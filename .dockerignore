@@ -1,0 +1,37 @@
+# Contexte Docker serveur (issue #32) : jamais de secret/clé/.env*/donnée
+# perso dans l'image. `COPY` du Dockerfile est explicite (package.json,
+# bun.lock, tsconfig, server/, shared/) ; ce fichier ceinture le contexte
+# (défense en profondeur + build plus rapide).
+.env*
+!.env.example
+*.pem
+*.key
+*.keystore
+*.jks
+secrets/
+.git/
+node_modules/
+dist/
+build/
+coverage/
+logs/
+*.log
+data/
+downloads/
+manuels/
+cours/
+media/
+attachments/
+*.pdf
+server/data/
+*.db
+*.sqlite
+*.sqlite-journal
+*.apk
+*.aab
+android/
+tests/
+docs/
+agents/
+playwright/
+.DS_Store
