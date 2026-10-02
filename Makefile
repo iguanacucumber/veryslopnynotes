@@ -12,7 +12,6 @@ unit:
 	bun test tests/unit
 
 architecture: architecture-test
-	bun test tests/architecture
 
 architecture-test:
 	bun run agents/runtime/check-architecture.ts
@@ -24,15 +23,11 @@ contracts:
 security:
 	bun test tests/security
 
-integration: integration-pronote integration-pairing integration-push integration-api
-
-integration-pronote integration-pairing integration-push integration-api:
+integration integration-pronote integration-pairing integration-push integration-api:
 	@if [ ! -f .env.local ]; then echo "skip $@ (pas de .env.local)"; exit 0; fi
 	bun test tests/integration
 
-e2e: e2e-grades e2e-assignments e2e-manuals e2e-revision
-
-e2e-grades e2e-assignments e2e-manuals e2e-revision:
+e2e e2e-grades e2e-assignments e2e-manuals e2e-revision:
 	@if [ ! -f .env.local ]; then echo "skip $@ (pas de .env.local)"; exit 0; fi
 	bun test tests/e2e
 

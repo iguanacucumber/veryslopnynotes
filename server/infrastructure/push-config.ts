@@ -20,19 +20,19 @@ export const PUSH_ENV_KEYS = [
 
 const DEFAULT_SUBJECT = "mailto:push@example.invalid";
 
-function clean(v: string | undefined): string {
-  return (v ?? "").trim();
-}
+import { cleanEnvValue, loadRequiredEnv } from "./env";
 
 export function loadPushConfig(
   env: Record<string, string | undefined> = Bun.env as Record<string, string | undefined>,
 ): PushConfig | null {
-  const provider = clean(env["PUSH_PROVIDER"]);
-  const vapidPublicKey = clean(env["PUSH_VAPID_PUBLIC_KEY"]);
-  const vapidPrivateKey = clean(env["PUSH_VAPID_PRIVATE_KEY"]);
-  const subject = clean(env["PUSH_VAPID_SUBJECT"]) || DEFAULT_SUBJECT;
-  if (!provider || !vapidPublicKey || !vapidPrivateKey) return null;
-  return { provider, vapidPublicKey, vapidPrivateKey, subject };
+  const got = loadRequiredEnv(env, ["PUSH_PROVIDER", "PUSH_VAPID_PUBLIC_KEY", "PUSH_VAPID_PRIVATE_KEY"]);
+  if (!got) return null;
+  return {
+    provider: got["PUSH_PROVIDER"],
+    vapidPublicKey: got["PUSH_VAPID_PUBLIC_KEY"],
+    vapidPrivateKey: got["PUSH_VAPID_PRIVATE_KEY"],
+    subject: cleanEnvValue(env["PUSH_VAPID_SUBJECT"]) || DEFAULT_SUBJECT,
+  };
 }
 
 export function isPushConfigured(
