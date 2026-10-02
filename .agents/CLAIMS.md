@@ -17,3 +17,4 @@ Case `- [ ]` = prise active, `- [x]` = libérée/mergée.
 | #24 | `agent/dev-server/24-jobs-ds` | dev-server | 2026-10-02 | - [ ] prise active (server/jobs DS, phase 7) |
 | #6 | `agent/dev-server/6-pronote-http-client` | dev-server | 2026-10-02 | pris |
 | #11 | `agent/dev-server/11-server-storage` | dev-server | 2026-10-02 | pris |
+| #7 | `agent/dev-server/7-pronote-auth` | dev-server | 2026-10-02 | - [ ] prise active (server/integrations auth ENT/CAS, phase 2) |
