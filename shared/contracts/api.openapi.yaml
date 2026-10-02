@@ -1,6 +1,170 @@
 openapi: 3.0.3
 info:
   title: veryslopnynotes API
-  version: 0.0.0
-  description: Contrats app <-> serveur. Source de vérité (phases 3+).
-paths: {}
+  version: 0.1.0
+  description: Contrats app <-> serveur. Source de vérité (phase 1, issue #4). Miroir de shared/contracts/*.ts.
+paths:
+  /v1/health:
+    get:
+      operationId: health
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /v1/pairing/start:
+    post:
+      operationId: pairingStart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PairingStartRequest'
+      responses:
+        '200':
+          description: session + code PIN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PairingStartResponse'
+  /v1/pairing/confirm:
+    post:
+      operationId: pairingConfirm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PairingConfirmRequest'
+      responses:
+        '200':
+          description: appareil appairé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+  /v1/grades:
+    get:
+      operationId: listGrades
+      responses:
+        '200':
+          description: notes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GradesResponse'
+  /v1/assignments:
+    get:
+      operationId: listAssignments
+      responses:
+        '200':
+          description: devoirs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentsResponse'
+  /v1/timetable:
+    get:
+      operationId: listTimetable
+      responses:
+        '200':
+          description: EDT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimetableResponse'
+  /v1/events:
+    get:
+      operationId: subscribeEvents
+      description: SSE serveur->app (GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted).
+      responses:
+        '200':
+          description: flux text/event-stream d'enveloppes ContractEvent
+components:
+  schemas:
+    Grade:
+      type: object
+      required: [id, accountId, subject, value, scale, date]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        subject: { type: string }
+        value: { type: number, minimum: 0 }
+        scale: { type: number, exclusiveMinimum: 0 }
+        coefficient: { type: number, exclusiveMinimum: 0 }
+        date: { type: string, format: date-time }
+    Assignment:
+      type: object
+      required: [id, accountId, subject, title, dueDate, done]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        subject: { type: string }
+        title: { type: string }
+        dueDate: { type: string, format: date-time }
+        done: { type: boolean }
+    TimetableEntry:
+      type: object
+      required: [id, accountId, subject, start, end]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        subject: { type: string }
+        room: { type: string }
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time }
+    Device:
+      type: object
+      required: [id, tokenHash]
+      properties:
+        id: { type: string }
+        tokenHash: { type: string, description: Empreinte du token push, jamais le token brut. }
+    HealthResponse:
+      type: object
+      required: [status, version]
+      properties:
+        status: { type: string, enum: [ok] }
+        version: { type: string }
+    PairingStartRequest:
+      type: object
+      required: [deviceName]
+      properties:
+        deviceName: { type: string }
+    PairingStartResponse:
+      type: object
+      required: [sessionId, code]
+      properties:
+        sessionId: { type: string }
+        code: { type: string, pattern: '^[0-9]{6}$' }
+    PairingConfirmRequest:
+      type: object
+      required: [sessionId, code]
+      properties:
+        sessionId: { type: string }
+        code: { type: string, pattern: '^[0-9]{6}$' }
+    GradesResponse:
+      type: object
+      required: [grades]
+      properties:
+        grades: { type: array, items: { $ref: '#/components/schemas/Grade' } }
+    AssignmentsResponse:
+      type: object
+      required: [assignments]
+      properties:
+        assignments: { type: array, items: { $ref: '#/components/schemas/Assignment' } }
+    TimetableResponse:
+      type: object
+      required: [entries]
+      properties:
+        entries: { type: array, items: { $ref: '#/components/schemas/TimetableEntry' } }
+    ContractEvent:
+      type: object
+      required: [v, type, at, data]
+      properties:
+        v: { type: string, enum: ['0.1.0'] }
+        type: { type: string, enum: [GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted] }
+        at: { type: string, format: date-time }
+        data: { type: object }
