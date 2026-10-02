@@ -17,3 +17,31 @@ export const syntheticPassword = "fake-pw-9x8y7z-UNREAL";
 export const syntheticEntKind = "cas-fake";
 export const syntheticAuthToken = "fake-token-abc123-UNREAL";
 export const syntheticAuthSuccess = { token: syntheticAuthToken };
+// Lectures synthétiques (#8). Contrats Grade/Assignment/TimetableEntry, valeurs inventées.
+export const syntheticGrade = {
+  id: "g-fake-1",
+  accountId: syntheticAccountId,
+  subject: "Maths-Fake",
+  value: 14,
+  scale: 20,
+  date: "2026-09-20T10:00:00.000Z",
+};
+export const syntheticAssignment = {
+  id: "a-fake-1",
+  accountId: syntheticAccountId,
+  subject: "Francais-Fake",
+  title: "Redaction-UNREAL",
+  dueDate: "2026-10-05T08:00:00.000Z",
+  done: false,
+};
+export const syntheticTimetableEntry = {
+  id: "t-fake-1",
+  accountId: syntheticAccountId,
+  subject: "Histoire-Fake",
+  room: "Salle-UNREAL-12",
+  start: "2026-10-03T08:00:00.000Z",
+  end: "2026-10-03T09:00:00.000Z",
+};
+export const syntheticGradesOk = { grades: [syntheticGrade], nextCursor: "cur-fake-2" };
+export const syntheticAssignmentsOk = { assignments: [syntheticAssignment], nextCursor: null };
+export const syntheticTimetableOk = { entries: [syntheticTimetableEntry], nextCursor: null };

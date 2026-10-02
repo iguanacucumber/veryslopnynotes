@@ -2,6 +2,7 @@
 // vers HTTP, SQLite ou Pronote. Adapters en server/infrastructure/
 // et server/integrations/.
 // Voir docs/architecture/INVARIANTS.md (I2, I3, I5, I6, I7).
+import type { Assignment, Grade, TimetableEntry } from "../../shared/contracts/models";
 
 export type Untrusted<T = string> = { readonly __untrusted: true; readonly value: T };
 
@@ -39,9 +40,43 @@ export class PronoteAuthError extends Error {
 
 export interface PronoteProvider {
   authenticate(credentials: PronoteCredentials): Promise<PronoteSession>;
-  // Lectures Grades, Assignments, etc. (phase 2+, issue #8) réutiliseront
-  // la session par accountId. Re-auth : voir server/integrations/pronote-auth.ts
-  // (invalidation + nouvel authenticate après changement IP).
+  // Lectures phase 2 (issue #8) : voir PronoteReader ci-dessous.
+  // Session réutilisée par accountId. Re-auth : voir
+  // server/integrations/pronote-auth.ts (invalidation + nouvel
+  // authenticate après changement IP).
+}
+
+export type PronoteReadErrorCode = "session_expired" | "ent_unavailable" | "network" | "timeout";
+
+export class PronoteReadError extends Error {
+  readonly code: PronoteReadErrorCode;
+  constructor(message: string, code: PronoteReadErrorCode) {
+    super(message);
+    this.name = "PronoteReadError";
+    this.code = code;
+  }
+}
+
+export interface PronotePageOptions {
+  readonly limit?: number;
+  readonly cursor?: string;
+}
+
+export interface PronoteTimetableOptions extends PronotePageOptions {
+  readonly from?: string;
+  readonly to?: string;
+}
+
+export interface PronotePage<T> {
+  /** Contenu externe brut : donnée, jamais instruction (I6). Passer par server/ai/untrusted.ts avant LLM. */
+  readonly items: Untrusted<T[]>;
+  readonly nextCursor: string | null;
+}
+
+export interface PronoteReader {
+  getGrades(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Grade>>;
+  getAssignments(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Assignment>>;
+  getTimetable(accountId: string, options?: PronoteTimetableOptions): Promise<PronotePage<TimetableEntry>>;
 }
 
 export interface LLMProvider {
