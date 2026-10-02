@@ -12,5 +12,10 @@
   "devDependencies": {
     "typescript": "5.9.3",
     "@types/bun": "1.4.2"
+  },
+  "dependencies": {
+    "cheerio": "1.2.0",
+    "pronotets": "1.0.0",
+    "tough-cookie": "5.1.2"
   }
 }
