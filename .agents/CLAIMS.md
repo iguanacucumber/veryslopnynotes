@@ -9,3 +9,4 @@ Case `- [ ]` = prise active, `- [x]` = libérée/mergée.
 | ----- | ------- | ----------- | -------- | ------ |
 | #35 | `agent/guardian/35-parallel-coordination` | coordination | 2026-10-02 | pris (noyau : AGENTS.md, CLAIMS.md, branching.md, launch.sh) |
 | #4 | `agent/dev-server/4-contracts-api` | dev-server | 2026-10-02 | - [ ] prise active (shared/contracts, phase 1) |
+| #10 | `agent/dev-server/10-server-http-api` | dev-server | 2026-10-02 | - [ ] prise active (server/api, phase 3) |
