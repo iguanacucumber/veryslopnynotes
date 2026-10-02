@@ -20,3 +20,4 @@ Case `- [ ]` = prise active, `- [x]` = libérée/mergée.
 | #7 | `agent/dev-server/7-pronote-auth` | dev-server | 2026-10-02 | - [ ] prise active (server/integrations auth ENT/CAS, phase 2) |
 | #22 | `agent/dev-server/22-push-infra` | dev-server | 2026-10-02 | - [ ] prise active (server/push, phase 7) |
 | #19 | `agent/guardian/19-pipeline-untrusted` | guardian | 2026-10-02 | pris |
+| #8 | `agent/dev-server/8-pronote-lectures` | dev-server | 2026-10-02 | - [ ] prise active (server/integrations lectures notes/devoirs/EDT, phase 2) |
