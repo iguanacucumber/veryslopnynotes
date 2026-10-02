@@ -4,11 +4,15 @@
 // env-assign — KEY=valeur réelle ; FP: .env.example ignoré, $VAR ignoré, placeholders (your/example/xxx/</TODO/dummy) ignorés. ponytail: plafond regex, upgrade gitleaks en CI.
 // storageState — token/session Playwright, jamais commité.
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { execSync } from "node:child_process";
+import { join, relative } from "node:path";
 
 const ROOT = new URL("../..", import.meta.url).pathname;
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage", ".bun-cache"]);
 const SKIP_FILES = new Set(["bun.lock", "bun.lockb", "package-lock.json", "check-secrets.ts"]);
+// Chemins locaux jamais commités (gitignorés) : pas de scan contenu.
+// .env.local untracked requis pour intégration -> PASS (issue #85).
+const SKIP_PATH_PREFIXES = ["server/data/", "playwright/.auth/"];
 
 const PATTERNS: { name: string; re: RegExp }[] = [
   { name: "private-key", re: /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
@@ -21,20 +25,56 @@ const PLACEHOLDER_RE = /your|example|placeholder|x{3,}|<[^>]*>|TODO|change-?me|d
 
 let failures: string[] = [];
 
+// Liste fichiers trackés git si dispo, fallback readdir brut sinon.
+// Tout fichier untracked (.env.local, server/data, playwright/.auth)
+// est ignoré : secrets locaux ne bloquent pas make check (#85).
+function trackedSet(): Set<string> | null {
+  try {
+    const out = execSync("git ls-files -z", { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] });
+    const parts = String(out).split("\0").filter((s) => s.length > 0);
+    return new Set(parts);
+  } catch {
+    return null;
+  }
+}
+
+const TRACKED = trackedSet();
+
+function isSkippedPath(absPath: string): boolean {
+  const rel = relative(ROOT, absPath).replace(/\\/g, "/");
+  for (const prefix of SKIP_PATH_PREFIXES) {
+    if (rel === prefix.slice(0, -1) || rel.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
 function walk(dir: string) {
   for (const e of readdirSync(dir)) {
     const p = join(dir, e);
-    const st = statSync(p);
+    // Chemins locaux gitignorés : jamais scannés, jamais FAIL.
+    if (isSkippedPath(p)) continue;
+    let st: ReturnType<typeof statSync>;
+    try {
+      st = statSync(p);
+    } catch {
+      continue;
+    }
     if (st.isDirectory()) {
       if (SKIP_DIRS.has(e)) continue;
       walk(p);
       continue;
     }
     if (SKIP_FILES.has(e) || e === ".env.example") continue;
-    if (e.endsWith(".env") || e.endsWith(".env.local")) {
-      failures.push(`${p}: fichier .env* tracké (interdit sauf .env.example)`);
+    // Fichiers .env* : FAIL uniquement si trackés git, sinon skip contenu.
+    // .env.local untracked requis pour intégration -> PASS (#85).
+    if (/\.env(\.|$)/.test(e) || e.endsWith(".env") || e.endsWith(".env.local")) {
+      const tracked = TRACKED ? TRACKED.has(relative(ROOT, p)) : true;
+      if (tracked) failures.push(`${p}: fichier .env* tracké (interdit sauf .env.example)`);
       continue;
     }
+    // Hors git (fallback) : scan contenu quand même ci-dessous.
+    // Sous git : seuls fichiers trackés scannés (untracked = locaux, skip).
+    if (TRACKED && !TRACKED.has(relative(ROOT, p))) continue;
     let content: string;
     try {
       content = readFileSync(p, "utf8");
