@@ -131,7 +131,8 @@ describe("contracts", () => {
   });
 
   test("api : routes et payloads", () => {
-    expect(API_ROUTES.length).toBe(12);
+    // Plancher : chaque issue de parité ajoute ses routes (add-only).
+    expect(API_ROUTES.length).toBeGreaterThanOrEqual(12);
     expect(API_ROUTES.map((r) => r.path)).toContain("/v1/revision-sheets");
     expect(API_ROUTES.map((r) => r.path)).toContain("/v1/revision-sheets/pdf");
     expect(isHealthResponse({ status: "ok", version: CONTRACTS_VERSION })).toBe(true);
