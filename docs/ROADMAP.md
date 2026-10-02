@@ -6,7 +6,6 @@ Invariants bloquants : `docs/architecture/INVARIANTS.md` (I1-I7).
 Ports : `server/domain/ports.ts`. Features : `docs/FEATURES.md`. Apports humains : `docs/HUMAN_INPUTS.md`.
 
 Légende priorité : P0 = bloquant suite, P1 = cœur produit, P2 = valeur ajoutée.
-Rôles : `dev-server`, `dev-android`, `reviewer-security`, `guardian` (invariants), `qa-e2e`.
 
 ## Phase 1 — architecture + ADR (P0, sans dépendance)
 Verrouille stack, contrats, garde-fous avant tout code métier.
