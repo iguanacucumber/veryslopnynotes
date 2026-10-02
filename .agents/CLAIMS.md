@@ -16,3 +16,4 @@ Case `- [ ]` = prise active, `- [x]` = libérée/mergée.
 | #5 | `agent/guardian/5-architecture-guards` | guardian | 2026-10-02 | pris |
 | #24 | `agent/dev-server/24-jobs-ds` | dev-server | 2026-10-02 | - [ ] prise active (server/jobs DS, phase 7) |
 | #6 | `agent/dev-server/6-pronote-http-client` | dev-server | 2026-10-02 | pris |
+| #11 | `agent/dev-server/11-server-storage` | dev-server | 2026-10-02 | pris |
