@@ -7,6 +7,7 @@
 import {
   API_ROUTES,
   isAssignmentsResponse,
+  isCanteenMenusResponse,
   isGradesResponse,
   isPairingConfirmRequest,
   isPairingStartRequest,
@@ -30,6 +31,26 @@ import type { LLMProvider } from "../domain/ports";
 
 /** Longueur max d'un periodId reflété dans la réponse (borne d'entrée utilisateur). */
 const PERIOD_ID_MAX_CHARS = 64;
+
+/** Longueur max d'une date de fenêtre cantine (borne d'entrée utilisateur, #81). */
+const CANTEEN_DATE_MAX_CHARS = 40;
+
+/**
+ * #81 : fenêtre from/to du routeur. Longueur bornée puis validation ISO ;
+ * paramètre absent = pas de borne. Renvoie null = 400 (jamais de date devinée).
+ */
+function canteenWindow(url: URL): { from?: string; to?: string } | null {
+  const out: { from?: string; to?: string } = {};
+  for (const key of ["from", "to"] as const) {
+    const raw = url.searchParams.get(key);
+    if (raw === null) continue;
+    const t = raw.trim().slice(0, CANTEEN_DATE_MAX_CHARS);
+    if (t === "") continue;
+    if (Number.isNaN(Date.parse(t))) return null;
+    out[key] = t;
+  }
+  return out;
+}
 
 function json(valid: boolean, payload: unknown): Response {
   if (!valid) return apiError("internal", "invalid payload");
@@ -170,6 +191,24 @@ export function createHandler(
       }
       case "/v1/homework/generate": {
         return handleHomeworkGenerate(req, llm);
+      }
+      // #81 : menus cantine de la fenêtre from/to (optionnels, défaut semaine
+      // courante côté app). Fenêtre bornée en longueur puis validée ISO : date
+      // illisible = 400, jamais de date devinée. Aucun menu = [] (onglet masqué).
+      case "/v1/menus": {
+        const win = canteenWindow(url);
+        if (win === null) return apiError("bad_request", "invalid date window");
+        const all = store.canteenMenus?.(win) ?? [];
+        const from = win.from === undefined ? null : Date.parse(win.from);
+        const to = win.to === undefined ? null : Date.parse(win.to);
+        const menus = all.filter((m) => {
+          const d = Date.parse(m.date);
+          if (Number.isNaN(d)) return false;
+          return (from === null || d >= from) && (to === null || d <= to);
+        });
+        const balance = store.canteenBalance?.() ?? undefined;
+        const payload = balance === undefined ? { menus } : { menus, balance };
+        return json(isCanteenMenusResponse(payload), payload);
       }
       default:
         return apiError("not_found", `unknown path ${path}`);
