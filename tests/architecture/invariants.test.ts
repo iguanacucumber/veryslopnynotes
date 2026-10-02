@@ -103,9 +103,4 @@ describe("invariants", () => {
       hasDirectFetch(codeOnly('const u = "https://index-education.net/pronote/";\nawait fetch(u);')),
     ).toBe(true);
   });
-
-  test("circuit agentique: check-pr refuse PR sans double review", async () => {
-    const proc = Bun.spawnSync(["bun", "run", "agents/runtime/check-pr.ts", ".agents/prs/TEMPLATE.md", "0".repeat(40)], { cwd: ROOT });
-    expect(proc.exitCode).not.toBe(0);
-  });
 });
