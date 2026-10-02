@@ -1,0 +1,57 @@
+# Secrets — jamais dans le dépôt ni l'historique
+.env*
+!.env.example
+*.pem
+*.key
+*.keystore
+*.jks
+secrets/
+playwright/.auth/
+playwright/storageState*.json
+**/storageState*.json
+
+# Local
+.env.local
+*.local
+
+# Données personnelles / établissement / manuels
+/data/
+/downloads/
+/manuels/
+/cours/
+*.pdf
+!docs/**/*.pdf
+/media/
+/attachments/
+
+# Build outputs
+node_modules/
+dist/
+build/
+coverage/
+*.apk
+*.aab
+android/**/build/
+android/**/.gradle/
+server/data/
+*.db
+*.sqlite
+*.sqlite-journal
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+
+# Bun
+bun.lockb
+.bun-cache/
+
+# Logs
+logs/
+*.log
+npm-debug.log*

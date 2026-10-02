@@ -1,0 +1,9 @@
+FROM oven/bun:1 AS base
+WORKDIR /app
+COPY package.json tsconfig.json ./
+RUN bun install --frozen-lockfile || bun install
+COPY server ./server
+COPY shared ./shared
+COPY agents ./agents
+ENV PORT=3000
+CMD ["bun", "run", "server/infrastructure/http.ts"]

@@ -1,0 +1,16 @@
+{
+  "name": "veryslopnynotes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "make check",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "bun run agents/runtime/check-secrets.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/bun": "latest"
+  }
+}
