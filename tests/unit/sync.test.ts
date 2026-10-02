@@ -57,6 +57,18 @@ describe("unit sync", () => {
     expect(res.events[0].type).toBe("GradeCreated");
   });
 
+  test("correction de note → événement dédié + snapshot versionné", async () => {
+    const grades = [grade("g1")];
+    const h = harness(grades);
+    const first = await runSync(h.source, h.sink);
+    expect(first.snapshot.version).toBe(1);
+    grades[0] = { ...grade("g1"), value: 16 };
+    const res = await runSync(h.source, h.sink);
+    expect(res.events.length).toBe(1);
+    expect(res.events[0].type).toBe("GradeCreated");
+    expect(res.snapshot.version).toBe(2);
+  });
+
   test("donnée invalide écartée, boucle n'explose pas", async () => {
     const h = harness([{ ...grade("bad"), value: -3 }]);
     const res = await runSync(h.source, h.sink);

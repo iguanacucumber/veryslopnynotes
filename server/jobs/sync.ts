@@ -8,6 +8,7 @@
 import { CONTRACTS_VERSION, isAssignment, isGrade, isTimetableEntry } from "../../shared/contracts/models";
 import type { Assignment, Grade, TimetableEntry } from "../../shared/contracts/models";
 import type { ContractEvent } from "../../shared/contracts/events";
+import { diffAgainstPrints, fingerprint } from "./grades";
 
 export interface SyncSource {
   grades(): Promise<Grade[]>;
@@ -19,6 +20,7 @@ export interface SyncSnapshot {
   readonly version: number;
   readonly at: string;
   readonly gradeIds: string[];
+  readonly gradePrints: Record<string, string>;
   readonly assignmentIds: string[];
   readonly entryIds: string[];
 }
@@ -49,10 +51,13 @@ export async function runSync(source: SyncSource, sink: SyncSink, at = new Date(
   const validEntries = entries.filter(isTimetableEntry);
 
   const previous = await sink.loadSnapshot();
+  const prints: Record<string, string> = {};
+  for (const g of validGrades) prints[g.id] = fingerprint(g);
   const snapshot: SyncSnapshot = {
     version: (previous?.version ?? 0) + 1,
     at,
     gradeIds: ids(validGrades),
+    gradePrints: prints,
     assignmentIds: ids(validAssignments),
     entryIds: ids(validEntries),
   };
@@ -62,10 +67,14 @@ export async function runSync(source: SyncSource, sink: SyncSink, at = new Date(
     return { firstRun: true, events: [], snapshot: { ...snapshot, version: 1 } };
   }
 
-  const known = new Set(previous.gradeIds);
-  const events: ContractEvent[] = validGrades
-    .filter((g) => !known.has(g.id))
-    .map((data) => ({ v: CONTRACTS_VERSION, type: "GradeCreated" as const, at, data }));
+  // Diff structurée notes (issue #17, I7) : ajouts + corrections → GradeCreated.
+  const diff = diffAgainstPrints(previous.gradePrints ?? {}, validGrades);
+  const events: ContractEvent[] = [...diff.added, ...diff.changed].map((data) => ({
+    v: CONTRACTS_VERSION,
+    type: "GradeCreated" as const,
+    at,
+    data,
+  }));
 
   if (events.length > 0 || snapshotChanged(previous, snapshot)) {
     await sink.saveSnapshot(snapshot);
@@ -75,7 +84,7 @@ export async function runSync(source: SyncSource, sink: SyncSink, at = new Date(
 }
 
 function emptySnapshot(): SyncSnapshot {
-  return { version: 0, at: "", gradeIds: [], assignmentIds: [], entryIds: [] };
+  return { version: 0, at: "", gradeIds: [], gradePrints: {}, assignmentIds: [], entryIds: [] };
 }
 
 function snapshotChanged(a: SyncSnapshot, b: SyncSnapshot): boolean {
