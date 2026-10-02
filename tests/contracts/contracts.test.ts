@@ -89,7 +89,7 @@ describe("contracts", () => {
   });
 
   test("api : routes et payloads", () => {
-    expect(API_ROUTES.length).toBe(7);
+    expect(API_ROUTES.length).toBe(8);
     expect(isHealthResponse({ status: "ok", version: CONTRACTS_VERSION })).toBe(true);
     expect(isHealthResponse({ status: "ko", version: CONTRACTS_VERSION })).toBe(false);
     expect(isPairingStartRequest({ deviceName: "pixel" })).toBe(true);
