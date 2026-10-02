@@ -1,18 +1,22 @@
-// API v0 — routeur HTTP stdlib Bun.serve (issue #10, ADR-001 : pas de
+// API v0 — routeur HTTP stdlib Bun.serve (issues #10, #12, ADR-001 : pas de
 // framework sans besoin justifié). Routes = shared/contracts API_ROUTES,
 // payloads validés par les garde-fous is* avant envoi (500 typée sinon).
-// Appairage = 501 (scope #12). SSE = snapshot SyncCompleted puis connexion
-// tenue (live : phase 5).
+// Appairage câblé sur PairingService (QR = payload {sessionId, code}).
+// SSE = snapshot SyncCompleted puis connexion tenue (live : phase 5).
 
 import {
   API_ROUTES,
   isAssignmentsResponse,
   isGradesResponse,
+  isPairingConfirmRequest,
+  isPairingStartRequest,
+  isPairingStartResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
-import { CONTRACTS_VERSION } from "../../shared/contracts/models";
+import { CONTRACTS_VERSION, isDevice } from "../../shared/contracts/models";
 import type { ContractEvent, SyncCompletedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
+import { PairingService } from "./pairing";
 import type { ReadStore } from "./store";
 
 function json(valid: boolean, payload: unknown): Response {
@@ -37,7 +41,10 @@ function sse(event: ContractEvent): Response {
   });
 }
 
-export function createHandler(store: ReadStore): (req: Request) => Promise<Response> {
+export function createHandler(
+  store: ReadStore,
+  pairing: PairingService = new PairingService(),
+): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
     const path = new URL(req.url).pathname;
     const route = API_ROUTES.find((r) => r.path === path);
@@ -73,14 +80,33 @@ export function createHandler(store: ReadStore): (req: Request) => Promise<Respo
         };
         return sse(event);
       }
-      case "/v1/pairing/start":
-      case "/v1/pairing/confirm": {
+      case "/v1/pairing/start": {
+        let body: unknown;
         try {
-          await req.json();
+          body = await req.json();
         } catch {
           return apiError("bad_request", "invalid JSON body");
         }
-        return apiError("not_implemented", "pairing handled separately");
+        if (!isPairingStartRequest(body)) return apiError("bad_request", "invalid pairing request");
+        const payload = pairing.start(body.deviceName);
+        return json(isPairingStartResponse(payload), payload);
+      }
+      case "/v1/pairing/confirm": {
+        let body: unknown;
+        try {
+          body = await req.json();
+        } catch {
+          return apiError("bad_request", "invalid JSON body");
+        }
+        if (!isPairingConfirmRequest(body)) return apiError("bad_request", "invalid pairing request");
+        const res = pairing.confirm(body.sessionId, body.code);
+        if (!res.ok) {
+          if (res.failure === "unknown_session" || res.failure === "expired") {
+            return apiError("not_found", `pairing ${res.failure}`);
+          }
+          return apiError("bad_request", `pairing ${res.failure}`);
+        }
+        return json(isDevice(res.device), res.device);
       }
       default:
         return apiError("not_found", `unknown path ${path}`);
@@ -88,10 +114,10 @@ export function createHandler(store: ReadStore): (req: Request) => Promise<Respo
   };
 }
 
-export function serve(store: ReadStore, port = 0) {
+export function serve(store: ReadStore, port = 0, pairing?: PairingService) {
   return Bun.serve({
     port,
     hostname: "127.0.0.1",
-    fetch: createHandler(store),
+    fetch: createHandler(store, pairing),
   });
 }
