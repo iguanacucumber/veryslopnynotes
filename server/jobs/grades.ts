@@ -2,6 +2,8 @@
 // structurées uniquement : aucun appel LLM, aucune sortie libre ne déclenche
 // d'événement (garde testée dans jobs-guard.test.ts). Correction de note =
 // événement dédié GradeCreated (nouvelle information à notifier).
+// #74 : les champs de contexte (bonus/facultatif, moyennes de classe) entrent
+// dans l'empreinte — repasser une note en facultatif est une correction.
 
 import type { Grade } from "../../shared/contracts/models";
 
@@ -13,7 +15,19 @@ export interface GradeDiff {
 }
 
 export function fingerprint(g: Grade): string {
-  return JSON.stringify([g.subject, g.value, g.scale, g.coefficient ?? null, g.date]);
+  return JSON.stringify([
+    g.subject,
+    g.value,
+    g.scale,
+    g.coefficient ?? null,
+    g.bonus ?? false,
+    g.optional ?? false,
+    g.classAverage ?? null,
+    g.classMin ?? null,
+    g.classMax ?? null,
+    g.periodId ?? null,
+    g.date,
+  ]);
 }
 
 /** Diff contre empreintes persistées (moteur sync, snapshot versionné). */

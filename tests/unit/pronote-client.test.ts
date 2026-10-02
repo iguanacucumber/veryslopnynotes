@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { PronoteSessionStore } from "../../server/integrations/pronote-sessions";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
 import { PronoteAuthError, PronoteReadError } from "../../server/domain/ports";
-import { isAssignment, isGrade, isTimetableEntry } from "../../shared/contracts/models";
+import { isAssignment, isGrade, isPeriod, isTimetableEntry } from "../../shared/contracts/models";
 import { isPedagogicResource } from "../../server/domain/ports";
 import {
   syntheticAccountId,
@@ -47,6 +47,56 @@ function fakeClient() {
           description: "Cours introductif.",
           files: () => [{ name: "cours1.pdf", id: "c1" }],
         }),
+      },
+    ],
+  };
+}
+
+// #74 : période id + moyennes de classe + bonus/facultative + libellé.
+function fakeClientAverages() {
+  return {
+    periods: [
+      {
+        id: "period-1",
+        name: "Trimestre 1",
+        start: new Date("2026-09-01T00:00:00.000Z"),
+        end: new Date("2026-11-30T23:59:59.000Z"),
+        grades: async () => [
+          {
+            id: "g1",
+            grade: "15",
+            outOf: "20",
+            date: new Date("2026-09-20T10:00:00.000Z"),
+            subject: { name: "Maths" },
+            coefficient: "1",
+            average: "12",
+            min: "4",
+            max: "19",
+            isBonus: false,
+            isOptionnal: false,
+            comment: "Contrôle 1",
+          },
+          {
+            id: "g2",
+            grade: "18",
+            outOf: "20",
+            date: new Date("2026-09-25T10:00:00.000Z"),
+            subject: { name: "EPS" },
+            isBonus: true,
+            isOptionnal: true,
+            // Moyennes de classe illisibles (non notées) : doivent disparaître.
+            average: "N.Rendu",
+            min: "",
+            max: "",
+          },
+        ],
+      },
+      {
+        id: "period-2",
+        name: "Trimestre 2",
+        start: new Date("2026-12-01T00:00:00.000Z"),
+        end: new Date("2027-02-28T23:59:59.000Z"),
+        grades: async () => [],
       },
     ],
   };
@@ -162,6 +212,54 @@ describe("PronoteClientReader", () => {
     expect(r.items.value.every(isPedagogicResource)).toBe(true);
     expect(r.items.value.some((x) => x.origin === "lesson-content")).toBe(true);
     expect(r.items.value.some((x) => x.origin === "homework-file")).toBe(true);
+  });
+
+  test("#74 : moyennes de classe, période, bonus/facultative, libellé mappés", async () => {
+    const store = new PronoteSessionStore({
+      pronoteUrl: "https://example.test/pronote/eleve.html",
+      clientFactory: (async () => fakeClientAverages()) as never,
+    });
+    await store.authenticate({ ...creds, entKind: "ninegate" });
+    const reader = new PronoteClientReader({ sessions: store });
+    const page = await reader.getGrades(syntheticAccountId);
+    const [g1, g2] = page.items.value;
+    expect(isGrade(g1)).toBe(true);
+    expect(g1?.classAverage).toBe(12);
+    expect(g1?.classMin).toBe(4);
+    expect(g1?.classMax).toBe(19);
+    expect(g1?.periodId).toBe("period-1");
+    expect(g1?.label).toBe("Contrôle 1");
+    // Flags absents (pas false) quand Pronote ne les publie pas : contrat add-only.
+    expect(g1?.bonus).toBeUndefined();
+    expect(g1?.optional).toBeUndefined();
+    // Moyennes de classe illisibles retirées, pas de 0 trompeur.
+    expect(g2?.bonus).toBe(true);
+    expect(g2?.optional).toBe(true);
+    expect(g2?.classAverage).toBeUndefined();
+    expect(g2?.classMin).toBeUndefined();
+    expect(g2?.classMax).toBeUndefined();
+    expect(isGrade(g2)).toBe(true);
+  });
+
+  test("#74 : périodes mappées et validées, Untrusted", async () => {
+    const store = new PronoteSessionStore({
+      pronoteUrl: "https://example.test/pronote/eleve.html",
+      clientFactory: (async () => fakeClientAverages()) as never,
+    });
+    await store.authenticate({ ...creds, entKind: "ninegate" });
+    const reader = new PronoteClientReader({ sessions: store });
+    const page = await reader.getPeriods(syntheticAccountId);
+    expect(page.items.__untrusted).toBe(true);
+    expect(page.nextCursor).toBeNull();
+    expect(page.items.value).toHaveLength(2);
+    expect(page.items.value.every(isPeriod)).toBe(true);
+    expect(page.items.value[0]?.id).toBe("period-1");
+    expect(page.items.value[0]?.name).toBe("Trimestre 1");
+    expect(Date.parse(page.items.value[0]!.start)).toBeLessThan(Date.parse(page.items.value[0]!.end));
+    // Session absente : erreur typée, pas de fuite.
+    const cold = new PronoteClientReader({ sessions: store });
+    const err = await cold.getPeriods("acc-inconnu").catch((e: unknown) => e);
+    expect((err as PronoteReadError).code).toBe("session_expired");
   });
 
   test("sans session -> session_expired, from/to invalides -> ent_unavailable", async () => {

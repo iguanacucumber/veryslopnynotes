@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: veryslopnynotes API
-  version: 0.1.0
+  version: 0.2.0
   description: Contrats app <-> serveur. Source de vérité (phase 1, issue #4). Miroir de shared/contracts/*.ts.
 paths:
   /v1/health:
@@ -49,13 +49,33 @@ paths:
   /v1/grades:
     get:
       operationId: listGrades
+      description: Notes + rapport de moyennes (fournie sinon estimee, issue #74).
+      parameters:
+        - name: algorithm
+          in: query
+          required: false
+          schema: { type: string, enum: [subject, weighted, median], default: subject }
+        - name: periodId
+          in: query
+          required: false
+          schema: { type: string }
       responses:
         '200':
-          description: notes
+          description: notes + moyennes
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/GradesResponse'
+  /v1/periods:
+    get:
+      operationId: listPeriods
+      responses:
+        '200':
+          description: periodes scolaires
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeriodsResponse'
   /v1/assignments:
     get:
       operationId: listAssignments
@@ -148,6 +168,60 @@ components:
         scale: { type: number, exclusiveMinimum: 0 }
         coefficient: { type: number, exclusiveMinimum: 0 }
         date: { type: string, format: date-time }
+        classAverage: { type: number }
+        classMin: { type: number }
+        classMax: { type: number }
+        periodId: { type: string }
+        bonus: { type: boolean }
+        optional: { type: boolean }
+        label: { type: string, description: Libelle libre de l'evaluation, donnee jamais instruction (I6). }
+        teacher: { type: string }
+    Period:
+      type: object
+      required: [id, name, start, end]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time }
+    GeneralAverage:
+      type: object
+      required: [value, origin, subjectCount]
+      properties:
+        value: { type: number, nullable: true, description: Sur /20, null si aucune note exploitable. }
+        origin: { type: string, enum: [provided, estimated] }
+        subjectCount: { type: integer, minimum: 0 }
+    SubjectAverage:
+      type: object
+      required: [subject, value, origin, gradeCount]
+      properties:
+        subject: { type: string }
+        value: { type: number, nullable: true }
+        origin: { type: string, enum: [provided, estimated] }
+        gradeCount: { type: integer, minimum: 0 }
+    GradeInfluence:
+      type: object
+      required: [gradeId, subject, impact]
+      properties:
+        gradeId: { type: string }
+        subject: { type: string }
+        impact: { type: number, description: Ecart de moyenne generale avec/sans la note. }
+    AverageHistoryPoint:
+      type: object
+      required: [date, value]
+      properties:
+        date: { type: string, format: date-time }
+        value: { type: number, nullable: true }
+    AveragesReport:
+      type: object
+      required: [algorithm, periodId, general, subjects, history, influences]
+      properties:
+        algorithm: { type: string, enum: [subject, weighted, median] }
+        periodId: { type: string, nullable: true }
+        general: { $ref: '#/components/schemas/GeneralAverage' }
+        subjects: { type: array, items: { $ref: '#/components/schemas/SubjectAverage' } }
+        history: { type: array, items: { $ref: '#/components/schemas/AverageHistoryPoint' } }
+        influences: { type: array, items: { $ref: '#/components/schemas/GradeInfluence' } }
     Assignment:
       type: object
       required: [id, accountId, subject, title, dueDate, done]
@@ -199,9 +273,15 @@ components:
         code: { type: string, pattern: '^[0-9]{6}$' }
     GradesResponse:
       type: object
-      required: [grades]
+      required: [grades, averages]
       properties:
         grades: { type: array, items: { $ref: '#/components/schemas/Grade' } }
+        averages: { $ref: '#/components/schemas/AveragesReport' }
+    PeriodsResponse:
+      type: object
+      required: [periods]
+      properties:
+        periods: { type: array, items: { $ref: '#/components/schemas/Period' } }
     AssignmentsResponse:
       type: object
       required: [assignments]
@@ -234,7 +314,7 @@ components:
       type: object
       required: [v, type, at, data]
       properties:
-        v: { type: string, enum: ['0.1.0'] }
+        v: { type: string, enum: ['0.2.0'] }
         type: { type: string, enum: [GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted, CacheInvalidated, SecurityAlert] }
         at: { type: string, format: date-time }
         data: { type: object }
