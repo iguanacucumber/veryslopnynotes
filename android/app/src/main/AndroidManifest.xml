@@ -1,0 +1,16 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Réseau : un seul hôte allowlist = serveur (I1). INTERNET seul requis. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <application
+        android:label="VerySlopyNyNotes"
+        android:supportsRtl="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
