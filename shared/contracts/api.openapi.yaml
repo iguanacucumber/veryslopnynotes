@@ -94,6 +94,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SecurityAlertsResponse'
+  /v1/homework/generate:
+    post:
+      operationId: homeworkGenerate
+      description: Assistant devoirs sourcé cours+manuels, JSON validé (phase 9). Refus propre si sources insuffisantes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HomeworkGenerateRequest'
+      responses:
+        '200':
+          description: corrigé sourcé ou refus propre
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeworkGenerateResponse'
 components:
   schemas:
     Grade:
@@ -192,3 +209,24 @@ components:
       required: [alerts]
       properties:
         alerts: { type: array, items: { $ref: '#/components/schemas/SecurityAlert' } }
+    HomeworkSource:
+      type: object
+      required: [text, source]
+      properties:
+        text: { type: string, maxLength: 2000 }
+        source: { type: string, maxLength: 200 }
+    HomeworkGenerateRequest:
+      type: object
+      required: [question, sources]
+      properties:
+        question: { type: string, maxLength: 2000 }
+        sources: { type: array, maxItems: 8, items: { $ref: '#/components/schemas/HomeworkSource' } }
+    HomeworkGenerateResponse:
+      type: object
+      required: [status, sources]
+      properties:
+        status: { type: string, enum: [ok, refused] }
+        answer: { type: string }
+        steps: { type: array, items: { type: string } }
+        reason: { type: string }
+        sources: { type: array, items: { type: string } }
