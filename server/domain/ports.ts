@@ -2,7 +2,7 @@
 // vers HTTP, SQLite ou Pronote. Adapters en server/infrastructure/
 // et server/integrations/.
 // Voir docs/architecture/INVARIANTS.md (I2, I3, I5, I6, I7).
-import type { Assignment, Grade, TimetableEntry } from "../../shared/contracts/models";
+import type { Assignment, Grade, Period, TimetableEntry } from "../../shared/contracts/models";
 
 export type Untrusted<T = string> = { readonly __untrusted: true; readonly value: T };
 
@@ -77,6 +77,8 @@ export interface PronoteReader {
   getGrades(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Grade>>;
   getAssignments(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Assignment>>;
   getTimetable(accountId: string, options?: PronoteTimetableOptions): Promise<PronotePage<TimetableEntry>>;
+  /** Périodes scolaires (#74) : regroupement des moyennes + onglets par trimestre. */
+  getPeriods?(accountId: string): Promise<PronotePage<Period>>;
   /** Ressources pédagogiques : contenus cours + PJ devoirs (proxy serveur, #84). */
   getResources?(accountId: string, page?: PronotePageOptions): Promise<PronotePage<PedagogicResource>>;
 }

@@ -116,7 +116,7 @@ fun AppNav(
                 CachedScreen("Calendrier", CachePolicy.TIMETABLE, repo, baseUrl, "EDT semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
             }
             composable(ROUTE_GRADES) {
-                CachedScreen("Notes", CachePolicy.GRADES, repo, baseUrl, "Moyennes", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
+                CachedScreen("Notes", CachePolicy.GRADES, repo, baseUrl, "Moyennes", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, showAverage = true)
             }
             composable(ROUTE_TASKS) {
                 CachedScreen("Tâches", CachePolicy.ASSIGNMENTS, repo, baseUrl, "Devoirs semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
@@ -157,6 +157,8 @@ fun CachedScreen(
     goSettings: () -> Unit,
     goPairing: () -> Unit,
     goAlerts: () -> Unit,
+    // #74 : mention "fournie"/"estimée" sous le titre (onglet Notes seul).
+    showAverage: Boolean = false,
 ) {
     // Etat initial = cache synchrone (affichage sans reseau immediat).
     var state by remember(resource) {
@@ -191,6 +193,11 @@ fun CachedScreen(
     ) {
         Text(title)
         Text(subtitle)
+        if (showAverage) {
+            // Donnee contractuelle lue, jamais interpretee (I6). Absent = aucun affichage.
+            val payload = (state as? UiState.Data)?.payload ?: (state as? UiState.Error)?.cached
+            Text(averageLabel(if (payload != null) generalAverageFrom(payload) else null))
+        }
         when (val s = state) {
             UiState.Loading -> Text("Chargement…")
             UiState.Empty -> Text("Aucune donnée en cache. Connectez-vous puis actualisez.")

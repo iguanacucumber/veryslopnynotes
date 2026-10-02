@@ -4,7 +4,10 @@
 // Voir shared/contracts/README.md, docs/architecture/INVARIANTS.md (I7 : push
 // et détection DS sur données structurées uniquement, jamais sortie LLM).
 
-export const CONTRACTS_VERSION = "0.1.0" as const;
+// 0.2.0 (#74) : moyennes parité Papillon (fournie/estimée, 3 algorithmes,
+// influence par note, historique) + périodes. Changement cassant sur
+// /v1/grades et /v1/events (enveloppe v) -> bump mineur documenté.
+export const CONTRACTS_VERSION = "0.2.0" as const;
 
 /** Version gabarit fiches révision (issue #30, phase 10). Stockée par fiche. */
 export const REVISION_TEMPLATE_VERSION = "fiche-v1" as const;
@@ -29,6 +32,85 @@ export interface Grade {
   readonly scale: number;
   readonly coefficient?: number;
   readonly date: string; // ISO-8601
+  // --- #74 parité Papillon : contexte de la note (tous optionnels, add-only) ---
+  /** Moyenne de classe sur l'échelle de la note, si l'établissement la publie. */
+  readonly classAverage?: number;
+  /** Note la plus basse / plus haute de la classe (borne d'interprétation). */
+  readonly classMin?: number;
+  readonly classMax?: number;
+  /** Période (trimestre/semestre) d'appartenance de la note. */
+  readonly periodId?: string;
+  /** Note bonus (majoration) : traitée à part par les 3 algorithmes. */
+  readonly bonus?: boolean;
+  /** Note facultative : ne compte que si elle améliore la moyenne. */
+  readonly optional?: boolean;
+  /** Libellé libre de l'évaluation (commentaire enseignant) = donnée, jamais instruction (I6). */
+  readonly label?: string;
+  /** Enseignant, si Pronote le publie. */
+  readonly teacher?: string;
+}
+
+/** Période scolaire (trimestre, semestre, année) servant de regroupement des moyennes. */
+export interface Period {
+  readonly id: string;
+  readonly name: string;
+  readonly start: string; // ISO-8601
+  readonly end: string; // ISO-8601
+}
+
+// --- #74 moyennes : algorithmes parité Papillon ---
+// subject  = moyenne des moyennes de matière (défaut Papillon)
+// weighted = toutes notes poolées, pondérées par coefficient
+// median   = médiane des notes ramenées sur /20
+export const AVERAGE_ALGORITHMS = ["subject", "weighted", "median"] as const;
+
+export type AverageAlgorithm = (typeof AVERAGE_ALGORITHMS)[number];
+
+export const DEFAULT_AVERAGE_ALGORITHM: AverageAlgorithm = "subject";
+
+/** Provenance de la moyenne : fournie par l'établissement, ou estimée par nos algorithmes. */
+export type AverageOrigin = "provided" | "estimated";
+
+export interface SubjectAverage {
+  readonly subject: string;
+  /** Valeur sur /20, ou null si la période ne contient aucune note exploitable. */
+  readonly value: number | null;
+  readonly origin: AverageOrigin;
+  /** Notes exploitables comptées dans la matière (hors coefficient 0). */
+  readonly gradeCount: number;
+}
+
+export interface GeneralAverage {
+  readonly value: number | null;
+  readonly origin: AverageOrigin;
+  readonly subjectCount: number;
+}
+
+/** Influence d'une note sur la moyenne générale (écart avec/sans la note, /20). */
+export interface GradeInfluence {
+  readonly gradeId: string;
+  readonly subject: string;
+  /** Écart de moyenne générale avec/sans la note. Négatif = la note fait baisser la moyenne. */
+  readonly impact: number;
+}
+
+/** Point d'historique : moyenne générale recalculée à chaque nouvelle note (courbe). */
+export interface AverageHistoryPoint {
+  readonly date: string; // ISO-8601
+  readonly value: number | null;
+}
+
+export interface AveragesReport {
+  readonly algorithm: AverageAlgorithm;
+  readonly periodId: string | null;
+  readonly general: GeneralAverage;
+  readonly subjects: SubjectAverage[];
+  readonly history: AverageHistoryPoint[];
+  readonly influences: GradeInfluence[];
+}
+
+export function isAverageAlgorithm(v: unknown): v is AverageAlgorithm {
+  return typeof v === "string" && (AVERAGE_ALGORITHMS as readonly string[]).includes(v);
 }
 
 export interface Assignment {
@@ -79,6 +161,73 @@ export function isGrade(v: unknown): v is Grade {
   if (!isFiniteNumber(v["scale"]) || (v["scale"] as number) <= 0) return false;
   if (v["coefficient"] !== undefined && (!isFiniteNumber(v["coefficient"]) || (v["coefficient"] as number) <= 0)) return false;
   if (!isIsoDate(v["date"])) return false;
+  // #74 champs optionnels : présents = typés. Les moyennes de classe sont
+  // filtrées à la source (mapper Pronote) quand Pronote ne les publie pas.
+  for (const k of ["classAverage", "classMin", "classMax"]) {
+    if (v[k] !== undefined && !isFiniteNumber(v[k])) return false;
+  }
+  if (v["periodId"] !== undefined && !isNonEmptyString(v["periodId"])) return false;
+  if (v["bonus"] !== undefined && typeof v["bonus"] !== "boolean") return false;
+  if (v["optional"] !== undefined && typeof v["optional"] !== "boolean") return false;
+  if (v["label"] !== undefined && typeof v["label"] !== "string") return false;
+  if (v["teacher"] !== undefined && typeof v["teacher"] !== "string") return false;
+  return true;
+}
+
+export function isPeriod(v: unknown): v is Period {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["name"])) return false;
+  if (!isIsoDate(v["start"]) || !isIsoDate(v["end"])) return false;
+  if (Date.parse(v["end"] as string) < Date.parse(v["start"] as string)) return false;
+  return true;
+}
+
+function isNullableNumberOrNull(v: unknown): v is number | null {
+  return v === null || isFiniteNumber(v);
+}
+
+export function isSubjectAverage(v: unknown): v is SubjectAverage {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["subject"])) return false;
+  if (!isNullableNumberOrNull(v["value"])) return false;
+  if (v["origin"] !== "provided" && v["origin"] !== "estimated") return false;
+  if (!Number.isInteger(v["gradeCount"]) || (v["gradeCount"] as number) < 0) return false;
+  return true;
+}
+
+export function isGeneralAverage(v: unknown): v is GeneralAverage {
+  if (!isRecord(v)) return false;
+  if (!isNullableNumberOrNull(v["value"])) return false;
+  if (v["origin"] !== "provided" && v["origin"] !== "estimated") return false;
+  if (!Number.isInteger(v["subjectCount"]) || (v["subjectCount"] as number) < 0) return false;
+  return true;
+}
+
+export function isGradeInfluence(v: unknown): v is GradeInfluence {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["gradeId"]) || !isNonEmptyString(v["subject"])) return false;
+  if (!isFiniteNumber(v["impact"])) return false;
+  return true;
+}
+
+export function isAverageHistoryPoint(v: unknown): v is AverageHistoryPoint {
+  if (!isRecord(v)) return false;
+  if (!isIsoDate(v["date"])) return false;
+  if (!isNullableNumberOrNull(v["value"])) return false;
+  return true;
+}
+
+export function isAveragesReport(v: unknown): v is AveragesReport {
+  if (!isRecord(v)) return false;
+  if (!isAverageAlgorithm(v["algorithm"])) return false;
+  if (v["periodId"] !== null && !isNonEmptyString(v["periodId"])) return false;
+  if (!isGeneralAverage(v["general"])) return false;
+  const s = v["subjects"];
+  if (!Array.isArray(s) || !s.every(isSubjectAverage)) return false;
+  const h = v["history"];
+  if (!Array.isArray(h) || !h.every(isAverageHistoryPoint)) return false;
+  const i = v["influences"];
+  if (!Array.isArray(i) || !i.every(isGradeInfluence)) return false;
   return true;
 }
 

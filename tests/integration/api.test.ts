@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   isAssignmentsResponse,
   isGradesResponse,
+  isPeriodsResponse,
   isHealthResponse,
   isPairingStartResponse,
   isTimetableResponse,
@@ -34,6 +35,14 @@ describe("integration api", () => {
     const grades = await (await fetch(`${base}/v1/grades`)).json();
     expect(isGradesResponse(grades)).toBe(true);
     expect(grades.grades.length).toBeGreaterThan(0);
+    // #74 : moyennes dans la même réponse, defaut = algorithme subject Papillon.
+    expect(grades.averages.algorithm).toBe("subject");
+    expect(grades.averages.general.origin).toBe("estimated");
+    expect(grades.averages.subjects.length).toBe(1);
+
+    const periods = await (await fetch(`${base}/v1/periods`)).json();
+    expect(isPeriodsResponse(periods)).toBe(true);
+    expect(periods.periods.length).toBeGreaterThan(0);
 
     const assignments = await (await fetch(`${base}/v1/assignments`)).json();
     expect(isAssignmentsResponse(assignments)).toBe(true);
@@ -62,6 +71,52 @@ describe("integration api", () => {
     }
     await reader.cancel();
     expect(buf).toContain("data: ");
+  });
+
+  test("#74 : choix d'algorithme, période filtrée, algo inconnu rejeté", async () => {
+    const weighted = await (await fetch(`${base}/v1/grades?algorithm=weighted`)).json();
+    expect(isGradesResponse(weighted)).toBe(true);
+    expect(weighted.averages.algorithm).toBe("weighted");
+
+    const median = await (await fetch(`${base}/v1/grades?algorithm=median`)).json();
+    expect(median.averages.algorithm).toBe("median");
+
+    // Période inconnue = rapport vide, jamais une moyenne d'une autre période.
+    const scoped = await (await fetch(`${base}/v1/grades?periodId=inconnue`)).json();
+    expect(isGradesResponse(scoped)).toBe(true);
+    expect(scoped.averages.periodId).toBe("inconnue");
+    expect(scoped.averages.subjects).toEqual([]);
+    expect(scoped.averages.general.value).toBeNull();
+
+    const bad = await fetch(`${base}/v1/grades?algorithm=moyenne`);
+    expect(bad.status).toBe(400);
+    expect(isApiErrorBody(await bad.json())).toBe(true);
+  });
+
+  test("#74 : moyennes fournies prioritaires sur l'estimation", async () => {
+    const server = serve(
+      createMemoryStore({
+        grades: [
+          { id: "s1", accountId: "seed-acc", subject: "Maths", value: 12, scale: 20, date: "2026-09-20T10:00:00.000Z" },
+          { id: "s2", accountId: "seed-acc", subject: "Anglais", value: 16, scale: 20, date: "2026-09-21T10:00:00.000Z" },
+        ],
+        providedAverages: { general: 14, subjects: { maths: 12 } },
+      }),
+      0,
+    );
+    try {
+      const res = await (await fetch(`http://127.0.0.1:${server.port}/v1/grades`)).json();
+      expect(isGradesResponse(res)).toBe(true);
+      expect(res.averages.general).toEqual({ value: 14, origin: "provided", subjectCount: 2 });
+      const maths = res.averages.subjects.find((s: { subject: string }) => s.subject === "Maths");
+      expect(maths.origin).toBe("provided");
+      expect(maths.value).toBe(12);
+      const anglais = res.averages.subjects.find((s: { subject: string }) => s.subject === "Anglais");
+      expect(anglais.origin).toBe("estimated");
+      expect(anglais.value).toBeCloseTo(16, 9);
+    } finally {
+      server.stop(true);
+    }
   });
 
   test("erreurs typées : 404, 405, 400", async () => {

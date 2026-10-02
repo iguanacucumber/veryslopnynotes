@@ -3,8 +3,9 @@
 // Mémoire = seed/tests uniquement ; l'adaptateur SQLite (#11) implémentera
 // ReadStore sans changer le routeur.
 
-import type { Assignment, Grade, TimetableEntry } from "../../shared/contracts/models";
+import type { Assignment, Grade, Period, TimetableEntry } from "../../shared/contracts/models";
 import type { SecurityAlertData } from "../../shared/contracts/events";
+import type { ProvidedAverages } from "../domain/averages";
 
 export interface ReadStore {
   grades(): Grade[];
@@ -12,6 +13,10 @@ export interface ReadStore {
   entries(): TimetableEntry[];
   /** Alertes sécurité : injections neutralisées (I6, #21). Lecture seule ici. */
   securityAlerts(): SecurityAlertData[];
+  /** Périodes scolaires (#74) : regroupement des moyennes + onglets par période. */
+  periods(): Period[];
+  /** Moyennes fournies par l'établissement (#74), null si non publiées. */
+  providedAverages(): ProvidedAverages | null;
 }
 
 export interface StoreSeed {
@@ -19,6 +24,8 @@ export interface StoreSeed {
   readonly assignments?: Assignment[];
   readonly entries?: TimetableEntry[];
   readonly securityAlerts?: SecurityAlertData[];
+  readonly periods?: Period[];
+  readonly providedAverages?: ProvidedAverages | null;
 }
 
 const SEED_GRADE: Grade = {
@@ -64,15 +71,23 @@ const SEED_ALERTS: SecurityAlertData[] = [
   },
 ];
 
+const SEED_PERIODS: Period[] = [
+  { id: "p-1", name: "Trimestre 1", start: "2026-09-01T00:00:00.000Z", end: "2026-11-30T23:59:59.000Z" },
+];
+
 export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
   const grades = structuredClone(seed.grades ?? [SEED_GRADE]);
   const assignments = structuredClone(seed.assignments ?? [SEED_ASSIGNMENT]);
   const entries = structuredClone(seed.entries ?? [SEED_ENTRY]);
   const alerts = structuredClone(seed.securityAlerts ?? SEED_ALERTS);
+  const periods = structuredClone(seed.periods ?? SEED_PERIODS);
+  const provided = seed.providedAverages === undefined ? null : structuredClone(seed.providedAverages);
   return {
     grades: () => structuredClone(grades),
     assignments: () => structuredClone(assignments),
     entries: () => structuredClone(entries),
     securityAlerts: () => structuredClone(alerts),
+    periods: () => structuredClone(periods),
+    providedAverages: () => (provided === null ? null : structuredClone(provided)),
   };
 }

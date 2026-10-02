@@ -4,9 +4,14 @@
 // Pagination : limit clampée 1..100 (défaut 50), cursor = offset opaque, nextCursor null = fin.
 // Mappers : Grade pronotets (grade/outOf strings) → contrat (value/scale numbers).
 // ponytail: mappers purs minimaux, pas de lib date.
-// Upgrade: moyennes fournies (#74), contenus (#75), semaine (#76) enrichiront ces mappers.
-import type { Assignment, Grade, TimetableEntry } from "../../shared/contracts/models";
-import { isAssignment, isGrade, isTimetableEntry } from "../../shared/contracts/models";
+// #74 : moyennes de classe (average/min/max), bonus, facultative, période et
+// libellé repris de pronotets Grade. Les moyennes *de matière* et *générale*
+// fournies par l'établissement (period.averages()/overallAverage()) ne sont pas
+// encore lues : ProvidedAverages reste null, les rapports sont donc estimés,
+// ce qui est le comportement Papillon par défaut. Upgrade: getProvidedAverages
+// sur ce reader, sans toucher aux trois algorithmes.
+import type { Assignment, Grade, Period, TimetableEntry } from "../../shared/contracts/models";
+import { isAssignment, isGrade, isPeriod, isTimetableEntry } from "../../shared/contracts/models";
 import type {
   PedagogicResource,
   PronotePage,
@@ -40,10 +45,14 @@ function parseOffset(cursor?: string): number {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
+// Chaîne vide / espaces = valeur absente (non notée), jamais 0 : Number("")
+// vaut 0 et ferait passer une note ou une moyenne de classe inexistante.
 function toNumber(v: unknown, fallback: number): number {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "number") return Number.isFinite(v) ? v : fallback;
   if (typeof v === "string") {
-    const n = Number(v.replace(",", "."));
+    const t = v.trim();
+    if (t === "") return fallback;
+    const n = Number(t.replace(",", "."));
     if (Number.isFinite(n)) return n;
   }
   return fallback;
@@ -70,8 +79,14 @@ function toReadError(err: unknown, what: string): PronoteReadError {
   return new PronoteReadError(`${what} ent unavailable`, "ent_unavailable");
 }
 
+/** Trim + borne dure. Vide après trim = "" (l'appelant le transforme en undefined). */
+function bounded(s: string, max: number): string {
+  const t = s.trim();
+  return t.length > max ? t.slice(0, max) : t;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapGrade(accountId: string, g: any, index: number): Grade | null {
+function mapGrade(accountId: string, g: any, index: number, periodId?: string): Grade | null {
   const fallback = `g-${index}`;
   const candidate = {
     id: typeof g?.id === "string" && g.id ? g.id : fallback,
@@ -81,9 +96,45 @@ function mapGrade(accountId: string, g: any, index: number): Grade | null {
     scale: toNumber(g?.outOf ?? g?.defaultOutOf, 20),
     coefficient: g?.coefficient !== undefined ? toNumber(g.coefficient, 1) : undefined,
     date: toIso(g?.date, new Date().toISOString()),
+    // #74 : moyennes de classe, bonus/facultative, période, libellé enseignant.
+    // Le contrat est borné (200 chars pour le libellé) : une chaîne Pronote
+    // arbitrairement longue ne sort jamais telle quelle côté API.
+    classAverage: g?.average !== undefined ? toNumber(g.average, Number.NaN) : undefined,
+    classMin: g?.min !== undefined ? toNumber(g.min, Number.NaN) : undefined,
+    classMax: g?.max !== undefined ? toNumber(g.max, Number.NaN) : undefined,
+    periodId: periodId ?? (typeof g?.period?.id === "string" ? bounded(g.period.id, 64) || undefined : undefined),
+    bonus: g?.isBonus === true ? true : undefined,
+    optional: g?.isOptionnal === true ? true : undefined,
+    label: typeof g?.comment === "string" ? bounded(g.comment, 200) || undefined : undefined,
   };
   if (!Number.isFinite(candidate.value)) return null;
-  return isGrade(candidate) ? candidate : null;
+  // isGrade rejette les moyennes de classe illisibles (absent, "N.Rendu", ...) :
+  // on les retire plutôt que de laisser un NaN ou un 0 trompeur dans le contrat.
+  const clean: Grade = {
+    ...candidate,
+    ...(Number.isFinite(candidate.classAverage as number) ? {} : { classAverage: undefined }),
+    ...(Number.isFinite(candidate.classMin as number) ? {} : { classMin: undefined }),
+    ...(Number.isFinite(candidate.classMax as number) ? {} : { classMax: undefined }),
+  };
+  return isGrade(clean) ? clean : null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapPeriods(raw: any[]): Period[] {
+  const out: Period[] = [];
+  raw.forEach((p, i) => {
+    const start = toIso(p?.start, "");
+    const end = toIso(p?.end, "");
+    if (!start || !end) return;
+    const cand: Period = {
+      id: typeof p?.id === "string" && p.id ? p.id : `period-${i}`,
+      name: typeof p?.name === "string" && p.name.trim() ? p.name.trim().slice(0, 100) : `Période ${i + 1}`,
+      start,
+      end,
+    };
+    if (isPeriod(cand)) out.push(cand);
+  });
+  return out;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -212,8 +263,11 @@ export class PronoteClientReader implements PronoteReader {
       const all: Grade[] = [];
       for (const p of periods) {
         const grades = (await p.grades()) as unknown[];
+        // #74 : periodId porte le regroupement des moyennes, il vient de la
+        // période Pronote qui porte ces notes (jamais deviné).
+        const periodId = typeof p?.id === "string" && p.id ? p.id : undefined;
         grades.forEach((g, i) => {
-          const m = mapGrade(id, g, all.length + i);
+          const m = mapGrade(id, g, all.length + i, periodId);
           if (m) all.push(m);
         });
         if (all.length >= offset + limit + 1) break;
@@ -225,6 +279,29 @@ export class PronoteClientReader implements PronoteReader {
     } catch (err) {
       const mapped = toReadError(err, "grades");
       this.logger(`grades -> error ${mapped.code}`);
+      throw mapped;
+    }
+  }
+
+  /** Périodes (#74) : libellés + bornes pour les onglets et le filtre periodId. */
+  async getPeriods(accountId: string): Promise<PronotePage<Period>> {
+    const id = (accountId ?? "").trim();
+    if (!id) throw new PronoteReadError("periods session expired", "session_expired");
+    let client;
+    try {
+      client = this.sessions.requireClient(id);
+    } catch (err) {
+      const mapped = toReadError(err, "periods");
+      this.logger(`periods -> error ${mapped.code}`);
+      throw mapped;
+    }
+    try {
+      const items = mapPeriods((client.periods ?? []) as unknown[]);
+      this.logger(`periods -> ok ${items.length}`);
+      return { items: untrusted(items), nextCursor: null };
+    } catch (err) {
+      const mapped = toReadError(err, "periods");
+      this.logger(`periods -> error ${mapped.code}`);
       throw mapped;
     }
   }
