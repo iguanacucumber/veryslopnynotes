@@ -33,11 +33,8 @@ import fr.veryslopnynotes.data.SyncedRepository
 // Badge "perime" via CachePolicy (miroir contrats cache phase 5).
 // Appairage QR+PIN #15 : route "pairing" (PairingRoute), token chiffré.
 // Alertes sécurité #21 : route "alerts" (SecurityAlertsRoute, I6).
+// Fiches révision #30 : route "fiches" (RevisionSheetsScreen).
 // Contenu serveur affiche comme donnee, jamais interprete.
-
- // ponytail: defaut = defaut emulateur app/build.gradle.kts (10.0.2.2:3000).
- // Upgrade phase #15 : injecter BuildConfig.SERVER_* depuis app/MainActivity.
-private const val DEFAULT_BASE_URL = "http://10.0.2.2:3000"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,6 +85,7 @@ fun AppNav(
                 }
             }
             composable("alerts") { SecurityAlertsRoute(loadAlerts) }
+            composable("fiches") { RevisionSheetsScreen() }
         }
     }
 }

@@ -11,6 +11,7 @@ import {
   isPairingConfirmRequest,
   isPairingStartRequest,
   isPairingStartResponse,
+  isRevisionSheetsResponse,
   isSecurityAlertsResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
@@ -19,6 +20,9 @@ import type { ContractEvent, SyncCompletedData } from "../../shared/contracts/ev
 import { apiError } from "./errors";
 import { handleHomeworkGenerate } from "./homework";
 import { PairingService } from "./pairing";
+import { renderRevisionPdf } from "../jobs/revision";
+import type { RevisionListStore } from "./revision";
+import { createRevisionMemoryStore } from "./revision";
 import type { ReadStore } from "./store";
 import type { LLMProvider } from "../domain/ports";
 
@@ -48,9 +52,11 @@ export function createHandler(
   store: ReadStore,
   pairing: PairingService = new PairingService(),
   llm: LLMProvider | null = null,
+  revisions: RevisionListStore = createRevisionMemoryStore(),
 ): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
-    const path = new URL(req.url).pathname;
+    const url = new URL(req.url);
+    const path = url.pathname;
     const route = API_ROUTES.find((r) => r.path === path);
     if (!route) return apiError("not_found", `unknown path ${path}`);
     if (req.method !== route.method) return apiError("method_not_allowed", `${req.method} not allowed on ${path}`);
@@ -87,6 +93,25 @@ export function createHandler(
           data,
         };
         return sse(event);
+      }
+      case "/v1/revision-sheets": {
+        const payload = { sheets: revisions.list() };
+        return json(isRevisionSheetsResponse(payload), payload);
+      }
+      case "/v1/revision-sheets/pdf": {
+        const id = (url.searchParams.get("id") ?? "").trim();
+        if (!id) return apiError("bad_request", "missing id");
+        const sheet = revisions.get(id);
+        if (!sheet) return apiError("not_found", "unknown revision sheet");
+        let pdf: Uint8Array;
+        try {
+          pdf = renderRevisionPdf(sheet);
+        } catch {
+          return apiError("internal", "invalid payload");
+        }
+        return new Response(pdf as unknown as BodyInit, {
+          headers: { "content-type": "application/pdf" },
+        });
       }
       case "/v1/pairing/start": {
         let body: unknown;
@@ -125,10 +150,16 @@ export function createHandler(
   };
 }
 
-export function serve(store: ReadStore, port = 0, pairing?: PairingService, llm?: LLMProvider | null) {
+export function serve(
+  store: ReadStore,
+  port = 0,
+  pairing?: PairingService,
+  llm?: LLMProvider | null,
+  revisions?: RevisionListStore,
+) {
   return Bun.serve({
     port,
     hostname: "127.0.0.1",
-    fetch: createHandler(store, pairing, llm ?? null),
+    fetch: createHandler(store, pairing ?? new PairingService(), llm ?? null, revisions ?? createRevisionMemoryStore()),
   });
 }
