@@ -3,7 +3,7 @@
 // Mémoire = seed/tests uniquement ; l'adaptateur SQLite (#11) implémentera
 // ReadStore sans changer le routeur.
 
-import type { Assignment, Grade, Period, TimetableEntry } from "../../shared/contracts/models";
+import type { Assignment, CanteenBalance, CanteenMenu, Grade, Period, TimetableEntry } from "../../shared/contracts/models";
 import type { SecurityAlertData } from "../../shared/contracts/events";
 import type { ProvidedAverages } from "../domain/averages";
 
@@ -17,6 +17,13 @@ export interface ReadStore {
   periods(): Period[];
   /** Moyennes fournies par l'établissement (#74), null si non publiées. */
   providedAverages(): ProvidedAverages | null;
+  /**
+   * Menus cantine (#81) : fenêtre ISO optionnelle. Optionnel + défaut [] =
+   * établissement sans module cantine, aucun appelant existant cassé.
+   */
+  canteenMenus?(window?: { from?: string; to?: string }): CanteenMenu[];
+  /** Solde compte cantine (#81), null tant que Turboself/ARD n'est pas branché. */
+  canteenBalance?(): CanteenBalance | null;
 }
 
 export interface StoreSeed {
@@ -26,6 +33,9 @@ export interface StoreSeed {
   readonly securityAlerts?: SecurityAlertData[];
   readonly periods?: Period[];
   readonly providedAverages?: ProvidedAverages | null;
+  /** Menus cantine synthétiques (#81). Défaut = aucun menu (onglet masqué). */
+  readonly canteenMenus?: CanteenMenu[];
+  readonly canteenBalance?: CanteenBalance | null;
 }
 
 const SEED_GRADE: Grade = {
@@ -82,6 +92,10 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
   const alerts = structuredClone(seed.securityAlerts ?? SEED_ALERTS);
   const periods = structuredClone(seed.periods ?? SEED_PERIODS);
   const provided = seed.providedAverages === undefined ? null : structuredClone(seed.providedAverages);
+  // #81 : aucun menu par défaut (module cantine souvent absent). Le filtre de
+  // fenêtre est fait par le routeur, le store reste une source de lecture.
+  const canteen = structuredClone(seed.canteenMenus ?? []);
+  const balance = seed.canteenBalance === undefined ? null : structuredClone(seed.canteenBalance);
   return {
     grades: () => structuredClone(grades),
     assignments: () => structuredClone(assignments),
@@ -89,5 +103,7 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
     securityAlerts: () => structuredClone(alerts),
     periods: () => structuredClone(periods),
     providedAverages: () => (provided === null ? null : structuredClone(provided)),
+    canteenMenus: () => structuredClone(canteen),
+    canteenBalance: () => (balance === null ? null : structuredClone(balance)),
   };
 }
