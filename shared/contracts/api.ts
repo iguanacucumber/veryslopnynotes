@@ -2,8 +2,8 @@
 // Table de routes + types requête/réponse. Doit rester en sync avec
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
-import { isAssignment, isDevice, isGrade, isTimetableEntry } from "./models";
-import type { Assignment, Device, Grade, TimetableEntry } from "./models";
+import { isAssignment, isDevice, isGrade, isRevisionSheet, isTimetableEntry } from "./models";
+import type { Assignment, Device, Grade, RevisionSheet, TimetableEntry } from "./models";
 import { isSecurityAlertData } from "./events";
 import type { SecurityAlertData } from "./events";
 
@@ -22,6 +22,8 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/v1/events" },
   { method: "GET", path: "/v1/security/alerts" },
   { method: "POST", path: "/v1/homework/generate" },
+  { method: "GET", path: "/v1/revision-sheets" },
+  { method: "GET", path: "/v1/revision-sheets/pdf" },
 ] as const;
 
 export interface HealthResponse {
@@ -52,6 +54,9 @@ export interface AssignmentsResponse {
 }
 export interface TimetableResponse {
   readonly entries: TimetableEntry[];
+}
+export interface RevisionSheetsResponse {
+  readonly sheets: RevisionSheet[];
 }
 
 // Alertes sécurité phase 6 (#21) : liste d'injections neutralisées (I6).
@@ -145,6 +150,12 @@ export function isSecurityAlertsResponse(v: unknown): v is SecurityAlertsRespons
   if (typeof v !== "object" || v === null) return false;
   const a = (v as Record<string, unknown>)["alerts"];
   return Array.isArray(a) && a.every(isSecurityAlertData);
+}
+
+export function isRevisionSheetsResponse(v: unknown): v is RevisionSheetsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const s = (v as Record<string, unknown>)["sheets"];
+  return Array.isArray(s) && s.every(isRevisionSheet);
 }
 
 export function isPairingConfirmResponse(v: unknown): v is PairingConfirmResponse {
