@@ -1,15 +1,18 @@
-// Contrats v0 — événements serveur→app (SSE, source de vérité, issue #4).
+// Contrats v0 — événements serveur→app (SSE, source de vérité, issues #4, #18).
 // Enveloppe versionnée {v, type, at, data}. Détection nouvelle note / DS
 // sur données structurées uniquement (I7), jamais sur sortie libre LLM.
 
 import { CONTRACTS_VERSION, isAssignment, isGrade, isTimetableEntry } from "./models";
 import type { Assignment, Grade, TimetableEntry } from "./models";
+import { isCacheableResource } from "./cache";
+import type { CacheableResource } from "./cache";
 
 export const EVENT_TYPES = [
   "GradeCreated",
   "AssignmentUpdated",
   "TimetableUpdated",
   "SyncCompleted",
+  "CacheInvalidated",
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -28,6 +31,10 @@ export type SyncCompletedData = {
   readonly accountId: string;
   readonly grades: number;
   readonly assignments: number;
+};
+export type CacheInvalidatedData = {
+  readonly resource: CacheableResource;
+  readonly reason: "sync" | "expiry" | "manual";
 };
 
 function isIsoDate(v: unknown): v is string {
@@ -63,6 +70,14 @@ export function isContractEvent(v: unknown): v is ContractEvent {
         (d["accountId"] as string).trim().length > 0 &&
         isNonNegativeInt(d["grades"]) &&
         isNonNegativeInt(d["assignments"])
+      );
+    }
+    case "CacheInvalidated": {
+      if (typeof data !== "object" || data === null) return false;
+      const d = data as Record<string, unknown>;
+      return (
+        isCacheableResource(d["resource"]) &&
+        (d["reason"] === "sync" || d["reason"] === "expiry" || d["reason"] === "manual")
       );
     }
     default:

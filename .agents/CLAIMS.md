@@ -26,3 +26,4 @@ Case `- [ ]` = prise active, `- [x]` = libérée/mergée.
 | #23 | `agent/dev-server/23-notif-notes` | dev-server | 2026-10-02 | - [ ] prise active (server/jobs notif notes, phase 7) |
 | #9 | `agent/dev-server/9-pronote-gonogo` | dev-server | 2026-10-02 | - [ ] prise active (docs/adr ADR-002 go/no-go, phase 2) |
 | #13 | `agent/dev-android/13-android-shell` | dev-android | 2026-10-02 | - [ ] prise active (android/ shell, phase 4) |
+| #18 | `agent/dev-server/18-sync-cache-invalidation` | dev-server | 2026-10-02 | - [ ] prise active (shared/contracts cache, phase 5) |
