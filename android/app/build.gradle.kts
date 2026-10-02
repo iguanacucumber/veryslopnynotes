@@ -31,9 +31,37 @@ android {
         buildConfigField("String", "SERVER_HOST", "\"$host\"")
     }
 
+    signingConfigs {
+        // Clé release hors repo (jamais commitée, voir docs/RELEASE.md).
+        // Config incomplète = bloc inutilisé (buildTypes ne l'assigne que si
+        // STORE_FILE présent), donc aucun secret en dur, aucun défaut.
+        create("release") {
+            val f = (project.findProperty("release.storeFile") as String?)
+                ?: System.getenv("STORE_FILE")
+            if (!f.isNullOrBlank()) {
+                storeFile = file(f)
+                storePassword = ((project.findProperty("release.storePassword") as String?)
+                    ?: System.getenv("STORE_PASSWORD"))
+                keyAlias = ((project.findProperty("release.keyAlias") as String?)
+                    ?: System.getenv("KEY_ALIAS"))
+                keyPassword = ((project.findProperty("release.keyPassword") as String?)
+                    ?: System.getenv("KEY_PASSWORD"))
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Release signée (issue #32) : clé TOUJOURS hors repo.
+            // Vars : gradle.properties `release.storeFile/storePassword/keyAlias/
+            // keyPassword` ou env STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD.
+            // Absentes = APK non signé (assembleRelease OK, à signer en local).
+            val storeFileProp = (project.findProperty("release.storeFile") as String?)
+                ?: System.getenv("STORE_FILE")
+            if (!storeFileProp.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     buildFeatures {
