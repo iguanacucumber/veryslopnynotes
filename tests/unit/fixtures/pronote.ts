@@ -10,3 +10,10 @@ export const syntheticSampleGrades = {
     { subject: "Histoire-Fake", value: 11, scale: 20 },
   ],
 };
+// Auth ENT/CAS synthétique (#7). Identifiants faux, jamais réels.
+export const syntheticAccountId = "acc-fake-1";
+export const syntheticUsername = "fake-user-UNREAL";
+export const syntheticPassword = "fake-pw-9x8y7z-UNREAL";
+export const syntheticEntKind = "cas-fake";
+export const syntheticAuthToken = "fake-token-abc123-UNREAL";
+export const syntheticAuthSuccess = { token: syntheticAuthToken };
