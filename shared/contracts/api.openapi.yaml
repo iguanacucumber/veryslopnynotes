@@ -165,6 +165,6 @@ components:
       required: [v, type, at, data]
       properties:
         v: { type: string, enum: ['0.1.0'] }
-        type: { type: string, enum: [GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted] }
+        type: { type: string, enum: [GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted, CacheInvalidated] }
         at: { type: string, format: date-time }
         data: { type: object }
