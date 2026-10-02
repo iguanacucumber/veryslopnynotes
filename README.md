@@ -16,7 +16,7 @@ android/  app, core, data, ui      (client natif, phase 4)
 server/   api, domain, infrastructure, integrations, ai, jobs
 shared/   contracts/               (source de vérité API/événements/modèles)
 agents/   launch.sh, runtime/      (outillage local : check-secrets, check-architecture, check-pr)
-.agents/  roles, policies, tasks, prs/
+.agents/  policies, tasks, prs/
 docs/     adr, architecture (INVARIANTS), security, HUMAN_INPUTS, FEATURES, ROADMAP
 tests/    unit, architecture, contracts, security, integration, e2e
 ```
@@ -38,10 +38,9 @@ make build                    # image Docker + rappel APK debug (clé hors repo)
 Détail apports humains : `docs/HUMAN_INPUTS.md`.
 Conventions Git + circuit agents : `AGENTS.md`, `docs/CONVENTIONS_GIT.md`.
 
-## Équipe agents
+## Workflow
 
-Un agent = une issue = une branche `agent/<role>/<n>-<slug>` = une PR.
-Travail local (un worktree par agent, `agents/launch.sh`), deux reviews locales obligatoires sur SHA courant (`.agents/prs/<id>.md`), puis publication/merge via `gh`. `main` uniquement via PR validée. Backlog : `docs/ROADMAP.md` (agent Planning). Rôles : `planning`, `dev-server`, `dev-android`, `reviewer-*`, `guardian`.
+Plan (découper, critères avant code) → Build (une issue = une branche `agent/<n>-<slug>` = une PR) → Review (relire, `bun run check`, répéter jusqu'à bon), puis merge via `gh`. `main` uniquement via PR validée. Backlog : `docs/ROADMAP.md`.
 
 ## Fonctionnalités
 

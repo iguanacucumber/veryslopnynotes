@@ -5,7 +5,7 @@
 // Interface d'envoi structurelle (compatible PushProvider sans import de lane).
 // Logs = compteurs seuls, jamais de token en clair.
 
-import { isGrade } from "../../shared/contracts/models";
+import { isGrade, isTokenHash } from "../../shared/contracts/models";
 import type { ContractEvent } from "../../shared/contracts/events";
 import type { Device, Grade } from "../../shared/contracts/models";
 import type { SyncResult } from "./sync";
@@ -23,8 +23,6 @@ export interface NotifyResult {
 
 export type NotifyLogger = (message: string) => void;
 
-const HASH_RE = /^[0-9a-f]{64}$/i;
-
 function clean(s: string, max: number): string {
   const t = s.trim().replace(/\s+/g, " ");
   return t.length > max ? t.slice(0, max) : t;
@@ -39,7 +37,7 @@ export function formatGradePush(grade: Grade): { title: string; body: string } {
 }
 
 function validDevices(devices: Device[]): Device[] {
-  return devices.filter((d) => typeof d?.tokenHash === "string" && HASH_RE.test(d.tokenHash));
+  return devices.filter((d) => isTokenHash(d?.tokenHash));
 }
 
 export async function notifyGradeEvents(

@@ -12,18 +12,14 @@ export interface ManualsConfig {
 
 export const MANUAL_ENV_KEYS = ["MANUAL_PLATFORM", "MANUAL_USERNAME", "MANUAL_PASSWORD"] as const;
 
-function clean(v: string | undefined): string {
-  return (v ?? "").trim();
-}
+import { loadRequiredEnv } from "./env";
 
 export function loadManualsConfig(
   env: Record<string, string | undefined> = Bun.env as Record<string, string | undefined>,
 ): ManualsConfig | null {
-  const platform = clean(env["MANUAL_PLATFORM"]);
-  const username = clean(env["MANUAL_USERNAME"]);
-  const password = clean(env["MANUAL_PASSWORD"]);
-  if (!platform || !username || !password) return null;
-  return { platform, username, password };
+  const got = loadRequiredEnv(env, MANUAL_ENV_KEYS);
+  if (!got) return null;
+  return { platform: got["MANUAL_PLATFORM"], username: got["MANUAL_USERNAME"], password: got["MANUAL_PASSWORD"] };
 }
 
 export function isManualsConfigured(
