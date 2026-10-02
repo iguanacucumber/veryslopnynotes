@@ -17,8 +17,10 @@ import {
 import { CONTRACTS_VERSION, isDevice } from "../../shared/contracts/models";
 import type { ContractEvent, SyncCompletedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
+import { handleHomeworkGenerate } from "./homework";
 import { PairingService } from "./pairing";
 import type { ReadStore } from "./store";
+import type { LLMProvider } from "../domain/ports";
 
 function json(valid: boolean, payload: unknown): Response {
   if (!valid) return apiError("internal", "invalid payload");
@@ -45,6 +47,7 @@ function sse(event: ContractEvent): Response {
 export function createHandler(
   store: ReadStore,
   pairing: PairingService = new PairingService(),
+  llm: LLMProvider | null = null,
 ): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
     const path = new URL(req.url).pathname;
@@ -113,16 +116,19 @@ export function createHandler(
         }
         return json(isDevice(res.device), res.device);
       }
+      case "/v1/homework/generate": {
+        return handleHomeworkGenerate(req, llm);
+      }
       default:
         return apiError("not_found", `unknown path ${path}`);
     }
   };
 }
 
-export function serve(store: ReadStore, port = 0, pairing?: PairingService) {
+export function serve(store: ReadStore, port = 0, pairing?: PairingService, llm?: LLMProvider | null) {
   return Bun.serve({
     port,
     hostname: "127.0.0.1",
-    fetch: createHandler(store, pairing),
+    fetch: createHandler(store, pairing, llm ?? null),
   });
 }

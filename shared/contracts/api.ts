@@ -21,6 +21,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/v1/timetable" },
   { method: "GET", path: "/v1/events" },
   { method: "GET", path: "/v1/security/alerts" },
+  { method: "POST", path: "/v1/homework/generate" },
 ] as const;
 
 export interface HealthResponse {
@@ -58,6 +59,42 @@ export interface TimetableResponse {
 export interface SecurityAlertsResponse {
   readonly alerts: SecurityAlertData[];
 }
+
+
+// Devoirs generate (issue #27, phase 9) — JSON validé, sources citées.
+// Requête = question + sources déjà récupérées (cours + manuels) ;
+// réponse = corrigé sourcé ou refus propre si insuffisant.
+// Aucun effet métier : RENDER/push = phases suivantes, jamais ici (I7).
+export const HOMEWORK_MAX_QUESTION_CHARS = 2000;
+export const HOMEWORK_MAX_SOURCES = 8;
+export const HOMEWORK_MAX_SOURCE_CHARS = 2000;
+export const HOMEWORK_MAX_SOURCE_LABEL_CHARS = 200;
+
+export interface HomeworkSource {
+  readonly text: string;
+  readonly source: string;
+}
+
+export interface HomeworkGenerateRequest {
+  readonly question: string;
+  readonly sources: HomeworkSource[];
+}
+
+export interface HomeworkOkResponse {
+  readonly status: "ok";
+  readonly answer: string;
+  readonly steps: string[];
+  readonly sources: string[];
+}
+
+export interface HomeworkRefusedResponse {
+  readonly status: "refused";
+  readonly reason: string;
+  readonly sources: string[];
+}
+
+export type HomeworkGenerateResponse = HomeworkOkResponse | HomeworkRefusedResponse;
+
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
@@ -112,4 +149,49 @@ export function isSecurityAlertsResponse(v: unknown): v is SecurityAlertsRespons
 
 export function isPairingConfirmResponse(v: unknown): v is PairingConfirmResponse {
   return isDevice(v);
+}
+
+function isBoundedNonEmptyString(v: unknown, max: number): v is string {
+  return typeof v === "string" && v.trim().length > 0 && v.length <= max;
+}
+
+export function isHomeworkSource(v: unknown): v is HomeworkSource {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    isBoundedNonEmptyString(r["text"], HOMEWORK_MAX_SOURCE_CHARS) &&
+    isBoundedNonEmptyString(r["source"], HOMEWORK_MAX_SOURCE_LABEL_CHARS)
+  );
+}
+
+export function isHomeworkGenerateRequest(v: unknown): v is HomeworkGenerateRequest {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  if (!isBoundedNonEmptyString(r["question"], HOMEWORK_MAX_QUESTION_CHARS)) return false;
+  const sources = r["sources"];
+  if (!Array.isArray(sources) || sources.length > HOMEWORK_MAX_SOURCES) return false;
+  return sources.every(isHomeworkSource);
+}
+
+export function isHomeworkGenerateResponse(v: unknown): v is HomeworkGenerateResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  if (r["status"] === "ok") {
+    return (
+      isBoundedNonEmptyString(r["answer"], 8000) &&
+      Array.isArray(r["steps"]) &&
+      (r["steps"] as unknown[]).every((s) => typeof s === "string") &&
+      Array.isArray(r["sources"]) &&
+      (r["sources"] as unknown[]).length > 0 &&
+      (r["sources"] as unknown[]).every((s) => isNonEmptyString(s))
+    );
+  }
+  if (r["status"] === "refused") {
+    return (
+      isNonEmptyString(r["reason"]) &&
+      Array.isArray(r["sources"]) &&
+      (r["sources"] as unknown[]).every((s) => typeof s === "string")
+    );
+  }
+  return false;
 }
