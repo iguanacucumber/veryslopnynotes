@@ -16,7 +16,7 @@ android/  app, core, data, ui      (client natif, phase 4)
 server/   api, domain, infrastructure, integrations, ai, jobs
 shared/   contracts/               (source de vérité API/événements/modèles)
 agents/   launch.sh, runtime/      (outillage local : check-secrets, check-architecture)
-.agents/  policies, tasks, prs/
+.agents/  policies, tasks/
 docs/     adr, architecture (INVARIANTS), security, HUMAN_INPUTS, FEATURES, ROADMAP
 tests/    unit, architecture, contracts, security, integration, e2e
 ```
