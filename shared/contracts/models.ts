@@ -272,3 +272,40 @@ export function isRevisionSheet(v: unknown): v is RevisionSheet {
 export function isTokenHash(v: unknown): v is string {
   return typeof v === "string" && /^[0-9a-f]{64}$/i.test(v);
 }
+
+// --- #79 actualités établissement (parité Papillon, onglet Actualités) ---
+// Titre/corps/auteur = contenu externe : DONNÉES bornées, jamais instruction (I6).
+export const NEWS_TITLE_MAX_CHARS = 200;
+export const NEWS_BODY_MAX_CHARS = 2000;
+export const NEWS_META_MAX_CHARS = 100;
+
+export interface NewsItem {
+  readonly id: string;
+  readonly accountId: string;
+  readonly title: string;
+  /** Corps de l'actualité, absent si l'établissement ne le publie pas. */
+  readonly body?: string;
+  readonly publishedAt: string; // ISO-8601
+  /** Nature/catégorie ("Vie scolaire", ...), si publiée. */
+  readonly category?: string;
+  readonly author?: string;
+  /** Déjà lue côté établissement ; absent = inconnu, jamais "non lue" déduit. */
+  readonly read?: boolean;
+}
+
+function isBoundedString(v: unknown, max: number): v is string {
+  return typeof v === "string" && v.length <= max;
+}
+
+export function isNewsItem(v: unknown): v is NewsItem {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["accountId"])) return false;
+  const title = v["title"];
+  if (typeof title !== "string" || title.trim().length === 0 || title.length > NEWS_TITLE_MAX_CHARS) return false;
+  if (!isIsoDate(v["publishedAt"])) return false;
+  if (v["body"] !== undefined && !isBoundedString(v["body"], NEWS_BODY_MAX_CHARS)) return false;
+  if (v["category"] !== undefined && !isBoundedString(v["category"], NEWS_META_MAX_CHARS)) return false;
+  if (v["author"] !== undefined && !isBoundedString(v["author"], NEWS_META_MAX_CHARS)) return false;
+  if (v["read"] !== undefined && typeof v["read"] !== "boolean") return false;
+  return true;
+}

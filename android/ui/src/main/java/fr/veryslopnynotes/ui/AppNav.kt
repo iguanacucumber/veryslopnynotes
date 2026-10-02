@@ -122,7 +122,7 @@ fun AppNav(
                 CachedScreen("Tâches", CachePolicy.ASSIGNMENTS, repo, baseUrl, "Devoirs semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
             }
             composable(ROUTE_PROFILE) {
-                ProfileScreen(baseUrl, { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, { nav.navigate("fiches") })
+                ProfileScreen(baseUrl, { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, { nav.navigate("fiches") }, { nav.navigate("actus") })
             }
             composable(ROUTE_SETTINGS) {
                 SettingsScreen(onBack = { nav.popBackStack() })
@@ -143,6 +143,8 @@ fun AppNav(
             }
             composable("alerts") { SecurityAlertsRoute(loadAlerts) }
             composable("fiches") { RevisionSheetsScreen() }
+            // #79 : actualités établissement, ressource cachable "news" (offline).
+            composable("actus") { NewsRoute(repo, baseUrl) }
         }
     }
 }
@@ -288,6 +290,7 @@ fun ProfileScreen(
     goPairing: () -> Unit,
     goAlerts: () -> Unit,
     goFiches: () -> Unit,
+    goNews: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -298,6 +301,7 @@ fun ProfileScreen(
         Text("Infos élève, périodes et vie scolaire arrivent avec la synchro (#82, #77).")
         Button(onClick = goPairing) { Text("Appairage QR+PIN") }
         Button(onClick = { goFiches() }) { Text("Fiches révision") }
+        Button(onClick = { goNews() }) { Text("Actualités") }
         Button(onClick = goAlerts) { Text("Alertes sécurité") }
         Button(onClick = goSettings) { Text("Réglages") }
     }

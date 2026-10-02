@@ -8,6 +8,7 @@ import {
   API_ROUTES,
   isAssignmentsResponse,
   isGradesResponse,
+  isNewsResponse,
   isPairingConfirmRequest,
   isPairingStartRequest,
   isPairingStartResponse,
@@ -16,8 +17,8 @@ import {
   isSecurityAlertsResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
-import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDevice } from "../../shared/contracts/models";
-import type { ContractEvent, SyncCompletedData } from "../../shared/contracts/events";
+import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDevice, isNewsItem } from "../../shared/contracts/models";
+import type { ContractEvent, NewsUpdatedData, SyncCompletedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
 import { computeAverages } from "../domain/averages";
 import { handleHomeworkGenerate } from "./homework";
@@ -36,8 +37,9 @@ function json(valid: boolean, payload: unknown): Response {
   return Response.json(payload);
 }
 
-function sse(event: ContractEvent): Response {
-  const line = `data: ${JSON.stringify(event)}\n\n`;
+function sse(events: ContractEvent | ContractEvent[]): Response {
+  const list = Array.isArray(events) ? events : [events];
+  const line = list.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(new TextEncoder().encode(line));
@@ -119,7 +121,15 @@ export function createHandler(
           at: new Date().toISOString(),
           data,
         };
-        return sse(event);
+        // #79 : snapshot actus dans le meme flux (items filtrees par le garde-fou
+        // pour garantir une enveloppe valide, pas de 500 possible en flux ouvert).
+        const newsEvent: ContractEvent<"NewsUpdated", NewsUpdatedData> = {
+          v: CONTRACTS_VERSION,
+          type: "NewsUpdated",
+          at: new Date().toISOString(),
+          data: { items: (store.news?.() ?? []).filter(isNewsItem) },
+        };
+        return sse([event, newsEvent]);
       }
       case "/v1/revision-sheets": {
         const payload = { sheets: revisions.list() };
@@ -170,6 +180,11 @@ export function createHandler(
       }
       case "/v1/homework/generate": {
         return handleHomeworkGenerate(req, llm);
+      }
+      case "/v1/news": {
+        // #79 : onglet Actualités. Store sans table actus = liste vide (200).
+        const payload = { news: store.news?.() ?? [] };
+        return json(isNewsResponse(payload), payload);
       }
       default:
         return apiError("not_found", `unknown path ${path}`);

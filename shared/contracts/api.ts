@@ -7,11 +7,21 @@ import {
   isAssignment,
   isDevice,
   isGrade,
+  isNewsItem,
   isPeriod,
   isRevisionSheet,
   isTimetableEntry,
 } from "./models";
-import type { AveragesReport, Assignment, Device, Grade, Period, RevisionSheet, TimetableEntry } from "./models";
+import type {
+  AveragesReport,
+  Assignment,
+  Device,
+  Grade,
+  NewsItem,
+  Period,
+  RevisionSheet,
+  TimetableEntry,
+} from "./models";
 import { isSecurityAlertData } from "./events";
 import type { SecurityAlertData } from "./events";
 
@@ -33,6 +43,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/v1/homework/generate" },
   { method: "GET", path: "/v1/revision-sheets" },
   { method: "GET", path: "/v1/revision-sheets/pdf" },
+  { method: "GET", path: "/v1/news" },
 ] as const;
 
 export interface HealthResponse {
@@ -228,4 +239,16 @@ export function isHomeworkGenerateResponse(v: unknown): v is HomeworkGenerateRes
     );
   }
   return false;
+}
+
+// Actualités établissement (#79) : liste la plus récente d'abord.
+// Onglet non actif côté établissement = liste vide (200), jamais 500.
+export interface NewsResponse {
+  readonly news: NewsItem[];
+}
+
+export function isNewsResponse(v: unknown): v is NewsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const n = (v as Record<string, unknown>)["news"];
+  return Array.isArray(n) && n.every(isNewsItem);
 }
