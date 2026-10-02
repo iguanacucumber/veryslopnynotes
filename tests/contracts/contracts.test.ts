@@ -9,9 +9,17 @@ import {
   isPairingConfirmRequest,
   isPairingStartRequest,
   isPairingStartResponse,
+  isRevisionSheetsResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
-import { CONTRACTS_VERSION, isAssignment, isGrade, isTimetableEntry } from "../../shared/contracts/models";
+import {
+  CONTRACTS_VERSION,
+  REVISION_TEMPLATE_VERSION,
+  isAssignment,
+  isGrade,
+  isRevisionSheet,
+  isTimetableEntry,
+} from "../../shared/contracts/models";
 import { isContractEvent } from "../../shared/contracts/events";
 
 const CONTRACTS_DIR = join(import.meta.dir, "..", "..", "shared/contracts");
@@ -89,7 +97,9 @@ describe("contracts", () => {
   });
 
   test("api : routes et payloads", () => {
-    expect(API_ROUTES.length).toBe(9);
+    expect(API_ROUTES.length).toBe(11);
+    expect(API_ROUTES.map((r) => r.path)).toContain("/v1/revision-sheets");
+    expect(API_ROUTES.map((r) => r.path)).toContain("/v1/revision-sheets/pdf");
     expect(isHealthResponse({ status: "ok", version: CONTRACTS_VERSION })).toBe(true);
     expect(isHealthResponse({ status: "ko", version: CONTRACTS_VERSION })).toBe(false);
     expect(isPairingStartRequest({ deviceName: "pixel" })).toBe(true);
@@ -102,5 +112,24 @@ describe("contracts", () => {
     expect(isAssignmentsResponse({ assignments: [assignment] })).toBe(true);
     expect(isTimetableResponse({ entries: [entry] })).toBe(true);
     expect(isTimetableResponse({ entries: "non" })).toBe(false);
+  });
+
+  test("fiches : modèle + liste validés, gabarit versionné", () => {
+    const sheet = {
+      id: "fiche-a1",
+      examId: "a1",
+      subject: "Maths",
+      date: "2026-10-06T08:00:00.000Z",
+      title: "Fiche révision Maths",
+      body: "Résumé.\n\nSources :\n- editeur-fake • Maths-Fake 6e • p.42",
+      sources: ["editeur-fake • Maths-Fake 6e • p.42"],
+      templateVersion: REVISION_TEMPLATE_VERSION,
+      createdAt: "2026-10-02T06:00:00.000Z",
+    };
+    expect(isRevisionSheet(sheet)).toBe(true);
+    expect(isRevisionSheet({ ...sheet, sources: [] })).toBe(false);
+    expect(isRevisionSheet({ ...sheet, templateVersion: "autre" })).toBe(false);
+    expect(isRevisionSheetsResponse({ sheets: [sheet] })).toBe(true);
+    expect(isRevisionSheetsResponse({ sheets: [{ ...sheet, body: "" }] })).toBe(false);
   });
 });

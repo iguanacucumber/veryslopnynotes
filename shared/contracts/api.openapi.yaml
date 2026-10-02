@@ -111,6 +111,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HomeworkGenerateResponse'
+  /v1/revision-sheets:
+    get:
+      operationId: listRevisionSheets
+      responses:
+        '200':
+          description: fiches révision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevisionSheetsResponse'
+  /v1/revision-sheets/pdf:
+    get:
+      operationId: exportRevisionSheetPdf
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: fiche en PDF
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
 components:
   schemas:
     Grade:
@@ -188,6 +212,24 @@ components:
       required: [entries]
       properties:
         entries: { type: array, items: { $ref: '#/components/schemas/TimetableEntry' } }
+    RevisionSheet:
+      type: object
+      required: [id, examId, subject, date, title, body, sources, templateVersion, createdAt]
+      properties:
+        id: { type: string }
+        examId: { type: string }
+        subject: { type: string }
+        date: { type: string, format: date-time }
+        title: { type: string }
+        body: { type: string }
+        sources: { type: array, items: { type: string } }
+        templateVersion: { type: string, enum: [fiche-v1] }
+        createdAt: { type: string, format: date-time }
+    RevisionSheetsResponse:
+      type: object
+      required: [sheets]
+      properties:
+        sheets: { type: array, items: { $ref: '#/components/schemas/RevisionSheet' } }
     ContractEvent:
       type: object
       required: [v, type, at, data]

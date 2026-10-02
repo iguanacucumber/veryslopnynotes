@@ -6,6 +6,21 @@
 
 export const CONTRACTS_VERSION = "0.1.0" as const;
 
+/** Version gabarit fiches révision (issue #30, phase 10). Stockée par fiche. */
+export const REVISION_TEMPLATE_VERSION = "fiche-v1" as const;
+
+export interface RevisionSheet {
+  readonly id: string;
+  readonly examId: string;
+  readonly subject: string;
+  readonly date: string; // ISO-8601
+  readonly title: string;
+  readonly body: string;
+  readonly sources: string[];
+  readonly templateVersion: typeof REVISION_TEMPLATE_VERSION;
+  readonly createdAt: string; // ISO-8601
+}
+
 export interface Grade {
   readonly id: string;
   readonly accountId: string;
@@ -89,6 +104,18 @@ export function isTimetableEntry(v: unknown): v is TimetableEntry {
 export function isDevice(v: unknown): v is Device {
   if (!isRecord(v)) return false;
   if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["tokenHash"])) return false;
+  return true;
+}
+
+export function isRevisionSheet(v: unknown): v is RevisionSheet {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["examId"])) return false;
+  if (!isNonEmptyString(v["subject"]) || !isNonEmptyString(v["title"])) return false;
+  if (!isNonEmptyString(v["body"])) return false;
+  if (!isIsoDate(v["date"]) || !isIsoDate(v["createdAt"])) return false;
+  if (!Array.isArray(v["sources"]) || v["sources"].length === 0) return false;
+  for (const s of v["sources"] as unknown[]) if (!isNonEmptyString(s)) return false;
+  if (v["templateVersion"] !== REVISION_TEMPLATE_VERSION) return false;
   return true;
 }
 
