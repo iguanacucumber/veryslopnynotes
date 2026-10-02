@@ -15,7 +15,7 @@ Le serveur est le seul à parler à Pronote. Le téléphone ne contacte que le s
 android/  app, core, data, ui      (client natif, phase 4)
 server/   api, domain, infrastructure, integrations, ai, jobs
 shared/   contracts/               (source de vérité API/événements/modèles)
-agents/   launch.sh, runtime/      (outillage local : check-secrets, check-architecture, check-pr)
+agents/   launch.sh, runtime/      (outillage local : check-secrets, check-architecture)
 .agents/  policies, tasks, prs/
 docs/     adr, architecture (INVARIANTS), security, HUMAN_INPUTS, FEATURES, ROADMAP
 tests/    unit, architecture, contracts, security, integration, e2e
