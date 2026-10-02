@@ -1,6 +1,10 @@
 // Ressources pédagogiques → corpus manuels (issue #84).
 // Ordre : 1) session Pronote (getResources : contenus cours + PJ, via SSO),
 // 2) fallback Playwright (scrape manuel éditeur, MANUAL_* via .env.local).
+// Verdict live 2026-10-02 : manuels numériques liés = liens externes SSO
+// (9 titres vus : Easy as Pie, Indice Maths, Let's Meet Up, etc.), aucune API
+// Pronote directe -> récupération via session impossible ; seul le fallback
+// éditeur externe (avec MANUAL_* humain) peut les scraper.
 // Sorties = ManualDoc bruts à marquer Untrusted (markManualsUntrusted) avant IA (I6).
 // Aucun secret/URL en dur : tout injecté. Logs compteurs + origines seuls.
 // ponytail: conversion directe, pas de PDF-parse (excerpts texte seuls).
