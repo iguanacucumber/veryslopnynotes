@@ -103,4 +103,51 @@ describe("invariants", () => {
       hasDirectFetch(codeOnly('const u = "https://index-education.net/pronote/";\nawait fetch(u);')),
     ).toBe(true);
   });
+
+  test("I4/I5: server/ai sans reseau/secrets/outils", () => {
+    const aiFiles = list(join(ROOT, "server/ai"));
+    expect(aiFiles.length).toBeGreaterThanOrEqual(2);
+    const secretRe =
+      /sk-or-v1-|OPENROUTER_API_KEY|MASTER_KEY|PRONOTE_PASSWORD|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/;
+    for (const f of aiFiles) {
+      const c = codeOnly(readFileSync(f, "utf8"));
+      expect({ file: f, kind: "secret" }).toEqual({ file: f, kind: "secret" });
+      expect(c).not.toMatch(secretRe);
+      expect(c).not.toMatch(/Bun\.env|process\.env/);
+      expect(c).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|Bun\.serve/);
+      expect(c).not.toMatch(/tools\s*[:=]\s*\[[^\]]*[^\s\]]/);
+    }
+  });
+
+  test("I6: pipeline Untrusted + nonce partout dans server/ai", () => {
+    const aiFiles = list(join(ROOT, "server/ai"));
+    const untrusted = aiFiles.find((f) => f.endsWith("untrusted.ts"));
+    expect(untrusted).toBeDefined();
+    const base = codeOnly(readFileSync(untrusted!, "utf8"));
+    expect(base).toContain("UNTRUSTED_DATA");
+    expect(base).toContain("nonce");
+    expect(base).toContain("createNonce");
+    for (const f of aiFiles) {
+      if (f.endsWith("untrusted.ts")) continue;
+      const c = readFileSync(f, "utf8");
+      expect(c).toMatch(/from\s+["']\.\/untrusted["']/);
+      expect(c).toMatch(/markExternal|wrapUntrusted|buildSafePrompt/);
+    }
+    const ports = codeOnly(readFileSync(join(ROOT, "server/domain/ports.ts"), "utf8"));
+    expect(ports).toContain("untrusted");
+  });
+
+  test("I7: jobs sans LLM, effets sur donnees structurees uniquement", () => {
+    const jobFiles = list(join(ROOT, "server/jobs"));
+    expect(jobFiles.length).toBeGreaterThan(0);
+    const offenders = jobFiles.filter((f) => {
+      const c = codeOnly(readFileSync(f, "utf8"));
+      return (
+        /server\/ai|LLMProvider|from\s+['"][^'"]*\/ai['"]/.test(c) ||
+        /\bgenerate\s*\(/.test(c) ||
+        /fetch\s*\(/.test(c)
+      );
+    });
+    expect({ offenders }).toEqual({ offenders: [] });
+  });
 });

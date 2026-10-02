@@ -24,12 +24,22 @@ security:
 	bun test tests/security
 
 integration integration-pronote integration-pairing integration-push integration-api:
-	@if [ ! -f .env.local ]; then echo "skip $@ (pas de .env.local)"; exit 0; fi
-	bun test tests/integration
+	@if [ ! -f .env.local ]; then echo "skip $@ (pas de .env.local)"; else bun test tests/integration; fi
 
-e2e e2e-grades e2e-assignments e2e-manuals e2e-revision:
-	@if [ ! -f .env.local ]; then echo "skip $@ (pas de .env.local)"; exit 0; fi
+e2e:
 	bun test tests/e2e
+
+e2e-grades:
+	bun test tests/e2e/grades.test.ts
+
+e2e-assignments:
+	bun test tests/e2e/assignments.test.ts
+
+e2e-manuals:
+	bun test tests/e2e/manuals.test.ts
+
+e2e-revision:
+	bun test tests/e2e/revision.test.ts
 
 build:
 	bun run agents/runtime/check-secrets.ts
