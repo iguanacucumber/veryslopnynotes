@@ -22,3 +22,4 @@ Case `- [ ]` = prise active, `- [x]` = libérée/mergée.
 | #19 | `agent/guardian/19-pipeline-untrusted` | guardian | 2026-10-02 | pris |
 | #8 | `agent/dev-server/8-pronote-lectures` | dev-server | 2026-10-02 | - [ ] prise active (server/integrations lectures notes/devoirs/EDT, phase 2) |
 | #25 | `agent/dev-server/25-manuels-scrape` | dev-server | 2026-10-02 | - [ ] prise active (server/infrastructure manuals scrape, phase 8) |
+| #20 | `agent/guardian/20-pipeline-llm-guard` | guardian | 2026-10-02 | - [ ] prise active (server/ai guard LLM, phase 6) |
