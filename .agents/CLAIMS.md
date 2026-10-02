@@ -13,3 +13,4 @@ Case `- [ ]` = prise active, `- [x]` = libérée/mergée.
 | #12 | `agent/dev-server/12-server-pairing` | dev-server | 2026-10-02 | - [ ] prise active (server/api pairing, phase 3) |
 | #16 | `agent/dev-server/16-sync-moteur` | dev-server | 2026-10-02 | - [ ] prise active (server/jobs, phase 5) |
 | #17 | `agent/dev-server/17-sync-delta-notes` | dev-server | 2026-10-02 | - [ ] prise active (server/jobs diff, phase 5) |
+| #24 | `agent/dev-server/24-jobs-ds` | dev-server | 2026-10-02 | - [ ] prise active (server/jobs DS, phase 7) |
