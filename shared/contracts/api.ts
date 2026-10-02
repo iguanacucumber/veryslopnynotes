@@ -2,8 +2,16 @@
 // Table de routes + types requête/réponse. Doit rester en sync avec
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
-import { isAssignment, isDevice, isGrade, isRevisionSheet, isTimetableEntry } from "./models";
-import type { Assignment, Device, Grade, RevisionSheet, TimetableEntry } from "./models";
+import {
+  isAveragesReport,
+  isAssignment,
+  isDevice,
+  isGrade,
+  isPeriod,
+  isRevisionSheet,
+  isTimetableEntry,
+} from "./models";
+import type { AveragesReport, Assignment, Device, Grade, Period, RevisionSheet, TimetableEntry } from "./models";
 import { isSecurityAlertData } from "./events";
 import type { SecurityAlertData } from "./events";
 
@@ -17,6 +25,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/v1/pairing/start" },
   { method: "POST", path: "/v1/pairing/confirm" },
   { method: "GET", path: "/v1/grades" },
+  { method: "GET", path: "/v1/periods" },
   { method: "GET", path: "/v1/assignments" },
   { method: "GET", path: "/v1/timetable" },
   { method: "GET", path: "/v1/events" },
@@ -46,14 +55,21 @@ export interface PairingConfirmRequest {
 }
 export type PairingConfirmResponse = Device;
 
+// #74 : /v1/grades enrichi du rapport de moyennes (fournie/estimée, algorithme
+// choisi par query `?algorithm=`, période par `?periodId=`). Breaking 0.1.0→0.2.0.
 export interface GradesResponse {
   readonly grades: Grade[];
+  readonly averages: AveragesReport;
 }
 export interface AssignmentsResponse {
   readonly assignments: Assignment[];
 }
 export interface TimetableResponse {
   readonly entries: TimetableEntry[];
+}
+/** Périodes (#74) : libellés des onglets, les notes ne portant que periodId. */
+export interface PeriodsResponse {
+  readonly periods: Period[];
 }
 export interface RevisionSheetsResponse {
   readonly sheets: RevisionSheet[];
@@ -130,14 +146,21 @@ export function isPairingConfirmRequest(v: unknown): v is PairingConfirmRequest 
 
 export function isGradesResponse(v: unknown): v is GradesResponse {
   if (typeof v !== "object" || v === null) return false;
-  const g = (v as Record<string, unknown>)["grades"];
-  return Array.isArray(g) && g.every(isGrade);
+  const r = v as Record<string, unknown>;
+  const g = r["grades"];
+  return Array.isArray(g) && g.every(isGrade) && isAveragesReport(r["averages"]);
 }
 
 export function isAssignmentsResponse(v: unknown): v is AssignmentsResponse {
   if (typeof v !== "object" || v === null) return false;
   const a = (v as Record<string, unknown>)["assignments"];
   return Array.isArray(a) && a.every(isAssignment);
+}
+
+export function isPeriodsResponse(v: unknown): v is PeriodsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const p = (v as Record<string, unknown>)["periods"];
+  return Array.isArray(p) && p.every(isPeriod);
 }
 
 export function isTimetableResponse(v: unknown): v is TimetableResponse {

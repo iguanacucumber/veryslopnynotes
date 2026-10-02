@@ -11,13 +11,15 @@ import {
   isPairingConfirmRequest,
   isPairingStartRequest,
   isPairingStartResponse,
+  isPeriodsResponse,
   isRevisionSheetsResponse,
   isSecurityAlertsResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
-import { CONTRACTS_VERSION, isDevice } from "../../shared/contracts/models";
+import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDevice } from "../../shared/contracts/models";
 import type { ContractEvent, SyncCompletedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
+import { computeAverages } from "../domain/averages";
 import { handleHomeworkGenerate } from "./homework";
 import { PairingService } from "./pairing";
 import { renderRevisionPdf } from "../jobs/revision";
@@ -25,6 +27,9 @@ import type { RevisionListStore } from "./revision";
 import { createRevisionMemoryStore } from "./revision";
 import type { ReadStore } from "./store";
 import type { LLMProvider } from "../domain/ports";
+
+/** Longueur max d'un periodId reflété dans la réponse (borne d'entrée utilisateur). */
+const PERIOD_ID_MAX_CHARS = 64;
 
 function json(valid: boolean, payload: unknown): Response {
   if (!valid) return apiError("internal", "invalid payload");
@@ -65,8 +70,30 @@ export function createHandler(
       case "/v1/health":
         return Response.json({ status: "ok", version: CONTRACTS_VERSION });
       case "/v1/grades": {
-        const payload = { grades: store.grades() };
+        // #74 : moyennes fournies si l'établissement les publie, sinon estimées
+        // (3 algorithmes Papillon). Choix algo/période par query, defauts sûrs.
+        const grades = store.grades();
+        const rawAlgo = url.searchParams.get("algorithm");
+        // Algo inconnu = 400 sans répliquer l'input dans le corps d'erreur.
+        if (rawAlgo !== null && !isAverageAlgorithm(rawAlgo)) return apiError("bad_request", "unknown algorithm");
+        const algorithm = rawAlgo ?? DEFAULT_AVERAGE_ALGORITHM;
+        // periodIdborné : c'est un champ d'entrée utilisateur, on le reflète
+        // dans la réponse mais sans laisser une chaîne arbitrairement longue.
+        const rawPeriod = (url.searchParams.get("periodId") ?? "").trim().slice(0, PERIOD_ID_MAX_CHARS);
+        const periodId = rawPeriod === "" ? null : rawPeriod;
+        const payload = {
+          grades,
+          averages: computeAverages(grades, {
+            algorithm,
+            periodId,
+            provided: store.providedAverages(),
+          }),
+        };
         return json(isGradesResponse(payload), payload);
+      }
+      case "/v1/periods": {
+        const payload = { periods: store.periods() };
+        return json(isPeriodsResponse(payload), payload);
       }
       case "/v1/assignments": {
         const payload = { assignments: store.assignments() };

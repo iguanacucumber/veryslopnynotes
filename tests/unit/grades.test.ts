@@ -21,6 +21,24 @@ describe("unit grade diff", () => {
     expect(diff.removed).toEqual(["g3"]);
   });
 
+  test("correction de contexte (#74) : bonus/facultatif/coefficient détectés", () => {
+    const before = [grade("g1")];
+    const madeOptional = diffGrades(before, [{ ...grade("g1"), optional: true }]);
+    expect(madeOptional.changed.map((g) => g.id)).toEqual(["g1"]);
+
+    const madeBonus = diffGrades(before, [{ ...grade("g1"), bonus: true }]);
+    expect(madeBonus.changed.map((g) => g.id)).toEqual(["g1"]);
+
+    const newClassAverage = diffGrades(before, [{ ...grade("g1"), classAverage: 11 }]);
+    expect(newClassAverage.changed.map((g) => g.id)).toEqual(["g1"]);
+
+    const sameOptional = diffGrades(
+      [{ ...grade("g1"), optional: true }],
+      [{ ...grade("g1"), optional: true }],
+    );
+    expect(sameOptional).toEqual({ added: [], changed: [], removed: [] });
+  });
+
   test("identique → diff vide ; contre empreintes équivalent", () => {
     const before = [grade("g1")];
     const empty = diffGrades(before, [grade("g1")]);
