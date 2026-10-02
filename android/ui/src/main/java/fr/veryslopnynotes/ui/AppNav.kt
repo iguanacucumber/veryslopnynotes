@@ -15,19 +15,41 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import fr.veryslopnynotes.data.ApiClient
+import fr.veryslopnynotes.data.CachePolicy
+import fr.veryslopnynotes.data.FileCacheStore
+import fr.veryslopnynotes.data.InMemoryCacheStore
+import fr.veryslopnynotes.data.SyncedRepository
 
-// Shell #13 : 3 destinations placeholder (Notes/Devoirs/EDT).
-// États chargement/erreur propres ; données réelles #14 (offline).
-// Contenu serveur affiché comme donnée, jamais interprété.
+// Lecture hors-ligne #14 : cache local + affichage sans reseau.
+// Offline-first : lecture synchrone du cache au demarrage (jamais de
+// spinner si cache dispo), refresh reseau en echec = repli cache.
+// Badge "perime" via CachePolicy (miroir contrats cache phase 5).
+// Contenu serveur affiche comme donnee, jamais interprete.
+
+ // ponytail: defaut = defaut emulateur app/build.gradle.kts (10.0.2.2:3000).
+ // Upgrade phase #15 : injecter BuildConfig.SERVER_* depuis app/MainActivity.
+private const val DEFAULT_BASE_URL = "http://10.0.2.2:3000"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppNav() {
+fun AppNav(baseUrl: String = DEFAULT_BASE_URL) {
     val nav = rememberNavController()
+    val ctx = LocalContext.current.applicationContext
+    // ponytail: fichier natif seul (pas de Room). Repli memoire si stockage KO.
+    val repo = remember(baseUrl) {
+        val store = try {
+            FileCacheStore(java.io.File(ctx.filesDir, "offline"))
+        } catch (_: Exception) {
+            InMemoryCacheStore()
+        }
+        SyncedRepository(ApiClient(baseUrl), store)
+    }
     Scaffold(
         topBar = { TopAppBar(title = { Text("VerySlopyNyNotes") }) },
     ) { pad ->
@@ -36,29 +58,69 @@ fun AppNav() {
             startDestination = "grades",
             modifier = Modifier.padding(pad),
         ) {
-            composable("grades") { PlaceholderScreen("Notes", "assignments", { nav.navigate(it) }) }
-            composable("assignments") { PlaceholderScreen("Devoirs", "timetable", { nav.navigate(it) }) }
-            composable("timetable") { PlaceholderScreen("EDT", "grades", { nav.navigate(it) }) }
+            composable("grades") {
+                CachedScreen("Notes", CachePolicy.GRADES, repo, baseUrl, "assignments") { nav.navigate(it) }
+            }
+            composable("assignments") {
+                CachedScreen("Devoirs", CachePolicy.ASSIGNMENTS, repo, baseUrl, "timetable") { nav.navigate(it) }
+            }
+            composable("timetable") {
+                CachedScreen("EDT", CachePolicy.TIMETABLE, repo, baseUrl, "grades") { nav.navigate(it) }
+            }
         }
     }
 }
 
 @Composable
-fun PlaceholderScreen(title: String, next: String, go: (String) -> Unit) {
-    // ponytail: état local seul (pas de ViewModel avant données #14).
-    var state by remember { mutableStateOf("idle") }
+fun CachedScreen(
+    title: String,
+    resource: String,
+    repo: SyncedRepository,
+    baseUrl: String,
+    next: String,
+    go: (String) -> Unit,
+) {
+    // Etat initial = cache synchrone (affichage sans reseau immediat).
+    var state by remember(resource) {
+        val c = try {
+            repo.cached(resource)
+        } catch (_: Exception) {
+            null
+        }
+        mutableStateOf(if (c == null) UiState.Empty else uiStateFromCache(c, repo.isStale(resource, c)))
+    }
+    fun refresh() {
+        state = when (val s = state) {
+            // Re-affichage cache pendant reload (pas de spinner plein ecran si donnees).
+            is UiState.Data -> s
+            is UiState.Error -> if (s.cached != null) UiState.Data(s.cached, true, 0L) else UiState.Loading
+            else -> UiState.Loading
+        }
+        try {
+            repo.refreshAsync(resource, baseUrl) { o -> state = uiStateFromOutcome(o) }
+        } catch (_: Exception) {
+            state = UiState.Error("Erreur inattendue.", (state as? UiState.Data)?.payload)
+        }
+    }
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(title)
-        when (state) {
-            "idle" -> Text("En attente de synchronisation (phase 5).")
-            "loading" -> Text("Chargement…")
-            "error" -> Text("Erreur réseau. Réessayer.")
+        when (val s = state) {
+            UiState.Loading -> Text("Chargement…")
+            UiState.Empty -> Text("Aucune donnée en cache. Connectez-vous puis actualisez.")
+            is UiState.Data -> {
+                if (s.isStale) Text("Données hors-ligne (périmé).")
+                // ponytail: payload brut affiche tel quel (donnee, jamais interpretee).
+                Text(if (s.payload.length > 500) s.payload.take(500) + "…" else s.payload)
+            }
+            is UiState.Error -> {
+                Text("Erreur réseau. Réessayer.")
+                if (s.cached != null) Text(s.cached.take(500))
+            }
         }
-        Button(onClick = { state = "loading" }) { Text("Charger") }
-        Button(onClick = { state = "error" }) { Text("Simuler erreur") }
+        Button(onClick = { refresh() }) { Text("Actualiser") }
         Button(onClick = { go(next) }) { Text("Aller à $next") }
     }
 }
