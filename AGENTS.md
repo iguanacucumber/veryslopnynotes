@@ -3,9 +3,9 @@
 ## Workflow (solo, sans rôles)
 1. Plan — découper en petit pas, critères d'acceptation écrits avant code.
 2. Build — une issue = une branche `agent/<n>-<slug>`. Zéro commit direct sur `main` (PR `gh` uniquement).
-3. Review — relire le diff + `bun run check`, noter dans `.agents/prs/<id>.md` (`head: <SHA>`, `tests: … → pass|fail`, `findings: - [blocking|non-blocking] chemin:ligne — desc`). Répéter build↔review jusqu'à mergable (`check` pass + zéro blocking). 2e passe seulement si sensible : `PronoteHttpClient`, crypto/secrets/auth, appairage, push, intégration, fixtures, lockfiles, `Makefile`, `.agents/`, `AGENTS.md`, `agents/launch.sh`. Modif après review ⇒ review périmée.
-4. Merge auto — dès mergable : `git push`, `gh pr create`, `gh pr merge --merge`, fermer l'issue. Aucune validation humaine, jamais d'attente.
-- Avant PR : `git fetch origin main && git rebase origin/main`. Vérif : `bun run check`.
+3. Review — relire le diff + `bun run check`. Répéter build↔review jusqu'à bon (`check` pass, rien de douteux). Si sensible, relire une 2e fois en adversarial : `PronoteHttpClient`, crypto/secrets/auth, appairage, push, intégration, fixtures, lockfiles, `Makefile`, `.agents/`, `AGENTS.md`, `agents/launch.sh`.
+4. Merge auto — dès bon : `git push`, `gh pr create`, `gh pr merge --merge`, fermer l'issue. Aucune validation humaine, jamais d'attente.
+- Avant PR : `git fetch origin main && git rebase origin/main`, puis `bun run check`.
 - Worktree (`agents/launch.sh <n> <slug>`) optionnel — sinon travail en place OK.
 - Parallèle : push = claim. Avant : `git fetch origin && git branch -r | grep '/<n>-'`. Pris = autre issue.
 
