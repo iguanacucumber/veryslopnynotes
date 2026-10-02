@@ -59,7 +59,7 @@ describe("e2e revision", () => {
     expect(calls[0].title).toContain("Maths");
 
     const revisions = createRevisionMemoryStore([sheet]);
-    const handler = createHandler(createMemoryStore(), undefined, revisions);
+    const handler = createHandler(createMemoryStore(), undefined, null, revisions);
 
     const listRes = await handler(new Request("http://127.0.0.1/v1/revision-sheets"));
     expect(listRes.status).toBe(200);
@@ -106,7 +106,7 @@ describe("e2e revision", () => {
   });
 
   test("API pdf : 400 sans id, 404 inconnu", async () => {
-    const handler = createHandler(createMemoryStore(), undefined, createRevisionMemoryStore());
+    const handler = createHandler(createMemoryStore(), undefined, null, createRevisionMemoryStore());
     const bad = await handler(new Request("http://127.0.0.1/v1/revision-sheets/pdf"));
     expect(bad.status).toBe(400);
     const nf = await handler(new Request("http://127.0.0.1/v1/revision-sheets/pdf?id=nope"));
