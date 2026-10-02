@@ -1,6 +1,7 @@
 # shared/contracts/ — source de vérité app↔serveur
-`api.openapi.yaml` (miroir), `models.ts`, `events.ts`, `api.ts` + validateurs `is*`.
-Événements (`GradeCreated`, `AssignmentUpdated`, `TimetableUpdated`, `SyncCompleted`).
+`api.openapi.yaml` (miroir), `models.ts`, `events.ts`, `api.ts`, `cache.ts` + validateurs `is*`.
+Événements (`GradeCreated`, `AssignmentUpdated`, `TimetableUpdated`, `SyncCompleted`, `CacheInvalidated`).
+Cache : TTL par ressource + `cacheStatus()` (badge périmé app, phase 4 #14), invalidation par événement.
 Les API convertissent domaine → contrats, sans logique Pronote/métier.
 
 Version : `CONTRACTS_VERSION` (`models.ts`) = `info.version` (`api.openapi.yaml`) = `v` des événements.
