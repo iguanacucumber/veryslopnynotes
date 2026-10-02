@@ -32,9 +32,24 @@ compileSdk/targetSdk 34, minSdk 26, Compose BOM 2024.06.00, OkHttp 4.12.0.
 Zéro dépendance ajoutée au-delà de la stack (Compose Material3 +
 navigation-compose + OkHttp + core-ktx/activity, licences Apache-2.0).
 
+## Release signée (issue #32, clé hors repo)
+
+Voir `docs/RELEASE.md` (procédure complète) :
+
+```sh
+cd android
+./gradlew assembleRelease   # signé si STORE_FILE (+ mots de passe/alias) présent, sinon non signé
+```
+
+Keystore généré une fois hors repo (`keytool -genkeypair ...`), config via
+`~/.gradle/gradle.properties` (`release.storeFile/storePassword/keyAlias/
+keyPassword`) ou env `STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD`.
+Jamais commité (`.gitignore` `*.keystore/*.jks`, APK `*.apk` ignoré).
+Vérifier : `jarsigner -verify`, `check-secrets` OK.
+
 ## Renvoyé phases suivantes (hors scope #13)
 
 - #14 offline : cache Room + affichage sans réseau.
 - #15 pairing/SSE : QR+PIN côté app, SSE reconnect, token sécurisé.
-- Phase 10 : pinning cert, release signée (clé hors repo).
+- Phase 10 : pinning cert (reste hors scope, release #32 faite).
 

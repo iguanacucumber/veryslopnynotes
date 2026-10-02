@@ -1,9 +1,16 @@
-FROM oven/bun:1 AS base
+# Release serveur (issue #32) : image minimale, sans secret.
+# Base épinglée exacte (ADR-001, `bun --version` 1.4.2). Digest : `docker pull
+# oven/bun:1.4.2` puis figer `FROM oven/bun:1.4.2@sha256:<digest>` (daemon
+# absent en local, tag exact en attendant).
+FROM oven/bun:1.4.2 AS base
 WORKDIR /app
-COPY package.json tsconfig.json ./
-RUN bun install --frozen-lockfile || bun install
+# Lock commité : install strict, aucun fallback (dérive interdite).
+COPY package.json bun.lock tsconfig.json ./
+RUN bun install --frozen-lockfile
+# Contexte minimal : ni agents/ (outillage local), ni tests, ni docs.
+# Secrets/clés/.env* exclus via .dockerignore (jamais COPY).
 COPY server ./server
 COPY shared ./shared
-COPY agents ./agents
 ENV PORT=3000
+EXPOSE 3000
 CMD ["bun", "run", "server/infrastructure/http.ts"]
