@@ -1,5 +1,5 @@
-// Module ui : navigation Compose Material3 seule.
-// Données réelles #14 (offline), pairing/SSE #15.
+// Module ui : navigation Compose Material3 + écrans pairing/SSE #15.
+// Données réelles #14 (offline) à venir.
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")

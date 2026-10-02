@@ -20,5 +20,11 @@ class ApiClient(
         return Request.Builder().url(url).get().build()
     }
 
+    fun buildPost(path: String, body: okhttp3.RequestBody): Request {
+        val url = baseUrl + path
+        require(ServerConfig.isAllowed(url, baseUrl)) { "URL hors allowlist serveur" }
+        return Request.Builder().url(url).post(body).build()
+    }
+
     fun client(): OkHttpClient = http
 }

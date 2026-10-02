@@ -30,6 +30,7 @@ import fr.veryslopnynotes.data.SyncedRepository
 // Offline-first : lecture synchrone du cache au demarrage (jamais de
 // spinner si cache dispo), refresh reseau en echec = repli cache.
 // Badge "perime" via CachePolicy (miroir contrats cache phase 5).
+// Appairage QR+PIN #15 : route "pairing" (PairingRoute), token chiffré.
 // Contenu serveur affiche comme donnee, jamais interprete.
 
  // ponytail: defaut = defaut emulateur app/build.gradle.kts (10.0.2.2:3000).
@@ -59,13 +60,27 @@ fun AppNav(baseUrl: String = DEFAULT_BASE_URL) {
             modifier = Modifier.padding(pad),
         ) {
             composable("grades") {
-                CachedScreen("Notes", CachePolicy.GRADES, repo, baseUrl, "assignments") { nav.navigate(it) }
+                CachedScreen("Notes", CachePolicy.GRADES, repo, baseUrl, "assignments", { nav.navigate(it) }, { nav.navigate("pairing") })
             }
             composable("assignments") {
-                CachedScreen("Devoirs", CachePolicy.ASSIGNMENTS, repo, baseUrl, "timetable") { nav.navigate(it) }
+                CachedScreen("Devoirs", CachePolicy.ASSIGNMENTS, repo, baseUrl, "timetable", { nav.navigate(it) }, { nav.navigate("pairing") })
             }
             composable("timetable") {
-                CachedScreen("EDT", CachePolicy.TIMETABLE, repo, baseUrl, "grades") { nav.navigate(it) }
+                CachedScreen("EDT", CachePolicy.TIMETABLE, repo, baseUrl, "grades", { nav.navigate(it) }, { nav.navigate("pairing") })
+            }
+            composable("pairing") {
+                if (baseUrl.isBlank()) {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text("Appairage")
+                        Text("Serveur non configuré.")
+                        Button(onClick = { nav.popBackStack() }) { Text("Retour") }
+                    }
+                } else {
+                    PairingRoute(baseUrl = baseUrl, onBack = { nav.popBackStack() })
+                }
             }
         }
     }
@@ -79,6 +94,7 @@ fun CachedScreen(
     baseUrl: String,
     next: String,
     go: (String) -> Unit,
+    goPairing: () -> Unit,
 ) {
     // Etat initial = cache synchrone (affichage sans reseau immediat).
     var state by remember(resource) {
@@ -122,5 +138,6 @@ fun CachedScreen(
         }
         Button(onClick = { refresh() }) { Text("Actualiser") }
         Button(onClick = { go(next) }) { Text("Aller à $next") }
+        Button(onClick = { goPairing() }) { Text("Appairage QR+PIN") }
     }
 }

@@ -6,15 +6,20 @@ import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import fr.veryslopnynotes.ui.AppNav
 
-// Shell phase 4 (#13) : navigation Material3 seule. Données réelles
-// branchées phases 4-5 (#14 offline, #15 pairing/SSE) ; aucun appel
-// réseau ici (téléphone ne contacte que le serveur allowlist, I1).
+// Shell phase 4 (#13) + appairage/SSE #15 : navigation Material3 + route
+// "pairing" (QR+PIN, token chiffré, SSE reconnect). Aucun appel réseau ici
+// (téléphone ne contacte que le serveur allowlist, I1) : baseUrl injectée
+// depuis BuildConfig (local.properties server.host ou env SERVER_HOST).
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val baseUrl = fr.veryslopnynotes.core.ServerConfig.baseUrl(
+            BuildConfig.SERVER_SCHEME,
+            BuildConfig.SERVER_HOST,
+        )
         setContent {
             MaterialTheme {
-                AppNav()
+                AppNav(baseUrl = baseUrl)
             }
         }
     }
