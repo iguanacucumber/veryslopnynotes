@@ -79,10 +79,21 @@ paths:
   /v1/events:
     get:
       operationId: subscribeEvents
-      description: SSE serveur->app (GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted).
+      description: SSE serveur->app (GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted, SecurityAlert).
       responses:
         '200':
           description: flux text/event-stream d'enveloppes ContractEvent
+  /v1/security/alerts:
+    get:
+      operationId: listSecurityAlerts
+      description: Alertes sécurité (injections neutralisées, I6). Excerpt = donnée jamais interprétée.
+      responses:
+        '200':
+          description: liste alertes sécurité
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityAlertsResponse'
 components:
   schemas:
     Grade:
@@ -165,6 +176,19 @@ components:
       required: [v, type, at, data]
       properties:
         v: { type: string, enum: ['0.1.0'] }
-        type: { type: string, enum: [GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted, CacheInvalidated] }
+        type: { type: string, enum: [GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted, CacheInvalidated, SecurityAlert] }
         at: { type: string, format: date-time }
         data: { type: object }
+    SecurityAlert:
+      type: object
+      required: [id, kind, excerpt, source]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [injection_neutralized] }
+        excerpt: { type: string, description: Extrait suspect, donnée jamais interprétée (I6). }
+        source: { type: string }
+    SecurityAlertsResponse:
+      type: object
+      required: [alerts]
+      properties:
+        alerts: { type: array, items: { $ref: '#/components/schemas/SecurityAlert' } }

@@ -13,6 +13,7 @@ export const EVENT_TYPES = [
   "TimetableUpdated",
   "SyncCompleted",
   "CacheInvalidated",
+  "SecurityAlert",
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -36,6 +37,38 @@ export type CacheInvalidatedData = {
   readonly resource: CacheableResource;
   readonly reason: "sync" | "expiry" | "manual";
 };
+
+// Alertes sécurité phase 6 (#21) : injections neutralisées (I6).
+// Excerpt = contenu suspect tronqué, affiché comme donnée jamais interprétée.
+// Fixtures 100 % synthétiques, sans secret ni URL réelle.
+export const SECURITY_ALERT_KINDS = ["injection_neutralized"] as const;
+
+export type SecurityAlertKind = (typeof SECURITY_ALERT_KINDS)[number];
+
+export interface SecurityAlertData {
+  readonly id: string;
+  readonly kind: SecurityAlertKind;
+  /** Extrait suspect (1..2000 chars), donnée jamais instruction (I6). */
+  readonly excerpt: string;
+  /** Origine pipeline (ex. revision, homework, manuals), 1..64 chars. */
+  readonly source: string;
+}
+
+export function isSecurityAlertData(v: unknown): v is SecurityAlertData {
+  if (typeof v !== "object" || v === null) return false;
+  const d = v as Record<string, unknown>;
+  if (typeof d["id"] !== "string" || (d["id"] as string).trim().length === 0) return false;
+  if (typeof d["kind"] !== "string" || !(SECURITY_ALERT_KINDS as readonly string[]).includes(d["kind"])) {
+    return false;
+  }
+  if (typeof d["excerpt"] !== "string") return false;
+  const excerpt = (d["excerpt"] as string).trim();
+  if (excerpt.length === 0 || excerpt.length > 2000) return false;
+  if (typeof d["source"] !== "string") return false;
+  const source = (d["source"] as string).trim();
+  if (source.length === 0 || source.length > 64) return false;
+  return true;
+}
 
 function isIsoDate(v: unknown): v is string {
   return typeof v === "string" && !Number.isNaN(Date.parse(v));
@@ -80,6 +113,8 @@ export function isContractEvent(v: unknown): v is ContractEvent {
         (d["reason"] === "sync" || d["reason"] === "expiry" || d["reason"] === "manual")
       );
     }
+    case "SecurityAlert":
+      return isSecurityAlertData(data);
     default:
       return false;
   }
