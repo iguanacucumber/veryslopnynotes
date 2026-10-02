@@ -77,6 +77,37 @@ export interface PronoteReader {
   getGrades(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Grade>>;
   getAssignments(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Assignment>>;
   getTimetable(accountId: string, options?: PronoteTimetableOptions): Promise<PronotePage<TimetableEntry>>;
+  /** Ressources pédagogiques : contenus cours + PJ devoirs (proxy serveur, #84). */
+  getResources?(accountId: string, page?: PronotePageOptions): Promise<PronotePage<PedagogicResource>>;
+}
+
+/** Ressource pédagogique via session Pronote (contenu cours, fichier joint, manuel lié). */
+export interface PedagogicResource {
+  readonly id: string;
+  readonly accountId: string;
+  readonly subject: string;
+  readonly title: string;
+  /** Texte descriptif (contenu cours) ou nom fichier. */
+  readonly excerpt: string;
+  readonly origin: "lesson-content" | "homework-file";
+  /** Référence opaque pour téléchargement via proxy serveur, jamais URL directe. */
+  readonly ref: string;
+}
+
+export function isPedagogicResource(v: unknown): v is PedagogicResource {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r["id"] === "string" &&
+    (r["id"] as string).trim().length > 0 &&
+    typeof r["accountId"] === "string" &&
+    (r["accountId"] as string).trim().length > 0 &&
+    typeof r["subject"] === "string" &&
+    typeof r["title"] === "string" &&
+    typeof r["excerpt"] === "string" &&
+    (r["origin"] === "lesson-content" || r["origin"] === "homework-file") &&
+    typeof r["ref"] === "string"
+  );
 }
 
 export interface LLMProvider {
