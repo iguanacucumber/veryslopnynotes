@@ -13,9 +13,35 @@ export interface PronoteSession {
   readonly accountId: string;
 }
 
+export interface PronoteCredentials {
+  readonly accountId: string;
+  readonly username: string;
+  readonly password: string;
+  /** Type ENT/CAS injecté (ex. valeur fournie par humain, jamais en dur). */
+  readonly entKind: string;
+}
+
+export type PronoteAuthErrorCode =
+  | "invalid_credentials"
+  | "ent_unavailable"
+  | "network"
+  | "timeout"
+  | "session_expired";
+
+export class PronoteAuthError extends Error {
+  readonly code: PronoteAuthErrorCode;
+  constructor(message: string, code: PronoteAuthErrorCode) {
+    super(message);
+    this.name = "PronoteAuthError";
+    this.code = code;
+  }
+}
+
 export interface PronoteProvider {
-  authenticate(session: PronoteSession): Promise<void>;
-  // ... lectures Grades, Assignments, etc. (phase 2+)
+  authenticate(credentials: PronoteCredentials): Promise<PronoteSession>;
+  // Lectures Grades, Assignments, etc. (phase 2+, issue #8) réutiliseront
+  // la session par accountId. Re-auth : voir server/integrations/pronote-auth.ts
+  // (invalidation + nouvel authenticate après changement IP).
 }
 
 export interface LLMProvider {
