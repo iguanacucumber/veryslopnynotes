@@ -1,9 +1,7 @@
-# CLAIMS — registre des prises (local-first, miroir des commentaires GitHub)
+# CLAIMS — ARCHIVE (push = claim, voir AGENTS.md § Claim ; ne plus mettre à jour)
 
-Protocole : lire top issue #35 avant de prendre. CLAIM en <60s
-(commentaire + assignee si réseau), puis ajouter ligne ci-dessous et pusher
-la branche vide. La branche distante `agent/*/<n>-*` fait foi en cas de conflit.
-Case `- [ ]` = prise active, `- [x]` = libérée/mergée.
+Protocole actuel : `git fetch origin && git branch -r | grep '/<n>-'`, puis push branche.
+Ci-dessous : registre historique, conservé tel quel.
 
 | Issue | Branche | Agent/ rôle | Date UTC | Statut |
 | ----- | ------- | ----------- | -------- | ------ |
