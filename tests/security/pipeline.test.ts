@@ -422,13 +422,44 @@ describe("devoirs gardefous", () => {
   });
 
   test("I7 devoirs: jobs/api sur structure uniquement, aucun import IA", async () => {
+    // Durci post-#72 : la route devoirs (#27) cable generateHomework derrière
+    // une frontière JSON validée (isHomeworkGenerateRequest/Response, 400/501/500
+    // typées, aucun push/store/effet métier dans le handler). I7 tient car la
+    // sortie LLM ne déclenche rien : allowlist explicite ci-dessous, le reste
+    // garde l'interdiction stricte.
+    const API_AI_ALLOWLIST = new Set(["homework.ts", "router.ts"]);
     for (const dir of [JOBS_DIR, API_DIR]) {
       const files = readdirSync(dir).filter((f) => f.endsWith(".ts"));
       expect(files.length).toBeGreaterThanOrEqual(1);
       for (const f of files) {
         const c = readFileSync(join(dir, f), "utf8");
-        expect(c).not.toMatch(/server\/ai|LLMProvider/);
-        expect(c).not.toMatch(/from\s+["'][^"']*\/ai\/[^"']*["']/);
+        const allowed = dir === API_DIR && API_AI_ALLOWLIST.has(f);
+        if (!allowed) {
+          expect(c).not.toMatch(/server\/ai|LLMProvider/);
+          expect(c).not.toMatch(/from\s+["'][^"']*\/ai\/[^"']*["']/);
+        } else {
+          // Frontière validée uniquement : pas d'import runtime hors ai/homework,
+          // LLMProvider en `import type` seul, aucun fetch/push/store/SSE.
+          expect(c).not.toMatch(/fetch\s*\(/);
+          expect(c).not.toMatch(/\.send\s*\(|push\(|EventSource/);
+          expect(c).not.toMatch(/[^.]store\.(set|put|save|write)/);
+          for (const m of c.matchAll(/from\s+["']([^"']+)["']/g)) {
+            const spec = m[1] ?? "";
+            if (spec.includes("/ai/") || spec.endsWith("/ai")) {
+              expect(spec).toBe("../ai/homework");
+            }
+          }
+          for (const line of c.split("\n")) {
+            if (!line.includes("LLMProvider")) continue;
+            // Import en `import type` seul (type-level, effacé à la compilation),
+            // sinon simple annotation de type (paramètre/retour), jamais new/appel.
+            if (line.includes("from ")) {
+              expect(line).toMatch(/import\s+type/);
+            } else {
+              expect(line).not.toMatch(/new\s+LLMProvider|LLMProvider\s*\(/);
+            }
+          }
+        }
       }
     }
     // Jobs sans reseau declenche par sortie libre : aucun fetch dans server/jobs.
