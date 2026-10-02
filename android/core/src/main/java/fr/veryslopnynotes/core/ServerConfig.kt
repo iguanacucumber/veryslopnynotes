@@ -21,6 +21,7 @@ object ServerConfig {
     fun assignmentsUrl(baseUrl: String): String = "$baseUrl/v1/assignments"
     fun timetableUrl(baseUrl: String): String = "$baseUrl/v1/timetable"
     fun eventsUrl(baseUrl: String): String = "$baseUrl/v1/events"
+    fun securityAlertsUrl(baseUrl: String): String = "$baseUrl/v1/security/alerts"
     fun pairingStartUrl(baseUrl: String): String = "$baseUrl/v1/pairing/start"
     fun pairingConfirmUrl(baseUrl: String): String = "$baseUrl/v1/pairing/confirm"
 
