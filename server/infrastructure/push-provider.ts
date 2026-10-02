@@ -10,6 +10,7 @@
 // (endpoint/p256dh/auth) via StorageProvider.
 
 import { createHash } from "node:crypto";
+import { isTokenHash } from "../../shared/contracts/models";
 import type { PushProvider } from "../domain/ports";
 import type { PushConfig } from "./push-config";
 import { loadPushConfig } from "./push-config";
@@ -30,7 +31,6 @@ export interface PushProviderOptions {
 }
 
 const DEFAULT_TIMEOUT_MS = 8_000;
-const HASH_RE = /^[0-9a-f]{64}$/i;
 
 export function hashToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
@@ -41,7 +41,7 @@ export function shortHash(deviceTokenHash: string): string {
 }
 
 function assertPayload(deviceTokenHash: string, title: string, body: string): void {
-  if (!HASH_RE.test(deviceTokenHash)) throw new PushError("invalid deviceTokenHash (hex64 attendu)");
+  if (!isTokenHash(deviceTokenHash)) throw new PushError("invalid deviceTokenHash (hex64 attendu)");
   if (!title.trim() || !body.trim()) throw new PushError("title/body requis");
   if (title.length > 120 || body.length > 1000) throw new PushError("title/body trop long");
 }

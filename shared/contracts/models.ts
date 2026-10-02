@@ -91,3 +91,8 @@ export function isDevice(v: unknown): v is Device {
   if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["tokenHash"])) return false;
   return true;
 }
+
+/** Empreinte token push = hex sha256 (64 chars). Partagé jobs/infra (issue #57). */
+export function isTokenHash(v: unknown): v is string {
+  return typeof v === "string" && /^[0-9a-f]{64}$/i.test(v);
+}
