@@ -3,10 +3,11 @@ import {
   isAssignmentsResponse,
   isGradesResponse,
   isHealthResponse,
+  isPairingStartResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
 import { isContractEvent } from "../../shared/contracts/events";
-import { CONTRACTS_VERSION } from "../../shared/contracts/models";
+import { CONTRACTS_VERSION, isDevice } from "../../shared/contracts/models";
 import { isApiErrorBody } from "../../server/api/errors";
 import { createMemoryStore } from "../../server/api/store";
 import { serve } from "../../server/api/router";
@@ -63,7 +64,7 @@ describe("integration api", () => {
     expect(buf).toContain("data: ");
   });
 
-  test("erreurs typées : 404, 405, 400, 501", async () => {
+  test("erreurs typées : 404, 405, 400", async () => {
     const nf = await fetch(`${base}/v1/nope`);
     expect(nf.status).toBe(404);
     expect(isApiErrorBody(await nf.json())).toBe(true);
@@ -79,15 +80,36 @@ describe("integration api", () => {
     });
     expect(bad.status).toBe(400);
     expect(isApiErrorBody(await bad.json())).toBe(true);
+  });
 
-    const todo = await fetch(`${base}/v1/pairing/start`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ deviceName: "pixel" }),
+  test("pairing : start → confirm OK, rejou/mauvais code rejetés", async () => {
+    const post = (path: string, body: unknown) =>
+      fetch(`${base}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    const started = await (await post("/v1/pairing/start", { deviceName: "pixel" })).json();
+    expect(isPairingStartResponse(started)).toBe(true);
+
+    const confirmed = await post("/v1/pairing/confirm", {
+      sessionId: started.sessionId,
+      code: started.code,
     });
-    expect(todo.status).toBe(501);
-    const body = await todo.json();
-    expect(isApiErrorBody(body)).toBe(true);
-    expect(body.error.code).toBe("not_implemented");
+    expect(confirmed.status).toBe(200);
+    expect(isDevice(await confirmed.json())).toBe(true);
+
+    const replay = await post("/v1/pairing/confirm", {
+      sessionId: started.sessionId,
+      code: started.code,
+    });
+    expect(replay.status).toBe(404);
+    expect(isApiErrorBody(await replay.json())).toBe(true);
+
+    const other = await (await post("/v1/pairing/start", { deviceName: "pixel2" })).json();
+    const wrong = await post("/v1/pairing/confirm", { sessionId: other.sessionId, code: "000000" });
+    expect(wrong.status).toBe(400);
+    expect(isApiErrorBody(await wrong.json())).toBe(true);
   });
 });
