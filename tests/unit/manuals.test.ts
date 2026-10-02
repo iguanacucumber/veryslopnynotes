@@ -5,13 +5,19 @@ import { join } from "node:path";
 import { isManualsConfigured, loadManualsConfig } from "../../server/infrastructure/manuals-config";
 import {
   LocalManualProvider,
+  MANUAL_INDEX_KEY,
+  buildManualIndex,
   chunkManual,
   citeSources,
   formatCorrigeWithCitations,
+  loadIndexedChunks,
   loadManualChunk,
+  loadManualIndex,
   markManualsUntrusted,
+  parseManualSource,
   retrieveManuals,
   saveManualChunks,
+  searchManualIndex,
 } from "../../server/infrastructure/manuals";
 import { ScrapeManualsError, isPlaywrightAvailable, scrapeManuals } from "../../server/infrastructure/manuals-scrape";
 import { SqliteStorageProvider } from "../../server/infrastructure/sqlite-storage";
@@ -126,8 +132,64 @@ describe("unit manuals", () => {
     }
   });
 
-  test("fixtures synthétiques : aucune URL réelle ni secret", async () => {
-    const { readFileSync } = await import("node:fs");
+  test("index versionné build/load/loadAll + rebuild idempotent (#26)", async () => {
+    const store = new SqliteStorageProvider(tmpDb());
+    expect(await loadManualIndex(store)).toBeNull();
+    expect(await loadIndexedChunks(store)).toEqual([]);
+    const { index, chunks } = await buildManualIndex(store, syntheticManualDocs, 500);
+    expect(index.version).toBe(1);
+    expect(index.chunkCount).toBe(chunks.length);
+    expect(index.chunkKeys.length).toBe(chunks.length);
+    expect(Number.isNaN(Date.parse(index.builtAt))).toBe(false);
+    expect(await loadManualIndex(store)).toEqual(index);
+    expect(await loadIndexedChunks(store)).toEqual(chunks);
+    // rebuild écrase, mêmes clés
+    const again = await buildManualIndex(store, syntheticManualDocs, 500);
+    expect(again.index.chunkKeys).toEqual(index.chunkKeys);
+    expect(await loadIndexedChunks(store)).toEqual(chunks);
+    store.close();
+  });
+
+  test("index stale/corrompu → null + chunks ignorés, search vide (#26)", async () => {
+    const store = new SqliteStorageProvider(tmpDb());
+    const enc = new TextEncoder();
+    await store.set(MANUAL_INDEX_KEY, enc.encode(JSON.stringify({ version: 999, chunkKeys: [], chunkCount: 0, builtAt: "x" })));
+    expect(await loadManualIndex(store)).toBeNull();
+    await store.set(MANUAL_INDEX_KEY, enc.encode("not-json{{{"));
+    expect(await loadManualIndex(store)).toBeNull();
+    expect(await searchManualIndex(store, "fractions")).toEqual([]);
+    store.close();
+  });
+
+  test("searchManualIndex citable : source + page + extrait, citation corrigé (#26)", async () => {
+    const store = new SqliteStorageProvider(tmpDb());
+    await buildManualIndex(store, syntheticManualDocs, 500);
+    const hits = await searchManualIndex(store, "fractions half quarter", 2);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0].source).toContain("p.42");
+    expect(hits[0].text.length).toBeGreaterThan(0);
+    const parsed = parseManualSource(hits[0].source);
+    expect(parsed.platform).toBe("editeur-fake");
+    expect(parsed.title).toContain("Maths-Fake");
+    expect(parsed.page).toBe(42);
+    // citation obligatoire exposée aux corrigés phase 9
+    const corrige = formatCorrigeWithCitations("Corrigé : 3/4.", hits.slice(0, 1));
+    expect(corrige).toContain("Sources :");
+    expect(corrige).toContain(hits[0].source);
+    expect(await searchManualIndex(store, "quasar xylophone wombat")).toEqual([]);
+    store.close();
+  });
+
+  test("parseManualSource legacy : jamais de throw, page -1", () => {
+    expect(parseManualSource("editeur-fake • Titre • p.abc")).toEqual({
+      platform: "editeur-fake",
+      title: "Titre",
+      page: -1,
+    });
+    expect(parseManualSource("source-brute").page).toBe(-1);
+  });
+
+  test("fixtures synthétiques : aucune URL réelle ni secret", async () => {    const { readFileSync } = await import("node:fs");
     const url = new URL("./fixtures/manuals.ts", import.meta.url).pathname;
     const content = readFileSync(url, "utf8");
     expect(content).not.toMatch(/https?:\/\/(?!example\.invalid|docs\.example\.invalid)[^\s"']+/i);
