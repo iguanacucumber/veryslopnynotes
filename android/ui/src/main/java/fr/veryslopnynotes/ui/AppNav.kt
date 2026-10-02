@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import fr.veryslopnynotes.core.SecurityAlert
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.FileCacheStore
@@ -31,6 +32,7 @@ import fr.veryslopnynotes.data.SyncedRepository
 // spinner si cache dispo), refresh reseau en echec = repli cache.
 // Badge "perime" via CachePolicy (miroir contrats cache phase 5).
 // Appairage QR+PIN #15 : route "pairing" (PairingRoute), token chiffré.
+// Alertes sécurité #21 : route "alerts" (SecurityAlertsRoute, I6).
 // Contenu serveur affiche comme donnee, jamais interprete.
 
  // ponytail: defaut = defaut emulateur app/build.gradle.kts (10.0.2.2:3000).
@@ -39,7 +41,10 @@ private const val DEFAULT_BASE_URL = "http://10.0.2.2:3000"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppNav(baseUrl: String = DEFAULT_BASE_URL) {
+fun AppNav(
+    baseUrl: String = DEFAULT_BASE_URL,
+    loadAlerts: suspend () -> List<SecurityAlert> = { emptyList() },
+) {
     val nav = rememberNavController()
     val ctx = LocalContext.current.applicationContext
     // ponytail: fichier natif seul (pas de Room). Repli memoire si stockage KO.
@@ -60,13 +65,13 @@ fun AppNav(baseUrl: String = DEFAULT_BASE_URL) {
             modifier = Modifier.padding(pad),
         ) {
             composable("grades") {
-                CachedScreen("Notes", CachePolicy.GRADES, repo, baseUrl, "assignments", { nav.navigate(it) }, { nav.navigate("pairing") })
+                CachedScreen("Notes", CachePolicy.GRADES, repo, baseUrl, "assignments", { nav.navigate(it) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
             }
             composable("assignments") {
-                CachedScreen("Devoirs", CachePolicy.ASSIGNMENTS, repo, baseUrl, "timetable", { nav.navigate(it) }, { nav.navigate("pairing") })
+                CachedScreen("Devoirs", CachePolicy.ASSIGNMENTS, repo, baseUrl, "timetable", { nav.navigate(it) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
             }
             composable("timetable") {
-                CachedScreen("EDT", CachePolicy.TIMETABLE, repo, baseUrl, "grades", { nav.navigate(it) }, { nav.navigate("pairing") })
+                CachedScreen("EDT", CachePolicy.TIMETABLE, repo, baseUrl, "grades", { nav.navigate(it) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
             }
             composable("pairing") {
                 if (baseUrl.isBlank()) {
@@ -82,6 +87,7 @@ fun AppNav(baseUrl: String = DEFAULT_BASE_URL) {
                     PairingRoute(baseUrl = baseUrl, onBack = { nav.popBackStack() })
                 }
             }
+            composable("alerts") { SecurityAlertsRoute(loadAlerts) }
         }
     }
 }
@@ -95,6 +101,7 @@ fun CachedScreen(
     next: String,
     go: (String) -> Unit,
     goPairing: () -> Unit,
+    goAlerts: () -> Unit,
 ) {
     // Etat initial = cache synchrone (affichage sans reseau immediat).
     var state by remember(resource) {
@@ -139,5 +146,6 @@ fun CachedScreen(
         Button(onClick = { refresh() }) { Text("Actualiser") }
         Button(onClick = { go(next) }) { Text("Aller à $next") }
         Button(onClick = { goPairing() }) { Text("Appairage QR+PIN") }
+        Button(onClick = { goAlerts() }) { Text("Alertes sécurité") }
     }
 }

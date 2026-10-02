@@ -4,10 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
+import fr.veryslopnynotes.data.ApiClient
+import fr.veryslopnynotes.data.SecurityAlertsRepository
 import fr.veryslopnynotes.ui.AppNav
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-// Shell phase 4 (#13) + appairage/SSE #15 : navigation Material3 + route
-// "pairing" (QR+PIN, token chiffré, SSE reconnect). Aucun appel réseau ici
+// Shell phase 4 (#13) + offline #14 + appairage/SSE #15 + alertes #21.
+// Navigation Material3 + routes "pairing" (QR+PIN, token chiffré) et
+// "alerts" (I6 : donnée jamais interprétée). Aucun appel réseau ici
 // (téléphone ne contacte que le serveur allowlist, I1) : baseUrl injectée
 // depuis BuildConfig (local.properties server.host ou env SERVER_HOST).
 class MainActivity : ComponentActivity() {
@@ -17,9 +22,14 @@ class MainActivity : ComponentActivity() {
             BuildConfig.SERVER_SCHEME,
             BuildConfig.SERVER_HOST,
         )
+        // ponytail: client paresseux, IO hors UI-thread via loader suspend.
+        val repo = SecurityAlertsRepository(ApiClient(baseUrl))
         setContent {
             MaterialTheme {
-                AppNav(baseUrl = baseUrl)
+                AppNav(
+                    baseUrl = baseUrl,
+                    loadAlerts = { withContext(Dispatchers.IO) { repo.fetch() } },
+                )
             }
         }
     }

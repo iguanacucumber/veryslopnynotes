@@ -11,6 +11,7 @@ import {
   isPairingConfirmRequest,
   isPairingStartRequest,
   isPairingStartResponse,
+  isSecurityAlertsResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
 import { CONTRACTS_VERSION, isDevice } from "../../shared/contracts/models";
@@ -65,6 +66,10 @@ export function createHandler(
       case "/v1/timetable": {
         const payload = { entries: store.entries() };
         return json(isTimetableResponse(payload), payload);
+      }
+      case "/v1/security/alerts": {
+        const payload = { alerts: store.securityAlerts() };
+        return json(isSecurityAlertsResponse(payload), payload);
       }
       case "/v1/events": {
         const data: SyncCompletedData = {

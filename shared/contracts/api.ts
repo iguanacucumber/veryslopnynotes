@@ -4,6 +4,8 @@
 
 import { isAssignment, isDevice, isGrade, isTimetableEntry } from "./models";
 import type { Assignment, Device, Grade, TimetableEntry } from "./models";
+import { isSecurityAlertData } from "./events";
+import type { SecurityAlertData } from "./events";
 
 export interface ApiRoute {
   readonly method: "GET" | "POST";
@@ -18,6 +20,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/v1/assignments" },
   { method: "GET", path: "/v1/timetable" },
   { method: "GET", path: "/v1/events" },
+  { method: "GET", path: "/v1/security/alerts" },
 ] as const;
 
 export interface HealthResponse {
@@ -48,6 +51,12 @@ export interface AssignmentsResponse {
 }
 export interface TimetableResponse {
   readonly entries: TimetableEntry[];
+}
+
+// Alertes sécurité phase 6 (#21) : liste d'injections neutralisées (I6).
+// Excerpt affiché comme donnée, jamais interprété côté app.
+export interface SecurityAlertsResponse {
+  readonly alerts: SecurityAlertData[];
 }
 
 function isNonEmptyString(v: unknown): v is string {
@@ -93,6 +102,12 @@ export function isTimetableResponse(v: unknown): v is TimetableResponse {
   if (typeof v !== "object" || v === null) return false;
   const e = (v as Record<string, unknown>)["entries"];
   return Array.isArray(e) && e.every(isTimetableEntry);
+}
+
+export function isSecurityAlertsResponse(v: unknown): v is SecurityAlertsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const a = (v as Record<string, unknown>)["alerts"];
+  return Array.isArray(a) && a.every(isSecurityAlertData);
 }
 
 export function isPairingConfirmResponse(v: unknown): v is PairingConfirmResponse {

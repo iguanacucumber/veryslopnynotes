@@ -1,5 +1,5 @@
-// Module ui : navigation Compose Material3 + écrans pairing/SSE #15.
-// Données réelles #14 (offline) à venir.
+// Module ui : navigation Compose Material3 + écrans offline #14,
+// pairing/SSE #15, alertes #21 via core+data.
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
