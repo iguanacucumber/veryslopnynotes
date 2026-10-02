@@ -1,4 +1,4 @@
-// e2e manuals (issue #25, phase 8) — skip sans .env.local (Makefile).
+// e2e manuals (issue #25, phase 8) — offline-first, sans .env.local requis.
 // Aucun réseau externe : fixtures synthétiques + serveur local uniquement.
 // Sessions/credentials réelles jamais utilisées : pipeline validé sur données
 // anonymisées, scrape réel seulement vers boucle locale si Playwright présent.
@@ -15,9 +15,7 @@ import { isPlaywrightAvailable, scrapeManuals } from "../../server/infrastructur
 import { buildRevisionPrompt } from "../../server/ai/prompt";
 import { syntheticManualDocs } from "../unit/fixtures/manuals";
 
-const hasEnv = await Bun.file(".env.local").exists();
-
-describe.skipIf(!hasEnv)("e2e manuals", () => {
+describe("e2e manuals", () => {
   test("pipeline local chunk→retrieve→cite→prompt, sans fuite", () => {
     // Config réelle chargée ou noop gracieux — jamais loguée en clair.
     const config = loadManualsConfig();
