@@ -25,7 +25,6 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/v1/assignments/toggle" },
   // #75 : proxy de pièces jointes. L'app n'a jamais d'URL Pronote : elle passe
   // une `ref` opaque (règle d'or média, I1). Jamais de WebView distante.
-  { method: "GET", path: "/v1/media" },
   { method: "GET", path: "/v1/timetable" },
   { method: "GET", path: "/v1/events" },
   { method: "GET", path: "/v1/security/alerts" },
@@ -35,9 +34,9 @@ export const API_ROUTES: readonly ApiRoute[] = [
   // #83 préférences matière : GET liste / PUT upsert (clé = nom de matière).
   { method: "GET", path: "/v1/subjects/prefs" },
   { method: "PUT", path: "/v1/subjects/prefs" },
-
+  // #78 : évaluations par compétences (chips + détail).
   { method: "GET", path: "/v1/evaluations" },
-
+  // #79 : actualités établissement.
   { method: "GET", path: "/v1/news" },
 
   // #81 cantine : menus de la semaine + solde compte (optionnel).
@@ -46,8 +45,6 @@ export const API_ROUTES: readonly ApiRoute[] = [
   // #77 vie scolaire : absences + retards unifiés (kind) + compteurs par période.
   { method: "GET", path: "/v1/attendance" },
   { method: "GET", path: "/v1/punishments" },
-
-
   // #82 profil : infos du compte appairé (nom, classe, période, photo opaque).
   { method: "GET", path: "/v1/me" },
   // #82/#84 : résolution serveur d'une réf opaque (photo, PJ). L'app n'a
