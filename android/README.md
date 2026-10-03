@@ -10,10 +10,25 @@ Modules : `app/` (Activity + navigation), `core/` (config allowlist),
 
 ## Serveur : choisi à l'exécution, le build fournit le défaut
 
-L'adresse est saisie dans l'écran **Appairage** (on ne peut pas appairer sans
-connaitre son serveur) et persistée par `data/ServerStore`. La valeur
-`BuildConfig` ci-dessous n'est plus qu'une **graine** : elle sert quand rien
-n'est choisi.
+L'adresse est saisie à l'étape 1 de l'**assistant de connexion** (on ne peut pas
+se connecter sans connaitre son serveur) et persistée par `data/ServerStore`. La
+valeur `BuildConfig` ci-dessous n'est plus qu'une **graine** : elle sert quand
+rien n'est choisi.
+
+## Assistant de connexion (3 étapes, un seul appel)
+
+Lancement → **1. ton serveur** (validé, puis `GET /v1/health` : sa version de
+contrat s'affiche) → **2. ton compte EduConnect** (adresse de l'établissement +
+identifiants, ou « j'ai seulement un QR ») → **3. le QR de l'application de
+l'établissement** (contenu `login`+`jeton` + son PIN, ou les identifiants de
+l'étape 2). Un seul `POST /v1/setup` ouvre la session de l'établissement ET rend
+le jeton d'appareil, stocké chiffré. Sans jeton appairé, le démarrage ouvre
+l'assistant au lieu de l'accueil ; après un 401 ou un redémarrage du serveur,
+c'est lui qui rouvre la session **et** le credential.
+
+Aucun mot de passe n'est écrit sur le téléphone : il part dans le POST, le
+serveur le garde en mémoire pour renouveler la session. Le QR se colle pour
+l'instant (scan caméra : issue suivante).
 
 L'allowlist est donc `core/ServerConfig.validateBaseUrl` (et `isAllowed` en
 préfixe strict), pas une constante de build : `https` obligatoire, `http` uni-
@@ -66,6 +81,8 @@ Vérifier : `jarsigner -verify`, `check-secrets` OK.
 ## Renvoyé phases suivantes (hors scope #13)
 
 - #14 offline : cache Room + affichage sans réseau.
-- #15 pairing/SSE : QR+PIN côté app, SSE reconnect, token sécurisé.
+- Scan caméra du QR (colle seule pour l'instant) : le parseur `parseSchoolQr`
+  est déjà en place, il ne manque que la capture.
+- Persistance serveur (SQLite) : aujourd'hui un redémarrage fait refaire le setup.
 - Phase 10 : pinning cert (reste hors scope, release #32 faite).
 

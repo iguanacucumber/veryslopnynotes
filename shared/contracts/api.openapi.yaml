@@ -833,7 +833,7 @@ components:
             Jamais journalisé, jamais re-servi par une autre route.
     SetupRequest:
       type: object
-      required: [deviceName, pronoteUrl, ent]
+      required: [deviceName, schoolUrl, ent]
       description: >-
         Compte de l'établissement + preuve de détention. Au moins une méthode
         complète : `qr` + `pin` (QR affiché par l'app Pronote/ENT), sinon
@@ -841,10 +841,12 @@ components:
         sont deux connexions Pronote exclusives, pas deux étapes.
       properties:
         deviceName: { type: string, maxLength: 256 }
-        pronoteUrl:
+        schoolUrl:
           type: string
           maxLength: 300
-          description: URL élève de l'établissement. Doit être un hôte PUBLIC.
+          description: >-
+            Adresse de l'établissement. Doit être un hôte PUBLIC (le serveur
+            appelle cette adresse : filtrée avant toute sortie réseau).
         ent: { type: string, maxLength: 32, description: 'Type ENT/CAS. Seul `ninegate` est implémenté.' }
         username: { type: string, maxLength: 256 }
         password: { type: string, maxLength: 256, writeOnly: true }

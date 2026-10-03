@@ -9,8 +9,9 @@ import okhttp3.Response
 // Un seul client HTTP de l'app : toutes les requêtes passent
 // ici, vers la allowlist serveur seule. Refuse toute URL hors
 // allowlist avant envoi. Médias via proxy serveur, pas de WebView.
-// Contrat 0.4.0 : le serveur exige `Authorization: Bearer <token d'appareil>`
-// sur TOUTES les routes sauf l'appairage et /v1/health. Le secret est lu au
+// Contrat 0.5.0 : le serveur exige `Authorization: Bearer <token d'appareil>`
+// sur TOUTES les routes sauf l'appairage, /v1/setup (la porte qui rend le
+// secret) et /v1/health. Le secret est lu au
 // moment de CONSTRUIRE la requête (jamais mémorisé ici : il change à
 // l'appairage et à chaque ré-appairage). `tokens` null = pas encore appairé
 // (previews/tests JVM) : la requête part sans header et le serveur refuse.
@@ -61,6 +62,7 @@ class ApiClient(
         private val PUBLIC_PATHS = setOf(
             ServerConfig.PAIRING_START_PATH,
             ServerConfig.PAIRING_CONFIRM_PATH,
+            ServerConfig.SETUP_PATH,
             ServerConfig.HEALTH_PATH,
         )
 
