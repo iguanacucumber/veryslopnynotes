@@ -15,6 +15,7 @@ import type {
   CanteenMeal,
   CanteenMenu,
   Grade,
+  NewsItem,
   Period,
   TimetableEntry,
 } from "../../shared/contracts/models";
@@ -26,8 +27,12 @@ import {
   isAssignment,
   isCanteenMenu,
   isGrade,
+  isNewsItem,
   isPeriod,
   isTimetableEntry,
+  NEWS_BODY_MAX_CHARS,
+  NEWS_META_MAX_CHARS,
+  NEWS_TITLE_MAX_CHARS,
 } from "../../shared/contracts/models";
 import type {
   PedagogicResource,
@@ -47,6 +52,9 @@ export interface PronoteClientReaderOptions {
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
+// #79 : le corps d'une actuité coûte 1 requête Pronote (content()) : on plafonne
+// le nombre de corps téléchargés par page. Upgrade: endpoint contenu groupé.
+const NEWS_BODY_FETCH_LIMIT = 20;
 
 function clampLimit(limit?: number): number {
   if (typeof limit !== "number" || !Number.isFinite(limit)) return DEFAULT_LIMIT;
@@ -250,6 +258,41 @@ function mapResources(accountId: string, lessons: any[], homeworks?: any[]): Ped
   });
   return out;
 }
+
+/**
+ * #79 : actu établissement (Information pronotets). Tous les textes passent par
+ * bounded() et le contrat est validé par isNewsItem : champs absents ou date
+ * illisible = valeurs sûres (titre de repli, publishedAt = maintenant), jamais
+ * de chaîne brute ni de date "NaN" côté API.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function mapNews(accountId: string, raw: any, index: number, withBody: boolean): Promise<NewsItem | null> {
+  const id = typeof raw?.id === "string" && raw.id.trim() ? bounded(raw.id, 64) : `news-${index}`;
+  let body = "";
+  if (withBody) {
+    // content() = 1 requête Pronote par actu ; peut échouer (pièce absente).
+    try {
+      const c = typeof raw?.content === "function" ? await raw.content() : "";
+      body = typeof c === "string" ? bounded(c, NEWS_BODY_MAX_CHARS) : "";
+    } catch {
+      body = "";
+    }
+  }
+  const title = typeof raw?.title === "string" ? bounded(raw.title, NEWS_TITLE_MAX_CHARS) : "";
+  const candidate: NewsItem = {
+    id,
+    accountId,
+    // Titre du contrat obligatoire : corps (extrait) sinon libellé générique.
+    title: title || bounded(body, NEWS_TITLE_MAX_CHARS) || "Actualité",
+    body: body || undefined,
+    publishedAt: toIso(raw?.creationDate, toIso(raw?.startDate, new Date().toISOString())),
+    category: typeof raw?.category === "string" ? bounded(raw.category, NEWS_META_MAX_CHARS) || undefined : undefined,
+    author: typeof raw?.author === "string" ? bounded(raw.author, NEWS_META_MAX_CHARS) || undefined : undefined,
+    read: typeof raw?.read === "boolean" ? raw.read : undefined,
+  };
+  return isNewsItem(candidate) ? candidate : null;
+}
+
 
 // #81 cantine : plats = libellés bornés + étiquettes alimentaires agrégées.
 // pronotets n'expose que isLunch/isDinner : le petit-déjeuner est reconnu par
@@ -505,6 +548,61 @@ export class PronoteClientReader implements PronoteReader {
       throw mapped;
     }
   }
+
+  /**
+   * Actualités établissement (#79) : onglet Actualités/sondages.
+   * ponytail: la lib n'expose pas l'onglet partout (établissement sans
+   * actualités, version antérieure) et l'appel peut échouer selon les droits :
+   * on renvoie alors une page VIDE plutôt qu'une erreur (l'app affiche "Aucune
+   * actualité"). Upgrade: fetch paginé côté serveur d'actions + pièces jointes.
+   */
+  async getNews(accountId: string, page?: PronotePageOptions): Promise<PronotePage<NewsItem>> {
+    const id = (accountId ?? "").trim();
+    if (!id) throw new PronoteReadError("news session expired", "session_expired");
+    const limit = clampLimit(page?.limit);
+    const offset = parseOffset(page?.cursor);
+    let client;
+    try {
+      client = this.sessions.requireClient(id);
+    } catch (err) {
+      const mapped = toReadError(err, "news");
+      this.logger(`news -> error ${mapped.code}`);
+      throw mapped;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const reader = (client as any)?.informationAndSurveys;
+    if (typeof reader !== "function") {
+      this.logger("news -> onglet absent, page vide");
+      return { items: untrusted([]), nextCursor: null };
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = (await reader.call(client)) as any[];
+      const list = Array.isArray(raw) ? raw : [];
+      const items: NewsItem[] = [];
+      for (const [i, info] of list.slice(offset, offset + limit).entries()) {
+        try {
+          const m = await mapNews(id, info, offset + i, i < NEWS_BODY_FETCH_LIMIT);
+          if (m) items.push(m);
+        } catch {
+          // Actu illisible (champs requis manquants) : ignorée, pas de 500.
+        }
+      }
+      const nextCursor = offset + limit < list.length ? String(offset + limit) : null;
+      this.logger(`news -> ok ${items.length}`);
+      return { items: untrusted(items), nextCursor };
+    } catch (err) {
+      const mapped = toReadError(err, "news");
+      // Session morte = re-auth nécessaire (l'app recharge), reste = page vide.
+      if (mapped.code === "session_expired") {
+        this.logger(`news -> error ${mapped.code}`);
+        throw mapped;
+      }
+      this.logger(`news -> indisponible (${mapped.code}), page vide`);
+      return { items: untrusted([]), nextCursor: null };
+    }
+  }
+
 
   /**
    * Menus cantine (#81). Fenêtre from/to, défaut semaine courante (lundi→dimanche).

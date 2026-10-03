@@ -40,6 +40,8 @@ class SyncedRepository(
             .removePrefix(baseUrl).ifEmpty { "/v1/assignments" }
         CachePolicy.TIMETABLE -> ServerConfig.timetableUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/timetable" }
+        CachePolicy.NEWS -> ServerConfig.newsUrl(baseUrl)
+            .removePrefix(baseUrl).ifEmpty { "/v1/news" }
         CachePolicy.MENUS -> ServerConfig.menusUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/menus" }
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
