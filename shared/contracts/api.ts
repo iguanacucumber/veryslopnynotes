@@ -3,34 +3,7 @@
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
 import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, RevisionSheet, Skill, SubjectPrefs, TimetableEntry, UserInfo } from "./models";
-import {
-  DISCUSSION_ID_MAX_CHARS,
-  DISCUSSION_MAX_RECIPIENTS,
-  DISCUSSION_SUBJECT_MAX_CHARS,
-  isAbsenceRecord,
-  isAssignment,
-  isAttendancePeriod,
-  isAveragesReport,
-  isCanteenBalance,
-  isCanteenMenu,
-  isCompetenceSummary,
-  isDevice,
-  isDiscussion,
-  isEvaluation,
-  isGrade,
-  isMessage,
-  isNewsItem,
-  isPeriod,
-  isPunishment,
-  isRecipient,
-  isRevisionSheet,
-  isSkill,
-  isSubjectPrefs,
-  isTimetableEntry,
-  isUserInfo,
-  MESSAGE_BODY_MAX_CHARS,
-  SUBJECT_PREFS_MAX_COUNT,
-} from "./models";
+import { DISCUSSION_ID_MAX_CHARS, DISCUSSION_MAX_RECIPIENTS, DISCUSSION_SUBJECT_MAX_CHARS, isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isDiscussion, isEvaluation, isGrade, isMessage, isNewsItem, isPeriod, isPunishment, isRecipient, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, isUserInfo, MESSAGE_BODY_MAX_CHARS, SUBJECT_PREFS_MAX_COUNT } from "./models";
 import type { CacheInvalidatedData, ContractEvent, SecurityAlertData } from "./events";
 import { isContractEvent, isSecurityAlertData } from "./events";
 
