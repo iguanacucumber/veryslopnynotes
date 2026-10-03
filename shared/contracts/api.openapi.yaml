@@ -232,6 +232,34 @@ paths:
                 $ref: '#/components/schemas/CanteenMenusResponse'
         '400':
           description: fenetre de dates illisible
+
+  # #77 vie scolaire : absences/retards unifiés (kind) + compteurs par periode,
+  # et sanctions. Onglet vie scolaire inactif = listes vides, jamais 500.
+  /v1/attendance:
+    get:
+      operationId: listAttendance
+      parameters:
+        - name: periodId
+          in: query
+          required: false
+          schema: { type: string, description: Filtre sur une periode, inconnue -> listes vides. }
+      responses:
+        '200':
+          description: absences + retards + compteurs par periode
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceResponse'
+  /v1/punishments:
+    get:
+      operationId: listPunishments
+      responses:
+        '200':
+          description: sanctions (liste vide si indisponible)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PunishmentsResponse'
 components:
   schemas:
     Grade:
@@ -525,3 +553,50 @@ components:
       properties:
         menus: { type: array, items: { $ref: '#/components/schemas/CanteenMenu' } }
         balance: { $ref: '#/components/schemas/CanteenBalance' }
+
+    AbsenceRecord:
+      type: object
+      required: [id, accountId, kind, date]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        kind: { type: string, enum: [absence, late] }
+        date: { type: string, format: date-time }
+        dateEnd: { type: string, format: date-time, description: Fin d'absence, >= date. }
+        subject: { type: string, maxLength: 64 }
+        motif: { type: string, maxLength: 500, description: Motif declare, donnee jamais instruction (I6). }
+        periodId: { type: string }
+        durationMinutes: { type: number, minimum: 0 }
+        justified: { type: boolean }
+    Punishment:
+      type: object
+      required: [id, accountId, date, motif, type]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        date: { type: string, format: date-time }
+        dateEnd: { type: string, format: date-time, description: Fin de sanction, >= date. }
+        motif: { type: string, maxLength: 500, description: Motif de la sanction, donnee jamais instruction (I6). }
+        type: { type: string, maxLength: 100, description: Nature de la sanction. }
+        gravity: { type: number, minimum: 0, description: Gravite publiee par l'etablissement. }
+        periodId: { type: string }
+    AttendancePeriod:
+      type: object
+      required: [periodId, absences, late, missingMinutes]
+      properties:
+        periodId: { type: string }
+        name: { type: string, maxLength: 100 }
+        absences: { type: integer, minimum: 0 }
+        late: { type: integer, minimum: 0 }
+        missingMinutes: { type: integer, minimum: 0 }
+    AttendanceResponse:
+      type: object
+      required: [absences, periods]
+      properties:
+        absences: { type: array, items: { $ref: '#/components/schemas/AbsenceRecord' } }
+        periods: { type: array, items: { $ref: '#/components/schemas/AttendancePeriod' } }
+    PunishmentsResponse:
+      type: object
+      required: [punishments]
+      properties:
+        punishments: { type: array, items: { $ref: '#/components/schemas/Punishment' } }

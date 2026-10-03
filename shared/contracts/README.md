@@ -22,3 +22,12 @@ Changement cassant = bump version + PR justificative ; `tests/contracts` impose 
 Add-only #83 (pas de bump) : préférences matière `SubjectPrefs` (couleur `#RRGGBB` strict,
 emoji borné, libellé perso) + `GET`/`PUT /v1/subjects/prefs`. Matière sans prefs = nom
 d'origine, donc les apps 0.2.0 ignorent le champ sans régression.
+
+Add-only #77 (pas de bump) : vie scolaire — `AbsenceRecord` (absences ET retards unifiés
+par `kind: "absence" | "late"`, motif borné 500), `Punishment` (motif + type requis,
+gravité optionnelle), `AttendancePeriod` (compteurs dérivés par période) + routes
+`/v1/attendance` et `/v1/punishments`, ressources cache `attendance`/`punishments`
+(TTL 60 min). Onglet vie scolaire inactif côté établissement = listes vides (200),
+jamais 500. Invalidation = `CacheInvalidated` (resource `attendance`), pas d'événement
+dédié ; la détection de nouvelle absence se fait sur comparaison de données structurées
+(`newAbsences` dans `server/jobs/notify.ts`), jamais sur une sortie LLM (I7).

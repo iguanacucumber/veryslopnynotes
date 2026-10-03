@@ -47,6 +47,11 @@ class SyncedRepository(
             .removePrefix(baseUrl).ifEmpty { "/v1/news" }
         CachePolicy.MENUS -> ServerConfig.menusUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/menus" }
+        // #77 : vie scolaire (absences/retards + compteurs, sanctions).
+        CachePolicy.ATTENDANCE -> ServerConfig.attendanceUrl(baseUrl)
+            .removePrefix(baseUrl).ifEmpty { "/v1/attendance" }
+        CachePolicy.PUNISHMENTS -> ServerConfig.punishmentsUrl(baseUrl)
+            .removePrefix(baseUrl).ifEmpty { "/v1/punishments" }
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
     }
 

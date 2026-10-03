@@ -3,7 +3,7 @@
 // Mémoire = seed/tests uniquement ; l'adaptateur SQLite (#11) implémentera
 // ReadStore sans changer le routeur.
 
-import type { Assignment, CanteenBalance, CanteenMenu, Evaluation, Grade, NewsItem, Period, TimetableEntry } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, CanteenBalance, CanteenMenu, Evaluation, Grade, NewsItem, Period, Punishment, TimetableEntry } from "../../shared/contracts/models";
 import type { SecurityAlertData } from "../../shared/contracts/events";
 
 import type { ProvidedAverages } from "../domain/averages";
@@ -38,6 +38,14 @@ export interface ReadStore {
   canteenMenus?(window?: { from?: string; to?: string }): CanteenMenu[];
   /** Solde compte cantine (#81), null tant que Turboself/ARD n'est pas branché. */
   canteenBalance?(): CanteenBalance | null;
+
+  /**
+   * Vie scolaire (#77) : absences + retards unifiés (`kind`). Optionnelle :
+   * défaut `[]` = établissement sans onglet vie scolaire (état propre côté app).
+   */
+  absences?(): AbsenceRecord[];
+  /** Sanctions vie scolaire (#77). Optionnelle, défaut `[]`. */
+  punishments?(): Punishment[];
 }
 
 export interface StoreSeed {
@@ -54,6 +62,10 @@ export interface StoreSeed {
   /** Menus cantine synthétiques (#81). Défaut = aucun menu (onglet masqué). */
   readonly canteenMenus?: CanteenMenu[];
   readonly canteenBalance?: CanteenBalance | null;
+
+  /** Vie scolaire synthétique (#77). Défaut = aucune absence / aucune sanction. */
+  readonly absences?: AbsenceRecord[];
+  readonly punishments?: Punishment[];
 }
 
 const SEED_GRADE: Grade = {
@@ -141,6 +153,9 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
   // fenêtre est fait par le routeur, le store reste une source de lecture.
   const canteen = structuredClone(seed.canteenMenus ?? []);
   const balance = seed.canteenBalance === undefined ? null : structuredClone(seed.canteenBalance);
+  // #77 : défaut vide = établissement sans onglet vie scolaire (état propre).
+  const absences = structuredClone(seed.absences ?? []);
+  const punishments = structuredClone(seed.punishments ?? []);
   return {
     grades: () => structuredClone(grades),
     assignments: () => structuredClone(assignments),
@@ -154,5 +169,8 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
 
     canteenMenus: () => structuredClone(canteen),
     canteenBalance: () => (balance === null ? null : structuredClone(balance)),
+
+    absences: () => structuredClone(absences),
+    punishments: () => structuredClone(punishments),
   };
 }

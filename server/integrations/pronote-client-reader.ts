@@ -10,8 +10,8 @@
 // encore lues : ProvidedAverages reste null, les rapports sont donc estimés,
 // ce qui est le comportement Papillon par défaut. Upgrade: getProvidedAverages
 // sur ce reader, sans toucher aux trois algorithmes.
-import type { Assignment, CanteenMeal, CanteenMenu, Evaluation, Grade, NewsItem, Period, TimetableEntry } from "../../shared/contracts/models";
-import { CANTEEN_MAX_ALLERGEN_CHARS, CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_DISH_CHARS, CANTEEN_MAX_DISHES, EVALUATION_LABEL_MAX_CHARS, isAssignment, isCanteenMenu, isEvaluation, isGrade, isNewsItem, isPeriod, isTimetableEntry, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CHARS } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, CanteenMeal, CanteenMenu, Evaluation, Grade, NewsItem, Period, Punishment, TimetableEntry } from "../../shared/contracts/models";
+import { ABSENCE_MOTIF_MAX_CHARS, ABSENCE_SUBJECT_MAX_CHARS, CANTEEN_MAX_ALLERGEN_CHARS, CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_DISH_CHARS, CANTEEN_MAX_DISHES, EVALUATION_LABEL_MAX_CHARS, isAbsenceRecord, isAssignment, isCanteenMenu, isEvaluation, isGrade, isNewsItem, isPeriod, isPunishment, isTimetableEntry, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CHARS, PUNISHMENT_MOTIF_MAX_CHARS, PUNISHMENT_TYPE_MAX_CHARS } from "../../shared/contracts/models";
 import type { PedagogicResource, PronotePage, PronotePageOptions, PronoteReader, PronoteTimetableOptions } from "../domain/ports";
 import { isPedagogicResource, PronoteAuthError, PronoteReadError, untrusted } from "../domain/ports";
 
@@ -353,6 +353,112 @@ function mapCanteenMenu(accountId: string, m: any, index: number): CanteenMenu |
     ...(allergens.length > 0 ? { allergens } : {}),
   };
   return isCanteenMenu(cand) ? cand : null;
+}
+
+// --- #77 vie scolaire : absences, retards, sanctions ---
+// pronotets expose, par période, `absences()`, `delays()` (retards) et
+// `punishments()`. Absences et retards ont la même forme côté app : un seul
+// modèle `kind` (parité Papillon). Motifs/sanctions = DONNÉES bornées, jamais
+// instruction (I6). Onglet absent ou en erreur = page VIDE (capacités
+// dynamiques), seule la session morte remonte.
+// ponytail: `hours` ("2h", "1h30") est converti en minutes par regex ; une
+// durée illisible est OMISE (compteurs en occurrences), jamais 0 deviné.
+
+/** Liste d'une période : [] si l'appel n'existe pas ou échoue (onglet inactif). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function periodList(period: any, method: string): Promise<unknown[]> {
+  if (typeof period?.[method] !== "function") return [];
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = (await period[method]()) as any;
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Motif = raisons pronotets dédupliquées puis bornées ; vide = champ omis. */
+function joinReasons(raw: unknown, max: number): string | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const parts: string[] = [];
+  for (const r of raw) {
+    if (typeof r !== "string") continue;
+    const t = bounded(r, max);
+    if (t !== "" && !parts.includes(t)) parts.push(t);
+  }
+  return parts.length > 0 ? bounded(parts.join(" ; "), max) : undefined;
+}
+
+const HOURS_MIN_RE = /(\d{1,2})\s*h(?:(\d{1,2}))?/i;
+
+function hoursToMinutes(v: unknown): number | undefined {
+  if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? v : undefined;
+  if (typeof v !== "string") return undefined;
+  const m = HOURS_MIN_RE.exec(v);
+  if (!m) return undefined;
+  const total = Number(m[1]) * 60 + (m[2] === undefined ? 0 : Number(m[2]));
+  return Number.isFinite(total) ? total : undefined;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapAbsence(accountId: string, a: any, index: number, periodId?: string): AbsenceRecord | null {
+  const from = toIso(a?.fromDate, "");
+  if (!from) return null;
+  const to = toIso(a?.toDate, from);
+  const cand: AbsenceRecord = {
+    id: typeof a?.id === "string" && a.id ? bounded(a.id, 64) : `abs-${index}`,
+    accountId,
+    kind: "absence",
+    date: from,
+    // Journée simple = pas de dateEnd (jamais de doublon de date).
+    dateEnd: to !== from ? to : undefined,
+    subject: typeof a?.subject?.name === "string" ? bounded(a.subject.name, ABSENCE_SUBJECT_MAX_CHARS) || undefined : undefined,
+    motif: joinReasons(a?.reasons, ABSENCE_MOTIF_MAX_CHARS),
+    periodId,
+    durationMinutes: hoursToMinutes(a?.hours),
+    justified: typeof a?.justified === "boolean" ? a.justified : undefined,
+  };
+  return isAbsenceRecord(cand) ? cand : null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapDelay(accountId: string, d: any, index: number, periodId?: string): AbsenceRecord | null {
+  const date = toIso(d?.date, "");
+  if (!date) return null;
+  const minutes = d?.minutes !== undefined ? toNumber(d.minutes, Number.NaN) : Number.NaN;
+  const cand: AbsenceRecord = {
+    id: typeof d?.id === "string" && d.id ? bounded(d.id, 64) : `late-${index}`,
+    accountId,
+    kind: "late",
+    date,
+    motif: joinReasons(d?.reasons, ABSENCE_MOTIF_MAX_CHARS),
+    periodId,
+    durationMinutes: Number.isFinite(minutes) && minutes >= 0 ? minutes : undefined,
+    justified: typeof d?.justified === "boolean" ? d.justified : undefined,
+  };
+  return isAbsenceRecord(cand) ? cand : null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapPunishment(accountId: string, p: any, index: number, periodId?: string): Punishment | null {
+  const date = toIso(p?.given, "");
+  if (!date) return null;
+  const nature = typeof p?.nature === "string" ? bounded(p.nature, PUNISHMENT_TYPE_MAX_CHARS) : "";
+  // gravity = durée publiée par l'établissement (échelle libre, ex. heures
+  // d'exclusion) ; absente si non publiée, jamais 0 déduit.
+  const gravity = p?.duration !== undefined ? toNumber(p.duration, Number.NaN) : Number.NaN;
+  const cand: Punishment = {
+    id: typeof p?.id === "string" && p.id ? bounded(p.id, 64) : `pun-${index}`,
+    accountId,
+    date,
+    // ponytail: dateEnd non renseigné (Pronote donne un instantané + un
+    // calendrier de sanctions). Upgrade: lire `schedule` si l'ENT publie une plage.
+    motif: joinReasons(p?.reasons, PUNISHMENT_MOTIF_MAX_CHARS) ?? "Sanction",
+    type: nature || "Sanction",
+    gravity: Number.isFinite(gravity) && gravity >= 0 ? gravity : undefined,
+    periodId,
+  };
+  return isPunishment(cand) ? cand : null;
 }
 
 export class PronoteClientReader implements PronoteReader {
@@ -724,6 +830,89 @@ export class PronoteClientReader implements PronoteReader {
     } catch (err) {
       // Cantine indisponible = absence de donnée, pas une panne de sync.
       this.logger(`menus -> indisponible ${toReadError(err, "menus").code}`);
+      return { items: untrusted([]), nextCursor: null };
+    }
+  }
+
+  /**
+   * Absences + retards par période (#77). L'onglet vie scolaire est souvent
+   * absent d'un établissement : page VIDE + log `attendance -> indisponible
+   * <code>`, jamais une erreur (l'app masque l'onglet). Seules les erreurs de
+   * session remontent, comme getMenus.
+   * ponytail: une SEULE période en erreur n'annule pas les autres (l'onglet est
+   *lu période par période) ; le compte est alors simplement incomplet.
+   */
+  async getAttendance(accountId: string, page?: PronotePageOptions): Promise<PronotePage<AbsenceRecord>> {
+    const id = (accountId ?? "").trim();
+    if (!id) throw new PronoteReadError("attendance session expired", "session_expired");
+    const limit = clampLimit(page?.limit);
+    const offset = parseOffset(page?.cursor);
+    let client;
+    try {
+      client = this.sessions.requireClient(id);
+    } catch (err) {
+      const mapped = toReadError(err, "attendance");
+      this.logger(`attendance -> error ${mapped.code}`);
+      throw mapped;
+    }
+    try {
+      const periods = (client.periods ?? []) as unknown[];
+      const all: AbsenceRecord[] = [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const p of periods as any[]) {
+        const periodId = typeof p?.id === "string" && p.id ? bounded(p.id, 64) || undefined : undefined;
+        for (const a of await periodList(p, "absences")) {
+          const m = mapAbsence(id, a, all.length, periodId);
+          if (m) all.push(m);
+        }
+        for (const d of await periodList(p, "delays")) {
+          const m = mapDelay(id, d, all.length, periodId);
+          if (m) all.push(m);
+        }
+        if (all.length >= offset + limit + 1) break;
+      }
+      const slice = all.slice(offset, offset + limit);
+      const nextCursor = offset + limit < all.length ? String(offset + limit) : null;
+      this.logger(`attendance -> ok ${slice.length}`);
+      return { items: untrusted(slice), nextCursor };
+    } catch (err) {
+      this.logger(`attendance -> indisponible ${toReadError(err, "attendance").code}`);
+      return { items: untrusted([]), nextCursor: null };
+    }
+  }
+
+  /** Sanctions vie scolaire (#77). Onglet absent/KO = page vide, jamais d'erreur. */
+  async getPunishments(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Punishment>> {
+    const id = (accountId ?? "").trim();
+    if (!id) throw new PronoteReadError("punishments session expired", "session_expired");
+    const limit = clampLimit(page?.limit);
+    const offset = parseOffset(page?.cursor);
+    let client;
+    try {
+      client = this.sessions.requireClient(id);
+    } catch (err) {
+      const mapped = toReadError(err, "punishments");
+      this.logger(`punishments -> error ${mapped.code}`);
+      throw mapped;
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const periods = (client.periods ?? []) as any[];
+      const all: Punishment[] = [];
+      for (const p of periods) {
+        const periodId = typeof p?.id === "string" && p.id ? bounded(p.id, 64) || undefined : undefined;
+        for (const s of await periodList(p, "punishments")) {
+          const m = mapPunishment(id, s, all.length, periodId);
+          if (m) all.push(m);
+        }
+        if (all.length >= offset + limit + 1) break;
+      }
+      const slice = all.slice(offset, offset + limit);
+      const nextCursor = offset + limit < all.length ? String(offset + limit) : null;
+      this.logger(`punishments -> ok ${slice.length}`);
+      return { items: untrusted(slice), nextCursor };
+    } catch (err) {
+      this.logger(`punishments -> indisponible ${toReadError(err, "punishments").code}`);
       return { items: untrusted([]), nextCursor: null };
     }
   }
