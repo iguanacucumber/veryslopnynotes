@@ -15,7 +15,12 @@
 // seulement, donc l'app ne pouvait jamais présenter de bearer). Cassant : un
 // champ requis de plus sur /v1/pairing/confirm, et les routes protégé exigent
 // désormais ce credential (401 pour une app 0.3.0 qui ne sait pas le lire).
-export const CONTRACTS_VERSION = "0.4.0" as const;
+// 0.5.0 (#118) : `POST /v1/setup` — route OUVERTE qui authentifie le compte
+// école (QR de l'établissement OU identifiants ENT) et rend le jeton de device
+// une seule fois. Add-only : les 31 routes existantes ne changent pas de forme.
+// Cassant pour une app 0.4.0 : elle ignore la route (elle continue
+// l'appairage QR+PIN, toujours ouvert) mais ne bénéficie pas du setup.
+export const CONTRACTS_VERSION = "0.5.0" as const;
 
 /** Version gabarit fiches révision (issue #30, phase 10). Stockée par fiche. */
 export const REVISION_TEMPLATE_VERSION = "fiche-v1" as const;

@@ -11,6 +11,19 @@ export const API_ERROR_CODES = [
   "unauthorized",
   "conflict",
   "internal",
+  // #118 : rejets de POST /v1/setup. Volontairement PAS 401 : un 401 déclenche
+  // le garde-fou de l'app (déconnexion + retour appairage), alors que ces
+  // rejets concernent ce que l'UTILISATEUR vient de saisir — l'app doit
+  // afficher « rescane ton QR » / « identifiants refusés » et le laisser
+  // corriger, jamais le déconnecter.
+  "qr_rejected",
+  "login_refused",
+  // 502 : l'ENT/Pronote est en amont et n'a pas répondu. Distinct de
+  // `login_refused` pour que l'app propose réessayer plus tard.
+  "ent_unreachable",
+  // #118 : trop d'échecs de setup sur la fenêtre (10 min). L'app doit proposer
+  // « réessayer plus tard », pas boucler.
+  "rate_limited",
 ] as const;
 
 export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
@@ -27,6 +40,10 @@ const STATUS: Record<ApiErrorCode, number> = {
   unauthorized: 401,
   conflict: 409,
   internal: 500,
+  qr_rejected: 400,
+  login_refused: 400,
+  ent_unreachable: 502,
+  rate_limited: 429,
 };
 
 /**

@@ -32,10 +32,12 @@ import {
   isPeriodsResponse,
   isRevisionSheetsResponse,
   isSecurityAlertsResponse,
+  isSetupRequest,
+  isSetupResponse,
   isSubjectPrefsResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
-import type { PairingConfirmResponse } from "../../shared/contracts/api";
+import type { PairingConfirmResponse, SetupResponse } from "../../shared/contracts/api";
 import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, DISCUSSION_ID_MAX_CHARS, isAverageAlgorithm, isNewsItem, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT, TIMETABLE_WEEK_MAX_SPAN_DAYS } from "../../shared/contracts/models";
 import type { ContractEvent, NewsUpdatedData, SyncCompletedData, TimetableUpdatedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
@@ -51,6 +53,7 @@ import { handleSyncRefresh } from "./sync-refresh";
 import type { DiscussionActions } from "./discussions";
 import { handleDiscussionWrite } from "./discussions";
 import { PairingService } from "./pairing";
+import type { SetupFailure, SetupService } from "./setup";
 import { renderRevisionPdf } from "../jobs/revision";
 import type { RevisionListStore } from "./revision";
 import { createRevisionMemoryStore } from "./revision";
@@ -230,7 +233,42 @@ const OPEN_WITHOUT_DEVICE: ReadonlySet<string> = new Set([
   "/v1/health",
   "/v1/pairing/start",
   "/v1/pairing/confirm",
+  // #118 : obtenir un credential ET la session école d'un coup. Comme
+  // l'appairage, c'est une porte d'entrée sans jeton — donc fermée par
+  // construction : elle n'accepte que ce qu'un utilisateur SAIT de son
+  // établissement (URL publique, identifiants ou QR), jamais un pouvoir sur
+  // les données d'un compte déjà appairé.
+  "/v1/setup",
 ]);
+
+/**
+ * #118 : corps de setup — des identifiants et un QR chiffré, quelques centaines
+ * d'octets. Borné avant parse comme l'appairage (route ouverte : autant ne pas
+ * bufferiser un corps arbitraire).
+ */
+const SETUP_MAX_BODY_CHARS = 4096;
+
+/**
+ * Rejet de setup → code d'erreur typé. Volontairement jamais 401 : un 401
+ * ferait déconnecter l'app alors que le problème est la saisie de l'utilisateur,
+ * qui doit pouvoir corriger sur place (`qr_rejected`, `login_refused`).
+ */
+function setupError(failure: SetupFailure): Response {
+  switch (failure) {
+    case "unavailable":
+      return apiError("not_implemented", "setup non branche (aucune session Pronote)");
+    case "bad_url":
+      return apiError("bad_request", "adresse d'etablissement refusee");
+    case "throttled":
+      return apiError("rate_limited", "trop de tentatives, reessayez plus tard");
+    case "qr_rejected":
+      return apiError("qr_rejected", "QR refuse par l'etablissement");
+    case "login_refused":
+      return apiError("login_refused", "identifiants refuses");
+    case "ent_unreachable":
+      return apiError("ent_unreachable", "ENT injoignable");
+  }
+}
 
 /**
  * Jeton d'appareil appairé exigé sur TOUTE route hors `OPEN_WITHOUT_DEVICE`
@@ -320,6 +358,10 @@ export function createHandler(
   // #80 : écritures de messagerie (create/reply/read-state/delete) = actions APP
   // CONFIRMÉES (I7). Absent par défaut = 501 honnête, jamais un faux succès.
   discussionActions: DiscussionActions | null = null,
+  // #118 : POST /v1/setup (compte école + jeton en un appel). Absent par défaut
+  // = 501 honnête, comme les autres ports non branchés (10e paramètre, aucun
+  // appelant existant cassé).
+  setup: SetupService | null = null,
 ): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
     try {
@@ -550,6 +592,21 @@ export function createHandler(
         // jamais dans un log). Le client s'en sert comme bearer.
         const payload: PairingConfirmResponse = { device: res.device, token: res.token };
         return json(isPairingConfirmResponse(payload), payload);
+      }
+      case "/v1/setup": {
+        if (!setup) return setupError("unavailable");
+        const body = await boundedJson(req, SETUP_MAX_BODY_CHARS);
+        if (body instanceof Response) return body;
+        if (!isSetupRequest(body)) return apiError("bad_request", "invalid setup request");
+        const res = await setup.run(body);
+        // Échecs = codes ACTIONNABLES (rescan, corrige, réessaie) : jamais le
+        // 401 indifférencié de l'appairage, qui déconnecterait l'app.
+        if (!res.ok) return setupError(res.failure);
+        // Le secret sort ICI, UNE SEULE FOIS dans toute l'API : c'est la seule
+        // réponse qui le porte (aucune autre route ne le rend, jamais en erreur,
+        // jamais dans un log). Le client s'en sert comme bearer.
+        const payload: SetupResponse = { device: res.device, token: res.token };
+        return json(isSetupResponse(payload), payload);
       }
       case "/v1/homework/generate": {
         return handleHomeworkGenerate(req, llm);

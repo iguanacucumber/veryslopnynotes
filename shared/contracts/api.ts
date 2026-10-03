@@ -33,6 +33,10 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/v1/health" },
   { method: "POST", path: "/v1/pairing/start" },
   { method: "POST", path: "/v1/pairing/confirm" },
+  // #118 : setup EN UN APPEL (compte école + jeton de device). L'appairage
+  // QR+PIN reste pour le ré-appairage ; au premier lancement l'app appelle
+  // cette route, qui ouvre la session Pronote AVANT de rendre le jeton.
+  { method: "POST", path: "/v1/setup" },
   { method: "GET", path: "/v1/grades" },
   { method: "GET", path: "/v1/periods" },
   { method: "GET", path: "/v1/assignments" },
@@ -119,6 +123,51 @@ export interface PairingConfirmResponse {
 }
 /** Borne du token d'app dans la réponse d'appairage (32 octets base64url = 43). */
 export const PAIRING_TOKEN_MAX_CHARS = 512;
+
+// #118 : POST /v1/setup — le flux « tout marche » en un appel.
+// L'app envoie l'URL du serveur sur une autre requête (hors contrat), puis ici
+// TOUT ce qui identifie l'établissement, et reçoit le jeton de device.
+// Deux méthodes, jamais jouées ensemble : le QR de l'établissement prime (il
+// porte sa propre preuve de détention du compte), sinon les identifiants ENT.
+export const SETUP_URL_MAX_CHARS = 300;
+export const SETUP_CREDENTIAL_MAX_CHARS = 256;
+export const SETUP_ENT_MAX_CHARS = 32;
+/** login/jeton sont des hex AES : long, mais borné. */
+export const SETUP_QR_FIELD_MAX_CHARS = 1024;
+/** PIN de validation : clé de déchiffrement du QR, pas un code à 6 chiffres. */
+export const SETUP_PIN_MAX_CHARS = 64;
+
+/** Payload du QR Pronote de l'établissement (`login` + `jeton` chiffrés). */
+export interface SetupQr {
+  readonly login: string;
+  readonly jeton: string;
+  /** URL portée par le QR ; absente = `SetupRequest.pronoteUrl`. */
+  readonly url?: string;
+}
+
+export interface SetupRequest {
+  readonly deviceName: string;
+  /** URL élève de l'établissement, saisie par l'utilisateur. */
+  readonly pronoteUrl: string;
+  /** Type ENT/CAS. Seul `ninegate` est implémenté côté intégration. */
+  readonly ent: string;
+  /** Identifiants ENT (méthode « credentials », facultative). */
+  readonly username?: string;
+  readonly password?: string;
+  /** QR de l'établissement (méthode « qr », facultative). */
+  readonly qr?: SetupQr;
+  /** PIN de validation associé au QR. */
+  readonly pin?: string;
+}
+
+/**
+ * 0.5.0 : comme `PairingConfirmResponse` — le jeton sort UNE SEULE FOIS, ici.
+ * Le serveur ne rend jamais le jeton sur une autre route, ni en cas d'erreur.
+ */
+export interface SetupResponse {
+  readonly device: Device;
+  readonly token: string;
+}
 
 // #74 : /v1/grades enrichi du rapport de moyennes (fournie/estimée, algorithme
 // choisi par query `?algorithm=`, période par `?periodId=`). Breaking 0.1.0→0.2.0.
@@ -311,6 +360,52 @@ export function isRevisionSheetsResponse(v: unknown): v is RevisionSheetsRespons
 }
 
 export function isPairingConfirmResponse(v: unknown): v is PairingConfirmResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return isDevice(r["device"]) && isBoundedNonEmptyString(r["token"], PAIRING_TOKEN_MAX_CHARS);
+}
+
+function isSetupQr(v: unknown): v is SetupQr {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  const url = r["url"];
+  return (
+    isBoundedNonEmptyString(r["login"], SETUP_QR_FIELD_MAX_CHARS) &&
+    isBoundedNonEmptyString(r["jeton"], SETUP_QR_FIELD_MAX_CHARS) &&
+    (url === undefined || isBoundedNonEmptyString(url, SETUP_URL_MAX_CHARS))
+  );
+}
+
+/**
+ * #118 : valide la forme ET l'exploitabilité — au moins une méthode complète.
+ * Un setup sans méthode exploitable ne consomme pas de tentative contre
+ * l'ENT : 400 direct, l'app garde l'utilisateur sur l'écran du setup.
+ * Champs présents mais incomplets (username sans password, qr sans jeton) =>
+ * refus aussi : mieux vaut une erreur franche qu'un login à moitié fait.
+ */
+export function isSetupRequest(v: unknown): v is SetupRequest {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  const deviceName = r["deviceName"];
+  const pronoteUrl = r["pronoteUrl"];
+  const ent = r["ent"];
+  const username = r["username"];
+  const password = r["password"];
+  const qr = r["qr"];
+  const pin = r["pin"];
+  if (!isBoundedNonEmptyString(deviceName, SETUP_CREDENTIAL_MAX_CHARS)) return false;
+  if (!isBoundedNonEmptyString(pronoteUrl, SETUP_URL_MAX_CHARS)) return false;
+  if (!isBoundedNonEmptyString(ent, SETUP_ENT_MAX_CHARS)) return false;
+  if (username !== undefined && !isBoundedNonEmptyString(username, SETUP_CREDENTIAL_MAX_CHARS)) return false;
+  if (password !== undefined && !isBoundedNonEmptyString(password, SETUP_CREDENTIAL_MAX_CHARS)) return false;
+  if (pin !== undefined && !isBoundedNonEmptyString(pin, SETUP_PIN_MAX_CHARS)) return false;
+  if (qr !== undefined && !isSetupQr(qr)) return false;
+  const hasQr = qr !== undefined && pin !== undefined;
+  const hasCredentials = username !== undefined && password !== undefined;
+  return hasQr || hasCredentials;
+}
+
+export function isSetupResponse(v: unknown): v is SetupResponse {
   if (typeof v !== "object" || v === null) return false;
   const r = v as Record<string, unknown>;
   return isDevice(r["device"]) && isBoundedNonEmptyString(r["token"], PAIRING_TOKEN_MAX_CHARS);

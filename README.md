@@ -16,11 +16,11 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 
 | Domaine | État |
 |---|---|
-| Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.4.0`), miroir OpenAPI |
-| Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (31 routes, 7 types d'événements) |
+| Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.5.0`), miroir OpenAPI |
+| Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (32 routes, 7 types d'événements) |
 | Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, appairage QR+PIN, SSE |
 | Point d'entrée HTTP serveur (`make serve`, Docker) | Câblé : env → session Pronote → reader → snapshot → routes, ports d'écriture inclus |
-| Garde-fous sécurité (I1–I7) + tests | 508 tests verts, scan d'architecture et de secrets en CI locale |
+| Garde-fous sécurité (I1–I7) + tests | 546 tests verts, scan d'architecture et de secrets en CI locale |
 | Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'ENT = **vide propre** |
 
 ## Fonctionnalités
@@ -82,7 +82,7 @@ Tout passe par `.env.local` (gitignoré). Jamais de secret en issue, PR, log ou 
 | `HOST` | hôte d'écoute (défaut `127.0.0.1`, loopback) |
 | `MEDIA_DOWNLOAD_TIMEOUT_MS` | échéance de téléchargement d'une pièce jointe via `/v1/media` |
 | `MEDIA_REF_SECRET` | secret de signature des refs média (tiré au sort au démarrage si absent) |
-| `PRONOTE_URL` | URL élève de l'établissement |
+| `PRONOTE_URL` | URL élève de l'établissement. **Facultative** : absente, le compte s'ouvre depuis l'app via `POST /v1/setup`. Renseignée, elle **épingle** l'établissement : le setup ne peut plus viser une autre école |
 | `PRONOTE_USERNAME` / `PRONOTE_PASSWORD` | compte de test (jamais en CI) |
 | `PRONOTE_ENT_KIND` | type ENT/CAS : `ninegate` (défaut), `educonnect`, `cas` |
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | assistant devoirs + fiches de révision |
@@ -156,7 +156,7 @@ lecture. Une route ajoutée est donc fermée par défaut.
 
 | Domaine | Routes |
 |---|---|
-| Santé, appairage (ouvertes sans jeton) | `GET /v1/health`, `POST /v1/pairing/start`, `POST /v1/pairing/confirm` |
+| Santé, appairage, setup (ouvertes sans jeton) | `GET /v1/health`, `POST /v1/pairing/start`, `POST /v1/pairing/confirm`, `POST /v1/setup` |
 | Notes | `GET /v1/grades` (notes + moyennes, `?algorithm=`, `?periodId=`), `GET /v1/periods` |
 | Devoirs | `GET /v1/assignments` (filtres de dates/semaine), `POST /v1/assignments/toggle` |
 | EDT | `GET /v1/timetable` (`?weekStart=`, `?from=`, `?to=`) |
@@ -184,7 +184,7 @@ make integration            # nécessite .env.local (skip sinon)
 make build                  # image Docker + rappel APK
 ```
 
-508 tests, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
+546 tests, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
 La CI locale est `make check` : un changement qui casse un invariant est bloquant, même si
 fonctionnellement il passe.
 
@@ -192,7 +192,15 @@ fonctionnellement il passe.
 
 - Sans `PRONOTE_URL` (ou sans identifiants), le serveur démarre quand même : lectures vides et
   écritures en 501 plutôt qu'un `200` mensonger. La session et les identifiants vivent en mémoire,
-  jamais sur disque.
+  jamais sur disque — donc un redémarrage les perd, et l'app doit refaire son setup.
+- `POST /v1/setup` est la seule route ouverte qui déclenche une **sortie réseau** : l'URL de
+  l'établissement est choisie par le client. Elle est filtrée (hôtes privés, loopback et
+  link-local refusés ; établissement épinglé si `PRONOTE_URL` est renseignée ; 20 échecs par
+  fenêtre de 10 min). Résiduel assumé : un **nom DNS** pointant sur une IP privée passe le filtre
+  littéral (rebinding). À fermer quand le serveur-exposed grandit : résolution DNS + épinglage de
+  l'IP résolue, ou liste blanche d'hôtes.
+- Seul `PRONOTE_ENT_KIND=ninegate` est implémenté côté SSO ; `educonnect` et `cas` sont déclarés
+  mais refusés franchement (les identifiants ne partent pas vers un ENT non configuré).
 - Onglets Pronote réellement publiés par l'établissement : les capacités ne sont jamais devinées,
   donc un onglet non observé vaut onglet absent et **est masqué**. Inversement, des capacités non
   déterminées (`capabilities: null`, lecture en échec) ne masquent rien.
