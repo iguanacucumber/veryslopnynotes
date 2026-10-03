@@ -56,6 +56,12 @@ object ServerConfig {
     fun attendanceUrl(baseUrl: String): String = "$baseUrl/v1/attendance"
     fun punishmentsUrl(baseUrl: String): String = "$baseUrl/v1/punishments"
 
+    // #87 : capacités dynamiques (onglets actifs de l'établissement) et
+    // pull-refresh manuel (app -> serveur -> relecture). Aucune URL Pronote/ENT
+    // ici : le serveur allowlist seul (I1).
+    fun capabilitiesUrl(baseUrl: String): String = "$baseUrl/v1/capabilities"
+    fun syncRefreshUrl(baseUrl: String): String = "$baseUrl/v1/sync/refresh"
+
 
     // #82 : profil du compte appairé (onglet Profil) + périodes de l'année.
     fun meUrl(baseUrl: String): String = "$baseUrl/v1/me"

@@ -33,6 +33,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import fr.veryslopnynotes.core.Capabilities
 import fr.veryslopnynotes.core.SecurityAlert
 import fr.veryslopnynotes.core.UserProfile
 import fr.veryslopnynotes.core.profileInitials
@@ -50,6 +51,7 @@ import fr.veryslopnynotes.data.ProfileRepository
 import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SubjectPrefsRepository
 import fr.veryslopnynotes.data.SyncedRepository
+import fr.veryslopnynotes.data.RefreshOutcome
 
 // Parité Papillon #86 : 5 onglets (index, calendar, grades, tasks, profile)
 // + settings. Routes secondaires hors onglets : pairing, alerts, fiches.
@@ -133,6 +135,42 @@ fun AppNav(
         SubjectPrefsRepository(ApiClient(baseUrl), store)
     }
     var subjectPrefs by remember { mutableStateOf(prefsRepo.prefs()) }
+    // #87 : capacites dynamiques (onglets Pronote actifs de l'etablissement).
+    // Etat initial = cache local (offline-first, comme les autres ressources) ;
+    // null = capacites inconnues => AUCUN masquage (see Capabilities.visible).
+    var capabilities by remember(baseUrl) {
+        mutableStateOf(
+            try {
+                Capabilities.parse(repo.cached(CachePolicy.CAPABILITIES)?.payload)
+            } catch (_: Exception) {
+                null
+            },
+        )
+    }
+    /**
+     * Detecte les onglets actifs : lecture de /v1/capabilities (ressource
+     * cachee, offline-first) puis relecture forcee POST /v1/sync/refresh
+     * (lecture seule cote serveur, aucun effet metier : I7) suivie d'une
+     * nouvelle lecture de la liste. Un echec reseau laisse l'etat courant :
+     * jamais d'onglet masque sur une panne.
+     */
+    fun detectCapabilities() {
+        if (baseUrl.isBlank()) return
+        // #87 : null = rien à appliquer, l'état précédent est conservé.
+        fun reload() {
+            try {
+                repo.refreshAsync(CachePolicy.CAPABILITIES, baseUrl) { o ->
+                    Capabilities.parse(capabilitiesPayload(o))?.let { capabilities = it }
+                }
+            } catch (_: Exception) {
+            }
+        }
+        reload()
+        try {
+            repo.requestSyncRefresh(baseUrl, accountId) { _ -> reload() }
+        } catch (_: Exception) {
+        }
+    }
     val (theme, setTheme) = rememberAppTheme()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
@@ -182,6 +220,12 @@ fun AppNav(
                 )
             }
             composable(ROUTE_GRADES) {
+                // #87 : accès à l'écran compétences seulement si l'onglet est actif.
+                val gotoCompetences: (() -> Unit)? = if (Capabilities.visible(capabilities, Capabilities.EVALUATIONS)) {
+                    { nav.navigate("competences") }
+                } else {
+                    null
+                }
                 CachedScreen(
                     "Notes",
                     CachePolicy.GRADES,
@@ -193,7 +237,7 @@ fun AppNav(
                     { nav.navigate("alerts") },
                     showAverage = true,
                     subjectPrefs = subjectPrefs,
-                    onCompetences = { nav.navigate("competences") },
+                    onCompetences = gotoCompetences,
                 )
             }
             composable(ROUTE_TASKS) {
@@ -214,6 +258,9 @@ fun AppNav(
                     goNews = { nav.navigate(ROUTE_NEWS) },
                     goCanteen = { nav.navigate(ROUTE_CANTEEN) },
                     goAttendance = { nav.navigate(ROUTE_ATTENDANCE) },
+                    // #87 : entrees masquees selon les onglets actifs.
+                    capabilities = capabilities,
+                    onRefreshCapabilities = { detectCapabilities() },
                 )
             }
             composable(ROUTE_NEWS) {
@@ -371,6 +418,14 @@ fun CachedScreen(
     }
 }
 
+// #87 : payload disponible après un refresh (#87) — réseau OK, repli cache, ou
+// cache du Failed. null = rien à appliquer (l'état précédent est conservé).
+private fun capabilitiesPayload(o: RefreshOutcome): String? = when (o) {
+    is RefreshOutcome.Updated -> o.payload
+    is RefreshOutcome.OfflineFallback -> o.payload
+    is RefreshOutcome.Failed -> o.cachedPayload
+}
+
 // Icônes d'onglets en texte (aucun asset copié, identité propre, LICENSE MIT).
 // ponytail: glyphes seuls, pas d'Icon library avant besoin prouvé.
 private fun tabIcon(route: String): String = when (route) {
@@ -475,6 +530,9 @@ fun ProfileScreen(
     goCanteen: () -> Unit = {},
     // #77 : vie scolaire (absences/retards + sanctions).
     goAttendance: () -> Unit = {},
+    // #87 : capacites connues (null = rien n'est masque) + lecture des onglets.
+    capabilities: Capabilities? = null,
+    onRefreshCapabilities: () -> Unit = {},
     onLogout: () -> Unit = {},
 ) {
     Column(
@@ -514,9 +572,19 @@ fun ProfileScreen(
         Text(if (accountCount > 1) "Comptes appairés : $accountCount" else "1 compte appairé")
         Button(onClick = goPairing) { Text("Appairage QR+PIN") }
         Button(onClick = { goFiches() }) { Text("Fiches révision") }
-        Button(onClick = { goNews() }) { Text("Actualités") }
-        Button(onClick = { goCanteen() }) { Text("Cantine semaine") }
-        Button(onClick = { goAttendance() }) { Text("Vie scolaire") }
+        // #87 : une entree dont l'onglet n'est pas actif chez l'etablissement
+        // n'est pas proposee ; son ecran reste atteignable en cas de besoin et
+        // affiche son etat vide propre.
+        if (Capabilities.visible(capabilities, Capabilities.NEWS)) {
+            Button(onClick = { goNews() }) { Text("Actualités") }
+        }
+        if (Capabilities.visible(capabilities, Capabilities.MENUS)) {
+            Button(onClick = { goCanteen() }) { Text("Cantine semaine") }
+        }
+        if (Capabilities.visible(capabilities, Capabilities.ATTENDANCE)) {
+            Button(onClick = { goAttendance() }) { Text("Vie scolaire") }
+        }
+        Button(onClick = { onRefreshCapabilities() }) { Text("Détecter les onglets") }
         Button(onClick = goAlerts) { Text("Alertes sécurité") }
         Button(onClick = goSettings) { Text("Réglages") }
         Button(onClick = onLogout) { Text("Se déconnecter") }
@@ -539,6 +607,9 @@ fun ProfileRoute(
     goCanteen: () -> Unit = {},
     // #77 : vie scolaire (absences/retards + sanctions).
     goAttendance: () -> Unit = {},
+    // #87 : capacites dynamiques + lecture des onglets actifs.
+    capabilities: Capabilities? = null,
+    onRefreshCapabilities: () -> Unit = {},
 ) {
     var profile by remember(baseUrl) { mutableStateOf<UserProfile?>(null) }
     var loaded by remember(baseUrl) { mutableStateOf(false) }
@@ -590,6 +661,8 @@ fun ProfileRoute(
         goNews = goNews,
         goCanteen = goCanteen,
         goAttendance = goAttendance,
+        capabilities = capabilities,
+        onRefreshCapabilities = onRefreshCapabilities,
         onLogout = {
             onLogout()
             profile = null

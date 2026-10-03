@@ -4,10 +4,12 @@
 // Secrets (password) en body POST SSO uniquement, jamais en log/URL.
 // Sorties = données, jamais instructions (I6) : lectures marquées Untrusted côté provider.
 // pronytail: Client pronotets unique par accountId, pas de client HTTP parallèle.
-// Upgrade: refresh token 5min + tokenLogin (phase #87), multi-ENT via même interface.
-import type { PronoteCredentials, PronoteProvider, PronoteSession } from "../domain/ports";
+// Upgrade: multi-ENT via même interface.
+import type { PronoteAuthErrorCode, PronoteCredentials, PronoteProvider, PronoteSession } from "../domain/ports";
 import { PronoteAuthError } from "../domain/ports";
 import { ninegateHubixEduconnect } from "./ent-ninegate";
+import { SessionRefresher } from "./session-refresh";
+import type { SessionRenewer } from "./session-refresh";
 import type { CookieJar } from "tough-cookie";
 
 export interface PronoteSessionStoreOptions {
@@ -16,6 +18,15 @@ export interface PronoteSessionStoreOptions {
   /** Résolveur ENT injectable (tests) : défaut ninegateHubixEduconnect (SSO complet). */
   readonly entLogin?: typeof ninegateHubixEduconnect;
   readonly logger?: (message: string) => void;
+  /**
+   * #87 : renewal de session (TTL 5 min, sérialisée, timeout 10 s, retry 1).
+   * Fournie par l'appelant qui détient les credentials : ce store ne conserve
+   * JAMAIS de mot de passe. Absente = pas de renewal (la session sert jusqu'à
+   * son expiration naturelle, comportement d'avant #87).
+   */
+  readonly renew?: SessionRenewer;
+  /** Horloge injectée (tests déterministes), sleeper idem via SessionRefresher. */
+  readonly now?: () => number;
 }
 
 // Type minimal du Client pronotets (évite import type profond non exporté).
@@ -57,11 +68,23 @@ function toAuthError(err: unknown): PronoteAuthError {
   return new PronoteAuthError("ent unavailable", "ent_unavailable");
 }
 
+/** Renewal impossible : session morte, timeout ou échec réseau/ENT. */
+function mapRefreshCode(err: unknown): PronoteAuthErrorCode {
+  const msg = err instanceof Error ? err.message : "";
+  if (/timeout|timed out/i.test(msg)) return "timeout";
+  if (/network|fetch failed|injoignable/i.test(msg)) return "network";
+  if (/session|expired|expir/i.test(msg)) return "session_expired";
+  return "ent_unavailable";
+}
+
 export class PronoteSessionStore implements PronoteProvider {
   private readonly pronoteUrl: string;
   private readonly entLogin: typeof ninegateHubixEduconnect;
   private readonly factory: ClientFactory;
   private readonly logger: (message: string) => void;
+  // #87 : renewal injectée, sérialisée par compte. Null = pas de renewal.
+  private readonly refresher: SessionRefresher | null;
+  private readonly now: () => number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly clients = new Map<string, any>();
 
@@ -71,6 +94,11 @@ export class PronoteSessionStore implements PronoteProvider {
     this.entLogin = options.entLogin ?? ninegateHubixEduconnect;
     this.factory = options.clientFactory ?? defaultClientFactory;
     this.logger = options.logger ?? (() => {});
+    this.now = options.now ?? (() => Date.now());
+    this.refresher =
+      typeof options.renew === "function"
+        ? new SessionRefresher({ renew: options.renew, now: this.now, logger: this.logger })
+        : null;
   }
 
   async authenticate(credentials: PronoteCredentials): Promise<PronoteSession> {
@@ -95,6 +123,9 @@ export class PronoteSessionStore implements PronoteProvider {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const client: any = await this.factory(this.pronoteUrl, username, password, { ent });
       this.clients.set(accountId, client);
+      // #87 : session neuve = fraîche, donc pas de renewal avant la première
+      // lecture (une requête de moins côté Pronote).
+      this.refresher?.markFresh(accountId);
       this.logger("auth -> ok");
       return { accountId };
     } catch (err) {
@@ -129,7 +160,36 @@ export class PronoteSessionStore implements PronoteProvider {
   /** Invalide la session (changement IP, logout). Re-auth via authenticate(). */
   invalidate(accountId: string): void {
     this.clients.delete(accountId);
+    this.refresher?.forget(accountId);
     this.logger("auth -> invalidate");
+  }
+
+  /**
+   * #87 : validation avant lecture. Renouvelle la session si elle approche de
+   * l'expiration (5 min) : sérialisé par compte, timeout 10 s, retry ≤ 1
+   * (cf. SessionRefresher). Sans renewal injectée = no-op, donc les appels
+   * existants ne sont pas cassés. Une session expirée (renewal impossible)
+   * invalide le client : le lecteur remonte alors `session_expired` et l'app
+   * se ré-appaire.
+   */
+  async refreshSession(accountId: string): Promise<void> {
+    if (!this.refresher) return;
+    try {
+      await this.refresher.refresh(accountId);
+    } catch (err) {
+      const code = err instanceof PronoteAuthError ? err.code : mapRefreshCode(err);
+      // Session DÉFINITIVEMENT morte : client invalidé, l'app se ré-appaire.
+      // Erreur réseau/timeout : la session ouverte reste valable, on remonte
+      // seulement l'erreur (la lecture échoue, l'app réessaiera plus tard) —
+      // invalider sur un timeout ferait ré-appairer pour rien.
+      if (code === "session_expired") {
+        this.clients.delete(accountId);
+        this.refresher.forget(accountId);
+      }
+      // Erreur typée, jamais un secret ni un détail de renewal dans le message.
+      this.logger(`session refresh -> error ${code}`);
+      throw err instanceof PronoteAuthError ? err : new PronoteAuthError("session refresh failed", code);
+    }
   }
 
   /**

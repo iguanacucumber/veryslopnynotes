@@ -3,7 +3,7 @@
 // Mémoire = seed/tests uniquement ; l'adaptateur SQLite (#11) implémentera
 // ReadStore sans changer le routeur.
 
-import type { AbsenceRecord, Assignment, CanteenBalance, CanteenMenu, Evaluation, Grade, NewsItem, Period, Punishment, TimetableEntry, UserInfo } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, Capabilities, CanteenBalance, CanteenMenu, Evaluation, Grade, NewsItem, Period, Punishment, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 import type { SecurityAlertData } from "../../shared/contracts/events";
 
 import type { ProvidedAverages } from "../domain/averages";
@@ -54,6 +54,15 @@ export interface ReadStore {
    * l'écran Profil affiche un état vide plutôt qu'un profil d'exemple.
    */
   userInfo?(): UserInfo | null;
+
+  /**
+   * Onglets Pronote actifs de l'établissement (#87). Optionnelle + défaut
+   * `null` = capacités NON déterminées (session absente, adaptateur sans
+   * détection) : la route répond alors `capabilities: null` et l'app garde son
+   * affichage par défaut. Un onglet absent de la liste est une capacité
+   * `false`, jamais une erreur de lecture.
+   */
+  capabilities?(): Capabilities | null;
 }
 
 export interface StoreSeed {
@@ -81,6 +90,12 @@ export interface StoreSeed {
    * seed par défaut, donc aucun risque de profil fantôme dans les tests.
    */
   readonly userInfo?: UserInfo | null;
+
+  /**
+   * Capacités synthétiques (#87). Défaut = null : aucun onglet n'est affirmé
+   * actif tant que la détection n'a pas tourné (état neutre, pas de masquage).
+   */
+  readonly capabilities?: Capabilities | null;
 }
 
 const SEED_GRADE: Grade = {
@@ -174,6 +189,8 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
 
   // #82 : défaut null (pas de profil dans le seed général = mode anonyme).
   const user = seed.userInfo === undefined ? null : structuredClone(seed.userInfo);
+  // #87 : défaut null (capacités non déterminées = aucun masquage côté app).
+  const caps = seed.capabilities === undefined ? null : structuredClone(seed.capabilities);
   return {
     grades: () => structuredClone(grades),
     assignments: () => structuredClone(assignments),
@@ -193,5 +210,7 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
 
 
     userInfo: () => (user === null ? null : structuredClone(user)),
+
+    capabilities: () => (caps === null ? null : structuredClone(caps)),
   };
 }
