@@ -87,3 +87,22 @@ aucun type novel et une app 0.3.0 comprend déjà la réponse. Le flux `/v1/even
 est un snapshot **borné** : une écriture puis fermeture (plus de connexion tenue
 sans rien émettre). Refresh de session côté serveur : TTL 5 min, renewal
 sérialisée par compte, timeout 10 s, retry ≤ 1 (`server/integrations/session-refresh.ts`).
+
+
+Add-only #80 (mêmes versions, pas de bump) : messagerie — `Recipient`
+(`student`/`teacher`/`administration`), `Message` (corps **borné 4000**,
+`attachments?` en réf opaque comme les PJ #75) et `Discussion` (`participants`,
+`unreadCount?`, `lastMessageAt?`, `updatedAt`). Lectures : `GET /v1/discussions`,
+`GET /v1/discussions/messages?id=`, `GET /v1/discussions/recipients` — onglet
+Discussions inactif côté établissement = listes **vides** (200), jamais 500.
+Écritures : `POST /v1/discussions` (créer), `/reply`, `/read-state`, `/delete` —
+**actions APP CONFIRMÉES uniquement** (I7) : corps borné avant parse, `is*Request`,
+erreurs `not_implemented`/`unauthorized`/`conflict`, et **jamais de faux succès**.
+`delete` est un POST (le contrat `ApiRoute` n'accepte que GET/POST/PUT).
+SSE : **aucun type d'événement nouveau** — l'invalidation de cache est
+`CacheInvalidated` (resource `discussions`), renvoyé dans la réponse des 4
+actions. Ressource cache `discussions` = **liste des fils seulement** (TTL 15 min,
+donnée personnelle purgée au logout par le `clearAll()` global #82) ; les messages
+d'un fil sont lus à la demande et **jamais** écrits sur disque.
+I6 : le corps d'un message est une DONNÉE bornée — jamais exécutée, jamais
+interprétée, jamais remise à un LLM (test I7 dans `tests/unit/discussions.test.ts`).

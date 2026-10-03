@@ -83,6 +83,9 @@ const val ROUTE_CANTEEN = "canteen"
 // #77 : vie scolaire (absences/retards + sanctions), hors onglets comme
 // "fiches" : apparaît seulement si l'établissement publie la donnée.
 const val ROUTE_ATTENDANCE = "attendance"
+// #80 : messagerie (parité Papillon Discussions), hors onglets comme les autres
+// capacités dynamiques : visible seulement si l'établissement publie des fils.
+const val ROUTE_MESSAGES = "messages"
 
 private val TAB_ROUTES = listOf(ROUTE_INDEX, ROUTE_CALENDAR, ROUTE_GRADES, ROUTE_TASKS, ROUTE_PROFILE)
 
@@ -261,6 +264,8 @@ fun AppNav(
                     // #87 : entrees masquees selon les onglets actifs.
                     capabilities = capabilities,
                     onRefreshCapabilities = { detectCapabilities() },
+
+                    goMessages = { nav.navigate(ROUTE_MESSAGES) },
                 )
             }
             composable(ROUTE_NEWS) {
@@ -325,6 +330,11 @@ fun AppNav(
                     section = { CompetencesSection(it) },
                     subjectPrefs = subjectPrefs,
                 )
+            }
+            // #80 : messagerie — liste des fils (cache), lecture d'un fil, réponse,
+            // création, lu/non-lu et suppression (boutons = actions confirmées, I7).
+            composable(ROUTE_MESSAGES) {
+                MessagesRoute(repo, baseUrl, accountId)
             }
         }
     }
@@ -533,6 +543,9 @@ fun ProfileScreen(
     // #87 : capacites connues (null = rien n'est masque) + lecture des onglets.
     capabilities: Capabilities? = null,
     onRefreshCapabilities: () -> Unit = {},
+
+    // #80 : messagerie (discussions).
+    goMessages: () -> Unit = {},
     onLogout: () -> Unit = {},
 ) {
     Column(
@@ -585,6 +598,14 @@ fun ProfileScreen(
             Button(onClick = { goAttendance() }) { Text("Vie scolaire") }
         }
         Button(onClick = { onRefreshCapabilities() }) { Text("Détecter les onglets") }
+        Button(onClick = { goNews() }) { Text("Actualités") }
+        Button(onClick = { goCanteen() }) { Text("Cantine semaine") }
+        Button(onClick = { goAttendance() }) { Text("Vie scolaire") }
+
+        Button(onClick = { goNews() }) { Text("Actualités") }
+        Button(onClick = { goCanteen() }) { Text("Cantine semaine") }
+        Button(onClick = { goAttendance() }) { Text("Vie scolaire") }
+        Button(onClick = { goMessages() }) { Text("Messages") }
         Button(onClick = goAlerts) { Text("Alertes sécurité") }
         Button(onClick = goSettings) { Text("Réglages") }
         Button(onClick = onLogout) { Text("Se déconnecter") }
@@ -610,6 +631,9 @@ fun ProfileRoute(
     // #87 : capacites dynamiques + lecture des onglets actifs.
     capabilities: Capabilities? = null,
     onRefreshCapabilities: () -> Unit = {},
+
+    // #80 : messagerie (discussions).
+    goMessages: () -> Unit = {},
 ) {
     var profile by remember(baseUrl) { mutableStateOf<UserProfile?>(null) }
     var loaded by remember(baseUrl) { mutableStateOf(false) }
@@ -663,6 +687,8 @@ fun ProfileRoute(
         goAttendance = goAttendance,
         capabilities = capabilities,
         onRefreshCapabilities = onRefreshCapabilities,
+
+        goMessages = goMessages,
         onLogout = {
             onLogout()
             profile = null

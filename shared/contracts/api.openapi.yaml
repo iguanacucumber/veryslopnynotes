@@ -439,6 +439,133 @@ paths:
           description: session Pronote expiree, re-appairage requis
         '501':
           description: relecture non branchee sur cet adaptateur
+
+
+  # #80 messagerie (parite Papillon, onglet Discussions). Lectures pures : onglet
+  # Discussions inactif cote etablissement = listes VIDES (200), jamais 500.
+  # Ecritures = ACTIONS APP CONFIRMEES (I7) : une route POST par action, corps
+  # borne avant parse, jamais declenchees par une sortie LLM. `delete` est un
+  # POST (le contrat ApiRoute n'accepte que GET/POST/PUT).
+  /v1/discussions:
+    get:
+      operationId: listDiscussions
+      description: Fils de discussion (liste). Onglet Discussions absent = liste vide.
+      responses:
+        '200':
+          description: fils de discussion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscussionsResponse'
+    post:
+      operationId: createDiscussion
+      description: >-
+        Nouvelle discussion : ECRITURE Pronote declenchee par une action APP
+        CONFIRMEE (I7). Destinataire inconnu = 409, session expiree = 401,
+        ecriture non supportee = 501. Jamais un faux succes.
+      responses:
+        '200':
+          description: action confirmee + invalidation de cache
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscussionActionResponse'
+        '400':
+          description: corps hors contrat
+        '401':
+          description: session Pronote expiree
+        '409':
+          description: destinataire inconnu
+        '501':
+          description: ecriture non supportee
+  /v1/discussions/messages:
+    get:
+      operationId: listDiscussionMessages
+      description: Messages d'un fil. Fil inconnu ou illisible = liste vide (200).
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: messages du fil (liste vide si indisponible)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscussionMessagesResponse'
+        '400':
+          description: id manquant
+  /v1/discussions/recipients:
+    get:
+      operationId: listDiscussionRecipients
+      description: Destinataires proposables pour une nouvelle discussion.
+      responses:
+        '200':
+          description: destinataires (liste vide si l'onglet est absent)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscussionRecipientsResponse'
+  /v1/discussions/reply:
+    post:
+      operationId: replyDiscussion
+      description: Reponse dans un fil. ECRITURE confirmee par l'app (I7).
+      responses:
+        '200':
+          description: action confirmee + invalidation de cache
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscussionActionResponse'
+        '400':
+          description: corps hors contrat
+        '401':
+          description: session Pronote expiree
+        '409':
+          description: fil indisponible ou ferme
+        '501':
+          description: ecriture non supportee
+  /v1/discussions/read-state:
+    post:
+      operationId: setDiscussionReadState
+      description: Marquer un fil lu / non-lu. ECRITURE confirmee par l'app (I7).
+      responses:
+        '200':
+          description: action confirmee + invalidation de cache
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscussionActionResponse'
+        '400':
+          description: corps hors contrat
+        '401':
+          description: session Pronote expiree
+        '409':
+          description: fil introuvable
+        '501':
+          description: ecriture non supportee
+  /v1/discussions/delete:
+    post:
+      operationId: deleteDiscussion
+      description: >-
+        Mise a la corbeille d'un fil. POST et non DELETE (contrat ApiRoute
+        GET/POST/PUT). ECRITURE confirmee par l'app (I7).
+      responses:
+        '200':
+          description: action confirmee + invalidation de cache
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscussionActionResponse'
+        '400':
+          description: corps hors contrat
+        '401':
+          description: session Pronote expiree
+        '409':
+          description: fil introuvable
+        '501':
+          description: ecriture non supportee
 components:
   schemas:
     Grade:
@@ -898,3 +1025,72 @@ components:
           type: array
           maxItems: 200
           items: { $ref: '#/components/schemas/ContractEvent' }
+
+
+    Recipient:
+      type: object
+      required: [id, displayName, kind]
+      properties:
+        id: { type: string, maxLength: 64 }
+        displayName: { type: string, maxLength: 100, description: Nom publie, donnee jamais instruction (I6). }
+        kind: { type: string, enum: [student, teacher, administration] }
+    Message:
+      type: object
+      required: [id, discussionId, body, sentAt]
+      properties:
+        id: { type: string, maxLength: 64 }
+        discussionId: { type: string, maxLength: 64 }
+        authorId: { type: string, maxLength: 64, description: Absent = message du compte apparie (jamais de nom devine). }
+        authorName: { type: string, maxLength: 100 }
+        body:
+          type: string
+          maxLength: 4000
+          description: >-
+            Corps du message (eleve ou enseignant) = DONNEE bornee, jamais
+            executee ni interpretee, jamais remise a un LLM (I6).
+        sentAt: { type: string, format: date-time }
+        attachments:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/AttachmentRef' }
+          description: >-
+            Refs opaques resolues par /v1/media ; une URL y est invalide par
+            contrat (l'app ne voit jamais d'adresse Pronote/ENT, I1).
+    Discussion:
+      type: object
+      required: [id, subject, participants, updatedAt]
+      properties:
+        id: { type: string, maxLength: 64 }
+        subject: { type: string, maxLength: 200 }
+        participants:
+          type: array
+          maxItems: 20
+          items: { type: string, maxLength: 100 }
+        unreadCount: { type: integer, minimum: 0, maximum: 999, description: Absent = non publie par l'ENT. }
+        lastMessageAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DiscussionsResponse:
+      type: object
+      required: [discussions]
+      properties:
+        discussions: { type: array, items: { $ref: '#/components/schemas/Discussion' } }
+    DiscussionMessagesResponse:
+      type: object
+      required: [messages]
+      properties:
+        messages: { type: array, items: { $ref: '#/components/schemas/Message' } }
+    DiscussionRecipientsResponse:
+      type: object
+      required: [recipients]
+      properties:
+        recipients: { type: array, items: { $ref: '#/components/schemas/Recipient' } }
+    DiscussionActionResponse:
+      type: object
+      required: [ok, event]
+      properties:
+        ok: { type: boolean, enum: [true], description: Action confirmee par l'app (jamais un faux succes). }
+        event:
+          $ref: '#/components/schemas/ContractEvent'
+          description: >-
+            CacheInvalidated (resource discussions) : evenement EXISTANT, aucun
+            type nouveau. L'app purge son cache de messagerie puis recharge.

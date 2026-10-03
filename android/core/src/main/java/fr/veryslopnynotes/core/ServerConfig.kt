@@ -63,6 +63,30 @@ object ServerConfig {
     fun syncRefreshUrl(baseUrl: String): String = "$baseUrl/v1/sync/refresh"
 
 
+    // #80 : messagerie (parité Papillon, onglet Discussions). Lectures :
+    // liste des fils, messages d'un fil, destinataires d'une nouvelle discussion.
+    // ÉCRITURES : une route par action, chacune déclenchée par un geste de
+    // l'utilisateur (I7) — `delete` est un POST (contrat ApiRoute GET/POST/PUT).
+    fun discussionsUrl(baseUrl: String): String = "$baseUrl/v1/discussions"
+    fun discussionMessagesUrl(baseUrl: String, discussionId: String): String =
+        "$baseUrl/v1/discussions/messages?id=" + urlEncode(discussionId)
+    fun discussionRecipientsUrl(baseUrl: String): String = "$baseUrl/v1/discussions/recipients"
+    fun discussionCreateUrl(baseUrl: String): String = "$baseUrl/v1/discussions"
+    fun discussionReplyUrl(baseUrl: String): String = "$baseUrl/v1/discussions/reply"
+    fun discussionReadStateUrl(baseUrl: String): String = "$baseUrl/v1/discussions/read-state"
+    fun discussionDeleteUrl(baseUrl: String): String = "$baseUrl/v1/discussions/delete"
+
+    // Chemin de la liste (cache) — forme utilisable par ApiClient.buildGet.
+    fun discussionsPath(): String = "/v1/discussions"
+    fun discussionMessagesPath(discussionId: String): String =
+        "/v1/discussions/messages?id=" + urlEncode(discussionId)
+    fun discussionRecipientsPath(): String = "/v1/discussions/recipients"
+    fun discussionCreatePath(): String = "/v1/discussions"
+    fun discussionReplyPath(): String = "/v1/discussions/reply"
+    fun discussionReadStatePath(): String = "/v1/discussions/read-state"
+    fun discussionDeletePath(): String = "/v1/discussions/delete"
+
+
     // #82 : profil du compte appairé (onglet Profil) + périodes de l'année.
     fun meUrl(baseUrl: String): String = "$baseUrl/v1/me"
     fun periodsUrl(baseUrl: String): String = "$baseUrl/v1/periods"

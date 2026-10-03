@@ -2,7 +2,7 @@
 // vers HTTP, SQLite ou Pronote. Adapters en server/infrastructure/
 // et server/integrations/.
 // Voir docs/architecture/INVARIANTS.md (I2, I3, I5, I6, I7).
-import type { AbsenceRecord, Assignment, Capabilities, CanteenMenu, Evaluation, Grade, NewsItem, Period, Punishment, TimetableEntry, UserInfo } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, CanteenMenu, Capabilities, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 
 export type Untrusted<T = string> = { readonly __untrusted: true; readonly value: T };
 
@@ -163,6 +163,22 @@ export interface PronoteReader {
    * l'app garde alors son affichage par défaut).
    */
   getCapabilities?(accountId: string): Promise<Capabilities>;
+
+
+  /**
+   * Fils de discussion (#80, parité Papillon onglet Discussions). Onglet
+   * Discussions absent de l'établissement (ou droits non accordés) = page VIDE,
+   * jamais une erreur (capacités dynamiques, comme #77/#79/#81).
+   * ponytail: ce port de LECTURE n'expose AUCUNE écriture. Répondre / créer /
+   * lu-non-lu / supprimer passent par des ports d'action séparés côté API
+   * (server/api/discussions.ts), donc uniquement par une action APP confirmée
+   * (I7) — jamais depuis une sortie LLM.
+   */
+  getDiscussions?(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Discussion>>;
+  /** Messages d'UN fil ; fil illisible ou absent = page vide (pas une erreur). */
+  getDiscussionMessages?(accountId: string, discussionId: string): Promise<PronotePage<Message>>;
+  /** Destinataires proposables pour une nouvelle discussion (lecture). */
+  getDiscussionRecipients?(accountId: string): Promise<PronotePage<Recipient>>;
 }
 
 /** Ressource pédagogique via session Pronote (contenu cours, fichier joint, manuel lié). */

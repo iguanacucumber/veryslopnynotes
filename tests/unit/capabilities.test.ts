@@ -187,7 +187,9 @@ describe("unit capacités (#87)", () => {
 
   test("cache + invalidation : ressource `capabilities` (CacheInvalidated existant)", () => {
     expect(isCacheableResource("capabilities")).toBe(true);
-    expect(CACHEABLE_RESOURCES[CACHEABLE_RESOURCES.length - 1]).toBe("capabilities");
+    // "capabilities" est bien dans la liste (l'ordre d'ajout reste libre :
+    // d'autres ressources de parité sont apparues depuis).
+    expect(CACHEABLE_RESOURCES as readonly string[]).toContain("capabilities");
     expect(CACHE_TTL_MS.capabilities).toBeGreaterThan(0);
     // TTL long : la liste bouge à la configuration de l'établissement.
     expect(cacheStatus("capabilities", 0, CACHE_TTL_MS.capabilities)).toBe("fresh");

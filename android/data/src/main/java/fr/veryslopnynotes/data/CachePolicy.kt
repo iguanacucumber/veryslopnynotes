@@ -21,6 +21,11 @@ object CachePolicy {
     // = l'app masque un onglet hors-ligne ; invalidé par CacheInvalidated.
     const val CAPABILITIES = "capabilities"
 
+    // #80 : messagerie — liste des fils seulement (donnée personnelle, purgée au
+    // logout par AccountStore.logout → clearAll ; les messages d'un fil sont lus
+    // à la demande et jamais écrits sur disque).
+    const val DISCUSSIONS = "discussions"
+
     // ponytail: constantes dures = miroir CACHE_TTL_MS (contrats v0). Upgrade: codegen contrats.
     const val TTL_GRADES_MS = 15L * 60L * 1000L
     const val TTL_ASSIGNMENTS_MS = 15L * 60L * 1000L
@@ -35,11 +40,14 @@ object CachePolicy {
     // #87 : configuration d'établissement, très lente.
     const val TTL_CAPABILITIES_MS = 24L * 60L * 60L * 1000L
 
+    // #80 : liste des fils, cadence devoirs (messages fréquents).
+    const val TTL_DISCUSSIONS_MS = 15L * 60L * 1000L
+
     fun isCacheable(resource: String): Boolean =
         resource == GRADES || resource == ASSIGNMENTS || resource == TIMETABLE ||
             resource == EVALUATIONS || resource == NEWS || resource == MENUS ||
             resource == ATTENDANCE || resource == PUNISHMENTS ||
-            resource == CAPABILITIES
+            resource == CAPABILITIES || resource == DISCUSSIONS
 
     fun ttlFor(resource: String): Long = when (resource) {
         GRADES -> TTL_GRADES_MS
@@ -51,6 +59,7 @@ object CachePolicy {
         ATTENDANCE -> TTL_ATTENDANCE_MS
         PUNISHMENTS -> TTL_PUNISHMENTS_MS
         CAPABILITIES -> TTL_CAPABILITIES_MS
+        DISCUSSIONS -> TTL_DISCUSSIONS_MS
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
     }
 
