@@ -36,6 +36,11 @@ object ServerConfig {
     // #81 : menus cantine de la fenêtre (semaine par défaut).
     fun menusUrl(baseUrl: String): String = "$baseUrl/v1/menus"
 
+    // #77 : vie scolaire — absences/retards (compteurs par période) + sanctions.
+    fun attendanceUrl(baseUrl: String): String = "$baseUrl/v1/attendance"
+    fun punishmentsUrl(baseUrl: String): String = "$baseUrl/v1/punishments"
+
+
     // #82 : profil du compte appairé (onglet Profil) + périodes de l'année.
     fun meUrl(baseUrl: String): String = "$baseUrl/v1/me"
     fun periodsUrl(baseUrl: String): String = "$baseUrl/v1/periods"
