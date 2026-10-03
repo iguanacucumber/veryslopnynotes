@@ -125,6 +125,17 @@ export class PairingService {
     // `tokenHash` = sha256 du VRAI token d'appareil (et non d'un couple
     // sessionId:uuid) : c'est cette empreinte que le pushProvider poste en
     // `to:`. Le secret lui-même reste côté serveur (tokenOf).
+    return { ok: true, ...this.issue() };
+  }
+
+  /**
+   * #118 : émet un credential d'appareil SANS session d'appairage — c'est ce
+   * que fait POST /v1/setup, où le jeton est la récompense d'une authentification
+   * école réussie (QR de l'établissement ou identifiants ENT) et non d'un PIN
+   * lu sur un écran du serveur. Même secret, même durée de vie, même règle :
+   * il ne sort qu'ici, une seule fois, jamais journalisé ni persisté en clair.
+   */
+  issue(): { device: Device; token: string } {
     const token = this.token();
     const device: Device = { id: this.uuid(), tokenHash: this.hash(token) };
     this.credentials.set(device.id, { ...device, expiresAt: this.now() + this.deviceTtlMs });
@@ -133,7 +144,7 @@ export class PairingService {
     // occasion pour l'app d'apprendre le bearer des routes protégé. Jamais
     // loggé, jamais persisté en clair (seul `sha256(token)` l'est), jamais
     // re-servi : au-delà, un secret perdu = ré-appairage.
-    return { ok: true, device, token };
+    return { device, token };
   }
 
   revoke(deviceId: string): boolean {
