@@ -4,8 +4,8 @@
 
 import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Evaluation, Grade, NewsItem, Period, Punishment, RevisionSheet, Skill, SubjectPrefs, TimetableEntry, UserInfo } from "./models";
 import { isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isEvaluation, isGrade, isNewsItem, isPeriod, isPunishment, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, isUserInfo, SUBJECT_PREFS_MAX_COUNT } from "./models";
-import type { SecurityAlertData } from "./events";
-import { isSecurityAlertData } from "./events";
+import type { ContractEvent, SecurityAlertData } from "./events";
+import { isContractEvent, isSecurityAlertData } from "./events";
 
 
 export interface ApiRoute {
@@ -20,6 +20,12 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/v1/grades" },
   { method: "GET", path: "/v1/periods" },
   { method: "GET", path: "/v1/assignments" },
+  // #75 : toggle "fait" = ÉCRITURE vers Pronote, action CONFIRMÉE par l'app
+  // uniquement (I7). Jamais déclenchée par une sortie libre LLM.
+  { method: "POST", path: "/v1/assignments/toggle" },
+  // #75 : proxy de pièces jointes. L'app n'a jamais d'URL Pronote : elle passe
+  // une `ref` opaque (règle d'or média, I1). Jamais de WebView distante.
+  { method: "GET", path: "/v1/media" },
   { method: "GET", path: "/v1/timetable" },
   { method: "GET", path: "/v1/events" },
   { method: "GET", path: "/v1/security/alerts" },
@@ -78,6 +84,41 @@ export interface GradesResponse {
 export interface AssignmentsResponse {
   readonly assignments: Assignment[];
 }
+
+// --- #75 : toggle fait (action confirmée par l'app, I7) ---
+// accountId : borne, et OPTIONNEL — absent = serveur mono-compte, qui résout sa
+// session appairée côté intégration. done = état demandé ; la réponse fait foi.
+export const ASSIGNMENT_TOGGLE_ID_MAX_CHARS = 64;
+
+export interface AssignmentsToggleRequest {
+  readonly accountId?: string;
+  readonly assignmentId: string;
+  readonly done: boolean;
+}
+
+export interface AssignmentsToggleResponse {
+  readonly assignment: Assignment;
+  /** Événement SSE `AssignmentUpdated` : l'app invalide son cache `assignments`. */
+  readonly event: ContractEvent<"AssignmentUpdated", Assignment>;
+}
+
+export function isAssignmentsToggleRequest(v: unknown): v is AssignmentsToggleRequest {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  const account = r["accountId"];
+  if (account !== undefined && !isBoundedNonEmptyString(account, ASSIGNMENT_TOGGLE_ID_MAX_CHARS)) return false;
+  return (
+    isBoundedNonEmptyString(r["assignmentId"], ASSIGNMENT_TOGGLE_ID_MAX_CHARS) &&
+    typeof r["done"] === "boolean"
+  );
+}
+
+export function isAssignmentsToggleResponse(v: unknown): v is AssignmentsToggleResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return isAssignment(r["assignment"]) && isContractEvent(r["event"]);
+}
+
 export interface TimetableResponse {
   readonly entries: TimetableEntry[];
 }

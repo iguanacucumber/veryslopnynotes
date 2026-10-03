@@ -27,6 +27,18 @@ Add-only #83 (v0.3) : préférences matière `SubjectPrefs` (couleur `#RRGGBB` s
 emoji borné, libellé perso) + `GET`/`PUT /v1/subjects/prefs`. Matière sans prefs = nom
 d'origine, donc les apps 0.2.0 ignorent le champ sans régression.
 
+Add-only #75 (mêmes versions) : `Assignment` enrichi (`description?`, `lessonContent?`,
+`attachments?: AttachmentRef[]`, `periodId?`, `weekId?` — tous omis quand l'établissement
+ne les publie pas), filtre de fenêtre `GET /v1/assignments?weekStart=` ou `?from=&to=`
+(400 sur date illisible, sans reflet de l'input), `POST /v1/assignments/toggle`
+(écriture Pronote = **action APP confirmée uniquement**, I7 ; 401 session expirée,
+409 devoir introuvable, 501 écriture non supportée) et `GET /v1/media?accountId=&ref=`
+(proxy des pièces jointes). `AttachmentRef.ref` est une référence **opaque** : le
+validateur refuse `http://`, `https://`, `//`, `data:` et `\\` — l'app n'a jamais d'URL
+Pronote/ENT (I1, règle d'or média). Le toggle renvoie l'**événement existant**
+`AssignmentUpdated` (aucun nouveau type d'événement) pour l'invalidation de cache.
+
+
 Add-only #77 (pas de bump) : vie scolaire — `AbsenceRecord` (absences ET retards unifiés
 par `kind: "absence" | "late"`, motif borné 500), `Punishment` (motif + type requis,
 gravité optionnelle), `AttendancePeriod` (compteurs dérivés par période) + routes

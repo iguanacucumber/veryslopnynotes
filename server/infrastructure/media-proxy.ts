@@ -60,12 +60,13 @@ function cleanName(name: string): string {
  */
 export async function downloadMedia(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sessions: { requireClient(accountId: string): any },
+  sessions: { requireClient(accountId: string): any; currentAccountId?(): string | null },
   accountId: string,
   ref: string,
   logger?: (message: string) => void,
 ): Promise<MediaPayload> {
-  const id = (accountId ?? "").trim();
+  // accountId vide = serveur mono-compte : session appairée unique (#75).
+  const id = ((accountId ?? "").trim() || sessions.currentAccountId?.() || "").trim();
   const parsed = parseRef((ref ?? "").trim());
   if (!id || !parsed) throw new MediaProxyError("media bad ref", "bad_ref");
   let client;
@@ -136,3 +137,18 @@ export async function downloadMedia(
 }
 
 export type { PronoteClientReader };
+
+/**
+ * Adaptateur du port média du routeur (server/api/assignments.ts) : un objet,
+ * zéro câblage manuel par appelant. Aucune URL n'est exposée à l'app, seule la
+ * `ref` opaque l'est.
+ */
+export function mediaActions(sessions: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  requireClient(accountId: string): any;
+  currentAccountId?(): string | null;
+}): { download(accountId: string, ref: string): Promise<MediaPayload> } {
+  return {
+    download: (accountId, ref) => downloadMedia(sessions, accountId, ref),
+  };
+}

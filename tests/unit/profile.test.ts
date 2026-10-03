@@ -105,7 +105,7 @@ describe("unit profil #82", () => {
 
   test("GET /v1/media : réf opaque seulement, octets streamés par le serveur", async () => {
     const seen: { accountId: string; ref: string }[] = [];
-    const handler = createHandler(createMemoryStore(), undefined, null, undefined, undefined, async (accountId, ref) => {
+    const handler = createHandler(createMemoryStore(), undefined, null, undefined, undefined, null, async (accountId: string, ref: string) => {
       seen.push({ accountId, ref });
       return { name: "photo.png", bytes: new Uint8Array([1, 2, 3, 4]) };
     });
@@ -133,7 +133,7 @@ describe("unit profil #82", () => {
   });
 
   test("GET /v1/media : erreurs du proxy mappées sans message interne", async () => {
-    const handler = createHandler(createMemoryStore(), undefined, null, undefined, undefined, async () => {
+    const handler = createHandler(createMemoryStore(), undefined, null, undefined, undefined, null, async () => {
       throw new MediaProxyError("échec interne 10.0.0.1", "ent_unavailable");
     });
     const res = await handler(
