@@ -2,32 +2,12 @@
 // Table de routes + types requête/réponse. Doit rester en sync avec
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
-import {
-  isAveragesReport,
-  isAssignment,
-  isCanteenBalance,
-  isCanteenMenu,
-  isDevice,
-  isGrade,
-  isNewsItem,
-  isPeriod,
-  isRevisionSheet,
-  isTimetableEntry,
-} from "./models";
-import type {
-  AveragesReport,
-  Assignment,
-  CanteenBalance,
-  CanteenMenu,
-  Device,
-  Grade,
-  NewsItem,
-  Period,
-  RevisionSheet,
-  TimetableEntry,
-} from "./models";
+import type { Assignment, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Evaluation, Grade, NewsItem, Period, RevisionSheet, Skill, TimetableEntry } from "./models";
+import { isAssignment, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isEvaluation, isGrade, isNewsItem, isPeriod, isRevisionSheet, isSkill, isTimetableEntry } from "./models";
 import { isSecurityAlertData } from "./events";
+
 import type { SecurityAlertData } from "./events";
+
 
 export interface ApiRoute {
   readonly method: "GET" | "POST";
@@ -47,6 +27,8 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/v1/homework/generate" },
   { method: "GET", path: "/v1/revision-sheets" },
   { method: "GET", path: "/v1/revision-sheets/pdf" },
+  { method: "GET", path: "/v1/evaluations" },
+
   { method: "GET", path: "/v1/news" },
 
   // #81 cantine : menus de la semaine + solde compte (optionnel).
@@ -92,6 +74,18 @@ export interface PeriodsResponse {
 export interface RevisionSheetsResponse {
   readonly sheets: RevisionSheet[];
 }
+
+/**
+ * #78 : évaluations par compétences. `summary` = agrégat par compétence
+ * (moyenne des notes DÉFINIES seulement, `value: null` si non notée).
+ * Établissement sans évaluations par compétences = trois listes vides.
+ */
+export interface EvaluationsResponse {
+  readonly skills: Skill[];
+  readonly evaluations: Evaluation[];
+  readonly summary: CompetenceSummary[];
+}
+
 
 // #81 cantine : menus de la fenêtre from/to (semaine courante par défaut).
 // Tableau vide = aucun menu publié sur la fenêtre (module cantine absent de
@@ -211,6 +205,23 @@ export function isRevisionSheetsResponse(v: unknown): v is RevisionSheetsRespons
 export function isPairingConfirmResponse(v: unknown): v is PairingConfirmResponse {
   return isDevice(v);
 }
+
+export function isEvaluationsResponse(v: unknown): v is EvaluationsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  const s = r["skills"];
+  const e = r["evaluations"];
+  const m = r["summary"];
+  return (
+    Array.isArray(s) &&
+    s.every(isSkill) &&
+    Array.isArray(e) &&
+    e.every(isEvaluation) &&
+    Array.isArray(m) &&
+    m.every(isCompetenceSummary)
+  );
+}
+
 
 export function isCanteenMenusResponse(v: unknown): v is CanteenMenusResponse {
   if (typeof v !== "object" || v === null) return false;
