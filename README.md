@@ -19,9 +19,9 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 | Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.3.0`), miroir OpenAPI |
 | Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (30 routes, 7 types d'événements) |
 | Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, appairage QR+PIN, SSE |
-| Garde-fous sécurité (I1–I7) + tests | 438 tests verts, scan d'architecture et de secrets en CI locale |
-| Lecture « live » complète d'un établissement | Partielle : chaque onglet absent est traité comme **vide propre**, jamais comme une erreur |
-| Point d'entrée HTTP du serveur | Non câblé (voir [Limitations](#limitations)) |
+| Point d'entrée HTTP serveur (`make serve`, Docker) | Câblé : env → session Pronote → reader → snapshot → routes, ports d'écriture inclus |
+| Garde-fous sécurité (I1–I7) + tests | 444 tests verts, scan d'architecture et de secrets en CI locale |
+| Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'ENT = **vide propre** |
 
 ## Fonctionnalités
 
@@ -57,6 +57,7 @@ cp .env.example .env.local     # valeurs réelles, jamais commitées
 make check                     # secrets + typecheck + unit + arch + contracts + security
 make e2e                       # tests bout-en-bout (store seed, zéro réseau)
 make integration               # tests d'intégration (nécessite .env.local)
+make serve                     # serveur branché : lecture réelle + routes (voir PORT/HOST)
 ```
 
 Client Android :

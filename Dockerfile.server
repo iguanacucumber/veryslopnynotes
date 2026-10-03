@@ -11,6 +11,9 @@ RUN bun install --frozen-lockfile
 # Secrets/clés/.env* exclus via .dockerignore (jamais COPY).
 COPY server ./server
 COPY shared ./shared
+# PORT/HOST explicites : le serveur écoute sur 0.0.0.0 DANS le conteneur
+# (127.0.0.1 par défaut en local, cf. server/infrastructure/http.ts).
 ENV PORT=3000
+ENV HOST=0.0.0.0
 EXPOSE 3000
 CMD ["bun", "run", "server/infrastructure/http.ts"]
