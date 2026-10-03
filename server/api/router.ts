@@ -12,7 +12,10 @@ import {
 
   isCanteenMenusResponse,
   isGradesResponse,
+  isMeResponse,
   isNewsResponse,
+  MEDIA_ACCOUNT_ID_MAX_CHARS,
+  MEDIA_REF_MAX_CHARS,
   isPairingConfirmRequest,
   isPairingStartRequest,
   isPairingStartResponse,
@@ -36,6 +39,40 @@ import type { ReadStore } from "./store";
 import type { SubjectPrefsStore } from "./subject-prefs";
 import { createSubjectPrefsMemoryStore } from "./subject-prefs";
 import type { LLMProvider } from "../domain/ports";
+import type { MediaPayload } from "../infrastructure/media-proxy";
+import { MediaProxyError } from "../infrastructure/media-proxy";
+
+/**
+ * #82 : résolution serveur d'une réf opaque (photo de profil, pièce jointe).
+ * L'app n'a jamais d'adresse Pronote/ENT (I1, règle d'or média) : elle appelle
+ * /v1/media et le serveur télécharge via la session appairée.
+ * ponytail: fonction injectée, null = 501 explicite (aucun accès direct depuis
+ * le routeur). Upgrade: câblage sur PronoteSessionStore au démarrage serveur.
+ */
+export type MediaResolver = (accountId: string, ref: string) => Promise<MediaPayload>;
+
+/** Types MIME déduits de l'extension du nom renvoyé par le proxy (defaut = binaire). */
+const MEDIA_CONTENT_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+};
+
+function mediaContentType(name: string): string {
+  const ext = (name.toLowerCase().split(".").pop() ?? "").trim();
+  return MEDIA_CONTENT_TYPES[ext] ?? "application/octet-stream";
+}
+
+/**
+ * #82 : une ref est un jeton opaque. Toute forme d'adresse est refusée avant le
+ * proxy (défense en profondeur, même si le proxy revalide de son côté).
+ */
+function isMediaRef(v: string): boolean {
+  return v.length > 0 && v.length <= MEDIA_REF_MAX_CHARS && !v.includes("//") && !v.includes("..");
+}
 
 /** Longueur max d'un periodId reflété dans la réponse (borne d'entrée utilisateur). */
 const PERIOD_ID_MAX_CHARS = 64;
@@ -91,6 +128,8 @@ export function createHandler(
   // #83 : préférences matière. Interface d'écriture séparée de ReadStore, NoOp
   // par défaut pour les appels existants (5e paramètre, aucun appel cassé).
   subjectPrefs: SubjectPrefsStore = createSubjectPrefsMemoryStore(),
+  // #82/#84 : proxy média. Null = 501 sur /v1/media (jamais d'accès direct).
+  media: MediaResolver | null = null,
 ): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
@@ -278,6 +317,42 @@ export function createHandler(
         const payload = balance === undefined ? { menus } : { menus, balance };
         return json(isCanteenMenusResponse(payload), payload);
       }
+      // #82 : écran Profil. Store sans infos = `user: null` (état vide propre),
+      // jamais de nom ni de photo d'exemple. Périodes : /v1/periods (#74).
+      case "/v1/me": {
+        const payload = { user: store.userInfo?.() ?? null };
+        return json(isMeResponse(payload), payload);
+      }
+
+      // #82/#84 : proxy média (photo de profil, PJ). Réf opaque bornée, refusée
+      // si elle ressemble à une adresse ; octets streamés par le serveur, donc
+      // aucune URL Pronote ne sort côté app (I1). Sans proxy injecté = 501.
+      // ponytail: aucune vérification de token ici — l'auth du device n'est
+      // encore appliquée sur AUCUNE route (voir createHandler) ; /v1/media
+      // n'ouvre pas un trou nouveau, il hérite du même poste.
+      // Upgrade: exiger le token appairé sur /v1/me et /v1/media.
+      case "/v1/media": {
+        const ref = (url.searchParams.get("ref") ?? "").trim();
+        const accountId = (url.searchParams.get("accountId") ?? "").trim().slice(0, MEDIA_ACCOUNT_ID_MAX_CHARS);
+        if (!isMediaRef(ref) || accountId === "") return apiError("bad_request", "invalid media ref");
+        if (!media) return apiError("not_implemented", "media proxy absent");
+        let file: MediaPayload;
+        try {
+          file = await media(accountId, ref);
+        } catch (err) {
+          // Jamais le message d'erreur brut (il peut contenir une interne).
+          if (err instanceof MediaProxyError && err.code === "bad_ref") return apiError("bad_request", "invalid media ref");
+          if (err instanceof MediaProxyError && err.code === "not_found") return apiError("not_found", "media not found");
+          return apiError("internal", "media unavailable");
+        }
+        return new Response(file.bytes as unknown as BodyInit, {
+          headers: {
+            "content-type": mediaContentType(file.name),
+            "content-length": String(file.bytes.byteLength),
+            "cache-control": "private, max-age=600",
+          },
+        });
+      }
       default:
         return apiError("not_found", `unknown path ${path}`);
     }
@@ -291,6 +366,7 @@ export function serve(
   llm?: LLMProvider | null,
   revisions?: RevisionListStore,
   subjectPrefs?: SubjectPrefsStore,
+  media?: MediaResolver | null,
 ) {
   return Bun.serve({
     port,
@@ -301,6 +377,7 @@ export function serve(
       llm ?? null,
       revisions ?? createRevisionMemoryStore(),
       subjectPrefs ?? createSubjectPrefsMemoryStore(),
+      media ?? null,
     ),
   });
 }

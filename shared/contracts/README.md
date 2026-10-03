@@ -22,3 +22,10 @@ Changement cassant = bump version + PR justificative ; `tests/contracts` impose 
 Add-only #83 (pas de bump) : préférences matière `SubjectPrefs` (couleur `#RRGGBB` strict,
 emoji borné, libellé perso) + `GET`/`PUT /v1/subjects/prefs`. Matière sans prefs = nom
 d'origine, donc les apps 0.2.0 ignorent le champ sans régression.
+
+Add-only #82 (pas de bump) : `UserInfo` (+`ChildAccount`) et `GET /v1/me` (`user: null` =
+infos non publiées, aucun nom inventé), plus `GET /v1/media` : résolution serveur d'une
+**réf opaque** (`photo:<id>`), une URL dans `photoRef` est rejetée par `isUserInfo` (I1,
+règle d'or média). `profile`/`me` n'est PAS une ressource cachable : le profil reste en
+mémoire côté app (mode anonyme, aucune donnée personnelle persistée).
+Les périodes de l'année restent sur `/v1/periods` (#74) — pas de doublon.
