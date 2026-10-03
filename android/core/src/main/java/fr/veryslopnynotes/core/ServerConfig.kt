@@ -105,9 +105,6 @@ object ServerConfig {
     fun mediaPath(ref: String, accountId: String): String =
         "/v1/media?ref=" + urlEncode(ref) + "&accountId=" + urlEncode(accountId)
 
-    private fun urlEncode(value: String): String =
-        java.net.URLEncoder.encode(value, "UTF-8")
-
     // ponytail: allowlist = préfixe baseUrl seule. Upgrade: pinning cert phase 10.
     fun isAllowed(url: String, baseUrl: String): Boolean = url.startsWith(baseUrl)
 

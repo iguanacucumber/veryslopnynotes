@@ -17,10 +17,10 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 | Domaine | État |
 |---|---|
 | Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.4.0`), miroir OpenAPI |
-| Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (30 routes, 7 types d'événements) |
+| Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (31 routes, 7 types d'événements) |
 | Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, appairage QR+PIN, SSE |
 | Point d'entrée HTTP serveur (`make serve`, Docker) | Câblé : env → session Pronote → reader → snapshot → routes, ports d'écriture inclus |
-| Garde-fous sécurité (I1–I7) + tests | 444 tests verts, scan d'architecture et de secrets en CI locale |
+| Garde-fous sécurité (I1–I7) + tests | 508 tests verts, scan d'architecture et de secrets en CI locale |
 | Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'ENT = **vide propre** |
 
 ## Fonctionnalités
@@ -78,13 +78,20 @@ Tout passe par `.env.local` (gitignoré). Jamais de secret en issue, PR, log ou 
 | Variable | Rôle |
 |---|---|
 | `PORT` | port d'écoute du serveur |
-| `MASTER_KEY` | clé de chiffrement local (≥ 32 octets) |
-| `DATABASE_URL` | stockage SQLite local |
+| `HOST` | hôte d'écoute (défaut `127.0.0.1`, loopback) |
+| `MEDIA_DOWNLOAD_TIMEOUT_MS` | échéance de téléchargement d'une pièce jointe via `/v1/media` |
+| `MEDIA_REF_SECRET` | secret de signature des refs média (tiré au sort au démarrage si absent) |
 | `PRONOTE_URL` | URL élève de l'établissement |
 | `PRONOTE_USERNAME` / `PRONOTE_PASSWORD` | compte de test (jamais en CI) |
+| `PRONOTE_ENT_KIND` | type ENT/CAS : `ninegate` (défaut), `educonnect`, `cas` |
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | assistant devoirs + fiches de révision |
 | `PUSH_PROVIDER`, `PUSH_VAPID_*` | notifications push |
 | `MANUAL_PLATFORM`, `MANUAL_USERNAME`, `MANUAL_PASSWORD` | manuels, première connexion interactive |
+
+Persistence serveur et chiffrement au repos : **pas encore câblés**. Le snapshot est mémoire
+seule (`snapshot-store.ts`) — un redémarrage serveur repart vide et l'app refill au pull-refresh.
+Le serveur ne lit donc ni `MASTER_KEY` ni `DATABASE_URL` : ces deux variables réapparaîtront le jour
+du branchement SQLite, pas avant.
 
 Le compte et l'URL de ton établissement sont des **apports humains** :
 liste complète dans [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md).
@@ -136,13 +143,19 @@ Le détail est verifié par `make lint` (scan de secrets) et `make architecture-
 
 ## API
 
-Toutes les routes sont déclarées dans `shared/contracts/api.ts` et mirrorées dans
+Toutes les routes sont déclarées dans `shared/contracts/api.ts` (contrats `0.4.0`) et mirrorées dans
 `shared/contracts/api.openapi.yaml` (un test impose la synchronie). Les payloads sortent validés
 par des garde-fous `is*` : une réponse invalide vaut 500 typée, jamais une donnée douteuse.
 
+**Auth** : toute route exige l'en-tête `Authorization: Bearer <token d'appareil appairé>`, sauf
+`GET /v1/health`, `POST /v1/pairing/start` et `POST /v1/pairing/confirm`. Le token sort une seule
+fois, dans la réponse de `POST /v1/pairing/confirm` ; le serveur n'en conserve que `sha256(token)`
+et compare en temps constant. Jeton absent, inconnu, expiré ou révoqué = un seul 401, avant toute
+lecture. Une route ajoutée est donc fermée par défaut.
+
 | Domaine | Routes |
 |---|---|
-| Santé, appairage | `GET /v1/health`, `POST /v1/pairing/start`, `POST /v1/pairing/confirm` |
+| Santé, appairage (ouvertes sans jeton) | `GET /v1/health`, `POST /v1/pairing/start`, `POST /v1/pairing/confirm` |
 | Notes | `GET /v1/grades` (notes + moyennes, `?algorithm=`, `?periodId=`), `GET /v1/periods` |
 | Devoirs | `GET /v1/assignments` (filtres de dates/semaine), `POST /v1/assignments/toggle` |
 | EDT | `GET /v1/timetable` (`?weekStart=`, `?from=`, `?to=`) |
@@ -170,19 +183,18 @@ make integration            # nécessite .env.local (skip sinon)
 make build                  # image Docker + rappel APK
 ```
 
-438 tests, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
+508 tests, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
 La CI locale est `make check` : un changement qui casse un invariant est bloquant, même si
 fonctionnellement il passe.
 
 ## Limitations connues
 
-- Le point d'entrée HTTP du serveur (`server/infrastructure/http.ts`, référencé par le
-  `Dockerfile.server`) **n'existe pas encore** : l'image se construit mais ne démarre pas. Les
-  handlers sont testés via `createHandler`, le câblage de production reste à faire.
-- Les ports d'écriture (toggle de devoir, messagerie) et le proxy média sont injectés dans le
-  handler : à câbler au démarrage du serveur.
-- Onglets Pronote réellement publiés par l'établissement : les capacités sont détectées par
-  introspection du client, donc une fausse positif affiche un onglet vide plutôt que de le masquer.
+- Sans `PRONOTE_URL` (ou sans identifiants), le serveur démarre quand même : lectures vides et
+  écritures en 501 plutôt qu'un `200` mensonger. La session et les identifiants vivent en mémoire,
+  jamais sur disque.
+- Onglets Pronote réellement publiés par l'établissement : les capacités ne sont jamais devinées,
+  donc un onglet non observé vaut onglet absent et **est masqué**. Inversement, des capacités non
+  déterminées (`capabilities: null`, lecture en échec) ne masquent rien.
 - Le provider Pronote est en `no-go` conditionnel côté live ([`ADR-002`](docs/adr/002-pronote-provider.md)) :
   les lectures sont validées sur library + fixtures, pas sur un établissement réel.
 - Non lus : solde de cantine Turboself/ARD, composition détaillée des plats, pièces jointes de
