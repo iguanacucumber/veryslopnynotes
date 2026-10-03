@@ -59,7 +59,7 @@ function service(sessions: unknown, opts: Record<string, unknown> = {}) {
 
 const CREDENTIALS: SetupRequest = {
   deviceName: "pixel",
-  pronoteUrl: "https://etablissement.index-education.net/pronote",
+  schoolUrl: "https://etablissement.index-education.net/pronote",
   ent: "ninegate",
   username: "eleve",
   password: "motdepasse",
@@ -67,7 +67,7 @@ const CREDENTIALS: SetupRequest = {
 
 const QR: SetupRequest = {
   deviceName: "pixel",
-  pronoteUrl: "https://etablissement.index-education.net/pronote",
+  schoolUrl: "https://etablissement.index-education.net/pronote",
   ent: "ninegate",
   qr: { login: "a1b2c3", jeton: "d4e5f6", url: "https://etablissement.index-education.net/pronote" },
   pin: "1234",
@@ -91,7 +91,7 @@ describe("POST /v1/setup — compte école puis jeton", () => {
     // Le secret est bien celui du serveur, et le device existe côté PairingService.
     expect(body.token).toBe("secret-device-token-1");
     expect(p.calls[0]?.username).toBe("eleve");
-    expect(p.calls[0]?.pronoteUrl).toBe(CREDENTIALS.pronoteUrl);
+    expect(p.calls[0]?.pronoteUrl).toBe(CREDENTIALS.schoolUrl);
     expect(opened).toHaveLength(1);
     // Un 2e setup RÉ-ÉMET un credential (nouveau device, nouveau secret) : il ne
     // re-sert jamais le même token, et le 1er device reste valable en parallèle.
@@ -182,7 +182,7 @@ describe("POST /v1/setup — garde-fou réseau (route ouverte)", () => {
     for (const url of ["http://10.0.0.1/pronote", "http://127.0.0.1:3000", "http://169.254.169.254/", "http://192.168.1.5", "http://localhost/pronote", "http://[::1]/", "ftp://exemple.fr"]) {
       const p = provider();
       const { handler } = service(p.sessions);
-      const res = await post(handler, { ...CREDENTIALS, pronoteUrl: url });
+      const res = await post(handler, { ...CREDENTIALS, schoolUrl: url });
       expect(res.status).toBe(400);
       expect(p.calls).toHaveLength(0);
     }
@@ -199,11 +199,11 @@ describe("POST /v1/setup — garde-fou réseau (route ouverte)", () => {
   test("PRONOTE_URL épinglée → le setup ne peut pas viser une autre école", async () => {
     const p = provider();
     const { handler } = service(p.sessions, { allowedSchoolUrl: "https://etablissement.index-education.net/pronote" });
-    const autre = await post(handler, { ...CREDENTIALS, pronoteUrl: "https://autre-etablissement.fr/pronote" });
+    const autre = await post(handler, { ...CREDENTIALS, schoolUrl: "https://autre-etablissement.fr/pronote" });
     expect(autre.status).toBe(400);
     expect(p.calls).toHaveLength(0);
     // Même école, barre finale en plus : accepté.
-    const meme = await post(handler, { ...CREDENTIALS, pronoteUrl: "https://etablissement.index-education.net/pronote/" });
+    const meme = await post(handler, { ...CREDENTIALS, schoolUrl: "https://etablissement.index-education.net/pronote/" });
     expect(meme.status).toBe(200);
     expect(sameSchool("https://a.fr/pronote/", "https://a.fr/pronote")).toBe(true);
     expect(sameSchool("https://a.fr/pronote", "http://a.fr/pronote")).toBe(false);
@@ -242,14 +242,14 @@ describe("contrat POST /v1/setup", () => {
     expect(isSetupRequest(CREDENTIALS)).toBe(true);
     expect(isSetupRequest(QR)).toBe(true);
     // Ni QR ni identifiants : rien à tenter, refus sans consommer d'ENT.
-    expect(isSetupRequest({ deviceName: "p", pronoteUrl: "https://a.fr", ent: "ninegate" })).toBe(false);
+    expect(isSetupRequest({ deviceName: "p", schoolUrl: "https://a.fr", ent: "ninegate" })).toBe(false);
     // Méthodes incomplètes : refus aussi (pas de login à moitié fait).
     expect(isSetupRequest({ ...CREDENTIALS, password: undefined })).toBe(false);
     expect(isSetupRequest({ ...QR, pin: undefined })).toBe(false);
     expect(isSetupRequest({ ...QR, qr: { login: "aa" } as never })).toBe(false);
     // Bornes : rien d'énorme n'entre.
     expect(isSetupRequest({ ...CREDENTIALS, username: "x".repeat(257) })).toBe(false);
-    expect(isSetupRequest({ ...CREDENTIALS, pronoteUrl: "https://a.fr/" + "x".repeat(300) })).toBe(false);
+    expect(isSetupRequest({ ...CREDENTIALS, schoolUrl: "https://a.fr/" + "x".repeat(300) })).toBe(false);
     expect(isSetupRequest({ ...QR, qr: { login: "x".repeat(1025), jeton: "aa" } })).toBe(false);
   });
 

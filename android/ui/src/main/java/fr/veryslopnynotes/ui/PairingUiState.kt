@@ -3,22 +3,46 @@ package fr.veryslopnynotes.ui
 import fr.veryslopnynotes.core.ServerConfig
 import fr.veryslopnynotes.data.SseState
 
-// États appairage + SSE visibles (#15). Contenu serveur = donnée affichée,
-// jamais interprétée (I7 côté app : pas d'action sur contenu flux).
+// États de l'assistant de connexion (#120). Trois étapes, dans l'ordre où
+// l'utilisateur les vit : le serveur, puis son compte EduConnect, puis le QR de
+// l'application Pronote. Le contenu servi = donnée affichée, jamais interprété
+// (I7 côté app : aucune action déclenchée par du contenu distant).
+enum class SetupStep {
+    SERVER,
+    ACCOUNT,
+    QR,
+}
+
 sealed interface PairingState {
     data object Idle : PairingState
-    data object Confirming : PairingState
+    data object Submitting : PairingState
     data class Paired(val deviceId: String) : PairingState
     data class Error(val message: String) : PairingState
 }
 
-data class PairingForm(
+/**
+ * Saisie du compte de l'établissement. `state` couvre la dernière action
+ * (envoi en cours, échec, succès) ; un échec ne vide JAMAIS la saisie : la
+ * corriger est le but de l'écran.
+ */
+data class SetupForm(
+    val schoolUrl: String = "",
+    val ent: String = DEFAULT_ENT_KIND,
+    val username: String = "",
+    val password: String = "",
     val qrRaw: String = "",
     val pin: String = "",
     val state: PairingState = PairingState.Idle,
     val sse: SseState = SseState.Disconnected,
     val lastEventPreview: String? = null,
-)
+) {
+    /** Méthode « identifiants » complète : c'est ce que l'utilisateur a saisi. */
+    val hasCredentials: Boolean
+        get() = username.isNotBlank() && password.isNotBlank()
+}
+
+/** Seul ENT implémenté côté serveur (les autres sont refusés franchement). */
+const val DEFAULT_ENT_KIND = "ninegate"
 
 fun sseLabel(s: SseState): String = when (s) {
     is SseState.Disconnected -> "SSE déconnecté"
@@ -29,10 +53,17 @@ fun sseLabel(s: SseState): String = when (s) {
 }
 
 fun pairingStateLabel(s: PairingState): String = when (s) {
-    is PairingState.Idle -> "En attente d'appairage"
-    is PairingState.Confirming -> "Vérification du PIN…"
+    is PairingState.Idle -> "Prêt"
+    is PairingState.Submitting -> "Connexion à l'établissement…"
     is PairingState.Paired -> "Appareil appairé : ${s.deviceId}"
     is PairingState.Error -> "Erreur : ${s.message}"
+}
+
+/** Titre d'étape, pour que l'utilisateur sache toujours où il en est. */
+fun setupStepLabel(step: SetupStep): String = when (step) {
+    SetupStep.SERVER -> "Étape 1/3 — ton serveur"
+    SetupStep.ACCOUNT -> "Étape 2/3 — ton compte EduConnect"
+    SetupStep.QR -> "Étape 3/3 — le QR de l'application"
 }
 
 /**

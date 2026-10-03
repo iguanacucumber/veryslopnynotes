@@ -289,7 +289,11 @@ fun AppNav(
     ) { pad ->
         NavHost(
             navController = nav,
-            startDestination = ROUTE_INDEX,
+            // #120 : premier lancement OU session morte = l'assistant de
+            // connexion, pas un Accueil qui ne peut rien afficher. Le secret
+            // est relu au COMPOSABLE parent (une seule source : c'est lui que
+            // l'API et l'écran d'appairage partagent).
+            startDestination = if (tokens.isPaired()) ROUTE_INDEX else ROUTE_PAIRING,
             modifier = Modifier.padding(pad),
         ) {
             composable(ROUTE_INDEX) {
@@ -401,6 +405,14 @@ fun AppNav(
                         changeServer(raw, baseUrl, accounts, serverStore) { url ->
                             authNotice = null
                             baseUrl = url
+                        }
+                    },
+                    // Setup réussi = la session ET le credential sont en place :
+                    // on va droit à l'accueil. Aucun écran de confirmation à
+                    // faire valider, l'utilisateur n'a plus rien à prouver.
+                    onPaired = {
+                        if (!nav.popBackStack(ROUTE_INDEX, inclusive = false)) {
+                            nav.navigate(ROUTE_INDEX)
                         }
                     },
                 )

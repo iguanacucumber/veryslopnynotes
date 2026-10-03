@@ -307,7 +307,7 @@ describe("unit android 401 : session perdue -> appairage (#113)", () => {
     // L'écran d'appairage affiche la raison factuelle, sans chrono ni devinette.
     const pairing = read(kt.pairing);
     expect(pairing).toContain("notice: String? = null,");
-    expect(pairing).toContain("if (!notice.isNullOrEmpty()) Text(notice)");
+    expect(pairing).toContain('if (!notice.isNullOrEmpty()) Text(notice, modifier = Modifier.padding(horizontal = 16.dp))');
     expect(pairing).toContain("tokens.save(res.device.id, res.device.tokenHash, res.device.token)");
   });
 });
