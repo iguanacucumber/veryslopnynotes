@@ -195,3 +195,40 @@ function messageFor(repo: string, code: string): string {
   const apres = ligne.slice(ligne.indexOf("->") + 2).trim().replace(/^"|",?$/g, "");
   return apres;
 }
+
+describe("scan du QR (#122) : caméra sans permission, collage toujours là", () => {
+  const scanner = read(join(UI, "QrScanner.kt"));
+  const screen = read(join(UI, "PairingScreen.kt"));
+  const uiGradle = read(join(ANDROID, "ui/build.gradle.kts"));
+  const catalog = read(join(ANDROID, "gradle/libs.versions.toml"));
+  const manifest = read(join(ANDROID, "app/src/main/AndroidManifest.xml"));
+
+  test("dépendance épinglée dans le catalogue ET déclarée dans le module ui", () => {
+    // Un module Gradle sans version explicite est une dépendance qui dérive.
+    expect(catalog).toContain('play-services-code-scanner = "16.1.0"');
+    expect(catalog).toContain('module = "com.google.android.gms:play-services-code-scanner"');
+    expect(uiGradle).toContain('implementation("com.google.android.gms:play-services-code-scanner:16.1.0")');
+  });
+
+  test("AUCUNE permission caméra déclarée (le scan est délégué à Play Services)", () => {
+    expect(manifest).not.toContain("android.permission.CAMERA");
+    expect(read(join(UI, "QrScanner.kt"))).not.toContain("Manifest.permission");
+  });
+
+  test("annulation ou échec = null, donc le collage reste le chemin de secours", () => {
+    expect(scanner).toContain("fun scanQrCode(");
+    expect(scanner).toContain(".addOnCanceledListener { onResult(null) }");
+    expect(scanner).toContain(".addOnFailureListener { onResult(null) }");
+    // L'appelant ne remplace la saisie que si un contenu est vraiment revenu.
+    expect(screen).toContain("if (scanned != null) onChange(form.copy(qrRaw = scanned))");
+    // Et le champ de collage n'a pas disparu au profit du bouton.
+    expect(screen).toContain('Text("Scanner le QR")');
+    expect(screen).toContain('label = { Text("Contenu du QR (login + jeton)") }');
+  });
+
+  test("un contenu scanné passe par le même parseur que le collage", () => {
+    // Deux entrées, une seule porte de sortie : pas de second parseur à diverger.
+    expect(screen).toContain("val qr = parseSchoolQr(form.qrRaw)");
+    expect(scanner).toContain("Barcode.FORMAT_QR_CODE");
+  });
+});

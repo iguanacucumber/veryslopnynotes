@@ -18,7 +18,7 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 |---|---|
 | Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.5.0`), miroir OpenAPI |
 | Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (32 routes, 7 types d'événements) |
-| Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, assistant de connexion en 3 étapes (serveur → EduConnect → QR), SSE |
+| Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, assistant de connexion en 3 étapes (serveur → EduConnect → QR scanné), SSE |
 | Point d'entrée HTTP serveur (`make serve`, Docker) | Câblé : env → session Pronote → reader → snapshot → routes, ports d'écriture inclus |
 | Garde-fous sécurité (I1–I7) + tests | 546 tests verts, scan d'architecture et de secrets en CI locale |
 | Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'ENT = **vide propre** |
