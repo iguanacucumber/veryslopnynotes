@@ -60,6 +60,10 @@ class SyncedRepository(
         // #87 : onglets actifs de l'etablissement (capacites dynamiques).
         CachePolicy.CAPABILITIES -> ServerConfig.capabilitiesUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/capabilities" }
+
+        // #80 : liste des fils de messagerie (les messages ne sont pas en cache).
+        CachePolicy.DISCUSSIONS -> ServerConfig.discussionsUrl(baseUrl)
+            .removePrefix(baseUrl).ifEmpty { "/v1/discussions" }
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
     }
 

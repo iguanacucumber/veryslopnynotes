@@ -14,6 +14,9 @@ import {
   isPunishmentsResponse,
 
   isCanteenMenusResponse,
+  isDiscussionMessagesResponse,
+  isDiscussionRecipientsResponse,
+  isDiscussionsResponse,
   isGradesResponse,
   isMeResponse,
   isNewsResponse,
@@ -28,7 +31,7 @@ import {
   isSubjectPrefsResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
-import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDevice, isNewsItem, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT, TIMETABLE_WEEK_MAX_SPAN_DAYS } from "../../shared/contracts/models";
+import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, DISCUSSION_ID_MAX_CHARS, isAverageAlgorithm, isDevice, isNewsItem, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT, TIMETABLE_WEEK_MAX_SPAN_DAYS } from "../../shared/contracts/models";
 import type { ContractEvent, NewsUpdatedData, SyncCompletedData, TimetableUpdatedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
 import { computeAverages } from "../domain/averages";
@@ -39,6 +42,9 @@ import type { AssignmentActions, MediaActions } from "./assignments";
 import { handleAssignmentsToggle } from "./assignments";
 import type { SyncRefreshActions } from "./sync-refresh";
 import { handleSyncRefresh } from "./sync-refresh";
+
+import type { DiscussionActions } from "./discussions";
+import { handleDiscussionWrite } from "./discussions";
 import { PairingService } from "./pairing";
 import { renderRevisionPdf } from "../jobs/revision";
 import type { RevisionListStore } from "./revision";
@@ -219,6 +225,10 @@ export function createHandler(
   // Absente par défaut = 501 honnête, aucun appelant existant cassé (8e
   // paramètre ; le câblage réel reste au démarrage du serveur).
   syncRefresh: SyncRefreshActions | null = null,
+
+  // #80 : écritures de messagerie (create/reply/read-state/delete) = actions APP
+  // CONFIRMÉES (I7). Absent par défaut = 501 honnête, jamais un faux succès.
+  discussionActions: DiscussionActions | null = null,
 ): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
@@ -525,6 +535,38 @@ export function createHandler(
         return handleSyncRefresh(req, syncRefresh);
       }
 
+
+
+      // #80 : messagerie (parité Papillon, onglet Discussions).
+      // Lectures pures : store sans fils = listes VIDES (onglet inactif côté
+      // établissement), jamais 500. `id` borné en amont (entrée utilisateur).
+      // Écritures : une route POST par action, geste APP CONFIRMÉ (I7).
+      case "/v1/discussions": {
+        if (req.method === "GET") {
+          const payload = { discussions: store.discussions?.() ?? [] };
+          return json(isDiscussionsResponse(payload), payload);
+        }
+        return handleDiscussionWrite(req, discussionActions, "create");
+      }
+      case "/v1/discussions/messages": {
+        const id = (url.searchParams.get("id") ?? "").trim().slice(0, DISCUSSION_ID_MAX_CHARS);
+        if (id === "") return apiError("bad_request", "invalid discussion id");
+        const payload = { messages: store.discussionMessages?.(id) ?? [] };
+        return json(isDiscussionMessagesResponse(payload), payload);
+      }
+      case "/v1/discussions/recipients": {
+        const payload = { recipients: store.discussionRecipients?.() ?? [] };
+        return json(isDiscussionRecipientsResponse(payload), payload);
+      }
+      case "/v1/discussions/reply": {
+        return handleDiscussionWrite(req, discussionActions, "reply");
+      }
+      case "/v1/discussions/read-state": {
+        return handleDiscussionWrite(req, discussionActions, "read-state");
+      }
+      case "/v1/discussions/delete": {
+        return handleDiscussionWrite(req, discussionActions, "delete");
+      }
       default:
         return apiError("not_found", `unknown path ${path}`);
     }
@@ -542,6 +584,9 @@ export function serve(
   assignmentActions?: AssignmentActions | null,
   media?: MediaResolver | MediaActions | null,
   syncRefresh?: SyncRefreshActions | null,
+
+  // #80 : écritures de messagerie confirmées par l'app (I7).
+  discussionActions?: DiscussionActions | null,
 ) {
   return Bun.serve({
     port,
@@ -555,6 +600,8 @@ export function serve(
       assignmentActions ?? null,
       media ?? null,
       syncRefresh ?? null,
+
+      discussionActions ?? null,
     ),
   });
 }
