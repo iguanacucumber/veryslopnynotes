@@ -73,7 +73,9 @@ class AccountStore(
      */
     fun logout() {
         tokenStore.clear()
-        for (resource in cacheableResources()) cacheStore.clear(resource)
+        // Purge totale : la liste de ressources dérive des contrats, une liste
+        // codée en dur laisserait fuiter la donnee d'une ressource ajoutée plus tard.
+        cacheStore.clearAll()
         prefs.edit().clear().apply()
     }
 
@@ -87,7 +89,7 @@ class AccountStore(
 
         fun isValidAccountId(id: String): Boolean = id.isNotBlank() && id.length <= MAX_ACCOUNT_ID
 
-        /** Ressources purgées à la déconnexion = miroir de CACHEABLE_RESOURCES. */
+        // ponytail: miroir de CACHEABLE_RESOURCES, pour les tests de purge par ressource.
         fun cacheableResources(): List<String> = listOf(
             CachePolicy.GRADES,
             CachePolicy.ASSIGNMENTS,

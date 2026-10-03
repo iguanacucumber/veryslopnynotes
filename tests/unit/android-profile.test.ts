@@ -288,7 +288,9 @@ describe("unit android profil (#82)", () => {
     const store = read(join(DATA, "AccountStore.kt"));
     expect(store).toContain("fun logout()");
     expect(store).toContain("tokenStore.clear()");
-    expect(store).toContain("for (resource in cacheableResources()) cacheStore.clear(resource)");
+    // Purge totale via clearAll() : la liste de ressources dérive des contrats,
+    // une liste codée en dur laisserait survivant une ressource ajoutee apres.
+    expect(store).toContain("cacheStore.clearAll()");
     expect(store).toContain("prefs.edit().clear().apply()");
     const nav = read(join(UI, "AppNav.kt"));
     expect(nav).toContain("accounts.logout()");
