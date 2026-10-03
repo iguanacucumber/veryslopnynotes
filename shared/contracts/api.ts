@@ -9,6 +9,7 @@ import {
   isCanteenMenu,
   isDevice,
   isGrade,
+  isNewsItem,
   isPeriod,
   isRevisionSheet,
   isTimetableEntry,
@@ -20,6 +21,7 @@ import type {
   CanteenMenu,
   Device,
   Grade,
+  NewsItem,
   Period,
   RevisionSheet,
   TimetableEntry,
@@ -45,6 +47,8 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/v1/homework/generate" },
   { method: "GET", path: "/v1/revision-sheets" },
   { method: "GET", path: "/v1/revision-sheets/pdf" },
+  { method: "GET", path: "/v1/news" },
+
   // #81 cantine : menus de la semaine + solde compte (optionnel).
   { method: "GET", path: "/v1/menus" },
 ] as const;
@@ -259,4 +263,16 @@ export function isHomeworkGenerateResponse(v: unknown): v is HomeworkGenerateRes
     );
   }
   return false;
+}
+
+// Actualités établissement (#79) : liste la plus récente d'abord.
+// Onglet non actif côté établissement = liste vide (200), jamais 500.
+export interface NewsResponse {
+  readonly news: NewsItem[];
+}
+
+export function isNewsResponse(v: unknown): v is NewsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const n = (v as Record<string, unknown>)["news"];
+  return Array.isArray(n) && n.every(isNewsItem);
 }
