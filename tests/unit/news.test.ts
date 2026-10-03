@@ -219,23 +219,25 @@ describe("unit news (#79)", () => {
     expect(post.status).toBe(405);
   });
 
-  test("SSE : snapshot SyncCompleted puis NewsUpdated dans /v1/events", async () => {
+  // #76 : le snapshot SSE réémet aussi TimetableUpdated (type déjà contractuel,
+  // pas de doublon) — d'où 3 enveloppes.
+  test("SSE : snapshot SyncCompleted, NewsUpdated puis TimetableUpdated dans /v1/events", async () => {
     const handler = createHandler(createMemoryStore({ news: [syntheticNewsInjectionItem] }));
     const res = await handler(new Request("http://127.0.0.1/v1/events"));
     expect(res.headers.get("content-type")).toContain("text/event-stream");
-    // Flux tenu ouvert : lecture jusqu'à 2 enveloppes puis annulation.
+    // Flux tenu ouvert : lecture jusqu'à 3 enveloppes puis annulation.
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let buf = "";
     let events: { type: string; data?: unknown }[] = [];
-    for (let i = 0; i < 20 && events.length < 2; i++) {
+    for (let i = 0; i < 20 && events.length < 3; i++) {
       const { done, value } = await reader.read();
       if (value) buf += decoder.decode(value, { stream: true });
       events = [...buf.matchAll(/data: (\{.*\})\n\n/g)].map((m) => JSON.parse(m[1] as string));
       if (done) break;
     }
     await reader.cancel();
-    expect(events.length).toBe(2);
+    expect(events.length).toBe(3);
     expect(events.every((e) => isContractEvent(e))).toBe(true);
     expect(events[0]?.type).toBe("SyncCompleted");
     const news = events.find((e) => e.type === "NewsUpdated");

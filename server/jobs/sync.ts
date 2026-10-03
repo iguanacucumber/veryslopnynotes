@@ -23,6 +23,8 @@ export interface SyncSnapshot {
   readonly gradePrints: Record<string, string>;
   readonly assignmentIds: string[];
   readonly entryIds: string[];
+  /** #76 : empreintes des cours d'EDT (add-only : snapshot 0.2.0 sans ce champ = pas de diff). */
+  readonly entryPrints?: Record<string, string>;
 }
 
 export interface SyncSink {
@@ -38,6 +40,38 @@ export interface SyncResult {
 
 function ids<T extends { id: string }>(items: T[]): string[] {
   return items.map((i) => i.id).sort();
+}
+
+// #76 : empreinte d'un cours d'EDT. Le statut et les horaires d'origine
+// entrent dans l'empreinte : un cours annulé ou déplacé est une correction,
+// donc une information à re-notifier.
+function entryPrint(e: TimetableEntry): string {
+  return JSON.stringify([
+    e.subject,
+    e.room ?? null,
+    e.teacher ?? null,
+    e.status ?? null,
+    e.originalStart ?? null,
+    e.originalEnd ?? null,
+    e.start,
+    e.end,
+  ]);
+}
+
+function entryPrints(entries: TimetableEntry[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const e of entries) out[e.id] = entryPrint(e);
+  return out;
+}
+
+/** Cours ajoutés ou modifiés depuis le snapshot (pas de type novel côté sync). */
+function changedAgainstPrints(previous: Record<string, string>, current: TimetableEntry[]): TimetableEntry[] {
+  const out: TimetableEntry[] = [];
+  for (const e of current) {
+    const print = previous[e.id];
+    if (print === undefined || print !== entryPrint(e)) out.push(e);
+  }
+  return out;
 }
 
 export async function runSync(source: SyncSource, sink: SyncSink, at = new Date().toISOString()): Promise<SyncResult> {
@@ -60,6 +94,7 @@ export async function runSync(source: SyncSource, sink: SyncSink, at = new Date(
     gradePrints: prints,
     assignmentIds: ids(validAssignments),
     entryIds: ids(validEntries),
+    entryPrints: entryPrints(validEntries),
   };
 
   if (!previous) {
@@ -75,6 +110,19 @@ export async function runSync(source: SyncSource, sink: SyncSink, at = new Date(
     at,
     data,
   }));
+
+  // #76 : même diff sur l'EDT (cours ajouté, annulé, déplacé) → UN événement
+  // TimetableUpdated groupé. Données structurées Pronote uniquement, jamais de
+  // sortie LLM (I7).
+  const changedEntries = changedAgainstPrints(previous.entryPrints ?? {}, validEntries);
+  if (changedEntries.length > 0) {
+    events.push({
+      v: CONTRACTS_VERSION,
+      type: "TimetableUpdated" as const,
+      at,
+      data: { entries: changedEntries },
+    });
+  }
 
   if (events.length > 0 || snapshotChanged(previous, snapshot)) {
     await sink.saveSnapshot(snapshot);
