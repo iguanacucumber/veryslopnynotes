@@ -7,7 +7,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join, relative } from "node:path";
 
-const ROOT = new URL("../..", import.meta.url).pathname;
+const ROOT = join(import.meta.dir, "..", "..");
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage", ".bun-cache"]);
 const SKIP_FILES = new Set(["bun.lock", "bun.lockb", "package-lock.json", "check-secrets.ts"]);
 // Chemins locaux jamais commités (gitignorés) : pas de scan contenu.

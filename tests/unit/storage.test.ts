@@ -52,7 +52,7 @@ describe("SqliteStorageProvider", () => {
   });
 
   test("I3 statique : aucun import sqlite dans server/domain/", () => {
-    const dir = new URL("../../server/domain", import.meta.url).pathname;
+    const dir = join(import.meta.dir, "..", "..", "server", "domain");
     const offenders: string[] = [];
     for (const f of readdirSync(dir)) {
       if (!/\.(ts|tsx|js)$/.test(f)) continue;

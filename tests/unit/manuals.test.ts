@@ -190,7 +190,7 @@ describe("unit manuals", () => {
   });
 
   test("fixtures synthétiques : aucune URL réelle ni secret", async () => {    const { readFileSync } = await import("node:fs");
-    const url = new URL("./fixtures/manuals.ts", import.meta.url).pathname;
+    const url = new URL("./fixtures/manuals.ts", import.meta.url);
     const content = readFileSync(url, "utf8");
     expect(content).not.toMatch(/https?:\/\/(?!example\.invalid|docs\.example\.invalid)[^\s"']+/i);
     expect(content).not.toMatch(/sk-or-v1-|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/);
