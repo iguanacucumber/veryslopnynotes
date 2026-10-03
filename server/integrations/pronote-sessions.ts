@@ -5,7 +5,8 @@
 // Sorties = données, jamais instructions (I6) : lectures marquées Untrusted côté provider.
 // pronytail: Client pronotets unique par accountId, pas de client HTTP parallèle.
 // Upgrade: multi-ENT via même interface.
-import type { PronoteAuthErrorCode, PronoteCredentials, PronoteProvider, PronoteSession } from "../domain/ports";
+import { randomUUID } from "node:crypto";
+import type { PronoteAuthErrorCode, PronoteCredentials, PronoteProvider, PronoteQr, PronoteSession } from "../domain/ports";
 import { PronoteAuthError } from "../domain/ports";
 import { ninegateHubixEduconnect } from "./ent-ninegate";
 import { SessionRefresher } from "./session-refresh";
@@ -13,8 +14,12 @@ import type { SessionRenewer } from "./session-refresh";
 import type { CookieJar } from "tough-cookie";
 
 export interface PronoteSessionStoreOptions {
-  /** URL Pronote établissement injectée (jamais en dur, jamais loggée). */
-  readonly pronoteUrl: string;
+  /**
+   * URL Pronote PAR DÉFAUT (jamais en dur, jamais loggée). #118 : optionnelle —
+   * un setup piloté par l'app fournit son URL par session, donc un serveur sans
+   * `PRONOTE_URL` peut déjà ouvrir une session (avant : aucune session possible).
+   */
+  readonly pronoteUrl?: string;
   /** Résolveur ENT injectable (tests) : défaut ninegateHubixEduconnect (SSO complet). */
   readonly entLogin?: typeof ninegateHubixEduconnect;
   readonly logger?: (message: string) => void;
@@ -27,6 +32,8 @@ export interface PronoteSessionStoreOptions {
   readonly renew?: SessionRenewer;
   /** Horloge injectée (tests déterministes), sleeper idem via SessionRefresher. */
   readonly now?: () => number;
+  /** #118 : uuid d'appareil pour `qrcodeLogin` (tests : générateur déterministe). */
+  readonly uuid?: () => string;
 }
 
 // Type minimal du Client pronotets (évite import type profond non exporté).
@@ -36,12 +43,22 @@ export interface PronoteClientLike {
   [key: string]: any;
 }
 
+/** Options communes aux deux modes de connexion Pronote (entKind ou qr). */
+export interface ClientFactoryOptions {
+  readonly ent: (u: string, p: string, o: any) => Promise<CookieJar>;
+  /**
+   * #118 : mode QR de l'établissement. `uuid` est l'identifiant d'appareil
+   * transmis à pronotets (généré et mémorisé par session, jamais réutilisé
+   * d'un compte à l'autre).
+   */
+  readonly qr?: { readonly qr: PronoteQr; readonly pin: string; readonly uuid: string };
+}
+
 export type ClientFactory = (
   pronoteUrl: string,
   username: string,
   password: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  opts: { ent: (u: string, p: string, o: any) => Promise<CookieJar> },
+  opts: ClientFactoryOptions,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ) => Promise<any>;
 
@@ -50,11 +67,20 @@ async function defaultClientFactory(
   pronoteUrl: string,
   username: string,
   password: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  opts: { ent: (u: string, p: string, o: any) => Promise<CookieJar> },
+  opts: ClientFactoryOptions,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<any> {
   const { Client } = await import("pronotets");
+  // QR : la connexion n'est PAS un login identifiant/mot de passe mais le
+  // `qrcodeLogin` (login + jeton de l'établissement, déchiffrés par le Pin).
+  // L'URL vient du QR quand il en porte une, sinon de l'URL saisie au setup.
+  if (opts.qr) {
+    return Client.qrcodeLogin(
+      { ...opts.qr.qr, url: opts.qr.qr.url ?? pronoteUrl } as never,
+      opts.qr.pin,
+      opts.qr.uuid,
+    );
+  }
   return Client.login(pronoteUrl, username, password, { ent: opts.ent });
 }
 
@@ -65,6 +91,12 @@ function toAuthError(err: unknown): PronoteAuthError {
   }
   if (/timeout|timed out/i.test(msg)) return new PronoteAuthError("auth timeout", "timeout");
   if (/network|fetch failed|injoignable/i.test(msg)) return new PronoteAuthError("auth network", "network");
+  // #118 : déchiffrement login/jeton impossible, jeton expiré, Pin faux. Le
+  // message brut de la lib n'est jamais renvoyé à l'app (peut contenir de
+  // l'interne) : seulement ce code typé, que l'app traduit en « rescanez ».
+  if (/confirmation code|qrcode|jeton|invalid.*pin/i.test(msg)) {
+    return new PronoteAuthError("qr rejected", "qr_rejected");
+  }
   return new PronoteAuthError("ent unavailable", "ent_unavailable");
 }
 
@@ -94,6 +126,12 @@ export class PronoteSessionStore implements PronoteProvider {
   // #87 : renewal injectée, sérialisée par compte. Null = pas de renewal.
   private readonly refresher: SessionRefresher | null;
   private readonly now: () => number;
+  private readonly newUuid: () => string;
+  /**
+   * accountId → uuid d'appareil (#118, mode QR). Un uuid par compte, stable
+   * d'une renewal à l'autre, jamais partagé entre comptes.
+   */
+  private readonly uuids = new Map<string, string>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly clients = new Map<string, any>();
   /**
@@ -104,12 +142,15 @@ export class PronoteSessionStore implements PronoteProvider {
   private readonly epochs = new Map<string, number>();
 
   constructor(options: PronoteSessionStoreOptions & { clientFactory?: ClientFactory }) {
-    if (!options.pronoteUrl) throw new Error("pronoteUrl requise (injectée, jamais en dur)");
-    this.pronoteUrl = options.pronoteUrl;
+    // #118 : plus d'obligation — un setup piloté par l'app fournit l'URL de
+    // l'établissement par session (via `PronoteCredentials.pronoteUrl`). Ni
+    // l'env ni le code ne la contiennent donc jamais en dur.
+    this.pronoteUrl = options.pronoteUrl ?? "";
     this.entLogin = options.entLogin ?? ninegateHubixEduconnect;
     this.factory = options.clientFactory ?? defaultClientFactory;
     this.logger = options.logger ?? (() => {});
     this.now = options.now ?? (() => Date.now());
+    this.newUuid = options.uuid ?? randomUUID;
     this.refresher =
       typeof options.renew === "function"
         ? new SessionRefresher({ renew: options.renew, now: this.now, logger: this.logger })
@@ -121,16 +162,32 @@ export class PronoteSessionStore implements PronoteProvider {
     const username = credentials?.username ?? "";
     const password = credentials?.password ?? "";
     const entKind = credentials?.entKind?.trim() ?? "";
-    if (!accountId || !username || !password || !entKind) {
+    const qr = credentials?.qr;
+    const pin = (credentials?.pin ?? "").trim();
+    // #118 : URL de CETTE session (setup) sinon celle du store (env).
+    const url = (credentials?.pronoteUrl ?? "").trim() || this.pronoteUrl;
+    if (!accountId || !url) {
       this.logger("auth -> error invalid_credentials");
       throw new PronoteAuthError("invalid credentials", "invalid_credentials");
+    }
+    // Mode QR : login + jeton valent preuve de détention du compte, le Pin sert
+    // de clé de déchiffrement. Sans les trois, rien à tenter.
+    const qrMode = qr !== undefined;
+    if (!qrMode && (!username || !password || !entKind)) {
+      this.logger("auth -> error invalid_credentials");
+      throw new PronoteAuthError("invalid credentials", "invalid_credentials");
+    }
+    if (qrMode && (!qr.login || !qr.jeton || !pin)) {
+      this.logger("auth -> error qr_rejected");
+      throw new PronoteAuthError("qr rejected", "qr_rejected");
     }
     try {
       // Seul le SSO Ninegate est implémenté (ent-ninegate.ts). `cas` /
       // `educonnect` ne doivent surtout pas être joués en silence par la
       // chaîne Ninegate : les identifiants partiraient vers un ENT que le
       // compte n'a pas configuré. Refus franc, pas de faux SSO.
-      if (entKind !== "ninegate") {
+      // (Le mode QR n'emprunte pas cette chaîne : il porte sa propre preuve.)
+      if (!qrMode && entKind !== "ninegate") {
         this.logger("auth -> error invalid_credentials");
         throw new PronoteAuthError("invalid credentials", "invalid_credentials");
       }
@@ -139,12 +196,17 @@ export class PronoteSessionStore implements PronoteProvider {
         return this.entLogin(u, p, { pronote_url: o.pronote_url, logger: this.logger });
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const client: any = await this.factory(this.pronoteUrl, username, password, { ent });
+      const client: any = qrMode
+        ? await this.factory(url, username, password, {
+            ent,
+            qr: { qr, pin, uuid: this.uuidFor(accountId) },
+          })
+        : await this.factory(url, username, password, { ent });
       this.clients.set(accountId, client);
       // #87 : session neuve = fraîche, donc pas de renewal avant la première
       // lecture (une requête de moins côté Pronote).
       this.refresher?.markFresh(accountId);
-      this.logger("auth -> ok");
+      this.logger(`auth -> ok (${qrMode ? "qr" : "ent"})`);
       return { accountId };
     } catch (err) {
       if (err instanceof PronoteAuthError) {
@@ -155,6 +217,16 @@ export class PronoteSessionStore implements PronoteProvider {
       this.logger(`auth -> error ${mapped.code}`);
       throw mapped;
     }
+  }
+
+  /** uuid d'appareil du compte (mode QR #118) : généré une fois, jamais loggé. */
+  private uuidFor(accountId: string): string {
+    const id = key(accountId);
+    const known = this.uuids.get(id);
+    if (known !== undefined) return known;
+    const fresh = this.newUuid();
+    this.uuids.set(id, fresh);
+    return fresh;
   }
 
   isAuthenticated(accountId: string): boolean {

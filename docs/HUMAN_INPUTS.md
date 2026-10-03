@@ -1,6 +1,7 @@
 # HUMAN_INPUTS.md — apports humains attendus (sans valeurs secrètes)
 
-- URL Pronote établissement + type ENT/CAS (texte, jamais commité).
+- URL Pronote établissement + type ENT/CAS (texte, jamais commité). Depuis #118, saisissables
+  dans l'app (assistant de configuration) : le `.env.local` n'est plus le seul chemin.
 - Comptes test Pronote (via `.env.local` local uniquement).
 - Comptes manuels + plateforme (via `.env.local`, première connexion interactive Playwright).
 - Clé OpenRouter + modèle souhaité (via `.env.local`).

@@ -15,12 +15,37 @@ export interface PronoteSession {
   readonly accountId: string;
 }
 
+/**
+ * QR Pronote de l'établissement (#118) : c'est le code affiché par l'application
+ * Pronote / l'ENT pour autoriser un nouvel appareil. `login` + `jeton` valent
+ * preuve de détention du compte SANS mot de passe : ils ne sont donc jamais
+ * persistés ni journalisés, seulement transmis au client Pronote.
+ */
+export interface PronoteQr {
+  readonly login: string;
+  readonly jeton: string;
+  /** URL portée par le QR lui-même ; absente = URL de la session (setup). */
+  readonly url?: string;
+}
+
 export interface PronoteCredentials {
   readonly accountId: string;
   readonly username: string;
   readonly password: string;
   /** Type ENT/CAS injecté (ex. valeur fournie par humain, jamais en dur). */
   readonly entKind: string;
+  /**
+   * URL Pronote de CETTE session. Absente = celle du store (issue #118 : le
+   * setup l'envoie, l'env ne l'a plus en paramètre obligatoire).
+   */
+  readonly pronoteUrl?: string;
+  /**
+   * Mode QR : présent = connexion par le QR de l'établissement, qui remplace
+   * les identifiants (pronotets `qrcodeLogin`). `pin` = code de validation
+   * associé au QR, absent = pas de 2FA demandée par l'établissement.
+   */
+  readonly qr?: PronoteQr;
+  readonly pin?: string;
 }
 
 export type PronoteAuthErrorCode =
@@ -28,7 +53,9 @@ export type PronoteAuthErrorCode =
   | "ent_unavailable"
   | "network"
   | "timeout"
-  | "session_expired";
+  | "session_expired"
+  /** #118 : QR scanné refusé (jeton expiré, mauvais compte, Pin faux). */
+  | "qr_rejected";
 
 export class PronoteAuthError extends Error {
   readonly code: PronoteAuthErrorCode;

@@ -1,13 +1,14 @@
 openapi: 3.0.3
 info:
   title: veryslopnynotes API
-  version: 0.4.0
+  version: 0.5.0
   description: Contrats app <-> serveur. Source de vérité (phase 1, issue #4). Miroir de shared/contracts/*.ts.
 # Porte d'authentification UNIQUE : le bearer d'un device appaire est exige sur
-# TOUTE route (lectures ET ecritures). Seules les trois routes declarees
+# TOUTE route (lectures ET ecritures). Seules les quatre routes declarees
 # `security: []` y echappent : les deux qui servent a OBTENIR le credential
-# (/v1/pairing/start, /v1/pairing/confirm) et la sonde de vivacite
-# (/v1/health). Une route ajoutee est donc fermee par defaut.
+# (/v1/pairing/start, /v1/pairing/confirm), celle qui l'obtient en authentifiant
+# le compte de l'etablissement d'un coup (#118, /v1/setup) et la sonde de
+# vivacite (/v1/health). Une route ajoutee est donc fermee par defaut.
 security:
   - deviceBearer: []
 paths:
@@ -59,6 +60,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PairingConfirmResponse'
+  /v1/setup:
+    post:
+      operationId: setup
+      # Route ouverte : SEULE réponse qui porte le secret du device. Authentifie
+      # le compte de l'établissement (QR de l'app Pronote/ENT ou identifiants
+      # ENT) PUIS émet le credential — l'app n'a plus besoin de l'appairage
+      # QR+PIN au premier lancement.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetupRequest'
+      responses:
+        '200':
+          description: session école ouverte + secret du device, UNE SEULE FOIS ici
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupResponse'
+        '400':
+          description: >-
+            Saisie refusée (`qr_rejected` = QR à rescanner, `login_refused` =
+            identifiants refusés, `bad_request` = corps ou URL invalide).
+            Jamais 401 : l'app doit pouvoir corriger sur place.
+        '429':
+          description: Trop d'échecs sur la fenêtre de 10 minutes.
+        '501':
+          description: Serveur sans session Pronote branchée.
+        '502':
+          description: ENT/Pronote injoignable (`ent_unreachable`).
   /v1/grades:
     get:
       operationId: listGrades
@@ -798,6 +831,48 @@ components:
             Le serveur ne conserve que sha256(token) ; l'app le stocke et le
             présente en `Authorization: Bearer <token>` sur les routes protégé.
             Jamais journalisé, jamais re-servi par une autre route.
+    SetupRequest:
+      type: object
+      required: [deviceName, pronoteUrl, ent]
+      description: >-
+        Compte de l'établissement + preuve de détention. Au moins une méthode
+        complète : `qr` + `pin` (QR affiché par l'app Pronote/ENT), sinon
+        `username` + `password`. Le QR prime quand les deux sont présents : ce
+        sont deux connexions Pronote exclusives, pas deux étapes.
+      properties:
+        deviceName: { type: string, maxLength: 256 }
+        pronoteUrl:
+          type: string
+          maxLength: 300
+          description: URL élève de l'établissement. Doit être un hôte PUBLIC.
+        ent: { type: string, maxLength: 32, description: 'Type ENT/CAS. Seul `ninegate` est implémenté.' }
+        username: { type: string, maxLength: 256 }
+        password: { type: string, maxLength: 256, writeOnly: true }
+        qr: { $ref: '#/components/schemas/SetupQr' }
+        pin: { type: string, maxLength: 64, writeOnly: true }
+    SetupQr:
+      type: object
+      required: [login, jeton]
+      description: >-
+        Payload du QR Pronote de l'établissement : `login` et `jeton` sont des
+        blocs AES chiffrés (clé = `pin`). Jamais journalisés ni persistés.
+      properties:
+        login: { type: string, maxLength: 1024 }
+        jeton: { type: string, maxLength: 1024 }
+        url: { type: string, maxLength: 300 }
+    SetupResponse:
+      type: object
+      required: [device, token]
+      properties:
+        device: { $ref: '#/components/schemas/Device' }
+        token:
+          type: string
+          maxLength: 512
+          writeOnly: true
+          description: >-
+            Secret du device, renvoyé UNE SEULE FOIS, ici. Même règle que
+            l'appairage : jamais journalisé, jamais re-servi par une autre
+            route, jamais rendu sur un échec de setup.
     GradesResponse:
       type: object
       required: [grades, averages]

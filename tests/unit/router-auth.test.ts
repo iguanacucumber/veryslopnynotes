@@ -15,8 +15,13 @@ import type { SyncRefreshActions } from "../../server/api/sync-refresh";
 /** Le SEUL corps de refus possible d'un bearer absent/invalide (aucune fuite). */
 const attendu401 = { error: { code: "unauthorized", message: "jeton d'appareil invalide" } };
 
-/** Les 3 seules routes ouvertes : obtenir un credential + savoir si on est vif. */
-const OPEN: readonly string[] = ["/v1/health", "/v1/pairing/start", "/v1/pairing/confirm"];
+/** Les 4 seules routes ouvertes : obtenir un credential (2 voies) + savoir si on est vif. */
+const OPEN: readonly string[] = [
+  "/v1/health",
+  "/v1/pairing/start",
+  "/v1/pairing/confirm",
+  "/v1/setup",
+];
 
 async function json(res: Response): Promise<unknown> {
   return res.json();
@@ -35,10 +40,11 @@ describe("porte d'authentification du routeur", () => {
       );
       if (OPEN.includes(route.path)) {
         // Route ouverte : le statut est celui de la route, jamais un 401 d'auth.
-        expect({ path: route.path, status: res.status }).toEqual({
-          path: route.path,
-          status: route.path === "/v1/health" ? 200 : 400, // corps `{}` incomplet
-        });
+        // `/v1/setup` n'est pas câblé dans ce handler (10e paramètre absent) :
+        // 501 honnête, pas un jeton ni un 200 mensonger.
+        const attendu =
+          route.path === "/v1/health" ? 200 : route.path === "/v1/setup" ? 501 : 400; // corps `{}` incomplet
+        expect({ path: route.path, status: res.status }).toEqual({ path: route.path, status: attendu });
         continue;
       }
       expect({ path: route.path, method: route.method, status: res.status }).toEqual({
