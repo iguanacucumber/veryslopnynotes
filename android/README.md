@@ -1,12 +1,27 @@
 # android/ — client natif from scratch (phase 4, issue #13)
 
 Règle d'or réseau : aucun hôte tiers ici. Un seul hôte serveur allowlist
-(configuré au build, jamais en dur), un seul OkHttp (`data/ApiClient`),
-médias via proxy serveur, pas de WebView distante. Voir
-`docs/architecture/INVARIANTS.md` (I1) et `core/ServerConfig`.
+(jamais en dur), un seul OkHttp (`data/ApiClient`), médias via proxy serveur,
+pas de WebView distante. Voir `docs/architecture/INVARIANTS.md` (I1) et
+`core/ServerConfig`.
 
 Modules : `app/` (Activity + navigation), `core/` (config allowlist),
 `data/` (client HTTP unique), `ui/` (écrans Compose Material3).
+
+## Serveur : choisi à l'exécution, le build fournit le défaut
+
+L'adresse est saisie dans l'écran **Appairage** (on ne peut pas appairer sans
+connaitre son serveur) et persistée par `data/ServerStore`. La valeur
+`BuildConfig` ci-dessous n'est plus qu'une **graine** : elle sert quand rien
+n'est choisi.
+
+L'allowlist est donc `core/ServerConfig.validateBaseUrl` (et `isAllowed` en
+préfixe strict), pas une constante de build : `https` obligatoire, `http` uni-
+quement pour `10.0.2.2`/`localhost`, hôte IPv4/IPv6-littérale/nom DNS borné,
+port 1-65535, et refus de tout identifiant, chemin, query, fragment, espace ou
+caractère de contrôle. Un changement de serveur invalide la session et purge
+les caches par le chemin existant `AccountStore.logout()` (le jeton d'appareil
+est un bearer pour l'ancien serveur), AVANT d'utiliser la nouvelle adresse.
 
 ## Config hôte serveur (jamais commité, jamais en dur)
 
@@ -18,7 +33,8 @@ server.host=10.0.2.2:3000
 
 Défaut émulateur `10.0.2.2:3000` (http local). Hors émulateur : HTTPS-only
 (`app/build.gradle.kts` force `https` sauf `10.0.2.2`/`localhost`).
-`./gradlew installDebug` utilise le défaut sans config.
+`./gradlew installDebug` utilise le défaut sans config ; l'utilisateur peut le
+remplacer ensuite depuis l'app.
 
 ## Build debug (SDK requis, pas de réseau tiers)
 

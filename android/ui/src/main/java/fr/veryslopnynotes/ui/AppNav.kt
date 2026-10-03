@@ -38,6 +38,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import fr.veryslopnynotes.core.Capabilities
 import fr.veryslopnynotes.core.SecurityAlert
+import fr.veryslopnynotes.core.ServerConfig
+import fr.veryslopnynotes.core.ServerUrlResult
 import fr.veryslopnynotes.core.UserProfile
 import fr.veryslopnynotes.core.profileInitials
 import fr.veryslopnynotes.data.AccountStore
@@ -51,6 +53,7 @@ import fr.veryslopnynotes.data.InMemorySubjectPrefsStore
 import fr.veryslopnynotes.data.MeResult
 import fr.veryslopnynotes.data.PhotoState
 import fr.veryslopnynotes.data.ProfileRepository
+import fr.veryslopnynotes.data.ServerStore
 import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SubjectPrefsRepository
 import fr.veryslopnynotes.data.SyncedRepository
@@ -105,18 +108,65 @@ private fun tabLabel(route: String): String = when (route) {
     else -> route
 }
 
+/**
+ * Changement de serveur = changement d'établissement. Le jeton d'appareil est
+ * un BEARER de l'ANCIEN serveur : le conserver enverrait un credential vivant
+ * au nouveau. Donc, dans cet ordre : valider (aucun effet de bord), purger
+ * session + caches par le chemin EXISTANT `accounts.logout()` (ni purge
+ * parallèle, ni nouveau store), puis persister. Un refus renvoie son message
+ * français et ne change RIEN ; `onSwitched` n'est appelé qu'une fois la purge
+ * faite et l'adresse enregistrée.
+ *
+ * ponytail: purge AVANT écriture — un stockage KO coûte alors une déconnexion,
+ * alors que l'inverse laisserait une fenêtre où le nouveau serveur est écrit et
+ * le credential de l'ancien encore vivant. Fonction top-level (pas une locale
+ * dans le composable) : la validation et l'ordre des effets n'ont rien à faire
+ * dans un corps recomposé. `when` + `is` positif : dans ce module, le plugin
+ * Compose casse le smart cast après un `!is` (vérifié à la compilation).
+ */
+private fun changeServer(
+    raw: String,
+    current: String,
+    accounts: AccountStore,
+    serverStore: ServerStore,
+    onSwitched: (String) -> Unit,
+): String? {
+    val target = when (val validated = ServerConfig.validateBaseUrl(raw)) {
+        is ServerUrlResult.Rejected -> return validated.message
+        is ServerUrlResult.Ok -> validated.baseUrl
+    }
+    if (target == current) return null
+    // On enregistre AVANT de déconnecter : si l'écriture échoue, l'utilisateur
+    // garde sa session et son cache au lieu d'être déconnecté pour rien.
+    val saved = serverStore.save(target)
+    if (saved is ServerUrlResult.Rejected) return saved.message
+    accounts.logout()
+    onSwitched(target)
+    return null
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNav(
-    // ponytail: "" = non configuré (bouchon previews/tests sans BuildConfig).
-    baseUrl: String = "",
+    // Graine par défaut (valeur BuildConfig) : l'adresse UTILISÉE est l'état
+    // ci-dessous, alimenté par ServerStore — l'utilisateur choisit son
+    // serveur dans l'écran d'appairage. "" = non configuré (bouchon
+    // previews/tests sans BuildConfig).
+    baseUrlSeed: String = "",
     // #75 : compte appairé, sert au toggle (écriture confirmée par l'app, I7)
     // et au proxy des pièces jointes. Jamais un hôte Pronote/ENT (I1).
     accountId: String = "",
-    loadAlerts: suspend () -> List<SecurityAlert> = { emptyList() },
+    // L'adresse est passée à l'appel : le repository doit suivre le serveur
+    // courant, pas celui du lancement de l'activité.
+    loadAlerts: suspend (String) -> List<SecurityAlert> = { emptyList() },
 ) {
     val nav = rememberNavController()
     val ctx = LocalContext.current.applicationContext
+    // Serveur choisi à l'exécution : `baseUrl` devient un ÉTAT. Toutes les
+    // `remember(baseUrl)` plus bas rebloquent donc leurs repositories sur la
+    // nouvelle adresse, et les routes lisent le même état.
+    val serverStore = remember(ctx) { ServerStore(ctx) }
+    var baseUrl by remember(serverStore) { mutableStateOf(serverStore.baseUrl(baseUrlSeed)) }
     // ponytail: fichier natif seul (pas de Room). Repli memoire si stockage KO.
     val cacheStore = remember(baseUrl) {
         try {
@@ -336,27 +386,26 @@ fun AppNav(
                 )
             }
             composable(ROUTE_PAIRING) {
-                if (baseUrl.isBlank()) {
-                    Column(
-                        modifier = Modifier.fillMaxSize().padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text("Appairage")
-                        Text("Serveur non configuré.")
-                        Button(onClick = { nav.popBackStack() }) { Text("Retour") }
-                    }
-                } else {
-                    // #113 : `notice` = raison factuelle de l'arrivée ici (credential
-                    // refusée). Pas de cause devinée, pas de bouton « réessayer » :
-                    // le seul geste utile est l'appairage.
-                    PairingRoute(
-                        baseUrl = baseUrl,
-                        onBack = { nav.popBackStack() },
-                        notice = authNotice,
-                    )
-                }
+                // Serveur vide = aucune graine de build : on montre QUAND MÊME
+                // le champ (c'est là que l'utilisateur saisit son adresse), pas
+                // un cul-de-sac — sans serveur, on ne peut pas appairer.
+                // #113 : `notice` = raison factuelle de l'arrivée ici (credential
+                // refusée). Pas de cause devinée, pas de bouton « réessayer » :
+                // le seul geste utile est l'appairage.
+                PairingRoute(
+                    baseUrl = baseUrl,
+                    onBack = { nav.popBackStack() },
+                    notice = authNotice,
+                    // null = enregistrée (session purgée), sinon message à afficher.
+                    onServerChange = { raw ->
+                        changeServer(raw, baseUrl, accounts, serverStore) { url ->
+                            authNotice = null
+                            baseUrl = url
+                        }
+                    },
+                )
             }
-            composable("alerts") { SecurityAlertsRoute(loadAlerts) }
+            composable("alerts") { SecurityAlertsRoute { loadAlerts(baseUrl) } }
             composable("fiches") { RevisionSheetsScreen() }
             // #78 : chips de compétences + détail, payload /v1/evaluations en cache.
             composable("competences") {
