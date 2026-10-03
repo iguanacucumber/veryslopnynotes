@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Clairtext strictement limité à la boucle locale / alias émulateur.
+
+  Pourquoi : `ServerConfig.schemeFor` autorise `http` pour l'émulateur et la
+  boucle locale, mais depuis targetSdk 28 le clairtext est INTERDIT par défaut —
+  le manifeste ne le réactivait pas, donc cette branche du code était inatteignable
+  et le workflow émulateur documenté (`http://10.0.2.2:3000`) n'a jamais
+  fonctionné. On active donc le clairtext, mais uniquement pour ces trois hôtes.
+
+  Ce que ça n'ouvre PAS : `base-config` interdit le clairtext partout ailleurs.
+  Un serveur réel (LAN, domaine) doit être en HTTPS — c'est déjà la règle du
+  validateur d'adresse côté app, cet XML ne fait que l'appliquer au plateforme.
+
+  ponytail: pas d'exception par domaine pour le serveur de l'utilisateur — il
+  doit être en HTTPS. Upgrade: épinglage de certificat (phase 10).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Alias hôte-machine depuis l'émulateur Android. -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <!-- Boucle locale de l'appareil. -->
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
