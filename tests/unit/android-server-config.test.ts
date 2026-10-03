@@ -465,13 +465,15 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(screen).toContain("ServerField(");
     expect(screen).toContain("val refusal = onServerChange(serverDraft)");
     expect(screen).toContain('label = { Text("Adresse du serveur (https://domaine[:port])") }');
-    expect(screen).toContain('Text("Enregistrer le serveur")');
+    expect(screen).toContain('Text("Continuer")');
     expect(screen).toContain("Text(serverHint(value))");
     // Erreur affichée telle quelle, confirmation après purge de la session.
     expect(screen).toContain("if (!error.isNullOrEmpty()) Text(error)");
-    expect(screen).toContain('Text("Serveur enregistré. Ré-appairez l\'appareil si l\'adresse a changé.")');
-    // Le QR et le PIN de l'ancien serveur ne survivent pas au changement.
-    expect(screen).toContain('form = form.copy(qrRaw = "", pin = "", state = PairingState.Idle)');
+    expect(screen).toContain("Serveur enregistré. Si l'adresse change, reconnecte l'appareil.");
+    // #120 : un refus d'adresse arrête ICI. Passer à l'étape du compte quand
+    // le serveur ne répond pas, c'est faire découvrir une mauvaise adresse
+    // trois écrans plus tard, sous la forme d'un « identifiants refusés ».
+    expect(screen).toContain("step = SetupStep.ACCOUNT");
     // Le repo SSE/HTTP est rebouclé sur la nouvelle adresse, pas sur l'ancienne.
     expect(screen).toContain("val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }");
 
@@ -497,9 +499,16 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(state).toContain("Adresse d'émulateur : elle ne fonctionne que dans l'émulateur Android.");
     expect(state).toContain("Sur un téléphone, utilisez l'adresse https de votre serveur");
     expect(state).toContain("http est réservé à l'émulateur et à la boucle locale");
-    // Honnêteté : aucun test de joignabilité (une requête non confirmée).
+    // #120 : la sonde de joignabilité EXISTE, mais seulement sur appui
+    // explicite (« Continuer ») et elle vit dans le dépôt, pas dans l'écran :
+    // l'écran ne fait aucun appel direct. C'est la seule façon de distinguer
+    // « mauvaise adresse » de « identifiants refusés » pour l'utilisateur.
+    expect(screen).toContain("probeHealthBlocking(target)");
     expect(codeOnly(screen)).not.toContain("api.buildGet(");
     expect(codeOnly(screen)).not.toContain("client().newCall(");
+    const repo = read(join(DATA, "SetupRepository.kt"));
+    expect(repo).toContain("fun probeHealthBlocking(baseUrl: String): HealthResult");
+    expect(repo).toContain("ServerConfig.HEALTH_PATH");
   });
 
   test("I1 : aucun hôte en dur dans android/, aucun hôte Pronote/ENT", () => {

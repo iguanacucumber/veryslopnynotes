@@ -178,6 +178,7 @@ export class SetupThrottle {
 
 /** Le QR prime sur les identifiants : jamais les deux dans la même session. */
 export function credentialsOf(request: SetupRequest): {
+  /** Interne : l'API dit `schoolUrl`, le provider attend `pronoteUrl` (I1). */
   readonly pronoteUrl: string;
   readonly username: string;
   readonly password: string;
@@ -187,7 +188,7 @@ export function credentialsOf(request: SetupRequest): {
 } {
   const useQr = request.qr !== undefined && request.pin !== undefined;
   return {
-    pronoteUrl: request.pronoteUrl,
+    pronoteUrl: request.schoolUrl,
     username: useQr ? "" : (request.username ?? ""),
     password: useQr ? "" : (request.password ?? ""),
     entKind: useQr ? "" : request.ent,
@@ -221,7 +222,7 @@ export class SetupService {
     }
 // Garde-fou AVANT toute sortie réseau : une URL d'établissement non
     // publique ne part jamais vers Pronote (le serveur n'est pas un proxy).
-    if (!isPublicSchoolUrl(request.pronoteUrl) || (request.qr?.url !== undefined && !isPublicSchoolUrl(request.qr.url))) {
+    if (!isPublicSchoolUrl(request.schoolUrl) || (request.qr?.url !== undefined && !isPublicSchoolUrl(request.qr.url))) {
       this.logger("setup -> refus bad_url");
       return { ok: false, failure: "bad_url" };
     }
@@ -230,7 +231,7 @@ export class SetupService {
     // pas rediriger les identifiants vers une autre. Sans cette ligne, une
     // route ouverte devient un relais d'authentification vers un ENT arbitraire
     // depuis l'IP du serveur — le pire scénario pour un compte scolaire.
-    if (this.allowedSchoolUrl !== null && !sameSchool(request.pronoteUrl, this.allowedSchoolUrl)) {
+    if (this.allowedSchoolUrl !== null && !sameSchool(request.schoolUrl, this.allowedSchoolUrl)) {
       this.logger("setup -> refus bad_url (hors etablissement configure)");
       return { ok: false, failure: "bad_url" };
     }

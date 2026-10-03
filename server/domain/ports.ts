@@ -36,7 +36,9 @@ export interface PronoteCredentials {
   readonly entKind: string;
   /**
    * URL Pronote de CETTE session. Absente = celle du store (issue #118 : le
-   * setup l'envoie, l'env ne l'a plus en paramètre obligatoire).
+   * setup l'envoie, l'env ne l'a plus à rendre obligatoire). Sur l'API le champ
+   * s'appelle `schoolUrl` : le vocabulaire de l'établissement ne doit pas
+   * atteindre le client (I1).
    */
   readonly pronoteUrl?: string;
   /**
