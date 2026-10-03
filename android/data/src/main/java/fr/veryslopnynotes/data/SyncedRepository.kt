@@ -97,6 +97,15 @@ class SyncedRepository(
             override fun onResponse(call: Call, response: Response) {
                 response.use {
                     if (!it.isSuccessful) {
+                        // 401 : credential d'appareil refusée. Le cache ne masque
+                        // PAS une session morte (l'utilisateur verrait des données
+                        // périmées comme si tout allait bien) : Failed nu, même
+                        // plomberie que les autres échecs, et le garde-fou ApiClient
+                        // renvoie vers l'appairage.
+                        if (it.code == ApiClient.HTTP_UNAUTHORIZED) {
+                            post(cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
+                            return
+                        }
                         val c = store.load(resource)
                         if (c != null) {
                             post(cb, RefreshOutcome.OfflineFallback(c.payload, c.fetchedAt, isStale(resource, c)))
