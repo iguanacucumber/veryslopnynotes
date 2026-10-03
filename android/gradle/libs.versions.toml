@@ -1,5 +1,5 @@
-// Dépendances Gradle versionnées (issue #13, ADR-001).
-// Catalogue seul : versions figées, licences MIT-compatibles.
+# Dépendances Gradle versionnées (issue #13, ADR-001).
+# Catalogue seul : versions figées, licences MIT-compatibles.
 [versions]
 agp = "8.5.2"
 kotlin = "1.9.24"

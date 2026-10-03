@@ -33,6 +33,10 @@ coverage/
 *.aab
 android/**/build/
 android/**/.gradle/
+# Chemin du SDK Android local + config hôte serveur : propre à la machine.
+# Le modèle (server.host) est dans android/README.md, jamais le chemin réel.
+android/local.properties
+android/local-defaults.properties
 server/data/
 *.db
 *.sqlite
