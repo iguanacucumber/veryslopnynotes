@@ -5,6 +5,8 @@
 import {
   isAveragesReport,
   isAssignment,
+  isCanteenBalance,
+  isCanteenMenu,
   isDevice,
   isGrade,
   isNewsItem,
@@ -15,6 +17,8 @@ import {
 import type {
   AveragesReport,
   Assignment,
+  CanteenBalance,
+  CanteenMenu,
   Device,
   Grade,
   NewsItem,
@@ -44,6 +48,9 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/v1/revision-sheets" },
   { method: "GET", path: "/v1/revision-sheets/pdf" },
   { method: "GET", path: "/v1/news" },
+
+  // #81 cantine : menus de la semaine + solde compte (optionnel).
+  { method: "GET", path: "/v1/menus" },
 ] as const;
 
 export interface HealthResponse {
@@ -84,6 +91,15 @@ export interface PeriodsResponse {
 }
 export interface RevisionSheetsResponse {
   readonly sheets: RevisionSheet[];
+}
+
+// #81 cantine : menus de la fenêtre from/to (semaine courante par défaut).
+// Tableau vide = aucun menu publié sur la fenêtre (module cantine absent de
+// l'ENT ou hors périmètre) : l'app masque alors l'onglet, sans erreur.
+// balance absent = solde non publié (Turboself/ARD non branché).
+export interface CanteenMenusResponse {
+  readonly menus: CanteenMenu[];
+  readonly balance?: CanteenBalance;
 }
 
 // Alertes sécurité phase 6 (#21) : liste d'injections neutralisées (I6).
@@ -194,6 +210,14 @@ export function isRevisionSheetsResponse(v: unknown): v is RevisionSheetsRespons
 
 export function isPairingConfirmResponse(v: unknown): v is PairingConfirmResponse {
   return isDevice(v);
+}
+
+export function isCanteenMenusResponse(v: unknown): v is CanteenMenusResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  const m = r["menus"];
+  if (!Array.isArray(m) || !m.every(isCanteenMenu)) return false;
+  return r["balance"] === undefined || isCanteenBalance(r["balance"]);
 }
 
 function isBoundedNonEmptyString(v: unknown, max: number): v is string {

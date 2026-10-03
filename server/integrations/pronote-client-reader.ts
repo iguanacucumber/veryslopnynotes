@@ -10,9 +10,22 @@
 // encore lues : ProvidedAverages reste null, les rapports sont donc estimés,
 // ce qui est le comportement Papillon par défaut. Upgrade: getProvidedAverages
 // sur ce reader, sans toucher aux trois algorithmes.
-import type { Assignment, Grade, NewsItem, Period, TimetableEntry } from "../../shared/contracts/models";
+import type {
+  Assignment,
+  CanteenMeal,
+  CanteenMenu,
+  Grade,
+  NewsItem,
+  Period,
+  TimetableEntry,
+} from "../../shared/contracts/models";
 import {
+  CANTEEN_MAX_ALLERGENS,
+  CANTEEN_MAX_ALLERGEN_CHARS,
+  CANTEEN_MAX_DISHES,
+  CANTEEN_MAX_DISH_CHARS,
   isAssignment,
+  isCanteenMenu,
   isGrade,
   isNewsItem,
   isPeriod,
@@ -280,6 +293,52 @@ async function mapNews(accountId: string, raw: any, index: number, withBody: boo
   return isNewsItem(candidate) ? candidate : null;
 }
 
+
+// #81 cantine : plats = libellés bornés + étiquettes alimentaires agrégées.
+// pronotets n'expose que isLunch/isDinner : le petit-déjeuner est reconnu par
+// une regex simple et bornée sur le nom du repas.
+// ponytail: allergènes agrégés au repas, pas de structure par plat. Upgrade:
+// plat structuré {label, allergens, composition} si l'ENT publie la composition.
+const BREAKFAST_RE = /\b(petit[\s-]?d[eé]jeuner|breakfast)\b/i;
+
+function canteenMealOf(m: unknown): CanteenMeal {
+  const r = m as { isDinner?: unknown; name?: unknown } | null;
+  if (r?.isDinner === true) return "dinner";
+  if (typeof r?.name === "string" && BREAKFAST_RE.test(bounded(r.name, 100))) return "breakfast";
+  return "lunch";
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapCanteenMenu(accountId: string, m: any, index: number): CanteenMenu | null {
+  const date = toIso(m?.date, "");
+  if (!date) return null;
+  const groups = [m?.firstMeal, m?.mainMeal, m?.sideMeal, m?.otherMeal, m?.cheese, m?.dessert];
+  const dishes: string[] = [];
+  const allergens: string[] = [];
+  for (const group of groups) {
+    for (const f of Array.isArray(group) ? group : []) {
+      const label = typeof f?.name === "string" ? bounded(f.name, CANTEEN_MAX_DISH_CHARS) : "";
+      if (label === "") continue;
+      if (!dishes.includes(label) && dishes.length < CANTEEN_MAX_DISHES) dishes.push(label);
+      for (const l of Array.isArray(f?.labels) ? f.labels : []) {
+        const a = typeof l?.name === "string" ? bounded(l.name, CANTEEN_MAX_ALLERGEN_CHARS) : "";
+        if (a !== "" && !allergens.includes(a) && allergens.length < CANTEEN_MAX_ALLERGENS) allergens.push(a);
+      }
+    }
+  }
+  // Repas sans plat lisible = pas de ligne (l'app masque, n'invente pas).
+  if (dishes.length === 0) return null;
+  const cand: CanteenMenu = {
+    id: typeof m?.id === "string" && m.id ? bounded(m.id, 64) : `menu-${index}`,
+    accountId,
+    date,
+    meal: canteenMealOf(m),
+    dishes,
+    ...(allergens.length > 0 ? { allergens } : {}),
+  };
+  return isCanteenMenu(cand) ? cand : null;
+}
+
 export class PronoteClientReader implements PronoteReader {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly sessions: { requireClient(accountId: string): any };
@@ -540,6 +599,70 @@ export class PronoteClientReader implements PronoteReader {
         throw mapped;
       }
       this.logger(`news -> indisponible (${mapped.code}), page vide`);
+      return { items: untrusted([]), nextCursor: null };
+    }
+  }
+
+
+  /**
+   * Menus cantine (#81). Fenêtre from/to, défaut semaine courante (lundi→dimanche).
+   * Défensif : la cantine est souvent hors périmètre (module non activé, onglet
+   * absent, pas de self-service) => page VIDE + log, jamais une erreur, pour que
+   * l'onglet puisse être masqué (capacités dynamiques, #81). Seules les erreurs
+   * de session et les bornes de fenêtre illisibles remontent, comme getTimetable.
+   * ponytail: solde non lu (Turboself/ARD hors Pronote, rien dans pronotets) =>
+   * CanteenBalance reste absent de la réponse. Upgrade: source solde dédiée
+   * derrière PronoteHttpClient (I2) une fois le service identifié.
+   */
+  async getMenus(accountId: string, options?: PronoteTimetableOptions): Promise<PronotePage<CanteenMenu>> {
+    const id = (accountId ?? "").trim();
+    if (!id) throw new PronoteReadError("menus session expired", "session_expired");
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    const end = new Date(start.getTime() + 6 * 86400000);
+    let from = start;
+    let to = end;
+    if (options?.from !== undefined) {
+      if (typeof options.from !== "string" || Number.isNaN(Date.parse(options.from))) {
+        throw new PronoteReadError("menus ent unavailable", "ent_unavailable");
+      }
+      from = new Date(options.from);
+    }
+    if (options?.to !== undefined) {
+      if (typeof options.to !== "string" || Number.isNaN(Date.parse(options.to))) {
+        throw new PronoteReadError("menus ent unavailable", "ent_unavailable");
+      }
+      to = new Date(options.to);
+    }
+    const fromMs = from.getTime();
+    const toMs = to.getTime();
+    const limit = clampLimit(options?.limit);
+    const offset = parseOffset(options?.cursor);
+    let client;
+    try {
+      client = this.sessions.requireClient(id);
+    } catch (err) {
+      const mapped = toReadError(err, "menus");
+      this.logger(`menus -> error ${mapped.code}`);
+      throw mapped;
+    }
+    try {
+      const raw = (await client.menus(from, to)) as unknown[];
+      const all: CanteenMenu[] = [];
+      (Array.isArray(raw) ? raw : []).forEach((m, i) => {
+        const mapped = mapCanteenMenu(id, m, all.length + i);
+        // Fenêtre appliquée côté reader : la lib aligne sur ses semaines, on
+        // re-borne sur la fenêtre demandée (dates illisibles filtrées au mapping).
+        if (mapped && Date.parse(mapped.date) >= fromMs && Date.parse(mapped.date) <= toMs) all.push(mapped);
+      });
+      const slice = all.slice(offset, offset + limit);
+      const nextCursor = offset + limit < all.length ? String(offset + limit) : null;
+      this.logger(`menus -> ok ${slice.length}`);
+      return { items: untrusted(slice), nextCursor };
+    } catch (err) {
+      // Cantine indisponible = absence de donnée, pas une panne de sync.
+      this.logger(`menus -> indisponible ${toReadError(err, "menus").code}`);
       return { items: untrusted([]), nextCursor: null };
     }
   }

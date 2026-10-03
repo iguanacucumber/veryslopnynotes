@@ -2,7 +2,7 @@
 // vers HTTP, SQLite ou Pronote. Adapters en server/infrastructure/
 // et server/integrations/.
 // Voir docs/architecture/INVARIANTS.md (I2, I3, I5, I6, I7).
-import type { Assignment, Grade, NewsItem, Period, TimetableEntry } from "../../shared/contracts/models";
+import type { Assignment, CanteenMenu, Grade, NewsItem, Period, TimetableEntry } from "../../shared/contracts/models";
 
 export type Untrusted<T = string> = { readonly __untrusted: true; readonly value: T };
 
@@ -88,6 +88,13 @@ export interface PronoteReader {
    * Upgrade: détection de capacité + pièces jointes (attachments).
    */
   getNews?(accountId: string, page?: PronotePageOptions): Promise<PronotePage<NewsItem>>;
+
+  /**
+   * Menus cantine (#81) : fenêtre ISO from/to (défaut semaine courante) +
+   * pagination. Optionnel = module cantine non activé côté Pronote : dans ce
+   * cas l'adaptateur renvoie une page VIDE, pas une erreur (onglet masqué).
+   */
+  getMenus?(accountId: string, options?: PronoteTimetableOptions): Promise<PronotePage<CanteenMenu>>;
 }
 
 /** Ressource pédagogique via session Pronote (contenu cours, fichier joint, manuel lié). */
