@@ -1,5 +1,6 @@
 package fr.veryslopnynotes.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -32,12 +34,19 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import fr.veryslopnynotes.core.SecurityAlert
+import fr.veryslopnynotes.core.UserProfile
+import fr.veryslopnynotes.core.profileInitials
+import fr.veryslopnynotes.data.AccountStore
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.CachePolicy
+import fr.veryslopnynotes.data.EncryptedTokenStore
 import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.FileSubjectPrefsStore
 import fr.veryslopnynotes.data.InMemoryCacheStore
 import fr.veryslopnynotes.data.InMemorySubjectPrefsStore
+import fr.veryslopnynotes.data.MeResult
+import fr.veryslopnynotes.data.PhotoState
+import fr.veryslopnynotes.data.ProfileRepository
 import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SubjectPrefsRepository
 import fr.veryslopnynotes.data.SyncedRepository
@@ -92,14 +101,22 @@ fun AppNav(
     val nav = rememberNavController()
     val ctx = LocalContext.current.applicationContext
     // ponytail: fichier natif seul (pas de Room). Repli memoire si stockage KO.
-    val repo = remember(baseUrl) {
-        val store = try {
+    val cacheStore = remember(baseUrl) {
+        try {
             FileCacheStore(java.io.File(ctx.filesDir, "offline"))
         } catch (_: Exception) {
             InMemoryCacheStore()
         }
-        SyncedRepository(ApiClient(baseUrl), store)
     }
+    val repo = remember(baseUrl, cacheStore) {
+        SyncedRepository(ApiClient(baseUrl), cacheStore)
+    }
+    // #82 : comptes appairés + déconnexion (session invalidée + cache purgé).
+    // Seuls des accountId sont persistés, aucune donnée personnelle.
+    val accounts = remember(baseUrl, cacheStore) {
+        AccountStore(ctx, cacheStore, EncryptedTokenStore(ctx))
+    }
+    val profileRepo = remember(baseUrl) { ProfileRepository(ApiClient(baseUrl)) }
     // #83 : prefs matière = fichier local (survit au restart, lisible hors
     // ligne), répliqué vers le serveur allowlist seul (I1).
     val prefsRepo = remember(baseUrl) {
@@ -169,7 +186,19 @@ fun AppNav(
                 CachedScreen("Tâches", CachePolicy.ASSIGNMENTS, repo, baseUrl, "Devoirs semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, subjectPrefs = subjectPrefs)
             }
             composable(ROUTE_PROFILE) {
-                ProfileScreen(baseUrl, { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, { nav.navigate("fiches") }, { nav.navigate(ROUTE_NEWS) }, { nav.navigate(ROUTE_CANTEEN) }, { nav.navigate(ROUTE_ATTENDANCE) })
+                ProfileRoute(
+                    baseUrl = baseUrl,
+                    repo = profileRepo,
+                    accounts = accounts,
+                    onLogout = { accounts.logout() },
+                    goSettings = { nav.navigate(ROUTE_SETTINGS) },
+                    goPairing = { nav.navigate("pairing") },
+                    goAlerts = { nav.navigate("alerts") },
+                    goFiches = { nav.navigate("fiches") },
+                    goNews = { nav.navigate(ROUTE_NEWS) },
+                    goCanteen = { nav.navigate(ROUTE_CANTEEN) },
+                    goAttendance = { nav.navigate(ROUTE_ATTENDANCE) },
+                )
             }
             composable(ROUTE_NEWS) {
                 NewsRoute(repo, baseUrl)
@@ -337,9 +366,9 @@ private fun tabIcon(route: String): String = when (route) {
     else -> "•"
 }
 
-// Accueil #86 : widgets sur caches existants (affichage seul, jamais
-// interprété). Vide propre si pas de cache (pas de spinner, pas de boucle).
-// #82 brancherait ici /v1/me + périodes ; en attendant, zéro faux contenu.
+// Accueil #82 : widgets sur caches existants, données STRUCTURÉES du contrat
+// (helpers testables dans HomeWidgets.kt). Aucune requête ajoutée : l'accueil
+// reste offline-first (cache d'abord), et un cache absent = état vide propre.
 @Composable
 fun IndexScreen(
     repo: SyncedRepository,
@@ -347,10 +376,20 @@ fun IndexScreen(
     goGrades: () -> Unit,
     goTasks: () -> Unit,
 ) {
-    // ponytail: lecture synchrone des 3 caches (pas de ViewModel avant #82).
+    // ponytail: lecture synchrone des 3 caches (pas de ViewModel avant besoin).
     val grades = try { repo.cached(CachePolicy.GRADES) } catch (_: Exception) { null }
     val assignments = try { repo.cached(CachePolicy.ASSIGNMENTS) } catch (_: Exception) { null }
     val timetable = try { repo.cached(CachePolicy.TIMETABLE) } catch (_: Exception) { null }
+    // Horodatage ISO commun aux tris « à venir ». Les dates du contrat sont en UTC
+// (.000Z) : on formate donc explicitement en UTC, sinon le fuseau du téléphone
+// décalerait le « maintenant » et masquerait le cours en cours.
+    val nowIso = try {
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.FRANCE)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+            .format(java.util.Date())
+    } catch (_: Exception) {
+        ""
+    }
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -359,39 +398,123 @@ fun IndexScreen(
         if (grades == null && assignments == null && timetable == null) {
             Text("Aucune donnée en cache. Appairez puis actualisez un onglet.")
         } else {
-            WidgetRow("Prochain cours", timetable, { repo.isStale(CachePolicy.TIMETABLE, it) }, goCalendar)
-            WidgetRow("Devoirs", assignments, { repo.isStale(CachePolicy.ASSIGNMENTS, it) }, goTasks)
-            WidgetRow("Dernières notes", grades, { repo.isStale(CachePolicy.GRADES, it) }, goGrades)
+            if (timetable != null && repo.isStale(CachePolicy.TIMETABLE, timetable)) {
+                Text("Données hors-ligne (périmé).")
+            }
+            val lessons = timetable?.payload?.let { upcomingLessonsFrom(it, nowIso) } ?: emptyList()
+            if (lessons.isEmpty()) {
+                Text("Prochain cours : pas de cours à venir.")
+            } else {
+                Text("Prochain cours")
+                for (l in lessons) {
+                    val room = if (l.room.isEmpty()) "" else " — ${l.room}"
+                    Text("${homeTimeLabel(l.start)} · ${l.subject}$room")
+                }
+            }
+            Button(onClick = goCalendar) { Text("Ouvrir l'EDT") }
+
+            val homework = assignments?.payload?.let { pendingHomeworkFrom(it, nowIso) } ?: emptyList()
+            if (homework.isEmpty()) {
+                Text("Devoirs : rien à rendre.")
+            } else {
+                Text("Devoirs")
+                for (h in homework) {
+                    Text("${homeTimeLabel(h.dueDate)} · ${h.subject} — ${h.title}")
+                }
+            }
+            Button(onClick = goTasks) { Text("Ouvrir les tâches") }
+
+            val latest = grades?.payload?.let { latestGradesFrom(it) } ?: emptyList()
+            if (latest.isEmpty()) {
+                Text("Dernières notes : aucune note en cache.")
+            } else {
+                Text("Dernières notes")
+                for (g in latest) {
+                    Text("${g.subject} : ${g.note}")
+                }
+            }
+            Button(onClick = goGrades) { Text("Ouvrir les notes") }
         }
     }
 }
 
-@Composable
-private fun WidgetRow(
-    title: String,
-    entry: fr.veryslopnynotes.data.CachedEntry?,
-    staleOf: (fr.veryslopnynotes.data.CachedEntry) -> Boolean,
-    go: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title)
-        if (entry == null) {
-            Text("Pas de cache.")
-        } else {
-            if (staleOf(entry)) Text("Données hors-ligne (périmé).")
-            // ponytail: extrait brut seul (jamais parsé/interprété côté app).
-            Text(if (entry.payload.length > 200) entry.payload.take(200) + "…" else entry.payload)
-        }
-        Button(onClick = go) { Text("Ouvrir") }
-    }
-}
-
-// Profil #86 : coquille parité (#82 profil/accueil, #77 vie scolaire
-// brancheront /v1/me + présences ici). Affiche l'état réel local seul :
-// serveur configuré ou non. Zéro faux user, zéro asset copié.
+// Profil #82 (parité Papillon) : écran alimenté par /v1/me. Nom, classe,
+// période courante, photo via le PROXY serveur (réF opaque, jamais une adresse
+// Pronote/ENT — I1), enfants d'un compte parent, déconnexion (session invalidée
+// + cache purgé). Aucune donnée personnelle persistée : hors-ligne = mode
+// anonyme, état vide propre. Zéro faux user, zéro asset copié.
+// ponytail: état local (comme les autres onglets), pas de ViewModel. Upgrade:
+//   sélecteur de compte quand plusieurs enfants sont appairés.
 @Composable
 fun ProfileScreen(
     baseUrl: String,
+    profile: UserProfile?,
+    photo: PhotoState,
+    accountCount: Int,
+    goSettings: () -> Unit,
+    goPairing: () -> Unit,
+    goAlerts: () -> Unit,
+    goFiches: () -> Unit,
+    goNews: () -> Unit = {},
+    goCanteen: () -> Unit = {},
+    // #77 : vie scolaire (absences/retards + sanctions).
+    goAttendance: () -> Unit = {},
+    onLogout: () -> Unit = {},
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Profil")
+        if (baseUrl.isBlank()) {
+            Text("Serveur non configuré.")
+        } else if (profile == null) {
+            // Compte appairé sans infos publiées : état vide, pas de nom d'exemple.
+            Text("Aucune information publiée pour ce compte.")
+        } else {
+            when (photo) {
+                is PhotoState.Loaded ->
+                    Image(
+                        bitmap = photo.bitmap.asImageBitmap(),
+                        contentDescription = "Photo du profil",
+                        modifier = Modifier.padding(4.dp),
+                    )
+                // Réf absente, média KO ou non configuré = initiales de repli.
+                else -> Text(profileInitials(profile))
+            }
+            Text(profile.displayName)
+            if (profile.classLabel.isNotEmpty()) Text("Classe : ${profile.classLabel}")
+            // Période courante publiée par /v1/me ; la liste des périodes de l'année
+            // reste sur /v1/periods (contrat #74).
+            if (profile.periodName.isNotEmpty()) Text("Période : ${profile.periodName}")
+            if (profile.hasKids) {
+                Text("Comptes enfants")
+                for (k in profile.kids) {
+                    val klass = if (k.classLabel.isEmpty()) "" else " (${k.classLabel})"
+                    Text("${k.displayName}$klass")
+                }
+            }
+        }
+        Text(if (accountCount > 1) "Comptes appairés : $accountCount" else "1 compte appairé")
+        Button(onClick = goPairing) { Text("Appairage QR+PIN") }
+        Button(onClick = { goFiches() }) { Text("Fiches révision") }
+        Button(onClick = { goNews() }) { Text("Actualités") }
+        Button(onClick = { goCanteen() }) { Text("Cantine semaine") }
+        Button(onClick = { goAttendance() }) { Text("Vie scolaire") }
+        Button(onClick = goAlerts) { Text("Alertes sécurité") }
+        Button(onClick = goSettings) { Text("Réglages") }
+        Button(onClick = onLogout) { Text("Se déconnecter") }
+    }
+}
+
+// Écran Profil câblé : lecture /v1/me (mémoire seule) + photo via proxy.
+// Déconnexion = session appairée invalidée, caches purgés, profil abandonné.
+@Composable
+fun ProfileRoute(
+    baseUrl: String,
+    repo: ProfileRepository,
+    accounts: AccountStore,
+    onLogout: () -> Unit,
     goSettings: () -> Unit,
     goPairing: () -> Unit,
     goAlerts: () -> Unit,
@@ -401,21 +524,65 @@ fun ProfileScreen(
     // #77 : vie scolaire (absences/retards + sanctions).
     goAttendance: () -> Unit = {},
 ) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("Profil")
-        Text(if (baseUrl.isBlank()) "Serveur non configuré." else "Serveur configuré.")
-        Text("Infos élève, périodes et vie scolaire arrivent avec la synchro (#82, #77).")
-        Button(onClick = goPairing) { Text("Appairage QR+PIN") }
-        Button(onClick = { goFiches() }) { Text("Fiches révision") }
-        Button(onClick = { goNews() }) { Text("Actualités") }
-        Button(onClick = { goCanteen() }) { Text("Cantine semaine") }
-        Button(onClick = { goAttendance() }) { Text("Vie scolaire") }
-        Button(onClick = goAlerts) { Text("Alertes sécurité") }
-        Button(onClick = goSettings) { Text("Réglages") }
+    var profile by remember(baseUrl) { mutableStateOf<UserProfile?>(null) }
+    var loaded by remember(baseUrl) { mutableStateOf(false) }
+    var error by remember(baseUrl) { mutableStateOf("") }
+    var photo by remember(baseUrl) { mutableStateOf<PhotoState>(PhotoState.Absent) }
+    var accountCount by remember(baseUrl) { mutableStateOf(accounts.count()) }
+    fun refresh() {
+        // Serveur non configuré : aucun appel (I1).
+        if (baseUrl.isBlank()) {
+            loaded = true
+            return
+        }
+        try {
+            repo.fetchMe { r ->
+                loaded = true
+                error = ""
+                accountCount = accounts.count()
+                when (r) {
+                    is MeResult.Err -> error = r.message
+                    is MeResult.Ok -> {
+                        profile = r.profile
+                        val p = r.profile
+                        if (p == null) {
+                            photo = PhotoState.Absent
+                        } else {
+                            repo.fetchPhoto(p) { bitmap ->
+                                photo = if (bitmap == null) PhotoState.Absent else PhotoState.Loaded(bitmap)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            loaded = true
+            error = "Profil indisponible."
+        }
     }
+    Button(onClick = { refresh() }) { Text(if (loaded) "Actualiser le profil" else "Charger le profil") }
+    if (error.isNotEmpty()) Text(error)
+    ProfileScreen(
+        baseUrl = baseUrl,
+        profile = profile,
+        photo = photo,
+        accountCount = accountCount,
+        goSettings = goSettings,
+        goPairing = goPairing,
+        goAlerts = goAlerts,
+        goFiches = goFiches,
+        goNews = goNews,
+        goCanteen = goCanteen,
+        goAttendance = goAttendance,
+        onLogout = {
+            onLogout()
+            profile = null
+            photo = PhotoState.Absent
+            loaded = false
+            error = ""
+            accountCount = accounts.count()
+        },
+    )
 }
 
 // Réglages #83 : préférences matière (couleur/emoji/libellé, offline-first via

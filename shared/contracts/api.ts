@@ -2,8 +2,8 @@
 // Table de routes + types requête/réponse. Doit rester en sync avec
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
-import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Evaluation, Grade, NewsItem, Period, Punishment, RevisionSheet, Skill, SubjectPrefs, TimetableEntry } from "./models";
-import { isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isEvaluation, isGrade, isNewsItem, isPeriod, isPunishment, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT } from "./models";
+import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Evaluation, Grade, NewsItem, Period, Punishment, RevisionSheet, Skill, SubjectPrefs, TimetableEntry, UserInfo } from "./models";
+import { isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isEvaluation, isGrade, isNewsItem, isPeriod, isPunishment, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, isUserInfo, SUBJECT_PREFS_MAX_COUNT } from "./models";
 import type { SecurityAlertData } from "./events";
 import { isSecurityAlertData } from "./events";
 
@@ -40,6 +40,13 @@ export const API_ROUTES: readonly ApiRoute[] = [
   // #77 vie scolaire : absences + retards unifiés (kind) + compteurs par période.
   { method: "GET", path: "/v1/attendance" },
   { method: "GET", path: "/v1/punishments" },
+
+
+  // #82 profil : infos du compte appairé (nom, classe, période, photo opaque).
+  { method: "GET", path: "/v1/me" },
+  // #82/#84 : résolution serveur d'une réf opaque (photo, PJ). L'app n'a
+  // jamais d'URL Pronote : c'est le serveur qui télécharge (I1, règle d'or média).
+  { method: "GET", path: "/v1/media" },
 ] as const;
 
 export interface HealthResponse {
@@ -340,4 +347,25 @@ export function isPunishmentsResponse(v: unknown): v is PunishmentsResponse {
   if (typeof v !== "object" || v === null) return false;
   const p = (v as Record<string, unknown>)["punishments"];
   return Array.isArray(p) && p.every(isPunishment);
+}
+
+
+// --- #82 profil + média ---
+// Bornes des paramètres d'entrée de /v1/media (ref opaque, accountId).
+export const MEDIA_REF_MAX_CHARS = 200;
+export const MEDIA_ACCOUNT_ID_MAX_CHARS = 64;
+
+/**
+ * Infos du compte appairé. `user: null` = compte appairé dont l'établissement
+ * ne publie aucune info (état vide propre côté app), jamais un nom d'exemple.
+ * Les périodes de l'année sont déjà servies par `/v1/periods` (#74).
+ */
+export interface MeResponse {
+  readonly user: UserInfo | null;
+}
+
+export function isMeResponse(v: unknown): v is MeResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const u = (v as Record<string, unknown>)["user"];
+  return u === null || isUserInfo(u);
 }
