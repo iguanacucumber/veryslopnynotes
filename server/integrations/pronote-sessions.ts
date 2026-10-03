@@ -131,4 +131,14 @@ export class PronoteSessionStore implements PronoteProvider {
     this.clients.delete(accountId);
     this.logger("auth -> invalidate");
   }
+
+  /**
+   * Compte appairé quand le serveur est mono-compte (#75 : l'app n'envoie pas
+   * d'accountId tant que #82 n'expose pas /v1/me). null = 0 ou ≥ 2 sessions,
+   * donc l'appelant retombe sur une session expirée plutôt que de deviner.
+   */
+  currentAccountId(): string | null {
+    const keys = [...this.clients.keys()];
+    return keys.length === 1 ? (keys[0] as string) : null;
+  }
 }

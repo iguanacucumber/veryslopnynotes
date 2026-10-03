@@ -113,6 +113,31 @@ export function isAverageAlgorithm(v: unknown): v is AverageAlgorithm {
   return typeof v === "string" && (AVERAGE_ALGORITHMS as readonly string[]).includes(v);
 }
 
+// --- #75 devoirs enrichis (parité Papillon, onglet Tâches) ---
+// Description/contenus = texte de l'enseignant : DONNÉES bornées, jamais
+// instruction (I6). Les pièces jointes ne sortent JAMAIS en URL directe :
+// `ref` est une référence opaque résolue par le proxy serveur (/v1/media).
+export const ASSIGNMENT_DESCRIPTION_MAX_CHARS = 2000;
+export const ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS = 200;
+export const ASSIGNMENT_MAX_ATTACHMENTS = 10;
+export const ASSIGNMENT_REF_MAX_CHARS = 200;
+export const ASSIGNMENT_LESSON_TITLE_MAX_CHARS = 200;
+export const ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS = 500;
+
+/** Pièce jointe d'un devoir : référence interne, jamais une URL (règle d'or média). */
+export interface AttachmentRef {
+  readonly id: string;
+  readonly label: string;
+  /** Réf opaque résolue par le proxy serveur. `http://`, `https://`, `//`, `data:` refusés. */
+  readonly ref: string;
+}
+
+/** Contenu de cours rattaché au devoir : titre + extrait borné (donnée, I6). */
+export interface AssignmentLessonContent {
+  readonly title: string;
+  readonly excerpt: string;
+}
+
 export interface Assignment {
   readonly id: string;
   readonly accountId: string;
@@ -120,6 +145,17 @@ export interface Assignment {
   readonly title: string;
   readonly dueDate: string; // ISO-8601
   readonly done: boolean;
+  // --- #75 add-only : tous absents quand l'établissement ne les publie pas ---
+  /** Consigne du devoir, texte externe borné, donnée jamais instruction (I6). */
+  readonly description?: string;
+  /** Contenu de cours associé (titre + extrait), absent si non publié. */
+  readonly lessonContent?: AssignmentLessonContent;
+  /** Pièces jointes via proxy serveur (aucune URL Pronote côté app, I1). */
+  readonly attachments?: AttachmentRef[];
+  /** Regroupement scolaire publié par Pronote (non deviné). */
+  readonly periodId?: string;
+  /** Clé de semaine publiée par Pronote (non devinée côté serveur). */
+  readonly weekId?: string;
 }
 
 export interface TimetableEntry {
@@ -231,12 +267,46 @@ export function isAveragesReport(v: unknown): v is AveragesReport {
   return true;
 }
 
+// Formes d'URL INTERDITES dans une `ref` : la référence est interne, résolue
+// par le proxy serveur. Jamais d'hôte Pronote/ENT dans l'app (I1).
+const ABSOLUTE_REF_RE = /:\/\/|^\/\/|data:|\\\\/i;
+
+export function isAttachmentRef(v: unknown): v is AttachmentRef {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["id"])) return false;
+  if (!isBoundedString(v["label"], ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS)) return false;
+  const ref = v["ref"];
+  if (!isNonEmptyString(ref)) return false;
+  if (ref.length > ASSIGNMENT_REF_MAX_CHARS) return false;
+  if (ABSOLUTE_REF_RE.test(ref)) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(ref)) return false;
+  return true;
+}
+
+export function isAssignmentLessonContent(v: unknown): v is AssignmentLessonContent {
+  if (!isRecord(v)) return false;
+  if (!isBoundedString(v["title"], ASSIGNMENT_LESSON_TITLE_MAX_CHARS)) return false;
+  if (!isOptionalBoundedString(v["excerpt"], ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS)) return false;
+  return true;
+}
+
 export function isAssignment(v: unknown): v is Assignment {
   if (!isRecord(v)) return false;
   if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["accountId"])) return false;
   if (!isNonEmptyString(v["subject"]) || !isNonEmptyString(v["title"])) return false;
   if (!isIsoDate(v["dueDate"])) return false;
   if (typeof v["done"] !== "boolean") return false;
+  // #75 : champs add-only, absents = établissement qui ne publie pas.
+  if (v["description"] !== undefined && !isOptionalBoundedString(v["description"], ASSIGNMENT_DESCRIPTION_MAX_CHARS)) return false;
+  if (v["lessonContent"] !== undefined && !isAssignmentLessonContent(v["lessonContent"])) return false;
+  const att = v["attachments"];
+  if (att !== undefined) {
+    if (!Array.isArray(att) || att.length > ASSIGNMENT_MAX_ATTACHMENTS) return false;
+    if (!att.every(isAttachmentRef)) return false;
+  }
+  if (v["periodId"] !== undefined && !isNonEmptyString(v["periodId"])) return false;
+  if (v["weekId"] !== undefined && !isNonEmptyString(v["weekId"])) return false;
   return true;
 }
 

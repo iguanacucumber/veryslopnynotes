@@ -28,6 +28,8 @@ import { apiError } from "./errors";
 import { computeAverages } from "../domain/averages";
 import { buildCompetenceSummary, buildSkills } from "../domain/competences";
 import { handleHomeworkGenerate } from "./homework";
+import { handleAssignmentsToggle, handleMedia } from "./assignments";
+import type { AssignmentActions, MediaActions } from "./assignments";
 import { PairingService } from "./pairing";
 import { renderRevisionPdf } from "../jobs/revision";
 import type { RevisionListStore } from "./revision";
@@ -40,24 +42,40 @@ import type { LLMProvider } from "../domain/ports";
 /** Longueur max d'un periodId reflété dans la réponse (borne d'entrée utilisateur). */
 const PERIOD_ID_MAX_CHARS = 64;
 
-/** Longueur max d'une date de fenêtre cantine (borne d'entrée utilisateur, #81). */
-const CANTEEN_DATE_MAX_CHARS = 40;
+/** Longueur max d'une date de fenêtre (borne d'entrée utilisateur, #75/#81). */
+const DATE_MAX_CHARS = 40;
 
 /**
- * #81 : fenêtre from/to du routeur. Longueur bornée puis validation ISO ;
- * paramètre absent = pas de borne. Renvoie null = 400 (jamais de date devinée).
+ * Fenêtre from/to du routeur (bornée en longueur puis validée ISO ; paramètre
+ * absent = pas de borne). Renvoie null = 400 (jamais de date devinée).
+ * Partagée par /v1/assignments (#75, + weekStart) et /v1/menus (#81).
  */
-function canteenWindow(url: URL): { from?: string; to?: string } | null {
+function dateWindow(url: URL): { from?: string; to?: string } | null {
   const out: { from?: string; to?: string } = {};
   for (const key of ["from", "to"] as const) {
     const raw = url.searchParams.get(key);
     if (raw === null) continue;
-    const t = raw.trim().slice(0, CANTEEN_DATE_MAX_CHARS);
+    const t = raw.trim().slice(0, DATE_MAX_CHARS);
     if (t === "") continue;
     if (Number.isNaN(Date.parse(t))) return null;
     out[key] = t;
   }
   return out;
+}
+
+/** #75 : bornes ISO de la semaine demandée (weekStart lundi → dimanche). */
+function assignmentWeek(url: URL): { from?: string; to?: string } | null {
+  const win = dateWindow(url);
+  if (win === null) return null;
+  const rawWeek = url.searchParams.get("weekStart");
+  if (rawWeek === null) return win;
+  const day = rawWeek.trim().slice(0, DATE_MAX_CHARS);
+  if (day === "") return win;
+  const start = Date.parse(day);
+  if (Number.isNaN(start)) return null;
+  // 7 jours pleins : l'app passe le lundi, la borne haute couvre dimanche soir.
+  const end = new Date(start + 7 * 86400000 - 1);
+  return { from: new Date(start).toISOString(), to: end.toISOString() };
 }
 
 function json(valid: boolean, payload: unknown): Response {
@@ -91,6 +109,10 @@ export function createHandler(
   // #83 : préférences matière. Interface d'écriture séparée de ReadStore, NoOp
   // par défaut pour les appels existants (5e paramètre, aucun appel cassé).
   subjectPrefs: SubjectPrefsStore = createSubjectPrefsMemoryStore(),
+  // #75 : écriture "fait" (I7, action APP confirmée) et proxy média. Absents par
+  // défaut = 501 honnête, jamais un faux succès ni une URL Pronote côté app.
+  assignmentActions: AssignmentActions | null = null,
+  media: MediaActions | null = null,
 ): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
@@ -132,8 +154,29 @@ export function createHandler(
         return json(isPeriodsResponse(payload), payload);
       }
       case "/v1/assignments": {
-        const payload = { assignments: store.assignments() };
+        // #75 : fenêtre weekStart (lundi→dimanche) ou from/to. Date illisible
+        // = 400 sans refléter l'input ; devoir sans description/PJ = champs
+        // omis, jamais de valeur inventée.
+        const win = assignmentWeek(url);
+        if (win === null) return apiError("bad_request", "invalid date window");
+        const from = win.from === undefined ? null : Date.parse(win.from);
+        const to = win.to === undefined ? null : Date.parse(win.to);
+        const assignments = store.assignments().filter((a) => {
+          const d = Date.parse(a.dueDate);
+          if (Number.isNaN(d)) return false;
+          return (from === null || d >= from) && (to === null || d <= to);
+        });
+        const payload = { assignments };
         return json(isAssignmentsResponse(payload), payload);
+      }
+      // #75 : toggle fait = ÉCRITURE Pronote, action APP confirmée (I7).
+      case "/v1/assignments/toggle": {
+        return handleAssignmentsToggle(req, assignmentActions);
+      }
+      // #75 : proxy des pièces jointes (ref opaque → octets). Jamais d'URL
+      // Pronote dans l'app (I1), jamais de WebView distante.
+      case "/v1/media": {
+        return handleMedia(url, media);
       }
       case "/v1/timetable": {
         const payload = { entries: store.entries() };
@@ -264,7 +307,7 @@ export function createHandler(
       // courante côté app). Fenêtre bornée en longueur puis validée ISO : date
       // illisible = 400, jamais de date devinée. Aucun menu = [] (onglet masqué).
       case "/v1/menus": {
-        const win = canteenWindow(url);
+        const win = dateWindow(url);
         if (win === null) return apiError("bad_request", "invalid date window");
         const all = store.canteenMenus?.(win) ?? [];
         const from = win.from === undefined ? null : Date.parse(win.from);
@@ -291,6 +334,9 @@ export function serve(
   llm?: LLMProvider | null,
   revisions?: RevisionListStore,
   subjectPrefs?: SubjectPrefsStore,
+  // #75 : toggle "fait" (écriture confirmée par l'app) + proxy média.
+  assignmentActions?: AssignmentActions | null,
+  media?: MediaActions | null,
 ) {
   return Bun.serve({
     port,
@@ -301,6 +347,8 @@ export function serve(
       llm ?? null,
       revisions ?? createRevisionMemoryStore(),
       subjectPrefs ?? createSubjectPrefsMemoryStore(),
+      assignmentActions ?? null,
+      media ?? null,
     ),
   });
 }

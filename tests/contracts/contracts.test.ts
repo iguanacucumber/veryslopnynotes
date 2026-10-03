@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   API_ROUTES,
   isAssignmentsResponse,
+  isAssignmentsToggleRequest,
   isGradesResponse,
   isHealthResponse,
   isPairingConfirmRequest,
@@ -84,6 +85,11 @@ describe("contracts", () => {
       // #81 cantine : menu + solde optionnel.
       "CanteenMenu:",
       "CanteenMenusResponse:",
+      // #75 devoirs enrichis : PJ opaque + toggle (action app confirmée) + proxy.
+      "AttachmentRef:",
+      "AssignmentLessonContent:",
+      "AssignmentsToggleRequest:",
+      "AssignmentsToggleResponse:",
     ]) {
       expect(raw).toContain(s);
     }
@@ -159,6 +165,16 @@ describe("contracts", () => {
     expect(isPeriodsResponse({ periods: [{ ...period, end: "2026-08-01T00:00:00.000Z" }] })).toBe(false);
     expect(isPeriodsResponse({ periods: "non" })).toBe(false);
     expect(isAssignmentsResponse({ assignments: [assignment] })).toBe(true);
+    // #75 : champs add-only + ref de PJ jamais une URL, toggle borné.
+    const attachment = { id: "f1", label: "fiche.pdf", ref: "homework:0:file:0:f1" };
+    expect(isAssignmentsResponse({ assignments: [{ ...assignment, description: "x", attachments: [attachment] }] })).toBe(true);
+    expect(
+      isAssignmentsResponse({
+        assignments: [{ ...assignment, attachments: [{ ...attachment, ref: "https://x.invalid/f.pdf" }] }],
+      }),
+    ).toBe(false);
+    expect(isAssignmentsToggleRequest({ assignmentId: "a1", done: true })).toBe(true);
+    expect(isAssignmentsToggleRequest({ assignmentId: "a1", done: "oui" })).toBe(false);
     expect(isTimetableResponse({ entries: [entry] })).toBe(true);
     expect(isTimetableResponse({ entries: "non" })).toBe(false);
   });

@@ -6,6 +6,10 @@ export const API_ERROR_CODES = [
   "not_found",
   "method_not_allowed",
   "not_implemented",
+  // #75 : session Pronote expirée sur une action confirmée par l'app (re-appairage),
+  // et devoir introuvable sur la fenêtre lue. Codes add-only (0.2.0).
+  "unauthorized",
+  "conflict",
   "internal",
 ] as const;
 
@@ -20,6 +24,8 @@ const STATUS: Record<ApiErrorCode, number> = {
   not_found: 404,
   method_not_allowed: 405,
   not_implemented: 501,
+  unauthorized: 401,
+  conflict: 409,
   internal: 500,
 };
 

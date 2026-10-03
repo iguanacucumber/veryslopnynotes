@@ -84,6 +84,9 @@ private fun tabLabel(route: String): String = when (route) {
 fun AppNav(
     // ponytail: "" = non configuré (bouchon previews/tests sans BuildConfig).
     baseUrl: String = "",
+    // #75 : compte appairé, sert au toggle (écriture confirmée par l'app, I7)
+    // et au proxy des pièces jointes. Jamais un hôte Pronote/ENT (I1).
+    accountId: String = "",
     loadAlerts: suspend () -> List<SecurityAlert> = { emptyList() },
 ) {
     val nav = rememberNavController()
@@ -163,7 +166,9 @@ fun AppNav(
                 )
             }
             composable(ROUTE_TASKS) {
-                CachedScreen("Tâches", CachePolicy.ASSIGNMENTS, repo, baseUrl, "Devoirs semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, subjectPrefs = subjectPrefs)
+                // #75 : devoirs de la semaine (contenus + PJ via proxy), toggle
+                // Optimiste avec retour arrière, pull-refresh.
+                AssignmentsRoute(CachePolicy.ASSIGNMENTS, repo, baseUrl, accountId, subjectPrefs = subjectPrefs)
             }
             composable(ROUTE_PROFILE) {
                 ProfileScreen(baseUrl, { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, { nav.navigate("fiches") }, { nav.navigate(ROUTE_NEWS) }, { nav.navigate(ROUTE_CANTEEN) })
