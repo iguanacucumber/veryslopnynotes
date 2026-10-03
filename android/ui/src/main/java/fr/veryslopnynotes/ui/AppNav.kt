@@ -76,6 +76,9 @@ const val ROUTE_SETTINGS = "settings"
 // cantine n'apparaissent que si l'établissement publie la donnée).
 const val ROUTE_NEWS = "news"
 const val ROUTE_CANTEEN = "canteen"
+// #77 : vie scolaire (absences/retards + sanctions), hors onglets comme
+// "fiches" : apparaît seulement si l'établissement publie la donnée.
+const val ROUTE_ATTENDANCE = "attendance"
 
 private val TAB_ROUTES = listOf(ROUTE_INDEX, ROUTE_CALENDAR, ROUTE_GRADES, ROUTE_TASKS, ROUTE_PROFILE)
 
@@ -194,6 +197,7 @@ fun AppNav(
                     goFiches = { nav.navigate("fiches") },
                     goNews = { nav.navigate(ROUTE_NEWS) },
                     goCanteen = { nav.navigate(ROUTE_CANTEEN) },
+                    goAttendance = { nav.navigate(ROUTE_ATTENDANCE) },
                 )
             }
             composable(ROUTE_NEWS) {
@@ -201,6 +205,14 @@ fun AppNav(
             }
             composable(ROUTE_CANTEEN) {
                 CanteenRoute(repo, baseUrl)
+            }
+            // #77 : vie scolaire — absences/retards + compteurs par période,
+            // puis sanctions (même ressource, écran secondaire).
+            composable(ROUTE_ATTENDANCE) {
+                AttendanceRoute(repo, baseUrl, onSanctions = { nav.navigate("sanctions") })
+            }
+            composable("sanctions") {
+                PunishmentsRoute(repo, baseUrl, onBack = { nav.popBackStack() })
             }
             composable(ROUTE_SETTINGS) {
                 SettingsScreen(
@@ -445,6 +457,8 @@ fun ProfileScreen(
     goFiches: () -> Unit,
     goNews: () -> Unit = {},
     goCanteen: () -> Unit = {},
+    // #77 : vie scolaire (absences/retards + sanctions).
+    goAttendance: () -> Unit = {},
     onLogout: () -> Unit = {},
 ) {
     Column(
@@ -486,6 +500,7 @@ fun ProfileScreen(
         Button(onClick = { goFiches() }) { Text("Fiches révision") }
         Button(onClick = { goNews() }) { Text("Actualités") }
         Button(onClick = { goCanteen() }) { Text("Cantine semaine") }
+        Button(onClick = { goAttendance() }) { Text("Vie scolaire") }
         Button(onClick = goAlerts) { Text("Alertes sécurité") }
         Button(onClick = goSettings) { Text("Réglages") }
         Button(onClick = onLogout) { Text("Se déconnecter") }
@@ -506,6 +521,8 @@ fun ProfileRoute(
     goFiches: () -> Unit,
     goNews: () -> Unit = {},
     goCanteen: () -> Unit = {},
+    // #77 : vie scolaire (absences/retards + sanctions).
+    goAttendance: () -> Unit = {},
 ) {
     var profile by remember(baseUrl) { mutableStateOf<UserProfile?>(null) }
     var loaded by remember(baseUrl) { mutableStateOf(false) }
@@ -556,6 +573,7 @@ fun ProfileRoute(
         goFiches = goFiches,
         goNews = goNews,
         goCanteen = goCanteen,
+        goAttendance = goAttendance,
         onLogout = {
             onLogout()
             profile = null

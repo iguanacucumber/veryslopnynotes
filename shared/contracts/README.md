@@ -27,6 +27,16 @@ Add-only #83 (v0.3) : préférences matière `SubjectPrefs` (couleur `#RRGGBB` s
 emoji borné, libellé perso) + `GET`/`PUT /v1/subjects/prefs`. Matière sans prefs = nom
 d'origine, donc les apps 0.2.0 ignorent le champ sans régression.
 
+Add-only #77 (pas de bump) : vie scolaire — `AbsenceRecord` (absences ET retards unifiés
+par `kind: "absence" | "late"`, motif borné 500), `Punishment` (motif + type requis,
+gravité optionnelle), `AttendancePeriod` (compteurs dérivés par période) + routes
+`/v1/attendance` et `/v1/punishments`, ressources cache `attendance`/`punishments`
+(TTL 60 min). Onglet vie scolaire inactif côté établissement = listes vides (200),
+jamais 500. Invalidation = `CacheInvalidated` (resource `attendance`), pas d'événement
+dédié ; la détection de nouvelle absence se fait sur comparaison de données structurées
+(`newAbsences` dans `server/jobs/notify.ts`), jamais sur une sortie LLM (I7).
+
+
 Add-only #82 (pas de bump) : `UserInfo` (+`ChildAccount`) et `GET /v1/me` (`user: null` =
 infos non publiées, aucun nom inventé), plus `GET /v1/media` : résolution serveur d'une
 **réf opaque** (`photo:<id>`), une URL dans `photoRef` est rejetée par `isUserInfo` (I1,
