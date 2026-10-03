@@ -95,8 +95,18 @@ class SseClient(
                     return
                 }
                 if (!response.isSuccessful) {
+                    val code = response.code
                     response.close()
-                    scheduleRetry(listener, "HTTP ${response.code}")
+                    // 401 : credential d'appareil refusée. Reconnecter rejouerait le
+                    // MÊME jeton refusé, jusqu'à MAX_ATTEMPTS_BEFORE_FAILED essais
+                    // sur une session morte : on coupe le flux, la reprise passe par
+                    // l'appairage (le signal 401 de ApiClient y renvoie l'utilisateur).
+                    if (code == ApiClient.HTTP_UNAUTHORIZED) {
+                        closed = true
+                        listener.onState(SseState.Failed(DeviceAuth.REJECTED_MESSAGE))
+                        return
+                    }
+                    scheduleRetry(listener, "HTTP $code")
                     return
                 }
                 attempt = 0
