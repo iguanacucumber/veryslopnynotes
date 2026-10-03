@@ -102,9 +102,9 @@ describe("unit android moyennes (#74)", () => {
       expect(tsGeneralAverage(JSON.stringify(payload))).not.toBeNull();
     }
     expect(AVERAGE_ALGORITHMS).toEqual(["subject", "weighted", "median"]);
-    // 0.4.0 : le secret du device sort une fois à l'appairage (aucun impact
-    // sur le rapport de moyennes, d'où le simple re-pin de version).
-    expect(CONTRACTS_VERSION).toBe("0.4.0");
+    // 0.5.0 : POST /v1/setup (compte école + jeton en un appel). Aucun impact
+    // sur le rapport de moyennes, d'où le simple re-pin de version.
+    expect(CONTRACTS_VERSION).toBe("0.5.0");
   });
 
   test("Kotlin : parsing + libellé, sans dépendance ajoutée", () => {

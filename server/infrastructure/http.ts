@@ -5,16 +5,16 @@
 // I2 : tout le réseau Pronote passe par PronoteHttpClient (via pronotets), rien ici.
 // I7 : les écritures (devoirs, messagerie) sont des ports d'action branchés sur le
 // reader, atteignables uniquement via une route (= action app confirmée).
-import { createHash } from "node:crypto";
 import type { ContractEvent } from "../../shared/contracts/events";
 import { createHandler } from "../api/router";
 import type { AssignmentActions, MediaActions } from "../api/assignments";
 import type { DiscussionActions } from "../api/discussions";
 import { PairingService } from "../api/pairing";
+import { accountIdFrom, SetupService } from "../api/setup";
 import { createSubjectPrefsMemoryStore } from "../api/subject-prefs";
 import { createRevisionMemoryStore } from "../api/revision";
-import type { PronoteReader } from "../domain/ports";
-import { PronoteWriteError } from "../domain/ports";
+import type { PronoteCredentials, PronoteReader } from "../domain/ports";
+import { PronoteAuthError, PronoteWriteError } from "../domain/ports";
 import { PronoteClientReader } from "../integrations/pronote-client-reader";
 import { PronoteSessionStore } from "../integrations/pronote-sessions";
 import { createLlmProvider } from "./llm-openrouter";
@@ -50,14 +50,6 @@ function envValue(env: Record<string, string | undefined>, key: string): string 
   return (env[key] ?? "").trim();
 }
 
-/**
- * accountId = empreinte du compte, jamais le compte en clair : il apparaît dans
- * les logs, les snapshots et les événements SSE.
- */
-function accountIdFrom(username: string): string {
-  return createHash("sha256").update(`pronote:${username}`).digest("hex").slice(0, 16);
-}
-
 export function createApp(
   env: Record<string, string | undefined> = Bun.env as Record<string, string | undefined>,
   deps: AppDeps = {},
@@ -72,22 +64,50 @@ export function createApp(
   const entKind = envValue(env, "PRONOTE_ENT_KIND") || DEFAULT_ENT_KIND;
   const accountId = username ? accountIdFrom(username) : "";
 
+  /**
+   * #118 : derniers identifiants EN MÉMOIRE, par compte. Le store de session ne
+   * conserve JAMAIS de mot de passe (cf. #87) : sans ce coffre, un setup fait
+   * depuis l'app n'aurait aucun moyen de renouveler sa session 5 min plus tard.
+   * Jamais persisté, jamais journalisé. Il survit volontairement à une
+   * invalidation de session : c'est lui qui permet de rouvrir la session quand
+   * elle meurt, donc le vider à cet instant-là la rendrait irrécupérable.
+   */
+  const vault = new Map<string, PronoteCredentials>();
+
+  /**
+   * Credentials de renewal d'un compte : le coffre d'abord (setup app), sinon
+   * l'env (démarrage serveur). `null` = personne ne sait rouvrir cette session.
+   */
+  const credentialsToRenew = (target: string): PronoteCredentials | null => {
+    const known = vault.get(target.trim());
+    if (known) return known;
+    if (username && password && accountId) {
+      return { accountId: target, username, password, entKind, pronoteUrl };
+    }
+    return null;
+  };
+
   // `null` explicite = aucun store (tests) : ne jamais construire une session
   // réelle depuis l'env quand le caller a dit non.
+  // #118 : le store existe même sans `PRONOTE_URL` — l'URL et les identifiants
+  // peuvent arriver par POST /v1/setup. Avant, un serveur sans env ne pouvait
+  // ouvrir aucune session, donc l'app n'avait aucun chemin de setup.
   let sessions: PronoteSessionStore | null = deps.sessions === undefined ? null : deps.sessions;
-  if (deps.sessions === undefined && pronoteUrl) {
+  if (deps.sessions === undefined) {
     sessions = new PronoteSessionStore({
       pronoteUrl,
       logger: (m) => log(`pronote ${m}`),
-      // #87 : renewal de session. Les identifiants restent en mémoire fermée,
-      // jamais journalisés ni persistés (le store ne les conserve pas).
-      ...(username && password && accountId
-        ? {
-            renew: async (target: string) => {
-              await sessions?.authenticate({ accountId: target, username, password, entKind });
-            },
-          }
-        : {}),
+      // #87 : renewal de session. Les identifiants restent en mémoire fermée
+      // (env ou coffre du setup), jamais journalisés ni persistés.
+      renew: async (target: string) => {
+        const known = credentialsToRenew(target);
+        if (!known) {
+          log(`renewal -> impossible (aucun identifiant memorise pour ce compte)`);
+          throw new PronoteAuthError("renewal impossible", "ent_unavailable");
+        }
+        vault.set(known.accountId, known);
+        await sessions?.authenticate(known);
+      },
     });
   }
   const reader: PronoteReader | null =
@@ -96,7 +116,10 @@ export function createApp(
         ? new PronoteClientReader({ sessions, logger: (m) => log(`reader ${m}`) })
         : null
       : deps.reader;
-  if (!sessions) log("PRONOTE_URL absent : lectures vides, ecritures indisponibles (501)");
+  // `sessions` n'est nul que sur injonction explicite des tests : le store est
+  // construit même sans env depuis #118 (le compte peut arriver par POST /v1/setup).
+  if (!sessions) log("aucun store de session : lectures vides, ecritures indisponibles (501)");
+  else if (!pronoteUrl) log("PRONOTE_URL absent : le compte s'ouvrira via POST /v1/setup");
 
   /** Mono-compte : le compte appairé par le serveur, et RIEN d'autre.
    *  L'`accountId` transporté par le client n'est qu'un indice borné : le
@@ -124,7 +147,11 @@ export function createApp(
    * la session Pronote : rafale de `session_expired` + snapshot de diff écrit
    * deux fois).
    */
-  const refreshSnapshot = (): Promise<ContractEvent[]> => liveSync.actions.refresh(accountId);
+  // `target` absent = le compte de l'env (warmup, appairage) ; fourni = le
+  // compte qu'un setup vient d'ouvrir (#118), qui n'est pas encore le compte
+  // servi par le snapshot.
+  const refreshSnapshot = (target?: string): Promise<ContractEvent[]> =>
+    liveSync.actions.refresh(target ?? accountId);
 
   /**
    * Journal honnête (I6) : « rempli » seulement si la relecture a réellement
@@ -160,6 +187,36 @@ export function createApp(
     }
     return result;
   };
+
+  /**
+   * #118 : setup = authentifie le compte école PUIS émet le jeton. Le snapshot
+   * est warmed APRÈS la réponse (comme l'appairage) : le jeton ne dépend pas
+   * d'une relecture complète, et l'app tire son premier rafraîchissement.
+   */
+  const setup = new SetupService({
+    sessions,
+    issue: () => pairing.issue(),
+    // Session déjà ouverte (env au démarrage) : on ne rejoue pas une connexion,
+    // sinon `currentAccountId()` verrait deux sessions et tout le mono-compte
+    // s'effondrerait (#75).
+    existingAccountId: () => sessions?.currentAccountId() ?? null,
+    // Épinglage d'exploitation : avec `PRONOTE_URL` renseignée, c'est CETTE école
+    // que ce serveur parle à. Sans elle, le setup accueille l'URL saisie (le
+    // serveur n'a alors aucune référence — donc aucun relais possible).
+    allowedSchoolUrl: pronoteUrl,
+    onOpened: (opened, credentials) => {
+      // Coffre mémoire : sans lui, la session ouverte par le setup ne pourra
+      // pas être renouvelée 5 min plus tard (cf. `credentialsToRenew`).
+      vault.set(opened, credentials);
+      // Pas de reader = relecture impossible : ne jamais annoncer un snapshot
+      // rafraîchi qui n'a pas eu lieu (I6).
+      if (!reader) return log("setup -> session ouverte, relecture ignoree (aucun reader)");
+      void refreshSnapshot(opened)
+        .then(() => logSnapshotFilled("setup -> session ouverte,"))
+        .catch(() => log("setup -> relecture echouee, l'app retry"));
+    },
+    logger: log,
+  });
 
   // Ports d'écriture (I7) : le reader est l'unique source, l'app doit confirmer.
   // Mono-compte : l'app n'envoie pas d'accountId avant /v1/me, une requête à
@@ -197,6 +254,7 @@ export function createApp(
     // un refresh impossible (même règle que les ports d'écriture/media).
     reader ? liveSync.actions : null,
     discussionActions,
+    setup,
   );
 
   return {
