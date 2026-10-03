@@ -68,3 +68,22 @@ infos non publiées, aucun nom inventé), plus `GET /v1/media` : résolution ser
 règle d'or média). `profile`/`me` n'est PAS une ressource cachable : le profil reste en
 mémoire côté app (mode anonyme, aucune donnée personnelle persistée).
 Les périodes de l'année restent sur `/v1/periods` (#74) — pas de doublon.
+
+
+Add-only #87 (pas de bump) : **capacités dynamiques** — `Capabilities` (`accountId`,
+`tabs`, `fetchedAt`) + `TabCapability` (dix onglets Pronote : `grades`, `homework`,
+`timetable`, `evaluations`, `news`, `menus`, `attendance`, `punishments`,
+`discussions`, `profile`) et `GET /v1/capabilities`. Onglet absent de la liste =
+capacité `false` (l'app masque l'entrée, écran avec état vide propre) ; un onglet
+non observé n'est **jamais** déduit actif, et un onglet absent chez l'établissement
+n'est pas une erreur de lecture. `capabilities: null` = capacités non déterminées
+(session absente, adaptateur sans détection) : l'app ne masque alors rien.
+Ressource cache `capabilities` (TTL 24 h), invalidée par `CacheInvalidated`
+(existant, pas d'événement dédié) — le snapshot `/v1/events` reste à trois
+enveloppes. Also `POST /v1/sync/refresh` (pull-refresh app → serveur → Pronote,
+lecture bornée, sans LLM : I7) qui renvoie **les types d'événements existants**
+(`GradeCreated`, `TimetableUpdated`, `SyncCompleted`, `CacheInvalidated`), donc
+aucun type novel et une app 0.3.0 comprend déjà la réponse. Le flux `/v1/events`
+est un snapshot **borné** : une écriture puis fermeture (plus de connexion tenue
+sans rien émettre). Refresh de session côté serveur : TTL 5 min, renewal
+sérialisée par compte, timeout 10 s, retry ≤ 1 (`server/integrations/session-refresh.ts`).

@@ -396,6 +396,49 @@ paths:
               schema: { type: string, format: binary }
         '400':
           description: ref ou accountId manquant/illisible
+  /v1/capabilities:
+    get:
+      operationId: listCapabilities
+      description: >-
+        Onglets Pronote actifs de l'etablissement (issue #87). Onglet absent de
+        la liste = capacite false : l'app masque l'entree de navigation. Un
+        onglet absent cote etablissement n'est jamais une erreur de lecture et
+        un `true` n'est jamais devine. `capabilities: null` = capacites non
+        determinees (session absente) : l'app garde son affichage par defaut.
+      responses:
+        '200':
+          description: liste des onglets actifs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilitiesResponse'
+  /v1/sync/refresh:
+    post:
+      operationId: refreshSync
+      description: >-
+        Pull-refresh manuel (app -> serveur -> Pronote) : force une relecture
+        bornee et renvoie les evenements de sync. Types d'evenements EXISTANTS
+        (GradeCreated, TimetableUpdated, SyncCompleted, CacheInvalidated
+        resource capabilities), aucun type novel, aucune sortie LLM (I7).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncRefreshRequest'
+      responses:
+        '200':
+          description: evenements de la relecture
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncRefreshResponse'
+        '400':
+          description: corps illisible
+        '401':
+          description: session Pronote expiree, re-appairage requis
+        '501':
+          description: relecture non branchee sur cet adaptateur
 components:
   schemas:
     Grade:
@@ -817,3 +860,41 @@ components:
           allOf:
             - $ref: '#/components/schemas/UserInfo'
           description: null = aucune info publiee (etat vide propre, aucun nom invente).
+
+    TabCapability:
+      type: string
+      enum: [grades, homework, timetable, evaluations, news, menus, attendance, punishments, discussions, profile]
+    Capabilities:
+      type: object
+      required: [accountId, tabs, fetchedAt]
+      properties:
+        accountId: { type: string, maxLength: 64 }
+        tabs:
+          type: array
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/TabCapability' }
+          description: >-
+            Onglets ACTIFS. Onglet absent = capacite false, jamais un true devine.
+        fetchedAt: { type: string, format: date-time }
+    CapabilitiesResponse:
+      type: object
+      required: [capabilities]
+      properties:
+        capabilities:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Capabilities'
+          description: null = capacites non determinees (aucun masquage cote app).
+    SyncRefreshRequest:
+      type: object
+      properties:
+        accountId: { type: string, maxLength: 64, description: Absent = serveur mono-compte. }
+    SyncRefreshResponse:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          maxItems: 200
+          items: { $ref: '#/components/schemas/ContractEvent' }

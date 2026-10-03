@@ -8,7 +8,11 @@
 // Add-only, le sync serveur reste la source de vérité. Invalidation =
 // CacheInvalidated (resource attendance/punishments), pas d'événement dédié.
 // "evaluations" (#78) : badge périmé comme les notes, même principe.
-export const CACHEABLE_RESOURCES = ["grades", "assignments", "timetable", "news", "menus", "evaluations", "attendance", "punishments"] as const;
+// "capabilities" (#87) ajouté en fin : la liste des onglets Pronote actifs ne
+// bouge qu'à la configuration de l'établissement. Elle est cachée comme les
+// autres (l'app masque un onglet sans réseau) et invalidée par
+// CacheInvalidated (resource capabilities) quand le pull-refresh la change.
+export const CACHEABLE_RESOURCES = ["grades", "assignments", "timetable", "news", "menus", "evaluations", "attendance", "punishments", "capabilities"] as const;
 
 export type CacheableResource = (typeof CACHEABLE_RESOURCES)[number];
 
@@ -26,6 +30,8 @@ export const CACHE_TTL_MS: Record<CacheableResource, number> = {
   // #77 : vie scolaire (absences/retards/sanctions), rythme EDT.
   attendance: 60 * 60 * 1000,
   punishments: 60 * 60 * 1000,
+  // #87 : onglets Pronote actifs = configuration d'établissement, très lente.
+  capabilities: 24 * 60 * 60 * 1000,
 } as const;
 
 export type CacheStatus = "fresh" | "stale";
