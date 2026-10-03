@@ -10,16 +10,16 @@
 // encore lues : ProvidedAverages reste null, les rapports sont donc estimés,
 // ce qui est le comportement Papillon par défaut. Upgrade: getProvidedAverages
 // sur ce reader, sans toucher aux trois algorithmes.
-import type { AbsenceRecord, Assignment, CanteenMeal, CanteenMenu, ChildAccount, Evaluation, Grade, NewsItem, Period, Punishment, TimetableEntry, UserInfo } from "../../shared/contracts/models";
-import { ABSENCE_MOTIF_MAX_CHARS, ABSENCE_SUBJECT_MAX_CHARS, CANTEEN_MAX_ALLERGEN_CHARS, CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_DISH_CHARS, CANTEEN_MAX_DISHES, EVALUATION_LABEL_MAX_CHARS, isAbsenceRecord, isAssignment, isCanteenMenu, isChildAccount, isEvaluation, isGrade, isNewsItem, isOpaquePhotoRef, isPeriod, isPunishment, isTimetableEntry, isUserInfo, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CHARS, PHOTO_REF_PREFIX, PUNISHMENT_MOTIF_MAX_CHARS, PUNISHMENT_TYPE_MAX_CHARS, USER_CLASS_MAX_CHARS, USER_MAX_KIDS, USER_NAME_MAX_CHARS } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, AssignmentLessonContent, AttachmentRef, CanteenMeal, CanteenMenu, ChildAccount, Evaluation, Grade, NewsItem, Period, Punishment, TimetableEntry, UserInfo } from "../../shared/contracts/models";
+import { ABSENCE_MOTIF_MAX_CHARS, ABSENCE_SUBJECT_MAX_CHARS, ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS, ASSIGNMENT_DESCRIPTION_MAX_CHARS, ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS, ASSIGNMENT_LESSON_TITLE_MAX_CHARS, ASSIGNMENT_MAX_ATTACHMENTS, ASSIGNMENT_REF_MAX_CHARS, CANTEEN_MAX_ALLERGEN_CHARS, CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_DISH_CHARS, CANTEEN_MAX_DISHES, EVALUATION_LABEL_MAX_CHARS, isAbsenceRecord, isAssignment, isAttachmentRef, isCanteenMenu, isChildAccount, isEvaluation, isGrade, isNewsItem, isOpaquePhotoRef, isPeriod, isPunishment, isTimetableEntry, isUserInfo, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CHARS, PHOTO_REF_PREFIX, PUNISHMENT_MOTIF_MAX_CHARS, PUNISHMENT_TYPE_MAX_CHARS, USER_CLASS_MAX_CHARS, USER_MAX_KIDS, USER_NAME_MAX_CHARS } from "../../shared/contracts/models";
 import type { PedagogicResource, PronotePage, PronotePageOptions, PronoteReader, PronoteTimetableOptions } from "../domain/ports";
-import { isPedagogicResource, PronoteAuthError, PronoteReadError, untrusted } from "../domain/ports";
+import { isPedagogicResource, PronoteAuthError, PronoteReadError, PronoteWriteError, untrusted } from "../domain/ports";
 
 
 export interface PronoteClientReaderOptions {
   /** Résolveur session injecté (PronoteSessionStore.requireClient). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  readonly sessions: { requireClient(accountId: string): any };
+  readonly sessions: { requireClient(accountId: string): any; currentAccountId?(): string | null };
   readonly logger?: (message: string) => void;
 }
 
@@ -75,6 +75,17 @@ function toReadError(err: unknown, what: string): PronoteReadError {
   if (/timeout|timed out/i.test(msg)) return new PronoteReadError(`${what} timeout`, "timeout");
   if (/network|fetch failed|injoignable/i.test(msg)) return new PronoteReadError(`${what} network`, "network");
   return new PronoteReadError(`${what} ent unavailable`, "ent_unavailable");
+}
+
+/** Écriture (#75) : mêmes classes d'erreur que la lecture, plus `unsupported`. */
+function toWriteError(err: unknown, what: string): PronoteWriteError {
+  if (err instanceof PronoteWriteError) return err;
+  if (/unsupported|not.?implemented/i.test(err instanceof Error ? err.message : "")) {
+    return new PronoteWriteError(`${what} unsupported`, "unsupported");
+  }
+  const read = toReadError(err, what);
+  const code = read.code === "session_expired" ? "session_expired" : read.code;
+  return new PronoteWriteError(`${what} ${code}`, code);
 }
 
 /** Trim + borne dure. Vide après trim = "" (l'appelant le transforme en undefined). */
@@ -136,17 +147,68 @@ function mapPeriods(raw: any[]): Period[] {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapAssignment(accountId: string, h: any, index: number): Assignment | null {
+function mapAssignment(
+  accountId: string,
+  h: any,
+  index: number,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  lesson?: { title: string; excerpt: string } | null,
+): Assignment | null {
   const fallback = `a-${index}`;
-  const candidate = {
+  const description = typeof h?.description === "string" ? bounded(h.description, ASSIGNMENT_DESCRIPTION_MAX_CHARS) : "";
+  const candidate: Assignment = {
     id: typeof h?.id === "string" && h.id ? h.id : fallback,
     accountId,
     subject: h?.subject?.name ?? h?.subject ?? "Matière",
-    title: typeof h?.description === "string" && h.description.trim() ? h.description.trim().slice(0, 200) : "Devoir",
+    title: description ? description.slice(0, 200) : "Devoir",
     dueDate: toIso(h?.date, new Date().toISOString()),
     done: h?.done === true,
+    // #75 : champs add-only, omis quand Pronote ne les publie pas.
+    description: description || undefined,
+    lessonContent: lesson ? { title: bounded(lesson.title, ASSIGNMENT_LESSON_TITLE_MAX_CHARS), excerpt: bounded(lesson.excerpt, ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS) } : undefined,
+    attachments: mapAssignmentFiles(h, index),
+    periodId: typeof h?.period?.id === "string" ? bounded(h.period.id, 64) || undefined : undefined,
+    weekId: typeof h?.weekId === "string" ? bounded(h.weekId, 64) || undefined : undefined,
   };
   return isAssignment(candidate) ? candidate : null;
+}
+
+// #75 : PJ du devoir via le PROXY SERVEUR. La ref reprend le format déjà résolu
+// par media-proxy (`homework:<index>:file:<di>:<fileId>`) : jamais d'URL Pronote
+// dans l'app (I1). Pièce sans fichier lisible (ni id ni nom) = ignorée, donc
+// l'app n'affiche jamais une ligne morte.
+function mapAssignmentFiles(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  h: any,
+  index: number,
+): AttachmentRef[] | undefined {
+  const files = typeof h?.files === "function" ? (h.files() as unknown[]) : [];
+  if (!Array.isArray(files) || files.length === 0) return undefined;
+  const out: AttachmentRef[] = [];
+  files.slice(0, ASSIGNMENT_MAX_ATTACHMENTS).forEach((f, di) => {
+    if (f === null || typeof f !== "object") return;
+    const rec = f as Record<string, unknown>;
+    const name = typeof rec["name"] === "string" ? bounded(rec["name"], ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS) : "";
+    const fileId = typeof rec["id"] === "string" ? bounded(rec["id"], ASSIGNMENT_REF_MAX_CHARS) : "";
+    if (name === "" || fileId === "") return;
+    const cand: AttachmentRef = { id: fileId, label: name, ref: `homework:${index}:file:${di}:${fileId}` };
+    if (isAttachmentRef(cand)) out.push(cand);
+  });
+  return out.length > 0 ? out : undefined;
+}
+
+// #75 : le contenu de cours d'un devoir = PageCahierDeTextes de sa séance
+// (même matière, même jour). Chaque `content()` = 1 requête Pronote, donc le
+// nombre de lessons enrichies est plafonné ; au-delà, `lessonContent` est omis.
+// ponytail: recoupement matière+date, pas d'identifiant de séance published par
+// pronotets. Upgrade: index de séances construit une fois par semaine.
+const ASSIGNMENT_LESSON_FETCH_LIMIT = 10;
+
+function lessonKey(subject: unknown, date: unknown): string | null {
+  const name = typeof subject === "string" ? subject : (subject as { name?: unknown })?.name;
+  if (typeof name !== "string" || name === "") return null;
+  const iso = toIso(date, "");
+  return iso === "" ? null : `${name}|${iso.slice(0, 10)}`;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -463,13 +525,28 @@ function mapPunishment(accountId: string, p: any, index: number, periodId?: stri
 
 export class PronoteClientReader implements PronoteReader {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private readonly sessions: { requireClient(accountId: string): any };
+  private readonly sessions: { requireClient(accountId: string): any; currentAccountId?(): string | null };
   private readonly logger: (message: string) => void;
 
   constructor(options: PronoteClientReaderOptions) {
     if (!options.sessions) throw new Error("sessions requises (PronoteSessionStore injecté)");
     this.sessions = options.sessions;
     this.logger = options.logger ?? (() => {});
+  }
+
+  /**
+   * accountId vide = serveur mono-compte : on prend l'unique session appairée.
+   * Aucun secret journalisé, juste une résolution de clé de session.
+   * ponytail: multi-compte = l'app enverra l'accountId appairé (#82 /v1/me).
+   */
+  private resolveAccount(accountId: string): string {
+    const id = (accountId ?? "").trim();
+    if (id !== "") return id;
+    try {
+      return this.sessions.currentAccountId?.() ?? "";
+    } catch {
+      return "";
+    }
   }
 
   async getGrades(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Grade>> {
@@ -548,11 +625,25 @@ export class PronoteClientReader implements PronoteReader {
     }
     try {
       const now = new Date();
+      const from = new Date(now.getTime() - 7 * 86400000);
       const later = new Date(now.getTime() + 21 * 86400000);
-      const raw = (await client.homework(new Date(now.getTime() - 7 * 86400000), later)) as unknown[];
+      const raw = (await client.homework(from, later)) as unknown[];
+      const list = Array.isArray(raw) ? raw : [];
+      // #75 : contenus de cours rattachés (plafond de requêtes, cf. mapper).
+      const wanted = new Set<string>();
+      for (const rawHomework of list) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const hw = rawHomework as any;
+        const key = lessonKey(hw?.subject?.name ?? hw?.subject, hw?.date);
+        if (key !== null) wanted.add(key);
+      }
+      const lessons = await this.lessonContents(client, from, later, wanted);
       const all: Assignment[] = [];
-      raw.forEach((h, i) => {
-        const m = mapAssignment(id, h, i);
+      list.forEach((rawHomework, i) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const h = rawHomework as any;
+        const key = lessonKey(h?.subject?.name ?? h?.subject, h?.date);
+        const m = mapAssignment(id, h, i, (key !== null ? lessons.get(key) : undefined) ?? null);
         if (m) all.push(m);
       });
       const slice = all.slice(offset, offset + limit);
@@ -562,6 +653,101 @@ export class PronoteClientReader implements PronoteReader {
     } catch (err) {
       const mapped = toReadError(err, "assignments");
       this.logger(`assignments -> error ${mapped.code}`);
+      throw mapped;
+    }
+  }
+
+  /**
+   * #75 : index `matière|jour` → contenu de cours, pour les SEULES clés
+   * attendues par les devoirs de la page, plafonné à
+   * ASSIGNMENT_LESSON_FETCH_LIMIT requêtes. Tout échec (pas de content(),
+   * réseau) = entrée absente : `lessonContent` est alors omis, jamais un texte
+   * bidon.
+   */
+  private async lessonContents(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    client: any,
+    from: Date,
+    to: Date,
+    wanted: Set<string>,
+  ): Promise<Map<string, AssignmentLessonContent>> {
+    const out = new Map<string, AssignmentLessonContent>();
+    if (wanted.size === 0) return out;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const lessons = (await client.lessons(from, to)) as any[];
+      if (!Array.isArray(lessons)) return out;
+      let fetched = 0;
+      for (const l of lessons) {
+        if (fetched >= ASSIGNMENT_LESSON_FETCH_LIMIT) break;
+        const key = lessonKey(l?.subject?.name ?? l?.subject, l?.start);
+        // Séance sans devoir correspondant = inutile de payer une requête.
+        if (key === null || !wanted.has(key) || out.has(key)) continue;
+        fetched += 1;
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const c = (await l?.content?.()) as any;
+          if (c === null || c === undefined) continue;
+          const title = bounded(String(c.title ?? ""), ASSIGNMENT_LESSON_TITLE_MAX_CHARS);
+          const excerpt = bounded(String(c.description ?? ""), ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS);
+          if (title === "" && excerpt === "") continue;
+          out.set(key, { title: title || "Contenu de cours", excerpt });
+        } catch {
+          // Séance sans contenu publié : entrée absente, pas d'erreur de lecture.
+        }
+      }
+      this.logger(`assignments -> contenus ${out.size}`);
+    } catch (err) {
+      // Séances illisibles : les devoirs sortent sans lessonContent (add-only).
+      this.logger(`assignments -> contenus indisponibles (${toReadError(err, "assignments").code})`);
+    }
+    return out;
+  }
+
+  /**
+   * #75 : bascule "fait" — ÉCRITURE vers Pronote, action APP confirmée (I7).
+   * Jamais appelée depuis une sortie LLM : la seule porte d'entrée est
+   * POST /v1/assignments/toggle (server/api/assignments.ts).
+   * Erreurs typées : `unsupported` si l'adaptateur n'expose pas setDone,
+   * `session_expired` (401), `not_found` (409). Jamais de faux succès.
+   */
+  async setAssignmentDone(accountId: string, assignmentId: string, done: boolean): Promise<Assignment> {
+    const id = this.resolveAccount(accountId);
+    const target = (assignmentId ?? "").trim();
+    if (!id) throw new PronoteWriteError("toggle session expired", "session_expired");
+    if (!target) throw new PronoteWriteError("toggle not found", "not_found");
+    let client;
+    try {
+      client = this.sessions.requireClient(id);
+    } catch (err) {
+      const mapped = toWriteError(err, "toggle");
+      this.logger(`assignments -> toggle error ${mapped.code}`);
+      throw mapped;
+    }
+    try {
+      const now = new Date();
+      const raw = (await client.homework(new Date(now.getTime() - 7 * 86400000), new Date(now.getTime() + 21 * 86400000))) as unknown[];
+      const list = Array.isArray(raw) ? raw : [];
+      const index = list.findIndex((h) => (h as { id?: unknown })?.id === target);
+      if (index < 0) {
+        this.logger("assignments -> toggle not_found");
+        throw new PronoteWriteError("toggle not found", "not_found");
+      }
+      const found = list[index] as { setDone?: (status: boolean) => Promise<void> };
+      if (typeof found?.setDone !== "function") {
+        this.logger("assignments -> toggle unsupported");
+        throw new PronoteWriteError("toggle unsupported", "unsupported");
+      }
+      await found.setDone(done);
+      const mapped = mapAssignment(id, list[index], index);
+      if (!mapped) throw new PronoteWriteError("toggle not found", "not_found");
+      // Compteur seul dans les logs : jamais d'identifiant de devoir journalisé.
+      this.logger("assignments -> toggle ok");
+      return { ...mapped, done };
+    } catch (err) {
+      if (err instanceof PronoteWriteError) throw err;
+      const mapped = toWriteError(err, "toggle");
+      this.logger(`assignments -> toggle error ${mapped.code}`);
       throw mapped;
     }
   }

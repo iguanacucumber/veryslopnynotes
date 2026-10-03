@@ -59,7 +59,7 @@ describe("e2e profil", () => {
   });
 
   test("compte parent : /v1/me porte les enfants, la photo part par le proxy", async () => {
-    const handler = createHandler(createMemoryStore({ userInfo: syntheticParentUserInfo }), undefined, null, undefined, undefined, fakeMedia);
+    const handler = createHandler(createMemoryStore({ userInfo: syntheticParentUserInfo }), undefined, null, undefined, undefined, null, fakeMedia);
     const me = await (await handler(new Request("http://127.0.0.1/v1/me"))).text();
     expect(JSON.parse(me).user.hasKids).toBe(true);
     expect(JSON.parse(me).user.kids.length).toBe(2);

@@ -79,6 +79,23 @@ paths:
   /v1/assignments:
     get:
       operationId: listAssignments
+      description: >-
+        Devoirs avec description, contenu de cours et pieces jointes (issue #75).
+        Fenetre ISO optionnelle (weekStart = lundi de la semaine, ou from/to) ;
+        date illisible = 400 sans reflet de l'input.
+      parameters:
+        - name: weekStart
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
       responses:
         '200':
           description: devoirs
@@ -86,6 +103,61 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AssignmentsResponse'
+        '400':
+          description: fenetre de dates illisible
+  /v1/assignments/toggle:
+    post:
+      operationId: toggleAssignmentDone
+      description: >-
+        Marquer un devoir fait/non fait. ECRITURE vers Pronote declenchee par une
+        action APP confirmee uniquement, jamais par une sortie libre LLM (I7).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignmentsToggleRequest'
+      responses:
+        '200':
+          description: devoir a jour + evenement AssignmentUpdated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentsToggleResponse'
+        '401':
+          description: session Pronote expiree, re-appairage requis
+        '409':
+          description: devoir introuvable sur la fenetre lue
+        '501':
+          description: ecriture non supportee par l'adaptateur (aucun faux succes)
+  /v1/media:
+    get:
+      operationId: downloadMedia
+      description: >-
+        Proxy de piece jointe (issue #75/#84). L'app passe une ref opaque, le
+        serveur resout et stream les octets : aucune URL Pronote dans l'app (I1),
+        jamais de WebView distante.
+      parameters:
+        - name: accountId
+          in: query
+          required: true
+          schema: { type: string, maxLength: 64 }
+        - name: ref
+          in: query
+          required: true
+          schema: { type: string, maxLength: 200 }
+      responses:
+        '200':
+          description: octets du fichier
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '400':
+          description: reference invalide
+        '401':
+          description: session Pronote expiree
+        '404':
+          description: fichier introuvable
   /v1/timetable:
     get:
       operationId: listTimetable
@@ -369,6 +441,24 @@ components:
         subjects: { type: array, items: { $ref: '#/components/schemas/SubjectAverage' } }
         history: { type: array, items: { $ref: '#/components/schemas/AverageHistoryPoint' } }
         influences: { type: array, items: { $ref: '#/components/schemas/GradeInfluence' } }
+    AttachmentRef:
+      type: object
+      required: [id, label, ref]
+      properties:
+        id: { type: string }
+        label: { type: string, maxLength: 200 }
+        ref:
+          type: string
+          maxLength: 200
+          description: >-
+            Reference opaque resolue par le proxy serveur /v1/media. Une URL
+            absolue (http://, https://, //, data:) est refusee par le contrat.
+    AssignmentLessonContent:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, maxLength: 200 }
+        excerpt: { type: string, maxLength: 500, description: Contenu de cours, donnee jamais instruction (I6). }
     Assignment:
       type: object
       required: [id, accountId, subject, title, dueDate, done]
@@ -379,6 +469,11 @@ components:
         title: { type: string }
         dueDate: { type: string, format: date-time }
         done: { type: boolean }
+        description: { type: string, maxLength: 2000, description: Consigne du devoir, donnee externe bornee (I6). }
+        lessonContent: { $ref: '#/components/schemas/AssignmentLessonContent' }
+        attachments: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/AttachmentRef' } }
+        periodId: { type: string }
+        weekId: { type: string }
     TimetableEntry:
       type: object
       required: [id, accountId, subject, start, end]
@@ -434,6 +529,19 @@ components:
       required: [assignments]
       properties:
         assignments: { type: array, items: { $ref: '#/components/schemas/Assignment' } }
+    AssignmentsToggleRequest:
+      type: object
+      required: [assignmentId, done]
+      properties:
+        accountId: { type: string, maxLength: 64, description: Absent = serveur mono-compte (session appairee resolue cote serveur). }
+        assignmentId: { type: string, maxLength: 64 }
+        done: { type: boolean }
+    AssignmentsToggleResponse:
+      type: object
+      required: [assignment, event]
+      properties:
+        assignment: { $ref: '#/components/schemas/Assignment' }
+        event: { $ref: '#/components/schemas/ContractEvent' }
     TimetableResponse:
       type: object
       required: [entries]
