@@ -7,6 +7,8 @@
 import {
   API_ROUTES,
   isAssignmentsResponse,
+  isEvaluationsResponse,
+
   isCanteenMenusResponse,
   isGradesResponse,
   isNewsResponse,
@@ -22,6 +24,7 @@ import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDev
 import type { ContractEvent, NewsUpdatedData, SyncCompletedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
 import { computeAverages } from "../domain/averages";
+import { buildCompetenceSummary, buildSkills } from "../domain/competences";
 import { handleHomeworkGenerate } from "./homework";
 import { PairingService } from "./pairing";
 import { renderRevisionPdf } from "../jobs/revision";
@@ -202,6 +205,18 @@ export function createHandler(
       case "/v1/homework/generate": {
         return handleHomeworkGenerate(req, llm);
       }
+      // #78 : compétences fournies = chips + détail. Store sans évaluations
+      // (ou établissement sans l'onglet) = trois listes vides, état propre.
+      case "/v1/evaluations": {
+        const evaluations = store.evaluations?.() ?? [];
+        const payload = {
+          skills: buildSkills(evaluations),
+          evaluations,
+          summary: buildCompetenceSummary(evaluations),
+        };
+        return json(isEvaluationsResponse(payload), payload);
+      }
+
       case "/v1/news": {
         // #79 : onglet Actualités. Store sans table actus = liste vide (200).
         const payload = { news: store.news?.() ?? [] };

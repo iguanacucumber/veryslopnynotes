@@ -120,7 +120,18 @@ fun AppNav(
                 CachedScreen("Calendrier", CachePolicy.TIMETABLE, repo, baseUrl, "EDT semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
             }
             composable(ROUTE_GRADES) {
-                CachedScreen("Notes", CachePolicy.GRADES, repo, baseUrl, "Moyennes", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, showAverage = true)
+                CachedScreen(
+                    "Notes",
+                    CachePolicy.GRADES,
+                    repo,
+                    baseUrl,
+                    "Moyennes",
+                    { nav.navigate(ROUTE_SETTINGS) },
+                    { nav.navigate("pairing") },
+                    { nav.navigate("alerts") },
+                    showAverage = true,
+                    onCompetences = { nav.navigate("competences") },
+                )
             }
             composable(ROUTE_TASKS) {
                 CachedScreen("Tâches", CachePolicy.ASSIGNMENTS, repo, baseUrl, "Devoirs semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
@@ -153,6 +164,21 @@ fun AppNav(
             }
             composable("alerts") { SecurityAlertsRoute(loadAlerts) }
             composable("fiches") { RevisionSheetsScreen() }
+            // #78 : chips de compétences + détail, payload /v1/evaluations en cache.
+            composable("competences") {
+                CachedScreen(
+                    title = "Compétences",
+                    resource = CachePolicy.EVALUATIONS,
+                    repo = repo,
+                    baseUrl = baseUrl,
+                    subtitle = "Évaluations par compétences",
+                    goSettings = { nav.navigate(ROUTE_SETTINGS) },
+                    goPairing = { nav.navigate("pairing") },
+                    goAlerts = { nav.navigate("alerts") },
+                    section = { CompetencesSection(it) },
+                )
+            }
+
             // #79 : actualités établissement, ressource cachable "news" (offline).
             composable("actus") { NewsRoute(repo, baseUrl) }
         }
@@ -171,6 +197,10 @@ fun CachedScreen(
     goAlerts: () -> Unit,
     // #74 : mention "fournie"/"estimée" sous le titre (onglet Notes seul).
     showAverage: Boolean = false,
+    // #78 : bloc competencies (chips) rendu sous le titre, payload en entrée.
+    section: (@Composable (String?) -> Unit)? = null,
+    // #78 : accès à l'écran compétences depuis l'onglet Notes.
+    onCompetences: (() -> Unit)? = null,
 ) {
     // Etat initial = cache synchrone (affichage sans reseau immediat).
     var state by remember(resource) {
@@ -215,15 +245,20 @@ fun CachedScreen(
             UiState.Empty -> Text("Aucune donnée en cache. Connectez-vous puis actualisez.")
             is UiState.Data -> {
                 if (s.isStale) Text("Données hors-ligne (périmé).")
+                section?.invoke(s.payload)
                 // ponytail: payload brut affiche tel quel (donnee, jamais interpretee).
                 Text(if (s.payload.length > 500) s.payload.take(500) + "…" else s.payload)
             }
             is UiState.Error -> {
                 Text("Erreur réseau. Réessayer.")
+                section?.invoke(s.cached)
                 if (s.cached != null) Text(s.cached.take(500))
             }
         }
         Button(onClick = { refresh() }) { Text("Actualiser") }
+        if (onCompetences != null) {
+            Button(onClick = { onCompetences() }) { Text("Compétences") }
+        }
         Button(onClick = { goSettings() }) { Text("Réglages") }
         Button(onClick = { goPairing() }) { Text("Appairage QR+PIN") }
         Button(onClick = { goAlerts() }) { Text("Alertes sécurité") }

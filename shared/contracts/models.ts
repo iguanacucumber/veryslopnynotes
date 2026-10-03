@@ -273,6 +273,102 @@ export function isTokenHash(v: unknown): v is string {
   return typeof v === "string" && /^[0-9a-f]{64}$/i.test(v);
 }
 
+// --- #78 évaluations par compétences (parité Papillon) ---
+// Pronote ne publie les évaluations par compétences que selon la configuration
+// de l'établissement : chaque champ peut manquer. Un champ absent est OMMIS
+// (jamais 0 ni "" bidon) et une note absente vaut `note: null`.
+// ponytail: couleur = hex #RRGGBB seulement ; l'app dérive une couleur stable
+// par skillId quand l'établissement n'en publie pas. Upgrade: palette de
+// l'établissement via /v1/me (#82).
+
+/** Bornes des libellés (données externes bornées, jamais interprétées, I6). */
+export const SKILL_LABEL_MAX_CHARS = 100;
+export const EVALUATION_LABEL_MAX_CHARS = 200;
+
+const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
+
+function isBoundedString(v: unknown, max: number): v is string {
+  return typeof v === "string" && v.trim().length > 0 && v.length <= max;
+}
+
+function isOptionalHexColor(v: unknown): boolean {
+  return v === undefined || (typeof v === "string" && HEX_COLOR_RE.test(v));
+}
+
+/** Compétence (domaine) regroupant les évaluations d'une matière. */
+export interface Skill {
+  readonly id: string;
+  readonly label: string;
+  /** Couleur de chip #RRGGBB, absente si l'établissement n'en publie pas. */
+  readonly color?: string;
+}
+
+/** Évaluation rattachée à une compétence. `note: null` = non notée. */
+export interface Evaluation {
+  readonly id: string;
+  readonly accountId: string;
+  readonly periodId?: string;
+  readonly subject: string;
+  /** Clé de regroupement des chips (= domaine/compétence Pronote). */
+  readonly skillId: string;
+  readonly label: string;
+  /** Note sur `scale`, ou null si non notée : ignorée par tout calcul. */
+  readonly note: number | null;
+  readonly scale: number;
+  readonly date: string; // ISO-8601
+  /** Moyenne de classe sur l'échelle de la note, si l'établissement la publie. */
+  readonly classAverage?: number;
+  /** Couleur de la compétence telle que publiée, si elle existe. */
+  readonly color?: string;
+}
+
+/** Agrégat d'une compétence pour la chip : moyenne des notes DÉFINIES seulement. */
+export interface CompetenceSummary {
+  readonly skillId: string;
+  readonly label: string;
+  readonly subject: string;
+  /** Moyenne sur /20 des notes définies, null si la compétence n'en a aucune. */
+  readonly value: number | null;
+  /** Notes définies comptées : les évaluations non notées n'y figurent pas. */
+  readonly evaluationCount: number;
+}
+
+export function isSkill(v: unknown): v is Skill {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["id"])) return false;
+  if (!isBoundedString(v["label"], SKILL_LABEL_MAX_CHARS)) return false;
+  if (!isOptionalHexColor(v["color"])) return false;
+  return true;
+}
+
+export function isEvaluation(v: unknown): v is Evaluation {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["accountId"])) return false;
+  if (!isNonEmptyString(v["subject"]) || !isNonEmptyString(v["skillId"])) return false;
+  if (!isBoundedString(v["label"], EVALUATION_LABEL_MAX_CHARS)) return false;
+  // #78 : note requise mais nullable. undefined (champ absent) = invalide,
+  // null = non notée. Jamais de 0 substitué à une note manquante.
+  const note = v["note"];
+  if (note !== null && (!isFiniteNumber(note) || (note as number) < 0)) return false;
+  if (!isFiniteNumber(v["scale"]) || (v["scale"] as number) <= 0) return false;
+  if (!isIsoDate(v["date"])) return false;
+  if (v["periodId"] !== undefined && !isNonEmptyString(v["periodId"])) return false;
+  if (v["classAverage"] !== undefined && !isFiniteNumber(v["classAverage"])) return false;
+  if (!isOptionalHexColor(v["color"])) return false;
+  return true;
+}
+
+export function isCompetenceSummary(v: unknown): v is CompetenceSummary {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["skillId"])) return false;
+  if (!isBoundedString(v["label"], SKILL_LABEL_MAX_CHARS)) return false;
+  if (!isNonEmptyString(v["subject"])) return false;
+  if (!isNullableNumberOrNull(v["value"])) return false;
+  if (!Number.isInteger(v["evaluationCount"]) || (v["evaluationCount"] as number) < 0) return false;
+  return true;
+}
+
+
 // --- #79 actualités établissement (parité Papillon, onglet Actualités) ---
 // Titre/corps/auteur = contenu externe : DONNÉES bornées, jamais instruction (I6).
 export const NEWS_TITLE_MAX_CHARS = 200;
@@ -293,7 +389,8 @@ export interface NewsItem {
   readonly read?: boolean;
 }
 
-function isBoundedString(v: unknown, max: number): v is string {
+/** Borné sans exigence de contenu : champ externe optionnel (chaîne vide tolérée). */
+function isOptionalBoundedString(v: unknown, max: number): v is string {
   return typeof v === "string" && v.length <= max;
 }
 
@@ -303,9 +400,9 @@ export function isNewsItem(v: unknown): v is NewsItem {
   const title = v["title"];
   if (typeof title !== "string" || title.trim().length === 0 || title.length > NEWS_TITLE_MAX_CHARS) return false;
   if (!isIsoDate(v["publishedAt"])) return false;
-  if (v["body"] !== undefined && !isBoundedString(v["body"], NEWS_BODY_MAX_CHARS)) return false;
-  if (v["category"] !== undefined && !isBoundedString(v["category"], NEWS_META_MAX_CHARS)) return false;
-  if (v["author"] !== undefined && !isBoundedString(v["author"], NEWS_META_MAX_CHARS)) return false;
+  if (v["body"] !== undefined && !isOptionalBoundedString(v["body"], NEWS_BODY_MAX_CHARS)) return false;
+  if (v["category"] !== undefined && !isOptionalBoundedString(v["category"], NEWS_META_MAX_CHARS)) return false;
+  if (v["author"] !== undefined && !isOptionalBoundedString(v["author"], NEWS_META_MAX_CHARS)) return false;
   if (v["read"] !== undefined && typeof v["read"] !== "boolean") return false;
   return true;
 }
