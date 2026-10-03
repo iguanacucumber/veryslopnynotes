@@ -40,7 +40,6 @@ import fr.veryslopnynotes.core.profileInitials
 import fr.veryslopnynotes.data.AccountStore
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.CachePolicy
-import fr.veryslopnynotes.data.EncryptedTokenStore
 import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.FileSubjectPrefsStore
 import fr.veryslopnynotes.data.InMemoryCacheStore
@@ -52,6 +51,7 @@ import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SubjectPrefsRepository
 import fr.veryslopnynotes.data.SyncedRepository
 import fr.veryslopnynotes.data.RefreshOutcome
+import fr.veryslopnynotes.data.SessionTokens
 
 // Parité Papillon #86 : 5 onglets (index, calendar, grades, tasks, profile)
 // + settings. Routes secondaires hors onglets : pairing, alerts, fiches.
@@ -118,24 +118,29 @@ fun AppNav(
             InMemoryCacheStore()
         }
     }
-    val repo = remember(baseUrl, cacheStore) {
-        SyncedRepository(ApiClient(baseUrl), cacheStore)
+    // Session appairée UNIQUE partagée : un seul store, lu par ApiClient à
+    // chaque requête (bearer) et vidé par accounts.logout(). Deux stores
+    // divergents (chiffré côté écrans, mémoire ailleurs) laisseraient le secret
+    // vivant après une déconnexion.
+    val tokens = remember(ctx) { SessionTokens.get(ctx) }
+    val repo = remember(baseUrl, cacheStore, tokens) {
+        SyncedRepository(ApiClient(baseUrl, tokens = tokens), cacheStore)
     }
     // #82 : comptes appairés + déconnexion (session invalidée + cache purgé).
     // Seuls des accountId sont persistés, aucune donnée personnelle.
-    val accounts = remember(baseUrl, cacheStore) {
-        AccountStore(ctx, cacheStore, EncryptedTokenStore(ctx))
+    val accounts = remember(baseUrl, cacheStore, tokens) {
+        AccountStore(ctx, cacheStore, tokens)
     }
-    val profileRepo = remember(baseUrl) { ProfileRepository(ApiClient(baseUrl)) }
+    val profileRepo = remember(baseUrl, tokens) { ProfileRepository(ApiClient(baseUrl, tokens = tokens)) }
     // #83 : prefs matière = fichier local (survit au restart, lisible hors
     // ligne), répliqué vers le serveur allowlist seul (I1).
-    val prefsRepo = remember(baseUrl) {
+    val prefsRepo = remember(baseUrl, tokens) {
         val store = try {
             FileSubjectPrefsStore(java.io.File(ctx.filesDir, "offline/subject_prefs.json"))
         } catch (_: Exception) {
             InMemorySubjectPrefsStore()
         }
-        SubjectPrefsRepository(ApiClient(baseUrl), store)
+        SubjectPrefsRepository(ApiClient(baseUrl, tokens = tokens), store)
     }
     var subjectPrefs by remember { mutableStateOf(prefsRepo.prefs()) }
     // #87 : capacites dynamiques (onglets Pronote actifs de l'etablissement).
@@ -246,7 +251,7 @@ fun AppNav(
             composable(ROUTE_TASKS) {
                 // #75 : devoirs de la semaine (contenus + PJ via proxy), toggle
                 // Optimiste avec retour arrière, pull-refresh.
-                AssignmentsRoute(CachePolicy.ASSIGNMENTS, repo, baseUrl, accountId, subjectPrefs = subjectPrefs)
+                AssignmentsRoute(CachePolicy.ASSIGNMENTS, repo, baseUrl, accountId, subjectPrefs = subjectPrefs, tokens = tokens)
             }
             composable(ROUTE_PROFILE) {
                 ProfileRoute(
@@ -334,7 +339,7 @@ fun AppNav(
             // #80 : messagerie — liste des fils (cache), lecture d'un fil, réponse,
             // création, lu/non-lu et suppression (boutons = actions confirmées, I7).
             composable(ROUTE_MESSAGES) {
-                MessagesRoute(repo, baseUrl, accountId)
+                MessagesRoute(repo, baseUrl, accountId, tokens = tokens)
             }
         }
     }

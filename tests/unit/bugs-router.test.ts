@@ -11,6 +11,10 @@ import { apiError, isApiErrorBody } from "../../server/api/errors";
 import { SnapshotStore } from "../../server/infrastructure/snapshot-store";
 import type { AssignmentActions } from "../../server/api/assignments";
 import type { LLMProvider } from "../../server/domain/ports";
+// Depuis 0.4.0 la porte d'entrée exige le bearer d'un device appairé : on
+// appaire pour de VRAI (fixture partagée) afin que le 400 observé soit bien
+// celui de la fenêtre de dates, jamais celui de l'authentification.
+import { pairedDevice } from "./fixtures/pairing";
 
 describe("bugs routeur API", () => {
   // --- 1. fuite inter-comptes : /v1/media lit l'accountId dans l'URL ---------
@@ -75,8 +79,9 @@ describe("bugs routeur API", () => {
 
   // --- 4. coercition de query param : Date.parse est lenient ---------------
   test("BUG: /v1/assignments?from=12 est accepté (V8 coerce \"12\" en 2001-12-01) au lieu de 400 — le client filtre sa fenêtre sur une date fantôme et croit la liste vide", async () => {
-    const h = createHandler(createMemoryStore());
-    const res = await h(new Request("http://127.0.0.1/v1/assignments?from=12"));
+    const { pairing, auth } = pairedDevice();
+    const h = createHandler(createMemoryStore(), pairing);
+    const res = await h(new Request("http://127.0.0.1/v1/assignments?from=12", { headers: auth }));
     // Attendu : 400 bad_request, jamais une fenêtre devinée à partir de junk.
     expect(res.status).toBe(400);
     expect(isApiErrorBody(await res.json())).toBe(true);
@@ -96,8 +101,9 @@ describe("bugs routeur API", () => {
         },
       ],
     });
-    const h = createHandler(store);
-    const res = await h(new Request("http://127.0.0.1/v1/events"));
+    const { pairing, auth } = pairedDevice();
+    const h = createHandler(store, pairing);
+    const res = await h(new Request("http://127.0.0.1/v1/events", { headers: auth }));
     const premiere = (await res.text()).split("\n\n")[0] ?? "";
     const evt = JSON.parse(premiere.replace("data: ", "")) as { type: string; data: { accountId: string } };
     expect(evt.type).toBe("SyncCompleted");
@@ -125,14 +131,15 @@ describe("bugs routeur API", () => {
     const llm: LLMProvider = {
       generate: async () => JSON.stringify({ status: "refused", reason: "sources_insuffisantes", sources: [] }),
     };
-    const h = createHandler(createMemoryStore(), undefined, llm);
+    const { pairing, auth } = pairedDevice();
+    const h = createHandler(createMemoryStore(), pairing, llm);
     const corps = JSON.stringify({
       question: "q",
       sources: [{ text: "t", source: "s" }],
       junk: "x".repeat(2_000_000),
     });
     const res = await h(
-      new Request("http://127.0.0.1/v1/homework/generate", { method: "POST", body: corps }),
+      new Request("http://127.0.0.1/v1/homework/generate", { method: "POST", headers: auth, body: corps }),
     );
     // Attendu : 400, le corps est borné AVANT le parse comme partout ailleurs.
     expect(res.status).toBe(400);

@@ -10,7 +10,6 @@
 import {
   isSyncRefreshRequest,
   isSyncRefreshResponse,
-  SYNC_REFRESH_ACCOUNT_ID_MAX_CHARS,
   SYNC_REFRESH_MAX_EVENTS,
 } from "../../shared/contracts/api";
 import type { SyncRefreshResponse } from "../../shared/contracts/api";
@@ -25,9 +24,9 @@ import { apiError } from "./errors";
  * `AssignmentActions` : le routeur ne connaît ni le reader ni le store.
  */
 export interface SyncRefreshActions {
-  /** Relecture bornée d'un compte. `accountId` est l'INDICE fourni par le
-   *  client (borné, optionnel) : la composition root vise le compte qu'elle a
-   *  appairé, jamais une identité demandée (mono-compte). */
+  /** Relecture bornée d'un compte. `accountId` est RÉSOLU CÔTÉ SERVEUR par le
+   *  routeur (`servedAccountId`) ; vide = serveur mono-compte (la composition
+   *  root vise le compte qu'elle a appairé). */
   refresh(accountId: string): Promise<ContractEvent[]>;
 }
 
@@ -46,12 +45,15 @@ function refreshError(err: unknown): Response {
 /**
  * POST /v1/sync/refresh — relecture immédiate, événements de sync en réponse.
  * Relecture non branchée = 501 honnête, jamais un faux succès.
+ *
+ * `accountId` est RÉSOLU CÔTÉ SERVEUR par le routeur : le `accountId` du corps
+ * reste validé par le contrat (add-only) mais ne sert JAMAIS d'identité — le
+ * refresh relit le compte appairé du serveur, pas celui demandé par l'app.
  */
-export async function handleSyncRefresh(req: Request, actions: SyncRefreshActions | null): Promise<Response> {
+export async function handleSyncRefresh(req: Request, actions: SyncRefreshActions | null, accountId = ""): Promise<Response> {
   if (!actions || typeof actions.refresh !== "function") {
     return apiError("not_implemented", "relecture non branchée");
   }
-  let accountId = "";
   const text = await req.text().catch(() => "");
   if (text.trim() !== "") {
     let body: unknown;
@@ -61,8 +63,9 @@ export async function handleSyncRefresh(req: Request, actions: SyncRefreshAction
     } catch {
       return apiError("bad_request", "invalid JSON body");
     }
+    // Corps toujours validé (forme + borne de l'accountId réclamé), mais la
+    // valeur reste IGNORÉE : seule celle du serveur est utilisée.
     if (!isSyncRefreshRequest(body)) return apiError("bad_request", "invalid refresh request");
-    accountId = (body.accountId ?? "").trim().slice(0, SYNC_REFRESH_ACCOUNT_ID_MAX_CHARS);
   }
   try {
     const raw = await actions.refresh(accountId);

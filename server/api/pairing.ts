@@ -7,8 +7,9 @@
 // fil : le routeur répond 401 « unauthorized » unique, sinon la réponse est un
 // oracle d'existence de session et de tentatives restantes.
 // Token d'appareil = secret aléatoire du serveur, seule forme d'API
-// `sha256(token)` ; le secret ne sort que par `tokenOf` (push). Aucun secret
-// persisté/committé/logué, aucun credential ni URL Pronote dans une réponse.
+// `sha256(token)` ; le secret ne sort que par la réponse d'appairage (une
+// fois, à la confirmation) et par `tokenOf` (push). Aucun secret persisté/
+// committé/logué, aucun credential ni URL Pronote dans une réponse.
 
 import { createHash, randomBytes, randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import type { Device } from "../../shared/contracts/models";
@@ -102,7 +103,7 @@ export class PairingService {
   confirm(
     sessionId: string,
     code: string,
-  ): { ok: true; device: Device } | { ok: false; failure: PairingFailure } {
+  ): { ok: true; device: Device; token: string } | { ok: false; failure: PairingFailure } {
     const session = this.sessions.get(sessionId);
     if (!session) return { ok: false, failure: "unknown_session" };
     // Expiration inclusive : à `expiresAt` exactement, la session est morte.
@@ -128,7 +129,11 @@ export class PairingService {
     const device: Device = { id: this.uuid(), tokenHash: this.hash(token) };
     this.credentials.set(device.id, { ...device, expiresAt: this.now() + this.deviceTtlMs });
     this.tokens.set(device.id, token);
-    return { ok: true, device };
+    // Le secret sort ICI, une seule fois, à l'appairage : c'est la seule
+    // occasion pour l'app d'apprendre le bearer des routes protégé. Jamais
+    // loggé, jamais persisté en clair (seul `sha256(token)` l'est), jamais
+    // re-servi : au-delà, un secret perdu = ré-appairage.
+    return { ok: true, device, token };
   }
 
   revoke(deviceId: string): boolean {

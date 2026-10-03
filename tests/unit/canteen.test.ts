@@ -3,6 +3,7 @@
 // aucun secret, aucune URL Pronote.
 import { describe, expect, test } from "bun:test";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "./fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { PronoteSessionStore } from "../../server/integrations/pronote-sessions";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
@@ -203,8 +204,9 @@ describe("PronoteClientReader.getMenus (#81)", () => {
 
 describe("route GET /v1/menus (#81)", () => {
   test("store sans menu → tableau vide valide (état masqué, pas d'erreur)", async () => {
-    const handler = createHandler(createMemoryStore());
-    const res = await handler(new Request("http://127.0.0.1/v1/menus"));
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore(), pairing);
+    const res = await handler(new Request("http://127.0.0.1/v1/menus", { headers: auth }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(isCanteenMenusResponse(body)).toBe(true);
@@ -213,25 +215,27 @@ describe("route GET /v1/menus (#81)", () => {
   });
 
   test("store seedé : menus + solde, fenêtre filtrée, bornes", async () => {
+    const { pairing, auth } = pairedDevice();
     const handler = createHandler(
       createMemoryStore({ canteenMenus: syntheticCanteenMenus, canteenBalance: syntheticCanteenBalance }),
+      pairing,
     );
-    const all = await handler(new Request("http://127.0.0.1/v1/menus"));
+    const all = await handler(new Request("http://127.0.0.1/v1/menus", { headers: auth }));
     const body = await all.json();
     expect(isCanteenMenusResponse(body)).toBe(true);
     expect(body.menus).toHaveLength(2);
     expect(body.balance).toEqual(syntheticCanteenBalance);
 
-    const week = await handler(new Request("http://127.0.0.1/v1/menus?from=2026-10-05&to=2026-10-05T23:59:59.000Z"));
+    const week = await handler(new Request("http://127.0.0.1/v1/menus?from=2026-10-05&to=2026-10-05T23:59:59.000Z", { headers: auth }));
     expect(((await week.json()) as { menus: unknown[] }).menus).toHaveLength(1);
 
     // Fenêtre vide = aucun menu sur la période, pas une erreur.
-    const outside = await handler(new Request("http://127.0.0.1/v1/menus?from=2027-01-01&to=2027-01-07"));
+    const outside = await handler(new Request("http://127.0.0.1/v1/menus?from=2027-01-01&to=2027-01-07", { headers: auth }));
     expect(((await outside.json()) as { menus: unknown[] }).menus).toEqual([]);
 
     // Date illisible ou absurdement longue = 400, sans refléter l'input.
     for (const q of ["?from=pas-une-date", "?to=xxx", `?from=${"9".repeat(500)}`]) {
-      const bad = await handler(new Request(`http://127.0.0.1/v1/menus${q}`));
+      const bad = await handler(new Request(`http://127.0.0.1/v1/menus${q}`, { headers: auth }));
       expect(bad.status).toBe(400);
       const err = await bad.json();
       expect(isApiErrorBody(err)).toBe(true);

@@ -357,7 +357,7 @@ describe("unit android messagerie (#80)", () => {
   test("réponse d'action : ok + CacheInvalidated(discussions) exigés", () => {
     const good = JSON.stringify({
       ok: true,
-      event: { v: "0.3.0", type: "CacheInvalidated", at: "2026-10-03T09:00:00.000Z", data: { resource: "discussions", reason: "manual" } },
+      event: { v: "0.4.0", type: "CacheInvalidated", at: "2026-10-03T09:00:00.000Z", data: { resource: "discussions", reason: "manual" } },
     });
     expect(tsParseAction(good)).toEqual({ ok: true, error: null });
     // Un autre événement = pas de confirmation d'action (jamais de faux succès).

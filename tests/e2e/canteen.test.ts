@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "../unit/fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { isApiErrorBody } from "../../server/api/errors";
 import { isCanteenMenusResponse } from "../../shared/contracts/api";
@@ -28,10 +29,12 @@ const creds = {
 };
 
 async function getMenusJson(query = "") {
+  const { pairing, auth } = pairedDevice();
   const handler = createHandler(
     createMemoryStore({ canteenMenus: syntheticCanteenMenus, canteenBalance: syntheticCanteenBalance }),
+    pairing,
   );
-  const res = await handler(new Request(`http://127.0.0.1/v1/menus${query}`));
+  const res = await handler(new Request(`http://127.0.0.1/v1/menus${query}`, { headers: auth }));
   return { res, body: await res.json() };
 }
 
@@ -64,8 +67,9 @@ describe("e2e cantine (#81)", () => {
   });
 
   test("établissement sans module cantine : réponse vide propre, onglet masqué", async () => {
-    const handler = createHandler(createMemoryStore());
-    const res = await handler(new Request("http://127.0.0.1/v1/menus"));
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore(), pairing);
+    const res = await handler(new Request("http://127.0.0.1/v1/menus", { headers: auth }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(isCanteenMenusResponse(body)).toBe(true);

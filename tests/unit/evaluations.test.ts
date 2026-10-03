@@ -6,6 +6,7 @@ import { PronoteReadError } from "../../server/domain/ports";
 import { isEvaluationsResponse } from "../../shared/contracts/api";
 import { isEvaluation } from "../../shared/contracts/models";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "./fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import type { ReadStore } from "../../server/api/store";
 import {
@@ -97,8 +98,9 @@ describe("unit reader évaluations (#78)", () => {
 
 describe("unit route /v1/evaluations (#78)", () => {
   test("payload servi depuis le store, validé par le garde-fou", async () => {
-    const handler = createHandler(createMemoryStore({ evaluations: syntheticEvaluations }));
-    const res = await handler(new Request("http://localhost/v1/evaluations"));
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore({ evaluations: syntheticEvaluations }), pairing);
+    const res = await handler(new Request("http://localhost/v1/evaluations", { headers: auth }));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { evaluations: unknown[]; summary: { evaluationCount: number }[] };
     expect(isEvaluationsResponse(body)).toBe(true);
@@ -119,12 +121,13 @@ describe("unit route /v1/evaluations (#78)", () => {
       periods: full.periods,
       providedAverages: full.providedAverages,
     };
-    const res = await createHandler(legacy)(new Request("http://localhost/v1/evaluations"));
+    const { pairing, auth } = pairedDevice();
+    const res = await createHandler(legacy, pairing)(new Request("http://localhost/v1/evaluations", { headers: auth }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ skills: [], evaluations: [], summary: [] });
     // Store implémentant la méthode mais sans donnée = même réponse vide.
-    const other = createHandler(createMemoryStore({ evaluations: [] }));
-    expect(await (await other(new Request("http://localhost/v1/evaluations"))).json()).toEqual({
+    const other = createHandler(createMemoryStore({ evaluations: [] }), pairing);
+    expect(await (await other(new Request("http://localhost/v1/evaluations", { headers: auth }))).json()).toEqual({
       skills: [],
       evaluations: [],
       summary: [],

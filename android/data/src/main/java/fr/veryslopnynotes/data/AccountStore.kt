@@ -68,8 +68,10 @@ class AccountStore(
 
     /**
      * Déconnexion : session appairée invalidée + TOUS les caches purgés (les
-     * notes/devoirs/EDT sont des données du compte déconnecté). Le profil, lu
-     * en mémoire, est abandonné par l'appelant.
+     * notes/devoirs/EDT sont des données du compte déconnecté). `tokenStore.clear()`
+     * efface l'id, l'empreinte ET le secret porteur (contrat 0.4.0) : après
+     * cette ligne, plus aucune requête ne part avec un `Authorization` valide.
+     * Le profil, lu en mémoire, est abandonné par l'appelant.
      */
     fun logout() {
         tokenStore.clear()

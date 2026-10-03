@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.SecurityAlertsRepository
+import fr.veryslopnynotes.data.SessionTokens
 import fr.veryslopnynotes.ui.AppNav
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -23,7 +24,10 @@ class MainActivity : ComponentActivity() {
             BuildConfig.SERVER_HOST,
         )
         // ponytail: client paresseux, IO hors UI-thread via loader suspend.
-        val repo = SecurityAlertsRepository(ApiClient(baseUrl))
+        // Contrat 0.4.0 : les routes lues exigent le bearer du device appairé,
+        // relu ici à chaque requête depuis le store chiffré.
+        val tokens = SessionTokens.get(this)
+        val repo = SecurityAlertsRepository(ApiClient(baseUrl, tokens = tokens))
         // Toggle "fait" #75 : l'app n'envoie pas d'accountId (le serveur
         // mono-compte résout sa session appairée) ; #82 exposera /v1/me pour un
         // multi-compte. Jamais un hôte Pronote/ENT ici (I1), et l'écriture reste

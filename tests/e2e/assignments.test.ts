@@ -74,6 +74,7 @@ function paired(): { pairing: PairingService; auth: Record<string, string> } {
 
 describe("e2e devoirs #75", () => {
   test("semaine : contenus + PJ via proxy, aucune URL Pronote dans la réponse", async () => {
+    const { pairing, auth } = paired();
     const handler = createHandler(
       createMemoryStore({
         assignments: [
@@ -98,8 +99,9 @@ describe("e2e devoirs #75", () => {
           },
         ],
       }),
+      pairing,
     );
-    const res = await handler(new Request("http://127.0.0.1/v1/assignments"));
+    const res = await handler(new Request("http://127.0.0.1/v1/assignments", { headers: auth }));
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(isAssignmentsResponse(JSON.parse(body))).toBe(true);
@@ -142,7 +144,9 @@ describe("e2e devoirs #75", () => {
     await sessions.authenticate({ ...creds, entKind: "ninegate" });
     const reader = new PronoteClientReader({ sessions });
     const { pairing, auth } = paired();
-    const handler = createHandler(createMemoryStore(), pairing, null, undefined, undefined, reader);
+    // 0.4.0 : le routeur résout le compte servi (servedAccountId) et le passe au
+    // port ; le store ne doit donc pas porter le compte seedé « seed-acc ».
+    const handler = createHandler(createMemoryStore({ grades: [], assignments: [] }), pairing, null, undefined, undefined, reader);
 
     const res = await handler(
       new Request("http://127.0.0.1/v1/assignments/toggle", {

@@ -38,8 +38,17 @@ object ServerConfig {
         if (query.isBlank()) timetableUrl(baseUrl) else "$baseUrl/v1/timetable?$query"
     fun eventsUrl(baseUrl: String): String = "$baseUrl/v1/events"
     fun securityAlertsUrl(baseUrl: String): String = "$baseUrl/v1/security/alerts"
-    fun pairingStartUrl(baseUrl: String): String = "$baseUrl/v1/pairing/start"
-    fun pairingConfirmUrl(baseUrl: String): String = "$baseUrl/v1/pairing/confirm"
+
+    // Chemins des routes PUBLIQUES : ni jeton d'appareil, ni bearer. L'appairage
+    // est la seule porte d'entrée du credential (c'est là qu'on l'obtient) et
+    // health est une sonde de version. Source unique : ApiClient s'en sert pour
+    // ne PAS joindre `Authorization` (un secret ne voyage que là où on l'exige).
+    const val PAIRING_START_PATH = "/v1/pairing/start"
+    const val PAIRING_CONFIRM_PATH = "/v1/pairing/confirm"
+    const val HEALTH_PATH = "/v1/health"
+
+    fun pairingStartUrl(baseUrl: String): String = baseUrl + PAIRING_START_PATH
+    fun pairingConfirmUrl(baseUrl: String): String = baseUrl + PAIRING_CONFIRM_PATH
     fun revisionSheetsUrl(baseUrl: String): String = "$baseUrl/v1/revision-sheets"
     fun revisionSheetPdfUrl(baseUrl: String, id: String): String = "$baseUrl/v1/revision-sheets/pdf?id=$id"
     // #83 préférences matière : GET liste, PUT upsert.

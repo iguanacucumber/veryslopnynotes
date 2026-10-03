@@ -16,7 +16,7 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 
 | Domaine | État |
 |---|---|
-| Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.3.0`), miroir OpenAPI |
+| Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.4.0`), miroir OpenAPI |
 | Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (30 routes, 7 types d'événements) |
 | Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, appairage QR+PIN, SSE |
 | Point d'entrée HTTP serveur (`make serve`, Docker) | Câblé : env → session Pronote → reader → snapshot → routes, ports d'écriture inclus |

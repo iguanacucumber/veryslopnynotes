@@ -14,6 +14,9 @@ import { createHandler } from "../../server/api/router";
 import { isGrade } from "../../shared/contracts/models";
 import type { Capabilities, Grade, TimetableEntry } from "../../shared/contracts/models";
 import type { ContractEvent } from "../../shared/contracts/events";
+// Depuis 0.4.0 le routeur est fermé sans bearer : on appaire un device pour que
+// le statut observé soit celui de la route (/v1/grades), pas celui de l'auth.
+import { pairedDevice } from "./fixtures/pairing";
 
 const ACCOUNT = "acc-bug-live-sync";
 const AT = "2026-10-02T07:00:00.000Z";
@@ -276,8 +279,9 @@ describe("bugs live-sync (revue adversariale)", () => {
 
     await sync.run(ACCOUNT);
     // Impact : la route /v1/grades sert le cache -> 500 sur tout l'écran notes.
-    const handler = createHandler(store);
-    const res = await handler(new Request("http://127.0.0.1/v1/grades"));
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(store, pairing);
+    const res = await handler(new Request("http://127.0.0.1/v1/grades", { headers: auth }));
     // Cause : `store.apply` reçoit la page brute, sans le filtre `isGrade` que
     // runSync applique sur la même donnée.
     expect({ notesValides: store.grades().every((g) => isGrade(g)), statutGrades: res.status }).toEqual({

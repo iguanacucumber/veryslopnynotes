@@ -18,19 +18,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.data.ApiClient
-import fr.veryslopnynotes.data.EncryptedTokenStore
-import fr.veryslopnynotes.data.InMemoryTokenStore
 import fr.veryslopnynotes.data.PairingRepository
 import fr.veryslopnynotes.data.PairingResult
 import fr.veryslopnynotes.data.SseClient
 import fr.veryslopnynotes.data.SseListener
 import fr.veryslopnynotes.data.SseState
+import fr.veryslopnynotes.data.SessionTokens
 import fr.veryslopnynotes.data.isValidPin
 import fr.veryslopnynotes.data.parseQrPayload
 
 // Route appairage (#15) : scan QR (JSON sessionId+code) + saisie PIN manuelle,
-// confirm vers serveur allowlist seul, tokenHash stocké chiffré, SSE reconnect
-// avec états visibles. Aucun hôte tiers ici (ApiClient allowlist, I1).
+// confirm vers serveur allowlist seul, secret du device stocké chiffré
+// (contrat 0.4.0), SSE reconnect avec états visibles. Aucun hôte tiers ici
+// (ApiClient allowlist, I1).
 @Composable
 fun PairingRoute(
     baseUrl: String,
@@ -39,16 +39,13 @@ fun PairingRoute(
 ) {
     val context = LocalContext.current
     val main = remember { Handler(Looper.getMainLooper()) }
-    val api = remember(baseUrl) { ApiClient(baseUrl) }
+    // UN store pour l'écran : il alimente ApiClient (bearer) ET reçoit le
+    // secret de la réponse d'appairage. Le client le relit à chaque requête,
+    // donc le token s'utilise tout de suite après le pairing.
+    val tokens = remember(context) { SessionTokens.get(context) }
+    val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }
     val repo = remember(api) { PairingRepository(api) }
     val sse = remember(api) { SseClient(api) }
-    val tokens = remember(context) {
-        try {
-            EncryptedTokenStore(context)
-        } catch (_: Exception) {
-            InMemoryTokenStore()
-        }
-    }
 
     var form by remember { mutableStateOf(PairingForm()) }
     // ponytail: callbacks OkHttp hors main → post main. Upgrade: Flow/ViewModel.
@@ -96,7 +93,9 @@ fun PairingRoute(
                         when (res) {
                             is PairingResult.Ok -> {
                                 try {
-                                    tokens.save(res.device.id, res.device.tokenHash)
+                                    // Le secret est montré UNE fois : s'il est absent ou
+                                    // invalide, `save` échoue et RIEN n'est stocké.
+                                    tokens.save(res.device.id, res.device.tokenHash, res.device.token)
                                 } catch (e: IllegalArgumentException) {
                                     form = form.copy(state = PairingState.Error("Appareil invalide"))
                                     return@post
