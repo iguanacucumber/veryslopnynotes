@@ -2,20 +2,11 @@
 // Table de routes + types requête/réponse. Doit rester en sync avec
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
-import {
-  SUBJECT_PREFS_MAX_COUNT,
-  isAveragesReport,
-  isAssignment,
-  isDevice,
-  isGrade,
-  isPeriod,
-  isRevisionSheet,
-  isSubjectPrefs,
-  isTimetableEntry,
-} from "./models";
-import type { AveragesReport, Assignment, Device, Grade, Period, RevisionSheet, SubjectPrefs, TimetableEntry } from "./models";
-import { isSecurityAlertData } from "./events";
+import type { Assignment, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Evaluation, Grade, NewsItem, Period, RevisionSheet, Skill, SubjectPrefs, TimetableEntry } from "./models";
+import { isAssignment, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isEvaluation, isGrade, isNewsItem, isPeriod, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT } from "./models";
 import type { SecurityAlertData } from "./events";
+import { isSecurityAlertData } from "./events";
+
 
 export interface ApiRoute {
   readonly method: "GET" | "POST" | "PUT";
@@ -38,6 +29,13 @@ export const API_ROUTES: readonly ApiRoute[] = [
   // #83 préférences matière : GET liste / PUT upsert (clé = nom de matière).
   { method: "GET", path: "/v1/subjects/prefs" },
   { method: "PUT", path: "/v1/subjects/prefs" },
+
+  { method: "GET", path: "/v1/evaluations" },
+
+  { method: "GET", path: "/v1/news" },
+
+  // #81 cantine : menus de la semaine + solde compte (optionnel).
+  { method: "GET", path: "/v1/menus" },
 ] as const;
 
 export interface HealthResponse {
@@ -78,6 +76,27 @@ export interface PeriodsResponse {
 }
 export interface RevisionSheetsResponse {
   readonly sheets: RevisionSheet[];
+}
+
+/**
+ * #78 : évaluations par compétences. `summary` = agrégat par compétence
+ * (moyenne des notes DÉFINIES seulement, `value: null` si non notée).
+ * Établissement sans évaluations par compétences = trois listes vides.
+ */
+export interface EvaluationsResponse {
+  readonly skills: Skill[];
+  readonly evaluations: Evaluation[];
+  readonly summary: CompetenceSummary[];
+}
+
+
+// #81 cantine : menus de la fenêtre from/to (semaine courante par défaut).
+// Tableau vide = aucun menu publié sur la fenêtre (module cantine absent de
+// l'ENT ou hors périmètre) : l'app masque alors l'onglet, sans erreur.
+// balance absent = solde non publié (Turboself/ARD non branché).
+export interface CanteenMenusResponse {
+  readonly menus: CanteenMenu[];
+  readonly balance?: CanteenBalance;
 }
 
 // Alertes sécurité phase 6 (#21) : liste d'injections neutralisées (I6).
@@ -190,6 +209,31 @@ export function isPairingConfirmResponse(v: unknown): v is PairingConfirmRespons
   return isDevice(v);
 }
 
+export function isEvaluationsResponse(v: unknown): v is EvaluationsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  const s = r["skills"];
+  const e = r["evaluations"];
+  const m = r["summary"];
+  return (
+    Array.isArray(s) &&
+    s.every(isSkill) &&
+    Array.isArray(e) &&
+    e.every(isEvaluation) &&
+    Array.isArray(m) &&
+    m.every(isCompetenceSummary)
+  );
+}
+
+
+export function isCanteenMenusResponse(v: unknown): v is CanteenMenusResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  const m = r["menus"];
+  if (!Array.isArray(m) || !m.every(isCanteenMenu)) return false;
+  return r["balance"] === undefined || isCanteenBalance(r["balance"]);
+}
+
 function isBoundedNonEmptyString(v: unknown, max: number): v is string {
   return typeof v === "string" && v.trim().length > 0 && v.length <= max;
 }
@@ -247,4 +291,17 @@ export function isSubjectPrefsResponse(v: unknown): v is SubjectPrefsResponse {
   if (typeof v !== "object" || v === null) return false;
   const p = (v as Record<string, unknown>)["prefs"];
   return Array.isArray(p) && p.length <= SUBJECT_PREFS_MAX_COUNT && p.every(isSubjectPrefs);
+}
+
+
+// Actualités établissement (#79) : liste la plus récente d'abord.
+// Onglet non actif côté établissement = liste vide (200), jamais 500.
+export interface NewsResponse {
+  readonly news: NewsItem[];
+}
+
+export function isNewsResponse(v: unknown): v is NewsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const n = (v as Record<string, unknown>)["news"];
+  return Array.isArray(n) && n.every(isNewsItem);
 }

@@ -235,8 +235,11 @@ describe("miroir Kotlin prefs matière (#83)", () => {
 
     const nav = read(UI, "AppNav.kt");
     // Préfs appliquées aux trois onglets + thème à la racine.
+    // Regex tolérante à la mise en forme multi-lignes du CachedScreen.
     for (const resource of ["CachePolicy.GRADES", "CachePolicy.ASSIGNMENTS", "CachePolicy.TIMETABLE"]) {
-      expect(nav).toContain(`${resource}, repo, baseUrl`);
+      expect(nav).toMatch(new RegExp(`${resource}[\\s\\S]{0,80}baseUrl`));
+      // La prefs est passée à chacun des trois onglets qui affichent des matières.
+      expect(nav).toMatch(new RegExp(`${resource}[\\s\\S]{0,400}subjectPrefs = subjectPrefs`));
     }
     expect(nav).toContain("subjectPrefs = subjectPrefs");
     expect(nav).toContain("SubjectLegend(subjectsFromPayload(s.payload), subjectPrefs)");

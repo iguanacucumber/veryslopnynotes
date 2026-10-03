@@ -63,6 +63,10 @@ const val ROUTE_GRADES = "grades"
 const val ROUTE_TASKS = "tasks"
 const val ROUTE_PROFILE = "profile"
 const val ROUTE_SETTINGS = "settings"
+// #79/#81 : hors onglets comme "fiches" (capacités dynamiques : actualités et
+// cantine n'apparaissent que si l'établissement publie la donnée).
+const val ROUTE_NEWS = "news"
+const val ROUTE_CANTEEN = "canteen"
 
 private val TAB_ROUTES = listOf(ROUTE_INDEX, ROUTE_CALENDAR, ROUTE_GRADES, ROUTE_TASKS, ROUTE_PROFILE)
 
@@ -144,13 +148,31 @@ fun AppNav(
                 CachedScreen("Calendrier", CachePolicy.TIMETABLE, repo, baseUrl, "EDT semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, subjectPrefs = subjectPrefs)
             }
             composable(ROUTE_GRADES) {
-                CachedScreen("Notes", CachePolicy.GRADES, repo, baseUrl, "Moyennes", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, showAverage = true, subjectPrefs = subjectPrefs)
+                CachedScreen(
+                    "Notes",
+                    CachePolicy.GRADES,
+                    repo,
+                    baseUrl,
+                    "Moyennes",
+                    { nav.navigate(ROUTE_SETTINGS) },
+                    { nav.navigate("pairing") },
+                    { nav.navigate("alerts") },
+                    showAverage = true,
+                    subjectPrefs = subjectPrefs,
+                    onCompetences = { nav.navigate("competences") },
+                )
             }
             composable(ROUTE_TASKS) {
                 CachedScreen("Tâches", CachePolicy.ASSIGNMENTS, repo, baseUrl, "Devoirs semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, subjectPrefs = subjectPrefs)
             }
             composable(ROUTE_PROFILE) {
-                ProfileScreen(baseUrl, { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, { nav.navigate("fiches") })
+                ProfileScreen(baseUrl, { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, { nav.navigate("fiches") }, { nav.navigate(ROUTE_NEWS) }, { nav.navigate(ROUTE_CANTEEN) })
+            }
+            composable(ROUTE_NEWS) {
+                NewsRoute(repo, baseUrl)
+            }
+            composable(ROUTE_CANTEEN) {
+                CanteenRoute(repo, baseUrl)
             }
             composable(ROUTE_SETTINGS) {
                 SettingsScreen(
@@ -186,6 +208,21 @@ fun AppNav(
             }
             composable("alerts") { SecurityAlertsRoute(loadAlerts) }
             composable("fiches") { RevisionSheetsScreen() }
+            // #78 : chips de compétences + détail, payload /v1/evaluations en cache.
+            composable("competences") {
+                CachedScreen(
+                    title = "Compétences",
+                    resource = CachePolicy.EVALUATIONS,
+                    repo = repo,
+                    baseUrl = baseUrl,
+                    subtitle = "Évaluations par compétences",
+                    goSettings = { nav.navigate(ROUTE_SETTINGS) },
+                    goPairing = { nav.navigate("pairing") },
+                    goAlerts = { nav.navigate("alerts") },
+                    section = { CompetencesSection(it) },
+                    subjectPrefs = subjectPrefs,
+                )
+            }
         }
     }
     }
@@ -205,6 +242,10 @@ fun CachedScreen(
     showAverage: Boolean = false,
     // #83 : prefs matière du résolveur unique (légende couleur/emoji/libellé).
     subjectPrefs: List<SubjectPrefs> = emptyList(),
+    // #78 : bloc competencies (chips) rendu sous le titre, payload en entrée.
+    section: (@Composable (String?) -> Unit)? = null,
+    // #78 : accès à l'écran compétences depuis l'onglet Notes.
+    onCompetences: (() -> Unit)? = null,
 ) {
     // Etat initial = cache synchrone (affichage sans reseau immediat).
     var state by remember(resource) {
@@ -251,16 +292,23 @@ fun CachedScreen(
                 if (s.isStale) Text("Données hors-ligne (périmé).")
                 // #83 : matières du payload résolues (nom seul si aucune prefs).
                 SubjectLegend(subjectsFromPayload(s.payload), subjectPrefs)
+
+                section?.invoke(s.payload)
                 // ponytail: payload brut affiche tel quel (donnee, jamais interpretee).
                 Text(if (s.payload.length > 500) s.payload.take(500) + "…" else s.payload)
             }
             is UiState.Error -> {
                 Text("Erreur réseau. Réessayer.")
                 SubjectLegend(subjectsFromPayload(s.cached.orEmpty()), subjectPrefs)
+
+                section?.invoke(s.cached)
                 if (s.cached != null) Text(s.cached.take(500))
             }
         }
         Button(onClick = { refresh() }) { Text("Actualiser") }
+        if (onCompetences != null) {
+            Button(onClick = { onCompetences() }) { Text("Compétences") }
+        }
         Button(onClick = { goSettings() }) { Text("Réglages") }
         Button(onClick = { goPairing() }) { Text("Appairage QR+PIN") }
         Button(onClick = { goAlerts() }) { Text("Alertes sécurité") }
@@ -337,6 +385,8 @@ fun ProfileScreen(
     goPairing: () -> Unit,
     goAlerts: () -> Unit,
     goFiches: () -> Unit,
+    goNews: () -> Unit = {},
+    goCanteen: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -347,6 +397,8 @@ fun ProfileScreen(
         Text("Infos élève, périodes et vie scolaire arrivent avec la synchro (#82, #77).")
         Button(onClick = goPairing) { Text("Appairage QR+PIN") }
         Button(onClick = { goFiches() }) { Text("Fiches révision") }
+        Button(onClick = { goNews() }) { Text("Actualités") }
+        Button(onClick = { goCanteen() }) { Text("Cantine semaine") }
         Button(onClick = goAlerts) { Text("Alertes sécurité") }
         Button(onClick = goSettings) { Text("Réglages") }
     }

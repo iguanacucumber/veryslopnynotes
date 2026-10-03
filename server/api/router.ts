@@ -8,7 +8,11 @@ import {
   API_ROUTES,
   SUBJECT_PREFS_MAX_BODY_CHARS,
   isAssignmentsResponse,
+  isEvaluationsResponse,
+
+  isCanteenMenusResponse,
   isGradesResponse,
+  isNewsResponse,
   isPairingConfirmRequest,
   isPairingStartRequest,
   isPairingStartResponse,
@@ -18,10 +22,11 @@ import {
   isSubjectPrefsResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
-import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, SUBJECT_PREFS_MAX_COUNT, isAverageAlgorithm, isDevice, isSubjectPrefs } from "../../shared/contracts/models";
-import type { ContractEvent, SyncCompletedData } from "../../shared/contracts/events";
+import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDevice, isNewsItem, isSubjectPrefs, SUBJECT_PREFS_MAX_COUNT } from "../../shared/contracts/models";
+import type { ContractEvent, NewsUpdatedData, SyncCompletedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
 import { computeAverages } from "../domain/averages";
+import { buildCompetenceSummary, buildSkills } from "../domain/competences";
 import { handleHomeworkGenerate } from "./homework";
 import { PairingService } from "./pairing";
 import { renderRevisionPdf } from "../jobs/revision";
@@ -35,13 +40,34 @@ import type { LLMProvider } from "../domain/ports";
 /** Longueur max d'un periodId reflété dans la réponse (borne d'entrée utilisateur). */
 const PERIOD_ID_MAX_CHARS = 64;
 
+/** Longueur max d'une date de fenêtre cantine (borne d'entrée utilisateur, #81). */
+const CANTEEN_DATE_MAX_CHARS = 40;
+
+/**
+ * #81 : fenêtre from/to du routeur. Longueur bornée puis validation ISO ;
+ * paramètre absent = pas de borne. Renvoie null = 400 (jamais de date devinée).
+ */
+function canteenWindow(url: URL): { from?: string; to?: string } | null {
+  const out: { from?: string; to?: string } = {};
+  for (const key of ["from", "to"] as const) {
+    const raw = url.searchParams.get(key);
+    if (raw === null) continue;
+    const t = raw.trim().slice(0, CANTEEN_DATE_MAX_CHARS);
+    if (t === "") continue;
+    if (Number.isNaN(Date.parse(t))) return null;
+    out[key] = t;
+  }
+  return out;
+}
+
 function json(valid: boolean, payload: unknown): Response {
   if (!valid) return apiError("internal", "invalid payload");
   return Response.json(payload);
 }
 
-function sse(event: ContractEvent): Response {
-  const line = `data: ${JSON.stringify(event)}\n\n`;
+function sse(events: ContractEvent | ContractEvent[]): Response {
+  const list = Array.isArray(events) ? events : [events];
+  const line = list.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(new TextEncoder().encode(line));
@@ -129,7 +155,15 @@ export function createHandler(
           at: new Date().toISOString(),
           data,
         };
-        return sse(event);
+        // #79 : snapshot actus dans le meme flux (items filtrees par le garde-fou
+        // pour garantir une enveloppe valide, pas de 500 possible en flux ouvert).
+        const newsEvent: ContractEvent<"NewsUpdated", NewsUpdatedData> = {
+          v: CONTRACTS_VERSION,
+          type: "NewsUpdated",
+          at: new Date().toISOString(),
+          data: { items: (store.news?.() ?? []).filter(isNewsItem) },
+        };
+        return sse([event, newsEvent]);
       }
       case "/v1/revision-sheets": {
         const payload = { sheets: revisions.list() };
@@ -206,6 +240,43 @@ export function createHandler(
           return apiError("bad_request", "subject prefs rejected");
         }
         return json(isSubjectPrefs(body), body);
+      }
+
+      // #78 : compétences fournies = chips + détail. Store sans évaluations
+      // (ou établissement sans l'onglet) = trois listes vides, état propre.
+      case "/v1/evaluations": {
+        const evaluations = store.evaluations?.() ?? [];
+        const payload = {
+          skills: buildSkills(evaluations),
+          evaluations,
+          summary: buildCompetenceSummary(evaluations),
+        };
+        return json(isEvaluationsResponse(payload), payload);
+      }
+
+      case "/v1/news": {
+        // #79 : onglet Actualités. Store sans table actus = liste vide (200).
+        const payload = { news: store.news?.() ?? [] };
+        return json(isNewsResponse(payload), payload);
+      }
+
+      // #81 : menus cantine de la fenêtre from/to (optionnels, défaut semaine
+      // courante côté app). Fenêtre bornée en longueur puis validée ISO : date
+      // illisible = 400, jamais de date devinée. Aucun menu = [] (onglet masqué).
+      case "/v1/menus": {
+        const win = canteenWindow(url);
+        if (win === null) return apiError("bad_request", "invalid date window");
+        const all = store.canteenMenus?.(win) ?? [];
+        const from = win.from === undefined ? null : Date.parse(win.from);
+        const to = win.to === undefined ? null : Date.parse(win.to);
+        const menus = all.filter((m) => {
+          const d = Date.parse(m.date);
+          if (Number.isNaN(d)) return false;
+          return (from === null || d >= from) && (to === null || d <= to);
+        });
+        const balance = store.canteenBalance?.() ?? undefined;
+        const payload = balance === undefined ? { menus } : { menus, balance };
+        return json(isCanteenMenusResponse(payload), payload);
       }
       default:
         return apiError("not_found", `unknown path ${path}`);
