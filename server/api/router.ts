@@ -8,7 +8,9 @@ import {
   API_ROUTES,
   SUBJECT_PREFS_MAX_BODY_CHARS,
   isAssignmentsResponse,
+  isAttendanceResponse,
   isEvaluationsResponse,
+  isPunishmentsResponse,
 
   isCanteenMenusResponse,
   isGradesResponse,
@@ -26,6 +28,7 @@ import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDev
 import type { ContractEvent, NewsUpdatedData, SyncCompletedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
 import { computeAverages } from "../domain/averages";
+import { attendancePeriods } from "../domain/attendance";
 import { buildCompetenceSummary, buildSkills } from "../domain/competences";
 import { handleHomeworkGenerate } from "./homework";
 import { PairingService } from "./pairing";
@@ -278,6 +281,24 @@ export function createHandler(
         const payload = balance === undefined ? { menus } : { menus, balance };
         return json(isCanteenMenusResponse(payload), payload);
       }
+
+      // #77 vie scolaire : absences + retards unifiés (kind) + compteurs dérivés
+      // par période. Store sans vie scolaire = listes vides (onglet masqué).
+      // periodId reflété dans la réponse : entrée utilisateur bornée en amont.
+      case "/v1/attendance": {
+        const rawPeriod = (url.searchParams.get("periodId") ?? "").trim().slice(0, PERIOD_ID_MAX_CHARS);
+        const periodId = rawPeriod === "" ? null : rawPeriod;
+        const all = store.absences?.() ?? [];
+        const absences = periodId === null ? all : all.filter((a) => a.periodId === periodId);
+        const payload = { absences, periods: attendancePeriods(absences, store.periods()) };
+        return json(isAttendanceResponse(payload), payload);
+      }
+
+      case "/v1/punishments": {
+        const payload = { punishments: store.punishments?.() ?? [] };
+        return json(isPunishmentsResponse(payload), payload);
+      }
+
       default:
         return apiError("not_found", `unknown path ${path}`);
     }

@@ -36,6 +36,10 @@ object ServerConfig {
     // #81 : menus cantine de la fenêtre (semaine par défaut).
     fun menusUrl(baseUrl: String): String = "$baseUrl/v1/menus"
 
+    // #77 : vie scolaire — absences/retards (compteurs par période) + sanctions.
+    fun attendanceUrl(baseUrl: String): String = "$baseUrl/v1/attendance"
+    fun punishmentsUrl(baseUrl: String): String = "$baseUrl/v1/punishments"
+
     // ponytail: allowlist = préfixe baseUrl seule. Upgrade: pinning cert phase 10.
     fun isAllowed(url: String, baseUrl: String): Boolean = url.startsWith(baseUrl)
 }
