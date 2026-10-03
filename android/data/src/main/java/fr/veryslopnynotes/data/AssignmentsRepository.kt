@@ -79,7 +79,8 @@ class AssignmentsRepository(private val api: ApiClient) {
             return out
         }
 
-        fun fromJson(o: JSONObject): Assignment? = try {
+        fun fromJson(o: JSONObject): Assignment? {
+            return try {
             val atts = mutableListOf<AssignmentAttachment>()
             val arr = o.optJSONArray("attachments")
             for (i in 0 until (arr?.length() ?: 0)) {
@@ -110,18 +111,20 @@ class AssignmentsRepository(private val api: ApiClient) {
                 periodId = o.optString("periodId", "").takeIf { it.isNotEmpty() },
                 weekId = o.optString("weekId", "").takeIf { it.isNotEmpty() },
             )
-        } catch (_: Exception) {
-            null
+            } catch (_: Exception) {
+                null
+            }
         }
 
         /** Réponse du toggle : {assignment, event}. L'event sert d'invalidation de cache. */
-        fun parseToggle(body: String): Assignment? =
-            try {
+        fun parseToggle(body: String): Assignment? {
+            return try {
                 val root = JSONObject(body)
                 fromJson(root.optJSONObject("assignment") ?: return null)
             } catch (_: Exception) {
                 null
             }
+        }
 
         /** URL de téléchargement d'une PJ : PROXY SERVEUR, jamais une URL Pronote (I1). */
         fun mediaUrl(baseUrl: String, accountId: String, ref: String): String =
