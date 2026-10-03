@@ -1,16 +1,23 @@
 package fr.veryslopnynotes.ui
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,7 +35,11 @@ import fr.veryslopnynotes.core.SecurityAlert
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.FileCacheStore
+import fr.veryslopnynotes.data.FileSubjectPrefsStore
 import fr.veryslopnynotes.data.InMemoryCacheStore
+import fr.veryslopnynotes.data.InMemorySubjectPrefsStore
+import fr.veryslopnynotes.data.SubjectPrefs
+import fr.veryslopnynotes.data.SubjectPrefsRepository
 import fr.veryslopnynotes.data.SyncedRepository
 
 // Parité Papillon #86 : 5 onglets (index, calendar, grades, tasks, profile)
@@ -39,9 +50,11 @@ import fr.veryslopnynotes.data.SyncedRepository
 // Appairage QR+PIN #15 : route "pairing" (PairingRoute), token chiffré.
 // Alertes sécurité #21 : route "alerts" (SecurityAlertsRoute, I6).
 // Fiches révision #30 : route "fiches" (RevisionSheetsScreen).
-// index/profile/settings : coquilles parité (#82 profil/accueil et #83
-// réglages brancheront les données ici) ; aucun faux contenu.
-// Contenu serveur affiche comme donnee, jamais interprete.
+// Préférences matière #83 : route "settings" (éditeur couleur/emoji/libellé),
+// résolveur unique appliqué aux notes, devoirs et EDT (SubjectStyle.kt), offline
+// via fichier local + réplication serveur (SubjectPrefs.kt).
+// index/profile : coquilles parité (#82 profil/accueil branchera les données ici) ;
+// aucun faux contenu. Contenu serveur affiché comme donnée, jamais interprété.
 
 // ponytail: routes en const (pas de sealed class avant besoin #82/#83).
 const val ROUTE_INDEX = "index"
@@ -80,8 +93,23 @@ fun AppNav(
         }
         SyncedRepository(ApiClient(baseUrl), store)
     }
+    // #83 : prefs matière = fichier local (survit au restart, lisible hors
+    // ligne), répliqué vers le serveur allowlist seul (I1).
+    val prefsRepo = remember(baseUrl) {
+        val store = try {
+            FileSubjectPrefsStore(java.io.File(ctx.filesDir, "offline/subject_prefs.json"))
+        } catch (_: Exception) {
+            InMemorySubjectPrefsStore()
+        }
+        SubjectPrefsRepository(ApiClient(baseUrl), store)
+    }
+    var subjectPrefs by remember { mutableStateOf(prefsRepo.prefs()) }
+    val (theme, setTheme) = rememberAppTheme()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    // ponytail: deux schemes Material3 de base, appliqués une fois à la racine.
+    val colorScheme = if (isDarkTheme(theme, isSystemInDarkTheme())) darkColorScheme() else lightColorScheme()
+    MaterialTheme(colorScheme = colorScheme) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("VerySlopyNyNotes") }) },
         bottomBar = {
@@ -113,19 +141,34 @@ fun AppNav(
                 IndexScreen(repo, { nav.navigate(ROUTE_CALENDAR) }, { nav.navigate(ROUTE_GRADES) }, { nav.navigate(ROUTE_TASKS) })
             }
             composable(ROUTE_CALENDAR) {
-                CachedScreen("Calendrier", CachePolicy.TIMETABLE, repo, baseUrl, "EDT semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
+                CachedScreen("Calendrier", CachePolicy.TIMETABLE, repo, baseUrl, "EDT semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, subjectPrefs = subjectPrefs)
             }
             composable(ROUTE_GRADES) {
-                CachedScreen("Notes", CachePolicy.GRADES, repo, baseUrl, "Moyennes", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, showAverage = true)
+                CachedScreen("Notes", CachePolicy.GRADES, repo, baseUrl, "Moyennes", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, showAverage = true, subjectPrefs = subjectPrefs)
             }
             composable(ROUTE_TASKS) {
-                CachedScreen("Tâches", CachePolicy.ASSIGNMENTS, repo, baseUrl, "Devoirs semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
+                CachedScreen("Tâches", CachePolicy.ASSIGNMENTS, repo, baseUrl, "Devoirs semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, subjectPrefs = subjectPrefs)
             }
             composable(ROUTE_PROFILE) {
                 ProfileScreen(baseUrl, { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, { nav.navigate("fiches") })
             }
             composable(ROUTE_SETTINGS) {
-                SettingsScreen(onBack = { nav.popBackStack() })
+                SettingsScreen(
+                    onBack = { nav.popBackStack() },
+                    subjectPrefs = subjectPrefs,
+                    onSavePrefs = { subject, color, emoji, label ->
+                        prefsRepo.upsert(subject, color, emoji, label)
+                        subjectPrefs = prefsRepo.prefs()
+                    },
+                    onRefreshPrefs = {
+                        // Serveur non configuré : aucun appel (I1), prefs locales conservées.
+                        if (baseUrl.isNotBlank()) {
+                            prefsRepo.refresh(baseUrl) { subjectPrefs = it }
+                        }
+                    },
+                    theme = theme,
+                    onTheme = setTheme,
+                )
             }
             composable("pairing") {
                 if (baseUrl.isBlank()) {
@@ -145,6 +188,7 @@ fun AppNav(
             composable("fiches") { RevisionSheetsScreen() }
         }
     }
+    }
 }
 
 @Composable
@@ -159,6 +203,8 @@ fun CachedScreen(
     goAlerts: () -> Unit,
     // #74 : mention "fournie"/"estimée" sous le titre (onglet Notes seul).
     showAverage: Boolean = false,
+    // #83 : prefs matière du résolveur unique (légende couleur/emoji/libellé).
+    subjectPrefs: List<SubjectPrefs> = emptyList(),
 ) {
     // Etat initial = cache synchrone (affichage sans reseau immediat).
     var state by remember(resource) {
@@ -203,11 +249,14 @@ fun CachedScreen(
             UiState.Empty -> Text("Aucune donnée en cache. Connectez-vous puis actualisez.")
             is UiState.Data -> {
                 if (s.isStale) Text("Données hors-ligne (périmé).")
+                // #83 : matières du payload résolues (nom seul si aucune prefs).
+                SubjectLegend(subjectsFromPayload(s.payload), subjectPrefs)
                 // ponytail: payload brut affiche tel quel (donnee, jamais interpretee).
                 Text(if (s.payload.length > 500) s.payload.take(500) + "…" else s.payload)
             }
             is UiState.Error -> {
                 Text("Erreur réseau. Réessayer.")
+                SubjectLegend(subjectsFromPayload(s.cached.orEmpty()), subjectPrefs)
                 if (s.cached != null) Text(s.cached.take(500))
             }
         }
@@ -303,20 +352,106 @@ fun ProfileScreen(
     }
 }
 
-// Réglages #86 : coquille parité (#83 matières perso + thème + comptes
-// brancheront la persistance ici). Aucun effet réseau, I1 intact.
+// Réglages #83 : préférences matière (couleur/emoji/libellé, offline-first via
+// SubjectPrefsRepository) + thème clair/sombre persisté (Theme.kt). Aucun effet
+// réseau hors serveur allowlist, I1 intact.
+// @OptIn: FilterChip.material3 tant qu'il reste annoté Expérimental.
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
-    // ponytail: état local seul (pas de DataStore avant #83).
-    var theme by remember { mutableStateOf("Système") }
+fun SettingsScreen(
+    onBack: () -> Unit,
+    subjectPrefs: List<SubjectPrefs> = emptyList(),
+    // Signature = arguments édités, validation faite par isValid (contrat).
+    onSavePrefs: (String, String?, String?, String?) -> Unit = { _, _, _, _ -> },
+    onRefreshPrefs: () -> Unit = {},
+    theme: AppTheme = AppTheme.SYSTEM,
+    onTheme: (AppTheme) -> Unit = {},
+) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text("Réglages")
-        Text("Thème : $theme")
-        Button(onClick = { theme = if (theme == "Système") "Clair" else "Système" }) { Text("Changer de thème") }
-        Text("Matières personnalisées et comptes arrivent avec la synchro (#83).")
+        Text("Thème : ${themeLabel(theme)}")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (mode in AppTheme.values().toList()) {
+                FilterChip(
+                    selected = theme == mode,
+                    onClick = { onTheme(mode) },
+                    label = { Text(themeLabel(mode)) },
+                )
+            }
+        }
+        Text("Matières")
+        if (subjectPrefs.isEmpty()) {
+            Text("Aucune matière personnalisée. Le nom d'origine est affiché partout.")
+        } else {
+            for (p in subjectPrefs) {
+                SubjectPrefsEditor(
+                    subject = p.subject,
+                    color = p.color,
+                    emoji = p.emoji,
+                    label = p.label,
+                    onSave = onSavePrefs,
+                )
+            }
+        }
+        // Matière inconnue = nom libre (validation isValid côté repository).
+        var newSubject by remember { mutableStateOf("") }
+        OutlinedTextField(
+            value = newSubject,
+            onValueChange = { newSubject = it },
+            label = { Text("Matière à personnaliser") },
+            singleLine = true,
+        )
+        Button(onClick = { onSavePrefs(newSubject, "", "", ""); newSubject = "" }) { Text("Ajouter la matière") }
+        Button(onClick = { onRefreshPrefs() }) { Text("Synchroniser les préférences") }
         Button(onClick = onBack) { Text("Retour") }
+    }
+}
+
+// ponytail: palette de 8 couleurs en dur (aucun Color Picker tant que le
+// besoin n'est pas prouvé), champs texte = Material3 de base.
+private val PREFS_PALETTE = listOf(
+    "#E53935", "#D81B60", "#8E24AA", "#5E35B1",
+    "#3949AB", "#1E88E5", "#43A047", "#FB8C00",
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SubjectPrefsEditor(
+    subject: String,
+    color: String?,
+    emoji: String?,
+    label: String?,
+    onSave: (String, String?, String?, String?) -> Unit,
+) {
+    var draftColor by remember(subject) { mutableStateOf(color ?: "") }
+    var draftEmoji by remember(subject) { mutableStateOf(emoji ?: "") }
+    var draftLabel by remember(subject) { mutableStateOf(label ?: "") }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(subject)
+        OutlinedTextField(
+            value = draftLabel,
+            onValueChange = { draftLabel = it },
+            label = { Text("Libellé") },
+            singleLine = true,
+        )
+        OutlinedTextField(
+            value = draftEmoji,
+            onValueChange = { draftEmoji = it },
+            label = { Text("Emoji") },
+            singleLine = true,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            for (hex in PREFS_PALETTE) {
+                FilterChip(
+                    selected = draftColor.equals(hex, ignoreCase = true),
+                    onClick = { draftColor = if (draftColor.equals(hex, ignoreCase = true)) "" else hex },
+                    label = { Text("■", color = colorFromHex(hex) ?: MaterialTheme.colorScheme.onSurface) },
+                )
+            }
+        }
+        Button(onClick = { onSave(subject, draftColor, draftEmoji, draftLabel) }) { Text("Enregistrer $subject") }
     }
 }

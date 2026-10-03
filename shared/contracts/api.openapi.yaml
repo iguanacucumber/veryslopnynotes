@@ -155,6 +155,33 @@ paths:
           content:
             application/pdf:
               schema: { type: string, format: binary }
+  /v1/subjects/prefs:
+    get:
+      operationId: listSubjectPrefs
+      description: Préférences matière (couleur/emoji/libellé), add-only #83. Matière sans prefs = nom seul.
+      responses:
+        '200':
+          description: préférences par matière
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectPrefsResponse'
+    put:
+      operationId: upsertSubjectPrefs
+      description: Upsert des préférences d'une matière (clé = nom de matière, corps borné 2048 caractères).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubjectPrefs'
+      responses:
+        '200':
+          description: préférences enregistrées
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectPrefs'
 components:
   schemas:
     Grade:
@@ -352,3 +379,17 @@ components:
         steps: { type: array, items: { type: string } }
         reason: { type: string }
         sources: { type: array, items: { type: string } }
+    SubjectPrefs:
+      type: object
+      required: [subject, updatedAt]
+      properties:
+        subject: { type: string, maxLength: 64 }
+        color: { type: string, pattern: '^#[0-9a-fA-F]{6}$', description: Couleur d'affichage, #RRGGBB strict. }
+        emoji: { type: string, maxLength: 8, description: Emoji court (points de code), absent = aucun. }
+        label: { type: string, maxLength: 64, description: Libellé personnalisé, absent = nom d'origine. }
+        updatedAt: { type: string, format: date-time }
+    SubjectPrefsResponse:
+      type: object
+      required: [prefs]
+      properties:
+        prefs: { type: array, maxItems: 64, items: { $ref: '#/components/schemas/SubjectPrefs' } }
