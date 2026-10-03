@@ -54,6 +54,9 @@ class SyncedRepository(
             .removePrefix(baseUrl).ifEmpty { "/v1/attendance" }
         CachePolicy.PUNISHMENTS -> ServerConfig.punishmentsUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/punishments" }
+        // #80 : liste des fils de messagerie (les messages ne sont pas en cache).
+        CachePolicy.DISCUSSIONS -> ServerConfig.discussionsUrl(baseUrl)
+            .removePrefix(baseUrl).ifEmpty { "/v1/discussions" }
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
     }
 
