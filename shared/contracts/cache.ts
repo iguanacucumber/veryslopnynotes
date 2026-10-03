@@ -8,6 +8,11 @@
 // Add-only, le sync serveur reste la source de vérité. Invalidation =
 // CacheInvalidated (resource attendance/punishments), pas d'événement dédié.
 // "evaluations" (#78) : badge périmé comme les notes, même principe.
+// "capabilities" (#87) ajouté en fin : la liste des onglets Pronote actifs ne
+// bouge qu'à la configuration de l'établissement. Elle est cachée comme les
+// autres (l'app masque un onglet sans réseau) et invalidée par
+// CacheInvalidated (resource capabilities) quand le pull-refresh la change.
+
 // "discussions" (#80) ajouté en FIN : la MESSAGERIE est une donnée personnelle
 // (sujets, participants, non-lus). Elle n'est donc JAMAIS journalisée en clair,
 // et sa purge au logout est couverte par le `clearAll()` global (#82). Seule la
@@ -15,7 +20,7 @@
 // (jamais en cache disque). TTL = cadence des devoirs (arrivée fréquente).
 // Invalidation = CacheInvalidated (resource discussions) renvoyé par les
 // actions d'écriture confirmées par l'app, pas d'événement dédié.
-export const CACHEABLE_RESOURCES = ["grades", "assignments", "timetable", "news", "menus", "evaluations", "attendance", "punishments", "discussions"] as const;
+export const CACHEABLE_RESOURCES = ["grades", "assignments", "timetable", "news", "menus", "evaluations", "attendance", "punishments", "capabilities", "discussions"] as const;
 
 export type CacheableResource = (typeof CACHEABLE_RESOURCES)[number];
 
@@ -33,6 +38,9 @@ export const CACHE_TTL_MS: Record<CacheableResource, number> = {
   // #77 : vie scolaire (absences/retards/sanctions), rythme EDT.
   attendance: 60 * 60 * 1000,
   punishments: 60 * 60 * 1000,
+  // #87 : onglets Pronote actifs = configuration d'établissement, très lente.
+  capabilities: 24 * 60 * 60 * 1000,
+
   // #80 : liste des fils de messagerie, cadence devoirs (messages fréquents).
   discussions: 15 * 60 * 1000,
 } as const;

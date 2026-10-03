@@ -57,7 +57,8 @@ async function handlerWithClient(options: { tab?: boolean } = {}) {
     undefined,
     undefined,
     undefined,
-    reader,
+    null,
+    reader as never,
   );
   return { handler, sessions };
 }

@@ -56,6 +56,13 @@ object ServerConfig {
     fun attendanceUrl(baseUrl: String): String = "$baseUrl/v1/attendance"
     fun punishmentsUrl(baseUrl: String): String = "$baseUrl/v1/punishments"
 
+    // #87 : capacités dynamiques (onglets actifs de l'établissement) et
+    // pull-refresh manuel (app -> serveur -> relecture). Aucune URL Pronote/ENT
+    // ici : le serveur allowlist seul (I1).
+    fun capabilitiesUrl(baseUrl: String): String = "$baseUrl/v1/capabilities"
+    fun syncRefreshUrl(baseUrl: String): String = "$baseUrl/v1/sync/refresh"
+
+
     // #80 : messagerie (parité Papillon, onglet Discussions). Lectures :
     // liste des fils, messages d'un fil, destinataires d'une nouvelle discussion.
     // ÉCRITURES : une route par action, chacune déclenchée par un geste de
