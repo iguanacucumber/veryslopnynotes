@@ -28,6 +28,7 @@ import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.DiscussionsRepository
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SyncedRepository
+import fr.veryslopnynotes.data.TokenStore
 
 // Onglet Messagerie #80 (parité Papillon Discussions) : liste des fils, lecture
 // d'un fil, réponse, création, lu/non-lu, suppression.
@@ -240,8 +241,10 @@ fun MessagesRoute(
     repo: SyncedRepository,
     baseUrl: String,
     accountId: String,
+    // Bearer du device appairé (contrat 0.4.0), relu à chaque requête.
+    tokens: TokenStore? = null,
 ) {
-    val api = remember(baseUrl) { ApiClient(baseUrl) }
+    val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }
     val discussionsRepo = remember(api) { DiscussionsRepository(api) }
     // Cache synchrone au démarrage (affichage hors-ligne sans attendre le réseau).
     var payload by remember {

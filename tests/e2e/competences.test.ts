@@ -5,6 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "../unit/fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import type { ReadStore } from "../../server/api/store";
 import { isEvaluationsResponse } from "../../shared/contracts/api";
@@ -23,8 +24,9 @@ async function serveEvaluations(seed?: Evaluation[]): Promise<EvaluationsRespons
   const page = await reader.getEvaluations(syntheticAccountId);
   // Le contenu externe Untrusted est repris tel quel, jamais interprété.
   const evaluations = page.items.value as Evaluation[];
-  const handler = createHandler(createMemoryStore({ evaluations: seed ?? evaluations }));
-  const res = await handler(new Request("http://127.0.0.1/v1/evaluations"));
+  const { pairing, auth } = pairedDevice();
+  const handler = createHandler(createMemoryStore({ evaluations: seed ?? evaluations }), pairing);
+  const res = await handler(new Request("http://127.0.0.1/v1/evaluations", { headers: auth }));
   expect(res.status).toBe(200);
   const body = (await res.json()) as EvaluationsResponse;
   expect(isEvaluationsResponse(body)).toBe(true);
@@ -61,8 +63,9 @@ describe("e2e compétences (#78)", () => {
       sessions: { requireClient: () => syntheticClientWithoutEvaluations() },
     });
     const page = await reader.getEvaluations(syntheticAccountId);
-    const handler = createHandler(createMemoryStore({ evaluations: page.items.value as Evaluation[] }));
-    const res = await handler(new Request("http://127.0.0.1/v1/evaluations"));
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore({ evaluations: page.items.value as Evaluation[] }), pairing);
+    const res = await handler(new Request("http://127.0.0.1/v1/evaluations", { headers: auth }));
     expect(await res.json()).toEqual({ skills: [], evaluations: [], summary: [] });
   });
 
@@ -76,13 +79,15 @@ describe("e2e compétences (#78)", () => {
       periods: full.periods,
       providedAverages: full.providedAverages,
     };
-    const res = await createHandler(legacy)(new Request("http://127.0.0.1/v1/evaluations"));
+    const { pairing, auth } = pairedDevice();
+    const res = await createHandler(legacy, pairing)(new Request("http://127.0.0.1/v1/evaluations", { headers: auth }));
     expect(res.status).toBe(200);
     expect(isEvaluationsResponse(await res.json())).toBe(true);
   });
 
   test("méthode absente sur la route : 404, pas de 500", async () => {
-    const res = await createHandler(createMemoryStore())(new Request("http://127.0.0.1/v1/competences"));
+    const { pairing, auth } = pairedDevice();
+    const res = await createHandler(createMemoryStore(), pairing)(new Request("http://127.0.0.1/v1/competences", { headers: auth }));
     expect(res.status).toBe(404);
   });
 });

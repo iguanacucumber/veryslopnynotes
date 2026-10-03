@@ -3,10 +3,9 @@
 // handlers déjà couverts ailleurs : un test vert ici prouve que le serveur
 // démarre réellement branché, pas qu'un WiringFactory existe sur le papier.
 // Fakes 100 % synthétiques, aucun accès réseau, aucun secret.
-import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { createApp } from "../../server/infrastructure/http";
 import type { App } from "../../server/infrastructure/http";
-import { PairingService } from "../../server/api/pairing";
 import { createLiveSync } from "../../server/infrastructure/live-sync";
 import { SnapshotStore } from "../../server/infrastructure/snapshot-store";
 import { isContractEvent } from "../../shared/contracts/events";
@@ -84,28 +83,10 @@ const ENV = {
 };
 
 describe("composition serveur (http.ts)", () => {
-  // POST /v1/assignments/toggle touche Pronote : la composition exige un device
-  // APPAIRÉ. `createApp` construit son PROPRE PairingService (non exporté) et
-  // l'API ne rend que `tokenHash` — le secret brut ne sort JAMAIS d'y. On
-  // instrumente donc `confirm` pour récupérer l'instance COMPOSÉE et son
-  // secret : l'appairage reste intégralement réel (vrai PIN, vrai secret
-  // aléatoire, sha256 comparé par le routeur), seule la lecture du secret est
-  // faite depuis le test — comme le provider push le fait en production.
-  const composed: PairingService[] = [];
-  let restore: (() => void) | null = null;
-  beforeAll(() => {
-    const base = PairingService.prototype.confirm;
-    const spy = spyOn(PairingService.prototype, "confirm").mockImplementation(function (
-      this: PairingService,
-      ...args: Parameters<PairingService["confirm"]>
-    ) {
-      composed.push(this);
-      return base.apply(this, args);
-    });
-    restore = () => spy.mockRestore();
-  });
-  afterAll(() => restore?.());
-
+  // Toute route hors appairage + /v1/health exige un device APPAIRÉ (0.4.0).
+  // `createApp` construit son PROPRE PairingService (non exporté) : on appaire
+  // donc via l'API elle-même, parcours réel de l'app (vrai PIN, vrai secret
+  // aléatoire, sha256 comparé par le routeur).
   /** Appaire un device via l'API du serveur puis rend l'en-tête `Bearer`. */
   async function paired(app: App): Promise<Record<string, string>> {
     const start = await app.handler(
@@ -122,9 +103,11 @@ describe("composition serveur (http.ts)", () => {
       }),
     );
     expect(confirm.status).toBe(200);
-    const device = (await confirm.json()) as { id: string };
-    const token = composed[composed.length - 1]?.tokenOf(device.id);
-    if (token === null || token === undefined) throw new Error("jeton du device appairé indisponible");
+    // 0.4.0 : la réponse d'appairage porte le secret, UNE SEULE FOIS. Le test
+    // le lit comme le fait l'app (avant, il espionnait `confirm` pour le
+    // récupérer côté serveur).
+    const { device, token } = (await confirm.json()) as { device: { id: string; tokenHash: string }; token: string };
+    expect(device.tokenHash).toMatch(/^[0-9a-f]{64}$/);
     return { authorization: `Bearer ${token}` };
   }
 
@@ -132,11 +115,13 @@ describe("composition serveur (http.ts)", () => {
     const app = createApp({ PORT: "3000" }, { reader: null, sessions: null });
     const health = await app.handler(new Request("http://127.0.0.1/v1/health"));
     expect(health.status).toBe(200);
-    const grades = await app.handler(new Request("http://127.0.0.1/v1/grades"));
+    const auth = await paired(app);
+    const grades = await app.handler(new Request("http://127.0.0.1/v1/grades", { headers: auth }));
     // Store vide = rapport de moyennes estimées sans note : jamais un 500.
     expect(grades.status).toBe(200);
     expect(isGradesResponse(await grades.json())).toBe(true);
-    const auth = await paired(app);
+    // Sans bearer, la lecture est refusée (401) : la route est fermée.
+    expect((await app.handler(new Request("http://127.0.0.1/v1/grades"))).status).toBe(401);
     const toggle = await app.handler(
       new Request("http://127.0.0.1/v1/assignments/toggle", {
         method: "POST",
@@ -150,8 +135,9 @@ describe("composition serveur (http.ts)", () => {
   test("refresh : snapshot alimenté par le reader, événements contractuels, 1re passe sans faux positif", async () => {
     const { reader, calls } = fakeReader();
     const app = createApp(ENV, { reader, sessions: null });
+    const auth = await paired(app);
     const res = await app.handler(
-      new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", body: "{}" }),
+      new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: auth, body: "{}" }),
     );
     expect(res.status).toBe(200);
     const events = (await res.json()).events as unknown[];
@@ -160,13 +146,13 @@ describe("composition serveur (http.ts)", () => {
     // Premier sync = zéro GradeCreated/TimetableUpdated (pas de faux positif).
     expect(events.some((e) => (e as { type: string }).type === "GradeCreated")).toBe(false);
     // Le store est réellement rempli : les routes lisent le snapshot.
-    const grades = await app.handler(new Request("http://127.0.0.1/v1/grades"));
+    const grades = await app.handler(new Request("http://127.0.0.1/v1/grades", { headers: auth }));
     const gradesBody = await grades.json();
     expect(isGradesResponse(gradesBody)).toBe(true);
     expect((gradesBody as { grades: unknown[] }).grades).toHaveLength(1);
-    const timetable = await app.handler(new Request("http://127.0.0.1/v1/timetable"));
+    const timetable = await app.handler(new Request("http://127.0.0.1/v1/timetable", { headers: auth }));
     expect(isTimetableResponse(await timetable.json())).toBe(true);
-    const caps = await app.handler(new Request("http://127.0.0.1/v1/capabilities"));
+    const caps = await app.handler(new Request("http://127.0.0.1/v1/capabilities", { headers: auth }));
     const capsBody = await caps.json();
     expect(isCapabilitiesResponse(capsBody)).toBe(true);
     expect((capsBody as { capabilities: unknown }).capabilities).not.toBeNull();
@@ -190,9 +176,10 @@ describe("composition serveur (http.ts)", () => {
       },
     } as never;
     const app = createApp(ENV, { reader, sessions: null });
-    await app.handler(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", body: "{}" }));
+    const auth = await paired(app);
+    await app.handler(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: auth, body: "{}" }));
     const second = await app.handler(
-      new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", body: "{}" }),
+      new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: auth, body: "{}" }),
     );
     const events = (await second.json()).events as { type: string }[];
     expect(events.map((e) => e.type)).toContain("GradeCreated");
@@ -232,6 +219,7 @@ describe("composition serveur (http.ts)", () => {
     const create = await app.handler(
       new Request("http://127.0.0.1/v1/discussions", {
         method: "POST",
+        headers: auth,
         body: JSON.stringify({ subject: "Sortie", body: "Merci.", recipientIds: ["r-1"] }),
       }),
     );
@@ -241,6 +229,7 @@ describe("composition serveur (http.ts)", () => {
     const homework = await app.handler(
       new Request("http://127.0.0.1/v1/homework/generate", {
         method: "POST",
+        headers: auth,
         body: JSON.stringify({ question: "q", sources: [] }),
       }),
     );

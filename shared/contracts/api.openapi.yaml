@@ -1,12 +1,21 @@
 openapi: 3.0.3
 info:
   title: veryslopnynotes API
-  version: 0.3.0
+  version: 0.4.0
   description: Contrats app <-> serveur. Source de vérité (phase 1, issue #4). Miroir de shared/contracts/*.ts.
+# Porte d'authentification UNIQUE : le bearer d'un device appaire est exige sur
+# TOUTE route (lectures ET ecritures). Seules les trois routes declarees
+# `security: []` y echappent : les deux qui servent a OBTENIR le credential
+# (/v1/pairing/start, /v1/pairing/confirm) et la sonde de vivacite
+# (/v1/health). Une route ajoutee est donc fermee par defaut.
+security:
+  - deviceBearer: []
 paths:
   /v1/health:
     get:
       operationId: health
+      # Route ouverte : sonde de vivacite, aucun credential (device non encore appaire).
+      security: []
       responses:
         '200':
           description: ok
@@ -17,6 +26,8 @@ paths:
   /v1/pairing/start:
     post:
       operationId: pairingStart
+      # Route ouverte : c'est ici qu'on OBTIENT le credential (QR {sessionId, code}).
+      security: []
       requestBody:
         required: true
         content:
@@ -33,6 +44,8 @@ paths:
   /v1/pairing/confirm:
     post:
       operationId: pairingConfirm
+      # Route ouverte : SEULE réponse qui porte le secret du device.
+      security: []
       requestBody:
         required: true
         content:
@@ -41,11 +54,11 @@ paths:
               $ref: '#/components/schemas/PairingConfirmRequest'
       responses:
         '200':
-          description: appareil appairé
+          description: appareil appairé + secret du device, renvoyé UNE SEULE FOIS ici
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Device'
+                $ref: '#/components/schemas/PairingConfirmResponse'
   /v1/grades:
     get:
       operationId: listGrades
@@ -66,6 +79,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GradesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/periods:
     get:
       operationId: listPeriods
@@ -76,6 +91,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PeriodsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/assignments:
     get:
       operationId: listAssignments
@@ -105,6 +122,8 @@ paths:
                 $ref: '#/components/schemas/AssignmentsResponse'
         '400':
           description: fenetre de dates illisible
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/assignments/toggle:
     post:
       operationId: toggleAssignmentDone
@@ -190,6 +209,8 @@ paths:
                 $ref: '#/components/schemas/TimetableResponse'
         '400':
           description: fenetre de dates illisible
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/events:
     get:
       operationId: subscribeEvents
@@ -197,6 +218,8 @@ paths:
       responses:
         '200':
           description: flux text/event-stream d'enveloppes ContractEvent
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/security/alerts:
     get:
       operationId: listSecurityAlerts
@@ -208,6 +231,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SecurityAlertsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/homework/generate:
     post:
       operationId: homeworkGenerate
@@ -225,6 +250,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HomeworkGenerateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/revision-sheets:
     get:
       operationId: listRevisionSheets
@@ -235,6 +262,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RevisionSheetsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/revision-sheets/pdf:
     get:
       operationId: exportRevisionSheetPdf
@@ -249,6 +278,8 @@ paths:
           content:
             application/pdf:
               schema: { type: string, format: binary }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/subjects/prefs:
     get:
       operationId: listSubjectPrefs
@@ -260,6 +291,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SubjectPrefsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     put:
       operationId: upsertSubjectPrefs
       description: Upsert des préférences d'une matière (clé = nom de matière, corps borné 2048 caractères).
@@ -276,6 +309,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SubjectPrefs'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /v1/evaluations:
     get:
@@ -288,6 +323,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EvaluationsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /v1/news:
     get:
@@ -300,6 +337,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NewsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /v1/menus:
     get:
@@ -326,6 +365,8 @@ paths:
                 $ref: '#/components/schemas/CanteenMenusResponse'
         '400':
           description: fenetre de dates illisible
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   # #77 vie scolaire : absences/retards unifiés (kind) + compteurs par periode,
   # et sanctions. Onglet vie scolaire inactif = listes vides, jamais 500.
@@ -344,6 +385,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AttendanceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/punishments:
     get:
       operationId: listPunishments
@@ -354,6 +397,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PunishmentsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
 
   /v1/me:
@@ -371,6 +416,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /v1/media:
     get:
@@ -396,6 +443,8 @@ paths:
               schema: { type: string, format: binary }
         '400':
           description: ref ou accountId manquant/illisible
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/capabilities:
     get:
       operationId: listCapabilities
@@ -412,6 +461,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CapabilitiesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/sync/refresh:
     post:
       operationId: refreshSync
@@ -457,6 +508,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DiscussionsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
       operationId: createDiscussion
       description: >-
@@ -496,6 +549,8 @@ paths:
                 $ref: '#/components/schemas/DiscussionMessagesResponse'
         '400':
           description: id manquant
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/discussions/recipients:
     get:
       operationId: listDiscussionRecipients
@@ -507,6 +562,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DiscussionRecipientsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /v1/discussions/reply:
     post:
       operationId: replyDiscussion
@@ -567,6 +624,22 @@ paths:
         '501':
           description: ecriture non supportee
 components:
+  securitySchemes:
+    deviceBearer:
+      type: http
+      scheme: bearer
+      description: >-
+        Secret du device appaire, renvoye UNE SEULE FOIS par
+        POST /v1/pairing/confirm (jamais journalise, jamais re-servi). Le serveur
+        ne conserve que sha256(token) et compare en temps constant. Present par
+        l'app en `Authorization: Bearer <token>` sur toutes les routes fermees ;
+        absent de /v1/pairing/start, /v1/pairing/confirm et /v1/health.
+  responses:
+    Unauthorized:
+      description: >-
+        Bearer absent, inconnu, expire ou revoque : un seul 401, un seul message,
+        un seul defi `WWW-Authenticate: Bearer realm="api"` (aucune fuite de la
+        cause). Aucune donnee n'est lue avant ce refus.
   schemas:
     Grade:
       type: object
@@ -712,6 +785,19 @@ components:
       properties:
         sessionId: { type: string }
         code: { type: string, pattern: '^[0-9]{6}$' }
+    PairingConfirmResponse:
+      type: object
+      required: [device, token]
+      properties:
+        device: { $ref: '#/components/schemas/Device' }
+        token:
+          type: string
+          maxLength: 512
+          description: >-
+            Secret du device, renvoyé UNE SEULE FOIS, ici, à l'appairage.
+            Le serveur ne conserve que sha256(token) ; l'app le stocke et le
+            présente en `Authorization: Bearer <token>` sur les routes protégé.
+            Jamais journalisé, jamais re-servi par une autre route.
     GradesResponse:
       type: object
       required: [grades, averages]
@@ -768,7 +854,7 @@ components:
       type: object
       required: [v, type, at, data]
       properties:
-        v: { type: string, enum: ['0.3.0'] }
+        v: { type: string, enum: ['0.4.0'] }
         type: { type: string, enum: [GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted, CacheInvalidated, SecurityAlert, NewsUpdated] }
         at: { type: string, format: date-time }
         data: { type: object }

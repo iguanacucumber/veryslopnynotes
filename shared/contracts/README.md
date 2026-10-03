@@ -27,6 +27,17 @@ Add-only #83 (v0.3) : préférences matière `SubjectPrefs` (couleur `#RRGGBB` s
 emoji borné, libellé perso) + `GET`/`PUT /v1/subjects/prefs`. Matière sans prefs = nom
 d'origine, donc les apps 0.2.0 ignorent le champ sans régression.
 
+v0.4 (`0.4.0`) : `PairingConfirmResponse` = `{ device: Device, token: string }`.
+Le token d'appareil en clair sort **UNE SEULE FOIS**, dans la réponse de
+`POST /v1/pairing/confirm` ; le serveur ne conserve que `sha256(token)`
+(`Device.tokenHash`) et ne le re-servit jamais. `isPairingConfirmResponse` valide
+`device` via `isDevice` + `token` borné non vide (`PAIRING_TOKEN_MAX_CHARS`).
+**Cassant** : champ requis de plus sur `/v1/pairing/confirm`, et les routes qui
+exigent un credential(`/v1/media`, `/v1/assignments/toggle`) renvoient 401 à une
+app 0.3.0 — qui ne connaît que `{ id, tokenHash }` et ne peut donc présenter aucun
+bearer. Secret jamais journalisé, jamais persisté en clair, jamais dans un
+`toJSON` ; un secret perdu = ré-appairage.
+
 Add-only #76 (pas de bump) : `TimetableEntry` + `teacher?`, `status?`
 (`normal`/`cancelled`/`moved`), `originalStart?`/`originalEnd?` (cours déplacé).
 Champ absent = établissement qui ne publie rien (jamais de `""` ni de `normal`

@@ -9,6 +9,7 @@ import { isCapabilitiesResponse, isSyncRefreshResponse } from "../../shared/cont
 import { isContractEvent } from "../../shared/contracts/events";
 import { CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "../unit/fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { runSync } from "../../server/jobs/sync";
 import type { SyncResult, SyncSink, SyncSnapshot, SyncSource } from "../../server/jobs/sync";
@@ -60,9 +61,12 @@ async function refreshOnce(source: SyncSource, sink: SyncSink, at = AT): Promise
 }
 
 describe("e2e sync (#87)", () => {
+  // Depuis 0.4.0 ces routes exigent le bearer d'un device appairé.
+  const { pairing: PAIRING, auth: AUTH } = pairedDevice();
+
   test("GET /v1/capabilities : onglets inactifs absents, état vide propre", async () => {
-    const handler = createHandler(createMemoryStore({ capabilities: CAPS }));
-    const res = await handler(new Request("http://127.0.0.1/v1/capabilities"));
+    const handler = createHandler(createMemoryStore({ capabilities: CAPS }), PAIRING);
+    const res = await handler(new Request("http://127.0.0.1/v1/capabilities", { headers: AUTH }));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { capabilities: Capabilities | null };
     expect(isCapabilitiesResponse(body)).toBe(true);
@@ -73,8 +77,8 @@ describe("e2e sync (#87)", () => {
     expect(JSON.stringify(body)).not.toMatch(/sk-or-v1-|OPENROUTER_API_KEY|PRONOTE_PASSWORD/);
 
     // Établissement sans rien de détecté : liste vide (l'app masque, 200).
-    const vide = createHandler(createMemoryStore({ capabilities: { accountId: syntheticAccountId, tabs: [], fetchedAt: AT } }));
-    const videRes = await vide(new Request("http://127.0.0.1/v1/capabilities"));
+    const vide = createHandler(createMemoryStore({ capabilities: { accountId: syntheticAccountId, tabs: [], fetchedAt: AT } }), PAIRING);
+    const videRes = await vide(new Request("http://127.0.0.1/v1/capabilities", { headers: AUTH }));
     expect(videRes.status).toBe(200);
     expect(((await videRes.json()) as { capabilities: Capabilities }).capabilities.tabs).toEqual([]);
 
@@ -88,7 +92,7 @@ describe("e2e sync (#87)", () => {
     const source = memorySource(grades);
     // Relecture branchée sur le moteur de sync réel (données structurées).
     let appels = 0;
-    const handler = createHandler(createMemoryStore({ capabilities: CAPS }), undefined, undefined, undefined, undefined, null, null, {
+    const handler = createHandler(createMemoryStore({ capabilities: CAPS }), PAIRING, undefined, undefined, undefined, null, null, {
       refresh: async (accountId) => {
         appels += 1;
         const result = await refreshOnce(source, sink);
@@ -107,7 +111,7 @@ describe("e2e sync (#87)", () => {
 
     // Premier refresh : premier sync = zéro événement métier, donc zéro alerte.
     const premier = await handler(
-      new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", body: JSON.stringify({ accountId: syntheticAccountId }) }),
+      new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: AUTH, body: JSON.stringify({ accountId: syntheticAccountId }) }),
     );
     expect(premier.status).toBe(200);
     const body1 = (await premier.json()) as { events: { type: string }[] };
@@ -118,7 +122,7 @@ describe("e2e sync (#87)", () => {
 
     // Nouvelle note : GradeCreated (type existant) + SyncCompleted.
     grades.push({ ...GRADE, id: "g-fake-2", value: 18 });
-    const second = await handler(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", body: "{}" }));
+    const second = await handler(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: AUTH, body: "{}" }));
     const body2 = (await second.json()) as { events: { type: string }[] };
     expect(isSyncRefreshResponse(body2)).toBe(true);
     expect(body2.events.map((e) => e.type)).toEqual(["GradeCreated", "SyncCompleted"]);
@@ -126,24 +130,24 @@ describe("e2e sync (#87)", () => {
     expect(saved()?.version).toBe(2);
 
     // Rejeu identique : rien à notifier (idempotence, pas de push inutile).
-    const troisieme = await handler(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST" }));
+    const troisieme = await handler(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: AUTH }));
     const body3 = (await troisieme.json()) as { events: { type: string }[] };
     expect(body3.events.map((e) => e.type)).toEqual(["SyncCompleted"]);
 
     // Corps surdimensionné = 400 borné (pas de JSON arbitraire en entrée).
     const enorme = await handler(
-      new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", body: "x".repeat(1024) }),
+      new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: AUTH, body: "x".repeat(1024) }),
     );
     expect(enorme.status).toBe(400);
     // Non câblé : 501 honnête, jamais un faux succès.
-    const nu = createHandler(createMemoryStore());
-    const nonBranche = await nu(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST" }));
+    const nu = createHandler(createMemoryStore(), PAIRING);
+    const nonBranche = await nu(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: AUTH }));
     expect(nonBranche.status).toBe(501);
   });
 
   test("/v1/events : snapshot BORNÉ (3 enveloppes, flux fermé, rien qui fuit)", async () => {
-    const handler = createHandler(createMemoryStore({ capabilities: CAPS }));
-    const res = await handler(new Request("http://127.0.0.1/v1/events"));
+    const handler = createHandler(createMemoryStore({ capabilities: CAPS }), PAIRING);
+    const res = await handler(new Request("http://127.0.0.1/v1/events", { headers: AUTH }));
     expect(res.headers.get("content-type")).toContain("text/event-stream");
     const text = await res.text();
     const events = [...text.matchAll(/data: (\{.*\})\n\n/g)].map((m) => JSON.parse(m[1] as string));
@@ -176,11 +180,11 @@ describe("e2e sync (#87)", () => {
     ]);
     // Onglet inactif → écran absent de la navigation ; son état reste propre
     // (liste vide côté API, jamais un 500).
-    const handler = createHandler(createMemoryStore({ capabilities: CAPS }));
-    const menus = await handler(new Request("http://127.0.0.1/v1/menus"));
+    const handler = createHandler(createMemoryStore({ capabilities: CAPS }), PAIRING);
+    const menus = await handler(new Request("http://127.0.0.1/v1/menus", { headers: AUTH }));
     expect(menus.status).toBe(200);
     expect(((await menus.json()) as { menus: unknown[] }).menus).toEqual([]);
-    const evals = await handler(new Request("http://127.0.0.1/v1/evaluations"));
+    const evals = await handler(new Request("http://127.0.0.1/v1/evaluations", { headers: AUTH }));
     expect(evals.status).toBe(200);
     expect(((await evals.json()) as { skills: unknown[] }).skills).toEqual([]);
   });

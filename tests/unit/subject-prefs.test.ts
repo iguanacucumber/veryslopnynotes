@@ -12,6 +12,7 @@ import {
 } from "../../shared/contracts/models";
 import type { SubjectPrefs } from "../../shared/contracts/models";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "./fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { createSubjectPrefsMemoryStore } from "../../server/api/subject-prefs";
 
@@ -29,14 +30,16 @@ const FRANCAIS: SubjectPrefs = { subject: "Français", emoji: "📚", updatedAt:
 
 function handlerWith(seed?: SubjectPrefs[]) {
   const prefs = createSubjectPrefsMemoryStore(seed);
-  return { prefs, handler: createHandler(createMemoryStore(), undefined, null, undefined, prefs) };
+  // Depuis 0.4.0, /v1/subjects/prefs est fermée : le device est appairé.
+  const { pairing, auth } = pairedDevice();
+  return { prefs, auth, handler: createHandler(createMemoryStore(), pairing, null, undefined, prefs) };
 }
 
-function put(handler: (req: Request) => Promise<Response>, body: unknown) {
+function put(auth: Record<string, string>, handler: (req: Request) => Promise<Response>, body: unknown) {
   return handler(
     new Request("http://localhost/v1/subjects/prefs", {
       method: "PUT",
-      headers: { "content-type": "application/json" },
+      headers: { ...auth, "content-type": "application/json" },
       body: typeof body === "string" ? body : JSON.stringify(body),
     }),
   );
@@ -92,8 +95,8 @@ describe("contrat SubjectPrefs (#83)", () => {
 
 describe("API préférences matière (#83)", () => {
   test("GET liste les prefs, seed par défaut hors-ligne", async () => {
-    const { handler } = handlerWith();
-    const res = await handler(new Request("http://localhost/v1/subjects/prefs"));
+    const { handler, auth } = handlerWith();
+    const res = await handler(new Request("http://localhost/v1/subjects/prefs", { headers: auth }));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { prefs: SubjectPrefs[] };
     expect(isSubjectPrefsResponse(body)).toBe(true);
@@ -101,17 +104,17 @@ describe("API préférences matière (#83)", () => {
   });
 
   test("PUT upsert une matière puis GET la renvoie", async () => {
-    const { prefs, handler } = handlerWith([]);
-    const up = await put(handler, { subject: "SVT", color: "#43A047", emoji: "🌱", updatedAt: "2026-10-02T08:00:00.000Z" });
+    const { prefs, handler, auth } = handlerWith([]);
+    const up = await put(auth, handler, { subject: "SVT", color: "#43A047", emoji: "🌱", updatedAt: "2026-10-02T08:00:00.000Z" });
     expect(up.status).toBe(200);
     expect(((await up.json()) as SubjectPrefs).color).toBe("#43A047");
 
-    const list = (await (await handler(new Request("http://localhost/v1/subjects/prefs"))).json()) as {
+    const list = (await (await handler(new Request("http://localhost/v1/subjects/prefs", { headers: auth }))).json()) as {
       prefs: SubjectPrefs[];
     };
     expect(list.prefs).toHaveLength(1);
     // Second PUT sur la même matière = écrasement, pas de doublon.
-    await put(handler, { subject: "SVT", label: "Sciences", updatedAt: "2026-10-03T08:00:00.000Z" });
+    await put(auth, handler, { subject: "SVT", label: "Sciences", updatedAt: "2026-10-03T08:00:00.000Z" });
     expect(prefs.list()).toHaveLength(1);
     expect(prefs.list()[0]?.label).toBe("Sciences");
     // La réponse du store ne doit pas être aliasée (mutation externe impossible).
@@ -121,7 +124,7 @@ describe("API préférences matière (#83)", () => {
   });
 
   test("400 sur prefs invalides, corps hors bornes, JSON cassé — sans répliquer l'input", async () => {
-    const { handler } = handlerWith([]);
+    const { handler, auth } = handlerWith([]);
     const cases: unknown[] = [
       { subject: "SVT", color: "red", updatedAt: "2026-10-02T08:00:00.000Z" },
       { subject: "", updatedAt: "2026-10-02T08:00:00.000Z" },
@@ -129,7 +132,7 @@ describe("API préférences matière (#83)", () => {
       { subject: "SVT", emoji: "x".repeat(50), updatedAt: "2026-10-02T08:00:00.000Z" },
     ];
     for (const bad of cases) {
-      const res = await put(handler, bad);
+      const res = await put(auth, handler, bad);
       expect(res.status).toBe(400);
       const text = await res.text();
       expect(text).not.toContain("SVT");
@@ -137,33 +140,34 @@ describe("API préférences matière (#83)", () => {
     }
     // Corps trop gros = 400 avant parse (pas de JSON.error en fuite).
     const huge = JSON.stringify({ subject: "M".repeat(SUBJECT_PREFS_MAX_BODY_CHARS), updatedAt: "2026-10-02T08:00:00.000Z" });
-    const big = await put(handler, huge);
+    const big = await put(auth, handler, huge);
     expect(big.status).toBe(400);
     expect(await big.text()).not.toContain("M".repeat(50));
-    const broken = await put(handler, "{pas du json");
+    const broken = await put(auth, handler, "{pas du json");
     expect(broken.status).toBe(400);
   });
 
   test("bornes de matières : au-delà du max, upsert refusé", async () => {
     const many = Array.from({ length: SUBJECT_PREFS_MAX_COUNT }, (_, i) => ({ ...MATHS, subject: `M${i}` }));
-    const { prefs, handler } = handlerWith(many);
-    const res = await put(handler, { subject: "Nouvelle", updatedAt: "2026-10-02T08:00:00.000Z" });
+    const { prefs, handler, auth } = handlerWith(many);
+    const res = await put(auth, handler, { subject: "Nouvelle", updatedAt: "2026-10-02T08:00:00.000Z" });
     expect(res.status).toBe(400);
     expect(prefs.list()).toHaveLength(SUBJECT_PREFS_MAX_COUNT);
     // Une matière déjà connue reste modifiable quand la liste est pleine.
-    expect((await put(handler, { subject: "M0", label: "ok", updatedAt: "2026-10-02T08:00:00.000Z" })).status).toBe(200);
+    expect((await put(auth, handler, { subject: "M0", label: "ok", updatedAt: "2026-10-02T08:00:00.000Z" })).status).toBe(200);
   });
 
   test("méthodes/routes inconnues : 404 / 405, GET et PUT cohabitent", async () => {
-    const { handler } = handlerWith();
-    expect((await handler(new Request("http://localhost/v1/subjects/inconnues"))).status).toBe(404);
-    const del = await handler(new Request("http://localhost/v1/subjects/prefs", { method: "DELETE" }));
+    const { handler, auth } = handlerWith();
+    expect((await handler(new Request("http://localhost/v1/subjects/inconnues", { headers: auth }))).status).toBe(404);
+    const del = await handler(new Request("http://localhost/v1/subjects/prefs", { method: "DELETE", headers: auth }));
     expect(del.status).toBe(405);
-    // Les routes existantes n'ont pas régressé.
+    // Les routes existantes n'ont pas régressé. /v1/health reste ouverte (sonde
+    // de vivacité), les autres exigent le device appairé.
     expect((await handler(new Request("http://localhost/v1/health"))).status).toBe(200);
-    expect((await handler(new Request("http://localhost/v1/grades"))).status).toBe(200);
-    expect((await handler(new Request("http://localhost/v1/grades", { method: "POST" }))).status).toBe(405);
-    expect((await handler(new Request("http://localhost/v1/periods"))).status).toBe(200);
+    expect((await handler(new Request("http://localhost/v1/grades", { headers: auth }))).status).toBe(200);
+    expect((await handler(new Request("http://localhost/v1/grades", { method: "POST", headers: auth }))).status).toBe(405);
+    expect((await handler(new Request("http://localhost/v1/periods", { headers: auth }))).status).toBe(200);
   });
 });
 

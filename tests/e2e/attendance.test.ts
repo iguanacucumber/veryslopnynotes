@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "../unit/fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { isApiErrorBody } from "../../server/api/errors";
 import { isAttendanceResponse, isPunishmentsResponse } from "../../shared/contracts/api";
@@ -34,15 +35,20 @@ const SEED_PERIODS = [
   { id: "p-2", name: "Trimestre 2", start: "2026-12-01T00:00:00.000Z", end: "2027-03-31T23:59:59.000Z" },
 ];
 
+// Depuis 0.4.0 la lecture exige le bearer d'un device appairé : un seul
+// appairage pour le fichier, l'en-tête voyage sur chaque requête.
+const { pairing: PAIRING, auth: AUTH } = pairedDevice();
+
 function handler() {
   return createHandler(
     createMemoryStore({ absences: syntheticAbsences, punishments: syntheticPunishments, periods: SEED_PERIODS }),
+    PAIRING,
   );
 }
 
 describe("e2e vie scolaire (#77)", () => {
   test("abscences + retards publiés : compteurs par période, contrats valides", async () => {
-    const res = await handler()(new Request("http://127.0.0.1/v1/attendance"));
+    const res = await handler()(new Request("http://127.0.0.1/v1/attendance", { headers: AUTH }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(isAttendanceResponse(body)).toBe(true);
@@ -57,26 +63,26 @@ describe("e2e vie scolaire (#77)", () => {
   });
 
   test("filtre periodId : une période, puis période inconnue (jamais d'erreur)", async () => {
-    const p1 = await handler()(new Request("http://127.0.0.1/v1/attendance?periodId=p-2"));
+    const p1 = await handler()(new Request("http://127.0.0.1/v1/attendance?periodId=p-2", { headers: AUTH }));
     expect(p1.status).toBe(200);
     const p1Body = await p1.json();
     expect(p1Body.absences).toHaveLength(1);
     expect(p1Body.periods).toEqual([syntheticAttendancePeriods[1]]);
-    const inconnu = await handler()(new Request("http://127.0.0.1/v1/attendance?periodId=p-999"));
+    const inconnu = await handler()(new Request("http://127.0.0.1/v1/attendance?periodId=p-999", { headers: AUTH }));
     expect(inconnu.status).toBe(200);
     expect((await inconnu.json()).absences).toEqual([]);
   });
 
   test("sanctions : liste publiée, establishment sans onglet = liste vide", async () => {
-    const res = await handler()(new Request("http://127.0.0.1/v1/punishments"));
+    const res = await handler()(new Request("http://127.0.0.1/v1/punishments", { headers: AUTH }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(isPunishmentsResponse(body)).toBe(true);
     expect(body.punishments.every(isPunishment)).toBe(true);
     expect(body.punishments.map((p: Punishment) => p.type)).toEqual(["Avertissement", "Exclusion temporaire"]);
 
-    const vide = createHandler(createMemoryStore());
-    const videRes = await vide(new Request("http://127.0.0.1/v1/punishments"));
+    const vide = createHandler(createMemoryStore(), PAIRING);
+    const videRes = await vide(new Request("http://127.0.0.1/v1/punishments", { headers: AUTH }));
     expect(videRes.status).toBe(200);
     expect((await videRes.json()).punishments).toEqual([]);
     // Cache : une réponse vide reste fraîche (état vide, pas badge d'erreur).
@@ -85,7 +91,7 @@ describe("e2e vie scolaire (#77)", () => {
   });
 
   test("méthode invalide : 405 typée, corps d'erreur conforme", async () => {
-    const res = await handler()(new Request("http://127.0.0.1/v1/punishments", { method: "DELETE" }));
+    const res = await handler()(new Request("http://127.0.0.1/v1/punishments", { method: "DELETE", headers: AUTH }));
     expect(res.status).toBe(405);
     expect(isApiErrorBody(await res.json())).toBe(true);
   });

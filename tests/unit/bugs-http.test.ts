@@ -47,6 +47,34 @@ async function withServerLogs<T>(fn: (logs: string[]) => Promise<T>): Promise<{ 
   }
 }
 
+/**
+ * Appaire un device comme le fait l'app, VIA les deux seules routes ouvertes :
+ * le `PairingService` est interne à `createApp` (non injectable), le parcours
+ * réel start -> confirm est donc le seul moyen d'obtenir le bearer. PIN et
+ * token synthétiques, aucun réseau, aucun secret en dur.
+ */
+async function appairer(
+  app: { handler: (req: Request) => Promise<Response> },
+): Promise<{ authorization: string }> {
+  const start = await app.handler(
+    new Request("http://127.0.0.1/v1/pairing/start", {
+      method: "POST",
+      body: JSON.stringify({ deviceName: "pixel-test" }),
+    }),
+  );
+  const { sessionId, code } = (await start.json()) as { sessionId: string; code: string };
+  const confirm = await app.handler(
+    new Request("http://127.0.0.1/v1/pairing/confirm", {
+      method: "POST",
+      body: JSON.stringify({ sessionId, code }),
+    }),
+  );
+  const { token } = (await confirm.json()) as { token: string };
+  // Le bearer des routes fermées : sans lui, le 401 de la porte d'entrée
+  // masquerait le statut métier que ces tests de bugs veulent observer.
+  return { authorization: `Bearer ${token}` };
+}
+
 describe("bugs http.ts", () => {
   test("BUG: PORT=0 est ignoré (|| au lieu d'un test NaN) — le serveur lie 3000 au lieu d'un port éphémère, deux instances/tests se percutent en EADDRINUSE", async () => {
     // 0 = port éphémère (convention standard, et valeur portée par ENV).
@@ -113,8 +141,11 @@ describe("bugs http.ts", () => {
   test("BUG: POST /v1/sync/refresh répond 200 {events: []} sans aucun reader branché — faux succès (le handler impose 501 « relecture non branchée », cf. tous les autres ports absents)", async () => {
     // Pas de PRONOTE_URL => reader null => la relecture ne peut JAMAIS aboutir.
     const app = createApp({ PORT: "3000" }, { reader: null, sessions: null });
+    // Device appairé : la porte d'entrée laisse passer, le 501 du port absent
+    // reste le statut observé (et non un 401 d'authentification).
+    const auth = await appairer(app);
     const res = await app.handler(
-      new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", body: "{}" }),
+      new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: auth, body: "{}" }),
     );
     expect(res.status).toBe(501);
   });
