@@ -40,4 +40,8 @@ dependencies {
     // directement. `data` le déclare en `implementation` (donc absent de notre
     // classpath de compilation) : on le déclare ici aussi, version alignée.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // #122 : scan du QR affiché par l'application de l'établissement. Aucune
+    // permission CAMERA (le scan est délégué à Play Services), et le champ de
+    // collage reste le repli quand le module n'est pas disponible.
+    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 }
