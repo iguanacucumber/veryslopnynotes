@@ -722,8 +722,15 @@ export class PronoteClientReader implements PronoteReader {
       this.logger(`menus -> ok ${slice.length}`);
       return { items: untrusted(slice), nextCursor };
     } catch (err) {
+      const mapped = toReadError(err, "menus");
+      // Session morte = re-authentification requise, jamais "aucun menu" : sinon
+      // l'app afficherait un onglet vide au lieu de proposer le re-login.
+      if (mapped.code === "session_expired") {
+        this.logger(`menus -> error ${mapped.code}`);
+        throw mapped;
+      }
       // Cantine indisponible = absence de donnée, pas une panne de sync.
-      this.logger(`menus -> indisponible ${toReadError(err, "menus").code}`);
+      this.logger(`menus -> indisponible ${mapped.code}`);
       return { items: untrusted([]), nextCursor: null };
     }
   }
