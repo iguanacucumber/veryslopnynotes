@@ -7,7 +7,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const ROOT = new URL("../..", import.meta.url).pathname;
+const ROOT = join(import.meta.dir, "..", "..");
 
 function listFiles(dir: string, out: string[] = []): string[] {
   try {
