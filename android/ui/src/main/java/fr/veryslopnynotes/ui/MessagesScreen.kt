@@ -114,6 +114,9 @@ fun DiscussionDetailScreen(
     discussion: Discussion,
     messages: List<DiscussionMessage>,
     baseUrl: String,
+    // Compte affiché dans les URL de PJ ; le serveur résout le compte servi
+    // côté serveur (contrat 0.4.0), ce n'est qu'un contexte d'affichage.
+    accountId: String = "",
     isLoading: Boolean = false,
     notice: String? = null,
     onReply: (String) -> Unit = {},
@@ -352,6 +355,7 @@ fun MessagesRoute(
             discussion = current,
             messages = messages,
             baseUrl = baseUrl,
+            accountId = accountId,
             isLoading = messagesLoading,
             notice = notice,
             onReply = { body ->
