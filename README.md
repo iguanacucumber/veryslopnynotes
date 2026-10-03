@@ -68,7 +68,8 @@ cd android
 ```
 
 Hôte serveur côté app : `android/local.properties` (non commité) ou env `SERVER_HOST`.
-Défaut émulateur `10.0.2.2:3000` ; hors émulateur, HTTPS obligatoire.
+Défaut émulateur `10.0.2.2:3000` ; hors émulateur, HTTPS obligatoire. Cet hôte
+n'est qu'un défaut : l'adresse réelle se saisit dans l'écran Appairage.
 Détails build/signature : [`android/README.md`](android/README.md) et [`docs/RELEASE.md`](docs/RELEASE.md).
 
 ## Configuration

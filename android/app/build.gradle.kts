@@ -3,11 +3,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// allowlist serveur unique. buildConfigField depuis
-// local.properties `server.host` ou env SERVER_HOST ; aucun
-// hôte tiers ici (voir README + INVARIANTS I1).
-// Usage cibles : BuildConfig.SERVER_HOST (+ SERVER_SCHEME),
-// validés HTTPS-only sauf http://10.0.2.2 / localhost (émulateur).
+// Graine serveur : défaut de l'app quand l'utilisateur n'a pas choisi
+// d'adresse à l'exécution (écran d'appairage -> data/ServerStore). Valeur
+// depuis local.properties `server.host` ou env SERVER_HOST ; aucun hôte tiers
+// ici (voir README + INVARIANTS I1). Règle HTTPS-only sauf
+// http://10.0.2.2 / localhost (émulateur), identique à
+// core/ServerConfig.validateBaseUrl qui borne et normalise toute saisie.
 // Médias via proxy serveur, pas de WebView distante.
 android {
     namespace = "fr.veryslopnynotes.app"

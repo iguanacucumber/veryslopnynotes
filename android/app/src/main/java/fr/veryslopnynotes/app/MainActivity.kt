@@ -14,12 +14,13 @@ import kotlinx.coroutines.withContext
 // Shell phase 4 (#13) + offline #14 + appairage/SSE #15 + alertes #21.
 // Navigation Material3 + routes "pairing" (QR+PIN, token chiffré) et
 // "alerts" (I6 : donnée jamais interprétée). Aucun appel réseau ici
-// (téléphone ne contacte que le serveur allowlist, I1) : baseUrl injectée
-// depuis BuildConfig (local.properties server.host ou env SERVER_HOST).
+// (téléphone ne contacte que le serveur allowlist, I1) : on ne fournit que la
+// GRAINE d'adresse (local.properties server.host ou env SERVER_HOST), que
+// ServerStore/AppNav remplacent par le serveur choisi à l'exécution.
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val baseUrl = fr.veryslopnynotes.core.ServerConfig.baseUrl(
+        val baseUrlSeed = fr.veryslopnynotes.core.ServerConfig.baseUrl(
             BuildConfig.SERVER_SCHEME,
             BuildConfig.SERVER_HOST,
         )
@@ -27,7 +28,6 @@ class MainActivity : ComponentActivity() {
         // Contrat 0.4.0 : les routes lues exigent le bearer du device appairé,
         // relu ici à chaque requête depuis le store chiffré.
         val tokens = SessionTokens.get(this)
-        val repo = SecurityAlertsRepository(ApiClient(baseUrl, tokens = tokens))
         // Toggle "fait" #75 : l'app n'envoie pas d'accountId (le serveur
         // mono-compte résout sa session appairée) ; #82 exposera /v1/me pour un
         // multi-compte. Jamais un hôte Pronote/ENT ici (I1), et l'écriture reste
@@ -35,8 +35,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 AppNav(
-                    baseUrl = baseUrl,
-                    loadAlerts = { withContext(Dispatchers.IO) { repo.fetch() } },
+                    baseUrlSeed = baseUrlSeed,
+                    // L'adresse arrive en paramètre : après un changement de
+                    // serveur, les alertes suivent le serveur courant.
+                    loadAlerts = { url ->
+                        withContext(Dispatchers.IO) {
+                            SecurityAlertsRepository(ApiClient(url, tokens = tokens)).fetch()
+                        }
+                    },
                 )
             }
         }
