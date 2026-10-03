@@ -89,10 +89,20 @@ function toWriteError(err: unknown, what: string): PronoteWriteError {
   return new PronoteWriteError(`${what} ${code}`, code);
 }
 
-/** Trim + borne dure. Vide après trim = "" (l'appelant le transforme en undefined). */
+/**
+ * Trim + borne dure. Vide après trim = "" (l'appelant le transforme en undefined).
+ * La borne compte en POINTS DE CODE, comme `isOptionalBoundedString` du contrat
+ * (models.ts) : un slice() en unités UTF-16 couperait un surrogate pair en son
+ * demi-caractère orphelin, que le contrat rejetera ensuite (ou que le client
+ * affichera en U+FFFD). Le chemin rapide `t.length <= max` (unités UTF-16) est
+ * sûr : un texte plus court que la borne ne peut pas avoir de point de code en
+ * excès, donc aucun couple ne peut être coupé.
+ */
 function bounded(s: string, max: number): string {
   const t = s.trim();
-  return t.length > max ? t.slice(0, max) : t;
+  if (t.length <= max) return t;
+  const points = [...t];
+  return points.length > max ? points.slice(0, max).join("") : t;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -238,11 +248,29 @@ function mapAssignmentFiles(
 // pronotets. Upgrade: index de séances construit une fois par semaine.
 const ASSIGNMENT_LESSON_FETCH_LIMIT = 10;
 
+/**
+ * Jour CALENDRIER local de l'établissement (Europe/Paris), pas jour UTC :
+ * un devoir ENT est daté du jour local (minuit Paris) et une séance du jour
+ * local, donc l'ISO UTC de part et d'autre tombe la veille après 22h UTC.
+ * Les process/tests ne tournent pas forcément en Paris : le fuseau est donc
+ * explicite (jamais implicite comme les bornes de getTimetable/getMenus).
+ * ponytail: format ISO court (`en-CA` = AAAA-MM-JJ), pas de lib de dates.
+ * Upgrade: fuseau configuré par établissement (constante APP_TIME_ZONE).
+ */
+const APP_TIME_ZONE = "Europe/Paris";
+const LOCAL_DAY_FORMAT = new Intl.DateTimeFormat("en-CA", { timeZone: APP_TIME_ZONE });
+
+function toLocalDay(date: unknown): string | null {
+  if (date instanceof Date && !Number.isNaN(date.getTime())) return LOCAL_DAY_FORMAT.format(date);
+  if (typeof date === "string" && !Number.isNaN(Date.parse(date))) return LOCAL_DAY_FORMAT.format(new Date(date));
+  return null;
+}
+
 function lessonKey(subject: unknown, date: unknown): string | null {
   const name = typeof subject === "string" ? subject : (subject as { name?: unknown })?.name;
   if (typeof name !== "string" || name === "") return null;
-  const iso = toIso(date, "");
-  return iso === "" ? null : `${name}|${iso.slice(0, 10)}`;
+  const day = toLocalDay(date);
+  return day === null ? null : `${name}|${day}`;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -298,6 +326,9 @@ function mapResources(accountId: string, lessons: any[], homeworks?: any[]): Ped
       if (isPedagogicResource(cand)) out.push(cand);
     }
     const pushFile = (d: unknown, di: number, prefix: string) => {
+      // Pièce nulle ou non-objet (même forme sale que `homework.files()`) :
+      // IGNORÉE, sinon toute la lecture des ressources tombe sur un TypeError.
+      if (d === null || typeof d !== "object") return;
       const rec = d as Record<string, unknown>;
       const name = typeof rec["name"] === "string" ? (rec["name"] as string) : `doc-${di}`;
       const fileId = typeof rec["id"] === "string" ? (rec["id"] as string) : "";
@@ -323,6 +354,9 @@ function mapResources(accountId: string, lessons: any[], homeworks?: any[]): Ped
     const subj = typeof subject === "string" ? subject : "Matière";
     const files = typeof h?.files === "function" ? (h.files() as unknown[]) : [];
     files.forEach((d: unknown, di: number) => {
+      // Même garde que les PJ de séance : un élément nul de la liste des
+      // devoirs est ignoré, pas indexé.
+      if (d === null || typeof d !== "object") return;
       const rec = d as Record<string, unknown>;
       const name = typeof rec["name"] === "string" ? (rec["name"] as string) : `doc-${di}`;
       const fileId = typeof rec["id"] === "string" ? (rec["id"] as string) : "";
@@ -473,15 +507,22 @@ function mapCanteenMenu(accountId: string, m: any, index: number): CanteenMenu |
 // ponytail: `hours` ("2h", "1h30") est converti en minutes par regex ; une
 // durée illisible est OMISE (compteurs en occurrences), jamais 0 deviné.
 
-/** Liste d'une période : [] si l'appel n'existe pas ou échoue (onglet inactif). */
+/**
+ * Liste d'une période : [] si l'appel n'existe pas ou échoue (onglet inactif).
+ * Session morte = le cas PARTICULIER qui REMONTE : une session expirée ne doit
+ * jamais devenir une page vide, sinon live-sync applique `absences: []` et
+ * PURGE l'instantané déjà synchronisé au lieu de demander un ré-appairage (I6).
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function periodList(period: any, method: string): Promise<unknown[]> {
+async function periodList(period: any, method: string, what: string): Promise<unknown[]> {
   if (typeof period?.[method] !== "function") return [];
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const raw = (await period[method]()) as any;
     return Array.isArray(raw) ? raw : [];
-  } catch {
+  } catch (err) {
+    const mapped = toReadError(err, what);
+    if (mapped.code === "session_expired") throw mapped;
     return [];
   }
 }
@@ -631,13 +672,19 @@ export class PronoteClientReader implements PronoteReader {
     try {
       const periods = client.periods ?? [];
       const all: Grade[] = [];
+      // Compteur MONOTONE d'index bruts. `all.length + i` repartait de
+      // `all.length` (recalculé à chaque période) alors que les notes écartées
+      // ne le faisaient PAS monter : deux notes distinctes de périodes
+      // différentes se retrouvaient avec le même id de repli — clé de sync/diff
+      // serveur. L'id reste STABLE : il ne dépend que de la position brute.
+      let seq = 0;
       for (const p of periods) {
         const grades = (await p.grades()) as unknown[];
         // #74 : periodId porte le regroupement des moyennes, il vient de la
         // période Pronote qui porte ces notes (jamais deviné).
         const periodId = typeof p?.id === "string" && p.id ? p.id : undefined;
-        grades.forEach((g, i) => {
-          const m = mapGrade(id, g, all.length + i, periodId);
+        grades.forEach((g) => {
+          const m = mapGrade(id, g, seq++, periodId);
           if (m) all.push(m);
         });
         if (all.length >= offset + limit + 1) break;
@@ -856,8 +903,11 @@ export class PronoteClientReader implements PronoteReader {
     try {
       const raw = (await client.lessons(from, to)) as unknown[];
       const all: TimetableEntry[] = [];
-      (Array.isArray(raw) ? raw : []).forEach((l, i) => {
-        const mapped = mapLesson(id, l, all.length + i);
+      // Index bruts monotones (cf. getGrades) : un cours écarté par la fenêtre
+      // ne décale plus les ids de repli des cours suivants.
+      let seq = 0;
+      (Array.isArray(raw) ? raw : []).forEach((l) => {
+        const mapped = mapLesson(id, l, seq++);
         if (mapped && Date.parse(mapped.start) >= fromMs && Date.parse(mapped.start) <= toMs) all.push(mapped);
       });
       const slice = all.slice(offset, offset + limit);
@@ -948,18 +998,32 @@ export class PronoteClientReader implements PronoteReader {
     try {
       const periods = client.periods ?? [];
       const all: Evaluation[] = [];
+      // ids de repli uniques dans la page : `i` repart à 0 à chaque période
+      // alors que `all.length` n'avance que des items MAPPÉS → deux évaluations
+      // sans id de périodes différentes se partageaient le même `ev-<n>`.
+      // `consumed` (bruts déjà lus) ré-étale les index SANS changer la
+      // numérotation d'un établissement à une seule période (cf.
+      // tests/unit/evaluations.test.ts, qui fige `skill-4`).
+      let consumed = 0;
       for (const p of periods) {
         // Établissement sans évaluations par compétences : pas d'appel, pas d'erreur.
         if (typeof p?.evaluations !== "function") continue;
         let raw: unknown[] = [];
         try {
           raw = (await p.evaluations()) as unknown[];
-        } catch {
+        } catch (err) {
+          // Session morte = re-appairage demandé par l'app, jamais une page
+          // vide (l'onglet « évaluations » disparaîtrait au lieu de proposer
+          // le re-login). Onglet absent/KO = page vide, comme avant.
+          const mapped = toReadError(err, "evaluations");
+          if (mapped.code === "session_expired") throw mapped;
           continue;
         }
         const periodId = typeof p?.id === "string" && p.id ? p.id : undefined;
+        const rawBase = consumed;
         (raw ?? []).forEach((e, i) => {
-          const m = mapEvaluation(id, e, all.length + i, periodId);
+          const m = mapEvaluation(id, e, all.length + i + rawBase, periodId);
+          consumed += 1;
           if (m) all.push(m);
         });
         if (all.length >= offset + limit + 1) break;
@@ -1077,8 +1141,11 @@ export class PronoteClientReader implements PronoteReader {
     try {
       const raw = (await client.menus(from, to)) as unknown[];
       const all: CanteenMenu[] = [];
-      (Array.isArray(raw) ? raw : []).forEach((m, i) => {
-        const mapped = mapCanteenMenu(id, m, all.length + i);
+      // Index bruts monotones (cf. getGrades) : un menu écarté par la fenêtre ne
+      // décale plus les ids de repli des menus suivants.
+      let seq = 0;
+      (Array.isArray(raw) ? raw : []).forEach((m) => {
+        const mapped = mapCanteenMenu(id, m, seq++);
         // Fenêtre appliquée côté reader : la lib aligne sur ses semaines, on
         // re-borne sur la fenêtre demandée (dates illisibles filtrées au mapping).
         if (mapped && Date.parse(mapped.date) >= fromMs && Date.parse(mapped.date) <= toMs) all.push(mapped);
@@ -1141,8 +1208,15 @@ export class PronoteClientReader implements PronoteReader {
       this.logger(`me -> ok 1 profil, ${kids.length} compte(s) enfant`);
       return { items: untrusted([candidate]), nextCursor: null };
     } catch (err) {
+      const mapped = toReadError(err, "me");
+      // Session morte = re-appairage, jamais "profil vide" (I6) : une page
+      // vide ferait croire à un compte sans données au lieu d'un re-login.
+      if (mapped.code === "session_expired") {
+        this.logger(`me -> error ${mapped.code}`);
+        throw mapped;
+      }
       // Panne de lecture du profil = donnée absente, jamais une 500.
-      this.logger(`me -> indisponible (${toReadError(err, "me").code}), page vide`);
+      this.logger(`me -> indisponible (${mapped.code}), page vide`);
       return { items: untrusted([]), nextCursor: null };
     }
   }
@@ -1174,11 +1248,11 @@ export class PronoteClientReader implements PronoteReader {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const p of periods as any[]) {
         const periodId = typeof p?.id === "string" && p.id ? bounded(p.id, 64) || undefined : undefined;
-        for (const a of await periodList(p, "absences")) {
+        for (const a of await periodList(p, "absences", "attendance")) {
           const m = mapAbsence(id, a, all.length, periodId);
           if (m) all.push(m);
         }
-        for (const d of await periodList(p, "delays")) {
+        for (const d of await periodList(p, "delays", "attendance")) {
           const m = mapDelay(id, d, all.length, periodId);
           if (m) all.push(m);
         }
@@ -1189,7 +1263,15 @@ export class PronoteClientReader implements PronoteReader {
       this.logger(`attendance -> ok ${slice.length}`);
       return { items: untrusted(slice), nextCursor };
     } catch (err) {
-      this.logger(`attendance -> indisponible ${toReadError(err, "attendance").code}`);
+      const mapped = toReadError(err, "attendance");
+      // Session morte = re-appairage demandé par l'app. Une page vide ici
+      // EFFACERAIT les absences déjà synchronisées (I6) au lieu de les
+      // mettre en attente : getMenus/getNews font déjà ce tri.
+      if (mapped.code === "session_expired") {
+        this.logger(`attendance -> error ${mapped.code}`);
+        throw mapped;
+      }
+      this.logger(`attendance -> indisponible ${mapped.code}`);
       return { items: untrusted([]), nextCursor: null };
     }
   }
@@ -1214,7 +1296,7 @@ export class PronoteClientReader implements PronoteReader {
       const all: Punishment[] = [];
       for (const p of periods) {
         const periodId = typeof p?.id === "string" && p.id ? bounded(p.id, 64) || undefined : undefined;
-        for (const s of await periodList(p, "punishments")) {
+        for (const s of await periodList(p, "punishments", "punishments")) {
           const m = mapPunishment(id, s, all.length, periodId);
           if (m) all.push(m);
         }
@@ -1225,7 +1307,14 @@ export class PronoteClientReader implements PronoteReader {
       this.logger(`punishments -> ok ${slice.length}`);
       return { items: untrusted(slice), nextCursor };
     } catch (err) {
-      this.logger(`punishments -> indisponible ${toReadError(err, "punishments").code}`);
+      const mapped = toReadError(err, "punishments");
+      // Session morte = re-appairage (I6), jamais une page vide qui purge les
+      // sanctions déjà synchronisées.
+      if (mapped.code === "session_expired") {
+        this.logger(`punishments -> error ${mapped.code}`);
+        throw mapped;
+      }
+      this.logger(`punishments -> indisponible ${mapped.code}`);
       return { items: untrusted([]), nextCursor: null };
     }
   }

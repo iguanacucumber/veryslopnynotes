@@ -29,10 +29,10 @@ const NO_DATA = -1;
 
 /**
  * Historique et influence : une entrée par note, donc quadratique (chaque
- * influence recalcule la moyenne sans la note). On garde les N notes les plus
- * récentes, ce qui couvre une période scolaire entière (~30 notes) tout en
- * bornant le coût et la taille de la réponse. ponytail: au-delà de N, la
- * moyenne générale reste exacte ; seuls les points/impacts anciens manquent.
+ * influence recalcule la moyenne sans la note). L'historique porte sur TOUTES
+ * les notes antérieures (exact, cohérent avec la moyenne générale) ; seules
+ * les MAX_AVERAGE_POINTS DERNIERS entrées sont renvoyées. ponytail: au-delà de
+ * N, seuls les points/impacts anciens manquent, la moyenne reste exacte.
  */
 export const MAX_AVERAGE_POINTS = 200;
 
@@ -58,9 +58,12 @@ function isExcluded(g: Grade): boolean {
 
 /** Note exploitable : hors moyenne écartée, valeur et barème exploitables. */
 function isUsable(g: Grade): boolean {
-  return (
-    !isExcluded(g) && Number.isFinite(g.value) && g.value >= 0 && Number.isFinite(g.scale) && g.scale > 0
-  );
+  if (isExcluded(g)) return false;
+  // Coefficient négatif : le poids annule le dénominateur (moyenne qui
+  // disparaît ou s'inverse). Donnée Pronote incohérente = note écartée, comme
+  // un coefficient 0 — jamais un dénominateur annulé.
+  if (g.coefficient !== undefined && (!Number.isFinite(g.coefficient) || g.coefficient < 0)) return false;
+  return Number.isFinite(g.value) && g.value >= 0 && Number.isFinite(g.scale) && g.scale > 0;
 }
 
 /**
@@ -170,6 +173,9 @@ export function medianAlgorithmAverage(grades: Grade[]): number | null {
   const values: number[] = [];
   for (const g of grades) {
     if (!isUsable(g)) continue;
+    // Bonus = majoration hors barème, PAS une note /20 ordinaire : l'inclure
+    // ferait monter la médiane de la matière pour une note qui ne compte pas.
+    if (g.bonus) continue;
     values.push((g.value / g.scale) * 20);
   }
   if (values.length === 0) return null;
@@ -231,12 +237,16 @@ function providedSubject(key: string, provided?: ProvidedAverages | null): numbe
  */
 function buildHistory(algorithm: AverageAlgorithm, grades: Grade[]): AverageHistoryPoint[] {
   const sorted = [...grades].sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
-  const start = Math.max(0, sorted.length - MAX_AVERAGE_POINTS);
   const out: AverageHistoryPoint[] = [];
-  for (let i = start; i < sorted.length; i++) {
+  // Historique EXACT : chaque point est la moyenne de TOUTES les notes
+  // antérieures (fenêtrer les notes d'entrée ferait diverger la courbe de la
+  // moyenne générale affichée, qui porte sur toute la période).
+  for (let i = 0; i < sorted.length; i++) {
     out.push({ date: sorted[i].date, value: averageWith(algorithm, sorted.slice(0, i + 1)) });
   }
-  return out;
+  // Seule la TAILLE de la réponse est bornée : on garde les points les plus
+  // récents (le dernier = moyenne générale, donc cohérent avec l'affichage).
+  return out.length > MAX_AVERAGE_POINTS ? out.slice(out.length - MAX_AVERAGE_POINTS) : out;
 }
 
 /** Notes les plus récentes, triées : fenêtré pour borner le coût quadratique. */
@@ -319,7 +329,7 @@ export function computeAverages(grades: Grade[], options: ComputeAveragesOptions
     periodId,
     general,
     subjects,
-    history: buildHistory(algorithm, recentByDate(scoped)),
+    history: buildHistory(algorithm, scoped),
     influences: buildInfluences(algorithm, scoped),
   };
 }

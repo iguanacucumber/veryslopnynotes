@@ -119,13 +119,15 @@ describe("integration api", () => {
     }
   });
 
-  test("erreurs typées : 404, 405, 400", async () => {
+  test("erreurs typées : 404, 405 + Allow, 400, HEAD", async () => {
     const nf = await fetch(`${base}/v1/nope`);
     expect(nf.status).toBe(404);
     expect(isApiErrorBody(await nf.json())).toBe(true);
 
     const met = await fetch(`${base}/v1/grades`, { method: "POST" });
     expect(met.status).toBe(405);
+    // 405 = en-tête Allow obligatoire (RFC 9110 §15.5.6).
+    expect(met.headers.get("allow")).toBe("GET");
     expect(isApiErrorBody(await met.json())).toBe(true);
 
     const bad = await fetch(`${base}/v1/pairing/start`, {
@@ -135,6 +137,12 @@ describe("integration api", () => {
     });
     expect(bad.status).toBe(400);
     expect(isApiErrorBody(await bad.json())).toBe(true);
+
+    // HEAD est obligatoire partout où GET existe : même statut, en-têtes, pas
+    // de corps (sonde de disponibilité / de taille de contenu).
+    const head = await fetch(`${base}/v1/health`, { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe("");
   });
 
   test("pairing : start → confirm OK, rejou/mauvais code rejetés", async () => {
@@ -159,12 +167,31 @@ describe("integration api", () => {
       sessionId: started.sessionId,
       code: started.code,
     });
-    expect(replay.status).toBe(404);
-    expect(isApiErrorBody(await replay.json())).toBe(true);
+    // Échecs d'appairage INDISTINGUABLES : une session déjà consommée (rejeu)
+    // et un PIN faux rendent le MÊME 401 « pairing refused ». Un 404 « session
+    // inconnue » ou un 400 « mauvais code » étaient un oracle d'existence de
+    // session. Le 401 porte son défi d'authentification.
+    const attendu = { error: { code: "unauthorized", message: "pairing refused" } };
+    expect(replay.status).toBe(401);
+    expect(replay.headers.get("www-authenticate")).not.toBeNull();
+    const replayBody = await replay.json();
+    expect(isApiErrorBody(replayBody)).toBe(true);
+    expect(replayBody).toEqual(attendu);
 
     const other = await (await post("/v1/pairing/start", { deviceName: "pixel2" })).json();
     const wrong = await post("/v1/pairing/confirm", { sessionId: other.sessionId, code: "000000" });
-    expect(wrong.status).toBe(400);
-    expect(isApiErrorBody(await wrong.json())).toBe(true);
+    expect(wrong.status).toBe(401);
+    expect(await wrong.json()).toEqual(replayBody);
+
+    // Session jamais ouverte : même refus, aucune différence observable.
+    const inconnu = await post("/v1/pairing/confirm", { sessionId: "session-inexistante", code: "000000" });
+    expect(inconnu.status).toBe(401);
+    expect(await inconnu.json()).toEqual(replayBody);
+
+    // /v1/pairing/start est ouverte (le device n'est pas encore appairé) :
+    // le corps est donc borné AVANT parse, comme les autres routes d'écriture.
+    const geant = await post("/v1/pairing/start", { deviceName: "x".repeat(5000) });
+    expect(geant.status).toBe(400);
+    expect(isApiErrorBody(await geant.json())).toBe(true);
   });
 });

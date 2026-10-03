@@ -25,7 +25,9 @@ import { apiError } from "./errors";
  * `AssignmentActions` : le routeur ne connaît ni le reader ni le store.
  */
 export interface SyncRefreshActions {
-  /** Relecture bornée d'un compte ("" = serveur mono-compte). */
+  /** Relecture bornée d'un compte. `accountId` est l'INDICE fourni par le
+   *  client (borné, optionnel) : la composition root vise le compte qu'elle a
+   *  appairé, jamais une identité demandée (mono-compte). */
   refresh(accountId: string): Promise<ContractEvent[]>;
 }
 
@@ -64,9 +66,13 @@ export async function handleSyncRefresh(req: Request, actions: SyncRefreshAction
   }
   try {
     const raw = await actions.refresh(accountId);
+    // Sortie NON contractuelle = rélecture en panne : 500 « invalid payload »,
+    // jamais 200 { events: [] } (le client lirait « rien n'a changé » et
+    // garderait son cache périmé).
+    if (!Array.isArray(raw)) return apiError("internal", "invalid payload");
     // Borne de volume : un sync très productif ne fait pas exploser la réponse.
     // Seuls des événements CONTRACTUELS sortent (garde-fou enveloppe versionnée).
-    const events = (Array.isArray(raw) ? raw : []).slice(0, SYNC_REFRESH_MAX_EVENTS).filter(isContractEvent);
+    const events = raw.slice(0, SYNC_REFRESH_MAX_EVENTS).filter(isContractEvent);
     const payload: SyncRefreshResponse = { events };
     if (!isSyncRefreshResponse(payload)) return apiError("internal", "invalid payload");
     return Response.json(payload);

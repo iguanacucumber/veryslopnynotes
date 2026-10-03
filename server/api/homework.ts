@@ -2,6 +2,7 @@
 // I7 : retourne JSON validé uniquement, aucun push/store/effet métier.
 // Erreurs typées sans secret : 400 requête invalide, 501 LLM non configuré, 500 sortie invalide.
 import {
+  HOMEWORK_MAX_BODY_CHARS,
   isHomeworkGenerateRequest,
   isHomeworkGenerateResponse,
 } from "../../shared/contracts/api";
@@ -16,7 +17,10 @@ export async function handleHomeworkGenerate(
   if (!llm) return apiError("not_implemented", "assistant devoirs non configuré");
   let body: unknown;
   try {
-    body = await req.json();
+    const text = await req.text();
+    // Corps borné AVANT parse : même discipline que toggle / messagerie / prefs.
+    if (text.length > HOMEWORK_MAX_BODY_CHARS) return apiError("bad_request", "invalid homework request");
+    body = JSON.parse(text);
   } catch {
     return apiError("bad_request", "invalid JSON body");
   }

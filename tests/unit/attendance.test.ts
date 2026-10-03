@@ -19,7 +19,7 @@ import {
   isAttendancePeriod,
   isPunishment,
 } from "../../shared/contracts/models";
-import { formatAbsencePush, newAbsences } from "../../server/jobs/notify";
+import { absenceFingerprint, formatAbsencePush, newAbsences } from "../../server/jobs/notify";
 import { syntheticAccountId, syntheticEntKind, syntheticPassword, syntheticUsername } from "./fixtures/pronote";
 import {
   syntheticAbsences,
@@ -319,18 +319,28 @@ describe("routes GET /v1/attendance + /v1/punishments (#77)", () => {
 });
 
 describe("détection de nouvelle absence sur données structurées (#77, I7)", () => {
-  test("diff d'ids : seulement les absences inconnues du snapshot", () => {
-    const previous = [syntheticAbsences[0].id];
+  test("diff d'empreintes : seulement les absences inconnues du snapshot", () => {
+    const previous = [absenceFingerprint(syntheticAbsences[0])];
     const fresh = newAbsences(previous, syntheticAbsences);
     expect(fresh.map((a) => a.id)).toEqual(["abs-fake-2", "abs-fake-3", "abs-fake-4"]);
     // Rejeu des mêmes données = zéro notif (idempotent).
-    expect(newAbsences(syntheticAbsences.map((a) => a.id), syntheticAbsences)).toEqual([]);
+    expect(newAbsences(syntheticAbsences.map(absenceFingerprint), syntheticAbsences)).toEqual([]);
     // Enregistrement invalide : jamais d'effet, même absent du snapshot.
     expect(newAbsences([], [{ ...syntheticAbsences[0], kind: "exclusion" } as never])).toEqual([]);
+    // Absence CORRIGÉE (justifiée) : empreinte différente de la version vue,
+    // donc à notifier — un diff par id seul l'aurait avalée en silence.
+    const nonJustifiee = { ...syntheticAbsences[0], justified: false };
+    expect(newAbsences([absenceFingerprint(nonJustifiee)], [syntheticAbsences[0]]).map((a) => a.id)).toEqual([
+      "abs-fake-1",
+    ]);
   });
 
-  test("push : titre/bornes, motif = donnée tronquée, jamais d'instruction", () => {
+  test("push : titre/bornes, date locale (jamais le jour UTC), motif = donnée tronquée, jamais d'instruction", () => {
     const [absence, late] = syntheticAbsences;
+    // Jour civil LOCAL au format du dépôt (helper partagé `localDay`, en-CA +
+    // Europe/Paris) : « 01/10/2026 » et « 2026-10-01 » désignent le MÊME jour
+    // affiché, seul le rendu change — plus de `Intl` local divergent entre le
+    // push d'absence, le titre de fiche et le PDF.
     expect(formatAbsencePush(absence)).toEqual({
       title: "Nouvelle absence",
       body: "2026-10-01 en Maths — Rendez-vous medical",
@@ -338,5 +348,10 @@ describe("détection de nouvelle absence sur données structurées (#77, I7)", (
     expect(formatAbsencePush(late)).toEqual({ title: "Nouveau retard", body: "2026-10-02 — Transport" });
     const long = formatAbsencePush({ ...absence, motif: "m".repeat(4000) });
     expect(long.body.length).toBeLessThanOrEqual(1000);
+    // Jour local, JAMAIS le jour UTC : 23h30Z = 01h30 le lendemain à Paris,
+    // donc le corps nomme le 02 et pas le 01 (`.slice(0, 10)` de l'ISO).
+    const nocturne = formatAbsencePush({ ...absence, date: "2026-10-01T23:30:00.000Z" });
+    expect(nocturne.body).toBe("2026-10-02 en Maths — Rendez-vous medical");
+    expect(nocturne.body).not.toContain("2026-10-01 en");
   });
 });

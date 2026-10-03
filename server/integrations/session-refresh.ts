@@ -133,9 +133,11 @@ export class SessionRefresher {
         return { refreshed: true, attempts };
       } catch (err) {
         last = err;
-        // Session morte = inutile de réessayer : l'app doit se ré-appairer.
-        if (isExpired(err)) {
-          this.logger("session refresh -> error session_expired");
+        // Session morte / credentials refusés par l'ENT = inutile de
+        // réessayer : l'app doit se ré-appairer. L'erreur remonte telle quelle,
+        // jamais dégradée en échec retryable générique.
+        if (isDefinitive(err)) {
+          this.logger(`session refresh -> error ${authCode(err)}`);
           throw err;
         }
         // Timeout = renewal enlisée (réseau figé) : on ne retente pas, comme
@@ -177,14 +179,33 @@ export class SessionRefresher {
   }
 }
 
-function isExpired(err: unknown): boolean {
-  // Lecture structurelle du discriminant plutôt qu'un import de PronoteAuthError :
-  // ce module reste sans dépendance runtime (donc déplaçable), et l'on ne
-  // masque jamais une erreur session_expired venue d'un adaptateur.
+/**
+ * Lecture structurelle du discriminant plutôt qu'un import de PronoteAuthError :
+ * ce module reste sans dépendance runtime (donc déplaçable), et l'on ne
+ * masque jamais une erreur venue d'un adaptateur.
+ */
+function isPronoteAuthError(err: unknown): boolean {
   return (
     typeof err === "object" &&
     err !== null &&
-    (err as { name?: unknown }).name === "PronoteAuthError" &&
-    (err as { code?: unknown }).code === "session_expired"
+    (err as { name?: unknown }).name === "PronoteAuthError"
+  );
+}
+
+function authCode(err: unknown): string {
+  const code = (err as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code : "session_expired";
+}
+
+/**
+ * Échecs DÉFINITIFS : un nouvel essai ne les changera pas. `session_expired`
+ * (session morte) et `invalid_credentials` (ENT/CAS a refusé le couple
+ * identifiant/mot de passe) imposent un ré-appairage côté app, donc pas de
+ * retry et pas de déclassement en erreur retryable.
+ */
+function isDefinitive(err: unknown): boolean {
+  return (
+    isPronoteAuthError(err) &&
+    (authCode(err) === "session_expired" || authCode(err) === "invalid_credentials")
   );
 }
