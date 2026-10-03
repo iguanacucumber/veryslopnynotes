@@ -24,6 +24,10 @@ class MainActivity : ComponentActivity() {
         )
         // ponytail: client paresseux, IO hors UI-thread via loader suspend.
         val repo = SecurityAlertsRepository(ApiClient(baseUrl))
+        // Toggle "fait" #75 : l'app n'envoie pas d'accountId (le serveur
+        // mono-compte résout sa session appairée) ; #82 exposera /v1/me pour un
+        // multi-compte. Jamais un hôte Pronote/ENT ici (I1), et l'écriture reste
+        // une action utilisateur confirmée (I7).
         setContent {
             MaterialTheme {
                 AppNav(

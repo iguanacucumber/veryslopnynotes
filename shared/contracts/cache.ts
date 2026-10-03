@@ -3,9 +3,12 @@
 // source de vérité reste le sync serveur (#16/#17). Invalidation active via
 // événement CacheInvalidated (events.ts). Versionnée avec CONTRACTS_VERSION.
 
-// "evaluations" (#78) ajouté en fin : badge périmé comme les notes. Add-only,
-// le sync serveur reste la source de vérité.
-export const CACHEABLE_RESOURCES = ["grades", "assignments", "timetable", "news", "menus", "evaluations"] as const;
+// "attendance"/"punishments" (#77) ajoutés en fin : vie scolaire lente comme
+// l'EDT (les absences sont saisies par la vie scolaire, pas par l'app).
+// Add-only, le sync serveur reste la source de vérité. Invalidation =
+// CacheInvalidated (resource attendance/punishments), pas d'événement dédié.
+// "evaluations" (#78) : badge périmé comme les notes, même principe.
+export const CACHEABLE_RESOURCES = ["grades", "assignments", "timetable", "news", "menus", "evaluations", "attendance", "punishments"] as const;
 
 export type CacheableResource = (typeof CACHEABLE_RESOURCES)[number];
 
@@ -20,6 +23,9 @@ export const CACHE_TTL_MS: Record<CacheableResource, number> = {
   menus: 6 * 60 * 60 * 1000,
   // #78 : évaluations par compétences, même cadence que les notes.
   evaluations: 15 * 60 * 1000,
+  // #77 : vie scolaire (absences/retards/sanctions), rythme EDT.
+  attendance: 60 * 60 * 1000,
+  punishments: 60 * 60 * 1000,
 } as const;
 
 export type CacheStatus = "fresh" | "stale";

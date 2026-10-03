@@ -7,7 +7,10 @@
 // 0.2.0 (#74) : moyennes parité Papillon (fournie/estimée, 3 algorithmes,
 // influence par note, historique) + périodes. Changement cassant sur
 // /v1/grades et /v1/events (enveloppe v) -> bump mineur documenté.
-export const CONTRACTS_VERSION = "0.2.0" as const;
+// 0.3.0 (#78 #79 #81 #83) : vague de parité add-only. Nouvelles ressources
+// uniquement (évaluations, actualités, menus, préférences matière) : les
+// contrats existants ne changent pas de forme, seul le jeu de routes grandit.
+export const CONTRACTS_VERSION = "0.3.0" as const;
 
 /** Version gabarit fiches révision (issue #30, phase 10). Stockée par fiche. */
 export const REVISION_TEMPLATE_VERSION = "fiche-v1" as const;
@@ -113,6 +116,31 @@ export function isAverageAlgorithm(v: unknown): v is AverageAlgorithm {
   return typeof v === "string" && (AVERAGE_ALGORITHMS as readonly string[]).includes(v);
 }
 
+// --- #75 devoirs enrichis (parité Papillon, onglet Tâches) ---
+// Description/contenus = texte de l'enseignant : DONNÉES bornées, jamais
+// instruction (I6). Les pièces jointes ne sortent JAMAIS en URL directe :
+// `ref` est une référence opaque résolue par le proxy serveur (/v1/media).
+export const ASSIGNMENT_DESCRIPTION_MAX_CHARS = 2000;
+export const ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS = 200;
+export const ASSIGNMENT_MAX_ATTACHMENTS = 10;
+export const ASSIGNMENT_REF_MAX_CHARS = 200;
+export const ASSIGNMENT_LESSON_TITLE_MAX_CHARS = 200;
+export const ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS = 500;
+
+/** Pièce jointe d'un devoir : référence interne, jamais une URL (règle d'or média). */
+export interface AttachmentRef {
+  readonly id: string;
+  readonly label: string;
+  /** Réf opaque résolue par le proxy serveur. `http://`, `https://`, `//`, `data:` refusés. */
+  readonly ref: string;
+}
+
+/** Contenu de cours rattaché au devoir : titre + extrait borné (donnée, I6). */
+export interface AssignmentLessonContent {
+  readonly title: string;
+  readonly excerpt: string;
+}
+
 export interface Assignment {
   readonly id: string;
   readonly accountId: string;
@@ -120,6 +148,17 @@ export interface Assignment {
   readonly title: string;
   readonly dueDate: string; // ISO-8601
   readonly done: boolean;
+  // --- #75 add-only : tous absents quand l'établissement ne les publie pas ---
+  /** Consigne du devoir, texte externe borné, donnée jamais instruction (I6). */
+  readonly description?: string;
+  /** Contenu de cours associé (titre + extrait), absent si non publié. */
+  readonly lessonContent?: AssignmentLessonContent;
+  /** Pièces jointes via proxy serveur (aucune URL Pronote côté app, I1). */
+  readonly attachments?: AttachmentRef[];
+  /** Regroupement scolaire publié par Pronote (non deviné). */
+  readonly periodId?: string;
+  /** Clé de semaine publiée par Pronote (non devinée côté serveur). */
+  readonly weekId?: string;
 }
 
 export interface TimetableEntry {
@@ -239,12 +278,46 @@ export function isAveragesReport(v: unknown): v is AveragesReport {
   return true;
 }
 
+// Formes d'URL INTERDITES dans une `ref` : la référence est interne, résolue
+// par le proxy serveur. Jamais d'hôte Pronote/ENT dans l'app (I1).
+const ABSOLUTE_REF_RE = /:\/\/|^\/\/|data:|\\\\/i;
+
+export function isAttachmentRef(v: unknown): v is AttachmentRef {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["id"])) return false;
+  if (!isBoundedString(v["label"], ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS)) return false;
+  const ref = v["ref"];
+  if (!isNonEmptyString(ref)) return false;
+  if (ref.length > ASSIGNMENT_REF_MAX_CHARS) return false;
+  if (ABSOLUTE_REF_RE.test(ref)) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(ref)) return false;
+  return true;
+}
+
+export function isAssignmentLessonContent(v: unknown): v is AssignmentLessonContent {
+  if (!isRecord(v)) return false;
+  if (!isBoundedString(v["title"], ASSIGNMENT_LESSON_TITLE_MAX_CHARS)) return false;
+  if (!isOptionalBoundedString(v["excerpt"], ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS)) return false;
+  return true;
+}
+
 export function isAssignment(v: unknown): v is Assignment {
   if (!isRecord(v)) return false;
   if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["accountId"])) return false;
   if (!isNonEmptyString(v["subject"]) || !isNonEmptyString(v["title"])) return false;
   if (!isIsoDate(v["dueDate"])) return false;
   if (typeof v["done"] !== "boolean") return false;
+  // #75 : champs add-only, absents = établissement qui ne publie pas.
+  if (v["description"] !== undefined && !isOptionalBoundedString(v["description"], ASSIGNMENT_DESCRIPTION_MAX_CHARS)) return false;
+  if (v["lessonContent"] !== undefined && !isAssignmentLessonContent(v["lessonContent"])) return false;
+  const att = v["attachments"];
+  if (att !== undefined) {
+    if (!Array.isArray(att) || att.length > ASSIGNMENT_MAX_ATTACHMENTS) return false;
+    if (!att.every(isAttachmentRef)) return false;
+  }
+  if (v["periodId"] !== undefined && !isNonEmptyString(v["periodId"])) return false;
+  if (v["weekId"] !== undefined && !isNonEmptyString(v["weekId"])) return false;
   return true;
 }
 
@@ -579,4 +652,196 @@ export const TIMETABLE_WEEK_MAX_SPAN_DAYS = 14;
 
 export function isTimetableStatus(v: unknown): v is TimetableStatus {
   return typeof v === "string" && (TIMETABLE_STATUSES as readonly string[]).includes(v);
+}
+
+
+
+// --- #77 vie scolaire : absences, retards, sanctions (parité Papillon) ---
+// Papillon lit l'onglet « Vie scolaire » de l'ENT : absences et retards y sont
+// deux tables distinctes de forme identique, d'où UN seul modèle `kind`. Les
+// onglets vie scolaire sont absents de certains établissements : liste vide = état
+// propre (l'app masque), jamais une erreur.
+// Motifs/sanctions = DONNÉES externes bornées, jamais instruction (I6).
+
+export const ABSENCE_KINDS = ["absence", "late"] as const;
+
+export type AbsenceKind = (typeof ABSENCE_KINDS)[number];
+
+export const ABSENCE_MOTIF_MAX_CHARS = 500;
+export const ABSENCE_SUBJECT_MAX_CHARS = 64;
+export const PUNISHMENT_MOTIF_MAX_CHARS = 500;
+export const PUNISHMENT_TYPE_MAX_CHARS = 100;
+export const ATTENDANCE_NAME_MAX_CHARS = 100;
+
+/** Absence OU retard (parité Papillon : un seul modèle, champ `kind`). */
+export interface AbsenceRecord {
+  readonly id: string;
+  readonly accountId: string;
+  readonly kind: AbsenceKind;
+  readonly date: string; // ISO-8601 (début)
+  /** Fin d'absence (absence sur plusieurs jours), absente = journée simple. */
+  readonly dateEnd?: string;
+  /** Matière concernée si l'établissement la publie. */
+  readonly subject?: string;
+  /** Motif déclaré : donnée bornée, jamais instruction (I6). */
+  readonly motif?: string;
+  /** Période d'appartenance (compteurs dérivés par période côté API). */
+  readonly periodId?: string;
+  /** Durée en minutes si l'ENT la publie (absente =occurrence comptée seule). */
+  readonly durationMinutes?: number;
+  /** Justifiée côté établissement, absent = inconnu (jamais « non justifiée » déduit). */
+  readonly justified?: boolean;
+}
+
+/** Sanction vie scolaire (avertissement, exclusion temporaire, ...). */
+export interface Punishment {
+  readonly id: string;
+  readonly accountId: string;
+  readonly date: string; // ISO-8601
+  /** Fin de sanction si l'ENT publie une plage, absente = sanction ponctuelle. */
+  readonly dateEnd?: string;
+  /** Motif de la sanction : donnée bornée, jamais instruction (I6). */
+  readonly motif: string;
+  /** Nature de la sanction (« Avertissement », « Exclusion temporaire », ...). */
+  readonly type: string;
+  /** Gravité publiée par l'établissement (échelle libre), absente sinon. */
+  readonly gravity?: number;
+  readonly periodId?: string;
+}
+
+/** Compteurs dérivés par période (add-only, jamais de valeur devinée). */
+export interface AttendancePeriod {
+  readonly periodId: string;
+  /** Libellé de la période si l'ENT la publie (sinon l'app affiche l'id). */
+  readonly name?: string;
+  readonly absences: number;
+  readonly late: number;
+  /** Minutes manquées cumulées (0 si l'ENT ne publie aucune durée). */
+  readonly missingMinutes: number;
+}
+
+export function isAbsenceRecord(v: unknown): v is AbsenceRecord {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["accountId"])) return false;
+  if (!(ABSENCE_KINDS as readonly string[]).includes(v["kind"] as string)) return false;
+  if (!isIsoDate(v["date"])) return false;
+  if (v["dateEnd"] !== undefined && !isIsoDate(v["dateEnd"])) return false;
+  // Plage cohérente : une fin avant le début n'est pas une absence, c'est du bruit.
+  if (v["dateEnd"] !== undefined && Date.parse(v["dateEnd"] as string) < Date.parse(v["date"] as string)) return false;
+  if (v["subject"] !== undefined && !isOptionalBoundedString(v["subject"], ABSENCE_SUBJECT_MAX_CHARS)) return false;
+  if (v["motif"] !== undefined && !isOptionalBoundedString(v["motif"], ABSENCE_MOTIF_MAX_CHARS)) return false;
+  const minutes = v["durationMinutes"];
+  if (minutes !== undefined && (!isFiniteNumber(minutes) || (minutes as number) < 0)) return false;
+  if (v["periodId"] !== undefined && !isNonEmptyString(v["periodId"])) return false;
+  if (v["justified"] !== undefined && typeof v["justified"] !== "boolean") return false;
+  return true;
+}
+
+export function isPunishment(v: unknown): v is Punishment {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["accountId"])) return false;
+  if (!isBoundedString(v["motif"], PUNISHMENT_MOTIF_MAX_CHARS)) return false;
+  if (!isBoundedString(v["type"], PUNISHMENT_TYPE_MAX_CHARS)) return false;
+  if (!isIsoDate(v["date"])) return false;
+  if (v["dateEnd"] !== undefined && !isIsoDate(v["dateEnd"])) return false;
+  if (v["dateEnd"] !== undefined && Date.parse(v["dateEnd"] as string) < Date.parse(v["date"] as string)) return false;
+  const gravity = v["gravity"];
+  if (gravity !== undefined && (!isFiniteNumber(gravity) || (gravity as number) < 0)) return false;
+  if (v["periodId"] !== undefined && !isNonEmptyString(v["periodId"])) return false;
+  return true;
+}
+
+export function isAttendancePeriod(v: unknown): v is AttendancePeriod {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["periodId"])) return false;
+  if (v["name"] !== undefined && !isOptionalBoundedString(v["name"], ATTENDANCE_NAME_MAX_CHARS)) return false;
+  for (const k of ["absences", "late", "missingMinutes"]) {
+    const n = v[k];
+    if (!isFiniteNumber(n) || !Number.isInteger(n) || (n as number) < 0) return false;
+  }
+  return true;
+}
+
+
+
+// --- #82 profil (parité Papillon, onglets index + profile) ---
+// Infos du compte appairé : nom, classe, période courante, photo. Tout est
+// optionnel côté établissement : champ non publié = OMIS, jamais de valeur
+// bidon (ni faux nom, ni photo inventée). La photo est une RÉF OPAQUE résolue
+// par le proxy serveur : aucune adresse Pronote/ENT ne sort du contrat (I1).
+export const USER_NAME_MAX_CHARS = 64;
+export const USER_CLASS_MAX_CHARS = 64;
+export const USER_PHOTO_REF_MAX_CHARS = 200;
+export const USER_PERIOD_ID_MAX_CHARS = 64;
+export const USER_MAX_KIDS = 8; // enfants listés (compte parent)
+
+/** Préfixe des réf photo : `photo:<idFichier>`. */
+export const PHOTO_REF_PREFIX = "photo:";
+
+// Jeton de fichier : pas d'espace, pas de séparateur d'URL, pas de chemin.
+const PHOTO_REF_ID_RE = /^[A-Za-z0-9._-]{1,150}$/;
+
+/**
+ * Réf photo = `photo:<id>` strictement. Toute forme d'adresse est donc refusée
+ * (`http://`, `https://`, `//cdn…`, `data:`, `photo://`) : l'app ne manipule
+ * qu'un jeton, la résolution se fait côté serveur via /v1/media.
+ */
+export function isOpaquePhotoRef(v: unknown): v is string {
+  if (typeof v !== "string") return false;
+  const t = v.trim();
+  if (!t.startsWith(PHOTO_REF_PREFIX) || t.length > USER_PHOTO_REF_MAX_CHARS) return false;
+  return PHOTO_REF_ID_RE.test(t.slice(PHOTO_REF_PREFIX.length));
+}
+
+/** Compte enfant d'un compte parent (multi-compte, #82). */
+export interface ChildAccount {
+  readonly accountId: string;
+  readonly displayName: string;
+  readonly classLabel?: string;
+}
+
+export interface UserInfo {
+  readonly accountId: string;
+  /** Nom affiché. Requis et non vide : sans nom publié, pas de profil du tout. */
+  readonly displayName: string;
+  readonly firstName?: string;
+  readonly lastName?: string;
+  readonly classLabel?: string;
+  /** Période courante (id + libellé), absente si l'établissement ne la publie pas. */
+  readonly periodId?: string;
+  readonly periodName?: string;
+  /** Réf opaque de photo (voir `isOpaquePhotoRef`), jamais une URL. */
+  readonly photoRef?: string;
+  /** Compte parent : des enfants existent (HAVE_KIDS côté app). */
+  readonly hasKids?: boolean;
+  readonly kids?: ChildAccount[];
+}
+
+export function isChildAccount(v: unknown): v is ChildAccount {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["accountId"])) return false;
+  if (!isBoundedString(v["displayName"], USER_NAME_MAX_CHARS)) return false;
+  if (v["classLabel"] !== undefined && !isBoundedString(v["classLabel"], USER_CLASS_MAX_CHARS)) return false;
+  return true;
+}
+
+export function isUserInfo(v: unknown): v is UserInfo {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["accountId"])) return false;
+  if (!isBoundedString(v["displayName"], USER_NAME_MAX_CHARS)) return false;
+  if (v["firstName"] !== undefined && !isBoundedString(v["firstName"], USER_NAME_MAX_CHARS)) return false;
+  if (v["lastName"] !== undefined && !isBoundedString(v["lastName"], USER_NAME_MAX_CHARS)) return false;
+  if (v["classLabel"] !== undefined && !isBoundedString(v["classLabel"], USER_CLASS_MAX_CHARS)) return false;
+  if (v["periodId"] !== undefined && !isBoundedString(v["periodId"], USER_PERIOD_ID_MAX_CHARS)) return false;
+  if (v["periodName"] !== undefined && !isBoundedString(v["periodName"], USER_NAME_MAX_CHARS)) return false;
+  // Photo : une URL dans photoRef = contrat invalide (l'app ne doit jamais voir
+  // une adresse Pronote/ENT, I1 + règle d'or média).
+  if (v["photoRef"] !== undefined && !isOpaquePhotoRef(v["photoRef"])) return false;
+  if (v["hasKids"] !== undefined && typeof v["hasKids"] !== "boolean") return false;
+  const kids = v["kids"];
+  if (kids !== undefined) {
+    if (!Array.isArray(kids) || kids.length > USER_MAX_KIDS) return false;
+    for (const k of kids) if (!isChildAccount(k)) return false;
+  }
+  return true;
 }

@@ -2,7 +2,7 @@
 // vers HTTP, SQLite ou Pronote. Adapters en server/infrastructure/
 // et server/integrations/.
 // Voir docs/architecture/INVARIANTS.md (I2, I3, I5, I6, I7).
-import type { Assignment, CanteenMenu, Evaluation, Grade, NewsItem, Period, TimetableEntry } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, CanteenMenu, Evaluation, Grade, NewsItem, Period, Punishment, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 
 export type Untrusted<T = string> = { readonly __untrusted: true; readonly value: T };
 
@@ -57,6 +57,29 @@ export class PronoteReadError extends Error {
   }
 }
 
+/**
+ * Écriture Pronote (#75) : uniquement depuis une action APP confirmée (toggle
+ * "fait"), jamais depuis une sortie libre LLM (I7). `unsupported` = l'adaptateur
+ * n'expose pas d'écriture (pronotets sans setDone) -> erreur franche, jamais
+ * un faux succès.
+ */
+export type PronoteWriteErrorCode =
+  | "unsupported"
+  | "not_found"
+  | "session_expired"
+  | "ent_unavailable"
+  | "network"
+  | "timeout";
+
+export class PronoteWriteError extends Error {
+  readonly code: PronoteWriteErrorCode;
+  constructor(message: string, code: PronoteWriteErrorCode) {
+    super(message);
+    this.name = "PronoteWriteError";
+    this.code = code;
+  }
+}
+
 export interface PronotePageOptions {
   readonly limit?: number;
   readonly cursor?: string;
@@ -76,6 +99,16 @@ export interface PronotePage<T> {
 export interface PronoteReader {
   getGrades(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Grade>>;
   getAssignments(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Assignment>>;
+
+  /**
+   * Bascule "fait" sur un devoir (#75). C'est une ÉCRITURE vers Pronote : elle
+   * n'est appelée que par la route POST /v1/assignments/toggle, donc par une
+   * action APP confirmée — jamais depuis une sortie libre LLM (I7).
+   * ponytail: optionnelle = adaptateur sans écriture supportée ; l'appelant
+   * transforme l'absence en erreur typée `unsupported` (jamais un faux succès).
+   */
+  setAssignmentDone?(accountId: string, assignmentId: string, done: boolean): Promise<Assignment>;
+
   getTimetable(accountId: string, options?: PronoteTimetableOptions): Promise<PronotePage<TimetableEntry>>;
   /** Périodes scolaires (#74) : regroupement des moyennes + onglets par trimestre. */
   getPeriods?(accountId: string): Promise<PronotePage<Period>>;
@@ -101,6 +134,26 @@ export interface PronoteReader {
    * cas l'adaptateur renvoie une page VIDE, pas une erreur (onglet masqué).
    */
   getMenus?(accountId: string, options?: PronoteTimetableOptions): Promise<PronotePage<CanteenMenu>>;
+
+  /**
+   * Vie scolaire (#77) : absences ET retards unifiés (`kind`), avec la période
+   * d'appartenance. Onglet absent de l'établissement (non configuré) = page
+   * VIDE, pas une erreur (capacités dynamiques, l'app masque l'onglet).
+   * ponytail: motifs = données bornées (I6), jamais réinterprétés.
+   */
+  getAttendance?(accountId: string, page?: PronotePageOptions): Promise<PronotePage<AbsenceRecord>>;
+
+  /** Sanctions vie scolaire (#77) : même contrat défensif (page vide si absent). */
+  getPunishments?(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Punishment>>;
+
+
+  /**
+   * Infos du compte appairé (#82, parité Papillon Profil) : nom, classe,
+   * période courante, photo (réf opaque, résolue par le proxy média) et
+   * enfants d'un compte parent. Optionnel + page VIDE quand l'établissement ne
+   * publie rien : jamais de nom ni de photo inventés (voir isUserInfo).
+   */
+  getUserInfo?(accountId: string): Promise<PronotePage<UserInfo>>;
 }
 
 /** Ressource pédagogique via session Pronote (contenu cours, fichier joint, manuel lié). */
