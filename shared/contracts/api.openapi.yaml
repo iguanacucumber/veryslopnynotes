@@ -232,6 +232,47 @@ paths:
                 $ref: '#/components/schemas/CanteenMenusResponse'
         '400':
           description: fenetre de dates illisible
+
+  /v1/me:
+    get:
+      operationId: getMe
+      description: >-
+        Infos du compte apparie (issue #82, parite Papillon Profil) : nom, classe,
+        periode courante, photo (ref opaque resolue par /v1/media) et enfants d'un
+        compte parent. user absent = etablissement ne publie rien, aucun nom
+        invente. Les periodes de l'annee restent sur /v1/periods.
+      responses:
+        '200':
+          description: profil du compte ou user null
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+
+  /v1/media:
+    get:
+      operationId: getMedia
+      description: >-
+        Proxy serveur d'une ref opaque (photo de profil, piece jointe). Aucune
+        adresse Pronote/ENT ne sort cote app (I1) ; le serveur resout et stream
+        les octets. Reponse binaire (image ou fichier), pas de JSON.
+      parameters:
+        - name: ref
+          in: query
+          required: true
+          schema: { type: string, maxLength: 200 }
+        - name: accountId
+          in: query
+          required: true
+          schema: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: octets du media
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '400':
+          description: ref ou accountId manquant/illisible
 components:
   schemas:
     Grade:
@@ -525,3 +566,40 @@ components:
       properties:
         menus: { type: array, items: { $ref: '#/components/schemas/CanteenMenu' } }
         balance: { $ref: '#/components/schemas/CanteenBalance' }
+
+    ChildAccount:
+      type: object
+      required: [accountId, displayName]
+      properties:
+        accountId: { type: string, maxLength: 64 }
+        displayName: { type: string, maxLength: 64 }
+        classLabel: { type: string, maxLength: 64 }
+    UserInfo:
+      type: object
+      required: [accountId, displayName]
+      properties:
+        accountId: { type: string, maxLength: 64 }
+        displayName: { type: string, maxLength: 64, description: Nom publie par l'etablissement, jamais invente. }
+        firstName: { type: string, maxLength: 64 }
+        lastName: { type: string, maxLength: 64 }
+        classLabel: { type: string, maxLength: 64 }
+        periodId: { type: string, maxLength: 64, description: Periode courante, absente si non publiee. }
+        periodName: { type: string, maxLength: 64 }
+        photoRef:
+          type: string
+          maxLength: 200
+          pattern: '^photo:[A-Za-z0-9._-]{1,150}$'
+          description: >-
+            Ref opaque resolue par /v1/media. Une URL y est invalide par contrat :
+            l'app ne voit jamais d'adresse Pronote/ENT (I1).
+        hasKids: { type: boolean, description: Compte parent (HAVE_KIDS cote app). }
+        kids: { type: array, maxItems: 8, items: { $ref: '#/components/schemas/ChildAccount' } }
+    MeResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/UserInfo'
+          description: null = aucune info publiee (etat vide propre, aucun nom invente).
