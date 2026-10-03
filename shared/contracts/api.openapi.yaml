@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: veryslopnynotes API
-  version: 0.2.0
+  version: 0.3.0
   description: Contrats app <-> serveur. Source de vérité (phase 1, issue #4). Miroir de shared/contracts/*.ts.
 paths:
   /v1/health:
@@ -432,7 +432,7 @@ components:
       type: object
       required: [v, type, at, data]
       properties:
-        v: { type: string, enum: ['0.2.0'] }
+        v: { type: string, enum: ['0.3.0'] }
         type: { type: string, enum: [GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted, CacheInvalidated, SecurityAlert, NewsUpdated] }
         at: { type: string, format: date-time }
         data: { type: object }
