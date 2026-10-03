@@ -2,8 +2,8 @@
 // Enveloppe versionnée {v, type, at, data}. Détection nouvelle note / DS
 // sur données structurées uniquement (I7), jamais sur sortie libre LLM.
 
-import { CONTRACTS_VERSION, isAssignment, isGrade, isTimetableEntry } from "./models";
-import type { Assignment, Grade, TimetableEntry } from "./models";
+import { CONTRACTS_VERSION, isAssignment, isGrade, isNewsItem, isTimetableEntry } from "./models";
+import type { Assignment, Grade, NewsItem, TimetableEntry } from "./models";
 import { isCacheableResource } from "./cache";
 import type { CacheableResource } from "./cache";
 
@@ -14,6 +14,7 @@ export const EVENT_TYPES = [
   "SyncCompleted",
   "CacheInvalidated",
   "SecurityAlert",
+  "NewsUpdated",
 ] as const;
 
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -36,6 +37,10 @@ export type SyncCompletedData = {
 export type CacheInvalidatedData = {
   readonly resource: CacheableResource;
   readonly reason: "sync" | "expiry" | "manual";
+};
+/** Actualités établissement (#79) : snapshot paginé, l'app recharge /v1/news. */
+export type NewsUpdatedData = {
+  readonly items: NewsItem[];
 };
 
 // Alertes sécurité phase 6 (#21) : injections neutralisées (I6).
@@ -115,6 +120,11 @@ export function isContractEvent(v: unknown): v is ContractEvent {
     }
     case "SecurityAlert":
       return isSecurityAlertData(data);
+    case "NewsUpdated": {
+      if (typeof data !== "object" || data === null) return false;
+      const items = (data as Record<string, unknown>)["items"];
+      return Array.isArray(items) && items.every(isNewsItem);
+    }
     default:
       return false;
   }
