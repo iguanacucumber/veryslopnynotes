@@ -7,7 +7,10 @@
 // 0.2.0 (#74) : moyennes parité Papillon (fournie/estimée, 3 algorithmes,
 // influence par note, historique) + périodes. Changement cassant sur
 // /v1/grades et /v1/events (enveloppe v) -> bump mineur documenté.
-export const CONTRACTS_VERSION = "0.2.0" as const;
+// 0.3.0 (#78 #79 #81 #83) : vague de parité add-only. Nouvelles ressources
+// uniquement (évaluations, actualités, menus, préférences matière) : les
+// contrats existants ne changent pas de forme, seul le jeu de routes grandit.
+export const CONTRACTS_VERSION = "0.3.0" as const;
 
 /** Version gabarit fiches révision (issue #30, phase 10). Stockée par fiche. */
 export const REVISION_TEMPLATE_VERSION = "fiche-v1" as const;
