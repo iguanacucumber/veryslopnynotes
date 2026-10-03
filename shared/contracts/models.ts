@@ -129,6 +129,14 @@ export interface TimetableEntry {
   readonly room?: string;
   readonly start: string; // ISO-8601
   readonly end: string; // ISO-8601
+  // --- #76 parité Papillon EDT : prof, statut annulé/déplacé (add-only) ---
+  /** Enseignant, si l'établissement le publie. Absent = non publié, jamais deviné. */
+  readonly teacher?: string;
+  /** Statut tel que publié : absent = statut non publié (jamais "normal" par défaut). */
+  readonly status?: TimetableStatus;
+  /** Horaires d'origine d'un cours déplacé, si publiés (statut `moved`). */
+  readonly originalStart?: string; // ISO-8601
+  readonly originalEnd?: string; // ISO-8601
 }
 
 export interface Device {
@@ -244,9 +252,19 @@ export function isTimetableEntry(v: unknown): v is TimetableEntry {
   if (!isRecord(v)) return false;
   if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["accountId"])) return false;
   if (!isNonEmptyString(v["subject"])) return false;
-  if (v["room"] !== undefined && typeof v["room"] !== "string") return false;
+  if (v["room"] !== undefined && !isOptionalBoundedString(v["room"], TIMETABLE_ROOM_MAX_CHARS)) return false;
   if (!isIsoDate(v["start"]) || !isIsoDate(v["end"])) return false;
   if (Date.parse(v["end"] as string) < Date.parse(v["start"] as string)) return false;
+  // #76 : champs optionnels. Un payload 0.2.0 antérieur (sans prof/statut)
+  // reste VALIDE : champ absent = établissement qui ne publie rien.
+  if (v["status"] !== undefined && !isTimetableStatus(v["status"])) return false;
+  if (v["teacher"] !== undefined && !isOptionalBoundedString(v["teacher"], TIMETABLE_TEACHER_MAX_CHARS)) return false;
+  for (const k of ["originalStart", "originalEnd"] as const) {
+    if (v[k] !== undefined && !isIsoDate(v[k])) return false;
+  }
+  if (v["originalStart"] !== undefined && v["originalEnd"] !== undefined) {
+    if (Date.parse(v["originalEnd"] as string) < Date.parse(v["originalStart"] as string)) return false;
+  }
   return true;
 }
 
@@ -536,4 +554,29 @@ export function isCanteenBalance(v: unknown): v is CanteenBalance {
     if (c.trim().length > CANTEEN_MAX_CURRENCY_CHARS) return false;
   }
   return isIsoDate(v["updatedAt"]);
+}
+
+
+// --- #76 EDT semaine (parité Papillon, onglet EDT) ---
+// Add-only strict : tous les champs ajoutés sont OPTIONNELS, un payload 0.2.0
+// antérieur reste valide et les apps 0.2.0 ignorent ce qu'elles ne lisent pas.
+// Règle de mapping : champ absent = établissement qui ne publie rien. Aucun
+// statut deviné ("normal" n'est PAS une valeur par défaut), aucune chaîne vide.
+// ponytail: pas de champ `weekId`/`isNext` dans le contrat — la semaine est un
+// paramètre de requête (`weekStart`) et le « prochain cours » se calcule côté
+// app sur l'instant fourni : ce sont des données dérivées, pas du publié (I6).
+
+/** Statuts d'EDT publiés par l'établissement (français -> anglais, cf. menus). */
+export const TIMETABLE_STATUSES = ["normal", "cancelled", "moved"] as const;
+
+export type TimetableStatus = (typeof TIMETABLE_STATUSES)[number];
+
+/** Bornes des libellés d'EDT (données externes bornées, jamais interprétées, I6). */
+export const TIMETABLE_ROOM_MAX_CHARS = 100;
+export const TIMETABLE_TEACHER_MAX_CHARS = 100;
+/** Fenêtre de semaine : 7 jours demandés, 14 jours max (borne d'entrée du routeur). */
+export const TIMETABLE_WEEK_MAX_SPAN_DAYS = 14;
+
+export function isTimetableStatus(v: unknown): v is TimetableStatus {
+  return typeof v === "string" && (TIMETABLE_STATUSES as readonly string[]).includes(v);
 }

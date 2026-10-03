@@ -22,3 +22,15 @@ Changement cassant = bump version + PR justificative ; `tests/contracts` impose 
 Add-only #83 (pas de bump) : préférences matière `SubjectPrefs` (couleur `#RRGGBB` strict,
 emoji borné, libellé perso) + `GET`/`PUT /v1/subjects/prefs`. Matière sans prefs = nom
 d'origine, donc les apps 0.2.0 ignorent le champ sans régression.
+
+Add-only #76 (pas de bump) : `TimetableEntry` + `teacher?`, `status?`
+(`normal`/`cancelled`/`moved`), `originalStart?`/`originalEnd?` (cours déplacé).
+Champ absent = établissement qui ne publie rien (jamais de `""` ni de `normal`
+deviné) ; un payload 0.2.0 antérieur reste valide. `GET /v1/timetable` accepte
+une fenêtre `weekStart` (lundi→dimanche, bornes **UTC explicites** = bug d'offset
+de l'onglet EDT Papillon non reproduit) ou `from`/`to` (amplitude bornée à 14
+jours) ; date illisible = 400 sans répliquer l'input. Pas de champ `weekId` :
+la semaine est une requête, le « prochain cours » se calcule côté app (donnée
+dérivée, pas du publié). SSE : `TimetableUpdated` (type existant) est réémis
+dans le snapshot `/v1/events`, le diff de sync EDT l'émet sur cours ajouté,
+annulé ou déplacé. Ressource cache `timetable` inchangée (TTL 60 min).

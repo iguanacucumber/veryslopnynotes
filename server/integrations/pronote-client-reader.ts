@@ -10,8 +10,8 @@
 // encore lues : ProvidedAverages reste null, les rapports sont donc estimés,
 // ce qui est le comportement Papillon par défaut. Upgrade: getProvidedAverages
 // sur ce reader, sans toucher aux trois algorithmes.
-import type { Assignment, CanteenMeal, CanteenMenu, Evaluation, Grade, NewsItem, Period, TimetableEntry } from "../../shared/contracts/models";
-import { CANTEEN_MAX_ALLERGEN_CHARS, CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_DISH_CHARS, CANTEEN_MAX_DISHES, EVALUATION_LABEL_MAX_CHARS, isAssignment, isCanteenMenu, isEvaluation, isGrade, isNewsItem, isPeriod, isTimetableEntry, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CHARS } from "../../shared/contracts/models";
+import type { Assignment, CanteenMeal, CanteenMenu, Evaluation, Grade, NewsItem, Period, TimetableEntry, TimetableStatus } from "../../shared/contracts/models";
+import { CANTEEN_MAX_ALLERGEN_CHARS, CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_DISH_CHARS, CANTEEN_MAX_DISHES, EVALUATION_LABEL_MAX_CHARS, isAssignment, isCanteenMenu, isEvaluation, isGrade, isNewsItem, isPeriod, isTimetableEntry, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CHARS, TIMETABLE_ROOM_MAX_CHARS, TIMETABLE_TEACHER_MAX_CHARS } from "../../shared/contracts/models";
 import type { PedagogicResource, PronotePage, PronotePageOptions, PronoteReader, PronoteTimetableOptions } from "../domain/ports";
 import { isPedagogicResource, PronoteAuthError, PronoteReadError, untrusted } from "../domain/ports";
 
@@ -149,20 +149,65 @@ function mapAssignment(accountId: string, h: any, index: number): Assignment | n
   return isAssignment(candidate) ? candidate : null;
 }
 
+// --- #76 EDT : statut annulé/déplacé + prof (parité Papillon onglet EDT) ---
+// pronotets ne publie ces champs que selon la configuration de l'établissement :
+// champ absent = champ OMIS côté contrat, jamais "normal" deviné ni "" vide.
+// Le statut textual est normalisé (pronotets/ENT francophones) mais reste borné :
+// un libellé inconnu = absent, pas un statut inventé.
+const STATUS_WORDS: { readonly re: RegExp; readonly status: TimetableStatus }[] = [
+  { re: /cancel|annul/i, status: "cancelled" },
+  { re: /moved|deplac|déplac/i, status: "moved" },
+  { re: /^(normal|normalise|normalisé|ok)$/i, status: "normal" },
+];
+
+function toTimetableStatus(raw: unknown): TimetableStatus | undefined {
+  if (raw === true) return undefined; // booléen nu : pas de statut deviné.
+  if (typeof raw === "string") {
+    const s = bounded(raw, 40);
+    return STATUS_WORDS.find((w) => w.re.test(s))?.status;
+  }
+  return undefined;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapLessonStatus(l: any): TimetableStatus | undefined {
+  // Priorité aux drapeaux booléens (source la plus fiable), sinon statut texte.
+  if (l?.isCancelled === true || l?.cancelled === true) return "cancelled";
+  if (l?.isMoved === true || l?.isMovedCourse === true) return "moved";
+  const text = toTimetableStatus(l?.status ?? l?.state);
+  if (text !== undefined) return text;
+  // "Drapeau publié explicitement à faux" = normal, sinon aucune information.
+  if (l?.isCancelled === false || l?.isMoved === false) return "normal";
+  return undefined;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapLesson(accountId: string, l: any, index: number): TimetableEntry | null {
   const fallback = `t-${index}`;
   const start = toIso(l?.start, "");
   const end = toIso(l?.end, "");
   if (!start || !end) return null;
+  const room = typeof l?.classroom === "string" ? l.classroom : Array.isArray(l?.classrooms) ? l.classrooms[0] : undefined;
+  // Prof : nom si publié, sinon absent. Jamais de chaîne vide devinée.
+  const rawTeacher = l?.teacher?.name ?? l?.teacher ?? l?.teachers?.[0]?.name;
+  const teacher = typeof rawTeacher === "string" ? bounded(rawTeacher, TIMETABLE_TEACHER_MAX_CHARS) : "";
+  // Cours déplacé : horaires d'origine si Pronote les publie, sinon absents.
+  const originalStart = toIso(l?.originalStart ?? l?.movedStart ?? l?.initialStart, "");
+  const originalEnd = toIso(l?.originalEnd ?? l?.movedEnd ?? l?.initialEnd, "");
   const candidate = {
     id: typeof l?.id === "string" && l.id ? l.id : fallback,
     accountId,
     subject: l?.subject?.name ?? l?.subject ?? "Cours",
-    room: typeof l?.classroom === "string" ? l.classroom : Array.isArray(l?.classrooms) ? l.classrooms[0] : undefined,
+    room: typeof room === "string" ? bounded(room, TIMETABLE_ROOM_MAX_CHARS) || undefined : undefined,
     start,
     end,
+    status: mapLessonStatus(l),
+    teacher: teacher === "" ? undefined : teacher,
+    originalStart: originalStart === "" ? undefined : originalStart,
+    originalEnd: originalEnd === "" ? undefined : originalEnd,
   };
+  // Cours illisible (dates, statut hors contrat) : entrée IGNORÉE, jamais
+  // rendue à moitié remplie côté app.
   return isTimetableEntry(candidate) ? candidate : null;
 }
 
@@ -479,6 +524,12 @@ export class PronoteClientReader implements PronoteReader {
     }
     const limit = clampLimit(options?.limit);
     const offset = parseOffset(options?.cursor);
+    // #76 : bornes UTC explicites de la fenêtre (l'app demande une semaine via
+    // weekStart, résolu en from/to par le routeur) — pas de fuseau implicite.
+    // Fenêtre appliquée côté reader comme getMenus : la lib aligne sur ses
+    // semaines, on re-borne sur la fenêtre demandée (cours illisible filtré au mapping).
+    const fromMs = from.getTime();
+    const toMs = to.getTime();
     let client;
     try {
       client = this.sessions.requireClient(id);
@@ -490,9 +541,9 @@ export class PronoteClientReader implements PronoteReader {
     try {
       const raw = (await client.lessons(from, to)) as unknown[];
       const all: TimetableEntry[] = [];
-      raw.forEach((l, i) => {
-        const m = mapLesson(id, l, i);
-        if (m) all.push(m);
+      (Array.isArray(raw) ? raw : []).forEach((l, i) => {
+        const mapped = mapLesson(id, l, all.length + i);
+        if (mapped && Date.parse(mapped.start) >= fromMs && Date.parse(mapped.start) <= toMs) all.push(mapped);
       });
       const slice = all.slice(offset, offset + limit);
       const nextCursor = offset + limit < all.length ? String(offset + limit) : null;

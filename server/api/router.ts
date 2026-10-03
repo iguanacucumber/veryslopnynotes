@@ -22,8 +22,8 @@ import {
   isSubjectPrefsResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
-import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDevice, isNewsItem, isSubjectPrefs, SUBJECT_PREFS_MAX_COUNT } from "../../shared/contracts/models";
-import type { ContractEvent, NewsUpdatedData, SyncCompletedData } from "../../shared/contracts/events";
+import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDevice, isNewsItem, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT, TIMETABLE_WEEK_MAX_SPAN_DAYS } from "../../shared/contracts/models";
+import type { ContractEvent, NewsUpdatedData, SyncCompletedData, TimetableUpdatedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
 import { computeAverages } from "../domain/averages";
 import { buildCompetenceSummary, buildSkills } from "../domain/competences";
@@ -58,6 +58,40 @@ function canteenWindow(url: URL): { from?: string; to?: string } | null {
     out[key] = t;
   }
   return out;
+}
+
+/** Longueur max d'un weekStart d'EDT (borne d'entrée utilisateur, #76). */
+const TIMETABLE_DATE_MAX_CHARS = 40;
+
+/**
+ * #76 : fenêtre de l'EDT en millisecondes. `weekStart` = un jour quelconque de
+ * la semaine demandée -> lundi 00:00 UTC → dimanche 23:59:59.999 UTC (borne
+ * EXPLICITE en UTC : l'offset de fuseau implicite est le bug connu de l'onglet
+ * EDT Papillon, on ne le reproduit pas). Sans weekStart, from/to borment la
+ * fenêtre (parse ISO + longueur bornée). Sans paramètre = aucune fenêtre.
+ * Renvoie null = 400, sans jamais répliquer l'input ni deviner une date.
+ */
+function timetableWindow(url: URL): { fromMs?: number; toMs?: number } | null {
+  const weekStart = (url.searchParams.get("weekStart") ?? "").trim().slice(0, TIMETABLE_DATE_MAX_CHARS);
+  const win = canteenWindow(url);
+  if (win === null) return null;
+  if (weekStart !== "") {
+    const parsed = Date.parse(weekStart);
+    if (Number.isNaN(parsed)) return null;
+    const d = new Date(parsed);
+    const midnight = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    // getUTCDay() = 0 le dimanche -> décalage vers le lundi de la même semaine.
+    const monday = midnight - ((d.getUTCDay() + 6) % 7) * 86400000;
+    return { fromMs: monday, toMs: monday + 7 * 86400000 - 1 };
+  }
+  const fromMs = win.from === undefined ? undefined : Date.parse(win.from);
+  const toMs = win.to === undefined ? undefined : Date.parse(win.to);
+  // Fenêtre libre bornée en amplitude (une semaine par défaut, 14 jours maxi) :
+  // au-delà, 400 plutôt qu'un payload géant.
+  if (fromMs !== undefined && toMs !== undefined && toMs - fromMs > TIMETABLE_WEEK_MAX_SPAN_DAYS * 86400000) {
+    return null;
+  }
+  return { fromMs, toMs };
 }
 
 function json(valid: boolean, payload: unknown): Response {
@@ -136,7 +170,21 @@ export function createHandler(
         return json(isAssignmentsResponse(payload), payload);
       }
       case "/v1/timetable": {
-        const payload = { entries: store.entries() };
+        // #76 : fenêtre weekStart (semaine) ou from/to, bornees et valides.
+        // Date d'entrée illisible = 400 sans répliquer l'input ; aucune fenêtre
+        // demandée = tout le store (comportement 0.2.0, add-only).
+        const win = timetableWindow(url);
+        if (win === null) return apiError("bad_request", "invalid date window");
+        const all = store.entries();
+        const entries =
+          win.fromMs === undefined && win.toMs === undefined
+            ? all
+            : all.filter((e) => {
+                const t = Date.parse(e.start);
+                if (Number.isNaN(t)) return false;
+                return (win.fromMs === undefined || t >= win.fromMs) && (win.toMs === undefined || t <= win.toMs);
+              });
+        const payload = { entries };
         return json(isTimetableResponse(payload), payload);
       }
       case "/v1/security/alerts": {
@@ -163,7 +211,15 @@ export function createHandler(
           at: new Date().toISOString(),
           data: { items: (store.news?.() ?? []).filter(isNewsItem) },
         };
-        return sse([event, newsEvent]);
+        // #76 : meme principe pour l'EDT — TimetableUpdated existe deja dans le
+        // contrat, on le re-emet (pas de doublon d'evenement ni de type novel).
+        const timetableEvent: ContractEvent<"TimetableUpdated", TimetableUpdatedData> = {
+          v: CONTRACTS_VERSION,
+          type: "TimetableUpdated",
+          at: new Date().toISOString(),
+          data: { entries: store.entries().filter(isTimetableEntry) },
+        };
+        return sse([event, newsEvent, timetableEvent]);
       }
       case "/v1/revision-sheets": {
         const payload = { sheets: revisions.list() };
