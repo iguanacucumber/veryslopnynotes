@@ -3,7 +3,7 @@
 // Mémoire = seed/tests uniquement ; l'adaptateur SQLite (#11) implémentera
 // ReadStore sans changer le routeur.
 
-import type { AbsenceRecord, Assignment, CanteenBalance, CanteenMenu, Evaluation, Grade, NewsItem, Period, Punishment, TimetableEntry, UserInfo } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, CanteenBalance, CanteenMenu, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 import type { SecurityAlertData } from "../../shared/contracts/events";
 
 import type { ProvidedAverages } from "../domain/averages";
@@ -54,6 +54,18 @@ export interface ReadStore {
    * l'écran Profil affiche un état vide plutôt qu'un profil d'exemple.
    */
   userInfo?(): UserInfo | null;
+
+  /**
+   * Fils de discussion (#80) + destinataires. Optionnelles, défaut `[]` =
+   * établissement sans onglet Discussions (état propre côté app, l'onglet est
+   * masqué). Les ÉCRITURES ne passent pas par le store : ports d'action
+   * séparés (server/api/discussions.ts, I7).
+   */
+  discussions?(): Discussion[];
+  /** Messages d'UN fil (donnée personnelle, jamais loguée ni mise en cache disque). */
+  discussionMessages?(discussionId: string): Message[];
+  /** Destinataires possibles d'une nouvelle discussion. */
+  discussionRecipients?(): Recipient[];
 }
 
 export interface StoreSeed {
@@ -81,6 +93,11 @@ export interface StoreSeed {
    * seed par défaut, donc aucun risque de profil fantôme dans les tests.
    */
   readonly userInfo?: UserInfo | null;
+
+  /** Messagerie synthétique (#80). Défaut = vide (onglet Discussions absent). */
+  readonly discussions?: Discussion[];
+  readonly discussionMessages?: Message[];
+  readonly discussionRecipients?: Recipient[];
 }
 
 const SEED_GRADE: Grade = {
@@ -174,6 +191,10 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
 
   // #82 : défaut null (pas de profil dans le seed général = mode anonyme).
   const user = seed.userInfo === undefined ? null : structuredClone(seed.userInfo);
+  // #80 : défaut VIDE (établissement sans onglet Discussions) = état propre.
+  const discussions = structuredClone(seed.discussions ?? []);
+  const messages = structuredClone(seed.discussionMessages ?? []);
+  const recipients = structuredClone(seed.discussionRecipients ?? []);
   return {
     grades: () => structuredClone(grades),
     assignments: () => structuredClone(assignments),
@@ -193,5 +214,11 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
 
 
     userInfo: () => (user === null ? null : structuredClone(user)),
+
+    // #80 : messagerie (donnée personnelle, jamais journalisée en clair).
+    discussions: () => structuredClone(discussions),
+    discussionMessages: (discussionId: string) =>
+      structuredClone(messages.filter((m) => m.discussionId === discussionId)),
+    discussionRecipients: () => structuredClone(recipients),
   };
 }
