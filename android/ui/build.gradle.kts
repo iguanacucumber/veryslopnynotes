@@ -35,4 +35,9 @@ dependencies {
     implementation("androidx.compose.material3:material3:1.2.1")
     implementation("androidx.compose.ui:ui:1.6.8")
     implementation("androidx.navigation:navigation-compose:2.7.7")
+    // `ApiClient` expose `OkHttpClient` dans sa surface publique et l'écran
+    // d'appairage construit un client : le module UI manipule donc le type
+    // directement. `data` le déclare en `implementation` (donc absent de notre
+    // classpath de compilation) : on le déclare ici aussi, version alignée.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
