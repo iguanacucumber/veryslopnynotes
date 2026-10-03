@@ -3,7 +3,9 @@
 // source de vérité reste le sync serveur (#16/#17). Invalidation active via
 // événement CacheInvalidated (events.ts). Versionnée avec CONTRACTS_VERSION.
 
-export const CACHEABLE_RESOURCES = ["grades", "assignments", "timetable"] as const;
+// #78 : "evaluations" ajouté en fin (évaluations par compétences, badge périmé
+// comme les notes). Add-only : le sync serveur reste la source de vérité.
+export const CACHEABLE_RESOURCES = ["grades", "assignments", "timetable", "evaluations"] as const;
 
 export type CacheableResource = (typeof CACHEABLE_RESOURCES)[number];
 
@@ -12,6 +14,7 @@ export const CACHE_TTL_MS: Record<CacheableResource, number> = {
   grades: 15 * 60 * 1000,
   assignments: 15 * 60 * 1000,
   timetable: 60 * 60 * 1000,
+  evaluations: 15 * 60 * 1000,
 } as const;
 
 export type CacheStatus = "fresh" | "stale";

@@ -3,7 +3,7 @@
 // Mémoire = seed/tests uniquement ; l'adaptateur SQLite (#11) implémentera
 // ReadStore sans changer le routeur.
 
-import type { Assignment, Grade, Period, TimetableEntry } from "../../shared/contracts/models";
+import type { Assignment, Evaluation, Grade, Period, TimetableEntry } from "../../shared/contracts/models";
 import type { SecurityAlertData } from "../../shared/contracts/events";
 import type { ProvidedAverages } from "../domain/averages";
 
@@ -17,6 +17,11 @@ export interface ReadStore {
   periods(): Period[];
   /** Moyennes fournies par l'établissement (#74), null si non publiées. */
   providedAverages(): ProvidedAverages | null;
+  /**
+   * Évaluations par compétences (#78). Optionnelle : un store qui ne les
+   * publie pas renvoie un tableau vide (état propre, onglet sans contenu).
+   */
+  evaluations?(): Evaluation[];
 }
 
 export interface StoreSeed {
@@ -26,6 +31,7 @@ export interface StoreSeed {
   readonly securityAlerts?: SecurityAlertData[];
   readonly periods?: Period[];
   readonly providedAverages?: ProvidedAverages | null;
+  readonly evaluations?: Evaluation[];
 }
 
 const SEED_GRADE: Grade = {
@@ -82,6 +88,8 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
   const alerts = structuredClone(seed.securityAlerts ?? SEED_ALERTS);
   const periods = structuredClone(seed.periods ?? SEED_PERIODS);
   const provided = seed.providedAverages === undefined ? null : structuredClone(seed.providedAverages);
+  // #78 : défaut vide = établissement sans évaluations par compétences.
+  const evaluations = structuredClone(seed.evaluations ?? []);
   return {
     grades: () => structuredClone(grades),
     assignments: () => structuredClone(assignments),
@@ -89,5 +97,6 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
     securityAlerts: () => structuredClone(alerts),
     periods: () => structuredClone(periods),
     providedAverages: () => (provided === null ? null : structuredClone(provided)),
+    evaluations: () => structuredClone(evaluations),
   };
 }

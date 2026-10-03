@@ -5,13 +5,27 @@
 import {
   isAveragesReport,
   isAssignment,
+  isCompetenceSummary,
   isDevice,
+  isEvaluation,
   isGrade,
   isPeriod,
   isRevisionSheet,
+  isSkill,
   isTimetableEntry,
 } from "./models";
-import type { AveragesReport, Assignment, Device, Grade, Period, RevisionSheet, TimetableEntry } from "./models";
+import type {
+  AveragesReport,
+  Assignment,
+  CompetenceSummary,
+  Device,
+  Evaluation,
+  Grade,
+  Period,
+  RevisionSheet,
+  Skill,
+  TimetableEntry,
+} from "./models";
 import { isSecurityAlertData } from "./events";
 import type { SecurityAlertData } from "./events";
 
@@ -33,6 +47,7 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/v1/homework/generate" },
   { method: "GET", path: "/v1/revision-sheets" },
   { method: "GET", path: "/v1/revision-sheets/pdf" },
+  { method: "GET", path: "/v1/evaluations" },
 ] as const;
 
 export interface HealthResponse {
@@ -73,6 +88,17 @@ export interface PeriodsResponse {
 }
 export interface RevisionSheetsResponse {
   readonly sheets: RevisionSheet[];
+}
+
+/**
+ * #78 : évaluations par compétences. `summary` = agrégat par compétence
+ * (moyenne des notes DÉFINIES seulement, `value: null` si non notée).
+ * Établissement sans évaluations par compétences = trois listes vides.
+ */
+export interface EvaluationsResponse {
+  readonly skills: Skill[];
+  readonly evaluations: Evaluation[];
+  readonly summary: CompetenceSummary[];
 }
 
 // Alertes sécurité phase 6 (#21) : liste d'injections neutralisées (I6).
@@ -183,6 +209,22 @@ export function isRevisionSheetsResponse(v: unknown): v is RevisionSheetsRespons
 
 export function isPairingConfirmResponse(v: unknown): v is PairingConfirmResponse {
   return isDevice(v);
+}
+
+export function isEvaluationsResponse(v: unknown): v is EvaluationsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  const s = r["skills"];
+  const e = r["evaluations"];
+  const m = r["summary"];
+  return (
+    Array.isArray(s) &&
+    s.every(isSkill) &&
+    Array.isArray(e) &&
+    e.every(isEvaluation) &&
+    Array.isArray(m) &&
+    m.every(isCompetenceSummary)
+  );
 }
 
 function isBoundedNonEmptyString(v: unknown, max: number): v is string {

@@ -40,6 +40,9 @@ class SyncedRepository(
             .removePrefix(baseUrl).ifEmpty { "/v1/assignments" }
         CachePolicy.TIMETABLE -> ServerConfig.timetableUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/timetable" }
+        // #78 : évaluations par compétences (compétences fournies sinon vide).
+        CachePolicy.EVALUATIONS -> ServerConfig.evaluationsUrl(baseUrl)
+            .removePrefix(baseUrl).ifEmpty { "/v1/evaluations" }
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
     }
 
