@@ -2,9 +2,9 @@
 // Table de routes + types requête/réponse. Doit rester en sync avec
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
-import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Evaluation, Grade, NewsItem, Period, Punishment, RevisionSheet, Skill, SubjectPrefs, TimetableEntry, UserInfo } from "./models";
-import { isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isEvaluation, isGrade, isNewsItem, isPeriod, isPunishment, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, isUserInfo, SUBJECT_PREFS_MAX_COUNT } from "./models";
-import type { ContractEvent, SecurityAlertData } from "./events";
+import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, RevisionSheet, Skill, SubjectPrefs, TimetableEntry, UserInfo } from "./models";
+import { DISCUSSION_ID_MAX_CHARS, DISCUSSION_MAX_RECIPIENTS, DISCUSSION_SUBJECT_MAX_CHARS, isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isDiscussion, isEvaluation, isGrade, isMessage, isNewsItem, isPeriod, isPunishment, isRecipient, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, isUserInfo, MESSAGE_BODY_MAX_CHARS, SUBJECT_PREFS_MAX_COUNT } from "./models";
+import type { CacheInvalidatedData, ContractEvent, SecurityAlertData } from "./events";
 import { isContractEvent, isSecurityAlertData } from "./events";
 
 
@@ -53,6 +53,21 @@ export const API_ROUTES: readonly ApiRoute[] = [
   // #82/#84 : résolution serveur d'une réf opaque (photo, PJ). L'app n'a
   // jamais d'URL Pronote : c'est le serveur qui télécharge (I1, règle d'or média).
   { method: "GET", path: "/v1/media" },
+
+  // #80 : messagerie (parité Papillon, onglet Discussions). Lectures pures
+  // (onglet Discussions absent de l'établissement = listes VIDES, 200) et
+  // écritures = ACTIONS APP CONFIRMÉES, une route explicite par action (I7) :
+  // jamais déclenchées par une sortie LLM.
+  // ponytail: `delete` est un POST et non un DELETE (ApiRoute n'accepte que
+  // GET/POST/PUT, aucun appelant HTTP n'a besoin d'un vrai DELETE). Le corps
+  // reste borné + validé comme les autres actions.
+  { method: "GET", path: "/v1/discussions" },
+  { method: "POST", path: "/v1/discussions" },
+  { method: "GET", path: "/v1/discussions/messages" },
+  { method: "GET", path: "/v1/discussions/recipients" },
+  { method: "POST", path: "/v1/discussions/reply" },
+  { method: "POST", path: "/v1/discussions/read-state" },
+  { method: "POST", path: "/v1/discussions/delete" },
 ] as const;
 
 export interface HealthResponse {
@@ -409,4 +424,146 @@ export function isMeResponse(v: unknown): v is MeResponse {
   if (typeof v !== "object" || v === null) return false;
   const u = (v as Record<string, unknown>)["user"];
   return u === null || isUserInfo(u);
+}
+
+
+// --- #80 messagerie : lectures + actions APP confirmées (I7) ---
+// Lectures : `discussions` (liste des fils), `messages` d'un fil, `recipients`
+// (destinataires possibles d'une nouvelle discussion). Onglet Discussions inactif
+// côté établissement = listes VIDES (200), jamais une erreur.
+// Écritures : chaque action a SA route explicite et ne part que d'un geste de
+// l'utilisateur ; le corps est borné AVANT parse puis validé par is*Request.
+// La réponse est `{ ok, event }` où `event` est l'événement EXISTANT
+// CacheInvalidated (resource `discussions`) : aucun type d'événement nouveau,
+// l'app purge son cache de messagerie et recharge.
+
+/** Corps d'action borné AVANT parse : sujet + 4000 + ids de destinataires. */
+export const DISCUSSION_MAX_BODY_CHARS = 8192;
+
+/** accountId absent = serveur mono-compte, il résout sa session appairée. */
+function isOptionalAccountId(v: unknown): boolean {
+  return v === undefined || isBoundedNonEmptyString(v, DISCUSSION_ID_MAX_CHARS);
+}
+
+/** Liste d'ids de destinataires : bornée, sans doublon, jamais vide. */
+function isRecipientIdList(v: unknown): v is string[] {
+  if (!Array.isArray(v) || v.length === 0 || v.length > DISCUSSION_MAX_RECIPIENTS) return false;
+  const seen = new Set<string>();
+  for (const id of v) {
+    if (!isBoundedNonEmptyString(id, DISCUSSION_ID_MAX_CHARS)) return false;
+    if (seen.has(id)) return false;
+    seen.add(id);
+  }
+  return true;
+}
+
+export interface DiscussionsResponse {
+  readonly discussions: Discussion[];
+}
+
+export interface DiscussionMessagesResponse {
+  readonly messages: Message[];
+}
+
+export interface DiscussionRecipientsResponse {
+  readonly recipients: Recipient[];
+}
+
+/** Nouvelle discussion : sujet + premier message + destinataires (1..20). */
+export interface DiscussionsCreateRequest {
+  readonly accountId?: string;
+  readonly subject: string;
+  readonly body: string;
+  readonly recipientIds: string[];
+}
+
+export interface DiscussionsReplyRequest {
+  readonly accountId?: string;
+  readonly discussionId: string;
+  readonly body: string;
+}
+
+/** État lu/non-lu du fil (parité Papillon `readState`). */
+export interface DiscussionsReadStateRequest {
+  readonly accountId?: string;
+  readonly discussionId: string;
+  readonly read: boolean;
+}
+
+export interface DiscussionsDeleteRequest {
+  readonly accountId?: string;
+  readonly discussionId: string;
+}
+
+/** Réponse commune des 4 actions : confirmation + invalidation de cache. */
+export interface DiscussionActionResponse {
+  readonly ok: true;
+  readonly event: ContractEvent<"CacheInvalidated", CacheInvalidatedData>;
+}
+
+export function isDiscussionsResponse(v: unknown): v is DiscussionsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const d = (v as Record<string, unknown>)["discussions"];
+  return Array.isArray(d) && d.every(isDiscussion);
+}
+
+export function isDiscussionMessagesResponse(v: unknown): v is DiscussionMessagesResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const m = (v as Record<string, unknown>)["messages"];
+  return Array.isArray(m) && m.every(isMessage);
+}
+
+export function isDiscussionRecipientsResponse(v: unknown): v is DiscussionRecipientsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const r = (v as Record<string, unknown>)["recipients"];
+  return Array.isArray(r) && r.every(isRecipient);
+}
+
+export function isDiscussionsCreateRequest(v: unknown): v is DiscussionsCreateRequest {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  if (!isOptionalAccountId(r["accountId"])) return false;
+  if (!isBoundedNonEmptyString(r["subject"], DISCUSSION_SUBJECT_MAX_CHARS)) return false;
+  if (!isBoundedNonEmptyString(r["body"], MESSAGE_BODY_MAX_CHARS)) return false;
+  return isRecipientIdList(r["recipientIds"]);
+}
+
+export function isDiscussionsReplyRequest(v: unknown): v is DiscussionsReplyRequest {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  if (!isOptionalAccountId(r["accountId"])) return false;
+  if (!isBoundedNonEmptyString(r["discussionId"], DISCUSSION_ID_MAX_CHARS)) return false;
+  return isBoundedNonEmptyString(r["body"], MESSAGE_BODY_MAX_CHARS);
+}
+
+export function isDiscussionsReadStateRequest(v: unknown): v is DiscussionsReadStateRequest {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  if (!isOptionalAccountId(r["accountId"])) return false;
+  if (!isBoundedNonEmptyString(r["discussionId"], DISCUSSION_ID_MAX_CHARS)) return false;
+  return typeof r["read"] === "boolean";
+}
+
+export function isDiscussionsDeleteRequest(v: unknown): v is DiscussionsDeleteRequest {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  if (!isOptionalAccountId(r["accountId"])) return false;
+  return isBoundedNonEmptyString(r["discussionId"], DISCUSSION_ID_MAX_CHARS);
+}
+
+/**
+ * `{ ok, event }` valide = l'action est partie d'un geste de l'app ET
+ * l'invalidation porte bien la ressource `discussions` (donc le cache est
+ * purgé, pas un autre). Un événement d'un autre type = réponse refusée : le
+ * client ne peut pas transformer une action en autre effet.
+ */
+export function isDiscussionActionResponse(v: unknown): v is DiscussionActionResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  if (r["ok"] !== true) return false;
+  const e = r["event"];
+  if (!isContractEvent(e)) return false;
+  if (e.type !== "CacheInvalidated") return false;
+  const d = e.data as { resource?: unknown };
+  return d.resource === "discussions";
 }

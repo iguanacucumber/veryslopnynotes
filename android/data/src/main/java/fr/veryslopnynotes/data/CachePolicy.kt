@@ -17,6 +17,10 @@ object CachePolicy {
     // #77 : vie scolaire — absences/retards + sanctions (rythme EDT).
     const val ATTENDANCE = "attendance"
     const val PUNISHMENTS = "punishments"
+    // #80 : messagerie — liste des fils seulement (donnée personnelle, purgée au
+    // logout par AccountStore.logout → clearAll ; les messages d'un fil sont lus
+    // à la demande et jamais écrits sur disque).
+    const val DISCUSSIONS = "discussions"
 
     // ponytail: constantes dures = miroir CACHE_TTL_MS (contrats v0). Upgrade: codegen contrats.
     const val TTL_GRADES_MS = 15L * 60L * 1000L
@@ -29,11 +33,13 @@ object CachePolicy {
     // #77 : vie scolaire, rythme EDT (saisie par l'établissement).
     const val TTL_ATTENDANCE_MS = 60L * 60L * 1000L
     const val TTL_PUNISHMENTS_MS = 60L * 60L * 1000L
+    // #80 : liste des fils, cadence devoirs (messages fréquents).
+    const val TTL_DISCUSSIONS_MS = 15L * 60L * 1000L
 
     fun isCacheable(resource: String): Boolean =
         resource == GRADES || resource == ASSIGNMENTS || resource == TIMETABLE ||
             resource == EVALUATIONS || resource == NEWS || resource == MENUS ||
-            resource == ATTENDANCE || resource == PUNISHMENTS
+            resource == ATTENDANCE || resource == PUNISHMENTS || resource == DISCUSSIONS
 
     fun ttlFor(resource: String): Long = when (resource) {
         GRADES -> TTL_GRADES_MS
@@ -44,6 +50,7 @@ object CachePolicy {
         EVALUATIONS -> TTL_EVALUATIONS_MS
         ATTENDANCE -> TTL_ATTENDANCE_MS
         PUNISHMENTS -> TTL_PUNISHMENTS_MS
+        DISCUSSIONS -> TTL_DISCUSSIONS_MS
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
     }
 
