@@ -2,6 +2,10 @@
 // framework sans besoin justifié). Routes = shared/contracts API_ROUTES,
 // payloads validés par les garde-fous is* avant envoi (500 typée sinon).
 // Appairage câblé sur PairingService (QR = payload {sessionId, code}).
+// Auth : une porte d'entrée unique laisse ouvertes les 3 routes qui servent à
+// OBTENIR un credential (appairage) + la sonde /v1/health (OPEN_WITHOUT_DEVICE) ;
+// TOUTE autre route exige le bearer d'un device appairé, et le compte servi est
+// résolu côté serveur (servedAccountId), jamais celui réclamé par le client.
 // SSE = snapshot SyncCompleted puis connexion tenue (live : phase 5).
 
 import {
@@ -22,6 +26,7 @@ import {
   isNewsResponse,
   MEDIA_REF_MAX_CHARS,
   isPairingConfirmRequest,
+  isPairingConfirmResponse,
   isPairingStartRequest,
   isPairingStartResponse,
   isPeriodsResponse,
@@ -30,7 +35,8 @@ import {
   isSubjectPrefsResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
-import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, DISCUSSION_ID_MAX_CHARS, isAverageAlgorithm, isDevice, isNewsItem, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT, TIMETABLE_WEEK_MAX_SPAN_DAYS } from "../../shared/contracts/models";
+import type { PairingConfirmResponse } from "../../shared/contracts/api";
+import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, DISCUSSION_ID_MAX_CHARS, isAverageAlgorithm, isNewsItem, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT, TIMETABLE_WEEK_MAX_SPAN_DAYS } from "../../shared/contracts/models";
 import type { ContractEvent, NewsUpdatedData, SyncCompletedData, TimetableUpdatedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
 import { computeAverages } from "../domain/averages";
@@ -214,11 +220,25 @@ async function boundedJson(req: Request, max: number): Promise<unknown | Respons
 const PAIRING_MAX_BODY_CHARS = 1024;
 
 /**
- * Jeton d'appareil appairé exigé sur les routes qui TOUCHENT Pronote
- * (lecture d'un autre compte par /v1/media, écriture /v1/assignments/toggle) :
+ * Routes ouvertes SANS credential : celles qui servent à OBTENIR un credential
+ * (appairage) et la sonde de vivacité. Tout le reste — lectures ET écritures —
+ * exige un device appairé.
+ * ponytail: une liste blanche de 3 chemins plutôt qu'une blacklist de 30 :
+ * une route ajoutée à API_ROUTES est fermée par DÉFAUT, pas ouverte par oubli.
+ */
+const OPEN_WITHOUT_DEVICE: ReadonlySet<string> = new Set([
+  "/v1/health",
+  "/v1/pairing/start",
+  "/v1/pairing/confirm",
+]);
+
+/**
+ * Jeton d'appareil appairé exigé sur TOUTE route hors `OPEN_WITHOUT_DEVICE`
+ * (donc sur les lectures comme sur les écritures) :
  * `Authorization: Bearer <token d'appareil>`.
  * `verifyDeviceToken` compare en temps constant ; le refus ne dit JAMAIS pourquoi
- * (inexistant / expiré / révoqué / format inconnu = un seul 401).
+ * (inexistant / expiré / révoqué / format inconnu = un seul 401, un seul
+ * message, `WWW-Authenticate`).
  * Renvoie la réponse 401 à renvoyer, ou `null` si le jeton est valide.
  */
 function requireDevice(req: Request, pairing: PairingService): Response | null {
@@ -340,6 +360,12 @@ export function createHandler(
     method: string,
     download: MediaResolver | null,
   ): Promise<Response> {
+    // Porte d'entrée unique : rien n'est lu (ni body, ni store, ni port) sur
+    // une route fermée sans jeton d'un device appairé.
+    if (!OPEN_WITHOUT_DEVICE.has(path)) {
+      const refuse = requireDevice(req, pairing);
+      if (refuse !== null) return refuse;
+    }
     switch (path) {
       case "/v1/health":
         return Response.json({ status: "ok", version: CONTRACTS_VERSION });
@@ -386,22 +412,19 @@ export function createHandler(
         return json(isAssignmentsResponse(payload), payload);
       }
       // #75 : toggle fait = ÉCRITURE Pronote, action APP confirmée (I7).
-      // Écriture = PRONOTE touché : sans jeton d'appareil appairé, l'écriture
-      // n'est même pas lue (aucun corps bufferisé, aucune action appelée).
+      // Écriture = PRONOTE touché : le jeton d'un device appairé est exigé par
+      // la porte d'entrée (avant même la lecture du corps).
       case "/v1/assignments/toggle": {
-        const refuse = requireDevice(req, pairing);
-        if (refuse !== null) return refuse;
-        return handleAssignmentsToggle(req, assignmentActions);
+        return handleAssignmentsToggle(req, assignmentActions, servedAccountId(store) ?? "");
       }
       // #75 : proxy des pièces jointes (ref opaque → octets). Jamais d'URL
       // Pronote dans l'app (I1), jamais de WebView distante.
       case "/v1/media": {
-        // Lecture des données d'un compte appairé : jeton exigé, et le compte
-        // est résolu côté SERVEUR (servedAccountId / session appairée du
-        // proxy). L'`accountId` de la query est IGNORÉ : le prendre pour une
-        // identité ouvrait la session d'un autre compte appairé.
-        const refuse = requireDevice(req, pairing);
-        if (refuse !== null) return refuse;
+        // Lecture des données d'un compte appairé : jeton exigé (porte
+        // d'entrée) et le compte est résolu côté SERVEUR (servedAccountId /
+        // session appairée du proxy). L'`accountId` de la query est IGNORÉ :
+        // le prendre pour une identité ouvrait la session d'un autre compte
+        // appairé.
         const ref = (url.searchParams.get("ref") ?? "").trim();
         if (!isMediaRef(ref)) return apiError("bad_request", "invalid media ref");
         if (!download) return apiError("not_implemented", "media proxy absent");
@@ -522,7 +545,11 @@ export function createHandler(
         // PIN faux = oracle d'existence de session + fuite des tentatives
         // restantes. Les nuances restent dans `PairingFailure` (usage interne).
         if (!res.ok) return apiError("unauthorized", "pairing refused");
-        return json(isDevice(res.device), res.device);
+        // Le secret sort ICI, UNE SEULE FOIS dans toute l'API : c'est la seule
+        // réponse qui le porte (aucune autre route ne le rend, jamais en erreur,
+        // jamais dans un log). Le client s'en sert comme bearer.
+        const payload: PairingConfirmResponse = { device: res.device, token: res.token };
+        return json(isPairingConfirmResponse(payload), payload);
       }
       case "/v1/homework/generate": {
         return handleHomeworkGenerate(req, llm);
@@ -620,10 +647,8 @@ export function createHandler(
       // #82/#84 : proxy média (photo de profil, PJ). Réf opaque bornée, refusée
       // si elle ressemble à une adresse ; octets streamés par le serveur, donc
       // aucune URL Pronote ne sort côté app (I1). Sans proxy injecté = 501.
-      // ponytail: aucune vérification de token ici — l'auth du device n'est
-      // encore appliquée sur AUCUNE route (voir createHandler) ; /v1/media
-      // n'ouvre pas un trou nouveau, il hérite du même poste.
-      // Upgrade: exiger le token appairé sur /v1/me et /v1/media.
+      // Auth : le jeton d'un device appairé est exigé par la porte d'entrée
+      // (OPEN_WITHOUT_DEVICE), comme sur TOUTE autre route.
 
       // #87 : capacités dynamiques (onglets Pronote actifs). Store sans
       // détection = `capabilities: null` (l'app garde son affichage), jamais
@@ -637,7 +662,7 @@ export function createHandler(
       // via le moteur de sync, événements de types EXISTANTS uniquement (I7 :
       // aucune sortie LLM sur ce chemin). Sans relecture branchée = 501 franc.
       case "/v1/sync/refresh": {
-        return handleSyncRefresh(req, syncRefresh);
+        return handleSyncRefresh(req, syncRefresh, servedAccountId(store) ?? "");
       }
 
 
@@ -651,7 +676,7 @@ export function createHandler(
           const payload = { discussions: store.discussions?.() ?? [] };
           return json(isDiscussionsResponse(payload), payload);
         }
-        return handleDiscussionWrite(req, discussionActions, "create");
+        return handleDiscussionWrite(req, discussionActions, "create", servedAccountId(store) ?? "");
       }
       case "/v1/discussions/messages": {
         const id = (url.searchParams.get("id") ?? "").trim().slice(0, DISCUSSION_ID_MAX_CHARS);
@@ -668,13 +693,13 @@ export function createHandler(
         return json(isDiscussionRecipientsResponse(payload), payload);
       }
       case "/v1/discussions/reply": {
-        return handleDiscussionWrite(req, discussionActions, "reply");
+        return handleDiscussionWrite(req, discussionActions, "reply", servedAccountId(store) ?? "");
       }
       case "/v1/discussions/read-state": {
-        return handleDiscussionWrite(req, discussionActions, "read-state");
+        return handleDiscussionWrite(req, discussionActions, "read-state", servedAccountId(store) ?? "");
       }
       case "/v1/discussions/delete": {
-        return handleDiscussionWrite(req, discussionActions, "delete");
+        return handleDiscussionWrite(req, discussionActions, "delete", servedAccountId(store) ?? "");
       }
       default:
         return apiError("not_found", `unknown path ${path}`);

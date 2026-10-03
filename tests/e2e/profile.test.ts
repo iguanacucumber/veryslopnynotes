@@ -61,8 +61,10 @@ function paired(): { pairing: PairingService; auth: Record<string, string> } {
 
 describe("e2e profil", () => {
   test("GET /v1/me : seed → payload contractuel → profil affiché par l'app", async () => {
-    const handler = createHandler(createMemoryStore({ userInfo: syntheticUserInfo, periods: syntheticPeriods }));
-    const res = await handler(new Request("http://127.0.0.1/v1/me"));
+    // Depuis 0.4.0 /v1/me exige le bearer d'un device appairé.
+    const { pairing, auth } = paired();
+    const handler = createHandler(createMemoryStore({ userInfo: syntheticUserInfo, periods: syntheticPeriods }), pairing);
+    const res = await handler(new Request("http://127.0.0.1/v1/me", { headers: auth }));
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(isMeResponse(JSON.parse(body))).toBe(true);
@@ -86,7 +88,7 @@ describe("e2e profil", () => {
       null,
       fakeMedia,
     );
-    const me = await (await handler(new Request("http://127.0.0.1/v1/me"))).text();
+    const me = await (await handler(new Request("http://127.0.0.1/v1/me", { headers: auth }))).text();
     expect(JSON.parse(me).user.hasKids).toBe(true);
     expect(JSON.parse(me).user.kids.length).toBe(2);
     // L'app ne connaît que la réf : elle demande les octets au serveur.
@@ -107,8 +109,9 @@ describe("e2e profil", () => {
   });
 
   test("compte sans infos : /v1/me → user null, l'app affiche un état vide", async () => {
-    const handler = createHandler(createMemoryStore({ userInfo: null }));
-    const body = await (await handler(new Request("http://127.0.0.1/v1/me"))).text();
+    const { pairing, auth } = paired();
+    const handler = createHandler(createMemoryStore({ userInfo: null }), pairing);
+    const body = await (await handler(new Request("http://127.0.0.1/v1/me", { headers: auth }))).text();
     expect(JSON.parse(body)).toEqual({ user: null });
     expect(parseApp(body)).toBeNull();
     expect(parseApp(null)).toBeNull();
@@ -119,8 +122,9 @@ describe("e2e profil", () => {
 
   test("périodes : /v1/periods déjà servi par #74, aucun doublon #82", async () => {
     expect(API_ROUTES.filter((r) => r.path === "/v1/periods").length).toBe(1);
-    const handler = createHandler(createMemoryStore({ periods: syntheticPeriods }));
-    const body = await (await handler(new Request("http://127.0.0.1/v1/periods"))).text();
+    const { pairing, auth } = paired();
+    const handler = createHandler(createMemoryStore({ periods: syntheticPeriods }), pairing);
+    const body = await (await handler(new Request("http://127.0.0.1/v1/periods", { headers: auth }))).text();
     const periods = JSON.parse(body).periods as { id: string }[];
     expect(periods.length).toBe(2);
     expect(periods.every((p) => typeof p.id === "string")).toBe(true);
@@ -128,8 +132,9 @@ describe("e2e profil", () => {
 
   test("hors-ligne : le profil n'est pas cachable, l'accueil retombe sur les caches", async () => {
     // "me" hors CACHEABLE_RESOURCES = aucune donnée personnelle persistée.
-    const handler = createHandler(createMemoryStore({ userInfo: syntheticUserInfo }));
-    const me = await (await handler(new Request("http://127.0.0.1/v1/me"))).text();
+    const { pairing, auth } = paired();
+    const handler = createHandler(createMemoryStore({ userInfo: syntheticUserInfo }), pairing);
+    const me = await (await handler(new Request("http://127.0.0.1/v1/me", { headers: auth }))).text();
     // Réseau KO côté app : le profil affiché reste le dernier en mémoire, mais
     // il n'est jamais écrit en cache (donnée personnelle, mode anonyme).
     expect(isUserInfo(JSON.parse(me).user)).toBe(true);

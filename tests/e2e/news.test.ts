@@ -9,6 +9,7 @@ import { CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
 import { isNewsItem } from "../../shared/contracts/models";
 import { createMemoryStore } from "../../server/api/store";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "../unit/fixtures/pairing";
 import { syntheticNewsInjectionItem, syntheticNewsItem } from "../unit/fixtures/news";
 
 // Miroir du parse app (android/data/NewsRepository.kt) : org.json → items valides.
@@ -33,9 +34,12 @@ function parseApp(payload: string | null): { id: string; title: string; body: st
 const NEWS = [syntheticNewsItem, syntheticNewsInjectionItem];
 
 describe("e2e news", () => {
+  // Depuis 0.4.0 /v1/news et /v1/events exigent le bearer d'un device appairé.
+  const { pairing: PAIRING, auth: AUTH } = pairedDevice();
+
   test("GET /v1/news : seed -> payload contractuel -> listé par l'app", async () => {
-    const handler = createHandler(createMemoryStore({ news: NEWS }));
-    const res = await handler(new Request("http://127.0.0.1/v1/news"));
+    const handler = createHandler(createMemoryStore({ news: NEWS }), PAIRING);
+    const res = await handler(new Request("http://127.0.0.1/v1/news", { headers: AUTH }));
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(isNewsResponse(JSON.parse(body))).toBe(true);
@@ -52,8 +56,8 @@ describe("e2e news", () => {
   });
 
   test("établissement sans onglet actualités : 200 + vide propre, jamais 500", async () => {
-    const handler = createHandler(createMemoryStore({ news: [] }));
-    const res = await handler(new Request("http://127.0.0.1/v1/news"));
+    const handler = createHandler(createMemoryStore({ news: [] }), PAIRING);
+    const res = await handler(new Request("http://127.0.0.1/v1/news", { headers: AUTH }));
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(isNewsResponse(JSON.parse(body))).toBe(true);
@@ -65,8 +69,8 @@ describe("e2e news", () => {
   });
 
   test("SSE NewsUpdated : snapshot valide, l'app peut recharger /v1/news", async () => {
-    const handler = createHandler(createMemoryStore({ news: NEWS }));
-    const res = await handler(new Request("http://127.0.0.1/v1/events"));
+    const handler = createHandler(createMemoryStore({ news: NEWS }), PAIRING);
+    const res = await handler(new Request("http://127.0.0.1/v1/events", { headers: AUTH }));
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let buf = "";
@@ -91,8 +95,8 @@ describe("e2e news", () => {
 
   test("hors-ligne : cache news périmé = repli, badge stale, pas d'écran vide", async () => {
     // Le cache serveur garde le dernier payload valide (miroir SyncedRepository).
-    const handler = createHandler(createMemoryStore({ news: NEWS }));
-    const fetched = await (await handler(new Request("http://127.0.0.1/v1/news"))).text();
+    const handler = createHandler(createMemoryStore({ news: NEWS }), PAIRING);
+    const fetched = await (await handler(new Request("http://127.0.0.1/v1/news", { headers: AUTH }))).text();
     const now = 1_000_000;
     // Réseau OK : cache réécrit, badge frais.
     expect(cacheStatus("news", now, now + CACHE_TTL_MS.news)).toBe("fresh");

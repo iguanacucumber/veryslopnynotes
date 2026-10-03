@@ -23,6 +23,7 @@ import fr.veryslopnynotes.data.AssignmentsRepository
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SyncedRepository
+import fr.veryslopnynotes.data.TokenStore
 
 // Onglet Tâches #75 (parité Papillon) : devoirs groupés par jour de la semaine
 // demandée, contenus de cours + pièces jointes via le PROXY SERVEUR.
@@ -138,8 +139,10 @@ fun AssignmentsRoute(
     baseUrl: String,
     accountId: String,
     subjectPrefs: List<SubjectPrefs> = emptyList(),
+    // Bearer du device appairé (contrat 0.4.0), relu à chaque requête.
+    tokens: TokenStore? = null,
 ) {
-    val api = remember(baseUrl) { ApiClient(baseUrl) }
+    val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }
     val toggleRepo = remember(api) { AssignmentsRepository(api) }
     var state by remember {
         val c = try {

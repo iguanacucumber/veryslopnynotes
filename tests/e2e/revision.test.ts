@@ -8,6 +8,7 @@ import { chunkManual, retrieveManuals } from "../../server/infrastructure/manual
 import { createRevisionMemoryStore, selectRevisionTriggers } from "../../server/api/revision";
 import { createMemoryStore } from "../../server/api/store";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "../unit/fixtures/pairing";
 import { syntheticManualDocs } from "../unit/fixtures/manuals";
 
 // e2e revision (issue #30, phase 10) : annonce DS structurée -> fiche
@@ -59,16 +60,17 @@ describe("e2e revision", () => {
     expect(calls[0].title).toContain("Maths");
 
     const revisions = createRevisionMemoryStore([sheet]);
-    const handler = createHandler(createMemoryStore(), undefined, null, revisions);
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore(), pairing, null, revisions);
 
-    const listRes = await handler(new Request("http://127.0.0.1/v1/revision-sheets"));
+    const listRes = await handler(new Request("http://127.0.0.1/v1/revision-sheets", { headers: auth }));
     expect(listRes.status).toBe(200);
     const listJson = await listRes.json();
     expect(isRevisionSheetsResponse(listJson)).toBe(true);
     expect(listJson.sheets.length).toBe(1);
     expect(listJson.sheets[0].templateVersion).toBe("fiche-v1");
 
-    const pdfRes = await handler(new Request(`http://127.0.0.1/v1/revision-sheets/pdf?id=${sheet.id}`));
+    const pdfRes = await handler(new Request(`http://127.0.0.1/v1/revision-sheets/pdf?id=${sheet.id}`, { headers: auth }));
     expect(pdfRes.status).toBe(200);
     expect(pdfRes.headers.get("content-type")).toContain("application/pdf");
     const buf = new Uint8Array(await pdfRes.arrayBuffer());
@@ -106,10 +108,11 @@ describe("e2e revision", () => {
   });
 
   test("API pdf : 400 sans id, 404 inconnu", async () => {
-    const handler = createHandler(createMemoryStore(), undefined, null, createRevisionMemoryStore());
-    const bad = await handler(new Request("http://127.0.0.1/v1/revision-sheets/pdf"));
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore(), pairing, null, createRevisionMemoryStore());
+    const bad = await handler(new Request("http://127.0.0.1/v1/revision-sheets/pdf", { headers: auth }));
     expect(bad.status).toBe(400);
-    const nf = await handler(new Request("http://127.0.0.1/v1/revision-sheets/pdf?id=nope"));
+    const nf = await handler(new Request("http://127.0.0.1/v1/revision-sheets/pdf?id=nope", { headers: auth }));
     expect(nf.status).toBe(404);
   });
 });

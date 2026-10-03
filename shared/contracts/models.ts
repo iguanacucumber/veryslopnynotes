@@ -10,7 +10,12 @@
 // 0.3.0 (#78 #79 #81 #83) : vague de parité add-only. Nouvelles ressources
 // uniquement (évaluations, actualités, menus, préférences matière) : les
 // contrats existants ne changent pas de forme, seul le jeu de routes grandit.
-export const CONTRACTS_VERSION = "0.3.0" as const;
+// 0.4.0 : `PairingConfirmResponse` porte désormais le token d'appareil EN
+// CLAIR, une seule fois, à l'appairage (avant : `Device` = { id, tokenHash }
+// seulement, donc l'app ne pouvait jamais présenter de bearer). Cassant : un
+// champ requis de plus sur /v1/pairing/confirm, et les routes protégé exigent
+// désormais ce credential (401 pour une app 0.3.0 qui ne sait pas le lire).
+export const CONTRACTS_VERSION = "0.4.0" as const;
 
 /** Version gabarit fiches révision (issue #30, phase 10). Stockée par fiche. */
 export const REVISION_TEMPLATE_VERSION = "fiche-v1" as const;

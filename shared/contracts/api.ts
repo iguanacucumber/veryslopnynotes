@@ -109,7 +109,16 @@ export interface PairingConfirmRequest {
   readonly sessionId: string;
   readonly code: string;
 }
-export type PairingConfirmResponse = Device;
+// 0.4.0 : le secret du device sort UNE SEULE FOIS, ici. Avant, la réponse ne
+// portait que `Device` = { id, tokenHash } : l'app ne connaissait JAMAIS le
+// token, donc ne pouvait présenter aucun bearer sur les routes protégé.
+export interface PairingConfirmResponse {
+  readonly device: Device;
+  /** Secret du device, renvoyé UNE SEULE FOIS, ici, à l'appairage. */
+  readonly token: string;
+}
+/** Borne du token d'app dans la réponse d'appairage (32 octets base64url = 43). */
+export const PAIRING_TOKEN_MAX_CHARS = 512;
 
 // #74 : /v1/grades enrichi du rapport de moyennes (fournie/estimée, algorithme
 // choisi par query `?algorithm=`, période par `?periodId=`). Breaking 0.1.0→0.2.0.
@@ -302,7 +311,9 @@ export function isRevisionSheetsResponse(v: unknown): v is RevisionSheetsRespons
 }
 
 export function isPairingConfirmResponse(v: unknown): v is PairingConfirmResponse {
-  return isDevice(v);
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return isDevice(r["device"]) && isBoundedNonEmptyString(r["token"], PAIRING_TOKEN_MAX_CHARS);
 }
 
 export function isEvaluationsResponse(v: unknown): v is EvaluationsResponse {

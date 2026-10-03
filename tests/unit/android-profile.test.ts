@@ -294,7 +294,10 @@ describe("unit android profil (#82)", () => {
     expect(store).toContain("prefs.edit().clear().apply()");
     const nav = read(join(UI, "AppNav.kt"));
     expect(nav).toContain("accounts.logout()");
-    expect(nav).toContain("AccountStore(ctx, cacheStore, EncryptedTokenStore(ctx))");
+    // AccountStore reçoit le store UNIQUE de session (chiffré via
+    // SessionTokens.get, repli mémoire) : c'est ce store-ci que logout() purge.
+    expect(nav).toContain("SessionTokens.get(ctx)");
+    expect(nav).toContain("AccountStore(ctx, cacheStore, tokens)");
   });
 
   test("accueil : prochain cours, devoirs à rendre, dernières notes", () => {

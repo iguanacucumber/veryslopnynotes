@@ -4,6 +4,7 @@
 // aucun réseau, aucun secret, aucune URL Pronote.
 import { describe, expect, test } from "bun:test";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "./fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { isApiErrorBody } from "../../server/api/errors";
 import { attendancePeriods } from "../../server/domain/attendance";
@@ -263,19 +264,21 @@ describe("PronoteClientReader vie scolaire (#77)", () => {
 
 describe("routes GET /v1/attendance + /v1/punishments (#77)", () => {
   test("store sans vie scolaire : deux listes vides (onglet masqué, pas d'erreur)", async () => {
-    const handler = createHandler(createMemoryStore());
-    const res = await handler(new Request("http://127.0.0.1/v1/attendance"));
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore(), pairing);
+    const res = await handler(new Request("http://127.0.0.1/v1/attendance", { headers: auth }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(isAttendanceResponse(body)).toBe(true);
     expect(body.absences).toEqual([]);
     expect(body.periods).toEqual([]);
-    const pun = await handler(new Request("http://127.0.0.1/v1/punishments"));
+    const pun = await handler(new Request("http://127.0.0.1/v1/punishments", { headers: auth }));
     expect(pun.status).toBe(200);
     expect((await pun.json()).punishments).toEqual([]);
   });
 
   test("store seedé : compteurs dérivés + filtre periodId", async () => {
+    const { pairing, auth } = pairedDevice();
     const handler = createHandler(
       createMemoryStore({
         absences: syntheticAbsences,
@@ -285,35 +288,37 @@ describe("routes GET /v1/attendance + /v1/punishments (#77)", () => {
           { id: "p-2", name: "Trimestre 2", start: "2026-12-01T00:00:00.000Z", end: "2027-03-31T23:59:59.000Z" },
         ],
       }),
+      pairing,
     );
-    const all = await handler(new Request("http://127.0.0.1/v1/attendance"));
+    const all = await handler(new Request("http://127.0.0.1/v1/attendance", { headers: auth }));
     const body = await all.json();
     expect(isAttendanceResponse(body)).toBe(true);
     expect(body.absences).toHaveLength(4);
     expect(body.periods).toEqual(syntheticAttendancePeriods);
 
-    const p1 = await handler(new Request("http://127.0.0.1/v1/attendance?periodId=p-1"));
+    const p1 = await handler(new Request("http://127.0.0.1/v1/attendance?periodId=p-1", { headers: auth }));
     const p1Body = await p1.json();
     expect(p1Body.absences).toHaveLength(3);
     expect(p1Body.periods).toEqual([syntheticAttendancePeriods[0]]);
 
     // Période inconnue = listes vides, jamais une erreur.
-    const inconnu = await handler(new Request("http://127.0.0.1/v1/attendance?periodId=p-42"));
+    const inconnu = await handler(new Request("http://127.0.0.1/v1/attendance?periodId=p-42", { headers: auth }));
     expect(inconnu.status).toBe(200);
     expect((await inconnu.json()).absences).toEqual([]);
 
-    const pun = await handler(new Request("http://127.0.0.1/v1/punishments"));
+    const pun = await handler(new Request("http://127.0.0.1/v1/punishments", { headers: auth }));
     const punBody = await pun.json();
     expect(isPunishmentsResponse(punBody)).toBe(true);
     expect(punBody.punishments).toEqual(syntheticPunishments);
   });
 
   test("méthode/props : 405 sur la mauvaise méthode, 404 hors API_ROUTES", async () => {
-    const handler = createHandler(createMemoryStore());
-    const post = await handler(new Request("http://127.0.0.1/v1/attendance", { method: "POST" }));
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore(), pairing);
+    const post = await handler(new Request("http://127.0.0.1/v1/attendance", { method: "POST", headers: auth }));
     expect(post.status).toBe(405);
     expect(isApiErrorBody(await post.json())).toBe(true);
-    const unknown = await handler(new Request("http://127.0.0.1/v1/sanctions"));
+    const unknown = await handler(new Request("http://127.0.0.1/v1/sanctions", { headers: auth }));
     expect(unknown.status).toBe(404);
   });
 });

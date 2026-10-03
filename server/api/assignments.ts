@@ -51,10 +51,16 @@ function writeError(err: unknown): Response {
  * POST /v1/assignments/toggle — action APP confirmée (I7).
  * Renvoie le devoir à jour + l'événement `AssignmentUpdated` (type existant,
  * pas de nouveau type d'événement) pour que l'app invalide son cache.
+ *
+ * `accountId` est RÉSOLU CÔTÉ SERVEUR par le routeur (`servedAccountId`) :
+ * l'`accountId` du corps n'est validé par le contrat que pour rester
+ * add-only, il ne sert JAMAIS d'identité. Vide = serveur mono-compte, qui
+ * résout sa session appairée côté intégration.
  */
 export async function handleAssignmentsToggle(
   req: Request,
   actions: AssignmentActions | null,
+  accountId = "",
   at: string = new Date().toISOString(),
 ): Promise<Response> {
   // Écriture indisponible (adaptateur sans setDone) : erreur franche, pas de faux succès.
@@ -71,9 +77,10 @@ export async function handleAssignmentsToggle(
   }
   if (!isAssignmentsToggleRequest(body)) return apiError("bad_request", "invalid toggle request");
   try {
-    // accountId = INDICE borné, jamais une identité : le serveur résout son
-    // compte appairé (resolveAccountId de la composition root ignore l'indice).
-    const assignment = await actions.setAssignmentDone(body.accountId ?? "", body.assignmentId, body.done);
+    // Le compte est celui RÉSOLU PAR LE SERVEUR (jamais `body.accountId`) :
+    // prendre l'indice du client pour une identité ouvrirait l'écriture sur un
+    // compte que le device n'a pas appairé.
+    const assignment = await actions.setAssignmentDone(accountId, body.assignmentId, body.done);
     if (!isAssignment(assignment)) return apiError("internal", "invalid payload");
     const event: ContractEvent<"AssignmentUpdated", Assignment> = {
       v: CONTRACTS_VERSION,

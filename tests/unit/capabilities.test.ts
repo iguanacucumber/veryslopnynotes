@@ -22,6 +22,7 @@ import { isContractEvent } from "../../shared/contracts/events";
 import { capabilitiesFromProbe, disabledTabs, hasCapability } from "../../server/domain/capabilities";
 import { createMemoryStore } from "../../server/api/store";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "./fixtures/pairing";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
 import { PronoteReadError } from "../../server/domain/ports";
 import { syntheticAccountId } from "./fixtures/pronote";
@@ -168,20 +169,21 @@ describe("unit capacités (#87)", () => {
   });
 
   test("route GET /v1/capabilities : liste publiée ou null, jamais 500", async () => {
-    const known = createHandler(createMemoryStore({ capabilities: caps(["grades", "timetable"]) }));
-    const ok = await known(new Request("http://127.0.0.1/v1/capabilities"));
+    const { pairing, auth } = pairedDevice();
+    const known = createHandler(createMemoryStore({ capabilities: caps(["grades", "timetable"]) }), pairing);
+    const ok = await known(new Request("http://127.0.0.1/v1/capabilities", { headers: auth }));
     expect(ok.status).toBe(200);
     const body = (await ok.json()) as { capabilities: Capabilities | null };
     expect(isCapabilitiesResponse(body)).toBe(true);
     expect(body.capabilities?.tabs).toEqual(["grades", "timetable"]);
 
     // Store sans détection = null (l'app garde son affichage, aucun masquage).
-    const inconnu = createHandler(createMemoryStore());
-    const vide = await inconnu(new Request("http://127.0.0.1/v1/capabilities"));
+    const inconnu = createHandler(createMemoryStore(), pairing);
+    const vide = await inconnu(new Request("http://127.0.0.1/v1/capabilities", { headers: auth }));
     expect(vide.status).toBe(200);
     expect((await vide.json()) as unknown).toEqual({ capabilities: null });
 
-    const bad = await inconnu(new Request("http://127.0.0.1/v1/capabilities", { method: "POST" }));
+    const bad = await inconnu(new Request("http://127.0.0.1/v1/capabilities", { method: "POST", headers: auth }));
     expect(bad.status).toBe(405);
   });
 

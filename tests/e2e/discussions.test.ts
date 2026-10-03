@@ -13,6 +13,7 @@ import {
 import { isDiscussion, isMessage } from "../../shared/contracts/models";
 import { CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "../unit/fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { isApiErrorBody } from "../../server/api/errors";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
@@ -45,13 +46,20 @@ async function handlerWithClient(options: { tab?: boolean } = {}) {
   });
   await sessions.authenticate({ ...creds, entKind: "ninegate" });
   const reader = new PronoteClientReader({ sessions });
+  // Depuis 0.4.0 les routes #80 exigent le bearer d'un device appairé.
+  const { pairing, auth } = pairedDevice();
   const handler = createHandler(
     createMemoryStore({
       discussions: [syntheticDiscussion],
       discussionMessages: [syntheticMessage],
       discussionRecipients: [syntheticRecipient],
+      // 0.4.0 : le routeur résout le compte servi (servedAccountId) et le
+      // passe au port. Ici le store ne doit donc PAS porter le compte seedé
+      // « seed-acc » : le compte est celui de la session appairée (acc-fake-1).
+      grades: [{ id: "g-fake-1", accountId: syntheticAccountId, subject: "Maths-Fake", value: 12, scale: 20, date: "2026-10-01T08:00:00.000Z" }],
+      assignments: [],
     }),
-    undefined,
+    pairing,
     null,
     undefined,
     undefined,
@@ -60,16 +68,16 @@ async function handlerWithClient(options: { tab?: boolean } = {}) {
     null,
     reader as never,
   );
-  return { handler, sessions };
+  return { handler, sessions, auth };
 }
 
-const post = (path: string, body: unknown) =>
-  new Request(`http://127.0.0.1${path}`, { method: "POST", body: JSON.stringify(body) });
+const post = (auth: Record<string, string>, path: string, body: unknown) =>
+  new Request(`http://127.0.0.1${path}`, { method: "POST", headers: auth, body: JSON.stringify(body) });
 
 describe("e2e messagerie #80", () => {
   test("lectures : fils, messages, destinataires — aucune URL Pronote dans la réponse", async () => {
-    const { handler } = await handlerWithClient();
-    const list = await handler(new Request("http://127.0.0.1/v1/discussions"));
+    const { handler, auth } = await handlerWithClient();
+    const list = await handler(new Request("http://127.0.0.1/v1/discussions", { headers: auth }));
     expect(list.status).toBe(200);
     const body = await list.text();
     expect(isDiscussionsResponse(JSON.parse(body))).toBe(true);
@@ -77,9 +85,9 @@ describe("e2e messagerie #80", () => {
     expect(body).not.toMatch(/https?:\/\/(?!127\.0\.0\.1)/);
     expect(body).not.toMatch(/sk-or-v1-|OPENROUTER_API_KEY|PRONOTE_PASSWORD/);
 
-    const msgs = await handler(new Request("http://127.0.0.1/v1/discussions/messages?id=d-fake-1"));
+    const msgs = await handler(new Request("http://127.0.0.1/v1/discussions/messages?id=d-fake-1", { headers: auth }));
     expect(isDiscussionMessagesResponse(await msgs.json())).toBe(true);
-    const rec = await handler(new Request("http://127.0.0.1/v1/discussions/recipients"));
+    const rec = await handler(new Request("http://127.0.0.1/v1/discussions/recipients", { headers: auth }));
     expect(isDiscussionRecipientsResponse(await rec.json())).toBe(true);
 
     // Cache : liste des fils seulement, TTL 15 min comme les devoirs.
@@ -89,7 +97,7 @@ describe("e2e messagerie #80", () => {
 
   test("parcours d'écriture confirmé par l'app : reply, create, read-state, delete", async () => {
     resetDiscussionWrites();
-    const { handler } = await handlerWithClient();
+    const { handler, auth } = await handlerWithClient();
     const calls: [string, unknown][] = [
       ["/v1/discussions/reply", { discussionId: "d-fake-1", body: "Je serai la." }],
       ["/v1/discussions", { subject: "Question", body: "Merci de repondre.", recipientIds: ["r-fake-1"] }],
@@ -97,7 +105,7 @@ describe("e2e messagerie #80", () => {
       ["/v1/discussions/delete", { discussionId: "d-fake-1" }],
     ];
     for (const [path, body] of calls) {
-      const res = await handler(post(path, body));
+      const res = await handler(post(auth, path, body));
       expect({ path, status: res.status }).toEqual({ path, status: 200 });
       const json = await res.json();
       expect(isDiscussionActionResponse(json)).toBe(true);
@@ -115,29 +123,32 @@ describe("e2e messagerie #80", () => {
 
   test("refus propres : session expirée 401, fil inconnu 409, écriture absente 501", async () => {
     resetDiscussionWrites();
-    const { handler, sessions } = await handlerWithClient();
+    const { handler, sessions, auth } = await handlerWithClient();
     // Fil inconnu : la session vit, le fil n'existe pas → 409 conflict.
-    const inconnu = await handler(post("/v1/discussions/reply", { discussionId: "d-999", body: "Coucou" }));
+    const inconnu = await handler(post(auth, "/v1/discussions/reply", { discussionId: "d-999", body: "Coucou" }));
     expect(inconnu.status).toBe(409);
     expect(isApiErrorBody(await inconnu.json())).toBe(true);
     expect(writes.replies).toEqual([]);
 
     // Session expirée : 401 + invalidation de session serveur, aucune écriture.
     sessions.invalidate(syntheticAccountId);
-    const expired = await handler(post("/v1/discussions/read-state", { discussionId: "d-fake-1", read: true }));
+    const expired = await handler(post(auth, "/v1/discussions/read-state", { discussionId: "d-fake-1", read: true }));
     expect(expired.status).toBe(401);
     expect(writes.readStates).toEqual([]);
 
     // Établissement sans onglet Discussions : lecture vide, écriture indisponible
     // (501 par la route ou unsupported côté reader) — jamais un faux succès.
     const sansOnglet = await handlerWithClient({ tab: false });
-    const vide = await sansOnglet.handler(new Request("http://127.0.0.1/v1/discussions"));
+    const vide = await sansOnglet.handler(new Request("http://127.0.0.1/v1/discussions", { headers: sansOnglet.auth }));
     expect(isDiscussionsResponse(await vide.json())).toBe(true);
-    const refuse = await sansOnglet.handler(post("/v1/discussions/delete", { discussionId: "d-fake-1" }));
+    const refuse = await sansOnglet.handler(
+      post(sansOnglet.auth, "/v1/discussions/delete", { discussionId: "d-fake-1" }),
+    );
     expect(refuse.status).toBe(409);
     // Sans adaptateur injecté du tout : 501 explicite.
-    const sansActions = createHandler(createMemoryStore());
-    expect((await sansActions(post("/v1/discussions/delete", { discussionId: "d-fake-1" }))).status).toBe(501);
+    const { pairing, auth: auth2 } = pairedDevice();
+    const sansActions = createHandler(createMemoryStore(), pairing);
+    expect((await sansActions(post(auth2, "/v1/discussions/delete", { discussionId: "d-fake-1" }))).status).toBe(501);
   });
 
   test("reader : mapper défensif (onglet absent = page vide, injection = donnée)", async () => {

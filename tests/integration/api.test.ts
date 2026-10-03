@@ -2,16 +2,18 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   isAssignmentsResponse,
   isGradesResponse,
+  isPairingConfirmResponse,
   isPeriodsResponse,
   isHealthResponse,
   isPairingStartResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
 import { isContractEvent } from "../../shared/contracts/events";
-import { CONTRACTS_VERSION, isDevice } from "../../shared/contracts/models";
+import { CONTRACTS_VERSION } from "../../shared/contracts/models";
 import { isApiErrorBody } from "../../server/api/errors";
 import { createMemoryStore } from "../../server/api/store";
 import { serve } from "../../server/api/router";
+import { pairedDevice } from "../unit/fixtures/pairing";
 
 // API locale, zéro secret, tourne toujours (pas de .env.local requis).
 // `make integration-api` reste skippé sans .env.local (Makefile) ; ce test
@@ -19,9 +21,12 @@ import { serve } from "../../server/api/router";
 describe("integration api", () => {
   let base = "";
   let stop = () => {};
+  // Depuis 0.4.0, seule l'appairage + /v1/health restent ouvertes : le serveur
+  // est donc monté AVEC un device appairé, et chaque fetch porte son bearer.
+  const { pairing, auth } = pairedDevice();
 
   beforeAll(() => {
-    const server = serve(createMemoryStore(), 0);
+    const server = serve(createMemoryStore(), 0, pairing);
     base = `http://127.0.0.1:${server.port}`;
     stop = () => server.stop(true);
   });
@@ -32,7 +37,7 @@ describe("integration api", () => {
     expect(isHealthResponse(health)).toBe(true);
     expect(health.version).toBe(CONTRACTS_VERSION);
 
-    const grades = await (await fetch(`${base}/v1/grades`)).json();
+    const grades = await (await fetch(`${base}/v1/grades`, { headers: auth })).json();
     expect(isGradesResponse(grades)).toBe(true);
     expect(grades.grades.length).toBeGreaterThan(0);
     // #74 : moyennes dans la même réponse, defaut = algorithme subject Papillon.
@@ -40,19 +45,19 @@ describe("integration api", () => {
     expect(grades.averages.general.origin).toBe("estimated");
     expect(grades.averages.subjects.length).toBe(1);
 
-    const periods = await (await fetch(`${base}/v1/periods`)).json();
+    const periods = await (await fetch(`${base}/v1/periods`, { headers: auth })).json();
     expect(isPeriodsResponse(periods)).toBe(true);
     expect(periods.periods.length).toBeGreaterThan(0);
 
-    const assignments = await (await fetch(`${base}/v1/assignments`)).json();
+    const assignments = await (await fetch(`${base}/v1/assignments`, { headers: auth })).json();
     expect(isAssignmentsResponse(assignments)).toBe(true);
 
-    const timetable = await (await fetch(`${base}/v1/timetable`)).json();
+    const timetable = await (await fetch(`${base}/v1/timetable`, { headers: auth })).json();
     expect(isTimetableResponse(timetable)).toBe(true);
   });
 
   test("events SSE : premier événement SyncCompleted valide", async () => {
-    const res = await fetch(`${base}/v1/events`);
+    const res = await fetch(`${base}/v1/events`, { headers: auth });
     expect(res.headers.get("content-type")).toContain("text/event-stream");
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
@@ -74,21 +79,21 @@ describe("integration api", () => {
   });
 
   test("#74 : choix d'algorithme, période filtrée, algo inconnu rejeté", async () => {
-    const weighted = await (await fetch(`${base}/v1/grades?algorithm=weighted`)).json();
+    const weighted = await (await fetch(`${base}/v1/grades?algorithm=weighted`, { headers: auth })).json();
     expect(isGradesResponse(weighted)).toBe(true);
     expect(weighted.averages.algorithm).toBe("weighted");
 
-    const median = await (await fetch(`${base}/v1/grades?algorithm=median`)).json();
+    const median = await (await fetch(`${base}/v1/grades?algorithm=median`, { headers: auth })).json();
     expect(median.averages.algorithm).toBe("median");
 
     // Période inconnue = rapport vide, jamais une moyenne d'une autre période.
-    const scoped = await (await fetch(`${base}/v1/grades?periodId=inconnue`)).json();
+    const scoped = await (await fetch(`${base}/v1/grades?periodId=inconnue`, { headers: auth })).json();
     expect(isGradesResponse(scoped)).toBe(true);
     expect(scoped.averages.periodId).toBe("inconnue");
     expect(scoped.averages.subjects).toEqual([]);
     expect(scoped.averages.general.value).toBeNull();
 
-    const bad = await fetch(`${base}/v1/grades?algorithm=moyenne`);
+    const bad = await fetch(`${base}/v1/grades?algorithm=moyenne`, { headers: auth });
     expect(bad.status).toBe(400);
     expect(isApiErrorBody(await bad.json())).toBe(true);
   });
@@ -105,7 +110,25 @@ describe("integration api", () => {
       0,
     );
     try {
-      const res = await (await fetch(`http://127.0.0.1:${server.port}/v1/grades`)).json();
+      // Ce serveur a son PROPRE PairingService : on y apparie son device.
+      const url = `http://127.0.0.1:${server.port}`;
+      const start2 = await (
+        await fetch(`${url}/v1/pairing/start`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ deviceName: "pixel-moyennes" }),
+        })
+      ).json();
+      const conf = await (
+        await fetch(`${url}/v1/pairing/confirm`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionId: start2.sessionId, code: start2.code }),
+        })
+      ).json();
+      const res = await (
+        await fetch(`${url}/v1/grades`, { headers: { authorization: `Bearer ${conf.token}` } })
+      ).json();
       expect(isGradesResponse(res)).toBe(true);
       expect(res.averages.general).toEqual({ value: 14, origin: "provided", subjectCount: 2 });
       const maths = res.averages.subjects.find((s: { subject: string }) => s.subject === "Maths");
@@ -120,11 +143,11 @@ describe("integration api", () => {
   });
 
   test("erreurs typées : 404, 405 + Allow, 400, HEAD", async () => {
-    const nf = await fetch(`${base}/v1/nope`);
+    const nf = await fetch(`${base}/v1/nope`, { headers: auth });
     expect(nf.status).toBe(404);
     expect(isApiErrorBody(await nf.json())).toBe(true);
 
-    const met = await fetch(`${base}/v1/grades`, { method: "POST" });
+    const met = await fetch(`${base}/v1/grades`, { method: "POST", headers: auth });
     expect(met.status).toBe(405);
     // 405 = en-tête Allow obligatoire (RFC 9110 §15.5.6).
     expect(met.headers.get("allow")).toBe("GET");
@@ -161,7 +184,10 @@ describe("integration api", () => {
       code: started.code,
     });
     expect(confirmed.status).toBe(200);
-    expect(isDevice(await confirmed.json())).toBe(true);
+    // 0.4.0 : la réponse d'appairage porte le device ET le secret (une fois).
+    const confirmBody = await confirmed.json();
+    expect(isPairingConfirmResponse(confirmBody)).toBe(true);
+    expect(confirmBody.token.length).toBeGreaterThan(0);
 
     const replay = await post("/v1/pairing/confirm", {
       sessionId: started.sessionId,
