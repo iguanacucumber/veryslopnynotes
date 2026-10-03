@@ -5,7 +5,10 @@ import android.os.Looper
 import fr.veryslopnynotes.core.ServerConfig
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import org.json.JSONObject
 import java.io.IOException
 
 // Resultat refresh reseau avec repli cache (affichage sans reseau).
@@ -54,6 +57,10 @@ class SyncedRepository(
             .removePrefix(baseUrl).ifEmpty { "/v1/attendance" }
         CachePolicy.PUNISHMENTS -> ServerConfig.punishmentsUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/punishments" }
+        // #87 : onglets actifs de l'etablissement (capacites dynamiques).
+        CachePolicy.CAPABILITIES -> ServerConfig.capabilitiesUrl(baseUrl)
+            .removePrefix(baseUrl).ifEmpty { "/v1/capabilities" }
+
         // #80 : liste des fils de messagerie (les messages ne sont pas en cache).
         CachePolicy.DISCUSSIONS -> ServerConfig.discussionsUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/discussions" }
@@ -118,6 +125,47 @@ class SyncedRepository(
         })
     }
 
+    /**
+     * #87 : pull-refresh manuel (app -> serveur -> relecture Pronote bornee).
+     * POST /v1/sync/refresh : aucune ecriture Pronote, donc pas de confirmation
+     * supplementaire (I7 : ce chemin ne declenche aucun LLM). La reponse porte
+     * les evenements de sync (types existants) : l'appelant les traite comme
+     * une invalidation de cache. accountId absent = serveur mono-compte.
+     */
+    fun requestSyncRefresh(baseUrl: String, accountId: String = "", cb: (RefreshOutcome) -> Unit) {
+        if (baseUrl.isBlank()) {
+            post(cb, RefreshOutcome.Failed("Serveur non configure.", null))
+            return
+        }
+        val request = try {
+            val body = JSONObject().apply {
+                if (accountId.isNotBlank()) put("accountId", accountId.trim())
+            }.toString().toRequestBody(JSON_MEDIA)
+            api.buildPost(ServerConfig.syncRefreshUrl(baseUrl).removePrefix(baseUrl), body)
+        } catch (e: IllegalArgumentException) {
+            post(cb, RefreshOutcome.Failed("URL hors allowlist serveur", null))
+            return
+        }
+        api.client().newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                post(cb, RefreshOutcome.Failed("Relecture indisponible (hors-ligne).", null))
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    val body = it.body?.string()
+                    if (!it.isSuccessful || body.isNullOrEmpty()) {
+                        post(cb, RefreshOutcome.Failed("Relecture indisponible (HTTP ${it.code}).", null))
+                        return
+                    }
+                    // Contenu serveur = donnee consommee comme invalidation,
+                    // jamais interpretee (I6/I7).
+                    post(cb, RefreshOutcome.Updated(body, clock()))
+                }
+            }
+        })
+    }
+
     private fun post(cb: (RefreshOutcome) -> Unit, o: RefreshOutcome) {
         try {
             main.post { cb(o) }
@@ -126,3 +174,6 @@ class SyncedRepository(
         }
     }
 }
+
+// #87 : corps JSON du pull-refresh (application/json, stdlib + OkHttp).
+private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()

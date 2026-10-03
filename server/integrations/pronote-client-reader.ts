@@ -10,16 +10,17 @@
 // encore lues : ProvidedAverages reste null, les rapports sont donc estimés,
 // ce qui est le comportement Papillon par défaut. Upgrade: getProvidedAverages
 // sur ce reader, sans toucher aux trois algorithmes.
-import type { AbsenceRecord, Assignment, AssignmentLessonContent, AttachmentRef, CanteenMeal, CanteenMenu, ChildAccount, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, RecipientKind, TimetableEntry, TimetableStatus, UserInfo } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, AssignmentLessonContent, AttachmentRef, CanteenMeal, CanteenMenu, Capabilities, ChildAccount, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, RecipientKind, TimetableEntry, TimetableStatus, UserInfo } from "../../shared/contracts/models";
 import { ABSENCE_MOTIF_MAX_CHARS, ABSENCE_SUBJECT_MAX_CHARS, ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS, ASSIGNMENT_DESCRIPTION_MAX_CHARS, ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS, ASSIGNMENT_LESSON_TITLE_MAX_CHARS, ASSIGNMENT_MAX_ATTACHMENTS, ASSIGNMENT_REF_MAX_CHARS, CANTEEN_MAX_ALLERGEN_CHARS, CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_DISH_CHARS, CANTEEN_MAX_DISHES, DISCUSSION_ID_MAX_CHARS, DISCUSSION_MAX_PARTICIPANTS, DISCUSSION_MAX_UNREAD, DISCUSSION_PARTICIPANT_MAX_CHARS, DISCUSSION_SUBJECT_MAX_CHARS, EVALUATION_LABEL_MAX_CHARS, isAbsenceRecord, isAssignment, isAttachmentRef, isCanteenMenu, isChildAccount, isDiscussion, isEvaluation, isGrade, isMessage, isNewsItem, isOpaquePhotoRef, isPeriod, isPunishment, isRecipient, isTimetableEntry, isUserInfo, MESSAGE_AUTHOR_MAX_CHARS, MESSAGE_BODY_MAX_CHARS, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CHARS, PHOTO_REF_PREFIX, PUNISHMENT_MOTIF_MAX_CHARS, PUNISHMENT_TYPE_MAX_CHARS, RECIPIENT_NAME_MAX_CHARS, TIMETABLE_ROOM_MAX_CHARS, TIMETABLE_TEACHER_MAX_CHARS, USER_CLASS_MAX_CHARS, USER_MAX_KIDS, USER_NAME_MAX_CHARS } from "../../shared/contracts/models";
 import type { PedagogicResource, PronotePage, PronotePageOptions, PronoteReader, PronoteTimetableOptions } from "../domain/ports";
 import { isPedagogicResource, PronoteAuthError, PronoteReadError, PronoteWriteError, untrusted } from "../domain/ports";
+import { capabilitiesFromProbe } from "../domain/capabilities";
 
 
 export interface PronoteClientReaderOptions {
   /** Résolveur session injecté (PronoteSessionStore.requireClient). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  readonly sessions: { requireClient(accountId: string): any; currentAccountId?(): string | null };
+  readonly sessions: { requireClient(accountId: string): any; currentAccountId?(): string | null; refreshSession?(accountId: string): Promise<void> };
   readonly logger?: (message: string) => void;
 }
 
@@ -571,13 +572,31 @@ function mapPunishment(accountId: string, p: any, index: number, periodId?: stri
 
 export class PronoteClientReader implements PronoteReader {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private readonly sessions: { requireClient(accountId: string): any; currentAccountId?(): string | null };
+  private readonly sessions: { requireClient(accountId: string): any; currentAccountId?(): string | null; refreshSession?(accountId: string): Promise<void> };
   private readonly logger: (message: string) => void;
 
   constructor(options: PronoteClientReaderOptions) {
     if (!options.sessions) throw new Error("sessions requises (PronoteSessionStore injecté)");
     this.sessions = options.sessions;
     this.logger = options.logger ?? (() => {});
+  }
+
+  /**
+   * #87 : validation de session avant LECTURE. Renouvellement 5 min sérialisé
+   * (timeout 10 s, retry 1) délégué au session store ; absent = aucun appel
+   * (les adaptateurs de test et les stubs ne cassent pas). Une renewal
+   * impossible remonte en erreur typée → l'app se ré-appaire.
+   */
+  private async refreshSession(id: string): Promise<void> {
+    const refresh = this.sessions.refreshSession;
+    if (typeof refresh !== "function") return;
+    try {
+      await refresh.call(this.sessions, id);
+    } catch (err) {
+      const mapped = toReadError(err, "session");
+      this.logger(`session -> error ${mapped.code}`);
+      throw mapped;
+    }
   }
 
   /**
@@ -602,6 +621,7 @@ export class PronoteClientReader implements PronoteReader {
     const offset = parseOffset(page?.cursor);
     let client;
     try {
+      await this.refreshSession(id);
       client = this.sessions.requireClient(id);
     } catch (err) {
       const mapped = toReadError(err, "grades");
@@ -663,6 +683,7 @@ export class PronoteClientReader implements PronoteReader {
     const offset = parseOffset(page?.cursor);
     let client;
     try {
+      await this.refreshSession(id);
       client = this.sessions.requireClient(id);
     } catch (err) {
       const mapped = toReadError(err, "assignments");
@@ -825,6 +846,7 @@ export class PronoteClientReader implements PronoteReader {
     const toMs = to.getTime();
     let client;
     try {
+      await this.refreshSession(id);
       client = this.sessions.requireClient(id);
     } catch (err) {
       const mapped = toReadError(err, "timetable");
@@ -1207,6 +1229,60 @@ export class PronoteClientReader implements PronoteReader {
       return { items: untrusted([]), nextCursor: null };
     }
   }
+
+  /**
+   * #87 : capacités dynamiques — onglets Pronote réellement servis par cet
+   * établissement. Observation STRUCTURELLE (le client expose-t-il la méthode de
+   * l'onglet ?) : aucune requête Pronote, donc aucune erreur possible côté
+   * établissement. Onglet non observé = capacité absente, JAMAIS un `true`
+   * deviné : la réduction canonique est faite par server/domain/capabilities.
+   * ponytail: `discussions` (onglet Discussions de Papillon) reste absent tant
+   * que pronotets n'expose pas l'onglet ; l'app masque donc l'entrée, ce qui est
+   * le comportement correct pour un établissement qui ne l'a pas. Upgrade: mapper
+   * `client.information` quand la lib le publiera.
+   */
+  async getCapabilities(accountId: string): Promise<Capabilities> {
+    const id = (accountId ?? "").trim();
+    if (!id) throw new PronoteReadError("capabilities session expired", "session_expired");
+    let client;
+    try {
+      await this.refreshSession(id);
+      client = this.sessions.requireClient(id);
+    } catch (err) {
+      const mapped = toReadError(err, "capabilities");
+      this.logger(`capabilities -> error ${mapped.code}`);
+      throw mapped;
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = client as any;
+      const periods = Array.isArray(raw?.periods) ? (raw.periods as unknown[]) : [];
+      const anyPeriod = (method: string): boolean => periods.some((p) => typeof (p as { [k: string]: unknown })?.[method] === "function");
+      const caps = capabilitiesFromProbe(
+        id,
+        {
+          grades: anyPeriod("grades"),
+          homework: typeof raw?.homework === "function",
+          timetable: typeof raw?.lessons === "function",
+          evaluations: anyPeriod("evaluations"),
+          news: typeof raw?.informationAndSurveys === "function",
+          menus: typeof raw?.menus === "function",
+          attendance: anyPeriod("absences") || anyPeriod("delays"),
+          punishments: anyPeriod("punishments"),
+          profile: typeof raw?.info === "object" && raw.info !== null,
+        },
+        new Date().toISOString(),
+      );
+      // Logs = compteurs seuls (aucun nom, aucun hôte, aucun secret).
+      this.logger(`capabilities -> ok ${caps.tabs.length} onglet(s) actif(s)`);
+      return caps;
+    } catch {
+      // Détection impossible = aucune capacité affirmée, jamais une erreur 500.
+      this.logger("capabilities -> indisponible, aucune capacite");
+      return capabilitiesFromProbe(id, {}, new Date().toISOString());
+    }
+  }
+
 
   // --- #80 messagerie : lectures + ÉCRITURES (actions APP confirmées, I7) ---
   // Les 4 écritures (create/reply/read-state/delete) n'ont qu'une seule porte

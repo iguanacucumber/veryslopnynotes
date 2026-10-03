@@ -143,11 +143,19 @@ function snapshotChanged(a: SyncSnapshot, b: SyncSnapshot): boolean {
   );
 }
 
+/**
+ * Boucle de sync d'arrière-plan. `maxRuns` (0 = illimité, défaut inchangé)
+ * borne le nombre de tours : un sync manuel/one-shot s'arrête tout seul au lieu
+ * de laisser un intervalle tourner pour rien. Le tick ne se chevauche pas
+ * (jamais deux relectures simultanées, comme le refresh de session) et un échec
+ * ne crashe jamais l'ordonnanceur.
+ */
 export function startSyncLoop(
   source: SyncSource,
   sink: SyncSink,
   intervalMs: number,
   onResult: (result: SyncResult) => void,
+  maxRuns = 0,
 ): () => void {
   let stopped = false;
   let runs = 0;
@@ -160,6 +168,11 @@ export function startSyncLoop(
       // Le job ne crashe jamais l'ordonnanceur : run vide, snapshot conservé si dispo.
       const kept = await sink.loadSnapshot().catch(() => null);
       onResult({ firstRun: runs === 1, events: [], snapshot: kept ?? emptySnapshot() });
+    }
+    // Budget de tours atteint = arrêt propre (pas de tick orphelin).
+    if (maxRuns > 0 && runs >= maxRuns) {
+      stopped = true;
+      clearInterval(timer);
     }
   };
   const timer = setInterval(tick, intervalMs);

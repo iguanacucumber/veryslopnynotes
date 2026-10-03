@@ -2,7 +2,7 @@
 // vers HTTP, SQLite ou Pronote. Adapters en server/infrastructure/
 // et server/integrations/.
 // Voir docs/architecture/INVARIANTS.md (I2, I3, I5, I6, I7).
-import type { AbsenceRecord, Assignment, CanteenMenu, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, CanteenMenu, Capabilities, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 
 export type Untrusted<T = string> = { readonly __untrusted: true; readonly value: T };
 
@@ -154,6 +154,16 @@ export interface PronoteReader {
    * publie rien : jamais de nom ni de photo inventés (voir isUserInfo).
    */
   getUserInfo?(accountId: string): Promise<PronotePage<UserInfo>>;
+
+  /**
+   * Onglets Pronote actifs de l'établissement (#87, parité Papillon). Sert à
+   * masquer une entrée d'onglet quand l'onglet n'existe pas : c'est une
+   * information de structure, donc listée, jamais une erreur de lecture (un
+   * adaptateur qui ne sait pas détecter renvoie la liste vide = rien d'affirmé,
+   * l'app garde alors son affichage par défaut).
+   */
+  getCapabilities?(accountId: string): Promise<Capabilities>;
+
 
   /**
    * Fils de discussion (#80, parité Papillon onglet Discussions). Onglet

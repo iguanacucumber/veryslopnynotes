@@ -2,8 +2,8 @@
 // Table de routes + types requête/réponse. Doit rester en sync avec
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
-import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, RevisionSheet, Skill, SubjectPrefs, TimetableEntry, UserInfo } from "./models";
-import { DISCUSSION_ID_MAX_CHARS, DISCUSSION_MAX_RECIPIENTS, DISCUSSION_SUBJECT_MAX_CHARS, isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isDiscussion, isEvaluation, isGrade, isMessage, isNewsItem, isPeriod, isPunishment, isRecipient, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, isUserInfo, MESSAGE_BODY_MAX_CHARS, SUBJECT_PREFS_MAX_COUNT } from "./models";
+import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, Capabilities, CompetenceSummary, Device, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, RevisionSheet, Skill, SubjectPrefs, TimetableEntry, UserInfo } from "./models";
+import { DISCUSSION_ID_MAX_CHARS, DISCUSSION_MAX_RECIPIENTS, DISCUSSION_SUBJECT_MAX_CHARS, isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isCapabilities, isCompetenceSummary, isDevice, isDiscussion, isEvaluation, isGrade, isMessage, isNewsItem, isPeriod, isPunishment, isRecipient, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, isUserInfo, MESSAGE_BODY_MAX_CHARS, SUBJECT_PREFS_MAX_COUNT } from "./models";
 import type { CacheInvalidatedData, ContractEvent, SecurityAlertData } from "./events";
 import { isContractEvent, isSecurityAlertData } from "./events";
 
@@ -53,6 +53,14 @@ export const API_ROUTES: readonly ApiRoute[] = [
   // #82/#84 : résolution serveur d'une réf opaque (photo, PJ). L'app n'a
   // jamais d'URL Pronote : c'est le serveur qui télécharge (I1, règle d'or média).
   { method: "GET", path: "/v1/media" },
+
+  // #87 : capacités dynamiques (onglets Pronote actifs) + pull-refresh manuel
+  // (app → serveur → Pronote). Le refresh renvoie les événements de sync, tous
+  // de types EXISTANTS (GradeCreated, TimetableUpdated, SyncCompleted,
+  // CacheInvalidated) : aucun type d'événement nouveau.
+  { method: "GET", path: "/v1/capabilities" },
+  { method: "POST", path: "/v1/sync/refresh" },
+
 
   // #80 : messagerie (parité Papillon, onglet Discussions). Lectures pures
   // (onglet Discussions absent de l'établissement = listes VIDES, 200) et
@@ -425,6 +433,47 @@ export function isMeResponse(v: unknown): v is MeResponse {
   const u = (v as Record<string, unknown>)["user"];
   return u === null || isUserInfo(u);
 }
+
+// --- #87 capacités dynamiques + pull-refresh ---
+// `capabilities: null` = capacités NON déterminées (session absente, adaptateur
+// sans détection) : l'app garde son affichage par défaut, elle ne masque rien.
+// Liste présente = source de vérité : un onglet absent est désactivé.
+export interface CapabilitiesResponse {
+  readonly capabilities: Capabilities | null;
+}
+
+export function isCapabilitiesResponse(v: unknown): v is CapabilitiesResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const c = (v as Record<string, unknown>)["capabilities"];
+  return c === null || isCapabilities(c);
+}
+
+// Pull-refresh : l'app demande une relecture Pronote immédiate. La réponse
+// porte les événements de sync (types existants) pour invalider les caches,
+// plus un `SyncCompleted` et, si les onglets actifs ont changé, un
+// `CacheInvalidated` (resource capabilities). Aucun événement novel, aucune
+// donnée inventée : liste vide = rien n'a changé.
+export const SYNC_REFRESH_MAX_EVENTS = 200;
+
+export interface SyncRefreshResponse {
+  readonly events: ContractEvent[];
+}
+
+export function isSyncRefreshResponse(v: unknown): v is SyncRefreshResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const e = (v as Record<string, unknown>)["events"];
+  return Array.isArray(e) && e.length <= SYNC_REFRESH_MAX_EVENTS && e.every(isContractEvent);
+}
+
+/** Corps du pull-refresh : `accountId` optionnel (absent = serveur mono-compte). */
+export const SYNC_REFRESH_ACCOUNT_ID_MAX_CHARS = 64;
+
+export function isSyncRefreshRequest(v: unknown): v is { readonly accountId?: string } {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return false;
+  const account = (v as Record<string, unknown>)["accountId"];
+  return account === undefined || isBoundedNonEmptyString(account, SYNC_REFRESH_ACCOUNT_ID_MAX_CHARS);
+}
+
 
 
 // --- #80 messagerie : lectures + actions APP confirmées (I7) ---

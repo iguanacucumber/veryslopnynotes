@@ -9,6 +9,7 @@ import {
   SUBJECT_PREFS_MAX_BODY_CHARS,
   isAssignmentsResponse,
   isAttendanceResponse,
+  isCapabilitiesResponse,
   isEvaluationsResponse,
   isPunishmentsResponse,
 
@@ -39,6 +40,9 @@ import { buildCompetenceSummary, buildSkills } from "../domain/competences";
 import { handleHomeworkGenerate } from "./homework";
 import type { AssignmentActions, MediaActions } from "./assignments";
 import { handleAssignmentsToggle } from "./assignments";
+import type { SyncRefreshActions } from "./sync-refresh";
+import { handleSyncRefresh } from "./sync-refresh";
+
 import type { DiscussionActions } from "./discussions";
 import { handleDiscussionWrite } from "./discussions";
 import { PairingService } from "./pairing";
@@ -180,9 +184,16 @@ function json(valid: boolean, payload: unknown): Response {
 function sse(events: ContractEvent | ContractEvent[]): Response {
   const list = Array.isArray(events) ? events : [events];
   const line = list.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
+  // #87 : le flux est un SNAPSHOT BORNÉ : une seule écriture puis fermeture.
+  // Avant, la réponse restait ouverte sans jamais rien émettre (connexion tenue
+  // pour rien). L'app reconnecte avec son backoff et recharge ce qu'il faut ;
+  // c'est aussi ce qui évite une fuite de payload sur un flux « vivant ».
+  // ponytail: pas de bus d'événements en mémoire (fan-out par device). Upgrade:
+  // file d'événements par accountId + Last-Event-ID.
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       controller.enqueue(new TextEncoder().encode(line));
+      controller.close();
     },
     cancel() {},
   });
@@ -210,6 +221,11 @@ export function createHandler(
   // ports (fonction #82, objet `download` #75) sont acceptés et normalisés :
   // une seule implémentation de la route, un seul contrat.
   media: MediaResolver | MediaActions | null = null,
+  // #87 : relecture synchrone pour le pull-refresh (POST /v1/sync/refresh).
+  // Absente par défaut = 501 honnête, aucun appelant existant cassé (8e
+  // paramètre ; le câblage réel reste au démarrage du serveur).
+  syncRefresh: SyncRefreshActions | null = null,
+
   // #80 : écritures de messagerie (create/reply/read-state/delete) = actions APP
   // CONFIRMÉES (I7). Absent par défaut = 501 honnête, jamais un faux succès.
   discussionActions: DiscussionActions | null = null,
@@ -504,6 +520,23 @@ export function createHandler(
       // n'ouvre pas un trou nouveau, il hérite du même poste.
       // Upgrade: exiger le token appairé sur /v1/me et /v1/media.
 
+      // #87 : capacités dynamiques (onglets Pronote actifs). Store sans
+      // détection = `capabilities: null` (l'app garde son affichage), jamais
+      // une erreur et jamais un onglet deviné actif.
+      case "/v1/capabilities": {
+        const payload = { capabilities: store.capabilities?.() ?? null };
+        return json(isCapabilitiesResponse(payload), payload);
+      }
+
+      // #87 : pull-refresh manuel (app -> serveur -> Pronote). Relecture bornée
+      // via le moteur de sync, événements de types EXISTANTS uniquement (I7 :
+      // aucune sortie LLM sur ce chemin). Sans relecture branchée = 501 franc.
+      case "/v1/sync/refresh": {
+        return handleSyncRefresh(req, syncRefresh);
+      }
+
+
+
       // #80 : messagerie (parité Papillon, onglet Discussions).
       // Lectures pures : store sans fils = listes VIDES (onglet inactif côté
       // établissement), jamais 500. `id` borné en amont (entrée utilisateur).
@@ -550,6 +583,8 @@ export function serve(
   // #75 : toggle "fait" (écriture confirmée par l'app) + proxy média.
   assignmentActions?: AssignmentActions | null,
   media?: MediaResolver | MediaActions | null,
+  syncRefresh?: SyncRefreshActions | null,
+
   // #80 : écritures de messagerie confirmées par l'app (I7).
   discussionActions?: DiscussionActions | null,
 ) {
@@ -564,6 +599,8 @@ export function serve(
       subjectPrefs ?? createSubjectPrefsMemoryStore(),
       assignmentActions ?? null,
       media ?? null,
+      syncRefresh ?? null,
+
       discussionActions ?? null,
     ),
   });

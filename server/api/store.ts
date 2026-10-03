@@ -3,7 +3,7 @@
 // Mémoire = seed/tests uniquement ; l'adaptateur SQLite (#11) implémentera
 // ReadStore sans changer le routeur.
 
-import type { AbsenceRecord, Assignment, CanteenBalance, CanteenMenu, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, CanteenBalance, CanteenMenu, Capabilities, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 import type { SecurityAlertData } from "../../shared/contracts/events";
 
 import type { ProvidedAverages } from "../domain/averages";
@@ -56,6 +56,16 @@ export interface ReadStore {
   userInfo?(): UserInfo | null;
 
   /**
+   * Onglets Pronote actifs de l'établissement (#87). Optionnelle + défaut
+   * `null` = capacités NON déterminées (session absente, adaptateur sans
+   * détection) : la route répond alors `capabilities: null` et l'app garde son
+   * affichage par défaut. Un onglet absent de la liste est une capacité
+   * `false`, jamais une erreur de lecture.
+   */
+  capabilities?(): Capabilities | null;
+
+
+  /**
    * Fils de discussion (#80) + destinataires. Optionnelles, défaut `[]` =
    * établissement sans onglet Discussions (état propre côté app, l'onglet est
    * masqué). Les ÉCRITURES ne passent pas par le store : ports d'action
@@ -93,6 +103,13 @@ export interface StoreSeed {
    * seed par défaut, donc aucun risque de profil fantôme dans les tests.
    */
   readonly userInfo?: UserInfo | null;
+
+  /**
+   * Capacités synthétiques (#87). Défaut = null : aucun onglet n'est affirmé
+   * actif tant que la détection n'a pas tourné (état neutre, pas de masquage).
+   */
+  readonly capabilities?: Capabilities | null;
+
 
   /** Messagerie synthétique (#80). Défaut = vide (onglet Discussions absent). */
   readonly discussions?: Discussion[];
@@ -191,6 +208,9 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
 
   // #82 : défaut null (pas de profil dans le seed général = mode anonyme).
   const user = seed.userInfo === undefined ? null : structuredClone(seed.userInfo);
+  // #87 : défaut null (capacités non déterminées = aucun masquage côté app).
+  const caps = seed.capabilities === undefined ? null : structuredClone(seed.capabilities);
+
   // #80 : défaut VIDE (établissement sans onglet Discussions) = état propre.
   const discussions = structuredClone(seed.discussions ?? []);
   const messages = structuredClone(seed.discussionMessages ?? []);
@@ -214,6 +234,9 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
 
 
     userInfo: () => (user === null ? null : structuredClone(user)),
+
+    capabilities: () => (caps === null ? null : structuredClone(caps)),
+
 
     // #80 : messagerie (donnée personnelle, jamais journalisée en clair).
     discussions: () => structuredClone(discussions),
