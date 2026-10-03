@@ -27,6 +27,10 @@ export function fingerprint(g: Grade): string {
     g.classMax ?? null,
     g.periodId ?? null,
     g.date,
+    // Libellé/enseignant : l'app les affiche et les met en cache, donc une
+    // correction de libellé est une information à re-notifier (comme une note).
+    g.label ?? null,
+    g.teacher ?? null,
   ]);
 }
 

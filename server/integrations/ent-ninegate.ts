@@ -58,6 +58,15 @@ function formAction(html: string, base: string, formName?: string): string | nul
   }
 }
 
+/** Origine (`scheme://host[:port]`) d'une URL, "" si illisible. */
+function originOf(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "";
+  }
+}
+
 function formInputs(html: string, formName?: string): Record<string, string> {
   const $ = load(html);
   const out: Record<string, string> = {};
@@ -135,7 +144,15 @@ export async function ninegateHubixEduconnect(
   if (!edu.text.includes("j_username")) throw new Error("ninegate: page login absente");
 
   // 4. Login EduConnect (j_username/j_password + csrf, body POST uniquement).
+  //    L'action du form vient du HTML servi : le mot de passe ne part que si
+  //    elle reste sur l'origine qui a servi la page de login. Une page ENT
+  //    substituée (ou un `action` absolu hostile) ne doit jamais capter le
+  //    secret — échec franc plutôt que fuite vers un hôte arbitraire.
   const loginAction = formAction(edu.text, edu.url) ?? edu.url;
+  const eduOrigin = originOf(edu.url);
+  if (eduOrigin === "" || originOf(loginAction) !== eduOrigin) {
+    throw new Error("ninegate: action login hors origine ENT");
+  }
   const csrf = load(edu.text)('input[name="csrf_token"]').attr("value") ?? "";
   const logged = await session.post(loginAction, {
     headers: HEADERS,
@@ -161,11 +178,10 @@ export async function ninegateHubixEduconnect(
     logger?.(`sso sso-reunion -> ${current.status}`);
     current = await followSamlPosts(session, current, logger);
   }
-  if (!/portail/i.test(current.url) && !/Mes applications|ninegate/i.test(current.text)) {
-    throw new Error("ninegate: portail non atteint");
-  }
-  logger?.("sso portail -> ok");
-  // Base portail = origine URL finale (jamais loggée). Puis tuile auto sans navigateur.
+  // Portail atteint = réponse RÉELLEMENT authentifiée : le portail a établi un
+  // cookie de session. Jamais un substring « ninegate » dans le HTML — une page
+  // non authentifiée passerait alors pour une session valide et on rendrait un
+  // jar vide au Client pronotets (échec lu comme une session morte).
   let portalBase = "";
   try {
     const u = new URL(current.url);
@@ -173,6 +189,11 @@ export async function ninegateHubixEduconnect(
   } catch {
     throw new Error("ninegate: base portail illisible");
   }
+  if ((await session.jar.getCookieString(`${portalBase}/`)) === "") {
+    throw new Error("ninegate: session portail non authentifiée");
+  }
+  logger?.("sso portail -> ok");
+  // Base portail (jamais loggée en clair). Puis tuile auto sans navigateur.
   const tileHref = await ninegateDiscoverTile(session.jar, portalBase, logger);
   return ninegatePronoteTicket(session.jar, tileHref, logger);
 }

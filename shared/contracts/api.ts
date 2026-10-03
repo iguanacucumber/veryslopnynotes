@@ -8,6 +8,22 @@ import type { CacheInvalidatedData, ContractEvent, SecurityAlertData } from "./e
 import { isContractEvent, isSecurityAlertData } from "./events";
 
 
+// --- Dates affichées : jour LOCAL, pas jour UTC ---
+/** Fuseau du dépôt (élève, établissement, serveur) : Europe/Paris. */
+export const APP_TIME_ZONE = "Europe/Paris";
+const appDayFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: APP_TIME_ZONE });
+
+/**
+ * Jour civil d'un instant ISO, « AAAA-MM-JJ », vu par l'élève. Une date
+ * affichée = jour local : tronquer l'ISO (`slice(0, 10)`) donne le JOUR UTC et
+ * date du 14 un DS du 15 à 00h30 locales. Source unique pour tout ce qui est
+ * montré (titre de fiche, PDF, push). Instant illisible = texte d'origine.
+ */
+export function localDay(iso: string): string {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? iso.slice(0, 10) : appDayFormatter.format(at);
+}
+
 export interface ApiRoute {
   readonly method: "GET" | "POST" | "PUT";
   readonly path: string;
@@ -183,6 +199,14 @@ export interface SecurityAlertsResponse {
 // réponse = corrigé sourcé ou refus propre si insuffisant.
 // Aucun effet métier : RENDER/push = phases suivantes, jamais ici (I7).
 export const HOMEWORK_MAX_QUESTION_CHARS = 2000;
+/**
+ * Corps POST /v1/homework/generate borné AVANT parse, comme les autres routes
+ * d'écriture. Le contrat n'interdit pas les clés inconnues (`bourrage: …`) :
+ * sans cette borne, un POST non authentifié de taille arbitraire est
+ * entièrement bufferisé, puis accepté, et part quand même au LLM.
+ * Marge au-dessus du pire cas utile : question 2000 + 8×(2000 + 200).
+ */
+export const HOMEWORK_MAX_BODY_CHARS = 65536;
 export const HOMEWORK_MAX_SOURCES = 8;
 export const HOMEWORK_MAX_SOURCE_CHARS = 2000;
 export const HOMEWORK_MAX_SOURCE_LABEL_CHARS = 200;

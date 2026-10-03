@@ -6,6 +6,7 @@
 // I7 : les écritures (devoirs, messagerie) sont des ports d'action branchés sur le
 // reader, atteignables uniquement via une route (= action app confirmée).
 import { createHash } from "node:crypto";
+import type { ContractEvent } from "../../shared/contracts/events";
 import { createHandler } from "../api/router";
 import type { AssignmentActions, MediaActions } from "../api/assignments";
 import type { DiscussionActions } from "../api/discussions";
@@ -97,12 +98,12 @@ export function createApp(
       : deps.reader;
   if (!sessions) log("PRONOTE_URL absent : lectures vides, ecritures indisponibles (501)");
 
-  /** Mono-compte : la session appairée unique, sinon compte demandé. */
-  const resolveAccountId = (requested: string): string => {
-    const trimmed = requested.trim();
-    if (trimmed) return trimmed;
-    return sessions?.currentAccountId() ?? accountId;
-  };
+  /** Mono-compte : le compte appairé par le serveur, et RIEN d'autre.
+   *  L'`accountId` transporté par le client n'est qu'un indice borné : le
+   *  prendre pour une identité ouvrait une session Pronote pour un compte
+   *  jamais appairé, et cassait la résolution mono-compte
+   *  (`currentAccountId()` = null dès qu'une 2e session existe). */
+  const resolveAccountId = (_requested: string): string => sessions?.currentAccountId() ?? accountId;
 
   const liveSync = createLiveSync({
     reader: reader as never,
@@ -116,6 +117,25 @@ export function createApp(
     logger: log,
   });
 
+  /**
+   * Relecture UNIQUE et sérialisée : passe par `actions.refresh`, donc warmup et
+   * l'appairage partagent le même garde-fou mono-relecture que
+   * POST /v1/sync/refresh (appeler `liveSync.run` en direct doublait la passe sur
+   * la session Pronote : rafale de `session_expired` + snapshot de diff écrit
+   * deux fois).
+   */
+  const refreshSnapshot = (): Promise<ContractEvent[]> => liveSync.actions.refresh(accountId);
+
+  /**
+   * Journal honnête (I6) : « rempli » seulement si la relecture a réellement
+   * alimenté le snapshot. Zéro note lue = rien n'a été rempli, on le dit.
+   */
+  const logSnapshotFilled = (subject: string): void => {
+    const grades = store.grades().length;
+    if (grades === 0) log(`${subject} relecture vide (aucune note lue), l'app retry`);
+    else log(`${subject} snapshot rempli (${grades} note(s))`);
+  };
+
   // Appairage réussi = on ouvre la session Pronote puis on warms le snapshot.
   // L'auth est déclenchée APRÈS la réponse (fire-and-forget) : la confirmation
   // d'appairage ne doit pas dépendre de la disponibilité de l'ENT.
@@ -126,8 +146,12 @@ export function createApp(
     if (result.ok && sessions && username && password) {
       void sessions
         .authenticate({ accountId, username, password, entKind })
-        .then(() => liveSync.run(accountId))
-        .then(() => log("pairing -> session ouverte, snapshot rafraichi"))
+        .then(() => {
+          // Pas de reader = relecture impossible : ne jamais annoncer un
+          // snapshot rafraichi qui n'a pas eu lieu (I6).
+          if (!reader) return log("pairing -> session ouverte, relecture ignoree (aucun reader)");
+          return refreshSnapshot().then(() => logSnapshotFilled("pairing -> session ouverte,"));
+        })
         .catch((err: unknown) => {
           // Jamais le message brut (peut contenir une interne) : code seulement.
           const code2 = err instanceof Error ? err.name : "unknown";
@@ -168,7 +192,10 @@ export function createApp(
     createSubjectPrefsMemoryStore(),
     assignmentActions,
     media,
-    liveSync.actions,
+    // Relecture non branchée (aucun reader) = port absent = 501 honnête
+    // « relecture non branchée », jamais un `200 {events: []}` qui mentirait sur
+    // un refresh impossible (même règle que les ports d'écriture/media).
+    reader ? liveSync.actions : null,
     discussionActions,
   );
 
@@ -178,11 +205,15 @@ export function createApp(
     liveSync,
     sessions,
     warmup: async () => {
-      if (!sessions) return;
+      // Sans session, ou SANS identifiants (PRONOTE_URL seul) : aucune
+      // authentification à tenter — une session ouverte avec un username vide
+      // est pire que pas de session du tout.
+      if (!sessions || !username || !password) return;
       try {
         await sessions.authenticate({ accountId, username, password, entKind });
-        await liveSync.run(accountId);
-        log("warmup -> snapshot initial rempli");
+        if (!reader) return log("warmup -> aucune lecture (aucun reader), le serveur demarre vide");
+        await refreshSnapshot();
+        logSnapshotFilled("warmup ->");
       } catch {
         log("warmup -> echec, le serveur demarre vide (l'app retry)");
       }
@@ -203,18 +234,49 @@ async function write<T = unknown>(reader: PronoteReader, method: string, ...args
   return (await fn.apply(reader, args)) as T;
 }
 
-/** Démarre le serveur (CLI). `HOST` explicite requis pour exposer hors loopback. */
-/** Type de retour : `ReturnType<typeof Bun.serve>` (le type Bun global n'expose pas `serve`). */
+/** `PORT` : absent -> défaut ; `0` conservé (port éphémère) ; hors plage -> refus explicite. */
+function parsePort(raw: string | null): number {
+  if (raw === null) return DEFAULT_PORT;
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error(`PORT invalide: ${JSON.stringify(raw)} (entier attendu dans 0..65535)`);
+  }
+  return port;
+}
+
+/** Corps HTTP maximal : toutes les routes JSON sont bornées à quelques ko. */
+const MAX_REQUEST_BODY_BYTES = 1_048_576;
+
+/**
+ * Démarre le serveur (CLI). `HOST` explicite requis pour exposer hors loopback.
+ * Type de retour : `ReturnType<typeof Bun.serve>` (le type Bun global n'expose pas `serve`).
+ */
 export function start(
   env: Record<string, string | undefined> = Bun.env as Record<string, string | undefined>,
 ): ReturnType<typeof Bun.serve> {
   const app = createApp(env);
-  const port = Number.parseInt(envValue(env, "PORT"), 10) || DEFAULT_PORT;
+  const port = parsePort(envValue(env, "PORT"));
   const hostname = envValue(env, "HOST") || "127.0.0.1";
-  const server = Bun.serve({ port, hostname, fetch: app.handler });
+  const server = Bun.serve({
+    port,
+    hostname,
+    maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+    fetch: app.handler,
+    // Une exception échappée au handler ne doit JAMAIS sortir en page HTML
+    // Bun avec l'exception brute : JSON 500 au format contrat, sans message
+    // interne (I6).
+    error: () => Response.json({ error: { code: "internal", message: "internal error" } }, { status: 500 }),
+  });
   console.log(`[server] écoute sur ${hostname}:${server.port}`);
-  // Relecture initiale sans bloquer l'écoute : l'app peut tire tout de suite.
+  // Relecture initiale sans bloquer l'écoute : l'app peut tirer tout de suite.
   void app.warmup();
+  // Arrêt propre : les sockets en cours (SSE) sont fermés, le process se termine.
+  const shutdown = (signal: string) => {
+    console.log(`[server] ${signal} -> arret`);
+    server.stop();
+  };
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
   return server;
 }
 

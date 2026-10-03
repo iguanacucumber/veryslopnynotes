@@ -44,8 +44,11 @@ export function hasCapability(caps: Capabilities | null | undefined, tab: TabCap
  * Onglets désactivés = tous les onglets connus moins ceux observés actifs.
  * Sert au masquage côté app et aux tests (un onglet absent est bien listé
  * comme désactivé, jamais oublié).
+ * `null`/absent = capacités NON déterminées : on n'affirme alors rien, donc
+ * AUCUN masquage n'est déduit (même règle que `hasCapability`).
  */
 export function disabledTabs(caps: Capabilities | null | undefined): TabCapability[] {
-  const enabled = new Set(caps?.tabs ?? []);
+  if (!caps) return [];
+  const enabled = new Set(caps.tabs);
   return TAB_CAPABILITIES.filter((t) => !enabled.has(t));
 }
