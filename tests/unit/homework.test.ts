@@ -149,7 +149,7 @@ describe("unit homework generate (#27)", () => {
     const secretRe =
       /sk-or-v1-|OPENROUTER_API_KEY|MASTER_KEY|PRONOTE_PASSWORD|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/;
     expect(SYSTEM_HOMEWORK_JSON).not.toMatch(secretRe);
-    const url = new URL("../../server/ai/homework.ts", import.meta.url).pathname;
+    const url = new URL("../../server/ai/homework.ts", import.meta.url);
     const content = readFileSync(url, "utf8");
     expect(content).not.toMatch(secretRe);
     expect(content).not.toMatch(/Bun\.env|process\.env/);
@@ -167,7 +167,7 @@ describe("unit homework generate (#27)", () => {
       model: "m",
     });
     expect(isLlmConfigured({})).toBe(false);
-    const url = new URL("../../server/infrastructure/llm-openrouter.ts", import.meta.url).pathname;
+    const url = new URL("../../server/infrastructure/llm-openrouter.ts", import.meta.url);
     const content = readFileSync(url, "utf8");
     expect(content).not.toMatch(/sk-or-v1-[A-Za-z0-9]{8,}/);
   });
