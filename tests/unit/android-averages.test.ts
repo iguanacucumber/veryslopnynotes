@@ -102,7 +102,7 @@ describe("unit android moyennes (#74)", () => {
       expect(tsGeneralAverage(JSON.stringify(payload))).not.toBeNull();
     }
     expect(AVERAGE_ALGORITHMS).toEqual(["subject", "weighted", "median"]);
-    expect(CONTRACTS_VERSION).toBe("0.2.0");
+    expect(CONTRACTS_VERSION).toBe("0.3.0");
   });
 
   test("Kotlin : parsing + libellé, sans dépendance ajoutée", () => {

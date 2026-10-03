@@ -2,7 +2,7 @@
 // vers HTTP, SQLite ou Pronote. Adapters en server/infrastructure/
 // et server/integrations/.
 // Voir docs/architecture/INVARIANTS.md (I2, I3, I5, I6, I7).
-import type { AbsenceRecord, Assignment, CanteenMenu, Evaluation, Grade, NewsItem, Period, Punishment, TimetableEntry } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, CanteenMenu, Evaluation, Grade, NewsItem, Period, Punishment, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 
 export type Untrusted<T = string> = { readonly __untrusted: true; readonly value: T };
 
@@ -112,6 +112,15 @@ export interface PronoteReader {
 
   /** Sanctions vie scolaire (#77) : même contrat défensif (page vide si absent). */
   getPunishments?(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Punishment>>;
+
+
+  /**
+   * Infos du compte appairé (#82, parité Papillon Profil) : nom, classe,
+   * période courante, photo (réf opaque, résolue par le proxy média) et
+   * enfants d'un compte parent. Optionnel + page VIDE quand l'établissement ne
+   * publie rien : jamais de nom ni de photo inventés (voir isUserInfo).
+   */
+  getUserInfo?(accountId: string): Promise<PronotePage<UserInfo>>;
 }
 
 /** Ressource pédagogique via session Pronote (contenu cours, fichier joint, manuel lié). */
