@@ -13,4 +13,8 @@ v0.2 add-only (issue #78) : modèles `Skill`/`Evaluation`/`CompetenceSummary` (t
 optionnels omis quand Pronote ne les publie pas, `note: null` = non noté) + nouvelle route
 `/v1/evaluations` (compétences fournies, sinon trois listes vides) et ressource cache `evaluations`.
 Invalidation = `CacheInvalidated` (resource `evaluations`), pas d'événement dédié.
+
+Add-only #79 (mêmes versions) : route `/v1/news` (`NewsItem`), événement SSE `NewsUpdated`,
+ressource cache `news` (TTL 60 min). Onglet Actualités absent côté établissement
+= liste vide (200), jamais 500.
 Changement cassant = bump version + PR justificative ; `tests/contracts` impose le sync.
