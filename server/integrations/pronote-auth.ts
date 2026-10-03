@@ -20,13 +20,23 @@ export interface PronoteAuthProviderOptions {
   readonly logger?: (message: string) => void;
 }
 
+/** Clé de session normalisée : l'id vient de l'appelant, pas de nous. */
+function key(accountId: string): string {
+  return (accountId ?? "").trim();
+}
+
 function extractToken(raw: unknown): string | null {
   if (typeof raw !== "object" || raw === null) return null;
   const rec = raw as Record<string, unknown>;
-  const candidate = rec["token"] ?? rec["sessionToken"];
-  if (typeof candidate !== "string") return null;
-  const token = candidate.trim();
-  return token.length > 0 ? token : null;
+  // Premier candidat NON VIDE : `token` peut être présent mais vide
+  // (`{token:"",sessionToken:"…"}`), le jeton utile est alors l'autre.
+  for (const field of ["token", "sessionToken"] as const) {
+    const candidate = rec[field];
+    if (typeof candidate !== "string") continue;
+    const token = candidate.trim();
+    if (token.length > 0) return token;
+  }
+  return null;
 }
 
 function toAuthError(err: unknown): PronoteAuthError {
@@ -86,24 +96,24 @@ export class PronoteAuthProvider implements PronoteProvider {
   }
 
   isAuthenticated(accountId: string): boolean {
-    return this.tokens.has(accountId);
+    return this.tokens.has(key(accountId));
   }
 
   /** Token opaque pour lectures phase #8. Null = re-auth requise. Jamais loggé. */
   getSessionToken(accountId: string): string | null {
-    return this.tokens.get(accountId) ?? null;
+    return this.tokens.get(key(accountId)) ?? null;
   }
 
   /** Exige une session, sinon session_expired (caller doit re-authentifier). */
   requireSessionToken(accountId: string): string {
-    const token = this.tokens.get(accountId);
+    const token = this.tokens.get(key(accountId));
     if (!token) throw new PronoteAuthError("session expired", "session_expired");
     return token;
   }
 
   /** Invalide la session (changement IP, logout). Re-auth via authenticate(). */
   invalidate(accountId: string): void {
-    this.tokens.delete(accountId);
+    this.tokens.delete(key(accountId));
     this.logger("auth -> invalidate");
   }
 }

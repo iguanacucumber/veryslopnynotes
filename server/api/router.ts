@@ -20,7 +20,6 @@ import {
   isGradesResponse,
   isMeResponse,
   isNewsResponse,
-  MEDIA_ACCOUNT_ID_MAX_CHARS,
   MEDIA_REF_MAX_CHARS,
   isPairingConfirmRequest,
   isPairingStartRequest,
@@ -109,6 +108,29 @@ const PERIOD_ID_MAX_CHARS = 64;
 const DATE_MAX_CHARS = 40;
 
 /**
+ * Date de fenêtre : ISO 8601 STRICT ou rien. `Date.parse` est lenient
+ * (« 12 » -> 2001-12-01, du junk collé à une date valide passe encore) : sans
+ * ce garde-fou le serveur devine une fenêtre et le client croit sa liste vide.
+ * Formes acceptées : `AAAA-MM-JJ`, `…THH:MM[:SS[.mmm]]` avec `Z` ou ±HH:MM.
+ */
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
+
+/**
+ * Paramètre de date de fenêtre (`from`, `to`, `weekStart`).
+ * - `null` = absent ou vide -> AUCUNE borne (comportement inchangé) ;
+ * - chaîne = ISO valide, reflétée telle quelle ;
+ * - `undefined` = valeur invalide -> 400 chez l'appelant, jamais de date devinée.
+ */
+function isoDateParam(raw: string | null): string | null | undefined {
+  if (raw === null) return null;
+  const t = raw.trim();
+  if (t === "") return null;
+  if (t.length > DATE_MAX_CHARS) return undefined;
+  if (!ISO_DATE_RE.test(t) || Number.isNaN(Date.parse(t))) return undefined;
+  return t;
+}
+
+/**
  * Fenêtre from/to du routeur (bornée en longueur puis validée ISO ; paramètre
  * absent = pas de borne). Renvoie null = 400 (jamais de date devinée).
  * Partagée par /v1/assignments (#75, + weekStart) et /v1/menus (#81).
@@ -116,18 +138,12 @@ const DATE_MAX_CHARS = 40;
 function dateWindow(url: URL): { from?: string; to?: string } | null {
   const out: { from?: string; to?: string } = {};
   for (const key of ["from", "to"] as const) {
-    const raw = url.searchParams.get(key);
-    if (raw === null) continue;
-    const t = raw.trim().slice(0, DATE_MAX_CHARS);
-    if (t === "") continue;
-    if (Number.isNaN(Date.parse(t))) return null;
-    out[key] = t;
+    const t = isoDateParam(url.searchParams.get(key));
+    if (t === undefined) return null;
+    if (t !== null) out[key] = t;
   }
   return out;
 }
-
-/** Longueur max d'un weekStart d'EDT (borne d'entrée utilisateur, #76). */
-const TIMETABLE_DATE_MAX_CHARS = 40;
 
 /**
  * #76 : fenêtre de l'EDT en millisecondes. `weekStart` = un jour quelconque de
@@ -138,12 +154,12 @@ const TIMETABLE_DATE_MAX_CHARS = 40;
  * Renvoie null = 400, sans jamais répliquer l'input ni deviner une date.
  */
 function timetableWindow(url: URL): { fromMs?: number; toMs?: number } | null {
-  const weekStart = (url.searchParams.get("weekStart") ?? "").trim().slice(0, TIMETABLE_DATE_MAX_CHARS);
+  const weekStart = isoDateParam(url.searchParams.get("weekStart"));
+  if (weekStart === undefined) return null;
   const win = dateWindow(url);
   if (win === null) return null;
-  if (weekStart !== "") {
+  if (weekStart !== null) {
     const parsed = Date.parse(weekStart);
-    if (Number.isNaN(parsed)) return null;
     const d = new Date(parsed);
     const midnight = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
     // getUTCDay() = 0 le dimanche -> décalage vers le lundi de la même semaine.
@@ -165,15 +181,70 @@ function timetableWindow(url: URL): { fromMs?: number; toMs?: number } | null {
 function assignmentWeek(url: URL): { from?: string; to?: string } | null {
   const win = dateWindow(url);
   if (win === null) return null;
-  const rawWeek = url.searchParams.get("weekStart");
-  if (rawWeek === null) return win;
-  const day = rawWeek.trim().slice(0, DATE_MAX_CHARS);
-  if (day === "") return win;
+  const day = isoDateParam(url.searchParams.get("weekStart"));
+  if (day === undefined) return null;
+  if (day === null) return win;
   const start = Date.parse(day);
-  if (Number.isNaN(start)) return null;
   // 7 jours pleins : l'app passe le lundi, la borne haute couvre dimanche soir.
   const end = new Date(start + 7 * 86400000 - 1);
   return { from: new Date(start).toISOString(), to: end.toISOString() };
+}
+
+/**
+ * Corps JSON borné AVANT le parse (comme les autres routes d'écriture) : un
+ * corps géant est refusé sans être bufferisé ni validé. Un retour `Response`
+ * = erreur typée à renvoyer telle quelle.
+ */
+async function boundedJson(req: Request, max: number): Promise<unknown | Response> {
+  let text: string;
+  try {
+    text = await req.text();
+  } catch {
+    return apiError("bad_request", "invalid JSON body");
+  }
+  if (text.length > max) return apiError("bad_request", "invalid body");
+  try {
+    return JSON.parse(text);
+  } catch {
+    return apiError("bad_request", "invalid JSON body");
+  }
+}
+
+/** Corps d'appairage : {deviceName} ou {sessionId, code}, quelques centaines de caractères suffisent. */
+const PAIRING_MAX_BODY_CHARS = 1024;
+
+/**
+ * Jeton d'appareil appairé exigé sur les routes qui TOUCHENT Pronote
+ * (lecture d'un autre compte par /v1/media, écriture /v1/assignments/toggle) :
+ * `Authorization: Bearer <token d'appareil>`.
+ * `verifyDeviceToken` compare en temps constant ; le refus ne dit JAMAIS pourquoi
+ * (inexistant / expiré / révoqué / format inconnu = un seul 401).
+ * Renvoie la réponse 401 à renvoyer, ou `null` si le jeton est valide.
+ */
+function requireDevice(req: Request, pairing: PairingService): Response | null {
+  const m = /^Bearer[ \t]+(\S+)$/i.exec((req.headers.get("authorization") ?? "").trim());
+  const token = m?.[1];
+  if (token === undefined || pairing.verifyDeviceToken(token) === null) {
+    return apiError("unauthorized", "jeton d'appareil invalide");
+  }
+  return null;
+}
+
+/**
+ * Compte RÉELLEMENT servi, résolu côté serveur : l'`accountId` transporté par
+ * le client n'est qu'un indice (comme `resolveAccountId` côté intégration), le
+ * prendre pour une identité ouvrait la session d'un compte qu'il n'a pas
+ * appairé. `null` = serveur mono-compte : le proxy média résout la session
+ * appairée unique (accountId vide).
+ */
+function servedAccountId(store: ReadStore): string | null {
+  return (
+    store.userInfo?.()?.accountId ??
+    store.capabilities?.()?.accountId ??
+    store.grades()[0]?.accountId ??
+    store.assignments()[0]?.accountId ??
+    null
+  );
 }
 
 function json(valid: boolean, payload: unknown): Response {
@@ -231,16 +302,44 @@ export function createHandler(
   discussionActions: DiscussionActions | null = null,
 ): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
-    const url = new URL(req.url);
-    const path = url.pathname;
-    const download = mediaResolver(media);
-    // Une path peut porter GET + PUT (#83) : on matche path puis méthode,
-    // sinon 405 sur la mauvaise méthode au lieu de 404/405 incohérent.
-    if (!API_ROUTES.some((r) => r.path === path)) return apiError("not_found", `unknown path ${path}`);
-    if (!API_ROUTES.some((r) => r.path === path && r.method === req.method)) {
-      return apiError("method_not_allowed", `${req.method} not allowed on ${path}`);
+    try {
+      const url = new URL(req.url);
+      const path = url.pathname;
+      const download = mediaResolver(media);
+      // Une path peut porter GET + PUT (#83) : on matche path puis méthode,
+      // sinon 405 sur la mauvaise méthode au lieu de 404/405 incohérent.
+      const routes = API_ROUTES.filter((r) => r.path === path);
+      if (routes.length === 0) return apiError("not_found", `unknown path ${path}`);
+      // HEAD est obligatoire partout où GET existe (RFC 9110 §9.3.2) : sondes de
+      // disponibilité et de taille de contenu (pdf, média). Il rejoue le GET et
+      // rend le même statut + les mêmes en-têtes, SANS corps. API_ROUTES ne
+      // déclare que GET/POST/PUT : aucune route n'annonce HEAD en propre.
+      const isHead = req.method === "HEAD" && routes.some((r) => r.method === "GET");
+      const method = isHead ? "GET" : req.method;
+      if (!routes.some((r) => r.method === method)) {
+        // 405 = en-tête Allow obligatoire (RFC 9110 §15.5.6) : sans lui le client
+        // ne sait pas quelles méthodes la route accepte.
+        return apiError("method_not_allowed", `${req.method} not allowed on ${path}`, {
+          allow: routes.map((r) => r.method).join(", "),
+        });
+      }
+      const res = await dispatch(req, url, path, method, download);
+      return isHead ? new Response(null, { status: res.status, headers: res.headers }) : res;
+    } catch {
+      // Aucun THROW ne sort du handler (URL illisible, store qui lève, port qui
+      // jette) : une promesse rejetée = socket cassée sans corps d'erreur typé.
+      // I6 : le client reçoit un 500 structuré, le message interne ne sort JAMAIS.
+      return apiError("internal", "unexpected failure");
     }
+  };
 
+  async function dispatch(
+    req: Request,
+    url: URL,
+    path: string,
+    method: string,
+    download: MediaResolver | null,
+  ): Promise<Response> {
     switch (path) {
       case "/v1/health":
         return Response.json({ status: "ok", version: CONTRACTS_VERSION });
@@ -287,19 +386,28 @@ export function createHandler(
         return json(isAssignmentsResponse(payload), payload);
       }
       // #75 : toggle fait = ÉCRITURE Pronote, action APP confirmée (I7).
+      // Écriture = PRONOTE touché : sans jeton d'appareil appairé, l'écriture
+      // n'est même pas lue (aucun corps bufferisé, aucune action appelée).
       case "/v1/assignments/toggle": {
+        const refuse = requireDevice(req, pairing);
+        if (refuse !== null) return refuse;
         return handleAssignmentsToggle(req, assignmentActions);
       }
       // #75 : proxy des pièces jointes (ref opaque → octets). Jamais d'URL
       // Pronote dans l'app (I1), jamais de WebView distante.
       case "/v1/media": {
+        // Lecture des données d'un compte appairé : jeton exigé, et le compte
+        // est résolu côté SERVEUR (servedAccountId / session appairée du
+        // proxy). L'`accountId` de la query est IGNORÉ : le prendre pour une
+        // identité ouvrait la session d'un autre compte appairé.
+        const refuse = requireDevice(req, pairing);
+        if (refuse !== null) return refuse;
         const ref = (url.searchParams.get("ref") ?? "").trim();
-        const accountId = (url.searchParams.get("accountId") ?? "").trim().slice(0, MEDIA_ACCOUNT_ID_MAX_CHARS);
-        if (!isMediaRef(ref) || accountId === "") return apiError("bad_request", "invalid media ref");
+        if (!isMediaRef(ref)) return apiError("bad_request", "invalid media ref");
         if (!download) return apiError("not_implemented", "media proxy absent");
         let file: MediaPayload;
         try {
-          file = await download(accountId, ref);
+          file = await download(servedAccountId(store) ?? "", ref);
         } catch (err) {
           // Jamais le message d'erreur brut (il peut contenir une interne).
           if (err instanceof MediaProxyError) {
@@ -344,7 +452,10 @@ export function createHandler(
       }
       case "/v1/events": {
         const data: SyncCompletedData = {
-          accountId: "seed-acc",
+          // Le compte RÉELLEMENT servi, jamais la constante de seed du module :
+          // attribuer les données de tout compte à « seed-acc » faisait
+          // purger/recharger le mauvais cache côté app.
+          accountId: servedAccountId(store) ?? "compte-inconnu",
           grades: store.grades().length,
           assignments: store.assignments().length,
         };
@@ -392,31 +503,25 @@ export function createHandler(
         });
       }
       case "/v1/pairing/start": {
-        let body: unknown;
-        try {
-          body = await req.json();
-        } catch {
-          return apiError("bad_request", "invalid JSON body");
-        }
+        // Corps borné AVANT parse comme les autres routes d'écriture : /start
+        // est ouverte (le device n'est pas appairé) donc c'est la seule porte
+        // d'entrée sans jeton, autant ne pas y bufferiser un corps arbitraire.
+        const body = await boundedJson(req, PAIRING_MAX_BODY_CHARS);
+        if (body instanceof Response) return body;
         if (!isPairingStartRequest(body)) return apiError("bad_request", "invalid pairing request");
         const payload = pairing.start(body.deviceName);
         return json(isPairingStartResponse(payload), payload);
       }
       case "/v1/pairing/confirm": {
-        let body: unknown;
-        try {
-          body = await req.json();
-        } catch {
-          return apiError("bad_request", "invalid JSON body");
-        }
+        const body = await boundedJson(req, PAIRING_MAX_BODY_CHARS);
+        if (body instanceof Response) return body;
         if (!isPairingConfirmRequest(body)) return apiError("bad_request", "invalid pairing request");
         const res = pairing.confirm(body.sessionId, body.code);
-        if (!res.ok) {
-          if (res.failure === "unknown_session" || res.failure === "expired") {
-            return apiError("not_found", `pairing ${res.failure}`);
-          }
-          return apiError("bad_request", `pairing ${res.failure}`);
-        }
+        // Échecs d'appairage INDISTINGUABLES : un seul 401 « unauthorized », un
+        // seul message. Distinguer session inexistante / expirée / verrouillée /
+        // PIN faux = oracle d'existence de session + fuite des tentatives
+        // restantes. Les nuances restent dans `PairingFailure` (usage interne).
+        if (!res.ok) return apiError("unauthorized", "pairing refused");
         return json(isDevice(res.device), res.device);
       }
       case "/v1/homework/generate": {
@@ -426,7 +531,7 @@ export function createHandler(
         // #83 : préférences matière (couleur/emoji/libellé), clé = nom de matière.
         // GET = liste bornée, PUT = upsert d'une matière. Le local gagne côté app,
         // le serveur ne fait que répliquer (aucun effet métier ici, I7).
-        if (req.method === "GET") {
+        if (method === "GET") {
           const payload = { prefs: subjectPrefs.list().slice(0, SUBJECT_PREFS_MAX_COUNT) };
           return json(isSubjectPrefsResponse(payload), payload);
         }
@@ -542,7 +647,7 @@ export function createHandler(
       // établissement), jamais 500. `id` borné en amont (entrée utilisateur).
       // Écritures : une route POST par action, geste APP CONFIRMÉ (I7).
       case "/v1/discussions": {
-        if (req.method === "GET") {
+        if (method === "GET") {
           const payload = { discussions: store.discussions?.() ?? [] };
           return json(isDiscussionsResponse(payload), payload);
         }
@@ -550,7 +655,11 @@ export function createHandler(
       }
       case "/v1/discussions/messages": {
         const id = (url.searchParams.get("id") ?? "").trim().slice(0, DISCUSSION_ID_MAX_CHARS);
-        if (id === "") return apiError("bad_request", "invalid discussion id");
+        // Un id de fil est un jeton opaque : `toString`, `__proto__`,
+        // `constructor`… ne sont jamais des ids et ne doivent surtout pas
+        // résoudre dans une table indexée par objet côté store (une fonction
+        // remontée là se fait structuredCloner en DataCloneError). 400 typé.
+        if (id === "" || id in Object.prototype) return apiError("bad_request", "invalid discussion id");
         const payload = { messages: store.discussionMessages?.(id) ?? [] };
         return json(isDiscussionMessagesResponse(payload), payload);
       }
@@ -570,7 +679,7 @@ export function createHandler(
       default:
         return apiError("not_found", `unknown path ${path}`);
     }
-  };
+  }
 }
 
 export function serve(

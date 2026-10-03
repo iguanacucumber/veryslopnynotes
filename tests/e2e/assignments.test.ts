@@ -20,6 +20,7 @@ import { isContractEvent } from "../../shared/contracts/events";
 import { CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
 import { createHandler } from "../../server/api/router";
 import { createMemoryStore } from "../../server/api/store";
+import { PairingService } from "../../server/api/pairing";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
 import { PronoteSessionStore } from "../../server/integrations/pronote-sessions";
 import { PronoteWriteError } from "../../server/domain/ports";
@@ -53,6 +54,22 @@ function citedFake(): LLMProvider {
       });
     },
   };
+}
+
+/**
+ * POST /v1/assignments/toggle est une ÉCRITURE Pronote : la route exige le jeton
+ * d'un device APPAIRÉ. `confirm` ne renvoie que `tokenHash` (le secret ne sort
+ * JAMAIS de l'API), on récupère le token brut côté service et on présente
+ * l'en-tête comme le ferait l'app déjà appairée.
+ */
+function paired(): { pairing: PairingService; auth: Record<string, string> } {
+  const pairing = new PairingService();
+  const started = pairing.start("pixel-e2e");
+  const confirmed = pairing.confirm(started.sessionId, started.code);
+  if (!confirmed.ok) throw new Error("appairage de test impossible");
+  const token = pairing.tokenOf(confirmed.device.id);
+  if (token === null) throw new Error("jeton de test indisponible");
+  return { pairing, auth: { authorization: `Bearer ${token}` } };
 }
 
 describe("e2e devoirs #75", () => {
@@ -124,11 +141,13 @@ describe("e2e devoirs #75", () => {
     });
     await sessions.authenticate({ ...creds, entKind: "ninegate" });
     const reader = new PronoteClientReader({ sessions });
-    const handler = createHandler(createMemoryStore(), undefined, null, undefined, undefined, reader);
+    const { pairing, auth } = paired();
+    const handler = createHandler(createMemoryStore(), pairing, null, undefined, undefined, reader);
 
     const res = await handler(
       new Request("http://127.0.0.1/v1/assignments/toggle", {
         method: "POST",
+        headers: auth,
         body: JSON.stringify({ assignmentId: "h1", done: true }),
       }),
     );
@@ -146,6 +165,7 @@ describe("e2e devoirs #75", () => {
     const again = await handler(
       new Request("http://127.0.0.1/v1/assignments/toggle", {
         method: "POST",
+        headers: auth,
         body: JSON.stringify({ assignmentId: "h1", done: false }),
       }),
     );

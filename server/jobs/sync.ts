@@ -147,8 +147,10 @@ function snapshotChanged(a: SyncSnapshot, b: SyncSnapshot): boolean {
  * Boucle de sync d'arrière-plan. `maxRuns` (0 = illimité, défaut inchangé)
  * borne le nombre de tours : un sync manuel/one-shot s'arrête tout seul au lieu
  * de laisser un intervalle tourner pour rien. Le tick ne se chevauche pas
- * (jamais deux relectures simultanées, comme le refresh de session) et un échec
- * ne crashe jamais l'ordonnanceur.
+ * (jamais deux relectures simultanées, comme le refresh de session : un tick
+ * déclenché pendant un tour en cours est IGNORÉ) et un échec ne crashe jamais
+ * l'ordonnanceur — l'erreur du tour ET celle du `onResult` de secours sont
+ * absorbées, donc aucune rejection ne s'échappe jamais.
  */
 export function startSyncLoop(
   source: SyncSource,
@@ -159,15 +161,27 @@ export function startSyncLoop(
 ): () => void {
   let stopped = false;
   let runs = 0;
+  // Exclusion mutuelle : un seul tour en vol. Sans ça, deux ticks se chevauchent,
+  // relisent le même snapshot et émettent deux fois le même GradeCreated.
+  let enCours = false;
   const tick = async () => {
-    if (stopped) return;
+    if (stopped || enCours) return;
+    enCours = true;
     runs += 1;
     try {
       onResult(await runSync(source, sink));
     } catch {
       // Le job ne crashe jamais l'ordonnanceur : run vide, snapshot conservé si dispo.
+      // Le rattrapage reste DANS le try : un `onResult` KO ici ne doit pas
+      // devenir une rejection non gérée (elle tuerait le process serveur).
       const kept = await sink.loadSnapshot().catch(() => null);
-      onResult({ firstRun: runs === 1, events: [], snapshot: kept ?? emptySnapshot() });
+      try {
+        onResult({ firstRun: runs === 1, events: [], snapshot: kept ?? emptySnapshot() });
+      } catch {
+        // Dispatcher de push KO et rattrapage KO : rien à notifier, on continue.
+      }
+    } finally {
+      enCours = false;
     }
     // Budget de tours atteint = arrêt propre (pas de tick orphelin).
     if (maxRuns > 0 && runs >= maxRuns) {

@@ -3,8 +3,10 @@
 // handlers déjà couverts ailleurs : un test vert ici prouve que le serveur
 // démarre réellement branché, pas qu'un WiringFactory existe sur le papier.
 // Fakes 100 % synthétiques, aucun accès réseau, aucun secret.
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { createApp } from "../../server/infrastructure/http";
+import type { App } from "../../server/infrastructure/http";
+import { PairingService } from "../../server/api/pairing";
 import { createLiveSync } from "../../server/infrastructure/live-sync";
 import { SnapshotStore } from "../../server/infrastructure/snapshot-store";
 import { isContractEvent } from "../../shared/contracts/events";
@@ -82,6 +84,50 @@ const ENV = {
 };
 
 describe("composition serveur (http.ts)", () => {
+  // POST /v1/assignments/toggle touche Pronote : la composition exige un device
+  // APPAIRÉ. `createApp` construit son PROPRE PairingService (non exporté) et
+  // l'API ne rend que `tokenHash` — le secret brut ne sort JAMAIS d'y. On
+  // instrumente donc `confirm` pour récupérer l'instance COMPOSÉE et son
+  // secret : l'appairage reste intégralement réel (vrai PIN, vrai secret
+  // aléatoire, sha256 comparé par le routeur), seule la lecture du secret est
+  // faite depuis le test — comme le provider push le fait en production.
+  const composed: PairingService[] = [];
+  let restore: (() => void) | null = null;
+  beforeAll(() => {
+    const base = PairingService.prototype.confirm;
+    const spy = spyOn(PairingService.prototype, "confirm").mockImplementation(function (
+      this: PairingService,
+      ...args: Parameters<PairingService["confirm"]>
+    ) {
+      composed.push(this);
+      return base.apply(this, args);
+    });
+    restore = () => spy.mockRestore();
+  });
+  afterAll(() => restore?.());
+
+  /** Appaire un device via l'API du serveur puis rend l'en-tête `Bearer`. */
+  async function paired(app: App): Promise<Record<string, string>> {
+    const start = await app.handler(
+      new Request("http://127.0.0.1/v1/pairing/start", {
+        method: "POST",
+        body: JSON.stringify({ deviceName: "pixel-wiring" }),
+      }),
+    );
+    const { sessionId, code } = (await start.json()) as { sessionId: string; code: string };
+    const confirm = await app.handler(
+      new Request("http://127.0.0.1/v1/pairing/confirm", {
+        method: "POST",
+        body: JSON.stringify({ sessionId, code }),
+      }),
+    );
+    expect(confirm.status).toBe(200);
+    const device = (await confirm.json()) as { id: string };
+    const token = composed[composed.length - 1]?.tokenOf(device.id);
+    if (token === null || token === undefined) throw new Error("jeton du device appairé indisponible");
+    return { authorization: `Bearer ${token}` };
+  }
+
   test("env sans PRONOTE_URL : le serveur démarre quand même, lectures vides, écritures 501", async () => {
     const app = createApp({ PORT: "3000" }, { reader: null, sessions: null });
     const health = await app.handler(new Request("http://127.0.0.1/v1/health"));
@@ -90,9 +136,11 @@ describe("composition serveur (http.ts)", () => {
     // Store vide = rapport de moyennes estimées sans note : jamais un 500.
     expect(grades.status).toBe(200);
     expect(isGradesResponse(await grades.json())).toBe(true);
+    const auth = await paired(app);
     const toggle = await app.handler(
       new Request("http://127.0.0.1/v1/assignments/toggle", {
         method: "POST",
+        headers: auth,
         body: JSON.stringify({ assignmentId: "a-1", done: true }),
       }),
     );
@@ -171,9 +219,11 @@ describe("composition serveur (http.ts)", () => {
   test("écriture confirmée : toggle et messagerie atteignent le reader, jamais le LLM", async () => {
     const { reader, calls } = fakeReader();
     const app = createApp(ENV, { reader, sessions: null });
+    const auth = await paired(app);
     const toggle = await app.handler(
       new Request("http://127.0.0.1/v1/assignments/toggle", {
         method: "POST",
+        headers: auth,
         body: JSON.stringify({ assignmentId: "a-1", done: true }),
       }),
     );
@@ -202,9 +252,11 @@ describe("composition serveur (http.ts)", () => {
       getGrades: async () => ({ items: { __untrusted: true, value: [] }, nextCursor: null }),
     } as never;
     const app = createApp(ENV, { reader, sessions: null });
+    const auth = await paired(app);
     const toggle = await app.handler(
       new Request("http://127.0.0.1/v1/assignments/toggle", {
         method: "POST",
+        headers: auth,
         body: JSON.stringify({ assignmentId: "a-1", done: false }),
       }),
     );

@@ -10,6 +10,7 @@
 // ponytail: conversion directe, pas de PDF-parse (excerpts texte seuls).
 // Upgrade: téléchargement PJ via proxy /v1/media + index versionné (#26).
 import type { ManualDoc } from "./manuals";
+import { truncateManualText } from "./manuals";
 import type { PedagogicResource, PronoteReader } from "../domain/ports";
 import { loadManualsConfig } from "./manuals-config";
 import type { ManualsConfig } from "./manuals-config";
@@ -35,7 +36,7 @@ function toManualDoc(r: PedagogicResource, index: number): ManualDoc | null {
     title: title.slice(0, 200),
     subject: r.subject.slice(0, 100),
     page: 1,
-    excerpt: excerpt.slice(0, 4000),
+    excerpt: truncateManualText(excerpt, 4000),
   };
 }
 
@@ -57,13 +58,27 @@ export async function collectResourceCorpus(options: {
   // 1) Session Pronote d'abord.
   if (options.reader?.getResources && options.accountId) {
     try {
-      const page = await options.reader.getResources(options.accountId, { limit: 100 });
       const docs: ManualDoc[] = [];
-      page.items.value.forEach((r, i) => {
-        counts[r.origin] = (counts[r.origin] ?? 0) + 1;
-        const doc = toManualDoc(r, i);
-        if (doc) docs.push(doc);
-      });
+      // Pagination : suivre nextCursor jusqu'au bout, sinon tout ce qui passe
+      // après la 1re page est perdu silencieusement. Cursor déjà vu = boucle
+      // infinie côté API, on s'arrête.
+      const seenCursors = new Set<string>();
+      let cursor: string | undefined;
+      do {
+        const page = await options.reader.getResources(options.accountId, { limit: 100, cursor });
+        page.items.value.forEach((r) => {
+          counts[r.origin] = (counts[r.origin] ?? 0) + 1;
+          const doc = toManualDoc(r, docs.length);
+          if (doc) docs.push(doc);
+        });
+        cursor = page.nextCursor ?? undefined;
+        if (cursor && seenCursors.has(cursor)) {
+          log("resources session -> cursor repete, pagination arretee");
+          cursor = undefined;
+        } else if (cursor) {
+          seenCursors.add(cursor);
+        }
+      } while (cursor);
       log(`resources session -> ${docs.length} docs`);
       if (docs.length > 0) return { docs, origin: "pronote-session", counts };
     } catch {

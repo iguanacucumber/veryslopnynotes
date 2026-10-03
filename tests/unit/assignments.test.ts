@@ -24,6 +24,7 @@ import { PronoteSessionStore } from "../../server/integrations/pronote-sessions"
 import { PronoteWriteError } from "../../server/domain/ports";
 import { createHandler } from "../../server/api/router";
 import { createMemoryStore } from "../../server/api/store";
+import { PairingService } from "../../server/api/pairing";
 import { isApiErrorBody } from "../../server/api/errors";
 import { downloadMedia, mediaActions, MediaProxyError } from "../../server/infrastructure/media-proxy";
 import {
@@ -242,23 +243,29 @@ describe("routes #75", () => {
     { ...BASE, id: "a-dimanche", dueDate: "2026-10-11T18:00:00.000Z" },
     { ...BASE, id: "a-ht", dueDate: "2026-10-15T08:00:00.000Z" },
   ];
-  function handler(actions: unknown = null) {
-    return createHandler(
-      createMemoryStore({ assignments: seed }),
-      undefined,
-      null,
-      undefined,
-      undefined,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      actions as any,
-    );
+  // /v1/assignments/toggle et /v1/media TOUCHENT Pronote : la route exige un
+  // jeton d'appareil appairé (avant, n'importe quel processus de l'hôte
+  // pouvait marquer un devoir « fait » ou lire les pièces d'un autre compte).
+  // Le token n'est jamais exposé par l'API (seul `tokenHash` sort du confirm) :
+  // ici il vient du service, comme le ferait le client appairé.
+  // Renvoie le handler et l'en-tête `Authorization` du device appairé.
+  function appaired(actions: unknown = null, media: unknown = null) {
+    const pairing = new PairingService();
+    const started = pairing.start("pixel-test");
+    const confirmed = pairing.confirm(started.sessionId, started.code);
+    if (!confirmed.ok) throw new Error("appairage de test impossible");
+    const token = pairing.tokenOf(confirmed.device.id);
+    if (token === null) throw new Error("jeton de test indisponible");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const h = createHandler(createMemoryStore({ assignments: seed }), pairing, null, undefined, undefined, actions as any, media as any);
+    return { h, auth: { authorization: `Bearer ${token}` } };
   }
   const actions = {
     setAssignmentDone: async (_a: string, id: string, done: boolean) => ({ ...BASE, id, done }),
   };
 
   test("GET /v1/assignments : contenu + PJ conservés, filtre semaine, 400 sans reflet", async () => {
-    const h = handler();
+    const { h } = appaired();
     const all = await (await h(new Request("http://127.0.0.1/v1/assignments"))).json();
     expect(isAssignmentsResponse(all)).toBe(true);
     expect(all.assignments).toHaveLength(3);
@@ -278,15 +285,55 @@ describe("routes #75", () => {
     const badText = await bad.text();
     expect(isApiErrorBody(JSON.parse(badText))).toBe(true);
     expect(badText).not.toContain("lundi");
-    // GET sur la route d'écriture = 405 (pas une écriture déguisée).
-    expect((await h(new Request("http://127.0.0.1/v1/assignments/toggle"))).status).toBe(405);
+    // Fenêtre STRICTEMENT ISO : ni coercition lenient de Date.parse (« 12 » ->
+    // 2001-12-01), ni junk collé à une date valide, ni paramètre géant. Un 400
+    // typé, jamais une fenêtre devinée (le client croyait sa liste vide).
+    for (const query of [
+      "?from=12",
+      "?to=2026",
+      `?from=2026-10-07T00:00:00.000Z${"z".repeat(40)}`,
+      `?weekStart=${"9".repeat(80)}`,
+    ]) {
+      const refuse = await h(new Request(`http://127.0.0.1/v1/assignments${query}`));
+      expect({ query: query.slice(0, 24), status: refuse.status }).toEqual({ query: query.slice(0, 24), status: 400 });
+      const corps = await refuse.text();
+      expect(isApiErrorBody(JSON.parse(corps))).toBe(true);
+      expect(corps).not.toContain("2026-10-07T00:00:00.000Zz");
+    }
+    // GET sur la route d'écriture = 405 (pas une écriture déguisée), avec Allow.
+    const methode = await h(new Request("http://127.0.0.1/v1/assignments/toggle"));
+    expect(methode.status).toBe(405);
+    expect(methode.headers.get("allow")).toBe("POST");
+    // HEAD là où GET existe (sonde de taille de contenu).
+    const head = await h(new Request("http://127.0.0.1/v1/assignments", { method: "HEAD" }));
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe("");
   });
 
-  test("POST toggle : 200 + AssignmentUpdated, 501 sans adaptateur, 401 session expirée", async () => {
-    const ok = await handler(actions)(
+  test("POST toggle : sans jeton 401 + zéro écriture, puis 200 + AssignmentUpdated, 501 sans adaptateur, 401 session expirée", async () => {
+    const corps = JSON.stringify({ assignmentId: "a-mardi", done: true });
+    // Écriture Pronote sans jeton d'appareil appairé : refus AVANT l'appel au
+    // port d'écriture (le geste n'atteint jamais Pronote).
+    let ecritures = 0;
+    const { h: sansJeton } = appaired({
+      setAssignmentDone: async (_a: string, id: string, done: boolean) => {
+        ecritures += 1;
+        return { ...BASE, id, done };
+      },
+    });
+    const refuse = await sansJeton(
+      new Request("http://127.0.0.1/v1/assignments/toggle", { method: "POST", body: corps }),
+    );
+    expect(refuse.status).toBe(401);
+    expect(refuse.headers.get("www-authenticate")).not.toBeNull();
+    expect({ ecritures }).toEqual({ ecritures: 0 });
+
+    const { h, auth } = appaired(actions);
+    const ok = await h(
       new Request("http://127.0.0.1/v1/assignments/toggle", {
         method: "POST",
-        body: JSON.stringify({ assignmentId: "a-mardi", done: true }),
+        headers: auth,
+        body: corps,
       }),
     );
     expect(ok.status).toBe(200);
@@ -296,11 +343,13 @@ describe("routes #75", () => {
     expect(body.event.type).toBe("AssignmentUpdated");
     expect(isContractEvent(body.event)).toBe(true);
 
+    const sansAdaptateur = appaired();
     expect(
-      (await handler()(
+      (await sansAdaptateur.h(
         new Request("http://127.0.0.1/v1/assignments/toggle", {
           method: "POST",
-          body: JSON.stringify({ assignmentId: "a-mardi", done: true }),
+          headers: sansAdaptateur.auth,
+          body: corps,
         }),
       )).status,
     ).toBe(501);
@@ -311,44 +360,55 @@ describe("routes #75", () => {
       ["unsupported", 501],
       ["network", 500],
     ] as const) {
-      const res = await handler({
+      const cas = appaired({
         setAssignmentDone: async () => {
           throw new PronoteWriteError("x", code);
         },
-      })(
+      });
+      const res = await cas.h(
         new Request("http://127.0.0.1/v1/assignments/toggle", {
           method: "POST",
-          body: JSON.stringify({ assignmentId: "a-mardi", done: true }),
+          headers: cas.auth,
+          body: corps,
         }),
       );
       expect({ code, status: res.status }).toEqual({ code, status: expected });
       expect(isApiErrorBody(await res.json())).toBe(true);
     }
-    const bad = await handler(actions)(
-      new Request("http://127.0.0.1/v1/assignments/toggle", { method: "POST", body: "{pas json" }),
+    const bad = await h(
+      new Request("http://127.0.0.1/v1/assignments/toggle", { method: "POST", headers: auth, body: "{pas json" }),
     );
     expect(bad.status).toBe(400);
   });
 
-  test("GET /v1/media : proxy serveur, ref en URL refusée avant tout appel", async () => {
-    let dl = 0;
+  test("GET /v1/media : proxy serveur sur le compte du SERVEUR, sans jeton 401, ref en URL refusée avant tout appel", async () => {
+    const appels: string[] = [];
     const media = {
       download: async (accountId: string, ref: string) => {
-        dl += 1;
+        appels.push(`${accountId}|${ref}`);
         return { name: "fiche.pdf", bytes: new Uint8Array([1, 2, 3]) };
       },
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const h = createHandler(createMemoryStore(), undefined, null, undefined, undefined, undefined, media as any);
-    const res = await h(
+    // Sans jeton d'appareil appairé : 401 et ZÉRO résolution (le compte d'un
+    // autre ne doit jamais pouvoir être ouvert par un appelant local).
+    const { h, auth } = appaired(null, media);
+    const anonime = await h(
       new Request("http://127.0.0.1/v1/media?accountId=acc1&ref=" + encodeURIComponent(REF.ref)),
+    );
+    expect(anonime.status).toBe(401);
+    expect(appels).toEqual([]);
+
+    const res = await h(
+      new Request("http://127.0.0.1/v1/media?accountId=acc1&ref=" + encodeURIComponent(REF.ref), { headers: auth }),
     );
     expect(res.status).toBe(200);
     expect(res.headers.get("content-disposition")).toContain("fiche.pdf");
-    expect(dl).toBe(1);
-    const sansRef = await h(new Request("http://127.0.0.1/v1/media"));
+    // L'accountId de la query est IGNORÉ : le serveur résout son propre compte
+    // (ici le compte appairé du store), jamais celui réclamé par le client.
+    expect(appels).toEqual([`seed-acc|${REF.ref}`]);
+    const sansRef = await h(new Request("http://127.0.0.1/v1/media", { headers: auth }));
     expect(sansRef.status).toBe(400);
-    expect(dl).toBe(1);
+    expect(appels).toHaveLength(1);
     // Le vrai proxy refuse une ref qui est une URL, sans sortir les octets.
     const sessions = {
       requireClient: () => {

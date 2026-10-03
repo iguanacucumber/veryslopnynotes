@@ -9,6 +9,7 @@ import { API_ROUTES } from "../../shared/contracts/api";
 import { createHandler } from "../../server/api/router";
 import type { MediaResolver } from "../../server/api/router";
 import { createMemoryStore } from "../../server/api/store";
+import { PairingService } from "../../server/api/pairing";
 import { MediaProxyError } from "../../server/infrastructure/media-proxy";
 import { cacheStatus } from "../../shared/contracts/cache";
 import {
@@ -42,6 +43,22 @@ const fakeMedia: MediaResolver = async (_accountId, ref) => {
   return { name: "photo.png", bytes: new Uint8Array([137, 80, 78, 71]) };
 };
 
+/**
+ * /v1/media lit les données d'un compte appairé : la route exige le jeton d'un
+ * device APPAIRÉ. `confirm` ne renvoie que `tokenHash` (le secret ne sort
+ * JAMAIS de l'API), on récupère donc le token brut côté service et on
+ * présente l'en-tête comme le ferait l'app.
+ */
+function paired(): { pairing: PairingService; auth: Record<string, string> } {
+  const pairing = new PairingService();
+  const started = pairing.start("pixel-e2e");
+  const confirmed = pairing.confirm(started.sessionId, started.code);
+  if (!confirmed.ok) throw new Error("appairage de test impossible");
+  const token = pairing.tokenOf(confirmed.device.id);
+  if (token === null) throw new Error("jeton de test indisponible");
+  return { pairing, auth: { authorization: `Bearer ${token}` } };
+}
+
 describe("e2e profil", () => {
   test("GET /v1/me : seed → payload contractuel → profil affiché par l'app", async () => {
     const handler = createHandler(createMemoryStore({ userInfo: syntheticUserInfo, periods: syntheticPeriods }));
@@ -59,7 +76,16 @@ describe("e2e profil", () => {
   });
 
   test("compte parent : /v1/me porte les enfants, la photo part par le proxy", async () => {
-    const handler = createHandler(createMemoryStore({ userInfo: syntheticParentUserInfo }), undefined, null, undefined, undefined, null, fakeMedia);
+    const { pairing, auth } = paired();
+    const handler = createHandler(
+      createMemoryStore({ userInfo: syntheticParentUserInfo }),
+      pairing,
+      null,
+      undefined,
+      undefined,
+      null,
+      fakeMedia,
+    );
     const me = await (await handler(new Request("http://127.0.0.1/v1/me"))).text();
     expect(JSON.parse(me).user.hasKids).toBe(true);
     expect(JSON.parse(me).user.kids.length).toBe(2);
@@ -67,12 +93,16 @@ describe("e2e profil", () => {
     const app = parseApp(me);
     expect(app?.photoRef).toBe(`${PHOTO_REF_PREFIX}file-fake-1`);
     const media = await handler(
-      new Request(`http://127.0.0.1/v1/media?ref=${app?.photoRef}&accountId=${syntheticParentUserInfo.accountId}`),
+      new Request(`http://127.0.0.1/v1/media?ref=${app?.photoRef}&accountId=${syntheticParentUserInfo.accountId}`, {
+        headers: auth,
+      }),
     );
     expect(media.status).toBe(200);
     expect(media.headers.get("content-type")).toBe("image/png");
     // Média absent = 404 propre (l'app retombe sur les initiales).
-    const missing = await handler(new Request("http://127.0.0.1/v1/media?ref=photo:absent&accountId=acc-fake-parent"));
+    const missing = await handler(
+      new Request("http://127.0.0.1/v1/media?ref=photo:absent&accountId=acc-fake-parent", { headers: auth }),
+    );
     expect(missing.status).toBe(404);
   });
 

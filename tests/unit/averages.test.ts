@@ -64,10 +64,14 @@ describe("moyennes parité Papillon (#74)", () => {
   test("3 algorithmes : valeurs de référence upstream", () => {
     expect(subjectAlgorithmAverage(GRADES)).toBeCloseTo(15.3, 9);
     expect(weightedAlgorithmAverage(GRADES)).toBeCloseTo(15.135135135135137, 9);
-    expect(medianAlgorithmAverage(GRADES)).toBeCloseTo(14.5, 9);
+    // Médiane : la majoration `b1` est IGNORÉE (une majoration n'est pas une
+    // note /20 ordinaire, cf. docstring averages.ts) -> médiane des 5 notes
+    // restantes [10, 12, 14, 15, 18] = 14. L'ancienne référence 14.5 incluait
+    // la majoration à tort (cf. tests/unit/bugs-domain-jobs.test.ts).
+    expect(medianAlgorithmAverage(GRADES)).toBeCloseTo(14, 9);
     expect(averageWith("subject", GRADES)).toBeCloseTo(15.3, 9);
     expect(averageWith("weighted", GRADES)).toBeCloseTo(15.135135135135137, 9);
-    expect(averageWith("median", GRADES)).toBeCloseTo(14.5, 9);
+    expect(averageWith("median", GRADES)).toBeCloseTo(14, 9);
   });
 
   test("historique : moyenne recalculée note par note (ordre chronologique)", () => {

@@ -51,7 +51,13 @@ export function isCacheableResource(v: unknown): v is CacheableResource {
   return typeof v === "string" && (CACHEABLE_RESOURCES as readonly string[]).includes(v);
 }
 
-/** Frais si fetchedAt + TTL couvre now, périmé sinon (badge app). */
+/**
+ * Frais si fetchedAt + TTL couvre now, périmé sinon (badge app).
+ * `fetchedAt` dans le futur (dérive d'horloge appareil) = staleness
+ * indéterminable, donc « périmé » : on ne garde jamais une entrée fraîche sur
+ * une horloge qui recule.
+ */
 export function cacheStatus(resource: CacheableResource, fetchedAt: number, now: number): CacheStatus {
-  return now - fetchedAt <= CACHE_TTL_MS[resource] ? "fresh" : "stale";
+  const elapsed = now - fetchedAt;
+  return elapsed >= 0 && elapsed <= CACHE_TTL_MS[resource] ? "fresh" : "stale";
 }

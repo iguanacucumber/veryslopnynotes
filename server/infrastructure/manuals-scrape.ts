@@ -7,7 +7,9 @@
 // Contenu retourné = brut à marquer Untrusted (markManualsUntrusted) avant IA.
 // ponytail: squelette extraction texte générique, pas de sélecteurs par éditeur.
 // Upgrade: sélecteurs par plateforme + pagination + PDF-detect si corpus réel.
+import { load } from "cheerio";
 import type { ManualsConfig } from "./manuals-config";
+import { truncateManualText } from "./manuals";
 import type { ManualDoc } from "./manuals";
 
 export class ScrapeManualsError extends Error {
@@ -46,11 +48,18 @@ export async function isPlaywrightAvailable(): Promise<boolean> {
   }
 }
 
+// Extraction texte : script/style retirés, entités HTML DÉCODÉES (« &eacute; »,
+// « &nbsp; » laissés tels quels = extrait illisible et introuvable à la
+// recherche). Cheerio déjà dépendance (cf. ent-ninegate), zéro ajoutée.
+// Espace ajouté après chaque élément : sinon deux paragraphes se collent.
 function stripTags(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
+  const $ = load(html);
+  $("script,style").remove();
+  $("*").each((_i, el) => {
+    $(el).append(" ");
+  });
+  return $.root()
+    .text()
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -78,10 +87,22 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     );
     const page = await context.newPage();
     log(`scrape ${config.platform} -> 1 page`);
-    await page.goto(opts.startUrl, { timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS });
+    // Statut HTTP vérifié AVANT toute extraction : une page d'erreur (404/500)
+    // ou un mur de connexion ne doit jamais devenir un ManualDoc (le corpus
+    // citerait sinon « Page introuvable » comme source de corrigé).
+    const response = await page
+      .goto(opts.startUrl, { timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS })
+      .catch(() => null);
+    const status = typeof response?.status === "function" ? response.status() : 0;
+    const ok = typeof response?.ok === "function" ? response.ok() : status < 400;
+    if (!response || !ok || status >= 400) {
+      throw new ScrapeManualsError(
+        `réponse HTTP ${status || "inconnue"} sur ${config.platform} — page non ingérée`,
+      );
+    }
     const title = (await page.title().catch(() => config.platform)) || config.platform;
     const html: string = await page.content().catch(() => "");
-    const text = stripTags(html).slice(0, 4000);
+    const text = truncateManualText(stripTags(html), 4000);
     await context.storageState({ path: authFile }).catch(() => {});
     await context.close().catch(() => {});
     if (!text) return [];

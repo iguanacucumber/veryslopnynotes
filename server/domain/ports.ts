@@ -3,6 +3,7 @@
 // et server/integrations/.
 // Voir docs/architecture/INVARIANTS.md (I2, I3, I5, I6, I7).
 import type { AbsenceRecord, Assignment, CanteenMenu, Capabilities, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
+import { isOpaqueMediaRef } from "../../shared/contracts/models";
 
 export type Untrusted<T = string> = { readonly __untrusted: true; readonly value: T };
 
@@ -181,6 +182,9 @@ export interface PronoteReader {
   getDiscussionRecipients?(accountId: string): Promise<PronotePage<Recipient>>;
 }
 
+/** Longueur max d'une `ref` de ressource pédagogique (même borne que les PJ). */
+export const PEDAGOGIC_REF_MAX_CHARS = 200;
+
 /** Ressource pédagogique via session Pronote (contenu cours, fichier joint, manuel lié). */
 export interface PedagogicResource {
   readonly id: string;
@@ -206,7 +210,10 @@ export function isPedagogicResource(v: unknown): v is PedagogicResource {
     typeof r["title"] === "string" &&
     typeof r["excerpt"] === "string" &&
     (r["origin"] === "lesson-content" || r["origin"] === "homework-file") &&
-    typeof r["ref"] === "string"
+    // Même contrainte que les PJ de devoir : une `ref` est une référence opaque
+    // résolue par le proxy serveur, jamais une URL (`://`, `//`, `data:`,
+    // UNC). Sans ce contrôle, une adresse Pronote/ENT sortait du contrat.
+    isOpaqueMediaRef(r["ref"], PEDAGOGIC_REF_MAX_CHARS)
   );
 }
 

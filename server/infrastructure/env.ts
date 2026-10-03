@@ -10,9 +10,14 @@ export function loadRequiredEnv(
   env: Record<string, string | undefined>,
   keys: readonly string[],
 ): Record<string, string> | null {
-  const out: Record<string, string> = {};
+  // Prototype nu : `out[k] = v` sur "__proto__" stocke une vraie clé au lieu de
+  // passer par le setter de Object.prototype (secret perdu à la lecture).
+  const out = Object.create(null) as Record<string, string>;
   for (const k of keys) {
-    const v = cleanEnvValue(env[k]);
+    // only own-property : une clé héritée ("toString", "constructor", ...)
+    // ABSENTE. `Object.hasOwn` évite le crash sur une fonction prototype.
+    // n'est PAS une variable d'env, elle vaut « absente ».
+    const v = Object.hasOwn(env, k) ? cleanEnvValue(env[k]) : "";
     if (!v) return null;
     out[k] = v;
   }
