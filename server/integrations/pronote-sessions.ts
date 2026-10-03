@@ -73,8 +73,17 @@ function mapRefreshCode(err: unknown): PronoteAuthErrorCode {
   const msg = err instanceof Error ? err.message : "";
   if (/timeout|timed out/i.test(msg)) return "timeout";
   if (/network|fetch failed|injoignable/i.test(msg)) return "network";
+  if (/identifiants|credentials|login information|wrong/i.test(msg)) return "invalid_credentials";
   if (/session|expired|expir/i.test(msg)) return "session_expired";
   return "ent_unavailable";
+}
+
+/** Codes qui tuent la session : l'app doit se ré-appairer (jamais un retry). */
+const FATAL_REFRESH_CODES = new Set<PronoteAuthErrorCode>(["session_expired", "invalid_credentials"]);
+
+/** Clé de session normalisée : l'accountId vient de l'appelant, pas de nous. */
+function key(accountId: string): string {
+  return (accountId ?? "").trim();
 }
 
 export class PronoteSessionStore implements PronoteProvider {
@@ -87,6 +96,12 @@ export class PronoteSessionStore implements PronoteProvider {
   private readonly now: () => number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private readonly clients = new Map<string, any>();
+  /**
+   * accountId → compteur d'invalidation. Un `invalidate()` l'incrémente : une
+   * renewal partie avant le logout se voit à son retour et ne peut pas
+   * ressusciter la session (cf. refreshSession).
+   */
+  private readonly epochs = new Map<string, number>();
 
   constructor(options: PronoteSessionStoreOptions & { clientFactory?: ClientFactory }) {
     if (!options.pronoteUrl) throw new Error("pronoteUrl requise (injectée, jamais en dur)");
@@ -111,8 +126,11 @@ export class PronoteSessionStore implements PronoteProvider {
       throw new PronoteAuthError("invalid credentials", "invalid_credentials");
     }
     try {
-      // ENT Ninegate (entKind réservé pour multi-ENT futurs, seul ninegate supporté v1).
-      if (entKind !== "ninegate" && entKind !== "cas" && entKind !== "educonnect") {
+      // Seul le SSO Ninegate est implémenté (ent-ninegate.ts). `cas` /
+      // `educonnect` ne doivent surtout pas être joués en silence par la
+      // chaîne Ninegate : les identifiants partiraient vers un ENT que le
+      // compte n'a pas configuré. Refus franc, pas de faux SSO.
+      if (entKind !== "ninegate") {
         this.logger("auth -> error invalid_credentials");
         throw new PronoteAuthError("invalid credentials", "invalid_credentials");
       }
@@ -140,27 +158,29 @@ export class PronoteSessionStore implements PronoteProvider {
   }
 
   isAuthenticated(accountId: string): boolean {
-    return this.clients.has(accountId);
+    return this.clients.has(key(accountId));
   }
 
   /** Client pronotets authentifié, ou null si re-auth requise. Jamais loggé. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getClient(accountId: string): any | null {
-    return this.clients.get(accountId) ?? null;
+    return this.clients.get(key(accountId)) ?? null;
   }
 
   /** Exige un client, sinon session_expired (caller doit re-authentifier). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   requireClient(accountId: string): any {
-    const client = this.clients.get(accountId);
+    const client = this.clients.get(key(accountId));
     if (!client) throw new PronoteAuthError("session expired", "session_expired");
     return client;
   }
 
   /** Invalide la session (changement IP, logout). Re-auth via authenticate(). */
   invalidate(accountId: string): void {
-    this.clients.delete(accountId);
-    this.refresher?.forget(accountId);
+    const id = key(accountId);
+    this.clients.delete(id);
+    this.epochs.set(id, (this.epochs.get(id) ?? 0) + 1);
+    this.refresher?.forget(id);
     this.logger("auth -> invalidate");
   }
 
@@ -168,27 +188,44 @@ export class PronoteSessionStore implements PronoteProvider {
    * #87 : validation avant lecture. Renouvelle la session si elle approche de
    * l'expiration (5 min) : sérialisé par compte, timeout 10 s, retry ≤ 1
    * (cf. SessionRefresher). Sans renewal injectée = no-op, donc les appels
-   * existants ne sont pas cassés. Une session expirée (renewal impossible)
-   * invalide le client : le lecteur remonte alors `session_expired` et l'app
-   * se ré-appaire.
+   * existants ne sont pas cassés. Une session expirée ou des credentials
+   * refusées par l'ENT invalident le client : le lecteur remonte alors
+   * `session_expired`/`invalid_credentials` et l'app se ré-appaire.
    */
   async refreshSession(accountId: string): Promise<void> {
     if (!this.refresher) return;
+    const id = key(accountId);
+    // Jamais de login SSO pour un accountId jamais appairé : la clé vient de
+    // l'appelant (route HTTP), une renewal y planterait une session Pronote
+    // sous une clé arbitraire. `requireClient` fera échouer la lecture.
+    if (!this.clients.has(id)) {
+      this.logger("session refresh -> ignore (compte non appairé)");
+      return;
+    }
+    const epoch = this.epochs.get(id) ?? 0;
     try {
-      await this.refresher.refresh(accountId);
+      await this.refresher.refresh(id);
     } catch (err) {
       const code = err instanceof PronoteAuthError ? err.code : mapRefreshCode(err);
       // Session DÉFINITIVEMENT morte : client invalidé, l'app se ré-appaire.
       // Erreur réseau/timeout : la session ouverte reste valable, on remonte
       // seulement l'erreur (la lecture échoue, l'app réessaiera plus tard) —
       // invalider sur un timeout ferait ré-appairer pour rien.
-      if (code === "session_expired") {
-        this.clients.delete(accountId);
-        this.refresher.forget(accountId);
+      if (FATAL_REFRESH_CODES.has(code)) {
+        this.clients.delete(id);
+        this.refresher.forget(id);
       }
       // Erreur typée, jamais un secret ni un détail de renewal dans le message.
       this.logger(`session refresh -> error ${code}`);
       throw err instanceof PronoteAuthError ? err : new PronoteAuthError("session refresh failed", code);
+    } finally {
+      // Logout pendant la renewal : le compte a été invalidé entre-temps, donc
+      // le client que la renewal vient de (re)créer est effacé — pas de
+      // résurrection après `invalidate()`.
+      if ((this.epochs.get(id) ?? 0) !== epoch) {
+        this.clients.delete(id);
+        this.refresher.forget(id);
+      }
     }
   }
 

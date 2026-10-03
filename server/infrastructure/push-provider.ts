@@ -5,6 +5,11 @@
 // Transport : fetch natif vers PUSH_PROVIDER (URL http(s)) ou dégradé noop
 // si provider symbolique. Clé privée chargée (preuve config) mais jamais
 // envoyée ni loguée.
+// `delivers` = « ce provider transmet-il vraiment ? » : noop et endpoint
+// symbolique valent false, donc l'appelant ne peut pas compter une livraison
+// qui n'a pas eu lieu (honnêteté du résultat de job).
+// Un corps de notification ne sort JAMAIS en http:// vers un hôte distant :
+// seul le loopback (test d'intégration local) est toléré en clair.
 // ponytail: squelette sans JWT VAPID ES256 complet ni chiffrement WebPush
 // aes128gcm. Upgrade #23 : lib épinglée+audit+MIT ou JOSE stdlib + subscription
 // (endpoint/p256dh/auth) via StorageProvider.
@@ -50,7 +55,27 @@ function isHttpUrl(v: string): boolean {
   return /^https?:\/\//i.test(v);
 }
 
+/** 127.0.0.0/8, ::1 ou localhost = machine locale (seuls cas http tolérés). */
+function isLoopbackHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  return h === "localhost" || h === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
+}
+
+/** true = le endpoint transmet vraiment (https distant, ou http loopback). */
+export function deliversPush(endpoint: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    return false;
+  }
+  if (url.protocol === "https:") return true;
+  return url.protocol === "http:" && isLoopbackHost(url.hostname);
+}
+
 export class NoopPushProvider implements PushProvider {
+  /** Transmet RIEN : l'appelant ne doit pas compter une livraison. */
+  readonly delivers = false;
   private readonly logger: (message: string) => void;
   constructor(opts: PushProviderOptions = {}) {
     this.logger = opts.logger ?? (() => {});
@@ -62,6 +87,8 @@ export class NoopPushProvider implements PushProvider {
 }
 
 export class HttpPushProvider implements PushProvider {
+  /** false si endpoint symbolique ou http:// non loopback (rien ne part). */
+  readonly delivers: boolean;
   private readonly config: PushConfig;
   private readonly fetchFn: typeof fetch;
   private readonly logger: (message: string) => void;
@@ -72,6 +99,7 @@ export class HttpPushProvider implements PushProvider {
       throw new PushError("push config incomplète");
     }
     this.config = config;
+    this.delivers = deliversPush(config.provider);
     this.fetchFn = opts.fetchFn ?? globalThis.fetch.bind(globalThis);
     this.logger = opts.logger ?? (() => {});
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -83,6 +111,12 @@ export class HttpPushProvider implements PushProvider {
     if (!isHttpUrl(this.config.provider)) {
       this.logger(`push skip ${short} (provider non-URL)`);
       return;
+    }
+    if (!this.delivers) {
+      // Note et empreinte de device ne quittent JAMAIS la machine en clair.
+      // Refus AVANT tout fetch : rien n'est transmis, rien n'est compté.
+      this.logger(`push skip ${short} (endpoint http distant non chiffré)`);
+      throw new PushError("push endpoint http:// distant refusé : chiffrement obligatoire");
     }
     const signal = AbortSignal.timeout(this.timeoutMs);
     let res: Response;

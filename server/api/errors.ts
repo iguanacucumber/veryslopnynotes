@@ -29,9 +29,28 @@ const STATUS: Record<ApiErrorCode, number> = {
   internal: 500,
 };
 
-export function apiError(code: ApiErrorCode, message: string): Response {
+/**
+ * Défi d'authentification d'un 401 (RFC 9110 §11.6.1) : sans cet en-tête le
+ * client ne sait pas quel jeton présenter. Le type de jeton est le sien
+ * (device appairé), jamais un indice sur la cause du refus : 401 est
+ * INDISTINGUABLE (inexistant / expiré / révoqué / mauvais format).
+ */
+const AUTH_CHALLENGE: Readonly<Record<string, string>> = {
+  "www-authenticate": 'Bearer realm="api"',
+};
+
+/**
+ * Réponse d'erreur typée. `extraHeaders` porte les en-têtes exigés par le
+ * statut (`Allow` sur un 405, `WWW-Authenticate` sur un 401) ; un 401 les
+ * reçoit toujours, qu'on les passe ou non.
+ */
+export function apiError(code: ApiErrorCode, message: string, extraHeaders?: Readonly<Record<string, string>>): Response {
   const body: ApiErrorBody = { error: { code, message } };
-  return Response.json(body, { status: STATUS[code] });
+  const headers = new Headers(extraHeaders);
+  if (code === "unauthorized" && !headers.has("www-authenticate")) {
+    for (const [k, v] of Object.entries(AUTH_CHALLENGE)) headers.set(k, v);
+  }
+  return Response.json(body, { status: STATUS[code], headers });
 }
 
 export function isApiErrorBody(v: unknown): v is ApiErrorBody {

@@ -29,12 +29,15 @@ export function formatSource(doc: ManualDoc): string {
   return `${doc.platform} • ${doc.title} • p.${doc.page}`;
 }
 
+// Normalisation Unicode : on garde TOUTES les lettres/chiffres (latin, CJK,
+// grec, arabe...) après retrait des diacritiques, sinon une requête hors
+// alphabet latin ne peut jamais retrouver son chunk.
 function normalize(text: string): string {
   return text
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -42,6 +45,40 @@ function normalize(text: string): string {
 function words(text: string): string[] {
   const n = normalize(text);
   return n ? n.split(" ") : [];
+}
+
+const HIGH_SURROGATE = { min: 0xd800, max: 0xdbff };
+
+function endsWithHighSurrogate(s: string): boolean {
+  if (!s.length) return false;
+  const c = s.charCodeAt(s.length - 1);
+  return c >= HIGH_SURROGATE.min && c <= HIGH_SURROGATE.max;
+}
+
+// Troncature sans jamais séparer une paire de surrogates (sinon demi-caractère
+// orphelin en base). Si la coupe tombe sur un surrogate haut, on le remplace
+// par "…" : longueur conservée, texte bien formé.
+export function truncateManualText(text: string, maxLen: number): string {
+  if (maxLen <= 0) return "";
+  if (text.length <= maxLen) return text;
+  const cut = text.slice(0, maxLen);
+  return endsWithHighSurrogate(cut) ? `${cut.slice(0, -1)}…` : cut;
+}
+
+// Coupe dure d'un mot plus long que maxLen, sans casser un surrogate.
+function hardSplitWord(word: string, maxLen: number): string[] {
+  if (maxLen < 1) return [word];
+  const out: string[] = [];
+  let rest = word;
+  while (rest.length > maxLen) {
+    let piece = rest.slice(0, maxLen);
+    if (endsWithHighSurrogate(piece)) piece = piece.slice(0, -1);
+    if (!piece) break;
+    out.push(piece);
+    rest = rest.slice(piece.length);
+  }
+  if (rest) out.push(rest);
+  return out;
 }
 
 // Découpe excerpt en chunks <= maxLen, frontières mots. Pur, déterministe.
@@ -59,6 +96,17 @@ export function chunkManual(doc: ManualDoc, maxLen = 500): ManualChunk[] {
     curLen = 0;
   };
   for (const t of tokens) {
+    // Un mot plus long que maxLen doit être coupé, sinon le chunk dépasse la
+    // limite promise (mot collé / URL / tableau sans espaces).
+    if (t.length > maxLen) {
+      flush();
+      for (const piece of hardSplitWord(t, maxLen)) {
+        cur = [piece];
+        curLen = piece.length;
+        flush();
+      }
+      continue;
+    }
     const add = (cur.length ? 1 : 0) + t.length;
     if (curLen + add > maxLen && cur.length) flush();
     cur.push(t);
@@ -139,21 +187,41 @@ export function parseManualSource(source: string): ParsedManualSource {
 }
 
 // Construit chunks + persiste + écrit manifeste. Idempotent : rebuild écrase.
+// Deux docs de même docId ne s'écrasent pas (suffixe d'occurrence sur la clé),
+// et les chunks du manifeste précédent absents du nouveau sont purgés.
 export async function buildManualIndex(
   store: StorageProvider,
   docs: ManualDoc[],
   maxLen = 500,
 ): Promise<{ index: ManualIndex; chunks: ManualChunk[] }> {
   const chunks = docs.flatMap((d) => chunkManual(d, maxLen));
-  await saveManualChunks(store, chunks);
+  const keys = uniqueChunkKeys(chunks);
+  const previous = await loadManualIndex(store);
+  await saveManualChunks(store, chunks, keys);
+  if (previous) {
+    const kept = new Set(keys);
+    for (const key of previous.chunkKeys) if (!kept.has(key)) await store.set(key, EMPTY);
+  }
   const index: ManualIndex = {
     version: MANUAL_INDEX_VERSION,
-    chunkKeys: chunks.map((c) => chunkKey(c.docId, c.index)),
+    chunkKeys: keys,
     chunkCount: chunks.length,
     builtAt: new Date().toISOString(),
   };
   await store.set(MANUAL_INDEX_KEY, enc.encode(JSON.stringify(index)));
   return { index, chunks };
+}
+
+// chunkKey = docId:index : deux chunks distincts de même docId:index (docId
+// dupliqué par le scraper) doivent rester adressables -> suffixe #n.
+function uniqueChunkKeys(chunks: ManualChunk[]): string[] {
+  const seen = new Map<string, number>();
+  return chunks.map((c) => {
+    const base = chunkKey(c.docId, c.index);
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n === 0 ? base : `${base}#${n + 1}`;
+  });
 }
 
 function isManualIndex(v: unknown): v is ManualIndex {
@@ -187,7 +255,7 @@ export async function loadIndexedChunks(store: StorageProvider): Promise<ManualC
   const out: ManualChunk[] = [];
   for (const key of index.chunkKeys) {
     const raw = await store.get(key);
-    if (!raw) continue;
+    if (!raw || raw.length === 0) continue;
     try {
       const v = JSON.parse(dec.decode(raw)) as ManualChunk;
       if (v.docId && typeof v.text === "string" && typeof v.source === "string") out.push(v);
@@ -217,10 +285,19 @@ function chunkKey(docId: string, index: number): string {
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+/** Valeur vide = chunk purgé (StorageProvider n'a pas de delete). */
+const EMPTY = new Uint8Array(0);
 
-export async function saveManualChunks(store: StorageProvider, chunks: ManualChunk[]): Promise<void> {
-  for (const c of chunks) {
-    await store.set(chunkKey(c.docId, c.index), enc.encode(JSON.stringify(c)));
+// keys optionnel = clés calculées par le caller (docId dupliqué), sinon
+// chunkKey(docId, index).
+export async function saveManualChunks(
+  store: StorageProvider,
+  chunks: ManualChunk[],
+  keys?: readonly string[],
+): Promise<void> {
+  for (const [i, c] of chunks.entries()) {
+    const key = keys?.[i] ?? chunkKey(c.docId, c.index);
+    await store.set(key, enc.encode(JSON.stringify(c)));
   }
 }
 
@@ -230,7 +307,7 @@ export async function loadManualChunk(
   index: number,
 ): Promise<ManualChunk | null> {
   const raw = await store.get(chunkKey(docId, index));
-  if (!raw) return null;
+  if (!raw || raw.length === 0) return null;
   try {
     const v = JSON.parse(dec.decode(raw)) as ManualChunk;
     if (!v.docId || typeof v.text !== "string" || typeof v.source !== "string") return null;

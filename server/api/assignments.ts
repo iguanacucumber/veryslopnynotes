@@ -27,7 +27,7 @@ export interface MediaActions {
 }
 
 /** accountId absent = serveur mono-compte résout sa session appairée (côté
- * intégration). La valeur reste BORNÉE et jamais reflétée dans une erreur.
+ *  intégration). La valeur reste BORNÉE et jamais reflétée dans une erreur.
  */
 function accountParam(raw: string | null): string {
   return (raw ?? "").trim().slice(0, 64);
@@ -71,6 +71,8 @@ export async function handleAssignmentsToggle(
   }
   if (!isAssignmentsToggleRequest(body)) return apiError("bad_request", "invalid toggle request");
   try {
+    // accountId = INDICE borné, jamais une identité : le serveur résout son
+    // compte appairé (resolveAccountId de la composition root ignore l'indice).
     const assignment = await actions.setAssignmentDone(body.accountId ?? "", body.assignmentId, body.done);
     if (!isAssignment(assignment)) return apiError("internal", "invalid payload");
     const event: ContractEvent<"AssignmentUpdated", Assignment> = {

@@ -19,18 +19,30 @@ const SEED_PREFS: SubjectPrefs[] = [
   { subject: "Français", emoji: "📚", updatedAt: "2026-09-20T10:00:00.000Z" },
 ];
 
+/**
+ * Clé d'une prefs matière : casse et espaces internes indifférents. Sans ça,
+ * « Maths » et « maths » deviennent DEUX entrées (le PUT ne remplace plus,
+ * deux chips pour une matière) et le garde-fou SUBJECT_PREFS_MAX_COUNT est
+ * contournable de la même façon. La valeur stockée reste celle du dernier PUT
+ * (le libellé affiché est celui de l'app).
+ */
+function prefsKey(subject: string): string {
+  return subject.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 export function createSubjectPrefsMemoryStore(seed: SubjectPrefs[] = SEED_PREFS): SubjectPrefsStore {
   const map = new Map<string, SubjectPrefs>();
-  for (const p of seed) if (isSubjectPrefs(p)) map.set(p.subject, structuredClone(p));
+  for (const p of seed) if (isSubjectPrefs(p)) map.set(prefsKey(p.subject), structuredClone(p));
   return {
     list: () => [...map.values()].map((p) => structuredClone(p)),
     upsert: (prefs: SubjectPrefs) => {
       if (!isSubjectPrefs(prefs)) throw new Error("prefs matière invalides (contrat)");
+      const key = prefsKey(prefs.subject);
       // Borne du nombre de matières : pas de store infini via PUT répétés.
-      if (!map.has(prefs.subject) && map.size >= SUBJECT_PREFS_MAX_COUNT) {
+      if (!map.has(key) && map.size >= SUBJECT_PREFS_MAX_COUNT) {
         throw new Error("trop de matières personnalisées");
       }
-      map.set(prefs.subject, structuredClone(prefs));
+      map.set(key, structuredClone(prefs));
     },
   };
 }

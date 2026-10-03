@@ -282,16 +282,25 @@ export function isAveragesReport(v: unknown): v is AveragesReport {
 // par le proxy serveur. Jamais d'hôte Pronote/ENT dans l'app (I1).
 const ABSOLUTE_REF_RE = /:\/\/|^\/\/|data:|\\\\/i;
 
+/**
+ * `ref` interne bornée : non vide, pas une adresse, pas de caractère de
+ * contrôle. Source unique partagée par toutes les références média du contrat
+ * (PJ de devoir ET ressource pédagogique) : même forme = même garde.
+ */
+export function isOpaqueMediaRef(v: unknown, max: number): boolean {
+  if (!isNonEmptyString(v)) return false;
+  if ((v as string).length > max) return false;
+  if (ABSOLUTE_REF_RE.test(v as string)) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(v as string)) return false;
+  return true;
+}
+
 export function isAttachmentRef(v: unknown): v is AttachmentRef {
   if (!isRecord(v)) return false;
   if (!isNonEmptyString(v["id"])) return false;
   if (!isBoundedString(v["label"], ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS)) return false;
-  const ref = v["ref"];
-  if (!isNonEmptyString(ref)) return false;
-  if (ref.length > ASSIGNMENT_REF_MAX_CHARS) return false;
-  if (ABSOLUTE_REF_RE.test(ref)) return false;
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f\u007f]/.test(ref)) return false;
+  if (!isOpaqueMediaRef(v["ref"], ASSIGNMENT_REF_MAX_CHARS)) return false;
   return true;
 }
 
@@ -523,7 +532,9 @@ export interface NewsItem {
 
 /** Borné sans exigence de contenu : champ externe optionnel (chaîne vide tolérée). */
 function isOptionalBoundedString(v: unknown, max: number): v is string {
-  return typeof v === "string" && v.length <= max;
+  // Borné en points de code comme `isBoundedText` : une coupure ne doit jamais
+  // laisser un surrogate isolé (voir `pronote-client-reader.ts` `bounded`).
+  return typeof v === "string" && (v.length <= max ? true : [...v].length <= max);
 }
 
 export function isNewsItem(v: unknown): v is NewsItem {

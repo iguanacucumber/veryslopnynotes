@@ -14,6 +14,7 @@ import {
   isTokenHash,
 } from "../../shared/contracts/models";
 import type { Device, RevisionSheet } from "../../shared/contracts/models";
+import { localDay } from "../../shared/contracts/api";
 import type { ExamCandidate } from "./exams";
 
 export const REVISION_KIND = "fiche-v1" as const;
@@ -40,6 +41,11 @@ export interface RevisionKv {
 
 const SHEET_PREFIX = "revision:sheet:";
 const INDEX_KEY = "revision:index";
+// Journal append-only des ids : l'index est réécrit à chaque ajout, donc une
+// écriture tronquée/perdue le rend illisible et les fiches DÉJÀ stockées
+// devenaient inatteignables. Le journal ne perd jamais d'id, on ne fait que
+// grossir, et il sert de secours à la lecture comme à l'écriture.
+const INDEX_JOURNAL_KEY = "revision:index:journal";
 
 function clean(s: string, max: number): string {
   const t = s.trim().replace(/\s+/g, " ");
@@ -50,15 +56,33 @@ function sheetKey(id: string): string {
   return `${SHEET_PREFIX}${id}`;
 }
 
-// Id déterministe par examen : rejouable, zéro doublon.
+/**
+ * Id déterministe par examen : rejouable, zéro doublon. L'assainissement est
+ * PERDANT (« a/b » et « a?b » sont deux devoirs distincts qui donneraient le
+ * même « fiche-a-b », l'un écrasant l'autre) : un suffixe dérivé de l'id brut
+ * (FNV-1a 32 bits, collision practically impossible) garantit l'unicité tout
+ * en gardant un id lisible et rejouable.
+ */
 export function revisionIdForExam(examId: string): string {
-  const safe = examId.trim().replace(/[^A-Za-z0-9_-]+/g, "-").slice(0, 80) || "exam";
-  return `fiche-${safe}`;
+  const raw = examId.trim();
+  const safe = raw.replace(/[^A-Za-z0-9_-]+/g, "-").slice(0, 80);
+  const base = safe || "exam";
+  return raw === safe ? `fiche-${base}` : `fiche-${base}-${fnv1a(raw)}`;
+}
+
+/** FNV-1a 32 bits en base 36 : suffixe court, déterministe, sans collision pratique. */
+function fnv1a(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
 }
 
 export function buildRevisionTitle(exam: ExamCandidate): string {
   const subject = exam.subject.trim() || "matière";
-  return clean(`Fiche révision ${subject} — ${exam.matched} ${exam.date.slice(0, 10)}`, 120);
+  return clean(`Fiche révision ${subject} — ${exam.matched} ${localDay(exam.date)}`, 120);
 }
 
 // Seule confiance haute pousse en auto (I7). Incertain = app confirme.
@@ -69,7 +93,7 @@ export function shouldPushForExam(exam: ExamCandidate): boolean {
 export function formatRevisionPush(exam: ExamCandidate): { title: string; body: string } {
   const subject = exam.subject.trim() || "matière";
   const title = clean(`Fiche révision dispo en ${subject}`, 120);
-  const body = clean(`DS ${exam.matched} le ${exam.date.slice(0, 10)} en ${subject} : fiche prête`, 1000);
+  const body = clean(`DS ${exam.matched} le ${localDay(exam.date)} en ${subject} : fiche prête`, 1000);
   return { title, body };
 }
 
@@ -155,23 +179,41 @@ export async function notifyRevisionSheets(
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
+/** ids d'un index : `[]` si absent, `null` si ILLISIBLE (à ne pas écraser). */
+async function readIdIndex(store: RevisionKv, key: string): Promise<string[] | null> {
+  const raw = await store.get(key);
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(dec.decode(raw)) as unknown;
+    if (!Array.isArray(v)) return null;
+    return v.filter((x): x is string => typeof x === "string");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Union index + journal : un index illisible ne doit JAMAIS faire disparaître
+ * une fiche déjà présente dans le kv (l'API ne ment pas sur son stock).
+ */
+async function allKnownIds(store: RevisionKv): Promise<string[]> {
+  const index = (await readIdIndex(store, INDEX_KEY)) ?? [];
+  const journal = (await readIdIndex(store, INDEX_JOURNAL_KEY)) ?? [];
+  return [...new Set([...index, ...journal])].sort();
+}
+
 export async function saveRevisionSheet(store: RevisionKv, sheet: RevisionSheet): Promise<void> {
   if (!isRevisionSheet(sheet)) throw new Error("fiche invalide (contrat)");
   await store.set(sheetKey(sheet.id), enc.encode(JSON.stringify(sheet)));
-  const raw = await store.get(INDEX_KEY);
-  let ids: string[] = [];
-  try {
-    if (raw) {
-      const v = JSON.parse(dec.decode(raw)) as unknown;
-      if (Array.isArray(v)) ids = v.filter((x): x is string => typeof x === "string");
-    }
-  } catch {
-    ids = [];
-  }
+  const ids = await allKnownIds(store);
   if (!ids.includes(sheet.id)) {
     ids.push(sheet.id);
     ids.sort();
-    await store.set(INDEX_KEY, enc.encode(JSON.stringify(ids)));
+    const encoded = enc.encode(JSON.stringify(ids));
+    await store.set(INDEX_KEY, encoded);
+    // Le journal est la source de vérité qui ne rétrécit jamais : même si
+    // l'index est corrompu au prochain tour, l'id reste listable.
+    await store.set(INDEX_JOURNAL_KEY, encoded);
   }
 }
 
@@ -187,16 +229,7 @@ export async function loadRevisionSheet(store: RevisionKv, id: string): Promise<
 }
 
 export async function listRevisionSheets(store: RevisionKv): Promise<RevisionSheet[]> {
-  const raw = await store.get(INDEX_KEY);
-  if (!raw) return [];
-  let ids: string[] = [];
-  try {
-    const v = JSON.parse(dec.decode(raw)) as unknown;
-    if (!Array.isArray(v)) return [];
-    ids = v.filter((x): x is string => typeof x === "string");
-  } catch {
-    return [];
-  }
+  const ids = await allKnownIds(store);
   const out: RevisionSheet[] = [];
   for (const id of ids) {
     const s = await loadRevisionSheet(store, id);
@@ -212,7 +245,7 @@ function pdfEscape(s: string): string {
 // ponytail: PDF une page Helvetica stdlib, pas de lib. Upgrade: lib épinglée si mise en page riche.
 export function renderRevisionPdf(sheet: RevisionSheet): Uint8Array {
   if (!isRevisionSheet(sheet)) throw new Error("fiche invalide (contrat)");
-  const lines = [sheet.title, `${sheet.subject} — ${sheet.date.slice(0, 10)}`, "", ...sheet.body.split("\n"), "", `Gabarit ${sheet.templateVersion}`]
+  const lines = [sheet.title, `${sheet.subject} — ${localDay(sheet.date)}`, "", ...sheet.body.split("\n"), "", `Gabarit ${sheet.templateVersion}`]
     .flatMap((l) => {
       const t = l.trim() === "" ? [" "] : splitLine(l, 90);
       return t;
@@ -235,25 +268,41 @@ export function renderRevisionPdf(sheet: RevisionSheet): Uint8Array {
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>";
   objects[5] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
   const header = "%PDF-1.4\n";
-  let pdf = header;
+  // Assemblage en OCTETS : les offsets xref sont des positions dans le FICHIER,
+  // donc ils se comptent en octets. Compter des caractères (pdf.length) décalait
+  // la table dès que le texte contenait un caractère multi-octets (accents,
+  // tiret cadratin) et rendait le PDF illisible par tout lecteur.
+  const parts: Uint8Array[] = [enc.encode(header)];
+  let pos = parts[0].length;
   const offsets: number[] = [0];
+  const pushText = (text: string): void => {
+    const bytes = enc.encode(text);
+    parts.push(bytes);
+    pos += bytes.length;
+  };
   for (let n = 1; n <= 5; n++) {
+    offsets[n] = pos;
     if (n === 4) {
-      const head = `${n} 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n`;
-      const tail = "\nendstream\nendobj\n";
-      offsets[n] = pdf.length;
-      pdf += head + stream + tail;
+      pushText(`${n} 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n`);
+      parts.push(streamBytes);
+      pos += streamBytes.length;
+      pushText("\nendstream\nendobj\n");
     } else {
-      const body = `${n} 0 obj\n${objects[n]}\nendobj\n`;
-      offsets[n] = pdf.length;
-      pdf += body;
+      pushText(`${n} 0 obj\n${objects[n]}\nendobj\n`);
     }
   }
-  const xrefPos = pdf.length;
-  pdf += `xref\n0 6\n0000000000 65535 f \n`;
-  for (let n = 1; n <= 5; n++) pdf += `${String(offsets[n]).padStart(10, "0")} 00000 n \n`;
-  pdf += `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`;
-  return enc.encode(pdf);
+  const xrefPos = pos;
+  let xref = `xref\n0 6\n0000000000 65535 f \n`;
+  for (let n = 1; n <= 5; n++) xref += `${String(offsets[n]).padStart(10, "0")} 00000 n \n`;
+  xref += `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`;
+  parts.push(enc.encode(xref));
+  const out = new Uint8Array(pos + enc.encode(xref).length);
+  let cursor = 0;
+  for (const p of parts) {
+    out.set(p, cursor);
+    cursor += p.length;
+  }
+  return out;
 }
 
 function splitLine(line: string, max: number): string[] {

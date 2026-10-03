@@ -24,6 +24,8 @@ import { apiError } from "./errors";
  * Port d'action côté API, SÉPARÉ des lectures (PronoteReader n'expose aucune
  * écriture). Implémenté par le reader Pronote via la session SSO serveur.
  * `accountId` vide = serveur mono-compte (session appairée résolue côté intégr.).
+ * Un `accountId` fourni par le client n'est qu'un INDICE borné : la composition
+ * root vise le compte qu'elle a appairé, jamais une identité demandée.
  */
 export interface DiscussionActions {
   createDiscussion(accountId: string, subject: string, body: string, recipientIds: string[]): Promise<void>;
@@ -34,6 +36,17 @@ export interface DiscussionActions {
 
 /** Une route d'écriture par action : aucune action implicite, aucune combinaison. */
 export type DiscussionWriteKind = "create" | "reply" | "read-state" | "delete";
+
+/** Kind -> méthode du port. Un kind ABSENT de cette table est un bug de
+ *  routage (jamais un geste d'app) : il doit être REFUSÉ, sinon le switch
+ *  n'écrit rien et la route répond quand même `{ ok: true }` + invalidation
+ *  (faux succès : l'app purge son cache pour une action jamais partie). */
+const WRITE_METHODS: Readonly<Record<string, keyof DiscussionActions>> = {
+  create: "createDiscussion",
+  reply: "replyToDiscussion",
+  "read-state": "setDiscussionRead",
+  delete: "deleteDiscussion",
+};
 
 /**
  * Invalidation : l'événement EXISTANT CacheInvalidated (resource discussions).
@@ -78,17 +91,10 @@ export async function handleDiscussionWrite(
 ): Promise<Response> {
   // Écriture indisponible (aucun adaptateur injecté, ou adaptateur sans cette
   // action) : erreur franche 501, jamais un faux succès.
-  const method: keyof DiscussionActions | null =
-    actions === null
-      ? null
-      : kind === "create"
-        ? "createDiscussion"
-        : kind === "reply"
-          ? "replyToDiscussion"
-          : kind === "read-state"
-            ? "setDiscussionRead"
-            : "deleteDiscussion";
-  if (!actions || method === null || typeof actions[method] !== "function") {
+  if (!actions) return apiError("not_implemented", "action messagerie non supportée");
+  const method = WRITE_METHODS[kind];
+  if (method === undefined) return apiError("bad_request", "action messagerie inconnue");
+  if (typeof actions[method] !== "function") {
     return apiError("not_implemented", "action messagerie non supportée");
   }
   let body: unknown;
@@ -122,6 +128,9 @@ export async function handleDiscussionWrite(
         await actions.deleteDiscussion(body.accountId ?? "", body.discussionId);
         break;
       }
+      default:
+        // Filet de sécurité : une action jamais écrite ne doit jamais valider.
+        return apiError("bad_request", "action messagerie inconnue");
     }
   } catch (err) {
     return writeError(err, kind);

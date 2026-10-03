@@ -52,6 +52,23 @@ export interface SnapshotPatch {
   readonly discussionRecipients?: Recipient[];
 }
 
+/** Compte porté par un patch, s'il est connu (données personnelles). */
+function patchAccountId(patch: SnapshotPatch): string | null {
+  return (
+    patch.userInfo?.accountId ??
+    patch.capabilities?.accountId ??
+    patch.grades?.[0]?.accountId ??
+    patch.assignments?.[0]?.accountId ??
+    patch.entries?.[0]?.accountId ??
+    patch.evaluations?.[0]?.accountId ??
+    patch.news?.[0]?.accountId ??
+    patch.canteenMenus?.[0]?.accountId ??
+    patch.absences?.[0]?.accountId ??
+    patch.punishments?.[0]?.accountId ??
+    null
+  );
+}
+
 export class SnapshotStore implements ReadStore {
   private stateGrades: Grade[] = [];
   private stateAssignments: Assignment[] = [];
@@ -69,16 +86,32 @@ export class SnapshotStore implements ReadStore {
   private stateDiscussions: Discussion[] = [];
   private stateMessages: Record<string, Message[]> = {};
   private stateRecipients: Recipient[] = [];
+  /** Compte propriétaire de l'instantané courant (`null` = inconnu). */
+  private stateAccountId: string | null = null;
+  private readonly alerts: SecurityAlertData[];
 
-  constructor(
-    patch: SnapshotPatch = {},
-    private readonly alerts: SecurityAlertData[] = [],
-  ) {
+  constructor(patch: SnapshotPatch = {}, alerts: SecurityAlertData[] = []) {
+    // Clone à l'entrée : le tableau du caller ne doit jamais pouvoir
+    // corrompre l'instantané (tous les autres champs passent par apply()).
+    this.alerts = structuredClone(alerts);
     this.apply(patch);
   }
 
-  /** Remplace uniquement les ressources présentes (une lecture ratée ne purge rien). */
-  apply(patch: SnapshotPatch): void {
+  /**
+   * Remplace uniquement les ressources présentes (une lecture ratée ne purge
+   * rien) — SAUF si le compte change : l'instantané appartient alors au compte
+   * précédent et ne doit jamais fuiter dans la vue du nouveau compte.
+   *
+   * `accountId` = compte déjà résolu par le moteur de sync ; il permet
+   * d'invalider même quand la lecture a échoué (aucune ligne à comparator).
+   * Absent, le compte est déduit du patch. ponytail: le patch est mono-compte
+   * par construction (le reader ne lit qu'un compte à la fois) — si un patch
+   * mélangeait deux comptes, c'est un bug reader, pas un cas géré ici.
+   */
+  apply(patch: SnapshotPatch, accountId?: string): void {
+    const incoming = accountId ?? patchAccountId(patch);
+    if (incoming && this.stateAccountId && incoming !== this.stateAccountId) this.clearAccountState();
+    if (incoming) this.stateAccountId = incoming;
     if (patch.grades) this.stateGrades = structuredClone(patch.grades);
     if (patch.assignments) this.stateAssignments = structuredClone(patch.assignments);
     if (patch.entries) this.stateEntries = structuredClone(patch.entries);
@@ -95,6 +128,26 @@ export class SnapshotStore implements ReadStore {
     if (patch.discussions) this.stateDiscussions = structuredClone(patch.discussions);
     if (patch.discussionMessages) this.stateMessages = structuredClone(patch.discussionMessages);
     if (patch.discussionRecipients) this.stateRecipients = structuredClone(patch.discussionRecipients);
+  }
+
+  /** Purge l'instantané à un changement de compte : plus aucune ligne du précédent. */
+  private clearAccountState(): void {
+    this.stateGrades = [];
+    this.stateAssignments = [];
+    this.stateEntries = [];
+    this.statePeriods = [];
+    this.provided = null;
+    this.stateEvaluations = [];
+    this.stateNews = [];
+    this.stateCanteenMenus = [];
+    this.stateCanteenBalance = null;
+    this.stateAbsences = [];
+    this.statePunishments = [];
+    this.stateUserInfo = null;
+    this.stateCapabilities = null;
+    this.stateDiscussions = [];
+    this.stateMessages = Object.create(null) as Record<string, Message[]>;
+    this.stateRecipients = [];
   }
 
   grades(): Grade[] {
@@ -145,6 +198,10 @@ export class SnapshotStore implements ReadStore {
     return structuredClone(this.stateDiscussions);
   }
   discussionMessages(discussionId: string): Message[] {
+    // `discussionId` vient de l'URL (borne 64 caractères, pas de filtre de
+    // forme) : `__proto__`/`toString` ne doivent JAMAIS résoudre via
+    // Object.prototype — un fil inconnu répond `[]`, jamais une exception.
+    if (!Object.hasOwn(this.stateMessages, discussionId)) return [];
     return structuredClone(this.stateMessages[discussionId] ?? []);
   }
   discussionRecipients(): Recipient[] {

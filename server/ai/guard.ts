@@ -49,6 +49,26 @@ export function parseJsonOutput<T>(out: unknown): T {
   return parsed as T;
 }
 
+// Fournisseur qui sait envoyer un SafePrompt déjà validé (nonce de l'appelant
+// préservé). ponytail: capacité optionnelle, pas de port modifié (server/domain
+// est hors périmètre) ; sinon repli sur generate(), qui reconstruit le prompt.
+type SafePromptProvider = { generateSafe(safe: SafePrompt): Promise<string> };
+
+function hasGenerateSafe(provider: LLMProvider): provider is LLMProvider & SafePromptProvider {
+  return typeof (provider as Partial<SafePromptProvider>).generateSafe === "function";
+}
+
+// Envoie le prompt VALIDÉ ici (jamais une reconstruction) : le corps contrôlé par
+// assertNoSecretsInPrompt est exactement celui transmis.
+function callProvider(
+  provider: LLMProvider,
+  safe: SafePrompt,
+  data: Untrusted<string>[],
+): Promise<string> {
+  if (hasGenerateSafe(provider)) return provider.generateSafe(safe);
+  return provider.generate({ system: safe.system, data });
+}
+
 // Pont SafePrompt (body nonce) -> LLMProvider (system + data Untrusted).
 // Valide prompt avant appel, valide sortie apres. Aucun outil/reseau ici.
 export async function generateGuarded(
@@ -59,7 +79,7 @@ export async function generateGuarded(
 ): Promise<string> {
   const safe = buildSafePrompt(system, data, nonce);
   assertNoSecretsInPrompt(safe, data);
-  const out = await provider.generate({ system: safe.system, data });
+  const out = await callProvider(provider, safe, data);
   return validateTextOutput(out);
 }
 
@@ -71,6 +91,6 @@ export async function generateGuardedJson<T>(
 ): Promise<T> {
   const safe = buildSafePrompt(system, data, nonce);
   assertNoSecretsInPrompt(safe, data);
-  const out = await provider.generate({ system: safe.system, data });
+  const out = await callProvider(provider, safe, data);
   return parseJsonOutput<T>(out);
 }
