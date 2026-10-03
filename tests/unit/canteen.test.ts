@@ -189,6 +189,15 @@ describe("PronoteClientReader.getMenus (#81)", () => {
     const err = await cold.getMenus("acc-inconnu").catch((e: unknown) => e);
     expect((err as PronoteReadError).code).toBe("session_expired");
     expect((await cold.getMenus("  ").catch((e: unknown) => e) as PronoteReadError).code).toBe("session_expired");
+    // Session qui expire pendant la lecture = erreur session, PAS une page vide :
+    // l'app doit proposer le re-login au lieu d'afficher "aucun menu".
+    const expiredReader = await readerFor(
+      { menus: async () => { throw new Error("session expirée"); } },
+      logs,
+    );
+    const expired = await expiredReader.getMenus(syntheticAccountId, { from: "2026-10-05T00:00:00.000Z", to: "2026-10-07T00:00:00.000Z" })
+      .catch((e: unknown) => e);
+    expect((expired as PronoteReadError).code).toBe("session_expired");
   });
 });
 

@@ -19,6 +19,10 @@ ressource cache `news` (TTL 60 min). Onglet Actualités absent côté établisse
 = liste vide (200), jamais 500.
 Changement cassant = bump version + PR justificative ; `tests/contracts` impose le sync.
 
-Add-only #83 (pas de bump) : préférences matière `SubjectPrefs` (couleur `#RRGGBB` strict,
+v0.3 (`0.3.0`, issues #78 #79 #81 #83) : vague de parité add-only. Les contrats
+existants ne changent pas de forme, seul le jeu de routes et de ressources cache
+grandit. **Non cassant** pour les apps 0.2.0 : elles ignorent les nouvelles ressources.
+
+Add-only #83 (v0.3) : préférences matière `SubjectPrefs` (couleur `#RRGGBB` strict,
 emoji borné, libellé perso) + `GET`/`PUT /v1/subjects/prefs`. Matière sans prefs = nom
 d'origine, donc les apps 0.2.0 ignorent le champ sans régression.
