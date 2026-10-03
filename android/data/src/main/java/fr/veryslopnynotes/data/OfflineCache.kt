@@ -12,6 +12,9 @@ interface CacheStore {
     fun save(resource: String, payload: String, fetchedAt: Long)
     fun load(resource: String): CachedEntry?
     fun clear(resource: String)
+    // Purge totale (logout #82) : toute donnee scolaire locale disparait, sans
+    // dependre d'une liste de ressources qui deriverait des contrats.
+    fun clearAll()
 }
 
 // ponytail: memoire seule pour tests/preview. Upgrade: persistance seule (File).
@@ -30,6 +33,11 @@ class InMemoryCacheStore : CacheStore {
     @Synchronized
     override fun clear(resource: String) {
         map.remove(resource)
+    }
+
+    @Synchronized
+    override fun clearAll() {
+        map.clear()
     }
 }
 
@@ -69,6 +77,15 @@ class FileCacheStore(private val dir: File) : CacheStore {
             fileFor(resource).delete()
         } catch (_: Exception) {
             // ponytail: clear best-effort (cache seul, pas de donnee critique).
+        }
+    }
+
+    @Synchronized
+    override fun clearAll() {
+        try {
+            dir.listFiles()?.forEach { it.delete() }
+        } catch (_: Exception) {
+            // ponytail: purge best-effort, comme clear().
         }
     }
 }
