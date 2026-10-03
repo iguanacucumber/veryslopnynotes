@@ -35,6 +35,9 @@ import fr.veryslopnynotes.data.parseQrPayload
 fun PairingRoute(
     baseUrl: String,
     onBack: () -> Unit,
+    // #113 : arrivée sur écran d'appairage après un 401. Phrase factuelle
+    // (« credential refusée »), jamais une cause devinée ni un chrono.
+    notice: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -70,6 +73,7 @@ fun PairingRoute(
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         Button(onClick = onBack, modifier = Modifier.padding(16.dp)) { Text("Retour") }
+        if (!notice.isNullOrEmpty()) Text(notice)
         PairingFormContent(
             form = form,
             onQrChange = { form = form.copy(qrRaw = it, state = PairingState.Idle) },

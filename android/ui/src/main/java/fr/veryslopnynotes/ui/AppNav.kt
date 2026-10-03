@@ -1,5 +1,7 @@
 package fr.veryslopnynotes.ui
 
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +22,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +43,7 @@ import fr.veryslopnynotes.core.profileInitials
 import fr.veryslopnynotes.data.AccountStore
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.CachePolicy
+import fr.veryslopnynotes.data.DeviceAuth
 import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.FileSubjectPrefsStore
 import fr.veryslopnynotes.data.InMemoryCacheStore
@@ -86,6 +90,9 @@ const val ROUTE_ATTENDANCE = "attendance"
 // #80 : messagerie (parité Papillon Discussions), hors onglets comme les autres
 // capacités dynamiques : visible seulement si l'établissement publie des fils.
 const val ROUTE_MESSAGES = "messages"
+// #113 : écran d'appairage = destination de secours quand le serveur refuse la
+// credential d'appareil (401). Une seule constante pour tous les `navigate`.
+const val ROUTE_PAIRING = "pairing"
 
 private val TAB_ROUTES = listOf(ROUTE_INDEX, ROUTE_CALENDAR, ROUTE_GRADES, ROUTE_TASKS, ROUTE_PROFILE)
 
@@ -130,6 +137,29 @@ fun AppNav(
     // Seuls des accountId sont persistés, aucune donnée personnelle.
     val accounts = remember(baseUrl, cacheStore, tokens) {
         AccountStore(ctx, cacheStore, tokens)
+    }
+    // #113 : un 401 (credential révoquée/expirée — INDISTINGUABLES côté serveur)
+    // ne doit plus se traduire par des échecs silencieux. Le signal unique vient
+    // du garde-fou ApiClient (une 401 sur route protégée qui portait un bearer) ;
+    // ici on répare par le chemin EXISTANT `accounts.logout()` (secret effacé +
+    // caches purgés, aucune purge parallèle) puis on ramène à l'appairage.
+    // Anti-boucle : après logout() plus aucun bearer ne part, donc le garde-fou
+    // ne peut plus se déclencher, et on ne navigue pas deux fois.
+    var authNotice by remember { mutableStateOf<String?>(null) }
+    val main = remember { Handler(Looper.getMainLooper()) }
+    DisposableEffect(accounts) {
+        DeviceAuth.setOnRejected {
+            main.post {
+                authNotice = DeviceAuth.REJECTED_MESSAGE
+                accounts.logout()
+                if (nav.currentDestination?.route != ROUTE_PAIRING) {
+                    nav.navigate(ROUTE_PAIRING) {
+                        popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
+                    }
+                }
+            }
+        }
+        onDispose { DeviceAuth.setOnRejected(null) }
     }
     val profileRepo = remember(baseUrl, tokens) { ProfileRepository(ApiClient(baseUrl, tokens = tokens)) }
     // #83 : prefs matière = fichier local (survit au restart, lisible hors
@@ -223,7 +253,7 @@ fun AppNav(
                     baseUrl = baseUrl,
                     subjectPrefs = subjectPrefs,
                     onSettings = { nav.navigate(ROUTE_SETTINGS) },
-                    onPairing = { nav.navigate("pairing") },
+                    onPairing = { nav.navigate(ROUTE_PAIRING) },
                     onAlerts = { nav.navigate("alerts") },
                 )
             }
@@ -241,7 +271,7 @@ fun AppNav(
                     baseUrl,
                     "Moyennes",
                     { nav.navigate(ROUTE_SETTINGS) },
-                    { nav.navigate("pairing") },
+                    { nav.navigate(ROUTE_PAIRING) },
                     { nav.navigate("alerts") },
                     showAverage = true,
                     subjectPrefs = subjectPrefs,
@@ -260,7 +290,7 @@ fun AppNav(
                     accounts = accounts,
                     onLogout = { accounts.logout() },
                     goSettings = { nav.navigate(ROUTE_SETTINGS) },
-                    goPairing = { nav.navigate("pairing") },
+                    goPairing = { nav.navigate(ROUTE_PAIRING) },
                     goAlerts = { nav.navigate("alerts") },
                     goFiches = { nav.navigate("fiches") },
                     goNews = { nav.navigate(ROUTE_NEWS) },
@@ -305,7 +335,7 @@ fun AppNav(
                     onTheme = setTheme,
                 )
             }
-            composable("pairing") {
+            composable(ROUTE_PAIRING) {
                 if (baseUrl.isBlank()) {
                     Column(
                         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -316,7 +346,14 @@ fun AppNav(
                         Button(onClick = { nav.popBackStack() }) { Text("Retour") }
                     }
                 } else {
-                    PairingRoute(baseUrl = baseUrl, onBack = { nav.popBackStack() })
+                    // #113 : `notice` = raison factuelle de l'arrivée ici (credential
+                    // refusée). Pas de cause devinée, pas de bouton « réessayer » :
+                    // le seul geste utile est l'appairage.
+                    PairingRoute(
+                        baseUrl = baseUrl,
+                        onBack = { nav.popBackStack() },
+                        notice = authNotice,
+                    )
                 }
             }
             composable("alerts") { SecurityAlertsRoute(loadAlerts) }
@@ -330,7 +367,7 @@ fun AppNav(
                     baseUrl = baseUrl,
                     subtitle = "Évaluations par compétences",
                     goSettings = { nav.navigate(ROUTE_SETTINGS) },
-                    goPairing = { nav.navigate("pairing") },
+                    goPairing = { nav.navigate(ROUTE_PAIRING) },
                     goAlerts = { nav.navigate("alerts") },
                     section = { CompetencesSection(it) },
                     subjectPrefs = subjectPrefs,
