@@ -232,15 +232,18 @@ object ServerConfig {
     fun securityAlertsUrl(baseUrl: String): String = "$baseUrl/v1/security/alerts"
 
     // Chemins des routes PUBLIQUES : ni jeton d'appareil, ni bearer. L'appairage
-    // est la seule porte d'entrée du credential (c'est là qu'on l'obtient) et
-    // health est une sonde de version. Source unique : ApiClient s'en sert pour
-    // ne PAS joindre `Authorization` (un secret ne voyage que là où on l'exige).
+    // est l'ancienne porte d'entrée du credential ; #120 le remplace par /v1/setup,
+    // qui ouvre la session de l'établissement ET rend le jeton en un appel ; health
+    // est une sonde de version. Source unique : ApiClient s'en sert pour ne PAS
+    // joindre `Authorization` (un secret ne voyage que là où on l'exige).
     const val PAIRING_START_PATH = "/v1/pairing/start"
     const val PAIRING_CONFIRM_PATH = "/v1/pairing/confirm"
+    const val SETUP_PATH = "/v1/setup"
     const val HEALTH_PATH = "/v1/health"
 
     fun pairingStartUrl(baseUrl: String): String = baseUrl + PAIRING_START_PATH
     fun pairingConfirmUrl(baseUrl: String): String = baseUrl + PAIRING_CONFIRM_PATH
+    fun setupUrl(baseUrl: String): String = baseUrl + SETUP_PATH
     fun revisionSheetsUrl(baseUrl: String): String = "$baseUrl/v1/revision-sheets"
     fun revisionSheetPdfUrl(baseUrl: String, id: String): String = "$baseUrl/v1/revision-sheets/pdf?id=$id"
     // #83 préférences matière : GET liste, PUT upsert.

@@ -18,7 +18,7 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 |---|---|
 | Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.5.0`), miroir OpenAPI |
 | Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (32 routes, 7 types d'événements) |
-| Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, appairage QR+PIN, SSE |
+| Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, assistant de connexion en 3 étapes (serveur → EduConnect → QR), SSE |
 | Point d'entrée HTTP serveur (`make serve`, Docker) | Câblé : env → session Pronote → reader → snapshot → routes, ports d'écriture inclus |
 | Garde-fous sécurité (I1–I7) + tests | 546 tests verts, scan d'architecture et de secrets en CI locale |
 | Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'ENT = **vide propre** |
@@ -69,7 +69,11 @@ cd android
 
 Hôte serveur côté app : `android/local.properties` (non commité) ou env `SERVER_HOST`.
 Défaut émulateur `10.0.2.2:3000` ; hors émulateur, HTTPS obligatoire. Cet hôte
-n'est qu'un défaut : l'adresse réelle se saisit dans l'écran Appairage.
+n'est qu'un défaut : l'adresse réelle se saisit à l'étape 1 de l'assistant de
+connexion. Sans identifiants dans `.env.local`, c'est l'assistant qui ouvre la
+session : adresse du serveur, puis identifiants EduConnect ou QR de
+l'application de l'établissement — un seul `POST /v1/setup` rend le jeton de
+device. Détails : [`android/README.md`](android/README.md).
 Détails build/signature : [`android/README.md`](android/README.md) et [`docs/RELEASE.md`](docs/RELEASE.md).
 
 ## Configuration

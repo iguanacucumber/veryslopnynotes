@@ -141,14 +141,19 @@ export const SETUP_PIN_MAX_CHARS = 64;
 export interface SetupQr {
   readonly login: string;
   readonly jeton: string;
-  /** URL portée par le QR ; absente = `SetupRequest.pronoteUrl`. */
+  /** URL portée par le QR ; absente = `SetupRequest.schoolUrl`. */
   readonly url?: string;
 }
 
 export interface SetupRequest {
   readonly deviceName: string;
-  /** URL élève de l'établissement, saisie par l'utilisateur. */
-  readonly pronoteUrl: string;
+  /**
+   * Adresse de l'établissement, saisie par l'utilisateur. Volontairement
+   * `schoolUrl` et non `pronoteUrl` : le vocabulaire de l'établissement ne
+   * doit pas atteindre le client (invariant I1 — l'app ne connaît que son
+   * serveur). Le serveur, lui, sait ce que c'est.
+   */
+  readonly schoolUrl: string;
   /** Type ENT/CAS. Seul `ninegate` est implémenté côté intégration. */
   readonly ent: string;
   /** Identifiants ENT (méthode « credentials », facultative). */
@@ -387,14 +392,14 @@ export function isSetupRequest(v: unknown): v is SetupRequest {
   if (typeof v !== "object" || v === null) return false;
   const r = v as Record<string, unknown>;
   const deviceName = r["deviceName"];
-  const pronoteUrl = r["pronoteUrl"];
+  const schoolUrl = r["schoolUrl"];
   const ent = r["ent"];
   const username = r["username"];
   const password = r["password"];
   const qr = r["qr"];
   const pin = r["pin"];
   if (!isBoundedNonEmptyString(deviceName, SETUP_CREDENTIAL_MAX_CHARS)) return false;
-  if (!isBoundedNonEmptyString(pronoteUrl, SETUP_URL_MAX_CHARS)) return false;
+  if (!isBoundedNonEmptyString(schoolUrl, SETUP_URL_MAX_CHARS)) return false;
   if (!isBoundedNonEmptyString(ent, SETUP_ENT_MAX_CHARS)) return false;
   if (username !== undefined && !isBoundedNonEmptyString(username, SETUP_CREDENTIAL_MAX_CHARS)) return false;
   if (password !== undefined && !isBoundedNonEmptyString(password, SETUP_CREDENTIAL_MAX_CHARS)) return false;
