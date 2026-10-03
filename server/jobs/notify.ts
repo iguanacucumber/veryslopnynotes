@@ -5,9 +5,9 @@
 // Interface d'envoi structurelle (compatible PushProvider sans import de lane).
 // Logs = compteurs seuls, jamais de token en clair.
 
-import { isGrade, isTokenHash } from "../../shared/contracts/models";
+import { isAbsenceRecord, isGrade, isTokenHash } from "../../shared/contracts/models";
 import type { ContractEvent } from "../../shared/contracts/events";
-import type { Device, Grade } from "../../shared/contracts/models";
+import type { AbsenceRecord, Device, Grade } from "../../shared/contracts/models";
 import type { SyncResult } from "./sync";
 
 export interface GradePushSender {
@@ -80,4 +80,20 @@ export async function notifySyncResult(
     return { sent: 0, failed: 0, events: 0, devices: devices.length };
   }
   return notifyGradeEvents(result.events, devices, sender, logger);
+}
+
+// --- #77 vie scolaire : détection de nouvelle absence sur DONNÉES STRUCTURÉES ---
+// Comparaison d'identifiants d'enregistrements (comme diffAgainstPrints pour
+// les notes) : aucun LLM, aucune sortie libre sur le chemin d'un effet métier
+// (I7). Le câblage dans l'ordonnanceur de sync reste hors de ce fichier.
+export function newAbsences(previousIds: readonly string[], records: readonly AbsenceRecord[]): AbsenceRecord[] {
+  const seen = new Set(previousIds);
+  return records.filter((r) => isAbsenceRecord(r) && !seen.has(r.id));
+}
+
+export function formatAbsencePush(record: AbsenceRecord): { title: string; body: string } {
+  const title = clean(record.kind === "late" ? "Nouveau retard" : "Nouvelle absence", 120);
+  const where = record.subject ? ` en ${record.subject}` : "";
+  const motif = record.motif ? ` — ${record.motif}` : "";
+  return { title, body: clean(`${record.date.slice(0, 10)}${where}${motif}`, 1000) };
 }

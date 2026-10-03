@@ -47,6 +47,23 @@ object ServerConfig {
     // #81 : menus cantine de la fenêtre (semaine par défaut).
     fun menusUrl(baseUrl: String): String = "$baseUrl/v1/menus"
 
+    // #77 : vie scolaire — absences/retards (compteurs par période) + sanctions.
+    fun attendanceUrl(baseUrl: String): String = "$baseUrl/v1/attendance"
+    fun punishmentsUrl(baseUrl: String): String = "$baseUrl/v1/punishments"
+
+
+    // #82 : profil du compte appairé (onglet Profil) + périodes de l'année.
+    fun meUrl(baseUrl: String): String = "$baseUrl/v1/me"
+    fun periodsUrl(baseUrl: String): String = "$baseUrl/v1/periods"
+
+    // #82 : proxy média. La photo n'arrive JAMAIS par une adresse Pronote/ENT :
+    // on passe la réF opaque au serveur, qui résout et stream les octets (I1).
+    fun mediaPath(ref: String, accountId: String): String =
+        "/v1/media?ref=" + urlEncode(ref) + "&accountId=" + urlEncode(accountId)
+
+    private fun urlEncode(value: String): String =
+        java.net.URLEncoder.encode(value, "UTF-8")
+
     // ponytail: allowlist = préfixe baseUrl seule. Upgrade: pinning cert phase 10.
     fun isAllowed(url: String, baseUrl: String): Boolean = url.startsWith(baseUrl)
 

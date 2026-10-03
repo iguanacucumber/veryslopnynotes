@@ -6,6 +6,8 @@
 // Contenu servi = donnée, jamais instruction (I6) : à marquer Untrusted côté appelant.
 // ponytail: résolution ref par re-parcours lessons/homeworks (pas de cache).
 // Upgrade: cache disque + HEAD content-type, route GET /v1/resources liste.
+// #82 : une ref photo de profil (`photo:<idFichier>`) est aussi résolue ici,
+// pour que l'app n'aie JAMAIS d'adresse de photo à télécharger (I1).
 import type { PronoteClientReader } from "../integrations/pronote-client-reader";
 
 export class MediaProxyError extends Error {
@@ -22,8 +24,17 @@ export interface MediaPayload {
   readonly bytes: Uint8Array;
 }
 
-function parseRef(ref: string): { kind: "lesson-doc" | "lesson-content-file" | "homework-file"; li: number; di: number } | null {
+/** Extension d'image autorisée pour le nom renvoyé (borne, pas d'arbitraire). */
+const PHOTO_EXT_RE = /^[a-z0-9]{2,4}$/;
+
+function parseRef(ref: string): { kind: "lesson-doc" | "lesson-content-file" | "homework-file" | "photo"; li: number; di: number } | null {
   const parts = (ref ?? "").split(":");
+  // #82 : photo de profil = `photo:<idFichier>` (émis par le mapper profil).
+  // L'id n'est jamais une URL : on n'accepte que le jeton du fichier.
+  if (parts.length === 2 && parts[0] === "photo") {
+    const fileId = parts[1] ?? "";
+    return /^[A-Za-z0-9._-]{1,150}$/.test(fileId) ? { kind: "photo", li: 0, di: 0 } : null;
+  }
   // Formats émis par mapResources : lesson:<li>:doc:<di>:<fileId>,
   // lesson:<li>:content-file:<di>:<fileId>, homework:<hi>:file:<di>:<fileId>.
   if (parts.length < 4) return null;
@@ -66,6 +77,21 @@ export async function downloadMedia(
   }
   try {
     const now = new Date();
+    // #82 : photo de profil (pièce jointe du client connecté). On ne renvoie
+    // que les octets + une extension : l'URL Pronote de la pièce ne sort JAMAIS
+    // du serveur.
+    if (parsed.kind === "photo") {
+      const pic = (
+        client as {
+          info?: { profilePicture?: { url?: string; data?: () => Promise<Buffer> } };
+        }
+      )?.info?.profilePicture;
+      if (!pic || typeof pic.data !== "function") throw new MediaProxyError("media not found", "not_found");
+      const buf = Buffer.from(await pic.data());
+      const ext = (String(pic.url ?? "").split("?")[0]?.split(".").pop() ?? "").toLowerCase();
+      logger?.(`media -> ok ${buf.length} bytes`);
+      return { name: `photo.${PHOTO_EXT_RE.test(ext) ? ext : "png"}`, bytes: new Uint8Array(buf) };
+    }
     if (parsed.kind === "homework-file") {
       const later = new Date(now.getTime() + 21 * 86400000);
       const hws = (await client.homework(new Date(now.getTime() - 7 * 86400000), later)) as unknown[];

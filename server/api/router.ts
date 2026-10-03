@@ -8,11 +8,16 @@ import {
   API_ROUTES,
   SUBJECT_PREFS_MAX_BODY_CHARS,
   isAssignmentsResponse,
+  isAttendanceResponse,
   isEvaluationsResponse,
+  isPunishmentsResponse,
 
   isCanteenMenusResponse,
   isGradesResponse,
+  isMeResponse,
   isNewsResponse,
+  MEDIA_ACCOUNT_ID_MAX_CHARS,
+  MEDIA_REF_MAX_CHARS,
   isPairingConfirmRequest,
   isPairingStartRequest,
   isPairingStartResponse,
@@ -26,10 +31,11 @@ import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDev
 import type { ContractEvent, NewsUpdatedData, SyncCompletedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
 import { computeAverages } from "../domain/averages";
+import { attendancePeriods } from "../domain/attendance";
 import { buildCompetenceSummary, buildSkills } from "../domain/competences";
 import { handleHomeworkGenerate } from "./homework";
-import { handleAssignmentsToggle, handleMedia } from "./assignments";
 import type { AssignmentActions, MediaActions } from "./assignments";
+import { handleAssignmentsToggle } from "./assignments";
 import { PairingService } from "./pairing";
 import { renderRevisionPdf } from "../jobs/revision";
 import type { RevisionListStore } from "./revision";
@@ -38,6 +44,54 @@ import type { ReadStore } from "./store";
 import type { SubjectPrefsStore } from "./subject-prefs";
 import { createSubjectPrefsMemoryStore } from "./subject-prefs";
 import type { LLMProvider } from "../domain/ports";
+import type { MediaPayload } from "../infrastructure/media-proxy";
+import { MediaProxyError } from "../infrastructure/media-proxy";
+
+/**
+ * #82 : résolution serveur d'une réf opaque (photo de profil, pièce jointe).
+ * L'app n'a jamais d'adresse Pronote/ENT (I1, règle d'or média) : elle appelle
+ * /v1/media et le serveur télécharge via la session appairée.
+ * ponytail: fonction injectée, null = 501 explicite (aucun accès direct depuis
+ * le routeur). Upgrade: câblage sur PronoteSessionStore au démarrage serveur.
+ */
+export type MediaResolver = (accountId: string, ref: string) => Promise<MediaPayload>;
+
+/** Types MIME déduits de l'extension du nom renvoyé par le proxy (defaut = binaire). */
+const MEDIA_CONTENT_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+};
+
+function mediaContentType(name: string): string {
+  const ext = (name.toLowerCase().split(".").pop() ?? "").trim();
+  return MEDIA_CONTENT_TYPES[ext] ?? "application/octet-stream";
+}
+
+/** Nom ASCII pour l'en-tête (le nom lisible part dans filename*). */
+function asciiFileName(name: string): string {
+  const clean = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_").trim();
+  return clean || "fichier";
+}
+
+/** Normalise les deux ports média (fonction #82 / objet `download` #75). */
+function mediaResolver(media: MediaResolver | MediaActions | null): MediaResolver | null {
+  if (media === null) return null;
+  if (typeof media === "function") return media;
+  if (typeof media.download === "function") return (accountId, ref) => media.download(accountId, ref);
+  return null;
+}
+
+/**
+ * #82 : une ref est un jeton opaque. Toute forme d'adresse est refusée avant le
+ * proxy (défense en profondeur, même si le proxy revalide de son côté).
+ */
+function isMediaRef(v: string): boolean {
+  return v.length > 0 && v.length <= MEDIA_REF_MAX_CHARS && !v.includes("//") && !v.includes("..");
+}
 
 /** Longueur max d'un periodId reflété dans la réponse (borne d'entrée utilisateur). */
 const PERIOD_ID_MAX_CHARS = 64;
@@ -112,11 +166,15 @@ export function createHandler(
   // #75 : écriture "fait" (I7, action APP confirmée) et proxy média. Absents par
   // défaut = 501 honnête, jamais un faux succès ni une URL Pronote côté app.
   assignmentActions: AssignmentActions | null = null,
-  media: MediaActions | null = null,
+  // #75/#82/#84 : proxy média unique (PJ devoirs + photo de profil). Les deux
+  // ports (fonction #82, objet `download` #75) sont acceptés et normalisés :
+  // une seule implémentation de la route, un seul contrat.
+  media: MediaResolver | MediaActions | null = null,
 ): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
     const path = url.pathname;
+    const download = mediaResolver(media);
     // Une path peut porter GET + PUT (#83) : on matche path puis méthode,
     // sinon 405 sur la mauvaise méthode au lieu de 404/405 incohérent.
     if (!API_ROUTES.some((r) => r.path === path)) return apiError("not_found", `unknown path ${path}`);
@@ -176,7 +234,32 @@ export function createHandler(
       // #75 : proxy des pièces jointes (ref opaque → octets). Jamais d'URL
       // Pronote dans l'app (I1), jamais de WebView distante.
       case "/v1/media": {
-        return handleMedia(url, media);
+        const ref = (url.searchParams.get("ref") ?? "").trim();
+        const accountId = (url.searchParams.get("accountId") ?? "").trim().slice(0, MEDIA_ACCOUNT_ID_MAX_CHARS);
+        if (!isMediaRef(ref) || accountId === "") return apiError("bad_request", "invalid media ref");
+        if (!download) return apiError("not_implemented", "media proxy absent");
+        let file: MediaPayload;
+        try {
+          file = await download(accountId, ref);
+        } catch (err) {
+          // Jamais le message d'erreur brut (il peut contenir une interne).
+          if (err instanceof MediaProxyError) {
+            if (err.code === "bad_ref") return apiError("bad_request", "invalid media ref");
+            if (err.code === "session_expired") return apiError("unauthorized", "session expirée");
+            if (err.code === "not_found") return apiError("not_found", "unknown media ref");
+          }
+          return apiError("internal", "media unavailable");
+        }
+        const type = mediaContentType(file.name);
+        return new Response(file.bytes as unknown as BodyInit, {
+          headers: {
+            "content-type": type,
+            "content-length": String(file.bytes.byteLength),
+            "cache-control": "private, max-age=600",
+            // Image = affichage direct (photo de profil), sinon téléchargement.
+            "content-disposition": `${type.startsWith("image/") ? "inline" : "attachment"}; filename="${asciiFileName(file.name)}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+          },
+        });
       }
       case "/v1/timetable": {
         const payload = { entries: store.entries() };
@@ -307,6 +390,7 @@ export function createHandler(
       // courante côté app). Fenêtre bornée en longueur puis validée ISO : date
       // illisible = 400, jamais de date devinée. Aucun menu = [] (onglet masqué).
       case "/v1/menus": {
+        // #75 : fenêtre ISO mutualisée avec /v1/menus (borne + validation).
         const win = dateWindow(url);
         if (win === null) return apiError("bad_request", "invalid date window");
         const all = store.canteenMenus?.(win) ?? [];
@@ -321,6 +405,39 @@ export function createHandler(
         const payload = balance === undefined ? { menus } : { menus, balance };
         return json(isCanteenMenusResponse(payload), payload);
       }
+
+      // #77 vie scolaire : absences + retards unifiés (kind) + compteurs dérivés
+      // par période. Store sans vie scolaire = listes vides (onglet masqué).
+      // periodId reflété dans la réponse : entrée utilisateur bornée en amont.
+      case "/v1/attendance": {
+        const rawPeriod = (url.searchParams.get("periodId") ?? "").trim().slice(0, PERIOD_ID_MAX_CHARS);
+        const periodId = rawPeriod === "" ? null : rawPeriod;
+        const all = store.absences?.() ?? [];
+        const absences = periodId === null ? all : all.filter((a) => a.periodId === periodId);
+        const payload = { absences, periods: attendancePeriods(absences, store.periods()) };
+        return json(isAttendanceResponse(payload), payload);
+      }
+
+      case "/v1/punishments": {
+        const payload = { punishments: store.punishments?.() ?? [] };
+        return json(isPunishmentsResponse(payload), payload);
+      }
+
+
+      // #82 : écran Profil. Store sans infos = `user: null` (état vide propre),
+      // jamais de nom ni de photo d'exemple. Périodes : /v1/periods (#74).
+      case "/v1/me": {
+        const payload = { user: store.userInfo?.() ?? null };
+        return json(isMeResponse(payload), payload);
+      }
+
+      // #82/#84 : proxy média (photo de profil, PJ). Réf opaque bornée, refusée
+      // si elle ressemble à une adresse ; octets streamés par le serveur, donc
+      // aucune URL Pronote ne sort côté app (I1). Sans proxy injecté = 501.
+      // ponytail: aucune vérification de token ici — l'auth du device n'est
+      // encore appliquée sur AUCUNE route (voir createHandler) ; /v1/media
+      // n'ouvre pas un trou nouveau, il hérite du même poste.
+      // Upgrade: exiger le token appairé sur /v1/me et /v1/media.
       default:
         return apiError("not_found", `unknown path ${path}`);
     }
@@ -336,7 +453,7 @@ export function serve(
   subjectPrefs?: SubjectPrefsStore,
   // #75 : toggle "fait" (écriture confirmée par l'app) + proxy média.
   assignmentActions?: AssignmentActions | null,
-  media?: MediaActions | null,
+  media?: MediaResolver | MediaActions | null,
 ) {
   return Bun.serve({
     port,
