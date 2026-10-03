@@ -26,6 +26,9 @@ object ServerConfig {
     fun pairingConfirmUrl(baseUrl: String): String = "$baseUrl/v1/pairing/confirm"
     fun revisionSheetsUrl(baseUrl: String): String = "$baseUrl/v1/revision-sheets"
     fun revisionSheetPdfUrl(baseUrl: String, id: String): String = "$baseUrl/v1/revision-sheets/pdf?id=$id"
+    // #83 préférences matière : GET liste, PUT upsert.
+    fun subjectPrefsUrl(baseUrl: String): String = "$baseUrl/v1/subjects/prefs"
+
     fun evaluationsUrl(baseUrl: String): String = "$baseUrl/v1/evaluations"
 
     // #79 : actualités établissement (parité Papillon, onglet Actualités).

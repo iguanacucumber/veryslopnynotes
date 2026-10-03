@@ -13,7 +13,6 @@
 import type { Assignment, CanteenMeal, CanteenMenu, Evaluation, Grade, NewsItem, Period, TimetableEntry } from "../../shared/contracts/models";
 import { CANTEEN_MAX_ALLERGEN_CHARS, CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_DISH_CHARS, CANTEEN_MAX_DISHES, EVALUATION_LABEL_MAX_CHARS, isAssignment, isCanteenMenu, isEvaluation, isGrade, isNewsItem, isPeriod, isTimetableEntry, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CHARS } from "../../shared/contracts/models";
 import type { PedagogicResource, PronotePage, PronotePageOptions, PronoteReader, PronoteTimetableOptions } from "../domain/ports";
-
 import { isPedagogicResource, PronoteAuthError, PronoteReadError, untrusted } from "../domain/ports";
 
 

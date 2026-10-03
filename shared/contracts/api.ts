@@ -2,15 +2,14 @@
 // Table de routes + types requête/réponse. Doit rester en sync avec
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
-import type { Assignment, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Evaluation, Grade, NewsItem, Period, RevisionSheet, Skill, TimetableEntry } from "./models";
-import { isAssignment, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isEvaluation, isGrade, isNewsItem, isPeriod, isRevisionSheet, isSkill, isTimetableEntry } from "./models";
-import { isSecurityAlertData } from "./events";
-
+import type { Assignment, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Evaluation, Grade, NewsItem, Period, RevisionSheet, Skill, SubjectPrefs, TimetableEntry } from "./models";
+import { isAssignment, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isEvaluation, isGrade, isNewsItem, isPeriod, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT } from "./models";
 import type { SecurityAlertData } from "./events";
+import { isSecurityAlertData } from "./events";
 
 
 export interface ApiRoute {
-  readonly method: "GET" | "POST";
+  readonly method: "GET" | "POST" | "PUT";
   readonly path: string;
 }
 
@@ -27,6 +26,10 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/v1/homework/generate" },
   { method: "GET", path: "/v1/revision-sheets" },
   { method: "GET", path: "/v1/revision-sheets/pdf" },
+  // #83 préférences matière : GET liste / PUT upsert (clé = nom de matière).
+  { method: "GET", path: "/v1/subjects/prefs" },
+  { method: "PUT", path: "/v1/subjects/prefs" },
+
   { method: "GET", path: "/v1/evaluations" },
 
   { method: "GET", path: "/v1/news" },
@@ -275,6 +278,21 @@ export function isHomeworkGenerateResponse(v: unknown): v is HomeworkGenerateRes
   }
   return false;
 }
+
+// #83 préférences matière : corps PUT borné (4 champs, pas d'entrée arbitraire).
+export const SUBJECT_PREFS_MAX_BODY_CHARS = 2048;
+
+/** Liste des préférences connues, clé = nom de matière. */
+export interface SubjectPrefsResponse {
+  readonly prefs: SubjectPrefs[];
+}
+
+export function isSubjectPrefsResponse(v: unknown): v is SubjectPrefsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const p = (v as Record<string, unknown>)["prefs"];
+  return Array.isArray(p) && p.length <= SUBJECT_PREFS_MAX_COUNT && p.every(isSubjectPrefs);
+}
+
 
 // Actualités établissement (#79) : liste la plus récente d'abord.
 // Onglet non actif côté établissement = liste vide (200), jamais 500.
