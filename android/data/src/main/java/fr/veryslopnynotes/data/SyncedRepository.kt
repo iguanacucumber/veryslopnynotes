@@ -43,6 +43,10 @@ class SyncedRepository(
         // #78 : évaluations par compétences (compétences fournies sinon vide).
         CachePolicy.EVALUATIONS -> ServerConfig.evaluationsUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/evaluations" }
+        CachePolicy.NEWS -> ServerConfig.newsUrl(baseUrl)
+            .removePrefix(baseUrl).ifEmpty { "/v1/news" }
+        CachePolicy.MENUS -> ServerConfig.menusUrl(baseUrl)
+            .removePrefix(baseUrl).ifEmpty { "/v1/menus" }
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
     }
 

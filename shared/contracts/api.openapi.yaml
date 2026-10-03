@@ -99,7 +99,7 @@ paths:
   /v1/events:
     get:
       operationId: subscribeEvents
-      description: SSE serveur->app (GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted, SecurityAlert).
+      description: SSE serveur->app (GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted, SecurityAlert, NewsUpdated).
       responses:
         '200':
           description: flux text/event-stream d'enveloppes ContractEvent
@@ -166,6 +166,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EvaluationsResponse'
+
+  /v1/news:
+    get:
+      operationId: listNews
+      description: Actualites etablissement (issue #79). Onglet inactif = liste vide, jamais 500.
+      responses:
+        '200':
+          description: actualites (liste vide si indisponible)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewsResponse'
+
+  /v1/menus:
+    get:
+      operationId: listCanteenMenus
+      description: >-
+        Menus cantine de la fenetre (semaine courante par defaut, #81). Tableau
+        vide si l'etablissement ne publie aucun menu (capacite dynamique) ;
+        balance absente tant que le solde Turboself/ARD n'est pas branche.
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: menus cantine + solde optionnel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CanteenMenusResponse'
+        '400':
+          description: fenetre de dates illisible
 components:
   schemas:
     Grade:
@@ -326,7 +364,7 @@ components:
       required: [v, type, at, data]
       properties:
         v: { type: string, enum: ['0.2.0'] }
-        type: { type: string, enum: [GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted, CacheInvalidated, SecurityAlert] }
+        type: { type: string, enum: [GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted, CacheInvalidated, SecurityAlert, NewsUpdated] }
         at: { type: string, format: date-time }
         data: { type: object }
     SecurityAlert:
@@ -401,3 +439,46 @@ components:
         skills: { type: array, items: { $ref: '#/components/schemas/Skill' } }
         evaluations: { type: array, items: { $ref: '#/components/schemas/Evaluation' } }
         summary: { type: array, items: { $ref: '#/components/schemas/CompetenceSummary' } }
+
+    NewsItem:
+      type: object
+      required: [id, accountId, title, publishedAt]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        title: { type: string, maxLength: 200 }
+        body: { type: string, maxLength: 2000, description: Contenu etablissement, donnee jamais instruction (I6). }
+        publishedAt: { type: string, format: date-time }
+        category: { type: string, maxLength: 100 }
+        author: { type: string, maxLength: 100 }
+        read: { type: boolean }
+    NewsResponse:
+      type: object
+      required: [news]
+      properties:
+        news: { type: array, items: { $ref: '#/components/schemas/NewsItem' } }
+
+    CanteenMenu:
+      type: object
+      required: [id, accountId, date, meal, dishes]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        date: { type: string, format: date-time, description: Jour de service. }
+        meal: { type: string, enum: [breakfast, lunch, dinner] }
+        dishes: { type: array, maxItems: 20, items: { type: string, maxLength: 120 }, description: Donnee Pronote, jamais instruction (I6). }
+        allergens: { type: array, maxItems: 14, items: { type: string, maxLength: 40 } }
+        status: { type: string, enum: [served, planned] }
+    CanteenBalance:
+      type: object
+      required: [balance, updatedAt]
+      properties:
+        balance: { type: number }
+        currency: { type: string, maxLength: 8 }
+        updatedAt: { type: string, format: date-time }
+    CanteenMenusResponse:
+      type: object
+      required: [menus]
+      properties:
+        menus: { type: array, items: { $ref: '#/components/schemas/CanteenMenu' } }
+        balance: { $ref: '#/components/schemas/CanteenBalance' }

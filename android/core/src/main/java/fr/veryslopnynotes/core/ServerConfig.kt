@@ -28,6 +28,11 @@ object ServerConfig {
     fun revisionSheetPdfUrl(baseUrl: String, id: String): String = "$baseUrl/v1/revision-sheets/pdf?id=$id"
     fun evaluationsUrl(baseUrl: String): String = "$baseUrl/v1/evaluations"
 
+    // #79 : actualités établissement (parité Papillon, onglet Actualités).
+    fun newsUrl(baseUrl: String): String = "$baseUrl/v1/news"
+    // #81 : menus cantine de la fenêtre (semaine par défaut).
+    fun menusUrl(baseUrl: String): String = "$baseUrl/v1/menus"
+
     // ponytail: allowlist = préfixe baseUrl seule. Upgrade: pinning cert phase 10.
     fun isAllowed(url: String, baseUrl: String): Boolean = url.startsWith(baseUrl)
 }

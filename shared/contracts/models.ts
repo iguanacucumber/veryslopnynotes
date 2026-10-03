@@ -367,3 +367,132 @@ export function isCompetenceSummary(v: unknown): v is CompetenceSummary {
   if (!Number.isInteger(v["evaluationCount"]) || (v["evaluationCount"] as number) < 0) return false;
   return true;
 }
+
+
+// --- #79 actualités établissement (parité Papillon, onglet Actualités) ---
+// Titre/corps/auteur = contenu externe : DONNÉES bornées, jamais instruction (I6).
+export const NEWS_TITLE_MAX_CHARS = 200;
+export const NEWS_BODY_MAX_CHARS = 2000;
+export const NEWS_META_MAX_CHARS = 100;
+
+export interface NewsItem {
+  readonly id: string;
+  readonly accountId: string;
+  readonly title: string;
+  /** Corps de l'actualité, absent si l'établissement ne le publie pas. */
+  readonly body?: string;
+  readonly publishedAt: string; // ISO-8601
+  /** Nature/catégorie ("Vie scolaire", ...), si publiée. */
+  readonly category?: string;
+  readonly author?: string;
+  /** Déjà lue côté établissement ; absent = inconnu, jamais "non lue" déduit. */
+  readonly read?: boolean;
+}
+
+/** Borné sans exigence de contenu : champ externe optionnel (chaîne vide tolérée). */
+function isOptionalBoundedString(v: unknown, max: number): v is string {
+  return typeof v === "string" && v.length <= max;
+}
+
+export function isNewsItem(v: unknown): v is NewsItem {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["accountId"])) return false;
+  const title = v["title"];
+  if (typeof title !== "string" || title.trim().length === 0 || title.length > NEWS_TITLE_MAX_CHARS) return false;
+  if (!isIsoDate(v["publishedAt"])) return false;
+  if (v["body"] !== undefined && !isOptionalBoundedString(v["body"], NEWS_BODY_MAX_CHARS)) return false;
+  if (v["category"] !== undefined && !isOptionalBoundedString(v["category"], NEWS_META_MAX_CHARS)) return false;
+  if (v["author"] !== undefined && !isOptionalBoundedString(v["author"], NEWS_META_MAX_CHARS)) return false;
+  if (v["read"] !== undefined && typeof v["read"] !== "boolean") return false;
+  return true;
+}
+
+
+// --- #81 cantine : menus + solde (parité Papillon, onglet Menus) ---
+// Le module cantine est souvent absent de l'ENT : l'absence est un fait normal,
+// pas une erreur (page vide côté API, écran masqué côté app).
+export const CANTEEN_MEALS = ["breakfast", "lunch", "dinner"] as const;
+
+export type CanteenMeal = (typeof CANTEEN_MEALS)[number];
+
+/** Servi/prévu quand l'établissement publie le statut, absent sinon. */
+export const CANTEEN_MENU_STATUSES = ["served", "planned"] as const;
+
+export type CanteenMenuStatus = (typeof CANTEEN_MENU_STATUSES)[number];
+
+// Bornes dures : contenu cantine est du texte libre externe (I6), il ne sort
+// jamais de l'API sans plafond de longueur ni de volume.
+export const CANTEEN_MAX_DISHES = 20;
+export const CANTEEN_MAX_DISH_CHARS = 120;
+export const CANTEEN_MAX_ALLERGENS = 14;
+export const CANTEEN_MAX_ALLERGEN_CHARS = 40;
+export const CANTEEN_MAX_CURRENCY_CHARS = 8;
+
+export interface CanteenMenu {
+  readonly id: string;
+  readonly accountId: string;
+  /** Jour de service (ISO-8601), borné par la fenêtre from/to demandée. */
+  readonly date: string;
+  readonly meal: CanteenMeal;
+  /** Libellés de plats : données Pronote non fiables, jamais instruction (I6). */
+  readonly dishes: string[];
+  /** Étiquettes alimentaires du repas (gluten, lactose, ...) si publiées. */
+  readonly allergens?: string[];
+  readonly status?: CanteenMenuStatus;
+}
+
+/** Solde du compte cantine (Turboself/ARD) : absent tant que l'ENT ne le publie pas. */
+export interface CanteenBalance {
+  readonly balance: number;
+  readonly currency?: string;
+  readonly updatedAt: string; // ISO-8601
+}
+
+export function isCanteenMeal(v: unknown): v is CanteenMeal {
+  return typeof v === "string" && (CANTEEN_MEALS as readonly string[]).includes(v);
+}
+
+function isBoundedStringArray(v: unknown, maxItems: number, maxChars: number): v is string[] {
+  if (!Array.isArray(v) || v.length === 0 || v.length > maxItems) return false;
+  const seen = new Set<string>();
+  for (const s of v as unknown[]) {
+    if (typeof s !== "string") return false;
+    const t = s.trim();
+    if (t.length === 0 || t.length > maxChars) return false;
+    // Doublons rejetés : un plat répété ("riz, riz") ferait exploser le volume
+    // affiché sans rien ajouter. Le mapper cantine déduplique en amont.
+    if (seen.has(t)) return false;
+    seen.add(t);
+  }
+  return true;
+}
+
+export function isCanteenMenu(v: unknown): v is CanteenMenu {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["accountId"])) return false;
+  if (!isIsoDate(v["date"])) return false;
+  if (!isCanteenMeal(v["meal"])) return false;
+  if (!isBoundedStringArray(v["dishes"], CANTEEN_MAX_DISHES, CANTEEN_MAX_DISH_CHARS)) return false;
+  if (
+    v["allergens"] !== undefined &&
+    !isBoundedStringArray(v["allergens"], CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_ALLERGEN_CHARS)
+  ) {
+    return false;
+  }
+  // Statut absent = établissement qui ne le publie pas (add-only).
+  if (v["status"] !== undefined && !(CANTEEN_MENU_STATUSES as readonly string[]).includes(v["status"] as string)) {
+    return false;
+  }
+  return true;
+}
+
+export function isCanteenBalance(v: unknown): v is CanteenBalance {
+  if (!isRecord(v)) return false;
+  if (!isFiniteNumber(v["balance"])) return false;
+  if (v["currency"] !== undefined) {
+    const c = v["currency"];
+    if (typeof c !== "string") return false;
+    if (c.trim().length > CANTEEN_MAX_CURRENCY_CHARS) return false;
+  }
+  return isIsoDate(v["updatedAt"]);
+}

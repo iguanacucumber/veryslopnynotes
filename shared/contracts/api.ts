@@ -2,32 +2,12 @@
 // Table de routes + types requête/réponse. Doit rester en sync avec
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
-import {
-  isAveragesReport,
-  isAssignment,
-  isCompetenceSummary,
-  isDevice,
-  isEvaluation,
-  isGrade,
-  isPeriod,
-  isRevisionSheet,
-  isSkill,
-  isTimetableEntry,
-} from "./models";
-import type {
-  AveragesReport,
-  Assignment,
-  CompetenceSummary,
-  Device,
-  Evaluation,
-  Grade,
-  Period,
-  RevisionSheet,
-  Skill,
-  TimetableEntry,
-} from "./models";
+import type { Assignment, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Evaluation, Grade, NewsItem, Period, RevisionSheet, Skill, TimetableEntry } from "./models";
+import { isAssignment, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isEvaluation, isGrade, isNewsItem, isPeriod, isRevisionSheet, isSkill, isTimetableEntry } from "./models";
 import { isSecurityAlertData } from "./events";
+
 import type { SecurityAlertData } from "./events";
+
 
 export interface ApiRoute {
   readonly method: "GET" | "POST";
@@ -48,6 +28,11 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/v1/revision-sheets" },
   { method: "GET", path: "/v1/revision-sheets/pdf" },
   { method: "GET", path: "/v1/evaluations" },
+
+  { method: "GET", path: "/v1/news" },
+
+  // #81 cantine : menus de la semaine + solde compte (optionnel).
+  { method: "GET", path: "/v1/menus" },
 ] as const;
 
 export interface HealthResponse {
@@ -99,6 +84,16 @@ export interface EvaluationsResponse {
   readonly skills: Skill[];
   readonly evaluations: Evaluation[];
   readonly summary: CompetenceSummary[];
+}
+
+
+// #81 cantine : menus de la fenêtre from/to (semaine courante par défaut).
+// Tableau vide = aucun menu publié sur la fenêtre (module cantine absent de
+// l'ENT ou hors périmètre) : l'app masque alors l'onglet, sans erreur.
+// balance absent = solde non publié (Turboself/ARD non branché).
+export interface CanteenMenusResponse {
+  readonly menus: CanteenMenu[];
+  readonly balance?: CanteenBalance;
 }
 
 // Alertes sécurité phase 6 (#21) : liste d'injections neutralisées (I6).
@@ -227,6 +222,15 @@ export function isEvaluationsResponse(v: unknown): v is EvaluationsResponse {
   );
 }
 
+
+export function isCanteenMenusResponse(v: unknown): v is CanteenMenusResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  const m = r["menus"];
+  if (!Array.isArray(m) || !m.every(isCanteenMenu)) return false;
+  return r["balance"] === undefined || isCanteenBalance(r["balance"]);
+}
+
 function isBoundedNonEmptyString(v: unknown, max: number): v is string {
   return typeof v === "string" && v.trim().length > 0 && v.length <= max;
 }
@@ -270,4 +274,16 @@ export function isHomeworkGenerateResponse(v: unknown): v is HomeworkGenerateRes
     );
   }
   return false;
+}
+
+// Actualités établissement (#79) : liste la plus récente d'abord.
+// Onglet non actif côté établissement = liste vide (200), jamais 500.
+export interface NewsResponse {
+  readonly news: NewsItem[];
+}
+
+export function isNewsResponse(v: unknown): v is NewsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const n = (v as Record<string, unknown>)["news"];
+  return Array.isArray(n) && n.every(isNewsItem);
 }

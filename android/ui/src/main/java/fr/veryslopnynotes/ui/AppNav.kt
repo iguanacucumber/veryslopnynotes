@@ -50,6 +50,10 @@ const val ROUTE_GRADES = "grades"
 const val ROUTE_TASKS = "tasks"
 const val ROUTE_PROFILE = "profile"
 const val ROUTE_SETTINGS = "settings"
+// #79/#81 : hors onglets comme "fiches" (capacités dynamiques : actualités et
+// cantine n'apparaissent que si l'établissement publie la donnée).
+const val ROUTE_NEWS = "news"
+const val ROUTE_CANTEEN = "canteen"
 
 private val TAB_ROUTES = listOf(ROUTE_INDEX, ROUTE_CALENDAR, ROUTE_GRADES, ROUTE_TASKS, ROUTE_PROFILE)
 
@@ -133,7 +137,13 @@ fun AppNav(
                 CachedScreen("Tâches", CachePolicy.ASSIGNMENTS, repo, baseUrl, "Devoirs semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
             }
             composable(ROUTE_PROFILE) {
-                ProfileScreen(baseUrl, { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, { nav.navigate("fiches") })
+                ProfileScreen(baseUrl, { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, { nav.navigate("fiches") }, { nav.navigate(ROUTE_NEWS) }, { nav.navigate(ROUTE_CANTEEN) })
+            }
+            composable(ROUTE_NEWS) {
+                NewsRoute(repo, baseUrl)
+            }
+            composable(ROUTE_CANTEEN) {
+                CanteenRoute(repo, baseUrl)
             }
             composable(ROUTE_SETTINGS) {
                 SettingsScreen(onBack = { nav.popBackStack() })
@@ -168,6 +178,9 @@ fun AppNav(
                     section = { CompetencesSection(it) },
                 )
             }
+
+            // #79 : actualités établissement, ressource cachable "news" (offline).
+            composable("actus") { NewsRoute(repo, baseUrl) }
         }
     }
 }
@@ -322,6 +335,8 @@ fun ProfileScreen(
     goPairing: () -> Unit,
     goAlerts: () -> Unit,
     goFiches: () -> Unit,
+    goNews: () -> Unit = {},
+    goCanteen: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -332,6 +347,8 @@ fun ProfileScreen(
         Text("Infos élève, périodes et vie scolaire arrivent avec la synchro (#82, #77).")
         Button(onClick = goPairing) { Text("Appairage QR+PIN") }
         Button(onClick = { goFiches() }) { Text("Fiches révision") }
+        Button(onClick = { goNews() }) { Text("Actualités") }
+        Button(onClick = { goCanteen() }) { Text("Cantine semaine") }
         Button(onClick = goAlerts) { Text("Alertes sécurité") }
         Button(onClick = goSettings) { Text("Réglages") }
     }
