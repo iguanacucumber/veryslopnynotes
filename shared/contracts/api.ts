@@ -2,12 +2,10 @@
 // Table de routes + types requête/réponse. Doit rester en sync avec
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
-import type { Assignment, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Evaluation, Grade, NewsItem, Period, RevisionSheet, Skill, SubjectPrefs, TimetableEntry } from "./models";
-import { isAssignment, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isEvaluation, isGrade, isNewsItem, isPeriod, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT } from "./models";
-import type { SecurityAlertData } from "./events";
-import { isSecurityAlertData } from "./events";
-import type { ContractEvent } from "./events";
-import { isContractEvent } from "./events";
+import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, CompetenceSummary, Device, Evaluation, Grade, NewsItem, Period, Punishment, RevisionSheet, Skill, SubjectPrefs, TimetableEntry, UserInfo } from "./models";
+import { isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isCompetenceSummary, isDevice, isEvaluation, isGrade, isNewsItem, isPeriod, isPunishment, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, isUserInfo, SUBJECT_PREFS_MAX_COUNT } from "./models";
+import type { ContractEvent, SecurityAlertData } from "./events";
+import { isContractEvent, isSecurityAlertData } from "./events";
 
 
 export interface ApiRoute {
@@ -44,6 +42,17 @@ export const API_ROUTES: readonly ApiRoute[] = [
 
   // #81 cantine : menus de la semaine + solde compte (optionnel).
   { method: "GET", path: "/v1/menus" },
+
+  // #77 vie scolaire : absences + retards unifiés (kind) + compteurs par période.
+  { method: "GET", path: "/v1/attendance" },
+  { method: "GET", path: "/v1/punishments" },
+
+
+  // #82 profil : infos du compte appairé (nom, classe, période, photo opaque).
+  { method: "GET", path: "/v1/me" },
+  // #82/#84 : résolution serveur d'une réf opaque (photo, PJ). L'app n'a
+  // jamais d'URL Pronote : c'est le serveur qui télécharge (I1, règle d'or média).
+  { method: "GET", path: "/v1/media" },
 ] as const;
 
 export interface HealthResponse {
@@ -347,4 +356,57 @@ export function isNewsResponse(v: unknown): v is NewsResponse {
   if (typeof v !== "object" || v === null) return false;
   const n = (v as Record<string, unknown>)["news"];
   return Array.isArray(n) && n.every(isNewsItem);
+}
+
+
+// #77 vie scolaire : `absences` porte absences ET retards (champ `kind`),
+// `periods` = compteurs dérivés par période. Onglet vie scolaire absent de
+// l'établissement = deux listes vides (200), jamais 500.
+export interface AttendanceResponse {
+  readonly absences: AbsenceRecord[];
+  readonly periods: AttendancePeriod[];
+}
+
+export interface PunishmentsResponse {
+  readonly punishments: Punishment[];
+}
+
+export function isAttendanceResponse(v: unknown): v is AttendanceResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  const a = r["absences"];
+  const p = r["periods"];
+  return (
+    Array.isArray(a) &&
+    a.every(isAbsenceRecord) &&
+    Array.isArray(p) &&
+    p.every(isAttendancePeriod)
+  );
+}
+
+export function isPunishmentsResponse(v: unknown): v is PunishmentsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const p = (v as Record<string, unknown>)["punishments"];
+  return Array.isArray(p) && p.every(isPunishment);
+}
+
+
+// --- #82 profil + média ---
+// Bornes des paramètres d'entrée de /v1/media (ref opaque, accountId).
+export const MEDIA_REF_MAX_CHARS = 200;
+export const MEDIA_ACCOUNT_ID_MAX_CHARS = 64;
+
+/**
+ * Infos du compte appairé. `user: null` = compte appairé dont l'établissement
+ * ne publie aucune info (état vide propre côté app), jamais un nom d'exemple.
+ * Les périodes de l'année sont déjà servies par `/v1/periods` (#74).
+ */
+export interface MeResponse {
+  readonly user: UserInfo | null;
+}
+
+export function isMeResponse(v: unknown): v is MeResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const u = (v as Record<string, unknown>)["user"];
+  return u === null || isUserInfo(u);
 }

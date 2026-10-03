@@ -13,7 +13,6 @@ import { CONTRACTS_VERSION, isAssignment } from "../../shared/contracts/models";
 import type { Assignment } from "../../shared/contracts/models";
 import type { ContractEvent } from "../../shared/contracts/events";
 import { PronoteWriteError } from "../domain/ports";
-import { MediaProxyError } from "../infrastructure/media-proxy";
 import type { MediaPayload } from "../infrastructure/media-proxy";
 import { apiError } from "./errors";
 
@@ -26,9 +25,6 @@ export interface AssignmentActions {
 export interface MediaActions {
   download(accountId: string, ref: string): Promise<MediaPayload>;
 }
-
-/** Longueur max d'une `ref` de PJ (entrée utilisateur, borne d'entrée). */
-const MEDIA_PARAM_MAX_CHARS = 200;
 
 /** accountId absent = serveur mono-compte résout sa session appairée (côté
  * intégration). La valeur reste BORNÉE et jamais reflétée dans une erreur.
@@ -89,43 +85,5 @@ export async function handleAssignmentsToggle(
     return Response.json(payload);
   } catch (err) {
     return writeError(err);
-  }
-}
-
-/** Nom ASCII pour l'en-tête (le nom lisible part dans filename*). */
-function asciiFileName(name: string): string {
-  const clean = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_").trim();
-  return clean || "fichier";
-}
-
-function mediaError(err: unknown): Response {
-  if (err instanceof MediaProxyError) {
-    if (err.code === "bad_ref") return apiError("bad_request", "invalid media ref");
-    if (err.code === "session_expired") return apiError("unauthorized", "session expirée");
-    if (err.code === "not_found") return apiError("not_found", "unknown media ref");
-  }
-  return apiError("internal", "media unavailable");
-}
-
-/**
- * GET /v1/media?accountId=&ref= — proxy serveur (règle d'or média, I1).
- * `ref` bornée en longueur : une URL absolue ou une chaîne arbitraire est
- * rejetée par parseRef (media-proxy) avant tout appel Pronote.
- */
-export async function handleMedia(url: URL, media: MediaActions | null): Promise<Response> {
-  if (!media || typeof media.download !== "function") return apiError("not_implemented", "proxy media non configuré");
-  const accountId = accountParam(url.searchParams.get("accountId"));
-  const ref = (url.searchParams.get("ref") ?? "").trim().slice(0, MEDIA_PARAM_MAX_CHARS);
-  if (!ref) return apiError("bad_request", "missing media ref");
-  try {
-    const payload = await media.download(accountId, ref);
-    return new Response(payload.bytes as unknown as BodyInit, {
-      headers: {
-        "content-type": "application/octet-stream",
-        "content-disposition": `attachment; filename="${asciiFileName(payload.name)}"; filename*=UTF-8''${encodeURIComponent(payload.name)}`,
-      },
-    });
-  } catch (err) {
-    return mediaError(err);
   }
 }

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: veryslopnynotes API
-  version: 0.2.0
+  version: 0.3.0
   description: Contrats app <-> serveur. Source de vérité (phase 1, issue #4). Miroir de shared/contracts/*.ts.
 paths:
   /v1/health:
@@ -304,6 +304,76 @@ paths:
                 $ref: '#/components/schemas/CanteenMenusResponse'
         '400':
           description: fenetre de dates illisible
+
+  # #77 vie scolaire : absences/retards unifiés (kind) + compteurs par periode,
+  # et sanctions. Onglet vie scolaire inactif = listes vides, jamais 500.
+  /v1/attendance:
+    get:
+      operationId: listAttendance
+      parameters:
+        - name: periodId
+          in: query
+          required: false
+          schema: { type: string, description: Filtre sur une periode, inconnue -> listes vides. }
+      responses:
+        '200':
+          description: absences + retards + compteurs par periode
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceResponse'
+  /v1/punishments:
+    get:
+      operationId: listPunishments
+      responses:
+        '200':
+          description: sanctions (liste vide si indisponible)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PunishmentsResponse'
+
+
+  /v1/me:
+    get:
+      operationId: getMe
+      description: >-
+        Infos du compte apparie (issue #82, parite Papillon Profil) : nom, classe,
+        periode courante, photo (ref opaque resolue par /v1/media) et enfants d'un
+        compte parent. user absent = etablissement ne publie rien, aucun nom
+        invente. Les periodes de l'annee restent sur /v1/periods.
+      responses:
+        '200':
+          description: profil du compte ou user null
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+
+  /v1/media:
+    get:
+      operationId: getMedia
+      description: >-
+        Proxy serveur d'une ref opaque (photo de profil, piece jointe). Aucune
+        adresse Pronote/ENT ne sort cote app (I1) ; le serveur resout et stream
+        les octets. Reponse binaire (image ou fichier), pas de JSON.
+      parameters:
+        - name: ref
+          in: query
+          required: true
+          schema: { type: string, maxLength: 200 }
+        - name: accountId
+          in: query
+          required: true
+          schema: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: octets du media
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '400':
+          description: ref ou accountId manquant/illisible
 components:
   schemas:
     Grade:
@@ -499,7 +569,7 @@ components:
       type: object
       required: [v, type, at, data]
       properties:
-        v: { type: string, enum: ['0.2.0'] }
+        v: { type: string, enum: ['0.3.0'] }
         type: { type: string, enum: [GradeCreated, AssignmentUpdated, TimetableUpdated, SyncCompleted, CacheInvalidated, SecurityAlert, NewsUpdated] }
         at: { type: string, format: date-time }
         data: { type: object }
@@ -633,3 +703,88 @@ components:
       properties:
         menus: { type: array, items: { $ref: '#/components/schemas/CanteenMenu' } }
         balance: { $ref: '#/components/schemas/CanteenBalance' }
+
+    AbsenceRecord:
+      type: object
+      required: [id, accountId, kind, date]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        kind: { type: string, enum: [absence, late] }
+        date: { type: string, format: date-time }
+        dateEnd: { type: string, format: date-time, description: Fin d'absence, >= date. }
+        subject: { type: string, maxLength: 64 }
+        motif: { type: string, maxLength: 500, description: Motif declare, donnee jamais instruction (I6). }
+        periodId: { type: string }
+        durationMinutes: { type: number, minimum: 0 }
+        justified: { type: boolean }
+    Punishment:
+      type: object
+      required: [id, accountId, date, motif, type]
+      properties:
+        id: { type: string }
+        accountId: { type: string }
+        date: { type: string, format: date-time }
+        dateEnd: { type: string, format: date-time, description: Fin de sanction, >= date. }
+        motif: { type: string, maxLength: 500, description: Motif de la sanction, donnee jamais instruction (I6). }
+        type: { type: string, maxLength: 100, description: Nature de la sanction. }
+        gravity: { type: number, minimum: 0, description: Gravite publiee par l'etablissement. }
+        periodId: { type: string }
+    AttendancePeriod:
+      type: object
+      required: [periodId, absences, late, missingMinutes]
+      properties:
+        periodId: { type: string }
+        name: { type: string, maxLength: 100 }
+        absences: { type: integer, minimum: 0 }
+        late: { type: integer, minimum: 0 }
+        missingMinutes: { type: integer, minimum: 0 }
+    AttendanceResponse:
+      type: object
+      required: [absences, periods]
+      properties:
+        absences: { type: array, items: { $ref: '#/components/schemas/AbsenceRecord' } }
+        periods: { type: array, items: { $ref: '#/components/schemas/AttendancePeriod' } }
+    PunishmentsResponse:
+      type: object
+      required: [punishments]
+      properties:
+        punishments: { type: array, items: { $ref: '#/components/schemas/Punishment' } }
+
+
+    ChildAccount:
+      type: object
+      required: [accountId, displayName]
+      properties:
+        accountId: { type: string, maxLength: 64 }
+        displayName: { type: string, maxLength: 64 }
+        classLabel: { type: string, maxLength: 64 }
+    UserInfo:
+      type: object
+      required: [accountId, displayName]
+      properties:
+        accountId: { type: string, maxLength: 64 }
+        displayName: { type: string, maxLength: 64, description: Nom publie par l'etablissement, jamais invente. }
+        firstName: { type: string, maxLength: 64 }
+        lastName: { type: string, maxLength: 64 }
+        classLabel: { type: string, maxLength: 64 }
+        periodId: { type: string, maxLength: 64, description: Periode courante, absente si non publiee. }
+        periodName: { type: string, maxLength: 64 }
+        photoRef:
+          type: string
+          maxLength: 200
+          pattern: '^photo:[A-Za-z0-9._-]{1,150}$'
+          description: >-
+            Ref opaque resolue par /v1/media. Une URL y est invalide par contrat :
+            l'app ne voit jamais d'adresse Pronote/ENT (I1).
+        hasKids: { type: boolean, description: Compte parent (HAVE_KIDS cote app). }
+        kids: { type: array, maxItems: 8, items: { $ref: '#/components/schemas/ChildAccount' } }
+    MeResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/UserInfo'
+          description: null = aucune info publiee (etat vide propre, aucun nom invente).
