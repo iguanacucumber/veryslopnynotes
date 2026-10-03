@@ -50,6 +50,9 @@ const val ROUTE_GRADES = "grades"
 const val ROUTE_TASKS = "tasks"
 const val ROUTE_PROFILE = "profile"
 const val ROUTE_SETTINGS = "settings"
+// #81 : hors onglets comme "fiches" (capacités dynamiques : l'onglet cantine
+// n'apparaît que si l'établissement publie des menus, voir CanteenMenus.kt).
+const val ROUTE_CANTEEN = "canteen"
 
 private val TAB_ROUTES = listOf(ROUTE_INDEX, ROUTE_CALENDAR, ROUTE_GRADES, ROUTE_TASKS, ROUTE_PROFILE)
 
@@ -122,7 +125,10 @@ fun AppNav(
                 CachedScreen("Tâches", CachePolicy.ASSIGNMENTS, repo, baseUrl, "Devoirs semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") })
             }
             composable(ROUTE_PROFILE) {
-                ProfileScreen(baseUrl, { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, { nav.navigate("fiches") })
+                ProfileScreen(baseUrl, { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, { nav.navigate("fiches") }, { nav.navigate(ROUTE_CANTEEN) })
+            }
+            composable(ROUTE_CANTEEN) {
+                CanteenRoute(repo, baseUrl)
             }
             composable(ROUTE_SETTINGS) {
                 SettingsScreen(onBack = { nav.popBackStack() })
@@ -288,6 +294,7 @@ fun ProfileScreen(
     goPairing: () -> Unit,
     goAlerts: () -> Unit,
     goFiches: () -> Unit,
+    goCanteen: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -298,6 +305,7 @@ fun ProfileScreen(
         Text("Infos élève, périodes et vie scolaire arrivent avec la synchro (#82, #77).")
         Button(onClick = goPairing) { Text("Appairage QR+PIN") }
         Button(onClick = { goFiches() }) { Text("Fiches révision") }
+        Button(onClick = { goCanteen() }) { Text("Cantine semaine") }
         Button(onClick = goAlerts) { Text("Alertes sécurité") }
         Button(onClick = goSettings) { Text("Réglages") }
     }
