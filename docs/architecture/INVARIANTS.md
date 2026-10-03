@@ -4,7 +4,13 @@ Format : Invariant → test → commande → emplacement.
 
 ## I1 — Android sans hôte Pronote/ENT
 - Invariant : `android/` ne contient aucune URL/référence hôte Pronote/ENT. Un seul hôte serveur allowlist.
-- Test : `tests/architecture/invariants.test.ts` (I1) + `agents/runtime/check-architecture.ts`.
+- Serveur choisi à l'exécution (écran d'appairage) : l'allowlist n'est plus une
+  constante de build mais `ServerConfig.validateBaseUrl` (https, sauf émulateur/
+  boucle locale en http ; hôte et port bornés ; identifiants, chemin, query,
+  fragment, espaces et caractères de contrôle refusés) + `isAllowed` en préfixe
+  strict. `BuildConfig.SERVER_HOST` n'est plus qu'une graine. Un changement de
+  serveur purge la session et les caches (`AccountStore.logout()`) avant usage.
+- Test : `tests/architecture/invariants.test.ts` (I1) + `agents/runtime/check-architecture.ts` + `tests/unit/android-server-config.test.ts`.
 - Commande : `make architecture-test`.
 - Emplacement : `android/**/*`.
 
