@@ -81,6 +81,9 @@ describe("contracts", () => {
       "Period:",
       "AveragesReport:",
       "PeriodsResponse:",
+      // #81 cantine : menu + solde optionnel.
+      "CanteenMenu:",
+      "CanteenMenusResponse:",
     ]) {
       expect(raw).toContain(s);
     }
@@ -132,7 +135,9 @@ describe("contracts", () => {
 
   test("api : routes et payloads", () => {
     // Plancher : chaque issue de parité ajoute ses routes (add-only).
-    expect(API_ROUTES.length).toBeGreaterThanOrEqual(12);
+    expect(API_ROUTES.length).toBeGreaterThanOrEqual(13);
+    expect(API_ROUTES.map((r) => r.path)).toContain("/v1/menus");
+    expect(API_ROUTES.map((r) => r.path)).toContain("/v1/news");
     expect(API_ROUTES.map((r) => r.path)).toContain("/v1/revision-sheets");
     expect(API_ROUTES.map((r) => r.path)).toContain("/v1/revision-sheets/pdf");
     expect(isHealthResponse({ status: "ok", version: CONTRACTS_VERSION })).toBe(true);
