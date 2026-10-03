@@ -1,4 +1,4 @@
-.PHONY: check lint typecheck unit architecture contracts security architecture-test integration integration-pronote integration-pairing integration-push integration-api e2e e2e-grades e2e-assignments e2e-manuals e2e-revision build
+.PHONY: check lint typecheck unit architecture contracts security architecture-test integration integration-pronote integration-pairing integration-push integration-api e2e e2e-grades e2e-assignments e2e-manuals e2e-revision serve build
 
 check: lint typecheck unit architecture contracts security
 
@@ -40,6 +40,12 @@ e2e-manuals:
 
 e2e-revision:
 	bun test tests/e2e/revision.test.ts
+
+# Serveur local : branchement complet (env -> session Pronote -> routes).
+# Sans .env.local il démarre quand même, lectures vides et écritures en 501.
+serve:
+	@if [ ! -f .env.local ]; then echo "aucun .env.local : lectures vides (écritures 501)"; fi
+	bun run server/infrastructure/http.ts
 
 build:
 	bun run agents/runtime/check-secrets.ts
