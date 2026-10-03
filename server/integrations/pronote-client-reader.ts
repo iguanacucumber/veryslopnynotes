@@ -10,8 +10,31 @@
 // encore lues : ProvidedAverages reste null, les rapports sont donc estimés,
 // ce qui est le comportement Papillon par défaut. Upgrade: getProvidedAverages
 // sur ce reader, sans toucher aux trois algorithmes.
-import type { Assignment, CanteenMeal, CanteenMenu, Evaluation, Grade, NewsItem, Period, TimetableEntry } from "../../shared/contracts/models";
-import { CANTEEN_MAX_ALLERGEN_CHARS, CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_DISH_CHARS, CANTEEN_MAX_DISHES, EVALUATION_LABEL_MAX_CHARS, isAssignment, isCanteenMenu, isEvaluation, isGrade, isNewsItem, isPeriod, isTimetableEntry, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CHARS } from "../../shared/contracts/models";
+import type { Assignment, CanteenMeal, CanteenMenu, ChildAccount, Evaluation, Grade, NewsItem, Period, TimetableEntry, UserInfo } from "../../shared/contracts/models";
+import {
+  CANTEEN_MAX_ALLERGEN_CHARS,
+  CANTEEN_MAX_ALLERGENS,
+  CANTEEN_MAX_DISH_CHARS,
+  CANTEEN_MAX_DISHES,
+  EVALUATION_LABEL_MAX_CHARS,
+  PHOTO_REF_PREFIX,
+  USER_CLASS_MAX_CHARS,
+  USER_MAX_KIDS,
+  USER_NAME_MAX_CHARS,
+  isAssignment,
+  isCanteenMenu,
+  isChildAccount,
+  isEvaluation,
+  isGrade,
+  isNewsItem,
+  isOpaquePhotoRef,
+  isPeriod,
+  isTimetableEntry,
+  isUserInfo,
+  NEWS_BODY_MAX_CHARS,
+  NEWS_META_MAX_CHARS,
+  NEWS_TITLE_MAX_CHARS,
+} from "../../shared/contracts/models";
 import type { PedagogicResource, PronotePage, PronotePageOptions, PronoteReader, PronoteTimetableOptions } from "../domain/ports";
 import { isPedagogicResource, PronoteAuthError, PronoteReadError, untrusted } from "../domain/ports";
 
@@ -734,4 +757,98 @@ export class PronoteClientReader implements PronoteReader {
       return { items: untrusted([]), nextCursor: null };
     }
   }
+
+  /**
+   * Infos du compte appairé (#82, parité Papillon Profil) : nom, classe,
+   * période courante, photo (réf opaque) + enfants d'un compte parent.
+   * DEFENSIF : pronotets expose `client.info` (name/className/profilePicture)
+   * et `client.children` (ParentClient). Champ non publié = omis ; nom vide =
+   * aucune page (jamais de faux nom, jamais de photo inventée). Seules les
+   * erreurs de session remontent (l'app doit se ré-appairer) ; le reste donne
+   * une page vide + log. Logs = compteurs seulement, aucun nom/secret.
+   * ponytail: période courante déduite des périodes déjà chargées par la lib
+   * (aucune requête en plus). Upgrade: currentPeriod() si la lib l'expose.
+   */
+  async getUserInfo(accountId: string): Promise<PronotePage<UserInfo>> {
+    const id = (accountId ?? "").trim();
+    if (!id) throw new PronoteReadError("me session expired", "session_expired");
+    let client;
+    try {
+      client = this.sessions.requireClient(id);
+    } catch (err) {
+      const mapped = toReadError(err, "me");
+      this.logger(`me -> error ${mapped.code}`);
+      throw mapped;
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const info = (client as any)?.info;
+      const periods = mapPeriods(((client as { periods?: unknown })?.periods ?? []) as unknown[]);
+      const user = mapUserInfo(id, info, periods);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const kids = mapKids((client as any)?.children);
+      const candidate =
+        user === null
+          ? null
+          : { ...user, hasKids: kids.length > 0, ...(kids.length > 0 ? { kids } : {}) };
+      if (candidate === null || !isUserInfo(candidate)) {
+        this.logger("me -> infos non publiees, page vide");
+        return { items: untrusted([]), nextCursor: null };
+      }
+      this.logger(`me -> ok 1 profil, ${kids.length} compte(s) enfant`);
+      return { items: untrusted([candidate]), nextCursor: null };
+    } catch (err) {
+      // Panne de lecture du profil = donnée absente, jamais une 500.
+      this.logger(`me -> indisponible (${toReadError(err, "me").code}), page vide`);
+      return { items: untrusted([]), nextCursor: null };
+    }
+  }
+}
+
+// --- #82 mappers profil ---
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapUserInfo(accountId: string, info: any, periods: Period[]): UserInfo | null {
+  const displayName = typeof info?.name === "string" ? bounded(info.name, USER_NAME_MAX_CHARS) : "";
+  // Nom non publié = pas de profil. Jamais de "Élève", jamais de chaîne vide
+  // envoyée comme si c'était une identité.
+  if (displayName === "") return null;
+  const lastName = typeof info?.lastName === "string" ? bounded(info.lastName, USER_NAME_MAX_CHARS) : "";
+  const firstName = typeof info?.firstName === "string" ? bounded(info.firstName, USER_NAME_MAX_CHARS) : "";
+  const classLabel = typeof info?.className === "string" ? bounded(info.className, USER_CLASS_MAX_CHARS) : "";
+  // Période courante = celle qui contient maintenant, sinon la 1re lisible.
+  const now = Date.now();
+  const current =
+    periods.find((p) => Date.parse(p.start) <= now && now <= Date.parse(p.end)) ?? periods[0] ?? null;
+  // Photo : RÈF OPAQUE `photo:<id>`, jamais l'URL de la pièce (qui est une
+  // donnée externe Pronote et ne doit pas sortir du serveur).
+  const rawPicId = typeof info?.profilePicture?.id === "string" ? bounded(info.profilePicture.id, 150) : "";
+  const photoRef =
+    rawPicId !== "" && isOpaquePhotoRef(`${PHOTO_REF_PREFIX}${rawPicId}`) ? `${PHOTO_REF_PREFIX}${rawPicId}` : undefined;
+  const candidate: UserInfo = {
+    accountId,
+    displayName,
+    ...(firstName !== "" ? { firstName } : {}),
+    ...(lastName !== "" ? { lastName } : {}),
+    ...(classLabel !== "" ? { classLabel } : {}),
+    ...(current ? { periodId: current.id, periodName: current.name } : {}),
+    ...(photoRef ? { photoRef } : {}),
+  };
+  return isUserInfo(candidate) ? candidate : null;
+}
+
+/** Enfants d'un compte parent (multi-compte #82), bornés et sans doublon. */
+function mapKids(raw: unknown): ChildAccount[] {
+  const out: ChildAccount[] = [];
+  for (const c of (Array.isArray(raw) ? raw : []).slice(0, USER_MAX_KIDS)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec = c as any;
+    const id = typeof rec?.id === "string" ? bounded(rec.id, 64) : "";
+    const name = typeof rec?.name === "string" ? bounded(rec.name, USER_NAME_MAX_CHARS) : "";
+    // Enfant sans id ou sans nom = ignoré (jamais de ligne à moitié remplie).
+    if (id === "" || name === "") continue;
+    const klass = typeof rec?.className === "string" ? bounded(rec.className, USER_CLASS_MAX_CHARS) : "";
+    const cand: ChildAccount = { accountId: id, displayName: name, ...(klass !== "" ? { classLabel: klass } : {}) };
+    if (isChildAccount(cand) && !out.some((k) => k.accountId === cand.accountId)) out.push(cand);
+  }
+  return out;
 }
