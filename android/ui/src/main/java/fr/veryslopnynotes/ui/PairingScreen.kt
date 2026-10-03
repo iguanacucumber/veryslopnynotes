@@ -1,5 +1,6 @@
 package fr.veryslopnynotes.ui
 
+import android.content.Context
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -184,6 +185,7 @@ fun PairingRoute(
                 onNext = { next -> step = next },
             )
             SetupStep.QR -> QrStep(
+                context = context,
                 form = form,
                 onChange = { form = it },
                 onSubmit = submit,
@@ -309,6 +311,7 @@ private fun AccountStep(
  */
 @Composable
 private fun QrStep(
+    context: Context,
     form: SetupForm,
     onChange: (SetupForm) -> Unit,
     onSubmit: (SetupInput) -> Unit,
@@ -331,6 +334,12 @@ private fun QrStep(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text("QR de l'application")
+        // #122 : scan direct, sans permission caméra. `null` = rien scanné, on
+        // ne touche à rien : le collage ci-dessous reste le repli.
+        Button(
+            onClick = { scanQrCode(context) { scanned -> if (scanned != null) onChange(form.copy(qrRaw = scanned)) } },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Scanner le QR") }
         OutlinedTextField(
             value = form.qrRaw,
             onValueChange = { onChange(form.copy(qrRaw = it)) },

@@ -27,8 +27,12 @@ l'assistant au lieu de l'accueil ; après un 401 ou un redémarrage du serveur,
 c'est lui qui rouvre la session **et** le credential.
 
 Aucun mot de passe n'est écrit sur le téléphone : il part dans le POST, le
-serveur le garde en mémoire pour renouveler la session. Le QR se colle pour
-l'instant (scan caméra : issue suivante).
+serveur le garde en mémoire pour renouveler la session.
+
+Le QR de l'étape 3 se **scanne** (`ui/QrScanner.kt`, Google Code Scanner :
+module Play Services téléchargé à la demande, **aucune permission CAMERA** dans
+le manifeste, ~15 lignes d'appel). Annulation, refus ou téléphone sans Play
+Services → `null`, et le champ de collage reste le chemin de secours.
 
 L'allowlist est donc `core/ServerConfig.validateBaseUrl` (et `isAllowed` en
 préfixe strict), pas une constante de build : `https` obligatoire, `http` uni-
@@ -81,8 +85,6 @@ Vérifier : `jarsigner -verify`, `check-secrets` OK.
 ## Renvoyé phases suivantes (hors scope #13)
 
 - #14 offline : cache Room + affichage sans réseau.
-- Scan caméra du QR (colle seule pour l'instant) : le parseur `parseSchoolQr`
-  est déjà en place, il ne manque que la capture.
 - Persistance serveur (SQLite) : aujourd'hui un redémarrage fait refaire le setup.
 - Phase 10 : pinning cert (reste hors scope, release #32 faite).
 
