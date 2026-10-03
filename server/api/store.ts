@@ -3,7 +3,7 @@
 // Mémoire = seed/tests uniquement ; l'adaptateur SQLite (#11) implémentera
 // ReadStore sans changer le routeur.
 
-import type { Assignment, CanteenBalance, CanteenMenu, Evaluation, Grade, NewsItem, Period, TimetableEntry } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, CanteenBalance, CanteenMenu, Evaluation, Grade, NewsItem, Period, Punishment, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 import type { SecurityAlertData } from "../../shared/contracts/events";
 
 import type { ProvidedAverages } from "../domain/averages";
@@ -38,6 +38,22 @@ export interface ReadStore {
   canteenMenus?(window?: { from?: string; to?: string }): CanteenMenu[];
   /** Solde compte cantine (#81), null tant que Turboself/ARD n'est pas branché. */
   canteenBalance?(): CanteenBalance | null;
+
+  /**
+   * Vie scolaire (#77) : absences + retards unifiés (`kind`). Optionnelle :
+   * défaut `[]` = établissement sans onglet vie scolaire (état propre côté app).
+   */
+  absences?(): AbsenceRecord[];
+  /** Sanctions vie scolaire (#77). Optionnelle, défaut `[]`. */
+  punishments?(): Punishment[];
+
+
+  /**
+   * Infos du compte appairé (#82) : nom, classe, période, photo (réf opaque).
+   * Optionnelle + défaut null = établissement/compte sans infos publiées,
+   * l'écran Profil affiche un état vide plutôt qu'un profil d'exemple.
+   */
+  userInfo?(): UserInfo | null;
 }
 
 export interface StoreSeed {
@@ -54,6 +70,17 @@ export interface StoreSeed {
   /** Menus cantine synthétiques (#81). Défaut = aucun menu (onglet masqué). */
   readonly canteenMenus?: CanteenMenu[];
   readonly canteenBalance?: CanteenBalance | null;
+
+  /** Vie scolaire synthétique (#77). Défaut = aucune absence / aucune sanction. */
+  readonly absences?: AbsenceRecord[];
+  readonly punishments?: Punishment[];
+
+
+  /**
+   * Profil synthétique (#82). Défaut = null : aucune donnée personnelle dans le
+   * seed par défaut, donc aucun risque de profil fantôme dans les tests.
+   */
+  readonly userInfo?: UserInfo | null;
 }
 
 const SEED_GRADE: Grade = {
@@ -141,6 +168,12 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
   // fenêtre est fait par le routeur, le store reste une source de lecture.
   const canteen = structuredClone(seed.canteenMenus ?? []);
   const balance = seed.canteenBalance === undefined ? null : structuredClone(seed.canteenBalance);
+  // #77 : défaut vide = établissement sans onglet vie scolaire (état propre).
+  const absences = structuredClone(seed.absences ?? []);
+  const punishments = structuredClone(seed.punishments ?? []);
+
+  // #82 : défaut null (pas de profil dans le seed général = mode anonyme).
+  const user = seed.userInfo === undefined ? null : structuredClone(seed.userInfo);
   return {
     grades: () => structuredClone(grades),
     assignments: () => structuredClone(assignments),
@@ -154,5 +187,11 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
 
     canteenMenus: () => structuredClone(canteen),
     canteenBalance: () => (balance === null ? null : structuredClone(balance)),
+
+    absences: () => structuredClone(absences),
+    punishments: () => structuredClone(punishments),
+
+
+    userInfo: () => (user === null ? null : structuredClone(user)),
   };
 }

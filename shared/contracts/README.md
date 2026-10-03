@@ -19,7 +19,11 @@ ressource cache `news` (TTL 60 min). Onglet Actualités absent côté établisse
 = liste vide (200), jamais 500.
 Changement cassant = bump version + PR justificative ; `tests/contracts` impose le sync.
 
-Add-only #83 (pas de bump) : préférences matière `SubjectPrefs` (couleur `#RRGGBB` strict,
+v0.3 (`0.3.0`, issues #78 #79 #81 #83) : vague de parité add-only. Les contrats
+existants ne changent pas de forme, seul le jeu de routes et de ressources cache
+grandit. **Non cassant** pour les apps 0.2.0 : elles ignorent les nouvelles ressources.
+
+Add-only #83 (v0.3) : préférences matière `SubjectPrefs` (couleur `#RRGGBB` strict,
 emoji borné, libellé perso) + `GET`/`PUT /v1/subjects/prefs`. Matière sans prefs = nom
 d'origine, donc les apps 0.2.0 ignorent le champ sans régression.
 
@@ -34,3 +38,33 @@ la semaine est une requête, le « prochain cours » se calcule côté app (donn
 dérivée, pas du publié). SSE : `TimetableUpdated` (type existant) est réémis
 dans le snapshot `/v1/events`, le diff de sync EDT l'émet sur cours ajouté,
 annulé ou déplacé. Ressource cache `timetable` inchangée (TTL 60 min).
+
+
+Add-only #75 (mêmes versions) : `Assignment` enrichi (`description?`, `lessonContent?`,
+`attachments?: AttachmentRef[]`, `periodId?`, `weekId?` — tous omis quand l'établissement
+ne les publie pas), filtre de fenêtre `GET /v1/assignments?weekStart=` ou `?from=&to=`
+(400 sur date illisible, sans reflet de l'input), `POST /v1/assignments/toggle`
+(écriture Pronote = **action APP confirmée uniquement**, I7 ; 401 session expirée,
+409 devoir introuvable, 501 écriture non supportée) et `GET /v1/media?accountId=&ref=`
+(proxy des pièces jointes). `AttachmentRef.ref` est une référence **opaque** : le
+validateur refuse `http://`, `https://`, `//`, `data:` et `\\` — l'app n'a jamais d'URL
+Pronote/ENT (I1, règle d'or média). Le toggle renvoie l'**événement existant**
+`AssignmentUpdated` (aucun nouveau type d'événement) pour l'invalidation de cache.
+
+
+Add-only #77 (pas de bump) : vie scolaire — `AbsenceRecord` (absences ET retards unifiés
+par `kind: "absence" | "late"`, motif borné 500), `Punishment` (motif + type requis,
+gravité optionnelle), `AttendancePeriod` (compteurs dérivés par période) + routes
+`/v1/attendance` et `/v1/punishments`, ressources cache `attendance`/`punishments`
+(TTL 60 min). Onglet vie scolaire inactif côté établissement = listes vides (200),
+jamais 500. Invalidation = `CacheInvalidated` (resource `attendance`), pas d'événement
+dédié ; la détection de nouvelle absence se fait sur comparaison de données structurées
+(`newAbsences` dans `server/jobs/notify.ts`), jamais sur une sortie LLM (I7).
+
+
+Add-only #82 (pas de bump) : `UserInfo` (+`ChildAccount`) et `GET /v1/me` (`user: null` =
+infos non publiées, aucun nom inventé), plus `GET /v1/media` : résolution serveur d'une
+**réf opaque** (`photo:<id>`), une URL dans `photoRef` est rejetée par `isUserInfo` (I1,
+règle d'or média). `profile`/`me` n'est PAS une ressource cachable : le profil reste en
+mémoire côté app (mode anonyme, aucune donnée personnelle persistée).
+Les périodes de l'année restent sur `/v1/periods` (#74) — pas de doublon.
