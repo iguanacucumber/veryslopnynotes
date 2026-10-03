@@ -2,7 +2,7 @@
 // vers HTTP, SQLite ou Pronote. Adapters en server/infrastructure/
 // et server/integrations/.
 // Voir docs/architecture/INVARIANTS.md (I2, I3, I5, I6, I7).
-import type { Assignment, CanteenMenu, Evaluation, Grade, NewsItem, Period, TimetableEntry } from "../../shared/contracts/models";
+import type { Assignment, CanteenMenu, Evaluation, Grade, NewsItem, Period, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 
 export type Untrusted<T = string> = { readonly __untrusted: true; readonly value: T };
 
@@ -101,6 +101,14 @@ export interface PronoteReader {
    * cas l'adaptateur renvoie une page VIDE, pas une erreur (onglet masqué).
    */
   getMenus?(accountId: string, options?: PronoteTimetableOptions): Promise<PronotePage<CanteenMenu>>;
+
+  /**
+   * Infos du compte appairé (#82, parité Papillon Profil) : nom, classe,
+   * période courante, photo (réf opaque, résolue par le proxy média) et
+   * enfants d'un compte parent. Optionnel + page VIDE quand l'établissement ne
+   * publie rien : jamais de nom ni de photo inventés (voir isUserInfo).
+   */
+  getUserInfo?(accountId: string): Promise<PronotePage<UserInfo>>;
 }
 
 /** Ressource pédagogique via session Pronote (contenu cours, fichier joint, manuel lié). */
