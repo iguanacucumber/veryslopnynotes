@@ -18,3 +18,7 @@ Add-only #79 (mêmes versions) : route `/v1/news` (`NewsItem`), événement SSE 
 ressource cache `news` (TTL 60 min). Onglet Actualités absent côté établissement
 = liste vide (200), jamais 500.
 Changement cassant = bump version + PR justificative ; `tests/contracts` impose le sync.
+
+Add-only #83 (pas de bump) : préférences matière `SubjectPrefs` (couleur `#RRGGBB` strict,
+emoji borné, libellé perso) + `GET`/`PUT /v1/subjects/prefs`. Matière sans prefs = nom
+d'origine, donc les apps 0.2.0 ignorent le champ sans régression.

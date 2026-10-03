@@ -6,6 +6,7 @@
 
 import {
   API_ROUTES,
+  SUBJECT_PREFS_MAX_BODY_CHARS,
   isAssignmentsResponse,
   isEvaluationsResponse,
 
@@ -18,9 +19,10 @@ import {
   isPeriodsResponse,
   isRevisionSheetsResponse,
   isSecurityAlertsResponse,
+  isSubjectPrefsResponse,
   isTimetableResponse,
 } from "../../shared/contracts/api";
-import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDevice, isNewsItem } from "../../shared/contracts/models";
+import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDevice, isNewsItem, isSubjectPrefs, SUBJECT_PREFS_MAX_COUNT } from "../../shared/contracts/models";
 import type { ContractEvent, NewsUpdatedData, SyncCompletedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
 import { computeAverages } from "../domain/averages";
@@ -31,6 +33,8 @@ import { renderRevisionPdf } from "../jobs/revision";
 import type { RevisionListStore } from "./revision";
 import { createRevisionMemoryStore } from "./revision";
 import type { ReadStore } from "./store";
+import type { SubjectPrefsStore } from "./subject-prefs";
+import { createSubjectPrefsMemoryStore } from "./subject-prefs";
 import type { LLMProvider } from "../domain/ports";
 
 /** Longueur max d'un periodId reflété dans la réponse (borne d'entrée utilisateur). */
@@ -84,13 +88,19 @@ export function createHandler(
   pairing: PairingService = new PairingService(),
   llm: LLMProvider | null = null,
   revisions: RevisionListStore = createRevisionMemoryStore(),
+  // #83 : préférences matière. Interface d'écriture séparée de ReadStore, NoOp
+  // par défaut pour les appels existants (5e paramètre, aucun appel cassé).
+  subjectPrefs: SubjectPrefsStore = createSubjectPrefsMemoryStore(),
 ): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
     const path = url.pathname;
-    const route = API_ROUTES.find((r) => r.path === path);
-    if (!route) return apiError("not_found", `unknown path ${path}`);
-    if (req.method !== route.method) return apiError("method_not_allowed", `${req.method} not allowed on ${path}`);
+    // Une path peut porter GET + PUT (#83) : on matche path puis méthode,
+    // sinon 405 sur la mauvaise méthode au lieu de 404/405 incohérent.
+    if (!API_ROUTES.some((r) => r.path === path)) return apiError("not_found", `unknown path ${path}`);
+    if (!API_ROUTES.some((r) => r.path === path && r.method === req.method)) {
+      return apiError("method_not_allowed", `${req.method} not allowed on ${path}`);
+    }
 
     switch (path) {
       case "/v1/health":
@@ -205,6 +215,33 @@ export function createHandler(
       case "/v1/homework/generate": {
         return handleHomeworkGenerate(req, llm);
       }
+      case "/v1/subjects/prefs": {
+        // #83 : préférences matière (couleur/emoji/libellé), clé = nom de matière.
+        // GET = liste bornée, PUT = upsert d'une matière. Le local gagne côté app,
+        // le serveur ne fait que répliquer (aucun effet métier ici, I7).
+        if (req.method === "GET") {
+          const payload = { prefs: subjectPrefs.list().slice(0, SUBJECT_PREFS_MAX_COUNT) };
+          return json(isSubjectPrefsResponse(payload), payload);
+        }
+        let body: unknown;
+        try {
+          const text = await req.text();
+          // Corps borné avant parse : prefs = 4 champs, pas d'entrée arbitraire.
+          if (text.length > SUBJECT_PREFS_MAX_BODY_CHARS) return apiError("bad_request", "invalid body");
+          body = JSON.parse(text);
+        } catch {
+          return apiError("bad_request", "invalid JSON body");
+        }
+        // 400 sans jamais répliquer l'input dans le message.
+        if (!isSubjectPrefs(body)) return apiError("bad_request", "invalid subject prefs");
+        try {
+          subjectPrefs.upsert(body);
+        } catch {
+          return apiError("bad_request", "subject prefs rejected");
+        }
+        return json(isSubjectPrefs(body), body);
+      }
+
       // #78 : compétences fournies = chips + détail. Store sans évaluations
       // (ou établissement sans l'onglet) = trois listes vides, état propre.
       case "/v1/evaluations": {
@@ -253,10 +290,17 @@ export function serve(
   pairing?: PairingService,
   llm?: LLMProvider | null,
   revisions?: RevisionListStore,
+  subjectPrefs?: SubjectPrefsStore,
 ) {
   return Bun.serve({
     port,
     hostname: "127.0.0.1",
-    fetch: createHandler(store, pairing ?? new PairingService(), llm ?? null, revisions ?? createRevisionMemoryStore()),
+    fetch: createHandler(
+      store,
+      pairing ?? new PairingService(),
+      llm ?? null,
+      revisions ?? createRevisionMemoryStore(),
+      subjectPrefs ?? createSubjectPrefsMemoryStore(),
+    ),
   });
 }

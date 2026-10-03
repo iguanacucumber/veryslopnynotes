@@ -135,8 +135,10 @@ describe("contracts", () => {
 
   test("api : routes et payloads", () => {
     // Plancher : chaque issue de parité ajoute ses routes (add-only).
-    expect(API_ROUTES.length).toBeGreaterThanOrEqual(13);
+    expect(API_ROUTES.length).toBeGreaterThanOrEqual(15);
     expect(API_ROUTES.map((r) => r.path)).toContain("/v1/menus");
+    expect(API_ROUTES.map((r) => r.path)).toContain("/v1/evaluations");
+    expect(API_ROUTES.filter((r) => r.path === "/v1/subjects/prefs").map((r) => r.method)).toEqual(["GET", "PUT"]);
     expect(API_ROUTES.map((r) => r.path)).toContain("/v1/news");
     expect(API_ROUTES.map((r) => r.path)).toContain("/v1/revision-sheets");
     expect(API_ROUTES.map((r) => r.path)).toContain("/v1/revision-sheets/pdf");
