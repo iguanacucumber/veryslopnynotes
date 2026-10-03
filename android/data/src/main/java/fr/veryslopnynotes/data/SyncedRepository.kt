@@ -33,12 +33,14 @@ class SyncedRepository(
     fun isStale(resource: String, entry: CachedEntry, now: Long = clock()): Boolean =
         CachePolicy.isStale(resource, entry.fetchedAt, now)
 
-    fun pathFor(resource: String, baseUrl: String): String = when (resource) {
+    // ponytail: query de fenêtre bornée par l appelant (weekStart, #76), vide par
+    // défaut = chemin inchangé. Jamais de saisie libre concaténée ici.
+    fun pathFor(resource: String, baseUrl: String, query: String = ""): String = when (resource) {
         CachePolicy.GRADES -> ServerConfig.gradesUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/grades" }
         CachePolicy.ASSIGNMENTS -> ServerConfig.assignmentsUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/assignments" }
-        CachePolicy.TIMETABLE -> ServerConfig.timetableUrl(baseUrl)
+        CachePolicy.TIMETABLE -> ServerConfig.timetableUrl(baseUrl, query)
             .removePrefix(baseUrl).ifEmpty { "/v1/timetable" }
         // #78 : évaluations par compétences (compétences fournies sinon vide).
         CachePolicy.EVALUATIONS -> ServerConfig.evaluationsUrl(baseUrl)
@@ -61,10 +63,13 @@ class SyncedRepository(
     }
 
     // GET serveur async (OkHttp enqueue, pas de coroutines). Callback sur main thread.
-    fun refreshAsync(resource: String, baseUrl: String, cb: (RefreshOutcome) -> Unit) {
+    // ponytail: une seule clé de cache par ressource : la requête de la fenêtre
+    //   demandée écrase le payload précédent (semaine courante en pratique).
+    //   Upgrade: clé de cache = ressource + fenêtre.
+    fun refreshAsync(resource: String, baseUrl: String, query: String = "", cb: (RefreshOutcome) -> Unit) {
         require(CachePolicy.isCacheable(resource)) { "ressource non cachable: $resource" }
         val request = try {
-            api.buildGet(pathFor(resource, baseUrl))
+            api.buildGet(pathFor(resource, baseUrl, query))
         } catch (e: IllegalArgumentException) {
             post(cb, RefreshOutcome.Failed("URL hors allowlist serveur", store.load(resource)?.payload))
             return
