@@ -266,7 +266,8 @@ class DiscussionsRepository(private val api: ApiClient) {
          * `discussions` (événement EXISTANT CacheInvalidated). Une réponse qui
          * ne le prouve pas = échec affiché, pas de faux succès.
          */
-        fun parseAction(body: String): DiscussionWriteOutcome? = try {
+        fun parseAction(body: String): DiscussionWriteOutcome? {
+            return try {
             val root = JSONObject(body)
             val event = root.optJSONObject("event") ?: return null
             val resource = event.optJSONObject("data")?.optString("resource", "") ?: ""
@@ -276,8 +277,9 @@ class DiscussionsRepository(private val api: ApiClient) {
             } else {
                 DiscussionWriteOutcome(false, "Réponse illisible.")
             }
-        } catch (_: Exception) {
-            null
+            } catch (_: Exception) {
+                null
+            }
         }
 
         /** Liste des fils depuis le cache : payload absent/illisible = vide. */
