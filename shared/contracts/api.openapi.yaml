@@ -161,13 +161,35 @@ paths:
   /v1/timetable:
     get:
       operationId: listTimetable
+      description: >-
+        EDT d'une fenêtre de semaine (issue #76, add-only). weekStart = un jour de
+        la semaine demandée, bornes du lundi 00:00 UTC au dimanche 23:59:59.999
+        UTC (offset de fuseau explicite : bug connu de l'onglet EDT Papillon).
+        Sans weekStart, from/to bornent la fenêtre ; sans paramètre, aucune
+        fenêtre. Une entrée porte prof/statut/cours déplacé si l'établissement
+        les publie, champs absents sinon.
+      parameters:
+        - name: weekStart
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
       responses:
         '200':
-          description: EDT
+          description: EDT de la fenêtre (liste vide si aucun cours)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/TimetableResponse'
+        '400':
+          description: fenetre de dates illisible
   /v1/events:
     get:
       operationId: subscribeEvents
@@ -481,9 +503,16 @@ components:
         id: { type: string }
         accountId: { type: string }
         subject: { type: string }
-        room: { type: string }
+        room: { type: string, maxLength: 100 }
         start: { type: string, format: date-time }
         end: { type: string, format: date-time }
+        teacher: { type: string, maxLength: 100, description: Enseignant, absent si non publie. }
+        status:
+          type: string
+          enum: [normal, cancelled, moved]
+          description: Statut publie, absent si l'etablissement ne le publie pas (jamais "normal" par defaut).
+        originalStart: { type: string, format: date-time, description: Horaires d'origine d'un cours deplace. }
+        originalEnd: { type: string, format: date-time }
     Device:
       type: object
       required: [id, tokenHash]

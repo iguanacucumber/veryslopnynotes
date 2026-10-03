@@ -71,14 +71,15 @@ describe("e2e news", () => {
     const decoder = new TextDecoder();
     let buf = "";
     let types: string[] = [];
-    for (let i = 0; i < 20 && types.length < 2; i++) {
+    for (let i = 0; i < 20 && types.length < 3; i++) {
       const { done, value } = await reader.read();
       if (value) buf += decoder.decode(value, { stream: true });
       types = [...buf.matchAll(/data: (\{.*\})\n\n/g)].map((m) => JSON.parse(m[1] as string).type);
       if (done) break;
     }
     await reader.cancel();
-    expect(types).toEqual(["SyncCompleted", "NewsUpdated"]);
+    // #76 : TimetableUpdated réémis dans le même snapshot (type déjà contractuel).
+    expect(types).toEqual(["SyncCompleted", "NewsUpdated", "TimetableUpdated"]);
     const newsEvent = [...buf.matchAll(/data: (\{.*\})\n\n/g)]
       .map((m) => JSON.parse(m[1] as string))
       .find((e) => e.type === "NewsUpdated");

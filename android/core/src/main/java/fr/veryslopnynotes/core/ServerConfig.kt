@@ -31,6 +31,11 @@ object ServerConfig {
         "$baseUrl/v1/media?accountId=${urlEncode(accountId)}&ref=${urlEncode(ref)}"
 
     fun timetableUrl(baseUrl: String): String = "$baseUrl/v1/timetable"
+    // #76 : fenêtre de semaine (weekStart=AAAA-MM-JJ) pour la vue semaine EDT.
+    // Query vide = appel inchangé ; la query est construite par l'app depuis un
+    // jour calculé, jamais d'une saisie libre.
+    fun timetableUrl(baseUrl: String, query: String): String =
+        if (query.isBlank()) timetableUrl(baseUrl) else "$baseUrl/v1/timetable?$query"
     fun eventsUrl(baseUrl: String): String = "$baseUrl/v1/events"
     fun securityAlertsUrl(baseUrl: String): String = "$baseUrl/v1/security/alerts"
     fun pairingStartUrl(baseUrl: String): String = "$baseUrl/v1/pairing/start"

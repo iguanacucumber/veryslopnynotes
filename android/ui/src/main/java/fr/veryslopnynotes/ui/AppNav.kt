@@ -62,6 +62,8 @@ import fr.veryslopnynotes.data.SyncedRepository
 // Préférences matière #83 : route "settings" (éditeur couleur/emoji/libellé),
 // résolveur unique appliqué aux notes, devoirs et EDT (SubjectStyle.kt), offline
 // via fichier local + réplication serveur (SubjectPrefs.kt).
+// EDT #76 : route "calendar" = TimetableRoute (vue semaine, prochain cours +
+// salle, statuts annulé/déplacé, hors-ligne par le cache `timetable`).
 // index/profile : coquilles parité (#82 profil/accueil branchera les données ici) ;
 // aucun faux contenu. Contenu serveur affiché comme donnée, jamais interprété.
 
@@ -168,7 +170,16 @@ fun AppNav(
                 IndexScreen(repo, { nav.navigate(ROUTE_CALENDAR) }, { nav.navigate(ROUTE_GRADES) }, { nav.navigate(ROUTE_TASKS) })
             }
             composable(ROUTE_CALENDAR) {
-                CachedScreen("Calendrier", CachePolicy.TIMETABLE, repo, baseUrl, "EDT semaine", { nav.navigate(ROUTE_SETTINGS) }, { nav.navigate("pairing") }, { nav.navigate("alerts") }, subjectPrefs = subjectPrefs)
+                // #76 : vue semaine EDT (prof, statut annulé/déplacé, salle du
+                // prochain cours, navigation de semaine, hors-ligne via cache).
+                TimetableRoute(
+                    repo = repo,
+                    baseUrl = baseUrl,
+                    subjectPrefs = subjectPrefs,
+                    onSettings = { nav.navigate(ROUTE_SETTINGS) },
+                    onPairing = { nav.navigate("pairing") },
+                    onAlerts = { nav.navigate("alerts") },
+                )
             }
             composable(ROUTE_GRADES) {
                 CachedScreen(
