@@ -9,4 +9,8 @@ v0 (`0.1.0`, phase 1, issue #4) : notes, devoirs, EDT, appairage QR+PIN, santé,
 v0.2 (`0.2.0`, issue #74) : `/v1/grades` renvoie `averages` (moyenne générale + par matière,
 fournie sinon estimée, algorithme `subject`/`weighted`/`median`, historique, influence par note),
 nouvelle route `/v1/periods`. **Cassant** : l'app doit ignorer `averages` avant 0.2.0.
+v0.2 add-only (issue #78) : modèles `Skill`/`Evaluation`/`CompetenceSummary` (tous les champs
+optionnels omis quand Pronote ne les publie pas, `note: null` = non noté) + nouvelle route
+`/v1/evaluations` (compétences fournies, sinon trois listes vides) et ressource cache `evaluations`.
+Invalidation = `CacheInvalidated` (resource `evaluations`), pas d'événement dédié.
 Changement cassant = bump version + PR justificative ; `tests/contracts` impose le sync.

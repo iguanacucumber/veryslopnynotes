@@ -7,6 +7,7 @@
 import {
   API_ROUTES,
   isAssignmentsResponse,
+  isEvaluationsResponse,
   isGradesResponse,
   isPairingConfirmRequest,
   isPairingStartRequest,
@@ -20,6 +21,7 @@ import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, isAverageAlgorithm, isDev
 import type { ContractEvent, SyncCompletedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
 import { computeAverages } from "../domain/averages";
+import { buildCompetenceSummary, buildSkills } from "../domain/competences";
 import { handleHomeworkGenerate } from "./homework";
 import { PairingService } from "./pairing";
 import { renderRevisionPdf } from "../jobs/revision";
@@ -170,6 +172,17 @@ export function createHandler(
       }
       case "/v1/homework/generate": {
         return handleHomeworkGenerate(req, llm);
+      }
+      // #78 : compétences fournies = chips + détail. Store sans évaluations
+      // (ou établissement sans l'onglet) = trois listes vides, état propre.
+      case "/v1/evaluations": {
+        const evaluations = store.evaluations?.() ?? [];
+        const payload = {
+          skills: buildSkills(evaluations),
+          evaluations,
+          summary: buildCompetenceSummary(evaluations),
+        };
+        return json(isEvaluationsResponse(payload), payload);
       }
       default:
         return apiError("not_found", `unknown path ${path}`);

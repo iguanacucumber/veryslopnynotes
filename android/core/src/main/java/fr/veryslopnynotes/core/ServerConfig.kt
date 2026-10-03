@@ -26,6 +26,7 @@ object ServerConfig {
     fun pairingConfirmUrl(baseUrl: String): String = "$baseUrl/v1/pairing/confirm"
     fun revisionSheetsUrl(baseUrl: String): String = "$baseUrl/v1/revision-sheets"
     fun revisionSheetPdfUrl(baseUrl: String, id: String): String = "$baseUrl/v1/revision-sheets/pdf?id=$id"
+    fun evaluationsUrl(baseUrl: String): String = "$baseUrl/v1/evaluations"
 
     // ponytail: allowlist = préfixe baseUrl seule. Upgrade: pinning cert phase 10.
     fun isAllowed(url: String, baseUrl: String): Boolean = url.startsWith(baseUrl)
