@@ -27,6 +27,7 @@ import {
   syntheticTimetableEntries,
   syntheticTimetablePayload,
 } from "./fixtures/timetable";
+import { pairedDevice } from "./fixtures/pairing";
 
 // Session injectée sans réseau (PronoteSessionStore/pronotets non nécessaire).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,8 +40,10 @@ function readerFor(client: unknown, logs: string[] = []) {
 }
 
 async function getTimetableJson(query = "", entries = syntheticTimetableEntries) {
-  const handler = createHandler(createMemoryStore({ entries }));
-  const res = await handler(new Request(`http://127.0.0.1/v1/timetable${query}`));
+  // Depuis 0.4.0 la lecture exige le bearer d'un device appairé.
+  const { pairing, auth } = pairedDevice();
+  const handler = createHandler(createMemoryStore({ entries }), pairing);
+  const res = await handler(new Request(`http://127.0.0.1/v1/timetable${query}`, { headers: auth }));
   return { res, body: (await res.json()) as { entries: typeof syntheticTimetableEntries } };
 }
 
@@ -205,8 +208,9 @@ describe("unit timetable (#76)", () => {
       }),
     ).toBe(false);
 
-    const handler = createHandler(createMemoryStore({ entries: syntheticTimetableEntries }));
-    const res = await handler(new Request("http://127.0.0.1/v1/events"));
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore({ entries: syntheticTimetableEntries }), pairing);
+    const res = await handler(new Request("http://127.0.0.1/v1/events", { headers: auth }));
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
     let buf = "";

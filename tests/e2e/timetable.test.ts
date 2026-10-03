@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "../unit/fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { isApiErrorBody } from "../../server/api/errors";
 import { isTimetableResponse } from "../../shared/contracts/api";
@@ -20,8 +21,9 @@ import { syntheticAccountId } from "../unit/fixtures/pronote";
 // aucun LLM sur le chemin (données structurées seules, I7).
 
 async function getTimetableJson(query = "") {
-  const handler = createHandler(createMemoryStore({ entries: syntheticTimetableEntries }));
-  const res = await handler(new Request(`http://127.0.0.1/v1/timetable${query}`));
+  const { pairing, auth } = pairedDevice();
+  const handler = createHandler(createMemoryStore({ entries: syntheticTimetableEntries }), pairing);
+  const res = await handler(new Request(`http://127.0.0.1/v1/timetable${query}`, { headers: auth }));
   return { res, body: (await res.json()) as { entries: TimetableEntry[] } };
 }
 
@@ -64,8 +66,9 @@ describe("e2e timetable (#76)", () => {
     expect(casse.res.status).toBe(400);
     expect(isApiErrorBody(casse.body)).toBe(true);
     // Store vide (établissement sans EDT) : 200 + liste vide, jamais 500.
-    const bare = await createHandler(createMemoryStore({ entries: [] }))(
-      new Request("http://127.0.0.1/v1/timetable"),
+    const { pairing, auth } = pairedDevice();
+    const bare = await createHandler(createMemoryStore({ entries: [] }), pairing)(
+      new Request("http://127.0.0.1/v1/timetable", { headers: auth }),
     );
     expect(bare.status).toBe(200);
     expect(await bare.json()).toEqual({ entries: [] });
@@ -101,8 +104,9 @@ describe("e2e timetable (#76)", () => {
 
   test("hors-ligne : cache EDT périmé = repli affiché, badge stale", async () => {
     // Le cache serveur garde le dernier payload valide (miroir SyncedRepository).
-    const handler = createHandler(createMemoryStore({ entries: syntheticTimetableEntries }));
-    const payload = await (await handler(new Request("http://127.0.0.1/v1/timetable?weekStart=2026-10-05"))).text();
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore({ entries: syntheticTimetableEntries }), pairing);
+    const payload = await (await handler(new Request("http://127.0.0.1/v1/timetable?weekStart=2026-10-05", { headers: auth }))).text();
     const now = 1_000_000;
     expect(cacheStatus("timetable", now, now + CACHE_TTL_MS.timetable)).toBe("fresh");
     expect(cacheStatus("timetable", now, now + CACHE_TTL_MS.timetable + 1)).toBe("stale");

@@ -20,6 +20,34 @@ import {
 } from "../../server/api/revision";
 import { createSubjectPrefsMemoryStore } from "../../server/api/subject-prefs";
 
+/**
+ * Appaire un device comme le fait l'app, VIA les deux seules routes ouvertes :
+ * le `PairingService` est interne à `createApp` (non injectable), le parcours
+ * réel start -> confirm est donc le seul moyen d'obtenir le bearer. PIN et
+ * token synthétiques, aucun réseau, aucun secret en dur.
+ */
+async function appairer(
+  app: { handler: (req: Request) => Promise<Response> },
+): Promise<{ authorization: string }> {
+  const start = await app.handler(
+    new Request("http://127.0.0.1/v1/pairing/start", {
+      method: "POST",
+      body: JSON.stringify({ deviceName: "pixel-test" }),
+    }),
+  );
+  const { sessionId, code } = (await start.json()) as { sessionId: string; code: string };
+  const confirm = await app.handler(
+    new Request("http://127.0.0.1/v1/pairing/confirm", {
+      method: "POST",
+      body: JSON.stringify({ sessionId, code }),
+    }),
+  );
+  const { token } = (await confirm.json()) as { token: string };
+  // Le bearer des routes fermées : sans lui, le 401 de la porte d'entrée
+  // masquerait le 200 que ce test attend du pull-refresh.
+  return { authorization: `Bearer ${token}` };
+}
+
 // Horodatages figés : aucun Date.now() caché, aucun sommeil dans ces tests.
 const AT = "2026-10-02T07:00:00.000Z";
 const AT2 = "2026-10-03T07:00:00.000Z";
@@ -96,9 +124,12 @@ describe("bugs handlers API (revue adversariale)", () => {
 
     // Le client envoie l'accountId de SON choix : le serveur doit viser la session
     // appairée (comme le fait une requête sans accountId), jamais un id inventé.
+    // Device appairé (bearer) : c'est le 200 métier du pull-refresh qui est observé.
+    const auth = await appairer(app);
     const res = await app.handler(
       new Request("http://127.0.0.1/v1/sync/refresh", {
         method: "POST",
+        headers: auth,
         body: JSON.stringify({ accountId: ALIAS }),
       }),
     );

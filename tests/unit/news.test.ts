@@ -17,6 +17,7 @@ import { PronoteClientReader } from "../../server/integrations/pronote-client-re
 import { PronoteReadError } from "../../server/domain/ports";
 import { createMemoryStore } from "../../server/api/store";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "./fixtures/pairing";
 import {
   syntheticInformation,
   syntheticNewsAccountId,
@@ -194,36 +195,41 @@ describe("unit news (#79)", () => {
   });
 
   test("GET /v1/news : payload validé par le garde-fou, store sans actus = liste vide", async () => {
-    const handler = createHandler(createMemoryStore({ news: [syntheticNewsItem] }));
-    const res = await handler(new Request("http://127.0.0.1/v1/news"));
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore({ news: [syntheticNewsItem] }), pairing);
+    const res = await handler(new Request("http://127.0.0.1/v1/news", { headers: auth }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(isNewsResponse(body)).toBe(true);
     expect(body.news).toEqual([syntheticNewsItem]);
     // Store sans news() (adaptateur non encore migré) : 200 + liste vide, pas 500.
     const bare = createMemoryStore();
-    const bareHandler = createHandler({ ...bare, news: undefined });
-    const bareRes = await bareHandler(new Request("http://127.0.0.1/v1/news"));
+    const bareHandler = createHandler({ ...bare, news: undefined }, pairing);
+    const bareRes = await bareHandler(new Request("http://127.0.0.1/v1/news", { headers: auth }));
     expect(bareRes.status).toBe(200);
     expect(await bareRes.json()).toEqual({ news: [] });
     // Corps illisible = 500 typée (jamais de payload douteux).
-    const broken = createHandler({
-      ...createMemoryStore(),
-      news: () => [{ ...syntheticNewsItem, publishedAt: "hier" }] as never,
-    });
-    const brokenRes = await broken(new Request("http://127.0.0.1/v1/news"));
+    const broken = createHandler(
+      {
+        ...createMemoryStore(),
+        news: () => [{ ...syntheticNewsItem, publishedAt: "hier" }] as never,
+      },
+      pairing,
+    );
+    const brokenRes = await broken(new Request("http://127.0.0.1/v1/news", { headers: auth }));
     expect(brokenRes.status).toBe(500);
     expect((await brokenRes.json() as { error: { code: string } }).error.code).toBe("internal");
     // Méthode refusée.
-    const post = await handler(new Request("http://127.0.0.1/v1/news", { method: "POST" }));
+    const post = await handler(new Request("http://127.0.0.1/v1/news", { method: "POST", headers: auth }));
     expect(post.status).toBe(405);
   });
 
   // #76 : le snapshot SSE réémet aussi TimetableUpdated (type déjà contractuel,
   // pas de doublon) — d'où 3 enveloppes.
   test("SSE : snapshot SyncCompleted, NewsUpdated puis TimetableUpdated dans /v1/events", async () => {
-    const handler = createHandler(createMemoryStore({ news: [syntheticNewsInjectionItem] }));
-    const res = await handler(new Request("http://127.0.0.1/v1/events"));
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore({ news: [syntheticNewsInjectionItem] }), pairing);
+    const res = await handler(new Request("http://127.0.0.1/v1/events", { headers: auth }));
     expect(res.headers.get("content-type")).toContain("text/event-stream");
     // Flux tenu ouvert : lecture jusqu'à 3 enveloppes puis annulation.
     const reader = res.body!.getReader();

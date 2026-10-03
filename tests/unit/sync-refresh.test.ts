@@ -22,6 +22,7 @@ import { PronoteAuthError } from "../../server/domain/ports";
 import { handleSyncRefresh } from "../../server/api/sync-refresh";
 import type { SyncRefreshActions } from "../../server/api/sync-refresh";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "./fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { isApiErrorBody } from "../../server/api/errors";
 import { isSyncRefreshResponse } from "../../shared/contracts/api";
@@ -313,7 +314,10 @@ describe("unit sync refresh (#87)", () => {
     // Aucun type d'événement nouveau : l'app 0.3.0 sait déjà les traiter.
     for (const e of events) expect(body.events).toContainEqual(e);
 
-    // Corps : absent = mono-compte, {} = idem, accountId borné, invalide = 400.
+    // Corps : absent = mono-compte, {} = idem, accountId réclamé par le client
+    // validé pour la FORME (borne) mais JAMAIS utilisé comme identité : c'est le
+    // compte RÉSOLU PAR LE SERVEUR qui part vers le port, même quand le corps en
+    // réclame un autre (0.4.0 : le refresh relit le compte appairé du serveur).
     const vus: string[] = [];
     const spy: SyncRefreshActions = {
       refresh: async (accountId) => {
@@ -325,10 +329,15 @@ describe("unit sync refresh (#87)", () => {
       const res = await handleSyncRefresh(
         new Request("http://127.0.0.1/v1/sync/refresh", body0 === undefined ? undefined : { method: "POST", body: body0 }),
         spy,
+        "acc-resolu-par-le-serveur",
       );
       expect(res.status).toBe(200);
     }
-    expect(vus).toEqual(["", "", syntheticAccountId]);
+    // Le compte réclamé par le corps ne remplace JAMAIS celui du serveur.
+    expect(vus).toEqual(["acc-resolu-par-le-serveur", "acc-resolu-par-le-serveur", "acc-resolu-par-le-serveur"]);
+    // Sans compte résolu (routeur mono-compte : store vide) = port sans identité.
+    await handleSyncRefresh(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", body: "{}" }), spy);
+    expect(vus.at(-1)).toBe("");
     const mauvais = await handleSyncRefresh(
       new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", body: "pas-du-json" }),
       spy,
@@ -430,18 +439,23 @@ describe("unit sync refresh (#87)", () => {
   });
 
   test("route POST /v1/sync/refresh : 405 sur GET, 501 par défaut", async () => {
-    const handler = createHandler(createMemoryStore());
-    const mauvaisMethode = await handler(new Request("http://127.0.0.1/v1/sync/refresh"));
+    // Depuis 0.4.0 la route est fermée : bearer du device appairé obligatoire.
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore(), pairing);
+    const mauvaisMethode = await handler(new Request("http://127.0.0.1/v1/sync/refresh", { headers: auth }));
     expect(mauvaisMethode.status).toBe(405);
-    const parDefaut = await handler(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST" }));
+    const parDefaut = await handler(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: auth }));
     expect(parDefaut.status).toBe(501);
+    // Sans bearer : 401 (le compte n'est même pas résolu).
+    const anonyme = await handler(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", body: "{}" }));
+    expect(anonyme.status).toBe(401);
     // Câblé : la relecture passe par les événements returned, pas par le store.
-    const cable = createHandler(createMemoryStore(), undefined, undefined, undefined, undefined, null, null, {
+    const cable = createHandler(createMemoryStore(), pairing, undefined, undefined, undefined, null, null, {
       refresh: async () => [
         { v: CONTRACTS_VERSION, type: "SyncCompleted", at: AT, data: { accountId: syntheticAccountId, grades: 2, assignments: 1 } },
       ],
     });
-    const res = await cable(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", body: "{}" }));
+    const res = await cable(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: auth, body: "{}" }));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { events: { type: string }[] };
     expect(isSyncRefreshResponse(body)).toBe(true);

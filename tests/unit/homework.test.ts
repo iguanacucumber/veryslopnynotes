@@ -12,6 +12,7 @@ import { buildSafePrompt } from "../../server/ai/untrusted";
 import type { LLMProvider, Untrusted } from "../../server/domain/ports";
 import { handleHomeworkGenerate } from "../../server/api/homework";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "./fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { isLlmConfigured, loadLlmConfig } from "../../server/infrastructure/llm-openrouter";
 
@@ -217,22 +218,26 @@ describe("unit homework generate (#27)", () => {
   });
 
   test("router : route exposée, 501 sans LLM, 200 avec fake", async () => {
-    const without = createHandler(createMemoryStore(), undefined, null);
+    // Depuis 0.4.0 la route est fermée : le device est appairé, bearer obligatoire.
+    const { pairing, auth } = pairedDevice();
+    const without = createHandler(createMemoryStore(), pairing, null);
     const r501 = await without(
       new Request("http://127.0.0.1/v1/homework/generate", {
         method: "POST",
+        headers: auth,
         body: JSON.stringify(validInput),
       }),
     );
     expect(r501.status).toBe(501);
     const withFake = createHandler(
       createMemoryStore(),
-      undefined,
+      pairing,
       fakeProvider(JSON.stringify({ status: "ok", answer: "3/4", steps: [], sources: [SRC_A] })),
     );
     const r200 = await withFake(
       new Request("http://127.0.0.1/v1/homework/generate", {
         method: "POST",
+        headers: auth,
         body: JSON.stringify(validInput),
       }),
     );

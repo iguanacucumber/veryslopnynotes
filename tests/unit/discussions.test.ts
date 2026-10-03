@@ -37,6 +37,7 @@ import { PronoteClientReader } from "../../server/integrations/pronote-client-re
 import { PronoteSessionStore } from "../../server/integrations/pronote-sessions";
 import { PronoteReadError, PronoteWriteError } from "../../server/domain/ports";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "./fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { isApiErrorBody } from "../../server/api/errors";
 import type { DiscussionActions } from "../../server/api/discussions";
@@ -322,6 +323,11 @@ describe("mapper messagerie #80 (défensif)", () => {
 });
 
 describe("routes #80", () => {
+  // Depuis 0.4.0 TOUTE route /v1/discussions exige le bearer d'un device
+  // appairé : un seul appairage pour le fichier, son en-tête sur chaque
+  // requête (une seule variable d'auth, pas de duplication par test).
+  const { pairing: PAIRING, auth: AUTH } = pairedDevice();
+
   function handler(actions: DiscussionActions | null = null) {
     return createHandler(
       createMemoryStore({
@@ -329,7 +335,7 @@ describe("routes #80", () => {
         discussionMessages: [syntheticMessage, syntheticInjectionMessage],
         discussionRecipients: [syntheticRecipient],
       }),
-      undefined,
+      PAIRING,
       null,
       undefined,
       undefined,
@@ -343,7 +349,7 @@ describe("routes #80", () => {
 
   test("GET : fils, messages d'un fil, destinataires (store sans données = vide)", async () => {
     const h = handler();
-    const list = await h(new Request("http://127.0.0.1/v1/discussions"));
+    const list = await h(new Request("http://127.0.0.1/v1/discussions", { headers: AUTH }));
     expect(list.status).toBe(200);
     const payload = await list.json();
     expect(isDiscussionsResponse(payload)).toBe(true);
@@ -352,20 +358,20 @@ describe("routes #80", () => {
     expect(body).not.toMatch(/https?:\/\/(?!127\.0\.0\.1)/);
     expect(body).not.toMatch(/sk-or-v1-|PRONOTE_PASSWORD/);
 
-    const msgs = await h(new Request("http://127.0.0.1/v1/discussions/messages?id=d-fake-1"));
+    const msgs = await h(new Request("http://127.0.0.1/v1/discussions/messages?id=d-fake-1", { headers: AUTH }));
     expect(isDiscussionMessagesResponse(await msgs.json())).toBe(true);
     // Un autre fil = liste vide (jamais les messages d'un autre fil).
-    const other = await h(new Request("http://127.0.0.1/v1/discussions/messages?id=d-fake-2"));
+    const other = await h(new Request("http://127.0.0.1/v1/discussions/messages?id=d-fake-2", { headers: AUTH }));
     expect((await other.json()).messages).toEqual([]);
-    expect((await h(new Request("http://127.0.0.1/v1/discussions/messages"))).status).toBe(400);
+    expect((await h(new Request("http://127.0.0.1/v1/discussions/messages", { headers: AUTH }))).status).toBe(400);
 
-    const rec = await h(new Request("http://127.0.0.1/v1/discussions/recipients"));
+    const rec = await h(new Request("http://127.0.0.1/v1/discussions/recipients", { headers: AUTH }));
     expect(isDiscussionRecipientsResponse(await rec.json())).toBe(true);
 
     // Store sans messagerie (établissement sans onglet) = 200 + listes vides.
-    const vide = createHandler(createMemoryStore());
-    expect((await (await vide(new Request("http://127.0.0.1/v1/discussions"))).json()).discussions).toEqual([]);
-    expect((await (await vide(new Request("http://127.0.0.1/v1/discussions/recipients"))).json()).recipients).toEqual([]);
+    const vide = createHandler(createMemoryStore(), PAIRING);
+    expect((await (await vide(new Request("http://127.0.0.1/v1/discussions", { headers: AUTH }))).json()).discussions).toEqual([]);
+    expect((await (await vide(new Request("http://127.0.0.1/v1/discussions/recipients", { headers: AUTH }))).json()).recipients).toEqual([]);
   });
 
   test("POST create/reply/read-state/delete : 200 + CacheInvalidated", async () => {
@@ -392,7 +398,7 @@ describe("routes #80", () => {
       ["/v1/discussions/delete", { discussionId: "d-fake-1" }],
     ];
     for (const [path, body] of cases) {
-      const res = await h(new Request(`http://127.0.0.1${path}`, { method: "POST", body: JSON.stringify(body) }));
+      const res = await h(new Request(`http://127.0.0.1${path}`, { method: "POST", headers: AUTH, body: JSON.stringify(body) }));
       expect({ path, status: res.status }).toEqual({ path, status: 200 });
       const json = await res.json();
       expect(isDiscussionActionResponse(json)).toBe(true);
@@ -416,7 +422,7 @@ describe("routes #80", () => {
       ["/v1/discussions/delete", { discussionId: "d-fake-1" }],
     ];
     for (const [path, body] of bodies) {
-      const res = await h(new Request(`http://127.0.0.1${path}`, { method: "POST", body: JSON.stringify(body) }));
+      const res = await h(new Request(`http://127.0.0.1${path}`, { method: "POST", headers: AUTH, body: JSON.stringify(body) }));
       expect({ path, status: res.status }).toEqual({ path, status: 501 });
       expect(isApiErrorBody(await res.json())).toBe(true);
     }
@@ -446,7 +452,7 @@ describe("routes #80", () => {
     ];
     for (const [path, body] of invalid) {
       const res = await withActions(
-        new Request(`http://127.0.0.1${path}`, { method: "POST", body }),
+        new Request(`http://127.0.0.1${path}`, { method: "POST", headers: AUTH, body }),
       );
       expect({ path, status: res.status }).toEqual({ path, status: 400 });
       const text = await res.text();
@@ -458,7 +464,7 @@ describe("routes #80", () => {
     expect({ writes: { ...writes, created: writes.created.length, replies: writes.replies.length, readStates: writes.readStates.length, deleted: writes.deleted.length } })
       .toEqual({ writes: { created: 0, replies: 0, readStates: 0, deleted: 0 } });
     // GET sur une route d'écriture = 405 (pas une écriture déguisée).
-    expect((await withActions(new Request("http://127.0.0.1/v1/discussions/reply"))).status).toBe(405);
+    expect((await withActions(new Request("http://127.0.0.1/v1/discussions/reply", { headers: AUTH }))).status).toBe(405);
     // Adaptateur qui n'expose PAS l'action demandée = 501 (pas un faux 400/succès).
     const partiel = handler({
       replyToDiscussion: async () => {},
@@ -466,6 +472,7 @@ describe("routes #80", () => {
     const manquant = await partiel(
       new Request("http://127.0.0.1/v1/discussions", {
         method: "POST",
+        headers: AUTH,
         body: JSON.stringify({ subject: "Sortie", body: "Merci.", recipientIds: ["r-fake-1"] }),
       }),
     );
@@ -498,6 +505,7 @@ describe("routes #80", () => {
       const res = await h(
         new Request("http://127.0.0.1/v1/discussions/reply", {
           method: "POST",
+          headers: AUTH,
           body: JSON.stringify({ discussionId: "d-fake-1", body: "Coucou" }),
         }),
       );
@@ -517,6 +525,7 @@ describe("routes #80", () => {
     const res = await boom(
       new Request("http://127.0.0.1/v1/discussions/reply", {
         method: "POST",
+        headers: AUTH,
         body: JSON.stringify({ discussionId: "d-fake-1", body: "Coucou" }),
       }),
     );

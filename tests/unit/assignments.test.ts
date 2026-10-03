@@ -265,22 +265,23 @@ describe("routes #75", () => {
   };
 
   test("GET /v1/assignments : contenu + PJ conservés, filtre semaine, 400 sans reflet", async () => {
-    const { h } = appaired();
-    const all = await (await h(new Request("http://127.0.0.1/v1/assignments"))).json();
+    // Depuis 0.4.0 la lecture exige le bearer d'un device appairé.
+    const { h, auth } = appaired();
+    const all = await (await h(new Request("http://127.0.0.1/v1/assignments", { headers: auth }))).json();
     expect(isAssignmentsResponse(all)).toBe(true);
     expect(all.assignments).toHaveLength(3);
     expect(all.assignments[0].description).toBe("fiche");
     expect(all.assignments[0].attachments[0].ref).toBe(REF.ref);
     // Semaine : lundi 2026-10-05 → dimanche 2026-10-11 inclus (borne haute 23:59).
     const week = await (
-      await h(new Request("http://127.0.0.1/v1/assignments?weekStart=2026-10-05T00:00:00.000Z"))
+      await h(new Request("http://127.0.0.1/v1/assignments?weekStart=2026-10-05T00:00:00.000Z", { headers: auth }))
     ).json();
     expect(week.assignments.map((a: Assignment) => a.id)).toEqual(["a-mardi", "a-dimanche"]);
     const from = await (
-      await h(new Request("http://127.0.0.1/v1/assignments?from=2026-10-07&to=2026-10-20"))
+      await h(new Request("http://127.0.0.1/v1/assignments?from=2026-10-07&to=2026-10-20", { headers: auth }))
     ).json();
     expect(from.assignments.map((a: Assignment) => a.id)).toEqual(["a-dimanche", "a-ht"]);
-    const bad = await h(new Request("http://127.0.0.1/v1/assignments?weekStart=lundi"));
+    const bad = await h(new Request("http://127.0.0.1/v1/assignments?weekStart=lundi", { headers: auth }));
     expect(bad.status).toBe(400);
     const badText = await bad.text();
     expect(isApiErrorBody(JSON.parse(badText))).toBe(true);
@@ -294,18 +295,18 @@ describe("routes #75", () => {
       `?from=2026-10-07T00:00:00.000Z${"z".repeat(40)}`,
       `?weekStart=${"9".repeat(80)}`,
     ]) {
-      const refuse = await h(new Request(`http://127.0.0.1/v1/assignments${query}`));
+      const refuse = await h(new Request(`http://127.0.0.1/v1/assignments${query}`, { headers: auth }));
       expect({ query: query.slice(0, 24), status: refuse.status }).toEqual({ query: query.slice(0, 24), status: 400 });
       const corps = await refuse.text();
       expect(isApiErrorBody(JSON.parse(corps))).toBe(true);
       expect(corps).not.toContain("2026-10-07T00:00:00.000Zz");
     }
     // GET sur la route d'écriture = 405 (pas une écriture déguisée), avec Allow.
-    const methode = await h(new Request("http://127.0.0.1/v1/assignments/toggle"));
+    const methode = await h(new Request("http://127.0.0.1/v1/assignments/toggle", { headers: auth }));
     expect(methode.status).toBe(405);
     expect(methode.headers.get("allow")).toBe("POST");
     // HEAD là où GET existe (sonde de taille de contenu).
-    const head = await h(new Request("http://127.0.0.1/v1/assignments", { method: "HEAD" }));
+    const head = await h(new Request("http://127.0.0.1/v1/assignments", { method: "HEAD", headers: auth }));
     expect(head.status).toBe(200);
     expect(await head.text()).toBe("");
   });

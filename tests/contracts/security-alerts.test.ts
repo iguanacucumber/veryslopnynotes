@@ -10,6 +10,7 @@ import {
 import { CONTRACTS_VERSION } from "../../shared/contracts/models";
 import { createMemoryStore } from "../../server/api/store";
 import { createHandler } from "../../server/api/router";
+import { pairedDevice } from "../unit/fixtures/pairing";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const OPENAPI = join(ROOT, "shared/contracts/api.openapi.yaml");
@@ -82,8 +83,9 @@ describe("contracts security alerts (#21)", () => {
   });
 
   test("GET /v1/security/alerts : payload validé par contrat", async () => {
-    const handler = createHandler(createMemoryStore());
-    const res = await handler(new Request("http://127.0.0.1/v1/security/alerts"));
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(createMemoryStore(), pairing);
+    const res = await handler(new Request("http://127.0.0.1/v1/security/alerts", { headers: auth }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(isSecurityAlertsResponse(body)).toBe(true);

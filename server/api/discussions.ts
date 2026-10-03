@@ -23,9 +23,9 @@ import { apiError } from "./errors";
 /**
  * Port d'action côté API, SÉPARÉ des lectures (PronoteReader n'expose aucune
  * écriture). Implémenté par le reader Pronote via la session SSO serveur.
- * `accountId` vide = serveur mono-compte (session appairée résolue côté intégr.).
- * Un `accountId` fourni par le client n'est qu'un INDICE borné : la composition
- * root vise le compte qu'elle a appairé, jamais une identité demandée.
+ * `accountId` est RÉSOLU CÔTÉ SERVEUR par le routeur (`servedAccountId`) ;
+ * vide = serveur mono-compte (session appairée résolue côté intégr.). Un
+ * `accountId` mis dans le corps par le client n'est JAMAIS une identité.
  */
 export interface DiscussionActions {
   createDiscussion(accountId: string, subject: string, body: string, recipientIds: string[]): Promise<void>;
@@ -80,6 +80,8 @@ function writeError(err: unknown, kind: DiscussionWriteKind): Response {
  * POST /v1/discussions | /reply | /read-state | /delete — action APP confirmée
  * (I7). Sortie : `{ ok, event }` ; `ok` seul ne prouve rien côté client, l'événement
  * porte l'invalidation de cache (même démarche que le toggle #75).
+ * `accountId` est RÉSOLU CÔTÉ SERVEUR (`servedAccountId`) : le `accountId` du
+ * corps est validé par le contrat mais n'est JAMAIS utilisé comme identité.
  * ponytail: un seul handler paramétré par `kind` plutôt que 4 handlers : une
  * seule implémentation de la discipline (bornes, validation, erreurs typées).
  */
@@ -87,6 +89,7 @@ export async function handleDiscussionWrite(
   req: Request,
   actions: DiscussionActions | null,
   kind: DiscussionWriteKind,
+  accountId = "",
   at: string = new Date().toISOString(),
 ): Promise<Response> {
   // Écriture indisponible (aucun adaptateur injecté, ou adaptateur sans cette
@@ -110,22 +113,22 @@ export async function handleDiscussionWrite(
     switch (kind) {
       case "create": {
         if (!isDiscussionsCreateRequest(body)) return apiError("bad_request", "invalid discussion request");
-        await actions.createDiscussion(body.accountId ?? "", body.subject, body.body, body.recipientIds);
+        await actions.createDiscussion(accountId, body.subject, body.body, body.recipientIds);
         break;
       }
       case "reply": {
         if (!isDiscussionsReplyRequest(body)) return apiError("bad_request", "invalid discussion request");
-        await actions.replyToDiscussion(body.accountId ?? "", body.discussionId, body.body);
+        await actions.replyToDiscussion(accountId, body.discussionId, body.body);
         break;
       }
       case "read-state": {
         if (!isDiscussionsReadStateRequest(body)) return apiError("bad_request", "invalid discussion request");
-        await actions.setDiscussionRead(body.accountId ?? "", body.discussionId, body.read);
+        await actions.setDiscussionRead(accountId, body.discussionId, body.read);
         break;
       }
       case "delete": {
         if (!isDiscussionsDeleteRequest(body)) return apiError("bad_request", "invalid discussion request");
-        await actions.deleteDiscussion(body.accountId ?? "", body.discussionId);
+        await actions.deleteDiscussion(accountId, body.discussionId);
         break;
       }
       default:

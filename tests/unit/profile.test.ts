@@ -91,35 +91,40 @@ describe("unit profil #82", () => {
   });
 
   test("GET /v1/me : profil du store, et periods déjà servies par /v1/periods", async () => {
-    const handler = createHandler(createMemoryStore({ userInfo: syntheticUserInfo, periods: syntheticPeriods }));
-    const res = await handler(new Request("http://127.0.0.1/v1/me"));
+    const { pairing, auth } = paired();
+    const handler = createHandler(createMemoryStore({ userInfo: syntheticUserInfo, periods: syntheticPeriods }), pairing);
+    const res = await handler(new Request("http://127.0.0.1/v1/me", { headers: auth }));
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(isMeResponse(JSON.parse(body))).toBe(true);
     expect(JSON.parse(body).user.displayName).toBe("Camille Exemple");
     expect(body).not.toMatch(/https?:\/\//);
     // Périodes : route #74 déjà en place, aucun doublon ajouté par #82.
-    const periods = await (await handler(new Request("http://127.0.0.1/v1/periods"))).text();
+    const periods = await (await handler(new Request("http://127.0.0.1/v1/periods", { headers: auth }))).text();
     expect(JSON.parse(periods).periods.length).toBe(2);
   });
 
   test("GET /v1/me sans infos publiées : user null (jamais de profil bidon)", async () => {
-    const handler = createHandler(createMemoryStore({ userInfo: null }));
-    const res = await handler(new Request("http://127.0.0.1/v1/me"));
+    const { pairing, auth } = paired();
+    const handler = createHandler(createMemoryStore({ userInfo: null }), pairing);
+    const res = await handler(new Request("http://127.0.0.1/v1/me", { headers: auth }));
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(JSON.parse(body)).toEqual({ user: null });
     expect(isMeResponse(JSON.parse(body))).toBe(true);
     // Store legacy sans userInfo() = même état, pas de 500.
-    const legacy = createHandler({
-      grades: () => [],
-      assignments: () => [],
-      entries: () => [],
-      securityAlerts: () => [],
-      periods: () => [],
-      providedAverages: () => null,
-    });
-    expect(await (await legacy(new Request("http://127.0.0.1/v1/me"))).text()).toBe('{"user":null}');
+    const legacy = createHandler(
+      {
+        grades: () => [],
+        assignments: () => [],
+        entries: () => [],
+        securityAlerts: () => [],
+        periods: () => [],
+        providedAverages: () => null,
+      },
+      pairing,
+    );
+    expect(await (await legacy(new Request("http://127.0.0.1/v1/me", { headers: auth }))).text()).toBe('{"user":null}');
   });
 
   test("GET /v1/media : réf opaque seulement, octets streamés par le serveur", async () => {
