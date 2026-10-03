@@ -82,7 +82,7 @@ class AssignmentsRepository(private val api: ApiClient) {
         fun fromJson(o: JSONObject): Assignment? = try {
             val atts = mutableListOf<AssignmentAttachment>()
             val arr = o.optJSONArray("attachments")
-            for (i in 0 until arr?.length() ?: 0) {
+            for (i in 0 until (arr?.length() ?: 0)) {
                 val a = arr?.optJSONObject(i) ?: continue
                 val att = AssignmentAttachment(
                     id = a.optString("id", ""),
