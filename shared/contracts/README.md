@@ -10,3 +10,7 @@ v0.2 (`0.2.0`, issue #74) : `/v1/grades` renvoie `averages` (moyenne générale 
 fournie sinon estimée, algorithme `subject`/`weighted`/`median`, historique, influence par note),
 nouvelle route `/v1/periods`. **Cassant** : l'app doit ignorer `averages` avant 0.2.0.
 Changement cassant = bump version + PR justificative ; `tests/contracts` impose le sync.
+
+Add-only #83 (pas de bump) : préférences matière `SubjectPrefs` (couleur `#RRGGBB` strict,
+emoji borné, libellé perso) + `GET`/`PUT /v1/subjects/prefs`. Matière sans prefs = nom
+d'origine, donc les apps 0.2.0 ignorent le champ sans régression.

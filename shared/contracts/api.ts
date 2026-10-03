@@ -3,20 +3,22 @@
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
 import {
+  SUBJECT_PREFS_MAX_COUNT,
   isAveragesReport,
   isAssignment,
   isDevice,
   isGrade,
   isPeriod,
   isRevisionSheet,
+  isSubjectPrefs,
   isTimetableEntry,
 } from "./models";
-import type { AveragesReport, Assignment, Device, Grade, Period, RevisionSheet, TimetableEntry } from "./models";
+import type { AveragesReport, Assignment, Device, Grade, Period, RevisionSheet, SubjectPrefs, TimetableEntry } from "./models";
 import { isSecurityAlertData } from "./events";
 import type { SecurityAlertData } from "./events";
 
 export interface ApiRoute {
-  readonly method: "GET" | "POST";
+  readonly method: "GET" | "POST" | "PUT";
   readonly path: string;
 }
 
@@ -33,6 +35,9 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/v1/homework/generate" },
   { method: "GET", path: "/v1/revision-sheets" },
   { method: "GET", path: "/v1/revision-sheets/pdf" },
+  // #83 préférences matière : GET liste / PUT upsert (clé = nom de matière).
+  { method: "GET", path: "/v1/subjects/prefs" },
+  { method: "PUT", path: "/v1/subjects/prefs" },
 ] as const;
 
 export interface HealthResponse {
@@ -228,4 +233,18 @@ export function isHomeworkGenerateResponse(v: unknown): v is HomeworkGenerateRes
     );
   }
   return false;
+}
+
+// #83 préférences matière : corps PUT borné (4 champs, pas d'entrée arbitraire).
+export const SUBJECT_PREFS_MAX_BODY_CHARS = 2048;
+
+/** Liste des préférences connues, clé = nom de matière. */
+export interface SubjectPrefsResponse {
+  readonly prefs: SubjectPrefs[];
+}
+
+export function isSubjectPrefsResponse(v: unknown): v is SubjectPrefsResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const p = (v as Record<string, unknown>)["prefs"];
+  return Array.isArray(p) && p.length <= SUBJECT_PREFS_MAX_COUNT && p.every(isSubjectPrefs);
 }
