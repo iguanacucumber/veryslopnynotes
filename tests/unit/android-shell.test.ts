@@ -212,6 +212,22 @@ describe("coquille applicative (#135)", () => {
     expect(profile).toContain('Text("Se déconnecter")');
   });
 
+  test("fenêtre sans barre d'action : pas de marque statique au-dessus de la barre du haut", () => {
+    // #135 : sans thème de fenêtre, la plateforme pose une barre d'action
+    // (`android:id/action_bar` dans le dump uiautomator) qui affiche le LABEL de
+    // l'app — « VerySlopyNyNotes » sur les 15 routes, la marque statique que
+    // cette issue retire de l'interface, plus 56 dp de hauteur perdue.
+    const manifest = readFileSync(join(ROOT, "android/app/src/main/AndroidManifest.xml"), "utf8");
+    expect(manifest).toContain('android:theme="@style/Theme.Veryslopynotes"');
+    for (const variant of ["values", "values-night"]) {
+      const file = join(ROOT, `android/app/src/main/res/${variant}/themes.xml`);
+      expect({ file, exists: existsSync(file) }).toEqual({ file, exists: true });
+      expect({ file, noActionBar: readFileSync(file, "utf8").includes("NoActionBar") }).toEqual({ file, noActionBar: true });
+    }
+    // Le label reste le label : c'est l'icône de l'app sous leLauncher.
+    expect(manifest).toContain('android:label="VerySlopyNyNotes"');
+  });
+
   test("zéro dépendance ajoutée : les icônes viennent du graphe, pas d'une ligne", () => {
     const gradle = readFileSync(join(ROOT, "android/ui/build.gradle.kts"), "utf8");
     expect(gradle).not.toContain("material-icons");

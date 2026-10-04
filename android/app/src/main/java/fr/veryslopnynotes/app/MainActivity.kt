@@ -3,6 +3,7 @@ package fr.veryslopnynotes.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.SecurityAlertsRepository
 import fr.veryslopnynotes.data.SessionTokens
@@ -19,6 +20,14 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // #135 : la fenêtre occupe tout l'écran.
+        // Avant : la fenêtre s'arrêtait sous la barre système, donc la bande de
+        // statut restait du fond de fenêtre — un bandeau gris au-dessus de la
+        // barre du haut. Les INSETS restent à la charge du `Scaffold` (barre du
+        // haut + barre d'onglets consomment `windowInsets`), donc aucun
+        // contenu ne passe dessous. ponytail: la fonction d'activity-compose
+        // déjà présente (zéro dépendance ajoutée).
+        enableEdgeToEdge()
         val baseUrlSeed = fr.veryslopnynotes.core.ServerConfig.baseUrl(
             BuildConfig.SERVER_SCHEME,
             BuildConfig.SERVER_HOST,
