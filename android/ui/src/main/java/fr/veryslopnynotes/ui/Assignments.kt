@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -117,6 +118,14 @@ import java.time.ZoneId
 // texte et la rangée du bas, soit le `spacedBy(6.dp)` et rien d'autre ; consigne
 // LONGUE = 57 px (~21 dp) avant « Voir plus », puis 58 px (~21 dp) après. Le même
 // écran, deux fois 6 dp de plus — parce que le bouton est là, et lui seul.
+//
+// #145 : la bascule « fait » a désormais un retour VISUEL (la carte se resserre
+// dans sa section, et sa place se déplace au lieu de sauter) et son ÉCHEC sort en
+// notice ROUGE avec une action « Réessayer ». Le texte `notice` de la version
+// d'avant ne distinguait pas un refus du serveur d'une réussite : les deux
+// s'affichaient pareil, en encre de texte. L'ANNULATION d'une bascule, elle, est
+// réelle — le serveur expose la même route dans les deux sens — donc le snackbar
+// peut l'offrir honnêtement, contrairement à une suppression de fil.
 //
 // Contenu serveur = DONNÉE affichée par `Text()` seul (I6) ; pièce jointe = URL
 // du proxy /v1/media, aucune adresse d'établissement dans l'app (I1), URL jamais
@@ -296,6 +305,9 @@ private fun SubjectFilterRow(
 @Composable
 private fun PapTaskCard(
     a: Assignment,
+    // #145 : le placement animé de la carte vient de l'appelant (liste) — la
+    // carte, elle, ne connaît que l'animation de sa propre bascule.
+    modifier: Modifier = Modifier,
     prefs: List<SubjectPrefs>,
     nowMillis: Long,
     zone: ZoneId,
@@ -329,7 +341,7 @@ private fun PapTaskCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = CARD_ELEVATION),
         border = BorderStroke(HAIRLINE, MaterialTheme.colorScheme.outline),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
@@ -488,7 +500,9 @@ private fun DoneToggle(done: Boolean, color: Color?, onToggle: () -> Unit) {
         // `Role.Checkbox` : la pastille EST une case à cocher, donc un lecteur
         // d'écran doit l'annoncer comme telle (et son état) au lieu d'un bouton.
         Surface(
-            modifier = Modifier.clickable(onClick = click, role = Role.Checkbox),
+            // #145 : ressort de presse (amortissement 0.8) — le geste le plus
+            // fait de l'écran, il se sent sous le doigt.
+            modifier = Modifier.papPressable(role = Role.Checkbox, onClick = click),
             shape = MaterialTheme.shapes.small,
             color = tint,
         ) {
@@ -506,7 +520,7 @@ private fun DoneToggle(done: Boolean, color: Color?, onToggle: () -> Unit) {
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .border(HAIRLINE, MaterialTheme.colorScheme.outline, CircleShape)
-                .clickable(onClick = click, role = Role.Checkbox),
+                .papPressable(role = Role.Checkbox, onClick = click),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -574,7 +588,6 @@ fun AssignmentsScreen(
     isStale: Boolean,
     fetchedAt: Long?,
     error: String?,
-    notice: String?,
     nowMillis: Long,
     zone: ZoneId,
     onRefresh: () -> Unit,
@@ -590,6 +603,16 @@ fun AssignmentsScreen(
 ) {
     val hasFilter = !selectedSubject.isNullOrEmpty() || query.isNotBlank()
     val page = MaterialTheme.colorScheme.surfaceVariant
+    // #145 : l'état affiché, comme VALEUR — c'est ce que le `Crossfade` compare.
+    // Les quatre branches restent les mêmes qu'avant, mais l'échange se fait
+    // maintenant en fondu au lieu d'être instantané.
+    val stateKey = when {
+        isLoading && sections.isEmpty() -> "loading"
+        error != null && sections.isEmpty() -> "error"
+        sections.isEmpty() -> "empty"
+        else -> "list"
+    }
+    val motionOn = rememberMotionOn()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -628,21 +651,22 @@ fun AssignmentsScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         SubjectFilterRow(subjects = subjects, prefs = subjectPrefs, selected = selectedSubject, onSelect = onSubjectChange)
-        if (!notice.isNullOrEmpty()) {
-            Text(
-                text = notice,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(vertical = 4.dp),
-            )
+        // #145 : le bandeau « périmé » s'OUVRE au lieu d'apparaître d'un coup, et
+        // le message d'écriture ne passe plus ici : c'est le snackbar racine, qui
+        // a une couleur de sévérité et une fermeture automatique.
+        PapAppear(visible = isStale) {
+            PapStaleBanner(fetchedAt = fetchedAt, onRefresh = onRefresh)
         }
-        if (isStale) PapStaleBanner(fetchedAt = fetchedAt, onRefresh = onRefresh)
         // `weight(1f)` : AVANT #138, le `LazyColumn` n'était PAS pondéré et le
         // bouton « Actualiser » qui le suivait devenait hors d'atteinte dès que la
         // liste débordait. Ici la zone liste occupe toute la hauteur restante, et
         // les états possibles la remplissent au lieu de flotter en haut.
         Box(modifier = Modifier.weight(1f)) {
-            when {
+            // #145 : le changement d'état (chargement -> contenu, semaine ->
+            // semaine) ne clignote plus. AVANT, la `when` échangeait ses branches
+            // d'un frame à l'autre : le contenu disparaissait puis revenait, donc
+            // une actualisation se lisait comme un défaut d'affichage.
+            Crossfade(targetState = stateKey, label = "assignmentsState") { _ -> when {
                 isLoading && sections.isEmpty() -> Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                     PapLoading()
                 }
@@ -693,8 +717,13 @@ fun AssignmentsScreen(
                                         )
                                     }
                                 }
+                                // #145 : une carte qui change de place GLISSE vers
+                                // sa nouvelle position au lieu d'y téléporter — donc
+                                // marquer un devoir « En retard » se voit même si la
+                                // carte passe hors de l'écran.
                                 items(items, key = { "${section.id}-${it.id}" }) { a ->
                                     PapTaskCard(
+                                        modifier = Modifier.animateItemPlacement(motionPlacementSpec(motionOn)),
                                         a = a,
                                         prefs = subjectPrefs,
                                         nowMillis = nowMillis,
@@ -708,6 +737,7 @@ fun AssignmentsScreen(
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -743,7 +773,11 @@ fun AssignmentsRoute(
     var query by remember { mutableStateOf("") }
     var selectedSubject by remember { mutableStateOf<String?>(null) }
     var doneOpen by remember { mutableStateOf(false) }
-    var notice by remember { mutableStateOf<String?>(null) }
+    // #145 : une seule porte pour les messages d'écriture — le snackbar racine,
+    // qui a une couleur de SÉVÉRITÉ et se referme tout seul. L'ancien `notice`
+    // était un `Text` en encre d'erreur au-dessus de la liste : un refus du
+    // serveur s'y lisait exactement comme une réussite.
+    val notices = LocalPapNotice.current
     // Toggle Optimiste : on patche la liste affichée, revert sur échec.
     var pending by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     var state by remember {
@@ -760,6 +794,12 @@ fun AssignmentsRoute(
         nowMillis = System.currentTimeMillis()
         // Le payload fait foi : l'état optimiste n'est plus nécessaire.
         if (o !is RefreshOutcome.Failed) pending = null
+        // #145 : échec AVEC cache = les cartes restent à l'écran, donc pas d'état
+        // d'erreur : c'est ici que le message du serveur doit être montré, et il
+        // sort en ROUGE. Un seul cas le double-afficherait, donc il est filtré.
+        if (o is RefreshOutcome.Failed && o.cachedPayload != null) {
+            notices.show(PapNotice(errorHeadline(o.message), NoticeKind.ERROR))
+        }
     }
 
     fun refresh() {
@@ -797,16 +837,48 @@ fun AssignmentsRoute(
     // semaine précédente sous le titre de la nouvelle serait un mensonge d'écran.
     LaunchedEffect(week) { refresh() }
 
+    /**
+     * Bascule « fait » : optimiste, puis Annuler (retour arrière) ou Réessayer
+     * (le serveur a refusé). Les DEUX actions sont honnêtes parce qu'elles
+     * rappellent la MÊME route dans l'autre sens — le contrat expose le même
+     * POST pour « fait » et pour « à faire », donc rien n'est promis en vain.
+     */
+    fun toggle(a: Assignment, done: Boolean) {
+        pending = a.id to done
+        toggleRepo.toggle(baseUrl, a.id, done) { o ->
+            if (o.assignment == null) {
+                // Retour arrière immédiat : l'affichage revient au cache.
+                pending = null
+                notices.show(
+                    PapNotice(
+                        text = errorHeadline(o.error),
+                        kind = NoticeKind.ERROR,
+                        actionLabel = "Réessayer",
+                        onAction = { toggle(a, done) },
+                    ),
+                )
+            } else {
+                notices.show(
+                    PapNotice(
+                        text = toggleNoticeLabel(a.subject, done),
+                        kind = NoticeKind.SUCCESS,
+                        actionLabel = "Annuler",
+                        onAction = { toggle(a, !done) },
+                    ),
+                )
+                // Succès : resync du cache (invalidation par événement), l'état
+                // optimiste reste affiché jusqu'à l'arrivée du payload à jour.
+                refresh()
+            }
+        }
+    }
+
     val payload = (state as? UiState.Data)?.payload ?: (state as? UiState.Error)?.cached
     val list = assignmentsFromPayload(payload)
     val optimistic = pending?.let { (id, done) -> list.map { if (it.id == id) it.copy(done = done) else it } } ?: list
     val visible = filterAssignments(optimistic, selectedSubject, query)
     val sections = assignmentSections(visible, nowMillis, zone)
     val errorMessage = (state as? UiState.Error)?.message
-    // Erreur AVEC cache : les cartes s'affichent, donc l'écran d'erreur n'a pas
-    // sa place — le message passe en bandeau, sinon il était JETÉ (le défaut que
-    // #136 corrigeait dans les autres écrans).
-    val shownNotice = if (sections.isEmpty()) notice else (notice ?: errorMessage)
 
     fun openAttachment(att: AssignmentAttachment) {
         // Jamais d'adresse d'établissement : la `ref` opaque passe par le PROXY
@@ -819,11 +891,18 @@ fun AssignmentsRoute(
         // l'ouvreur affiche donc « session requise » tant qu'aucun FileProvider
         // (module app) ne sert les octets téléchargés par l'app.
         // Upgrade: FileProvider + téléchargement par l'app, comme la photo #82.
-        notice = try {
+        // #145 : l'échec sort en notice ROUGE (c'est une action qui a échoué, pas
+        // un état de l'écran), et elle disparaît seule.
+        val opened = try {
             context.startActivity(intent)
-            null
+            true
         } catch (_: Exception) {
-            "Aucune application ne peut ouvrir cette pièce jointe."
+            false
+        }
+        if (!opened) {
+            notices.show(
+                PapNotice("Aucune application ne peut ouvrir cette pièce jointe.", NoticeKind.ERROR),
+            )
         }
     }
 
@@ -840,7 +919,6 @@ fun AssignmentsRoute(
         isStale = (state as? UiState.Data)?.isStale == true,
         fetchedAt = (state as? UiState.Data)?.fetchedAt,
         error = errorMessage,
-        notice = shownNotice,
         nowMillis = nowMillis,
         zone = zone,
         onRefresh = { refresh() },
@@ -853,25 +931,12 @@ fun AssignmentsRoute(
             // nouvelle ferait croire que le serveur a répondu.
             state = UiState.Loading
             pending = null
-            notice = null
+            // #145 : le message de la semaine précédente ne doit pas survivre à
+            // la navigation (il décrirait des cartes qui ne sont plus là).
+            notices.dismiss()
         },
         onToggleDoneSection = { doneOpen = !doneOpen },
-        onToggle = { a, done ->
-            pending = a.id to done
-            notice = null
-            toggleRepo.toggle(baseUrl, a.id, done) { o ->
-                if (o.assignment == null) {
-                    // Retour arrière immédiat : l'affichage revient au cache.
-                    pending = null
-                    notice = o.error
-                } else {
-                    // Succès : resync du cache (invalidation par événement), l'état
-                    // optimiste reste affiché jusqu'à l'arrivée du payload à jour.
-                    notice = null
-                    refresh()
-                }
-            }
-        },
+        onToggle = { a, done -> toggle(a, done) },
         onOpenAttachment = { att -> openAttachment(att) },
         onHelp = if (helpRepo == null) null else ({ a -> helpFor = a }),
     )
