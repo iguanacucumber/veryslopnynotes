@@ -491,6 +491,47 @@ fun gradeGroups(grades: List<GradeUi>, subjects: List<SubjectAverageUi>): List<G
 fun influenceOf(influences: List<InfluenceUi>, gradeId: String): InfluenceUi? =
     influences.firstOrNull { it.gradeId == gradeId }
 
+// --- Décision d'affichage de l'onglet Notes (#162) ---------------------------
+
+/**
+ * Ce que l'onglet Notes doit rendre, décidé par une fonction PURE (donc testée
+ * dans `tests/unit/android-averages.test.ts`, sans téléphone).
+ *
+ * [content] : le corps montre des notes ou des moyennes. Sinon l'écran est un
+ * état UNIQUE — un message, une action, et dessous NIEN : ni recherche, ni
+ * période, ni puces d'algorithme, ni titre de section. La capture réelle
+ * (#162) montrait l'inverse : un gros bloc d'erreur au milieu de la page, puis
+ * les contrôles, puis des liens de navigation sous le vide.
+ *
+ * [data] : il y a quelque chose à LISTER ou à MOYENNER. Un payload lu mais
+ * sans note exploitable ne justifie pas les puces d'algorithme (le sélecteur
+ * n'a rien à changer) ni le titre « Moyennes par matière » (rien à moyenner).
+ */
+data class GradesLayout(val content: Boolean, val data: Boolean)
+
+/**
+ * Décide de l'affichage de l'onglet Notes à partir de l'ÉTAT et des DONNÉES
+ * déjà lues.
+ *
+ * L'état seul ne suffit pas, et les deux questions sont distinctes :
+ *   - `Error` garde le cache ([UiState.Error.cached]) : les notes restent
+ *     affichées, périmées, avec la cause de l'échec en une ligne — un plein
+ *     écran d'erreur alors que des notes existent serait un mensonge ;
+ *   - `Data` peut ne porter aucune note exploitable : c'est du CONTENU (le
+ *     serveur a répondu) qui n'a rien à montrer, donc un seul message.
+ *
+ * ponytail: deux booléens plutôt qu'une hiérarchie de sealed classes — l'écran
+ * ne pose que ces deux questions, et le rendu reste dans le fichier d'écran.
+ */
+fun gradesLayout(state: UiState, grades: List<GradeUi>, report: AveragesUi?): GradesLayout = GradesLayout(
+    content = when (state) {
+        is UiState.Data -> true
+        is UiState.Error -> state.cached != null
+        UiState.Loading, UiState.Empty -> false
+    },
+    data = report != null || grades.isNotEmpty(),
+)
+
 // --- Sparkline (Canvas dessiné à la main, aucune bibliothèque) -------------
 
 /** Un point de la courbe, en pixels du `Canvas` (y vers le bas). */
