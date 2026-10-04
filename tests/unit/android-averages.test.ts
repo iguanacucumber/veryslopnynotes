@@ -503,6 +503,31 @@ function tsGeneralLabelGuard(): boolean {
   return tsAverageLabel(estimated).includes("estimée") && !tsAverageLabel(estimated).includes("fournie");
 }
 
+// --- #162 : la décision d'affichage de l'onglet Notes -----------------------
+
+/** Miroir de `UiState` (UiState.kt) : l'écran n'a que quatre états. */
+type TsUiState =
+  | { kind: "loading" }
+  | { kind: "data"; payload: string; isStale: boolean; fetchedAt: number }
+  | { kind: "empty" }
+  | { kind: "error"; message: string; cached: string | null };
+
+/**
+ * Miroir de `gradesLayout` (Averages.kt).
+ *
+ * `content` : le corps montre des notes / moyennes. Sinon l'écran est un état
+ * UNIQUE, sans contrôle dessous (le défaut de la capture #162 : un gros bloc
+ * d'erreur AU MILIEU de la page, puis les puces, puis des liens de navigation).
+ * `data` : il y a quelque chose à lister ou à moyenner — sinon pas de puces
+ * d'algorithme, pas de titre « Moyennes par matière ».
+ */
+function tsGradesLayout(state: TsUiState, grades: TsGrade[], report: TsAverages | null): { content: boolean; data: boolean } {
+  return {
+    content: state.kind === "data" ? true : state.kind === "error" ? state.cached !== null : false,
+    data: report !== null || grades.length > 0,
+  };
+}
+
 // --- #139 : l'onglet Notes structure ---------------------------------------
 
 describe("unit android onglet Notes (#139)", () => {
@@ -785,5 +810,139 @@ describe("unit android onglet Notes (#139)", () => {
     // Le garde-fou 401 reste UNIQUE : ce fichier ne lève jamais le signal.
     expect(repo).not.toContain("DeviceAuth.reject()");
     expect(repo).toContain("api.client().newCall(");
+  });
+});
+describe("unit android onglet Notes, états et navigation (#162)", () => {
+  test("écran SANS donnée = un état UNIQUE, pas un état puis des contrôles", () => {
+    const LOADING: TsUiState = { kind: "loading" };
+    const EMPTY: TsUiState = { kind: "empty" };
+    // Hors-ligne, aucune donnée en cache : le cas de la capture.
+    const FAILED: TsUiState = { kind: "error", message: "Hors-ligne, aucune donnée en cache.", cached: null };
+    const payload = JSON.stringify({ grades: GRADES_RICH, averages: REPORT });
+    const FRESH: TsUiState = { kind: "data", payload, isStale: false, fetchedAt: 1 };
+    const STALE: TsUiState = { kind: "data", payload, isStale: true, fetchedAt: 1 };
+    const grades = tsGrades(payload);
+    const report = tsAverages(payload);
+    const none: TsGrade[] = [];
+    const noReport = null;
+
+    // Aucun des trois états de requête ne montre de contenu : l'écran rend un
+    // message et UNE action, puis RIEN (ni recherche, ni période, ni algorithme).
+    expect(tsGradesLayout(LOADING, none, noReport)).toEqual({ content: false, data: false });
+    expect(tsGradesLayout(EMPTY, none, noReport)).toEqual({ content: false, data: false });
+    expect(tsGradesLayout(FAILED, none, noReport)).toEqual({ content: false, data: false });
+    // Échec AVEC cache : les notes restent affichées (périmées), un plein écran
+    // d'erreur alors qu'il y a des notes serait un mensonge.
+    expect(tsGradesLayout({ kind: "error", message: "Erreur serveur 503.", cached: payload }, grades, report)).toEqual({
+      content: true,
+      data: true,
+    });
+    expect(tsGradesLayout(FRESH, grades, report)).toEqual({ content: true, data: true });
+    expect(tsGradesLayout(STALE, grades, report)).toEqual({ content: true, data: true });
+  });
+
+  test("contrôles et titres de section seulement s'il y a des données", () => {
+    const payload = JSON.stringify({ grades: GRADES_RICH, averages: REPORT });
+    const grades = tsGrades(payload);
+    const report = tsAverages(payload);
+    // Payload lu mais ZÉRO note exploitable : c'est du contenu (le serveur a
+    // répondu) qui n'a rien à montrer — un seul message, pas de puces d'algorithme
+    // ni « Moyennes par matière » sous le vide.
+    expect(tsGradesLayout({ kind: "data", payload: "{}", isStale: false, fetchedAt: 1 }, [], null)).toEqual({
+      content: true,
+      data: false,
+    });
+    // Établissement qui ne publie pas de moyennes mais des notes : les notes
+    // restent listées, donc les contrôles servent.
+    expect(tsGradesLayout({ kind: "data", payload: "{}", isStale: false, fetchedAt: 1 }, grades, null)).toEqual({
+      content: true,
+      data: true,
+    });
+    // Inversement : moyennes publiées, aucune note lisible (cache tronqué, notes
+    // illisibles) — le rapport est là, donc la carte et les sections restent.
+    expect(tsGradesLayout({ kind: "data", payload: "{}", isStale: false, fetchedAt: 1 }, [], report)).toEqual({
+      content: true,
+      data: true,
+    });
+  });
+
+  test("Kotlin : un seul état, et les liens de navigation sont dans la barre du haut", () => {
+    const screen = readFileSync(join(UI, "GradesScreen.kt"), "utf8");
+    const shell = readFileSync(join(UI, "AppShell.kt"), "utf8");
+    const nav = readFileSync(join(UI, "AppNav.kt"), "utf8");
+    const averages = readFileSync(join(UI, "Averages.kt"), "utf8");
+    /** Sans les commentaires : une garde qui lit le texte ne doit pas confondre un
+     *  `//` qui NOMME une mauvaise pratique avec la pratique. */
+    const codeOnly = (src: string): string =>
+      src
+        .replace(/\/\*[\s\S]*?\*\//g, "\n")
+        .split("\n")
+        .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
+        .join("\n");
+
+    // 1. La décision est PURE et vit dans le fichier de logique : elle se teste.
+    expect(averages).toContain("fun gradesLayout(state: UiState, grades: List<GradeUi>, report: AveragesUi?)");
+    expect(averages).toContain("data class GradesLayout(val content: Boolean, val data: Boolean)");
+    expect(screen).toContain("gradesLayout(state, grades, report)");
+    // L'écran appelle l'état unique et S'ARRÊTE : rien de contrôles dessous.
+    expect(screen).toMatch(/if \(!layout\.content \|\| !layout\.data\) \{[\s\S]{0,600}?GradesBlankState\(state = state, query = query, onRefresh = \{ refresh\(\) \}\)\n\s*return\n\s*\}/);
+    // Les puces d'algorithme, le titre de section et le carrousel sont APRÈS le
+    // retour : avec zéro donnée ils ne sont jamais rendus.
+    const guard = screen.indexOf("if (!layout.content || !layout.data) {");
+    for (const brique of ["GradesSearchField(", "GradesPeriodChips(", "GradesAlgorithmChips(", "PapSectionHeader(", "GradesRecentCarousel("]) {
+      expect({ brique, afterGuard: screen.indexOf(brique) > guard }).toEqual({ brique, afterGuard: true });
+    }
+    // L'état vide porte UNE action, l'état d'erreur le sien : plus de bloc
+    // d'erreur à l'intérieur d'une page de contrôles.
+    expect(screen).not.toMatch(/is UiState\.Error -> PapErrorState\([\s\S]{0,200}Les notes en cache/);
+    expect(screen).toMatch(/is UiState\.Error -> PapErrorState\(message = state\.message, onRetry = onRefresh\)/);
+
+    // 2. Plus AUCUN lien de navigation dans le corps d'un écran : les
+    // destinations sont déclarées une fois, dans la table de la barre du haut.
+    const body = codeOnly(screen);
+    for (const label of ["Réglages", "Appairage QR+PIN", "Alertes sécurité", "Compétences"]) {
+      expect({ label, inBody: body.includes(`Text("${label}")`) }).toEqual({ label, inBody: false });
+    }
+    // Plus aucun bouton de navigation : le corps de l'onglet Notes n'a plus que
+    // l'action de son état vide.
+    expect(body).not.toContain("TextButton(");
+    for (const dest of ["ROUTE_COMPETENCES", "ROUTE_SETTINGS", "ROUTE_PAIRING", "ROUTE_ALERTS"]) {
+      expect({ dest, inTopBar: new RegExp(`TopAction\\.Go\\(${dest}, "`).test(shell) }).toEqual({ dest, inTopBar: true });
+    }
+    // La barre sait naviguer ET recharger, sans valeur par défaut : un bouton
+    // mort ne doit pas pouvoir se câbler.
+    expect(shell).toContain("private val TOP_BAR_ACTIONS: Map<String, List<TopAction>>");
+    expect(shell).toMatch(/fun AppTopBar\(\s*\n\s*route: String\?,\s*\n\s*onBack: \(String\) -> Unit,\s*\n\s*onNavigate: \(String\) -> Unit,\s*\n\s*onRefresh: \(\) -> Unit,/);
+    expect(shell).toContain("actions = { TopBarActions(actions = actions, onNavigate = onNavigate, onRefresh = onRefresh) }");
+    // #87 : la destination Compétences reste conditionnelle aux capacités.
+    expect(shell).toContain("hiddenDestinations: Set<String> = emptySet()");
+    expect(nav).toMatch(/hiddenDestinations = if \(Capabilities\.visible\(capabilities, Capabilities\.EVALUATIONS\)\) emptySet\(\) else setOf\(ROUTE_COMPETENCES\)/);
+    // La relecture passe par un compteur vu par les deux routes qui l'ont.
+    expect(nav).toContain("onRefresh = { readTick++ }");
+    expect(screen).toMatch(/LaunchedEffect\(resource, algorithm, periodId, refreshTick\) \{ refresh\(\) \}/);
+    expect(screen).toContain("refreshTick: Int = 0");
+    expect(nav).toContain("refreshTick = readTick");
+    // Plus de paramètre de navigation dans les deux écrans qui l'ont perdu.
+    for (const gone of ["goSettings:", "goPairing:", "goAlerts:", "onCompetences:"]) {
+      expect({ gone, absent: !screen.includes(gone) }).toEqual({ gone, absent: true });
+    }
+    // La route Compétences, seule autre route de cet écran, garde ses args.
+    expect(nav).toMatch(/CachedResourceScreen\([\s\S]{0,300}section = \{ CompetencesSection\(it\) \}/);
+  });
+
+  test("Kotlin : plus aucune phrase où le message d'échec répète le libellé", () => {
+    const screen = readFileSync(join(UI, "GradesScreen.kt"), "utf8");
+    const repo = readFileSync(join(DATA, "SyncedRepository.kt"), "utf8");
+    // La source de la phrase : le message d'échec de `/v1/periods` PORTE DÉJÀ le
+    // nom de la ressource. L'écran le préfixait par « Tranches indisponibles : »,
+    // d'où « Tranches indisponibles : Hors-ligne, tranches indisponibles. ».
+    expect(repo).toContain('RefreshOutcome.Failed("Hors-ligne, tranches indisponibles.", null)');
+    expect(screen).not.toMatch(/"Tranches indisponibles\s*:/);
+    // Le message est rendu tel quel, jamais concaténé à un libellé.
+    expect(screen).toMatch(/text = periodError/);
+    expect(screen).not.toMatch(/Text\(\s*"[^"]*:\s*\$\{?[a-zA-Z]/);
+    // Même règle pour l'échec de relecture : une ligne, pas un préfixe.
+    expect(screen).toMatch(/text = failed\.message/);
+    expect(screen).toMatch(/periodsError = "Tranches indisponibles\."/);
   });
 });
