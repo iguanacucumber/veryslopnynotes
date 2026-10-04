@@ -244,9 +244,11 @@ describe("android homework — le credential reste dans l'app", () => {
     expect(api).not.toMatch(/HOMEWORK_GENERATE_PATH/);
   });
 
-  test("l'écran Tâches expose le bouton et le dialogue, câblés par AppNav", () => {
+  test("l'écran Tâches expose le déclencheur et le dialogue, câblés par AppNav", () => {
     const assignments = stripComments(src(UI, "Assignments.kt"));
-    expect(assignments).toMatch(/HomeworkHelpButton \{ onHelp\(a\) \}/);
+    // #161 : le déclencheur n'est plus le `Button` vert pleine largeur de
+    // `HomeworkHelp.kt`, c'est une PUCE posée dans l'écran (dialogue inchangé).
+    expect(assignments).toMatch(/HomeworkHelpChip \{ onHelp\(a\) \}/);
     expect(assignments).toMatch(/HomeworkHelpDialog\(/);
     // Pas de repository injecté = pas de bouton (pas d'état vide, pas de 400).
     expect(assignments).toMatch(/if \(helpRepo == null\) null else/);

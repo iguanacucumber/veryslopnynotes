@@ -99,7 +99,15 @@ import java.time.ZoneId
 // query — donc aucune navigation par semaine n'existait.
 //
 // Le rendu d'un devoir fait est TRIPLE et jamais ambigu : pastille pleine dans la
-// couleur de la matière, pastille « ✓ Terminé », titre rayé et atténué.
+// couleur de la matière, pastille « ✓ Terminé », texte rayé et atténué.
+//
+// #161 (retour sur capture) : la consigne s'affichait DEUX fois (le serveur
+// dérive `title` des 200 premiers caractères de `description`), la pastille de
+// matière était un disque vide sans emoji, « Aide devoirs » était un bouton vert
+// pleine largeur plus saillant que la bascule « fait », et les puces de matière
+// criaient en majuscules. Les trois helpers de `AssignmentsSections.kt`
+// (`assignmentCardText`, `subjectDisplayFr`, `subjectInitial`) tiennent la
+// correction ; le DIALOGUE d'aide, lui, n'a pas bougé d'une ligne.
 //
 // Contenu serveur = DONNÉE affichée par `Text()` seul (I6) ; pièce jointe = URL
 // du proxy /v1/media, aucune adresse d'établissement dans l'app (I1), URL jamais
@@ -260,10 +268,14 @@ private fun SubjectFilterRow(
             // emoji + couleur, la pastille de Papillon. Le fond de la puce
             // sélectionnée reste le `secondaryContainer` du thème (vert pâle).
             val ink = colorFromHex(subjectColorHex(prefs, subject)) ?: LocalContentColor.current
+            // #161 : la matière garde sa casse, mais sans crier — « ALLEMAND LV2 »
+            // devient « Allemand LV2 ». `copy` réutilise `badge` (emoji + nom)
+            // au lieu de le reconstruire ici.
+            val chip = style.copy(label = subjectDisplayFr(style.label))
             FilterChip(
                 selected = selected == subject,
                 onClick = { onSelect(if (selected == subject) null else subject) },
-                label = { Text(style.badge, color = ink) },
+                label = { Text(chip.badge, color = ink) },
             )
         }
     }
@@ -271,7 +283,7 @@ private fun SubjectFilterRow(
 
 /** Carte de devoir : l'anatomie de papillon.bzh — pastille matière + matière
  *  dans sa couleur, échéance en gris à droite, consigne BORNÉE, rangée du bas
- *  avec l'état « fait ». */
+ *  avec la bascule « fait » et la PUCE d'aide (plus un bouton, #161). */
 @Composable
 private fun PapTaskCard(
     a: Assignment,
@@ -292,6 +304,16 @@ private fun PapTaskCard(
     // le NOM de la matière est du corps de texte, pas un aplat.
     val tint = colorFromHex(hex) ?: MaterialTheme.colorScheme.primary
     val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.onSurface
+    // #161 : la carte affiche UN SEUL texte. Le lecteur serveur dérive `title`
+    // des 200 premiers caractères de `description` (Pronote n'expose qu'UN champ
+    // descriptif), donc les deux champs affichés d'affilée donnaient la consigne
+    // deux fois. `assignmentCardText` décide lequel des deux emplacements reçoit
+    // le texte ; l'autre reste vide.
+    val text = assignmentCardText(a)
+    // Rayure et atténuation du FAIT : même traitement pour le titre et pour la
+    // consigne, donc « fait » se lit pareil quelle que soit la place du texte.
+    val dim = if (a.done) DONE_ALPHA else 1f
+    val strike = if (a.done) TextDecoration.LineThrough else null
     var expanded by remember(a.id) { mutableStateOf(false) }
     Card(
         shape = MaterialTheme.shapes.large,
@@ -306,22 +328,30 @@ private fun PapTaskCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                PapSubjectAvatar(emoji = style.emoji, color = tint)
-                Column(modifier = Modifier.weight(1f).alpha(if (a.done) DONE_ALPHA else 1f)) {
+                // #161 : une matière sans emoji n'affiche plus un disque vide —
+                // l'initiale de la matière, en repli (« ? » si elle n'a aucune
+                // lettre). `PapSubjectAvatar` n'est PAS touché : sa pastille vide
+                // reste son contrat pour les autres écrans, c'est l'appel qui
+                // fournit le glyphe.
+                PapSubjectAvatar(emoji = style.emoji ?: subjectInitial(a.subject), color = tint)
+                Column(modifier = Modifier.weight(1f).alpha(dim)) {
                     Text(
-                        text = style.label,
+                        // #161 : « ALLEMAND LV2 » se lit « Allemand LV2 ».
+                        text = subjectDisplayFr(style.label),
                         style = MaterialTheme.typography.titleSmall,
                         color = ink,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = a.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textDecoration = if (a.done) TextDecoration.LineThrough else null,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    if (text.title.isNotEmpty()) {
+                        Text(
+                            text = text.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textDecoration = strike,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 Text(
                     text = assignmentDueLabel(a.dueDate, nowMillis, zone),
@@ -330,16 +360,18 @@ private fun PapTaskCard(
                     maxLines = 1,
                 )
             }
-            if (a.description.isNotBlank()) {
+            if (text.body.isNotEmpty()) {
                 // Consigne du devoir : texte enseignant affiché tel quel (donnée).
                 Text(
-                    text = a.description,
+                    text = text.body,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textDecoration = strike,
+                    modifier = Modifier.alpha(dim),
                     maxLines = if (expanded) Int.MAX_VALUE else DESCRIPTION_MAX_LINES,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (a.description.length > DESCRIPTION_EXPAND_CHARS) {
+                if (text.body.length > DESCRIPTION_EXPAND_CHARS) {
                     TextButton(
                         onClick = { expanded = !expanded },
                         contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
@@ -360,13 +392,46 @@ private fun PapTaskCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // Espaceur : la rangée du bas se termine à droite, près de la bascule.
+                Box(modifier = Modifier.weight(1f))
                 // 0.7.0 : l'assistant est une AIDE, jamais une écriture (I7) — il
                 // n'écrit rien dans l'établissement, il rend un corrigé à l'écran.
-                if (onHelp != null) HomeworkHelpButton { onHelp(a) }
-                Box(modifier = Modifier.weight(1f))
+                // #161 : AVANT, c'était un bouton vert pleine largeur, plus saillant
+                // que la bascule « fait » — l'action qu'on vient chercher. La puce
+                // est discrète et collée à la bascule.
+                if (onHelp != null) HomeworkHelpChip { onHelp(a) }
                 DoneToggle(done = a.done, color = tint) { onToggle(a, !a.done) }
             }
         }
+    }
+}
+
+/**
+ * Déclencheur de l'aide devoirs : une PUCE, pas un bouton.
+ *
+ * AVANT #161, chaque carte portait un `Button` vert pleine largeur « Aide devoirs » —
+ * l'élément le plus saillant de la carte, devant la bascule « fait » et devant le
+ * texte du devoir. Ici la puce reprend les paramètres EXACTS des puces de pièce
+ * jointe (même fond `surfaceVariant`, même filet, même rayon), donc elle parle
+ * moins fort que la consigne. Le libellé reste « Aide devoirs » — aucun texte à
+ * retraduire — et `onClickLabel` le nomme à voix haute pour un lecteur d'écran.
+ *
+ * Le DIALOGUE reste celui de `HomeworkHelp.kt`, mot pour mot : ce correctif ne
+ * touche pas au flux LLM (réponse = DONNÉE affichée par `Text()`, I6).
+ */
+@Composable
+private fun HomeworkHelpChip(onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.clickable(onClickLabel = "Aide devoirs", role = Role.Button, onClick = onClick),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(HAIRLINE, MaterialTheme.colorScheme.outline),
+    ) {
+        Text(
+            text = "Aide devoirs",
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
     }
 }
 
