@@ -418,6 +418,9 @@ describe("unit android accueil (#143)", () => {
     // #143 : plus de comparaison de chaînes, plus d'admission `ponytail:` la
     // justifiant, et java.time fait le parsing.
     expect(widgets).toContain("java.time");
+    // #139 : l'accueil s'appuie sur le lecteur des notes de `Averages.kt` au lieu
+    // de reparcourir le JSON (un seul propriétaire par payload).
+    expect(widgets).toContain("gradesFrom(payload)");
     expect(widgets).not.toContain("sortedBy { it.start }");
     expect(widgets).not.toContain("sortedBy { it.dueDate }");
     expect(widgets).not.toContain("sortedByDescending { it.date }");
@@ -466,6 +469,7 @@ describe("unit android accueil (#143)", () => {
     // et la LIGNE de note porte sa couleur + sa date (#82 la triait sans
     // l'afficher).
     expect(screen).toContain("homeAverageNumberLabel(average.value)");
+    expect(screen).toContain("generalAverageOf(");
     expect(screen).toContain("grade.dateMillis");
     // L'echec d'une actualisation ne vide pas la page : le cache est relu.
     expect(screen).toContain("homeSnapshotFrom(repo)");
