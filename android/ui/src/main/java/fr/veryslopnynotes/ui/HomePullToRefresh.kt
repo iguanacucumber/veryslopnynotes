@@ -157,13 +157,21 @@ fun HomePullToRefresh(
         label = "homePullSpin",
     )
     val latestOnRefresh by rememberUpdatedState(onRefresh)
+    // #166 : `refreshing` passe par `rememberUpdatedState` comme `onRefresh`. La
+    // connexion est mémorisée par `remember`, donc un `{ refreshing }` capturé
+    // dans sa construction lit la valeur de la PREMIÈRE composition : pendant une
+    // actualisation, `isRefreshing()` rendait `false` et le tirail pouvait
+    // déclencher une DEUXIÈME requête par-dessus la première. Rare sur l'accueil,
+    // plus fréquent sur l'EDT où la relecture est déclenchée par semaine et par
+    // l'action de la barre du haut.
+    val latestRefreshing by rememberUpdatedState(refreshing)
     val connection = remember(offset, scope, triggerPx, maxPx) {
         HomePullConnection(
             offset = offset,
             scope = scope,
             triggerPx = triggerPx,
             maxPx = maxPx,
-            isRefreshing = { refreshing },
+            isRefreshing = { latestRefreshing },
             onRelease = { latestOnRefresh() },
         )
     }
