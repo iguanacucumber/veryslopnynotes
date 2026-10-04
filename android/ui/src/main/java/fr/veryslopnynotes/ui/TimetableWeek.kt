@@ -277,9 +277,8 @@ fun TimetableRoute(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Calendrier")
         Text(timetableWeekLabel(weekStart, zone))
-        Text("EDT semaine")
+        Text("EDT semaine", style = MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { weekStart -= WEEK_MS }) { Text("‹") }
             Button(onClick = { weekStart += WEEK_MS }) { Text("›") }

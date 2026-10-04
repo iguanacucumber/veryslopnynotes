@@ -265,7 +265,12 @@ describe("unit android vie scolaire (#77)", () => {
     expect(nav).toContain('const val ROUTE_ATTENDANCE = "attendance"');
     expect(nav).toContain("AttendanceRoute(repo, baseUrl");
     expect(nav).toContain("PunishmentsRoute(repo, baseUrl");
-    expect(nav).toContain('Button(onClick = { goAttendance() }) { Text("Vie scolaire") }');
+    // #135 : le bouton d'accès est dans l'écran Profil, sorti d'AppNav.kt.
+    expect(readFileSync(join(UI, "ProfileScreen.kt"), "utf8")).toContain(
+      'Button(onClick = { goAttendance() }) { Text("Vie scolaire") }',
+    );
+    // #135 : sanctions a reçu sa constante (c'était un littéral nu).
+    expect(nav).toContain('const val ROUTE_SANCTIONS = "sanctions"');
     // I1 : aucun hôte d'établissement dans le nouvel écran.
     expect(/pronote|index-education/i.test(screen)).toBe(false);
     // org.json vient du SDK : aucune ligne de dépendance ajoutée.

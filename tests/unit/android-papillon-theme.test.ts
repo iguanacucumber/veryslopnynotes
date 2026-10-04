@@ -296,7 +296,8 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     // retirés avant la recherche — AppNav.kt explique dans un commentaire
     // qu'il appelait justement ces deux fonctions sans argument, et ce texte ne
     // doit pas passer pour un appel.
-    for (const file of ["AppNav.kt", "Theme.kt", "SubjectStyle.kt"]) {
+    // #135 : les écrans sont sortis d'AppNav.kt — ils sont donc vérifiés aussi.
+    for (const file of ["AppNav.kt", "AppShell.kt", "AppIcons.kt", "Theme.kt", "SubjectStyle.kt"]) {
       const src = readCode(join(UI, file));
       expect({ file, bare: /lightColorScheme\(\)|darkColorScheme\(\)/.test(src) }).toEqual({ file, bare: false });
     }
@@ -305,9 +306,11 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     expect(nav).toContain("PapillonTheme(darkTheme = isDarkTheme(theme, isSystemInDarkTheme()))");
     expect(nav).not.toContain("import androidx.compose.material3.darkColorScheme");
     expect(nav).not.toContain("import androidx.compose.material3.lightColorScheme");
-    // `AppTheme.values()` est déprécié : `entries` le remplace.
-    expect(nav).toContain("AppTheme.entries");
-    expect(nav).not.toContain("AppTheme.values()");
+    // `AppTheme.values()` est déprécié : `entries` le remplace. #135 : les
+    // réglages sont sortis d'AppNav.kt, donc l'appel est dans SettingsScreen.kt.
+    const settings = readCode(join(UI, "SettingsScreen.kt"));
+    expect(settings).toContain("AppTheme.entries");
+    expect(nav + settings).not.toContain("AppTheme.values()");
     // MainActivity : plus de MaterialTheme extérieur, il écrasait le thème choisi.
     const activity = readCode(join(APP, "MainActivity.kt"));
     expect(activity).not.toContain("MaterialTheme");

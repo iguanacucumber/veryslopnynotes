@@ -392,7 +392,11 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     //     ne soit utilisée. C'est LA propriété qui compte.
     //   - save() AVANT logout() : si l'écriture échoue, l'utilisateur garde sa
     //     session et son cache au lieu d'être déconnecté pour rien.
-    const fn = nav.slice(nav.indexOf("private fun changeServer"), nav.indexOf("@OptIn(ExperimentalMaterial3Api::class)"));
+    // #135 : `changeServer` a quitté AppNav.kt pour l'assistant d'appairage,
+    // dont il est la logique (changer de serveur = se ré-appairer). Son ordre
+    // reste vérifié, dans son nouveau fichier.
+    const pairing = read(join(UI, "PairingScreen.kt"));
+    const fn = pairing.slice(pairing.indexOf("private fun changeServer"));
     const order = ["ServerConfig.validateBaseUrl(raw)", "serverStore.save(target)", "accounts.logout()", "onSwitched(target)"];
     const positions = order.map((needle) => fn.indexOf(needle));
     for (const p of positions) expect(p).toBeGreaterThan(-1);
@@ -416,7 +420,9 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     // appairage (le champ y est toujours accessible).
     // Bornes par le DÉBUT de la déclaration de route (sans parenthèse
     // fermante) : #133 ajoute `deepLinks` entre les deux.
-    const pairingRoute = nav.slice(nav.indexOf("composable(ROUTE_PAIRING"), nav.indexOf('composable("alerts"'));
+    // #135 : `alerts` a reçu sa constante (c'était un littéral nu), donc la
+    // borne de la tranche suit la constante, plus le littéral.
+    const pairingRoute = nav.slice(nav.indexOf("composable(ROUTE_PAIRING"), nav.indexOf("composable(ROUTE_ALERTS"));
     expect(pairingRoute).toContain("PairingRoute(");
     expect(pairingRoute).not.toContain("Serveur non configuré.");
     // Et le garde-fou 401 (#113) reste câblé comme avant.
