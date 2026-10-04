@@ -110,6 +110,24 @@ fun derivedSubjectHex(subject: String): String {
 }
 
 /**
+ * Couleur de prefs NORMALISÉE : `" #aabbcc "` → `"#AABBCC"`, `null` si elle est
+ * absente ou mal formée.
+ *
+ * #140 : la roue de pastilles de l'éditeur de matière doit comparer la couleur
+ * choisie à une pastille sans distinguer la casse ni les espaces de saisie, et
+ * une couleur douteuse ne doit jamais être rendue comme si elle était valide.
+ * La RÈGLE reste celle de la résolution (`COLOR_RE`) : six chiffres hexadécimaux
+ * après un `#`, rien de plus.
+ *
+ * ponytail: `trim` + `uppercase` + la regex existante, pas de parseur de
+ * couleur, et pas de `Color` ici — cette fonction est testable sans Compose.
+ */
+fun normalizeColorHex(hex: String?): String? {
+    val trimmed = hex?.trim().orEmpty()
+    return if (COLOR_RE.matches(trimmed)) trimmed.uppercase() else null
+}
+
+/**
  * Couleur de matière affichée : les préférences d'abord, sinon une couleur
  * dérivée du nom. Une couleur de prefs INVALIDE (le contrat la borne, mais un
  * cache ancien peut contenir autre chose) est ignorée comme si elle manquait.
