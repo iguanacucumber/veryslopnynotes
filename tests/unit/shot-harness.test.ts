@@ -686,3 +686,329 @@ describe("shot.sh : le témoin d'écran (#160)", () => {
     expect(r.out).toContain("ARRIVÉ sur l'écran PROFIL au lieu de « news »");
   });
 });
+
+// ---------------------------------------------------------------------------
+// #166 : LE TÉMOIN NE DOIT PAS ÊTRE DE LA DONNÉE.
+//
+// Le défaut : `grades|Notes|Moyennes par matière`, et ce libellé ne sort que dans
+// la branche qui a des notes à montrer. Hors ligne, sur un écran PARFAITEMENT
+// CORRECT, la capture échouait — et l'échec accuse une panne de navigation.
+//
+// Ces deux tableaux sont la RÈGLE, écrite une fois : pour chaque route, ce que le
+// dump uiautomator rend (a) quand l'établissement publie, (b) quand il ne
+// publie rien. Le test rejoue les DEUX variantes dans le harnais, donc la preuve
+// ne dépend pas d'une relecture : un témoin qui n'est lisible que dans un état
+// fait sortir le script en 1.
+//
+// Les libellés sont ceux des écrans (fichiers nommés en tête de chaque bloc), la
+// barre d'onglets comprise : sans elle, un témoin comme « Réessayer » passerait
+// pour propre alors qu'il est partagé par sept écrans.
+
+/** Libellés de la barre d'onglets, dans l'ordre d'AppShell.kt (TAB_ROUTES). */
+const ONGLETS = ["Accueil", "EDT", "Tâches", "Notes", "Profil"];
+
+/**
+ * Dump uiautomator du fixture : un `text` par libellé, dans l'ordre vu.
+ * C'est ce que le faux adb sert à la place de `uiautomator dump` (cf. FAKE_ADB).
+ */
+function ecran(h: { dir: string }, labels: string[]): void {
+  writeFileSync(join(h.dir, "texts"), labels.join("\n") + "\n");
+}
+
+/** Garde-fous de `verify_route` : les deux dérives nommées (cf. shot.sh). */
+const TEMOIN_PROFIL = "Détecter les onglets";
+const ARTEFACT_APPAIRAGE = /adresse du serveur|code pin du qr|contenu du qr|ton établissement/;
+
+/**
+ * Tout le module `ui` en un seul texte : un libellé de fixture doit être RÉEL,
+ * sinon le rejeu mentirait sur l'écran qu'il prétend rejouer.
+ *
+ * On cherche dans le PAQUET et non dans une liste de fichiers par route : les
+ * écrans se scindent (Attendance → AttendanceFormat/AttendanceRows,
+ * ProfileScreen → ProfileAccountSwitcher…) et une liste à la main devient un
+ * faux rouge dès qu'un autre agent décompose un écran. Le lien
+ * route ↔ fichier, lui, reste vérifié juste au-dessus, pour les TÉMOINS — c'est
+ * là qu'il compte.
+ */
+const UI_ENTIER = [...readdirSync(UI_DIR)]
+  .filter((f) => f.endsWith(".kt"))
+  .map((f) => readFileSync(join(UI_DIR, f), "utf8"))
+  .join("\n");
+
+interface Variante {
+  /** Libellés du dump quand la donnée est là. */
+  plein: string[];
+  /** Libellés du dump quand l'établissement ne publie rien. */
+  vide: string[];
+}
+
+/**
+ * Les DEUX états de chaque route : ce que le dump uiautomator rend quand
+ * l'établissement publie, et quand il ne publie rien.
+ *
+ * Tous les libellés sont du CHROME d'écran, jamais de la donnée : c'est ce que
+ * `verify_route` cherche, et c'est ce qui se relit dans la source. Un witness
+ * qui n'apparaît qu'accompagné de données n'aurait rien à prouver ici.
+ */
+const VARIANTES: Record<string, Variante> = {
+  // Les widgets portent un titre et chacun son bouton « Afficher plus » ; l'état
+  // sans rien porte « Rien à afficher ».
+  index: {
+    plein: ["Prochain cours", "Moyenne", "Devoirs", "Afficher plus ↗"],
+    vide: ["Rien à afficher", "Aucune donnée en cache. Appairez puis actualisez un onglet."],
+  },
+  // Le bandeau de semaine est rendu AVANT le contenu : « semaine du » se lit
+  // même sans un seul cours, et la pause méridienne est un libellé du contrat.
+  calendar: {
+    plein: ["semaine du", "Prochain cours", "Pause méridienne"],
+    vide: ["semaine du", "Aucun cours cette semaine", "Tirez vers le bas pour actualiser, ou changez de semaine."],
+  },
+  // #162 a retiré les titres de section de l'état sans donnée : il ne reste que
+  // `GradesNothingToShow` (« aucune note publiée ») et le cache vide (« Aucune
+  // note en cache »). C'est ce qui manquait — la capture hors ligne échouait sur
+  // « Moyennes par matière », qui ne sort qu'avec des notes.
+  grades: {
+    plein: ["Moyennes par matière", "Nouvelles notes", "Matière ou évaluation"],
+    vide: ["Aucune note sur cette période", "L'établissement n'a publié aucune note ici.", "Actualiser"],
+  },
+  // L'en-tête « Devoirs de la semaine » est rendu hors de la liste.
+  tasks: {
+    plein: ["Devoirs de la semaine", "En retard", "Rechercher un devoir", "Toutes", "Actualiser"],
+    vide: ["Devoirs de la semaine", "Rechercher un devoir", "Aucun devoir cette semaine", "Rien à rendre pour le moment."],
+  },
+  // Les boutons de destination sont rendus inconditionnellement.
+  profile: {
+    plein: ["Détecter les onglets", "Messages", "Appairage QR+PIN", "Fiches révision"],
+    vide: ["Détecter les onglets", "Aucune information publiée pour ce compte.", "compte appairé"],
+  },
+  // Les titres de section « Matières » et « Assistant devoirs » sont fixes.
+  settings: {
+    plein: ["Matières", "Assistant devoirs", "Ajouter la matière", "Enregistrer la clé"],
+    vide: ["Matières", "Aucune matière personnalisée.", "Assistant devoirs"],
+  },
+  // Le corps de cet écran ne rend QUE de la donnée : pas de fragment, son titre
+  // de barre suffit. L'état vide doit rester lisible, c'est ce qui est rejoué.
+  news: {
+    plein: ["Données hors-ligne (périmé)."],
+    vide: ["Aucune actualité."],
+  },
+  // « Menus de la semaine » est écrit avant la branche d'état.
+  canteen: {
+    plein: ["Menus de la semaine", "Actualiser"],
+    vide: ["Menus de la semaine", "Aucun menu publié cette semaine.", "Actualiser"],
+  },
+  // Le SOUS-TITRE de l'écran en cache est rendu avant l'état ; les trois lignes
+  // ci-dessous sont les trois états sans donnée (cache vide, réseau, zéro
+  // absence), pas un seul.
+  attendance: {
+    plein: ["Absences et retards", "Toutes", "Sanctions", "Actualiser"],
+    vide: ["Absences et retards", "Aucune donnée en cache", "Aucune absence ni retard"],
+  },
+  // Même écran en cache, sous-titre « Punitions vie scolaire ».
+  sanctions: {
+    plein: ["Punitions vie scolaire", "Toutes", "Actualiser"],
+    vide: ["Punitions vie scolaire", "Aucune sanction publiée"],
+  },
+  // « Discussions » est écrit avant la branche d'état.
+  messages: {
+    plein: ["Discussions", "Nouvelle discussion", "Ouvrir", "Actualiser"],
+    vide: ["Discussions", "Aucune discussion.", "Réessayer"],
+  },
+  // Le bouton « Retour » est rendu par TOUTES les étapes. Pas de barre d'onglets
+  // (`showsTabBar`), et ces libellés déclenchent le garde-fou d'appairage —
+  // ce que la règle ci-dessous doit donc reproduire.
+  pairing: {
+    plein: ["Ton établissement", "Adresse de l'établissement", "Continuer", "Retour"],
+    vide: ["QR de l'application", "Scanner le QR", "Contenu du QR (login + jeton)", "Code PIN du QR", "Terminer", "Retour"],
+  },
+  // Titre de section rendu avant l'état.
+  alerts: {
+    plein: ["Injections neutralisées (données, jamais exécutées).", "Donnée suspecte (non exécutée) : "],
+    vide: ["Injections neutralisées (données, jamais exécutées).", "Aucune alerte. Bon signe."],
+  },
+  // Comme `news` : le corps ne rend que de la donnée, le titre de barre suffit.
+  fiches: {
+    plein: ["Charger", "Simuler erreur"],
+    vide: ["Aucune fiche. Générée auto à l'annonce d'un DS.", "Charger"],
+  },
+  // AppNav.kt passe le sous-titre à l'écran en cache d'Attendance.kt.
+  competences: {
+    plein: ["Évaluations par compétences", "Touchez une compétence pour son détail.", "Détail compétence"],
+    vide: ["Évaluations par compétences", "Aucune compétence publiée par l'établissement.", "Actualiser"],
+  },
+};
+
+describe("le témoin d'écran ne dépend pas de la donnée (#166)", () => {
+  /** Libellés de la barre d'onglets d'une route (`showsTabBar`, AppShell.kt). */
+  function barreOnglets(route: string): string[] {
+    return route === "pairing" || route === "settings" ? [] : ONGLETS;
+  }
+
+  /**
+   * La RÈGLE de `verify_route`, rejouée hors script — trois lignes, cf. shot.sh :
+   * le titre doit se lire, le garde-fou du profil ne doit pas déclencher, et un
+   * fragment de la route doit se lire. C'est ce critère qui permet de comparer
+   * 15 × 14 paires sans lancer 210 fois le script ; les 30 rejeux ci-dessous
+   * vérifient qu'il COLLE à la sortie du vrai script, et deux tests #160
+   * vérifient le cas négatif.
+   */
+  function verifie(route: string, labels: string[]): boolean {
+    const texte = labels.join("\n");
+    const { title = "", fragments = [] } = WITNESSES.get(route) ?? {};
+    if (!title || !texte.includes(title)) return false;
+    if (route !== "profile" && texte.includes(TEMOIN_PROFIL)) return false;
+    if (route !== "pairing" && ARTEFACT_APPAIRAGE.test(texte)) return false;
+    return fragments.length === 0 || fragments.some((f) => texte.includes(f));
+  }
+
+  /** Les libellés du dump d'une route dans un état, et ce dump servi au harnais. */
+  function dump(h: { dir: string }, route: string, variante: keyof Variante): string[] {
+    // Le titre de barre du haut est le PREMIER libellé du dump réel ; la barre
+    // d'onglets vient ensuite, et elle est ce qui rend le titre d'onglet NON
+    // discriminant — donc ce qu'un faux vert utiliserait.
+    const labels = [TOP_BARS.get(route)!, ...barreOnglets(route), ...VARIANTES[route]![variante]];
+    ecran(h, labels);
+    return labels;
+  }
+
+  for (const route of ROUTES) {
+    test(`${route} : prouvée dans les DEUX états (donnée et aucune donnée)`, () => {
+      expect(VARIANTES[route]).toBeDefined();
+      for (const variante of ["plein", "vide"] as const) {
+        // Un harnais par passage : pas d'état partagé entre les deux états.
+        const h = harness();
+        const labels = dump(h, route, variante);
+        const r = h.run([route, "--wait", "0"]);
+        // On lit la SORTIE, pas le code seul : une route sans fragment réussit
+        // sur le titre, donc `code === 0` ne prouverait rien.
+        const reussite = r.out.includes("route vérifiée");
+        // …et on vérifie que le critère ci-dessus COLLE au script.
+        expect({ route, variante, script: reussite, critere: verifie(route, labels) }).toEqual({
+          route,
+          variante,
+          script: reussite,
+          critere: true,
+        });
+        expect(r.code).toBe(0);
+        expect(r.out).toContain(`route vérifiée (« ${TOP_BARS.get(route)} »`);
+      }
+    });
+  }
+
+  test("chaque état listé EXISTE littéralement dans l'écran de sa route", () => {
+    // La table ci-dessus doit rester collée aux écrans : un libellé renommé fait
+    // échouer ce test AVANT qu'une capture ne parte sur un device.
+    for (const route of ROUTES) {
+      for (const variante of ["plein", "vide"] as const) {
+        for (const label of VARIANTES[route]![variante]) {
+          expect({ route, variante, label, present: UI_ENTIER.includes(label) }).toEqual({
+            route,
+            variante,
+            label,
+            present: true,
+          });
+        }
+      }
+    }
+  });
+
+  test("le témoin de l'onglet Notes se lit sans note publiée", () => {
+    // Le défaut exact de #166, isolé : hors ligne l'écran est CORRECT et le
+    // script échouait sur « Moyennes par matière », qui ne sort qu'avec la
+    // donnée. La règle : un fragment par état, donc les trois états que l'écran
+    // possède SANS donnée doivent tous se lire.
+    const fragments = WITNESSES.get("grades")?.fragments ?? [];
+    expect({
+      cacheVide: fragments.includes("Aucune note en cache"),
+      aucuneNotePubliee: fragments.includes("Aucune note sur cette période"),
+      rechercheSansResultat: fragments.includes("Aucune note trouvée"),
+      // Et le libellé de donnée reste, pour l'état plein.
+      avecDonnees: fragments.includes("Moyennes par matière"),
+    }).toEqual({
+      cacheVide: true,
+      aucuneNotePubliee: true,
+      rechercheSansResultat: true,
+      avecDonnees: true,
+    });
+  });
+
+  test("aucun témoin n'est un libellé partagé par plusieurs écrans", () => {
+    // « Réessayer », « Actualiser », « Chargement… », « Données hors-ligne
+    // (périmé). », « Simuler erreur » sont rendus par plusieurs écrans : en
+    // témoin, ils prouvent que l'app tourne, pas QUELLE page on regarde — et la
+    // barre d'onglets fournit le titre de TOUTES les routes d'onglet, donc le
+    // faux vert est à portée. « Réessayer » est celui qui a été envisagé pour
+    // l'état d'erreur de l'onglet Notes.
+    const generiques = [
+      "Réessayer",
+      "Actualiser",
+      "Chargement…",
+      "Données hors-ligne (périmé).",
+      "Simuler erreur",
+    ];
+    for (const route of ROUTES) {
+      for (const fragment of WITNESSES.get(route)?.fragments ?? []) {
+        expect({ route, fragment, generique: generiques.includes(fragment) }).toEqual({
+          route,
+          fragment,
+          generique: false,
+        });
+      }
+    }
+  });
+
+  test("le témoin PROPRE à une route ne prouve AUCUNE autre route", () => {
+    // La preuve du caractère distinctif : le dump de chaque route est passé
+    // contre le critère de chaque AUTRE route, et il doit échouer partout. Un
+    // témoin générique (« Réessayer ») ferait passer ce test par accident.
+    const dumps = new Map<string, string[]>(
+      ROUTES.map((route) => [
+        route,
+        [TOP_BARS.get(route)!, ...barreOnglets(route), ...VARIANTES[route]!.plein],
+      ]),
+    );
+    const fauxVerts: string[] = [];
+    for (const [source, labels] of dumps) {
+      for (const route of ROUTES) {
+        if (route !== source && verifie(route, labels)) fauxVerts.push(`${source} -> ${route}`);
+      }
+    }
+    expect(fauxVerts).toEqual([]);
+    // Le cas historique : le témoin de l'onglet Notes ne doit PAS être
+    // « Réessayer », sinon les sept écrans en état d'échec y passeraient.
+    expect(WITNESSES.get("grades")?.fragments ?? []).not.toContain("Réessayer");
+  });
+
+  test("« Réessayer » comme témoin de l'onglet Notes : le faux vert, rejoué", () => {
+    // Le couple le plus dangereux, rejoué dans le VRAI script (et pas seulement
+    // par le critère ci-dessus) : hors ligne, sept écrans affichent « Réessayer »
+    // et la barre d'onglets affiche déjà « Notes » partout. Avec ce témoin, une
+    // dérive de navigation vers l'un d'eux passerait en vert.
+    const h = harness();
+    // Exactement les libellés d'un écran Actualités HORS-LIGNE (NewsScreen.kt).
+    ecran(h, ["Actualités", ...ONGLETS, "Erreur réseau. Réessayer.", "Réessayer"]);
+    const r = h.run(["grades", "--wait", "0"]);
+    expect(r.code).toBe(1);
+    expect(r.out).not.toContain("route vérifiée");
+    // Le même écran, VOULU pour `news` : son propre témoin reste valable, donc
+    // le contrôle ne rejette pas tout — il rejette la mauvaise route.
+    const r2 = h.run(["news", "--wait", "0"]);
+    expect(r2.code).toBe(0);
+    expect(r2.out).toContain("route vérifiée (« Actualités »).");
+  });
+
+  test("titre présent + aucun fragment : l'échec nomme l'état SANS DONNÉE", () => {
+    // Le message de #160 disait « l'écran est peut-être CORRECT » ; #166 ajoute
+    // la cause la plus fréquente : un écran sans donnée n'affiche pas le libellé
+    // qui en dépend.
+    const h = harness();
+    ecran(h, ["Notes", ...ONGLETS, "Hors-ligne, aucune donnée en cache.", "Réessayer"]);
+    const r = h.run(["grades", "--wait", "0"]);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("Titre attendu « Notes » : présent.");
+    expect(r.out).toContain("Fragment(s) attendu(s)");
+    expect(r.out).toContain("l'écran est sans DONNÉE");
+    expect(r.out).toContain("ROUTE_WITNESSES");
+    expect(r.out).not.toContain("N'EST PAS atteinte");
+  });
+});

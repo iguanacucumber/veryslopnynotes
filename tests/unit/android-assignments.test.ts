@@ -846,4 +846,35 @@ describe("carte de devoir (#161)", () => {
     expect(screen).toContain("subjectDisplayFr(style.label)");
     expect(screen).toContain("style.copy(label = subjectDisplayFr(style.label))");
   });
+
+  test("#166 : le dépliage est un LIBELLÉ, plus un bouton de 48 dp qui creuse un vide", () => {
+    // Le défaut, mesuré sur la capture du 04/10 : la rangée du bas (« Aide
+    // devoirs » + bascule) était repoussée par un grand vide, et la cause n'était
+    // ni un `weight(1f)` ni une hauteur fixe — c'était le `TextButton` « Voir
+    // plus ». `Button` de material3 impose `minimumInteractiveComponentSize()`
+    // (48 dp) puis `sizeIn(minHeight = 40.dp)`, donc sa boîte fait 48 dp pour un
+    // libellé `labelSmall` de ~16 dp : 32 dp de vide, 16 en-dessus et 16 en-
+    // dessous, dont la moitié tombait entre la consigne et la rangée du bas.
+    const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
+    const code = stripComments(screen);
+    // Le dépliage n'est plus un bouton…
+    expect(code).not.toMatch(/TextButton\([\s\S]{0,200}Voir plus/);
+    // …c'est un libellé cliquable, dans la couleur du thème.
+    expect(code).toMatch(/text = if \(expanded\) "Réduire" else "Voir plus"/);
+    expect(code).toMatch(/color = MaterialTheme\.colorScheme\.primary/);
+    // Le geste reste nommé pour un lecteur d'écran (on n'a pas échangé une
+    // hauteur pour un silence).
+    expect(code).toMatch(/onClickLabel = if \(expanded\)/);
+    expect(code).toMatch(/role = Role\.Button/);
+    // Le `Box(weight(1f))` de la rangée du bas est un poids de RANGÉE : c'est
+    // l'espaceur qui colle la bascule à droite. Il reste, et le test le dit —
+    // c'était l'hypothèse du défaut, et elle était fausse.
+    expect(code).toMatch(/Row\([\s\S]{0,400}Box\(modifier = Modifier\.weight\(1f\)\)/);
+    // Et AUCUNE hauteur fixe dans la carte : rien ne réserve de place à la rangée
+    // du bas, donc elle se colle au contenu comme le veut le défaut. (Les
+    // `weight(1f)` restants sont tous des poids de `Row`, donc horizontaux :
+    // la colonne interne de l'en-tête et l'espaceur du bas.)
+    const carte = code.slice(code.indexOf("private fun PapTaskCard"), code.indexOf("private fun HomeworkHelpChip"));
+    expect(carte).not.toMatch(/fillMaxHeight|requiredHeight|\bheight\(|\bheightIn\(|Spacer\(Modifier\.height/);
+  });
 });

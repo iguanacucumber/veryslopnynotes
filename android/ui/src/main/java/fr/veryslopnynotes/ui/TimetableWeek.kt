@@ -23,14 +23,11 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.data.CachePolicy
@@ -86,6 +82,19 @@ import java.util.Locale
 // ponytail: pas de ViewModel, état local comme les autres écrans ; le rendu
 //   passe par les briques de #136, pas par des `Text` à la main.
 //   upgrade: ViewModel + StateFlow quand #82 câblerait la navigation complète.
+//
+// #166 — le tirail vient de `HomePullToRefresh` (#143), PLUS de
+// `PullToRefreshContainer` de material3 1.2.1. En 1.2.1 ce conteneur peint son
+// disque de 40 dp INCONDITIONNELLEMENT — `.background(containerColor, shape)`
+// n'est pas conditionné par le geste, seul `shadow(elevation)` l'est — et au
+// repos `verticalOffset == 0f` donne `translationY = 0f - height`, donc le
+// disque se dessinait à cheval sur le bandeau « périmé » au lieu de sous le
+// bord haut du pager. C'est ce disque gris que la passe sur appareil a photographié
+// au milieu de l'EDT, sans qu'aucun geste n'ait jamais eu lieu. La brique de #143
+// ne compose son icône que si `offset.value > 0f || refreshing`, anime le retour
+// au repos, coupe l'overscroll natif — et elle est déjà écrite et testée : on la
+// réutilise au lieu de refaire un second « tirer pour actualiser » qui serait, lui,
+// animation par animation, le même défaut.
 
 private const val MAX_SUBJECT_CHARS = 100
 private const val MAX_ROOM_CHARS = 100
@@ -500,7 +509,7 @@ fun timetableWindowQuery(weekStartMillis: Long, zone: ZoneId): String {
  * (`LaunchedEffect(weekStart)` : une seule requête par semaine affichée, la
  * query de fenêtre du contrat est donc toujours celle de la semaine VUE).
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TimetableRoute(
     repo: SyncedRepository,
@@ -577,17 +586,10 @@ fun TimetableRoute(
         val target = if (todayPage in days.indices) todayPage else 0
         pagerState.scrollToPage(target)
     }
-    val pullState = rememberPullToRefreshState()
-    // Le geste est géré par l'état Material3 : au relâchement au-delà du
-    // seuil, l'état passe `isRefreshing` et c'est ICI qu'on demande le refresh.
-    LaunchedEffect(pullState.isRefreshing) {
-        if (pullState.isRefreshing) refresh()
-    }
-    // Refresh terminé : on rentre l'indicateur.
-    LaunchedEffect(refreshing) {
-        if (!refreshing) pullState.endRefresh()
-    }
-
+    // #166 : le tirail est celui de l'accueil (`HomePullToRefresh`, #143). Plus de
+    // `LaunchedEffect(pullState…)` : la brique appelle `refresh()` au relâchement
+    // au-delà du seuil et anime elle-même son propre retour au repos, donc l'écran
+    // n'a plus deux états à synchroniser avec celui de l'indicateur.
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -622,26 +624,35 @@ fun TimetableRoute(
             )
         }
         val error = state as? UiState.Error
-        when {
-            // Contenu affiché : le pager prime, l'erreur est portée par le
-            // bandeau « périmé » et le pull-to-refresh (une semaine entière vaut
-            // mieux qu'un bandeau d'erreur au-dessus d'elle).
-            days.isEmpty() && error != null -> PapErrorState(message = error.message, onRetry = { refresh() })
-            days.isEmpty() && state is UiState.Loading -> PapLoading()
-            days.isEmpty() -> PapEmptyState(
-                icon = Icons.Filled.DateRange,
-                title = "Aucun cours cette semaine",
-                description = if (baseUrl.isBlank()) {
-                    "Aucun serveur configuré : appairez l'établissement pour charger l'emploi du temps."
-                } else {
-                    "Tirez vers le bas pour actualiser, ou changez de semaine."
-                },
-                action = {
-                    if (baseUrl.isNotBlank()) TextButton(onClick = { refresh() }) { Text("Actualiser") }
-                },
-            )
-            else -> Box(modifier = Modifier.fillMaxSize().nestedScroll(pullState.nestedScrollConnection)) {
-                HorizontalPager(
+        // #166 : le tirail enveloppe l'ÉTAT ENTIER, pas seulement le pager. Le
+        // vide en disait « Tirez vers le bas pour actualiser » alors que la
+        // connexion de défilement n'était montée que dans la branche du pager :
+        // le geste y était un mensonge. Ici il est vrai partout, et il n'y a plus
+        // qu'une seule implémentation du tirail dans l'application.
+        HomePullToRefresh(
+            refreshing = refreshing,
+            onRefresh = { refresh() },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            when {
+                // Contenu affiché : le pager prime, l'erreur est portée par le
+                // bandeau « périmé » et le pull-to-refresh (une semaine entière
+                // vaut mieux qu'un bandeau d'erreur au-dessus d'elle).
+                days.isEmpty() && error != null -> PapErrorState(message = error.message, onRetry = { refresh() })
+                days.isEmpty() && state is UiState.Loading -> PapLoading()
+                days.isEmpty() -> PapEmptyState(
+                    icon = Icons.Filled.DateRange,
+                    title = "Aucun cours cette semaine",
+                    description = if (baseUrl.isBlank()) {
+                        "Aucun serveur configuré : appairez l'établissement pour charger l'emploi du temps."
+                    } else {
+                        "Tirez vers le bas pour actualiser, ou changez de semaine."
+                    },
+                    action = {
+                        if (baseUrl.isNotBlank()) TextButton(onClick = { refresh() }) { Text("Actualiser") }
+                    },
+                )
+                else -> HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
                 ) { page ->
@@ -654,12 +665,6 @@ fun TimetableRoute(
                         nextStartMillis = next?.startMillis,
                     )
                 }
-                PullToRefreshContainer(
-                    state = pullState,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary,
-                )
             }
         }
     }

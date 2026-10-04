@@ -109,6 +109,15 @@ import java.time.ZoneId
 // (`assignmentCardText`, `subjectDisplayFr`, `subjectInitial`) tiennent la
 // correction ; le DIALOGUE d'aide, lui, n'a pas bougé d'une ligne.
 //
+// #166 : le vide du carton ne venait d'aucun `weight(1f)` ni d'une hauteur fixe
+// (le `Box(Modifier.weight(1f))` de la rangée du bas est un poids de RANGÉE, donc
+// horizontal : c'est l'espaceur qui colle la bascule à droite, il reste). Il
+// venait du `TextButton` « Voir plus » — voir le commentaire sur place. Mesuré sur
+// la capture du 04/10 (2,748 px/dp) : consigne COURT = 14 px (~5 dp) entre le
+// texte et la rangée du bas, soit le `spacedBy(6.dp)` et rien d'autre ; consigne
+// LONGUE = 57 px (~21 dp) avant « Voir plus », puis 58 px (~21 dp) après. Le même
+// écran, deux fois 6 dp de plus — parce que le bouton est là, et lui seul.
+//
 // Contenu serveur = DONNÉE affichée par `Text()` seul (I6) ; pièce jointe = URL
 // du proxy /v1/media, aucune adresse d'établissement dans l'app (I1), URL jamais
 // journalisée (une URL finit dans les logs d'accès).
@@ -372,12 +381,35 @@ private fun PapTaskCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (text.body.length > DESCRIPTION_EXPAND_CHARS) {
-                    TextButton(
-                        onClick = { expanded = !expanded },
-                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
-                    ) {
-                        Text(if (expanded) "Réduire" else "Voir plus", style = MaterialTheme.typography.labelSmall)
-                    }
+                    // #166 : AVANT, c'était un `TextButton`, donc un `Button`
+                    // material3 — or `Button` impose `minimumInteractiveComponentSize()`
+                    // (48 dp) puis `sizeIn(minHeight = 40.dp)` : la boîte fait
+                    // 48 dp pour un libellé `labelSmall` de ~16 dp, donc 32 dp de
+                    // VIDE, 16 en-dessus et 16 en-dessous. La moitié du haut
+                    // tombait exactement entre la consigne et la rangée du bas
+                    // (mesuré sur la capture : 57 px ≈ 21 dp entre la 3e ligne et
+                    // « Voir plus », dont 6 dp de `spacedBy` et 44 px ≈ 16 dp de
+                    // minimum interactif), et celle du bas entre « Voir plus »
+                    // et la rangée — d'où le grand vide du carton. Le libellé
+                    // redevient un libellé : la rangée du bas se colle au
+                    // contenu, et le vide visible disparaît.
+                    // ponytail: la cible de toucher passe de 48 dp à ~24 dp (le
+                    //   libellé + 4 dp). Rétablir 48 dp obligerait à rendre la
+                    //   surface cliquable visible — donc à réintroduire le vide.
+                    //   Upgrade: un lien de dépliage en FIN de la dernière ligne
+                    //   de consigne, qui ne coûte aucune hauteur supplémentaire.
+                    Text(
+                        text = if (expanded) "Réduire" else "Voir plus",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clickable(
+                                onClickLabel = if (expanded) "Réduire la consigne" else "Voir toute la consigne",
+                                role = Role.Button,
+                                onClick = { expanded = !expanded },
+                            )
+                            .padding(vertical = 4.dp),
+                    )
                 }
             }
             val lesson = a.lessonContent
