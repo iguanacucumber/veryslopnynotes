@@ -6,8 +6,8 @@ package fr.veryslopnynotes.core
 // Pièces jointes : `ref` OPAQUE résolue par le proxy serveur (/v1/media).
 // Une URL absolue dans `ref` est rejetée par isValid : aucune URL Pronote
 // ne peut atteindre l'app (I1, règle d'or média).
-// ponytail: dates = 10 premiers caractères de l'ISO (stdlib seule, pas de lib
-// date) ; le badge semaine est dérivé de dueDate côté UI, jamais stocké.
+// ponytail: pas de lib date — la date affichée vient de `DateFr.kt`
+// (`dayLabelFr`), qui lit l'ISO avec `java.time` (minSdk 26).
 data class AssignmentAttachment(
     val id: String,
     val label: String,
@@ -66,16 +66,10 @@ data class Assignment(
             return true
         }
 
-        fun dayLabel(iso: String): String = if (iso.length >= 10) iso.substring(0, 10) else ""
-
-        /** "lundi 05/10" : badge semaine dérivé de dueDate, jamais un champ du contrat. */
-        fun dayLabelFr(iso: String): String {
-            val day = dayLabel(iso)
-            if (day.length < 10) return day
-            val names = listOf("dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi")
-            val index = runCatching { java.time.LocalDate.parse(day).dayOfWeek.value % 7 }.getOrDefault(-1)
-            val name = if (index < 0) "" else "${names[index]} "
-            return "$name${day.substring(8, 10)}/${day.substring(5, 7)}"
-        }
+        // #147 : le badge « lundi 05/10 » (dérivé de `dueDate`, jamais un champ
+        // du contrat) est parti dans `DateFr.kt` — `dayLabelFr`, l'unique
+        // implémentation des dates françaises, et `isoDayKey` pour la clé de
+        // regroupement des devoirs par jour. Les deux tables de jour qui
+        // coexistaient ici et dans l'écran Cantine ont disparu.
     }
 }

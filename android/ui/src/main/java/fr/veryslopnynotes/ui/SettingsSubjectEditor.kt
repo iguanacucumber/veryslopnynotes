@@ -32,6 +32,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -118,6 +121,17 @@ data class SubjectDraft(
     val emoji: String = "",
 )
 
+/**
+ * Les trois saisies du brouillon, en `list` : c'est ce que le `Bundle` de
+ * l'activité sait conserver, donc ce que la rotation rend après coup (#147).
+ * Un `data class` n'est pas `Serializable`, donc `rememberSaveable` la refuserait
+ * — d'où l'export explicite, et non « ça marche tant qu'on ne fait pas tourner ».
+ */
+val SubjectDraftSaver: Saver<SubjectDraft, Any> = listSaver(
+    save = { listOf(it.label, it.colorHex, it.emoji) },
+    restore = { SubjectDraft(label = it[0], colorHex = it[1], emoji = it[2]) },
+)
+
 /** Brouillon initialisé depuis les prefs enregistrées (vide pour une nouvelle). */
 fun subjectDraft(prefs: SubjectPrefs?): SubjectDraft = SubjectDraft(
     label = prefs?.label?.trim().orEmpty(),
@@ -196,10 +210,13 @@ fun SubjectEditorSheet(
     onSave: (color: String?, emoji: String?, label: String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // `remember(subject)` : le brouillon d'une matière ne doit pas survivre à
-    // l'ouverture d'une autre, et la feuille qui sort de la composition perd son
-    // état — donc rouvrir le même sujet repart de l'état enregistré.
-    var draft by remember(subject) { mutableStateOf(subjectDraft(saved)) }
+    // `rememberSaveable(subject)` : le brouillon d'une matière ne doit pas
+    // survivre à l'ouverture d'une autre, et rouvrir le même sujet repart de
+    // l'état ENREGISTRÉ — sauf si la feuille a été fermée par une rotation, où
+    // le brouillon saisi est justement ce qu'on ne veut pas perdre (#147).
+    var draft by rememberSaveable(subject, stateSaver = SubjectDraftSaver) {
+        mutableStateOf(subjectDraft(saved))
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),

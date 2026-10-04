@@ -446,8 +446,13 @@ describe("briques d'interface (#136)", () => {
     // Le témoin inversé : chaque écran migré affiche le VRAI message.
     const edt = readFileSync(join(UI, "TimetableWeek.kt"), "utf8");
     expect({ edt: edt.includes('"Erreur réseau. Réessayer."') }).toEqual({ edt: false });
-    expect(edt).toContain("PapErrorState(message = error.message");
+    expect(edt).toContain("PapErrorState(message = failed.message");
     expect(edt).toContain("PapStaleBanner(");
+    // #147 : relecture ratée alors que la SEMAINE EST AFFICHÉE. Avant, l'EDT ne
+    // montrait l'erreur que dans la branche « aucun cours » : avec le cache en
+    // place, le bandeau « hors ligne » disait l'âge des cours et jamais la
+    // cause. Une ligne de message, comme les autres écrans en cache.
+    expect(edt).toContain("text = failed.message");
     const devoirs = readFileSync(join(UI, "Assignments.kt"), "utf8");
     expect({ devoirs: devoirs.includes('"Erreur réseau. Réessayer."') }).toEqual({ devoirs: false });
     expect(devoirs).toContain("PapErrorState(message = error");

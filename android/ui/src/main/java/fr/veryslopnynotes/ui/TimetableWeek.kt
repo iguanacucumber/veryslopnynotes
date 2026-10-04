@@ -35,12 +35,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import fr.veryslopnynotes.core.dayLabelOf
+import fr.veryslopnynotes.core.enumFr
+import fr.veryslopnynotes.core.monthFr
+import fr.veryslopnynotes.core.weekdayCapitalizedFr
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SyncedRepository
@@ -192,18 +197,11 @@ fun highlightOf(
 }
 
 private val HHMM: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.FRANCE)
-private val DAY_NAMES = listOf("dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi")
 
-/**
- * Noms de mois ÉCRITS en français. Le nom court dépendrait de la CLDR du
- * téléphone : « oct. » sur un appareil français, « Oct » sur un autre, et une
- * abréviation dans une autre langue sur un troisième. Une pastille de date
- * qui change de langue selon le fabricant n'est pas une localisation.
- */
-private val MONTH_NAMES = listOf(
-    "janvier", "février", "mars", "avril", "mai", "juin",
-    "juillet", "août", "septembre", "octobre", "novembre", "décembre",
-)
+// #147 : les tables `DAY_NAMES` et `MONTH_NAMES` d'ici ont DISPARU. Jours et mois
+// en toutes lettres sont posés UNE fois dans `core/DateFr.kt` — jamais `EEEE` ni
+// `MMMM`, qui suivent la CLDR du téléphone (« oct. », « 10月 »). Ce fichier n'en a
+// plus besoin que pour trois libellés, tous délégués.
 
 private fun bound(s: String, max: Int): String = s.trim().take(max)
 
@@ -352,9 +350,12 @@ fun lessonBadgeLabel(lesson: TimetableLessonUi, zone: ZoneId, label: String = le
     val range = lessonRangeLabel(lesson, zone)
     if (range.isNotEmpty()) parts.add(range)
     val head = parts.joinToString(" • ")
+    // Le mot vient de la table du contrat, MIS en minuscules : il est collé au
+    // milieu de la ligne, donc « Annulé » y serait une faute de typographie
+    // (#147, cf. `core/EnumFr.kt`).
     return when (lesson.status) {
-        STATUS_CANCELLED -> "$head • annulé"
-        STATUS_MOVED -> "$head • déplacé" + movedFromLabel(lesson, zone)
+        STATUS_CANCELLED -> "$head • ${enumFr(STATUS_CANCELLED).lowercase()}"
+        STATUS_MOVED -> "$head • ${enumFr(STATUS_MOVED).lowercase()}" + movedFromLabel(lesson, zone)
         else -> head
     }
 }
@@ -377,20 +378,17 @@ fun movedHintLabel(lesson: TimetableLessonUi, zone: ZoneId): String? {
     return if (label.isEmpty()) null else "départ $label"
 }
 
-/** "lundi 05/10" depuis le jour local (2026-10-05). */
+/** "lundi 05/10" depuis le jour local (2026-10-05) ; illisible = tel quel. */
 fun timetableDayLabel(day: String): String {
     val date = runCatching { LocalDate.parse(day) }.getOrNull() ?: return day
-    val dd = date.dayOfMonth.toString().padStart(2, '0')
-    val mm = date.monthValue.toString().padStart(2, '0')
-    return "${DAY_NAMES[date.dayOfWeek.value % 7]} $dd/$mm"
+    return dayLabelOf(date)
 }
 
 /** "Lundi" : nom du jour civil, première lettre en capitale. */
-fun dayNameFr(date: LocalDate): String =
-    DAY_NAMES[date.dayOfWeek.value % 7].replaceFirstChar { it.uppercaseChar() }
+fun dayNameFr(date: LocalDate): String = weekdayCapitalizedFr(date.dayOfWeek)
 
-/** "octobre" : nom du mois ÉCRIT (cf. [MONTH_NAMES]). */
-fun monthNameFr(date: LocalDate): String = MONTH_NAMES.getOrElse(date.monthValue - 1) { "" }
+/** "octobre" : nom du mois ÉCRIT (cf. `FR_MONTHS`). */
+fun monthNameFr(date: LocalDate): String = monthFr(date.monthValue)
 
 /** "5 octobre" : le contenu de la pastille de jour de l'en-tête collant. */
 fun dayPillLabel(date: LocalDate): String =
@@ -524,7 +522,10 @@ fun TimetableRoute(
 ) {
     val zone = remember { ZoneId.systemDefault() }
     var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
-    var weekStart by remember { mutableStateOf(weekStartOf(nowMillis, zone)) }
+    // #147 : la SEMAINE affichée est un état d'écran : sans sauvegarde, tourner
+    // l'appareil en cours de consultation d'une autre semaine y revenait, et
+    // l'en-tête changeait de date sous les cours.
+    var weekStart by rememberSaveable { mutableStateOf(weekStartOf(nowMillis, zone)) }
     var refreshing by remember { mutableStateOf(false) }
     var state by remember {
         val cached = try {
@@ -614,6 +615,19 @@ fun TimetableRoute(
             // date inventée.
             PapStaleBanner(fetchedAt = data.fetchedAt.takeIf { it > 0L }, onRefresh = { refresh() })
         }
+        // #147 : relecture ratée alors que la SEMAINE EST LÀ. AVANT, l'état
+        // d'erreur n'était rendu que dans la branche « aucune journée » : le
+        // bandeau « hors ligne » disait l'âge des cours, jamais la cause de
+        // l'échec (« 503 », « session expirée »). Une ligne, même règle que les
+        // autres écrans en cache — les cours restent affichés, la cause est dite.
+        val failed = state as? UiState.Error
+        if (failed != null) {
+            Text(
+                text = failed.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         val next = week?.next
         val currentStartMillis = week?.let { currentLessonOf(it.lessons, nowMillis)?.startMillis }
         // #145 : la ligne du prochain cours APPARAÎT (échelle 0.9 -> 1 + opacité,
@@ -631,7 +645,6 @@ fun TimetableRoute(
                 )
             }
         }
-        val error = state as? UiState.Error
         // #166 : le tirail enveloppe l'ÉTAT ENTIER, pas seulement le pager. Le
         // vide en disait « Tirez vers le bas pour actualiser » alors que la
         // connexion de défilement n'était montée que dans la branche du pager :
@@ -647,16 +660,16 @@ fun TimetableRoute(
             // lit comme un défaut d'affichage. Ici le passage se fait en fondu, et la
             // clé est l'ÉTAT (les quatre branches sont celles d'avant).
             val stateKey = when {
-                days.isEmpty() && error != null -> "error"
+                days.isEmpty() && failed != null -> "error"
                 days.isEmpty() && state is UiState.Loading -> "loading"
                 days.isEmpty() -> "empty"
                 else -> "days"
             }
             Crossfade(targetState = stateKey, label = "timetableState") { _ -> when {
-                // Contenu affiché : le pager prime, l'erreur est portée par le
-                // bandeau « périmé » et le pull-to-refresh (une semaine entière
-                // vaut mieux qu'un bandeau d'erreur au-dessus d'elle).
-                days.isEmpty() && error != null -> PapErrorState(message = error.message, onRetry = { refresh() })
+                // Contenu affiché : le pager prime. L'erreur est déjà dite en une
+                // ligne plus haut (#147) — un bandeau « Réessayer » au-dessus
+                // d'une semaine entière doublerait l'action du pull-to-refresh.
+                days.isEmpty() && failed != null -> PapErrorState(message = failed.message, onRetry = { refresh() })
                 days.isEmpty() && state is UiState.Loading -> PapLoading()
                 days.isEmpty() -> PapEmptyState(
                     icon = Icons.Filled.DateRange,

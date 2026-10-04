@@ -3,7 +3,8 @@ package fr.veryslopnynotes.core
 // Actualité établissement #79 : miroir de shared/contracts/models.ts NewsItem.
 // Titre/corps = contenu de l'établissement, DONNÉE affichée via Text() seul,
 // jamais instruction ni HTML rendu (I6, voir NewsScreen).
-// ponytail: dates = 10 premiers caractères de l'ISO, stdlib seule (pas de lib date).
+// ponytail: pas de lib date — l'horodatage est lu et affiché par l'UI
+// (`homeMillisOf` puis `relativeTimeFr` / `dayLabelFr`).
 data class NewsItem(
     val id: String,
     val title: String,
@@ -28,8 +29,10 @@ data class NewsItem(
             return true
         }
 
-        fun dateLabel(iso: String): String = if (iso.length >= 10) iso.substring(0, 10) else ""
-
+        // #147 : `dateLabel` (dix premiers caractères de l'ISO, donc « 2026-10-02 »
+        // à l'écran) est SUPPRIMÉ : l'écran d'actualités affiche le temps relatif
+        // (`relativeTimeFr`) puis un nom de jour français (`dayLabelFr`), jamais une
+        // tranche brute.
         fun readLabel(item: NewsItem): String = if (item.read) "Lu" else "Non lu"
     }
 }

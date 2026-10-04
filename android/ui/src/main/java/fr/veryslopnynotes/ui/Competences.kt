@@ -21,6 +21,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
@@ -29,6 +30,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import fr.veryslopnynotes.core.dayLabelFr
 import org.json.JSONObject
 import java.util.Locale
 
@@ -220,8 +222,10 @@ private fun optIntCount(o: JSONObject, key: String): Int {
 fun CompetencesSection(payload: String?) {
     val ui = remember(payload) { if (payload == null) CompetenciesUi(emptyList(), emptyMap()) else competenciesFrom(payload) }
     // Clé = skills (liste immuable) : la sélection repart à vide quand le
-    // payload change, jamais de chip sélectionnée fantôme.
-    var selectedId by remember(ui.skills) { mutableStateOf<String?>(null) }
+    // payload change, jamais de chip sélectionnée fantôme. #147 : `saveable`,
+    // sinon la compétence ouverte disparaissait à la rotation et son détail —
+    // plusieurs évaluations à lire — était à rouvrir à la main.
+    var selectedId by rememberSaveable(ui.skills) { mutableStateOf<String?>(null) }
     val haptics = rememberPapHaptics()
     // #144 : la section est DÉFILABLE — le détail d'une compétence peut compter
     // plusieurs évaluations, et la coquille qui l'héberge ne défile pas.
@@ -309,7 +313,8 @@ private fun EvaluationRow(entry: EvaluationDetailUi) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = "${noteLabel(entry.note, entry.scale)} · ${entry.date.take(10)}",
+                // #147 : « lundi 05/10 » À LA PLACE de la tranche ISO brute du payload.
+                text = "${noteLabel(entry.note, entry.scale)} · ${dayLabelFr(entry.date)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

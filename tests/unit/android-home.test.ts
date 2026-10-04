@@ -13,6 +13,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { syntheticAssignmentsPayload, syntheticGradesPayload, syntheticTimetablePayload } from "./fixtures/profile";
+import { frDayNames } from "./fixtures/date-fr";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const UI = join(ROOT, "android/ui/src/main/java/fr/veryslopnynotes/ui");
@@ -42,7 +43,9 @@ function tsDayOffsetOf(millis: number, nowMillis: number): number {
   return day(millis) - day(nowMillis);
 }
 
-const DAYS = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+// #147 : la table des jours est celle de `core/DateFr.kt`, lue par le miroir
+// partagé (plus une copie par écran).
+const DAYS = frDayNames();
 
 /** Miroir de homeTimeLabel / homeRangeLabel. */
 function tsTimeLabel(millis: number): string {

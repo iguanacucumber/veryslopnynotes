@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
@@ -91,15 +92,23 @@ fun PairingRoute(
     // Saisie du serveur, pré-remplie avec l'adresse courante. Volontairement
     // NON liée à `baseUrl` pour le texte : un changement de serveur ne doit pas
     // effacer ce que l'utilisateur est en train de taper.
-    var serverDraft by remember { mutableStateOf(baseUrl) }
-    var serverError by remember { mutableStateOf<String?>(null) }
+    //
+    // #147 : tout l'état de l'assistant est en `rememberSaveable`. AVANT, ZÉRO
+    // `rememberSaveable` dans le module : tourner le téléphone en plein
+    // appairage effaçait l'adresse tapée, l'erreur affichée et l'ÉTAPE atteinte
+    // (retour au champ serveur, QR à resscanner).
+    var serverDraft by rememberSaveable { mutableStateOf(baseUrl) }
+    var serverError by rememberSaveable { mutableStateOf<String?>(null) }
     // Confirmation du changement (la session a été purgée) : hors `baseUrl`
     // sinon elle serait effacée par le changement qu'elle annonce.
-    var serverSaved by remember { mutableStateOf(false) }
-    var step by remember { mutableStateOf(SetupStep.SERVER) }
-    var form by remember { mutableStateOf(SetupForm()) }
+    var serverSaved by rememberSaveable { mutableStateOf(false) }
+    var step by rememberSaveable { mutableStateOf(SetupStep.SERVER) }
+    var form by rememberSaveable(stateSaver = SetupFormSaver) { mutableStateOf(SetupForm()) }
     // Version de contrat annoncée par le serveur joignable : preuve que la
-    // réponse vient bien de trèsslopnynotes, affichée telle quelle.
+    // réponse vient bien du serveur, affichée telle quelle.
+    // PAS `rememberSaveable` : c'est la trace d'une SONDE, pas une saisie. Après
+    // une rotation, l'app n'a pas re-sondé, donc afficher « joignable » serait
+    // une affirmation sans preuve derrière elle (#147).
     var serverVersion by remember { mutableStateOf<String?>(null) }
     val haptics = rememberPapHaptics()
 
@@ -310,7 +319,7 @@ private fun AccountStep(
     onChange: (SetupForm) -> Unit,
     onNext: (SetupStep) -> Unit,
 ) {
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -365,7 +374,9 @@ private fun QrStep(
     onSseConnect: () -> Unit,
     onSseDisconnect: () -> Unit,
 ) {
-    var error by remember { mutableStateOf<String?>(null) }
+    // #147 : l'erreur du scan survit à la rotation, sinon l'utilisateur rescane
+    // un QR pour apprendre la même chose.
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
     val qr = parseSchoolQr(form.qrRaw)
     // #127 : rien de lu (annulé, permission refusée, QR illisible) -> une phrase
     // qui dit quoi faire. Le silence de #122 rendait le bouton « inerte ».

@@ -5,6 +5,7 @@ import { isNewsItem, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CH
 import { isNewsResponse } from "../../shared/contracts/api";
 import { CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
 import { syntheticNewsInjectionItem, syntheticNewsItem, syntheticNewsOk } from "./fixtures/news";
+import { dayLabelFr } from "./fixtures/date-fr";
 
 // #144 : miroirs de la LOGIQUE PURE du rendu (NewsScreen.kt) — regroupement par
 // catégorie, libellé de catégorie, ligne auteur + date RELATIVE. `now`/`zone`
@@ -103,9 +104,14 @@ function tsNewsIsValid(item: KtNewsItem): boolean {
   return true;
 }
 
-function tsDateLabel(iso: string): string {
+/** TÉMOIN du helper supprimé en #147 (`NewsItem.dateLabel`) : tranche ISO. */
+function tsLegacyDateLabel(iso: string): string {
   return iso.length >= 10 ? iso.substring(0, 10) : "";
 }
+
+// #147 : la table des jours est celle de `core/DateFr.kt`, lue par le miroir
+// partagé — plus une copie par fichier de test.
+const tsDayLabelFr = dayLabelFr;
 
 function tsReadLabel(item: KtNewsItem): string {
   return item.read ? "Lu" : "Non lu";
@@ -248,9 +254,17 @@ describe("unit android actus (#79)", () => {
     expect(() => tsPathFor("actus", "https://server.example.test")).toThrow();
   });
 
-  test("dateLabel : 10 premiers chars de l'ISO, chaîne courte = vide", () => {
-    expect(tsDateLabel("2026-10-02T07:00:00.000Z")).toBe("2026-10-02");
-    expect(tsDateLabel("2026-10")).toBe("");
+  test("TEMPS (#147) : plus de tranche ISO dans core, la date est un jour français", () => {
+    // AVANT #147 : `NewsItem.dateLabel(iso)` rendait les dix premiers caractères
+    // de l'ISO (« 2026-10-02 »). Le témoin reste ici, le helper est SUPPRIMÉ de
+    // `core/NewsItem.kt` — même convention que `LEGACY_WEEK_MS` côté EDT.
+    expect(tsLegacyDateLabel("2026-10-02T07:00:00.000Z")).toBe("2026-10-02");
+    expect(tsLegacyDateLabel("2026-10")).toBe("");
+    // Le rendu réel passe par `relativeTimeFr` puis le nom de jour de `DateFr.kt`.
+    expect(tsDayLabelFr("2026-10-02T07:00:00.000Z")).toBe("vendredi 02/10");
+    // Date illisible : RIEN (une tranche brute ne vaut pas un horodatage).
+    expect(tsDayLabelFr("hier")).toBe("");
+    expect(tsDayLabelFr("")).toBe("");
   });
 
   test("Kotlin : fichiers présents, parse org.json, aucune interprétation (I6)", () => {
@@ -275,7 +289,10 @@ describe("unit android actus (#79)", () => {
     }
     const core = readFileSync(K_FILES.core, "utf8");
     expect(core).toContain("fun isValid");
-    expect(core).toContain("fun dateLabel");
+    // #147 : `dateLabel` (tranche ISO) est supprimé de `NewsItem` ; `readLabel`
+    // reste, c'est déjà du français.
+    expect(core).not.toContain("fun dateLabel");
+    expect(core).not.toContain("substring(0, 10)");
     expect(core).toContain("fun readLabel");
     const config = readFileSync(K_FILES.config, "utf8");
     expect(config).toContain("/v1/news");
@@ -343,7 +360,9 @@ describe("unit android actus (#79)", () => {
     // Pull-to-refresh : le MÊME composant que l'accueil, zéro dépendance.
     expect(screen).toContain("HomePullToRefresh(refreshing = loading");
     // Le contrat n'expose pas d'écriture de lecture : l'état lu est de session.
-    expect(screen).toContain("var readIds by remember");
+    // #147 : les ids lus sont `rememberSaveable` (une rotation ne remet donc pas
+    // la pastille « non lu » sur tout ce qui venait d'être marqué lu).
+    expect(screen).toContain("var readIds by rememberSaveable");
     // L'état vide Papillon et le bandeau horodaté.
     expect(screen).toContain('title = "Aucune actualité."');
     expect(screen).toContain("PapStaleBanner(fetchedAt = fetchedAt");

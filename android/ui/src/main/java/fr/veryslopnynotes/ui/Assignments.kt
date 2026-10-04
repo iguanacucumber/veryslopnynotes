@@ -57,6 +57,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -77,7 +80,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.AssignmentAttachment
+import fr.veryslopnynotes.core.AssignmentLessonContent
 import fr.veryslopnynotes.core.ServerConfig
+import fr.veryslopnynotes.core.dayLabelFr
+import fr.veryslopnynotes.core.isoDayKey
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.AssignmentsRepository
 import fr.veryslopnynotes.data.DeviceAuth
@@ -159,7 +165,9 @@ private const val DONE_ALPHA = 0.6f
 fun assignmentsByDay(list: List<Assignment>): List<Pair<String, List<Assignment>>> {
     val byDay = linkedMapOf<String, MutableList<Assignment>>()
     for (a in list) {
-        val day = Assignment.dayLabel(a.dueDate)
+        // Clé de RANGEMENT (tri alphabétique = ordre chronologique sur un ISO),
+        // jamais affichée : le badge passe par `dayLabelFr` (#147).
+        val day = isoDayKey(a.dueDate)
         if (day.isEmpty()) continue
         byDay.getOrPut(day) { mutableListOf() }.add(a)
     }
@@ -171,6 +179,59 @@ fun assignmentsFromPayload(payload: String?): List<Assignment> = try {
 } catch (_: Exception) {
     emptyList()
 }
+
+/**
+ * Le devoir entier, en `list` : ce que le `Bundle` sait garder après une
+ * rotation (#147). Tout le modèle est exporté — pas seulement les champs du
+ * dialogue — donc un `Assignment` restauré reste un `Assignment` complet et
+ * aucun appelant ne peut lire un trou par accident.
+ *
+ * `lessonContent` et `attachments` sont absents du contrat sur certains
+ * devoirs : ils sont donc exportés comme des listes VIDES, jamais comme `null`
+ * (un `null` dans un `listSaver` n'est pas une valeur restaurable).
+ */
+val AssignmentSaver: Saver<Assignment?, Any> = listSaver(
+    save = { a ->
+        if (a == null) {
+            listOf("")
+        } else {
+            val content = a.lessonContent
+            listOf(
+                a.id, a.subject, a.title, a.dueDate, if (a.done) "1" else "0", a.description,
+                if (content == null) "" else "1", content?.title.orEmpty(), content?.excerpt.orEmpty(),
+                a.attachments.size.toString(),
+            ) + a.attachments.map { "${it.id}\u0000${it.label}\u0000${it.ref}" } +
+                listOf(a.periodId.orEmpty(), a.weekId.orEmpty())
+        }
+    },
+    restore = { list ->
+        if (list.isEmpty() || list[0] as String == "") {
+            null
+        } else {
+            val nb = 9
+            val count = list[nb].toString().toIntOrNull()?.coerceIn(0, list.size - nb - 3) ?: 0
+            Assignment(
+                id = list[0] as String,
+                subject = list[1] as String,
+                title = list[2] as String,
+                dueDate = list[3] as String,
+                done = list[4] == "1",
+                description = list[5] as String,
+                lessonContent = if (list[6] == "1") {
+                    AssignmentLessonContent(title = list[7] as String, excerpt = list[8] as String)
+                } else {
+                    null
+                },
+                attachments = (0 until count).mapNotNull { i ->
+                    val parts = (list[nb + 1 + i] as String).split("\u0000")
+                    if (parts.size != 3) null else AssignmentAttachment(parts[0], parts[1], parts[2])
+                },
+                periodId = list[nb + 1 + count] as String,
+                weekId = list[nb + 2 + count] as String,
+            )
+        }
+    },
+)
 
 /** Icône d'une section (décorative : c'est le titre qui porte le sens). */
 private fun sectionIcon(id: String): ImageVector = when (id) {
@@ -359,7 +420,10 @@ private fun PapTaskCard(
     // consigne, donc « fait » se lit pareil quelle que soit la place du texte.
     val dim = if (a.done) DONE_ALPHA else 1f
     val strike = if (a.done) TextDecoration.LineThrough else null
-    var expanded by remember(a.id) { mutableStateOf(false) }
+    // #147 : la consigne dépliée survit à la rotation — la replier alors qu'on
+    // la lisait est exactement le genre de perte que l'utilisateur ne pardonne
+    // pas. La clé reste l'identifiant : deux devoirs ne partagent pas l'état.
+    var expanded by rememberSaveable(a.id) { mutableStateOf(false) }
     Card(
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -771,7 +835,7 @@ fun AssignmentsScreen(
                                 if (section.days.size > 1) {
                                     item(key = "jour-${section.id}-$day") {
                                         Text(
-                                            text = Assignment.dayLabelFr(day),
+                                            text = dayLabelFr(day),
                                             style = MaterialTheme.typography.titleSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
@@ -829,19 +893,28 @@ fun AssignmentsRoute(
     val zone = remember { ZoneId.systemDefault() }
     val main = remember { Handler(Looper.getMainLooper()) }
     val context = LocalContext.current
-    var helpFor by remember { mutableStateOf<Assignment?>(null) }
+    // #147 : le devoir ouvert dans l'Assistant est SAUVEGARDÉ. Sans lui, une
+    // rotation refermerait le dialogue — et sa question, son corrigé et son
+    // message d'erreur partiraient avec, alors qu'ils sont justement l'état qu'on
+    // veut garder (le régénérer coûte un appel modèle).
+    var helpFor by rememberSaveable(stateSaver = AssignmentSaver) { mutableStateOf<Assignment?>(null) }
     var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
-    // Curseur de semaine : un ISO court (lundi), recalculé à chaque rechargement.
-    var week by remember { mutableStateOf(weekStartIso(nowMillis, zone)) }
-    var query by remember { mutableStateOf("") }
-    var selectedSubject by remember { mutableStateOf<String?>(null) }
-    var doneOpen by remember { mutableStateOf(false) }
+    // #147 : la SEMAINE affichée est un état d'écran, pas une donnée : sans
+    // sauvegarde, tourner le téléphone ramenait l'utilisateur à la semaine
+    // courante alors qu'il consultait celle d'après (idem pour la recherche, le
+    // filtre matière et le volet « faits »).
+    var week by rememberSaveable { mutableStateOf(weekStartIso(nowMillis, zone)) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var selectedSubject by rememberSaveable { mutableStateOf<String?>(null) }
+    var doneOpen by rememberSaveable { mutableStateOf(false) }
     // #145 : une seule porte pour les messages d'écriture — le snackbar racine,
     // qui a une couleur de SÉVÉRITÉ et se referme tout seul. L'ancien `notice`
     // était un `Text` en encre d'erreur au-dessus de la liste : un refus du
     // serveur s'y lisait exactement comme une réussite.
     val notices = LocalPapNotice.current
-    // Toggle Optimiste : on patche la liste affichée, revert sur échec.
+    // Toggle Optimiste : on patche la liste affichée, revert sur échec. PAS
+    // sauvegardé : c'est une écriture EN VOL, la restaurer afficherait un devoir
+    // coché que personne n'a coché (#147).
     var pending by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     var state by remember {
         val c = try {
