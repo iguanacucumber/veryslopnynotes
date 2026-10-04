@@ -36,7 +36,8 @@ import fr.veryslopnynotes.data.SubjectPrefs
 //
 // Toute couleur vient de `PapillonTheme.kt` : la couleur de matière passe par
 // `subjectStyle` (libellé/emoji/color des préférences matière) puis par
-// `subjectContent` (−45 %, le seul pas qui repasse 4.5:1 sur les 20 couleurs).
+// `subjectContent` (−45 % en clair, +55 % en sombre : le seul pas qui repasse
+// 4.5:1 sur les 20 couleurs dans les DEUX thèmes).
 // Aucune couleur en dur, aucune chaîne en dur venue du serveur.
 
 /** Largeur d'une carte du carrousel : la carte doit tenir nom + note + date. */

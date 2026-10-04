@@ -170,12 +170,22 @@ fun tint(color: Color, p: Float): Color {
  *  inventée en guise de repli. */
 fun tint(hex: String, p: Float): Color? = papillonColor(hex)?.let { tint(it, p) }
 
-/** Fond de carte matière : la couleur de matière très éclaircie (75 % vers le
- *  blanc), c'est le pastel que Papillon pose derrière le nom du cours. */
-fun subjectSurface(hex: String): Color? = tint(hex, .75f)
+/** Fond de carte matière en thème CLAIR : 75 % vers le blanc, c'est le pastel
+ *  que Papillon pose derrière le nom du cours. */
+const val SUBJECT_SURFACE_TINT = 0.75f
 
 /**
- * Encre et bordure d'une carte matière.
+ * Fond de carte matière en thème SOMBRE : 60 % vers le noir.
+ *
+ * Un pas UNIQUE ne peut pas servir les deux thèmes, les deux directions étant
+ * opposées : en sombre, un pastel à 75 % vers le blanc est un aplat clair qui
+ * brûle sur un fond noir ET rend toute encre de texte du thème (`onSurface`,
+ * blanc) invisible sur la carte. Le même pas que [cancelledSurface] en sombre.
+ */
+const val SUBJECT_SURFACE_DARK_TINT = -0.60f
+
+/**
+ * Encre et bordure d'une carte matière en thème CLAIR.
  *
  * [tint] à −15 % — le pas de Papillon — ne mesure que 2.28:1 au pire de la
  * palette (`#E8B048`) : AA est hors d'atteinte. Or le nom de la matière est du
@@ -183,7 +193,46 @@ fun subjectSurface(hex: String): Color? = tint(hex, .75f)
  * clair qui repasse au-dessus pour les 20 couleurs (4.87:1 au pire, mesuré par
  * [contrastRatio] — cf. tests/unit/android-papillon-theme.test.ts).
  */
-fun subjectContent(hex: String): Color? = tint(hex, -.45f)
+const val SUBJECT_CONTENT_LIGHT_TINT = -0.45f
+
+/**
+ * Encre matière en thème SOMBRE : 55 % vers le blanc.
+ *
+ * #179 : −45 % ASSOMBRIT toujours la matière, donc un vert assombri sur une
+ * carte presque noire n'a plus aucun contraste (le pas était figé pour le fond
+ * clair). 55 % vers le blanc remonte à 7.31:1 au pire des 20 sur la surface
+ * sombre, 6.29:1 sur le fond de carte ci-dessus — mesuré, pas deviné.
+ */
+const val SUBJECT_CONTENT_DARK_TINT = 0.55f
+
+/** Fond de carte matière, dans le thème demandé. */
+fun subjectSurface(hex: String, dark: Boolean): Color? =
+    tint(hex, if (dark) SUBJECT_SURFACE_DARK_TINT else SUBJECT_SURFACE_TINT)
+
+/** Encre matière, dans le thème demandé : le pas suit le fond, il ne le précède
+ *  pas (cf. [SUBJECT_CONTENT_DARK_TINT]). */
+fun subjectContent(hex: String, dark: Boolean): Color? =
+    tint(hex, if (dark) SUBJECT_CONTENT_DARK_TINT else SUBJECT_CONTENT_LIGHT_TINT)
+
+/** Raccourci `@Composable` des deux : le mode se LIT dans le thème
+ *  ([isDarkSurface]) au lieu d'être câblé deux fois par l'appelant, donc une
+ *  encre de matière ne peut pas être choisie pour le mauvais thème. */
+@Composable
+fun subjectSurface(hex: String): Color? = subjectSurface(hex, isDarkSurface())
+
+@Composable
+fun subjectContent(hex: String): Color? = subjectContent(hex, isDarkSurface())
+
+/**
+ * Encre de matière lisible sur le fond RÉEL d'un composant : une puce sélectionnée
+ * n'a pas le fond d'une puce au repos, et le `secondaryContainer` du thème sombre
+ * reste un aplat clair. On garde donc le pas du thème qui passe le mieux,
+ * mesuré — la même partis pris que [bestContentOn], appliquée aux deux pas du
+ * thème au lieu du seul blanc.
+ */
+fun bestSubjectContentOn(hex: String, background: Color): Color? =
+    listOfNotNull(subjectContent(hex, false), subjectContent(hex, true))
+        .maxByOrNull { contrastRatio(it, background) }
 
 /**
  * Luminance relative WCAG 2.x d'une couleur (canaux non linéarisés).

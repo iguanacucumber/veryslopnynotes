@@ -651,24 +651,29 @@ fun PapStaleBanner(
 /**
  * Puce texte sur une couleur de matière.
  *
- * Fond et encre sortent des DEUX fonctions de matière de `PapillonTheme.kt` :
- * [tint] à 75 % vers le blanc (le pastel derrière le libellé) et à −45 % vers le
- * noir (l'encre mesurée qui repasse 4.5:1 sur les 20 couleurs). Aucune couleur
- * inventée, donc le contraste est le même que celui d'une carte matière.
+ * Fond et encre sortent des MÊMES pas que les deux fonctions de matière de
+ * `PapillonTheme.kt` : [tint] à 75 % vers le blanc (le pastel derrière le
+ * libellé) et à −45 % vers le noir (l'encre mesurée qui repasse 4.5:1 sur les
+ * 20 couleurs) en thème CLAIR. #179 : en thème SOMBRE les deux pas sont
+ * INVERSÉS (60 % vers le noir, 55 % vers le blanc) — un pastel clair posé sur
+ * un fond noir, avec une encre assombrie dessus, était illisible. Le pas vient
+ * du thème, donc une pastille de note, une pastille « en cours » et une
+ * pastille d'absence se rééquilibrent ensemble.
  */
 @Composable
 fun PapPill(text: String, color: Color, modifier: Modifier = Modifier) {
     if (text.isEmpty()) return
+    val dark = isDarkSurface()
     Box(
         modifier = modifier
             .clip(MaterialTheme.shapes.small)
-            .background(tint(color, .75f))
+            .background(tint(color, if (dark) SUBJECT_SURFACE_DARK_TINT else SUBJECT_SURFACE_TINT))
             .padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
-            color = tint(color, -.45f),
+            color = tint(color, if (dark) SUBJECT_CONTENT_DARK_TINT else SUBJECT_CONTENT_LIGHT_TINT),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

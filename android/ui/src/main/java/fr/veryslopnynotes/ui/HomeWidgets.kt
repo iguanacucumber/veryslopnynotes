@@ -400,9 +400,9 @@ fun homeQuickActions(
  * Couleur d'un accès rapide : l'entrée n de [SubjectPalette].
  *
  * Palette de matière = la SEULE liste de couleurs du thème, donc zéro hex en
- * dur ici. L'encre et le pastel sont dérivés plus loin par `subjectContent`
- * (−45 %, 4.87:1 au pire) et `subjectSurface` (+75 %), tous deux mesurés dans
- * `PapillonTheme.kt`.
+ * dur ici. L'encre et le fond sont dérivés plus loin par `subjectContent`
+ * (−45 % / +55 %, 4.5:1 au pire dans les deux thèmes) et `subjectSurface`
+ * (+75 % / −60 %), tous deux mesurés dans `PapillonTheme.kt`.
  */
 private fun homeTintHex(index: Int): String =
     SubjectPalette.getOrNull(index) ?: SubjectPalette.first()
