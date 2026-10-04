@@ -171,6 +171,44 @@ describe("invariants", () => {
     expect(ports).toContain("untrusted");
   });
 
+  // I9 (#172) : AUCUN CODE MORT dans `android/`.
+  //
+  // Le défaut qu'il traque, sans exception tolérée : un `fun`/`class` de premier
+  // niveau dont le nom n'apparaît nulle part ailleurs dans le code Kotlin. C'est
+  // ce que laisse une refonte quand elle remplace un composant (`HomeworkHelpButton`
+  // mort depuis #161) ou un paramètre (`AppNav.loadAlerts`, mort depuis #144) :
+  // le code compile, il est lu, il est relu à chaque revue, et il n'arrive
+  // JAMAIS à l'écran.
+  //
+  // Trois noms sont tolérés, et chacun est un MIROIR TS testé ailleurs :
+  // `lessonBadgeLabel`/`timetableDayLabel` rejoués par `android-timetable.test.ts`,
+  // `parseQrPayload` par `android-pairing-sse.test.ts`. Supprimer ces trois
+  // fonctions supprimerait ce qu'elles vérifient : c'est la LISTE qui est
+  // gardée, pas le code.
+  test("I9: android sans code mort (aucun fun/class jamais appele)", () => {
+    const files = list(join(ROOT, "android")).filter((f) => f.endsWith(".kt"));
+    const code = files.map((f) => codeOnly(readFileSync(f, "utf8"))).join("\n");
+    const tolere = new Set(["MainActivity", "lessonBadgeLabel", "timetableDayLabel", "parseQrPayload"]);
+    const morts: string[] = [];
+    for (const f of files) {
+      const src = codeOnly(readFileSync(f, "utf8"));
+      // Déclarations de premier niveau seulement : une fonction locale est
+      // visible dans son bloc, donc elle n'est pas « morte » du tout.
+      const declarations = [
+        ...src.matchAll(/^(?:internal |public )?fun ([A-Za-z]\w*)\(/gm),
+        ...src.matchAll(/^(?:internal |public )?(?:data |sealed |abstract )?(?:class|object|interface) ([A-Za-z]\w*)/gm),
+      ];
+      for (const d of declarations) {
+        const nom = d[1]!;
+        if (tolere.has(nom)) continue;
+        const usages = (code.match(new RegExp(`\\b${nom}\\b`, "g")) ?? []).length;
+        // 1 = la déclaration elle-même : personne d'autre ne l'a nommé.
+        if (usages <= 1) morts.push(`${f.slice(f.lastIndexOf("/") + 1)} : ${nom}`);
+      }
+    }
+    expect({ morts }).toEqual({ morts: [] });
+  });
+
   test("I7: jobs sans LLM, effets sur donnees structurees uniquement", () => {
     const jobFiles = list(join(ROOT, "server/jobs"));
     expect(jobFiles.length).toBeGreaterThan(0);

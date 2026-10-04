@@ -36,14 +36,6 @@ data class SetupForm(
     val lastEventPreview: String? = null,
 )
 
-fun sseLabel(s: SseState): String = when (s) {
-    is SseState.Disconnected -> "SSE déconnecté"
-    is SseState.Connecting -> "SSE connexion…"
-    is SseState.Connected -> "SSE connecté (${s.received} reçus)"
-    is SseState.WaitingRetry -> "SSE reconnexion… (essai ${s.attempt}, ${s.delayMs} ms)"
-    is SseState.Failed -> "SSE en échec : ${s.message}"
-}
-
 fun pairingStateLabel(s: PairingState): String = when (s) {
     is PairingState.Idle -> "Prêt"
     is PairingState.Submitting -> "Connexion à l'établissement…"
@@ -56,6 +48,38 @@ fun setupStepLabel(step: SetupStep): String = when (step) {
     SetupStep.SERVER -> "Étape 1/3 — ton serveur"
     SetupStep.ACCOUNT -> "Étape 2/3 — ton établissement"
     SetupStep.QR -> "Étape 3/3 — le QR de l'application"
+}
+
+/**
+ * Étape PRÉCÉDENTE, `null` à la première : c'est au retour du haut de
+ * l'assistant de décider (remonter d'un cran, ou sortir).
+ *
+ * #172 : le parcours était un escalier à sens unique — 1 → 2 → 3, aucun retour.
+ * Le « Retour » de l'écran appelle `popBackStack`, qui ne peut rien faire au
+ * premier lancement (l'appairage EST la route de départ) ni après un 401 (la
+ * pile est vidée), donc les étapes 2 et 3 étaient un cul-de-sac : une adresse
+ * mal saisie ne pouvait plus être corrigée sans tout ressaisir.
+ */
+fun previousStep(step: SetupStep): SetupStep? = when (step) {
+    SetupStep.SERVER -> null
+    SetupStep.ACCOUNT -> SetupStep.SERVER
+    SetupStep.QR -> SetupStep.ACCOUNT
+}
+
+/**
+ * État des notifications en direct, en FRANÇAIS COURANT (#172).
+ *
+ * « SSE reconnexion… (essai 3, 1500 ms) » était un état d'exécution, lu par un
+ * élève au premier lancement : de l'outillage exposé comme de l'interface.
+ * L'écart de reprise reste dit (il explique une coupure), en secondes et sans
+ * jargon, parce que le délai est la seule chose qu'un utilisateur peut attendre.
+ */
+fun sseLabel(s: SseState): String = when (s) {
+    is SseState.Disconnected -> "Notifications en direct : arrêtées."
+    is SseState.Connecting -> "Notifications en direct : connexion…"
+    is SseState.Connected -> "Notifications en direct : actives (${s.received} reçues)."
+    is SseState.WaitingRetry -> "Notifications en direct : nouvelle tentative dans ${s.delayMs / 1000} s."
+    is SseState.Failed -> "Notifications en direct : échec — ${s.message}"
 }
 
 /**
