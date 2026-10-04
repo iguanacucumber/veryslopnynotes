@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -151,7 +152,15 @@ fun PairingRoute(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        Button(onClick = onBack, modifier = Modifier.padding(16.dp)) { Text("Retour") }
+        // #172 : le retour remonte D'ABORD d'un cran dans le parcours. Hors
+        // première étape, `popBackStack` ne peut rien faire (au premier
+        // lancement l'assistant EST la route de départ ; après un 401 la pile a
+        // été vidée), donc les étapes 2 et 3 n'avaient aucun chemin de retour.
+        val previous = previousStep(step)
+        Button(
+            onClick = { if (previous != null) step = previous else onBack() },
+            modifier = Modifier.padding(16.dp),
+        ) { Text(if (previous != null) "Étape précédente" else "Retour") }
         if (!notice.isNullOrEmpty()) Text(notice, modifier = Modifier.padding(horizontal = 16.dp))
         Text(setupStepLabel(step), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         when (step) {
@@ -358,6 +367,15 @@ private fun QrStep(
             label = { Text("Code PIN du QR") },
             supportingText = { Text("Celui défini dans ton compte établissement : il déchiffre le QR.") },
             singleLine = true,
+            // #172 : le PIN est un SECRET — il masque par défaut, comme la clé
+            // LLM des Réglages (#140). Sans `visualTransformation`, les chiffres
+            // étaient lisibles par-dessus l'épaule ET présents tels quels dans la
+            // hiérarchie de vues (ce que relit `uiautomator dump`, donc une
+            // capture, donc un fichier) : `KeyboardType.NumberPassword` ne change
+            // que le clavier, jamais ce qui est affiché ni ce qui est stocké
+            // dans l'arbre. La transformation porte sur l'AFFICHAGE : la saisie,
+            // le collage et ce qui part dans `SetupInput` sont inchangés.
+            visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -387,8 +405,24 @@ private fun QrStep(
                 },
             )
         }
-        SseStatusRow(state = form.sse, onConnect = onSseConnect, onDisconnect = onSseDisconnect)
-        form.lastEventPreview?.let { preview -> Text("Dernier événement : $preview") }
+        // #172 : l'état SSE sort du parcours principal. L'état brut (« SSE
+        // reconnexion… (essai 3, 1500 ms) ») et le dernier événement écrit
+        // étaient un TABLEAU DE BORD d'exploitation, visible par un élève dès la
+        // première étape, sous les deux seuls gestes qui comptent (scanner le QR,
+        // saisir son PIN). Ils sont repliés derrière UN bouton — repliés, pas
+        // supprimés : c'est le seul endroit de l'app où l'on peut constater si
+        // les notifications en direct fonctionnent, donc le diagnostic doit
+        // rester atteignable. Ouvert, il dit la même chose en français courant
+        // (`sseLabel`), et le JSON brut reste sous le même dépliant que les
+        // « Détails » de `PapErrorState` : une donnée affichée, jamais exécutée.
+        var sseDetails by remember { mutableStateOf(false) }
+        TextButton(onClick = { sseDetails = !sseDetails }) {
+            Text(if (sseDetails) "Masquer l'état des notifications" else "État des notifications")
+        }
+        if (sseDetails) {
+            SseStatusRow(state = form.sse, onConnect = onSseConnect, onDisconnect = onSseDisconnect)
+            form.lastEventPreview?.let { preview -> Text("Dernier événement : $preview") }
+        }
     }
 }
 
