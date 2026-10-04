@@ -2,7 +2,7 @@ package fr.veryslopnynotes.core
 
 // Profil du compte appairé #82 : miroir de shared/contracts/models.ts UserInfo.
 // La photo est une RÉF OPAQUE (`photo:<id>`) : l'app ne connaît jamais d'adresse
-// Pronote/ENT, elle passe par le proxy serveur (ServerConfig.photoUrl, I1).
+// Pronote, elle passe par le proxy serveur (ServerConfig.photoUrl, I1).
 // Aucune donnée personnelle n'est persistée par ce modèle (mode anonyme : le
 // profil vit en mémoire, il repart à la déconnexion).
 // ponytail: dates = 10 premiers caractères de l'ISO, stdlib seule (pas de lib date).

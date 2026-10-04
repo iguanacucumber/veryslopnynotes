@@ -1,9 +1,8 @@
-// e2e manuals (issue #25, phase 8) — offline-first, sans .env.local requis.
+// e2e manuals (issue #25, phase 8) — offline-first, sans aucun credential.
 // Aucun réseau externe : fixtures synthétiques + serveur local uniquement.
 // Sessions/credentials réelles jamais utilisées : pipeline validé sur données
 // anonymisées, scrape réel seulement vers boucle locale si Playwright présent.
 import { describe, expect, test } from "bun:test";
-import { loadManualsConfig } from "../../server/infrastructure/manuals-config";
 import {
   chunkManual,
   citeSources,
@@ -13,17 +12,17 @@ import {
 } from "../../server/infrastructure/manuals";
 import { isPlaywrightAvailable, scrapeManuals } from "../../server/infrastructure/manuals-scrape";
 import { buildRevisionPrompt } from "../../server/ai/prompt";
-import { syntheticManualDocs } from "../unit/fixtures/manuals";
+import { syntheticManualAccount, syntheticManualDocs } from "../unit/fixtures/manuals";
 
 describe("e2e manuals", () => {
   test("pipeline local chunk→retrieve→cite→prompt, sans fuite", () => {
-    // Config réelle chargée ou noop gracieux — jamais loguée en clair.
-    const config = loadManualsConfig();
+    // 0.7.0 : aucun credential dans l'environnement. Le compte éditeur est
+    // injecté par l'appelant, et n'apparaît dans aucun log.
     const logs: string[] = [];
-    logs.push(`manuals configured=${config !== null}`);
+    logs.push(`manuals configured=${syntheticManualAccount !== null}`);
     const joined = logs.join("\n");
-    expect(joined).not.toContain(Bun.env["MANUAL_PASSWORD"] ?? "no-env-pw-never-present");
-    expect(joined).not.toContain(Bun.env["MANUAL_USERNAME"] ?? "no-env-user-never-present");
+    expect(joined).not.toContain(syntheticManualAccount.password);
+    expect(joined).not.toContain(syntheticManualAccount.username);
 
     // Pipeline sur fixtures synthétiques uniquement (jamais de données perso).
     const chunks = syntheticManualDocs.flatMap((d) => chunkManual(d, 500));
@@ -40,11 +39,11 @@ describe("e2e manuals", () => {
     const prompt = buildRevisionPrompt([corrige, citeSources(hits)]);
     expect(prompt.body).toContain(`nonce="${prompt.nonce}"`);
     expect(prompt.body).toContain("Sources :");
-    expect(prompt.body).not.toContain(Bun.env["MANUAL_PASSWORD"] ?? "no-env-pw-never-present");
+    expect(prompt.body).not.toContain(syntheticManualAccount.password);
   });
 
   test("scrape vers boucle locale ou skip gracieux sans navigateur", async () => {
-    const config = loadManualsConfig();
+    const config = syntheticManualAccount;
     if (!(await isPlaywrightAvailable())) {
       let err: Error | null = null;
       try {
@@ -52,7 +51,7 @@ describe("e2e manuals", () => {
       } catch (e) {
         err = e as Error;
       }
-      expect(err?.message ?? "").not.toContain(Bun.env["MANUAL_PASSWORD"] ?? "no-env-pw-never-present");
+      expect(err?.message ?? "").not.toContain(syntheticManualAccount.password);
       expect(true).toBe(true);
       return;
     }
@@ -68,7 +67,7 @@ describe("e2e manuals", () => {
     try {
       const logs: string[] = [];
       const docs = await scrapeManuals(
-        config ?? { platform: "editeur-fake", username: "u", password: "p" },
+        config,
         {
           startUrl: `http://127.0.0.1:${server.port}/manuel-fake`,
           authFile: `playwright/.auth/e2e-manuals-${Date.now()}.json`,
@@ -78,7 +77,7 @@ describe("e2e manuals", () => {
         },
       );
       expect(Array.isArray(docs)).toBe(true);
-      expect(logs.join("\n")).not.toContain(Bun.env["MANUAL_PASSWORD"] ?? "no-env-pw-never-present");
+      expect(logs.join("\n")).not.toContain(syntheticManualAccount.password);
     } finally {
       server.stop(true);
     }

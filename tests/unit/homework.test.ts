@@ -14,12 +14,16 @@ import { handleHomeworkGenerate } from "../../server/api/homework";
 import { createHandler } from "../../server/api/router";
 import { pairedDevice } from "./fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
-import { isLlmConfigured, loadLlmConfig } from "../../server/infrastructure/llm-openrouter";
+import { LLM_DEFAULT_MODEL, OpenRouterProvider } from "../../server/infrastructure/llm-openrouter";
 
 const SRC_A = "Maths-Fake 6e • p.42";
 const SRC_B = "Francais-Fake 5e • p.17";
 
+/** Clé LLM de l'APP (0.7.0) : fausse, jamais valide, jamais dans le repo. */
+const FAKE_API_KEY = "fake-openrouter-key-UNREAL";
+
 const validInput = {
+  apiKey: FAKE_API_KEY,
   question: "Combien font 1/2 + 1/4 ?",
   sources: [
     { text: "half plus quarter equals three quarters", source: SRC_A },
@@ -27,9 +31,10 @@ const validInput = {
   ],
 };
 
-function fakeProvider(reply: string, spy?: { calls: number; lastData?: Untrusted<string>[] }): LLMProvider {
+function fakeProvider(reply: string, spy?: { calls: number; lastData?: Untrusted<string>[]; lastKey?: string }): LLMProvider {
   return {
-    async generate({ system, data }: { system: string; data: Untrusted<string>[] }) {
+    async generate({ system, data }: { system: string; data: Untrusted<string>[] }, apiKey?: string) {
+      if (spy) spy.lastKey = apiKey;
       if (spy) {
         spy.calls += 1;
         spy.lastData = data;
@@ -44,14 +49,18 @@ function fakeProvider(reply: string, spy?: { calls: number; lastData?: Untrusted
 describe("unit homework generate (#27)", () => {
   test("contrats : requête/réponse valides, invalides rejetés", () => {
     expect(isHomeworkGenerateRequest(validInput)).toBe(true);
-    expect(isHomeworkGenerateRequest({ question: "  ", sources: [] })).toBe(false);
-    expect(isHomeworkGenerateRequest({ question: "q", sources: "non" })).toBe(false);
+    expect(isHomeworkGenerateRequest({ ...validInput, question: "  " })).toBe(false);
+    expect(isHomeworkGenerateRequest({ ...validInput, sources: "non" })).toBe(false);
     expect(
-      isHomeworkGenerateRequest({ question: "q", sources: [{ text: "", source: SRC_A }] }),
+      isHomeworkGenerateRequest({ ...validInput, sources: [{ text: "", source: SRC_A }] }),
     ).toBe(false);
+    // 0.7.0 : la clé de l'app est OBLIGATOIRE (le serveur n'en détient aucune).
+    expect(isHomeworkGenerateRequest({ ...validInput, apiKey: undefined })).toBe(false);
+    expect(isHomeworkGenerateRequest({ ...validInput, apiKey: "  " })).toBe(false);
+    expect(isHomeworkGenerateRequest({ ...validInput, apiKey: "x".repeat(513) })).toBe(false);
     expect(
       isHomeworkGenerateRequest({
-        question: "q",
+        ...validInput,
         sources: Array.from({ length: HOMEWORK_MAX_SOURCES + 1 }, (_, i) => ({
           text: `t${i}`,
           source: `s${i}`,
@@ -89,6 +98,7 @@ describe("unit homework generate (#27)", () => {
   test("refus déterministe sans sources : provider jamais appelé", async () => {
     const spy = { calls: 0 };
     const res = await generateHomework(fakeProvider("{}", spy), {
+      ...validInput,
       question: "question sans corpus",
       sources: [],
     });
@@ -123,7 +133,7 @@ describe("unit homework generate (#27)", () => {
       generateHomework(fakeProvider(JSON.stringify({ status: "ok", answer: "x", steps: [], sources: [] })), validInput, "TestNonce12345678"),
     ).rejects.toThrow();
     await expect(
-      generateHomework(fakeProvider("{}"), { question: "", sources: [] }),
+      generateHomework(fakeProvider("{}"), { ...validInput, question: "" }),
     ).rejects.toThrow(/requête devoirs invalide/);
   });
 
@@ -136,7 +146,7 @@ describe("unit homework generate (#27)", () => {
     );
     const res = await generateHomework(
       provider,
-      { question: attack, sources: [{ text: "cours neutre fractions", source: SRC_A }] },
+      { ...validInput, question: attack, sources: [{ text: "cours neutre fractions", source: SRC_A }] },
       "TestNonce12345678",
     );
     expect(res.status).toBe("ok");
@@ -160,17 +170,24 @@ describe("unit homework generate (#27)", () => {
     expect(content).toMatch(/from\s+["']\.\/untrusted["']/);
   });
 
-  test("config LLM : null si incomplet, jamais de clé en dur", () => {
-    expect(loadLlmConfig({})).toBeNull();
-    expect(loadLlmConfig({ OPENROUTER_API_KEY: "k", OPENROUTER_MODEL: "" })).toBeNull();
-    expect(loadLlmConfig({ OPENROUTER_API_KEY: "k", OPENROUTER_MODEL: "m" })).toEqual({
-      apiKey: "k",
-      model: "m",
-    });
-    expect(isLlmConfigured({})).toBe(false);
-    const url = new URL("../../server/infrastructure/llm-openrouter.ts", import.meta.url);
-    const content = readFileSync(url, "utf8");
+  test("0.7.0 : aucune clé en dur, aucun env, et sans clé de l'app AUCUN appel", async () => {
+    const content = readFileSync(new URL("../../server/infrastructure/llm-openrouter.ts", import.meta.url), "utf8");
+    // Zéro credential dans l'adaptateur : ni clé en dur, ni lecture d'env.
     expect(content).not.toMatch(/sk-or-v1-[A-Za-z0-9]{8,}/);
+    expect(content).not.toMatch(/OPENROUTER_API_KEY|Bun\.env|process\.env/);
+    expect(LLM_DEFAULT_MODEL).toBe("stealth/space-bunny-alpha");
+
+    const calls: string[] = [];
+    const provider = new OpenRouterProvider({ model: LLM_DEFAULT_MODEL }, {
+      fetchFn: (async () => {
+        calls.push("fetch");
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    // Pas de clé = refus franc AVANT tout fetch, pas d'appel nu au fournisseur.
+    await provider.generate({ system: "s", data: [] }).catch(() => undefined);
+    await provider.generateSafe(buildSafePrompt("s", []), "  ").catch(() => undefined);
+    expect(calls).toEqual([]);
   });
 
   test("api : 501 sans provider, 400 requête invalide, 200 ok/refus", async () => {
@@ -189,7 +206,7 @@ describe("unit homework generate (#27)", () => {
     const bad = await handleHomeworkGenerate(
       new Request("http://127.0.0.1/v1/homework/generate", {
         method: "POST",
-        body: JSON.stringify({ question: "", sources: [] }),
+        body: JSON.stringify({ ...validInput, question: "" }),
       }),
       okProvider,
     );
@@ -208,7 +225,7 @@ describe("unit homework generate (#27)", () => {
     const refused = await handleHomeworkGenerate(
       new Request("http://127.0.0.1/v1/homework/generate", {
         method: "POST",
-        body: JSON.stringify({ question: "q", sources: [] }),
+        body: JSON.stringify({ ...validInput, sources: [] }),
       }),
       okProvider,
     );

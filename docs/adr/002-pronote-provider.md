@@ -1,5 +1,12 @@
 # ADR-002 — provider Pronote (critères go/no-go)
 
+> **Contrats 0.7.0 : le volet « A — Auth ENT/CAS » est abandonné, et avec lui tout
+> credential serveur.** Aucun SSO tiers, aucun identifiant, aucun `.env` : la seule
+> connexion est le `qrcodeLogin` avec le QR affiché par l'app de l'établissement (et la
+> clé LLM, envoyée par l'app sur chaque appel). Le reste de cet ADR (critères lectures,
+> I1-I3, décision live) reste valable. Les mentions « ENT/CAS » ci-dessous sont
+> conservées telles quelles : elles décrivent l'état au moment de la décision.
+
 - Statut : `no-go` conditionnel (issue #9, phase 2, 2026-10-02). Base `origin/main` a8e1834 (inclut #8 lectures 6a8b532, #7 auth, #6 client, #20 garde LLM, #23 notif). Mesures locales vertes, mesures live bloquées faute d'inputs humains (pas de `.env.local`). Re-décision `go` possible après re-mesure live. Phases 3, 5, 7, 9, 10 bloquées (voir § Décision #9).
 
 ## Contexte
@@ -49,13 +56,13 @@ Un seul rouge = `no-go`. Quatre critères live rouges par manque d'inputs, pas p
 
 | Critère | Mesure locale (2026-10-02, base a8e1834) | Verdict |
 |---|---|---|
-| A1 auth 5/5 p95 < 15 s | Bloqué : pas de compte test (`.env.local` absent). Unit auth OK en mock (sessions `Map<accountId,token>`, `invalid_credentials`/`ent_unavailable`/`network`/`timeout` typées). Test intégration `pronote-auth.test.ts` prêt, skip sans env. | rouge (bloqué) |
+| A1 auth 5/5 p95 < 15 s | Bloqué : pas de compte test (`.env.local` absent). Unit auth OK en mock (sessions `Map<accountId,token>`, `invalid_credentials`/`pronote_unavailable`/`network`/`timeout` typées). Test intégration `pronote-auth.test.ts` prêt, skip sans env. | rouge (bloqué) |
 | A2 0 requête depuis `android/` | Vert : `make architecture-test` OK (`check-architecture OK`, 7 tests arch). `android/` sans module, zéro hôte Pronote/ENT. | vert |
 | A3 sessions isolées, 0 secret en log | Vert : `PronoteAuthProvider` + `PronoteLectureProvider` loggent `auth -> ok` / `grades -> ok N` / `-> error code` seuls. Asserté 19 tests unit (`pronote-auth` + `pronote-http-client` + `pronote-lectures` : jamais token/password en URL/log/header sauf `Authorization: Bearer`). | vert |
 | A4 re-auth IP 2/2 documentée | Bloqué live (même cause A1). Procédure documentée en code (`pronote-auth.ts` : `invalidate` + `authenticate`, VPS IP fixe recommandé) + test intégration re-auth prêt (skip). | rouge (bloqué) |
-| L1 notes+devoirs+EDT typés | Vert mock, rouge live. Types figés `ports.ts` (`PronoteReader`, `PronotePage`, guards `isGrade`/`isAssignment`/`isTimetableEntry`), pagination clamp 1..100 défaut 50 + cursor opaque + `nextCursor null` = fin, erreurs `session_expired`/`ent_unavailable`/`network`/`timeout`. 7 tests unit lectures OK. Live OK en attente compte test. | rouge (bloqué live) |
+| L1 notes+devoirs+EDT typés | Vert mock, rouge live. Types figés `ports.ts` (`PronoteReader`, `PronotePage`, guards `isGrade`/`isAssignment`/`isTimetableEntry`), pagination clamp 1..100 défaut 50 + cursor opaque + `nextCursor null` = fin, erreurs `session_expired`/`pronote_unavailable`/`network`/`timeout`. 7 tests unit lectures OK. Live OK en attente compte test. | rouge (bloqué live) |
 | L2 100 % `Untrusted` | Vert : sorties `untrusted(valid)` (`pronote-lectures.ts:173`), `tests/security` 18 pass, `tests/contracts` 4 pass. | vert |
-| L3 échec propre | Vert mock : 401/403 → `session_expired`, 5xx/forme inconnue → `ent_unavailable`, `network`/`timeout` mappés, `from`/`to` non-ISO → `ent_unavailable` avant réseau, `accountId` vide → `session_expired` sans appel. Live ENT indisponible en attente. | vert (mock) |
+| L3 échec propre | Vert mock : 401/403 → `session_expired`, 5xx/forme inconnue → `pronote_unavailable`, `network`/`timeout` mappés, `from`/`to` non-ISO → `pronote_unavailable` avant réseau, `accountId` vide → `session_expired` sans appel. Live ENT indisponible en attente. | vert (mock) |
 | S1 20 runs ≥ 95 % | Bloqué : sans compte test, pas de run live. 0 régression I1-I3 en local. | rouge (bloqué) |
 | S2 client unique + bornes | Vert : unique `PronoteHttpClient` (I2, aucun `fetch` direct côté lectures/auth, scan OK), timeout défaut 10 s (`DEFAULT_TIMEOUT_MS`), 1 retry réseau/5xx max (boucle `attempt <= 1`), file sérialisée. | vert |
 | S3 `make check` + fixtures | Vert : lint + typecheck + unit 64 + arch 7 + contracts 4 + security 18. Fixtures `fake-UNREAL` synthétiques seules, aucun hôte/URL/session en repo. Faux positif lint sur `main` déjà corrigé via #20 (#53) ; cette branche ne touche aucun fichier hors scope. | vert |

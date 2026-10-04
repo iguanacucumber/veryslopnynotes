@@ -7,7 +7,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
 
-// Payload du QR affiché par l'application Pronote / l'ENT (#120). `login` et
+// Payload du QR affiché par l'application Pronote (#120). `login` et
 // `jeton` sont des blocs chiffrés dont la clé est le PIN : le serveur les
 // transmet tels quels à pronotets (`qrcodeLogin`), il ne les interprète pas.
 // `url` n'est pas toujours présent dans le QR — sinon c'est l'URL saisie au
@@ -19,15 +19,12 @@ data class SchoolQr(
 )
 
 /**
- * Ce que l'utilisateur a rempli à l'écran, avant l'envoi. Les deux méthodes
- * sont facultatives mais le serveur en exige une : `parseSchoolQr`/`null` côté
- * identifiants, le refus « aucune méthode » est rendu tel quel par l'app.
+ * Ce que l'utilisateur a rempli à l'écran, avant l'envoi. 0.7.0 : le QR et son
+ * PIN sont la preuve de détention ET la seule méthode — aucun identifiant n'est
+ * saisi ni stocké. Le refus « QR/PIN manquant » est rendu tel quel par l'app.
  */
 data class SetupInput(
     val schoolUrl: String,
-    val ent: String,
-    val username: String = "",
-    val password: String = "",
     val qr: SchoolQr? = null,
     val pin: String = "",
 )
@@ -38,7 +35,7 @@ sealed interface SetupResult {
     data class Err(val code: String, val message: String) : SetupResult
 }
 
-// POST /v1/setup : compte école + jeton de device en UN appel (contrat 0.5.0).
+// POST /v1/setup : compte école + jeton de device en UN appel (contrat 0.6.0).
 // Route PUBLIQUE comme l'appairage — c'est elle qui rend le secret, donc aucun
 // bearer ne doit partir ; on construit donc la Request ici et non via
 // `ApiClient.buildPost`. Même allowlist serveur unique (ServerConfig), I1.
@@ -50,10 +47,7 @@ class SetupRepository(
     private val jsonMedia = "application/json; charset=utf-8".toMediaType()
 
     fun setupRequest(deviceName: String, input: SetupInput): Request {
-        val body = JSONObject().put("deviceName", deviceName).put("schoolUrl", input.schoolUrl).put("ent", input.ent)
-        if (input.username.isNotBlank() && input.password.isNotBlank()) {
-            body.put("username", input.username).put("password", input.password)
-        }
+        val body = JSONObject().put("deviceName", deviceName).put("schoolUrl", input.schoolUrl)
         input.qr?.let { qr ->
             body.put("qr", JSONObject().put("login", qr.login).put("jeton", qr.jeton))
             if (!qr.url.isNullOrBlank()) body.getJSONObject("qr").put("url", qr.url)
@@ -75,13 +69,10 @@ class SetupRepository(
     fun runBlocking(deviceName: String, input: SetupInput): SetupResult {
         val schoolUrl = input.schoolUrl.trim()
         if (schoolUrl.isEmpty()) return SetupResult.Err("bad_request", "Adresse de l'établissement absente")
-        if (input.ent.isBlank()) return SetupResult.Err("bad_request", "Type d'ENT absent")
-        // Aucune méthode exploitable : pas d'appel réseau, refus tout de suite
-        // (le serveur ferait la même chose, en plus lent).
-        val hasQr = input.qr != null && input.pin.isNotBlank()
-        val hasCredentials = input.username.isNotBlank() && input.password.isNotBlank()
-        if (!hasQr && !hasCredentials) {
-            return SetupResult.Err("bad_request", "Identifiants ou QR de l'établissement requis")
+        // QR + PIN = la seule méthode : sans les deux, pas d'appel réseau (le
+        // serveur ferait la même chose, en plus lent).
+        if (input.qr == null || input.pin.isBlank()) {
+            return SetupResult.Err("bad_request", "QR de l'établissement et son PIN requis")
         }
         return try {
             api.client().newCall(setupRequest(deviceName, input.copy(schoolUrl = schoolUrl))).execute().use { res ->
@@ -99,7 +90,7 @@ class SetupRepository(
     /**
      * Codes d'erreur du setup → phrase actionnable. Le serveur distingue
      * volontairement ces cas (400 qr_rejected / login_refused, 502
-     * ent_unreachable, 429 rate_limited) : l'utilisateur doit pouvoir corriger
+     * school_unreachable, 429 rate_limited) : l'utilisateur doit pouvoir corriger
      * SA SAISIE, donc on ne dit jamais « recommence » quand « rescane » ou
      * « vérifie ton mot de passe » est la bonne réponse. Aucun 401 ici : ce
      * serait le garde-fou de session, pas une faute de saisie.
@@ -110,8 +101,8 @@ class SetupRepository(
             code.ifEmpty { "http_$status" },
             when (code) {
                 "qr_rejected" -> "QR refusé par l'établissement : rescane le code affiché par son application."
-                "login_refused" -> "Identifiants refusés par l'ENT : vérifie ton EduConnect et ton mot de passe."
-                "ent_unreachable" -> "ENT injoignable depuis le serveur : réessaie dans un instant."
+                "login_refused" -> "Identifiants refusés par l'établissement : vérifie ton identifiant et ton mot de passe."
+                "school_unreachable" -> "L'établissement ne répond pas : réessaie dans un instant."
                 "rate_limited" -> "Trop de tentatives : réessaie dans quelques minutes."
                 "not_implemented" -> "Ce serveur n'a aucune session d'établissement branchée."
                 "bad_request" -> "Saisie refusée par le serveur : vérifie l'adresse de l'établissement."

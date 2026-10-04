@@ -29,7 +29,7 @@ export const syntheticManualDocs: ManualDoc[] = [
   },
 ];
 
-// Compte faux pour tests config (jamais réel, jamais commité en .env.local).
+// Compte faux pour tests config (jamais réel, jamais stocké nulle part côté serveur).
 export const syntheticManualAccount = {
   platform: syntheticManualPlatform,
   username: "fake-manual-user-UNREAL",

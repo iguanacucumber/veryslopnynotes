@@ -217,8 +217,18 @@ object ServerConfig {
     // #75 : toggle "fait" = écriture confirmée par l'app (I7), jamais par le LLM.
     fun assignmentsToggleUrl(baseUrl: String): String = "$baseUrl/v1/assignments/toggle"
 
+    // 0.7.0 : assistant devoirs. POST avec la clé du fournisseur dans le CORPS
+    // (`apiKey`, writeOnly) — donc JAMAIS en query : une URL finit dans les
+    // logs d'accès, un corps non. Chemin protégé : le bearer d'appareil part
+    // aussi, comme sur toute autre route.
+    const val HOMEWORK_GENERATE_PATH = "/v1/homework/generate"
+    fun homeworkGenerateUrl(baseUrl: String): String = "$baseUrl$HOMEWORK_GENERATE_PATH"
+
+    /** Chemin nu, pour `ApiClient.buildPost` (même forme que `discussionsPath()`). */
+    fun homeworkGeneratePath(): String = HOMEWORK_GENERATE_PATH
+
     // #75 : proxy des pièces jointes. L'app passe une `ref` opaque, jamais une
-    // URL de l'ENT : le serveur résout et stream les octets (règle d'or média).
+    // URL de l'établissement : le serveur résout et stream les octets (règle d'or média).
     fun mediaUrl(baseUrl: String, accountId: String, ref: String): String =
         "$baseUrl/v1/media?accountId=${urlEncode(accountId)}&ref=${urlEncode(ref)}"
 
@@ -261,7 +271,7 @@ object ServerConfig {
     fun punishmentsUrl(baseUrl: String): String = "$baseUrl/v1/punishments"
 
     // #87 : capacités dynamiques (onglets actifs de l'établissement) et
-    // pull-refresh manuel (app -> serveur -> relecture). Aucune URL Pronote/ENT
+    // pull-refresh manuel (app -> serveur -> relecture). Aucune URL Pronote
     // ici : le serveur allowlist seul (I1).
     fun capabilitiesUrl(baseUrl: String): String = "$baseUrl/v1/capabilities"
     fun syncRefreshUrl(baseUrl: String): String = "$baseUrl/v1/sync/refresh"
@@ -295,7 +305,7 @@ object ServerConfig {
     fun meUrl(baseUrl: String): String = "$baseUrl/v1/me"
     fun periodsUrl(baseUrl: String): String = "$baseUrl/v1/periods"
 
-    // #82 : proxy média. La photo n'arrive JAMAIS par une adresse Pronote/ENT :
+    // #82 : proxy média. La photo n'arrive JAMAIS par une adresse Pronote :
     // on passe la réF opaque au serveur, qui résout et stream les octets (I1).
     fun mediaPath(ref: String, accountId: String): String =
         "/v1/media?ref=" + urlEncode(ref) + "&accountId=" + urlEncode(accountId)

@@ -1,5 +1,5 @@
 // e2e profil #82 (parité Papillon onglets index + profile).
-// Zéro réseau réel, zéro .env.local : store seed + createHandler en mémoire.
+// Zéro réseau réel, zéro credential serveur : store seed + createHandler en mémoire.
 // Parcours : seed → GET /v1/me → garde-fou → miroir app (parse) → periods →
 // /v1/media (photo par réf opaque) → multi-compte parent → state vide.
 import { describe, expect, test } from "bun:test";

@@ -1,11 +1,11 @@
 package fr.veryslopnynotes.core
 
 // Messagerie #80 : miroir de shared/contracts/models.ts (Recipient, Message,
-// Discussion). Sujet / corps / nom d'expéditeur = DONNÉES de l'ENT, bornées et
+// Discussion). Sujet / corps / nom d'expéditeur = DONNÉES de l'établissement, bornées et
 // affichées par Text() seul (jamais de HTML, jamais d'exécution : I6).
 // ÉCRITURES (répondre, créer, lu/non-lu, supprimer) : actions APP CONFIRMÉES
 // depuis un geste de l'utilisateur, jamais depuis une sortie LLM (I7) ; les
-// routes sont sur le serveur allowlist seul (jamais d'adresse Pronote/ENT, I1).
+// routes sont sur le serveur allowlist seul (jamais d'adresse Pronote, I1).
 // ponytail: dates = 10 premiers caractères de l'ISO, stdlib seule ; champ
 // optionnel du contrat = "" ou -1 côté affichage (jamais de valeur devinée).
 object DiscussionRules {
@@ -18,7 +18,7 @@ object DiscussionRules {
     /** Pièces jointes par message (miroir ASSIGNMENT_MAX_ATTACHMENTS). */
     const val MAX_ATTACHMENTS = 10
 
-    /** UNKNOWN_UNREAD = l'ENT ne publie pas le compteur (≠ « 0 non lu »). */
+    /** UNKNOWN_UNREAD = l'établissement ne publie pas le compteur (≠ « 0 non lu »). */
     const val UNKNOWN_UNREAD = -1
 
     val KINDS = listOf("student", "teacher", "administration")
@@ -43,7 +43,7 @@ object DiscussionRules {
 /**
  * Pièce jointe d'un message : RÉF OPAQUE résolue par le proxy serveur
  * (/v1/media). Toute forme d'adresse est invalide par contrat : l'app ne voit
- * JAMAIS une adresse Pronote/ENT (I1, règle d'or média).
+ * JAMAIS une adresse Pronote (I1, règle d'or média).
  */
 data class MessageAttachment(
     val id: String,

@@ -17,8 +17,6 @@ import type { Device, RevisionSheet } from "../../shared/contracts/models";
 import { localDay } from "../../shared/contracts/api";
 import type { ExamCandidate } from "./exams";
 
-export const REVISION_KIND = "fiche-v1" as const;
-
 export interface RevisionPushSender {
   send(deviceTokenHash: string, payload: { title: string; body: string }): Promise<void>;
 }

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { isPushConfigured, loadPushConfig } from "../../server/infrastructure/push-config";
 import {
   HttpPushProvider,
   NoopPushProvider,
@@ -14,15 +13,14 @@ const HASH_B = "b".repeat(64);
 const FAKE_PUBLIC = "FAKE-PUBLIC-UNREAL-123";
 const FAKE_PRIVATE = "FAKE-PRIVATE-UNREAL-456";
 
-function envFull(over: Record<string, string | undefined> = {}) {
-  return {
-    PUSH_PROVIDER: "https://push.example.invalid/send",
-    PUSH_VAPID_PUBLIC_KEY: FAKE_PUBLIC,
-    PUSH_VAPID_PRIVATE_KEY: FAKE_PRIVATE,
-    PUSH_VAPID_SUBJECT: "mailto:push@example.invalid",
-    ...over,
-  };
-}
+// 0.7.0 : config INJECTÉE (plus de lecture env — le serveur ne détient aucun
+// credential). Clés VAPID factices, jamais valides.
+const FULL_CONFIG = {
+  provider: "https://push.example.invalid/send",
+  vapidPublicKey: FAKE_PUBLIC,
+  vapidPrivateKey: FAKE_PRIVATE,
+  subject: "mailto:push@example.invalid",
+};
 
 function okFetch(seen: { url?: string; init?: RequestInit }, status = 200) {
   return (async (url: string | URL | Request, init?: RequestInit) => {
@@ -48,16 +46,14 @@ describe("unit push", () => {
     expect(s.length).toBeLessThan(HASH_A.length);
   });
 
-  test("loadPushConfig null si clé manquante, OK si complet (sujet défaut)", () => {
-    expect(loadPushConfig({})).toBeNull();
-    expect(loadPushConfig(envFull({ PUSH_VAPID_PRIVATE_KEY: "" }))).toBeNull();
-    expect(loadPushConfig(envFull({ PUSH_VAPID_PUBLIC_KEY: "  " }))).toBeNull();
-    const full = loadPushConfig(envFull());
-    expect(full?.provider).toBe("https://push.example.invalid/send");
-    const noSubject = loadPushConfig(envFull({ PUSH_VAPID_SUBJECT: undefined }));
-    expect(noSubject?.subject).toContain("mailto:");
-    expect(isPushConfigured(envFull())).toBe(true);
-    expect(isPushConfigured({})).toBe(false);
+  test("HttpPushProvider : config incomplète refusée à la construction", () => {
+    expect(
+      () =>
+        new HttpPushProvider(
+          { provider: "", vapidPublicKey: "", vapidPrivateKey: "", subject: "" },
+          {},
+        ),
+    ).toThrow();
   });
 
   test("Noop résout + log préfixe seul", async () => {
@@ -73,7 +69,7 @@ describe("unit push", () => {
   test("Http envoie POST JSON + headers publics, log sans secret", async () => {
     const seen: { url?: string; init?: RequestInit } = {};
     const logs: string[] = [];
-    const p = new HttpPushProvider(loadPushConfig(envFull())!, {
+    const p = new HttpPushProvider(FULL_CONFIG, {
       fetchFn: okFetch(seen, 201),
       logger: (m) => logs.push(m),
     });
@@ -111,7 +107,7 @@ describe("unit push", () => {
   });
 
   test("Http 4xx/5xx → PushError + log statut, réseau → PushError", async () => {
-    const bad = new HttpPushProvider(loadPushConfig(envFull())!, {
+    const bad = new HttpPushProvider(FULL_CONFIG, {
       fetchFn: okFetch({}, 404),
       logger: () => {},
     });
@@ -119,7 +115,7 @@ describe("unit push", () => {
     expect(err404).toBeInstanceOf(PushError);
     expect((err404 as PushError).status).toBe(404);
 
-    const down = new HttpPushProvider(loadPushConfig(envFull())!, {
+    const down = new HttpPushProvider(FULL_CONFIG, {
       fetchFn: (async () => {
         throw new Error("down");
       }) as unknown as typeof fetch,
@@ -144,9 +140,9 @@ describe("unit push", () => {
   });
 
   test("createPushProvider : noop sans config, http avec config", async () => {
-    const noop = createPushProvider({});
+    const noop = createPushProvider(null);
     expect(noop).toBeInstanceOf(NoopPushProvider);
-    const http = createPushProvider(envFull());
+    const http = createPushProvider(FULL_CONFIG);
     expect(http).toBeInstanceOf(HttpPushProvider);
   });
 });

@@ -32,8 +32,8 @@ import { notifySyncResult } from "../../server/jobs/notify";
 import type { GradePushSender } from "../../server/jobs/notify";
 import {
   syntheticAccountId,
-  syntheticPassword,
-  syntheticUsername,
+  syntheticQr,
+  syntheticSessionCredentials,
 } from "./fixtures/pronote";
 
 const AT = "2026-10-02T07:00:00.000Z";
@@ -205,7 +205,6 @@ describe("unit sync refresh (#87)", () => {
     let renewals = 0;
     let logins = 0;
     const sessions = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       now: b.now,
       logger: (m) => logs.push(m),
       renew: async () => {
@@ -217,18 +216,13 @@ describe("unit sync refresh (#87)", () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       }) as never,
     });
-    await sessions.authenticate({
-      accountId: syntheticAccountId,
-      username: syntheticUsername,
-      password: syntheticPassword,
-      entKind: "ninegate",
-    });
+    await sessions.authenticate(syntheticSessionCredentials);
     expect(logins).toBe(1);
     expect(sessions.isAuthenticated(syntheticAccountId)).toBe(true);
     // Session ouverte = fraîche : le refresh de lecture ne renew pas encore.
     await sessions.refreshSession(syntheticAccountId);
     expect(renewals).toBe(0);
-    // Au-delà du TTL : une renewal, pas de nouveau login SSO.
+    // Au-delà du TTL : une renewal, pas de nouveau login Pronote.
     b.advance(SESSION_REFRESH_TTL_MS + 1);
     await sessions.refreshSession(syntheticAccountId);
     expect(renewals).toBe(1);
@@ -240,7 +234,6 @@ describe("unit sync refresh (#87)", () => {
     // ne doit pas forcer un ré-appairage) ; session morte = client invalidé.
     let echec: "ok" | "network" | "expired" = "ok";
     const store2 = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       now: b.now,
       renew: async () => {
         if (echec === "network") throw new Error("network injoignable");
@@ -248,7 +241,7 @@ describe("unit sync refresh (#87)", () => {
       },
       clientFactory: (async () => ({ periods: [] })) as never,
     });
-    await store2.authenticate({ accountId: syntheticAccountId, username: syntheticUsername, password: syntheticPassword, entKind: "ninegate" });
+    await store2.authenticate(syntheticSessionCredentials);
     b.advance(SESSION_REFRESH_TTL_MS + 1);
     echec = "network";
     await expect(store2.refreshSession(syntheticAccountId)).rejects.toMatchObject({ code: "network" });
@@ -260,14 +253,13 @@ describe("unit sync refresh (#87)", () => {
 
     // Sans renewal injectée : no-op (comportement d'avant #87, aucun crash).
     const sansRenew = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       clientFactory: (async () => ({ periods: [] })) as never,
     });
     await expect(sansRenew.refreshSession(syntheticAccountId)).resolves.toBeUndefined();
     const store = readStore();
     expect(store).not.toContain("this.password");
-    expect(logs.join("\n")).not.toContain(syntheticPassword);
-    expect(logs.join("\n")).not.toContain(syntheticUsername);
+    expect(logs.join("\n")).not.toContain(syntheticQr.jeton);
+    expect(logs.join("\n")).not.toContain(syntheticQr.login);
   });
 
   test("reader : refresh appelé avant chaque lecture du sync", async () => {

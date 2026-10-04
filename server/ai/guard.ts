@@ -52,7 +52,7 @@ export function parseJsonOutput<T>(out: unknown): T {
 // Fournisseur qui sait envoyer un SafePrompt déjà validé (nonce de l'appelant
 // préservé). ponytail: capacité optionnelle, pas de port modifié (server/domain
 // est hors périmètre) ; sinon repli sur generate(), qui reconstruit le prompt.
-type SafePromptProvider = { generateSafe(safe: SafePrompt): Promise<string> };
+type SafePromptProvider = { generateSafe(safe: SafePrompt, apiKey?: string): Promise<string> };
 
 function hasGenerateSafe(provider: LLMProvider): provider is LLMProvider & SafePromptProvider {
   return typeof (provider as Partial<SafePromptProvider>).generateSafe === "function";
@@ -64,22 +64,27 @@ function callProvider(
   provider: LLMProvider,
   safe: SafePrompt,
   data: Untrusted<string>[],
+  apiKey?: string,
 ): Promise<string> {
-  if (hasGenerateSafe(provider)) return provider.generateSafe(safe);
-  return provider.generate({ system: safe.system, data });
+  if (hasGenerateSafe(provider)) return provider.generateSafe(safe, apiKey);
+  return provider.generate({ system: safe.system, data }, apiKey);
 }
 
 // Pont SafePrompt (body nonce) -> LLMProvider (system + data Untrusted).
 // Valide prompt avant appel, valide sortie apres. Aucun outil/reseau ici.
+// `apiKey` = credential de l'APP, relayée telle quelle vers l'adaptateur. Elle
+// n'entre JAMAIS dans le prompt (donc jamais dans assertNoSecretsInPrompt) et
+// n'est jamais journalisée ici.
 export async function generateGuarded(
   provider: LLMProvider,
   system: string,
   data: Untrusted<string>[],
   nonce?: string,
+  apiKey?: string,
 ): Promise<string> {
   const safe = buildSafePrompt(system, data, nonce);
   assertNoSecretsInPrompt(safe, data);
-  const out = await callProvider(provider, safe, data);
+  const out = await callProvider(provider, safe, data, apiKey);
   return validateTextOutput(out);
 }
 
@@ -88,9 +93,10 @@ export async function generateGuardedJson<T>(
   system: string,
   data: Untrusted<string>[],
   nonce?: string,
+  apiKey?: string,
 ): Promise<T> {
   const safe = buildSafePrompt(system, data, nonce);
   assertNoSecretsInPrompt(safe, data);
-  const out = await callProvider(provider, safe, data);
+  const out = await callProvider(provider, safe, data, apiKey);
   return parseJsonOutput<T>(out);
 }

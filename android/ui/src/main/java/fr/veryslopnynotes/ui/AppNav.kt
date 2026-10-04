@@ -18,6 +18,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -50,6 +51,7 @@ import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.FileSubjectPrefsStore
 import fr.veryslopnynotes.data.InMemoryCacheStore
 import fr.veryslopnynotes.data.InMemorySubjectPrefsStore
+import fr.veryslopnynotes.data.LlmKeys
 import fr.veryslopnynotes.data.MeResult
 import fr.veryslopnynotes.data.PhotoState
 import fr.veryslopnynotes.data.ProfileRepository
@@ -154,7 +156,7 @@ fun AppNav(
     // previews/tests sans BuildConfig).
     baseUrlSeed: String = "",
     // #75 : compte appairé, sert au toggle (écriture confirmée par l'app, I7)
-    // et au proxy des pièces jointes. Jamais un hôte Pronote/ENT (I1).
+    // et au proxy des pièces jointes. Jamais un hôte Pronote (I1).
     accountId: String = "",
     // L'adresse est passée à l'appel : le repository doit suivre le serveur
     // courant, pas celui du lancement de l'activité.
@@ -166,6 +168,11 @@ fun AppNav(
     // `remember(baseUrl)` plus bas rebloquent donc leurs repositories sur la
     // nouvelle adresse, et les routes lisent le même état.
     val serverStore = remember(ctx) { ServerStore(ctx) }
+    // 0.7.0 : clé LLM = UN store pour tout le process (réglages + écran devoirs),
+    // sinon les deux écrans raisonneraient sur deux états divergents. L'état
+    // d'affichage est relu après chaque écriture : le store est la vérité.
+    val llmKeys = remember(ctx) { LlmKeys.get(ctx) }
+    var llmKeyConfigured by remember(llmKeys) { mutableStateOf(llmKeys.isConfigured()) }
     var baseUrl by remember(serverStore) { mutableStateOf(serverStore.baseUrl(baseUrlSeed)) }
     // ponytail: fichier natif seul (pas de Room). Repli memoire si stockage KO.
     val cacheStore = remember(baseUrl) {
@@ -335,7 +342,15 @@ fun AppNav(
             composable(ROUTE_TASKS) {
                 // #75 : devoirs de la semaine (contenus + PJ via proxy), toggle
                 // Optimiste avec retour arrière, pull-refresh.
-                AssignmentsRoute(CachePolicy.ASSIGNMENTS, repo, baseUrl, accountId, subjectPrefs = subjectPrefs, tokens = tokens)
+                AssignmentsRoute(
+                    CachePolicy.ASSIGNMENTS,
+                    repo,
+                    baseUrl,
+                    accountId,
+                    subjectPrefs = subjectPrefs,
+                    tokens = tokens,
+                    llmKeys = llmKeys,
+                )
             }
             composable(ROUTE_PROFILE) {
                 ProfileRoute(
@@ -387,6 +402,21 @@ fun AppNav(
                     },
                     theme = theme,
                     onTheme = setTheme,
+                    llmKeyConfigured = llmKeyConfigured,
+                    onSaveLlmKey = { key ->
+                        // `save` lève si la clé est vide/hors borne : le champ est
+                        // déjà désactivé dans ce cas, on ignore l'échec silencieux.
+                        try {
+                            llmKeys.save(key)
+                            llmKeyConfigured = llmKeys.isConfigured()
+                        } catch (_: IllegalArgumentException) {
+                            llmKeyConfigured = llmKeys.isConfigured()
+                        }
+                    },
+                    onForgetLlmKey = {
+                        llmKeys.clear()
+                        llmKeyConfigured = false
+                    },
                 )
             }
             composable(ROUTE_PAIRING) {
@@ -624,7 +654,7 @@ fun IndexScreen(
 
 // Profil #82 (parité Papillon) : écran alimenté par /v1/me. Nom, classe,
 // période courante, photo via le PROXY serveur (réF opaque, jamais une adresse
-// Pronote/ENT — I1), enfants d'un compte parent, déconnexion (session invalidée
+// Pronote — I1), enfants d'un compte parent, déconnexion (session invalidée
 // + cache purgé). Aucune donnée personnelle persistée : hors-ligne = mode
 // anonyme, état vide propre. Zéro faux user, zéro asset copié.
 // ponytail: état local (comme les autres onglets), pas de ViewModel. Upgrade:
@@ -817,6 +847,13 @@ fun SettingsScreen(
     onRefreshPrefs: () -> Unit = {},
     theme: AppTheme = AppTheme.SYSTEM,
     onTheme: (AppTheme) -> Unit = {},
+    // 0.7.0 : clé du fournisseur LLM. Le serveur n'en détient aucune, donc
+    // elle se saisit ICI, chiffrée (LlmKeyStore). Jamais pré-remplie dans le
+    // champ : on affiche seulement si une clé existe, la saisie est en clair
+    // dans le champ de l'app (l'utilisateur veut la relire/corriger).
+    llmKeyConfigured: Boolean = false,
+    onSaveLlmKey: (String) -> Unit = {},
+    onForgetLlmKey: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -857,6 +894,31 @@ fun SettingsScreen(
         )
         Button(onClick = { onSavePrefs(newSubject, "", "", ""); newSubject = "" }) { Text("Ajouter la matière") }
         Button(onClick = { onRefreshPrefs() }) { Text("Synchroniser les préférences") }
+        // Clé LLM : credential de l'utilisateur, pas une session d'appareil.
+        // "Oublier" EFFACE la valeur du store (elle n'est pas renvoyée par le
+        // serveur, personne ne peut la reconstruire à sa place).
+        Text("Assistant devoirs")
+        Text(
+            if (llmKeyConfigured) {
+                "Clé enregistrée (chiffrée). Elle part avec chaque demande, jamais stockée par le serveur."
+            } else {
+                "Aucune clé : l'assistant reste inactif tant qu'elle n'est pas saisie."
+            },
+        )
+        var llmKey by remember { mutableStateOf("") }
+        OutlinedTextField(
+            value = llmKey,
+            onValueChange = { llmKey = it },
+            label = { Text("Clé du fournisseur LLM") },
+            singleLine = true,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { onSaveLlmKey(llmKey); llmKey = "" },
+                enabled = llmKey.isNotBlank(),
+            ) { Text("Enregistrer la clé") }
+            TextButton(onClick = { onForgetLlmKey() }, enabled = llmKeyConfigured) { Text("Oublier") }
+        }
         Button(onClick = onBack) { Text("Retour") }
     }
 }

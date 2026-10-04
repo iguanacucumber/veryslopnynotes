@@ -29,17 +29,11 @@ import { isApiErrorBody } from "../../server/api/errors";
 import { downloadMedia, mediaActions, MediaProxyError } from "../../server/infrastructure/media-proxy";
 import {
   syntheticAccountId,
-  syntheticEntKind,
-  syntheticPassword,
-  syntheticUsername,
+  syntheticQr,
+  syntheticSessionCredentials,
 } from "./fixtures/pronote";
 
-const creds = {
-  accountId: syntheticAccountId,
-  username: syntheticUsername,
-  password: syntheticPassword,
-  entKind: syntheticEntKind,
-};
+const creds = syntheticSessionCredentials;
 
 const BASE: Assignment = {
   id: "a1",
@@ -86,11 +80,10 @@ const calls: boolean[] = [];
 
 async function readerWith(client: unknown) {
   const store = new PronoteSessionStore({
-    pronoteUrl: "https://example.test/pronote/eleve.html",
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     clientFactory: (async () => client) as never,
   });
-  await store.authenticate({ ...creds, entKind: "ninegate" });
+  await store.authenticate({ ...creds });
   return { store, reader: new PronoteClientReader({ sessions: store }) };
 }
 

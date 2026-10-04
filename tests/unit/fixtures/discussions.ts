@@ -13,7 +13,7 @@ export const syntheticDiscussion = {
   updatedAt: "2026-10-03T09:00:00.000Z",
 };
 
-/** Non-lus non publiés : champ absent = l'ENT ne publie pas le compteur. */
+/** Non-lus non publiés : champ absent = l'établissement ne publie pas le compteur. */
 export const syntheticDiscussionNoUnread = {
   id: "d-fake-2",
   subject: "Absence signalee",
@@ -95,7 +95,7 @@ export function syntheticPronoteDiscussion(options: {
     participants = ["Mme Claire Fake", "M. Alex Fake"],
     messages = [
       syntheticPronoteMessage(),
-      // author null = message du compte appairé (aucun nom de l'ENT).
+      // author null = message du compte appairé (aucun nom de l'établissement).
       syntheticPronoteMessage({
         id: "m-fake-2",
         author: null,

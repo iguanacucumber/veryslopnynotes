@@ -18,9 +18,9 @@ export const API_ERROR_CODES = [
   // corriger, jamais le déconnecter.
   "qr_rejected",
   "login_refused",
-  // 502 : l'ENT/Pronote est en amont et n'a pas répondu. Distinct de
+  // 502 : Pronote est en amont et n'a pas répondu. Distinct de
   // `login_refused` pour que l'app propose réessayer plus tard.
-  "ent_unreachable",
+  "school_unreachable",
   // #118 : trop d'échecs de setup sur la fenêtre (10 min). L'app doit proposer
   // « réessayer plus tard », pas boucler.
   "rate_limited",
@@ -42,7 +42,7 @@ const STATUS: Record<ApiErrorCode, number> = {
   internal: 500,
   qr_rejected: 400,
   login_refused: 400,
-  ent_unreachable: 502,
+  school_unreachable: 502,
   rate_limited: 429,
 };
 

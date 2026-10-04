@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.AssignmentsRepository
+import fr.veryslopnynotes.data.HomeworkRepository
+import fr.veryslopnynotes.data.LlmKeyStore
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SyncedRepository
@@ -31,7 +33,7 @@ import fr.veryslopnynotes.data.TokenStore
 // serveur refuse (401 session expirée / 409 inconnu / 501 non supporté / réseau).
 // Pull-refresh = bouton "Actualiser" (déjà le.refreshAsync + cache offline-first).
 // Contenu serveur = DONNÉE affichée par Text() seul (I6) ; pièce jointe = URL du
-// proxy /v1/media, aucune URL Pronote/ENT dans l'app (I1).
+// proxy /v1/media, aucune URL Pronote dans l'app (I1).
 
 fun assignmentsFromPayload(payload: String?): List<Assignment> = try {
     if (payload == null) emptyList() else AssignmentsRepository.parse(payload)
@@ -62,6 +64,8 @@ fun AssignmentsScreen(
     notice: String? = null,
     onRetry: () -> Unit = {},
     onToggle: (Assignment, Boolean) -> Unit = { _, _ -> },
+    // 0.7.0 : null = aucun assistant (pas de dépôt injecté) = pas de bouton.
+    onHelp: ((Assignment) -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -82,7 +86,7 @@ fun AssignmentsScreen(
                 for ((day, items) in days) {
                     item(key = "jour-$day") { Text(Assignment.dayLabelFr(day)) }
                     items(items, key = { it.id }) { a ->
-                        AssignmentCard(a, accountId, baseUrl, onToggle)
+                        AssignmentCard(a, accountId, baseUrl, onToggle, onHelp)
                     }
                 }
             }
@@ -97,6 +101,7 @@ private fun AssignmentCard(
     accountId: String,
     baseUrl: String,
     onToggle: (Assignment, Boolean) -> Unit,
+    onHelp: ((Assignment) -> Unit)? = null,
 ) {
     Card {
         Column(
@@ -113,16 +118,19 @@ private fun AssignmentCard(
                 if (lc.excerpt.isNotBlank()) Text(lc.excerpt)
             }
             for (att in a.attachments) {
-                // Téléchargement via le proxy serveur : l'URL n'est jamais celle de l'ENT.
+                // Téléchargement via le proxy serveur : l'URL n'est jamais celle de l'établissement.
                 // ponytail: URL affichée telle quelle, pas d'Intent ACTION_VIEW tant que
                 // le téléchargement n'a pas été demandé. Upgrade: Intent sur cette URL
-                // de proxy (et JAMAIS sur une URL Pronote/ENT, I1).
+                // de proxy (et JAMAIS sur une URL Pronote, I1).
                 val url = AssignmentsRepository.mediaUrl(baseUrl, accountId, att.ref)
                 Text("Pièce jointe : ${att.label} — ${url}")
             }
             Button(onClick = { onToggle(a, !a.done) }) {
                 Text(if (a.done) "Marquer non fait" else "Marquer fait")
             }
+            // 0.7.0 : l'assistant est une AIDE, jamais une écriture (I7) — il
+            // n'écrit rien dans Pronote, il rend un corrigé à l'écran.
+            if (onHelp != null) HomeworkHelpButton { onHelp(a) }
         }
     }
 }
@@ -141,9 +149,14 @@ fun AssignmentsRoute(
     subjectPrefs: List<SubjectPrefs> = emptyList(),
     // Bearer du device appairé (contrat 0.4.0), relu à chaque requête.
     tokens: TokenStore? = null,
+    // Clé LLM de l'appelant (0.7.0) : null = assistant non câblé, donc ni
+    // bouton ni appel. Elle reste dans le store, jamais dans l'état d'écran.
+    llmKeys: LlmKeyStore? = null,
 ) {
     val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }
     val toggleRepo = remember(api) { AssignmentsRepository(api) }
+    val helpRepo = remember(api, llmKeys) { llmKeys?.let { HomeworkRepository(api, it) } }
+    var helpFor by remember { mutableStateOf<Assignment?>(null) }
     var state by remember {
         val c = try {
             repo.cached(resource)
@@ -192,6 +205,7 @@ fun AssignmentsRoute(
             error = (state as? UiState.Error)?.message,
             notice = notice,
             onRetry = { refresh() },
+            onHelp = if (helpRepo == null) null else ({ a -> helpFor = a }),
             onToggle = { a, done ->
                 pending = a.id to done
                 notice = null
@@ -209,5 +223,19 @@ fun AssignmentsRoute(
                 }
             },
         )
+        // Le dialogue porte son propre état (question éditable, résultat) : il est
+        // retiré de l'arbre à la fermeture, donc aucun souvenir d'une clé ou d'un
+        // corrigé ne survit au changement de devoir.
+        val current = helpFor
+        val repo = helpRepo
+        if (current != null && repo != null) {
+            HomeworkHelpDialog(
+                assignment = current,
+                baseUrl = baseUrl,
+                repo = repo,
+                keyConfigured = llmKeys?.isConfigured() == true,
+                onDismiss = { helpFor = null },
+            )
+        }
     }
 }

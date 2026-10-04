@@ -1,5 +1,5 @@
 // Tests PronoteSessionStore + PronoteClientReader (issue #73).
-// Mocks injectés (factory/entLogin/sessions) : aucun réseau, aucun secret réel.
+// Mocks injectés (factory/sessions) : aucun réseau, aucun secret réel.
 // Fixtures synthétiques fake-UNREAL uniquement.
 import { describe, expect, test } from "bun:test";
 import { PronoteSessionStore } from "../../server/integrations/pronote-sessions";
@@ -9,17 +9,11 @@ import { isAssignment, isGrade, isPeriod, isTimetableEntry } from "../../shared/
 import { isPedagogicResource } from "../../server/domain/ports";
 import {
   syntheticAccountId,
-  syntheticEntKind,
-  syntheticPassword,
-  syntheticUsername,
+  syntheticQr,
+  syntheticSessionCredentials,
 } from "./fixtures/pronote";
 
-const creds = {
-  accountId: syntheticAccountId,
-  username: syntheticUsername,
-  password: syntheticPassword,
-  entKind: syntheticEntKind,
-};
+const creds = syntheticSessionCredentials;
 
 function fakeClient() {
   return {
@@ -103,59 +97,70 @@ function fakeClientAverages() {
 }
 
 describe("PronoteSessionStore", () => {
-  test("auth OK via ent injecté, sessions isolées", async () => {
+  test("auth OK, sessions isolées", async () => {
     const logs: string[] = [];
     const store = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
-      entLogin: (async () => ({}) as unknown as never) as never,
       clientFactory: (async () => fakeClient()) as never,
       logger: (m) => logs.push(m),
     });
-    const s = await store.authenticate({ ...creds, entKind: "ninegate" });
+    const s = await store.authenticate({ ...creds });
     expect(s.accountId).toBe(syntheticAccountId);
     expect(store.isAuthenticated(syntheticAccountId)).toBe(true);
     expect(store.isAuthenticated("autre")).toBe(false);
     expect(store.requireClient(syntheticAccountId)).toBeDefined();
     const joined = logs.join("\n");
-    expect(joined).not.toContain(syntheticPassword);
-    expect(joined).not.toContain(syntheticUsername);
+    expect(joined).not.toContain(syntheticQr.jeton);
+    expect(joined).not.toContain(syntheticQr.login);
   });
 
   test("validation vide -> invalid_credentials", async () => {
     const store = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       clientFactory: (async () => fakeClient()) as never,
     });
     for (const bad of [
       { ...creds, accountId: "  " },
-      { ...creds, username: "" },
-      { ...creds, password: "" },
-      { ...creds, entKind: "" },
+      { ...creds, pronoteUrl: "  " },
+      // QR + pin incomplets = preuve de détention absente : refus, pas d'appel.
+      { ...creds, qr: { login: "", jeton: creds.qr.jeton } },
+      { ...creds, qr: { login: creds.qr.login, jeton: "" } },
+      { ...creds, pin: "" },
     ]) {
       const err = await store.authenticate(bad).catch((e: unknown) => e);
-      expect((err as PronoteAuthError).code).toBe("invalid_credentials");
+      // Sans URL ni compte -> invalid_credentials ; QR/pin incomplets ->
+      // qr_rejected (« rescane »), les deux sont des refus AVEC réseau.
+      expect(["invalid_credentials", "qr_rejected"]).toContain((err as PronoteAuthError).code);
     }
   });
 
-  test("entKind inconnu -> invalid_credentials, echec ent -> ent_unavailable", async () => {
+  test("ni URL ni compte -> invalid_credentials sans appel réseau", async () => {
+    let calls = 0;
     const store = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       clientFactory: (async () => {
-        throw new Error("boom SSO");
+        calls += 1;
+        return fakeClient();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any,
+    });
+    const err = await store.authenticate({ ...creds, accountId: "", pronoteUrl: "" }).catch((e: unknown) => e);
+    expect((err as PronoteAuthError).code).toBe("invalid_credentials");
+    expect(calls).toBe(0);
+  });
+
+  test("echec incomprehensible de la lib au login -> pronote_unavailable", async () => {
+    const store = new PronoteSessionStore({
+      clientFactory: (async () => {
+        throw new Error("boom Pronote");
       }) as never,
     });
-    const errKind = await store.authenticate({ ...creds, entKind: "nope" }).catch((e: unknown) => e);
-    expect((errKind as PronoteAuthError).code).toBe("invalid_credentials");
-    const errEnt = await store.authenticate({ ...creds, entKind: "ninegate" }).catch((e: unknown) => e);
-    expect((errEnt as PronoteAuthError).code).toBe("ent_unavailable");
+    const err = await store.authenticate({ ...creds }).catch((e: unknown) => e);
+    expect((err as PronoteAuthError).code).toBe("pronote_unavailable");
   });
 
   test("invalidate + requireClient -> session_expired + re-auth OK", async () => {
     const store = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       clientFactory: (async () => fakeClient()) as never,
     });
-    await store.authenticate({ ...creds, entKind: "ninegate" });
+    await store.authenticate({ ...creds });
     store.invalidate(syntheticAccountId);
     expect(store.isAuthenticated(syntheticAccountId)).toBe(false);
     const err = (() => {
@@ -167,7 +172,7 @@ describe("PronoteSessionStore", () => {
       }
     })();
     expect((err as PronoteAuthError).code).toBe("session_expired");
-    await store.authenticate({ ...creds, entKind: "ninegate" });
+    await store.authenticate({ ...creds });
     expect(store.isAuthenticated(syntheticAccountId)).toBe(true);
   });
 });
@@ -176,10 +181,9 @@ describe("PronoteClientReader", () => {
   test("grades typées + pagination + Untrusted, invalides filtrées", async () => {
     const logs: string[] = [];
     const store = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       clientFactory: (async () => fakeClient()) as never,
     });
-    await store.authenticate({ ...creds, entKind: "ninegate" });
+    await store.authenticate({ ...creds });
     const reader = new PronoteClientReader({ sessions: store, logger: (m) => logs.push(m) });
     const page = await reader.getGrades(syntheticAccountId, { limit: 10 });
     expect(page.items.__untrusted).toBe(true);
@@ -187,15 +191,14 @@ describe("PronoteClientReader", () => {
     expect(isGrade(page.items.value[0])).toBe(true);
     expect(page.items.value[0]?.value).toBe(14.5);
     expect(page.nextCursor).toBeNull();
-    expect(logs.join("\n")).not.toContain(syntheticPassword);
+    expect(logs.join("\n")).not.toContain(syntheticQr.jeton);
   });
 
   test("assignments + timetable + resources OK, contrats valides", async () => {
     const store = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       clientFactory: (async () => fakeClient()) as never,
     });
-    await store.authenticate({ ...creds, entKind: "ninegate" });
+    await store.authenticate({ ...creds });
     const reader = new PronoteClientReader({ sessions: store });
     const a = await reader.getAssignments(syntheticAccountId);
     expect(a.items.__untrusted).toBe(true);
@@ -216,10 +219,9 @@ describe("PronoteClientReader", () => {
 
   test("#74 : moyennes de classe, période, bonus/facultative, libellé mappés", async () => {
     const store = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       clientFactory: (async () => fakeClientAverages()) as never,
     });
-    await store.authenticate({ ...creds, entKind: "ninegate" });
+    await store.authenticate({ ...creds });
     const reader = new PronoteClientReader({ sessions: store });
     const page = await reader.getGrades(syntheticAccountId);
     const [g1, g2] = page.items.value;
@@ -243,10 +245,9 @@ describe("PronoteClientReader", () => {
 
   test("#74 : périodes mappées et validées, Untrusted", async () => {
     const store = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       clientFactory: (async () => fakeClientAverages()) as never,
     });
-    await store.authenticate({ ...creds, entKind: "ninegate" });
+    await store.authenticate({ ...creds });
     const reader = new PronoteClientReader({ sessions: store });
     const page = await reader.getPeriods(syntheticAccountId);
     expect(page.items.__untrusted).toBe(true);
@@ -262,16 +263,15 @@ describe("PronoteClientReader", () => {
     expect((err as PronoteReadError).code).toBe("session_expired");
   });
 
-  test("sans session -> session_expired, from/to invalides -> ent_unavailable", async () => {
+  test("sans session -> session_expired, from/to invalides -> pronote_unavailable", async () => {
     const store = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       clientFactory: (async () => fakeClient()) as never,
     });
     const reader = new PronoteClientReader({ sessions: store });
     const err = await reader.getGrades("acc-inconnu").catch((e: unknown) => e);
     expect((err as PronoteReadError).code).toBe("session_expired");
-    await store.authenticate({ ...creds, entKind: "ninegate" });
+    await store.authenticate({ ...creds });
     const bad = await reader.getTimetable(syntheticAccountId, { from: "pas-une-date" }).catch((e: unknown) => e);
-    expect((bad as PronoteReadError).code).toBe("ent_unavailable");
+    expect((bad as PronoteReadError).code).toBe("pronote_unavailable");
   });
 });
