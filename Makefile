@@ -56,12 +56,16 @@ android-compile:
 	fi
 
 # Capture d'écran sur téléphone réel (#133) : `make shot ROUTE=grades`.
-# shot.sh installe l'APK debug s'il est plus vieux que les sources, ouvre
+# shot.sh construit l'APK debug AVANT toute capture (#151 : Gradle est l'autorité,
+# une comparaison de mtimes annonçait « à jour » sur un APK plus vieux que les
+# sources), l'installe si l'appareil ne fait pas tourner cette empreinte, ouvre
 # `veryslopnynotes://<route>` (deep link DU VARIANT DEBUG seulement) et dépose
 # la capture dans shots/<date-UTC>/. Sort en erreur si l'appareil manque, si
 # l'écran rend noir ou si l'app atterrit ailleurs que sur la route demandée :
-# une capture non vérifiée ne sert à rien. La découverte JDK/SDK est celle
-# d'android-env.sh, comme les autres cibles Gradle.
+# une capture non vérifiée ne sert à rien. `make shot ROUTE=index SHOT_ARGS=--no-build`
+# recapture le MÊME APK sans reconstruire (reprise d'une capture ratée ; le
+# script prévient bruyamment que la capture peut être périmée). La découverte
+# JDK/SDK est celle d'android-env.sh, comme les autres cibles Gradle.
 shot:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
@@ -72,7 +76,7 @@ shot:
 	if [ -z "$(ROUTE)" ]; then \
 	  echo "usage : make shot ROUTE=<route>   (index, calendar, grades, tasks, profile, ...)"; exit 1; \
 	fi; \
-	JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" agents/runtime/shot.sh $(ROUTE)
+	JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" agents/runtime/shot.sh $(ROUTE) $(SHOT_ARGS)
 
 # APK debug : clé de signature de debug (hors repo, générée par Gradle).
 buildDebugApk:
