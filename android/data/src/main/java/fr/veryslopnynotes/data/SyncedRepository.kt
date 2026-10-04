@@ -65,6 +65,10 @@ class SyncedRepository(
         // #80 : liste des fils de messagerie (les messages ne sont pas en cache).
         CachePolicy.DISCUSSIONS -> ServerConfig.discussionsUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/discussions" }
+        // #144 : alertes sécurité — même plomberie que les autres, donc le cache
+        // hors-ligne distingue « aucune menace » de « pas de réseau ».
+        CachePolicy.SECURITY_ALERTS -> ServerConfig.securityAlertsUrl(baseUrl)
+            .removePrefix(baseUrl).ifEmpty { "/v1/security/alerts" }
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
     }
 
