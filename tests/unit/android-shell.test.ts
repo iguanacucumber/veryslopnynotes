@@ -151,9 +151,15 @@ describe("coquille applicative (#135)", () => {
       const block = navCode.slice(c.index, c.index + 240);
       expect({ hasLaunchSingleTop: block.includes("launchSingleTop = true") }).toEqual({ hasLaunchSingleTop: true });
     }
-    expect({ navigationsViaHelpers: navCode.split("nav.navigateTo(").length - 1 >= 20 }).toEqual({
+    expect({ navigationsViaHelpers: navCode.split("nav.navigateTo(").length - 1 >= 12 }).toEqual({
       navigationsViaHelpers: true,
     });
+    // #162 : les destinations que les corps d'écran ouvraient en clair sont
+    // DÉCLARÉES une fois (`TOP_BAR_ACTIONS` d'`AppShell.kt`), donc leurs
+    // `nav.navigateTo` ne sont plus dans le graphe — ce que ce compte protège,
+    // c'est que la navigation continue de passer par le helper : chaque route
+    // de destination est une constante `ROUTE_*`, jamais un littéral.
+    expect({ literals: [...navCode.matchAll(/nav\.navigateTo\("([^"]+)"/g)].map((m) => m[1]) }).toEqual({ literals: [] });
     expect(nav).toMatch(/private fun NavHostController\.navigateTo\(route: String\) \{\n {4}navigate\(route\) \{ launchSingleTop = true \}\n\}/);
     expect(nav).toContain("launchSingleTop = true");
     // Deep link #133 : chaque route garde son URL ouvrable.

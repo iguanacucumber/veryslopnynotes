@@ -251,17 +251,25 @@ fun AppNav(
     val (theme, setTheme) = rememberAppTheme()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    // #162 : la barre du haut porte les destinations ET la relecture (compteur que
+    // regardent les deux routes qui l'ont) ; #87 : Compétences se retire s'il n'est pas actif.
+    var readTick by remember { mutableStateOf(0) }
+    val hiddenDestinations = if (Capabilities.visible(capabilities, Capabilities.EVALUATIONS)) emptySet() else setOf(ROUTE_COMPETENCES)
     // #134 : jetons Papillon (couleurs + typo + formes) appliqués une fois à la
     // racine. Avant : `lightColorScheme()` / `darkColorScheme()` sans argument,
     // donc le violet Material par défaut.
     PapillonTheme(darkTheme = isDarkTheme(theme, isSystemInDarkTheme())) {
     Scaffold(
         topBar = {
-            AppTopBar(currentRoute) { back ->
+            AppTopBar(
+                currentRoute,
+                onNavigate = { dest -> nav.navigateTo(dest) },
+                onRefresh = { readTick++ },
+                hiddenDestinations = hiddenDestinations,
                 // Retour = d'où l'on vient ; si la pile est vide (deep link
                 // direct), on part vers la route mère de la route courante.
-                if (!nav.popBackStack()) nav.navigateTo(back)
-            }
+                onBack = { back -> if (!nav.popBackStack()) nav.navigateTo(back) },
+            )
         },
         bottomBar = { AppTabBar(currentRoute) { tab -> nav.openTab(tab) } },
     ) { pad ->
@@ -292,24 +300,16 @@ fun AppNav(
                 )
             }
             composable(ROUTE_GRADES, deepLinks = listOf(routeDeepLink(ROUTE_GRADES))) {
-                // #87 : accès à l'écran compétences seulement si l'onglet est actif.
-                val gotoCompetences: (() -> Unit)? = if (Capabilities.visible(capabilities, Capabilities.EVALUATIONS)) {
-                    { nav.navigateTo(ROUTE_COMPETENCES) }
-                } else {
-                    null
-                }
                 // #139 : l'onglet Notes a son rendu structuré (moyennes par
                 // matière, sparkline, contexte de classe, sélecteurs de période
-                // et d'algorithme) : plus de JSON brut.
+                // et d'algorithme) : plus de JSON brut. #162 : plus de lien de
+                // navigation dans le corps, tout est dans la barre du haut.
                 GradesRoute(
                     CachePolicy.GRADES,
                     repo,
                     baseUrl,
                     subjectPrefs = subjectPrefs,
-                    onCompetences = gotoCompetences,
-                    goSettings = { nav.navigateTo(ROUTE_SETTINGS) },
-                    goPairing = { nav.navigateTo(ROUTE_PAIRING) },
-                    goAlerts = { nav.navigateTo(ROUTE_ALERTS) },
+                    refreshTick = readTick,
                 )
             }
             composable(ROUTE_TASKS, deepLinks = listOf(routeDeepLink(ROUTE_TASKS))) {
@@ -424,18 +424,17 @@ fun AppNav(
                 SecurityAlertsRoute { loadAlerts(baseUrl) }
             }
             composable(ROUTE_FICHES, deepLinks = listOf(routeDeepLink(ROUTE_FICHES))) { RevisionSheetsScreen() }
-            // #78 : chips de compétences + détail, payload /v1/evaluations en cache.
-            composable(ROUTE_COMPETENCES, deepLinks = listOf(routeDeepLink(ROUTE_COMPETENCES))) {
-                CachedResourceScreen(
+// #78 : chips de compétences + détail, payload /v1/evaluations en cache.
+                // #162 : destinations et relecture dans la barre du haut.
+                composable(ROUTE_COMPETENCES, deepLinks = listOf(routeDeepLink(ROUTE_COMPETENCES))) {
+                    CachedResourceScreen(
                     resource = CachePolicy.EVALUATIONS,
                     repo = repo,
                     baseUrl = baseUrl,
                     subtitle = "Évaluations par compétences",
-                    goSettings = { nav.navigateTo(ROUTE_SETTINGS) },
-                    goPairing = { nav.navigateTo(ROUTE_PAIRING) },
-                    goAlerts = { nav.navigateTo(ROUTE_ALERTS) },
                     section = { CompetencesSection(it) },
                     subjectPrefs = subjectPrefs,
+                    refreshTick = readTick,
                 )
             }
             // #80 : messagerie — liste des fils (cache), lecture d'un fil, réponse,
