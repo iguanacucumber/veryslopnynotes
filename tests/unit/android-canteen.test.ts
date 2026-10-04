@@ -10,7 +10,43 @@ import { syntheticCanteenPayload } from "./fixtures/canteen";
 // doivent rester en sync. org.json = SDK Android, aucune dépendance ajoutée
 // (le build Gradle n'est pas exécuté par make check).
 
+const ZONE = "Europe/Paris";
+/** 2026-10-05T09:00:00.000Z : le relevé du fixture (07:00Z) a donc 2 h. */
+const NOW = Date.parse("2026-10-05T09:00:00.000Z");
+
+/** Sous-ensemble de `relativeTimeFr` (PapComponents.kt) : ce qu'il faut ici. */
+function tsRelative(epochMillis: number, now: number, timeZone: string = ZONE): string {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(epochMillis));
+  const p: Record<string, string> = {};
+  for (const part of parts) if (part.type !== "literal") p[part.type] = part.value;
+  const nowParts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(now));
+  const np: Record<string, string> = {};
+  for (const part of nowParts) if (part.type !== "literal") np[part.type] = part.value;
+  const day = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day));
+  const nowDay = Date.UTC(Number(np.year), Number(np.month) - 1, Number(np.day));
+  const gap = Math.abs(epochMillis - now);
+  const past = epochMillis < now;
+  if (gap < 60_000) return "à l'instant";
+  const minutes = Math.floor(gap / 60_000);
+  if (minutes < 60) return past ? `il y a ${minutes} min` : `dans ${minutes} min`;
+  const hours = Math.floor(gap / 3_600_000);
+  if (day === nowDay) return past ? `il y a ${hours} h` : `dans ${hours} h`;
+  const clock = `${p.hour}:${p.minute}`;
+  if (past && day === nowDay - 86_400_000) return `hier ${clock}`;
+  const days = Math.abs(day - nowDay) / 86_400_000;
+  if (days < 7) return past ? `il y a ${days} jours` : `dans ${days} jours`;
+  return `${p.day}/${p.month}/${p.year}`;
+}
+
 const UI = join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui");
+/** Sans les commentaires : une garde de source ne doit pas confondre un `//` qui
+ *  NOMME un défaut avec le défaut lui-même. */
+const codeOnly = (c: string): string =>
+  c
+    .replace(/\/\*[\s\S]*?\*\//g, "\n")
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
+    .join("\n");
 const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/veryslopnynotes/data");
 const CORE = join(import.meta.dir, "..", "..", "android/core/src/main/java/fr/veryslopnynotes/core");
 
@@ -33,7 +69,9 @@ function tsStrings(value: unknown, maxItems: number, maxChars: number): string[]
   return out;
 }
 
-function tsCanteenWeek(payload: string): Week {
+// #144 : l'horloge est INJECTÉE comme côté Kotlin (`canteenWeekFrom(payload, now,
+// zone)`), sinon l'âge du solde dépendrait de la machine qui lance le test.
+function tsCanteenWeek(payload: string, now: number = NOW, timeZone: string = ZONE): Week {
   try {
     const root = JSON.parse(payload) as Record<string, unknown>;
     const byDate = new Map<string, Menu[]>();
@@ -57,7 +95,7 @@ function tsCanteenWeek(payload: string): Week {
     const balance = (root["balance"] ?? null) as Record<string, unknown> | null;
     return {
       days: [...byDate.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([date, meals]) => ({ date, meals })),
-      balanceLabel: tsBalanceLabel(balance),
+      balanceLabel: tsBalanceLine(balance, now, timeZone),
     };
   } catch {
     return { days: [], balanceLabel: null };
@@ -71,6 +109,32 @@ function tsBalanceLabel(balance: Record<string, unknown> | null): string | null 
   const currency = typeof balance["currency"] === "string" ? balance["currency"].trim() : "";
   return `${value.toFixed(2).replace(".", ",")} ${currency === "" ? "€" : currency} (solde)`;
 }
+
+/**
+ * Miroir de `canteenBalanceLine` (#144) : le montant SEUL, puis le montant daté.
+ * `updatedAt` était parsé puis jeté avant #144 — donc l'âge du solde n'était
+ * jamais montré.
+ */
+function tsBalanceLine(
+  balance: Record<string, unknown> | null,
+  now: number,
+  timeZone: string = ZONE,
+): string | null {
+  const label = tsBalanceLabel(balance);
+  if (label === null) return null;
+  const updatedAt = typeof balance?.["updatedAt"] === "string" ? (balance["updatedAt"] as string).trim() : "";
+  const epoch = Date.parse(updatedAt);
+  if (!Number.isFinite(epoch)) return label;
+  return `${label} · mis à jour ${tsRelative(epoch, now, timeZone)}`;
+}
+
+/** Miroir de `canteenStatusLabel` (#144) : le jeton anglais ne sort JAMAIS en clair. */
+const tsStatusLabel = (status: string | null): string | null => {
+  if (status === null || status === "") return null;
+  if (status === "served") return "Servi";
+  if (status === "planned") return "Prévu";
+  return "Statut inconnu";
+};
 
 const DAY_NAMES = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
 
@@ -99,12 +163,70 @@ describe("unit android cantine (#81)", () => {
     expect(week.days[0]?.meals[0]?.dishes).toEqual(["Poulet rôti", "Haricots verts", "Yaourt", "Compote"]);
     expect(week.days[0]?.meals[0]?.allergens).toEqual(["gluten", "lactose"]);
     expect(week.days[1]?.meals[0]?.status).toBe("planned");
-    expect(week.balanceLabel).toBe("12,50 EUR (solde)");
+    // #144 : le solde porte son âge (« updatedAt » était parsé puis jeté).
+    expect(week.balanceLabel).toBe("12,50 EUR (solde) · mis à jour il y a 2 h");
     // Libellés d'affichage :datenée + type de repas.
     expect(tsDayLabel(week.days[0]?.date ?? "")).toBe("lundi 05/10");
     expect(tsMealLabel("breakfast")).toBe("Petit-déjeuner");
     expect(tsMealLabel("lunch")).toBe("Déjeuner");
     expect(tsMealLabel("dinner")).toBe("Dîner");
+  });
+
+  test("#144 : statut traduit et coloré, jamais le jeton anglais", () => {
+    expect(tsStatusLabel("served")).toBe("Servi");
+    expect(tsStatusLabel("planned")).toBe("Prévu");
+    // Absent = établissement qui ne publie pas de statut : aucun libellé.
+    expect(tsStatusLabel(null)).toBeNull();
+    expect(tsStatusLabel("")).toBeNull();
+    // Jeton inconnu = « Statut inconnu », JAMAIS le jeton brut en clair.
+    expect(tsStatusLabel("cancelled")).toBe("Statut inconnu");
+    const kt = codeOnly(readFileSync(join(UI, "CanteenMenus.kt"), "utf8"));
+    // Les deux jetons du contrat sont pilotés par `when`, donc la traduction
+    // existe… et un jeton inconnu a son propre libellé.
+    expect(kt).toContain('"served" -> "Servi"');
+    expect(kt).toContain('"planned" -> "Prévu"');
+    expect(kt).toContain('else -> "Statut inconnu"');
+    // Aucune interpolation brute du statut dans une phrase (le défaut #144).
+    expect(kt).not.toContain("(${menu.status})");
+    expect(kt).not.toContain("allergènes :");
+    // La couleur passe par une pastille, donc par le thème.
+    expect(kt).toContain("PapPill(text = label, color = statusColor)");
+    expect(kt).toContain("MaterialTheme.colorScheme.primary");
+    expect(kt).toContain("MaterialTheme.colorScheme.tertiary");
+  });
+
+  test("#144 : allergènes en BLOC dédié, plus une fin de ligne", () => {
+    const kt = codeOnly(readFileSync(join(UI, "CanteenMenus.kt"), "utf8"));
+    // Bloc titré, avant les plats, sur un aplat — pas un « — allergènes : … ».
+    expect(kt).toContain("CanteenAllergenBlock(menu.allergens)");
+    expect(kt).toContain('text = "ALLERGÈNES"');
+    expect(kt).toContain("ALERGEN_BLOCK_ALPHA");
+    // Une étiquette par allergène, donc rien à déchiffrer.
+    expect(kt).toContain('text = "• $allergen"');
+    // Le solde est daté, le jour aussi (cartes groupées par jour).
+    expect(kt).toContain('· mis à jour ${relativeTimeFr(epoch, now, zone)}');
+    expect(kt).toContain("CanteenDayCard(day)");
+    expect(kt).toContain("CanteenBalanceCard(balance)");
+    // Zéro hex en dur : les couleurs viennent du thème.
+    expect(kt).not.toMatch(/Color\(0x[0-9A-Fa-f]{8}L\)/);
+  });
+
+  test("#144 : solde sans solde, sans date, date illisible", () => {
+    // Solde absent = rien n'est affiché (rien d'inventé).
+    expect(tsBalanceLine(null, NOW)).toBeNull();
+    expect(tsBalanceLine({ balance: "12,50" }, NOW)).toBeNull();
+    // Solde sans `updatedAt` = le montant seul, jamais une date devinée.
+    expect(tsBalanceLine({ balance: 1, currency: "EUR" }, NOW)).toBe("1,00 EUR (solde)");
+    // `updatedAt` illisible = idem.
+    expect(tsBalanceLine({ balance: 1, currency: "EUR", updatedAt: "hier" }, NOW)).toBe("1,00 EUR (solde)");
+    // Date lisible = datée, donc l'utilisateur sait dater son solde.
+    expect(tsBalanceLine({ balance: 1, currency: "EUR", updatedAt: "2026-10-05T07:00:00.000Z" }, NOW)).toBe(
+      "1,00 EUR (solde) · mis à jour il y a 2 h",
+    );
+    // Un relevé de la veille s'affiche comme tel, pas comme un chiffre orphelin.
+    expect(tsBalanceLine({ balance: 1, currency: "EUR", updatedAt: "2026-10-04T07:00:00.000Z" }, NOW)).toBe(
+      "1,00 EUR (solde) · mis à jour hier 09:00",
+    );
   });
 
   test("état vide propre : aucun menu, cache ancien, texte libre", () => {

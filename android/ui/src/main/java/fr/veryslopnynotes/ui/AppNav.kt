@@ -139,9 +139,8 @@ fun AppNav(
     // #75 : compte appairé, sert au toggle (écriture confirmée par l'app, I7)
     // et au proxy des pièces jointes. Jamais un hôte Pronote (I1).
     accountId: String = "",
-    // L'adresse est passée à l'appel : le repository doit suivre le serveur
-    // courant, pas celui du lancement de l'activité.
-    loadAlerts: suspend (String) -> List<SecurityAlert> = { emptyList() },
+    // ponytail #144 : `loadAlerts` n'est plus appelé (l'écran alertes lit le cache partagé) ; le paramètre reste pour ne pas casser `MainActivity` dans ce PR.
+    @Suppress("UNUSED_PARAMETER") loadAlerts: suspend (String) -> List<SecurityAlert> = { emptyList() },
 ) {
     val nav = rememberNavController()
     val ctx = LocalContext.current.applicationContext
@@ -168,9 +167,8 @@ fun AppNav(
     // divergents (chiffré côté écrans, mémoire ailleurs) laisseraient le secret
     // vivant après une déconnexion.
     val tokens = remember(ctx) { SessionTokens.get(ctx) }
-    val repo = remember(baseUrl, cacheStore, tokens) {
-        SyncedRepository(ApiClient(baseUrl, tokens = tokens), cacheStore)
-    }
+    val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }
+    val repo = remember(baseUrl, cacheStore, tokens) { SyncedRepository(api, cacheStore) }
     // #82 : comptes appairés + déconnexion (session invalidée + cache purgé).
     // Seuls des accountId sont persistés, aucune donnée personnelle.
     val accounts = remember(baseUrl, cacheStore, tokens) {
@@ -422,9 +420,12 @@ fun AppNav(
                 )
             }
             composable(ROUTE_ALERTS, deepLinks = listOf(routeDeepLink(ROUTE_ALERTS))) {
-                SecurityAlertsRoute { loadAlerts(baseUrl) }
+                SecurityAlertsRoute(repo = repo, baseUrl = baseUrl)
             }
-            composable(ROUTE_FICHES, deepLinks = listOf(routeDeepLink(ROUTE_FICHES))) { RevisionSheetsScreen() }
+            // #144 : appelé SANS argument avant, donc `sheets` vide pour toujours.
+            composable(ROUTE_FICHES, deepLinks = listOf(routeDeepLink(ROUTE_FICHES))) {
+                RevisionSheetsRoute(api = api, baseUrl = baseUrl)
+            }
 // #78 : chips de compétences + détail, payload /v1/evaluations en cache.
                 // #162 : destinations et relecture dans la barre du haut.
                 composable(ROUTE_COMPETENCES, deepLinks = listOf(routeDeepLink(ROUTE_COMPETENCES))) {

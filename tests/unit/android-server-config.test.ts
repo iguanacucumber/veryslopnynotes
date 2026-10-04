@@ -411,10 +411,13 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(navCode).not.toContain("TokenStore(");
     // Le chemin de purge est bien celui du AccountStore existant.
     expect(accounts_has_logout()).toBe(true);
-    // Les repositories suivent l'adresse courante (remember(baseUrl) inchangé,
-    // alerts inclus : le loader reçoit l'adresse).
+    // Les repositories suivent l'adresse courante : `repo` est rebâti à chaque
+    // changement de serveur (`remember(baseUrl, cacheStore, tokens)`), donc la
+    // route alertes — qui lit ce `repo` (#144, cache hors-ligne) lit elle aussi
+    // le serveur courant. `loadAlerts` reste le point d'injection inchangé.
     expect(nav).toContain("loadAlerts: suspend (String) -> List<SecurityAlert>");
-    expect(nav).toContain("SecurityAlertsRoute { loadAlerts(baseUrl) }");
+    expect(nav).toContain("remember(baseUrl, cacheStore, tokens)");
+    expect(nav).toContain("SecurityAlertsRoute(repo = repo, baseUrl = baseUrl)");
     // La route appairage reçoit le callback (pas de SettingsScreen).
     expect(nav).toContain("onServerChange = { raw ->");
     expect(nav).toContain("changeServer(raw, baseUrl, accounts, serverStore) { url ->");

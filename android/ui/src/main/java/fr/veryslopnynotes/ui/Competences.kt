@@ -1,11 +1,17 @@
 package fr.veryslopnynotes.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -17,6 +23,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
 import java.util.Locale
@@ -34,6 +43,21 @@ import java.util.Locale
 //    dérivé d'une map immuable -> pas de disparition/rebond au refresh ;
 //  - établissement sans compétences = une seule ligne d'état vide, pas d'écran
 //    cassé ni de spinner.
+//
+// #144 — les défauts de cet écran :
+//   - la couleur de puce venait d'un HACHAGE du libellé (`stableColorFor`) et le
+//     texte était forcé à `Color.White` : blanc sur le jaune `#E8B048` de la
+//     palette mesurait 1.96:1, donc illisible. L'encre passe par [bestContentOn], qui
+//     choisit entre l'encre de marque et le blanc PAR CONTRASTE MESURÉ, et la
+//     `Surface` la propage au texte via `contentColor` : la paire fond/texte ne
+//     peut plus diverger ;
+//   - la sélection n'était signalée que par une élévation (4 dp) : invisible pour
+//     un lecteur d'écran. Elle est portée par [Modifier.selectable] +
+//     `stateDescription` (« Sélectionnée »), donc elle existe aussi hors du sens
+//     visuel ;
+//   - une compétence sélectionnée SANS évaluation retombait sur le texte
+//     générique « Touchez une compétence pour son détail » : il a maintenant son
+//     propre état vide, qui nomme la compétence.
 
 data class SkillChipUi(
     val id: String,
@@ -59,6 +83,9 @@ data class CompetenciesUi(
     /** Détails par skillId (ordre du payload = ordre d'affichage stable). */
     val details: Map<String, List<EvaluationDetailUi>>,
 )
+
+/** Épaisseur du filet qui porte la sélection d'une puce. */
+private val SELECTED_BORDER = 2.dp
 
 private val HEX_COLOR = Regex("^#[0-9a-fA-F]{6}$")
 private const val SKILL_LABEL_MAX = 100
@@ -87,6 +114,32 @@ private fun parseChipColor(hex: String): Color = try {
 } catch (_: Exception) {
     Color(0xFF37474F)
 }
+
+/**
+ * FOND de puce : la couleur de la compétence, bornée en LUMINANCE.
+ *
+ * #144 : la puce prenait la couleur telle quelle — qu'elle vienne du serveur ou
+ * d'un hachage — donc deux couleurs de luminance opposée donnaient deux écrans
+ * de contraste opposés, et le texte ne pouvait pas être lisible sur les deux.
+ * On applique donc le MÊME pas que Papillon pour une carte matière : [tint] à
+ * 75 % vers le blanc (le pastel derrière le libellé). Le fond est alors toujours
+ * clair, quelle que soit la teinte — c'est ce qui rend la paire mesurable.
+ */
+fun chipSurfaceColor(hex: String): Color = tint(parseChipColor(hex), .75f)
+
+/**
+ * ENCRE de puce, choisie par contraste mesuré.
+ *
+ * #144 : le texte était forcé à `Color.White` — blanc sur le jaune `#E8B048`
+ * tombait à 1.96:1. [bestContentOn] compare l'encre de marque au blanc et garde
+ * la meilleure des deux : sur un fond pastel c'est toujours l'encre, et le
+ * contraste des 20 couleurs de la palette vaut 9.06:1 au pire (mesuré par le
+ * miroir TS, comme celui de `subjectContent` sur `subjectSurface`).
+ *
+ * ponytail: deux fonctions PURES (couleur -> couleur), donc le contraste des 20
+ * couleurs se teste sans téléphone.
+ */
+fun chipContentColor(background: Color): Color = bestContentOn(background)
 
 private fun JSONObject.nullableDouble(key: String): Double? {
     if (isNull(key)) return null
@@ -161,41 +214,116 @@ fun CompetencesSection(payload: String?) {
     // Clé = skills (liste immuable) : la sélection repart à vide quand le
     // payload change, jamais de chip sélectionnée fantôme.
     var selectedId by remember(ui.skills) { mutableStateOf<String?>(null) }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // #144 : la section est DÉFILABLE — le détail d'une compétence peut compter
+    // plusieurs évaluations, et la coquille qui l'héberge ne défile pas.
+    Column(
+        modifier = Modifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         if (ui.skills.isEmpty()) {
-            Text("Aucune compétence publiée par l'établissement.")
+            PapEmptyState(
+                icon = Icons.Filled.Star,
+                title = "Aucune compétence publiée par l'établissement.",
+                description = "",
+            )
             return@Column
         }
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            for (skill in ui.skills) {
-                // Clé stable = skillId : l'identité de la chip ne bouge pas au recomposition.
-                key(skill.id) {
-                    SkillChip(
-                        label = skill.label,
-                        value = skill.value,
-                        count = skill.evaluationCount,
-                        color = skill.color,
-                        selected = skill.id == selectedId,
-                        onClick = { selectedId = if (selectedId == skill.id) null else skill.id },
-                    )
-                }
-            }
+        SkillChipRow(ui.skills, selectedId) { id ->
+            selectedId = if (selectedId == id) null else id
         }
+        val selected = ui.skills.firstOrNull { it.id == selectedId }
         val detail = selectedId?.let { id -> ui.details[id] }
-        if (detail == null) {
-            Text("Touchez une compétence pour son détail.")
-        } else {
-            Text("Détail compétence")
-            for (e in detail) {
-                Text("${e.subject} — ${e.label} : ${noteLabel(e.note, e.scale)} (${e.date.take(10)})")
+        when {
+            selected == null -> Text("Touchez une compétence pour son détail.")
+            // #144 : état VIDE DÉDIÉ. Avant, une compétence sans aucune
+            // évaluation retombait sur le texte ci-dessus — donc l'utilisateur
+            // ne pouvait pas savoir si son geste avait échoué ou si la matière
+            // était vide.
+            detail.isNullOrEmpty() -> PapEmptyState(
+                icon = Icons.Filled.Star,
+                title = "Aucune évaluation",
+                description = "L'établissement n'a publié aucune évaluation pour « ${selected.label} ».",
+            )
+            else -> {
+                Text("Détail compétence", style = MaterialTheme.typography.titleMedium)
+                for (e in detail) {
+                    EvaluationRow(e)
+                }
             }
         }
     }
 }
 
+/**
+ * Ligne de détail : matière, intitulé, note et date.
+ *
+ * Séparée de la boucle pour que l'écran ne fasse qu'une chose par ligne ; le
+ * libellé est borné par le contrat (200 caractères) et affiché tel quel — c'est
+ * une donnée de l'établissement, jamais une instruction (I6).
+ */
+@Composable
+private fun EvaluationRow(entry: EvaluationDetailUi) {
+    PapCard(modifier = Modifier.fillMaxWidth()) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(entry.subject, style = MaterialTheme.typography.titleSmall)
+            Text(entry.label, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = "${noteLabel(entry.note, entry.scale)} · ${entry.date.take(10)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * Rangée de puces DÉFILABLE.
+ *
+ * #144 : la rangée était une `Row` SANS défilement — donc toute puce au-delà de
+ * la largeur de l'écran était INVISIBLE, sans file horizontale ni indication.
+ * Le défilement est donc explicite, et la rangée occupe toute la largeur pour
+ * que le geste s'y trouve.
+ */
+@Composable
+private fun SkillChipRow(
+    skills: List<SkillChipUi>,
+    selectedId: String?,
+    onSelect: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        for (skill in skills) {
+            // Clé stable = skillId : l'identité de la puce ne bouge pas au
+            // recomposition (le défilement horizontal la ferait sinon disparaître).
+            key(skill.id) {
+                SkillChip(
+                    label = skill.label,
+                    value = skill.value,
+                    count = skill.evaluationCount,
+                    color = skill.color,
+                    selected = skill.id == selectedId,
+                    onClick = { onSelect(skill.id) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Puce de compétence.
+ *
+ * Trois corrections #144 :
+ *   - le fond vient de [chipSurfaceColor] (borné en luminance) et l'encre de
+ *     [chipContentColor], propagée par la `Surface` : plus de blanc en dur sur
+ *     un fond clair (1.96:1 avant, blanc sur le jaune de la palette) ;
+ *   - la sélection est un [Modifier.selectable] : Compose pose `Role.Tab` /
+ *     `selected` dans l'arbre de sémantique, donc un lecteur d'écran annonce
+ *     « sélectionné ». Visuellement, elle est portée par un FILET de 2 dp (et
+ *     plus par la seule élévation, invisible au lecteur d'écran) ;
+ *   - `stateDescription` nomme l'état en français (« Sélectionnée »).
+ */
 @Composable
 private fun SkillChip(
     label: String,
@@ -205,16 +333,38 @@ private fun SkillChip(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val background = chipSurfaceColor(color)
+    // L'encre n'est PAS `contentColorFor(fond)` : en material3 1.2.1 cette
+    // fonction renvoie `LocalContentColor` pour toute couleur qui n'est pas un
+    // rôle du scheme — donc l'encre du conteneur, mesurée nulle part. Elle vient
+    // de [chipContentColor] (le `bestContentOn` du thème) et c'est `Surface` qui
+    // la propage au texte via `contentColor`, donc le texte ne peut plus être
+    // forcé à `Color.White`.
+    val ink = chipContentColor(background)
     Surface(
-        color = parseChipColor(color),
+        color = background,
+        contentColor = ink,
         shape = MaterialTheme.shapes.small,
-        tonalElevation = if (selected) 4.dp else 0.dp,
-        onClick = onClick,
+        // Filet de sélection : 2 dp, donc l'état se voit même sans couleur (le
+        // lecteur d'écran, lui, l'a par `selectable` + `stateDescription`).
+        border = if (selected) BorderStroke(SELECTED_BORDER, ink) else null,
+        modifier = Modifier.selectable(
+            selected = selected,
+            onClick = onClick,
+            role = Role.Tab,
+        ),
     ) {
         Text(
             text = "$label ${noteLabel(value)} ($count)",
-            color = Color.White,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            // L'encre vient de la Surface (`LocalContentColor`), pas d'un
+            // `Color.White` codé en dur : c'est le Theme qui décide.
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .semantics {
+                    stateDescription = if (selected) "Sélectionnée" else "Non sélectionnée"
+                },
         )
     }
 }
+
