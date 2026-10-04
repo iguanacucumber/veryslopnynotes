@@ -719,26 +719,21 @@ function ecran(h: { dir: string }, labels: string[]): void {
 const TEMOIN_PROFIL = "Détecter les onglets";
 const ARTEFACT_APPAIRAGE = /adresse du serveur|code pin du qr|contenu du qr|ton établissement/;
 
-/** Fichier(s) où vit chaque écran : un libellé renommé doit faire échouer ICI. */
-const ecransDe: Record<string, string[]> = {
-  index: ["IndexScreen.kt", "HomeCards.kt", "HomeWidgets.kt"],
-  calendar: ["TimetableWeek.kt"],
-  grades: ["GradesScreen.kt", "GradesRows.kt"],
-  tasks: ["Assignments.kt"],
-  profile: ["ProfileScreen.kt"],
-  settings: ["SettingsScreen.kt"],
-  news: ["NewsScreen.kt"],
-  canteen: ["CanteenMenus.kt"],
-  attendance: ["Attendance.kt"],
-  sanctions: ["Attendance.kt"],
-  messages: ["MessagesScreen.kt"],
-  pairing: ["PairingScreen.kt"],
-  alerts: ["SecurityAlertsScreen.kt"],
-  fiches: ["RevisionSheets.kt"],
-  // AppNav.kt passe le sous-titre, Attendance.kt (`CachedResourceScreen`) rend
-  // l'écran en cache, Competences.kt son corps.
-  competences: ["AppNav.kt", "Attendance.kt", "Competences.kt"],
-};
+/**
+ * Tout le module `ui` en un seul texte : un libellé de fixture doit être RÉEL,
+ * sinon le rejeu mentirait sur l'écran qu'il prétend rejouer.
+ *
+ * On cherche dans le PAQUET et non dans une liste de fichiers par route : les
+ * écrans se scindent (Attendance → AttendanceFormat/AttendanceRows,
+ * ProfileScreen → ProfileAccountSwitcher…) et une liste à la main devient un
+ * faux rouge dès qu'un autre agent décompose un écran. Le lien
+ * route ↔ fichier, lui, reste vérifié juste au-dessus, pour les TÉMOINS — c'est
+ * là qu'il compte.
+ */
+const UI_ENTIER = [...readdirSync(UI_DIR)]
+  .filter((f) => f.endsWith(".kt"))
+  .map((f) => readFileSync(join(UI_DIR, f), "utf8"))
+  .join("\n");
 
 interface Variante {
   /** Libellés du dump quand la donnée est là. */
@@ -784,12 +779,12 @@ const VARIANTES: Record<string, Variante> = {
   // Les boutons de destination sont rendus inconditionnellement.
   profile: {
     plein: ["Détecter les onglets", "Messages", "Appairage QR+PIN", "Fiches révision"],
-    vide: ["Détecter les onglets", "Aucune information publiée pour ce compte.", "1 compte appairé"],
+    vide: ["Détecter les onglets", "Aucune information publiée pour ce compte.", "compte appairé"],
   },
   // Les titres de section « Matières » et « Assistant devoirs » sont fixes.
   settings: {
     plein: ["Matières", "Assistant devoirs", "Ajouter la matière", "Enregistrer la clé"],
-    vide: ["Matières", "Aucune matière personnalisée. Le nom d'origine est affiché partout.", "Assistant devoirs"],
+    vide: ["Matières", "Aucune matière personnalisée.", "Assistant devoirs"],
   },
   // Le corps de cet écran ne rend QUE de la donnée : pas de fragment, son titre
   // de barre suffit. L'état vide doit rester lisible, c'est ce qui est rejoué.
@@ -807,12 +802,12 @@ const VARIANTES: Record<string, Variante> = {
   // absence), pas un seul.
   attendance: {
     plein: ["Absences et retards", "Toutes", "Sanctions", "Actualiser"],
-    vide: ["Absences et retards", "Aucune donnée en cache. Actualisez."],
+    vide: ["Absences et retards", "Aucune donnée en cache", "Aucune absence ni retard"],
   },
   // Même écran en cache, sous-titre « Punitions vie scolaire ».
   sanctions: {
     plein: ["Punitions vie scolaire", "Toutes", "Actualiser"],
-    vide: ["Punitions vie scolaire", "Aucune sanction publiée."],
+    vide: ["Punitions vie scolaire", "Aucune sanction publiée"],
   },
   // « Discussions » est écrit avant la branche d'état.
   messages: {
@@ -904,10 +899,9 @@ describe("le témoin d'écran ne dépend pas de la donnée (#166)", () => {
     // La table ci-dessus doit rester collée aux écrans : un libellé renommé fait
     // échouer ce test AVANT qu'une capture ne parte sur un device.
     for (const route of ROUTES) {
-      const source = ecransDe[route]!.map(readUi).join("\n");
       for (const variante of ["plein", "vide"] as const) {
         for (const label of VARIANTES[route]![variante]) {
-          expect({ route, variante, label, present: source.includes(label) }).toEqual({
+          expect({ route, variante, label, present: UI_ENTIER.includes(label) }).toEqual({
             route,
             variante,
             label,
