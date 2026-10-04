@@ -58,6 +58,12 @@ import java.util.Locale
 //   - une compétence sélectionnée SANS évaluation retombait sur le texte
 //     générique « Touchez une compétence pour son détail » : il a maintenant son
 //     propre état vide, qui nomme la compétence.
+//
+// #145 : choisir une compétence VIBRER (le geste change un état invisible ailleurs)
+// et le détail APPARAÎT — échelle 0.9 -> 1 + opacité, 300 ms mesurés — au lieu de
+// remplacer le texte d'un coup. Le `key(selectedId)` est ce qui fait rejouer
+// l'entrée à chaque sélection : sans lui, l'animation ne se jouerait qu'une fois,
+// à l'ouverture de l'écran.
 
 data class SkillChipUi(
     val id: String,
@@ -214,6 +220,7 @@ fun CompetencesSection(payload: String?) {
     // Clé = skills (liste immuable) : la sélection repart à vide quand le
     // payload change, jamais de chip sélectionnée fantôme.
     var selectedId by remember(ui.skills) { mutableStateOf<String?>(null) }
+    val haptics = rememberPapHaptics()
     // #144 : la section est DÉFILABLE — le détail d'une compétence peut compter
     // plusieurs évaluations, et la coquille qui l'héberge ne défile pas.
     Column(
@@ -229,25 +236,35 @@ fun CompetencesSection(payload: String?) {
             return@Column
         }
         SkillChipRow(ui.skills, selectedId) { id ->
+            // #145 : le retour physique d'une sélection. « select » et non
+            // « confirm » : rien n'est écrit, on change d'état à l'écran.
+            haptics.select()
             selectedId = if (selectedId == id) null else id
         }
         val selected = ui.skills.firstOrNull { it.id == selectedId }
         val detail = selectedId?.let { id -> ui.details[id] }
-        when {
-            selected == null -> Text("Touchez une compétence pour son détail.")
-            // #144 : état VIDE DÉDIÉ. Avant, une compétence sans aucune
-            // évaluation retombait sur le texte ci-dessus — donc l'utilisateur
-            // ne pouvait pas savoir si son geste avait échoué ou si la matière
-            // était vide.
-            detail.isNullOrEmpty() -> PapEmptyState(
-                icon = Icons.Filled.Star,
-                title = "Aucune évaluation",
-                description = "L'établissement n'a publié aucune évaluation pour « ${selected.label} ».",
-            )
-            else -> {
-                Text("Détail compétence", style = MaterialTheme.typography.titleMedium)
-                for (e in detail) {
-                    EvaluationRow(e)
+        if (selected == null) {
+            Text("Touchez une compétence pour son détail.")
+        } else {
+            key(selectedId) {
+                PapEnter {
+                    when {
+                        // #144 : état VIDE DÉDIÉ. Avant, une compétence sans aucune
+                        // évaluation retombait sur le texte ci-dessus — donc
+                        // l'utilisateur ne pouvait pas savoir si son geste avait
+                        // échoué ou si la matière était vide.
+                        detail.isNullOrEmpty() -> PapEmptyState(
+                            icon = Icons.Filled.Star,
+                            title = "Aucune évaluation",
+                            description = "L'établissement n'a publié aucune évaluation pour « ${selected.label} ».",
+                        )
+                        else -> {
+                            Text("Détail compétence", style = MaterialTheme.typography.titleMedium)
+                            for (e in detail) {
+                                EvaluationRow(e)
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -19,10 +19,19 @@ import com.journeyapps.barcodescanner.ScanOptions
  * `onResult(null)` = rien de lu : annulation, permission refusée, ou QR que le
  * décodeur n'a pas su lire. L'appelant ne remplace donc rien et affiche une
  * phrase actionnable, au lieu du silence.
+ *
+ * #145 : un QR lu VIBRE (le geste a réussi, hors du champ de vision : l'écran
+ * était face au mur pendant le scan). Un échec ne vibre PAS comme une réussite —
+ * Compose 1.6.8 n'a pas `HapticFeedbackType.Reject` (1.7.0) — donc c'est le
+ * message d'erreur de l'appelant, en couleur d'erreur, qui fait la différence.
  */
 @Composable
 fun rememberQrScanner(onResult: (String?) -> Unit): () -> Unit {
+    // Capturé ICI et non dans le callback : l'activité de scan rend plus tard, et
+    // le retour physique a besoin du `LocalHapticFeedback` de la composition.
+    val haptics = rememberPapHaptics()
     val launcher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        if (result.contents?.isNotBlank() == true) haptics.confirm()
         onResult(result.contents?.takeIf { it.isNotBlank() })
     }
     return remember(launcher) {

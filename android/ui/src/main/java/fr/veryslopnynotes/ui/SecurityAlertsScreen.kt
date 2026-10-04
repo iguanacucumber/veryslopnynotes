@@ -166,11 +166,14 @@ fun SecurityAlertsScreen(
         )
         // Échec de la RELECTURE alors que le cache est là : la liste reste
         // affichée, la cause passe en une ligne (mêmes replis que l'onglet Notes).
+        // #145 : c'est un REFUS, pas une information — il prend la couleur
+        // d'erreur. En encre secondaire, il se lisait comme la ligne du témoin
+        // juste au-dessus, donc un échec ne se distinguait d'aucun succès.
         if (notice != null) {
             Text(
                 text = notice,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.error,
             )
         }
         when (alertsLayout(view)) {

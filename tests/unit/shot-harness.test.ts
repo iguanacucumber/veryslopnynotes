@@ -795,7 +795,7 @@ const VARIANTES: Record<string, Variante> = {
   // « Menus de la semaine » est écrit avant la branche d'état.
   canteen: {
     plein: ["Menus de la semaine", "Actualiser"],
-    vide: ["Menus de la semaine", "Aucun menu publié cette semaine.", "Actualiser"],
+    vide: ["Menus de la semaine", "Aucun menu publié cette semaine", "Actualiser"],
   },
   // Le SOUS-TITRE de l'écran en cache est rendu avant l'état ; les trois lignes
   // ci-dessous sont les trois états sans donnée (cache vide, réseau, zéro
@@ -827,9 +827,15 @@ const VARIANTES: Record<string, Variante> = {
     vide: ["Injections neutralisées (données, jamais exécutées).", "Aucune alerte. Bon signe."],
   },
   // Comme `news` : le corps ne rend que de la donnée, le titre de barre suffit.
+  // #145 : les deux listes ci-dessous dataient de #144, qui a remplacé les deux
+  // boutons de DÉVELOPPEMENT (« Charger », « Simuler erreur ») par un état vide
+  // unique. Les témoins doivent nommer ce qui est RÉELLEMENT à l'écran, sinon la
+  // capture `make shot fiches` ne prouve plus rien — c'est tout l'objet de cette
+  // table. Réparé ici parce que `make check` était rouge sur `main` à cause de
+  // ces deux lignes (idem le témoin « cantine » ci-dessus).
   fiches: {
-    plein: ["Charger", "Simuler erreur"],
-    vide: ["Aucune fiche. Générée auto à l'annonce d'un DS.", "Charger"],
+    plein: ["Fiches de révision", "Actualiser"],
+    vide: ["Aucune fiche de révision", "générée automatiquement", "Actualiser"],
   },
   // AppNav.kt passe le sous-titre à l'écran en cache d'Attendance.kt.
   competences: {

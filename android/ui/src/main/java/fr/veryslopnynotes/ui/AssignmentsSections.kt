@@ -250,3 +250,14 @@ fun weekRangeFr(iso: String): String {
 /** « 05/10 » — format POSÉ : le nom court du mois dépend de la CLDR du téléphone. */
 private fun shortFr(date: LocalDate): String =
     "%02d/%02d".format(Locale.FRANCE, date.dayOfMonth, date.monthValue)
+
+/**
+ * Message du snackbar après une bascule « fait » (#145).
+ *
+ * PURE, donc testable sans téléphone : la notice dit ce que vient de faire
+ * l'app, et l'action « Annuler » n'a de sens qu'avec cette formulation — « fait »
+ * et « à faire » ne sont pas le même retour. La matière est reprise telle quelle :
+ * c'est une DONNÉE de l'établissement, affichée par `Text` (I6).
+ */
+fun toggleNoticeLabel(subject: String, done: Boolean): String =
+    if (done) "« $subject » marqué comme fait." else "« $subject » remis à faire."

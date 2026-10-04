@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -51,6 +52,13 @@ import fr.veryslopnynotes.data.probeHealthBlocking
 // L'écran est aussi la destination du 401 (#113) : après un redémarrage serveur,
 // c'est lui qui rouvre la session ET le credential, pas l'ancien appairage.
 // Aucun hôte tiers ici : ApiClient allowlist serveur seul (I1).
+//
+// #145 : la validation VIBRE quand l'appairage réussit (le parcours se termine et
+// l'écran disparaît : sans retour physique, rien ne dit que c'est passé), et les
+// messages d'erreur passent en COULEUR D'ERREUR — ils étaient en encre de texte,
+// exactement comme les messages de succès (« Serveur enregistré », « Serveur
+// joignable »), donc un refus se lisait comme une validation. Ils apparaissent en
+// plus avec l'ouverture mesurée, au lieu d'apparaître d'un coup.
 @Composable
 fun PairingRoute(
     baseUrl: String,
@@ -89,6 +97,7 @@ fun PairingRoute(
     // Version de contrat annoncée par le serveur joignable : preuve que la
     // réponse vient bien de trèsslopnynotes, affichée telle quelle.
     var serverVersion by remember { mutableStateOf<String?>(null) }
+    val haptics = rememberPapHaptics()
 
     // ponytail: callbacks OkHttp hors main → post main. Upgrade: Flow/ViewModel.
     val listener = remember {
@@ -115,6 +124,9 @@ fun PairingRoute(
             main.post {
                 when (res) {
                     is SetupResult.Ok -> {
+                        // #145 : le parcours est terminé et l'écran va quitter —
+                        // le retour physique est le seul signal qui reste.
+                        haptics.confirm()
                         try {
                             // Le secret est montré UNE fois : s'il est absent ou
                             // invalide, `save` échoue et RIEN n'est stocké.
@@ -232,7 +244,12 @@ fun ServerField(
             modifier = Modifier.fillMaxWidth(),
         )
         Text(serverHint(value))
-        if (!error.isNullOrEmpty()) Text(error)
+        // #145 : l'erreur prend la couleur d'erreur et s'OUVRE au lieu d'apparaître
+        // d'un coup — elle était en encre de texte, comme les deux messages de
+        // succès qui l'entourent.
+        PapAppear(visible = !error.isNullOrEmpty()) {
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
         if (saved) Text("Serveur enregistré. Si l'adresse change, reconnecte l'appareil.")
         if (!version.isNullOrEmpty()) Text("Serveur joignable — contrats $version.")
         Button(onClick = onSubmit, modifier = Modifier.fillMaxWidth()) { Text("Continuer") }
@@ -265,7 +282,10 @@ private fun AccountStep(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        error?.let { Text(it) }
+        // #145 : couleur d'erreur + ouverture mesurée (cf. `ServerField`).
+        PapAppear(visible = error != null) {
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
         Button(
             onClick = {
                 if (!isBoundedSchoolUrl(form.schoolUrl)) {
@@ -341,8 +361,14 @@ private fun QrStep(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             modifier = Modifier.fillMaxWidth(),
         )
-        error?.let { Text(it) }
-        if (form.state is PairingState.Error) Text(pairingStateLabel(form.state))
+        // #145 : les DEUX refus de cette étape (scan, puis setup) partagent la
+        // couleur d'erreur et la même ouverture mesurée.
+        PapAppear(visible = error != null || form.state is PairingState.Error) {
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (form.state is PairingState.Error) {
+                Text(pairingStateLabel(form.state), color = MaterialTheme.colorScheme.error)
+            }
+        }
         // QR + PIN = la méthode UNIQUE (0.7.0). Un des deux seul -> refus local,
         // message actionnable, aucun appel réseau.
         val pret = qr != null && form.pin.isNotBlank()
