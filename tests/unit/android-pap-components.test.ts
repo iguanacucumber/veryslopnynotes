@@ -385,9 +385,15 @@ describe("briques d'interface (#136)", () => {
     expect(kt).toContain("onDismissRequest = onDismiss");
     expect(kt).toMatch(/destructive: Boolean = false/);
     expect(kt).toContain('dismissLabel: String = "Annuler"');
-    // Une confirmation destructive se reconnaît à sa couleur : le rouge de
-    // marque, pas le vert du bouton d'action normal.
-    expect(kt).toContain("if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary");
+    // Une confirmation destructive se reconnaît à sa couleur : l'encre d'ERREUR
+    // du thème, pas l'accent du bouton normal. #146 : les DEUX passent par une
+    // encre MESURÉE — `errorTextColor()` (le rouge de marque ne vaut que
+    // 3.70:1 sur la surface sombre) et `secondary` (4.93:1, le `primary`
+    // d'avant ne tenait que 3.74:1). Le garde-fou de contraste est dans
+    // `android-papillon-theme.test.ts`.
+    expect(kt).toContain("contentColor = if (destructive) {");
+    expect(kt).toContain("errorTextColor()");
+    expect(kt).toContain("MaterialTheme.colorScheme.secondary");
   });
 
   test("zéro dépendance ajoutée : le squelette et les dates sont faits maison", () => {

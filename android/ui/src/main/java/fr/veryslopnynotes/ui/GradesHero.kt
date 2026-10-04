@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -23,9 +24,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 // Carte « moyenne générale » de l'onglet Notes #139, à la lettre de Papillon :
@@ -125,7 +130,9 @@ fun GradesAverageHero(
     val lastHistory = report?.history?.lastOrNull()?.millis
     val title = if (report == null) "Moyenne générale" else algorithmLabel(report.algorithm)
     PapCard(modifier = modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        // 8 dp : les quatre blocs de la carte (courbe, moyenne, titre, origine)
+        // sont un GROUPE — 6 dp les faisait se lire comme un seul bloc de texte.
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             AverageSparkline(values = report?.history?.map { it.value } ?: emptyList())
             Row(
                 verticalAlignment = Alignment.Bottom,
@@ -136,13 +143,21 @@ fun GradesAverageHero(
                         text = "Aucune moyenne sur cette période",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
                 } else {
                     Text(
                         text = formatMark(general.value),
                         style = MaterialTheme.typography.displaySmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        // `secondary` et non `primary` : 3.45:1 sur la surface
+                        // variante de la carte, 4.93:1 avec `secondary` — même
+                        // vert à l'œil, AA en texte dans les deux thèmes.
+                        color = MaterialTheme.colorScheme.secondary,
                         fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         // La phrase complète (« 14,87/20 (moyenne estimée,
                         // algorithme subject) ») est lue ici une fois, plutôt que
                         // de laisser lire le nombre puis la provenance à part.
@@ -155,23 +170,44 @@ fun GradesAverageHero(
                         text = scaleSuffix(AVERAGE_SCALE),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(bottom = 4.dp),
                     )
                 }
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = if (onAlgorithmClick == null) {
                     Modifier
                 } else {
-                    Modifier.clickable(onClick = onAlgorithmClick)
+                    // #146 : le geste était un `Row.clickable` de la hauteur du
+                    // texte (≈ 24 dp) et SANS rôle — un lecteur d'écran n'y
+                    // voyait ni bouton ni taille d'appui. `Role.Button` +
+                    // `heightIn(min = TouchTarget)` : la cible fait 48 dp et le
+                    // chevron a son propre libellé d'action.
+                    Modifier
+                        .heightIn(min = TouchTarget)
+                        .clickable(
+                            onClickLabel = "Changer de calcul de moyenne",
+                            role = Role.Button,
+                            onClick = onAlgorithmClick,
+                        )
                 },
             ) {
+                // `heading()` : c'est le TITRE de la carte (l'algorithme
+                // retenu). Il est aussi le point d'entrée du choix quand le
+                // chevron est là : titre + bouton, donc les deux rôles se
+                // cumulent sur le même nœud, ce que TalkBack annonce dans
+                // l'ordre (« titre », « bouton »).
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() },
                 )
                 if (onAlgorithmClick != null) {
                     Icon(
@@ -187,6 +223,8 @@ fun GradesAverageHero(
                     text = originLabel(report.provided, lastHistory),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -207,6 +245,8 @@ fun GradesHistoryNote(report: AveragesUi?, modifier: Modifier = Modifier) {
         text = note,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
         modifier = modifier,
     )
 }

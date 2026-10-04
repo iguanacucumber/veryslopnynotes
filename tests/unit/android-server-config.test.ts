@@ -483,13 +483,16 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(screen).toContain("val refusal = onServerChange(serverDraft)");
     expect(screen).toContain('label = { Text("Adresse du serveur (https://domaine[:port])") }');
     expect(screen).toContain('Text("Continuer")');
-    expect(screen).toContain("Text(serverHint(value))");
+    // #146 : borné sur deux lignes (le message vient du serveur).
+    expect(screen).toContain("text = serverHint(value),");
     // Erreur affichée telle quelle, confirmation après purge de la session.
     // #145 : elle s'OUVRE au lieu d'apparaître d'un coup, et elle prend la couleur
     // d'erreur — avant c'était un `Text` en encre normale, comme le message de
     // succès juste en dessous (« Serveur enregistré »).
     expect(screen).toContain("PapAppear(visible = !error.isNullOrEmpty()) {");
-    expect(screen).toContain("error?.let { Text(it, color = MaterialTheme.colorScheme.error) }");
+    // #146 : l'encre d'ERREUR du thème — le rouge de marque ne vaut que 3.70:1
+    // sur la surface SOMBRE, et ce refus est du texte.
+    expect(screen).toContain("color = errorTextColor(),");
     expect(screen).toContain("Serveur enregistré. Si l'adresse change, reconnecte l'appareil.");
     // #120 : un refus d'adresse arrête ICI. Passer à l'étape du compte quand
     // le serveur ne répond pas, c'est faire découvrir une mauvaise adresse

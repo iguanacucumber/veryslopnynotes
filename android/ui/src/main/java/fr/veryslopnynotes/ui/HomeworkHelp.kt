@@ -21,6 +21,9 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.Homework
@@ -114,11 +117,23 @@ fun HomeworkHelpDialog(
                 modifier = Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(assignment.title)
+                // `title` est dérivé des 200 premiers caractères de la consigne
+                // (cf. #161) : trois lignes suffisent à dire de quoi il s'agit, le
+                // dialogue défile pour le reste.
+                Text(
+                    text = assignment.title,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 if (!keyConfigured) {
                     Text("Clé LLM absente : renseigne-la dans Réglages pour activer l'assistant.")
                 }
-                Text("Sources envoyées : " + Homework.uniqueLabels(sources).joinToString(", ").ifEmpty { "aucune" })
+                Text(
+                    text = "Sources envoyées : " + Homework.uniqueLabels(sources).joinToString(", ")
+                        .ifEmpty { "aucune" },
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 if (sources.isEmpty()) Text(Homework.SOURCES_REQUIRED_MESSAGE)
                 OutlinedTextField(
                     value = question,
@@ -132,10 +147,25 @@ fun HomeworkHelpDialog(
                 if (o is HomeworkOutcome.Answer) {
                     Text(o.answer)
                     if (o.steps.isNotEmpty()) {
-                        Text("Étapes")
-                        o.steps.forEachIndexed { i, s -> Text("${i + 1}. $s") }
+                        // Titre de bloc dans un dialogue : `heading()` pour que le
+                        // survol parte d'ici.
+                        Text(
+                            text = "Étapes",
+                            modifier = Modifier.semantics { heading() },
+                        )
+                        o.steps.forEachIndexed { i, s ->
+                            Text(
+                                text = "${i + 1}. $s",
+                                maxLines = 4,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
-                    Text("Sources : " + o.sources.joinToString(", "))
+                    Text(
+                        text = "Sources : " + o.sources.joinToString(", "),
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 } else if (o is HomeworkOutcome.Refused) {
                     Text(
                         if (o.reason == Homework.REFUSAL_SOURCES_INSUFFICIENT) {
@@ -144,7 +174,13 @@ fun HomeworkHelpDialog(
                             "Assistant : " + o.reason
                         },
                     )
-                    if (o.sources.isNotEmpty()) Text("Sources citées : " + o.sources.joinToString(", "))
+                    if (o.sources.isNotEmpty()) {
+                        Text(
+                            text = "Sources citées : " + o.sources.joinToString(", "),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         },

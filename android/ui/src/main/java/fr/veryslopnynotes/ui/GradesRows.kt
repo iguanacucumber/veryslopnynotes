@@ -22,6 +22,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.data.SubjectPrefs
@@ -39,11 +42,19 @@ import fr.veryslopnynotes.data.SubjectPrefs
 /** Largeur d'une carte du carrousel : la carte doit tenir nom + note + date. */
 private val RECENT_CARD_WIDTH = 190.dp
 
-/** Couleur du texte de note quand la matière n'a pas de couleur choisie : le vert
- *  de marque, donc le même rôle que [subjectContent] côté palette. */
+/**
+ * Couleur du texte de note quand la matière n'a pas de couleur choisie : le rôle
+ * `secondary` du thème, donc le même vert que [subjectContent] côté palette.
+ *
+ * #146 : le repli était `primary` (vert de marque #29947A), qui ne vaut que
+ * 3.74:1 sur la surface et 3.45:1 sur la surface variante — sous le 4.5:1 du WCAG
+ * AA pour un corps de texte, alors que ces libellés sont en 13 sp.
+ * `secondary` (#237E68 en clair, le vert clair en sombre) tient 4.93:1 et
+ * 6.53:1 : même teinte à l'œil, lisible en texte.
+ */
 @Composable
 private fun subjectInk(hex: String?): Color =
-    (hex?.let { subjectContent(it) }) ?: MaterialTheme.colorScheme.primary
+    (hex?.let { subjectContent(it) }) ?: MaterialTheme.colorScheme.secondary
 
 /** Fond pastel de la carte matière ([subjectSurface] : 75 % vers le blanc), ou la
  *  surface variant du thème quand la matière n'a pas de couleur choisie. */
@@ -101,7 +112,16 @@ fun GradesAlgorithmChips(
             FilterChip(
                 selected = algorithm == selected,
                 onClick = { onSelect(algorithm) },
-                label = { Text(algorithmChipLabel(algorithm)) },
+                // Borné : un libellé d'algorithme est court, mais une puce qui
+                // déborde de l'écran de chip fait sortir le choix suivant du
+                // champ de vision (cf. `GradesChipRow`, défilable).
+                label = {
+                    Text(
+                        text = algorithmChipLabel(algorithm),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
             )
         }
     }
@@ -124,13 +144,16 @@ fun GradesPeriodChips(
         FilterChip(
             selected = selectedId == null,
             onClick = { onSelect(null) },
-            label = { Text("Année") },
+            label = { Text("Année", maxLines = 1, overflow = TextOverflow.Ellipsis) },
         )
         for (period in periods) {
             FilterChip(
                 selected = period.id == selectedId,
                 onClick = { onSelect(period.id) },
-                label = { Text(period.name) },
+                // Le nom d'une tranche vient de l'établissement : borné à une
+                // ligne, sinon une tranche au nom long pousse les autres hors
+                // de la rangée défilable.
+                label = { Text(period.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
             )
         }
     }
@@ -162,6 +185,8 @@ fun GradesPeriodCaption(
         text = periodLabel(period),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
         modifier = modifier,
     )
 }
@@ -248,21 +273,32 @@ fun GradesSubjectSections(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // Décoratif : le libellé de la matière est juste à côté, en
+                // toutes lettres. `#146` — sans ça, TalkBack annonçait le nom de
+                // l'emoji puis le libellé, donc deux fois la même information.
                 if (!style.emoji.isNullOrEmpty()) {
-                    Text(text = style.emoji, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = style.emoji,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.clearAndSetSemantics { },
+                    )
                 }
+                // Titre de section par matière : `heading()`, sinon une note
+                // d'antimatière ne se trouve pas au survol de l'écran.
                 Text(
                     text = style.label,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f, fill = false).semantics { heading() },
                 )
                 Text(
                     text = subjectAverageLabel(group),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             for (grade in group.grades) {
@@ -319,15 +355,22 @@ fun GradeRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // `label` est le commentaire libre de l'enseignant, borné
+                    // par le CONTRAT à 200 caractères : deux lignes suffisent à
+                    // dire de quoi il s'agit, la carte entière reste lisible.
                     Text(
                         text = gradeLabel(grade),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = relativeTimeFr(grade.millis, nowMillis),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 GradeValue(grade = grade, ink = ink)
@@ -341,14 +384,22 @@ fun GradeRow(
                 )
             }
             if (influence != null) {
+                // `primary` (3.74:1) et `error` (3.70:1 en thème sombre) ne
+                // passent pas AA en 13 sp : l'accroissance prend `secondary`
+                // (4.93:1) et la baisse l'encre d'erreur du thème
+                // ([errorTextColor], 8.52:1 sur la surface variante en sombre).
+                // Le SIGNE reste dans le texte (« +0,4 » / « −0,3 ») : la couleur
+                // ne porte jamais l'information seule.
                 Text(
                     text = influenceLabel(influence.impact),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (influence.impact > 0) {
-                        MaterialTheme.colorScheme.primary
+                        MaterialTheme.colorScheme.secondary
                     } else {
-                        MaterialTheme.colorScheme.error
+                        errorTextColor()
                     },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -367,11 +418,15 @@ private fun GradeValue(grade: GradeUi, ink: Color) {
             text = gradeValueLabel(grade.value),
             style = MaterialTheme.typography.headlineMedium,
             color = ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = scaleSuffix(grade.scale),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(bottom = 2.dp),
         )
     }
