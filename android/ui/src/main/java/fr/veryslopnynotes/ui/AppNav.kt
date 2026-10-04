@@ -275,10 +275,8 @@ fun AppNav(
             modifier = Modifier.padding(pad),
         ) {
             composable(ROUTE_INDEX, deepLinks = listOf(routeDeepLink(ROUTE_INDEX))) {
-                // #143 : l'accueil ouvre les écrans qu'il présente (widgets et
-                // accès rapides), donc il reçoit `baseUrl` (le tirail) et la
-                // seule porte de navigation de #135 — pas de `NavController`
-                // construit dans l'écran, ni un `when` de routes par carte.
+                // #143 : l'accueil ouvre les écrans qu'il présente (widgets,
+                // accès rapides) par la porte de #135 — pas de NavController ici.
                 IndexScreen(repo, baseUrl, subjectPrefs) { route -> nav.navigateTo(route) }
             }
             composable(ROUTE_CALENDAR, deepLinks = listOf(routeDeepLink(ROUTE_CALENDAR))) {
