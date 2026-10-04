@@ -2,22 +2,29 @@ package fr.veryslopnynotes.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import fr.veryslopnynotes.core.Capabilities
 import fr.veryslopnynotes.data.CachePolicy
+import fr.veryslopnynotes.data.RefreshOutcome
+import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SyncedRepository
 import org.json.JSONArray
 import org.json.JSONObject
@@ -30,11 +37,21 @@ import org.json.JSONObject
 // [] : état vide propre (pas d'erreur, pas de contenu inventé).
 // ponytail: pas de ViewModel (état local comme les autres écrans, UiState) ;
 //   upgrade: ViewModel + Flow quand #82 câblerà la navigation complète.
+//
+// #141 : ce fichier ne fait plus que LIRE le contrat et TENIR L'ÉTAT. Le rendu
+// est dans `AttendanceRows.kt`, la logique pure dans `AttendanceFormat.kt`.
+// Ce qui a disparu d'ici : la ligne concaténée par événement (date ISO brute,
+// aucune couleur) et les compteurs doublés. Ce qui est arrivé : `/v1/periods`
+// (liste complète des tranches, comme l'onglet Notes), la porte sur
+// `Capabilities.PUNISHMENTS`, et un conteneur de défilement.
 
 private const val MAX_MOTIF_CHARS = 500
 private const val MAX_SUBJECT_CHARS = 64
 private const val MAX_NAME_CHARS = 100
 private val ABSENCE_KINDS = listOf("absence", "late")
+
+/** Libellé de la vue « année entière » (aucune tranche choisie). */
+private const val ALL_PERIODS_LABEL = "Année"
 
 data class AbsenceUi(
     val id: String,
@@ -177,26 +194,47 @@ fun absenceKindLabel(kind: String): String = if (kind == "late") "Retard" else "
 fun absencesForPeriod(data: AttendanceUi, periodId: String?): List<AbsenceUi> =
     if (periodId == null) data.absences else data.absences.filter { it.periodId == periodId }
 
-fun attendanceTotals(rows: List<AbsenceUi>): Pair<Int, Int> =
-    Pair(rows.count { it.kind == "absence" }, rows.count { it.kind == "late" })
-
 // --- Routes : une ressource cachable par écran, état UiState commun ---
+// #141 : le rendu est restructuré (carte de statut, sections, cartes d'événement)
+//   et sort de ce fichier, qui ne garde que la LECTURE du contrat ; la logique
+//   pure est dans `AttendanceFormat.kt`, les briques visuelles dans
+//   `AttendanceRows.kt`. Ce qui changeait de toute façon :
+//   - `subtitle` (« Absences et retards », « Punitions vie scolaire ») : le
+//     titre de la route est dans la barre du haut depuis #135, le corps le
+//     répétait en 16 sp gras juste dessous ;
+//   - `extraLabel` / `onExtra` (« Sanctions », « Retour ») : des liens de
+//     navigation en clair dans le corps d'un écran. « Retour » disparaît — la
+//     route Sanctions a sa flèche dans la barre (cf. `TOP_BARS`) — et « Sanctions »
+//     devient une capacité (#87), pas un bouton permanent ;
+//   - le rendu des états : « Chargement… », « Erreur réseau. Réessayer. » (le
+//     VRAI message du serveur était JETÉ) et « Données hors-ligne (périmé). »
+//     (sans horodatage) sont remplacés par `PapLoading`, `PapErrorState`,
+//     `PapEmptyState` et `PapStaleBanner` ;
+//   - la page a enfin un conteneur de défilement : la liste des événements pouvait
+//     déborder de l'écran sans qu'on puisse l'atteindre.
+//
 // ponytail: coquille partagée (cache synchrone + refresh + repli hors-ligne)
 //   identique à CanteenRoute/NewsRoute, factorisée ici pour deux ressources.
-// #135 : le paramètre `title` (« Vie scolaire », « Sanctions ») et son
-//   `Text(title)` ont disparu — la barre du haut porte le titre de la route
-//   (cf. AppShell.kt), l'écran ne le répète plus. D'où les arguments NOMMÉS aux
-//   deux appelants : deux `String` consécutives en positionnel se seraient
-//   décalées en silence.
+// ponytail: `body` reçoit le PAYLOAD et le `refresh`, et rien d'autre : l'état
+//   reste dans la coquille, donc un écran ne peut pas afficher un état au milieu
+//   d'une page de contrôles (#162).
+
+/**
+ * Coquille des deux écrans « vie scolaire » : cache synchrone au premier rendu,
+ * relecture réseau, repli hors-ligne, et les quatre ÉTATS possibles.
+ *
+ * [body] reçoit le payload affiché (jamais la chaîne JSON rendue) et le geste de
+ * relecture. Elle n'est PAS appelée quand il n'y a rien à montrer : un écran sans
+ * donnée est un état unique (message + une action), pas une page de contrôles
+ * au-dessus du vide.
+ */
 @Composable
 private fun CachedSchoolRoute(
     repo: SyncedRepository,
     baseUrl: String,
     resource: String,
-    subtitle: String,
-    extraLabel: String? = null,
-    onExtra: (() -> Unit)? = null,
-    body: @Composable (String?) -> Unit,
+    refreshTick: Int = 0,
+    body: @Composable (String?, () -> Unit) -> Unit,
 ) {
     var state by remember(resource) {
         val c = try {
@@ -213,7 +251,7 @@ private fun CachedSchoolRoute(
             return
         }
         state = when (val s = state) {
-            // Re-affichage cache pendant reload (pas de spinner si données).
+            // Ré-affichage cache pendant reload (pas de spinner si données).
             is UiState.Data -> s
             is UiState.Error -> if (s.cached != null) UiState.Data(s.cached, true, 0L) else UiState.Loading
             else -> UiState.Loading
@@ -224,87 +262,241 @@ private fun CachedSchoolRoute(
             state = UiState.Error("Erreur inattendue.", (state as? UiState.Data)?.payload)
         }
     }
-    val payload = (state as? UiState.Data)?.payload ?: (state as? UiState.Error)?.cached
+    // Cache affiché d'abord, relecture ensuite (offline-first #14). Le compteur
+    // de la barre du haut rejoue le même effet (#162).
+    LaunchedEffect(resource, refreshTick) { refresh() }
+
+    val data = state as? UiState.Data
+    // `state` est une propriété déléguée : elle n'est pas smart-castable dans le
+    // lambda de contenu, donc l'erreur est extraite une fois ici.
+    val error = state as? UiState.Error
+    val payload = data?.payload ?: error?.cached
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(subtitle, style = MaterialTheme.typography.titleMedium)
-        if ((state as? UiState.Data)?.isStale == true) Text("Données hors-ligne (périmé).")
-        if (state is UiState.Loading) Text("Chargement…")
-        if (state is UiState.Error) Text("Erreur réseau. Réessayer.")
-        if (payload == null && state is UiState.Empty) Text("Aucune donnée en cache. Actualisez.")
-        body(payload)
-        Button(onClick = { refresh() }) { Text("Actualiser") }
-        if (extraLabel != null && onExtra != null) Button(onClick = onExtra) { Text(extraLabel) }
+        if (payload == null) {
+            // Un écran SANS donnée : squelette, vide, ou le VRAI message du
+            // serveur avec son « Réessayer ». Rien d'autre sous le message.
+            when (state) {
+                UiState.Loading -> PapLoading()
+                UiState.Empty -> PapEmptyState(
+                    icon = Icons.Filled.Info,
+                    title = "Aucune donnée en cache",
+                    description = "Actualisez pour lire les données de l'établissement.",
+                    action = { Button(onClick = { refresh() }) { Text("Actualiser") } },
+                )
+                is UiState.Error -> PapErrorState(message = error?.message, onRetry = { refresh() })
+                is UiState.Data -> Unit
+            }
+            return@Column
+        }
+        if (data != null && data.isStale) {
+            PapStaleBanner(fetchedAt = data.fetchedAt, onRefresh = { refresh() })
+        }
+        // Échec de la RELECTURE alors que le cache est là : les lignes restent
+        // affichées, la cause est dite en une ligne (le gros bloc rouge, avec son
+        // « Réessayer », doublerait l'action de l'en-tête).
+        if (error != null) {
+            Text(
+                text = error.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        body(payload) { refresh() }
     }
 }
 
-// @OptIn: FilterChip.material3 tant qu'il reste annoté Expérimental.
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Capacités publiées, lues UNE fois par entrée dans l'écran.
+ *
+ * `repo.cached` lit un FICHIEL : le lire à chaque recomposition serait du travail
+ * pour rien. `remember` sans clé a exactement la bonne durée de vie — relu à
+ * chaque entrée dans la route, donc après une détection d'onglets faite depuis
+ * le Profil. `Capabilities.visible(null, …)` = `true` : rien n'affirmé => rien
+ * n'est masqué.
+ */
+private fun sanctionsAllowed(repo: SyncedRepository): Boolean {
+    val payload = try {
+        repo.cached(CachePolicy.CAPABILITIES)?.payload
+    } catch (_: Exception) {
+        null
+    }
+    return Capabilities.visible(Capabilities.parse(payload), Capabilities.PUNISHMENTS)
+}
+
+/**
+ * Onglet « Vie scolaire » : carte de statut, sélecteur de période DÉFILABLE,
+ * sections « Absences » / « Retards », une carte par événement.
+ *
+ * [subjectPrefs] alimente le résolveur de matière (#83/#139) : sans prefs, la
+ * couleur vient du nom, donc la colonne vertébrale d'une matière est la même
+ * partout. [onSanctions] n'est une destination QUE si l'établissement publie
+ * l'onglet `punishments` (#87) — sinon le bouton n'existe pas, comme les entrées
+ * de navigation masquées du Profil.
+ *
+ * @param refreshTick relecture demandée par la barre du haut (#162) ; la barre
+ *   n'a pas de slot `Refresh` pour cette route, donc il reste à 0 et le bouton
+ *   d'en-tête fait le même travail.
+ */
 @Composable
-fun AttendanceRoute(repo: SyncedRepository, baseUrl: String, onSanctions: () -> Unit = {}) {
+fun AttendanceRoute(
+    repo: SyncedRepository,
+    baseUrl: String,
+    onSanctions: () -> Unit = {},
+    subjectPrefs: List<SubjectPrefs> = emptyList(),
+    refreshTick: Int = 0,
+) {
+    // UNE horloge pour toute la page : « il y a 4 jours » ne doit pas changer
+    // d'une ligne à l'autre. Relue à chaque nouveau payload (donc à chaque
+    // relecture), sinon un écran laissé ouvert vieillit ses propres libellés.
+    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     var periodId by remember { mutableStateOf<String?>(null) }
+    var periodsOpen by remember { mutableStateOf(false) }
+    var periods by remember { mutableStateOf(emptyList<PeriodUi>()) }
+    var periodsError by remember { mutableStateOf<String?>(null) }
+    // Une lecture de fichier par ENTRÉE dans l'écran, pas par recomposition.
+    val sanctionsVisible = remember(repo) { sanctionsAllowed(repo) }
+
+    /**
+     * Tranches de l'établissement : le même appel que l'onglet Notes (#139),
+     * hors cache (elles changent une fois par an). Son échec est affiché tel
+     * quel, et le sélecteur bascule alors sur les compteurs du payload.
+     */
+    fun loadPeriods() {
+        if (baseUrl.isBlank()) return
+        try {
+            repo.fetchPeriods(baseUrl) { o ->
+                when (o) {
+                    is RefreshOutcome.Updated -> {
+                        periods = periodsFrom(o.payload)
+                        periodsError = null
+                    }
+                    is RefreshOutcome.OfflineFallback -> {
+                        periods = periodsFrom(o.payload)
+                        periodsError = null
+                    }
+                    is RefreshOutcome.Failed -> periodsError = o.message
+                }
+            }
+        } catch (_: Exception) {
+            periodsError = "Tranches indisponibles."
+        }
+    }
+
+    LaunchedEffect(baseUrl) { loadPeriods() }
+
     CachedSchoolRoute(
         repo = repo,
         baseUrl = baseUrl,
         resource = CachePolicy.ATTENDANCE,
-        subtitle = "Absences et retards",
-        extraLabel = "Sanctions",
-        onExtra = onSanctions,
-    ) { payload ->
+        refreshTick = refreshTick,
+    ) { payload, refresh ->
+        LaunchedEffect(payload) { nowMillis = System.currentTimeMillis() }
         val data = attendanceFrom(payload)
         val rows = absencesForPeriod(data, periodId)
-        val totals = attendanceTotals(rows)
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            FilterChip(selected = periodId == null, onClick = { periodId = null }, label = { Text("Toutes") })
-            for (p in data.periods) {
-                FilterChip(
-                    selected = periodId == p.periodId,
-                    onClick = { periodId = if (periodId == p.periodId) null else p.periodId },
-                    label = { Text(p.name) },
+        val sections = attendanceSections(rows)
+        val status = attendanceStatus(rows)
+        // `/v1/periods` pour la liste complète, les compteurs du payload pour les
+        // chiffres ; sans tranches, la coquille des compteurs suffit.
+        val tranches = remember(periods, data.periods) { attendancePeriods(periods, data.periods) }
+        val chips = remember(tranches) { tranches.map { it.period } }
+        val selected = tranches.firstOrNull { it.id == periodId }
+
+        AttendanceHeader(
+            periodName = selected?.name ?: ALL_PERIODS_LABEL,
+            periodNumber = selected?.let { periodNumberLabel(it.name) },
+            expanded = periodsOpen,
+            onToggle = { periodsOpen = !periodsOpen },
+            onRefresh = refresh,
+        )
+        if (periodsOpen) {
+            GradesPeriodChips(periods = chips, selectedId = periodId, onSelect = { periodId = it })
+            val failure = periodsError
+            if (failure != null) {
+                Text(
+                    text = failure,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
-        for (p in data.periods) {
-            Text("${p.name} : ${p.absences} absence(s), ${p.late} retard(s), ${minutesLabel(p.minutes)}")
+        // Étendue de la tranche choisie (« Trimestre 1 · 01/09/2026 – 30/11/2026 »),
+        // seulement quand `/v1/periods` a publié des bornes. Les COMPTEURS, eux,
+        // sont dans les titres de section : une seule fois, pas deux (avant #141,
+        // ils étaient doublés — une ligne par période, puis une ligne de totaux).
+        if (selected != null && (selected.startMillis != null || selected.endMillis != null)) {
+            Text(
+                text = periodLabel(selected.period),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        Text("Absences : ${totals.first} · Retards : ${totals.second}")
-        if (rows.isEmpty()) {
-            // Capacite dynamique : aucune presence publiee = etat vide propre.
-            Text("Aucune absence ni retard.")
+        if (sections.isEmpty()) {
+            // Aucun événement : UNE carte d'état, pas une carte de statut qui
+            // annoncerait « aucune heure injustifiée » au-dessus d'un vide.
+            PapEmptyState(
+                icon = Icons.Filled.CheckCircle,
+                title = "Aucune absence ni retard",
+                description = "L'établissement n'a rien publié sur cette période.",
+                action = { Button(onClick = { refresh() }) { Text("Actualiser") } },
+            )
         } else {
-            for (row in rows) {
-                val span = if (row.dateEnd != null) "${row.date} → ${row.dateEnd}" else row.date
-                val subject = row.subject?.let { " en $it" } ?: ""
-                val minutes = row.minutes?.let { " (${minutesLabel(it)})" } ?: ""
-                val justified = row.justified?.let { if (it) " · justifiée" else " · non justifiée" } ?: ""
-                Text("${absenceKindLabel(row.kind)} $span$subject$minutes$justified")
-                // Donnee etablissement ci-dessous : affichee telle quelle, jamais executee (I6).
-                if (row.motif != null) Text(row.motif)
-            }
+            AttendanceStatusCard(status = status)
+            AttendanceSections(
+                sections = sections,
+                subjectPrefs = subjectPrefs,
+                nowMillis = nowMillis,
+            )
+        }
+        // #87 : Sanctions est une CAPACITÉ, pas un bouton permanent — un
+        // établissement qui n'active pas l'onglet ne voit pas la destination.
+        // #162 veut les destinations dans la barre du haut (`TOP_BAR_ACTIONS`),
+        // qui est le seul endroit qui sait nouer `onNavigate` ET la capacité ;
+        // ce bouton est donc le repli explicite tant que cette entrée n'existe
+        // pas — et il ne sort qu'avec des données, jamais sous un état d'erreur.
+        if (sanctionsVisible) {
+            Button(onClick = onSanctions) { Text("Sanctions") }
         }
     }
 }
 
+/**
+ * Écran « Sanctions » : une carte par sanction, sans date ISO ni gravité nue.
+ *
+ * [onBack] n'est plus câblé dans le corps : la route a sa flèche de retour dans
+ * la barre du haut (`TOP_BARS`, cf. `AppShell.kt`), donc un bouton « Retour »
+ * sous la liste était un doublon. Le paramètre reste parce que `AppNav.kt` le
+ * passe — le retirer serait un changement hors périmètre de cet écran.
+ */
+@Suppress("UNUSED_PARAMETER")
 @Composable
-fun PunishmentsRoute(repo: SyncedRepository, baseUrl: String, onBack: () -> Unit = {}) {
+fun PunishmentsRoute(
+    repo: SyncedRepository,
+    baseUrl: String,
+    onBack: () -> Unit = {},
+    refreshTick: Int = 0,
+) {
+    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     CachedSchoolRoute(
         repo = repo,
         baseUrl = baseUrl,
         resource = CachePolicy.PUNISHMENTS,
-        subtitle = "Punitions vie scolaire",
-        extraLabel = "Retour",
-        onExtra = onBack,
-    ) { payload ->
-        val rows = punishmentsFrom(payload)
+        refreshTick = refreshTick,
+    ) { payload, refresh ->
+        LaunchedEffect(payload) { nowMillis = System.currentTimeMillis() }
+        val rows = remember(payload) { punishmentsFrom(payload) }
         if (rows.isEmpty()) {
-            Text("Aucune sanction publiée.")
+            PapEmptyState(
+                icon = Icons.Filled.Warning,
+                title = "Aucune sanction publiée",
+                description = "L'établissement n'a publié aucune sanction.",
+                action = { Button(onClick = { refresh() }) { Text("Actualiser") } },
+            )
         } else {
             for (row in rows) {
-                val gravity = row.gravity?.let { " (gravité $it)" } ?: ""
-                Text("${row.date} · ${row.type}$gravity")
-                Text(row.motif)
+                PunishmentCard(row = row, nowMillis = nowMillis)
             }
         }
     }

@@ -430,10 +430,10 @@ describe("briques d'interface (#136)", () => {
     // « Données hors-ligne (périmé). » étaient toujours là. Ils disparaissent
     // quand un écran adopte `PapErrorState` / `PapStaleBanner`. Ce test
     // échouera le jour où le suivant le fera — c'est le témoin, pas le but.
-    // #137 (EDT) puis #138 (Tâches) sont les écrans migrés : `TimetableWeek.kt`
-    // et `Assignments.kt` sont donc sortis de la liste, et l'assertion compte
-    // les six restants.
-    const fichiers = ["Attendance.kt", "CanteenMenus.kt", "MessagesScreen.kt", "NewsScreen.kt", "RevisionSheets.kt", "SecurityAlertsScreen.kt"];
+    // #137 (EDT), #138 (Tâches) puis #141 (vie scolaire) sont les écrans
+    // migrés : `TimetableWeek.kt`, `Assignments.kt` et `Attendance.kt` sont donc
+    // sortis de la liste, et l'assertion compte les cinq restants.
+    const fichiers = ["CanteenMenus.kt", "MessagesScreen.kt", "NewsScreen.kt", "RevisionSheets.kt", "SecurityAlertsScreen.kt"];
     const restants = fichiers.filter((f) => readFileSync(join(UI, f), "utf8").includes('"Erreur réseau. Réessayer."'));
     expect({ ecransPasEncoreMigres: restants.length }).toEqual({ ecransPasEncoreMigres: fichiers.length });
     // Le témoin inversé : chaque écran migré affiche le VRAI message (#137, #138).
@@ -447,5 +447,12 @@ describe("briques d'interface (#136)", () => {
     expect(devoirs).toContain("PapStaleBanner(fetchedAt = fetchedAt");
     expect(devoirs).toContain("PapLoading()");
     expect(devoirs).toContain("PapEmptyState(");
+    // #141 : la vie scolaire (absences + retards, sanctions), même coquille.
+    const vieScolaire = readFileSync(join(UI, "Attendance.kt"), "utf8");
+    expect({ vieScolaire: vieScolaire.includes('"Erreur réseau. Réessayer."') }).toEqual({ vieScolaire: false });
+    expect(vieScolaire).toContain("PapErrorState(message = error?.message");
+    expect(vieScolaire).toContain("PapStaleBanner(fetchedAt = data.fetchedAt");
+    expect(vieScolaire).toContain("PapLoading()");
+    expect(vieScolaire).toContain("PapEmptyState(");
   });
 });
