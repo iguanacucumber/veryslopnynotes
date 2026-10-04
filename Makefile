@@ -1,4 +1,8 @@
-.PHONY: check lint typecheck unit architecture contracts security check-kotlin android-compile architecture-test integration-api e2e e2e-grades e2e-assignments e2e-manuals e2e-revision serve build
+.PHONY: check lint typecheck unit architecture contracts security check-kotlin android-compile architecture-test integration-api e2e e2e-grades e2e-assignments e2e-manuals e2e-revision runServer buildDebugApk buildRelApk build
+
+# Découverte JDK/SDK partagée par android-compile, buildDebugApk, buildRelApk :
+# une seule implémentation, sinon une des trois finit par oublier la borne 17-21.
+ANDROID_ENV = . agents/runtime/android-env.sh
 
 check: lint typecheck unit architecture contracts security check-kotlin android-compile
 
@@ -33,36 +37,48 @@ check-kotlin:
 # résolution de symbole, un import manquant ou une surcharge ambiguë : les miroirs
 # TS et check-kotlin ne les voient pas (piège réel : `MAX_LABEL_CHARS` non
 # qualifié dans core/Homework.kt, invisible côté TS).
-# Exigences : android/gradlew (dans le repo), un SDK Android, et un JDK 17-21 —
-# Gradle 8.7 REFUSE un JDK > 21 (échec opaque). Outillage absent = SKIP bruyant,
-# jamais un faux vert : `make check` dit alors explicitement ce qu'il n'a pas fait.
-# Installation (une fois) : JDK 17 via Adoptium, puis
-#   sdkmanager "platforms;android-34" "build-tools;34.0.0" platform-tools
+# Outillage absent = SKIP bruyant, jamais un faux vert : `make check` dit alors
+# ce qu'il n'a pas fait. Les commandes APK (buildDebugApk/buildRelApk) échouent
+# au lieu de sauter : un APK demandé en silence n'en est pas un.
 android-compile:
-	@JDK=""; \
-	for cand in "$${ANDROID_JDK_HOME}" "$${JAVA_HOME}" "$$HOME/.cache/jdk17"; do \
-	  [ -x "$$cand/bin/java" ] || continue; \
-	  v=$$("$$cand/bin/java" -version 2>&1 | sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p'); \
-	  if [ -n "$$v" ] && [ "$$v" -ge 17 ] && [ "$$v" -le 21 ]; then JDK="$$cand"; break; fi; \
-	done; \
-	SDK="$${ANDROID_HOME:-$${ANDROID_SDK_ROOT:-}}"; \
-	if [ -z "$$SDK" ] && [ -f android/local.properties ]; then \
-	  SDK=$$(sed -n 's/^sdk\.dir=//p' android/local.properties); \
-	fi; \
-	if [ ! -x android/gradlew ]; then \
-	  echo "android-compile SKIP : android/gradlew absent (wrapper non commité ?)."; \
-	  echo "  compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
-	elif [ -z "$$JDK" ]; then \
+	@$(ANDROID_ENV); \
+	jdk=$$(android_jdk); sdk=$$(android_sdk); \
+	if [ -z "$$jdk" ]; then \
 	  echo "android-compile SKIP : aucun JDK 17-21 (Gradle 8.7 refuse > 21)."; \
 	  echo "  compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
-	elif [ -z "$$SDK" ] || [ ! -d "$$SDK" ]; then \
+	elif [ -z "$$sdk" ]; then \
 	  echo "android-compile SKIP : SDK Android absent (ANDROID_HOME ou android/local.properties)."; \
 	  echo "  compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
 	else \
-	  echo "android-compile : JDK $$JDK, SDK $$SDK"; \
-	  cd android && JAVA_HOME="$$JDK" ANDROID_HOME="$$SDK" ./gradlew --console=plain \
+	  echo "android-compile : JDK $$jdk, SDK $$sdk"; \
+	  cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain \
 	    :core:compileDebugKotlin :data:compileDebugKotlin :ui:compileDebugKotlin :app:compileDebugKotlin; \
 	fi
+
+# APK debug : clé de signature de debug (hors repo, générée par Gradle).
+buildDebugApk:
+	@$(ANDROID_ENV); \
+	jdk=$$(android_jdk); sdk=$$(android_sdk); \
+	if [ -z "$$jdk" ] || [ -z "$$sdk" ]; then \
+	  echo "buildDebugApk : outillage absent (JDK=$${jdk:-aucun}, SDK=$${sdk:-aucun})."; \
+	  android_toolchain_hint; exit 1; \
+	fi; \
+	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleDebug; \
+	echo "APK debug : android/app/build/outputs/apk/debug/app-debug.apk"
+
+# APK release : signé SI les credentials de signature sont dans l'environnement
+# (STORE_FILE + mots de passe/alias — JAMAIS dans le repo, voir docs/RELEASE.md),
+# non signé sinon. Gradle ne le dit pas toujours : le rappel ci-dessous est
+# obligatoire pour que personne ne croie avoir un APK publiable.
+buildRelApk:
+	@$(ANDROID_ENV); \
+	jdk=$$(android_jdk); sdk=$$(android_sdk); \
+	if [ -z "$$jdk" ] || [ -z "$$sdk" ]; then \
+	  echo "buildRelApk : outillage absent (JDK=$${jdk:-aucun}, SDK=$${sdk:-aucun})."; \
+	  android_toolchain_hint; exit 1; \
+	fi; \
+	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleRelease; \
+	echo "APK release : android/app/build/outputs/apk/release/ (sigNE si STORE_FILE présent, sinon NON signé)"
 
 # tests/integration : API locale sans secret (0.7.0 : plus de .env.local, donc
 # plus rien à charger — le serveur ne détient aucun credential).
@@ -86,10 +102,10 @@ e2e-revision:
 
 # Serveur local : PORT/HOST -> routes. 0.7.0 : aucun credential à fournir, le
 # serveur démarre vide et le compte s'ouvre via POST /v1/setup (QR envoyé par l'app).
-serve:
+runServer:
 	bun run server/infrastructure/http.ts
 
 build:
 	bun run agents/runtime/check-secrets.ts
 	docker build -t veryslopnynotes-server:local -f Dockerfile.server . || echo "skip docker (daemon absent)"
-	@if [ -d android/app ]; then echo "APK: voir android/README.md (assembleDebug, cle hors repo)"; fi
+	@if [ -d android/app ]; then echo "APK : make buildDebugApk / make buildRelApk (cle de signature hors repo)"; fi

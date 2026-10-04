@@ -19,8 +19,8 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 | Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.7.0`), miroir OpenAPI |
 | Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (32 routes, 7 types d'événements) |
 | Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, assistant de connexion en 3 étapes (serveur → établissement → QR scanné + PIN), SSE, aide devoirs |
-| Point d'entrée HTTP serveur (`make serve`, Docker) | Câblé : setup (QR de l'app) → session Pronote → reader → snapshot → routes, ports d'écriture inclus. **Zéro credential serveur** |
-| Garde-fous sécurité (I1–I8) + tests | 613 tests verts, scan d'architecture et de secrets en CI locale |
+| Point d'entrée HTTP serveur (`make runServer`, Docker) | Câblé : setup (QR de l'app) → session Pronote → reader → snapshot → routes, ports d'écriture inclus. **Zéro credential serveur** |
+| Garde-fous sécurité (I1–I8) + tests | 618 tests verts, scan d'architecture et de secrets en CI locale |
 | Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'établissement = **vide propre** |
 
 ## Fonctionnalités
@@ -52,22 +52,27 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 
 ## Démarrage rapide
 
-Prérequis : [Bun](https://bun.sh) 1.4.2 (serveur) et, pour l'app, un SDK Android + JDK 17.
+Prérequis : [Bun](https://bun.sh) 1.4.2 (serveur) et, pour l'app, un SDK Android + un
+JDK 17-21 (Gradle 8.7 refuse un JDK plus récent).
 
 ```bash
 bun install
-make check                     # secrets + typecheck + unit + arch + contracts + security
+make check                     # secrets + typecheck + unit + arch + contracts + security + compile Kotlin
 make e2e                       # tests bout-en-bout (store seed, zéro réseau)
 make integration-api           # tests d'intégration (API locale, zéro secret)
-make serve                     # serveur branché : lecture réelle + routes (voir PORT/HOST)
+make runServer                 # serveur branché : lecture réelle + routes (voir PORT/HOST)
 ```
 
 Client Android :
 
 ```bash
-cd android
-./gradlew assembleDebug        # APK debug, clé hors dépôt
+make buildDebugApk             # APK debug  -> android/app/build/outputs/apk/debug/
+make buildRelApk               # APK release (signé si STORE_FILE est dans l'environnement)
 ```
+
+Les trois commandes Gradle (`buildDebugApk`, `buildRelApk`, `android-compile`) trouvent
+leur JDK et leur SDK toutes seules, et **échouent** si l'outillage manque : un APK
+demandé en silence n'en est pas un. Prérequis et installation : `android/README.md`.
 
 Hôte serveur côté app : `android/local.properties` (non commité) ou env `SERVER_HOST`.
 Défaut émulateur `10.0.2.2:3000` ; hors émulateur, HTTPS obligatoire. Cet hôte
@@ -196,7 +201,7 @@ make integration-api        # API locale, zéro secret
 make build                  # image Docker + rappel APK
 ```
 
-613 tests, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
+618 tests, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
 La CI locale est `make check` : un changement qui casse un invariant est bloquant, même si
 fonctionnellement il passe.
 
