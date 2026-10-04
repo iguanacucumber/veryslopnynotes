@@ -254,9 +254,10 @@ fun contrastRatio(a: Color, b: Color): Float {
 
 /**
  * Encre lisible sur [background] : **par contraste mesuré**, jamais du blanc en
- * dur. `Competences.kt` force du texte blanc sur une puce dont la couleur vient
- * d'un hachage du libellé — une puce jaune tombait alors à 1.1:1. Ici on
- * compare l'encre de marque au blanc et on garde le meilleur des deux.
+ * dur. L'écran Compétences (supprimé en #184) forçait du texte blanc sur une
+ * puce dont la couleur venait d'un hachage du libellé — une puce jaune tombait
+ * alors à 1.1:1. Ici on compare l'encre de marque au blanc et on garde le
+ * meilleur des deux.
  */
 fun bestContentOn(background: Color): Color =
     if (contrastRatio(background, PapillonInk) >= contrastRatio(background, Color.White)) {

@@ -20,7 +20,7 @@ const AT = "2026-10-02T07:00:00.000Z";
 
 const CAPS: Capabilities = capabilitiesFromProbe(
   syntheticAccountId,
-  { grades: true, homework: true, timetable: true, evaluations: false, news: true, menus: false, attendance: true, punishments: true, profile: true },
+  { grades: true, homework: true, timetable: true, news: true, menus: false, attendance: true, punishments: true, profile: true },
   AT,
 );
 
@@ -73,6 +73,7 @@ describe("e2e sync (#87)", () => {
     expect(body.capabilities?.tabs).toEqual(["grades", "homework", "timetable", "news", "attendance", "punishments", "profile"]);
     // Onglet absent de l'établissement = capacité false, jamais une erreur.
     expect(body.capabilities?.tabs).not.toContain("menus");
+    // #184 : l'onglet Compétences a quitté le contrat, donc du contrat.
     expect(body.capabilities?.tabs).not.toContain("evaluations");
     expect(JSON.stringify(body)).not.toMatch(/sk-or-v1-|OPENROUTER_API_KEY|PRONOTE_PASSWORD/);
 
@@ -166,7 +167,7 @@ describe("e2e sync (#87)", () => {
   test("cohérence bout en bout : détection capacités → décision d'affichage", async () => {
     // Une réconciliation pure par onglet : l'app masque exactement les onglets
     // non listés, sans jamais masquer un onglet dont la capacité est inconnue.
-    const decisions = (["grades", "homework", "timetable", "evaluations", "news", "menus", "attendance", "punishments"] as const).map((tab) => ({
+    const decisions = (["grades", "homework", "timetable", "news", "menus", "attendance", "punishments"] as const).map((tab) => ({
       tab,
       visible: CAPS.tabs.includes(tab),
     }));
@@ -184,8 +185,9 @@ describe("e2e sync (#87)", () => {
     const menus = await handler(new Request("http://127.0.0.1/v1/menus", { headers: AUTH }));
     expect(menus.status).toBe(200);
     expect(((await menus.json()) as { menus: unknown[] }).menus).toEqual([]);
+    // #184 : `/v1/evaluations` n'est plus une route du contrat => 404 net,
+    // jamais une réponse vide présentée comme un onglet.
     const evals = await handler(new Request("http://127.0.0.1/v1/evaluations", { headers: AUTH }));
-    expect(evals.status).toBe(200);
-    expect(((await evals.json()) as { skills: unknown[] }).skills).toEqual([]);
+    expect(evals.status).toBe(404);
   });
 });

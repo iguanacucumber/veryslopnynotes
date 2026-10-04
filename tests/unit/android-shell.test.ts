@@ -38,7 +38,7 @@ const codeOnly = (src: string): string =>
 const constName = (route: string) => `ROUTE_${route.toUpperCase()}`;
 
 const TABS = ["index", "calendar", "tasks", "grades", "profile"];
-const SECONDARY = ["news", "canteen", "attendance", "sanctions", "messages", "alerts", "fiches", "competences"];
+const SECONDARY = ["news", "canteen", "attendance", "sanctions", "messages", "alerts", "fiches"];
 const TITLES: Record<string, string> = {
   index: "Accueil",
   calendar: "EDT",
@@ -52,7 +52,6 @@ const TITLES: Record<string, string> = {
   messages: "Messages",
   alerts: "Alertes sécurité",
   fiches: "Fiches révision",
-  competences: "Compétences",
   settings: "Réglages",
   pairing: "Appairage",
 };
@@ -184,15 +183,16 @@ describe("coquille applicative (#135)", () => {
     // valeur exacte (989 avant #135).
     const lines = nav.trimEnd().split("\n").length;
     expect({ lines, under450: lines <= 450 }).toEqual({ lines, under450: true });
-    // Aucune route n'est un littéral nu : 15 constantes, toutes utilisées.
+    // Aucune route n'est un littéral nu : 14 constantes, toutes utilisées (#184
+    // a retiré celle de Compétences).
     const routes = [...nav.matchAll(/const val (ROUTE_[A-Z]+) = "([a-z]+)"/g)].map((m) => [m[1]!, m[2]!]);
-    expect(routes).toHaveLength(15);
+    expect(routes).toHaveLength(14);
     for (const [constName, value] of routes) {
       expect({ constName, used: new RegExp(`composable\\(${constName}`).test(nav) }).toEqual({ constName, used: true });
       expect({ value, used: nav.includes(`routeDeepLink(${constName})`) }).toEqual({ value, used: true });
     }
-    // Les 4 routes qui étaient en littéral nu ont bien leur constante.
-    for (const r of ["ROUTE_ALERTS", "ROUTE_FICHES", "ROUTE_COMPETENCES", "ROUTE_SANCTIONS"]) {
+    // Les 3 routes qui étaient en littéral nu ont bien leur constante.
+    for (const r of ["ROUTE_ALERTS", "ROUTE_FICHES", "ROUTE_SANCTIONS"]) {
       expect({ r, declared: nav.includes(`const val ${r} = `) }).toEqual({ r, declared: true });
     }
     // Navigation : chaque `navigate(` du graphe porte `launchSingleTop`, sinon
@@ -291,7 +291,7 @@ describe("coquille applicative (#135)", () => {
   test("fenêtre sans barre d'action : pas de marque statique au-dessus de la barre du haut", () => {
     // #135 : sans thème de fenêtre, la plateforme pose une barre d'action
     // (`android:id/action_bar` dans le dump uiautomator) qui affiche le LABEL de
-    // l'app — « VerySlopyNyNotes » sur les 15 routes, la marque statique que
+    // l'app — « VerySlopyNyNotes » sur les 14 routes, la marque statique que
     // cette issue retire de l'interface, plus 56 dp de hauteur perdue.
     const manifest = readFileSync(join(ROOT, "android/app/src/main/AndroidManifest.xml"), "utf8");
     expect(manifest).toContain('android:theme="@style/Theme.Veryslopynotes"');

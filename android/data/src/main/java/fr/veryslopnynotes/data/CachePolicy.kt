@@ -7,9 +7,6 @@ object CachePolicy {
     const val GRADES = "grades"
     const val ASSIGNMENTS = "assignments"
     const val TIMETABLE = "timetable"
-    // #78 : évaluations par compétences (miroir CACHEABLE_RESOURCES contrats).
-    const val EVALUATIONS = "evaluations"
-
     // #79 : actualités établissement (liste lente, TTL = EDT).
     const val NEWS = "news"
     // #81 : menus cantine (publiés à la semaine).
@@ -42,8 +39,6 @@ object CachePolicy {
     const val TTL_TIMETABLE_MS = 60L * 60L * 1000L
     const val TTL_NEWS_MS = 60L * 60L * 1000L
     const val TTL_MENUS_MS = 6L * 60L * 60L * 1000L
-    // #78 : évaluations par compétences, même cadence que les notes.
-    const val TTL_EVALUATIONS_MS = 15L * 60L * 1000L
     // #77 : vie scolaire, rythme EDT (saisie par l'établissement).
     const val TTL_ATTENDANCE_MS = 60L * 60L * 1000L
     const val TTL_PUNISHMENTS_MS = 60L * 60L * 1000L
@@ -55,7 +50,7 @@ object CachePolicy {
 
     fun isCacheable(resource: String): Boolean =
         resource == GRADES || resource == ASSIGNMENTS || resource == TIMETABLE ||
-            resource == EVALUATIONS || resource == NEWS || resource == MENUS ||
+            resource == NEWS || resource == MENUS ||
             resource == ATTENDANCE || resource == PUNISHMENTS ||
             resource == CAPABILITIES || resource == DISCUSSIONS ||
             resource == SECURITY_ALERTS
@@ -66,7 +61,6 @@ object CachePolicy {
         TIMETABLE -> TTL_TIMETABLE_MS
         NEWS -> TTL_NEWS_MS
         MENUS -> TTL_MENUS_MS
-        EVALUATIONS -> TTL_EVALUATIONS_MS
         ATTENDANCE -> TTL_ATTENDANCE_MS
         PUNISHMENTS -> TTL_PUNISHMENTS_MS
         CAPABILITIES -> TTL_CAPABILITIES_MS

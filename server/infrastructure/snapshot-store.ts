@@ -13,7 +13,6 @@ import type {
   CanteenMenu,
   Capabilities,
   Discussion,
-  Evaluation,
   Grade,
   Message,
   NewsItem,
@@ -38,7 +37,6 @@ export interface SnapshotPatch {
   readonly entries?: TimetableEntry[];
   readonly periods?: Period[];
   readonly providedAverages?: ProvidedAverages | null;
-  readonly evaluations?: Evaluation[];
   readonly news?: NewsItem[];
   readonly canteenMenus?: CanteenMenu[];
   readonly canteenBalance?: CanteenBalance | null;
@@ -60,7 +58,6 @@ function patchAccountId(patch: SnapshotPatch): string | null {
     patch.grades?.[0]?.accountId ??
     patch.assignments?.[0]?.accountId ??
     patch.entries?.[0]?.accountId ??
-    patch.evaluations?.[0]?.accountId ??
     patch.news?.[0]?.accountId ??
     patch.canteenMenus?.[0]?.accountId ??
     patch.absences?.[0]?.accountId ??
@@ -75,7 +72,6 @@ export class SnapshotStore implements ReadStore {
   private stateEntries: TimetableEntry[] = [];
   private statePeriods: Period[] = [];
   private provided: ProvidedAverages | null = null;
-  private stateEvaluations: Evaluation[] = [];
   private stateNews: NewsItem[] = [];
   private stateCanteenMenus: CanteenMenu[] = [];
   private stateCanteenBalance: CanteenBalance | null = null;
@@ -117,7 +113,6 @@ export class SnapshotStore implements ReadStore {
     if (patch.entries) this.stateEntries = structuredClone(patch.entries);
     if (patch.periods) this.statePeriods = structuredClone(patch.periods);
     if (patch.providedAverages !== undefined) this.provided = structuredClone(patch.providedAverages);
-    if (patch.evaluations) this.stateEvaluations = structuredClone(patch.evaluations);
     if (patch.news) this.stateNews = structuredClone(patch.news);
     if (patch.canteenMenus) this.stateCanteenMenus = structuredClone(patch.canteenMenus);
     if (patch.canteenBalance !== undefined) this.stateCanteenBalance = structuredClone(patch.canteenBalance);
@@ -137,7 +132,6 @@ export class SnapshotStore implements ReadStore {
     this.stateEntries = [];
     this.statePeriods = [];
     this.provided = null;
-    this.stateEvaluations = [];
     this.stateNews = [];
     this.stateCanteenMenus = [];
     this.stateCanteenBalance = null;
@@ -168,9 +162,6 @@ export class SnapshotStore implements ReadStore {
   }
   providedAverages(): ProvidedAverages | null {
     return this.provided === null ? null : structuredClone(this.provided);
-  }
-  evaluations(): Evaluation[] {
-    return structuredClone(this.stateEvaluations);
   }
   news(): NewsItem[] {
     return structuredClone(this.stateNews);
