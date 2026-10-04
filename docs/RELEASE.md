@@ -52,7 +52,7 @@ make build   # check-secrets + docker build (skip si daemon absent)
    ou env `STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD`.
 3. Builder :
    ```sh
-   cd android && ./gradlew assembleRelease
+   make buildRelApk   # equivalent : cd android && ./gradlew assembleRelease
    ```
    Sans clé : build OK, APK non signé (à signer en local).
    `SERVER_HOST` via `local.properties` `server.host` ou env (défaut
