@@ -424,21 +424,28 @@ describe("briques d'interface (#136)", () => {
     expect(kt.match(/remember \{ mutableStateOf/g)?.length).toBe(1);
   });
 
-  test("les écrans qui jetaient le message serveur : un seul a été migré, par #137", () => {
+  test("les écrans qui jetaient le message serveur : un seul a été migré, par #137 et #138", () => {
     // Honnêteté sur le périmètre : #136 livre les BRIQUES et ne touche aucun
     // écran, donc les `Text("Erreur réseau. Réessayer.")` et les
-    // « Données hors-ligne (périmé). » sont toujours là. Ils disparaîtront quand
-    // la vague suivante adoptera `PapErrorState` / `PapStaleBanner`. Ce test
-    // échouera le jour où ce sera fait — c'est le témoin, pas le but.
-    // #137 (EDT) est le PREMIER écran migré : `TimetableWeek.kt` est donc sorti
-    // de la liste, et l'assertion compte les sept restants.
-    const fichiers = ["Assignments.kt", "Attendance.kt", "CanteenMenus.kt", "MessagesScreen.kt", "NewsScreen.kt", "RevisionSheets.kt", "SecurityAlertsScreen.kt"];
+    // « Données hors-ligne (périmé). » étaient toujours là. Ils disparaissent
+    // quand un écran adopte `PapErrorState` / `PapStaleBanner`. Ce test
+    // échouera le jour où le suivant le fera — c'est le témoin, pas le but.
+    // #137 (EDT) puis #138 (Tâches) sont les écrans migrés : `TimetableWeek.kt`
+    // et `Assignments.kt` sont donc sortis de la liste, et l'assertion compte
+    // les six restants.
+    const fichiers = ["Attendance.kt", "CanteenMenus.kt", "MessagesScreen.kt", "NewsScreen.kt", "RevisionSheets.kt", "SecurityAlertsScreen.kt"];
     const restants = fichiers.filter((f) => readFileSync(join(UI, f), "utf8").includes('"Erreur réseau. Réessayer."'));
     expect({ ecransPasEncoreMigres: restants.length }).toEqual({ ecransPasEncoreMigres: fichiers.length });
-    // Le témoin inversé : l'EDT affiche le VRAI message (cf. #137).
+    // Le témoin inversé : chaque écran migré affiche le VRAI message (#137, #138).
     const edt = readFileSync(join(UI, "TimetableWeek.kt"), "utf8");
     expect({ edt: edt.includes('"Erreur réseau. Réessayer."') }).toEqual({ edt: false });
     expect(edt).toContain("PapErrorState(message = error.message");
     expect(edt).toContain("PapStaleBanner(");
+    const devoirs = readFileSync(join(UI, "Assignments.kt"), "utf8");
+    expect({ devoirs: devoirs.includes('"Erreur réseau. Réessayer."') }).toEqual({ devoirs: false });
+    expect(devoirs).toContain("PapErrorState(message = error");
+    expect(devoirs).toContain("PapStaleBanner(fetchedAt = fetchedAt");
+    expect(devoirs).toContain("PapLoading()");
+    expect(devoirs).toContain("PapEmptyState(");
   });
 });

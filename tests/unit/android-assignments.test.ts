@@ -11,9 +11,22 @@ import {
 } from "../../shared/contracts/models";
 
 // Miroir des helpers Kotlin (Assignment.kt, AssignmentsRepository.kt,
-// Assignments.kt, ServerConfig.kt) — doivent rester en sync. org.json = SDK
-// Android, aucune dépendance ajoutée (le build Gradle n'est pas exécuté par
-// `make check`). Instants injectés : aucun Date.now() incontrôlé.
+// Assignments.kt, AssignmentsSections.kt, ServerConfig.kt) — doivent rester en
+// sync. org.json = SDK Android, aucune dépendance ajoutée (le build Gradle n'est
+// pas exécuté par `make check`). Instants injectés : aucun Date.now()
+// incontrôlé.
+//
+// Ce que ce test PROUVE pour #138 (logique pure de l'écran Devoirs) :
+//   - le RANGEMENT par section (en retard / aujourd'hui / à venir / terminés),
+//     y compris les deux décisions qui ne vont pas de soi : le FAIT prime sur la
+//     date, et la comparaison se fait au JOUR (un devoir de ce matin reste
+//     « aujourd'hui », il ne devient pas « en retard » à 14 h) ;
+//   - le filtre matière + la recherche sans casse NI accent ;
+//   - la fenêtre de semaine : lundi ISO, ± n semaines, numéro de semaine, plage
+//     affichée — les quatre valeurs qui partent dans la query de l'API ;
+//   - par lecture de la source : la carte, la pastille « fait », les sections
+//     repliées, `weight(1f)`, l'`Intent` des pièces jointes, et l'absence de
+//     toute dépendance ajoutée.
 
 const UI = join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui");
 const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/veryslopnynotes/data");
@@ -167,6 +180,220 @@ function tsToggleOptimistic(list: Item[], id: string, done: boolean, ok: boolean
   return ok ? pending : list;
 }
 
+// --- AssignmentsSections.kt (logique pure #138) -------------------------------
+//
+// Même zone que le miroir de `relativeTimeFr` (android-pap-components.test.ts) :
+// `java.time.atZone` prend une ZoneId, donc le miroir prend une timeZone IANA,
+// et NOW est injecté — sinon « aujourd'hui » dépendrait de l'heure du test.
+
+const ZONE = "Europe/Paris";
+/** 2026-10-04 14:00 à Paris : un DIMANCHE, sa semaine commence le 28/09. */
+const NOW = Date.UTC(2026, 9, 4, 12, 0);
+
+// Miroir de `relativeTimeFr` (PapComponents.kt #136), recopié depuis
+// android-pap-components.test.ts où ses branches sont testées une par une : ici
+// il ne sert qu'à prouver que l'échéance d'un devoir passe par les seuils
+// français déjà éprouvés (« il y a 3 jours », « demain 08:00 »…).
+const MIN = 60_000;
+const HOUR = 3_600_000;
+
+function tsRelativeTimeFr(epochMillis: number, now: number, zone: string = ZONE): string {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = (ms: number): Record<string, string> => {
+    const p: Record<string, string> = {};
+    for (const part of fmt.formatToParts(new Date(ms))) if (part.type !== "literal") p[part.type] = part.value;
+    const y = Number(p.year), m = Number(p.month), d = Number(p.day);
+    return { hh: p.hour, mm: p.minute, day: String(Date.UTC(y, m - 1, d)) };
+  };
+  const delta = epochMillis - now;
+  const gap = Math.abs(delta);
+  const past = delta < 0;
+  if (gap < MIN) return "à l'instant";
+  const minutes = Math.floor(gap / MIN);
+  if (minutes < 60) return past ? `il y a ${minutes} min` : `dans ${minutes} min`;
+  const hours = Math.floor(gap / HOUR);
+  const there = parts(epochMillis);
+  const today = parts(now);
+  if (there.day === today.day) return past ? `il y a ${hours} h` : `dans ${hours} h`;
+  const clock = `${there.hh}:${there.mm}`;
+  const dayMs = Number(there.day);
+  const todayMs = Number(today.day);
+  if (past && dayMs === todayMs - 86_400_000) return `hier ${clock}`;
+  if (!past && dayMs === todayMs + 86_400_000) return `demain ${clock}`;
+  const days = Math.abs(dayMs - todayMs) / 86_400_000;
+  if (days < 7) return past ? `il y a ${days} jours` : `dans ${days} jours`;
+  const there2 = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" });
+  const p: Record<string, string> = {};
+  for (const part of there2.formatToParts(new Date(epochMillis))) if (part.type !== "literal") p[part.type] = part.value;
+  return `${p.day}/${p.month}/${p.year}`;
+}
+
+/** Jour civil local (« 2026-10-04 ») : le jour UTC serait le bug d'offset. */
+function tsLocalDay(millis: number, zone: string = ZONE): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(
+      new Date(millis),
+    );
+  } catch {
+    return "";
+  }
+}
+
+/** Miroir de `foldFr` : minuscules sans accent (NFD + diacritiques retirés).
+ *  Le Kotlin utilise `\p{InCombiningDiacriticalMarks}`, que le moteur de regex de
+ *  Bun ne connaît pas : la PLAGE des diacritiques combinants suffit au français
+ *  (accent aigu, grave, circonflexe, tréma, cédille). */
+function tsFoldFr(value: string): string {
+  return value
+    .toLocaleLowerCase("fr-FR")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]+/g, "")
+    .trim();
+}
+
+/** Miroir de `assignmentDueMillis` : `Instant.parse` n'accepte que l'instant ISO
+ *  COMPLET. JS `Date.parse` est plus permissif (il mange « 2026-10-05 »), donc
+ *  c'est le motif qui décide ici, sinon le miroir serait plus large que le Kotlin. */
+function tsDueMillis(iso: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(iso)) return null;
+  const ms = Date.parse(iso);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/** Miroir de `LocalDate.parse` : « AAAA-MM-JJ » uniquement, et un vrai jour. */
+function tsIsoDate(iso: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const ms = Date.parse(`${iso}T00:00:00Z`);
+  if (Number.isNaN(ms) || new Date(ms).toISOString().slice(0, 10) !== iso) return null;
+  return iso;
+}
+
+/** Miroir de `assignmentDay(iso, zone)` : instant OU date seule. */
+function tsAssignmentDay(iso: string, zone: string = ZONE): string | null {
+  const ms = tsDueMillis(iso);
+  if (ms !== null) {
+    const day = tsLocalDay(ms, zone);
+    return day === "" ? null : day;
+  }
+  return tsIsoDate(iso);
+}
+
+const SECTION_OVERDUE = "overdue";
+const SECTION_TODAY = "today";
+const SECTION_UPCOMING = "upcoming";
+const SECTION_DONE = "done";
+const SECTION_TITLES: [string, string][] = [
+  [SECTION_OVERDUE, "En retard"],
+  [SECTION_TODAY, "Aujourd'hui"],
+  [SECTION_UPCOMING, "À venir"],
+  [SECTION_DONE, "Terminés"],
+];
+
+/** Miroir de `assignmentSectionOf` : le FAIT prime, la comparaison est au JOUR. */
+function tsSectionOf(a: Item, nowMillis: number, zone: string = ZONE): string {
+  if (a.done) return SECTION_DONE;
+  const day = tsAssignmentDay(a.dueDate, zone);
+  if (day === null) return SECTION_UPCOMING;
+  const today = tsLocalDay(nowMillis, zone);
+  if (today === "") return SECTION_UPCOMING;
+  if (day < today) return SECTION_OVERDUE;
+  return day === today ? SECTION_TODAY : SECTION_UPCOMING;
+}
+
+/** Miroir de `assignmentSections` : les dates illisibles sont écartées, les
+ *  sections vides absentes, l'ordre est celui de l'écran. */
+function tsSections(
+  list: Item[],
+  nowMillis: number,
+  zone: string = ZONE,
+): { id: string; title: string; days: [string, Item[]][] }[] {
+  const dated = list.filter((a) => tsAssignmentDay(a.dueDate, zone) !== null);
+  const out: { id: string; title: string; days: [string, Item[]][] }[] = [];
+  for (const [id, title] of SECTION_TITLES) {
+    const days = tsByDay(dated.filter((a) => tsSectionOf(a, nowMillis, zone) === id));
+    if (days.length > 0) out.push({ id, title, days });
+  }
+  return out;
+}
+
+/** Miroir de `filterAssignments`. */
+function tsFilterAssignments(list: Item[], subject: string | null | undefined, query: string): Item[] {
+  const wanted = (subject ?? "").trim();
+  const needle = tsFoldFr(query);
+  return list.filter((a) => {
+    const sameSubject = wanted === "" || a.subject.trim() === wanted;
+    const matches = needle === "" || tsFoldFr(`${a.subject} ${a.title} ${a.description}`).includes(needle);
+    return sameSubject && matches;
+  });
+}
+
+/** Miroir de `weekStartIso` : lundi de la semaine, en ISO court. */
+function tsWeekStartIso(millis: number, zone: string = ZONE): string {
+  const day = tsLocalDay(millis, zone);
+  if (day === "") return "";
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Miroir de `shiftWeekIso` : une chaîne illisible est renvoyée TELLE QUELLE. */
+function tsShiftWeekIso(iso: string, weeks: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  d.setUTCDate(d.getUTCDate() + 7 * weeks);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Numéro de semaine ISO (`WeekFields.ISO.weekOfWeekBasedYear`) : le jeudi
+ *  décide de l'année, donc le calcul se fait sur le jeudi de la semaine. */
+function tsIsoWeekNumber(iso: string): number {
+  const d = new Date(`${iso}T00:00:00Z`);
+  const thursday = new Date(d.getTime());
+  thursday.setUTCDate(thursday.getUTCDate() - ((thursday.getUTCDay() + 6) % 7) + 3);
+  const firstThursday = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4));
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - ((firstThursday.getUTCDay() + 6) % 7) + 3);
+  return 1 + Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 86_400_000));
+}
+
+function tsWeekLabelFr(iso: string): string {
+  if (Number.isNaN(new Date(`${iso}T00:00:00Z`).getTime())) return "Semaine";
+  return `Semaine ${tsIsoWeekNumber(iso)}`;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+function tsWeekRangeFr(iso: string): string {
+  const start = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(start.getTime())) return "";
+  const end = new Date(start.getTime() + 6 * 86_400_000);
+  const short = (d: Date) => `${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}`;
+  const tail =
+    end.getUTCFullYear() === start.getUTCFullYear() ? short(end) : `${short(end)}/${end.getUTCFullYear()}`;
+  return `${short(start)} – ${tail}`;
+}
+
+/** Miroir de `assignmentDueLabel` : relatif si l'instant se parse, jour français
+ *  si la dueDate est une date seule, RIEN si la chaîne est illisible. */
+function tsAssignmentDueLabel(iso: string, nowMillis: number, zone: string = ZONE): string {
+  const ms = tsDueMillis(iso);
+  if (ms !== null) return tsRelativeTimeFr(ms, nowMillis, zone);
+  const day = tsIsoDate(iso);
+  if (day === null) return "";
+  const names = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+  // Kotlin : `dayOfWeek.value % 7` (lundi = 1 … dimanche = 7 → 0), donc JS
+  // `getUTCDay()` (dimanche = 0 … samedi = 6) donne déjà le même indice.
+  const index = new Date(`${day}T00:00:00Z`).getUTCDay();
+  return `${names[index]} ${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+}
+
 const REF = { id: "f1", label: "fiche.pdf", ref: "homework:0:file:0:f1" };
 const FULL = {
   id: "a1",
@@ -271,5 +498,197 @@ describe("miroir Kotlin devoirs #75", () => {
     expect(uiGradle).not.toContain("gson");
     expect(uiGradle).not.toContain("moshi");
     expect(uiGradle).not.toContain("kotlinx-serialization");
+  });
+});
+
+// Semaine de référence : dimanche 4 octobre 2026 à Paris. Les devoirs ci-dessous
+// sont datés AU JOUR LOCAL (08:00 Paris = 06:00Z), c'est ce qui décide des
+// sections — un décalage d'heure ne doit pas changer le rangement.
+const item = (id: string, over: Partial<Item> = {}): Item => ({
+  ...FULL,
+  id,
+  attachments: [],
+  lessonContent: null,
+  description: "",
+  ...over,
+});
+
+/** 08:00 à Paris : 06:00Z en octobre (UTC+2). */
+const at8 = (day: string) => `${day}T06:00:00Z`;
+
+const WEEK_ITEMS: Item[] = [
+  item("retard-vendredi", { subject: "Maths", dueDate: at8("2026-10-02") }),
+  item("aujourdhui", { subject: "Maths", dueDate: at8("2026-10-04") }),
+  item("demain", { subject: "SVT", dueDate: at8("2026-10-05") }),
+  item("apres-demain", { subject: "SVT", dueDate: at8("2026-10-06") }),
+  item("retard-ancien", { subject: "Histoire", dueDate: at8("2026-09-30") }),
+  item("fait-passe", { subject: "Maths", dueDate: at8("2026-10-01"), done: true }),
+  item("fait-futur", { subject: "Histoire", dueDate: at8("2026-10-07"), done: true }),
+];
+
+describe("sections, filtres et semaine (#138)", () => {
+  test("rangement : en retard, aujourd'hui, à venir, terminés — dans cet ordre", () => {
+    const sections = tsSections(WEEK_ITEMS, NOW);
+    expect(sections.map((s) => s.id)).toEqual([SECTION_OVERDUE, SECTION_TODAY, SECTION_UPCOMING, SECTION_DONE]);
+    expect(sections.map((s) => s.title)).toEqual(["En retard", "Aujourd'hui", "À venir", "Terminés"]);
+  });
+
+  test("le FAIT prime sur la date : un devoir rendu reste dans « Terminés »", () => {
+    const byId = new Map(tsSections(WEEK_ITEMS, NOW).flatMap((s) => s.days.flatMap(([, l]) => l).map((a) => [a.id, s.id])));
+    // Rendu et daté de la semaine prochaine : « À venir » l'avalerait à chaque
+    // rechargement, l'utilisateur le reverrait comme un travail à rendre.
+    expect(byId.get("fait-futur")).toBe(SECTION_DONE);
+    // Rendu et daté de la semaine passée : pas davantage « En retard ».
+    expect(byId.get("fait-passe")).toBe(SECTION_DONE);
+    // Non rendu, daté du jour même : « Aujourd'hui », pas « En retard » — la
+    // comparaison se fait au JOUR, donc l'heure de la journée n'entre pas.
+    expect(byId.get("aujourdhui")).toBe(SECTION_TODAY);
+    expect(byId.get("retard-vendredi")).toBe(SECTION_OVERDUE);
+    expect(byId.get("demain")).toBe(SECTION_UPCOMING);
+  });
+
+  test("chaque section garde le regroupement par jour, en ordre croissant", () => {
+    const overdue = tsSections(WEEK_ITEMS, NOW)[0]!;
+    expect(overdue.days.map(([day]) => day)).toEqual(["2026-09-30", "2026-10-02"]);
+    expect(overdue.days.map(([, l]) => l.map((a) => a.id))).toEqual([["retard-ancien"], ["retard-vendredi"]]);
+    const upcoming = tsSections(WEEK_ITEMS, NOW)[2]!;
+    expect(upcoming.days.map(([day]) => day)).toEqual(["2026-10-05", "2026-10-06"]);
+  });
+
+  test("sections vides absentes, date illisible écartée (jamais de retard inventé)", () => {
+    expect(tsSections([], NOW)).toEqual([]);
+    // dueDate illisible : `assignmentsByDay` en tirerait un jour avec les dix
+    // premiers caractères (« pas une da »), donc la carte est écartée plutôt
+    // qu'affichée sous un intitulé fabriqué.
+    expect(tsSections([item("broke", { dueDate: "pas une date" })], NOW)).toEqual([]);
+    expect(tsAssignmentDay("pas une date")).toBeNull();
+    expect(tsDueMillis("pas une date")).toBeNull();
+    // Date SEULE (« 2026-10-05 ») : acceptée par le contrat, donc elle reste
+    // affichée et datée, même si `Instant.parse` la refuse.
+    expect(tsAssignmentDay("2026-10-05")).toBe("2026-10-05");
+    expect(tsSections([item("jour-seul", { dueDate: "2026-10-05" })], NOW)[0]?.id).toBe(SECTION_UPCOMING);
+    // Échéance lisible : relative si l'instant se parse, jour sinon, RIEN si la
+    // chaîne est du bruit (jamais un fragment de date affiché).
+    expect(tsAssignmentDueLabel("2026-10-02T06:00:00Z", NOW)).toBe("il y a 2 jours");
+    expect(tsAssignmentDueLabel("2026-10-05T06:00:00Z", NOW)).toBe("demain 08:00");
+    expect(tsAssignmentDueLabel("2026-10-04T12:00:00Z", NOW)).toBe("à l'instant");
+    expect(tsAssignmentDueLabel("2026-10-05", NOW)).toBe("lundi 05/10");
+    expect(tsAssignmentDueLabel("abcdefghij", NOW)).toBe("");
+  });
+
+  test("filtre matière : une matière absente donne l'écran vide, pas la liste entière", () => {
+    expect(tsFilterAssignments(WEEK_ITEMS, "Maths", "").map((a) => a.id)).toEqual([
+      "retard-vendredi",
+      "aujourdhui",
+      "fait-passe",
+    ]);
+    expect(tsFilterAssignments(WEEK_ITEMS, "SVT", "").map((a) => a.id)).toEqual(["demain", "apres-demain"]);
+    expect(tsFilterAssignments(WEEK_ITEMS, "Physique", "")).toEqual([]);
+    expect(tsFilterAssignments(WEEK_ITEMS, null, "").length).toBe(WEEK_ITEMS.length);
+    expect(tsFilterAssignments(WEEK_ITEMS, "", "").length).toBe(WEEK_ITEMS.length);
+  });
+
+  test("recherche : sans casse ni accent, sur la matière, le titre et la consigne", () => {
+    const list = [
+      item("e1", { subject: "Économie", title: "Étude de marché", description: "Rendre le dossier" }),
+      item("e2", { subject: "Maths", title: "Exos p.12", description: "Fractions" }),
+    ];
+    expect(tsFilterAssignments(list, null, "economie").map((a) => a.id)).toEqual(["e1"]);
+    expect(tsFilterAssignments(list, null, "ÉTUDE").map((a) => a.id)).toEqual(["e1"]);
+    expect(tsFilterAssignments(list, null, "exos").map((a) => a.id)).toEqual(["e2"]);
+    expect(tsFilterAssignments(list, null, "dossier").map((a) => a.id)).toEqual(["e1"]);
+    expect(tsFilterAssignments(list, null, "zzz")).toEqual([]);
+    // Matière + recherche se cumulent.
+    expect(tsFilterAssignments(list, "Maths", "economie")).toEqual([]);
+    expect(tsFoldFr("Économie")).toBe("economie");
+    expect(tsFoldFr("  Ça Va  ")).toBe("ca va");
+  });
+
+  test("fenêtre de semaine : lundi ISO, ± n semaines, numéro et plage affichés", () => {
+    // NOW = dimanche 4 octobre 2026 à Paris : sa semaine commence le 28/09.
+    expect(tsWeekStartIso(NOW)).toBe("2026-09-28");
+    // Un lundi reste son propre lundi, quelle que soit l'heure locale.
+    expect(tsWeekStartIso(Date.UTC(2026, 8, 28, 22, 30))).toBe("2026-09-28");
+    expect(tsWeekStartIso(Date.UTC(2026, 8, 28, 6, 0))).toBe("2026-09-28");
+    expect(tsShiftWeekIso("2026-09-28", 1)).toBe("2026-10-05");
+    expect(tsShiftWeekIso("2026-09-28", -1)).toBe("2026-09-21");
+    expect(tsShiftWeekIso("2026-10-05", -1)).toBe("2026-09-28");
+    // Fenêtre illisible : la navigation ne fabrique pas de date.
+    expect(tsShiftWeekIso("pas une date", 1)).toBe("pas une date");
+    expect(tsWeekLabelFr("2026-09-28")).toBe("Semaine 40");
+    expect(tsWeekLabelFr("2026-10-05")).toBe("Semaine 41");
+    expect(tsWeekLabelFr("2026-01-01")).toBe("Semaine 1");
+    expect(tsWeekLabelFr("pas une date")).toBe("Semaine");
+    expect(tsWeekRangeFr("2026-09-28")).toBe("28/09 – 04/10");
+    expect(tsWeekRangeFr("2026-12-28")).toBe("28/12 – 03/01/2027");
+    expect(tsWeekRangeFr("pas une date")).toBe("");
+  });
+
+  test("Kotlin : la semaine part dans la QUERY de l'API, pas dans un filtre local", () => {
+    const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
+    // La plage est passée au serveur via ServerConfig (chemin issu de core seul).
+    expect(screen).toContain("ServerConfig.assignmentsUrl(baseUrl, null, null, weekStart)");
+    expect(screen).toContain("api.buildGet(url.removePrefix(baseUrl))");
+    // Changer de semaine RELANCE le chargement (pas de filtre en mémoire).
+    expect(screen).toContain("LaunchedEffect(week) { refresh() }");
+    expect(screen).toContain("week = shiftWeekIso(week, weeks)");
+    // Le sélecteur de semaine ne peut pas écrire une query libre.
+    expect(screen).not.toMatch(/"\?from=|"\?weekStart=/);
+  });
+
+  test("Kotlin : le fait est visible (pastille pleine, « ✓ Terminé », rayure)", () => {
+    const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
+    // AVANT #138 : le seul rendu du `done` était le libellé du bouton.
+    expect(screen).not.toContain("Marquer non fait");
+    expect(screen).toContain('"✓ Terminé"');
+    expect(screen).toContain("TextDecoration.LineThrough");
+    expect(screen).toContain("bestContentOn(tint)");
+    expect(screen).toContain("LocalHapticFeedback");
+    expect(screen).toContain("private fun PapTaskCard");
+    // Sections : les quatre libellés français, le repli des terminés.
+    for (const label of ["En retard", "Aujourd'hui", "À venir", "Terminés"]) {
+      expect(readFileSync(join(UI, "AssignmentsSections.kt"), "utf8")).toContain(label);
+    }
+    expect(screen).toContain("SECTION_DONE && !doneOpen");
+    expect(screen).toContain("stickyHeader");
+    // `weight(1f)` : le défaut de #138 était un `LazyColumn` non pondéré.
+    expect(screen).toContain("Box(modifier = Modifier.weight(1f))");
+    // Consigne bornée (elle peut faire 2000 caractères) + dépliage.
+    expect(screen).toContain("DESCRIPTION_MAX_LINES = 3");
+    expect(screen).toContain("overflow = TextOverflow.Ellipsis");
+    expect(screen).toContain("Voir plus");
+  });
+
+  test("Kotlin : pièce jointe = puce cliquable + Intent sur le PROXY, jamais d'hôte tiers", () => {
+    const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
+    expect(screen).toContain("private fun AttachmentChips");
+    expect(screen).toContain("AssignmentsRepository.mediaUrl(baseUrl, accountId, att.ref)");
+    expect(screen).toContain("Intent(Intent.ACTION_VIEW, Uri.parse(url))");
+    expect(screen).toContain("context.startActivity(intent)");
+    // L'URL du proxy ne doit JAMAIS être journalisée (elle finit dans les logs).
+    const code = stripComments(screen);
+    expect(code).not.toMatch(/Log\.[diewv]|println\(/);
+    // Filtre matière en puces défilables + recherche.
+    expect(screen).toContain("private fun SubjectFilterRow");
+    expect(screen).toContain("LazyRow");
+    expect(screen).toContain("FilterChip");
+    expect(screen).toContain('label = { Text("Rechercher un devoir") }');
+  });
+
+  test("Kotlin : zéro dépendance ajoutée, zéro brique #136 dupliquée", () => {
+    const uiGradle = readFileSync(join(import.meta.dir, "..", "..", "android/ui/build.gradle.kts"), "utf8");
+    // `androidx.compose.material` (le `pullrefresh` de M2) n'est pas déclaré :
+    // l'Actions de rafraîchissement reste donc EXPLICITE, faute de composant
+    // dans le BOM gelé.
+    expect(uiGradle).not.toContain('"androidx.compose.material:material"');
+    // Les briques de #136 sont utilisées, pas réécrites.
+    const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
+    for (const brick of ["PapLoading", "PapEmptyState", "PapErrorState", "PapStaleBanner", "PapSubjectAvatar", "PapPill"]) {
+      expect(screen).toContain(brick);
+    }
+    // Aucune couleur en dur : tout vient des jetons du thème.
+    const sections = readFileSync(join(UI, "AssignmentsSections.kt"), "utf8");
+    expect(stripComments(sections)).not.toMatch(/Color\(|0x[0-9A-Fa-f]{6}/);
+    expect(stripComments(screen)).not.toMatch(/Color\(0x|#[0-9A-Fa-f]{6}\"/);
   });
 });
