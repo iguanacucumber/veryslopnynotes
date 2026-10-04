@@ -91,9 +91,10 @@ class SetupRepository(
      * Codes d'erreur du setup → phrase actionnable. Le serveur distingue
      * volontairement ces cas (400 qr_rejected / login_refused, 502
      * school_unreachable, 429 rate_limited) : l'utilisateur doit pouvoir corriger
-     * SA SAISIE, donc on ne dit jamais « recommence » quand « rescane » ou
-     * « vérifie ton mot de passe » est la bonne réponse. Aucun 401 ici : ce
-     * serait le garde-fou de session, pas une faute de saisie.
+     * SA SAISIE, donc on ne dit jamais « recommence » quand « rescane » est la
+     * bonne réponse. Aucun 401 ici : ce serait le garde-fou de session, pas une
+     * faute de saisie. QR-only : aucune phrase ne parle d'identifiant, il n'y en
+     * a pas à saisir.
      */
     private fun failure(status: Int, body: String): SetupResult.Err {
         val code = runCatching { JSONObject(body).optJSONObject("error")?.optString("code", "") }.getOrNull().orEmpty()
@@ -101,7 +102,7 @@ class SetupRepository(
             code.ifEmpty { "http_$status" },
             when (code) {
                 "qr_rejected" -> "QR refusé par l'établissement : rescane le code affiché par son application."
-                "login_refused" -> "Identifiants refusés par l'établissement : vérifie ton identifiant et ton mot de passe."
+                "login_refused" -> "Compte refusé par l'établissement : regénère le QR dans son application, puis rescane-le."
                 "school_unreachable" -> "L'établissement ne répond pas : réessaie dans un instant."
                 "rate_limited" -> "Trop de tentatives : réessaie dans quelques minutes."
                 "not_implemented" -> "Ce serveur n'a aucune session d'établissement branchée."
@@ -125,7 +126,7 @@ sealed interface HealthResult {
 /**
  * Vérifie que l'adresse saisie répond. Appelé UNIQUEMENT sur appui explicite
  * de l'utilisateur à l'étape 1 (c'est sa demande, vers l'hôte qu'il vient de
- * saisir) : distinguer « mauvaise adresse » de « identifiants refusés » est
+ * saisir) : distinguer « mauvaise adresse » de « setup refusé » est
  * impossible autrement, et l'utilisateur ne peut pas deviner laquelle l'attend.
  *
  * Prend l'ADRESSE, pas un `ApiClient` : à l'étape 1, l'ApiClient du composable

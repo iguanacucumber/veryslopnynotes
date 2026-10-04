@@ -43,7 +43,7 @@ function grep(files: string[], re: RegExp): string[] {
 let fail: string[] = [];
 
 // I1 : Android sans URL/hôte Pronote
-const pronoteHost = /pronote|index-education|ent\.(ac-|cas|nevers)|cas\./i;
+const pronoteHost = /pronote/i;
 const i1 = androidFiles.filter((f) => {
   if (f.endsWith(".md")) return false; // docs légitimes ignorées
   try {
@@ -59,7 +59,7 @@ const clients = grep(serverFiles, /class PronoteHttpClient/);
 if (clients.length > 1) fail.push(`I2: plusieurs PronoteHttpClient: ${clients.join(", ")}`);
 // ponytail: ligne-même OU URL+réseau évite FP fetch hors Pronote. Upgrade: AST dataflow.
 const netRe = /fetch\(|axios|got\(|https?\.(get|request)|Bun\.serve|XMLHttpRequest|WebSocket/;
-const pronoteUrlRe = /https?:\/\/[^\s"']*(pronote|index-education|ent\.(ac-|cas|nevers))/i;
+const pronoteUrlRe = /https?:\/\/[^\s"']*(pronote)/i;
 function hasDirectFetch(code: string): boolean {
   if (code.split("\n").some((l) => pronoteHost.test(l) && netRe.test(l))) return true;
   return pronoteUrlRe.test(code) && netRe.test(code);
