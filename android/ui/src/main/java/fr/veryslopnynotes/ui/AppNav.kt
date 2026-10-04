@@ -32,11 +32,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDeepLink
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navDeepLink
 import fr.veryslopnynotes.core.Capabilities
 import fr.veryslopnynotes.core.SecurityAlert
 import fr.veryslopnynotes.core.ServerConfig
@@ -100,6 +102,24 @@ const val ROUTE_MESSAGES = "messages"
 const val ROUTE_PAIRING = "pairing"
 
 private val TAB_ROUTES = listOf(ROUTE_INDEX, ROUTE_CALENDAR, ROUTE_GRADES, ROUTE_TASKS, ROUTE_PROFILE)
+
+/**
+ * #133 : chaque route est atteignable par `veryslopnynotes://<route>`, ce qui
+ * permet de capturer un écran SANS taper au doigt aux coordonnées (elles changent
+ * avec la taille d'écran, la barre système et le thème).
+ *
+ * Le `<intent-filter>` qui rend ces URL ouvrables vit UNIQUEMENT dans le source
+ * set debug (android/app/src/debug/AndroidManifest.xml) : en release l'app ne
+ * répond à aucune URL extérieure. Sans l'intention-filter, une URL qui n'est
+ * déclarée nulle part est une NOUVELLE tâche, jamais la tâche courante.
+ *
+ * ponytail: `navDeepLink` existe déjà dans navigation-compose, aucun fil
+ * d'attente à écrire. Le RELEASE reste sans deep link ; upgrade : une intention
+ * interne explicite (`am broadcast`) si l'on veut un jour ouvrir un onglet
+ * depuis le serveur — jamais un scheme public.
+ */
+private fun routeDeepLink(route: String): NavDeepLink =
+    navDeepLink { uriPattern = "veryslopnynotes://$route" }
 
 private fun tabLabel(route: String): String = when (route) {
     ROUTE_INDEX -> "Accueil"
@@ -303,10 +323,10 @@ fun AppNav(
             startDestination = if (tokens.isPaired()) ROUTE_INDEX else ROUTE_PAIRING,
             modifier = Modifier.padding(pad),
         ) {
-            composable(ROUTE_INDEX) {
+            composable(ROUTE_INDEX, deepLinks = listOf(routeDeepLink(ROUTE_INDEX))) {
                 IndexScreen(repo, { nav.navigate(ROUTE_CALENDAR) }, { nav.navigate(ROUTE_GRADES) }, { nav.navigate(ROUTE_TASKS) })
             }
-            composable(ROUTE_CALENDAR) {
+            composable(ROUTE_CALENDAR, deepLinks = listOf(routeDeepLink(ROUTE_CALENDAR))) {
                 // #76 : vue semaine EDT (prof, statut annulé/déplacé, salle du
                 // prochain cours, navigation de semaine, hors-ligne via cache).
                 TimetableRoute(
@@ -318,7 +338,7 @@ fun AppNav(
                     onAlerts = { nav.navigate("alerts") },
                 )
             }
-            composable(ROUTE_GRADES) {
+            composable(ROUTE_GRADES, deepLinks = listOf(routeDeepLink(ROUTE_GRADES))) {
                 // #87 : accès à l'écran compétences seulement si l'onglet est actif.
                 val gotoCompetences: (() -> Unit)? = if (Capabilities.visible(capabilities, Capabilities.EVALUATIONS)) {
                     { nav.navigate("competences") }
@@ -339,7 +359,7 @@ fun AppNav(
                     onCompetences = gotoCompetences,
                 )
             }
-            composable(ROUTE_TASKS) {
+            composable(ROUTE_TASKS, deepLinks = listOf(routeDeepLink(ROUTE_TASKS))) {
                 // #75 : devoirs de la semaine (contenus + PJ via proxy), toggle
                 // Optimiste avec retour arrière, pull-refresh.
                 AssignmentsRoute(
@@ -352,7 +372,7 @@ fun AppNav(
                     llmKeys = llmKeys,
                 )
             }
-            composable(ROUTE_PROFILE) {
+            composable(ROUTE_PROFILE, deepLinks = listOf(routeDeepLink(ROUTE_PROFILE))) {
                 ProfileRoute(
                     baseUrl = baseUrl,
                     repo = profileRepo,
@@ -372,21 +392,21 @@ fun AppNav(
                     goMessages = { nav.navigate(ROUTE_MESSAGES) },
                 )
             }
-            composable(ROUTE_NEWS) {
+            composable(ROUTE_NEWS, deepLinks = listOf(routeDeepLink(ROUTE_NEWS))) {
                 NewsRoute(repo, baseUrl)
             }
-            composable(ROUTE_CANTEEN) {
+            composable(ROUTE_CANTEEN, deepLinks = listOf(routeDeepLink(ROUTE_CANTEEN))) {
                 CanteenRoute(repo, baseUrl)
             }
             // #77 : vie scolaire — absences/retards + compteurs par période,
             // puis sanctions (même ressource, écran secondaire).
-            composable(ROUTE_ATTENDANCE) {
+            composable(ROUTE_ATTENDANCE, deepLinks = listOf(routeDeepLink(ROUTE_ATTENDANCE))) {
                 AttendanceRoute(repo, baseUrl, onSanctions = { nav.navigate("sanctions") })
             }
-            composable("sanctions") {
+            composable("sanctions", deepLinks = listOf(routeDeepLink("sanctions"))) {
                 PunishmentsRoute(repo, baseUrl, onBack = { nav.popBackStack() })
             }
-            composable(ROUTE_SETTINGS) {
+            composable(ROUTE_SETTINGS, deepLinks = listOf(routeDeepLink(ROUTE_SETTINGS))) {
                 SettingsScreen(
                     onBack = { nav.popBackStack() },
                     subjectPrefs = subjectPrefs,
@@ -419,7 +439,7 @@ fun AppNav(
                     },
                 )
             }
-            composable(ROUTE_PAIRING) {
+            composable(ROUTE_PAIRING, deepLinks = listOf(routeDeepLink(ROUTE_PAIRING))) {
                 // Serveur vide = aucune graine de build : on montre QUAND MÊME
                 // le champ (c'est là que l'utilisateur saisit son adresse), pas
                 // un cul-de-sac — sans serveur, on ne peut pas appairer.
@@ -447,10 +467,10 @@ fun AppNav(
                     },
                 )
             }
-            composable("alerts") { SecurityAlertsRoute { loadAlerts(baseUrl) } }
-            composable("fiches") { RevisionSheetsScreen() }
+            composable("alerts", deepLinks = listOf(routeDeepLink("alerts"))) { SecurityAlertsRoute { loadAlerts(baseUrl) } }
+            composable("fiches", deepLinks = listOf(routeDeepLink("fiches"))) { RevisionSheetsScreen() }
             // #78 : chips de compétences + détail, payload /v1/evaluations en cache.
-            composable("competences") {
+            composable("competences", deepLinks = listOf(routeDeepLink("competences"))) {
                 CachedScreen(
                     title = "Compétences",
                     resource = CachePolicy.EVALUATIONS,
@@ -466,7 +486,7 @@ fun AppNav(
             }
             // #80 : messagerie — liste des fils (cache), lecture d'un fil, réponse,
             // création, lu/non-lu et suppression (boutons = actions confirmées, I7).
-            composable(ROUTE_MESSAGES) {
+            composable(ROUTE_MESSAGES, deepLinks = listOf(routeDeepLink(ROUTE_MESSAGES))) {
                 MessagesRoute(repo, baseUrl, accountId, tokens = tokens)
             }
         }

@@ -1,0 +1,56 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+      VARIANT DEBUG UNIQUEMENT — ce fichier N'EXISTE PAS en release, comme
+      src/debug/res/xml/network_security_config.xml. src/main/AndroidManifest.xml
+      n'a donc AUCUN intent-filter de deep link : l'APK publiable ne répond à
+      aucune URL extérieure.
+
+      Pourquoi : la refonte d'interface se vérifie écran par écran, et un
+      `adb shell input tap` aux coordonnées n'est pas déterministe (les
+      positions bougent avec la taille d'écran, la barre système, le thème).
+      `veryslopnynotes://<route>` ouvre l'écran visé directement — d'où
+      `navDeepLink` dans chaque `composable(...)` du module ui.
+
+      `android:launchMode="singleTask"` : MainActivity est `standard` par défaut,
+      donc une URL de second lancement créerait une NOUVELLE instance au-dessus
+      de la tâche courante — deux appaires, deux écrans superposés, une capture
+      qui montre l'ancien écran. singleTask route l'intent vers l'instance
+      existante. Le release reste `standard` : rien à remplacer côté main, donc
+      pas de tools:replace nécessaire (et surtout pas ici).
+    -->
+    <application>
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Un scheme, UN HÔTE PAR ROUTE (le nom de la route : `veryslopnynotes://grades`).
+                     Les hôtes sont énumérés plutôt que d'ouvrir le scheme entier :
+                     une URL de route inexistante doit faire ÉCHOUER `am start`
+                     bruyamment, pas ouvrir l'app sur son écran de départ — le
+                     silence est précisément ce que la capture ne doit pas
+                     accepter. Liste à tenir à jour avec les `navDeepLink` de
+                     AppNav.kt ; un oubli casse la capture, il ne la ment pas. -->
+                <data android:scheme="veryslopnynotes" />
+                <data android:host="index" />
+                <data android:host="calendar" />
+                <data android:host="grades" />
+                <data android:host="tasks" />
+                <data android:host="profile" />
+                <data android:host="settings" />
+                <data android:host="news" />
+                <data android:host="canteen" />
+                <data android:host="attendance" />
+                <data android:host="messages" />
+                <data android:host="pairing" />
+                <data android:host="alerts" />
+                <data android:host="fiches" />
+                <data android:host="competences" />
+                <data android:host="sanctions" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

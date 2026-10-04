@@ -94,13 +94,14 @@ describe("android-env.sh", () => {
     expect(hint).toMatch(/build-tools;34\.0\.0/);
   });
 
-  test("les trois cibles Gradle partagent la découverte, sans la réécrire", () => {
+  test("les cibles Gradle partagent la découverte, sans la réécrire", () => {
     const makefile = readFileSync(join(import.meta.dir, "..", "..", "Makefile"), "utf8");
-    for (const target of ["android-compile:", "buildDebugApk:", "buildRelApk:"]) {
+    // `shot` (#133) construit l'APK debug pour la capture : même découverte.
+    for (const target of ["android-compile:", "buildDebugApk:", "buildRelApk:", "shot:"]) {
       expect(makefile).toContain(target);
     }
     // Une seule découverte : personne ne réinvente la boucle de version.
-    expect(makefile.match(/android_jdk/g)?.length).toBe(3);
+    expect(makefile.match(/android_jdk/g)?.length).toBe(4);
     expect(makefile).not.toMatch(/android-check/);
   });
 });
