@@ -135,14 +135,21 @@ private const val HOUR_MS = 3_600_000L
 private const val DAYS_BEFORE_DATE = 7L
 
 /**
- * Fenêtre d'epoch que la mise en forme sait rendre : 0001-01-01 → 9999-12-31.
+ * Fenêtre d'epoch retenue : `0001-01-02` → `9999-12-30` en UTC.
  *
  * Bornes POSÉES, pas une exception : `java.time` accepte `Long.MIN_VALUE` et
  * rend alors une année de -292 millions, que le motif `dd/MM/yyyy` ne sait pas
  * formater (le champ `YearOfEra` commence à 1). Voir [relativeTimeFr].
+ *
+ * La marge d'UN JOUR à chaque bout n'est pas décorative : le fuseau s'ajoute
+ * APRÈS le bornage, et il va jusqu'à +14 h. Borné à `9999-12-31T23:59:59Z`,
+ * l'appareil de test (fuseau +04) affichait donc « 01/01/+10000 » — une année à
+ * cinq chiffres, que `yyyy` signe d'un `+` parce qu'elle dépasse quatre
+ * chiffres. Un jour de marge suffit à garder l'année dans le motif, quel que
+ * soit le fuseau.
  */
-private const val MIN_EPOCH_MS = -62_135_596_800_000L
-private const val MAX_EPOCH_MS = 253_402_300_799_999L
+private const val MIN_EPOCH_MS = -62_135_510_400_000L
+private const val MAX_EPOCH_MS = 253_402_128_000_000L
 
 /** Date de repli, format français court. Format POSÉ, pas `MMM` : le nom court
  *  du mois dépend de la CLDR du téléphone (« oct. », « oct », « 10月 »). */
