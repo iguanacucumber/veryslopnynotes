@@ -225,7 +225,7 @@ fun IndexScreen(
                         }
                         for (grade in grades) {
                             val style = subjectStyle(subjectPrefs, grade.subject)
-                            val hex = style.colorHex.orEmpty()
+                            val hex = subjectColorHex(subjectPrefs, grade.subject)
                             val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.primary
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -264,7 +264,7 @@ fun IndexScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         for (task in homework) {
                             val style = subjectStyle(subjectPrefs, task.subject)
-                            val hex = style.colorHex.orEmpty()
+                            val hex = subjectColorHex(subjectPrefs, task.subject)
                             val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.primary
                             Column(modifier = Modifier.fillMaxWidth()) {
                                 Row(

@@ -145,9 +145,10 @@ fun HomeCourseCard(
     countdown: String = "",
 ) {
     val style = subjectStyle(subjectPrefs, lesson.subject)
-    // Pas de couleur de matière = pas de couleur : le repli est un rôle du thème,
-    // jamais une teinte devinée à partir du nom de la matière.
-    val hex = style.colorHex.orEmpty()
+    // #137 : `subjectColorHex` ne rend plus jamais « pas de couleur » (prefs
+    // d'abord, sinon une couleur dérivée du nom sur la palette du thème), donc
+    // la carte de cours de l'accueil porte la MÊME couleur que celle de l'EDT.
+    val hex = subjectColorHex(subjectPrefs, lesson.subject)
     val background = subjectSurface(hex) ?: MaterialTheme.colorScheme.surfaceVariant
     val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.onSurface
     PapCard(modifier = modifier, containerColor = background, border = null) {
