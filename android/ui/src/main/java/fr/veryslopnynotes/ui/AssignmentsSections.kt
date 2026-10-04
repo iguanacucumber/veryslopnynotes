@@ -110,6 +110,69 @@ fun filterAssignments(list: List<Assignment>, subject: String?, query: String): 
     }
 }
 
+/** Les DEUX textes d'une carte de devoir : son titre et le corps de la consigne. */
+data class AssignmentCardText(val title: String, val body: String)
+
+/**
+ * Répartit les deux textes de la carte SANS JAMAIS afficher deux fois la consigne.
+ *
+ * Pronote n'expose qu'UN champ descriptif, et le lecteur serveur en publie deux
+ * fois le début : `title` = les 200 premiers caractères de `description`
+ * (`pronote-client-reader.ts`, `mapAssignment`). La carte affichait donc les deux
+ * champs côte à côte — « Evaluation de compréhension orale et d'expression
+ * écrite » puis « Evaluation de compréhension orale et d'expression écrite sur
+ * le début de la séquence… » (#161).
+ *
+ * Décision : la consigne vit dans le CORPS, bornée et dépliable comme avant ; le
+ * TITRE n'est affiché que s'il apporte autre chose — pas de consigne du tout, ou
+ * une consigne qui ne COMMENCE pas par lui (là, c'est un intitulé d'établissement).
+ * La comparaison se fait sur le texte PLIÉ (casse + accents), donc un titre
+ * re-casé ou ré-accents par le serveur ne passe pas pour un texte différent.
+ */
+fun assignmentCardText(a: Assignment): AssignmentCardText {
+    val title = a.title.trim()
+    val body = a.description.trim()
+    if (body.isEmpty()) return AssignmentCardText(title, "")
+    val foldedTitle = foldFr(title)
+    if (foldedTitle.isNotEmpty() && foldFr(body).startsWith(foldedTitle)) {
+        return AssignmentCardText("", body)
+    }
+    return AssignmentCardText(title, body)
+}
+
+/**
+ * Nom de matière affichable : l'établissement publie « ALLEMAND LV2 », qui crie
+ * à côté du reste de l'écran (#161). Seul le PREMIER mot passe en casse de
+ * phrase — « Allemand LV2 » — car le reste porte une abréviation de niveau
+ * (« LV2 », « Tle ») dont la casse fait sens. Un nom déjà mixte (« Mathématiques »)
+ * est rendu TEL QUEL : la matière garde sa propre casse.
+ */
+fun subjectDisplayFr(name: String): String {
+    val trimmed = name.trim()
+    val letters = trimmed.filter { it.isLetter() }
+    // Aucune lettre, ou au moins une en minuscule : la casse est celle de la
+    // matière (préférence saisie à la main), on n'y touche pas.
+    if (letters.isEmpty() || letters.any { !it.isUpperCase() }) return trimmed
+    val head = trimmed.substringBefore(' ')
+        .lowercase(Locale.FRANCE)
+        .replaceFirstChar { it.uppercaseChar() }
+    val tail = trimmed.substringAfter(' ', missingDelimiterValue = "")
+    return if (tail.isEmpty()) head else "$head $tail"
+}
+
+/**
+ * Initiale de matière, pour une pastille qui a un contenu : « ALLEMAND LV2 » → « A ».
+ *
+ * `PapSubjectAvatar` rend un disque PÂLE VIDE quand elle ne reçoit pas d'emoji,
+ * donc une matière sans préférences n'affichait qu'une tache pastel, muette
+ * (#161). Repli « ? », comme `profileInitials` (core/UserProfile.kt) : un glyphe
+ * lisible plutôt qu'un rond nu. `uppercaseChar()` est sans locale (donc pas de
+ * « ı » turc) et le premier caractère alphanumétrique gagne — « 2nde STL » commence
+ * par un chiffre, donc « 2 ».
+ */
+fun subjectInitial(subject: String): String =
+    subject.trim().firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"
+
 /**
  * Minuscules sans accent : `NFD` décompose « é » en « e » + accent combinant,
  * qu'on retire. La casse est repliée AVEC une locale : un `lowercase()` sans

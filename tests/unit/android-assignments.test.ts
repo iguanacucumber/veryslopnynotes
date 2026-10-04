@@ -27,6 +27,13 @@ import {
 //   - par lecture de la source : la carte, la pastille « fait », les sections
 //     repliées, `weight(1f)`, l'`Intent` des pièces jointes, et l'absence de
 //     toute dépendance ajoutée.
+//
+// #161 (capture du 4 octobre) : la consigne s'affichait deux fois, la pastille de
+// matière était vide, « Aide devoirs » dominait la carte, les puces de matière
+// criaient en majuscules. Ces quatre points sont prouvés ici —
+// `assignmentCardText`, `subjectInitial`, `subjectDisplayFr` ont des miroirs, et
+// le déclencheur d'aide est vérifié PAR LECTURE de source (la puce est à côté de
+// la bascule, plus le bouton vert).
 
 const UI = join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui");
 const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/veryslopnynotes/data");
@@ -333,6 +340,48 @@ function tsFilterAssignments(list: Item[], subject: string | null | undefined, q
     const matches = needle === "" || tsFoldFr(`${a.subject} ${a.title} ${a.description}`).includes(needle);
     return sameSubject && matches;
   });
+}
+
+// --- #161 : ce que la carte affiche vraiment ---------------------------------
+//
+// Le lecteur serveur (`server/integrations/pronote-client-reader.ts`,
+// `mapAssignment`) ne lit qu'UN champ descriptif chez Pronote et le publie
+// DEUX fois : `title = description.slice(0, 200)` et `description = le texte
+// entier`. Les deux champs arrivaient donc sur la carte, l'un sous la matière
+// (sous-titre), l'autre dans le corps — la consigne, deux fois de suite.
+
+/** Miroir de `assignmentCardText` : titre et corps ne peuvent PAS porter le même
+ *  texte ; la comparaison se fait sur le texte plié (casse + accents). */
+function tsAssignmentCardText(a: Item): { title: string; body: string } {
+  const title = a.title.trim();
+  const body = a.description.trim();
+  if (body === "") return { title, body: "" };
+  const foldedTitle = tsFoldFr(title);
+  if (foldedTitle !== "" && tsFoldFr(body).startsWith(foldedTitle)) return { title: "", body };
+  return { title, body };
+}
+
+/** Kotlin `Char.isUpperCase()` : une lettre MAJUSCULE et casée (`cased` implicite
+ *  des Properties of Strings, qui sont toutes nonMajuscule ou Majuscule). */
+const tsIsUpper = (c: string): boolean => c === c.toUpperCase() && c !== c.toLowerCase();
+
+/** Miroir de `subjectDisplayFr` : « ALLEMAND LV2 » → « Allemand LV2 », et le
+ *  premier mot SEUL (le reste porte une abréviation de niveau). */
+function tsSubjectDisplayFr(name: string): string {
+  const trimmed = name.trim();
+  const letters = [...trimmed].filter((c) => /\p{L}/u.test(c));
+  if (letters.length === 0 || letters.some((c) => !tsIsUpper(c))) return trimmed;
+  const cut = trimmed.indexOf(" ");
+  const head = (cut < 0 ? trimmed : trimmed.slice(0, cut)).toLocaleLowerCase("fr-FR");
+  const spelled = head.slice(0, 1).toLocaleUpperCase("fr-FR") + head.slice(1);
+  return cut < 0 ? spelled : `${spelled} ${trimmed.slice(cut + 1)}`;
+}
+
+/** Miroir de `subjectInitial` : première lettre ou chiffre de la matière, en
+ *  majuscule ; « ? » si elle n'en a aucune (comme `profileInitials`). */
+function tsSubjectInitial(subject: string): string {
+  const c = [...subject.trim()].find((ch) => /\p{L}|\p{Nd}/u.test(ch));
+  return c ? c.toLocaleUpperCase("fr-FR") : "?";
 }
 
 /** Miroir de `weekStartIso` : lundi de la semaine, en ISO court. */
@@ -690,5 +739,111 @@ describe("sections, filtres et semaine (#138)", () => {
     const sections = readFileSync(join(UI, "AssignmentsSections.kt"), "utf8");
     expect(stripComments(sections)).not.toMatch(/Color\(|0x[0-9A-Fa-f]{6}/);
     expect(stripComments(screen)).not.toMatch(/Color\(0x|#[0-9A-Fa-f]{6}\"/);
+  });
+});
+
+// #161 : les quatre défauts relevés sur la capture du 4 octobre.
+describe("carte de devoir (#161)", () => {
+  /** Le cas RÉEL de la capture : le serveur dérive le titre des 200 premiers
+   *  caractères de la consigne, donc les deux champs se recoupent. */
+  const CAPTURE = "Evaluation de compréhension orale et d'expression écrite sur le début de la séquence Slogans und Werbung. (relire le cours p.42)";
+  const captured = (over: Partial<Item> = {}) =>
+    item("allemand-lv2", { subject: "ALLEMAND LV2", title: CAPTURE.slice(0, 200), description: CAPTURE, ...over });
+
+  test("la consigne n'apparaît qu'une fois : le titre n'est plus nourri à côté du corps", () => {
+    const card = tsAssignmentCardText(captured());
+    // Le titre EST le début de la consigne : il ne descend pas en sous-titre, la
+    // consigne garde le corps (borné et dépliable).
+    expect(card).toEqual({ title: "", body: CAPTURE });
+    // LA propriété qui compte : les deux emplacements ne peuvent pas afficher le
+    // même texte — pas « rendu deux fois », quelle que soit la donnée.
+    expect(card.title).not.toBe(card.body);
+    // Re-casé / ré-accenté par le serveur : le pli le voit, donc toujours pas de doublon.
+    expect(tsAssignmentCardText(captured({ title: "évaluation de compréhension orale et d'expression" }))).toEqual({
+      title: "",
+      body: CAPTURE,
+    });
+    // Titre plus court que la consigne : il en reste le préfixe, donc toujours
+    // un seul texte à l'écran (le lecteur tronque à 200 caractères, il ne coupe
+    // pas au hasard).
+    expect(tsAssignmentCardText(captured({ title: "Evaluation de compréhension orale" })).title).toBe("");
+  });
+
+  test("titre VRAI et consigne distincte : les deux survivent, rien n'est perdu", () => {
+    // Un établissement qui publie un intitulé de devoir et une consigne séparés
+    // (le contrat les autorise) garde ses deux textes.
+    const distinct = item("exos", { subject: "Maths", title: "Exos p.12", description: "Rendre la fiche" });
+    expect(tsAssignmentCardText(distinct)).toEqual({ title: "Exos p.12", body: "Rendre la fiche" });
+    // Pas de consigne : le titre seul porte la carte (repli « Devoir » du lecteur).
+    const sansConsigne = item("liser", { subject: "SVT", title: "Devoir", description: "   " });
+    expect(tsAssignmentCardText(sansConsigne)).toEqual({ title: "Devoir", body: "" });
+    // Le titre n'est pas un préfixe de la consigne → il reste un sous-titre à part.
+    const autre = item("oral", { subject: "ANGLAIS", title: "Oral", description: "Préparer la présentation" });
+    expect(tsAssignmentCardText(autre)).toEqual({ title: "Oral", body: "Préparer la présentation" });
+  });
+
+  test("Kotlin : la carte ne branche plus `title` ET `description` sur deux Text", () => {
+    const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
+    expect(screen).toContain("assignmentCardText(a)");
+    const code = stripComments(screen);
+    // Le garde-fou du doublon : aucun des deux champs n'alimente plus un `Text`
+    // tout seul — ils passent par la répartition (titre, corps).
+    expect(code).not.toMatch(/text = a\.description/);
+    expect(code).not.toMatch(/text = a\.title\b/);
+    expect(code).toMatch(/text = text\.body/);
+    // La consigne reste bornée et dépliable (elle peut faire 2000 caractères).
+    expect(screen).toContain("DESCRIPTION_MAX_LINES = 3");
+    expect(screen).toContain("if (text.body.length > DESCRIPTION_EXPAND_CHARS)");
+    // Le « fait » se lit sur le texte affiché, où qu'il soit (rayure + atténuation).
+    expect(screen).toContain("val strike = if (a.done) TextDecoration.LineThrough else null");
+  });
+
+  test("pastille de matière : toujours un glyphe, et la brique partagée reste intacte", () => {
+    const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
+    // Emoji de prefs, sinon INITIALE de la matière — plus jamais `emoji = null`.
+    expect(screen).toContain("style.emoji ?: subjectInitial(a.subject)");
+    expect(stripComments(screen)).not.toMatch(/PapSubjectAvatar\(emoji = style\.emoji,/);
+    expect(tsSubjectInitial("ALLEMAND LV2")).toBe("A");
+    expect(tsSubjectInitial("Mathématiques")).toBe("M");
+    expect(tsSubjectInitial("histoire-géographie")).toBe("H");
+    expect(tsSubjectInitial("  2nde STL")).toBe("2");
+    expect(tsSubjectInitial("2nde STL")).toBe("2");
+    // Matière sans aucune lettre ni chiffre : un glyphe neutre, PAS une pastille vide.
+    expect(tsSubjectInitial("« »")).toBe("?");
+    // `PapComponents.kt` est PARTAGÉ (les notes l'utilisent déjà) : il ne doit pas
+    // connaître les replis de l'écran Devoirs, la correction est à l'appel.
+    const pap = readFileSync(join(UI, "PapComponents.kt"), "utf8");
+    expect(pap).toContain("fun PapSubjectAvatar(");
+    expect(stripComments(pap)).not.toMatch(/subjectInitial|subjectDisplayFr|assignmentCardText/);
+  });
+
+  test("« Aide devoirs » : une puce discrète alignée sur la bascule, pas un bouton vert", () => {
+    const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
+    expect(screen).toContain("private fun HomeworkHelpChip");
+    // Le `Button` pleine largeur de `HomeworkHelp.kt` n'est plus appelé par la carte…
+    expect(stripComments(screen)).not.toMatch(/HomeworkHelpButton/);
+    // …et la puce est COLLÉE à la bascule « fait », qui redevient l'action visible.
+    expect(screen).toMatch(/HomeworkHelpChip \{ onHelp\(a\) \}\n\s*DoneToggle/);
+    // La puce reprend la langue visuelle des pièces jointes (pas de couleur en dur).
+    expect(screen).toContain('text = "Aide devoirs"');
+    // Le DIALOGUE LLM, lui, est toujours câblé et inchangé (sortie = donnée, I6).
+    expect(screen).toContain("HomeworkHelpDialog(");
+    expect(screen).toContain("if (helpRepo == null) null else");
+  });
+
+  test("matière : la casse publiée, sans les majuscules qui crient", () => {
+    expect(tsSubjectDisplayFr("ALLEMAND LV2")).toBe("Allemand LV2");
+    expect(tsSubjectDisplayFr("ALLEMAND ANGLAIS LV2")).toBe("Allemand ANGLAIS LV2");
+    expect(tsSubjectDisplayFr("  ALLEMAND  ")).toBe("Allemand");
+    // Une matière qui a sa propre casse n'est pas réécrite (préf. saisie à la main).
+    expect(tsSubjectDisplayFr("Mathématiques")).toBe("Mathématiques");
+    expect(tsSubjectDisplayFr("Anglais LV2")).toBe("Anglais LV2");
+    expect(tsSubjectDisplayFr("LV2")).toBe("Lv2");
+    expect(tsSubjectDisplayFr("")).toBe("");
+    expect(tsSubjectDisplayFr("2nde STL")).toBe("2nde STL");
+    // Les deux appels (carte ET puce de filtre) passent par le même résolveur.
+    const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
+    expect(screen).toContain("subjectDisplayFr(style.label)");
+    expect(screen).toContain("style.copy(label = subjectDisplayFr(style.label))");
   });
 });
