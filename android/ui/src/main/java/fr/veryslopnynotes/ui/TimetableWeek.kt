@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -307,7 +308,15 @@ fun TimetableRoute(
                     // Cours annulé = gris + barré ; déplacé = mentioning l'origine.
                     Text(
                         lessonBadgeLabel(lesson, zone, style.badge),
-                        color = if (lesson.status == STATUS_CANCELLED) Color.LightGray else color,
+                        // #134 : `Color.LightGray` en dur mesurait 1.5:1 sur
+                        // surface claire, et ne s'adaptait pas au thème
+                        // sombre. L'encre de marque à 70 % mesure 5.58:1 sur
+                        // blanc et suit la surface en mode sombre.
+                        color = if (lesson.status == STATUS_CANCELLED) {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.70f)
+                        } else {
+                            color
+                        },
                         textDecoration = if (lesson.status == STATUS_CANCELLED) TextDecoration.LineThrough else null,
                     )
                 }

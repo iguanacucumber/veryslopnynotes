@@ -20,8 +20,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -289,9 +287,10 @@ fun AppNav(
     val (theme, setTheme) = rememberAppTheme()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-    // ponytail: deux schemes Material3 de base, appliqués une fois à la racine.
-    val colorScheme = if (isDarkTheme(theme, isSystemInDarkTheme())) darkColorScheme() else lightColorScheme()
-    MaterialTheme(colorScheme = colorScheme) {
+    // #134 : jetons Papillon (couleurs + typo + formes) appliqués une fois à la
+    // racine. Avant : `lightColorScheme()` / `darkColorScheme()` sans argument,
+    // donc le violet Material par défaut.
+    PapillonTheme(darkTheme = isDarkTheme(theme, isSystemInDarkTheme())) {
     Scaffold(
         topBar = { TopAppBar(title = { Text("VerySlopyNyNotes") }) },
         bottomBar = {
@@ -882,7 +881,7 @@ fun SettingsScreen(
         Text("Réglages")
         Text("Thème : ${themeLabel(theme)}")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (mode in AppTheme.values().toList()) {
+            for (mode in AppTheme.entries) {
                 FilterChip(
                     selected = theme == mode,
                     onClick = { onTheme(mode) },
