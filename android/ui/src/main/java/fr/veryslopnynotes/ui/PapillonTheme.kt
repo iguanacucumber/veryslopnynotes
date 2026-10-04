@@ -100,6 +100,32 @@ val PapillonDarkBackground = Color(0xFF000000L)
  */
 const val PapillonSecondaryAlpha = 0.65f
 
+/**
+ * Côte minimal d'une cible tactile, en dp.
+ *
+ * WCAG 2.5.8 (AA) demande 24 × 24 dp, Material en impose 48 : on pose 48, le
+ * plus exigeant des deux. C'est le SEUL endroit du module où la valeur est
+ * écrite — `IconButton`, `Button` et `ListItem` la respectent déjà par leur
+ * propre mise en page ; un jeton maison cliquable (puce, pastille, ligne
+ * d'en-tête) doit la poser lui-même.
+ *
+ * ponytail: une constante, pas un `Dimension` Material ni un helper qui gonfle la
+ * boîte — une cible trop petite se répare en AGRANDISSANT la boîte qui porte le
+ * `clickable`, pas en socialisant le trait.
+ */
+val TouchTarget = 48.dp
+
+/**
+ * Pas d'éclaircissement de l'encre d'erreur en thème SOMBRE, en `tint`.
+ *
+ * `error` (#DC1400) tient 5.07:1 sur la surface CLAIRE mais 3.70:1 sur la surface
+ * sombre `#121212` : sous le 4.5:1 du WCAG AA, donc un bandeau d'erreur en
+ * thème sombre n'était pas lisible. 70 % vers le blanc donne 11.07:1 sur la
+ * surface sombre et 8.52:1 sur la surface variante — mesuré par le miroir de
+ * `tests/unit/android-papillon-theme.test.ts`.
+ */
+const val ERROR_INK_TINT = 0.70f
+
 // --- Palette matières -------------------------------------------------------
 
 /**
@@ -189,6 +215,28 @@ fun bestContentOn(background: Color): Color =
     } else {
         Color.White
     }
+
+/**
+ * Encre d'erreur DESTINÉE À DU TEXTE, dans les deux thèmes.
+ *
+ * Le rôle `error` du scheme est un aplat : blanc dessus, 5.07:1 en clair. En
+ * thème sombre il ne vaut que 3.70:1 sur la surface `#121212` — sous AA — donc
+ * un texte d'erreur y serait illisible. [errorInk] l'éclaircit de [ERROR_INK_TINT]
+ * quand [dark] est vrai, et ne le touche pas sinon (la marque reste le rouge
+ * relevé sur papillon.bzh).
+ *
+ * Fonction PURE : le contraste des deux thèmes se teste sans téléphone.
+ */
+fun errorInk(error: Color, dark: Boolean): Color = if (dark) tint(error, ERROR_INK_TINT) else error
+
+/**
+ * Raccourci `@Composable` d'[errorInk] : le mode se LIT dans le thème
+ * (`relativeLuminance(surface)`, cf. [isDarkSurface]) au lieu d'être câblé deux
+ * fois par l'appelant, donc une encre d'erreur ne peut pas être choisie pour le
+ * mauvais thème.
+ */
+@Composable
+fun errorTextColor(): Color = errorInk(MaterialTheme.colorScheme.error, isDarkSurface())
 
 // --- Formes ----------------------------------------------------------------
 

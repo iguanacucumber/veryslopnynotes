@@ -24,8 +24,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.ServerConfig
 import fr.veryslopnynotes.core.ServerUrlResult
@@ -152,8 +155,24 @@ fun PairingRoute(
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
         Button(onClick = onBack, modifier = Modifier.padding(16.dp)) { Text("Retour") }
-        if (!notice.isNullOrEmpty()) Text(notice, modifier = Modifier.padding(horizontal = 16.dp))
-        Text(setupStepLabel(step), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        if (!notice.isNullOrEmpty()) {
+            Text(
+                text = notice,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
+        // `heading()` : l'étape en cours est le titre de l'assistant — c'est par
+        // elle qu'on sait quoi faire, donc c'est elle que le survol annonce.
+        Text(
+            text = setupStepLabel(step),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .semantics { heading() },
+        )
         when (step) {
             SetupStep.SERVER -> ServerField(
                 value = serverDraft,
@@ -243,12 +262,26 @@ fun ServerField(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        Text(serverHint(value))
+        Text(
+            text = serverHint(value),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
         // #145 : l'erreur prend la couleur d'erreur et s'OUVRE au lieu d'apparaître
         // d'un coup — elle était en encre de texte, comme les deux messages de
         // succès qui l'entourent.
         PapAppear(visible = !error.isNullOrEmpty()) {
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            // #146 : l'encre d'ERREUR du thème (le rouge de marque ne vaut que
+            // 3.70:1 sur la surface sombre) et trois lignes — le refus vient du
+            // serveur, donc de longueur inconnue.
+            error?.let {
+                Text(
+                    text = it,
+                    color = errorTextColor(),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         if (saved) Text("Serveur enregistré. Si l'adresse change, reconnecte l'appareil.")
         if (!version.isNullOrEmpty()) Text("Serveur joignable — contrats $version.")
@@ -284,7 +317,17 @@ private fun AccountStep(
         )
         // #145 : couleur d'erreur + ouverture mesurée (cf. `ServerField`).
         PapAppear(visible = error != null) {
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            // #146 : l'encre d'ERREUR du thème (le rouge de marque ne vaut que
+            // 3.70:1 sur la surface sombre) et trois lignes — le refus vient du
+            // serveur, donc de longueur inconnue.
+            error?.let {
+                Text(
+                    text = it,
+                    color = errorTextColor(),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         Button(
             onClick = {
@@ -364,9 +407,23 @@ private fun QrStep(
         // #145 : les DEUX refus de cette étape (scan, puis setup) partagent la
         // couleur d'erreur et la même ouverture mesurée.
         PapAppear(visible = error != null || form.state is PairingState.Error) {
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            error?.let {
+                Text(
+                    text = it,
+                    color = errorTextColor(),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (form.state is PairingState.Error) {
-                Text(pairingStateLabel(form.state), color = MaterialTheme.colorScheme.error)
+                // `errorTextColor()` : l'encre d'erreur lisible dans les deux
+                // thèmes, trois lignes (le refus vient du serveur).
+                Text(
+                    text = pairingStateLabel(form.state),
+                    color = errorTextColor(),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
         // QR + PIN = la méthode UNIQUE (0.7.0). Un des deux seul -> refus local,

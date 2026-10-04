@@ -95,8 +95,13 @@ describe("coquille applicative (#135)", () => {
     // Les 5 onglets, dans l'ordre de Papillon : Accueil, EDT, Tâches, Notes, Profil.
     const order = shell.match(/private val TAB_ROUTES = listOf\(([^)]*)\)/)?.[1] ?? "";
     expect(order.split(",").map((r) => r.replace("ROUTE_", "").trim().toLowerCase())).toEqual(TABS);
-    // ContentDescription : la même fonction que le libellé affiché, donc rien à diverger.
-    expect(shell).toContain("contentDescription = tabLabel(tab)");
+    // Nom annoncé = MÊME fonction que le libellé affiché, donc rien à diverger.
+    // #146 : c'est le `label` de l'item qui le porte, et l'icône est décorative
+    // (`contentDescription = null`) — la décrire en plus faisait annoncer
+    // « Accueil … Accueil », `NavigationBarItem` ne fusionnant pas les deux nœuds.
+    expect(shell).toContain("label = { Text(tabLabel(tab)) }");
+    expect(shell).toContain("contentDescription = null,");
+    expect(shell).not.toContain("contentDescription = tabLabel(tab)");
     // Zéro glyphe comme icône : plus aucun des glyphes d'origine, ni dans la
     // coquille ni dans les icônes.
     const shellCode = codeOnly(shell) + codeOnly(icons);
@@ -220,7 +225,10 @@ describe("coquille applicative (#135)", () => {
       const n = profile.split(`title = "${label}"`).length - 1;
       expect({ label, occurrences: n }).toEqual({ label, occurrences: 1 });
     }
-    expect(profile.split("Button(onClick").length - 1).toBe(0);
+    // `Button(` avec la parenthèse collée et SANS lettre devant, donc hors
+    // `IconButton` : le chevron « Changer de compte » (cible de 48 dp depuis
+    // #146) n'est pas le bouton en triple que #135 a interdit ici.
+    expect(profile.split(/(?<![A-Za-z])Button\(onClick/).length - 1).toBe(0);
     // Deux racines dans un slot du NavHost = débordement sans défilement : une
     // seule racine, défilable, et l'action la plus grave reste atteignable.
     expect(profile).toMatch(/fun ProfileRoute\([\s\S]*Modifier\.fillMaxSize\(\)\.verticalScroll\(rememberScrollState\(\)\)\)\s*\{/);

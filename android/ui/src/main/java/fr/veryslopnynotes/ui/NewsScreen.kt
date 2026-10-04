@@ -175,6 +175,8 @@ fun NewsScreen(
                 text = error,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         val groups = newsGroups(news)
@@ -232,9 +234,15 @@ fun NewsCard(
                             .semantics { contentDescription = "Actualité non lue" },
                     )
                 }
+                // `item.title` vient de l'établissement : AVANT #146 il n'était
+                // pas borné, alors que le corps, lui, l'était. Deux lignes : le
+                // titre d'un acte tient en deux lignes, le reste se lit dans le
+                // corps ou plus tard.
                 Text(
                     text = item.title,
                     style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
             }

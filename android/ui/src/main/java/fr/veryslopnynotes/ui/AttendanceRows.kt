@@ -23,6 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.data.SubjectPrefs
@@ -67,7 +69,10 @@ private const val SURFACE_IS_DARK = 0.5f
  */
 @Composable
 private fun eventSubjectInk(hex: String): Color =
-    (subjectContent(hex)) ?: MaterialTheme.colorScheme.primary
+    // `secondary` et non `primary` : 3.74:1 sur la surface pour un libellé de
+    // 13 sp, 4.93:1 avec `secondary` (cf. `subjectInk` dans `GradesRows.kt` —
+    // une seule règle pour les deux écrans).
+    (subjectContent(hex)) ?: MaterialTheme.colorScheme.secondary
 
 /** Icône d'une section : `Clear` (barré = cours manqué) pour une absence,
  *  `Warning` pour un retard. Les deux sont dans `material-icons-core`. */
@@ -122,12 +127,17 @@ fun AttendanceStatusCard(status: AttendanceStatusUi, modifier: Modifier = Modifi
                     text = status.title,
                     style = MaterialTheme.typography.titleMedium,
                     color = ink,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
             }
             Text(
                 text = status.detail,
                 style = MaterialTheme.typography.bodyMedium,
                 color = ink,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
             )
             // Ligne blanche dans la carte : le total manque, il ne se fond pas
             // dans le pastel (papillon.bzh pose la même sous-carte).
@@ -143,12 +153,16 @@ fun AttendanceStatusCard(status: AttendanceStatusUi, modifier: Modifier = Modifi
                         text = "Heures manquées",
                         style = MaterialTheme.typography.bodyMedium,
                         color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
                     Text(
                         text = durationLongFr(status.totalMinutes),
                         style = MaterialTheme.typography.titleSmall,
                         color = scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -186,13 +200,14 @@ fun AttendanceHeader(
         if (periodNumber != null) {
             PapPill(text = periodNumber, color = MaterialTheme.colorScheme.primary)
         }
+        // `heading()` : la tranche choisie est le titre de l'écran sous la barre.
         Text(
             text = periodName,
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).semantics { heading() },
         )
         IconButton(onClick = onToggle) {
             Icon(
@@ -237,16 +252,25 @@ fun AttendanceEventCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // Le motif est une DONNEE libre de l'établissement : deux
+                    // lignes + repli. Aucun écran de détail ne montre la suite,
+                    // donc le texte est tronque proprement plutot que de pousser
+                    // la carte hors de l'écran.
                     Text(
                         text = absenceTitle(row),
                         style = MaterialTheme.typography.titleSmall,
                         color = scheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() },
                     )
                     if (date.isNotEmpty()) {
                         Text(
                             text = date,
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -255,7 +279,12 @@ fun AttendanceEventCard(
                     Text(
                         text = minutesLabel(minutes),
                         style = MaterialTheme.typography.titleSmall,
-                        color = if (unjustified) scheme.error else scheme.onSurface,
+                        // Encre d'erreur du theme : `error` ne vaut que 3.70:1
+                        // sur la surface sombre. La pastille rouge voisine porte
+                        // déjà le même signal, donc la couleur n'est pas seule.
+                        color = if (unjustified) errorTextColor() else scheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -344,12 +373,17 @@ fun PunishmentCard(
                 text = row.type,
                 style = MaterialTheme.typography.titleSmall,
                 color = scheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
             )
             if (date.isNotEmpty()) {
                 Text(
                     text = date,
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             val gravity = remember(row.gravity) { gravityLabel(row.gravity) }
@@ -358,10 +392,15 @@ fun PunishmentCard(
             }
             // Donnée établissement ci-dessous : affichée telle quelle, jamais
             // exécutée (I6).
+            // Motif déclaré : donnée libre de l'établissement (donc non bornée
+            // par le contrat). Quatre lignes + repli : au-dela, la carte pousse
+            // les autres sanctions hors de l'écran.
             Text(
                 text = row.motif,
                 style = MaterialTheme.typography.bodyMedium,
                 color = scheme.onSurface,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp),
             )
         }

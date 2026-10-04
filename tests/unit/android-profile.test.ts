@@ -484,7 +484,9 @@ describe("unit android profil (#82)", () => {
     for (const section of ["Compte", "Ressources", "Réglages", "Session"]) {
       expect(profile).toContain(`ProfileSection("${section}"`);
     }
-    expect(profile.split("Button(onClick").length - 1).toBe(0);
+    // Idem `android-shell.test.ts` : le motif exclut `IconButton`, le bouton
+    // d'icône que #146 a introduit pour le chevron (cible de 48 dp).
+    expect(profile.split(/(?<![A-Za-z])Button\(onClick/).length - 1).toBe(0);
     expect(profile).toContain("ConfirmDialog(");
     expect(profile).toContain("destructive = true");
     // Défilement : une seule racine, au plus haut (cf. #135).

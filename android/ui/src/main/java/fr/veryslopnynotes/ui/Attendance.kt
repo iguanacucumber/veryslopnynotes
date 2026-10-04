@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.Capabilities
 import fr.veryslopnynotes.data.CachePolicy
@@ -302,6 +303,8 @@ private fun CachedSchoolRoute(
                 text = error.message,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         body(payload) { refresh() }
@@ -419,6 +422,8 @@ fun AttendanceRoute(
                     text = failure,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -431,6 +436,8 @@ fun AttendanceRoute(
                 text = periodLabel(selected.period),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         if (sections.isEmpty()) {

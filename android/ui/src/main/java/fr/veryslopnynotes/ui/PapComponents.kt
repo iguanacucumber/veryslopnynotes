@@ -43,8 +43,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -324,13 +327,17 @@ fun PapSectionHeader(
     ) {
         // Décoratif : le titre porte le sens, donc l'icône est annoncée nulle.
         Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        // `heading()` : c'est le repère de navigation qu'un lecteur d'écran
+        // cherche (« titres » dans TalkBack). AVANT #146, l'en-tête de section
+        // n'était qu'un texte : la seule façon de survoler un écran était de
+        // le lire ligne à ligne.
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             color = tint,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
+            modifier = Modifier.weight(1f, fill = false).semantics { heading() },
         )
         if (count != null && count > 0) {
             Text(text = "$count", style = MaterialTheme.typography.labelMedium, color = tint)
@@ -359,7 +366,10 @@ fun PapListItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            // `role = Role.Button` : la ligne ouvre une destination, donc un
+            // lecteur d'écran doit l'annoncer comme un bouton — un `Row` cliquable
+            // sans rôle se fait annoncer comme du texte qu'on active.
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(horizontal = CARD_PADDING, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -412,10 +422,13 @@ fun PapEmptyState(
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(48.dp).alpha(EMPTY_ICON_ALPHA),
         )
+        // Titre de l'état vide = le seul titre de l'écran : il porte `heading()`
+        // pour qu'un lecteur d'écran sache où il est sans lire la description.
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { heading() },
         )
         if (description.isNotEmpty()) {
             Text(
@@ -689,7 +702,15 @@ fun PapSubjectAvatar(
         contentAlignment = Alignment.Center,
     ) {
         if (!emoji.isNullOrEmpty()) {
-            Text(text = emoji, style = MaterialTheme.typography.titleLarge)
+            // L'emoji est DÉCORATIF : le libellé de la matière est toujours
+            // affiché en toutes lettres à côté (cf. `SubjectStyle.badge`), donc
+            // laisser TalkBack nommer le glyphe ne ferait qu'annoncer deux fois
+            // la même information — et en français, avec un nom d'emoji obscur.
+            Text(
+                text = emoji,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.clearAndSetSemantics { },
+            )
         }
     }
 }
@@ -739,8 +760,17 @@ fun ConfirmDialog(
         confirmButton = {
             TextButton(
                 onClick = onConfirm,
+                // #146 : `errorTextColor()` et `secondary` — les deux rôles bruts
+                // sont des aplats : 3.70:1 pour le rouge sur la surface sombre et
+                // 3.74:1 pour le vert de marque sur la claire, donc le bouton de
+                // confirmation d'une suppression était sous AA dans les deux
+                // thèmes (et le confirmant d'un dialogue est du texte de 14 sp).
                 colors = ButtonDefaults.textButtonColors(
-                    contentColor = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    contentColor = if (destructive) {
+                        errorTextColor()
+                    } else {
+                        MaterialTheme.colorScheme.secondary
+                    },
                 ),
             ) {
                 Text(confirmLabel)

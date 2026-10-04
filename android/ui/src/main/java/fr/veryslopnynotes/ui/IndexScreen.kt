@@ -26,6 +26,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.data.RefreshOutcome
@@ -208,12 +210,19 @@ fun IndexScreen(
                                 Text(
                                     text = homeAverageNumberLabel(average.value),
                                     style = MaterialTheme.typography.displaySmall,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    // `secondary` et non `primary` : le vert de
+                                    // marque ne vaut que 3.74:1 sur la surface,
+                                    // `secondary` 4.93:1 — même teinte à l'œil.
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
                                     text = "/20",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
                                 )
                             }
@@ -221,6 +230,8 @@ fun IndexScreen(
                                 text = if (average.provided) "Moyenne fournie" else "Moyenne estimée",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                         for (grade in grades) {
@@ -232,15 +243,23 @@ fun IndexScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
+                                // `heading()` : la matiere d'une ligne est le
+                                // TITRE de cette ligne — le survol doit
+                                // pouvoir s'y poser.
                                 Text(
                                     text = style.badge,
                                     style = MaterialTheme.typography.titleSmall,
                                     color = ink,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.weight(1f).semantics { heading() },
                                 )
-                                Text(text = grade.note, style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    text = grade.note,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                                 Text(
                                     text = relativeTimeFr(grade.dateMillis, nowMillis),
                                     style = MaterialTheme.typography.bodySmall,
@@ -272,13 +291,14 @@ fun IndexScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
+                                    // `heading()` : idem pour le widget devoirs.
                                     Text(
                                         text = style.badge,
                                         style = MaterialTheme.typography.titleSmall,
                                         color = ink,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier.weight(1f).semantics { heading() },
                                     )
                                     Box(modifier = Modifier.padding(top = 2.dp)) {
                                         PapPill(
