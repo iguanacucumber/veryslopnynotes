@@ -3,7 +3,6 @@ package fr.veryslopnynotes.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.SecurityAlertsRepository
 import fr.veryslopnynotes.data.SessionTokens
@@ -32,19 +31,21 @@ class MainActivity : ComponentActivity() {
         // mono-compte résout sa session appairée) ; #82 exposera /v1/me pour un
         // multi-compte. Jamais un hôte Pronote ici (I1), et l'écriture reste
         // une action utilisateur confirmée (I7).
+        // #134 : plus de `MaterialTheme { }` ici. Ce thème extérieur sans
+        // argument se posait AVANT celui d'AppNav, en light par défaut : il
+        // écrasait le thème choisi dans les réglages et le forçait au clair.
+        // Le thème est appliqué une seule fois, à la racine, par PapillonTheme.
         setContent {
-            MaterialTheme {
-                AppNav(
-                    baseUrlSeed = baseUrlSeed,
-                    // L'adresse arrive en paramètre : après un changement de
-                    // serveur, les alertes suivent le serveur courant.
-                    loadAlerts = { url ->
-                        withContext(Dispatchers.IO) {
-                            SecurityAlertsRepository(ApiClient(url, tokens = tokens)).fetch()
-                        }
-                    },
-                )
-            }
+            AppNav(
+                baseUrlSeed = baseUrlSeed,
+                // L'adresse arrive en paramètre : après un changement de
+                // serveur, les alertes suivent le serveur courant.
+                loadAlerts = { url ->
+                    withContext(Dispatchers.IO) {
+                        SecurityAlertsRepository(ApiClient(url, tokens = tokens)).fetch()
+                    }
+                },
+            )
         }
     }
 }
