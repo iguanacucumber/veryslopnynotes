@@ -396,7 +396,9 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     // dont il est la logique (changer de serveur = se ré-appairer). Son ordre
     // reste vérifié, dans son nouveau fichier.
     const pairing = read(join(UI, "PairingScreen.kt"));
-    const fn = pairing.slice(pairing.indexOf("private fun changeServer"));
+    // `internal` et non `private` : la fonction est appelée par AppNav.kt,
+    // dans le même module — la visibility module suffit, elle ne sort pas du module.
+    const fn = pairing.slice(pairing.indexOf("fun changeServer("));
     const order = ["ServerConfig.validateBaseUrl(raw)", "serverStore.save(target)", "accounts.logout()", "onSwitched(target)"];
     const positions = order.map((needle) => fn.indexOf(needle));
     for (const p of positions) expect(p).toBeGreaterThan(-1);
