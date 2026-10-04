@@ -52,9 +52,11 @@ const kt = codeOnly(src);
 const ZONE = "Europe/Paris";
 const MIN = 60_000;
 const HOUR = 3_600_000;
-/** Mêmes bornes que `MIN_EPOCH_MS` / `MAX_EPOCH_MS` du Kotlin. */
-const MIN_EPOCH_MS = -62_135_596_800_000;
-const MAX_EPOCH_MS = 253_402_300_799_999;
+/** Mêmes bornes que `MIN_EPOCH_MS` / `MAX_EPOCH_MS` du Kotlin : `0001-01-02`
+ *  → `9999-12-30` UTC, soit un jour de marge de part et d'autre pour que le
+ *  fuseau (jusqu'à +14 h) ne fasse pas sortir l'année du motif `dd/MM/yyyy`. */
+const MIN_EPOCH_MS = -62_135_510_400_000;
+const MAX_EPOCH_MS = 253_402_128_000_000;
 
 type Local = { y: number; m: number; d: number; hh: number; mm: number; day: number };
 
@@ -99,7 +101,8 @@ function tsRelativeTimeFr(epochMillis: number, now: number, zone: string = ZONE)
   if (!past && there.day === today.day + 86_400_000) return `demain ${clock}`;
   const days = Math.abs(there.day - today.day) / 86_400_000;
   if (days < 7) return past ? `il y a ${days} jours` : `dans ${days} jours`;
-  return `${pad2(there.d)}/${pad2(there.m)}/${there.y}`;
+  // `yyyy` est une annee SUR QUATRE CHIFFRES : le Kotlin rend « 0001 », pas « 1 ».
+  return `${pad2(there.d)}/${pad2(there.m)}/${String(there.y).padStart(4, "0")}`;
 }
 
 /** Miroir de `errorHeadline(message)`. */
@@ -238,9 +241,14 @@ describe("briques d'interface (#136)", () => {
       const obtenu = tsRelativeTimeFr(aberrant, NOW);
       expect({ aberrant, obtenu, nonVide: obtenu.length > 0 }).toEqual({ aberrant, obtenu, nonVide: true });
     }
-    // Le bornage est bien celui du Kotlin, et il borne les deux bornes.
-    expect(kt).toContain("private const val MIN_EPOCH_MS = -62_135_596_800_000L");
-    expect(kt).toContain("private const val MAX_EPOCH_MS = 253_402_300_799_999L");
+    // L'annee reste dans le motif, cote borne comme cote borne haute : c'est ce
+    // qu'un bornage trop large ne garantit pas (verifie sur l'appareil, fuseau
+    // +04 : une borne a 9999-12-31T23:59:59Z y rendait « 01/01/+10000 »).
+    expect(tsRelativeTimeFr(-(2 ** 63), NOW)).toBe("02/01/0001");
+    expect(tsRelativeTimeFr(2 ** 63 - 1, NOW)).toBe("30/12/9999");
+    // Le bornage est bien celui du Kotlin, et il borne les deux extremites.
+    expect(kt).toContain("private const val MIN_EPOCH_MS = -62_135_510_400_000L");
+    expect(kt).toContain("private const val MAX_EPOCH_MS = 253_402_128_000_000L");
     expect(kt).toContain("coerceIn(MIN_EPOCH_MS, MAX_EPOCH_MS)");
   });
 
