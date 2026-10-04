@@ -70,9 +70,11 @@ remplacer ensuite depuis l'app.
 ## Build debug (SDK requis, pas de réseau tiers)
 
 ```sh
-cd android
-./gradlew assembleDebug
+make buildDebugApk            # equivalent : cd android && ./gradlew assembleDebug
 ```
+
+Sortie : `android/app/build/outputs/apk/debug/app-debug.apk`. La clé de signature de
+debug est générée par Gradle, jamais dans le repo.
 
 ### Ce que `make check` compile vraiment
 
@@ -107,9 +109,11 @@ navigation-compose + OkHttp + core-ktx/activity, licences Apache-2.0).
 Voir `docs/RELEASE.md` (procédure complète) :
 
 ```sh
-cd android
-./gradlew assembleRelease   # signé si STORE_FILE (+ mots de passe/alias) présent, sinon non signé
+make buildRelApk             # equivalent : cd android && ./gradlew assembleRelease
 ```
+
+Sortie : `android/app/build/outputs/apk/release/` — signé **si** `STORE_FILE` (+ mots de
+passe/alias) est présent dans l'environnement, sinon `app-release-unsigned.apk`.
 
 Keystore généré une fois hors repo (`keytool -genkeypair ...`), config via
 `~/.gradle/gradle.properties` (`release.storeFile/storePassword/keyAlias/
