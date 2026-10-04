@@ -260,9 +260,10 @@ fun HomeQuickActionsGrid(
  * Carte d'accès rapide : pastille colorée, titre en gras, UNE ligne d'état.
  *
  * La couleur vient de `HomeQuickActionUi.colorHex` (entrée de `SubjectPalette`)
- * via les deux fonctions de matière du thème : pastel à 75 % derrière l'icône,
- * encre à −45 % (4.87:1 au pire de la palette). Le fond reste `surface` : le
- * pastel est déjà dans la pastille, la carte entière ne ferait que doubler.
+ * via les deux fonctions de matière du thème : fond de pastille à 75 % vers le
+ * blanc (sombre : 60 % vers le noir), encre mesurée à −45 % / +55 % (4.5:1 au
+ * pire de la palette dans les deux thèmes). Le fond reste `surface` : le pastel
+ * est déjà dans la pastille, la carte entière ne ferait que doubler.
  *
  * L'état est borné à une ligne (`homeEllipsis` côté logique) : une carte de
  * grille ne peut pas faire taller ses voisines.

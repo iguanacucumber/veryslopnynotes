@@ -62,7 +62,11 @@ android-compile:
 # `veryslopnynotes://<route>` (deep link DU VARIANT DEBUG seulement) et dépose
 # la capture dans shots/<date-UTC>/. Sort en erreur si l'appareil manque, si
 # l'écran rend noir ou si l'app atterrit ailleurs que sur la route demandée :
-# une capture non vérifiée ne sert à rien. `make shot ROUTE=index SHOT_ARGS=--no-build`
+# une capture non vérifiée ne sert à rien.
+# `make shot ROUTE=index SHOT_ARGS="--theme dark"` force le thème de l'APPAREIL
+# avant la capture (#179 : le pas d'encre de matière est sensible au thème, donc la
+# recette sombre doit être rejouable) ; le nom du fichier porte le thème.
+# `make shot ROUTE=index SHOT_ARGS=--no-build`
 # recapture le MÊME APK sans reconstruire (reprise d'une capture ratée ; le
 # script prévient bruyamment que la capture peut être périmée). La découverte
 # JDK/SDK est celle d'android-env.sh, comme les autres cibles Gradle.

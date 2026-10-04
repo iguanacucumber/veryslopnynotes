@@ -40,8 +40,21 @@ function tsTintHex(hex: string, p: number): Rgb | null {
   return tsTint(hex8(hex), p);
 }
 
-const tsSubjectSurface = (hex: string): Rgb | null => tsTintHex(hex, 0.75);
-const tsSubjectContent = (hex: string): Rgb | null => tsTintHex(hex, -0.45);
+// Miroir de `PapillonTheme.kt` : les quatre pas de matière sont SENSIBLES au
+// thème (#179) — un pas unique ne peut pas servir les deux, les directions
+// étant opposées (assombrir une couleur pour un fond clair, l'éclaircir pour un
+// fond sombre). Les constantes ci-dessous relisent les `const val` du Kotlin.
+const SUBJECT_SURFACE_TINT = 0.75;
+const SUBJECT_SURFACE_DARK_TINT = -0.6;
+const SUBJECT_CONTENT_LIGHT_TINT = -0.45;
+const SUBJECT_CONTENT_DARK_TINT = 0.55;
+
+/** `subjectSurface(hex, dark)` : le fond de carte matière du thème demandé. */
+const tsSubjectSurface = (hex: string, dark = false): Rgb | null =>
+  tsTintHex(hex, dark ? SUBJECT_SURFACE_DARK_TINT : SUBJECT_SURFACE_TINT);
+/** `subjectContent(hex, dark)` : l'encre matière du thème demandé. */
+const tsSubjectContent = (hex: string, dark = false): Rgb | null =>
+  tsTintHex(hex, dark ? SUBJECT_CONTENT_DARK_TINT : SUBJECT_CONTENT_LIGHT_TINT);
 
 function tsLuminance(color: Rgb): number {
   const linear = (v: number): number => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
@@ -57,6 +70,23 @@ function tsContrast(a: Rgb, b: Rgb): number {
 const INK = hex8("#1F292E");
 const tsBestContentOn = (background: Rgb): Rgb =>
   tsContrast(background, INK) >= tsContrast(background, WHITE) ? INK : WHITE;
+// Miroir de `bestSubjectContentOn` (#179) : le fond d'une puce change avec son
+// état (transparent au repos, `secondaryContainer` une fois sélectionnée) alors
+// que le `secondaryContainer` sombre reste un aplat clair — on garde donc le pas
+// du thème qui passe le mieux, mesuré contre le fond RÉEL.
+const tsBestSubjectContentOn = (hex: string, background: Rgb): Rgb | null => {
+  let best: Rgb | null = null;
+  let bestRatio = -1;
+  for (const candidate of [tsSubjectContent(hex, false), tsSubjectContent(hex, true)]) {
+    if (!candidate) continue;
+    const ratio = tsContrast(candidate, background);
+    if (ratio > bestRatio) {
+      bestRatio = ratio;
+      best = candidate;
+    }
+  }
+  return best;
+};
 // Miroir de `errorInk` (#146) : en thème sombre, le rouge d'`error` est éclairci
 // de `ERROR_INK_TINT` vers le blanc — sinon 3.70:1 sur la surface `#121212`.
 const ERROR_INK_TINT = 0.7;
@@ -228,22 +258,98 @@ describe("unit android thème Papillon (#134)", () => {
     expect(below.sort()).toEqual(["#007FDA", "#DD6B00"]);
   });
 
-  test("carte matière : subjectContent sur subjectSurface >= 4.5 pour les 20 couleurs", () => {
-    let worst = { h: "", ratio: 21 };
-    for (const h of PALETTE) {
-      const bg = tsSubjectSurface(h)!;
-      const ink = tsSubjectContent(h)!;
-      const ratio = tsContrast(ink, bg);
-      expect({ h, ok: ratio >= 4.5 }).toEqual({ h, ok: true });
-      // Le fond pastel reste distinguable de la surface (une carte se voit).
-      expect(tsContrast(bg, SURFACE)).toBeGreaterThan(1);
-      if (ratio < worst.ratio) worst = { h, ratio };
+  test("carte matière : le nom de la matière se lit dans LES DEUX thèmes", () => {
+    // #179 : le pas suit le fond. En clair le fond est le pastel de Papillon
+    // (+75 %) et l'encre −45 % ; en sombre le fond s'assombrit (−60 %) et
+    // l'encre s'éclaircit (+55 %). 4.5:1 sur les 20 couleurs, dans les deux.
+    for (const dark of [false, true]) {
+      let worst = { h: "", ratio: 21 };
+      for (const h of PALETTE) {
+        const bg = tsSubjectSurface(h, dark)!;
+        const ink = tsSubjectContent(h, dark)!;
+        const ratio = tsContrast(ink, bg);
+        expect({ dark, h, ok: ratio >= 4.5 }).toEqual({ dark, h, ok: true });
+        // Le fond de carte reste distinguable de la surface (une carte se voit).
+        expect(tsContrast(bg, dark ? DARK_SURFACE : SURFACE)).toBeGreaterThan(1);
+        if (ratio < worst.ratio) worst = { h, ratio };
+      }
+      // PIRE cas de chaque thème, figé : un changement de pas se voit ici.
+      expect({ dark, h: worst.h, ratio: rounded(worst.ratio) }).toEqual(
+        dark ? { dark, h: "#DD0030", ratio: 6.29 } : { dark, h: "#E8B048", ratio: 4.9 },
+      );
     }
-    // Le pas de Papillon (-15 %) ne suffirait pas : 2.29:1 au pire (#E8B048).
+    // Le pas de Papillon (-15 %) ne suffirait pas en clair : 2.29:1 au pire.
     expect(rounded(Math.min(...PALETTE.map((h) => tsContrast(tsTintHex(h, -0.15)!, tsSubjectSurface(h)!)))))
       .toBe(2.3);
-    // -45 % est le pas le plus clair qui repasse au-dessus des 4.5.
-    expect({ h: worst.h, ratio: rounded(worst.ratio) }).toEqual({ h: "#E8B048", ratio: 4.9 });
+    // RÉGRESSION #179 : le pas UNIQUE d'avant (−45 % partout) ne passe NI la
+    // carte sombre (1.17:1) NI la carte de devoir en thème sombre (1.30:1 sur
+    // la surface #121212). Ces deux lignes échouent sur le code précédent.
+    expect(rounded(Math.min(...PALETTE.map((h) => tsContrast(tsSubjectContent(h, false)!, tsSubjectSurface(h, true)!)))))
+      .toBe(1.17);
+    expect(rounded(Math.min(...PALETTE.map((h) => tsContrast(tsSubjectContent(h, false)!, DARK_SURFACE)))))
+      .toBe(1.3);
+  });
+
+  test("carte matière : l'encre se lit sur la surface RÉELLE de chaque carte, dans les deux thèmes", () => {
+    // Le fond n'est pas toujours `subjectSurface` : la carte de DEVOIR et le
+    // widget d'accueil sont posés sur la `surface` du thème (#121212 en sombre,
+    // blanc en clair), la rangée de note sur la `surfaceVariant`. L'encre doit
+    // donc passer sur les trois, sans que l'appelant ait à choisir un pas.
+    const surfaces: Array<[string, Rgb, Rgb]> = [
+      ["surface", SURFACE, DARK_SURFACE],
+      ["surfaceVariant", SURFACE_VARIANT, tsTint(DARK_SURFACE, 0.1)],
+      ["background (rangée de puces)", SURFACE, DARK_BACKGROUND],
+    ];
+    for (const [name, light, dark] of surfaces) {
+      for (const h of PALETTE) {
+        const clair = tsContrast(tsSubjectContent(h, false)!, light);
+        const sombre = tsContrast(tsSubjectContent(h, true)!, dark);
+        expect({ name, h, clair: Math.round(clair * 100) / 100 >= 4.5 }).toEqual({
+          name, h, clair: true,
+        });
+        expect({ name, h, sombre: Math.round(sombre * 100) / 100 >= 4.5 }).toEqual({
+          name, h, sombre: true,
+        });
+      }
+    }
+    // Pires figés : le violet `#7600CA` sur la surface sombre (7.31:1) et sa
+    // variante (`surfaceVariant`, 5.63:1) — les deux marches les plus courtes.
+    let pireSurface = 99;
+    let pireVariant = 99;
+    for (const h of PALETTE) {
+      pireSurface = Math.min(pireSurface, tsContrast(tsSubjectContent(h, true)!, DARK_SURFACE));
+      pireVariant = Math.min(pireVariant, tsContrast(tsSubjectContent(h, true)!, tsTint(DARK_SURFACE, 0.1)));
+    }
+    expect({ pireSurface: rounded(pireSurface), pireVariant: rounded(pireVariant) }).toEqual({
+      pireSurface: 7.31, pireVariant: 5.63,
+    });
+  });
+
+  test("puce matière : l'encre est mesurée contre le fond réel de la puce", () => {
+    // Au repos la puce est transparente sur le fond de l'écran (#FFFFFF en
+    // clair, #000000 en sombre) ; sélectionnée elle prend le `secondaryContainer`
+    // du thème, qui reste un APLAT CLAIR même en sombre. Un seul pas ne peut pas
+    // passer les deux : `bestSubjectContentOn` mesure et choisit.
+    const chips: Array<[string, Rgb]> = [
+      ["clair/repos", SURFACE],
+      ["clair/sélectionnée", GREEN_PALE],
+      ["sombre/repos", DARK_BACKGROUND],
+      ["sombre/sélectionnée", GREEN_PALE],
+    ];
+    for (const [name, bg] of chips) {
+      for (const h of PALETTE) {
+        const ink = tsBestSubjectContentOn(h, bg)!;
+        expect({ name, h, ok: tsContrast(ink, bg) >= 4.5 }).toEqual({ name, h, ok: true });
+      }
+    }
+    // RÉGRESSION #179 : la couleur BRUTE (ce que faisait la puce avant) tombe à
+    // 1.83:1 au pire sur le vert pâle et 2.62:1 sur le fond sombre — le défaut
+    // constaté (le jaune de la palette, lui, fait 1.96:1 sur le blanc).
+    expect(rounded(Math.min(...PALETTE.map((h) => tsContrast(hex8(h), GREEN_PALE))))).toBe(1.83);
+    expect(rounded(Math.min(...PALETTE.map((h) => tsContrast(hex8(h), DARK_BACKGROUND))))).toBe(2.62);
+    // Puce sélectionnée en thème sombre : le pas sombre y est à 1.25:1, donc
+    // c'est bien le pas CLAIR qui est choisi — la mesure tranche, pas le thème.
+    expect(tsBestSubjectContentOn(PALETTE[4]!, GREEN_PALE)).toEqual(tsSubjectContent(PALETTE[4]!, false));
   });
 });
 
@@ -269,21 +375,37 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     expect(kt).toContain("bodyMedium = papillonText(14, 20)");
     expect(kt).toContain("labelSmall = papillonText(13, 17)");
     expect(kt).toContain("fontFamily = FontFamily.SansSerif");
-    // Helpers purs : signatures attendues par le miroir ci-dessus.
+    // Helpers purs : signatures attendues par le miroir ci-dessus. `#179` : les
+    // deux fonctions de matière portent le thème EN PARAMÈTRE (donc testables
+    // sans Compose) et un raccourci `@Composable` qui le LIT dans le thème.
     for (const fn of [
       "fun tint(color: Color, p: Float): Color",
       "fun tint(hex: String, p: Float): Color?",
-      "fun subjectSurface(hex: String): Color?",
-      "fun subjectContent(hex: String): Color?",
+      "fun subjectSurface(hex: String, dark: Boolean): Color?",
+      "fun subjectContent(hex: String, dark: Boolean): Color?",
       "fun relativeLuminance(color: Color): Float",
       "fun contrastRatio(a: Color, b: Color): Float",
       "fun bestContentOn(background: Color): Color",
+      "fun bestSubjectContentOn(hex: String, background: Color): Color?",
     ]) {
       expect({ fn, found: kt.includes(fn) }).toEqual({ fn, found: true });
     }
-    // Les deux coefficients qui portent les garanties de contraste.
-    expect(kt).toContain("tint(hex, .75f)");
-    expect(kt).toContain("tint(hex, -.45f)");
+    // Les raccourcis `@Composable` : le mode se LIT dans le thème, donc une
+    // encre de matière ne peut pas être choisie pour le mauvais thème.
+    expect(kt).toContain("fun subjectSurface(hex: String): Color? = subjectSurface(hex, isDarkSurface())");
+    expect(kt).toContain("fun subjectContent(hex: String): Color? = subjectContent(hex, isDarkSurface())");
+    // Les quatre pas qui portent les garanties de contraste, et le câblage qui
+    // les rend sensibles au thème. Un pas unique figé échoue ici.
+    for (const step of [
+      "const val SUBJECT_SURFACE_TINT = 0.75f",
+      "const val SUBJECT_SURFACE_DARK_TINT = -0.60f",
+      "const val SUBJECT_CONTENT_LIGHT_TINT = -0.45f",
+      "const val SUBJECT_CONTENT_DARK_TINT = 0.55f",
+    ]) {
+      expect({ step, found: kt.includes(step) }).toEqual({ step, found: true });
+    }
+    expect(kt).toContain("tint(hex, if (dark) SUBJECT_SURFACE_DARK_TINT else SUBJECT_SURFACE_TINT)");
+    expect(kt).toContain("tint(hex, if (dark) SUBJECT_CONTENT_DARK_TINT else SUBJECT_CONTENT_LIGHT_TINT)");
     expect(kt).toContain("const val PapillonSecondaryAlpha = 0.65f");
     // Scheme : les deux modes, plus `MaterialTheme` complet (typo + formes).
     expect(kt).toContain("lightColorScheme(");
@@ -354,6 +476,28 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     expect(kt).toContain("fun errorInk(error: Color, dark: Boolean): Color = if (dark) tint(error, ERROR_INK_TINT) else error");
     expect(kt).toContain("fun errorTextColor(): Color = errorInk(MaterialTheme.colorScheme.error, isDarkSurface())");
   });
+
+  // #179 : les deux passers du pas de matière — la pastille (`PapPill`, qui
+  // reçoit une `Color` et non un hex) et la puce matière des devoirs. Un pas
+  // figé sur +75 % / −45 % y poserait un aplat clair et une encre assombrie en
+  // thème sombre : les deux sources sont donc vérifiées ici.
+  test("les deux passers du pas de matière lisent les pas du thème", () => {
+    const pill = readCode(join(UI, "PapComponents.kt"));
+    expect(pill).toContain("val dark = isDarkSurface()");
+    expect(pill).toContain("tint(color, if (dark) SUBJECT_SURFACE_DARK_TINT else SUBJECT_SURFACE_TINT)");
+    expect(pill).toContain("tint(color, if (dark) SUBJECT_CONTENT_DARK_TINT else SUBJECT_CONTENT_LIGHT_TINT)");
+    expect(pill).not.toContain("tint(color, .75f)");
+    expect(pill).not.toContain("tint(color, -.45f)");
+    // La puce matière : le fond est POSÉ (donc connu), l'encre MESURÉE contre.
+    const tasks = readCode(join(UI, "Assignments.kt"));
+    expect(tasks).toContain("bestSubjectContentOn(");
+    // LE MÊME fond sert à la puce et à la mesure de l'encre (« picked ») : une
+    // mesure faite sur un fond différent de celui qui est rendu ne prouve rien.
+    expect(tasks).toContain("selectedContainerColor = picked");
+    expect(tasks).toContain("if (isSelected) picked else resting");
+    // La couleur BRUTE ne peut plus servir d'encre de texte : c'était 1.96:1.
+    expect(tasks).not.toContain("colorFromHex(subjectColorHex(prefs, subject)) ?: LocalContentColor.current");
+  });
 });
 
 // AUDIT DE CONTRASTE #146 — TOUTES les paires texte/fond que l'app utilise
@@ -423,21 +567,36 @@ describe("unit android contraste (#146) — encre de texte, clair ET sombre", ()
     // Les trois surfaces matière de l'app — carte de cours, pastille de note
     // (`PapPill`), puce de compétence (`chipSurfaceColor`) — et les DEUX encres
     // possibles : `subjectContent` (le pas mesuré du thème) et `bestContentOn`
-    // (l'argmax du thème). Sur les 20, en clair comme en « sombre » inversé :
-    // une couleur de matière qui n'a pas de couleur de fond (carte annulée,
-    // avatar) est vue sur `surface`.
-    for (const h of PALETTE) {
-      const raw = hex8(h);
-      const surface = tsSubjectSurface(h)!;
-      const content = tsSubjectContent(h)!;
-      const chipInk = tsBestContentOn(tsTint(raw, 0.75));
-      const cases: Array<[string, number]> = [
-        ["subjectContent/subjectSurface", tsContrast(content, surface)],
-        ["bestContentOn/pastille 75%", tsContrast(chipInk, tsTint(raw, 0.75))],
-        ["bestContentOn/surface (carte annulée)", tsContrast(tsBestContentOn(SURFACE), SURFACE)],
-      ];
-      for (const [name, ratio] of cases) {
-        expect({ h, name, ok: ratio >= 4.5 }).toEqual({ h, name, ok: true });
+    // (l'argmax du thème). Sur les 20, dans les DEUX thèmes (#179) : la pastille
+    // porte le même couple de pas que la carte, inversé en sombre.
+    for (const dark of [false, true]) {
+      for (const h of PALETTE) {
+        const raw = hex8(h);
+        const surface = tsSubjectSurface(h, dark)!;
+        const content = tsSubjectContent(h, dark)!;
+        // `PapPill` prend une `Color`, pas un hex : c'est le MÊME couple de pas.
+        const pillSurface = tsTint(raw, dark ? SUBJECT_SURFACE_DARK_TINT : SUBJECT_SURFACE_TINT);
+        const pillInk = tsTint(raw, dark ? SUBJECT_CONTENT_DARK_TINT : SUBJECT_CONTENT_LIGHT_TINT);
+        const page = dark ? DARK_BACKGROUND : SURFACE;
+        const cases: Array<[string, number]> = [
+          ["subjectContent/subjectSurface", tsContrast(content, surface)],
+          ["PapPill encre/fond", tsContrast(pillInk, pillSurface)],
+          ["bestContentOn/pastille", tsContrast(tsBestContentOn(pillSurface), pillSurface)],
+          ["bestContentOn/surface (carte annulée)", tsContrast(tsBestContentOn(page), page)],
+        ];
+        for (const [name, ratio] of cases) {
+          expect({ dark, h, name, ok: ratio >= 4.5 }).toEqual({ dark, h, name, ok: true });
+        }
+      }
+    }
+    // `PapPill` ne reçoit pas qu'une couleur de matière : `error` (pastille
+    // « absent », « Annulé ») et `primary` (pastille « en cours », compteur de
+    // messages) passent par le même couple de pas, dans les deux thèmes.
+    for (const base of [DANGER, GREEN]) {
+      for (const dark of [false, true]) {
+        const bg = tsTint(base, dark ? SUBJECT_SURFACE_DARK_TINT : SUBJECT_SURFACE_TINT);
+        const fg = tsTint(base, dark ? SUBJECT_CONTENT_DARK_TINT : SUBJECT_CONTENT_LIGHT_TINT);
+        expect({ dark, ok: tsContrast(fg, bg) >= 4.5 }).toEqual({ dark, ok: true });
       }
     }
     // `PapSubjectAvatar` est décorée à 31 % AU-DESSUS de la carte et n'y porte
@@ -472,12 +631,26 @@ describe("unit android contraste (#146) — encre de texte, clair ET sombre", ()
     expect({ ok: tsContrast(darkInk, darkSurface) >= 4.5 }).toEqual({ ok: true });
   });
 
-  test("carte matière : le fond pastel reste distinguable de la surface", () => {
+  test("carte matière : le fond reste distinguable de la surface, dans les deux thèmes", () => {
     // Un aplat à 1.02:1 de la surface rendrait la carte invisible — le contraste
-    // du TEXTE est inutile si la CARTE ne se voit plus.
+    // du TEXTE est inutile si la CARTE ne se voit plus. En sombre (#179) le fond
+    // est assombri au lieu d'être éclairci : il reste donc loin du blanc.
+    for (const dark of [false, true]) {
+      for (const h of PALETTE) {
+        const bg = tsSubjectSurface(h, dark)!;
+        const page = dark ? DARK_SURFACE : SURFACE;
+        expect({ dark, h, visible: tsContrast(bg, page) > 1 }).toEqual({ dark, h, visible: true });
+      }
+    }
+    // Pire cas sombre figé : le violet `#7600CA` à 1.11:1 de la surface — le même
+    // écart que le pastel clair à 1.07:1 du blanc, la symétrie du pas.
+    let pire = 99;
+    for (const h of PALETTE) pire = Math.min(pire, tsContrast(tsSubjectSurface(h, true)!, DARK_SURFACE));
+    expect({ pire: rounded(pire) }).toEqual({ pire: 1.11 });
+    // Et le fond sombre ne peut pas être un aplat CLAIR : c'était le défaut
+    // visible (pastel à +75 % sur fond noir, encre assombrie dessus).
     for (const h of PALETTE) {
-      const bg = tsSubjectSurface(h)!;
-      expect({ h, visible: tsContrast(bg, SURFACE) > 1 }).toEqual({ h, visible: true });
+      expect(tsLuminance(tsSubjectSurface(h, true)!)).toBeLessThan(0.5);
     }
     // `primaryContainer` (bandeau « périmé », pastille d'onglet) est à 1.07:1 du
     // blanc : c'est le PRIX de son pas (94 % vers le blanc, le plus clair qui

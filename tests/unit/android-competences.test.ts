@@ -44,8 +44,11 @@ function tsContrast(a: Rgb, b: Rgb): number {
 }
 const tsBestContentOn = (background: Rgb): Rgb =>
   tsContrast(background, INK) >= tsContrast(background, WHITE) ? INK : WHITE;
-/** `chipSurfaceColor` : fond borné en luminance (pastel), puis encre mesurée. */
-const tsChipSurface = (hex: string): Rgb => tsTint(hex8(hex), 0.75);
+/** `chipSurfaceColor` : fond borné en luminance — pastel en clair, pastel SOMBRE
+ *  en thème sombre (#179 : le pas n'est plus figé sur le fond clair) — puis
+ *  encre mesurée par `bestContentOn`. */
+const tsChipSurface = (hex: string, dark = false): Rgb =>
+  tsTint(hex8(hex), dark ? -0.6 : 0.75);
 const tsChipContent = (background: Rgb): Rgb => tsBestContentOn(background);
 const rounded = (v: number): number => Math.round(v * 100) / 100;
 
@@ -212,8 +215,21 @@ describe("unit android compétences (#78)", () => {
       const bg = tsChipSurface(h);
       expect({ h, encre: tsChipContent(bg) === INK }).toEqual({ h, encre: true });
     }
+    // Thème SOMBRE (#179) : le fond s'assombrit AU MÊME ENDROIT que la page, et
+    // l'encre bascule donc côté blanc — mesurée, jamais forcée.
+    let pireSombre = { h: "", ratio: 21 };
+    for (const h of PALETTE) {
+      const bg = tsChipSurface(h, true);
+      const ratio = tsContrast(tsChipContent(bg), bg);
+      expect({ h, ok: ratio >= 4.5 }).toEqual({ h, ok: true });
+      // Un aplat clair en thème sombre : c'est ce que le pas figé produisait.
+      expect(tsLuminance(bg)).toBeLessThan(0.5);
+      if (ratio < pireSombre.ratio) pireSombre = { h, ratio };
+    }
+    expect({ h: pireSombre.h, ratio: rounded(pireSombre.ratio) }).toEqual({ h: "#E8B048", ratio: 8.87 });
     // Même règle pour une couleur HACHÉE (le serveur n'en publie pas) : le fond
-    // pastel est toujours clair, donc l'écart au texte reste confortable.
+    // est borné du même côté du gris que la page, donc l'écart au texte reste
+    // confortable — et l'encre, mesurée, s'adapte.
     const hashed = stableColorFor("sk-geometrie");
     const hashedRatio = tsContrast(tsChipContent(tsChipSurface(hashed)), tsChipSurface(hashed));
     expect({ hashed, ok: hashedRatio >= 4.5 }).toEqual({ hashed, ok: true });
@@ -231,7 +247,12 @@ describe("unit android compétences (#78)", () => {
     expect(kt).toContain("stateDescription = if (selected) \"Sélectionnée\"");
     expect(kt).toContain("border = if (selected) BorderStroke(SELECTED_BORDER, ink) else null");
     // Fond borné en luminance + encre mesurée (les deux fonctions pures).
-    expect(kt).toContain("fun chipSurfaceColor(hex: String): Color = tint(parseChipColor(hex), .75f)");
+    expect(kt).toContain(
+      "fun chipSurfaceColor(hex: String, dark: Boolean): Color =",
+    );
+    expect(kt).toContain("tint(parseChipColor(hex), if (dark) SUBJECT_SURFACE_DARK_TINT else SUBJECT_SURFACE_TINT)");
+    expect(kt).toContain("fun chipSurfaceColor(hex: String): Color = chipSurfaceColor(hex, isDarkSurface())");
+    expect(kt).not.toContain("tint(parseChipColor(hex), .75f)");
     expect(kt).toContain("fun chipContentColor(background: Color): Color = bestContentOn(background)");
     // La rangée de puces DÉFILE (avant : une Row sans défilement, donc les
     // puces au-delà de l'écran étaient invisibles).
