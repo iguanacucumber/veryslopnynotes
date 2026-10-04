@@ -1,5 +1,7 @@
 package fr.veryslopnynotes.ui
 
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
 import fr.veryslopnynotes.core.ServerConfig
 import fr.veryslopnynotes.data.SseState
 
@@ -34,6 +36,29 @@ data class SetupForm(
     val state: PairingState = PairingState.Idle,
     val sse: SseState = SseState.Disconnected,
     val lastEventPreview: String? = null,
+)
+
+/**
+ * Brouillon de l'assistant, SAUVEGARDÉ (#147) : le champ SAISI qui n'est pas un
+ * credential, et rien d'autre.
+ *
+ * Des champs sont volontairement absents :
+ *
+ *  - `qrRaw` et `pin`. Le QR est le contenu `login` + `jeton` chiffrés dont la
+ *    clé EST le PIN : les deux ensemble sont la preuve de détention, et le
+ *    serveur ne les garde que le temps de la session. Les écrire dans l'état
+ *    d'activité (donc dans un support que l'utilisateur ne surveille pas) serait
+ *    la première PERSISTANCE de ce credential dans l'app — le contraire de la
+ *    règle « provisoire, jamais stocké ». Le coût est un rescane après rotation,
+ *    et l'étape atteinte est restaurée : l'utilisateur retombe sur l'étape 3,
+ *    pas sur le champ serveur.
+ *  - `state`, `sse` et `lastEventPreview` : états de MACHINE (un envoi en
+ *    cours, une connexion SSE). Restaurer « Connexion… » afficherait un écran
+ *    figé sur une requête morte, donc ils repartent à leur valeur initiale.
+ */
+val SetupFormSaver: Saver<SetupForm, Any> = listSaver(
+    save = { listOf(it.schoolUrl) },
+    restore = { SetupForm(schoolUrl = it[0]) },
 )
 
 fun sseLabel(s: SseState): String = when (s) {
