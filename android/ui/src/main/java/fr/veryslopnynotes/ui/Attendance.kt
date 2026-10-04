@@ -58,6 +58,15 @@ private const val ABSENCE_KIND_FALLBACK = "Événement"
 /** Libellé de la vue « année entière » (aucune tranche choisie). */
 private const val ALL_PERIODS_LABEL = "Année"
 
+/** LIGNE FIXE de l'écran « Vie scolaire », rendue dans ses états SANS donnée. */
+private const val ATTENDANCE_HEADING = "Absences indisponibles."
+
+/** LIGNE FIXE de l'écran « Sanctions », rendue dans ses états SANS donnée. */
+private const val SANCTIONS_HEADING = "Sanctions indisponibles."
+
+/** Titre de la liste des sanctions : présent AVEC donnée comme SANS donnée. */
+private const val SANCTIONS_LABEL = "Sanctions déclarées"
+
 data class AbsenceUi(
     val id: String,
     val kind: String,
@@ -226,6 +235,19 @@ fun absencesForPeriod(data: AttendanceUi, periodId: String?): List<AbsenceUi> =
 //   - la page a enfin un conteneur de défilement : la liste des événements pouvait
 //     déborder de l'écran sans qu'on puisse l'atteindre.
 //
+// #172 : ce que la capture sur appareil a montré, et ce que ce fichier corrige.
+//   1. le témoin de route du marqueur était le SOUS-TITRE supprimé en #141 :
+//      `make shot ROUTE=attendance` échouait sur un écran parfaitement correct ;
+//   2. la branche d'erreur ne rendait que le message du serveur et « Réessayer »,
+//      un libellé que SEPT écrans partagent — donc rien de propre à l'écran, et
+//      le titre « Vie scolaire » ne suffit pas (il se lit dans la barre d'onglets
+//      sur les routes d'onglet). D'où [CachedSchoolRoute]'s `heading`, une ligne
+//      FIXE par écran dans les états sans payload, et le titre de liste des
+//      sanctions, rendu AVEC et SANS donnée ;
+//   3. « Sanctions » était encore un bouton dans le corps, derrière la capacité
+//      (#87) : c'est une action de la barre du haut, comme Compétences depuis
+//      #162, donc `onSanctions` disparaît d'ici.
+//
 // ponytail: coquille partagée (cache synchrone + refresh + repli hors-ligne)
 //   identique à CanteenRoute/NewsRoute, factorisée ici pour deux ressources.
 // ponytail: `body` reçoit le PAYLOAD et le `refresh`, et rien d'autre : l'état
@@ -235,6 +257,14 @@ fun absencesForPeriod(data: AttendanceUi, periodId: String?): List<AbsenceUi> =
 /**
  * Coquille des deux écrans « vie scolaire » : cache synchrone au premier rendu,
  * relecture réseau, repli hors-ligne, et les quatre ÉTATS possibles.
+ *
+ * [heading] est la LIGNE FIXE de l'écran, rendue dans les états qui n'ont pas de
+ * payload (chargement, cache vide, échec). Elle ne DOUBLE pas le titre de la
+ * barre du haut : elle dit ce que l'écran cherche à montrer, et elle est le seul
+ * libellé que cet écran rend dans ces états — `PapErrorState` ne sort qu'un
+ * message de serveur et « Réessayer », que sept écrans partagent, donc sans elle
+ * une capture de cette route ne prouverait rien (cf. `ROUTE_WITNESSES` de
+ * `shot.sh` : le titre « Vie scolaire » est unique, « Réessayer » ne l'est pas).
  *
  * [body] reçoit le payload affiché (jamais la chaîne JSON rendue) et le geste de
  * relecture. Elle n'est PAS appelée quand il n'y a rien à montrer : un écran sans
@@ -246,6 +276,7 @@ private fun CachedSchoolRoute(
     repo: SyncedRepository,
     baseUrl: String,
     resource: String,
+    heading: String,
     refreshTick: Int = 0,
     body: @Composable (String?, () -> Unit) -> Unit,
 ) {
@@ -289,8 +320,13 @@ private fun CachedSchoolRoute(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (payload == null) {
-            // Un écran SANS donnée : squelette, vide, ou le VRAI message du
-            // serveur avec son « Réessayer ». Rien d'autre sous le message.
+            // La ligne FIXE de l'écran, puis l'ÉTAT et rien d'autre : squelette,
+            // vide, ou le VRAI message du serveur avec son « Réessayer ».
+            Text(
+                text = heading,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             when (state) {
                 UiState.Loading -> PapLoading()
                 UiState.Empty -> PapEmptyState(
@@ -322,32 +358,18 @@ private fun CachedSchoolRoute(
 }
 
 /**
- * Capacités publiées, lues UNE fois par entrée dans l'écran.
- *
- * `repo.cached` lit un FICHIEL : le lire à chaque recomposition serait du travail
- * pour rien. `remember` sans clé a exactement la bonne durée de vie — relu à
- * chaque entrée dans la route, donc après une détection d'onglets faite depuis
- * le Profil. `Capabilities.visible(null, …)` = `true` : rien n'affirmé => rien
- * n'est masqué.
- */
-private fun sanctionsAllowed(repo: SyncedRepository): Boolean {
-    val payload = try {
-        repo.cached(CachePolicy.CAPABILITIES)?.payload
-    } catch (_: Exception) {
-        null
-    }
-    return Capabilities.visible(Capabilities.parse(payload), Capabilities.PUNISHMENTS)
-}
-
-/**
  * Onglet « Vie scolaire » : carte de statut, sélecteur de période DÉFILABLE,
  * sections « Absences » / « Retards », une carte par événement.
  *
  * [subjectPrefs] alimente le résolveur de matière (#83/#139) : sans prefs, la
  * couleur vient du nom, donc la colonne vertébrale d'une matière est la même
- * partout. [onSanctions] n'est une destination QUE si l'établissement publie
- * l'onglet `punishments` (#87) — sinon le bouton n'existe pas, comme les entrées
- * de navigation masquées du Profil.
+ * partout.
+ *
+ * #172 : plus aucun bouton de destination dans ce corps. « Sanctions » est une
+ * action de la barre du haut (`TOP_BAR_ACTIONS` d'`AppShell.kt`), qui est le seul
+ * endroit où la capacité `punishments` ET la navigation sont nouées ensemble —
+ * `AppNav.kt` la retire donc de la barre quand l'établissement ne publie pas
+ * l'onglet, comme il le fait pour Compétences.
  *
  * @param refreshTick relecture demandée par la barre du haut (#162) ; la barre
  *   n'a pas de slot `Refresh` pour cette route, donc il reste à 0 et le bouton
@@ -357,7 +379,6 @@ private fun sanctionsAllowed(repo: SyncedRepository): Boolean {
 fun AttendanceRoute(
     repo: SyncedRepository,
     baseUrl: String,
-    onSanctions: () -> Unit = {},
     subjectPrefs: List<SubjectPrefs> = emptyList(),
     refreshTick: Int = 0,
 ) {
@@ -372,8 +393,6 @@ fun AttendanceRoute(
     var periodsOpen by rememberSaveable { mutableStateOf(false) }
     var periods by remember { mutableStateOf(emptyList<PeriodUi>()) }
     var periodsError by remember { mutableStateOf<String?>(null) }
-    // Une lecture de fichier par ENTRÉE dans l'écran, pas par recomposition.
-    val sanctionsVisible = remember(repo) { sanctionsAllowed(repo) }
 
     /**
      * Tranches de l'établissement : le même appel que l'onglet Notes (#139),
@@ -407,6 +426,7 @@ fun AttendanceRoute(
         repo = repo,
         baseUrl = baseUrl,
         resource = CachePolicy.ATTENDANCE,
+        heading = ATTENDANCE_HEADING,
         refreshTick = refreshTick,
     ) { payload, refresh ->
         LaunchedEffect(payload) { nowMillis = System.currentTimeMillis() }
@@ -466,32 +486,21 @@ fun AttendanceRoute(
                 nowMillis = nowMillis,
             )
         }
-        // #87 : Sanctions est une CAPACITÉ, pas un bouton permanent — un
-        // établissement qui n'active pas l'onglet ne voit pas la destination.
-        // #162 veut les destinations dans la barre du haut (`TOP_BAR_ACTIONS`),
-        // qui est le seul endroit qui sait nouer `onNavigate` ET la capacité ;
-        // ce bouton est donc le repli explicite tant que cette entrée n'existe
-        // pas — et il ne sort qu'avec des données, jamais sous un état d'erreur.
-        if (sanctionsVisible) {
-            Button(onClick = onSanctions) { Text("Sanctions") }
-        }
     }
 }
 
 /**
  * Écran « Sanctions » : une carte par sanction, sans date ISO ni gravité nue.
  *
- * [onBack] n'est plus câblé dans le corps : la route a sa flèche de retour dans
- * la barre du haut (`TOP_BARS`, cf. `AppShell.kt`), donc un bouton « Retour »
- * sous la liste était un doublon. Le paramètre reste parce que `AppNav.kt` le
- * passe — le retirer serait un changement hors périmètre de cet écran.
+ * Ni `onBack` ni `onSanctions` ne restent : le retour est la flèche de la barre
+ * (`TOP_BARS`) et la destination Sanctions est une action de la barre du haut
+ * (`TOP_BAR_ACTIONS`) — #172. Un paramètre de navigation que l'écran ignore est
+ * un bouton mort qui le semble encore moins.
  */
-@Suppress("UNUSED_PARAMETER")
 @Composable
 fun PunishmentsRoute(
     repo: SyncedRepository,
     baseUrl: String,
-    onBack: () -> Unit = {},
     refreshTick: Int = 0,
 ) {
     var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -499,10 +508,19 @@ fun PunishmentsRoute(
         repo = repo,
         baseUrl = baseUrl,
         resource = CachePolicy.PUNISHMENTS,
+        heading = SANCTIONS_HEADING,
         refreshTick = refreshTick,
     ) { payload, refresh ->
         LaunchedEffect(payload) { nowMillis = System.currentTimeMillis() }
         val rows = remember(payload) { punishmentsFrom(payload) }
+        // Le titre de la liste est rendu AVEC et SANS sanction : c'est lui, et lui
+        // seul, qui distingue cette route d'une autre dans un état sans donnée
+        // (cf. le `why` de #172 dans `shot.sh`).
+        PapSectionHeader(
+            icon = Icons.Filled.Warning,
+            title = SANCTIONS_LABEL,
+            count = rows.size,
+        )
         if (rows.isEmpty()) {
             PapEmptyState(
                 icon = Icons.Filled.Warning,

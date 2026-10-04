@@ -12,8 +12,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.data.SseState
 
-// Ligne d'état SSE visible (#15) : déconnecté / connexion / connecté /
-// reconnexion avec délai / échec. Bouton Reconnecter / Déconnecter.
+// Ligne d'état des notifications en direct (#15) : arrêtées / connexion /
+// actives / nouvelle tentative / échec. Boutons Reconnecter ou Déconnecter.
+//
+// #172 : cette ligne est un DIAGNOSTIC, plus le parcours de l'écran — elle est
+// donc rendue repliée derrière « État des notifications » (cf. `QrStep`), et son
+// libellé est en français courant (`sseLabel` de `PairingUiState.kt`).
 @Composable
 fun SseStatusRow(
     state: SseState,
@@ -34,7 +38,7 @@ fun SseStatusRow(
                 Button(onClick = onConnect) { Text("Reconnecter") }
             }
             is SseState.WaitingRetry -> {
-                OutlinedButton(onClick = onDisconnect) { Text("Stop") }
+                OutlinedButton(onClick = onDisconnect) { Text("Arrêter") }
             }
             is SseState.Connecting, is SseState.Connected -> {
                 OutlinedButton(onClick = onDisconnect) { Text("Déconnecter") }

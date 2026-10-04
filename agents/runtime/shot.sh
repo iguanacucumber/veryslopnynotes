@@ -377,15 +377,28 @@ is_locked() {
 # de la branche de donnée, donc ils tiennent sans donnée. `news` et `fiches` ont
 # un titre de barre du haut unique, ce qui suffit (cf. le test de condition).
 #
-# UN SEUL ÉTAT RESTE SANS TÉMOIN : la BRANCHE ERREUR de l'onglet Notes, où
-# `GradesBlankState` rend `PapErrorState` — le message vient de la couche data et
-# son seul libellé fixe est « Réessayer », que SEPT autres écrans rendent aussi
-# (Actualités, Cantine, Vie scolaire, Sanctions, Messages, Alertes sécurité,
-# Fiches révision). Le mettre ici transformerait une dérive de navigation vers
-# l'un d'eux en faux vert : titre « Notes » vu dans la barre d'onglets +
-# « Réessayer » vu dans le corps = succès trompeur. On préfère un témoin en
-# moins à une capture qui prouve autre chose que ce qu'on demande. Le message
-# d'échec nomme donc l'état sans donnée au lieu d'accuser la navigation.
+# #172 — LA BRANCHE D'ERREUR, ÉTAT LE PLUS AVEUGLE. `PapErrorState` ne rend que
+# le message de la couche data et « Réessayer », un libellé que SEPT écrans
+# rendent aussi (Actualités, Cantine, Vie scolaire, Sanctions, Messages, Alertes
+# sécurité, Fiches révision). Or les cinq routes d'ONGLET ont leur titre dans la
+# barre d'onglets : « Notes » se lit sur TOUTES les routes, donc ajouter
+# « Réessayer » au témoin de l'onglet Notes transformerait une dérive de
+# navigation vers l'un des sept autres en faux vert (titre « Notes » + «
+# Réessayer » = succès trompeur). Un témoin d'état d'erreur est donc, par
+# construction, une LIGNE FIXE PROPRE À L'ÉCRAN : c'est ce que portent les trois
+# écrans réparés ici — « Notes indisponibles. » (onglet Notes), « Sanctions
+# déclarées » + « Sanctions indisponibles. » (route Sanctions), « Heures
+# manquées » + « Absences indisponibles. » (route Vie scolaire).
+#
+# Ces libellés sont sans apostrophe : la table ci-dessous est une chaîne entre
+# apostrophes simples, donc un « l'instant » la fermerait au milieu (erreur de
+# syntaxe bash, et un harnais de test qui rendrait 127 sans rien dire).
+#
+# Le corollaire, vérifié par `tests/unit/shot-harness.test.ts` : un écran dont la
+# branche d'erreur ne rend AUCUNE ligne fixe n'est pas prouvable dans cet état —
+# ni par le titre (les onglets le répètent partout) ni par « Réessayer » (sept
+# écrans le partagent). On préfère le dire dans la table plutôt que d'accepter
+# une capture qui prouve autre chose que ce qu'on demande.
 #
 # Correspondance par FRAGMENT (`grep -F`) : un nœud Compose porte la phrase
 # entière (« Prochain cours · Maths · 08:00 »), pas le mot isolé.
@@ -396,15 +409,15 @@ is_locked() {
 ROUTE_WITNESSES='
 index|Accueil|Afficher plus;Rien à afficher
 calendar|EDT|semaine du
-grades|Notes|Moyennes par matière;Aucune note en cache;Aucune note sur cette période;Aucune note trouvée
+grades|Notes|Moyennes par matière;Aucune note en cache;Aucune note sur cette période;Aucune note trouvée;Notes indisponibles.
 tasks|Tâches|Devoirs de la semaine
 profile|Profil|Détecter les onglets
 settings|Réglages|Assistant devoirs
 news|Actualités|
 canteen|Cantine|Menus de la semaine
-attendance|Vie scolaire|Absences et retards
-sanctions|Sanctions|Punitions vie scolaire
-messages|Messages|Discussions
+attendance|Vie scolaire|Heures manquées;Aucune absence ni retard;Absences indisponibles.
+sanctions|Sanctions|Sanctions déclarées;Sanctions indisponibles.
+messages|Messages|Rechercher une discussion
 pairing|Appairage|Retour
 alerts|Alertes sécurité|Injections neutralisées
 fiches|Fiches révision|

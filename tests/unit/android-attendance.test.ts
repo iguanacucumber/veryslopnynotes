@@ -753,9 +753,31 @@ describe("vie scolaire : rendu (#141)", () => {
     expect(screen).toContain("GradesPeriodChips(");
     expect(screen).not.toContain("FilterChip");
 
-    // 4. La destination Sanctions est une CAPACITÉ (#87).
-    expect(screen).toContain("Capabilities.visible(Capabilities.parse(payload), Capabilities.PUNISHMENTS)");
-    expect(screen).toContain("if (sanctionsVisible) {");
+    // 4. #172 : plus AUCUN bouton de destination dans le corps. « Sanctions »
+    // est une action de la barre du haut (`TOP_BAR_ACTIONS`), et la capacité
+    // `punishments` (#87) reste le filtre — mais elle est appliquée là où la
+    // navigation est nouée, donc dans `AppNav.kt` (`hiddenDestinations`).
+    expect(screen).not.toContain("onSanctions");
+    expect(screen).not.toContain("sanctionsAllowed");
+    expect(screen).not.toContain('Button(onClick = onSanctions)');
+    expect(screen).not.toContain('Text("Sanctions")');
+    const nav = codeOnly(readFileSync(join(UI, "AppNav.kt"), "utf8"));
+    expect(nav).toContain("if (!Capabilities.visible(capabilities, Capabilities.PUNISHMENTS)) add(ROUTE_SANCTIONS)");
+    // #172 : la branche d'erreur de la coquille porte une ligne FIXE par écran.
+    // Sans elle, cette route n'est prouvable que sur son titre — et « Réessayer »
+    // (le seul libellé de `PapErrorState`) est rendu par sept écrans.
+    for (const ligne of [
+      'private const val ATTENDANCE_HEADING = "Absences indisponibles."',
+      'private const val SANCTIONS_HEADING = "Sanctions indisponibles."',
+    ]) {
+      expect({ ligne, presente: screen.includes(ligne) }).toEqual({ ligne, presente: true });
+    }
+    expect(screen).toContain("heading = ATTENDANCE_HEADING");
+    expect(screen).toContain("heading = SANCTIONS_HEADING");
+    // Le titre de la liste des sanctions est rendu AVEC et SANS sanction : c'est
+    // lui qui distingue cette route d'une autre quand la donnée manque.
+    expect(screen).toContain('private const val SANCTIONS_LABEL = "Sanctions déclarées"');
+    expect(screen).toMatch(/PapSectionHeader\([\s\S]{0,200}title = SANCTIONS_LABEL,[\s\S]{0,80}count = rows\.size,[\s\S]{0,200}if \(rows\.isEmpty\(\)\)/);
 
     // 5. `/v1/periods` : la liste complète des tranches, comme l'onglet Notes.
     expect(screen).toContain("repo.fetchPeriods(baseUrl)");
@@ -770,6 +792,9 @@ describe("vie scolaire : rendu (#141)", () => {
       "attendanceTotals",
       'Text("Retour")',
       'subtitle = "Absences et retards"',
+      // #172 : le SOUS-TITRE ne revient pas par la porte du témoin de route.
+      'SANCTIONS_HEADING = "Sanctions déclarées"',
+      'ATTENDANCE_HEADING = "Absences et retards"',
     ]) {
       expect({ gone, absent: !screen.includes(gone) }).toEqual({ gone, absent: true });
     }

@@ -4,12 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import fr.veryslopnynotes.data.ApiClient
-import fr.veryslopnynotes.data.SecurityAlertsRepository
-import fr.veryslopnynotes.data.SessionTokens
 import fr.veryslopnynotes.ui.AppNav
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 // Shell phase 4 (#13) + offline #14 + appairage/SSE #15 + alertes #21.
 // Navigation Material3 + routes "pairing" (QR+PIN, token chiffré) et
@@ -32,10 +27,6 @@ class MainActivity : ComponentActivity() {
             BuildConfig.SERVER_SCHEME,
             BuildConfig.SERVER_HOST,
         )
-        // ponytail: client paresseux, IO hors UI-thread via loader suspend.
-        // Contrat 0.4.0 : les routes lues exigent le bearer du device appairé,
-        // relu ici à chaque requête depuis le store chiffré.
-        val tokens = SessionTokens.get(this)
         // Toggle "fait" #75 : l'app n'envoie pas d'accountId (le serveur
         // mono-compte résout sa session appairée) ; #82 exposera /v1/me pour un
         // multi-compte. Jamais un hôte Pronote ici (I1), et l'écriture reste
@@ -44,17 +35,10 @@ class MainActivity : ComponentActivity() {
         // argument se posait AVANT celui d'AppNav, en light par défaut : il
         // écrasait le thème choisi dans les réglages et le forçait au clair.
         // Le thème est appliqué une seule fois, à la racine, par PapillonTheme.
-        setContent {
-            AppNav(
-                baseUrlSeed = baseUrlSeed,
-                // L'adresse arrive en paramètre : après un changement de
-                // serveur, les alertes suivent le serveur courant.
-                loadAlerts = { url ->
-                    withContext(Dispatchers.IO) {
-                        SecurityAlertsRepository(ApiClient(url, tokens = tokens)).fetch()
-                    }
-                },
-            )
-        }
+        // #172 : plus de `loadAlerts` — l'écran Alertes lit le cache partagé
+        // (`SyncedRepository`), donc ce chargement était mort depuis #144. Le
+        // bearer est relu par `ApiClient` à chaque requête : il n'a rien à
+        // faire ici.
+        setContent { AppNav(baseUrlSeed = baseUrlSeed) }
     }
 }
