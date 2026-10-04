@@ -25,7 +25,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navDeepLink
 import fr.veryslopnynotes.core.Capabilities
-import fr.veryslopnynotes.core.SecurityAlert
 import fr.veryslopnynotes.data.AccountStore
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.CachePolicy
@@ -76,9 +75,8 @@ const val ROUTE_MESSAGES = "messages"
 // #113 : écran d'appairage = destination de secours quand le serveur refuse la
 // credential d'appareil (401). Une seule constante pour tous les `navigate`.
 const val ROUTE_PAIRING = "pairing"
-// #135 : ces quatre routes se naviguaient en LITTERAL NU pendant que onze
-// autres avaient une constante — donc une faute de frappe ne se voyait qu'à la
-// compilation, et le deep link de #133 dépendait de la même chaîne écrite deux fois.
+// #135 : ces quatre routes se naviguaient en LITTERAL NU pendant que onze autres
+// avaient une constante — une faute de frappe ne se voyait qu'à la compilation.
 const val ROUTE_ALERTS = "alerts"
 const val ROUTE_FICHES = "fiches"
 const val ROUTE_COMPETENCES = "competences"
@@ -112,15 +110,14 @@ private fun NavHostController.openTab(route: String) {
  * pas déclarée nulle part est une NOUVELLE tâche, jamais la tâche courante.
  *
  * ponytail: `navDeepLink` existe déjà dans navigation-compose, aucun fil
- * d'attente à écrire. Le RELEASE reste sans deep link ; upgrade : une intention
- * interne explicite (`am broadcast`) si l'on veut un jour ouvrir un onglet
- * depuis le serveur — jamais un scheme public.
+ * d'attente à écrire ; upgrade : une intention interne explicite (`am broadcast`)
+ * pour ouvrir un onglet depuis le serveur — jamais un scheme public.
  */
 private fun routeDeepLink(route: String): NavDeepLink =
     navDeepLink { uriPattern = "veryslopnynotes://$route" }
 
-// #87 : payload disponible après un refresh (#87) — réseau OK, repli cache, ou
-// cache du Failed. null = rien à appliquer (l'état précédent est conservé).
+// #87 : payload d'un refresh — réseau OK, repli cache, ou cache du Failed.
+// null = rien à appliquer (l'état précédent est conservé).
 private fun capabilitiesPayload(o: RefreshOutcome): String? = when (o) {
     is RefreshOutcome.Updated -> o.payload
     is RefreshOutcome.OfflineFallback -> o.payload
@@ -136,8 +133,7 @@ fun AppNav(
     baseUrlSeed: String = "",
     // #75 : compte appairé (toggle + proxy des pièces jointes), jamais un hôte.
     accountId: String = "",
-    // ponytail #144 : `loadAlerts` n'est plus appelé (l'écran alertes lit le cache partagé) ; le paramètre reste pour ne pas casser `MainActivity` dans ce PR.
-    @Suppress("UNUSED_PARAMETER") loadAlerts: suspend (String) -> List<SecurityAlert> = { emptyList() },
+    // #172 : `loadAlerts` retiré — mort depuis #144 (l'écran Alertes lit le cache).
 ) {
     val nav = rememberNavController()
     val ctx = LocalContext.current.applicationContext
@@ -221,9 +217,8 @@ fun AppNav(
     /**
      * Detecte les onglets actifs : lecture de /v1/capabilities (ressource
      * cachee, offline-first) puis relecture forcee POST /v1/sync/refresh
-     * (lecture seule cote serveur, aucun effet metier : I7) suivie d'une
-     * nouvelle lecture de la liste. Un echec reseau laisse l'etat courant :
-     * jamais d'onglet masque sur une panne.
+     * (lecture seule cote serveur, aucun effet metier : I7), suivie d'une
+     * nouvelle lecture de la liste. Un echec reseau laisse l'etat courant.
      */
     fun detectCapabilities() {
         if (baseUrl.isBlank()) return
@@ -246,9 +241,14 @@ fun AppNav(
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
     // #162 : la barre du haut porte les destinations ET la relecture (compteur que
-    // regardent les deux routes qui l'ont) ; #87 : Compétences se retire s'il n'est pas actif.
+    // regardent les deux routes qui l'ont). #87 : une destination masquée si
+    // l'onglet n'est pas actif. #172 : `punishments` s'y range maintenant aussi,
+    // « Sanctions » étant devenu une action de la barre de la Vie scolaire.
     var readTick by remember { mutableStateOf(0) }
-    val hiddenDestinations = if (Capabilities.visible(capabilities, Capabilities.EVALUATIONS)) emptySet() else setOf(ROUTE_COMPETENCES)
+    val hiddenDestinations = buildSet {
+        if (!Capabilities.visible(capabilities, Capabilities.EVALUATIONS)) add(ROUTE_COMPETENCES)
+        if (!Capabilities.visible(capabilities, Capabilities.PUNISHMENTS)) add(ROUTE_SANCTIONS)
+    }
     // #145 : l'hôte des notices transitoires (succès, échec, annulation) — une
     // fois pour toute l'application ; `LocalPapNotice` le rend lisible partout.
     val noticeHost = rememberPapNoticeHost()
@@ -347,13 +347,14 @@ fun AppNav(
             composable(ROUTE_CANTEEN, deepLinks = listOf(routeDeepLink(ROUTE_CANTEEN))) {
                 CanteenRoute(repo, baseUrl)
             }
-            // #77 : vie scolaire — absences/retards + compteurs par période,
-            // puis sanctions (même ressource, écran secondaire).
+            // #77 : vie scolaire (absences/retards), puis sanctions. #172 : plus de
+            // `onSanctions`/`onBack` — retour et destination sont dans la barre du
+            // haut (`TOP_BARS` / `TOP_BAR_ACTIONS`), qui noue navigation ET capacité.
             composable(ROUTE_ATTENDANCE, deepLinks = listOf(routeDeepLink(ROUTE_ATTENDANCE))) {
-                AttendanceRoute(repo, baseUrl, onSanctions = { nav.navigateTo(ROUTE_SANCTIONS) })
+                AttendanceRoute(repo, baseUrl)
             }
             composable(ROUTE_SANCTIONS, deepLinks = listOf(routeDeepLink(ROUTE_SANCTIONS))) {
-                PunishmentsRoute(repo, baseUrl, onBack = { nav.popBackStack() })
+                PunishmentsRoute(repo, baseUrl)
             }
             composable(ROUTE_SETTINGS, deepLinks = listOf(routeDeepLink(ROUTE_SETTINGS))) {
                 SettingsScreen( // #140 : plus de `onBack`, la barre porte la flèche

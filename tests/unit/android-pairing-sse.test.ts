@@ -181,13 +181,36 @@ describe("unit android pairing/SSE (#15)", () => {
     expect(sseKt).toContain("WaitingRetry");
     expect(sseKt).toContain("Connected");
 
+    // #172 : l'état est affiché en français courant, jamais en jargon d'outillage
+    // (« SSE reconnexion… (essai 3, 1500 ms) ») : l'écran d'appairage est le
+    // PREMIER écran que voit un élève.
     const uiState = read(join(UI, "PairingUiState.kt"));
-    expect(uiState).toContain("sseLabel");
-    expect(uiState).toContain("SSE connecté");
-    expect(uiState).toContain("SSE reconnexion");
+    const uiStateCode = codeOnly(uiState);
+    expect(uiStateCode).toContain("fun sseLabel(");
+    expect(uiStateCode).toContain("Notifications en direct : actives");
+    expect(uiStateCode).toContain("Notifications en direct : nouvelle tentative dans");
+    // Le délai est dit en SECONDES (c'est la seule chose qu'on peut attendre),
+    // jamais en millisecondes ni avec un numéro d'essai.
+    expect(uiStateCode).toContain("${s.delayMs / 1000} s.");
+    // Le KDoc, lui, CITE l'ancien libellé pour dire qu'il a disparu : c'est le
+    // code, commentaires vidés, qui ne doit plus le porter.
+    for (const jargon of ["SSE connecté", "SSE reconnexion", "essai ${s.attempt}", "${s.delayMs} ms"]) {
+      expect({ jargon, present: uiStateCode.includes(jargon) }).toEqual({ jargon, present: false });
+    }
     const sseRow = read(join(UI, "SseStatusRow.kt"));
     expect(sseRow).toContain("Reconnecter");
     expect(sseRow).toContain("Déconnecter");
+    // #172 : la ligne est un DIAGNOSTIC replié, plus le parcours de l'écran. Sans
+    // ça, un état d'exécution (connexion, reprise, JSON du dernier événement)
+    // s'affiche sous les deux seuls gestes qui comptent au premier lancement.
+    const screen = read(join(UI, "PairingScreen.kt"));
+    const repli = screen.slice(screen.indexOf("var sseDetails"));
+    expect(screen).toContain("var sseDetails by remember { mutableStateOf(false) }");
+    expect(repli).toContain("if (sseDetails) {");
+    expect(repli.indexOf("SseStatusRow(")).toBeGreaterThan(repli.indexOf("if (sseDetails) {"));
+    // La connexion au setup passe par les DEUX portes (succès + geste manual) :
+    // replier l'affichage ne doit pas rendre le bouton mort.
+    expect(screen).toContain("sse.connect(listener)");
   });
 
   test("I1 : aucun appel direct tiers, allowlist serveur seule", () => {

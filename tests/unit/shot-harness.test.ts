@@ -181,7 +181,9 @@ describe("marqueurs d'écran (#160)", () => {
       profile: ["ProfileScreen.kt"],
       settings: ["SettingsScreen.kt"],
       canteen: ["CanteenMenus.kt"],
-      attendance: ["Attendance.kt"],
+      // #172 : le témoin de l'état AVEC donnée est dans la carte de statut
+      // (`AttendanceRows.kt`), la ligne fixe de l'écran dans `Attendance.kt`.
+      attendance: ["Attendance.kt", "AttendanceRows.kt"],
       messages: ["MessagesScreen.kt"],
       pairing: ["PairingScreen.kt"],
       alerts: ["SecurityAlertsScreen.kt"],
@@ -223,6 +225,24 @@ describe("marqueurs d'écran (#160)", () => {
         });
       }
     }
+  });
+
+  test("chaque témoin ouvre un LITTERAL de la source, pas un sous-mot", () => {
+    // Le trou que #166 a laissé passer : la garde précédente cherchait le
+    // fragment en SOUS-CHAINE anywhere dans l'écran, donc « Discussions » était
+    // « présent » via `DiscussionsRepository` — et la capture de la route
+    // Messages échouait sur un téléphone, sans que rien ne le dise. Un témoin
+    // ouvrira donc un littéral : `"fragment` suivi d'un caractère qui ne prolonge
+    // pas l'identifiant (le point final d'une phrase, lui, est une faute).
+    const faux: string[] = [];
+    for (const route of ROUTES) {
+      for (const fragment of WITNESSES.get(route)?.fragments ?? []) {
+        if (!new RegExp(`"${fragment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_])`).test(UI_CODE)) {
+          faux.push(`${route} : ${fragment}`);
+        }
+      }
+    }
+    expect({ faux }).toEqual({ faux: [] });
   });
 
   test("l'échec dit que l'ÉCRAN est peut-être bon, et où changer le marqueur", () => {
@@ -735,16 +755,43 @@ const UI_ENTIER = [...readdirSync(UI_DIR)]
   .map((f) => readFileSync(join(UI_DIR, f), "utf8"))
   .join("\n");
 
+/**
+ * Le même paquet, SANS les commentaires : une garde qui cherche un libellé
+ * rendu doit ignorer un `//` qui le CITE pour dire qu'il a disparu — sans quoi
+ * l'histoire d'un écran dans son en-têteric-compte comme l'écran.
+ */
+const UI_CODE = UI_ENTIER.replace(/\/\*[\s\S]*?\*\//g, "\n")
+  .split("\n")
+  .filter((l) => !l.trim().startsWith("//"))
+  .join("\n");
+
 interface Variante {
   /** Libellés du dump quand la donnée est là. */
   plein: string[];
   /** Libellés du dump quand l'établissement ne publie rien. */
   vide: string[];
+  /**
+   * Libellés du dump dans la BRANCHE D'ERREUR (cache vide + relecture ratée) —
+   * l'état le plus aveugle : `PapErrorState` ne rend que le message de la couche
+   * data et « Réessayer », ce dernier étant rendu par SEPT écrans.
+   *
+   * Optionnel, et ce n'est pas un oubli : il n'est listé que pour les routes dont
+   * la branche d'erreur porte une ligne FIXE propre à l'écran (#172). Les autres
+   * routes rendent leur témoin de chrome AVANT la branche d'état, donc leur
+   * témoin s'y lit aussi — sauf `canteen` et `messages`, dont le témoin est dans
+   * la branche de DONNÉE et qui ne sont donc pas encore prouvables hors ligne
+   * (écart signalé, non masqué : une fixture qui invente un écran mentirait).
+   */
+  erreur?: string[];
 }
 
+/** Les états rejoués, dans l'ordre où on les rencontre : donnée, vide, erreur. */
+const ETATS: (keyof Variante)[] = ["plein", "vide", "erreur"];
+
 /**
- * Les DEUX états de chaque route : ce que le dump uiautomator rend quand
- * l'établissement publie, et quand il ne publie rien.
+ * Les états de chaque route : ce que le dump uiautomator rend quand
+ * l'établissement publie, quand il ne publie rien, et (#172) quand la lecture
+ * échoue sans cache.
  *
  * Tous les libellés sont du CHROME d'écran, jamais de la donnée : c'est ce que
  * `verify_route` cherche, et c'est ce qui se relit dans la source. Un witness
@@ -770,6 +817,11 @@ const VARIANTES: Record<string, Variante> = {
   grades: {
     plein: ["Moyennes par matière", "Nouvelles notes", "Matière ou évaluation"],
     vide: ["Aucune note sur cette période", "L'établissement n'a publié aucune note ici.", "Actualiser"],
+    // #172 : la ligne FIXE de l'onglet Notes dans sa branche d'erreur, devant le
+    // « Réessayer » que sept écrans partagent. Sans elle, la route n'était pas
+    // prouvable hors ligne — et son titre « Notes » se lit dans la barre
+    // d'onglets sur TOUTES les routes, donc le faux vert était à portée.
+    erreur: ["Notes indisponibles.", "Erreur réseau. Réessayer.", "Réessayer"],
   },
   // L'en-tête « Devoirs de la semaine » est rendu hors de la liste.
   tasks: {
@@ -792,27 +844,44 @@ const VARIANTES: Record<string, Variante> = {
     plein: ["Données hors-ligne (périmé)."],
     vide: ["Aucune actualité."],
   },
-  // « Menus de la semaine » est écrit avant la branche d'état.
+// #172 : ÉCART CONNU, non traité ici. « CanteenMenus.kt:407` ne rend « Menus
+  // de la semaine » que dans la branche qui a des menus, donc l'état vide et
+  // l'état d'erreur de cette route ne sont pas prouvables : le témoin n'existe
+  // pas dans ces deux états. Le réparer demande une ligne dans l'écran (comme
+  // pour `grades`, `attendance` et `sanctions`), pas un habillage de fixture —
+  // une fixture qui invente un écran mentirait sur la route qu'elle prétend
+  // rejouer, et c'est exactement ce que la matrice de #172 a démasqué.
   canteen: {
     plein: ["Menus de la semaine", "Actualiser"],
     vide: ["Menus de la semaine", "Aucun menu publié cette semaine", "Actualiser"],
   },
-  // Le SOUS-TITRE de l'écran en cache est rendu avant l'état ; les trois lignes
-  // ci-dessous sont les trois états sans donnée (cache vide, réseau, zéro
-  // absence), pas un seul.
+  // #172 : le SOUS-TITRE « Absences et retards » (#141) n'existe plus, donc le
+  // témoin de l'état AVEC donnée est la carte de statut (« Heures manquées »),
+  // rendue dès qu'il y a un événement ; sans événement, l'état vide ; sans
+  // payload, la ligne fixe de l'écran.
   attendance: {
-    plein: ["Absences et retards", "Toutes", "Sanctions", "Actualiser"],
-    vide: ["Absences et retards", "Aucune donnée en cache", "Aucune absence ni retard"],
+    plein: ["Année", "Aucune heure injustifiée", "Heures manquées", "Absences", "Retards"],
+    vide: ["Année", "Aucune absence ni retard", "L'établissement n'a rien publié sur cette période."],
+    // Sans payload : la ligne fixe de l'écran (« Absences indisponibles. »)
+    // ci-dessus, puis l'état — cache vide ici, `Réessayer` dans l'état suivant.
+    erreur: ["Absences indisponibles.", "Erreur réseau. Réessayer.", "Réessayer"],
   },
-  // Même écran en cache, sous-titre « Punitions vie scolaire ».
+  // Même coquille, liste de sanctions : le titre de liste (« Sanctions
+  // déclarées ») est rendu AVEC et SANS sanction (#172).
   sanctions: {
-    plein: ["Punitions vie scolaire", "Toutes", "Actualiser"],
-    vide: ["Punitions vie scolaire", "Aucune sanction publiée"],
+    plein: ["Sanctions déclarées", "Avertissement", "Niveau 1", "Actualiser"],
+    vide: ["Sanctions déclarées", "Aucune sanction publiée", "L'établissement n'a publié aucune sanction."],
+    erreur: ["Sanctions indisponibles.", "Erreur réseau. Réessayer.", "Réessayer"],
   },
-  // « Discussions » est écrit avant la branche d'état.
+  // #172 : le témoin était « Discussions », qui n'ouvre aucun littéral de l'écran
+  // — il ne matchait que le sous-mot de `DiscussionsRepository`, donc la fixture
+  // #166 passait sans que l'app rende jamais ce libellé (le compteur dit
+  // « 3 discussions », en minuscules). Le libellé du champ de recherche est
+  // rendu AVANT la branche d'état, donc il vaut dans tous les états.
   messages: {
-    plein: ["Discussions", "Nouvelle discussion", "Ouvrir", "Actualiser"],
-    vide: ["Discussions", "Aucune discussion.", "Réessayer"],
+    plein: ["Rechercher une discussion", "3 discussions", "Nouvelle", "Actualiser"],
+    vide: ["Rechercher une discussion", "Aucune discussion.", "Actualiser"],
+    erreur: ["Rechercher une discussion", "Erreur réseau. Réessayer.", "Réessayer"],
   },
   // Le bouton « Retour » est rendu par TOUTES les étapes. Pas de barre d'onglets
   // (`showsTabBar`), et ces libellés déclenchent le garde-fou d'appairage —
@@ -826,16 +895,21 @@ const VARIANTES: Record<string, Variante> = {
     plein: ["Injections neutralisées (données, jamais exécutées).", "Donnée suspecte (non exécutée) : "],
     vide: ["Injections neutralisées (données, jamais exécutées).", "Aucune alerte. Bon signe."],
   },
-  // Comme `news` : le corps ne rend que de la donnée, le titre de barre suffit.
-  // #145 : les deux listes ci-dessous dataient de #144, qui a remplacé les deux
-  // boutons de DÉVELOPPEMENT (« Charger », « Simuler erreur ») par un état vide
-  // unique. Les témoins doivent nommer ce qui est RÉELLEMENT à l'écran, sinon la
-  // capture `make shot fiches` ne prouve plus rien — c'est tout l'objet de cette
-  // table. Réparé ici parce que `make check` était rouge sur `main` à cause de
-  // ces deux lignes (idem le témoin « cantine » ci-dessus).
+  // Comme `news` : le corps ne rend que la donnée, le titre de barre suffit.
+  // #145 : les deux listes dataient de #144, qui a remplacé les deux boutons de
+  // DÉVELOPPEMENT (« Charger », « Simuler erreur ») par un état vide unique — les
+  // témoins doivent nommer ce qui est RÉELLEMENT à l'écran. #172 y ajoute le
+  // troisième état.
   fiches: {
-    plein: ["Fiches de révision", "Actualiser"],
-    vide: ["Aucune fiche de révision", "générée automatiquement", "Actualiser"],
+    plein: ["Exporter en PDF"],
+    vide: [
+      "Aucune fiche de révision",
+      "Une fiche est générée automatiquement à l'annonce d'un DS détecté avec certitude.",
+      "Actualiser",
+    ],
+    // Titre seul (pas de fragment) : l'état d'erreur se prouve donc sur la
+    // barre, et c'est la seule route qui n'a pas besoin de ligne fixe.
+    erreur: ["Erreur réseau. Réessayer.", "Réessayer"],
   },
   // AppNav.kt passe le sous-titre à l'écran en cache d'Attendance.kt.
   competences: {
@@ -872,15 +946,17 @@ describe("le témoin d'écran ne dépend pas de la donnée (#166)", () => {
     // Le titre de barre du haut est le PREMIER libellé du dump réel ; la barre
     // d'onglets vient ensuite, et elle est ce qui rend le titre d'onglet NON
     // discriminant — donc ce qu'un faux vert utiliserait.
-    const labels = [TOP_BARS.get(route)!, ...barreOnglets(route), ...VARIANTES[route]![variante]];
+    const labels = [TOP_BARS.get(route)!, ...barreOnglets(route), ...(VARIANTES[route]![variante] ?? [])];
     ecran(h, labels);
     return labels;
   }
 
   for (const route of ROUTES) {
-    test(`${route} : prouvée dans les DEUX états (donnée et aucune donnée)`, () => {
+    test(`${route} : prouvée dans chacun de ses états (donnée, vide, erreur)`, () => {
       expect(VARIANTES[route]).toBeDefined();
-      for (const variante of ["plein", "vide"] as const) {
+      for (const variante of ETATS) {
+        const labels0 = VARIANTES[route]![variante];
+        if (labels0 === undefined) continue;
         // Un harnais par passage : pas d'état partagé entre les deux états.
         const h = harness();
         const labels = dump(h, route, variante);
@@ -903,10 +979,10 @@ describe("le témoin d'écran ne dépend pas de la donnée (#166)", () => {
 
   test("chaque état listé EXISTE littéralement dans l'écran de sa route", () => {
     // La table ci-dessus doit rester collée aux écrans : un libellé renommé fait
-    // échouer ce test AVANT qu'une capture ne parte sur un device.
+    // échouer ce test AVORT qu'une capture ne parte sur un device.
     for (const route of ROUTES) {
-      for (const variante of ["plein", "vide"] as const) {
-        for (const label of VARIANTES[route]![variante]) {
+      for (const variante of ETATS) {
+        for (const label of VARIANTES[route]![variante] ?? ([] as string[])) {
           expect({ route, variante, label, present: UI_ENTIER.includes(label) }).toEqual({
             route,
             variante,
@@ -967,22 +1043,134 @@ describe("le témoin d'écran ne dépend pas de la donnée (#166)", () => {
     // La preuve du caractère distinctif : le dump de chaque route est passé
     // contre le critère de chaque AUTRE route, et il doit échouer partout. Un
     // témoin générique (« Réessayer ») ferait passer ce test par accident.
-    const dumps = new Map<string, string[]>(
-      ROUTES.map((route) => [
-        route,
-        [TOP_BARS.get(route)!, ...barreOnglets(route), ...VARIANTES[route]!.plein],
-      ]),
-    );
+    // #172 : dans TOUS les états, pas seulement « plein » — c'est précisément
+    // dans un état dégradé que la barre d'onglets affiche encore le titre et
+    // qu'un libellé partagé ferait passer une dérive.
+    const dumps = new Map<string, string[]>();
+    for (const route of ROUTES) {
+      for (const variante of ETATS) {
+        const labels = VARIANTES[route]![variante];
+        if (labels === undefined) continue;
+        dumps.set(`${route}/${variante}`, [TOP_BARS.get(route)!, ...barreOnglets(route), ...labels]);
+      }
+    }
     const fauxVerts: string[] = [];
     for (const [source, labels] of dumps) {
       for (const route of ROUTES) {
-        if (route !== source && verifie(route, labels)) fauxVerts.push(`${source} -> ${route}`);
+        if (!source.startsWith(`${route}/`) && verifie(route, labels)) fauxVerts.push(`${source} -> ${route}`);
       }
     }
     expect(fauxVerts).toEqual([]);
     // Le cas historique : le témoin de l'onglet Notes ne doit PAS être
     // « Réessayer », sinon les sept écrans en état d'échec y passeraient.
     expect(WITNESSES.get("grades")?.fragments ?? []).not.toContain("Réessayer");
+  });
+
+  // --- #172 : les trois états sans donnée des trois écrans réparés -----------
+
+  test("« attendance » : un témoin par état, le sous-titre supprimé ne revient pas", () => {
+    // Le défaut d'origine (#172) : le témoin était « Absences et retards », le
+    // SOUS-TITRE que #141 avait supprimé — donc `make shot ROUTE=attendance`
+    // échouait sur un écran parfaitement correct, sur un appareil en ligne.
+    const fragments = WITNESSES.get("attendance")?.fragments ?? [];
+    expect({
+      // Le sous-titre ne doit PLUS être le témoin : il n'est rendu nulle part.
+      sousTitre: fragments.includes("Absences et retards"),
+      avecEvenement: fragments.includes("Heures manquées"),
+      zeroEvenement: fragments.includes("Aucune absence ni retard"),
+      erreur: fragments.includes("Absences indisponibles."),
+    }).toEqual({
+      sousTitre: false,
+      avecEvenement: true,
+      zeroEvenement: true,
+      erreur: true,
+    });
+    // Et le sous-titre reste absent de la source : le témoin ne peut pas
+    // « revenir » par la porte de la table.
+    expect(UI_CODE.includes("Absences et retards")).toBe(false);
+    // L'état AVEC donnée rejoué par le VRAI script : c'est celui de la capture
+    // ratée (« Aucune heure injustifiée », « Heures manquées », « Absence »).
+    const h = harness();
+    const labels = dump(h, "attendance", "plein");
+    const r = h.run(["attendance", "--wait", "0"]);
+    expect({ sortie: r.out.includes("route vérifiée"), verdict: verifie("attendance", labels) }).toEqual({
+      sortie: true,
+      verdict: true,
+    });
+    expect(r.out).toContain("route vérifiée (« Vie scolaire » + « Heures manquées »).");
+  });
+
+  test("« sanctions » partage la coquille : son témoin n'est pas celui de la Vie scolaire", () => {
+    // Même écran en cache, donc le même risque de copier le témoin de l'autre
+    // route : « Punitions vie scolaire » était le sous-titre supprimé en #141.
+    const fragments = WITNESSES.get("sanctions")?.fragments ?? [];
+    expect({
+      ancienSousTitre: fragments.includes("Punitions vie scolaire"),
+      liste: fragments.includes("Sanctions déclarées"),
+      erreur: fragments.includes("Sanctions indisponibles."),
+      // Aucun fragment emprunté à l'autre route des deux écrans de vie scolaire.
+      emprunte: fragments.some((f) => (WITNESSES.get("attendance")?.fragments ?? []).includes(f)),
+    }).toEqual({ ancienSousTitre: false, liste: true, erreur: true, emprunte: false });
+    expect(UI_CODE.includes("Punitions vie scolaire")).toBe(false);
+    for (const etat of ["plein", "vide", "erreur"] as const) {
+      const h = harness();
+      const labels = dump(h, "sanctions", etat);
+      const r = h.run(["sanctions", "--wait", "0"]);
+      expect({ etat, sortie: r.out.includes("route vérifiée"), critere: verifie("sanctions", labels) }).toEqual({
+        etat,
+        sortie: true,
+        critere: true,
+      });
+    }
+  });
+
+  test("« grades » hors ligne en erreur : une ligne FIXE, propre à l'onglet", () => {
+    // #166 l'avait laissé devin : la branche d'erreur ne rendait que
+    // « Réessayer », que SEPT écrans partagent, alors que la barre d'onglets
+    // affiche déjà « Notes » partout. Un témoin y serait un faux vert.
+    const fragments = WITNESSES.get("grades")?.fragments ?? [];
+    const ligne = "Notes indisponibles.";
+    expect({
+      presente: fragments.includes(ligne),
+      // …et elle est rendue par l'écran, pas imaginée par la table.
+      dansLEcran: UI_CODE.includes(ligne),
+      // Le faux vert reste fermé : la même ligne ne vaut pour AUCUNE autre route.
+      pourUneAutre: ROUTES.some((r) => r !== "grades" && (WITNESSES.get(r)?.fragments ?? []).includes(ligne)),
+    }).toEqual({ presente: true, dansLEcran: true, pourUneAutre: false });
+    // Rejoué dans le vrai script, avec la barre d'onglets de toutes les routes.
+    const h = harness();
+    const labels = dump(h, "grades", "erreur");
+    const r = h.run(["grades", "--wait", "0"]);
+    expect({ sortie: r.out.includes("route vérifiée"), critere: verifie("grades", labels) }).toEqual({
+      sortie: true,
+      critere: true,
+    });
+    expect(r.out).toContain(`route vérifiée (« Notes » + « ${ligne} »).`);
+    // Et l'écran d'un AUTRE écran en erreur ne vaut toujours pas pour l'onglet.
+    const autre = harness();
+    ecran(autre, ["Vie scolaire", ...ONGLETS, "Absences indisponibles.", "Erreur réseau. Réessayer.", "Réessayer"]);
+    const refuse = autre.run(["grades", "--wait", "0"]);
+    expect(refuse.code).toBe(1);
+    expect(refuse.out).not.toContain("route vérifiée");
+  });
+
+  test("aucune branche d'erreur listée ne s'appuie sur « Réessayer »", () => {
+    // L'invariant que #172 répare : un état d'erreur se prouve avec une ligne
+    // FIXE de son écran, jamais avec le libellé que sept écrans partagent.
+    // Les routes SANS fragment (dont `news` et `fiches`) se prouvent sur leur
+    // titre de barre — ce qui n'est recevable que hors onglets, donc c'est
+    // exactement ce que ce test vérifie pour elles.
+    for (const route of ROUTES) {
+      const erreur = VARIANTES[route]?.erreur;
+      if (erreur === undefined) continue;
+      const fragments = WITNESSES.get(route)?.fragments ?? [];
+      if (fragments.length === 0) {
+        expect({ route, onglet: TABS.includes(route) }).toEqual({ route, onglet: false });
+        continue;
+      }
+      const trouve = erreur.some((label) => fragments.some((f) => label.includes(f)));
+      expect({ route, prouve: trouve }).toEqual({ route, prouve: true });
+    }
   });
 
   test("« Réessayer » comme témoin de l'onglet Notes : le faux vert, rejoué", () => {
