@@ -1,7 +1,9 @@
 // Point d'entrée HTTP du serveur (composition root, référencé par Dockerfile.server).
 // 0.7.0 : ZÉRO credential lu dans l'environnement. Les seules variables lues
-// sont `PORT`/`HOST` (écoute, pas un secret) ; tout ce qui s'authentifie vient de
-// l'app — le QR au setup, la clé LLM sur chaque appel. Les credentials de session
+// sont `PORT`/`HOST` (écoute, pas un secret) et `TLS_CERT_FILE`/`TLS_KEY_FILE`
+// (chemins vers un certificat local, cf. `tlsFromEnv`) ; tout ce qui
+// s'authentifie vient de l'app — le QR au setup, la clé LLM sur chaque appel.
+// Les credentials de session
 // (QR + pin) ne vivent qu'en mémoire, le temps de la session, jamais sur disque.
 // Unique endroit où les sessions Pronote, le reader, le LLM et les ports
 // d'écriture/action sont branchés sur le routeur. Aucun secret n'est journalisé :
@@ -9,6 +11,7 @@
 // I2 : tout le réseau Pronote passe par PronoteHttpClient (via pronotets), rien ici.
 // I7 : les écritures (devoirs, messagerie) sont des ports d'action branchés sur le
 // reader, atteignables uniquement via une route (= action app confirmée).
+import { readFileSync } from "node:fs";
 import type { ContractEvent } from "../../shared/contracts/events";
 import { createHandler } from "../api/router";
 import type { AssignmentActions, MediaActions } from "../api/assignments";
@@ -54,7 +57,8 @@ function envValue(env: Record<string, string | undefined>, key: string): string 
 
 /**
  * Composition root. 0.7.0 : plusaucun paramètre d'environnement — le serveur ne
- * lit que `PORT`/`HOST`, et uniquement dans `start()` (écoute, pas un secret).
+ * lit que `PORT`/`HOST` (et les deux chemins TLS, cf. `tlsFromEnv`), et
+ * uniquement dans `start()` (écoute, pas un secret).
  */
 export function createApp(deps: AppDeps = {}): App {
   const log = (message: string) => console.log(`[server] ${message}`);
@@ -259,6 +263,42 @@ function parsePort(raw: string | null): number {
 const MAX_REQUEST_BODY_BYTES = 1_048_576;
 
 /**
+ * TLS : `TLS_CERT_FILE` + `TLS_KEY_FILE` = HTTPS, rien = HTTP (défaut historique,
+ * borne aux tests et à Docker). Ce sont des CHEMINS vers du matériel local, pas
+ * des credentials d'authentification : rien à commiter, la clé est générée hors
+ * dépôt (`agents/runtime/dev-tls.sh`). I8 reste donc respecté — voir
+ * docs/architecture/INVARIANTS.md.
+ *
+ * Une seule des deux = REFUS explicite, jamais un repli silencieux en clair :
+ * l'app Android interdit le clairtext hors émulateur, donc un serveur qui
+ * répond en HTTP sur le LAN se voit comme « https ne marche pas ».
+ */
+function tlsFromEnv(env: Record<string, string | undefined>): { cert: string; key: string } | null {
+  const cert = envValue(env, "TLS_CERT_FILE");
+  const key = envValue(env, "TLS_KEY_FILE");
+  if (!cert && !key) return null;
+  if (!cert || !key) {
+    throw new Error(
+      "TLS incomplet: TLS_CERT_FILE et TLS_KEY_FILE doivent etre definis ensemble " +
+        "(ou absents tous les deux pour un serveur en clair)",
+    );
+  }
+  // Contenu PEM, pas le chemin : Bun 1.4.2 passe le chemin à OpenSSL comme s'il
+  // était déjà un PEM (ERR_OSSL_PEM_NO_START_LINE). Lire ici donne aussi une
+  // erreur nommant le fichier fautif au lieu d'une erreur OpenSSL opaque.
+  return { cert: readPem(cert, "TLS_CERT_FILE"), key: readPem(key, "TLS_KEY_FILE") };
+}
+
+function readPem(path: string, variable: string): string {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    // I6 : le chemin vient de l'opérateur, le dire aide ; le contenu, jamais.
+    throw new Error(`${variable} illisible (${path}) : fichier PEM absent ou non lisible`);
+  }
+}
+
+/**
  * Démarre le serveur (CLI). `HOST` explicite requis pour exposer hors loopback.
  * Type de retour : `ReturnType<typeof Bun.serve>` (le type Bun global n'expose pas `serve`).
  */
@@ -268,17 +308,22 @@ export function start(
   const app = createApp();
   const port = parsePort(envValue(env, "PORT"));
   const hostname = envValue(env, "HOST") || "127.0.0.1";
+  const tls = tlsFromEnv(env);
   const server = Bun.serve({
     port,
     hostname,
     maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
     fetch: app.handler,
+    // PEM lus par `tlsFromEnv` (jamais une variable secrète).
+    ...(tls ? { tls } : {}),
     // Une exception échappée au handler ne doit JAMAIS sortir en page HTML
     // Bun avec l'exception brute : JSON 500 au format contrat, sans message
     // interne (I6).
     error: () => Response.json({ error: { code: "internal", message: "internal error" } }, { status: 500 }),
   });
-  console.log(`[server] écoute sur ${hostname}:${server.port}`);
+  // Le scheme est journalisé : `HOST=0.0.0.0` n'apprend rien du TLS, et
+  // « ça ne marche pas en https » se diagnostique ici (I6).
+  console.log(`[server] écoute sur ${tls ? "https" : "http"}://${hostname}:${server.port}`);
   // Relecture initiale sans bloquer l'écoute : l'app peut tirer tout de suite.
   void app.warmup();
   // Arrêt propre : les sockets en cours (SSE) sont fermés, le process se termine.
