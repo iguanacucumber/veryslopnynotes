@@ -22,12 +22,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.SecurityAlert
+import fr.veryslopnynotes.core.enumFr
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SecurityAlertsRepository
@@ -57,6 +59,10 @@ import fr.veryslopnynotes.data.SyncedRepository
 
 /** Nombre de caractères d'extrait affichés avant le dépliant « Afficher plus ». */
 private const val EXCERPT_COLLAPSED = 140
+
+/** Replis de la table du contrat : un `kind`/`source` inconnu reste lisible. */
+private const val ALERT_KIND_FALLBACK = "Alerte de sécurité"
+private const val ALERT_SOURCE_FALLBACK = "Autre source"
 
 /**
  * Ce que l'écran sait sur les alertes.
@@ -112,24 +118,26 @@ enum class AlertSeverity { DANGER, INFO }
 fun alertSeverity(kind: String): AlertSeverity =
     if (kind == SecurityAlert.KIND_INJECTION) AlertSeverity.DANGER else AlertSeverity.INFO
 
-/** Libellé FRANÇAIS du `kind` : jamais le jeton brut du serveur à l'écran. */
-fun alertKindLabel(kind: String): String = when (alertSeverity(kind)) {
-    AlertSeverity.DANGER -> "Injection neutralisée"
-    AlertSeverity.INFO -> "Alerte de sécurité"
+/**
+ * Libellé FRANÇAIS du `kind` : jamais le jeton brut du serveur à l'écran.
+ *
+ * #147 : le jeton connu est traduit par la table du contrat (`core/EnumFr.kt`) ;
+ * un `kind` INCONNU reste une information, pas une menace inventée — d'où le
+ * libellé neutre plutôt que le jeton brut.
+ */
+fun alertKindLabel(kind: String): String = if (alertSeverity(kind) == AlertSeverity.DANGER) {
+    enumFr(kind, ALERT_KIND_FALLBACK)
+} else {
+    ALERT_KIND_FALLBACK
 }
 
 /**
  * Libellé FRANÇAIS de la source du pipeline (`revision`, `homework`,
- * `manuals` sont des jetons ANGLAIS du contrat : les afficher tels quels était un
- * défaut). Source inconnue = « Autre source » : le nom brut ne part jamais dans
- * l'interface.
+ * `manuals` sont des jetons ANGLAIS : les afficher tels quels était un défaut).
+ * Source inconnue = « Autre source » : le nom brut ne part jamais dans
+ * l'interface. #147 : même table que les enums du contrat.
  */
-fun alertSourceLabel(source: String): String = when (source) {
-    "revision" -> "Fiches de révision"
-    "homework" -> "Devoirs"
-    "manuals" -> "Manuels"
-    else -> "Autre source"
-}
+fun alertSourceLabel(source: String): String = enumFr(source, ALERT_SOURCE_FALLBACK)
 
 /** Extrait condensé pour l'état replié : coupe au MOT le plus proche. */
 fun excerptPreview(excerpt: String, max: Int = EXCERPT_COLLAPSED): String {
@@ -277,7 +285,8 @@ fun SecurityAlertCard(alert: SecurityAlert, modifier: Modifier = Modifier) {
     }
     val excerpt = SecurityAlert.sanitizeExcerpt(alert.excerpt)
     val collapsible = excerpt.length > EXCERPT_COLLAPSED
-    var expanded by remember(alert.id) { mutableStateOf(false) }
+    // #147 : l'extrait déplié survit à la rotation, comme la consigne d'un devoir.
+    var expanded by rememberSaveable(alert.id) { mutableStateOf(false) }
     PapCard(modifier = modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(

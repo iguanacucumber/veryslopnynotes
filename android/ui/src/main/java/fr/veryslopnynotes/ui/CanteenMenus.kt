@@ -26,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import fr.veryslopnynotes.core.dayLabelFr
+import fr.veryslopnynotes.core.enumFr
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SyncedRepository
@@ -48,6 +50,8 @@ import java.time.ZoneId
 //     anglaises (`served` / `planned`) : ils sont maintenant traduits ET colorés
 //     ([canteenStatusLabel] + pastille), et un jeton inconnu ne sort jamais en
 //     clair ;
+//   - #147 : la table des jours et la tranche ISO de `canteenDayLabel` ont rejoint
+//     `core/DateFr.kt`, les libellés de repas et de statut `core/EnumFr.kt` ;
 //   - les ALLERGÈNES, eux, étaient un ajout de gris en fin de ligne — or c'est un
 //     champ de SÉCURITÉ alimentaire. Ils passent maintenant dans un bloc dédié,
 //     titré, avant les plats ;
@@ -61,7 +65,20 @@ private const val MAX_DISHES = 20
 private const val MAX_DISH_CHARS = 120
 private const val MAX_ALLERGENS = 14
 private const val MAX_ALLERGEN_CHARS = 40
+// Les repas du contrat : la liste des jetons ACCEPTÉS reste ici (elle filtre le
+// payload), les libellés français viennent de `core/EnumFr.kt`.
 private val MEALS = listOf("breakfast", "lunch", "dinner")
+
+/** Repas hors contrat : on dit ce qu'on sait, pas un menu inventé. */
+private const val CANTEEN_MEAL_FALLBACK = "Repas"
+
+/** Statut publié mais inconnu : jamais le jeton brut en clair. */
+private const val CANTEEN_STATUS_UNKNOWN = "Statut inconnu"
+
+// Jetons ACCEPÉS du contrat (`CANTEEN_MENU_STATUSES`) : la couleur et le filtre
+// comparent des jetons, les libellés viennent de `core/EnumFr.kt`.
+private const val STATUS_SERVED = "served"
+private const val STATUS_PLANNED = "planned"
 
 data class CanteenMenuUi(
     val date: String,
@@ -166,21 +183,22 @@ fun canteenBalanceLine(
     return "$label · mis à jour ${relativeTimeFr(epoch, now, zone)}"
 }
 
-/** "lundi 05/10" depuis l'ISO du contrat (2026-10-05T00:00:00.000Z). */
-fun canteenDayLabel(date: String): String {
-    val day = date.take(10)
-    if (day.length < 10) return day
-    val days = listOf("dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi")
-    val index = runCatching { java.time.LocalDate.parse(day).dayOfWeek.value % 7 }.getOrDefault(-1)
-    val name = if (index < 0) "" else "${days[index]} "
-    return "$name${day.substring(8, 10)}/${day.substring(5, 7)}"
-}
+/**
+ * "lundi 05/10" depuis l'ISO du contrat (2026-10-05T00:00:00.000Z).
+ *
+ * #147 : la quatrième copie du tableau des jours français ET la tranche ISO
+ * des dix premiers caractères disparaissent au profit de `dayLabelFr`
+ * (`core/DateFr.kt`).
+ * Date illisible = libellé VIDE : une tranche brute ne vaut pas un titre de
+ * carte.
+ */
+fun canteenDayLabel(date: String): String = dayLabelFr(date)
 
-fun canteenMealLabel(meal: String): String = when (meal) {
-    "breakfast" -> "Petit-déjeuner"
-    "dinner" -> "Dîner"
-    else -> "Déjeuner"
-}
+/**
+ * Type de repas en français. Repli « Repas » : un repas HORS CONTRAT n'est pas
+ * un déjeuner, et l'écrire « Déjeuner » serait inventer un menu (#147).
+ */
+fun canteenMealLabel(meal: String): String = enumFr(meal, CANTEEN_MEAL_FALLBACK)
 
 /**
  * Statut du repas, en français : « Servi », « Prévu », ou `null` si
@@ -188,20 +206,23 @@ fun canteenMealLabel(meal: String): String = when (meal) {
  *
  * AVANT #144, `status` était concaténé tel quel — l'écran affichait le jeton
  * anglais du contrat. Un statut INCONNU ne sort pas non plus en clair : il
- * devient « Statut inconnu », jamais `something_else`.
+ * devient « Statut inconnu », jamais `something_else`. #147 : la table est
+ * celle du contrat (`core/EnumFr.kt`), plus aucun `when` par écran.
  */
-fun canteenStatusLabel(status: String?): String? = when (status) {
-    null, "" -> null
-    "served" -> "Servi"
-    "planned" -> "Prévu"
-    else -> "Statut inconnu"
-}
+fun canteenStatusLabel(status: String?): String? =
+    if (status.isNullOrBlank()) null else enumFr(status, CANTEEN_STATUS_UNKNOWN)
 
-/** Repas servi ou prévu : le vert de marque pour le passé, le lime pour l'à venir. */
+/**
+ * Repas servi ou prévu : le vert de marque pour le passé, le lime pour l'à venir.
+ *
+ * La couleur décide sur le JETON du contrat, jamais sur le libellé français :
+ * une pastille choisie en comparant des chaînes cassait dès qu'un libellé
+ * changeait de casse (#147).
+ */
 @Composable
-private fun canteenStatusColor(status: String?): Color? = when (canteenStatusLabel(status)) {
-    "Servi" -> MaterialTheme.colorScheme.primary
-    "Prévu" -> MaterialTheme.colorScheme.tertiary
+private fun canteenStatusColor(status: String?): Color? = when (status?.trim()) {
+    STATUS_SERVED -> MaterialTheme.colorScheme.primary
+    STATUS_PLANNED -> MaterialTheme.colorScheme.tertiary
     // Statut inconnu ou absent = pas de pastille : une pastille « Statut
     // inconnu » repeindrait le repas d'une couleur qui ne veut rien dire.
     else -> null

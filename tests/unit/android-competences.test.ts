@@ -252,7 +252,12 @@ describe("unit android compétences (#78)", () => {
     expect(kt).toContain("org.json.JSONObject");
     // Détail stable : clé par skillId (jamais une position), identité figée.
     expect(kt).toContain("key(skill.id)");
-    expect(kt).toContain("var selectedId by remember(ui.skills) { mutableStateOf<String?>(null) }");
+    // #147 : la compétence ouverte survit à la rotation, la clé reste `skills`
+    // (la sélection repart à vide quand le payload change).
+    expect(kt).toContain("var selectedId by rememberSaveable(ui.skills) { mutableStateOf<String?>(null) }");
+    // #147 : la date d'une évaluation est un jour français, plus une tranche ISO.
+    expect(kt).toContain("dayLabelFr(entry.date)");
+    expect(kt).not.toContain("entry.date.take(");
     expect(kt).toContain("Aucune compétence publiée par l'établissement.");
     // Écran branché + ressource cachable.
     const nav = readFileSync(join(UI, "AppNav.kt"), "utf8");

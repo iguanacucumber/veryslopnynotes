@@ -474,7 +474,9 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
   test("UI : le champ est sur l'écran d'appairage, honnête sur la joignabilité", () => {
     const screen = read(join(UI, "PairingScreen.kt"));
     expect(screen).toContain("onServerChange: (String) -> String? = { null }");
-    expect(screen).toContain("var serverDraft by remember { mutableStateOf(baseUrl) }");
+    // #147 : le brouillon d'adresse est `rememberSaveable` (rotation / low
+    // memory), pas un `remember` qui le rendait au champ vide.
+    expect(screen).toContain("var serverDraft by rememberSaveable { mutableStateOf(baseUrl) }");
     expect(screen).toContain("ServerField(");
     expect(screen).toContain("val refusal = onServerChange(serverDraft)");
     expect(screen).toContain('label = { Text("Adresse du serveur (https://domaine[:port])") }');

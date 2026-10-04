@@ -19,9 +19,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.Capabilities
+import fr.veryslopnynotes.core.enumFr
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SubjectPrefs
@@ -49,6 +51,9 @@ private const val MAX_MOTIF_CHARS = 500
 private const val MAX_SUBJECT_CHARS = 64
 private const val MAX_NAME_CHARS = 100
 private val ABSENCE_KINDS = listOf("absence", "late")
+
+/** Type d'événement hors contrat : jamais « Absence » par défaut. */
+private const val ABSENCE_KIND_FALLBACK = "Événement"
 
 /** Libellé de la vue « année entière » (aucune tranche choisie). */
 private const val ALL_PERIODS_LABEL = "Année"
@@ -188,7 +193,15 @@ fun punishmentsFrom(payload: String?): List<PunishmentUi> = try {
 fun minutesLabel(minutes: Int): String =
     if (minutes < 60) "${minutes}min" else "${minutes / 60}h${(minutes % 60).toString().padStart(2, '0')}"
 
-fun absenceKindLabel(kind: String): String = if (kind == "late") "Retard" else "Absence"
+/**
+ * Type d'événement en français : « Absence », « Retard ».
+ *
+ * #147 : la table du contrat (`core/EnumFr.kt`) et un repli honnête. AVANT,
+ * `if (kind == "late") … else "Absence"` : un type HORS CONTRAT s'affichait
+ * « Absence », donc l'app affirmait une absence que l'établissement n'a jamais
+ * publiée. Le repli dit ce qu'on sait (« Événement »).
+ */
+fun absenceKindLabel(kind: String): String = enumFr(kind, ABSENCE_KIND_FALLBACK)
 
 /** Sélecteur de période : null = toutes les périodes. */
 fun absencesForPeriod(data: AttendanceUi, periodId: String?): List<AbsenceUi> =
@@ -352,8 +365,11 @@ fun AttendanceRoute(
     // d'une ligne à l'autre. Relue à chaque nouveau payload (donc à chaque
     // relecture), sinon un écran laissé ouvert vieillit ses propres libellés.
     var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
-    var periodId by remember { mutableStateOf<String?>(null) }
-    var periodsOpen by remember { mutableStateOf(false) }
+    // #147 : la période filtrée et l'ouverture du sélecteur survivent à la
+    // rotation — sinon les lignes affichées changeaient sous le doigt de
+    // l'utilisateur sans qu'il l'ait demandé.
+    var periodId by rememberSaveable { mutableStateOf<String?>(null) }
+    var periodsOpen by rememberSaveable { mutableStateOf(false) }
     var periods by remember { mutableStateOf(emptyList<PeriodUi>()) }
     var periodsError by remember { mutableStateOf<String?>(null) }
     // Une lecture de fichier par ENTRÉE dans l'écran, pas par recomposition.
