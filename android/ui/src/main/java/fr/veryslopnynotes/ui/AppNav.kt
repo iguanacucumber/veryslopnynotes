@@ -50,9 +50,9 @@ import fr.veryslopnynotes.data.SessionTokens
 //
 // Parité Papillon #86 : 5 onglets + settings, et des routes secondaires hors
 // onglets (pairing, alerts, fiches, news, canteen, attendance, messages,
-// competences, sanctions), masquées ou non selon les capacités publiées par
-// l'établissement (#87). Lecture en cache d'abord (offline-first #14, jamais de
-// spinner si le cache est là). Contenu serveur affiché comme donnée, jamais
+// sanctions), masquées ou non selon les capacités publiées par l'établissement
+// (#87). Lecture en cache d'abord (offline-first #14, jamais de spinner si le
+// cache est là). Contenu serveur affiché comme donnée, jamais
 // interprété.
 
 // ponytail: routes en const (pas de sealed class avant besoin #82/#83).
@@ -79,7 +79,6 @@ const val ROUTE_PAIRING = "pairing"
 // avaient une constante — une faute de frappe ne se voyait qu'à la compilation.
 const val ROUTE_ALERTS = "alerts"
 const val ROUTE_FICHES = "fiches"
-const val ROUTE_COMPETENCES = "competences"
 const val ROUTE_SANCTIONS = "sanctions"
 
 /** Navigation vers une route, SANS doublon : `launchSingleTop = true`. #135 : avant,
@@ -246,7 +245,6 @@ fun AppNav(
     // « Sanctions » étant devenu une action de la barre de la Vie scolaire.
     var readTick by remember { mutableStateOf(0) }
     val hiddenDestinations = buildSet {
-        if (!Capabilities.visible(capabilities, Capabilities.EVALUATIONS)) add(ROUTE_COMPETENCES)
         if (!Capabilities.visible(capabilities, Capabilities.PUNISHMENTS)) add(ROUTE_SANCTIONS)
     }
     // #145 : l'hôte des notices transitoires (succès, échec, annulation) — une
@@ -423,19 +421,6 @@ fun AppNav(
             // #144 : appelé SANS argument avant, donc `sheets` vide pour toujours.
             composable(ROUTE_FICHES, deepLinks = listOf(routeDeepLink(ROUTE_FICHES))) {
                 RevisionSheetsRoute(api = api, baseUrl = baseUrl)
-            }
-// #78 : chips de compétences + détail, payload /v1/evaluations en cache.
-                // #162 : destinations et relecture dans la barre du haut.
-                composable(ROUTE_COMPETENCES, deepLinks = listOf(routeDeepLink(ROUTE_COMPETENCES))) {
-                    CachedResourceScreen(
-                    resource = CachePolicy.EVALUATIONS,
-                    repo = repo,
-                    baseUrl = baseUrl,
-                    subtitle = "Évaluations par compétences",
-                    section = { CompetencesSection(it) },
-                    subjectPrefs = subjectPrefs,
-                    refreshTick = readTick,
-                )
             }
             // #80 : messagerie — liste des fils (cache), lecture d'un fil, réponse,
             // création, lu/non-lu et suppression (boutons = actions confirmées, I7).

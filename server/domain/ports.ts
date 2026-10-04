@@ -2,7 +2,7 @@
 // vers HTTP, SQLite ou Pronote. Adapters en server/infrastructure/
 // et server/integrations/.
 // Voir docs/architecture/INVARIANTS.md (I2, I3, I5, I6, I7).
-import type { AbsenceRecord, Assignment, CanteenMenu, Capabilities, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, CanteenMenu, Capabilities, Discussion, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 import { isOpaqueMediaRef } from "../../shared/contracts/models";
 
 export type Untrusted<T = string> = { readonly __untrusted: true; readonly value: T };
@@ -146,12 +146,6 @@ export interface PronoteReader {
   getPeriods?(accountId: string): Promise<PronotePage<Period>>;
   /** Ressources pédagogiques : contenus cours + PJ devoirs (proxy serveur, #84). */
   getResources?(accountId: string, page?: PronotePageOptions): Promise<PronotePage<PedagogicResource>>;
-  /**
-   * Évaluations par compétences (#78). Onglet absent de l'établissement (non
-   * configuré) = page vide, pas une erreur : `items.value` = [].
-   */
-  getEvaluations?(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Evaluation>>;
-
   /**
    * Actualités établissement (#79, parité Papillon) : onglet Actualités/sondages.
    * ponytail: optionnel car l'onglet peut être absent de l'installation ; une

@@ -143,7 +143,8 @@ describe("contracts", () => {
     // Plancher : chaque issue de parité ajoute ses routes (add-only).
     expect(API_ROUTES.length).toBeGreaterThanOrEqual(15);
     expect(API_ROUTES.map((r) => r.path)).toContain("/v1/menus");
-    expect(API_ROUTES.map((r) => r.path)).toContain("/v1/evaluations");
+    // #184 : la route Compétences est sortie du contrat (les notes /20 restent).
+    expect(API_ROUTES.map((r) => r.path)).not.toContain("/v1/evaluations");
     expect(API_ROUTES.filter((r) => r.path === "/v1/subjects/prefs").map((r) => r.method)).toEqual(["GET", "PUT"]);
     expect(API_ROUTES.map((r) => r.path)).toContain("/v1/news");
     expect(API_ROUTES.map((r) => r.path)).toContain("/v1/revision-sheets");

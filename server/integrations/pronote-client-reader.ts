@@ -10,8 +10,8 @@
 // encore lues : ProvidedAverages reste null, les rapports sont donc estimés,
 // ce qui est le comportement Papillon par défaut. Upgrade: getProvidedAverages
 // sur ce reader, sans toucher aux trois algorithmes.
-import type { AbsenceRecord, Assignment, AssignmentLessonContent, AttachmentRef, CanteenMeal, CanteenMenu, Capabilities, ChildAccount, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, RecipientKind, TimetableEntry, TimetableStatus, UserInfo } from "../../shared/contracts/models";
-import { ABSENCE_MOTIF_MAX_CHARS, ABSENCE_SUBJECT_MAX_CHARS, ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS, ASSIGNMENT_DESCRIPTION_MAX_CHARS, ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS, ASSIGNMENT_LESSON_TITLE_MAX_CHARS, ASSIGNMENT_MAX_ATTACHMENTS, ASSIGNMENT_REF_MAX_CHARS, CANTEEN_MAX_ALLERGEN_CHARS, CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_DISH_CHARS, CANTEEN_MAX_DISHES, DISCUSSION_ID_MAX_CHARS, DISCUSSION_MAX_PARTICIPANTS, DISCUSSION_MAX_UNREAD, DISCUSSION_PARTICIPANT_MAX_CHARS, DISCUSSION_SUBJECT_MAX_CHARS, EVALUATION_LABEL_MAX_CHARS, isAbsenceRecord, isAssignment, isAttachmentRef, isCanteenMenu, isChildAccount, isDiscussion, isEvaluation, isGrade, isMessage, isNewsItem, isOpaquePhotoRef, isPeriod, isPunishment, isRecipient, isTimetableEntry, isUserInfo, MESSAGE_AUTHOR_MAX_CHARS, MESSAGE_BODY_MAX_CHARS, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CHARS, PHOTO_REF_PREFIX, PUNISHMENT_MOTIF_MAX_CHARS, PUNISHMENT_TYPE_MAX_CHARS, RECIPIENT_NAME_MAX_CHARS, TIMETABLE_ROOM_MAX_CHARS, TIMETABLE_TEACHER_MAX_CHARS, USER_CLASS_MAX_CHARS, USER_MAX_KIDS, USER_NAME_MAX_CHARS } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, AssignmentLessonContent, AttachmentRef, CanteenMeal, CanteenMenu, Capabilities, ChildAccount, Discussion, Grade, Message, NewsItem, Period, Punishment, Recipient, RecipientKind, TimetableEntry, TimetableStatus, UserInfo } from "../../shared/contracts/models";
+import { ABSENCE_MOTIF_MAX_CHARS, ABSENCE_SUBJECT_MAX_CHARS, ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS, ASSIGNMENT_DESCRIPTION_MAX_CHARS, ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS, ASSIGNMENT_LESSON_TITLE_MAX_CHARS, ASSIGNMENT_MAX_ATTACHMENTS, ASSIGNMENT_REF_MAX_CHARS, CANTEEN_MAX_ALLERGEN_CHARS, CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_DISH_CHARS, CANTEEN_MAX_DISHES, DISCUSSION_ID_MAX_CHARS, DISCUSSION_MAX_PARTICIPANTS, DISCUSSION_MAX_UNREAD, DISCUSSION_PARTICIPANT_MAX_CHARS, DISCUSSION_SUBJECT_MAX_CHARS, isAbsenceRecord, isAssignment, isAttachmentRef, isCanteenMenu, isChildAccount, isDiscussion, isGrade, isMessage, isNewsItem, isOpaquePhotoRef, isPeriod, isPunishment, isRecipient, isTimetableEntry, isUserInfo, MESSAGE_AUTHOR_MAX_CHARS, MESSAGE_BODY_MAX_CHARS, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CHARS, PHOTO_REF_PREFIX, PUNISHMENT_MOTIF_MAX_CHARS, PUNISHMENT_TYPE_MAX_CHARS, RECIPIENT_NAME_MAX_CHARS, TIMETABLE_ROOM_MAX_CHARS, TIMETABLE_TEACHER_MAX_CHARS, USER_CLASS_MAX_CHARS, USER_MAX_KIDS, USER_NAME_MAX_CHARS } from "../../shared/contracts/models";
 import type { PedagogicResource, PronotePage, PronotePageOptions, PronoteReader, PronoteTimetableOptions } from "../domain/ports";
 import { isPedagogicResource, PronoteAuthError, PronoteReadError, PronoteWriteError, untrusted } from "../domain/ports";
 import { capabilitiesFromProbe } from "../domain/capabilities";
@@ -374,49 +374,6 @@ function mapResources(accountId: string, lessons: any[], homeworks?: any[]): Ped
   });
   return out;
 }
-
-// #78 : évaluations par compétences. pronotets `Evaluation` ne porte la note
-// que selon la configuration de l'établissement : champ absent = omitted,
-// `note: null` (non noté), jamais 0. Onglet "évaluations" absent de la période
-// = page vide, pas une erreur.
-const HEX_COLOR = /^#[0-9a-f]{6}$/i;
-
-function toHexColor(v: unknown): string | undefined {
-  const s = typeof v === "string" || typeof v === "number" ? String(v).trim() : "";
-  return s !== "" && HEX_COLOR.test(s) ? s.toLowerCase() : undefined;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapEvaluation(accountId: string, e: any, index: number, periodId?: string): Evaluation | null {
-  const rawSubject = e?.subject?.name ?? e?.subject;
-  const subject = typeof rawSubject === "string" ? bounded(rawSubject, 100) : "";
-  // Compétence = domaine d'acquisition de l'évaluation (pronotets acquisitions).
-  const acquisition = Array.isArray(e?.acquisitions) ? e.acquisitions[0] : undefined;
-  const rawSkill = acquisition?.domainId ?? acquisition?.name ?? e?.domain ?? e?.domainId;
-  const skillId = rawSkill === undefined || rawSkill === null || String(rawSkill).trim() === ""
-    ? `skill-${index}`
-    : bounded(String(rawSkill), 64);
-  const rawLabel = typeof e?.name === "string" ? bounded(e.name, EVALUATION_LABEL_MAX_CHARS) : "";
-  const note = toNumber(e?.grade ?? e?.value, Number.NaN);
-  // Moyenne de classe illisible ("N.Rendu", "") : omitted, jamais 0.
-  const classAverage = e?.average !== undefined ? toNumber(e.average, Number.NaN) : Number.NaN;
-  const candidate: Evaluation = {
-    id: typeof e?.id === "string" && e.id ? bounded(e.id, 64) : `ev-${index}`,
-    accountId,
-    periodId,
-    subject: subject || "Matière",
-    skillId,
-    label: rawLabel || "Évaluation",
-    // Note non publiée / non notée = null : ignorée par tous les calculs.
-    note: Number.isFinite(note) ? note : null,
-    scale: toNumber(e?.outOf ?? e?.defaultOutOf, 20),
-    date: toIso(e?.date, new Date().toISOString()),
-    classAverage: Number.isFinite(classAverage) ? classAverage : undefined,
-    color: toHexColor(acquisition?.color ?? e?.color),
-  };
-  return isEvaluation(candidate) ? candidate : null;
-}
-
 
 /**
  * #79 : actu établissement (Information pronotets). Tous les textes passent par
@@ -981,65 +938,6 @@ export class PronoteClientReader implements PronoteReader {
     }
   }
 
-  /** Évaluations par compétences (#78). Onglet absent = page vide (pas d'erreur). */
-  async getEvaluations(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Evaluation>> {
-    const id = (accountId ?? "").trim();
-    if (!id) throw new PronoteReadError("evaluations session expired", "session_expired");
-    const limit = clampLimit(page?.limit);
-    const offset = parseOffset(page?.cursor);
-    let client;
-    try {
-      client = this.sessions.requireClient(id);
-    } catch (err) {
-      const mapped = toReadError(err, "evaluations");
-      this.logger(`evaluations -> error ${mapped.code}`);
-      throw mapped;
-    }
-    try {
-      const periods = client.periods ?? [];
-      const all: Evaluation[] = [];
-      // ids de repli uniques dans la page : `i` repart à 0 à chaque période
-      // alors que `all.length` n'avance que des items MAPPÉS → deux évaluations
-      // sans id de périodes différentes se partageaient le même `ev-<n>`.
-      // `consumed` (bruts déjà lus) ré-étale les index SANS changer la
-      // numérotation d'un établissement à une seule période (cf.
-      // tests/unit/evaluations.test.ts, qui fige `skill-4`).
-      let consumed = 0;
-      for (const p of periods) {
-        // Établissement sans évaluations par compétences : pas d'appel, pas d'erreur.
-        if (typeof p?.evaluations !== "function") continue;
-        let raw: unknown[] = [];
-        try {
-          raw = (await p.evaluations()) as unknown[];
-        } catch (err) {
-          // Session morte = re-appairage demandé par l'app, jamais une page
-          // vide (l'onglet « évaluations » disparaîtrait au lieu de proposer
-          // le re-login). Onglet absent/KO = page vide, comme avant.
-          const mapped = toReadError(err, "evaluations");
-          if (mapped.code === "session_expired") throw mapped;
-          continue;
-        }
-        const periodId = typeof p?.id === "string" && p.id ? p.id : undefined;
-        const rawBase = consumed;
-        (raw ?? []).forEach((e, i) => {
-          const m = mapEvaluation(id, e, all.length + i + rawBase, periodId);
-          consumed += 1;
-          if (m) all.push(m);
-        });
-        if (all.length >= offset + limit + 1) break;
-      }
-      const slice = all.slice(offset, offset + limit);
-      const nextCursor = offset + limit < all.length ? String(offset + limit) : null;
-      this.logger(`evaluations -> ok ${slice.length}`);
-      return { items: untrusted(slice), nextCursor };
-    } catch (err) {
-      const mapped = toReadError(err, "evaluations");
-      this.logger(`evaluations -> error ${mapped.code}`);
-      throw mapped;
-    }
-  }
-
-
   /**
    * Actualités établissement (#79) : onglet Actualités/sondages.
    * ponytail: la lib n'expose pas l'onglet partout (établissement sans
@@ -1353,7 +1251,6 @@ export class PronoteClientReader implements PronoteReader {
           grades: anyPeriod("grades"),
           homework: typeof raw?.homework === "function",
           timetable: typeof raw?.lessons === "function",
-          evaluations: anyPeriod("evaluations"),
           news: typeof raw?.informationAndSurveys === "function",
           menus: typeof raw?.menus === "function",
           attendance: anyPeriod("absences") || anyPeriod("delays"),

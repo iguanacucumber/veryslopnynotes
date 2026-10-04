@@ -14,7 +14,6 @@ import {
   isAssignmentsResponse,
   isAttendanceResponse,
   isCapabilitiesResponse,
-  isEvaluationsResponse,
   isPunishmentsResponse,
 
   isCanteenMenusResponse,
@@ -43,7 +42,6 @@ import type { ContractEvent, NewsUpdatedData, SyncCompletedData, TimetableUpdate
 import { apiError } from "./errors";
 import { computeAverages } from "../domain/averages";
 import { attendancePeriods } from "../domain/attendance";
-import { buildCompetenceSummary, buildSkills } from "../domain/competences";
 import { handleHomeworkGenerate } from "./homework";
 import type { AssignmentActions, MediaActions } from "./assignments";
 import { handleAssignmentsToggle } from "./assignments";
@@ -636,18 +634,6 @@ export function createHandler(
           return apiError("bad_request", "subject prefs rejected");
         }
         return json(isSubjectPrefs(body), body);
-      }
-
-      // #78 : compétences fournies = chips + détail. Store sans évaluations
-      // (ou établissement sans l'onglet) = trois listes vides, état propre.
-      case "/v1/evaluations": {
-        const evaluations = store.evaluations?.() ?? [];
-        const payload = {
-          skills: buildSkills(evaluations),
-          evaluations,
-          summary: buildCompetenceSummary(evaluations),
-        };
-        return json(isEvaluationsResponse(payload), payload);
       }
 
       case "/v1/news": {

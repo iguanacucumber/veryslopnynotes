@@ -27,7 +27,6 @@ data class Capabilities(
             "grades",
             "homework",
             "timetable",
-            "evaluations",
             "news",
             "menus",
             "attendance",
@@ -37,13 +36,12 @@ data class Capabilities(
         )
 
         // Onglets réellement masquables côté UI (entrées de navigation Profil).
-        const val EVALUATIONS = "evaluations"
         const val NEWS = "news"
         const val MENUS = "menus"
         const val ATTENDANCE = "attendance"
         const val PUNISHMENTS = "punishments"
 
-        const val MAX_TABS = 10
+        const val MAX_TABS = 9
         const val MAX_ACCOUNT_ID = 64
 
         /**

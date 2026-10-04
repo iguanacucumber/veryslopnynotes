@@ -78,7 +78,8 @@ fun isoDayKey(iso: String): String = if (iso.length >= 10) iso.substring(0, 10) 
  *
  * Vide et non « les dix premiers caractères » : une date qu'on ne sait pas lire
  * vaut mieux absente qu'affichée en fragment d'ISO — c'est le défaut que les
- * quatre écrans corrigés laissaient passer (`RevisionSheets`, `Competences`).
+ * quatre écrans corrigés laissaient passer (`RevisionSheets`, l'ancien écran
+ * Compétences supprimé en #184).
  */
 fun dayLabelFr(iso: String): String {
     val day = isoDayKey(iso)

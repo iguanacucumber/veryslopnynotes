@@ -3,7 +3,7 @@
 // Mémoire = seed/tests uniquement ; l'adaptateur SQLite (#11) implémentera
 // ReadStore sans changer le routeur.
 
-import type { AbsenceRecord, Assignment, CanteenBalance, CanteenMenu, Capabilities, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
+import type { AbsenceRecord, Assignment, CanteenBalance, CanteenMenu, Capabilities, Discussion, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 import type { SecurityAlertData } from "../../shared/contracts/events";
 
 import type { ProvidedAverages } from "../domain/averages";
@@ -19,12 +19,6 @@ export interface ReadStore {
   periods(): Period[];
   /** Moyennes fournies par l'établissement (#74), null si non publiées. */
   providedAverages(): ProvidedAverages | null;
-  /**
-   * Évaluations par compétences (#78). Optionnelle : un store qui ne les
-   * publie pas renvoie un tableau vide (état propre, onglet sans contenu).
-   */
-  evaluations?(): Evaluation[];
-
   /**
    * Actualités établissement (#79). Optionnelle : les implémentations qui n'ont
    * pas encore la table (adaptateur SQLite #11) répondent liste vide.
@@ -85,7 +79,6 @@ export interface StoreSeed {
   readonly securityAlerts?: SecurityAlertData[];
   readonly periods?: Period[];
   readonly providedAverages?: ProvidedAverages | null;
-  readonly evaluations?: Evaluation[];
 
   readonly news?: NewsItem[];
 
@@ -195,8 +188,6 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
   const periods = structuredClone(seed.periods ?? SEED_PERIODS);
   const news = structuredClone(seed.news ?? SEED_NEWS);
   const provided = seed.providedAverages === undefined ? null : structuredClone(seed.providedAverages);
-  // #78 : défaut vide = établissement sans évaluations par compétences.
-  const evaluations = structuredClone(seed.evaluations ?? []);
 
   // #81 : aucun menu par défaut (module cantine souvent absent). Le filtre de
   // fenêtre est fait par le routeur, le store reste une source de lecture.
@@ -222,7 +213,6 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
     securityAlerts: () => structuredClone(alerts),
     periods: () => structuredClone(periods),
     providedAverages: () => (provided === null ? null : structuredClone(provided)),
-    evaluations: () => structuredClone(evaluations),
 
     news: () => structuredClone(news),
 

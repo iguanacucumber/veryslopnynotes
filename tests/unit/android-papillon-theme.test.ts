@@ -245,7 +245,7 @@ describe("unit android thème Papillon (#134)", () => {
       // Et le côté écarté est réellement le moins bon.
       expect(Math.max(ink, white)).toBeGreaterThan(Math.min(ink, white));
     }
-    // Le cas réel de Competences.kt : du blanc en dur sur une puce jaune
+    // Le cas réel de l'écran Compétences (supprimé en #184) : du blanc en dur sur une puce jaune
     // tombait à 1.1:1 — `bestContentOn` choisit l'encre, à 7.59:1.
     const yellow = tsBestContentOn(hex8("#E8B048"));
     expect({ isWhite: yellow === WHITE, ratio: rounded(tsContrast(yellow, hex8("#E8B048"))) }).toEqual({

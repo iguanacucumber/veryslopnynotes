@@ -1,8 +1,8 @@
 # veryslopnynotes
 
 Client Android + serveur self-hosted pour consulter son Pronote : notes et moyennes, devoirs, EDT,
-vie scolaire, compétences, actualités, cantine, messagerie, profil. Le **serveur est le seul** à
-parler à Pronote (IP du serveur uniquement) ; le téléphone ne connaît qu'un hôte serveur.
+vie scolaire, actualités, cantine, messagerie, profil. Le **serveur est le seul** à parler à
+Pronote (IP du serveur uniquement) ; le téléphone ne connaît qu'un hôte serveur.
 
 Surcouche IA limitée et sourcée : assistant de devoirs et fiches de révision construits à partir
 de cours et manuels, avec contenu externe traité comme **donnée** et jamais comme instruction.
@@ -16,11 +16,11 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 
 | Domaine | État |
 |---|---|
-| Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.7.0`), miroir OpenAPI |
-| Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (32 routes, 7 types d'événements) |
+| Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.8.0`), miroir OpenAPI |
+| Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (31 routes, 7 types d'événements) |
 | Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, assistant de connexion en 3 étapes (serveur → établissement → QR scanné + PIN), SSE, aide devoirs |
 | Point d'entrée HTTP serveur (`make runServer`, Docker) | Câblé : setup (QR de l'app) → session Pronote → reader → snapshot → routes, ports d'écriture inclus. **Zéro credential serveur** |
-| Garde-fous sécurité (I1–I8) + tests | 618 tests verts, scan d'architecture et de secrets en CI locale |
+| Garde-fous sécurité (I1–I8) + tests | 786 tests verts dans `make check`, scan d'architecture et de secrets en CI locale |
 | Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'établissement = **vide propre** |
 
 ## Fonctionnalités
@@ -36,8 +36,6 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 - **EDT** — vue semaine, professeur, salle, cours annulé/déplacé, badge « prochain cours »,
   bornes de semaine explicites en UTC.
 - **Vie scolaire** — absences, retards, sanctions, compteurs par période.
-- **Compétences** — évaluations par compétence, chips, détail note/matière ; note non rendue = `null`,
-  jamais un `0` inventé, et exclue de tout calcul.
 - **Actualités, cantine, messagerie** — liste de fils, réponse, création, état lu, suppression.
 - **Profil & accueil** — nom, classe, période, photo **via proxy serveur**, multi-comptes parent,
   déconnexion qui purge session et cache local, mode anonyme.
@@ -201,7 +199,6 @@ lecture. Une route ajoutée est donc fermée par défaut.
 | Devoirs | `GET /v1/assignments` (filtres de dates/semaine), `POST /v1/assignments/toggle` |
 | EDT | `GET /v1/timetable` (`?weekStart=`, `?from=`, `?to=`) |
 | Vie scolaire | `GET /v1/attendance`, `GET /v1/punishments` |
-| Compétences | `GET /v1/evaluations` |
 | Actualités, cantine | `GET /v1/news`, `GET /v1/menus` |
 | Profil & médias | `GET /v1/me`, `GET /v1/media` (réf opaque uniquement) |
 | Préférences matière | `GET /v1/subjects/prefs`, `PUT /v1/subjects/prefs` |
@@ -212,7 +209,7 @@ lecture. Une route ajoutée est donc fermée par défaut.
 
 Événements SSE : `GradeCreated`, `AssignmentUpdated`, `TimetableUpdated`, `SyncCompleted`,
 `CacheInvalidated`, `SecurityAlert`, `NewsUpdated`. Ressources cachables : `grades`, `assignments`,
-`timetable`, `news`, `menus`, `evaluations`, `attendance`, `punishments`, `capabilities`, `discussions`.
+`timetable`, `news`, `menus`, `attendance`, `punishments`, `capabilities`, `discussions`.
 
 ## Tests et garde-fous
 
@@ -225,7 +222,7 @@ make integration-api        # API locale, zéro secret
 make build                  # image Docker + rappel APK
 ```
 
-618 tests, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
+786 tests dans `make check`, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
 La CI locale est `make check` : un changement qui casse un invariant est bloquant, même si
 fonctionnellement il passe.
 
