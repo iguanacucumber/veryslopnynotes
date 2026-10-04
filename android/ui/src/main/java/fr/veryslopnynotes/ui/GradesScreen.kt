@@ -23,7 +23,7 @@ import fr.veryslopnynotes.data.SubjectPrefs
 // générale) et par l'écran Compétences (`section` = chips + détail, #78).
 //
 // #135 : ce composable (`CachedScreen`, renommé `CachedResourceScreen` parce
-// que deux routes le partagent) SORT d'`AppNav.kt` (970 lignes qui portaient la
+// que deux routes le partagent) SORT d'`AppNav.kt` (989 lignes qui portaient la
 // coquille ET quatre écrans). Comportement inchangé, SAUF :
 //   - le paramètre `title` et son `Text(title)` DISPARAISSENT : la barre du
 //     haut affiche le titre de la route (« Notes », « Compétences »), donc

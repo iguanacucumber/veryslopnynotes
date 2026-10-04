@@ -42,7 +42,7 @@ import fr.veryslopnynotes.data.SessionTokens
 
 // Graphe de navigation et état de la session. La COQUILLE (barre du haut par
 // route, barre d'onglets, icônes) vit dans `AppShell.kt` et `AppIcons.kt`, les
-// ÉCRANS chacun dans son fichier : avant #135 ce fichier faisait 970 lignes et
+// ÉCRANS chacun dans son fichier : avant #135 ce fichier faisait 989 lignes et
 // portait la coquille ET quatre écrans, donc chaque issue d'interface se
 // disputait le même fichier.
 //

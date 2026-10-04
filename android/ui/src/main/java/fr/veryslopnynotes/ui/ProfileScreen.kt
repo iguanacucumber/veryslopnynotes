@@ -34,7 +34,7 @@ import fr.veryslopnynotes.data.ProfileRepository
 // ponytail: état local (comme les autres onglets), pas de ViewModel. Upgrade:
 //   sélecteur de compte quand plusieurs enfants sont appairés.
 //
-// #135 : ce fichier (les deux composables) SORT d'`AppNav.kt` (970 lignes qui
+// #135 : ce fichier (les deux composables) SORT d'`AppNav.kt` (989 lignes qui
 // portaient la coquille ET quatre écrans). Comportement inchangé, SAUF :
 //   - les 9 BOUTONS DUPLIQUÉS retirés (« Actualités », « Cantine semaine »,
 //     « Vie scolaire » apparaissaient chacun TROIS fois : trois recopies du
