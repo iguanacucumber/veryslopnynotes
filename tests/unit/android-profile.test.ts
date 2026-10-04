@@ -127,45 +127,58 @@ class TsAccountStore {
 }
 
 // --- miroir des widgets d'accueil (android/ui/HomeWidgets.kt) ---
-function tsUpcoming(payload: string, nowIso: string, limit = 3): { subject: string; start: string; room: string }[] {
+// #143 : les dates sont des MILLIS (`java.time` côté Kotlin, `Date.parse` ici).
+// Avant, ce miroir — et le Kotlin — triaient les chaînes ISO, ce qui ordonnait
+// mal une date à fuseau (« 09:00+02:00 » = 07:00Z, donc AVANT « 08:30Z »).
+// Le miroir complet des libellés et des états vit dans `android-home.test.ts`.
+const tsMillisOf = (iso: string): number | null => {
+  const value = iso.trim();
+  if (value === "") return null;
+  const millis = Date.parse(value);
+  return Number.isFinite(millis) ? millis : null;
+};
+
+function tsUpcoming(payload: string, nowMillis: number, limit = 3): { subject: string; start: number; room: string }[] {
   try {
     const root = JSON.parse(payload) as Record<string, unknown>;
     const entries = Array.isArray(root["entries"]) ? (root["entries"] as unknown[]) : [];
-    const out: { subject: string; start: string; room: string }[] = [];
+    const out: { subject: string; start: number; room: string }[] = [];
     for (const e of entries) {
       if (typeof e !== "object" || e === null) continue;
       const r = e as Record<string, unknown>;
       const subject = typeof r["subject"] === "string" ? r["subject"].trim() : "";
-      const start = typeof r["start"] === "string" ? r["start"].trim() : "";
-      const end = typeof r["end"] === "string" ? r["end"].trim() : "";
-      if (subject === "" || start === "" || end === "") continue;
-      if (end < nowIso) continue;
+      const start = tsMillisOf(typeof r["start"] === "string" ? (r["start"] as string) : "");
+      const end = tsMillisOf(typeof r["end"] === "string" ? (r["end"] as string) : "");
+      if (subject === "" || start === null || end === null) continue;
+      if (end < start) continue;
+      if (end <= nowMillis) continue;
+      if (r["status"] === "cancelled") continue;
       out.push({ subject, start, room: typeof r["room"] === "string" ? r["room"].trim() : "" });
     }
-    out.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+    out.sort((a, b) => a.start - b.start);
     return out.slice(0, limit > 0 ? limit : 5);
   } catch {
     return [];
   }
 }
 
-function tsPending(payload: string, nowIso: string, limit = 3): { subject: string; title: string; dueDate: string }[] {
+function tsPending(payload: string, nowMillis: number, limit = 3): { subject: string; title: string; dueDate: number }[] {
   try {
     const root = JSON.parse(payload) as Record<string, unknown>;
     const arr = Array.isArray(root["assignments"]) ? (root["assignments"] as unknown[]) : [];
-    const out: { subject: string; title: string; dueDate: string }[] = [];
+    const out: { subject: string; title: string; dueDate: number }[] = [];
     for (const a of arr) {
       if (typeof a !== "object" || a === null) continue;
       const r = a as Record<string, unknown>;
       const subject = typeof r["subject"] === "string" ? r["subject"].trim() : "";
       const title = typeof r["title"] === "string" ? r["title"].trim() : "";
-      const due = typeof r["dueDate"] === "string" ? r["dueDate"].trim() : "";
-      if (subject === "" || title === "" || due === "") continue;
+      const due = tsMillisOf(typeof r["dueDate"] === "string" ? (r["dueDate"] as string) : "");
+      if (subject === "" || title === "" || due === null) continue;
       if (r["done"] === true) continue;
-      if (due < nowIso) continue;
+      if (due <= nowMillis) continue;
       out.push({ subject, title, dueDate: due });
     }
-    out.sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
+    out.sort((a, b) => a.dueDate - b.dueDate);
     return out.slice(0, limit > 0 ? limit : 5);
   } catch {
     return [];
@@ -176,18 +189,18 @@ function tsLatestGrades(payload: string, limit = 3): { subject: string; note: st
   try {
     const root = JSON.parse(payload) as Record<string, unknown>;
     const arr = Array.isArray(root["grades"]) ? (root["grades"] as unknown[]) : [];
-    const out: { subject: string; note: string; date: string }[] = [];
+    const out: { subject: string; note: string; date: number }[] = [];
     for (const g of arr) {
       if (typeof g !== "object" || g === null) continue;
       const r = g as Record<string, unknown>;
       const subject = typeof r["subject"] === "string" ? r["subject"].trim() : "";
-      const date = typeof r["date"] === "string" ? r["date"].trim() : "";
-      if (subject === "" || date === "") continue;
+      const date = tsMillisOf(typeof r["date"] === "string" ? (r["date"] as string) : "");
+      if (subject === "" || date === null) continue;
       if (r["value"] === null || typeof r["value"] !== "number") continue;
-      const scale = typeof r["scale"] === "number" ? r["scale"] : Number.NaN;
+      const scale = typeof r["scale"] === "number" ? (r["scale"] as number) : Number.NaN;
       out.push({ subject, note: tsGradeLabel(r["value"] as number, scale), date });
     }
-    out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    out.sort((a, b) => b.date - a.date);
     return out.slice(0, limit > 0 ? limit : 5).map(({ subject, note }) => ({ subject, note }));
   } catch {
     return [];
@@ -201,8 +214,8 @@ function tsGradeLabel(value: number, scale: number): string {
   return `${v}/${String(Math.round(scale))}`;
 }
 
-// 2026-10-03 08:30 : le cours du 03 (08:00-09:00) est EN COURS.
-const NOW = "2026-10-03T08:30:00.000Z";
+// 2026-10-03 08:30 UTC : le cours du 03 (08:00-09:00) est EN COURS.
+const NOW = Date.parse("2026-10-03T08:30:00.000Z");
 
 describe("unit android profil (#82)", () => {
   test("parse /v1/me : profil conforme, user null = état vide propre", () => {
@@ -337,9 +350,14 @@ describe("unit android profil (#82)", () => {
 
   test("Kotlin : widgets + écran profil branchés, source sans dépendance ajoutée", () => {
     const widgets = read(join(UI, "HomeWidgets.kt"));
-    for (const fn of ["fun upcomingLessonsFrom(", "fun pendingHomeworkFrom(", "fun latestGradesFrom(", "fun gradeValueLabel(", "fun homeTimeLabel("]) {
+    // #139 a déplacé `gradeValueLabel` dans `Averages.kt` (avec `gradesFrom`,
+    // seul lecteur du JSON des notes) : `HomeWidgets.kt` s'y appuie au lieu de
+    // reparcourir le payload.
+    for (const fn of ["fun upcomingLessonsFrom(", "fun pendingHomeworkFrom(", "fun latestGradesFrom(", "fun homeTimeLabel("]) {
       expect(widgets).toContain(fn);
     }
+    expect(widgets).toContain("gradesFrom(payload)");
+    expect(read(join(UI, "Averages.kt"))).toContain("fun gradeValueLabel(");
     // org.json = SDK : aucune lib de parsing ajoutée.
     expect(widgets).toContain("org.json.JSONObject");
     // Écran profil : données réelles, empty state, photo + déconnexion.
