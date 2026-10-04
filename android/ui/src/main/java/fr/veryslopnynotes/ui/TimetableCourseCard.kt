@@ -234,6 +234,8 @@ fun PapCourseCard(
                         text = listOfNotNull(duration, moved).joinToString(" · "),
                         style = MaterialTheme.typography.labelMedium,
                         color = ink,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -279,6 +281,8 @@ fun PapLunchCard(label: String, duration: String, modifier: Modifier = Modifier)
                     text = duration,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

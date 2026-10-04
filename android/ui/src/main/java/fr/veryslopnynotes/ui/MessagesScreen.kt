@@ -51,6 +51,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.Discussion
@@ -295,7 +299,21 @@ private fun ConversationCard(
                     Box(
                         modifier = Modifier
                             .clip(MaterialTheme.shapes.small)
-                            .clickable(onClickLabel = "Marquer lu", onClick = onToggleRead)
+                            // #146 : `Role.Checkbox` + `stateDescription` — la
+                            // pastille EST un état binaire (des messages non lus
+                            // que le tap fait disparaître), donc elle doit être
+                            // annoncée comme telle, pas comme un « bouton » sans
+                            // nom. La pastille garde sa taille : la ligne entière
+                            // fait 48 dp de haut, donc la zone d'appui reste dans
+                            // les 24 dp du WCAG 2.5.8.
+                            .clickable(
+                                onClickLabel = "Marquer lu",
+                                role = Role.Checkbox,
+                                onClick = onToggleRead,
+                            )
+                            .semantics {
+                                stateDescription = if (badge > 1) "$badge messages non lus" else "1 message non lu"
+                            }
                             .padding(horizontal = 6.dp, vertical = 4.dp),
                     ) {
                         PapBadge(count = badge)
@@ -357,6 +375,10 @@ fun DiscussionDetailScreen(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
+                    // `heading()` : l'objet est le titre de l'écran (la barre
+                    // porte « Messages »), donc le point d'entrée du survol — et
+                    // il est borné à deux lignes, le contrat permet 200
+                    // caractères.
                     text = discussion.subject,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 2,
@@ -396,7 +418,18 @@ fun DiscussionDetailScreen(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Supprimer la discussion", color = MaterialTheme.colorScheme.error) },
+                        text = {
+                            // `errorTextColor()` : le rouge de marque ne vaut que
+                            // 3.70:1 sur la surface SOMBRE — l'action la plus
+                            // grave du fil doit rester lisible dans les deux
+                            // thèmes.
+                            Text(
+                                text = "Supprimer la discussion",
+                                color = errorTextColor(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
                         onClick = {
                             menuOpen = false
                             confirmDelete = true
@@ -417,7 +450,9 @@ fun DiscussionDetailScreen(
                 else -> LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    // 8 dp entre deux bulles : c'est un GROUPE de messages, la
+                    // conversation elle-même. 6 dp ne se lisait pas.
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                 ) {
                     items(messages, key = { it.id }) { m ->
@@ -469,6 +504,14 @@ private fun MessageBubble(
 ) {
     val own = isOwnMessage(m)
     val time = messageTimeLabel(m, nowMillis, zone)
+    // #146 : l'encre de l'AUTEUR était `primary` sur les DEUX fonds — 3.74:1 sur
+    // la surface claire et 3.50:1 sur le `primaryContainer` : sous AA pour un
+    // libellé de 13 sp, dans les deux thèmes. Elle passe par [bestContentOn] du
+    // thème, appliqué au fond RÉEL de la bulle : 14.84:1 en clair, 7.39:1 sur le
+    // conteneur vert en thème sombre. Le nom reste en tête de bulle, il perd
+    // seulement sa teinte.
+    val container = if (own) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+    val authorInk = bestContentOn(container)
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (own) Arrangement.End else Arrangement.Start,
@@ -476,7 +519,7 @@ private fun MessageBubble(
         Surface(
             modifier = Modifier.fillMaxWidth(0.85f),
             shape = MaterialTheme.shapes.medium,
-            color = if (own) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+            color = container,
             border = BorderStroke(HAIRLINE, MaterialTheme.colorScheme.outline),
         ) {
             Column(
@@ -487,9 +530,16 @@ private fun MessageBubble(
                     Text(
                         text = m.authorName,
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = authorInk,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
+                // Le corps n'est PAS borné : c'est le message, donc l'information
+                // la plus importante de l'écran, et la bulle est dans un
+                // `LazyColumn` qui défile. Tronquer un message sans écran de
+                // détail serait perdre l'information au lieu de protéger la mise
+                // en page.
                 Text(text = m.body, style = MaterialTheme.typography.bodyMedium)
                 if (m.attachments.isNotEmpty()) {
                     AttachmentChips(attachments = m.attachments, onOpen = onOpenAttachment)
@@ -499,6 +549,8 @@ private fun MessageBubble(
                         text = time,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 4.dp),
                     )
                 }
@@ -531,7 +583,7 @@ private fun AttachmentChips(attachments: List<MessageAttachment>, onOpen: (Messa
     ) {
         for (att in attachments) {
             Surface(
-                modifier = Modifier.clickable { onOpen(att) },
+                modifier = Modifier.clickable(onClickLabel = "Ouvrir la pièce jointe", role = Role.Button) { onOpen(att) },
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(HAIRLINE, MaterialTheme.colorScheme.outline),
@@ -587,7 +639,7 @@ private fun ReplyField(
         OutlinedTextField(
             value = draft,
             onValueChange = onDraftChange,
-            label = { Text("Répondre") },
+            label = { Text("Répondre", maxLines = 1) },
             maxLines = 4,
             modifier = Modifier.weight(1f),
         )
@@ -641,20 +693,22 @@ fun NewDiscussionScreen(
             Text(
                 text = "Nouvelle discussion",
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).semantics { heading() },
             )
         }
         OutlinedTextField(
             value = subject,
             onValueChange = { subject = it },
-            label = { Text("Objet") },
+            label = { Text("Objet", maxLines = 1) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         )
         OutlinedTextField(
             value = body,
             onValueChange = { body = it },
-            label = { Text("Message") },
+            label = { Text("Message", maxLines = 1) },
             minLines = 3,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         )
@@ -692,12 +746,17 @@ fun NewDiscussionScreen(
                 ) {
                     for (group in groups) {
                         item(key = "groupe-${group.kind}") {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            // 8 dp : le libellé du groupe et ses puces sont deux
+                            // niveaux, pas deux moitiés d'une même ligne.
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 // En-tête de groupe : le libellé TRADUIT, jamais `kind`.
                                 Text(
                                     text = "${group.label} · ${group.recipients.size}",
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.semantics { heading() },
                                 )
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     for (r in group.recipients) {
@@ -736,6 +795,8 @@ fun NewDiscussionScreen(
         ) {
             Text(
                 text = pickedCountLabel(picked.size),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),

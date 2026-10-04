@@ -67,6 +67,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -205,17 +209,27 @@ private fun AssignmentSectionHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // Décorative : le titre porte le sens (`heading()` ci-dessous).
         Icon(imageVector = sectionIcon(section.id), contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+        // `heading()` : « En retard », « Aujourd'hui », « Terminés » sont les
+        // TROIS titres de cet écran — sans eux, on ne pouvait pas sauter d'une
+        // section à l'autre au lecteur d'écran.
         Text(
             text = section.title,
             style = MaterialTheme.typography.titleMedium,
             color = accent,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).semantics { heading() },
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
         if (section.count > 0) {
-            Text(text = "${section.count}", style = MaterialTheme.typography.labelMedium, color = accent)
+            Text(
+                text = "${section.count}",
+                style = MaterialTheme.typography.labelMedium,
+                color = accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         if (section.id == SECTION_DONE) {
             IconButton(onClick = onToggle) {
@@ -276,7 +290,7 @@ private fun SubjectFilterRow(
             FilterChip(
                 selected = selected.isNullOrEmpty(),
                 onClick = { onSelect(null) },
-                label = { Text("Toutes") },
+                label = { Text("Toutes", maxLines = 1, overflow = TextOverflow.Ellipsis) },
             )
         }
         items(styles, key = { it.first }) { (subject, style) ->
@@ -293,7 +307,17 @@ private fun SubjectFilterRow(
             FilterChip(
                 selected = selected == subject,
                 onClick = { onSelect(if (selected == subject) null else subject) },
-                label = { Text(chip.badge, color = ink) },
+                // Le nom d'une matière vient de l'établissement (100 caractères
+                // au contrat) : borné, sinon une puce large mange les trois
+                // suivantes dans la rangée défilante.
+                label = {
+                    Text(
+                        text = chip.badge,
+                        color = ink,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
             )
         }
     }
@@ -413,7 +437,10 @@ private fun PapTaskCard(
                     Text(
                         text = if (expanded) "Réduire" else "Voir plus",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        // `secondary` et non `primary` : 3.74:1 sur la carte, le
+                        // lien « Voir plus » est en 13 sp donc sous AA avec
+                        // `primary`. `secondary` tient 4.93:1.
+                        color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier
                             .clickable(
                                 onClickLabel = if (expanded) "Réduire la consigne" else "Voir toute la consigne",
@@ -501,8 +528,11 @@ private fun DoneToggle(done: Boolean, color: Color?, onToggle: () -> Unit) {
         // d'écran doit l'annoncer comme telle (et son état) au lieu d'un bouton.
         Surface(
             // #145 : ressort de presse (amortissement 0.8) — le geste le plus
-            // fait de l'écran, il se sent sous le doigt.
-            modifier = Modifier.papPressable(role = Role.Checkbox, onClick = click),
+            // fait de l'écran, il se sent sous le doigt. #146 : l'état est nommé
+            // en français, donc il existe aussi sans la couleur.
+            modifier = Modifier
+                .papPressable(role = Role.Checkbox, onClick = click)
+                .semantics { stateDescription = "Devoir fait" },
             shape = MaterialTheme.shapes.small,
             color = tint,
         ) {
@@ -514,21 +544,36 @@ private fun DoneToggle(done: Boolean, color: Color?, onToggle: () -> Unit) {
             )
         }
     } else {
+        // #146 : le cercle VISIBLE fait 26 dp — la cible de toucher aussi. La
+        // boîte qui porte le geste fait [TouchTarget] (48 dp) et le cercle est
+        // centré dedans : l'image ne bouge pas d'un pixel, seule la zone d'appui
+        // grandit. Le ressort de #145 passe par la boîte entière, et comme un
+        // `graphicsLayer` met SES enfants à l'échelle, le cercle rétrécit bien au
+        // pressage. `stateDescription` nomme l'état en toutes lettres.
         Box(
             modifier = Modifier
-                .size(DONE_DOT_SIZE)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .border(HAIRLINE, MaterialTheme.colorScheme.outline, CircleShape)
-                .papPressable(role = Role.Checkbox, onClick = click),
+                .size(TouchTarget)
+                .papPressable(role = Role.Checkbox, onClick = click)
+                .semantics { stateDescription = "Devoir à faire" },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = "Marquer le devoir comme fait",
-                tint = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.size(18.dp),
-            )
+            Box(
+                modifier = Modifier
+                    .size(DONE_DOT_SIZE)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(HAIRLINE, MaterialTheme.colorScheme.outline, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    // Décorative : l'état est porté par [stateDescription] et la
+                    // forme (cercle creux = à faire, pastille pleine = fait).
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }
@@ -550,7 +595,7 @@ private fun AttachmentChips(attachments: List<AssignmentAttachment>, onOpen: (As
     ) {
         for (att in attachments) {
             Surface(
-                modifier = Modifier.clickable { onOpen(att) },
+                modifier = Modifier.clickable(onClickLabel = "Ouvrir la pièce jointe", role = Role.Button) { onOpen(att) },
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(HAIRLINE, MaterialTheme.colorScheme.outline),
@@ -560,7 +605,14 @@ private fun AttachmentChips(attachments: List<AssignmentAttachment>, onOpen: (As
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(text = "📎", style = MaterialTheme.typography.labelSmall)
+                    // Décorative : le libellé de la pièce (`att.label`) porte le
+                    // nom du fichier — « 📎 » serait annoncé en plus, sans rien
+                    // apprendre.
+                    Text(
+                        text = "📎",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.clearAndSetSemantics { },
+                    )
                     Text(
                         text = att.label,
                         style = MaterialTheme.typography.labelSmall,
@@ -628,7 +680,15 @@ fun AssignmentsScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(weekLabel, style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = weekLabel,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    // Titre de l'écran sous la barre du haut : `heading()` pour
+                    // que le survol commence ici.
+                    modifier = Modifier.semantics { heading() },
+                )
                 Text(
                     text = "Devoirs de la semaine",
                     style = MaterialTheme.typography.bodyMedium,
@@ -645,7 +705,7 @@ fun AssignmentsScreen(
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
-            label = { Text("Rechercher un devoir") },
+            label = { Text("Rechercher un devoir", maxLines = 1) },
             leadingIcon = { Icon(imageVector = Icons.Filled.Search, contentDescription = null) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -714,6 +774,9 @@ fun AssignmentsScreen(
                                             text = Assignment.dayLabelFr(day),
                                             style = MaterialTheme.typography.titleSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.semantics { heading() },
                                         )
                                     }
                                 }

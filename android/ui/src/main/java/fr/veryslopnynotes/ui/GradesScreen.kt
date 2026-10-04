@@ -18,6 +18,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SubjectPrefs
@@ -205,6 +208,8 @@ fun GradesRoute(
                 text = periodError,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         GradesPeriodCaption(periods = periods, selectedId = periodId)
@@ -222,6 +227,8 @@ fun GradesRoute(
                 text = failed.message,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
             )
         }
 
@@ -244,7 +251,15 @@ fun GradesRoute(
             GradesNothingToShow(query = query, onRefresh = { refresh() })
         } else {
             if (recent.isNotEmpty()) {
-                Text("Nouvelles notes", style = MaterialTheme.typography.titleMedium)
+                // `heading()` : « Nouvelles notes » precede le carrousel — c'est
+                // un titre de section, même sans icône.
+                Text(
+                    text = "Nouvelles notes",
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() },
+                )
                 GradesRecentCarousel(grades = recent, prefs = subjectPrefs, nowMillis = nowMillis)
             }
             PapSectionHeader(
@@ -400,12 +415,19 @@ fun CachedResourceScreen(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(subtitle, style = MaterialTheme.typography.titleMedium)
+        // `heading()` : le sous-titre est le titre de cet écran sous la barre.
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.semantics { heading() },
+        )
         when (val s = state) {
-            UiState.Loading -> Text("Chargement…")
-            UiState.Empty -> Text("Aucune donnée en cache. Connectez-vous puis actualisez.")
+            UiState.Loading -> Text("Chargement…", maxLines = 1)
+            UiState.Empty -> Text("Aucune donnée en cache. Connectez-vous puis actualisez.", maxLines = 3)
             is UiState.Data -> {
-                if (s.isStale) Text("Données hors-ligne (périmé).")
+                if (s.isStale) Text("Données hors-ligne (périmé).", maxLines = 1)
                 // #83 : matières du payload résolues (nom seul si aucune prefs).
                 SubjectLegend(subjectsFromPayload(s.payload), subjectPrefs)
 
@@ -415,6 +437,8 @@ fun CachedResourceScreen(
                         "Pas de rendu détaillé pour cette ressource.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }

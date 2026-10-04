@@ -48,6 +48,8 @@ fun tabIcon(route: String): ImageVector = when (route) {
     else -> Icons.Filled.Info
 }
 
-// Le `contentDescription` de l'icône est `tabLabel(route)` : le libellé affiché
-// sous l'icône et celui lu par un lecteur d'écran viennent donc de la MÊME
-// fonction, ils ne peuvent pas diverger.
+// Le nom de l'onglet est `tabLabel(route)` : le libellé affiché sous l'icône et
+// celui lu par un lecteur d'écran viennent donc de la MÊME fonction, ils ne
+// peuvent pas diverger. #146 : c'est le `label` de l'item qui le porte, donc le
+// `contentDescription` de l'icône est `null` — la décrire en plus ferait
+// annoncer le même mot deux fois.

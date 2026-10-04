@@ -721,7 +721,7 @@ describe("sections, filtres et semaine (#138)", () => {
     expect(screen).toContain("private fun SubjectFilterRow");
     expect(screen).toContain("LazyRow");
     expect(screen).toContain("FilterChip");
-    expect(screen).toContain('label = { Text("Rechercher un devoir") }');
+    expect(screen).toContain('label = { Text("Rechercher un devoir", maxLines = 1) }');
   });
 
   test("Kotlin : zéro dépendance ajoutée, zéro brique #136 dupliquée", () => {
@@ -859,9 +859,11 @@ describe("carte de devoir (#161)", () => {
     const code = stripComments(screen);
     // Le dépliage n'est plus un bouton…
     expect(code).not.toMatch(/TextButton\([\s\S]{0,200}Voir plus/);
-    // …c'est un libellé cliquable, dans la couleur du thème.
+    // …c'est un libellé cliquable, dans la couleur du thème. #146 : l'accent
+    // passe de `primary` (3.74:1, sous AA en 13 sp) à `secondary` (4.93:1) —
+    // même vert à l'œil, lisible en texte.
     expect(code).toMatch(/text = if \(expanded\) "Réduire" else "Voir plus"/);
-    expect(code).toMatch(/color = MaterialTheme\.colorScheme\.primary/);
+    expect(code).toMatch(/color = MaterialTheme\.colorScheme\.secondary/);
     // Le geste reste nommé pour un lecteur d'écran (on n'a pas échangé une
     // hauteur pour un silence).
     expect(code).toMatch(/onClickLabel = if \(expanded\)/);

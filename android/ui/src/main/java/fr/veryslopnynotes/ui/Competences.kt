@@ -24,8 +24,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
 import java.util.Locale
@@ -259,7 +261,15 @@ fun CompetencesSection(payload: String?) {
                             description = "L'établissement n'a publié aucune évaluation pour « ${selected.label} ».",
                         )
                         else -> {
-                            Text("Détail compétence", style = MaterialTheme.typography.titleMedium)
+                            // `heading()` : c'est le seul titre de la section de
+                            // détail, donc le point d'entrée du survol.
+                            Text(
+                                text = "Détail compétence",
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.semantics { heading() },
+                            )
                             for (e in detail) {
                                 EvaluationRow(e)
                             }
@@ -282,12 +292,28 @@ fun CompetencesSection(payload: String?) {
 private fun EvaluationRow(entry: EvaluationDetailUi) {
     PapCard(modifier = Modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(entry.subject, style = MaterialTheme.typography.titleSmall)
-            Text(entry.label, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = entry.subject,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
+            )
+            // `entry.label` est le libellé libre de l'établissement (200
+            // caractères au contrat) : trois lignes, pas plus — au-delà, la carte
+            // pousse la note hors de l'écran.
+            Text(
+                text = entry.label,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
             Text(
                 text = "${noteLabel(entry.note, entry.scale)} · ${entry.date.take(10)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
