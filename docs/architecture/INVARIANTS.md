@@ -54,8 +54,11 @@ Format : Invariant → test → commande → emplacement.
 
 Le serveur ne lit **aucune** variable de credential et ne détient aucun secret :
 `PORT`/`HOST` (l'écoute) sont les seules variables lues, et uniquement dans
-`start()` (`server/infrastructure/http.ts`). Tout ce qui s'authentifie vient de
-l'app, par requête :
+`start()` (`server/infrastructure/http.ts`). `TLS_CERT_FILE`/`TLS_KEY_FILE`
+complètent la liste : ce sont des **chemins** vers un certificat local
+auto-signé, généré hors du dépôt (`agents/runtime/dev-tls.sh`, `~/.cache`) —
+jamais un secret d'authentification, jamais commité. Tout ce qui s'authentifie
+vient de l'app, par requête :
 
 | Ce qui s'authentifie | Où il vit | Comment il voyage |
 |---|---|---|

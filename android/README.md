@@ -80,6 +80,36 @@ Défaut émulateur `10.0.2.2:3000` (http local). Hors émulateur : HTTPS-only
 `./gradlew installDebug` utilise le défaut sans config ; l'utilisateur peut le
 remplacer ensuite depuis l'app.
 
+### Certificat de `make runServer` (« Trust anchor … not found »)
+
+`make runServer` sert en HTTPS avec un certificat **auto-signé**. Depuis
+Android 7, une app ne fait pas confiance par défaut aux certificats installés
+par l'utilisateur, d'où `CertPathValidatorException: Trust anchor for
+certification path not found`. Le correctif est en deux temps :
+
+1. Installer le certificat du serveur sur l'appareil (`~/.cache/veryslopnynotes/tls/cert.pem`) :
+
+   ```sh
+   adb push ~/.cache/veryslopnynotes/tls/cert.pem /sdcard/vsn.crt
+   adb shell am start -a android.credentials.INSTALL \
+     -t application/x-x509-ca-cert -d file:///sdcard/vsn.crt
+   ```
+
+   Sur téléphone : `Paramètres > Sécurité > Chiffrement et identifiants >
+   Installer un certificat > Certificat CA`. Il est déclaré `CA:TRUE`, sinon
+   l'écran d'installation le refuse.
+
+2. Utiliser l'APK **debug** : `app/src/debug/res/xml/network_security_config.xml`
+   ajoute `<certificates src="user" />` aux ancres. Ce fichier n'existe qu'en
+   debug — la release garde la config stricte d'`src/main` (ancres plateforme
+   seules) et ne peut donc pas joindre un certificat auto-signé. Pour la
+   release, fournissez un certificat émis (`TLS_CERT_FILE`/`TLS_KEY_FILE`,
+   mkcert ou une autorité).
+
+Le nom saisi doit rester couvert par le SAN du certificat
+(`localhost`, `veryslopnynotes.local`, `127.0.0.1`, `10.0.2.2`, IP LAN) :
+sinon l'erreur suivante est un `HostnameVerifier`, pas une erreur d'ancre.
+
 ## Build debug (SDK requis, pas de réseau tiers)
 
 ```sh
