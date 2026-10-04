@@ -153,6 +153,15 @@ private val TOP_BAR_ACTIONS: Map<String, List<TopAction>> = mapOf(
         TopAction.Go(ROUTE_PAIRING, "Appairage QR+PIN"),
         TopAction.Go(ROUTE_ALERTS, "Alertes sécurité"),
     ),
+    // #172 : « Sanctions » sort du CORPS de la Vie scolaire (c'était le dernier
+    // lien de navigation en clair d'un écran) et devient une action de barre,
+    // comme Compétences. La capacité `punishments` (#87) reste le filtre : c'est
+    // `AppNav.kt` qui la range dans `hiddenDestinations`, seul endroit qui sait
+    // lire les capacités ET naviguer. Pas de relecture ici : le bouton
+    // d'en-tête de l'écran la porte déjà (`AttendanceHeader`).
+    ROUTE_ATTENDANCE to listOf(
+        TopAction.Go(ROUTE_SANCTIONS, "Sanctions"),
+    ),
 )
 
 private val TOP_BARS: Map<String, TopBar> = mapOf(
@@ -188,8 +197,9 @@ private val TOP_BARS: Map<String, TopBar> = mapOf(
  *
  * [hiddenDestinations] retire des destinations de la barre quand l'écran ne
  * doit pas les offrir (#87 : l'onglet Compétences n'existe que si
- * l'établissement active les évaluations). La table est statique, c'est donc
- * `AppNav` — qui lit les capacités — qui décide.
+ * l'établissement active les évaluations, la route Sanctions que s'il publie
+ * `punishments`). La table est statique, c'est donc `AppNav` — qui lit les
+ * capacités — qui décide.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

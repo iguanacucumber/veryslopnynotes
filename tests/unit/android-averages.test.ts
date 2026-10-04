@@ -895,7 +895,17 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     // L'état vide porte UNE action, l'état d'erreur le sien : plus de bloc
     // d'erreur à l'intérieur d'une page de contrôles.
     expect(screen).not.toMatch(/is UiState\.Error -> PapErrorState\([\s\S]{0,200}Les notes en cache/);
-    expect(screen).toMatch(/is UiState\.Error -> PapErrorState\(message = state\.message, onRetry = onRefresh\)/);
+    expect(screen).toMatch(/is UiState\.Error -> \{[\s\S]{0,300}?PapErrorState\(message = state\.message, onRetry = onRefresh\)/);
+    // #172 : cet état porte une ligne FIXE, PROPRE à l'onglet, AVANT l'erreur.
+    // `PapErrorState` ne rend que le message de la couche data et « Réessayer »
+    // — partagé par sept écrans — donc sans elle la route n'était pas prouvable
+    // hors ligne, alors que la barre d'onglets affiche « Notes » partout.
+    expect(screen).toContain('private const val GRADES_UNAVAILABLE = "Notes indisponibles."');
+    const erreur = screen.slice(screen.indexOf("is UiState.Error -> {"), screen.indexOf("is UiState.Data -> GradesNothingToShow"));
+    expect({
+      ligne: erreur.includes("text = GRADES_UNAVAILABLE"),
+      avantLErreur: erreur.indexOf("text = GRADES_UNAVAILABLE") < erreur.indexOf("PapErrorState("),
+    }).toEqual({ ligne: true, avantLErreur: true });
 
     // 2. Plus AUCUN lien de navigation dans le corps d'un écran : les
     // destinations sont déclarées une fois, dans la table de la barre du haut.
@@ -914,9 +924,14 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     expect(shell).toContain("private val TOP_BAR_ACTIONS: Map<String, List<TopAction>>");
     expect(shell).toMatch(/fun AppTopBar\(\s*\n\s*route: String\?,\s*\n\s*onBack: \(String\) -> Unit,\s*\n\s*onNavigate: \(String\) -> Unit,\s*\n\s*onRefresh: \(\) -> Unit,/);
     expect(shell).toContain("actions = { TopBarActions(actions = actions, onNavigate = onNavigate, onRefresh = onRefresh) }");
-    // #87 : la destination Compétences reste conditionnelle aux capacités.
+    // #87 : la destination Compétences reste conditionnelle aux capacités, et
+    // #172 : Sanctions aussi, maintenant qu'elle est une action de la barre de la
+    // Vie scolaire (`TOP_BAR_ACTIONS`) au lieu d'un bouton dans le corps.
     expect(shell).toContain("hiddenDestinations: Set<String> = emptySet()");
-    expect(nav).toMatch(/hiddenDestinations = if \(Capabilities\.visible\(capabilities, Capabilities\.EVALUATIONS\)\) emptySet\(\) else setOf\(ROUTE_COMPETENCES\)/);
+    expect(shell).toMatch(/ROUTE_ATTENDANCE to listOf\(\s*\n\s*TopAction\.Go\(ROUTE_SANCTIONS, "Sanctions"\),\s*\n\s*\)/);
+    expect(nav).toMatch(/hiddenDestinations = buildSet \{/);
+    expect(nav).toContain("if (!Capabilities.visible(capabilities, Capabilities.EVALUATIONS)) add(ROUTE_COMPETENCES)");
+    expect(nav).toContain("if (!Capabilities.visible(capabilities, Capabilities.PUNISHMENTS)) add(ROUTE_SANCTIONS)");
     // La relecture passe par un compteur vu par les deux routes qui l'ont.
     expect(nav).toContain("onRefresh = { readTick++ }");
     expect(screen).toMatch(/LaunchedEffect\(resource, algorithm, periodId, refreshTick\) \{ refresh\(\) \}/);
