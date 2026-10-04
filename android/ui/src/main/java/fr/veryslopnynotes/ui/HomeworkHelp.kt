@@ -17,6 +17,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.Assignment
@@ -36,6 +39,39 @@ import fr.veryslopnynotes.data.HomeworkRepository
 // La réponse est de la DONNÉE : Text() uniquement, jamais WebView ni HTML, les
 // étapes du modèle ne sont jamais exécutées (I6).
 
+/** Liste de chaînes revenue du `Bundle` : un élément non texte est écarté. */
+private fun stringsOf(raw: Any?): List<String> =
+    (raw as? List<*>)?.mapNotNull { it as? String }.orEmpty()
+
+/**
+ * Corrigé du serveur, en `list` pour la sauvegarde d'état : `Answer` porte trois
+ * listes de chaînes, `Refused` deux, donc l'export est plat et lisible. Rien
+ * n'est interprété au retour — c'est toujours affiché par `Text` (I6).
+ */
+val HomeworkOutcomeSaver: Saver<HomeworkOutcome?, Any> = listSaver(
+    save = { outcome ->
+        when (outcome) {
+            is HomeworkOutcome.Answer -> listOf("answer", outcome.answer, outcome.steps, outcome.sources)
+            is HomeworkOutcome.Refused -> listOf("refused", outcome.reason, outcome.sources)
+            null -> listOf("none")
+        }
+    },
+    restore = { list ->
+        when (list[0] as String) {
+            "answer" -> HomeworkOutcome.Answer(
+                answer = list[1] as String,
+                steps = stringsOf(list[2]),
+                sources = stringsOf(list[3]),
+            )
+            "refused" -> HomeworkOutcome.Refused(
+                reason = list[1] as String,
+                sources = stringsOf(list[2]),
+            )
+            else -> null
+        }
+    },
+)
+
 // #172 : `HomeworkHelpButton` (le `Button` pleine largeur d'avant #161) est
 // retiré : plus rien ne l'appelle, la PUCE de `Assignments.kt` le déclenche.
 // Un composant public qu'aucun écran ne compose est du code qu'on lit, compile
@@ -50,10 +86,15 @@ fun HomeworkHelpDialog(
     onDismiss: () -> Unit,
 ) {
     val sources = remember(assignment.id) { HomeworkRepository.sourcesFor(assignment) }
-    var question by remember(assignment.id) { mutableStateOf(HomeworkRepository.questionFor(assignment)) }
+    // #147 : la question est SAUVEGARDÉE (c'est de la saisie utilisateur) et le
+    // corrigé aussi — le régénérer coûte un appel modèle, donc le perdre pour une
+    // rotation serait facturer deux fois la même réponse. `pending` n'est PAS
+    // sauvegardé : restaurer un « Génération… » afficherait une attente que plus
+    // rien ne termine.
+    var question by rememberSaveable(assignment.id) { mutableStateOf(HomeworkRepository.questionFor(assignment)) }
     var pending by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var outcome by remember { mutableStateOf<HomeworkOutcome?>(null) }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+    var outcome by rememberSaveable(stateSaver = HomeworkOutcomeSaver) { mutableStateOf<HomeworkOutcome?>(null) }
 
     fun generate() {
         error = null

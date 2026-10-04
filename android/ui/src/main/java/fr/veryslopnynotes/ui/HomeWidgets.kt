@@ -1,5 +1,6 @@
 package fr.veryslopnynotes.ui
 
+import fr.veryslopnynotes.core.dayLabelOf
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.CachedEntry
 import fr.veryslopnynotes.data.SyncedRepository
@@ -44,8 +45,8 @@ private const val HOME_MAX_ITEMS = 5
 /** Longueur d'une ligne d'état d'accès rapide : au-delà, la ligne déborde. */
 private const val HOME_STATUS_CHARS = 34
 
-private val HOME_DAY_NAMES =
-    listOf("dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi")
+// #147 : la table `HOME_DAY_NAMES` d'ici est partie dans `core/DateFr.kt`, comme
+// les trois autres copies du même tableau (EDT, Cantine, Devoirs).
 
 /** Heure seule, 24 h. Format POSÉ : jamais `MMM`/`a` (CLDR du téléphone). */
 private val HOME_CLOCK: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.FRANCE)
@@ -104,12 +105,7 @@ fun homeDayLabel(millis: Long, nowMillis: Long, zone: ZoneId): String = when (da
     0L -> "Aujourd’hui"
     1L -> "Demain"
     -1L -> "Hier"
-    else -> runCatching {
-        val date = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
-        val dd = date.dayOfMonth.toString().padStart(2, '0')
-        val mm = date.monthValue.toString().padStart(2, '0')
-        "${HOME_DAY_NAMES[date.dayOfWeek.value % 7]} $dd/$mm"
-    }.getOrDefault("")
+    else -> runCatching { dayLabelOf(Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()) }.getOrDefault("")
 }
 
 /**

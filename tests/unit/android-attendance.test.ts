@@ -9,6 +9,7 @@ import {
   syntheticAttendancePayload,
   syntheticPunishmentsPayload,
 } from "./fixtures/attendance";
+import { frDayNames, frMonths } from "./fixtures/date-fr";
 
 // Miroir des helpers Kotlin (Attendance.kt + AttendanceFormat.kt +
 // CachePolicy/SyncedRepository/ServerConfig) — doivent rester en sync. org.json =
@@ -316,11 +317,10 @@ const ZONE = "Europe/Paris";
 /** 2026-10-04 14:00 à Paris (UTC+2) — un dimanche. */
 const NOW = Date.UTC(2026, 9, 4, 12, 0);
 
-const MONTHS_FR = [
-  "janvier", "février", "mars", "avril", "mai", "juin",
-  "juillet", "août", "septembre", "octobre", "novembre", "décembre",
-];
-const WEEKDAYS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+// #147 : plus de `WEEKDAYS_FR` en « lundi d'abord » ici — la seule table est celle
+// de `core/DateFr.kt`, en « dimanche d'abord » comme `dayOfWeek.value % 7`.
+const MONTHS_FR = frMonths();
+const FR_DAYS = frDayNames();
 
 type Civil = { y: number; m: number; d: number; day: number };
 
@@ -384,8 +384,9 @@ function tsRelativeDayFr(millis: number, now: number, zone: string = ZONE): stri
 function tsAbsoluteDayFr(millis: number, now: number, zone: string = ZONE): string {
   const day = civil(millis, zone);
   const here = civil(now, zone);
-  // Epoch day 0 = jeudi = index 3 dans une semaine lundi -> dimanche.
-  const weekday = WEEKDAYS_FR[(((day.day / DAY_MS + 3) % 7) + 7) % 7];
+  // Index du jour civil dans la table du dimanche : `getUTCDay()` EST déjà cet
+  // index (dimanche = 0), donc plus d'arithmétique sur l'epoch day.
+  const weekday = FR_DAYS[new Date(Date.UTC(day.y, day.m - 1, day.d)).getUTCDay()];
   const head = `${weekday} ${day.d} ${MONTHS_FR[day.m - 1]}`;
   return day.y === here.y ? head : `${head} ${day.y}`;
 }

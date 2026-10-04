@@ -3,6 +3,7 @@ package fr.veryslopnynotes.ui
 import fr.veryslopnynotes.core.Discussion
 import fr.veryslopnynotes.core.DiscussionMessage
 import fr.veryslopnynotes.core.DiscussionRecipient
+import fr.veryslopnynotes.core.enumFr
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -38,15 +39,12 @@ private const val PREVIEW_MAX_BOUND = 4000
  * administration — l'ordre du contrat (`student`, `teacher`,
  * `administration`) n'a pas de sens pour un utilisateur qui ne voit que des
  * mots français.
+ *
+ * #147 : les jetons restent listés ici parce que cet ordre est un choix
+ * D'AFFICHAGE, mais les LIBELLÉS français viennent de `core/EnumFr.kt` (table
+ * unique du contrat) : cette copie-ci a disparu.
  */
 private val RECIPIENT_KIND_ORDER = listOf("teacher", "student", "administration")
-
-/** Libellé français de chaque type. Le contrat reste en anglais, l'interface non. */
-private val RECIPIENT_KIND_LABELS = mapOf(
-    "teacher" to "Professeur",
-    "student" to "Élève",
-    "administration" to "Administration",
-)
 
 /** Repli d'un type hors contrat : jamais le mot du contrat affiché tel quel. */
 private const val RECIPIENT_KIND_FALLBACK = "Destinataire"
@@ -84,7 +82,7 @@ data class RecipientGroup(
  * défense, pas une branche chaude : afficher « teacher » au milieu d'une phrase
  * française serait une faute de langue, pas un détail de style.
  */
-fun recipientKindFr(kind: String): String = RECIPIENT_KIND_LABELS[kind] ?: RECIPIENT_KIND_FALLBACK
+fun recipientKindFr(kind: String): String = enumFr(kind, RECIPIENT_KIND_FALLBACK)
 
 /**
  * Millis d'un horodatage ISO du contrat, ou null s'il est illisible.

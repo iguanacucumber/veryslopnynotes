@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavDeepLink
@@ -43,12 +44,9 @@ import fr.veryslopnynotes.data.SessionTokens
 // Graphe de navigation et état de la session. La COQUILLE (barre du haut par
 // route, barre d'onglets, icônes) vit dans `AppShell.kt` et `AppIcons.kt`, les
 // ÉCRANS chacun dans son fichier : avant #135 ce fichier faisait 989 lignes et
-// portait la coquille ET quatre écrans, donc chaque issue d'interface se
-// disputait le même fichier.
-//
-// #135 : chaque `navigate` passe par `navigateTo`/`openTab` (`launchSingleTop`,
-// donc revenir après « Ouvrir l'EDT » sort au lieu de dupliquer l'écran), et
-// `changeServer` a rejoint l'assistant d'appairage, dont il est la logique.
+// portait la coquille ET quatre écrans.
+// #135 : chaque `navigate` passe par `navigateTo`/`openTab` (`launchSingleTop`),
+// et `changeServer` a rejoint l'assistant d'appairage, dont il est la logique.
 //
 // Parité Papillon #86 : 5 onglets + settings, et des routes secondaires hors
 // onglets (pairing, alerts, fiches, news, canteen, attendance, messages,
@@ -173,7 +171,9 @@ fun AppNav(
     // garde-fou ApiClient ; on répare par le chemin EXISTANT `accounts.logout()`
     // (secret effacé + caches purgés, aucune purge parallèle) puis on ramène à
     // l'appairage. Anti-boucle : après logout() plus aucun bearer ne part.
-    var authNotice by remember { mutableStateOf<String?>(null) }
+    // #147 : survit à la rotation — sans la phrase « Credential refusée », un
+    // écran de connexion ressemble à une panne.
+    var authNotice by rememberSaveable { mutableStateOf<String?>(null) }
     val main = remember { Handler(Looper.getMainLooper()) }
     DisposableEffect(accounts) {
         DeviceAuth.setOnRejected {

@@ -1,6 +1,7 @@
 package fr.veryslopnynotes.ui
 
 import fr.veryslopnynotes.core.Assignment
+import fr.veryslopnynotes.core.dayLabelFr
 import java.text.Normalizer
 import java.time.Instant
 import java.time.LocalDate
@@ -209,14 +210,15 @@ fun assignmentDay(iso: String, zone: ZoneId): String? {
  * Échéance en temps relatif : « il y a 3 jours », « dans 2 jours », « demain
  * 08:00 » (via [relativeTimeFr]), puis une date courte au-delà de 7 jours.
  *
- * Une dueDate en DATE SEULE passe par [Assignment.dayLabelFr] — « lundi 05/10 » —
- * et une chaîne illisible ne rend RIEN. Jamais de fragment de date : un jour qui
- * ne se lit pas vaut mieux qu'un « ij » affiché comme une échéance.
+ * Une dueDate en DATE SEULE passe par [dayLabelFr] (`core/DateFr.kt`) —
+ * « lundi 05/10 » — et une chaîne illisible ne rend RIEN. Jamais de fragment de
+ * date : un jour qui ne se lit pas vaut mieux qu'un « ij » affiché comme une
+ * échéance.
  */
 fun assignmentDueLabel(iso: String, nowMillis: Long, zone: ZoneId): String {
     val millis = assignmentDueMillis(iso)
     if (millis != null) return relativeTimeFr(millis, nowMillis, zone)
-    return if (assignmentDay(iso, zone) != null) Assignment.dayLabelFr(iso) else ""
+    return if (assignmentDay(iso, zone) != null) dayLabelFr(iso) else ""
 }
 
 /** Lundi de la semaine contenant [millis], en ISO court ; chaîne vide si l'instant est illisible. */

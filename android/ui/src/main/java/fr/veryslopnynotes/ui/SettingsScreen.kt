@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
@@ -101,8 +102,9 @@ fun SettingsScreen(
 ) {
     // Matière en cours d'édition, `null` = aucune feuille ouverte. L'écran ne
     // garde QUE le sujet : le brouillon vit dans la feuille, qui disparaît avec
-    // elle (fermer sans valider = annuler, comme chez Papillon).
-    var editing by remember { mutableStateOf<String?>(null) }
+    // elle (fermer sans valider = annuler, comme chez Papillon). #147 :
+    // `rememberSaveable`, sinon une rotation ferme la feuille en cours.
+    var editing by rememberSaveable { mutableStateOf<String?>(null) }
     val editingSubject = editing
     if (editingSubject != null) {
         SubjectEditorSheet(
@@ -167,7 +169,9 @@ fun SettingsScreen(
                 }
             }
             // Matière inconnue = nom libre (validation isValid côté repository).
-            var newSubject by remember { mutableStateOf("") }
+            // #147 : le nom tapé survit à la rotation (et le bouton « Ajouter »
+            // reste activé, donc l'app ne demande pas de le ressaisir).
+            var newSubject by rememberSaveable { mutableStateOf("") }
             val nameError = subjectNameError(newSubject)
             OutlinedTextField(
                 value = newSubject,
@@ -216,6 +220,12 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // #147 : PAS de `rememberSaveable` ICI, et c'est délibéré : une clé
+            // LLM est un CREDENTIAL. La sauvegarde d'état Compose peut finir
+            // sur disque, dans le fichier de l'activité — on ne recopie donc pas
+            // un secret dans un support que l'utilisateur ne surveille pas. Elle
+            // est chiffrée dans `LlmKeyStore` (Android Keystore) ; ici elle vit
+            // le temps de la saisie et disparaît avec elle.
             var llmKey by remember { mutableStateOf("") }
             // Masquée par DÉFAUT : une clé se COLLE, elle ne se tape pas. Le
             // collage reste autorisé (aucun filtre de caractères) — c'est le

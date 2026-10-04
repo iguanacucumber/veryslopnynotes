@@ -13,6 +13,13 @@ sealed interface UiState {
     data class Error(val message: String, val cached: String?) : UiState
 }
 
+// #147 : `Data.payload` et `Error.cached` ne sont JAMAIS passés à un
+// `rememberSaveable`. Ce sont des PAYLOADS serveur (jusqu'à des centaines de
+// kilo-octets), donc les écrire dans l'état d'activité Android finit en
+// `TransactionTooLargeException` au moment le moins utile — et ils sont de toute
+// façon re-lus du cache synchrone au montage. Ce qui se sauvegarde, c'est l'état
+// de saisie : brouillons, semaine, période, filtre (cf. chaque écran).
+//
 // ponytail: mapping centralise outcome/store -> etat (pas de logique en Composable).
 fun uiStateFromCache(entry: CachedEntry?, stale: Boolean): UiState =
     if (entry == null) UiState.Empty else UiState.Data(entry.payload, stale, entry.fetchedAt)
