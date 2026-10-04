@@ -388,6 +388,12 @@ shell() {
       printf '%s  %s\\n' "$sha" "\${2:-base.apk}" ;;
     wm) printf 'Physical size: 8x8\\n' ;;
     uiautomator) printf 'UI hierchary dumped to: %s\\n' "\${2:-/sdcard/ui.xml}" ;;
+    # #179 : la bascule de thème passe par là ; un refus doit faire échouer la
+    # capture, donc on peut aussi le simuler (THEME_REFUSAL=1).
+    cmd)
+      [ "\${2:-}" = uimode ] || return 0
+      [ "\${THEME_REFUSAL:-0}" = 1 ] && { printf 'cmd: Permission denied\\n' >&2; exit 1; }
+      printf '%s\\n' "$*" >> "$HARNESS/uimode.log" ;;
     cat)
       # #160 : le dump ne porte QUE les libellés du témoin de l'accueil (le
       # titre de barre du haut « Accueil » + « Afficher plus » d'une carte
@@ -606,6 +612,40 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
     expect(r.installs).toEqual([]);
     expect(r.out).toContain("--no-build");
     expect(r.out).toContain("interface périmée");
+  });
+
+  // #179 : sans bascule de thème, la recette sombre n'était pas rejouable —
+  // il fallait écrire `shared_prefs/settings.xml` à la main avant la capture.
+  test("--theme : la bascule passe par l'appareil, le thème entre dans le nom", () => {
+    const h = harness();
+    for (const theme of ["dark", "light", "system"]) {
+      const r = h.run(["index", "--wait", "0", "--theme", theme]);
+      expect(r.code).toBe(0);
+      expect(r.out).toContain(`thème de l'appareil forcé sur « ${theme} »`);
+      expect(readdirSync(join(h.dir, "shots", readdirSync(join(h.dir, "shots"))[0]!)))
+        .toContain(`index.${theme}.png`);
+    }
+    // Le fond du système, pas les préférences de l'app : rien n'entre dans ses
+    // données (session appairée, cache, thème choisi par l'utilisateur).
+    const nuit = readFileSync(join(h.dir, "uimode.log"), "utf8").trim().split("\n");
+    expect(nuit).toEqual(["cmd uimode night yes", "cmd uimode night no", "cmd uimode night auto"]);
+    // Sans --theme, AUCUNE bascule : le réglage du téléphone reste le sien.
+    const r = h.run(["index", "--wait", "0"]);
+    expect(r.code).toBe(0);
+    expect(r.out).not.toContain("uimode");
+    expect(r.out).not.toContain("forcé");
+    // Valeur hors enum : refus AVANT toute capture, jamais un thème deviné.
+    const refuse = h.run(["index", "--wait", "0", "--theme", "nuit"]);
+    expect(refuse.code).toBe(1);
+    expect(refuse.out).toContain("--theme hors valeur");
+    expect(refuse.out).not.toContain("route vérifiée");
+    // Appareil qui refuse la bascule : échec BRUYANT, pas une capture du thème
+    // courant présentée comme la preuve du thème demandé.
+    const muet = h.run(["index", "--wait", "0", "--theme", "dark"], { THEME_REFUSAL: "1" });
+    expect(muet.code).toBe(1);
+    expect(muet.out).toContain("thème NON");
+    expect(muet.out).toContain("forcé");
+    expect(muet.out).not.toContain("route vérifiée");
   });
 
   test("installation refusée : on ne désinstalle jamais, la session appairée survit", () => {
