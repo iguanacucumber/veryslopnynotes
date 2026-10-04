@@ -139,6 +139,90 @@ describe("assistant : le parcours est bien l'ordre annoncé", () => {
   });
 });
 
+describe("assistant : le PIN est un secret affiché comme tel (#172)", () => {
+  const screen = read(join(UI, "PairingScreen.kt"));
+  const settings = read(join(UI, "SettingsScreen.kt"));
+  const state = read(join(UI, "PairingUiState.kt"));
+
+  test("tout champ à clavier de secret MASQUE ce qu'il affiche", () => {
+    // Le défaut que #140 a corrigé pour la clé LLM et laissé pour le PIN : un
+    // `KeyboardType.NumberPassword` ne change QUE le clavier. Sans
+    // `visualTransformation`, les chiffres sont lisibles par-dessus l'épaule ET
+    // présents tels quels dans l'arbre de vues — ce que relit `uiautomator dump`,
+    // donc une capture, donc un fichier. La transformation porte sur l'AFFICHAGE
+    // : la saisie, le collage et ce qui part dans la requête sont inchangés.
+    const champs = [
+      ["PairingScreen.kt", screen],
+      ["SettingsScreen.kt", settings],
+    ] as const;
+    for (const [fichier, src] of champs) {
+      // Le CODE, commentaires vidés : un `//` qui CITE `KeyboardType.NumberPassword`
+      // pour dire qu'il ne masque rien n'est pas un champ.
+      const code = src
+        .replace(/\/\*[\s\S]*?\*\//g, "\n")
+        .split("\n")
+        .filter((l) => !l.trim().startsWith("//"))
+        .join("\n");
+      const claviers = [...code.matchAll(/KeyboardType\.(NumberPassword|Password)/g)];
+      // Le PIN de l'appairage et la clé de l'assistant : les deux seuls secrets
+      // que l'app saisit (0.7.0 : plus aucun mot de passe de compte).
+      expect({ fichier, champsSecret: claviers.length }).toEqual({ fichier, champsSecret: 1 });
+      for (const m of claviers) {
+        // Fenêtre autour de la déclaration du clavier : la transformation doit
+        // appartenir au MÊME bloc de champ (elle est posée juste au-dessus, donc
+        // la fenêtre regarde un peu avant comme un peu après).
+        const bloc = code.slice(Math.max(0, m.index! - 600), m.index! + 200);
+        expect({ fichier, masque: bloc.includes("PasswordVisualTransformation()") }).toEqual({
+          fichier,
+          masque: true,
+        });
+      }
+    }
+  });
+
+  test("le PIN : masqué, borné, et JAMAIS journalisé ni rendu", () => {
+    expect(screen).toContain("visualTransformation = PasswordVisualTransformation()");
+    expect(screen).toContain("keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)");
+    // La borne de saisie reste en place (64 caractères, cf. SETUP_PIN_MAX_CHARS) :
+    // masquer n'a rien changé à ce qui est accepté.
+    expect(screen).toContain("if (v.length <= PIN_MAX_CHARS)");
+    // Ni journal, ni copie du PIN dans un état d'affichage.
+    const code = screen
+      .replace(/\/\*[\s\S]*?\*\//g, "\n")
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("//"))
+      .join("\n");
+    for (const fuite of ["Log.", "println(", "printStackTrace", "toString()"]) {
+      expect({ fuite, presente: code.includes(fuite) }).toEqual({ fuite, presente: false });
+    }
+    // `SetupForm` ne le journalise pas davantage : `pin` y est un `String` simple,
+    // jamais rendu — le champ masqué est la seule surface d'affichage.
+    expect(state).toContain("val pin: String = \"\"");
+  });
+
+  test("le parcours a un retour en arrière (miroir exécutable)", () => {
+    // L'escalier était à sens unique : 1 → 2 → 3. Le « Retour » du haut appelle
+    // `popBackStack`, qui ne peut rien faire au premier lancement (l'appairage est
+    // la route de départ) ni après un 401 (pile vidée) : les étapes 2 et 3
+    // n'avaient aucun chemin de retour, donc une adresse mal saisie ne pouvait
+    // plus être corrigée. On rejoue le miroir ci-dessous, on lit l'écran pour le
+    // branchement.
+    const tsPrecedente = (step: "SERVER" | "ACCOUNT" | "QR"): string | null =>
+      step === "SERVER" ? null : step === "ACCOUNT" ? "SERVER" : "ACCOUNT";
+    // Les étapes depuis lesquelles on peut reculer (la première n'en a pas).
+    const depuis: ("SERVER" | "ACCOUNT" | "QR")[] = ["ACCOUNT", "QR"];
+    expect({ un_cran: depuis.map(tsPrecedente) }).toEqual({ un_cran: ["SERVER", "ACCOUNT"] });
+    expect({ premier: tsPrecedente("SERVER") }).toEqual({ premier: null });
+    // L'écran : le bouton de retour choisit entre l'étape précédente et la sortie.
+    expect(state).toContain("fun previousStep(step: SetupStep): SetupStep?");
+    expect(screen).toContain("val previous = previousStep(step)");
+    expect(screen).toContain("if (previous != null) step = previous else onBack()");
+    expect(screen).toContain('Text(if (previous != null) "Étape précédente" else "Retour")');
+    // Et la sortie reste possible à la première étape (donc hors parcours).
+    expect(screen).toContain("else onBack()");
+  });
+});
+
 describe("assistant : secrets et route publique", () => {
   const repo = read(join(DATA, "SetupRepository.kt"));
   const api = read(join(DATA, "ApiClient.kt"));

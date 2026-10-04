@@ -39,11 +39,10 @@ import fr.veryslopnynotes.data.HomeworkRepository
 // La réponse est de la DONNÉE : Text() uniquement, jamais WebView ni HTML, les
 // étapes du modèle ne sont jamais exécutées (I6).
 
-/** Bouton d'entrée dans le dialogue, posé sur chaque carte de devoir. */
-@Composable
-fun HomeworkHelpButton(onClick: () -> Unit) {
-    Button(onClick = onClick) { Text("Aide devoirs") }
-}
+// #172 : `HomeworkHelpButton` (le `Button` pleine largeur d'avant #161) est
+// retiré : plus rien ne l'appelle, la PUCE de `Assignments.kt` le déclenche.
+// Un composant public qu'aucun écran ne compose est du code qu'on lit, compile
+// et teste sans jamais le voir sur l'écran.
 
 @Composable
 fun HomeworkHelpDialog(
