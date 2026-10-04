@@ -337,36 +337,89 @@ is_locked() {
     printf '%s' "$1" | grep -qiE 'enter pin|enter password|enter pattern|swipe up to unlock|déverrouill|vérification biométrique'
 }
 
-# Le bouton que seul l'écran Profil affiche (ProfileRoute). Sert de marqueur de
-# la route ET de garde-fou : ce profil propose en BOUTON les mêmes libellés que
-# les écrans Actualités / Cantine / Vie scolaire / Fiches, donc un deep link
-# qui dériverait vers le profil ferait passer leurs marqueurs pour rien.
-PROFILE_MARKER='Détecter les onglets'
-
-# Un mot que seul l'écran de la route affiche (titres et sous-titres des écrans,
-# voir les Text(...) de chaque route) : prouve qu'on est arrivé AU BON ÉCRAN.
+# ---------------------------------------------------------------------------
+# #160 — LE TEXTE À L'ÉCRAN, ÉCRIT UN SEUL ENDROIT.
+#
+# `verify_route` cherche deux choses dans le dump uiautomator : le TITRE de la
+# barre du haut — le libellé du contrat de navigation, table `TOP_BARS` de
+# `AppShell.kt` (#135), donc stable quand une refonte remplace le CORPS d'un
+# écran — puis un FRAGMENT propre à cet écran.
+#
+# Pourquoi le fragment est partout : le titre seul ne prouve pas grand-chose.
+# Sur les cinq routes d'ONGLET, c'est le libellé de l'onglet (« Accueil »,
+# « Notes », « Profil »…) que la barre d'onglets affiche sur TOUTES les routes :
+# il est donc toujours là. Ailleurs, un ÉCRAN CENTRAL le réimprime en bouton —
+# l'onglet Notes propose « Réglages », « Appairage QR+PIN », « Alertes sécurité »
+# et « Compétences », l'accueil des cartes « Actualités », « Cantine »,
+# « Vie scolaire », « Messages », le profil les mêmes. Deux exceptions : `news`
+# et `fiches`, dont le corps ne dépend que de la donnée, donc sans libellé fixe :
+# leur titre EST le témoin.
+#
+# Format : `route|titre|fragment`, `;` entre fragments ALTERNATIFS (un seul
+# suffit) — l'accueil est le seul écran dont TOUT le corps dépend des données :
+# « Afficher plus » quand un widget est là, « Rien à afficher » quand la page
+# est vide.
+#
 # Correspondance par FRAGMENT (`grep -F`) : un nœud Compose porte la phrase
-# entière ("Prochain cours : pas de cours à venir."), pas le mot isolé.
-route_marker() {
-    case "$1" in
-        index) printf 'Dernières notes' ;;
-        calendar) printf 'EDT semaine' ;;
-        grades) printf 'Moyennes' ;;
-        tasks) printf 'Devoirs de la semaine' ;;
-        profile) printf "$PROFILE_MARKER" ;;
-        settings) printf 'Assistant devoirs' ;;
-        news) printf 'Actualités' ;;
-        canteen) printf 'Cantine' ;;
-        attendance) printf 'Absences et retards' ;;
-        messages) printf 'Discussions' ;;
-        pairing) printf 'Adresse du serveur' ;;
-        alerts) printf 'Injections neutralisées' ;;
-        fiches) printf 'Fiches révision' ;;
-        competences) printf 'Évaluations par compétences' ;;
-        sanctions) printf 'Punitions vie scolaire' ;;
-        *) printf '' ;;
-    esac
+# entière (« Prochain cours · Maths · 08:00 »), pas le mot isolé.
+#
+# Une refonte ne peut plus casser la vérification en silence : quand le témoin
+# manque, le message nomme CETTE table (fichier + ligne) et dit où changer le
+# titre. Le libellé d'onglet reste EXCLU comme témoin : voir plus haut.
+ROUTE_WITNESSES='
+index|Accueil|Afficher plus;Rien à afficher
+calendar|EDT|semaine du
+grades|Notes|Moyennes par matière
+tasks|Tâches|Devoirs de la semaine
+profile|Profil|Détecter les onglets
+settings|Réglages|Assistant devoirs
+news|Actualités|
+canteen|Cantine|Menus de la semaine
+attendance|Vie scolaire|Absences et retards
+sanctions|Sanctions|Punitions vie scolaire
+messages|Messages|Discussions
+pairing|Appairage|Retour
+alerts|Alertes sécurité|Injections neutralisées
+fiches|Fiches révision|
+competences|Compétences|Évaluations par compétences
+'
+
+# Ligne de la table d'une route. Vide = route inconnue (donc absente des 15).
+witness_row() {
+    printf '%s\n' "$ROUTE_WITNESSES" | grep -E "^$1[|]" | head -1 || true
 }
+
+# Titre de barre du haut attendu pour la route, "" si elle est inconnue.
+route_title() {
+    witness_row "$1" | cut -d'|' -f2
+}
+
+# Fragments alternatifs propres à la route, un par ligne. Vide = le titre suffit.
+route_fragments() {
+    local row
+    row=$(witness_row "$1")
+    [ -n "$row" ] || return 0
+    printf '%s' "$row" | cut -d'|' -f3- | tr ';' '\n' | sed '/^$/d'
+}
+
+# Une route est connue si elle a un titre : c'est aussi la LISTE BLANCHE (une
+# route inconnue est refusée avant toute écriture, jamais capturée au hasard).
+route_known() {
+    [ -n "$(route_title "$1")" ]
+}
+
+# Ligne DU FICHIEL où vit le marqueur : le message d'échec la nomme, donc on ne
+# laisse pas deviner où le changer.
+witness_line() {
+    grep -n -E "^$1[|]" "$RUNTIME_DIR/shot.sh" | head -1 | cut -d: -f1 || true
+}
+
+# Le bouton que seul l'écran Profil affiche (ProfileRoute). TIRÉ DE LA TABLE,
+# pas réécrit : garde-fou de dérive, pas une deuxième source. Ce profil propose
+# en BOUTON les mêmes libellés que les écrans Actualités / Cantine / Vie
+# scolaire / Fiches, donc un deep link qui dériverait vers le profil ferait
+# passer leurs titres pour rien.
+PROFILE_MARKER=$(route_fragments profile | head -1 || true)
 
 cleanup() {
     [ -n "$RAW" ] && rm -f "$RAW"
@@ -374,11 +427,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Un mot par route : c'est ce qui distingue un écran d'un autre. Les libellés
-# d'onglets ("Notes", "Profil"…) sont EXCLUS : la barre d'onglets les affiche
-# sur TOUTES les routes, donc ils ne prouvent rien.
+# Titre de barre du haut + fragment propre à l'écran : c'est ce qui distingue
+# un écran d'un autre (voir `ROUTE_WITNESSES` plus haut). Les libellés d'onglets
+# ("Notes", "Profil"…) sont EXCLUS comme témoins : la barre d'onglets les affiche
+# sur TOUTES les routes, donc ils ne prouvent rien — d'où le fragment des cinq
+# routes d'onglets.
 verify_route() {
-    local texts marker
+    local texts title fragments fragment title_seen candidate
     texts=$(screen_texts)
     if [ -z "$texts" ]; then
         printf 'shot : AVERTISSEMENT — arborescence illisible (uiautomator a échoué) :\n' >&2
@@ -407,16 +462,48 @@ verify_route() {
         printf '  Capture conservée (preuve) : %s\n' "$OUT_PNG" >&2
         exit 1
     fi
-    marker=$(route_marker "$ROUTE")
-    [ -n "$marker" ] || {
+    title=$(route_title "$ROUTE")
+    if [ -z "$title" ]; then
         printf "shot : route « %s » inconnue — capture prise SANS vérification d'écran.\n" "$ROUTE" >&2
         return 0
-    }
-    if printf '%s' "$texts" | grep -qF "$marker"; then
-        printf 'shot : route vérifiée (%s).\n' "$marker"
+    fi
+    # Le titre : le libellé du contrat de navigation, présent sur la route comme
+    # sur aucune autre. Le fragment : seulement quand le titre ne suffit pas.
+    title_seen=absent
+    if printf '%s' "$texts" | grep -qF "$title"; then title_seen=présent; fi
+    fragment=""
+    fragments=$(route_fragments "$ROUTE")
+    if [ -n "$fragments" ]; then
+        while IFS= read -r candidate; do
+            if printf '%s' "$texts" | grep -qF "$candidate"; then
+                fragment="$candidate"
+                break
+            fi
+        done <<EOF
+$fragments
+EOF
+    fi
+    if [ "$title_seen" = présent ] && { [ -z "$fragments" ] || [ -n "$fragment" ]; }; then
+        if [ -n "$fragment" ]; then
+            printf 'shot : route vérifiée (« %s » + « %s »).\n' "$title" "$fragment"
+        else
+            printf 'shot : route vérifiée (« %s »).\n' "$title"
+        fi
         return 0
     fi
-    printf "shot : la route « %s » N'EST PAS atteinte (« %s » absent de l'écran).\n" "$ROUTE" "$marker" >&2
+    # #160 : l'écran peut être PARFAIT, c'est le témoin qui a péri — l'annoncer
+    # « pas atteinte » envoyait chercher une panne de navigation qui n'existait
+    # pas. On dit ce qui manque, et OÙ le changer.
+    printf "shot : route « %s » NON PROUVÉE — le témoin de l'écran a changé.\n" "$ROUTE" >&2
+    printf "  Titre attendu « %s » : %s.\n" "$title" "$title_seen" >&2
+    if [ -n "$fragments" ]; then
+        printf "  Fragment(s) attendu(s) « %s » : %s.\n" \
+            "$(printf '%s' "$fragments" | tr '\n' '|')" \
+            "$([ -n "$fragment" ] && echo présent || echo ABSENT)" >&2
+    fi
+    printf "  L'écran est peut-être CORRECT : son texte a été refait.\n" >&2
+    printf "  Marqueur : agents/runtime/shot.sh:%s (table ROUTE_WITNESSES) ;\n" "$(witness_line "$ROUTE")" >&2
+    printf "  le titre se change dans AppShell.kt (TOP_BARS), le fragment dans l'écran.\n" >&2
     printf '  Libellés vus : %s\n' "$(printf '%s' "$texts" | head -8 | tr '\n' ' ')" >&2
     printf '  Capture conservée (preuve) : %s\n' "$OUT_PNG" >&2
     exit 1
@@ -440,11 +527,11 @@ main() {
         esac
     done
     [ -n "$ROUTE" ] || { usage >&2; die "route manquante (ex. : make shot ROUTE=grades)."; }
-    # Route inconnue = échec AVANT toute écriture : sans marqueur, une capture
+    # Route inconnue = échec AVANT toute écriture : sans témoin, une capture
     # ne prouve rien et l'app ouvrirait bêtement son écran de départ. Le message
     # sort la liste, donc le nom exact se lit sans ouvrir le script. Pour une
     # application tierce le premier argument n'est qu'un NOM DE CAPTURE.
-    if [ "$PKG" = "$APP_PKG" ] && [ -z "$(route_marker "$ROUTE")" ]; then
+    if [ "$PKG" = "$APP_PKG" ] && ! route_known "$ROUTE"; then
         usage >&2
         die "route inconnue : « $ROUTE ». Rien capturé."
     fi
