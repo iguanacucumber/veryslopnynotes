@@ -259,4 +259,20 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
     expect(screen).toContain("val qr = parseSchoolQr(form.qrRaw)");
     expect(scanner).toContain("ScanOptions.QR_CODE");
   });
+
+  test("annuler le scan NE DÉTRUIT PAS l'assistant (clearTaskOnLaunch de la lib)", () => {
+    // Constaté sur l'appareil : zxing déclare son activité `clearTaskOnLaunch`,
+    // donc ouvrir le scan DÉTRUISAIT MainActivity — au retour on se retrouvait
+    // à l'étape 1, serveur et adresse d'établissement compris, saisis à perdu.
+    expect(manifest).toContain('android:name="com.journeyapps.barcodescanner.CaptureActivity"');
+    expect(manifest).toContain('android:clearTaskOnLaunch="false"');
+    expect(manifest).toContain('tools:replace="android:clearTaskOnLaunch"');
+  });
+
+  test("chaque étape défile : en paysage, « Continuer » tombait hors écran", () => {
+    // Le téléphone en rotation verrouillée (paysage) : la colonne débordait, le
+    // bouton était hors de l'écran et donc inatteignable. L'assistant était
+    // inutilisable — et le scanner, lui, s'ouvrait très bien.
+    expect(screen.split("verticalScroll(rememberScrollState())").length - 1).toBe(3);
+  });
 });
