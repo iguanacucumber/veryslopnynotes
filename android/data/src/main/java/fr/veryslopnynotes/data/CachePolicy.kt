@@ -17,6 +17,8 @@ object CachePolicy {
     // #77 : vie scolaire — absences/retards + sanctions (rythme EDT).
     const val ATTENDANCE = "attendance"
     const val PUNISHMENTS = "punishments"
+    // #144 : alertes sécurité, cadence notes (voir SECURITY_ALERTS).
+    const val TTL_SECURITY_ALERTS_MS = 15L * 60L * 1000L
     // #87 : onglets Pronote actifs (miroir CACHEABLE_RESOURCES contrats). Cache
     // = l'app masque un onglet hors-ligne ; invalidé par CacheInvalidated.
     const val CAPABILITIES = "capabilities"
@@ -25,6 +27,14 @@ object CachePolicy {
     // logout par AccountStore.logout → clearAll ; les messages d'un fil sont lus
     // à la demande et jamais écrits sur disque).
     const val DISCUSSIONS = "discussions"
+
+    // #144 : alertes de sécurité. SANS cette clé, l'écran n'avait aucun cache :
+    // hors ligne la liste était vide et il affichait « Aucune alerte. Bon signe. »
+    // — impossible à distinguer d'une absence de menace. TTL court (cadence des
+    // notes) parce qu'une alerte est la donnée la plus sensible à l'âge ici. Le
+    // contenu hostile reste une DONNÉE bornée (`SecurityAlert.sanitizeExcerpt`),
+    // purgé comme le reste au logout.
+    const val SECURITY_ALERTS = "security-alerts"
 
     // ponytail: constantes dures = miroir CACHE_TTL_MS (contrats v0). Upgrade: codegen contrats.
     const val TTL_GRADES_MS = 15L * 60L * 1000L
@@ -47,7 +57,8 @@ object CachePolicy {
         resource == GRADES || resource == ASSIGNMENTS || resource == TIMETABLE ||
             resource == EVALUATIONS || resource == NEWS || resource == MENUS ||
             resource == ATTENDANCE || resource == PUNISHMENTS ||
-            resource == CAPABILITIES || resource == DISCUSSIONS
+            resource == CAPABILITIES || resource == DISCUSSIONS ||
+            resource == SECURITY_ALERTS
 
     fun ttlFor(resource: String): Long = when (resource) {
         GRADES -> TTL_GRADES_MS
@@ -60,6 +71,7 @@ object CachePolicy {
         PUNISHMENTS -> TTL_PUNISHMENTS_MS
         CAPABILITIES -> TTL_CAPABILITIES_MS
         DISCUSSIONS -> TTL_DISCUSSIONS_MS
+        SECURITY_ALERTS -> TTL_SECURITY_ALERTS_MS
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
     }
 

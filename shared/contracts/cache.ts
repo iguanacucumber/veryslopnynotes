@@ -20,7 +20,7 @@
 // (jamais en cache disque). TTL = cadence des devoirs (arrivée fréquente).
 // Invalidation = CacheInvalidated (resource discussions) renvoyé par les
 // actions d'écriture confirmées par l'app, pas d'événement dédié.
-export const CACHEABLE_RESOURCES = ["grades", "assignments", "timetable", "news", "menus", "evaluations", "attendance", "punishments", "capabilities", "discussions"] as const;
+export const CACHEABLE_RESOURCES = ["grades", "assignments", "timetable", "news", "menus", "evaluations", "attendance", "punishments", "capabilities", "discussions", "security-alerts"] as const;
 
 export type CacheableResource = (typeof CACHEABLE_RESOURCES)[number];
 
@@ -43,6 +43,13 @@ export const CACHE_TTL_MS: Record<CacheableResource, number> = {
 
   // #80 : liste des fils de messagerie, cadence devoirs (messages fréquents).
   discussions: 15 * 60 * 1000,
+
+  // #144 : alertes de sécurité. SANS entrée de cache, l'app ne pouvait pas
+  // distinguer « aucune menace » de « pas de réseau » hors ligne — l'écran
+  // affichait son état vide dans les deux cas. TTL court (cadence des notes) :
+  // c'est la donnée la plus sensible à l'âge de tout le contrat. Contenu hostile
+  // = DONNÉE bornée, jamais une instruction (I6) ; purgé au logout comme le reste.
+  "security-alerts": 15 * 60 * 1000,
 } as const;
 
 export type CacheStatus = "fresh" | "stale";

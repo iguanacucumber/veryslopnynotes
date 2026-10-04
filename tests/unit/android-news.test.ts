@@ -6,6 +6,78 @@ import { isNewsResponse } from "../../shared/contracts/api";
 import { CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
 import { syntheticNewsInjectionItem, syntheticNewsItem, syntheticNewsOk } from "./fixtures/news";
 
+// #144 : miroirs de la LOGIQUE PURE du rendu (NewsScreen.kt) — regroupement par
+// catégorie, libellé de catégorie, ligne auteur + date RELATIVE. `now`/`zone`
+// sont injectés côté Kotlin comme ici, sinon « il y a 4 min » dépend de l'horloge
+// du téléphone et le test ne pourrait rien prouver.
+const ZONE = "Europe/Paris";
+/** 2026-10-02T09:00:00.000Z — deux heures après les deux publications du fixture. */
+const NOW = Date.parse("2026-10-02T09:00:00.000Z");
+
+/** Lecteur ISO du Kotlin (`homeMillisOf`) : `Z`, décalage, puis date seule. */
+function tsIsoMillis(iso: string): number | null {
+  const value = iso.trim();
+  if (value === "") return null;
+  const instant = Date.parse(value);
+  if (Number.isFinite(instant)) return instant;
+  const day = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isFinite(day) ? day : null;
+}
+
+/** Miroir de `relativeTimeFr` (PapComponents.kt), instance locale à now/zone. */
+function tsRelative(epochMillis: number, now: number, timeZone: string = ZONE): string {
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone, hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const p: Record<string, string> = {};
+  for (const part of fmt.formatToParts(new Date(epochMillis))) if (part.type !== "literal") p[part.type] = part.value;
+  const day = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day));
+  const clock = `${p.hour}:${p.minute}`;
+  const np: Record<string, string> = {};
+  for (const part of new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(now))) {
+    if (part.type !== "literal") np[part.type] = part.value;
+  }
+  const nowDay = Date.UTC(Number(np.year), Number(np.month) - 1, Number(np.day));
+  if (Math.abs(epochMillis - now) < 60_000) return "à l'instant";
+  const minutes = Math.floor(Math.abs(epochMillis - now) / 60_000);
+  if (minutes < 60) return epochMillis < now ? `il y a ${minutes} min` : `dans ${minutes} min`;
+  const hours = Math.floor(Math.abs(epochMillis - now) / 3_600_000);
+  if (day === nowDay) return epochMillis < now ? `il y a ${hours} h` : `dans ${hours} h`;
+  if (epochMillis < now && day === nowDay - 86_400_000) return `hier ${clock}`;
+  const days = Math.abs(day - nowDay) / 86_400_000;
+  if (days < 7) return epochMillis < now ? `il y a ${days} jours` : `dans ${days} jours`;
+  return `${p.day}/${p.month}/${p.year}`;
+}
+
+const CATEGORY_OTHER = "Autres actualités";
+const tsCategoryLabel = (category: string): string => category.trim() === "" ? CATEGORY_OTHER : category.trim();
+
+/** Miroir de `newsGroups` : catégories triées par leur actualité la plus récente. */
+function tsGroups(news: KtNewsItem[]): { category: string; items: KtNewsItem[] }[] {
+  const buckets = new Map<string, KtNewsItem[]>();
+  for (const item of news) {
+    const key = tsCategoryLabel(item.category);
+    buckets.set(key, [...(buckets.get(key) ?? []), item]);
+  }
+  return [...buckets.entries()]
+    .map(([category, items]) => ({
+      category,
+      items: [...items].sort((a, b) => (a.publishedAt === b.publishedAt ? (a.id < b.id ? -1 : 1) : a.publishedAt < b.publishedAt ? 1 : -1)),
+    }))
+    .sort((a, b) => {
+      const first = a.items[0]?.publishedAt ?? "";
+      const second = b.items[0]?.publishedAt ?? "";
+      return first === second ? 0 : first < second ? 1 : -1;
+    });
+}
+
+/** Miroir de `newsByline`. */
+function tsByline(item: KtNewsItem, now: number, timeZone: string = ZONE): string {
+  const epoch = tsIsoMillis(item.publishedAt);
+  if (epoch === null) return "";
+  const date = tsRelative(epoch, now, timeZone);
+  const author = item.author.trim();
+  return author === "" ? date : `Par ${author} · ${date}`;
+}
+
 // Miroir TS du Kotlin #79 (NewsItem.kt, NewsRepository.kt, NewsScreen.kt,
 // CachePolicy.kt, SyncedRepository.kt) — le build Gradle n'est pas exécuté par
 // `make check`, donc la logique affichée est figée ici. org.json = SDK Android,
@@ -220,6 +292,68 @@ describe("unit android actus (#79)", () => {
       for (const dep of ["gson", "moshi", "kotlinx-serialization"]) {
         expect({ gradle, dep, found: raw.includes(dep) }).toEqual({ gradle, dep, found: false });
       }
+    }
+  });
+
+  test("#144 : regroupement par catégorie, catégorie de repli, ordre stable", () => {
+    const news = tsNewsFromPayload(JSON.stringify(syntheticNewsOk));
+    // Le fixture a deux catégories différentes, une sans `category` du tout.
+    const groups = tsGroups(news);
+    expect(groups.map((g) => g.category)).toEqual(["Vie scolaire", CATEGORY_OTHER]);
+    // Catégorie vide = REPLI nommé, jamais une chaîne vide en en-tête.
+    expect(tsCategoryLabel("")).toBe(CATEGORY_OTHER);
+    expect(tsCategoryLabel("   ")).toBe(CATEGORY_OTHER);
+    expect(tsCategoryLabel(" Vie scolaire ")).toBe("Vie scolaire");
+    // Une seule actualité par groupe dans ce fixture : rien à trier à l'intérieur.
+    expect(groups[0]?.items.map((i) => i.id)).toEqual(["n-fake-1"]);
+    // Deux fois le même payload = exactement le même écran (pas de saut de ligne).
+    expect(tsGroups(news)).toEqual(groups);
+  });
+
+  test("#144 : auteur et date en temps RELATIF, date illisible = pas de ligne", () => {
+    const [first, second] = tsNewsFromPayload(JSON.stringify(syntheticNewsOk));
+    // Fixture : première publiée le 02/10 à 07:00Z, seconde le 01/10 à 07:00Z ;
+    // `now` = 02/10 09:00Z. Europe/Paris = UTC+2 en octobre.
+    expect(tsByline(first!, NOW)).toBe("Par Vie scolaire · il y a 2 h");
+    // La veille = heure locale (« hier 09:00 »), jamais un décompte d'heures.
+    expect(tsByline(second!, NOW)).toBe("hier 09:00");
+    // Auteur vide = la date seule (jamais « Par · … »).
+    expect(tsByline({ ...first!, author: "  " }, NOW)).toBe("il y a 2 h");
+    // Date illisible = AUCUNE ligne, plutôt qu'une date devinée.
+    expect(tsByline({ ...first!, publishedAt: "pas-une-date" }, NOW)).toBe("");
+    expect(tsByline({ ...first!, publishedAt: "" }, NOW)).toBe("");
+    // Le fuseau décide du libellé : 23:30Z = 01:30 le 02/10 à Paris (donc
+    // « aujourd'hui ») mais 23:30 le 01/10 en UTC (donc « hier »).
+    const overnight = { ...first!, author: "", publishedAt: "2026-10-01T23:30:00.000Z" };
+    expect(tsByline(overnight, NOW, ZONE)).toBe("il y a 9 h");
+    expect(tsByline(overnight, NOW, "UTC")).toBe("hier 23:30");
+  });
+
+  test("#144 : la pastille non lu remplace le libellé texte « Non lu »", () => {
+    const screen = codeOnly(readFileSync(K_FILES.screen, "utf8"));
+    // Le texte « Lu » / « Non lu » ne doit plus être rendu comme état (il
+    // restait dans le payload, jamais dans l'interface).
+    expect(screen).not.toContain('"Non lu"');
+    expect(screen).not.toContain('"Lu"');
+    // Pastille + action « marquer comme lu », et le regroupement par catégorie.
+    expect(screen).toContain("newsGroups(news)");
+    expect(screen).toContain("Marquer comme lu");
+    expect(screen).toContain("NEWS_CATEGORY_OTHER");
+    expect(screen).toContain("PapSectionHeader(");
+    // Pull-to-refresh : le MÊME composant que l'accueil, zéro dépendance.
+    expect(screen).toContain("HomePullToRefresh(refreshing = loading");
+    // Le contrat n'expose pas d'écriture de lecture : l'état lu est de session.
+    expect(screen).toContain("var readIds by remember");
+    // L'état vide Papillon et le bandeau horodaté.
+    expect(screen).toContain('title = "Aucune actualité."');
+    expect(screen).toContain("PapStaleBanner(fetchedAt = fetchedAt");
+    expect(screen).toContain("PapErrorState(message = error");
+    expect(screen).toContain("PapLoading()");
+    // L'ancienne concaténation category · author · « Lu » a disparu.
+    expect(screen).not.toContain("NewsItem.readLabel");
+    // Aucune interprétation du contenu (I6) : les interdits de #79 restent.
+    for (const bad of ["WebView", "Html.fromHtml", "fromHtml", "loadUrl", "setJavaScriptEnabled", "AnnotatedString"]) {
+      expect({ bad, found: screen.includes(bad) }).toEqual({ bad, found: false });
     }
   });
 

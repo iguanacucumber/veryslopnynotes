@@ -424,17 +424,17 @@ describe("briques d'interface (#136)", () => {
     expect(kt.match(/remember \{ mutableStateOf/g)?.length).toBe(1);
   });
 
-  test("les écrans qui jetaient le message serveur : EDT, Tâches, Vie scolaire et Messagerie migrés", () => {
+  test("les écrans qui jetaient le message serveur : aucun n'est plus sur la liste (#137, #138, #141, #142, #144)", () => {
     // Honnêteté sur le périmètre : #136 livre les BRIQUES et ne touche aucun
     // écran, donc les `Text("Erreur réseau. Réessayer.")` et les
     // « Données hors-ligne (périmé). » étaient toujours là. Ils disparaissent
     // quand un écran adopte `PapErrorState` / `PapStaleBanner`. Ce test
     // échouera le jour où le suivant le fera — c'est le témoin, pas le but.
-    // #137 (EDT), #138 (Tâches), #141 (vie scolaire) puis #142 (messagerie)
-    // sont les écrans migrés : `TimetableWeek.kt`, `Assignments.kt`,
-    // `Attendance.kt` et `MessagesScreen.kt` sont donc sortis de la liste, et
-    // l'assertion compte les quatre restants.
-    const fichiers = ["CanteenMenus.kt", "NewsScreen.kt", "RevisionSheets.kt", "SecurityAlertsScreen.kt"];
+    // #137 (EDT), #138 (Tâches), #141 (vie scolaire), #142 (messagerie) puis
+    // #144 (Actualités, Cantine, Alertes, Fiches) : les huit écrans qui jetaient
+    // le message serveur sont donc TOUS sortis de la liste. `fichiers` est vide,
+    // et l'assertion le prouve : le prochain écran non migré le remettra.
+    const fichiers: string[] = [];
     const restants = fichiers.filter((f) => readFileSync(join(UI, f), "utf8").includes('"Erreur réseau. Réessayer."'));
     expect({ ecransPasEncoreMigres: restants.length }).toEqual({ ecransPasEncoreMigres: fichiers.length });
     // Le témoin inversé : chaque écran migré affiche le VRAI message.
@@ -467,5 +467,27 @@ describe("briques d'interface (#136)", () => {
     // #142 demande par-dessus les briques.
     expect(messagerie).toContain("HomePullToRefresh(");
     expect(messagerie).toContain("ConfirmDialog(");
+    // #144 : les quatre écrans de la vague ne gardent plus la chaîne figée, et
+    // ils affichent bien le message réel, le squelette, l'état vide et le
+    // bandeau horodaté.
+    for (const f of ["CanteenMenus.kt", "NewsScreen.kt", "SecurityAlertsScreen.kt"]) {
+      const src = readFileSync(join(UI, f), "utf8");
+      expect({ f, figee: src.includes('"Erreur réseau. Réessayer."') }).toEqual({ f, figee: false });
+      expect({ f, PapErrorState: src.includes("PapErrorState(") }).toEqual({ f, PapErrorState: true });
+      expect({ f, PapStaleBanner: src.includes("PapStaleBanner(") }).toEqual({ f, PapStaleBanner: true });
+      expect({ f, PapLoading: src.includes("PapLoading(") }).toEqual({ f, PapLoading: true });
+      expect({ f, PapEmptyState: src.includes("PapEmptyState(") }).toEqual({ f, PapEmptyState: true });
+    }
+    // Fiches : même.exception sur le bandeau, DÉLIBÉRÉE — `/v1/revision-sheets`
+    // n'est pas une ressource cachée, donc rien de cet écran ne peut être
+    // « périmé » : un bandeau « hors ligne » y serait un mensonge. L'âge des
+    // fiches, lui, est affiché.
+    const fiches = readFileSync(join(UI, "RevisionSheets.kt"), "utf8");
+    expect({ fiches, figee: fiches.includes('"Erreur réseau. Réessayer."') }).toEqual({ fiches, figee: false });
+    expect({ fiches, PapErrorState: fiches.includes("PapErrorState(") }).toEqual({ fiches, PapErrorState: true });
+    expect({ fiches, PapLoading: fiches.includes("PapLoading(") }).toEqual({ fiches, PapLoading: true });
+    expect({ fiches, PapEmptyState: fiches.includes("PapEmptyState(") }).toEqual({ fiches, PapEmptyState: true });
+    expect({ fiches, PapStaleBanner: fiches.includes("PapStaleBanner(") }).toEqual({ fiches, PapStaleBanner: false });
+    expect(fiches).toContain("relativeTimeFr(state.fetchedAt)");
   });
 });
