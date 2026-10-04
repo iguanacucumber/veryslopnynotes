@@ -478,6 +478,7 @@ describe("unit android accueil (#143)", () => {
 
   test("Kotlin : grille 2x2, cartes cliquables, et PAS de dépendance ajoutée", () => {
     const cards = read("HomeCards.kt");
+    const screen = read("IndexScreen.kt");
     expect(cards).toContain("actions.chunked(2)");
     expect(cards).toContain("PapCard(");
     expect(cards).toContain("onClick = onClick");
@@ -485,6 +486,11 @@ describe("unit android accueil (#143)", () => {
     expect(cards).toContain("Afficher plus ↗");
     // Couleurs : roles du theme ou palette matiere, jamais un hex en dur.
     expect(cards).not.toMatch(/Color\(0x/);
+    // #137 : la couleur d'une matiere vient de `subjectColorHex` (prefs, puis
+    // derivee du nom sur la palette du theme), donc l'accueil ne peut plus
+    // afficher un cours sans couleur.
+    expect(cards).toContain("subjectColorHex(subjectPrefs, lesson.subject)");
+    expect(screen).toContain("subjectColorHex(subjectPrefs, grade.subject)");
     expect(read("HomeWidgets.kt")).not.toMatch(/Color\(0x/);
     expect(read("HomeWidgets.kt")).toContain("SubjectPalette");
     const pull = read("HomePullToRefresh.kt");
