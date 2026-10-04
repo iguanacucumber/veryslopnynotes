@@ -804,7 +804,10 @@ describe("vie scolaire : rendu (#141)", () => {
 
     // 8. L'absence injustifiée est signalée DEUX fois (pastille + durée rouge).
     expect(rows).toContain("justifiedBadge(row.justified)");
-    expect(rows).toContain("color = if (unjustified) scheme.error else scheme.onSurface");
+    // #146 : l'encre d'erreur du thème (`errorTextColor()`), pas le rouge brut
+    // qui ne vaut que 3.70:1 sur la surface SOMBRE. La pastille rouge voisine
+    // porte déjà le même signal, donc la couleur n'est jamais seule.
+    expect(rows).toContain("color = if (unjustified) errorTextColor() else scheme.onSurface");
 
     // 9. Zéro hex en dur, zéro date ISO rendue, contenu serveur = DONNÉE.
     for (const file of [ATTENDANCE_KT, ROWS_KT, FORMAT_KT]) {

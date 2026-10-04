@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -39,8 +40,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -76,8 +81,13 @@ import java.time.ZoneId
 // matière `subjectSurface` / `subjectContent`. AUCUNE couleur en dur ici, donc le
 // thème sombre est correct sans seconde feuille de style.
 
-/** Côte d'une pastille de couleur et d'emoji. */
-private val SWATCH = 44.dp
+/**
+ * Côte d'une pastille de couleur et d'emoji : [TouchTarget] (48 dp).
+ *
+ * #146 : 44 dp — sous le minimum Material. La pastille est une cible de toucher,
+ * pas un simple glyphe : elle passe à 48 dp, comme les boutons de la barre.
+ */
+private val SWATCH = TouchTarget
 
 /** Épaisseur de l'anneau blanc de la pastille sélectionnée. */
 private val SWATCH_RING = 3.dp
@@ -282,13 +292,14 @@ private fun SheetHeader(title: String, onClose: () -> Unit, onConfirm: () -> Uni
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             onClick = onClose,
         )
+        // `heading()` : le titre de la feuille est le titre de l'écran.
         Text(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+            modifier = Modifier.weight(1f).padding(horizontal = 12.dp).semantics { heading() },
         )
         SheetDisc(
             icon = Icons.Filled.Check,
@@ -336,10 +347,14 @@ private fun SheetDisc(
  *  `PapSectionHeader`, donc les trois niveaux de titre se ressemblent. */
 @Composable
 private fun SheetLabel(text: String) {
+    // `heading()` : « Couleur » et « Emoji » sont les deux sections de la feuille.
     Text(
         text = text,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.semantics { heading() },
     )
 }
 
@@ -451,11 +466,16 @@ private fun SubjectSwatchRow(selected: String, onSelect: (String) -> Unit) {
                     )
                     // Nom + état annoncés : une pastille n'a pas de libellé, donc
                     // sans ça un lecteur d'écran dirait « bouton » 21 fois.
+                    // #146 : l'état part désormais de `selectable` +
+                    // `Role.RadioButton` (l'arbre de sémantique dit « sélectionné »
+                    // et « bouton radio 3 sur 20 ») et `stateDescription` le nomme
+                    // en francais — plus la choice d'une couleur seule dans le
+                    // `contentDescription`.
+                    .selectable(selected = isSelected, role = Role.RadioButton) { onSelect(hex) }
                     .semantics {
-                        contentDescription = "Couleur " + hex.uppercase() +
-                            if (isSelected) ", sélectionnée" else ""
-                    }
-                    .clickable { onSelect(hex) },
+                        contentDescription = "Couleur " + hex.uppercase()
+                        stateDescription = if (isSelected) "sélectionnée" else "non sélectionnée"
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 if (isSelected) {
@@ -498,10 +518,25 @@ private fun SubjectEmojiRow(selected: String, onSelect: (String) -> Unit) {
                             MaterialTheme.colorScheme.surfaceVariant
                         },
                     )
-                    .clickable { onSelect(emoji) },
+                    // #146 : ces pastilles n'etaient QUE des boites cliquables —
+                    // ni nom, ni état, ni rôle. Un lecteur d'écran annonçait
+                    // quatorze fois « bouton » sans dire quel emoji, ni lequel etait
+                    // choisi. `selectable` + `Role.RadioButton` +
+                    // `stateDescription` repondent aux trois questions.
+                    .selectable(selected = isSelected, role = Role.RadioButton) { onSelect(emoji) }
+                    .semantics {
+                        contentDescription = "Emoji $emoji"
+                        stateDescription = if (isSelected) "sélectionné" else "non sélectionné"
+                    },
                 contentAlignment = Alignment.Center,
             ) {
-                Text(text = emoji, style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = emoji,
+                    style = MaterialTheme.typography.titleLarge,
+                    // Décorative : le nom de l'emoji est dans le `contentDescription`
+                    // de la pastille, au-dessus.
+                    modifier = Modifier.clearAndSetSemantics { },
+                )
             }
         }
     }

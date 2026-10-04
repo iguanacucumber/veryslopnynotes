@@ -307,7 +307,10 @@ describe("unit android 401 : session perdue -> appairage (#113)", () => {
     // L'écran d'appairage affiche la raison factuelle, sans chrono ni devinette.
     const pairing = read(kt.pairing);
     expect(pairing).toContain("notice: String? = null,");
-    expect(pairing).toContain('if (!notice.isNullOrEmpty()) Text(notice, modifier = Modifier.padding(horizontal = 16.dp))');
+    // #146 : le même texte, désormais borné sur trois lignes (le message est
+    // celui du serveur, donc de longueur inconnue) — la condition est inchangée.
+    expect(pairing).toContain("if (!notice.isNullOrEmpty()) {");
+    expect(pairing).toMatch(/Text\(\s*text = notice,\s*maxLines = 3,/);
     expect(pairing).toContain("tokens.save(res.device.id, res.device.tokenHash, res.device.token)");
   });
 });

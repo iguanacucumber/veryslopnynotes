@@ -57,6 +57,10 @@ function tsContrast(a: Rgb, b: Rgb): number {
 const INK = hex8("#1F292E");
 const tsBestContentOn = (background: Rgb): Rgb =>
   tsContrast(background, INK) >= tsContrast(background, WHITE) ? INK : WHITE;
+// Miroir de `errorInk` (#146) : en thème sombre, le rouge d'`error` est éclairci
+// de `ERROR_INK_TINT` vers le blanc — sinon 3.70:1 sur la surface `#121212`.
+const ERROR_INK_TINT = 0.7;
+const tsErrorInk = (error: Rgb, dark: boolean): Rgb => (dark ? tsTint(error, ERROR_INK_TINT) : error);
 
 // Jetons Papillon, dans l'ordre du fichier Kotlin.
 const GREEN = hex8("#29947A");
@@ -344,5 +348,145 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     // le vert Papillon est l'identité, la couleur du fond d'écran l'écraserait.
     expect(kt).not.toContain("dynamicLightColorScheme");
     expect(kt).not.toContain("dynamicDarkColorScheme");
+    // #146 : la cible tactile du module, et l'encre d'erreur qui dépend du thème.
+    expect(kt).toContain("val TouchTarget = 48.dp");
+    expect(kt).toContain("const val ERROR_INK_TINT = 0.70f");
+    expect(kt).toContain("fun errorInk(error: Color, dark: Boolean): Color = if (dark) tint(error, ERROR_INK_TINT) else error");
+    expect(kt).toContain("fun errorTextColor(): Color = errorInk(MaterialTheme.colorScheme.error, isDarkSurface())");
+  });
+});
+
+// AUDIT DE CONTRASTE #146 — TOUTES les paires texte/fond que l'app utilise
+// réellement, dans les DEUX thèmes. Avant, seules sept paires étaient mesurées
+// et le reste de l'app pouvait écrire du texte en `primary` (3.74:1) ou en
+// `error` (3.70:1 en sombre) sans qu'aucune vérification ne le voie. Chaque
+// ligne ci-dessous est une paire RÉELLEMENT rendue : un rôle y entre comme
+// `Text`, une surface de carte, un `primaryContainer` de bulle.
+describe("unit android contraste (#146) — encre de texte, clair ET sombre", () => {
+  test("toute paire texte/fond réelle du thème clair tient 4.5:1", () => {
+    const pairs: Array<[string, Rgb, Rgb]> = [
+      // Corps de texte sur les trois surfaces que l'app empile.
+      ["onSurface/surface", INK, SURFACE],
+      ["onSurface/surfaceVariant", INK, SURFACE_VARIANT],
+      ["onSurfaceVariant/surface", over(INK, SURFACE, SECONDARY_ALPHA), SURFACE],
+      ["onSurfaceVariant/surfaceVariant", over(INK, SURFACE_VARIANT, SECONDARY_ALPHA), SURFACE_VARIANT],
+      ["onSurfaceVariant/surfaceContainerLow", over(INK, tsTint(SURFACE_CONTAINER, 0.35), SECONDARY_ALPHA), tsTint(SURFACE_CONTAINER, 0.35)],
+      // Accent de TEXTE : c'est `secondary` (le vert profond), PAS `primary`.
+      ["secondary/surface", GREEN_DEEP, SURFACE],
+      ["secondary/surfaceVariant", GREEN_DEEP, SURFACE_VARIANT],
+      ["secondary/surfaceContainerLow", GREEN_DEEP, tsTint(SURFACE_CONTAINER, 0.35)],
+      ["secondary/primaryContainer", GREEN_DEEP, GREEN_PALE],
+      // Encre d'erreur en texte : le rouge de marque en clair, éclairci en sombre.
+      ["errorInk/surface", DANGER, SURFACE],
+      ["errorInk/surfaceVariant", DANGER, SURFACE_VARIANT],
+      // Conteneurs.
+      ["onPrimaryContainer/primaryContainer", GREEN_DEEP, GREEN_PALE],
+      ["onSecondaryContainer/secondaryContainer", INK, GREEN_PALE],
+    ];
+    for (const [name, fg, bg] of pairs) {
+      expect({ name, ratio: rounded(tsContrast(fg, bg)) >= 4.5 }).toEqual({ name, ratio: true });
+    }
+    // Les deux valeurs qui portent le choix : `primary` ne tient PAS en texte,
+    // `secondary` tient. C'est ce qui a fait migrer les libellés.
+    expect(rounded(tsContrast(GREEN, SURFACE))).toBe(3.74);
+    expect(rounded(tsContrast(GREEN, SURFACE_VARIANT))).toBe(3.45);
+    expect(rounded(tsContrast(GREEN_DEEP, SURFACE))).toBe(4.93);
+    // ÉCART ASSUMÉ, pas un oubli : le blanc sur le vert de marque mesure 3.74:1.
+    // C'est la valeur relevée sur papillon.bzh, figée par le miroir de #133, et
+    // elle ne sert qu'aux libellés de BOUTON (large surface, pas du texte de
+    // lecture). Le seuil applicable à un bouton plein est 3:1 (WCAG 1.4.11) :
+    // mesuré, il passe. Passer à 4.5 obligerait à assombrir le vert de marque.
+    expect({ ok: rounded(tsContrast(WHITE, GREEN)) >= 3 }).toEqual({ ok: true });
+  });
+
+  test("la même paire, thème sombre : `error` seul ne passerait pas", () => {
+    const darkPairs: Array<[string, Rgb, Rgb]> = [
+      ["onSurface/surface", WHITE, DARK_SURFACE],
+      ["onSurfaceVariant/surface", over(WHITE, DARK_SURFACE, SECONDARY_ALPHA), DARK_SURFACE],
+      ["onSurfaceVariant/surfaceVariant", over(WHITE, tsTint(DARK_SURFACE, 0.1), SECONDARY_ALPHA), tsTint(DARK_SURFACE, 0.1)],
+      ["secondary/surface", hex8("#48A98B"), DARK_SURFACE],
+      ["secondary/surfaceVariant", hex8("#48A98B"), tsTint(DARK_SURFACE, 0.1)],
+      ["errorInk/surface", tsErrorInk(DANGER, true), DARK_SURFACE],
+      ["errorInk/surfaceVariant", tsErrorInk(DANGER, true), tsTint(DARK_SURFACE, 0.1)],
+      ["onPrimaryContainer/primaryContainer", tsTint(GREEN, 0.7), tsTint(GREEN, -0.35)],
+      ["onSecondaryContainer/secondaryContainer", INK, GREEN_PALE],
+    ];
+    for (const [name, fg, bg] of darkPairs) {
+      expect({ name, ratio: rounded(tsContrast(fg, bg)) >= 4.5 }).toEqual({ name, ratio: true });
+    }
+    // LE DÉFAUT CORRIGÉ : `error` en texte de 13-14 sp sur la surface sombre.
+    expect({ ratio: rounded(tsContrast(DANGER, DARK_SURFACE)) }).toEqual({ ratio: 3.7 });
+    expect({ ratio: rounded(tsContrast(tsErrorInk(DANGER, true), DARK_SURFACE)) }).toEqual({ ratio: 11.07 });
+  });
+
+  test("matière : l'encre de la pastille, de la puce et de la carte, sur 20 couleurs", () => {
+    // Les trois surfaces matière de l'app — carte de cours, pastille de note
+    // (`PapPill`), puce de compétence (`chipSurfaceColor`) — et les DEUX encres
+    // possibles : `subjectContent` (le pas mesuré du thème) et `bestContentOn`
+    // (l'argmax du thème). Sur les 20, en clair comme en « sombre » inversé :
+    // une couleur de matière qui n'a pas de couleur de fond (carte annulée,
+    // avatar) est vue sur `surface`.
+    for (const h of PALETTE) {
+      const raw = hex8(h);
+      const surface = tsSubjectSurface(h)!;
+      const content = tsSubjectContent(h)!;
+      const chipInk = tsBestContentOn(tsTint(raw, 0.75));
+      const cases: Array<[string, number]> = [
+        ["subjectContent/subjectSurface", tsContrast(content, surface)],
+        ["bestContentOn/pastille 75%", tsContrast(chipInk, tsTint(raw, 0.75))],
+        ["bestContentOn/surface (carte annulée)", tsContrast(tsBestContentOn(SURFACE), SURFACE)],
+      ];
+      for (const [name, ratio] of cases) {
+        expect({ h, name, ok: ratio >= 4.5 }).toEqual({ h, name, ok: true });
+      }
+    }
+    // `PapSubjectAvatar` est décorée à 31 % AU-DESSUS de la carte et n'y porte
+    // QU'UN glyphe : elle n'est donc pas dans la liste ci-dessus, et c'est
+    // VOLONTAIRE. Son fond se mesure à 3.86:1 au pire (`#C50066`) — sous AA, donc
+    // elle ne peut pas porter de texte, ce que #146 lui impose : l'emoji y est
+    // sorti de l'arbre de sémantique (`clearAndSetSemantics`) et le LIBELLÉ est
+    // toujours affiché à côté. C'est ce couple — glyphe + libellé écrit — qui
+    // rend la matière identifiable ; la pastille n'est qu'un rappel visuel. Le
+    // garde-fou correspondant est dans `android-accesibilite.test.ts`
+    // (« la légende matière porte une pastille ET un libellé écrit »).
+    let worst = { h: "", ratio: 99 };
+    for (const h of PALETTE) {
+      // Le meilleur des deux côtés sur le fond à 31 % : c'est le plafond que
+      // `bestContentOn` atteint, donc la limite réelle de cette pastille.
+      const bg = tsTint(hex8(h), 0.31);
+      const best = Math.max(tsContrast(INK, bg), tsContrast(WHITE, bg));
+      if (best < worst.ratio) worst = { h, ratio: best };
+    }
+    expect({ h: worst.h, ratio: rounded(worst.ratio) }).toEqual({ h: "#C50066", ratio: 3.86 });
+  });
+
+  test("cours annulé : l'encre rouge du thème sur le rouge pâle, mesurée", () => {
+    // `cancelledSurface` / `cancelledInk` (TimetableCourseCard.kt) : le rouge
+    // clairci à 82 % porte une encre rouge assombrie à −45 % ; en thème sombre
+    // l'ordre s'inverse. 4.5:1 des deux côtés, sinon « Annulé » n'est pas lu.
+    const clearSurface = tsTint(DANGER, 0.82)!;
+    const clearInk = tsTint(DANGER, -0.45)!;
+    const darkSurface = tsTint(DANGER, -0.6)!;
+    const darkInk = tsTint(DANGER, 0.72)!;
+    expect({ ok: tsContrast(clearInk, clearSurface) >= 4.5 }).toEqual({ ok: true });
+    expect({ ok: tsContrast(darkInk, darkSurface) >= 4.5 }).toEqual({ ok: true });
+  });
+
+  test("carte matière : le fond pastel reste distinguable de la surface", () => {
+    // Un aplat à 1.02:1 de la surface rendrait la carte invisible — le contraste
+    // du TEXTE est inutile si la CARTE ne se voit plus.
+    for (const h of PALETTE) {
+      const bg = tsSubjectSurface(h)!;
+      expect({ h, visible: tsContrast(bg, SURFACE) > 1 }).toEqual({ h, visible: true });
+    }
+    // `primaryContainer` (bandeau « périmé », pastille d'onglet) est à 1.07:1 du
+    // blanc : c'est le PRIX de son pas (94 % vers le blanc, le plus clair qui
+    // garde 4.61:1 pour l'encre — cf. le KDoc de `PapillonGreenPale`). Un aplat
+    // décoratif n'est pas un composant d'interface à BORDURE (WCAG 1.4.11 vise les
+    // contours d'INTERACTION) : c'est le texte du bandeau qui le rend lisible,
+    // et il tient 4.61:1. La valeur est FIGÉE ici pour qu'un changement de pas
+    // se voie.
+    expect({ frozen: rounded(tsContrast(GREEN_PALE, SURFACE)) }).toEqual({ frozen: 1.07 });
+    expect({ ink: rounded(tsContrast(GREEN_DEEP, GREEN_PALE)) >= 4.5 }).toEqual({ ink: true });
   });
 });

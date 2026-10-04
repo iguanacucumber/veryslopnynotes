@@ -26,7 +26,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.ServerConfig
 import fr.veryslopnynotes.core.dayLabelFr
@@ -172,7 +175,14 @@ private fun RevisionSheetCard(
 ) {
     PapCard(modifier = modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(text = sheet.title, style = MaterialTheme.typography.titleMedium)
+            // `heading()` : le titre de la fiche est le titre de la carte.
+            Text(
+                text = sheet.title,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
+            )
             // #147 : « lundi 05/10 » (`dayLabelFr`) À LA PLACE de la tranche ISO brute.
             val meta = listOf(sheet.subject, dayLabelFr(sheet.date)).filter { it.isNotBlank() }.joinToString(" · ")
             if (meta.isNotEmpty()) {
@@ -180,22 +190,31 @@ private fun RevisionSheetCard(
                     text = meta,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             PapDivider()
             // Donnée serveur ci-dessous (texte de fiche produit par le pipeline) :
-            // affichée telle quelle, jamais interprétée ni exécutée (I6).
+            // affichée telle quelle, jamais interprétée ni exécutée (I6). Elle n'est
+            // PAS bornée : c'est la fiche entière, dans une liste qui défile —
+            // tronquer une fiche sans écran de détail perdrait l'information.
             Text(text = sheet.body, style = MaterialTheme.typography.bodyMedium)
             Text(
                 text = "SOURCES",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
             )
             for (source in sheet.sources) {
                 Text(
                     text = "• $source",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             TextButton(onClick = { onExportPdf(sheet.id) }) { Text("Exporter en PDF") }
@@ -233,6 +252,8 @@ fun RevisionSheetsScreen(
                         text = notice,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 // Âge des fiches AFFICHÉES. Pas de `PapStaleBanner` ici, et c'est
@@ -244,6 +265,8 @@ fun RevisionSheetsScreen(
                     text = "Fiches rechargées ${relativeTimeFr(state.fetchedAt)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item(key = "entete") {

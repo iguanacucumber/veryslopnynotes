@@ -23,6 +23,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 
 // La COQUILLE : barre du haut et barre d'onglets. Le graphe de navigation et
 // l'état de la session restent dans `AppNav.kt`, qui appelle ces deux
@@ -222,10 +226,16 @@ fun AppTopBar(
         // « VerySlopyNyNotes » sur les 15 routes. `titleLarge` = 18 sp gras,
         // l'échelle de #134 — le texte le plus visible de l'écran.
         title = {
+            // `heading()` : le titre de la barre est le TITRE DE L'ÉCRAN. TalkBack
+            // le propose dans son menu « titres » et s'y positionne au double
+            // toucher — sans ça, les quinze routes n'avaient aucun point d'entrée
+            // dans la navigation par titres.
             Text(
                 text = bar?.title ?: APP_NAME,
                 style = MaterialTheme.typography.titleLarge,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
             )
         },
         navigationIcon = {
@@ -272,7 +282,13 @@ private fun TopBarActions(
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             for (destination in destinations) {
                 DropdownMenuItem(
-                    text = { Text(destination.label) },
+                    text = {
+                        Text(
+                            text = destination.label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
                     onClick = {
                         menuOpen = false
                         onNavigate(destination.route)
@@ -318,7 +334,13 @@ fun AppTabBar(route: String?, onSelect: (String) -> Unit) {
                             // #135 : `ImageVector` teinté par le thème au lieu
                             // du glyphe Unicode `"⌂"` / `"👤"`.
                             imageVector = tabIcon(tab),
-                            contentDescription = tabLabel(tab),
+                            // #146 : `null`, donc DÉCORATIF. Le libellé est déjà
+                            // rendu sous l'icône par le `label` de l'item, et
+                            // `NavigationBarItem` ne fusionne pas les deux nœuds :
+                            // avec un `contentDescription`, TalkBack annonçait
+                            // « Accueil … Accueil ». Le nom vient donc du SEUL
+                            // endroit qui le prononce, `tabLabel`.
+                            contentDescription = null,
                         )
                     }
                 },

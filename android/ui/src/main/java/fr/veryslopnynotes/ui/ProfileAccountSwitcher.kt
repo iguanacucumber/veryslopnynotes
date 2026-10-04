@@ -1,7 +1,6 @@
 package fr.veryslopnynotes.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -23,6 +23,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.UserProfile
@@ -127,12 +131,16 @@ fun ProfileAccountSheet(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            // 8 dp : les lignes de la feuille sont un GROUPE, pas les deux moitiés
+            // d'une même ligne — 4 dp les faisait se lire comme un bloc unique.
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
                 text = "Changer de compte",
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(vertical = 8.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(vertical = 8.dp).semantics { heading() },
             )
             val activeId = activeAccount(accounts, currentId)?.accountId
             for (account in accounts) {
@@ -147,13 +155,23 @@ fun ProfileAccountSheet(
                     "accès sur le serveur de l'établissement.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
     }
 }
 
-/** Une ligne du sélecteur : pastille d'initiales, nom, classe, coche si actif. */
+/**
+ * Une ligne du sélecteur : pastille d'initiales, nom, classe, coche si actif.
+ *
+ * #146 : le choix était un `Row.clickable` SANS état : la coche était la seule
+ * information « compte actif », donc un lecteur d'écran annonçait cinq lignes
+ * identiques et ne pouvait pas savoir laquelle l'était. `selectable` +
+ * `Role.RadioButton` pose l'état dans l'arbre de sémantique (« sélectionné »,
+ * « bouton radio 2 sur 5 ») et `stateDescription` le dit en français.
+ */
 @Composable
 private fun ProfileAccountRow(
     account: SwitchableAccount,
@@ -164,7 +182,8 @@ private fun ProfileAccountRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.medium)
-            .clickable(onClick = onClick)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .semantics { stateDescription = if (selected) "Compte actif" else "Compte inactif" }
             .padding(vertical = 10.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -202,9 +221,11 @@ private fun ProfileAccountRow(
             }
         }
         if (selected) {
+            // Décorative : l'état est déjà dans `stateDescription`, donc
+            // l'annoncer ici le ferait dire deux fois.
             Icon(
                 imageVector = Icons.Filled.Check,
-                contentDescription = "Compte actif",
+                contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
             )
         }

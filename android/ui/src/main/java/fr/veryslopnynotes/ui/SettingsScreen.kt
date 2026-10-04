@@ -31,6 +31,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -148,6 +151,8 @@ fun SettingsScreen(
                         "une couleur dérivée de son nom.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
                 )
             } else {
                 for (p in subjectPrefs) {
@@ -180,7 +185,11 @@ fun SettingsScreen(
                 singleLine = true,
                 isError = nameError != null,
                 supportingText = {
-                    Text(nameError ?: "Le nom vient de l'établissement : vérifie son orthographe.")
+                    Text(
+                        text = nameError ?: "Le nom vient de l'établissement : vérifie son orthographe.",
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 },
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -209,7 +218,15 @@ fun SettingsScreen(
 
         // --- Sécurité : la clé de l'assistant ------------------------------
         SettingsSection("Sécurité", Icons.Filled.Lock) {
-            Text(text = "Assistant devoirs", style = MaterialTheme.typography.titleSmall)
+            // `heading()` : « Assistant devoirs » est un titre de bloc de la
+            // feuille de réglages, pas un libellé de plus dans un paragraphe.
+            Text(
+                text = "Assistant devoirs",
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
+            )
             Text(
                 text = if (llmKeyConfigured) {
                     "Clé enregistrée (chiffrée). Elle part avec chaque demande, jamais stockée par " +
@@ -282,6 +299,8 @@ fun SettingsScreen(
                 text = "L'appairage, la déconnexion et le changement de compte sont dans l'onglet " +
                     "Profil. Les préférences de matière sont répliquées vers le serveur de " +
                     "l'établissement ; la clé de l'assistant ne sort jamais de l'appareil.",
+                maxLines = 6,
+                overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

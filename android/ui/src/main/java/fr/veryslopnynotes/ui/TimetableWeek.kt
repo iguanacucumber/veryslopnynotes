@@ -38,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.dayLabelOf
@@ -724,7 +726,10 @@ private fun TimetableWeekBar(
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        // 8 dp entre les contrôles du bandeau : quatre `IconButton` de 48 dp
+        // collés à 4 dp se lisaient comme un seul bloc (le pas de 8 dp des
+        // groupes, appliqué à un groupe). #146.
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         IconButton(onClick = onPrevious) {
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Semaine précédente")
@@ -747,9 +752,18 @@ private fun TimetableWeekBar(
                 Icon(Icons.Filled.MoreVert, contentDescription = "Plus d'actions")
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(text = { Text("Réglages") }, onClick = { menuOpen = false; onSettings() })
-                DropdownMenuItem(text = { Text("Appairage QR+PIN") }, onClick = { menuOpen = false; onPairing() })
-                DropdownMenuItem(text = { Text("Alertes sécurité") }, onClick = { menuOpen = false; onAlerts() })
+                DropdownMenuItem(
+                    text = { Text("Réglages", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    onClick = { menuOpen = false; onSettings() },
+                )
+                DropdownMenuItem(
+                    text = { Text("Appairage QR+PIN", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    onClick = { menuOpen = false; onPairing() },
+                )
+                DropdownMenuItem(
+                    text = { Text("Alertes sécurité", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    onClick = { menuOpen = false; onAlerts() },
+                )
             }
         }
     }
@@ -786,12 +800,14 @@ private fun TimetableDayHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // `heading()` : c'est le titre de la PAGE (l'en-tête collant suit le
+            // défilement), donc le point d'entrée du survol pour chaque jour.
             Text(
                 text = dayNameFr(date),
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).semantics { heading() },
             )
             Row(
                 modifier = Modifier
@@ -800,7 +816,13 @@ private fun TimetableDayHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Text(text = dayPillLabel(date), style = MaterialTheme.typography.labelMedium, color = pillInk)
+                Text(
+                    text = dayPillLabel(date),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = pillInk,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Icon(
                     imageVector = Icons.Filled.KeyboardArrowDown,
                     contentDescription = null,
@@ -814,6 +836,8 @@ private fun TimetableDayHeader(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

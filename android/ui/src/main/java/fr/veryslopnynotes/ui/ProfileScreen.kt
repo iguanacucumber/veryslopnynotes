@@ -2,7 +2,6 @@ package fr.veryslopnynotes.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +22,7 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -174,6 +174,8 @@ fun ProfileScreen(
                 text = if (accountCount > 1) "$accountCount comptes appairés" else "$accountCount compte appairé",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp),
             )
         }
@@ -288,12 +290,17 @@ private fun ProfileHeader(
         if (switchable && activeLabel.isNotEmpty()) {
             // Le chevron AFFIRME « cet en-tête est un sélecteur » : sans lui,
             // l'en-tête n'aurait aucune raison d'être cliquable.
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = "Changer de compte",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.clickable(onClick = onSwitch),
-            )
+            //
+            // #146 : c'était un `Icon(... .clickable(...))`, donc une cible de
+            // 24 dp — la moitié du minimum Material. L'`IconButton` garde la
+            // MÊME image (glyphe 24 dp par défaut) et la zone d'appui de 48 dp.
+            IconButton(onClick = onSwitch) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Changer de compte",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -326,6 +333,7 @@ private fun ProfileAvatar(photo: PhotoState, initials: String) {
                 text = initials,
                 style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1,
             )
         }
     }
@@ -450,10 +458,14 @@ fun ProfileRoute(
             // Relecture ratée alors qu'un profil est DÉJÀ affiché : rien n'est
             // remplacé (le profil vit en mémoire, mode anonyme), le message le
             // dit.
+            // `errorTextColor()` : le rouge de marque ne vaut que 3.70:1 sur la
+            // surface sombre du thème — en clair il reste le rouge relevé.
             Text(
                 text = error,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
+                color = errorTextColor(),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
             )
         }

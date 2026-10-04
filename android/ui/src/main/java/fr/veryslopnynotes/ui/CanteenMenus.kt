@@ -25,6 +25,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.dayLabelFr
 import fr.veryslopnynotes.core.enumFr
@@ -255,6 +258,9 @@ private fun CanteenAllergenBlock(allergens: List<String>) {
             text = "ALLERGÈNES",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.semantics { heading() },
         )
         // Données de l'établissement : une étiquette par allergène, donc aucune
         // liste à déchiffrer dans une phrase.
@@ -262,6 +268,8 @@ private fun CanteenAllergenBlock(allergens: List<String>) {
             Text(
                 text = "• $allergen",
                 style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -281,6 +289,8 @@ private fun CanteenMealCard(menu: CanteenMenuUi, modifier: Modifier = Modifier) 
                 Text(
                     text = canteenMealLabel(menu.meal),
                     style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 val label = canteenStatusLabel(menu.status)
@@ -294,6 +304,8 @@ private fun CanteenMealCard(menu: CanteenMenuUi, modifier: Modifier = Modifier) 
                 Text(
                     text = "• $dish",
                     style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -314,7 +326,12 @@ private fun CanteenBalanceCard(line: String, modifier: Modifier = Modifier) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp),
             )
-            Text(text = line, style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = line,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -327,6 +344,9 @@ private fun CanteenDayCard(day: CanteenDayUi, modifier: Modifier = Modifier) {
             Text(
                 text = canteenDayLabel(day.date),
                 style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
             )
             for (menu in day.meals) {
                 CanteenMealCard(menu)
@@ -425,7 +445,13 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
                 // Le VRAI message d'échec : l'écran ne se débrouille pas d'un « réseau ».
                 error != null && days.isEmpty() -> PapErrorState(message = error, onRetry = { refresh() })
                 days.isNotEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Menus de la semaine", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = "Menus de la semaine",
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() },
+                    )
                     if (stale) PapStaleBanner(fetchedAt = fetchedAt, onRefresh = { refresh() })
                     // Relecture échouée alors que les menus sont là : la cause passe
                     // en une ligne, les cartes restent affichées.
@@ -435,6 +461,8 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
                             text = failure,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                     CanteenContent(week ?: CanteenWeekUi(emptyList()))

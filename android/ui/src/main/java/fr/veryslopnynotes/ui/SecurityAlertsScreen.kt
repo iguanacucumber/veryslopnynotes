@@ -27,6 +27,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.SecurityAlert
 import fr.veryslopnynotes.core.enumFr
@@ -171,6 +174,8 @@ fun SecurityAlertsScreen(
             text = "Injections neutralisées (données, jamais exécutées).",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
         )
         // Échec de la RELECTURE alors que le cache est là : la liste reste
         // affichée, la cause passe en une ligne (mêmes replis que l'onglet Notes).
@@ -178,10 +183,14 @@ fun SecurityAlertsScreen(
         // d'erreur. En encre secondaire, il se lisait comme la ligne du témoin
         // juste au-dessus, donc un échec ne se distinguait d'aucun succès.
         if (notice != null) {
+            // `errorTextColor()` : le rouge de marque ne vaut que 3.70:1 sur la
+            // surface SOMBRE, et ce refus est du texte.
             Text(
                 text = notice,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                color = errorTextColor(),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         when (alertsLayout(view)) {
@@ -250,10 +259,14 @@ private fun AllClearCard(modifier: Modifier = Modifier) {
                 modifier = Modifier.size(28.dp),
             )
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                // `heading()` : le seul titre de cet état.
                 Text(
                     text = "Aucune alerte de sécurité",
                     style = MaterialTheme.typography.titleMedium,
                     color = content,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() },
                 )
                 Text(
                     text = "Bon signe : le serveur n'a signalé aucun contenu hostile.",
@@ -298,10 +311,14 @@ fun SecurityAlertCard(alert: SecurityAlert, modifier: Modifier = Modifier) {
                 PapPill(text = alertKindLabel(alert.kind), color = accent)
                 PapPill(text = alertSourceLabel(alert.source), color = MaterialTheme.colorScheme.primary)
             }
+            // `heading()` : titre du bloc d'extrait.
             Text(
                 text = "Donnée suspecte (non exécutée) :",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { heading() },
             )
             PapDivider()
             Text(

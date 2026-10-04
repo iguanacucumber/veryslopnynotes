@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -26,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.data.SubjectPrefs
@@ -103,21 +106,46 @@ fun HomeWidgetCard(
  * bordure 1 dp vient de `outline`, comme sur les cartes. La flèche est un
  * glyphe de TEXTE (donc teinté par la couleur du `Text`), pas une icône : le
  * core n'a pas d'`OpenInNew` sans `material-icons-extended`.
+ *
+ * #146 : deux corrections d'accessibilité, zéro pixel de design.
+ *   - la cible fait [TouchTarget] (48 dp de haut) au lieu de ~25 dp : le
+ *     `defaultMinSize` vient AVANT le `clip`, donc il étire la pastille bordée
+ *     elle-même — le bouton paraît plus haut, mais la zone d'appui devient
+ *     celle qu'on voit ;
+ *   - `Role.Button` + `onClickLabel` : c'est une navigation déguisée en pastille,
+ *     donc un lecteur d'écran doit l'annoncer comme un bouton qui ouvre l'écran ;
+ *   - la flèche « ↗ » est son propre `Text` en `clearAndSetSemantics` :
+ *     décorative, elle ne doit pas être lue (« flèche vers le haut à droite »)
+ *     alors que le libellé porte déjà tout le sens.
  */
 @Composable
-fun HomeMoreButton(onClick: () -> Unit, label: String = "Afficher plus ↗") {
+fun HomeMoreButton(onClick: () -> Unit, label: String = "Afficher plus") {
     val shape = RoundedCornerShape(20.dp)
     val ink = MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = Modifier
+            .defaultMinSize(minHeight = TouchTarget)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .border(1.dp, MaterialTheme.colorScheme.outline, shape)
-            .clickable(onClick = onClick)
+            .clickable(onClickLabel = label, role = Role.Button, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = ink, maxLines = 1)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        // Décorative : la direction est dans le libellé, pas dans l'oral.
+        Text(
+            text = " ↗",
+            style = MaterialTheme.typography.labelSmall,
+            color = ink,
+            modifier = Modifier.clearAndSetSemantics { },
+        )
     }
 }
 
