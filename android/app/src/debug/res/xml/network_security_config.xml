@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  VARIANT DEBUG UNIQUEMENT — ce fichier N'EXISTE PAS en release : il écrase
+  `src/main/res/xml/network_security_config.xml` pour le seul variant debug
+  (priorité du source set). La release garde donc exactement la config stricte
+  d'origine (ancres système seules).
+
+  Pourquoi : `make runServer` sort un certificat AUTO-SIGNÉ
+  (~/.cache/veryslopnynotes/tls/cert.pem). Depuis Android 7, une app ne fait pas
+  confiance aux CA installées par l'utilisateur — d'où l'erreur côté app :
+
+    java.security.cert.CertPathValidatorException:
+      Trust anchor for certification path not found
+
+  Le serveur est bien en HTTPS, la chaîne est simplement absente du magasin de
+  l'app. Ce qui est supporté ici : `<certificates src="user" />` (= ancre
+  installée par l'utilisateur) — donc il faut installer le .crt du serveur sur
+  l'appareil (procédure dans android/README.md).
+
+  Ce que ça n'ouvre PAS : la release n'accorde aucune confiance aux CA
+  utilisateur, donc aucune interception possible sur l'APK publiable. Seuls les
+  APK de debug sont concernés.
+
+  ponytail: `src="user"` est large (toute CA installée sur l'appareil, proxy de
+  debug compris). Upgrade: épingler le certificat du serveur (`<certificates
+  src="@raw/…">` par domaine) — le vrai « phase 10 », cf. la config main.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <!-- Ancrages plateforme (par défaut) + ceux installés par l'utilisateur. -->
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Alias hôte-machine depuis l'émulateur Android. -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <!-- Boucle locale de l'appareil. -->
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
