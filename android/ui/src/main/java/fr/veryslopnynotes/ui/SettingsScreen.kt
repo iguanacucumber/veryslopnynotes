@@ -26,7 +26,7 @@ import fr.veryslopnynotes.data.SubjectPrefs
 // réseau hors serveur allowlist, I1 intact.
 // @OptIn: FilterChip.material3 tant qu'il reste annoté Expérimental.
 //
-// #135 : ce composable SORT d'`AppNav.kt` (970 lignes qui portaient la coquille
+// #135 : ce composable SORT d'`AppNav.kt` (989 lignes qui portaient la coquille
 // ET quatre écrans). Comportement inchangé, SAUF :
 //   - `Text("Réglages")` retiré : la barre du haut affiche le titre de la route
 //     (papillon.bzh), le nom de l'écran ne doit plus être lu deux fois ;

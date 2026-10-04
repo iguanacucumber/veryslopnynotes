@@ -17,7 +17,7 @@ import fr.veryslopnynotes.data.SyncedRepository
 // (helpers testables dans HomeWidgets.kt). Aucune requête ajoutée : l'accueil
 // reste offline-first (cache d'abord), et un cache absent = état vide propre.
 //
-// #135 : ce composable SORT d'`AppNav.kt` (qui faisait 970 lignes et portait la
+// #135 : ce composable SORT d'`AppNav.kt` (qui faisait 989 lignes et portait la
 // coquille ET quatre écrans : tout le monde se disputait le même fichier).
 // Comportement inchangé, SAUF deux retouches de coquille :
 //   - `Text("Accueil")` retiré : la barre du haut affiche le titre de la route

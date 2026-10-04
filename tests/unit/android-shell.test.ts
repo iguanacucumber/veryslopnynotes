@@ -126,7 +126,7 @@ describe("coquille applicative (#135)", () => {
   test("AppNav.kt : le graphe seul, plus aucun écran dedans", () => {
     // Critère d'acceptation de #135 : sous ~450 lignes (989 avant). On lit le
     // compte plutôt qu'un nombre figé : le plafond est ce qui compte, pas sa
-    // valeur exacte.
+    // valeur exacte (989 avant #135).
     const lines = nav.trimEnd().split("\n").length;
     expect({ lines, under450: lines <= 450 }).toEqual({ lines, under450: true });
     // Aucune route n'est un littéral nu : 15 constantes, toutes utilisées.
