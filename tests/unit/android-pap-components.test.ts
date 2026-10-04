@@ -424,14 +424,21 @@ describe("briques d'interface (#136)", () => {
     expect(kt.match(/remember \{ mutableStateOf/g)?.length).toBe(1);
   });
 
-  test("les 8 écrans qui jetaient le message serveur n'ont pas été corrigés par #136", () => {
+  test("les écrans qui jetaient le message serveur : un seul a été migré, par #137", () => {
     // Honnêteté sur le périmètre : #136 livre les BRIQUES et ne touche aucun
-    // écran, donc les huit `Text("Erreur réseau. Réessayer.")` et les huit
+    // écran, donc les `Text("Erreur réseau. Réessayer.")` et les
     // « Données hors-ligne (périmé). » sont toujours là. Ils disparaîtront quand
     // la vague suivante adoptera `PapErrorState` / `PapStaleBanner`. Ce test
     // échouera le jour où ce sera fait — c'est le témoin, pas le but.
-    const fichiers = ["Assignments.kt", "TimetableWeek.kt", "Attendance.kt", "CanteenMenus.kt", "MessagesScreen.kt", "NewsScreen.kt", "RevisionSheets.kt", "SecurityAlertsScreen.kt"];
+    // #137 (EDT) est le PREMIER écran migré : `TimetableWeek.kt` est donc sorti
+    // de la liste, et l'assertion compte les sept restants.
+    const fichiers = ["Assignments.kt", "Attendance.kt", "CanteenMenus.kt", "MessagesScreen.kt", "NewsScreen.kt", "RevisionSheets.kt", "SecurityAlertsScreen.kt"];
     const restants = fichiers.filter((f) => readFileSync(join(UI, f), "utf8").includes('"Erreur réseau. Réessayer."'));
     expect({ ecransPasEncoreMigres: restants.length }).toEqual({ ecransPasEncoreMigres: fichiers.length });
+    // Le témoin inversé : l'EDT affiche le VRAI message (cf. #137).
+    const edt = readFileSync(join(UI, "TimetableWeek.kt"), "utf8");
+    expect({ edt: edt.includes('"Erreur réseau. Réessayer."') }).toEqual({ edt: false });
+    expect(edt).toContain("PapErrorState(message = error.message");
+    expect(edt).toContain("PapStaleBanner(");
   });
 });
