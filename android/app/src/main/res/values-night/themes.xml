@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- #135 : même thème de fenêtre que `values/themes.xml`, version SOMBRE —
+         sans quoi une app en thème sombre s'ouvre sur un fond de fenêtre clair
+         (le fond de fenêtre vient du thème de la fenêtre, pas de Compose).
+         L'interface, elle, reste pilotée par `PapillonTheme` (#134). -->
+    <style name="Theme.Veryslopynotes" parent="@android:style/Theme.Material.NoActionBar" />
+</resources>

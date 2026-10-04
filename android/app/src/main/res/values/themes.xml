@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- #135 : thème de la FENÊTRE, pas celui de l'interface.
+         L'app n'en déclarait AUCUN : elle héritait du thème plateforme par
+         défaut, qui contient une barre d'action système (`android:id/action_bar`
+         visible dans le dump uiautomator). Elle affichait donc le LABEL de
+         l'app — « VerySlopyNyNotes » — au-dessus de la barre du haut de la
+         Compose, sur LES 15 routes : exactement la marque statique que #135
+         supprime de l'interface, plus 56 dp de hauteur perdue. Elle était
+         aussi SOMBRE alors que l'app est en clair (le thème plateforme ne suit
+         pas le réglage clair/sombre de l'app, cf. `Theme.kt`).
+
+         On ne pose donc qu'un thème de fenêtre sans barre d'action : toute
+         l'interface reste en Compose, sous le thème Papillon (#134), et les
+         insets sont posés par le `Scaffold` (barre du haut + barre d'onglets
+         consomment déjà `windowInsets`).
+
+         Variante claire ici, variante sombre dans `values-night/` : sinon une
+         app en thème sombre s'ouvre sur un fond de fenêtre clair.
+         ponytail: pas de `AppCompat`, pas de `-uiMode`, pas de thème dynamique
+         — deux parents plateforme, rien d'autre. Upgrade: un écran de démarrage
+         aux couleurs Papillon (cf. #148). -->
+    <style name="Theme.Veryslopynotes" parent="@android:style/Theme.Material.Light.NoActionBar" />
+</resources>
