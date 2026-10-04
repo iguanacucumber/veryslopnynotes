@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
         val tokens = SessionTokens.get(this)
         // Toggle "fait" #75 : l'app n'envoie pas d'accountId (le serveur
         // mono-compte résout sa session appairée) ; #82 exposera /v1/me pour un
-        // multi-compte. Jamais un hôte Pronote/ENT ici (I1), et l'écriture reste
+        // multi-compte. Jamais un hôte Pronote ici (I1), et l'écriture reste
         // une action utilisateur confirmée (I7).
         setContent {
             MaterialTheme {

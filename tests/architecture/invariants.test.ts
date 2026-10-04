@@ -48,7 +48,7 @@ function list(dir: string): string[] {
 }
 
 describe("invariants", () => {
-  test("I1: android sans hote Pronote/ENT", () => {
+  test("I1: android sans hote Pronote", () => {
     const files = list(join(ROOT, "android")).filter((f) => {
       if (f.endsWith(".md")) return false;
       try {
@@ -117,6 +117,33 @@ describe("invariants", () => {
       expect(c).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|Bun\.serve/);
       expect(c).not.toMatch(/tools\s*[:=]\s*\[[^\]]*[^\s\]]/);
     }
+  });
+
+  test("I8 (0.7.0): le serveur ne lit AUCUN credential dans l'environnement", () => {
+    // Le serveur ne détient rien : `PORT`/`HOST` (écoute) sont les SEULES
+    // variables lues, et uniquement dans `start()`. Tout ce qui s'authentifie
+    // (QR de l'établissement, clé LLM) vient du client, à la demande.
+    const hits: string[] = [];
+    for (const f of list(join(ROOT, "server"))) {
+      for (const line of codeOnly(readFileSync(f, "utf8")).split("\n")) {
+        if (!/Bun\.env|process\.env/.test(line)) continue;
+        // La lecture de PORT/HOST est le seul accès autorisé, et il passe par
+        // `envValue(env, "…")` avec un littéral — jamais un nom construit.
+        const allowed = /envValue\(env,\s*"(PORT|HOST)"\)/.test(line) || /= Bun\.env as Record/.test(line);
+        if (!allowed) hits.push(`${f.replace(ROOT, "")}: ${line.trim()}`);
+      }
+    }
+    expect(hits).toEqual([]);
+
+    // Vrai positif : une lecture de credential doit être signalée, sinon le test
+    // ne prouve rien (il doit mordre, pas juste passer).
+    const sneak = 'const k = process.env["OPENROUTER_API_KEY"] ?? "";';
+    expect(sneak).toMatch(/process\.env/);
+    expect(/envValue\(env,\s*"(PORT|HOST)"\)/.test(sneak)).toBe(false);
+
+    // Et le template d'env n'existe plus du tout (rien à commiter, rien à documenter).
+    expect(existsSync(join(ROOT, ".env.example"))).toBe(false);
+    expect(existsSync(join(ROOT, ".env.local"))).toBe(false);
   });
 
   test("I6: pipeline Untrusted + nonce partout dans server/ai", () => {

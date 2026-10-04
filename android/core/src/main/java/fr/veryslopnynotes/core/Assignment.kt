@@ -4,7 +4,7 @@ package fr.veryslopnynotes.core
 // description/contenu de cours = texte enseignant, DONNÉE bornée affichée via
 // Text() seul (jamais WebView, jamais Html, jamais instruction — I6).
 // Pièces jointes : `ref` OPAQUE résolue par le proxy serveur (/v1/media).
-// Une URL absolue dans `ref` est rejetée par isValid : aucune URL Pronote/ENT
+// Une URL absolue dans `ref` est rejetée par isValid : aucune URL Pronote
 // ne peut atteindre l'app (I1, règle d'or média).
 // ponytail: dates = 10 premiers caractères de l'ISO (stdlib seule, pas de lib
 // date) ; le badge semaine est dérivé de dueDate côté UI, jamais stocké.

@@ -2,9 +2,8 @@
 // Contrat : send(deviceTokenHash, {title, body}). Le token brut n'entre
 // jamais ici : seul son hash sha256 (Device.tokenHash) circule, jamais logué
 // en clair — logs = préfixe 8 chars + statut uniquement, sans clé VAPID.
-// Transport : fetch natif vers PUSH_PROVIDER (URL http(s)) ou dégradé noop
-// si provider symbolique. Clé privée chargée (preuve config) mais jamais
-// envoyée ni loguée.
+// Transport : fetch natif vers le endpoint fourni par l'appelant (URL http(s))
+// ou dégradé noop si provider symbolique. Clé privée jamais envoyée ni loguée.
 // `delivers` = « ce provider transmet-il vraiment ? » : noop et endpoint
 // symbolique valent false, donc l'appelant ne peut pas compter une livraison
 // qui n'a pas eu lieu (honnêteté du résultat de job).
@@ -17,8 +16,19 @@
 import { createHash } from "node:crypto";
 import { isTokenHash } from "../../shared/contracts/models";
 import type { PushProvider } from "../domain/ports";
-import type { PushConfig } from "./push-config";
-import { loadPushConfig } from "./push-config";
+
+
+/**
+ * Config push. 0.7.0 : PLUS de lecture par env — le serveur ne détient aucun
+ * credential, donc aucune clé VAPID ne peut venir d'ici. `createPushProvider(null)`
+ * = push non configuré.
+ */
+export interface PushConfig {
+  readonly provider: string;
+  readonly vapidPublicKey: string;
+  readonly vapidPrivateKey: string;
+  readonly subject: string;
+}
 
 export class PushError extends Error {
   readonly status?: number;
@@ -147,11 +157,14 @@ export class HttpPushProvider implements PushProvider {
   }
 }
 
+/**
+ * `null` = push non configuré : Noop (aucun secret inventé, notification
+ * simplement sautée) plutôt qu'une clé VAPID sortie de nulle part.
+ */
 export function createPushProvider(
-  env: Record<string, string | undefined> = Bun.env as Record<string, string | undefined>,
+  config: PushConfig | null,
   opts: PushProviderOptions = {},
 ): PushProvider {
-  const config = loadPushConfig(env);
   if (!config) return new NoopPushProvider(opts);
   return new HttpPushProvider(config, opts);
 }

@@ -9,7 +9,7 @@ import okhttp3.Response
 // Un seul client HTTP de l'app : toutes les requêtes passent
 // ici, vers la allowlist serveur seule. Refuse toute URL hors
 // allowlist avant envoi. Médias via proxy serveur, pas de WebView.
-// Contrat 0.5.0 : le serveur exige `Authorization: Bearer <token d'appareil>`
+// Contrat 0.6.0 : le serveur exige `Authorization: Bearer <token d'appareil>`
 // sur TOUTES les routes sauf l'appairage, /v1/setup (la porte qui rend le
 // secret) et /v1/health. Le secret est lu au
 // moment de CONSTRUIRE la requête (jamais mémorisé ici : il change à

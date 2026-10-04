@@ -1,5 +1,5 @@
 // e2e devoirs #75 (parité Papillon, onglet Tâches).
-// Zéro réseau réel, zéro .env.local, zéro secret : client Pronote injecté +
+// Zéro réseau réel, zéro credential serveur, zéro secret : client Pronote injecté +
 // store seedé. Couvre le parcours complet : store -> GET /v1/assignments ->
 // contenu + PJ via proxy -> toggle confirmé -> AssignmentUpdated -> cache.
 //
@@ -21,19 +21,14 @@ import { CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
 import { createHandler } from "../../server/api/router";
 import { createMemoryStore } from "../../server/api/store";
 import { PairingService } from "../../server/api/pairing";
+import { syntheticAccountId, syntheticQr, syntheticSessionCredentials } from "../unit/fixtures/pronote";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
 import { PronoteSessionStore } from "../../server/integrations/pronote-sessions";
 import { PronoteWriteError } from "../../server/domain/ports";
 import { syntheticManualDocs } from "../unit/fixtures/manuals";
-import { syntheticAccountId, syntheticEntKind, syntheticPassword, syntheticUsername } from "../unit/fixtures/pronote";
 import type { LLMProvider, Untrusted } from "../../server/domain/ports";
 
-const creds = {
-  accountId: syntheticAccountId,
-  username: syntheticUsername,
-  password: syntheticPassword,
-  entKind: syntheticEntKind,
-};
+const creds = syntheticSessionCredentials;
 
 // Libellé de source exactement tel que construit par formatSource().
 const SOURCE_LABEL = "editeur-fake • Maths-Fake 6e • p.42";
@@ -137,11 +132,10 @@ describe("e2e devoirs #75", () => {
       lessons: async () => [],
     };
     const sessions = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       clientFactory: (async () => client) as never,
     });
-    await sessions.authenticate({ ...creds, entKind: "ninegate" });
+    await sessions.authenticate({ ...creds });
     const reader = new PronoteClientReader({ sessions });
     const { pairing, auth } = paired();
     // 0.4.0 : le routeur résout le compte servi (servedAccountId) et le passe au
@@ -199,11 +193,10 @@ describe("e2e devoirs #75", () => {
       lessons: async () => [],
     };
     const sessions = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       clientFactory: (async () => client) as never,
     });
-    await sessions.authenticate({ ...creds, entKind: "ninegate" });
+    await sessions.authenticate({ ...creds });
     const page = await new PronoteClientReader({ sessions }).getAssignments(syntheticAccountId);
     expect(page.items.__untrusted).toBe(true);
     expect(page.items.value.every(isAssignment)).toBe(true);
@@ -216,9 +209,11 @@ describe("e2e devoirs #75", () => {
   });
 });
 
-// Pipeline LLM devoirs : hors-ligne total, aucun secret requis. Ces tests
-// tournent AVEC ou SANS .env.local (plus de skip masquant une régression).
-describe("e2e pipeline devoirs (sans .env.local)", () => {
+// Pipeline LLM devoirs : hors-ligne total. La clé LLM vient de l'APP (0.7.0),
+// le serveur n'en détient aucune — ici une clé factice, jamais valide.
+const FAKE_KEY = "fake-openrouter-key-UNREAL";
+
+describe("e2e pipeline devoirs (clé fournie par l'app)", () => {
   test("pipeline chunk→retrieve→generate cite les sources, refus si vide", async () => {
     const chunks = syntheticManualDocs.flatMap((d) => chunkManual(d, 500));
     expect(chunks.length).toBeGreaterThan(0);
@@ -226,7 +221,7 @@ describe("e2e pipeline devoirs (sans .env.local)", () => {
     expect(hits.length).toBeGreaterThan(0);
 
     const sources = hits.map((h) => ({ text: h.text, source: h.source }));
-    const res = await generateHomework(citedFake(), { question: "Combien font 1/2 + 1/4 ?", sources });
+    const res = await generateHomework(citedFake(), { apiKey: FAKE_KEY, question: "Combien font 1/2 + 1/4 ?", sources });
     expect(res.status).toBe("ok");
     expect(isHomeworkGenerateResponse(res)).toBe(true);
     if (res.status === "ok") {
@@ -235,18 +230,21 @@ describe("e2e pipeline devoirs (sans .env.local)", () => {
     }
     expect(res.sources).toContain(SOURCE_LABEL);
 
-    const refused = await generateHomework(citedFake(), { question: "sans corpus ?", sources: [] });
+    const refused = await generateHomework(citedFake(), { apiKey: FAKE_KEY, question: "sans corpus ?", sources: [] });
     expect(refused.status).toBe("refused");
     if (refused.status === "refused") expect(refused.reason).toContain("sources_insuffisantes");
 
     // Garde anti-invention inchangée : une citation hors corpus reste refusée.
     const hors = await generateHomework(
       {
-        async generate() {
+        async generate(_prompt: unknown, apiKey?: string) {
+          // La clé de l'app atteint l'adaptateur telle quelle : c'est elle qui
+          // porte l'appel, jamais une valeur côté serveur.
+          if (apiKey !== FAKE_KEY) throw new Error("clé LLM absente");
           return JSON.stringify({ status: "ok", answer: "a", steps: [], sources: ["manuel-inconnu p.1"] });
         },
       },
-      { question: "q", sources },
+      { apiKey: FAKE_KEY, question: "q", sources },
     ).catch((e: unknown) => e);
     expect(String((hors as Error).message)).toContain("source non fournie");
   });
@@ -256,7 +254,7 @@ describe("e2e pipeline devoirs (sans .env.local)", () => {
     const chunks = syntheticManualDocs.flatMap((d) => chunkManual(d, 500));
     const hits = retrieveManuals(chunks, "fractions half quarter", 1);
     const sources = hits.map((h) => ({ text: h.text, source: h.source }));
-    const res = await generateHomework(citedFake(), { question: attack, sources });
+    const res = await generateHomework(citedFake(), { apiKey: FAKE_KEY, question: attack, sources });
     expect(res.status).toBe("ok");
     const p = buildSafePrompt(SYSTEM_HOMEWORK_JSON, [markExternal(attack)], "E2eNonce12345678");
     expect(p.system).toBe(SYSTEM_HOMEWORK_JSON);

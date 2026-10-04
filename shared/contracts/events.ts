@@ -26,8 +26,6 @@ export interface ContractEvent<T extends EventType = EventType, D = unknown> {
   readonly data: D;
 }
 
-export type GradeCreatedData = Grade;
-export type AssignmentUpdatedData = Assignment;
 export type TimetableUpdatedData = { readonly entries: TimetableEntry[] };
 export type SyncCompletedData = {
   readonly accountId: string;

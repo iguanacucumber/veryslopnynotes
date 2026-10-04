@@ -6,6 +6,7 @@ import { isApiErrorBody } from "../../server/api/errors";
 import { isCanteenMenusResponse } from "../../shared/contracts/api";
 import { isCanteenMenu } from "../../shared/contracts/models";
 import { CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
+import { syntheticAccountId, syntheticQr, syntheticSessionCredentials } from "../unit/fixtures/pronote";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
 import { PronoteSessionStore } from "../../server/integrations/pronote-sessions";
 import type { Untrusted } from "../../server/domain/ports";
@@ -15,18 +16,12 @@ import {
   syntheticCanteenMenus,
   syntheticRawMenus,
 } from "../unit/fixtures/canteen";
-import { syntheticAccountId, syntheticEntKind, syntheticPassword, syntheticUsername } from "../unit/fixtures/pronote";
 
 // e2e cantine (#81) : store seedé -> GET /v1/menus -> rendu semaine.
 // Zéro réseau (store mémoire + client Pronote injecté), zéro secret,
 // aucun LLM sur le chemin (données structurées seules, I7).
 
-const creds = {
-  accountId: syntheticAccountId,
-  username: syntheticUsername,
-  password: syntheticPassword,
-  entKind: syntheticEntKind,
-};
+const creds = syntheticSessionCredentials;
 
 async function getMenusJson(query = "") {
   const { pairing, auth } = pairedDevice();
@@ -82,10 +77,9 @@ describe("e2e cantine (#81)", () => {
   test("reader : page non fiable bornée, Untrusted, aucune fuite de session", async () => {
     const logs: string[] = [];
     const sessions = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       clientFactory: (async () => ({ menus: async () => syntheticRawMenus() })) as never,
     });
-    await sessions.authenticate({ ...creds, entKind: "ninegate" });
+    await sessions.authenticate({ ...creds });
     const reader = new PronoteClientReader({ sessions, logger: (m) => logs.push(m) });
     const page = await reader.getMenus(syntheticAccountId, {
       from: "2026-10-05T00:00:00.000Z",
@@ -96,7 +90,7 @@ describe("e2e cantine (#81)", () => {
     expect(items.value.every(isCanteenMenu)).toBe(true);
     expect(items.value.map((m) => m.meal)).toEqual(["lunch", "dinner", "breakfast"]);
     const joined = logs.join("\n");
-    expect(joined).not.toContain(syntheticPassword);
-    expect(joined).not.toContain(syntheticUsername);
+    expect(joined).not.toContain(syntheticQr.jeton);
+    expect(joined).not.toContain(syntheticQr.login);
   });
 });

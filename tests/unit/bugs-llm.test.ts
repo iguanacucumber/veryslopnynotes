@@ -11,7 +11,8 @@ import { generateGuarded } from "../../server/ai/guard";
 import { SYSTEM_REVISION } from "../../server/ai/prompt";
 import { markExternal } from "../../server/ai/untrusted";
 
-const FAKE_KEY = "sk-fake-test";
+// 0.7.0 : la clé est fournie par l'APP à chaque appel. Factice, jamais valide.
+const FAKE_KEY = "fake-openrouter-key-UNREAL";
 const FAKE_MODEL = "fake-model-test";
 /** Fragment de secret construit à l'exécution : jamais contigu dans le fichier. */
 const SECRET_FRAGMENT = "sk-or" + "-v1-";
@@ -44,7 +45,7 @@ function completion(content: string, finishReason = "stop"): Response {
 
 /** Provider construit APRÈS le stub : le constructeur capture globalThis.fetch. */
 function provider(opts?: { timeoutMs?: number }): OpenRouterProvider {
-  return new OpenRouterProvider({ apiKey: FAKE_KEY, model: FAKE_MODEL }, opts ?? {});
+  return new OpenRouterProvider({ model: FAKE_MODEL }, opts ?? {});
 }
 
 function sentBody(index = 0): Record<string, unknown> {
@@ -81,7 +82,7 @@ describe("bugs llm-openrouter", () => {
     // On n'exige pas le refus (un scrubber serait acceptable) : l'invariant dur,
     // c'est qu'aucun octet du secret ne parte sur le réseau.
     await p
-      .generate({ system: "consigne fixe", data: [markExternal(`cours ${leaked} injecté`)] })
+      .generate({ system: "consigne fixe", data: [markExternal(`cours ${leaked} injecté`)] }, FAKE_KEY)
       .catch(() => undefined);
 
     const onTheWire = sent.map((s) => s.body).join("\n");
@@ -98,7 +99,7 @@ describe("bugs llm-openrouter", () => {
     // finish_reason "length" = sortie INCOMPLÈTE (token budget atteint) : la
     // fiche/corrigé tronqué doit être rejetée, pas pushée telle quelle (I5).
     await expect(
-      p.generate({ system: SYSTEM_REVISION, data: [markExternal("cours de synthèse")] }),
+      p.generate({ system: SYSTEM_REVISION, data: [markExternal("cours de synthèse")] }, FAKE_KEY),
     ).rejects.toThrow();
   });
 
@@ -108,7 +109,7 @@ describe("bugs llm-openrouter", () => {
     responder = () => completion("résumé");
     const p = provider();
 
-    await p.generate({ system: SYSTEM_REVISION, data: [markExternal("cours de synthèse")] });
+    await p.generate({ system: SYSTEM_REVISION, data: [markExternal("cours de synthèse")] }, FAKE_KEY);
 
     const body = sentBody();
     // Sans plafond de tokens côté fournisseur, rien n'empêche de dépasser
@@ -125,7 +126,7 @@ describe("bugs llm-openrouter", () => {
     const p = provider();
     const nonce = "FixedNonce12345678";
 
-    await generateGuarded(p, SYSTEM_REVISION, [markExternal("cours de synthèse")], nonce);
+    await generateGuarded(p, SYSTEM_REVISION, [markExternal("cours de synthèse")], nonce, FAKE_KEY);
 
     // generate() refait buildSafePrompt() avec un nonce aléatoire : le corps
     // contrôlé par assertNoSecretsInPrompt n'est pas celui transmis.
@@ -145,7 +146,7 @@ describe("bugs llm-openrouter", () => {
     // exploitable par l'appelant). Ici AbortSignal.timeout lève avant le try.
     // Accepté : délai recalé sur le défaut (appel pursued) OU erreur typée.
     await p
-      .generate({ system: SYSTEM_REVISION, data: [] })
+      .generate({ system: SYSTEM_REVISION, data: [] }, FAKE_KEY)
       .catch((err: unknown) => {
         expect(err).toBeInstanceOf(LlmError);
       });
@@ -158,7 +159,7 @@ describe("bugs llm-openrouter", () => {
     responder = () => failed;
     const p = provider();
 
-    await expect(p.generate({ system: SYSTEM_REVISION, data: [] })).rejects.toThrow();
+    await expect(p.generate({ system: SYSTEM_REVISION, data: [] }, FAKE_KEY)).rejects.toThrow();
 
     // Sans consumption/annulation, le socket reste occupé : une clé invalide
     // (401 sur chaque appel) épuise les connexions du pool.

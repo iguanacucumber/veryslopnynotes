@@ -22,7 +22,7 @@ import { apiError } from "./errors";
 
 /**
  * Port d'action côté API, SÉPARÉ des lectures (PronoteReader n'expose aucune
- * écriture). Implémenté par le reader Pronote via la session SSO serveur.
+ * écriture). Implémenté par le reader Pronote via la session Pronote serveur.
  * `accountId` est RÉSOLU CÔTÉ SERVEUR par le routeur (`servedAccountId`) ;
  * vide = serveur mono-compte (session appairée résolue côté intégr.). Un
  * `accountId` mis dans le corps par le client n'est JAMAIS une identité.

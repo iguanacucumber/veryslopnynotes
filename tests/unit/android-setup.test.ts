@@ -1,4 +1,4 @@
-// Assistant de connexion Android (#120) — serveur -> compte EduConnect -> QR.
+// Assistant de connexion Android (#120) — serveur -> établissement -> QR.
 // Kotlin n'a pas de src/test dans ce dépôt : on rejoue donc la logique pure en
 // TypeScript (tableau rejouable contre le vrai Kotlin) et on vérifie par lecture
 // de source ce que seul l'écran peut garantir : l'ordre des étapes, le gate au
@@ -105,24 +105,24 @@ describe("assistant : le parcours est bien l'ordre annoncé", () => {
     expect(screen).toContain("is HealthResult.Unreachable ->");
   });
 
-  test("étape 2 : l'adresse de l'établissement est obligatoire, les identifiants ne le sont pas", () => {
+  test("étape 2 : l'adresse de l'établissement est la seule saisie — 0.7.0 n'a plus d'identifiants", () => {
     expect(screen).toContain("isBoundedSchoolUrl(form.schoolUrl)");
     expect(screen).toContain("Adresse de l'établissement absente : elle est obligatoire.");
-    // Un compte sans mot de passe EduConnect passe quand même : il utilisera le QR.
-    expect(screen).toContain('Text("J\'ai seulement un QR")');
-    expect(state).toContain("val hasCredentials: Boolean");
+    // Aucun champ identifiant/mot de passe ne subsiste dans l'app.
+    expect(state).not.toContain("val username");
+    expect(state).not.toContain("val password");
+    expect(state).not.toContain("hasCredentials");
   });
 
-  test("étape 3 : QR + PIN, ou identifiants — jamais les deux comme si c'était deux étapes", () => {
+  test("étape 3 : QR + PIN, la méthode UNIQUE — un des deux seul ne part pas", () => {
     expect(screen).toContain("val qr = parseSchoolQr(form.qrRaw)");
     // Le Pin est la clé de déchiffrement du QR : sans lui, le QR ne sert à rien.
     expect(screen).toContain("Code PIN du QR obligatoire : il déchiffre le contenu scanné.");
     expect(screen).toContain("QR illisible : rescane-le ou colle-le en JSON.");
-    // Les identifiants de l'étape 2 partent dans la MÊME requête : c'est la
-    // méthode de repli quand le QR manque, pas une étape à valider.
-    expect(screen).toContain("username = form.username");
-    expect(screen).toContain("password = form.password");
+    expect(screen).toContain("val pret = qr != null && form.pin.isNotBlank()");
+    // Le QR + le pin partent dans la MÊME requête : c'est la seule méthode.
     expect(screen).toContain("qr = qr");
+    expect(screen).toContain("pin = form.pin.trim()");
   });
 
   test("succès : le secret est stocké chiffré puis on quitte l'assistant", () => {
@@ -167,8 +167,8 @@ describe("assistant : secrets et route publique", () => {
   test("chaque refus a sa phrase actionnable, et aucun ne dit « déconnecte »", () => {
     for (const [code, attendu] of [
       ["qr_rejected", "rescane le code affiché par son application"],
-      ["login_refused", "vérifie ton EduConnect et ton mot de passe"],
-      ["ent_unreachable", "réessaie dans un instant"],
+      ["login_refused", "vérifie ton identifiant et ton mot de passe"],
+      ["school_unreachable", "réessaie dans un instant"],
       ["rate_limited", "réessaie dans quelques minutes"],
       ["not_implemented", "aucune session d'établissement branchée"],
     ] as const) {

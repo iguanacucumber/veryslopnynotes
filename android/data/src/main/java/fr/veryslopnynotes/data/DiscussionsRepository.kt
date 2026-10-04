@@ -25,7 +25,7 @@ import java.io.IOException
  * n'est réinjectée dans une requête d'IA. Le serveur refuse de toute façon toute
  * écriture non confirmée par l'app.
  * I1 : tous les chemins viennent de ServerConfig (serveur allowlist seul), les
- * pièces jointes passent par le proxy /v1/media — aucune adresse d'ENT ici.
+ * pièces jointes passent par le proxy /v1/media — aucune adresse d'établissement ici.
  * I6 : corps/sujets = DONNÉES affichées telles quelles, jamais exécutées.
  */
 data class DiscussionWriteOutcome(val ok: Boolean, val error: String?)
@@ -172,7 +172,7 @@ class DiscussionsRepository(private val api: ApiClient) {
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
-        /** UNKNOWN_UNREAD : champ absent = l'ENT ne publie pas le compteur. */
+        /** UNKNOWN_UNREAD : champ absent = l'établissement ne publie pas le compteur. */
         private fun unreadOf(o: JSONObject): Int =
             if (o.isNull("unreadCount")) DiscussionRules.UNKNOWN_UNREAD else o.optInt("unreadCount", DiscussionRules.UNKNOWN_UNREAD)
 

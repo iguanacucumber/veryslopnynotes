@@ -6,6 +6,7 @@ import { createHandler } from "../../server/api/router";
 import { pairedDevice } from "./fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { PronoteSessionStore } from "../../server/integrations/pronote-sessions";
+import { syntheticAccountId, syntheticQr, syntheticSessionCredentials } from "./fixtures/pronote";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
 import { PronoteReadError } from "../../server/domain/ports";
 import { isApiErrorBody } from "../../server/api/errors";
@@ -17,7 +18,6 @@ import {
   isCanteenBalance,
   isCanteenMenu,
 } from "../../shared/contracts/models";
-import { syntheticAccountId, syntheticEntKind, syntheticPassword, syntheticUsername } from "./fixtures/pronote";
 import {
   syntheticCanteenBalance,
   syntheticCanteenMenus,
@@ -25,23 +25,17 @@ import {
   syntheticRawMenus,
 } from "./fixtures/canteen";
 
-const creds = {
-  accountId: syntheticAccountId,
-  username: syntheticUsername,
-  password: syntheticPassword,
-  entKind: syntheticEntKind,
-};
+const creds = syntheticSessionCredentials;
 
 function fakeStore(client: unknown) {
   return new PronoteSessionStore({
-    pronoteUrl: "https://example.test/pronote/eleve.html",
     clientFactory: (async () => client) as never,
   });
 }
 
 async function readerFor(client: unknown, logs: string[] = []) {
   const store = fakeStore(client);
-  await store.authenticate({ ...creds, entKind: "ninegate" });
+  await store.authenticate({ ...creds });
   return new PronoteClientReader({ sessions: store, logger: (m) => logs.push(m) });
 }
 
@@ -107,8 +101,8 @@ describe("PronoteClientReader.getMenus (#81)", () => {
     // Repas sans plat lisible et date absente : ignorés (aucun contenu inventé).
     expect(page.items.value).toHaveLength(3);
     expect(page.nextCursor).toBeNull();
-    expect(logs.join("\n")).not.toContain(syntheticPassword);
-    expect(logs.join("\n")).not.toContain(syntheticUsername);
+    expect(logs.join("\n")).not.toContain(syntheticQr.jeton);
+    expect(logs.join("\n")).not.toContain(syntheticQr.login);
   });
 
   test("mapper : doublons, chaînes vides et libellés hors bornes retirés", async () => {
@@ -164,7 +158,7 @@ describe("PronoteClientReader.getMenus (#81)", () => {
     for (const bad of [{ from: "pas-une-date" }, { to: "xxx" }]) {
       const err = await reader.getMenus(syntheticAccountId, bad).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(PronoteReadError);
-      expect((err as PronoteReadError).code).toBe("ent_unavailable");
+      expect((err as PronoteReadError).code).toBe("pronote_unavailable");
     }
   });
 
@@ -184,7 +178,7 @@ describe("PronoteClientReader.getMenus (#81)", () => {
     const ko = await throwing.getMenus(syntheticAccountId, { from: "2026-10-05T00:00:00.000Z", to: "2026-10-07T00:00:00.000Z" });
     expect(ko.items.value).toEqual([]);
     expect(logs.join("\n")).toContain("menus -> indisponible");
-    expect(logs.join("\n")).not.toContain(syntheticPassword);
+    expect(logs.join("\n")).not.toContain(syntheticQr.jeton);
     // Sans session : erreur de session classique, pas une page vide silencieuse.
     const cold = new PronoteClientReader({ sessions: fakeStore({}) });
     const err = await cold.getMenus("acc-inconnu").catch((e: unknown) => e);

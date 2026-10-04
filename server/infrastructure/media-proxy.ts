@@ -1,7 +1,7 @@
 // Proxy téléchargement PJ pédagogiques (issue #84, I1 strict).
 // La app ne touche jamais d'URL Pronote directe : elle appelle /v1/media
 // avec une ref opaque (voir PedagogicResource.ref). Le serveur résout la ref
-// vers l'Attachment pronotets via la session SSO et stream les octets.
+// vers l'Attachment pronotets via la session Pronote et stream les octets.
 // Secrets/cookies session restent côté serveur. Logs compteurs+tailles seuls.
 // Contenu servi = donnée, jamais instruction (I6) : à marquer Untrusted côté appelant.
 // ponytail: résolution ref par re-parcours lessons/homeworks (pas de cache).
@@ -13,17 +13,17 @@
 //   - elle est liée à la session appairée (un accountId revendiqué par l'appelant
 //     ne redirige jamais la résolution vers un autre compte) ;
 //   - le `fileId` qu'elle porte doit être celui du fichier RÉELLEMENT résolu :
-//     une publication ENT qui décale les index rend la ref caduque (not_found)
+//     une publication qui décale les index rend la ref caduque (not_found)
 //     au lieu de servir silencieusement la PJ voisine ;
 //   - une ref signée (`signMediaRef`, HMAC sha256 sur accountId|kind|li|di|fileId)
 //     est en plus inforgeable ; signature absente = format historique accepté
 //     sous les deux règles ci-dessus (compatibilité des refs déjà en base/app).
-// Aucun octet n'est attendu sans échéance (MEDIA_DOWNLOAD_TIMEOUT_MS).
+// Aucun octet n'est attendu sans échéance (30 s par défaut, `timeoutMs` injectable).
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { PronoteClientReader } from "../integrations/pronote-client-reader";
 
 export class MediaProxyError extends Error {
-  readonly code: "bad_ref" | "not_found" | "session_expired" | "ent_unavailable";
+  readonly code: "bad_ref" | "not_found" | "session_expired" | "pronote_unavailable";
   constructor(message: string, code: MediaProxyError["code"]) {
     super(message);
     this.name = "MediaProxyError";
@@ -42,26 +42,23 @@ const PHOTO_EXT_RE = /^[a-z0-9]{2,4}$/;
 /** Signature appended : base64url d'un HMAC sha256 (jamais une URL, jamais un secret). */
 const SIG_RE = /^[A-Za-z0-9_-]{40,64}$/;
 
-// Secret de signature des refs : MEDIA_REF_SECRET en déploiement, sinon tiré au
-// sort par process (une ref ne survit pas à un redémarrage et n'est pas
-// forçable). Jamais journalisé, jamais renvoyé à l'app.
-const REF_SECRET: string = (process.env["MEDIA_REF_SECRET"] ?? "").trim() || randomBytes(32).toString("hex");
+/**
+ * Secret de signature des refs : tiré au sort par process, jamais journalisé,
+ * jamais renvoyé à l'app. 0.7.0 : plus de `MEDIA_REF_SECRET` — le serveur ne lit
+ * aucun secret d'environnement. Conséquence assumée : une ref ne survit pas à un
+ * redémarrage (l'app la régénère), ce qui est le comportement par défaut depuis le
+ * début et évite d'avoir une clé de signature à protéger.
+ */
+const REF_SECRET: string = randomBytes(32).toString("hex");
 
 /**
- * Échéance d'un téléchargement de PJ : une pièce jointe ENT qui ne répond
- * jamais ne doit pas laisser la requête HTTP ouverte (toutes les autres
- * lectures portent un AbortSignal). MEDIA_DOWNLOAD_TIMEOUT_MS règle le délai ;
- * défaut calé sur une PJ Pronote réelle (l'ENT est lent, le réseau domestic
- * l'est aussi) — Borne anti-pause, pas valeur de test.
- * ponytail: pas de reprise ni de retry, un délai dépassé = ent_unavailable.
+ * Échéance d'un téléchargement de PJ : une pièce jointe qui ne répond jamais ne
+ * doit pas laisser la requête HTTP ouverte (toutes les autres lectures portent un
+ * AbortSignal). Calé sur une PJ Pronote réelle (Pronote est lent, le réseau
+ * domestique l'est aussi) — borne anti-pause, pas valeur de test.
+ * ponytail: pas de reprise ni de retry, un délai dépassé = pronote_unavailable.
  */
-const DEFAULT_TRANSFER_TIMEOUT_MS = 30_000;
-const MAX_TRANSFER_TIMEOUT_MS = 600_000;
-
-function transferTimeoutMs(): number {
-  const raw = Number.parseInt((process.env["MEDIA_DOWNLOAD_TIMEOUT_MS"] ?? "").trim(), 10);
-  return Number.isFinite(raw) && raw > 0 && raw <= MAX_TRANSFER_TIMEOUT_MS ? raw : DEFAULT_TRANSFER_TIMEOUT_MS;
-}
+const TRANSFER_TIMEOUT_MS = 30_000;
 
 type MediaKind = "lesson-doc" | "lesson-content-file" | "homework-file" | "photo";
 
@@ -145,7 +142,7 @@ interface MediaFile {
 
 /**
  * La ref ne vaut que pour le fichier qu'elle NOME : si le fichier publié expose
- * un id différent (index décalé par une publication ENT, ref forgée), la ref
+ * un id différent (index décalé par une publication, ref forgée), la ref
  * est caduque → null (not_found), jamais la PJ voisine. Fichier sans id publié :
  * seule la signature peut alors porter l'identité (format historique).
  */
@@ -163,11 +160,12 @@ function cleanName(name: string): string {
 }
 
 /** Attend `work` sous échéance ; un dépassement = erreur typée (jamais une requête ouverte). */
-function withDeadline<T>(work: Promise<T>, what: string): Promise<T> {
+/** `timeoutMs` injectable : l'échéance est un comportement testable, pas un env. */
+function withDeadline<T>(work: Promise<T>, what: string, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new MediaProxyError(`media ${what} timeout`, "ent_unavailable")),
-      transferTimeoutMs(),
+      () => reject(new MediaProxyError(`media ${what} timeout`, "pronote_unavailable")),
+      timeoutMs,
     );
     work.then(
       (value) => {
@@ -185,14 +183,14 @@ function withDeadline<T>(work: Promise<T>, what: string): Promise<T> {
 /**
  * Table d'erreurs alignée sur `toReadError` (pronote-client-reader) : une
  * session morte surface en `session_expired` (401, l'app se ré-appaire) au lieu
- * d'un 500 « media unavailable ». Timeout/reste = ent_unavailable.
+ * d'un 500 « media unavailable ». Timeout/reste = pronote_unavailable.
  */
 function toMediaError(err: unknown): MediaProxyError {
   if (err instanceof MediaProxyError) return err;
   const msg = err instanceof Error ? err.message : "";
   if (/session|expired|expir/i.test(msg)) return new MediaProxyError("media session expired", "session_expired");
-  if (/timeout|timed out/i.test(msg)) return new MediaProxyError("media timeout", "ent_unavailable");
-  return new MediaProxyError("media ent unavailable", "ent_unavailable");
+  if (/timeout|timed out/i.test(msg)) return new MediaProxyError("media timeout", "pronote_unavailable");
+  return new MediaProxyError("media pronote unavailable", "pronote_unavailable");
 }
 
 /**
@@ -220,15 +218,17 @@ export interface MediaSessions {
 }
 
 /**
- * Résout une ref opaque et télécharge les octets via la session SSO.
- * Lève MediaProxyError typée (bad_ref / not_found / session_expired / ent_unavailable).
+ * Résout une ref opaque et télécharge les octets via la session Pronote.
+ * Lève MediaProxyError typée (bad_ref / not_found / session_expired / pronote_unavailable).
  */
 export async function downloadMedia(
   sessions: MediaSessions,
   accountId: string,
   ref: string,
   logger?: (message: string) => void,
+  opts?: { readonly timeoutMs?: number },
 ): Promise<MediaPayload> {
+  const timeoutMs = opts?.timeoutMs ?? TRANSFER_TIMEOUT_MS;
   // accountId vide = serveur mono-compte : session appairée unique (#75).
   const id = pairedAccountId(sessions, accountId);
   const parsed = parseRef((ref ?? "").trim());
@@ -262,7 +262,7 @@ export async function downloadMedia(
       if (typeof pic.id === "string" && pic.id !== "" && pic.id !== parsed.fileId) {
         throw new MediaProxyError("media not found", "not_found");
       }
-      const buf = Buffer.from(await withDeadline(pic.data(), "photo"));
+      const buf = Buffer.from(await withDeadline(pic.data(), "photo", timeoutMs));
       const ext = (String(pic.url ?? "").split("?")[0]?.split(".").pop() ?? "").toLowerCase();
       logger?.(`media -> ok ${buf.length} bytes`);
       return { name: `photo.${PHOTO_EXT_RE.test(ext) ? ext : "png"}`, bytes: new Uint8Array(buf) };
@@ -274,7 +274,7 @@ export async function downloadMedia(
       const files = typeof h?.files === "function" ? h.files() : [];
       const f = pickFile(files, parsed.di, parsed.fileId);
       if (!f) throw new MediaProxyError("media not found", "not_found");
-      const buf = Buffer.from(await withDeadline(f.data(), "download"));
+      const buf = Buffer.from(await withDeadline(f.data(), "download", timeoutMs));
       logger?.(`media -> ok ${buf.length} bytes`);
       return { name: cleanName(String(f.name ?? "fichier")), bytes: new Uint8Array(buf) };
     }
@@ -290,7 +290,7 @@ export async function downloadMedia(
     if (parsed.kind === "lesson-doc") {
       const f = pickFile(lesson.homeworkDocuments, parsed.di, parsed.fileId);
       if (!f) throw new MediaProxyError("media not found", "not_found");
-      const buf = Buffer.from(await withDeadline(f.data(), "download"));
+      const buf = Buffer.from(await withDeadline(f.data(), "download", timeoutMs));
       logger?.(`media -> ok ${buf.length} bytes`);
       return { name: cleanName(String(f.name ?? "fichier")), bytes: new Uint8Array(buf) };
     }
@@ -303,7 +303,7 @@ export async function downloadMedia(
     const files = typeof content?.files === "function" ? content.files() : [];
     const f = pickFile(files, parsed.di, parsed.fileId);
     if (!f) throw new MediaProxyError("media not found", "not_found");
-    const buf = Buffer.from(await withDeadline(f.data(), "download"));
+    const buf = Buffer.from(await withDeadline(f.data(), "download", timeoutMs));
     logger?.(`media -> ok ${buf.length} bytes`);
     return { name: cleanName(String(f.name ?? "fichier")), bytes: new Uint8Array(buf) };
   } catch (err) {

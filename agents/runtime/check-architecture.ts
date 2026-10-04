@@ -1,5 +1,5 @@
 // check-architecture.ts — garde-fous I1/I2/I3/I5 (+I4 secrets LLM). I6/I7 = tests/review, pas scannables en regex.
-// I1 android sans hôte Pronote/ENT — FP: .md ignorés, commentaires /* */ et // ignorés. ponytail: plafond regex, upgrade dependency-cruiser phase 1.
+// I1 android sans hôte Pronote — FP: .md ignorés, commentaires /* */ et // ignorés. ponytail: plafond regex, upgrade dependency-cruiser phase 1.
 // I2 unique PronoteHttpClient, seul accès réseau — FP: commentaires ignorés, fetch hors Pronote ignoré (exige hôte+réseau même ligne OU URL Pronote + réseau). ponytail: plafond regex, upgrade AST phase 1.
 // I3 domain sans sqlite/HTTP — FP: block comments, javadoc *, imports multi-lignes ([^;]* couvre \n). ponytail: plafond regex, upgrade AST/dependency-cruiser.
 // I4 secrets dans server/ai refusés — commentaires ignorés. ponytail: doublon volontaire avec check-secrets, upgrade gitleaks.
@@ -42,7 +42,7 @@ function grep(files: string[], re: RegExp): string[] {
 
 let fail: string[] = [];
 
-// I1 : Android sans URL/hôte Pronote/ENT
+// I1 : Android sans URL/hôte Pronote
 const pronoteHost = /pronote|index-education|ent\.(ac-|cas|nevers)|cas\./i;
 const i1 = androidFiles.filter((f) => {
   if (f.endsWith(".md")) return false; // docs légitimes ignorées
@@ -52,7 +52,7 @@ const i1 = androidFiles.filter((f) => {
     return false;
   }
 });
-if (i1.length) fail.push(`I1: android référence Pronote/ENT: ${i1.join(", ")}`);
+if (i1.length) fail.push(`I1: android référence Pronote: ${i1.join(", ")}`);
 
 // I2 : un seul PronoteHttpClient, seul à parler à Pronote
 const clients = grep(serverFiles, /class PronoteHttpClient/);

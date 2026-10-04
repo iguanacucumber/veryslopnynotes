@@ -33,25 +33,36 @@ interface TokenStore {
     fun clear()
 }
 
-class EncryptedTokenStore(context: Context) : TokenStore {
-    private val prefs: SharedPreferences by lazy {
-        val appCtx = context.applicationContext
-        try {
-            val masterKey = MasterKey.Builder(appCtx)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-            EncryptedSharedPreferences.create(
-                appCtx,
-                PREFS,
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-            )
-        } catch (_: Exception) {
-            // Fallback privé (chiffré OS) si Keystore indisponible en test.
-            appCtx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        }
+/**
+ * UN point de construction des preferences CHIFFREES pour tout le process
+ * (bearer d'appareil, clé LLM) : MasterKey AES256-GCM + EncryptedSharedPrefs,
+ * avec repli privé si le Keystore ne répond pas (previews, tests JVM).
+ * Deux copies de ce bloc divergeraient (schéma de chiffrement différent entre le
+ * jeton et la clé), donc une seule fonction, un seul schéma.
+ * ponytail: repli `MODE_PRIVATE` non chiffré seulement quand le Keystore est
+ * indisponible — un environnement de test n'a pas de hardware. Upgrade: refuser
+ * d'écrire plutôt que d'écrire en clair si le Keystore manque sur un appareil.
+ */
+internal fun encryptedPrefs(context: Context, name: String): SharedPreferences {
+    val appCtx = context.applicationContext
+    return try {
+        val masterKey = MasterKey.Builder(appCtx)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        EncryptedSharedPreferences.create(
+            appCtx,
+            name,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+        )
+    } catch (_: Exception) {
+        appCtx.getSharedPreferences(name, Context.MODE_PRIVATE)
     }
+}
+
+class EncryptedTokenStore(context: Context) : TokenStore {
+    private val prefs: SharedPreferences by lazy { encryptedPrefs(context, PREFS) }
 
     override fun save(deviceId: String, tokenHash: String, token: String) {
         require(deviceId.isNotBlank()) { "deviceId vide" }

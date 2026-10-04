@@ -1,5 +1,5 @@
 // e2e messagerie #80 (parité Papillon, onglet Discussions).
-// Zéro réseau réel, zéro .env.local, zéro secret : store seedé + client Pronote
+// Zéro réseau réel, zéro credential serveur, zéro secret : store seedé + client Pronote
 // injecté. Parcours complet : store -> GET /v1/discussions (+ messages,
 // destinataires) -> réponse / création / lu-non-lu / suppression CONFIRMÉS par
 // l'app (I7) -> invalidation de cache via l'événement EXISTANT.
@@ -16,6 +16,7 @@ import { createHandler } from "../../server/api/router";
 import { pairedDevice } from "../unit/fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { isApiErrorBody } from "../../server/api/errors";
+import { syntheticAccountId, syntheticQr, syntheticSessionCredentials } from "../unit/fixtures/pronote";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
 import { PronoteSessionStore } from "../../server/integrations/pronote-sessions";
 import { PronoteWriteError } from "../../server/domain/ports";
@@ -28,23 +29,16 @@ import {
   writableDiscussion,
   writes,
 } from "../unit/fixtures/discussions";
-import { syntheticAccountId, syntheticEntKind, syntheticPassword, syntheticUsername } from "../unit/fixtures/pronote";
 
-const creds = {
-  accountId: syntheticAccountId,
-  username: syntheticUsername,
-  password: syntheticPassword,
-  entKind: syntheticEntKind,
-};
+const creds = syntheticSessionCredentials;
 
 async function handlerWithClient(options: { tab?: boolean } = {}) {
   const client = syntheticDiscussionsClient({ tab: options.tab, threads: [writableDiscussion("d-fake-1")] });
   const sessions = new PronoteSessionStore({
-    pronoteUrl: "https://example.test/pronote/eleve.html",
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     clientFactory: (async () => client) as never,
   });
-  await sessions.authenticate({ ...creds, entKind: "ninegate" });
+  await sessions.authenticate({ ...creds });
   const reader = new PronoteClientReader({ sessions });
   // Depuis 0.4.0 les routes #80 exigent le bearer d'un device appairé.
   const { pairing, auth } = pairedDevice();
@@ -155,11 +149,10 @@ describe("e2e messagerie #80", () => {
     resetDiscussionWrites();
     const client = syntheticDiscussionsClient();
     const sessions = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       clientFactory: (async () => client) as never,
     });
-    await sessions.authenticate({ ...creds, entKind: "ninegate" });
+    await sessions.authenticate({ ...creds });
     const reader = new PronoteClientReader({ sessions });
     const page = await reader.getDiscussions(syntheticAccountId);
     expect(page.items.__untrusted).toBe(true);
@@ -178,6 +171,6 @@ describe("e2e messagerie #80", () => {
       .replyToDiscussion(syntheticAccountId, "d-fake-1", "Coucou")
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(PronoteWriteError);
-    expect((err as PronoteWriteError).code).toBe("ent_unavailable");
+    expect((err as PronoteWriteError).code).toBe("pronote_unavailable");
   });
 });

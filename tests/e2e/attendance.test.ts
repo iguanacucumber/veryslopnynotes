@@ -6,6 +6,7 @@ import { isApiErrorBody } from "../../server/api/errors";
 import { isAttendanceResponse, isPunishmentsResponse } from "../../shared/contracts/api";
 import { isAbsenceRecord, isPunishment } from "../../shared/contracts/models";
 import { CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
+import { syntheticAccountId, syntheticQr, syntheticSessionCredentials } from "../unit/fixtures/pronote";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
 import { PronoteSessionStore } from "../../server/integrations/pronote-sessions";
 import type { Untrusted } from "../../server/domain/ports";
@@ -17,18 +18,12 @@ import {
   syntheticClientWithoutAttendance,
   syntheticPunishments,
 } from "../unit/fixtures/attendance";
-import { syntheticAccountId, syntheticEntKind, syntheticPassword, syntheticUsername } from "../unit/fixtures/pronote";
 
 // e2e vie scolaire (#77) : store seedé -> GET /v1/attendance + /v1/punishments ->
 // compteurs par période. Zéro réseau (store mémoire + client injecté), zéro
 // secret, aucun LLM sur le chemin (données structurées seules, I7).
 
-const creds = {
-  accountId: syntheticAccountId,
-  username: syntheticUsername,
-  password: syntheticPassword,
-  entKind: syntheticEntKind,
-};
+const creds = syntheticSessionCredentials;
 
 const SEED_PERIODS = [
   { id: "p-1", name: "Trimestre 1", start: "2026-09-01T00:00:00.000Z", end: "2026-11-30T23:59:59.000Z" },
@@ -99,10 +94,9 @@ describe("e2e vie scolaire (#77)", () => {
   test("reader : page structurée bornée, Untrusted, aucune fuite de session", async () => {
     const logs: string[] = [];
     const sessions = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       clientFactory: (async () => syntheticAttendanceClient()) as never,
     });
-    await sessions.authenticate({ ...creds, entKind: "ninegate" });
+    await sessions.authenticate({ ...creds });
     const reader = new PronoteClientReader({ sessions, logger: (m) => logs.push(m) });
     const page = await reader.getAttendance(syntheticAccountId);
     const items: Untrusted<AbsenceRecord[]> = page.items;
@@ -116,16 +110,15 @@ describe("e2e vie scolaire (#77)", () => {
     const sanctions = await reader.getPunishments(syntheticAccountId);
     expect(sanctions.items.value.every(isPunishment)).toBe(true);
     const joined = logs.join("\n");
-    expect(joined).not.toContain(syntheticPassword);
-    expect(joined).not.toContain(syntheticUsername);
+    expect(joined).not.toContain(syntheticQr.jeton);
+    expect(joined).not.toContain(syntheticQr.login);
   });
 
   test("reader : établissement sans vie scolaire = listes vides (200 côté API)", async () => {
     const sessions = new PronoteSessionStore({
-      pronoteUrl: "https://example.test/pronote/eleve.html",
       clientFactory: (async () => syntheticClientWithoutAttendance()) as never,
     });
-    await sessions.authenticate({ ...creds, entKind: "ninegate" });
+    await sessions.authenticate({ ...creds });
     const reader = new PronoteClientReader({ sessions });
     expect((await reader.getAttendance(syntheticAccountId)).items.value).toEqual([]);
     expect((await reader.getPunishments(syntheticAccountId)).items.value).toEqual([]);

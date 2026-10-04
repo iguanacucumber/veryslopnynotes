@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: veryslopnynotes API
-  version: 0.5.0
+  version: 0.7.0
   description: Contrats app <-> serveur. Source de vérité (phase 1, issue #4). Miroir de shared/contracts/*.ts.
 # Porte d'authentification UNIQUE : le bearer d'un device appaire est exige sur
 # TOUTE route (lectures ET ecritures). Seules les quatre routes declarees
@@ -64,9 +64,10 @@ paths:
     post:
       operationId: setup
       # Route ouverte : SEULE réponse qui porte le secret du device. Authentifie
-      # le compte de l'établissement (QR de l'app Pronote/ENT ou identifiants
-      # ENT) PUIS émet le credential — l'app n'a plus besoin de l'appairage
-      # QR+PIN au premier lancement.
+      # le compte de l'établissement par le QR affiché par son application Pronote
+      # PUIS émet le credential — l'app n'a plus besoin de l'appairage
+      # QR+PIN au premier lancement. Le serveur ne détient AUCUN credential :
+      # tout ce qui s'authentifie vient de l'app, ici ou sur chaque appel.
       security: []
       requestBody:
         required: true
@@ -91,7 +92,7 @@ paths:
         '501':
           description: Serveur sans session Pronote branchée.
         '502':
-          description: ENT/Pronote injoignable (`ent_unreachable`).
+          description: Pronote injoignable (`school_unreachable`).
   /v1/grades:
     get:
       operationId: listGrades
@@ -457,7 +458,7 @@ paths:
       operationId: getMedia
       description: >-
         Proxy serveur d'une ref opaque (photo de profil, piece jointe). Aucune
-        adresse Pronote/ENT ne sort cote app (I1) ; le serveur resout et stream
+        adresse Pronote ne sort cote app (I1) ; le serveur resout et stream
         les octets. Reponse binaire (image ou fichier), pas de JSON.
       parameters:
         - name: ref
@@ -833,12 +834,12 @@ components:
             Jamais journalisé, jamais re-servi par une autre route.
     SetupRequest:
       type: object
-      required: [deviceName, schoolUrl, ent]
+      required: [deviceName, schoolUrl, qr, pin]
       description: >-
-        Compte de l'établissement + preuve de détention. Au moins une méthode
-        complète : `qr` + `pin` (QR affiché par l'app Pronote/ENT), sinon
-        `username` + `password`. Le QR prime quand les deux sont présents : ce
-        sont deux connexions Pronote exclusives, pas deux étapes.
+        Preuve de détention du compte de l'établissement : le `qr` affiché par
+        l'app Pronote (`login` + `jeton` chiffrés) et son `pin` (clé de
+        déchiffrement). Méthode UNIQUE — aucun identifiant n'est accepté, le
+        serveur n'en détient aucun (0.7.0).
       properties:
         deviceName: { type: string, maxLength: 256 }
         schoolUrl:
@@ -847,9 +848,6 @@ components:
           description: >-
             Adresse de l'établissement. Doit être un hôte PUBLIC (le serveur
             appelle cette adresse : filtrée avant toute sortie réseau).
-        ent: { type: string, maxLength: 32, description: 'Type ENT/CAS. Seul `ninegate` est implémenté.' }
-        username: { type: string, maxLength: 256 }
-        password: { type: string, maxLength: 256, writeOnly: true }
         qr: { $ref: '#/components/schemas/SetupQr' }
         pin: { type: string, maxLength: 64, writeOnly: true }
     SetupQr:
@@ -956,10 +954,15 @@ components:
         source: { type: string, maxLength: 200 }
     HomeworkGenerateRequest:
       type: object
-      required: [question, sources]
+      required: [question, sources, apiKey]
+      description: >-
+        0.7.0 : `apiKey` est la clé du fournisseur LLM, envoyée par l'app à
+        chaque appel. Le serveur n'en détient aucune — elle part dans l'en-tête
+        Authorization de l'appel fournisseur, et n'est ni loggée ni persistée.
       properties:
         question: { type: string, maxLength: 2000 }
         sources: { type: array, maxItems: 8, items: { $ref: '#/components/schemas/HomeworkSource' } }
+        apiKey: { type: string, maxLength: 512, writeOnly: true }
     HomeworkGenerateResponse:
       type: object
       required: [status, sources]
@@ -1138,7 +1141,7 @@ components:
           pattern: '^photo:[A-Za-z0-9._-]{1,150}$'
           description: >-
             Ref opaque resolue par /v1/media. Une URL y est invalide par contrat :
-            l'app ne voit jamais d'adresse Pronote/ENT (I1).
+            l'app ne voit jamais d'adresse Pronote (I1).
         hasKids: { type: boolean, description: Compte parent (HAVE_KIDS cote app). }
         kids: { type: array, maxItems: 8, items: { $ref: '#/components/schemas/ChildAccount' } }
     MeResponse:
@@ -1218,7 +1221,7 @@ components:
           items: { $ref: '#/components/schemas/AttachmentRef' }
           description: >-
             Refs opaques resolues par /v1/media ; une URL y est invalide par
-            contrat (l'app ne voit jamais d'adresse Pronote/ENT, I1).
+            contrat (l'app ne voit jamais d'adresse Pronote, I1).
     Discussion:
       type: object
       required: [id, subject, participants, updatedAt]
@@ -1229,7 +1232,7 @@ components:
           type: array
           maxItems: 20
           items: { type: string, maxLength: 100 }
-        unreadCount: { type: integer, minimum: 0, maximum: 999, description: Absent = non publie par l'ENT. }
+        unreadCount: { type: integer, minimum: 0, maximum: 999, description: Absent = non publie par l'établissement. }
         lastMessageAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     DiscussionsResponse:

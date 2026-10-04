@@ -108,7 +108,7 @@ describe("unit android cantine (#81)", () => {
   });
 
   test("état vide propre : aucun menu, cache ancien, texte libre", () => {
-    // Module cantine absent de l'ENT -> [] : onglet masqué, aucun texte inventé.
+    // Module cantine absent de l'établissement -> [] : onglet masqué, aucun texte inventé.
     expect(tsCanteenWeek(JSON.stringify({ menus: [] })).days).toEqual([]);
     // Cache antérieur à la route : pas de crash, pas de valeur inventée.
     expect(tsCanteenWeek("{}").days).toEqual([]);

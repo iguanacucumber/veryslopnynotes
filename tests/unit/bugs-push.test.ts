@@ -65,16 +65,17 @@ describe("bugs push", () => {
   // 1. CRITIQUE : un provider qui ne livre RIEN résout sans erreur -> `sent`
   //    incrémenté -> le job se croit notifié alors que la push est perdue.
   test("BUG: push comptée comme envoyée alors que le provider ne livre rien (noop / provider symbolique) — le job rapporte un succès alors que la notification est perdue", async () => {
-    const sansConfig = createPushProvider({}); // pas de PUSH_* => NoopPushProvider
+    const sansConfig = createPushProvider(null); // aucune config injectée => Noop
     const resNoop = await notifyGradeEvents([gradeEvent(grade("g1"))], DEVICES, sansConfig);
     expect(resNoop.sent).toBe(0);
 
-    // Même défaut chez HttpPushProvider quand PUSH_PROVIDER n'est pas une URL :
+    // Même défaut chez HttpPushProvider quand le provider n'est pas une URL :
     // il log « skip » et résout, donc l'appelant compte une livraison.
     const symbolique = createPushProvider({
-      PUSH_PROVIDER: "webpush",
-      PUSH_VAPID_PUBLIC_KEY: "PUB-FAKE",
-      PUSH_VAPID_PRIVATE_KEY: "PRIV-FAKE",
+      provider: "webpush",
+      vapidPublicKey: "PUB-FAKE",
+      vapidPrivateKey: "PRIV-FAKE",
+      subject: "mailto:push@example.invalid",
     });
     const resSymbolique = await notifyGradeEvents([gradeEvent(grade("g1"))], DEVICES, symbolique);
     expect(resSymbolique.sent).toBe(0);

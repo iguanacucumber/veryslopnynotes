@@ -5,7 +5,7 @@ import type { SyncSink, SyncSnapshot, SyncSource } from "../../server/jobs/sync"
 import { notifySyncResult } from "../../server/jobs/notify";
 import type { GradePushSender } from "../../server/jobs/notify";
 
-// e2e grades (sans réseau, sans .env.local) : sync delta phase 5 → push.
+// e2e grades (sans réseau, sans credential serveur) : sync delta phase 5 → push.
 // Premier sync silencieux, nouvelle note → push par device, correction → push.
 // Aucun LLM sur le chemin (données structurées seules, I7).
 

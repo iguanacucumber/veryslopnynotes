@@ -3,15 +3,10 @@
 // répond) ; elle envoie ici tout ce qui identifie l'établissement, et reçoit le
 // jeton de device UNE SEULE FOIS, exactement comme l'appairage QR+PIN.
 //
-// Deux méthodes, jamais jouées ensemble :
-//   • `qr`         — le QR affiché par l'app Pronote/ENT (login + jeton + Pin).
-//                     Porte sa propre preuve de détention du compte : elle prime.
-//   • `credentials` — identifiants EduConnect/ENT.
-//
-// Pourquoi pas les deux à la suite : ce sont deux connexions PRONOTE complètes
-// et exclusives. Enchaîner une SSO puis un `qrcodeLogin` sur le même compte ne
-// ferait que tuer la première session. Le serveur retient donc le QR s'il est
-// fourni, sinon les identifiants — et ne consomme qu'une tentative.
+// UNE méthode : le QR affiché par l'app Pronote (login + jeton + pin). Il porte
+// sa propre preuve de détention du compte, donc le serveur n'a besoin d'aucun
+// credential : rien n'est lu dans l'environnement, rien n'est persisté. Le `pin`
+// est la clé de déchiffrement du QR, pas un code à 6 chiffres.
 //
 // Codes de rejets distincts et ACTIONNABLES (jamais un 401 : un 401 déconnecte
 // l'app alors qu'il s'agit de ce que l'utilisateur vient de saisir). Les
@@ -29,7 +24,7 @@ export type SetupFailure =
   | "throttled"
   | "qr_rejected"
   | "login_refused"
-  | "ent_unreachable";
+  | "school_unreachable";
 
 export type SetupResult =
   | { readonly ok: true; readonly device: Device; readonly token: string; readonly accountId: string }
@@ -47,18 +42,12 @@ export interface SetupDeps {
    */
   readonly existingAccountId?: () => string | null;
   /**
-   * Session ouverte → l'appelant memorise les identifiants (renewal, #118) puis
-   * warms le snapshot, HORS du chemin critique : le jeton ne doit pas dépendre
-   * d'une relecture complète (I6 : ne pas annoncer un refresh qui n'a pas eu lieu).
-   * Reçoit les credentials pour qu'aucun mot de passe ne soit reconstruit ailleurs.
+   * Session ouverte → l'appelant mémorise le QR (renewal, #118) puis warms le
+   * snapshot, HORS du chemin critique : le jeton ne doit pas dépendre d'une
+   * relecture complète (I6 : ne pas annoncer un refresh qui n'a pas eu lieu).
+   * Reçoit les credentials pour qu'aucun QR ne soit reconstruit ailleurs.
    */
   readonly onOpened?: (accountId: string, credentials: PronoteCredentials) => void;
-  /**
-   * URL d'établissement ÉPINGLÉE par l'exploitant (`PRONOTE_URL`). Fournie, le
-   * client ne peut pas rediriger ce serveur vers une autre école. Absente (null
-   * ou undefined) = le serveur accueille l'URL saisie au setup.
-   */
-  readonly allowedSchoolUrl?: string | null;
   /** Plafond d'échecs (anti-bruit hors ligne). Défaut : jeton neuf à chaque route. */
   readonly throttle?: SetupThrottle;
   readonly logger?: (message: string) => void;
@@ -82,9 +71,9 @@ function toFailure(err: PronoteAuthError): SetupFailure {
       return "login_refused";
     case "network":
     case "timeout":
-    case "ent_unavailable":
-      return "ent_unreachable";
-    // `session_expired` pendant une ouverture = l'ENT a refermé la session
+    case "pronote_unavailable":
+      return "school_unreachable";
+    // `session_expired` pendant une ouverture = Pronote a refermé la session
     // aussitôt : pour l'utilisateur c'est un échec d'authentification.
     default:
       return "login_refused";
@@ -129,22 +118,6 @@ export function isPublicSchoolUrl(raw: string): boolean {
 }
 
 /**
- * Même établissement que l'URL épinglée par l'exploitant (`PRONOTE_URL`) :
- * même schéma + hôte + chemin (barre finale ignorée). Une URL illisible des
- * deux côtés ne correspond jamais — un refus doit être le cas par défaut.
- */
-export function sameSchool(candidate: string, pinned: string): boolean {
-  try {
-    const a = new URL(candidate);
-    const b = new URL(pinned);
-    const path = (u: URL): string => u.pathname.replace(/\/+$/, "");
-    return a.protocol === b.protocol && a.host === b.host && path(a) === path(b);
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Plafond d'échecs par fenêtre, GLOBAL (le serveur est mono-compte et Nu
  * backend n'expose pas l'IP distante au handler, donc pas de clé par IP). Il
  * n'existe que pour rendre le refus bruyant hors ligne impossible à monter en
@@ -163,7 +136,7 @@ export class SetupThrottle {
     private readonly now: () => number = Date.now,
   ) {}
 
-  /** Trop d'échecs récents = refus AVANT de toucher l'ENT (aucune tentative). */
+  /** Trop d'échecs récents = refus AVANT de toucher Pronote (aucune tentative). */
   blocked(): boolean {
     const cutoff = this.now() - this.windowMs;
     while (this.failures.length > 0 && (this.failures[0] as number) <= cutoff) this.failures.shift();
@@ -176,24 +149,18 @@ export class SetupThrottle {
   }
 }
 
-/** Le QR prime sur les identifiants : jamais les deux dans la même session. */
+/**
+ * Le QR EST la méthode : `credentialsOf` ne fait que renommer les champs (l'API
+ * dit `schoolUrl`, le provider attend `pronoteUrl`, I1). Aucune valeur n'est
+ * calculée, aucune n'est lue ailleurs : le credential du compte est celui que
+ * l'app a envoyé, tel quel.
+ */
 export function credentialsOf(request: SetupRequest): {
-  /** Interne : l'API dit `schoolUrl`, le provider attend `pronoteUrl` (I1). */
   readonly pronoteUrl: string;
-  readonly username: string;
-  readonly password: string;
-  readonly entKind: string;
-  readonly qr?: PronoteQr;
-  readonly pin?: string;
+  readonly qr: PronoteQr;
+  readonly pin: string;
 } {
-  const useQr = request.qr !== undefined && request.pin !== undefined;
-  return {
-    pronoteUrl: request.schoolUrl,
-    username: useQr ? "" : (request.username ?? ""),
-    password: useQr ? "" : (request.password ?? ""),
-    entKind: useQr ? "" : request.ent,
-    ...(useQr ? { qr: request.qr, pin: request.pin } : {}),
-  };
+  return { pronoteUrl: request.schoolUrl, qr: request.qr, pin: request.pin };
 }
 
 export class SetupService {
@@ -202,7 +169,6 @@ export class SetupService {
   private readonly existingAccountId: () => string | null;
   private readonly onOpened: (accountId: string, credentials: PronoteCredentials) => void;
   private readonly throttle: SetupThrottle;
-  private readonly allowedSchoolUrl: string | null;
   private readonly logger: (message: string) => void;
 
   constructor(deps: SetupDeps) {
@@ -211,7 +177,6 @@ export class SetupService {
     this.existingAccountId = deps.existingAccountId ?? (() => null);
     this.onOpened = deps.onOpened ?? (() => {});
     this.throttle = deps.throttle ?? new SetupThrottle();
-    this.allowedSchoolUrl = (deps.allowedSchoolUrl ?? "").trim() || null;
     this.logger = deps.logger ?? (() => {});
   }
 
@@ -222,33 +187,25 @@ export class SetupService {
     }
 // Garde-fou AVANT toute sortie réseau : une URL d'établissement non
     // publique ne part jamais vers Pronote (le serveur n'est pas un proxy).
-    if (!isPublicSchoolUrl(request.schoolUrl) || (request.qr?.url !== undefined && !isPublicSchoolUrl(request.qr.url))) {
+    if (!isPublicSchoolUrl(request.schoolUrl) || (request.qr.url !== undefined && !isPublicSchoolUrl(request.qr.url))) {
       this.logger("setup -> refus bad_url");
-      return { ok: false, failure: "bad_url" };
-    }
-    // L'exploitant a épinglé un établissement dans `PRONOTE_URL` : c'est son
-    // autorité sur « quelle école ce serveur parle à ». Le client ne peut alors
-    // pas rediriger les identifiants vers une autre. Sans cette ligne, une
-    // route ouverte devient un relais d'authentification vers un ENT arbitraire
-    // depuis l'IP du serveur — le pire scénario pour un compte scolaire.
-    if (this.allowedSchoolUrl !== null && !sameSchool(request.schoolUrl, this.allowedSchoolUrl)) {
-      this.logger("setup -> refus bad_url (hors etablissement configure)");
       return { ok: false, failure: "bad_url" };
     }
     if (this.throttle.blocked()) {
       this.logger("setup -> refus throttled");
       return { ok: false, failure: "throttled" };
     }
-    // Session déjà ouverte au démarrage (identifiants de l'env) : le compte
-    // école est déjà là, on rend le jeton sans rejouer une connexion.
+    // Session déjà ouverte (setup rejoué) : le compte école est déjà là, on rend
+    // le jeton sans rejouer une connexion — une 2e connexion ferait tomber le
+    // mono-compte (`currentAccountId()` = null dès deux sessions).
     const already = this.existingAccountId();
     if (already !== null) {
       this.logger("setup -> jeton emis (session deja ouverte)");
       return { ok: true, ...this.issueToken(), accountId: already };
     }
-    // Clé de session : empreinte du `login` du QR, sinon du login ENT. Jamais
-    // l'identité en clair (elle n'apparaît qu'en hash dans logs/snapshots/SSE).
-    const accountId = accountIdFrom(request.qr?.login ?? request.username ?? "");
+    // Clé de session : empreinte du `login` du QR. Jamais l'identité en clair
+    // (elle n'apparaît qu'en hash dans logs/snapshots/SSE).
+    const accountId = accountIdFrom(request.qr.login);
     const credentials: PronoteCredentials = { accountId, ...credentialsOf(request) };
     try {
       await this.sessions.authenticate(credentials);

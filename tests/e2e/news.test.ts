@@ -1,5 +1,5 @@
 // e2e actualités établissement #79 (parité Papillon, onglet Actualités).
-// Zéro réseau réel, zéro .env.local : store seed + createHandler en mémoire.
+// Zéro réseau réel, zéro credential serveur : store seed + createHandler en mémoire.
 // Couvre le parcours complet : store -> GET /v1/news -> garde-fou -> miroir app
 // (parse + vide propre) -> SSE NewsUpdated -> repli cache hors-ligne.
 import { describe, expect, test } from "bun:test";
