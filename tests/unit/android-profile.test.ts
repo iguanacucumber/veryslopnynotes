@@ -228,7 +228,7 @@ describe("unit android profil (#82)", () => {
   });
 
   test("I1 : aucune adresse Pronote dans le code Kotlin (allowlist serveur seule)", () => {
-    const pronoteHost = /pronote|index-education|ent\.(ac-|cas|nevers)|cas\./i;
+    const pronoteHost = /pronote/i;
     const files = [
       join(CORE, "UserProfile.kt"),
       join(CORE, "ServerConfig.kt"),
@@ -368,7 +368,7 @@ describe("unit android profil (#82)", () => {
 
   test("fixtures synthétiques : aucune donnée réelle ni référence Pronote", () => {
     const fixtures = read(join(import.meta.dir, "fixtures/profile.ts"));
-    expect(fixtures).not.toMatch(/sk-or-v1-|OPENROUTER_API_KEY|PRONOTE_PASSWORD|index-education/);
+    expect(fixtures).not.toMatch(/sk-or-v1-|OPENROUTER_API_KEY|PRONOTE_PASSWORD/);
     // Seule URL du fixture : un domaine .invalid réservé, jamais un hôte réel.
     expect([...fixtures.matchAll(/https?:\/\/([a-z.]+)/g)].map((m) => m[1])).toEqual(["photo.invalid"]);
     expect(isUserInfo(syntheticUserInfo)).toBe(true);

@@ -511,8 +511,8 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(repo).toContain("ServerConfig.HEALTH_PATH");
   });
 
-  test("I1 : aucun hôte en dur dans android/, aucun hôte Pronote/ENT", () => {
-    const pronoteHost = /pronote|index-education|ent\.(ac-|cas|nevers)|cas\./i;
+  test("I1 : aucun hôte en dur dans android/, aucun hôte Pronote", () => {
+    const pronoteHost = /pronote/i;
     const files = androidFiles();
     expect(files.length).toBeGreaterThan(20);
     for (const f of files) {

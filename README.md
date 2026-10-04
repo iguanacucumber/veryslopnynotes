@@ -220,8 +220,8 @@ vérifiée »), jamais un faux vert. Prérequis et installation : `android/READM
   d'établissement (il venait de l'URL d'ambiance, qui n'existe plus). Résiduel assumé : un **nom
   DNS** pointant sur une IP privée passe le filtre littéral (rebinding). À fermer quand le serveur-exposed grandit : résolution DNS + épinglage de
   l'IP résolue, ou liste blanche d'hôtes.
-- Connexion par le QR de l'établissement uniquement (`qrcodeLogin`). Aucun identifiant, aucun
-  SSO tiers : un établissement qui n'expose qu'un portail passe par son application.
+- Connexion par le QR de l'établissement uniquement (`qrcodeLogin`) : aucun identifiant n'est
+  saisi, nulle part. Un établissement qui n'expose que son portail passe par son application.
 - Onglets Pronote réellement publiés par l'établissement : les capacités ne sont jamais devinées,
   donc un onglet non observé vaut onglet absent et **est masqué**. Inversement, des capacités non
   déterminées (`capabilities: null`, lecture en échec) ne masquent rien.

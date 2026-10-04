@@ -41,7 +41,7 @@ aucune feature métier, aucun toucher `server/` métier, `android/` métier,
 
 ## 3. Vérifs I1-I7
 
-- I1 android sans hôte Pronote/ENT : `make architecture-test` OK (6→9 tests
+- I1 android sans hôte Pronote : `make architecture-test` OK (6→9 tests
   après ajout, 0 fail). `android/` scanné, `.md` ignorés, commentaires strip.
 - I2 unique PronoteHttpClient : 1 classe seule, aucun fetch direct hors
   client (même-ligne OU URL+réseau). Test FP/TP OK.
