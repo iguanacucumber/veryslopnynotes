@@ -16,16 +16,15 @@
 // champ requis de plus sur /v1/pairing/confirm, et les routes protégé exigent
 // désormais ce credential (401 pour une app 0.3.0 qui ne sait pas le lire).
 // 0.5.0 (#118) : `POST /v1/setup` — route OUVERTE qui authentifie le compte
-// école (QR de l'établissement OU identifiants Pronote) et rend le jeton de device
+// école (QR de l'établissement + son pin) et rend le jeton de device
 // une seule fois. Add-only : les 31 routes existantes ne changent pas de forme.
 // Cassant pour une app 0.4.0 : elle ignore la route (elle continue
 // l'appairage QR+PIN, toujours ouvert) mais ne bénéficie pas du setup.
-// 0.6.0 : plus d'ENT, plus de SSO — la connexion est un login Pronote direct
-// (identifiants de l'établissement) ou le `qrcodeLogin` du QR. Cassant :
-// `SetupRequest.ent` DISPARU (une app 0.5.0 qui l'envoie est simplement ignorée,
-// le setup marche toujours) et surtout le code d'erreur `ent_unreachable`
-// devient `school_unreachable` (502) — une app 0.5.0 lit ce 502 comme un code
-// inconnu et n'affiche donc aucune phrase actionnable.
+// 0.6.0 : le type de portail d'établissement sort du contrat — `SetupRequest.ent`
+// DISPARU (une app 0.5.0 qui l'envoie est simplement ignorée, le setup marche
+// toujours) et le code d'erreur `ent_unreachable` (502) devient
+// `school_unreachable` — une app 0.5.0 lit ce 502 comme un code inconnu et
+// n'affiche donc aucune phrase actionnable.
 // 0.7.0 : ZÉRO credential côté serveur. Le serveur ne lit plus aucun secret
 // d'environnement : `SetupRequest` est QR-ONLY (`qr` + `pin` requis, plus de
 // `username`/`password`) et `HomeworkGenerateRequest` porte désormais la clé

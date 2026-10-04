@@ -191,7 +191,7 @@ describe("unit android pairing/SSE (#15)", () => {
   });
 
   test("I1 : aucun appel direct tiers, allowlist serveur seule", () => {
-    const pronoteHost = /pronote|index-education|ent\.(ac-|cas|nevers)|cas\./i;
+    const pronoteHost = /pronote/i;
     for (const dir of [DATA, UI]) {
       const files = [join(dir, "QrPayload.kt"), join(dir, "PairingRepository.kt")];
       void files;

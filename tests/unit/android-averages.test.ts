@@ -102,7 +102,7 @@ describe("unit android moyennes (#74)", () => {
       expect(tsGeneralAverage(JSON.stringify(payload))).not.toBeNull();
     }
     expect(AVERAGE_ALGORITHMS).toEqual(["subject", "weighted", "median"]);
-    // 0.7.0 : plus d'ENT ni credential serveur (`SetupRequest` QR-only, clé
+    // 0.7.0 : plus aucun credential serveur (`SetupRequest` QR-only, clé
     // LLM envoyée par l'app). Aucun impact sur le rapport de moyennes, d'où le
     // simple re-pin de version.
     expect(CONTRACTS_VERSION).toBe("0.7.0");
