@@ -13,6 +13,9 @@ import fr.veryslopnynotes.data.SubjectPrefs
 import org.json.JSONObject
 
 // Préférences matière #83 : UN résolveur, utilisé par notes, devoirs et EDT.
+// #137 : `subjectColorHex` entre en scène — la couleur de matière ne sert plus
+// seulement à une légende, elle colore la CARTE de cours de l'EDT, et une
+// matière sans prefs reçoit une couleur dérivée de son nom.
 // org.json = SDK Android (aucune dépendance ajoutée). Le payload reste une
 // donnée structurée du contrat : on lit le champ `subject`, jamais de texte
 // libre (I6). Aucune prefs = nom de matière seul, l'affichage existant ne
@@ -62,6 +65,59 @@ fun colorFromHex(hex: String?): Color? {
     if (hex == null || !COLOR_RE.matches(hex)) return null
     val v = hex.substring(1).toLong(16)
     return Color(0xFF000000L or v)
+}
+
+/**
+ * Somme de hachage STABLE d'un nom de matière : `fold(31)` sur les caractères,
+ * et non `String.hashCode()`.
+ *
+ * `hashCode` est spécifié par le JDK donc stable d'une JVM à l'autre, mais le
+ * miroir TS de `tests/unit/android-timetable.test.ts` doit le recalculer à la
+ * main ; un `fold` de sept lignes se réécrit dans n'importe quelle langue,
+ * donc les deux implémentations ne peuvent pas diverger.
+ */
+private fun stableHash(value: String): Long {
+    var acc = 7L
+    for (c in value) acc = (acc * 31L + c.code.toLong()) and 0xFFFFFFFFL
+    return acc
+}
+
+/**
+ * Couleur de repli d'une matière SANS préférences : une couleur de la palette
+ * du thème (#134), choisie par le nom — donc STABLE d'un écran à l'autre, d'une
+ * session à l'autre, et identique pour deux matières homonymes.
+ *
+ * AVANT #137, une matière sans prefs n'avait aucune couleur : la carte de cours
+ * n'existait pas et l'EDT affichait une chaîne en encre de matière, ou le gris
+ * si la matière n'avait pas de prefs du tout. Une couleur DÉRIVÉE du nom vaut
+ * mieux qu'une palette tirée au sort à chaque composition : la colonne
+ * vertébrale d'un cours de Maths doit être la même partout.
+ *
+ * La liste vient du thème, donc aucune couleur n'est inventée ici, et les
+ * 20 entrées ont déjà été MESURÉES par `android-papillon-theme.test.ts`
+ * (`subjectContent` y repasse 4.5:1 sur les 20).
+ *
+ * ponytail: hachage + modulo sur la palette existante, pas une dérive
+ * HSL/HSV du nom (qui produirait des pastels non mesurés). Upgrade: une couleur
+ * dérivée par matière vraiment propre — les prefs, qui existent déjà.
+ */
+fun derivedSubjectHex(subject: String): String {
+    val name = subject.trim().lowercase()
+    // `stableHash` est masqué sur 32 bits non négatifs, donc le modulo est
+    // toujours dans la palette : fonction TOTALE, aucun repli à inventer.
+    val index = (stableHash(name) % SubjectPalette.size).toInt()
+    return SubjectPalette[index]
+}
+
+/**
+ * Couleur de matière affichée : les préférences d'abord, sinon une couleur
+ * dérivée du nom. Une couleur de prefs INVALIDE (le contrat la borne, mais un
+ * cache ancien peut contenir autre chose) est ignorée comme si elle manquait.
+ */
+fun subjectColorHex(prefs: List<SubjectPrefs>, subject: String): String {
+    val prefHex = subjectStyle(prefs, subject).colorHex
+    if (prefHex != null && COLOR_RE.matches(prefHex)) return prefHex
+    return derivedSubjectHex(subject)
 }
 
 // Légende matières : couleur + emoji + libellé perso, repli nom seul.
