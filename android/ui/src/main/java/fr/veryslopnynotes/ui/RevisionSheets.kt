@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,7 +37,6 @@ fun RevisionSheetsScreen(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Fiches révision")
         when (state) {
             "idle" -> Text(if (sheets.isEmpty()) "Aucune fiche. Générée auto à l'annonce d'un DS." else "${sheets.size} fiche(s) prête(s).")
             "loading" -> Text("Chargement…")

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Card
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -71,8 +72,7 @@ fun AssignmentsScreen(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Tâches")
-        Text("Devoirs de la semaine")
+        Text("Devoirs de la semaine", style = MaterialTheme.typography.titleMedium)
         if (isStale) Text("Données hors-ligne (périmé).")
         if (notice != null) Text(notice)
         when {

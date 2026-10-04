@@ -312,11 +312,20 @@ describe("unit capacités (#87)", () => {
     expect(repo).toContain("CachePolicy.CAPABILITIES -> ServerConfig.capabilitiesUrl(baseUrl)");
     expect(repo).toContain("fun requestSyncRefresh(");
     // UI : les entrées conditionnées + le bouton de détection.
+    // #135 : l'écran Profil (entrées conditionnées) est sorti d'AppNav.kt ;
+    // la détection et l'accès aux compétences restent dans la coquille.
     const nav = readFileSync(join(UI, "AppNav.kt"), "utf8");
-    expect(nav).toContain("Capabilities.visible(capabilities, Capabilities.NEWS)");
-    expect(nav).toContain("Capabilities.visible(capabilities, Capabilities.MENUS)");
-    expect(nav).toContain("Capabilities.visible(capabilities, Capabilities.ATTENDANCE)");
+    const profile = readFileSync(join(UI, "ProfileScreen.kt"), "utf8");
+    expect(profile).toContain("Capabilities.visible(capabilities, Capabilities.NEWS)");
+    expect(profile).toContain("Capabilities.visible(capabilities, Capabilities.MENUS)");
+    expect(profile).toContain("Capabilities.visible(capabilities, Capabilities.ATTENDANCE)");
     expect(nav).toContain("Capabilities.visible(capabilities, Capabilities.EVALUATIONS)");
     expect(nav).toContain("fun detectCapabilities()");
+    // #135 : une seule entrée par capacité — les trois « Visible » du profil
+    // étaient dupliqués trois fois (accident de copier-coller).
+    for (const cap of ["NEWS", "MENUS", "ATTENDANCE"]) {
+      expect({ cap, occurrences: profile.split(`Capabilities.visible(capabilities, Capabilities.${cap})`).length - 1 })
+        .toEqual({ cap, occurrences: 1 });
+    }
   });
 });
