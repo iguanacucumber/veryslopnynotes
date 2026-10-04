@@ -804,8 +804,12 @@ describe("unit android EDT par jour (#137)", () => {
     expect(screen).toContain("stickyHeader");
     expect(screen).toContain("HorizontalPager(");
     expect(screen).toContain("rememberPagerState");
-    expect(screen).toContain("PullToRefreshContainer(");
-    expect(screen).toContain("nestedScroll(pullState.nestedScrollConnection)");
+    // #166 : le geste est là, mais par la brique de #143 — pas par
+    // `PullToRefreshContainer` de material3 1.2.1, qui peignait son disque au
+    // repos (voir le test dédié plus bas). Ces deux assertions REMPLACENT celles
+    // de #137 : même exigence (« l'écran sait tirer pour actualiser »), autre
+    // composant.
+    expect(screen).toContain("HomePullToRefresh(");
     // Les briques de #136, enfin adoptées par un écran.
     for (const brique of ["PapLoading(", "PapEmptyState(", "PapErrorState(", "PapStaleBanner(", "PapCourseCard(", "PapLunchCard(", "PapPill("]) {
       const trouvee = screen.includes(brique) || card.includes(brique);
@@ -849,7 +853,85 @@ describe("unit android EDT par jour (#137)", () => {
       });
     }
   });
+
+  // #166 : le disque gris au repos de l'onglet EDT.
+  //
+  // material3 1.2.1 n'a pas de `PullToRefreshBox` : l'écran #137 avait donc
+  // composé `PullToRefreshContainer` à la main. En 1.2.1 ce composable peint son
+  // disque de 40 dp INCONDITIONNELLEMENT — `.background(containerColor, shape)`
+  // n'est pas conditionné par le geste, seul `shadow(elevation)` l'est, via
+  // `showElevation = verticalOffset > 1f || isRefreshing` — et au repos
+  // `verticalOffset == 0f` donne `translationY = 0f - height` : le disque se
+  // dessinait à cheval sur le bandeau « périmé », au milieu de l'écran, sans
+  // qu'aucun geste n'ait jamais eu lieu. Le tirail est désormais celui de
+  // `HomePullToRefresh` (#143), la seule implémentation du dépôt.
+  test("#166 : plus aucun `PullToRefreshContainer` de material3 1.2.1 dans l'EDT", () => {
+    const screen = kotlinCode(readFileSync(join(UI, "TimetableWeek.kt"), "utf8"));
+    // Le composable 1.2.1, son état, et la connexion de défilement qu'il
+    // imposait : les trois ont disparu de l'écran.
+    for (const interdit of [
+      "PullToRefreshContainer",
+      "rememberPullToRefreshState",
+      "pullState",
+      "material3.pulltorefresh",
+      "nestedScroll",
+      "endRefresh",
+      "startRefresh",
+    ]) {
+      expect({ interdit, present: screen.includes(interdit) }).toEqual({ interdit, present: false });
+    }
+    // La brique partagée, elle, est là, et une seule fois.
+    expect(screen).toContain("HomePullToRefresh(");
+    expect((screen.match(/HomePullToRefresh\(/g) ?? []).length).toBe(1);
+    // Elle enveloppe l'ÉTAT ENTIER : l'écran vide disait « Tirez vers le bas pour
+    // actualiser » alors que la connexion de défilement n'était montée que dans
+    // la branche du pager — le geste y était un mensonge.
+    const debut = screen.indexOf("HomePullToRefresh(");
+    const fin = screen.indexOf("HorizontalPager(");
+    expect({ pagerApresLeTirail: fin > debut }).toEqual({ pagerApresLeTirail: true });
+    expect(screen).toMatch(/HomePullToRefresh\([\s\S]{0,400}when \{/);
+    // Et le geste déclenche bien la relecture, la brique faisant le reste.
+    expect(screen).toMatch(/HomePullToRefresh\(\s*refreshing = refreshing,\s*onRefresh = \{ refresh\(\) \}/);
+  });
+
+  test("#143 : la brique de tirail n' dessine rien tant que le geste n'a pas commencé", () => {
+    // La garantie que #166 achète en réutilisant la brique : l'indicateur est
+    // conditionné à l'état du geste. Sans ce `if`, une icône `primary` posée à
+    // `TopCenter` se verrait au repos — exactement le défaut du disque gris.
+    const pull = readFileSync(join(UI, "HomePullToRefresh.kt"), "utf8");
+    expect(pull).toContain("if (offset.value > 0f || refreshing) {");
+    // Le retour au repos est ANIMÉ (pas un retrait sec) et le geste est recallé
+    // au relâchement au-delà du seuil.
+    expect(pull).toContain("offset.animateTo(0f, tween(PULL_BACK_MS))");
+    expect(pull).toContain("val fire = pull >= triggerPx");
+    // L'overscroll natif est coupé, sinon Android 12+ consomme le rappel avant la
+    // connexion et le tirail ne se produirait jamais.
+    expect(pull).toContain("LocalOverscrollConfiguration provides null");
+    // #166 : `refreshing` est lu à jour. La connexion est mémorisée par
+    // `remember`, donc une capture directe `{ refreshing }` lisait la valeur de
+    // la PREMIÈRE composition : pendant une actualisation, `isRefreshing()`
+    // rendait `false` et le tirail pouvait déclencher une DEUXIÈME requête.
+    expect(pull).toContain("val latestRefreshing by rememberUpdatedState(refreshing)");
+    expect(pull).toContain("isRefreshing = { latestRefreshing }");
+    expect(pull).not.toContain("isRefreshing = { refreshing }");
+    // Une SEULE implémentation du tirail dans l'application : l'accueil ne
+    // garde pas la sienne à côté de celle de l'EDT.
+    const accueil = readFileSync(join(UI, "IndexScreen.kt"), "utf8");
+    expect(accueil).toContain("HomePullToRefresh(");
+    expect(kotlinCode(accueil)).not.toContain("NestedScrollConnection");
+  });
 });
+
+/** Source Kotlin sans ses commentaires : les KDoc NOMMENT les bugs corrigés, donc
+ *  une garde qui lit le texte brut confond le nom de la mauvaise pratique avec la
+ *  pratique. Même règle que le `code` local du test de #137. */
+function kotlinCode(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, "\n")
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
+    .join("\n");
+}
 
 // Libellé de semaine (miroir de timetableWeekLabel Kotlin).
 function tsWeekLabel(day: string): string {

@@ -360,6 +360,33 @@ is_locked() {
 # « Afficher plus » quand un widget est là, « Rien à afficher » quand la page
 # est vide.
 #
+# #166 — UN FRAGMENT PAR ÉTAT, sinon le témoin est de la donnée. Règle lue et
+# vérifiée dans `tests/unit/shot-harness.test.ts` : la liste doit contenir au
+# moins un libellé lisible dans l'état PLEIN **et** dans l'état SANS DONNÉE
+# (cache vide, échec réseau, établissement qui ne publie rien). Le défaut était
+# l'onglet Notes : « Moyennes par matière » ne sort que dans la branche qui a
+# des notes à montrer (`GradesScreen.kt`), donc hors ligne — sur un écran
+# parfaitement correct — la capture échouait :
+#
+#     shot : la route « grades » NON PROUVÉE (« Moyennes par matière » absent).
+#
+# Le même critère a été repassé sur les quinze : `calendar` (« semaine du »),
+# `tasks` (« Devoirs de la semaine »), `profile` (« Détecter les onglets »),
+# `settings`, `canteen`, `attendance`, `sanctions`, `messages`, `pairing`,
+# `alerts` et `competences` portent un titre de section ou un bouton rendu HORS
+# de la branche de donnée, donc ils tiennent sans donnée. `news` et `fiches` ont
+# un titre de barre du haut unique, ce qui suffit (cf. le test de condition).
+#
+# UN SEUL ÉTAT RESTE SANS TÉMOIN : la BRANCHE ERREUR de l'onglet Notes, où
+# `GradesBlankState` rend `PapErrorState` — le message vient de la couche data et
+# son seul libellé fixe est « Réessayer », que SEPT autres écrans rendent aussi
+# (Actualités, Cantine, Vie scolaire, Sanctions, Messages, Alertes sécurité,
+# Fiches révision). Le mettre ici transformerait une dérive de navigation vers
+# l'un d'eux en faux vert : titre « Notes » vu dans la barre d'onglets +
+# « Réessayer » vu dans le corps = succès trompeur. On préfère un témoin en
+# moins à une capture qui prouve autre chose que ce qu'on demande. Le message
+# d'échec nomme donc l'état sans donnée au lieu d'accuser la navigation.
+#
 # Correspondance par FRAGMENT (`grep -F`) : un nœud Compose porte la phrase
 # entière (« Prochain cours · Maths · 08:00 »), pas le mot isolé.
 #
@@ -369,7 +396,7 @@ is_locked() {
 ROUTE_WITNESSES='
 index|Accueil|Afficher plus;Rien à afficher
 calendar|EDT|semaine du
-grades|Notes|Moyennes par matière
+grades|Notes|Moyennes par matière;Aucune note en cache;Aucune note sur cette période;Aucune note trouvée
 tasks|Tâches|Devoirs de la semaine
 profile|Profil|Détecter les onglets
 settings|Réglages|Assistant devoirs
@@ -500,6 +527,17 @@ EOF
         printf "  Fragment(s) attendu(s) « %s » : %s.\n" \
             "$(printf '%s' "$fragments" | tr '\n' '|')" \
             "$([ -n "$fragment" ] && echo présent || echo ABSENT)" >&2
+        # #166 : titre présent + aucun fragment = l'écran est presque toujours
+        # dans un état SANS DONNÉE (cache vide, échec réseau), pas un écran
+        # refait. On le dit, sinon on envoie chercher une panne de navigation
+        # inexistante — et on rappelle que la liste doit porter une variante par
+        # état.
+        if [ "$title_seen" = présent ]; then
+            printf "  Le titre est là, le fragment non : l'écran est sans DONNÉE (cache\n" >&2
+            printf "  vide, échec réseau, établissement qui ne publie rien) — donc soit son\n" >&2
+            printf "  texte a été refait, soit la liste n'a plus de variante pour cet\n" >&2
+            printf "  état. Cf. ROUTE_WITNESSES, où chaque état a sa variante.\n" >&2
+        fi
     fi
     printf "  L'écran est peut-être CORRECT : son texte a été refait.\n" >&2
     printf "  Marqueur : agents/runtime/shot.sh:%s (table ROUTE_WITNESSES) ;\n" "$(witness_line "$ROUTE")" >&2
