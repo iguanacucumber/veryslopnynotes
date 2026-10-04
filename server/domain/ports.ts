@@ -17,7 +17,7 @@ export interface PronoteSession {
 
 /**
  * QR Pronote de l'établissement (#118) : c'est le code affiché par l'application
- * Pronote / l'ENT pour autoriser un nouvel appareil. `login` + `jeton` valent
+ * Pronote pour autoriser un nouvel appareil. `login` + `jeton` valent
  * preuve de détention du compte SANS mot de passe : ils ne sont donc jamais
  * persistés ni journalisés, seulement transmis au client Pronote.
  */
@@ -28,31 +28,31 @@ export interface PronoteQr {
   readonly url?: string;
 }
 
+/**
+ * Credentials d'une session. Le serveur n'en détient AUCUN de façon permanente
+ * (0.7.0) : tout vient de l'app, à chaque appel. Ces valeurs vivent le temps
+ * d'une session en mémoire, jamais sur disque ni en log.
+ */
 export interface PronoteCredentials {
   readonly accountId: string;
-  readonly username: string;
-  readonly password: string;
-  /** Type ENT/CAS injecté (ex. valeur fournie par humain, jamais en dur). */
-  readonly entKind: string;
   /**
-   * URL Pronote de CETTE session. Absente = celle du store (issue #118 : le
-   * setup l'envoie, l'env ne l'a plus à rendre obligatoire). Sur l'API le champ
+   * URL Pronote de CETTE session, envoyée par l'app au setup (sur l'API le champ
    * s'appelle `schoolUrl` : le vocabulaire de l'établissement ne doit pas
-   * atteindre le client (I1).
+   * atteindre le client, I1).
    */
-  readonly pronoteUrl?: string;
+  readonly pronoteUrl: string;
   /**
-   * Mode QR : présent = connexion par le QR de l'établissement, qui remplace
-   * les identifiants (pronotets `qrcodeLogin`). `pin` = code de validation
-   * associé au QR, absent = pas de 2FA demandée par l'établissement.
+   * Seul moyen de preuve de détention : le QR affiché par l'app Pronote
+   * (pronotets `qrcodeLogin`). `pin` = code de validation associé au QR, clé de
+   * déchiffrement de `login`/`jeton`.
    */
-  readonly qr?: PronoteQr;
-  readonly pin?: string;
+  readonly qr: PronoteQr;
+  readonly pin: string;
 }
 
 export type PronoteAuthErrorCode =
   | "invalid_credentials"
-  | "ent_unavailable"
+  | "pronote_unavailable"
   | "network"
   | "timeout"
   | "session_expired"
@@ -71,12 +71,14 @@ export class PronoteAuthError extends Error {
 export interface PronoteProvider {
   authenticate(credentials: PronoteCredentials): Promise<PronoteSession>;
   // Lectures phase 2 (issue #8) : voir PronoteReader ci-dessous.
-  // Session réutilisée par accountId. Re-auth : voir
-  // server/integrations/pronote-auth.ts (invalidation + nouvel
-  // authenticate après changement IP).
+  // Session réutilisée par accountId. Re-auth après changement d'IP : c'est
+  // `PronoteSessionStore` (pronote-sessions.ts) qui invalide le jeton et
+  // rappelle `authenticate` avec le QR mémorisé — 0.7.0 n'a plus de
+  // `pronote-auth.ts` : le QR EST la preuve de détention, il n'y a plus rien
+  // à renvoyer à l'utilisateur.
 }
 
-export type PronoteReadErrorCode = "session_expired" | "ent_unavailable" | "network" | "timeout";
+export type PronoteReadErrorCode = "session_expired" | "pronote_unavailable" | "network" | "timeout";
 
 export class PronoteReadError extends Error {
   readonly code: PronoteReadErrorCode;
@@ -97,7 +99,7 @@ export type PronoteWriteErrorCode =
   | "unsupported"
   | "not_found"
   | "session_expired"
-  | "ent_unavailable"
+  | "pronote_unavailable"
   | "network"
   | "timeout";
 
@@ -241,14 +243,18 @@ export function isPedagogicResource(v: unknown): v is PedagogicResource {
     (r["origin"] === "lesson-content" || r["origin"] === "homework-file") &&
     // Même contrainte que les PJ de devoir : une `ref` est une référence opaque
     // résolue par le proxy serveur, jamais une URL (`://`, `//`, `data:`,
-    // UNC). Sans ce contrôle, une adresse Pronote/ENT sortait du contrat.
+    // UNC). Sans ce contrôle, une adresse Pronote sortait du contrat.
     isOpaqueMediaRef(r["ref"], PEDAGOGIC_REF_MAX_CHARS)
   );
 }
 
 export interface LLMProvider {
-  /** Génère texte/JSON depuis données déjà marquées. Sans outils, sans réseau. */
-  generate(prompt: { system: string; data: Untrusted<string>[] }): Promise<string>;
+  /**
+   * Génère texte/JSON depuis données déjà marquées. Sans outils, sans réseau.
+   * `apiKey` = credential de l'APP, fournie à chaque appel : le serveur n'en
+   * détient aucune (0.7.0). Absente = l'adaptateur refuse (jamais d'appel nu).
+   */
+  generate(prompt: { system: string; data: Untrusted<string>[] }, apiKey?: string): Promise<string>;
 }
 
 export interface ManualProvider {

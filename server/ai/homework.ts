@@ -51,7 +51,9 @@ export async function generateHomework(
     markExternal(`Question eleve (DONNEE) :\n${input.question}`),
     ...input.sources.map((s) => markExternal(`Source : ${s.source}\nContenu (DONNEE) :\n${s.text}`)),
   ];
-  const raw = await generateGuardedJson<unknown>(provider, SYSTEM_HOMEWORK_JSON, data, nonce);
+  // La clé de l'appelant (`input.apiKey`, `writeOnly`) est relayée à l'adaptateur
+  // telle quelle : elle n'entre pas dans le prompt et n'est jamais journalisée.
+  const raw = await generateGuardedJson<unknown>(provider, SYSTEM_HOMEWORK_JSON, data, nonce, input.apiKey);
   if (!isHomeworkGenerateResponse(raw)) throw new Error("réponse devoirs invalide (schéma)");
   const result = raw as HomeworkGenerateResponse;
   if (result.status === "ok" && result.sources.length === 0) {

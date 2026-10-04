@@ -5,7 +5,7 @@
 // à passer par server/ai/untrusted.ts avant tout LLM.
 // Pagination : limit clampée 1..100 (défaut 50), cursor opaque, nextCursor null = fin.
 // Erreurs typées sans secret : session_expired (re-auth via authenticate),
-// ent_unavailable, network, timeout.
+// pronote_unavailable, network, timeout.
 // ponytail: fetch natif via PronoteHttpClient uniquement, pas de nouvelle dép.
 import { isAssignment, isGrade, isTimetableEntry } from "../../shared/contracts/models";
 import type { Assignment, Grade, TimetableEntry } from "../../shared/contracts/models";
@@ -48,7 +48,7 @@ function toReadError(err: unknown, what: string): PronoteReadError {
     if (err.code === "session_expired") return new PronoteReadError(`${what} session expired`, "session_expired");
     if (err.code === "timeout") return new PronoteReadError(`${what} timeout`, "timeout");
     if (err.code === "network") return new PronoteReadError(`${what} network`, "network");
-    return new PronoteReadError(`${what} ent unavailable`, "ent_unavailable");
+    return new PronoteReadError(`${what} pronote unavailable`, "pronote_unavailable");
   }
   if (err instanceof PronoteHttpError) {
     if (err.code === "timeout") return new PronoteReadError(`${what} timeout`, "timeout");
@@ -56,9 +56,9 @@ function toReadError(err: unknown, what: string): PronoteReadError {
     if (err.code === "http_4xx" && (err.status === 401 || err.status === 403)) {
       return new PronoteReadError(`${what} session expired`, "session_expired");
     }
-    return new PronoteReadError(`${what} ent unavailable`, "ent_unavailable");
+    return new PronoteReadError(`${what} pronote unavailable`, "pronote_unavailable");
   }
-  return new PronoteReadError(`${what} ent unavailable`, "ent_unavailable");
+  return new PronoteReadError(`${what} pronote unavailable`, "pronote_unavailable");
 }
 
 function extractItems(raw: unknown, keys: string[]): unknown[] | null {
@@ -94,7 +94,7 @@ export class PronoteLectureProvider implements PronoteReader {
 
   constructor(options: PronoteLectureProviderOptions) {
     if (!options.client) throw new Error("client requis (PronoteHttpClient injecté)");
-    if (!options.sessions) throw new Error("sessions requises (PronoteAuthProvider injecté)");
+    if (!options.sessions) throw new Error("sessions requises (PronoteSessionStore injecté)");
     this.client = options.client;
     this.sessions = options.sessions;
     this.logger = options.logger ?? (() => {});
@@ -112,13 +112,13 @@ export class PronoteLectureProvider implements PronoteReader {
     const extra: Record<string, string> = {};
     if (options?.from !== undefined) {
       if (typeof options.from !== "string" || Number.isNaN(Date.parse(options.from))) {
-        throw new PronoteReadError("timetable ent unavailable", "ent_unavailable");
+        throw new PronoteReadError("timetable pronote unavailable", "pronote_unavailable");
       }
       extra["from"] = options.from;
     }
     if (options?.to !== undefined) {
       if (typeof options.to !== "string" || Number.isNaN(Date.parse(options.to))) {
-        throw new PronoteReadError("timetable ent unavailable", "ent_unavailable");
+        throw new PronoteReadError("timetable pronote unavailable", "pronote_unavailable");
       }
       extra["to"] = options.to;
     }
@@ -165,8 +165,8 @@ export class PronoteLectureProvider implements PronoteReader {
     }
     const arr = extractItems(raw, [what, "items", "data", "entries"]);
     if (!arr) {
-      this.logger(`${what} -> error ent_unavailable`);
-      throw new PronoteReadError(`${what} ent unavailable`, "ent_unavailable");
+      this.logger(`${what} -> error pronote_unavailable`);
+      throw new PronoteReadError(`${what} pronote unavailable`, "pronote_unavailable");
     }
     const valid = guard ? arr.filter(guard) : (arr as T[]);
     this.logger(`${what} -> ok ${valid.length}`);

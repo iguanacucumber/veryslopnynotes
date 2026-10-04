@@ -1,5 +1,5 @@
 // Profil + accueil #82 (parité Papillon onglets index + profile).
-// Zéro réseau, zéro .env.local, fixtures 100 % synthétiques.
+// Zéro réseau, zéro credential serveur, fixtures 100 % synthétiques.
 // Couvre : contrat UserInfo (photoRef = réf opaque, JAMAIS une URL), garde-fou
 // du reader (défensif, page vide), routes /v1/me + /v1/media, multi-compte
 // parent, déconnexion (purge cache + session), mode anonyme, widgets d'accueil.
@@ -211,7 +211,7 @@ describe("unit profil #82", () => {
       undefined,
       null,
       async () => {
-        throw new MediaProxyError("échec interne 10.0.0.1", "ent_unavailable");
+        throw new MediaProxyError("échec interne 10.0.0.1", "pronote_unavailable");
       },
     );
     const res = await handler(

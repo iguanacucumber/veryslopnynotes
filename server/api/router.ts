@@ -66,7 +66,7 @@ import { MediaProxyError } from "../infrastructure/media-proxy";
 
 /**
  * #82 : résolution serveur d'une réf opaque (photo de profil, pièce jointe).
- * L'app n'a jamais d'adresse Pronote/ENT (I1, règle d'or média) : elle appelle
+ * L'app n'a jamais d'adresse Pronote (I1, règle d'or média) : elle appelle
  * /v1/media et le serveur télécharge via la session appairée.
  * ponytail: fonction injectée, null = 501 explicite (aucun accès direct depuis
  * le routeur). Upgrade: câblage sur PronoteSessionStore au démarrage serveur.
@@ -265,8 +265,8 @@ function setupError(failure: SetupFailure): Response {
       return apiError("qr_rejected", "QR refuse par l'etablissement");
     case "login_refused":
       return apiError("login_refused", "identifiants refuses");
-    case "ent_unreachable":
-      return apiError("ent_unreachable", "ENT injoignable");
+    case "school_unreachable":
+      return apiError("school_unreachable", "Pronote injoignable");
   }
 }
 

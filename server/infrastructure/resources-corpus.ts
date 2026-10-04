@@ -1,7 +1,7 @@
 // Ressources pédagogiques → corpus manuels (issue #84).
-// Ordre : 1) session Pronote (getResources : contenus cours + PJ, via SSO),
-// 2) fallback Playwright (scrape manuel éditeur, MANUAL_* via .env.local).
-// Verdict live 2026-10-02 : manuels numériques liés = liens externes SSO
+// Ordre : 1) session Pronote (getResources : contenus cours + PJ),
+// 2) fallback Playwright (scrape manuel éditeur, compte fourni par l'appelant).
+// Verdict live 2026-10-02 : manuels numériques liés = liens externes de portail
 // (9 titres vus : Easy as Pie, Indice Maths, Let's Meet Up, etc.), aucune API
 // Pronote directe -> récupération via session impossible ; seul le fallback
 // éditeur externe (avec MANUAL_* humain) peut les scraper.
@@ -12,8 +12,7 @@
 import type { ManualDoc } from "./manuals";
 import { truncateManualText } from "./manuals";
 import type { PedagogicResource, PronoteReader } from "../domain/ports";
-import { loadManualsConfig } from "./manuals-config";
-import type { ManualsConfig } from "./manuals-config";
+import type { ManualsConfig } from "./manuals-scrape";
 import { isPlaywrightAvailable, scrapeManuals } from "./manuals-scrape";
 
 export type ResourceOrigin = "pronote-session" | "playwright-fallback";
@@ -85,8 +84,9 @@ export async function collectResourceCorpus(options: {
       log("resources session -> error, fallback playwright");
     }
   }
-  // 2) Fallback Playwright (manuels éditeurs, MANUAL_* via .env.local).
-  const manuals = options.manuals ?? loadManualsConfig() ?? null;
+  // 2) Fallback Playwright (manuels éditeurs). 0.7.0 : config INJECTÉE, jamais
+  //    lue dans l'environnement — sans elle, le fallback est simplement sauté.
+  const manuals = options.manuals ?? null;
   const startUrl = (options.startUrl ?? "").trim();
   if (manuals && startUrl && (await isPlaywrightAvailable())) {
     try {

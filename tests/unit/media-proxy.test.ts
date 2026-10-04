@@ -1,4 +1,4 @@
-// Tests media-proxy (issue #84). Mocks session SSO : aucun réseau, aucun secret.
+// Tests media-proxy (issue #84). Mocks session Pronote : aucun réseau, aucun secret.
 // Refs stables vérifiées : lesson-doc, lesson-content-file, homework-file.
 import { describe, expect, test } from "bun:test";
 import { downloadMedia, MediaProxyError } from "../../server/infrastructure/media-proxy";

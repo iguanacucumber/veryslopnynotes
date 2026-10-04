@@ -18,22 +18,22 @@ Verrouille stack, contrats, garde-fous avant tout code métier.
 ## Phase 2 — Pronote provider go/no-go (P0, dépend phase 1)
 Prouve l'accès Pronote via IP serveur uniquement (jamais depuis téléphone, I1).
 - `PronoteHttpClient` unique (`server/integrations/PronoteHttpClient.ts`, I2).
-- Auth ENT/CAS + sessions par `accountId` (`PronoteProvider::authenticate`, ports.ts).
+- Auth Pronote (login direct ou QR) + sessions par `accountId` (`PronoteProvider::authenticate`, ports.ts).
 - Lectures : notes, devoirs, EDT (Grades, Assignments, etc.).
 - Décision go/no-go ADR-002 + arbitrage humain si négatif.
-- Humain requis : URL établissement + type ENT/CAS, comptes test (`.env.local`), choix VPS IP fixe ou acceptation ré-auth.
+- Humain requis : QR + PIN d'un compte établissement (désormais saisis dans l'app, plus de `.env.local`), choix VPS IP fixe ou acceptation ré-auth.
 - Dépendances : phase 1. Bloque : phases 3, 5, 7, 9, 10.
 
 ## Phase 3 — server core (P0, dépend phases 1-2)
 API + stockage + appairage, domaine pur (I3 : `server/domain/` sans SQLite ni HTTP).
 - HTTP API depuis contrats phase 1 (`server/api/`, `server/infrastructure/`).
 - `StorageProvider` SQLite via adapters (jamais importé par `server/domain/`).
-- Appairage QR+PIN (secrets en `.env.local`, jamais en repo).
+- Appairage QR+PIN (aucun secret serveur : le QR vient de l'app, mémoire seule).
 - Dépendances : phases 1, 2. Bloque : phases 4-10.
 
 ## Phase 4 — android core (P0, dépend phases 1, 3)
 App native Kotlin, parité Papillon (Pronote uniquement, design propre).
-- Un seul hôte allowlist = serveur (I1 : zéro URL Pronote/ENT dans `android/`).
+- Un seul hôte allowlist = serveur (I1 : zéro URL Pronote/portail dans `android/`).
 - Lecture hors-ligne + SSE vers serveur.
 - Appairage QR+PIN côté app.
 - Dépendances : phases 1, 3 (contrats + API). Bloque : phases 5, 7, 10 (e2e).
@@ -55,10 +55,10 @@ Pipeline IA : SOURCE → INGEST → NORMALIZE → VISUAL VALIDATION → SECURITY
 
 ## Phase 7 — notifications (P1, dépend phases 3-5)
 Push fiables, jamais déclenchées par sortie libre LLM (I7).
-- `PushProvider` (clés VAPID via `.env.local`, `send(deviceTokenHash, ...)`).
+- `PushProvider` (`send(deviceTokenHash, ...)`, config injectée par l'appelant — plus de clé VAPID côté serveur, donc push non configuré).
 - Alerte nouvelle note (push, zéro au premier sync).
 - Jobs détection DS/interro sur données structurées → push.
-- Humain requis : token push / clés VAPID (`.env.local`).
+- Humain requis : token push / clés VAPID — plus fournis au serveur (non configuré depuis 0.7.0).
 - Dépendances : phases 3, 5. Bloque : phase 10 (fiches push).
 
 ## Phase 8 — manuels (P2, dépend phases 3, 6)
@@ -66,14 +66,14 @@ Manuels scrapés + cités dans les corrigés (FEATURES.md).
 - Scrape Playwright (sessions locales, jamais commitées ; fixtures synthétiques).
 - `ManualProvider` + CHUNK/INDEX/RETRIEVE (pipeline phase 6).
 - Citation obligatoire des sources dans les corrigés.
-- Humain requis : comptes manuels + plateforme (`.env.local`, première connexion interactive).
+- Humain requis : comptes manuels + plateforme — plus fournis au serveur, scraping désactivé depuis 0.7.0.
 - Dépendances : phases 3, 6. Bloque : phase 9.
 
 ## Phase 9 — homework AI (P1, dépend phases 6, 8)
 Assistant devoirs sourcé cours + manuels, JSON validé, humanisé versionné (FEATURES.md).
 - GENERATE → VALIDATE → RENDER sur `Untrusted`, prompts sans secrets (I4).
 - Aucun effet métier via sortie libre LLM (I7 : confirmation app sinon).
-- Humain requis : clé OpenRouter + modèle (`.env.local`).
+- Humain requis : clé OpenRouter — désormais saisie dans l'app et envoyée à chaque appel ; modèle en constante de code.
 - Dépendances : phases 6, 8 (+ phase 2 pour données devoirs). Bloque : rien (phase 10 réutilise le pipeline).
 
 ## Phase 10 — revision sheets + hardening (P1, dépend phases 5-9)

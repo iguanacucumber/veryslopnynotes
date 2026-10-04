@@ -40,10 +40,10 @@ import fr.veryslopnynotes.data.isBoundedSchoolUrl
 import fr.veryslopnynotes.data.parseSchoolQr
 import fr.veryslopnynotes.data.probeHealthBlocking
 
-// Assistant de connexion (#120) : serveur -> compte EduConnect -> QR Pronote.
+// Assistant de connexion (#120) : serveur -> compte Pronote -> QR Pronote.
 // Un SEUL appel (POST /v1/setup) ouvre la session de l'établissement ET rend le
 // jeton d'appareil, là où il fallait avant coller du JSON obtenu au curl, retaper
-// un PIN, puis découvrir que l'ENT n'était même pas joignable.
+// un PIN, puis découvrir que l'établissement n'était même pas joignable.
 //
 // L'écran est aussi la destination du 401 (#113) : après un redémarrage serveur,
 // c'est lui qui rouvre la session ET le credential, pas l'ancien appairage.
@@ -236,9 +236,10 @@ fun ServerField(
 }
 
 /**
- * Étape 2 : l'URL de l'établissement + les identifiants EduConnect. Aucun mot de
- * passe n'est persisté côté app : il part dans le POST /v1/setup et n'en
- * ressort jamais (le serveur le garde en mémoire pour renouveler la session).
+ * Étape 2 : l'adresse de l'établissement, et basta. 0.7.0 : l'app ne saisit
+ * PLUS aucun identifiant — la seule preuve de détention est le QR de l'étape 3,
+ * que le serveur ne stocke pas (il le garde en mémoire le temps de la session,
+ * pour la renewal, et ne le journalise jamais).
  */
 @Composable
 private fun AccountStep(
@@ -251,7 +252,7 @@ private fun AccountStep(
         modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("Ton compte sur l'ENT")
+        Text("Ton établissement")
         OutlinedTextField(
             value = form.schoolUrl,
             onValueChange = { onChange(form.copy(schoolUrl = it)) },
@@ -260,37 +261,8 @@ private fun AccountStep(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        TextField2(
-            value = form.ent,
-            onValueChange = { onChange(form.copy(ent = it.trim())) },
-            label = "Type d'ENT",
-        )
-        OutlinedTextField(
-            value = form.username,
-            onValueChange = { onChange(form.copy(username = it)) },
-            label = { Text("Identifiant EduConnect") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = form.password,
-            onValueChange = { onChange(form.copy(password = it)) },
-            label = { Text("Mot de passe") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth(),
-        )
         error?.let { Text(it) }
-        if (form.hasCredentials) {
-            Button(
-                onClick = { onNext(SetupStep.QR) },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Continuer") }
-        }
-        // Établissement sans identifiants utilisables (compte QR seul, compte
-        // transmis par l'établissement) : on ne bloque pas sur une étape vide.
-        OutlinedButton(
+        Button(
             onClick = {
                 if (!isBoundedSchoolUrl(form.schoolUrl)) {
                     error = "Adresse de l'établissement absente : elle est obligatoire."
@@ -299,12 +271,12 @@ private fun AccountStep(
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-        ) { Text("J'ai seulement un QR") }
+        ) { Text("Continuer") }
     }
 }
 
 /**
- * Étape 3 : le QR affiché par l'application Pronote/ENT. `login` + `jeton` sont
+ * Étape 3 : le QR affiché par l'application Pronote. `login` + `jeton` sont
  * des blocs chiffrés dont la clé est le PIN : les deux sont donc nécessaires,
  * et le PIN est celui défini dans Pronote (pas un code à 6 chiffres imposé par
  * l'app). Le collage reste possible quand l'appareil n'a pas de caméra.
@@ -322,9 +294,6 @@ private fun QrStep(
     val qr = parseSchoolQr(form.qrRaw)
     val input = SetupInput(
         schoolUrl = form.schoolUrl,
-        ent = form.ent,
-        username = form.username,
-        password = form.password,
         qr = qr,
         pin = form.pin.trim(),
     )
@@ -360,44 +329,27 @@ private fun QrStep(
         )
         error?.let { Text(it) }
         if (form.state is PairingState.Error) Text(pairingStateLabel(form.state))
-        // QR + PIN = méthode complète. Sinon les identifiants de l'étape 2
-        // partent seuls : les deux ensemble sont deux sessions concurrentes.
-        if (qr != null && form.pin.isNotBlank() || form.hasCredentials) {
+        // QR + PIN = la méthode UNIQUE (0.7.0). Un des deux seul -> refus local,
+        // message actionnable, aucun appel réseau.
+        val pret = qr != null && form.pin.isNotBlank()
+        if (pret) {
             Button(
-                onClick = {
-                    if (qr == null && form.pin.isNotBlank()) {
-                        error = "QR illisible : rescane-le ou colle-le en JSON."
-                    } else if (qr != null && form.pin.isBlank()) {
-                        error = "Code PIN du QR obligatoire : il déchiffre le contenu scanné."
-                    } else {
-                        onSubmit(input)
-                    }
-                },
+                onClick = { onSubmit(input) },
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(if (busy) "Connexion…" else "Terminer") }
         } else {
-            Text("Il faut le QR + son PIN, ou les identifiants EduConnect de l'étape 2.")
+            Text(
+                when {
+                    qr == null && form.pin.isNotBlank() -> "QR illisible : rescane-le ou colle-le en JSON."
+                    qr != null -> "Code PIN du QR obligatoire : il déchiffre le contenu scanné."
+                    else -> "Il faut le QR affiché par ton application + son PIN."
+                },
+            )
         }
         SseStatusRow(state = form.sse, onConnect = onSseConnect, onDisconnect = onSseDisconnect)
         form.lastEventPreview?.let { preview -> Text("Dernier événement : $preview") }
     }
-}
-
-/** Champ texte court, factorisé (libellé + valeur + clavier). */
-@Composable
-private fun TextField2(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-    )
 }
 
 /** Miroir de SETUP_PIN_MAX_CHARS (shared/contracts/api.ts). */

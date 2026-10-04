@@ -21,7 +21,7 @@ export interface AssignmentActions {
   setAssignmentDone(accountId: string, assignmentId: string, done: boolean): Promise<Assignment>;
 }
 
-/** Port média : résolution d'une `ref` opaque en octets (session SSO serveur). */
+/** Port média : résolution d'une `ref` opaque en octets (session Pronote serveur). */
 export interface MediaActions {
   download(accountId: string, ref: string): Promise<MediaPayload>;
 }

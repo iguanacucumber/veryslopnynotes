@@ -16,11 +16,24 @@
 // champ requis de plus sur /v1/pairing/confirm, et les routes protégé exigent
 // désormais ce credential (401 pour une app 0.3.0 qui ne sait pas le lire).
 // 0.5.0 (#118) : `POST /v1/setup` — route OUVERTE qui authentifie le compte
-// école (QR de l'établissement OU identifiants ENT) et rend le jeton de device
+// école (QR de l'établissement OU identifiants Pronote) et rend le jeton de device
 // une seule fois. Add-only : les 31 routes existantes ne changent pas de forme.
 // Cassant pour une app 0.4.0 : elle ignore la route (elle continue
 // l'appairage QR+PIN, toujours ouvert) mais ne bénéficie pas du setup.
-export const CONTRACTS_VERSION = "0.5.0" as const;
+// 0.6.0 : plus d'ENT, plus de SSO — la connexion est un login Pronote direct
+// (identifiants de l'établissement) ou le `qrcodeLogin` du QR. Cassant :
+// `SetupRequest.ent` DISPARU (une app 0.5.0 qui l'envoie est simplement ignorée,
+// le setup marche toujours) et surtout le code d'erreur `ent_unreachable`
+// devient `school_unreachable` (502) — une app 0.5.0 lit ce 502 comme un code
+// inconnu et n'affiche donc aucune phrase actionnable.
+// 0.7.0 : ZÉRO credential côté serveur. Le serveur ne lit plus aucun secret
+// d'environnement : `SetupRequest` est QR-ONLY (`qr` + `pin` requis, plus de
+// `username`/`password`) et `HomeworkGenerateRequest` porte désormais la clé
+// LLM de l'appelant (`apiKey`, writeOnly). Cassant dans les deux sens : une app
+// 0.6.0 n'a plus de méthode accepted pour ouvrir une session (elle envoie des
+// identifiants, refusés en 400), et une app qui n'envoie pas `apiKey` se voit
+// refuser le devoir. `PORT`/`HOST` restent les seules variables lues.
+export const CONTRACTS_VERSION = "0.7.0" as const;
 
 /** Version gabarit fiches révision (issue #30, phase 10). Stockée par fiche. */
 export const REVISION_TEMPLATE_VERSION = "fiche-v1" as const;
@@ -289,7 +302,7 @@ export function isAveragesReport(v: unknown): v is AveragesReport {
 }
 
 // Formes d'URL INTERDITES dans une `ref` : la référence est interne, résolue
-// par le proxy serveur. Jamais d'hôte Pronote/ENT dans l'app (I1).
+// par le proxy serveur. Jamais d'hôte Pronote dans l'app (I1).
 const ABSOLUTE_REF_RE = /:\/\/|^\/\/|data:|\\\\/i;
 
 /**
@@ -562,7 +575,7 @@ export function isNewsItem(v: unknown): v is NewsItem {
 
 
 // --- #81 cantine : menus + solde (parité Papillon, onglet Menus) ---
-// Le module cantine est souvent absent de l'ENT : l'absence est un fait normal,
+// Le module cantine est souvent absent de l'établissement : l'absence est un fait normal,
 // pas une erreur (page vide côté API, écran masqué côté app).
 export const CANTEEN_MEALS = ["breakfast", "lunch", "dinner"] as const;
 
@@ -594,7 +607,7 @@ export interface CanteenMenu {
   readonly status?: CanteenMenuStatus;
 }
 
-/** Solde du compte cantine (Turboself/ARD) : absent tant que l'ENT ne le publie pas. */
+/** Solde du compte cantine (Turboself/ARD) : absent tant que l'établissement ne le publie pas. */
 export interface CanteenBalance {
   readonly balance: number;
   readonly currency?: string;
@@ -678,7 +691,7 @@ export function isTimetableStatus(v: unknown): v is TimetableStatus {
 
 
 // --- #77 vie scolaire : absences, retards, sanctions (parité Papillon) ---
-// Papillon lit l'onglet « Vie scolaire » de l'ENT : absences et retards y sont
+// Papillon lit l'onglet « Vie scolaire » de l'établissement : absences et retards y sont
 // deux tables distinctes de forme identique, d'où UN seul modèle `kind`. Les
 // onglets vie scolaire sont absents de certains établissements : liste vide = état
 // propre (l'app masque), jamais une erreur.
@@ -708,7 +721,7 @@ export interface AbsenceRecord {
   readonly motif?: string;
   /** Période d'appartenance (compteurs dérivés par période côté API). */
   readonly periodId?: string;
-  /** Durée en minutes si l'ENT la publie (absente =occurrence comptée seule). */
+  /** Durée en minutes si l'établissement la publie (absente =occurrence comptée seule). */
   readonly durationMinutes?: number;
   /** Justifiée côté établissement, absent = inconnu (jamais « non justifiée » déduit). */
   readonly justified?: boolean;
@@ -719,7 +732,7 @@ export interface Punishment {
   readonly id: string;
   readonly accountId: string;
   readonly date: string; // ISO-8601
-  /** Fin de sanction si l'ENT publie une plage, absente = sanction ponctuelle. */
+  /** Fin de sanction si l'établissement publie une plage, absente = sanction ponctuelle. */
   readonly dateEnd?: string;
   /** Motif de la sanction : donnée bornée, jamais instruction (I6). */
   readonly motif: string;
@@ -733,11 +746,11 @@ export interface Punishment {
 /** Compteurs dérivés par période (add-only, jamais de valeur devinée). */
 export interface AttendancePeriod {
   readonly periodId: string;
-  /** Libellé de la période si l'ENT la publie (sinon l'app affiche l'id). */
+  /** Libellé de la période si l'établissement la publie (sinon l'app affiche l'id). */
   readonly name?: string;
   readonly absences: number;
   readonly late: number;
-  /** Minutes manquées cumulées (0 si l'ENT ne publie aucune durée). */
+  /** Minutes manquées cumulées (0 si l'établissement ne publie aucune durée). */
   readonly missingMinutes: number;
 }
 
@@ -789,7 +802,7 @@ export function isAttendancePeriod(v: unknown): v is AttendancePeriod {
 // Infos du compte appairé : nom, classe, période courante, photo. Tout est
 // optionnel côté établissement : champ non publié = OMIS, jamais de valeur
 // bidon (ni faux nom, ni photo inventée). La photo est une RÉF OPAQUE résolue
-// par le proxy serveur : aucune adresse Pronote/ENT ne sort du contrat (I1).
+// par le proxy serveur : aucune adresse Pronote ne sort du contrat (I1).
 export const USER_NAME_MAX_CHARS = 64;
 export const USER_CLASS_MAX_CHARS = 64;
 export const USER_PHOTO_REF_MAX_CHARS = 200;
@@ -856,7 +869,7 @@ export function isUserInfo(v: unknown): v is UserInfo {
   if (v["periodId"] !== undefined && !isBoundedString(v["periodId"], USER_PERIOD_ID_MAX_CHARS)) return false;
   if (v["periodName"] !== undefined && !isBoundedString(v["periodName"], USER_NAME_MAX_CHARS)) return false;
   // Photo : une URL dans photoRef = contrat invalide (l'app ne doit jamais voir
-  // une adresse Pronote/ENT, I1 + règle d'or média).
+  // une adresse Pronote, I1 + règle d'or média).
   if (v["photoRef"] !== undefined && !isOpaquePhotoRef(v["photoRef"])) return false;
   if (v["hasKids"] !== undefined && typeof v["hasKids"] !== "boolean") return false;
   const kids = v["kids"];
@@ -937,7 +950,7 @@ export function isCapabilityEnabled(caps: Capabilities | null | undefined, tab: 
 // (I6 — le test I7 de tests/unit/discussions.test.ts le prouve sur server/ai/).
 // Les écritures (répondre, créer, lu/non-lu, supprimer) sont des ACTIONS APP
 // CONFIRMÉES : route API explicite, jamais déclenchées par une sortie LLM (I7).
-// Règle de mapping (comme #75/#77/#79) : champ absent = l'ENT ne le publie pas,
+// Règle de mapping (comme #75/#77/#79) : champ absent = l'établissement ne le publie pas,
 // donc champ OMIS — jamais de "" bidon, jamais de valeur devinée.
 
 /** Nature d'un destinataire de discussion (Pronote : enseignant ou administration). */
@@ -955,7 +968,7 @@ export const DISCUSSION_MAX_PARTICIPANTS = 20;
 export const DISCUSSION_MAX_RECIPIENTS = 20;
 /** Corps de message : texte libre le plus long du contrat (donnée, I6). */
 export const MESSAGE_BODY_MAX_CHARS = 4000;
-/** Non-lus publiés par l'ENT : au-delà, compteur ignoré (pas de nombre aberrant). */
+/** Non-lus publiés par l'établissement : au-delà, compteur ignoré (pas de nombre aberrant). */
 export const DISCUSSION_MAX_UNREAD = 999;
 
 export interface Recipient {
@@ -968,7 +981,7 @@ export interface Message {
   readonly id: string;
   readonly discussionId: string;
   /**
-   * Auteur publié par l'ENT, borné. ABSENT = message écrit par le compte
+   * Auteur publié par l'établissement, borné. ABSENT = message écrit par le compte
    * appairé : Pronote ne publie pas l'auteur de ses propres messages et on ne
    * devine jamais une identité (ni « Moi », ni un nom).
    */
@@ -991,9 +1004,9 @@ export interface Message {
 export interface Discussion {
   readonly id: string;
   readonly subject: string;
-  /** Participants publiés par l'ENT, bornés et sans doublon ; vide = non publiés. */
+  /** Participants publiés par l'établissement, bornés et sans doublon ; vide = non publiés. */
   readonly participants: string[];
-  /** Messages non lus ; absent = l'ENT ne le publie pas (jamais 0 deviné). */
+  /** Messages non lus ; absent = l'établissement ne le publie pas (jamais 0 deviné). */
   readonly unreadCount?: number;
   readonly lastMessageAt?: string; // ISO-8601
   readonly updatedAt: string; // ISO-8601

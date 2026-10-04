@@ -14,6 +14,8 @@ export async function handleHomeworkGenerate(
   req: Request,
   llm: LLMProvider | null,
 ): Promise<Response> {
+  // `llm` nul = adaptateur non branché (tests). Sinon la clé LLM vient de la
+  // requête : sans elle, l'adaptateur refuse l'appel (aucun credential serveur).
   if (!llm) return apiError("not_implemented", "assistant devoirs non configuré");
   let body: unknown;
   try {

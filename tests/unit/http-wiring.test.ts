@@ -74,13 +74,19 @@ function fakeReader(overrides: Record<string, unknown> = {}) {
   return { reader: { ...base, ...overrides } as never, calls };
 }
 
-const ENV = {
-  PORT: "0",
-  PRONOTE_URL: "https://example.invalid/pronote/eleve.html",
-  PRONOTE_USERNAME: "compte-test",
-  PRONOTE_PASSWORD: "motdepasse-synthetique",
-  PRONOTE_ENT_KIND: "ninegate",
-};
+// 0.7.0 : plus aucune variable de credential. Le serveur se construit sans env.
+
+/**
+ * 0.7.0 : plus aucun compte d'ambiance (aucun credential serveur). Un store qui
+ * déclare UN compte appairé = ce que le setup aurait produit. Zéro réseau.
+ */
+function pairedSessions(account: string | null = "acc-wiring") {
+  return {
+    currentAccountId: () => account,
+    async refreshSession(): Promise<void> {},
+    requireClient: () => ({}),
+  };
+}
 
 describe("composition serveur (http.ts)", () => {
   // Toute route hors appairage + /v1/health exige un device APPAIRÉ (0.4.0).
@@ -111,8 +117,8 @@ describe("composition serveur (http.ts)", () => {
     return { authorization: `Bearer ${token}` };
   }
 
-  test("env sans PRONOTE_URL : le serveur démarre quand même, lectures vides, écritures 501", async () => {
-    const app = createApp({ PORT: "3000" }, { reader: null, sessions: null });
+  test("sans store de session : le serveur démarre quand même, lectures vides, écritures 501", async () => {
+    const app = createApp({ reader: null, sessions: null });
     const health = await app.handler(new Request("http://127.0.0.1/v1/health"));
     expect(health.status).toBe(200);
     const auth = await paired(app);
@@ -134,7 +140,7 @@ describe("composition serveur (http.ts)", () => {
 
   test("refresh : snapshot alimenté par le reader, événements contractuels, 1re passe sans faux positif", async () => {
     const { reader, calls } = fakeReader();
-    const app = createApp(ENV, { reader, sessions: null });
+    const app = createApp({ reader, sessions: pairedSessions() as never });
     const auth = await paired(app);
     const res = await app.handler(
       new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: auth, body: "{}" }),
@@ -175,7 +181,7 @@ describe("composition serveur (http.ts)", () => {
         return { items: { __untrusted: true, value: [] }, nextCursor: null };
       },
     } as never;
-    const app = createApp(ENV, { reader, sessions: null });
+    const app = createApp({ reader, sessions: pairedSessions() as never });
     const auth = await paired(app);
     await app.handler(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", headers: auth, body: "{}" }));
     const second = await app.handler(
@@ -205,7 +211,7 @@ describe("composition serveur (http.ts)", () => {
 
   test("écriture confirmée : toggle et messagerie atteignent le reader, jamais le LLM", async () => {
     const { reader, calls } = fakeReader();
-    const app = createApp(ENV, { reader, sessions: null });
+    const app = createApp({ reader, sessions: pairedSessions() as never });
     const auth = await paired(app);
     const toggle = await app.handler(
       new Request("http://127.0.0.1/v1/assignments/toggle", {
@@ -240,7 +246,7 @@ describe("composition serveur (http.ts)", () => {
     const reader = {
       getGrades: async () => ({ items: { __untrusted: true, value: [] }, nextCursor: null }),
     } as never;
-    const app = createApp(ENV, { reader, sessions: null });
+    const app = createApp({ reader, sessions: pairedSessions() as never });
     const auth = await paired(app);
     const toggle = await app.handler(
       new Request("http://127.0.0.1/v1/assignments/toggle", {

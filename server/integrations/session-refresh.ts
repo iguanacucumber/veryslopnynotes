@@ -37,7 +37,7 @@ export class SessionRefreshError extends Error {
   }
 }
 
-/** Renewal fournie par l'appelant (login ENT/Pronote), jamais un secret ici. */
+/** Renewal fournie par l'appelant (login Pronote), jamais un secret ici. */
 export type SessionRenewer = (accountId: string) => Promise<void>;
 
 export interface SessionRefresherOptions {
@@ -133,7 +133,7 @@ export class SessionRefresher {
         return { refreshed: true, attempts };
       } catch (err) {
         last = err;
-        // Session morte / credentials refusés par l'ENT = inutile de
+        // Session morte / credentials refusés par l'établissement = inutile de
         // réessayer : l'app doit se ré-appairer. L'erreur remonte telle quelle,
         // jamais dégradée en échec retryable générique.
         if (isDefinitive(err)) {
@@ -199,7 +199,7 @@ function authCode(err: unknown): string {
 
 /**
  * Échecs DÉFINITIFS : un nouvel essai ne les changera pas. `session_expired`
- * (session morte) et `invalid_credentials` (ENT/CAS a refusé le couple
+ * (session morte) et `invalid_credentials` (Pronote a refusé le couple
  * identifiant/mot de passe) imposent un ré-appairage côté app, donc pas de
  * retry et pas de déclassement en erreur retryable.
  */

@@ -17,7 +17,7 @@
 //    nullabilité, types de retour, imports, résolution de symboles, elvis/`until` (autre défaut
 //    PR #114, invisible ici), toute sémantique d'expression.
 // ponytail: lecture mot à mot, pas de parser Kotlin ni de résolution de types ; un class-like
-//    sans corps (`class A : B`) est invisible. Upgrade: ktlint puis `make android-check`.
+//    sans corps (`class A : B`) est invisible. Upgrade: ktlint (le compilateur, lui, est déjàbranché : `make android-compile`).
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 

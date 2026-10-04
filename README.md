@@ -16,12 +16,12 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 
 | Domaine | État |
 |---|---|
-| Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.5.0`), miroir OpenAPI |
+| Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.7.0`), miroir OpenAPI |
 | Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (32 routes, 7 types d'événements) |
-| Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, assistant de connexion en 3 étapes (serveur → EduConnect → QR scanné), SSE |
-| Point d'entrée HTTP serveur (`make serve`, Docker) | Câblé : env → session Pronote → reader → snapshot → routes, ports d'écriture inclus |
-| Garde-fous sécurité (I1–I7) + tests | 546 tests verts, scan d'architecture et de secrets en CI locale |
-| Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'ENT = **vide propre** |
+| Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, assistant de connexion en 3 étapes (serveur → établissement → QR scanné + PIN), SSE, aide devoirs |
+| Point d'entrée HTTP serveur (`make serve`, Docker) | Câblé : setup (QR de l'app) → session Pronote → reader → snapshot → routes, ports d'écriture inclus. **Zéro credential serveur** |
+| Garde-fous sécurité (I1–I8) + tests | 613 tests verts, scan d'architecture et de secrets en CI locale |
+| Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'établissement = **vide propre** |
 
 ## Fonctionnalités
 
@@ -30,6 +30,9 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
   périodes (trimestres/semestres).
 - **Devoirs** — description, contenus de cours, pièces jointes, filtre par semaine,
   **toggle « fait » écrit dans Pronote** (action confirmée dans l'app, jamais déclenchée par l'IA).
+- **Aide devoirs (IA)** — bouton par devoir : corrigé sourcé ou refus motivé, sources = la
+  consigne et l'extrait de cours du devoir. La clé du fournisseur se saisit dans les réglages de
+  l'app (chiffrée) et part dans le corps de chaque demande : le serveur n'en détient aucune.
 - **EDT** — vue semaine, professeur, salle, cours annulé/déplacé, badge « prochain cours »,
   bornes de semaine explicites en UTC.
 - **Vie scolaire** — absences, retards, sanctions, compteurs par période.
@@ -53,10 +56,9 @@ Prérequis : [Bun](https://bun.sh) 1.4.2 (serveur) et, pour l'app, un SDK Androi
 
 ```bash
 bun install
-cp .env.example .env.local     # valeurs réelles, jamais commitées
 make check                     # secrets + typecheck + unit + arch + contracts + security
 make e2e                       # tests bout-en-bout (store seed, zéro réseau)
-make integration               # tests d'intégration (nécessite .env.local)
+make integration-api           # tests d'intégration (API locale, zéro secret)
 make serve                     # serveur branché : lecture réelle + routes (voir PORT/HOST)
 ```
 
@@ -70,28 +72,33 @@ cd android
 Hôte serveur côté app : `android/local.properties` (non commité) ou env `SERVER_HOST`.
 Défaut émulateur `10.0.2.2:3000` ; hors émulateur, HTTPS obligatoire. Cet hôte
 n'est qu'un défaut : l'adresse réelle se saisit à l'étape 1 de l'assistant de
-connexion. Sans identifiants dans `.env.local`, c'est l'assistant qui ouvre la
-session : adresse du serveur, puis identifiants EduConnect ou QR de
-l'application de l'établissement — un seul `POST /v1/setup` rend le jeton de
-device. Détails : [`android/README.md`](android/README.md).
+connexion. L'assistant ouvre la session : adresse du serveur, puis adresse de
+l'établissement et **QR affiché par l'application Pronote + son PIN** — un seul
+`POST /v1/setup` rend le jeton de device. Aucun identifiant n'est saisi nulle part. Détails : [`android/README.md`](android/README.md).
 Détails build/signature : [`android/README.md`](android/README.md) et [`docs/RELEASE.md`](docs/RELEASE.md).
 
 ## Configuration
 
-Tout passe par `.env.local` (gitignoré). Jamais de secret en issue, PR, log ou commit.
+**Il n'y a pas de `.env`.** Le serveur ne détient aucun credential : il n'y a rien
+à configurer, rien à commiter, rien à faire tourner. Tout ce qui s'authentifie
+vient de l'app, à la demande :
+
+| Ce qui s'authentifie | Qui l'envoie | Comment |
+|---|---|---|
+| Compte de l'établissement | l'app | `POST /v1/setup` avec le QR affiché par l'application Pronote + son PIN (le serveur ne le garde qu'en mémoire, le temps de la session) |
+| Clé LLM (assistant devoirs) | l'app | champ `apiKey` de `POST /v1/homework/generate` (bornée, jamais journalisée, `writeOnly`) |
+
+Seules deux variables restent lues, et ce ne sont pas des secrets :
 
 | Variable | Rôle |
 |---|---|
 | `PORT` | port d'écoute du serveur |
 | `HOST` | hôte d'écoute (défaut `127.0.0.1`, loopback) |
-| `MEDIA_DOWNLOAD_TIMEOUT_MS` | échéance de téléchargement d'une pièce jointe via `/v1/media` |
-| `MEDIA_REF_SECRET` | secret de signature des refs média (tiré au sort au démarrage si absent) |
-| `PRONOTE_URL` | URL élève de l'établissement. **Facultative** : absente, le compte s'ouvre depuis l'app via `POST /v1/setup`. Renseignée, elle **épingle** l'établissement : le setup ne peut plus viser une autre école |
-| `PRONOTE_USERNAME` / `PRONOTE_PASSWORD` | compte de test (jamais en CI) |
-| `PRONOTE_ENT_KIND` | type ENT/CAS : `ninegate` (défaut), `educonnect`, `cas` |
-| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | assistant devoirs + fiches de révision |
-| `PUSH_PROVIDER`, `PUSH_VAPID_*` | notifications push |
-| `MANUAL_PLATFORM`, `MANUAL_USERNAME`, `MANUAL_PASSWORD` | manuels, première connexion interactive |
+
+Ce qui en découle, assumé : la clé de signature des `ref` média est tirée au sort à
+chaque démarrage (une ref ne survit pas à un redémarrage, l'app la régénère), le push
+n'est pas configuré (aucune clé VAPID ne peut venir du serveur) et le scraping de
+manuels est désactivé (le compte éditeur n'a plus d'où sortir).
 
 Persistence serveur et chiffrement au repos : **pas encore câblés**. Le snapshot est mémoire
 seule (`snapshot-store.ts`) — un redémarrage serveur repart vide et l'app refill au pull-refresh.
@@ -108,7 +115,7 @@ android/          client natif (Kotlin, Compose) : app, core, data, ui
 server/
   api/            routes HTTP (Bun.serve, stdlib), validation is* des contrats
   domain/         ports + logique pure (aucun import sqlite/HTTP)
-  integrations/   session Pronote, ENT/CAS, lectures, écritures confirmées
+  integrations/   session Pronote, lectures, écritures confirmées
   infrastructure/ stockage, push, médias, manuels, LLM
   jobs/           sync, notifications, exams, fiches
   ai/             prompts et garde-fous (aucun outil, aucun réseau, aucun secret)
@@ -125,7 +132,7 @@ Le domaine ne connaît ni SQLite ni le framework HTTP ; chaque dépendance est u
 
 | # | Invariant | Test |
 |---|---|---|
-| I1 | Android sans aucun hôte Pronote/ENT, médias par proxy serveur | `make architecture-test` |
+| I1 | Android sans aucun hôte Pronote/portail, médias par proxy serveur | `make architecture-test` |
 | I2 | Un seul `PronoteHttpClient`, seul accès réseau Pronote | idem + scan de définitions |
 | I3 | `server/domain/` sans SQLite ni framework HTTP | `tests/architecture` |
 | I4 | Aucun secret dans les prompts LLM | `make security` + scan |
@@ -181,30 +188,35 @@ lecture. Une route ajoutée est donc fermée par défaut.
 ## Tests et garde-fous
 
 ```bash
-make check                  # tout : secrets, typecheck, unit, arch, contracts, security
+make check                  # tout : secrets, typecheck, unit, arch, contracts, security, compile Kotlin
 make unit / contracts / architecture-test / security
+make android-compile        # compile Gradle des 4 modules Android (JDK 17-21 + SDK requis)
 make e2e                    # bout-en-bout sur store seed, zéro réseau
-make integration            # nécessite .env.local (skip sinon)
+make integration-api        # API locale, zéro secret
 make build                  # image Docker + rappel APK
 ```
 
-546 tests, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
+613 tests, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
 La CI locale est `make check` : un changement qui casse un invariant est bloquant, même si
 fonctionnellement il passe.
 
+`make check` compile aussi le Kotlin (`make android-compile`) quand un **JDK 17-21** et un
+**SDK Android** sont là — sans eux la cible skip en l'écrivant (« compile Kotlin NON
+vérifiée »), jamais un faux vert. Prérequis et installation : `android/README.md`.
+
 ## Limitations connues
 
-- Sans `PRONOTE_URL` (ou sans identifiants), le serveur démarre quand même : lectures vides et
-  écritures en 501 plutôt qu'un `200` mensonger. La session et les identifiants vivent en mémoire,
-  jamais sur disque — donc un redémarrage les perd, et l'app doit refaire son setup.
+- Le serveur démarre TOUJOURS vide : lectures vides et écritures en 501 plutôt qu'un `200`
+  mensonger. La session et son QR vivent en mémoire, jamais sur disque — donc un redémarrage les
+  perd, et l'app doit refaire son setup.
 - `POST /v1/setup` est la seule route ouverte qui déclenche une **sortie réseau** : l'URL de
   l'établissement est choisie par le client. Elle est filtrée (hôtes privés, loopback et
-  link-local refusés ; établissement épinglé si `PRONOTE_URL` est renseignée ; 20 échecs par
-  fenêtre de 10 min). Résiduel assumé : un **nom DNS** pointant sur une IP privée passe le filtre
-  littéral (rebinding). À fermer quand le serveur-exposed grandit : résolution DNS + épinglage de
+  link-local refusés ; 20 échecs par fenêtre de 10 min). Résiduel : plus d'épinglage
+  d'établissement (il venait de l'URL d'ambiance, qui n'existe plus). Résiduel assumé : un **nom
+  DNS** pointant sur une IP privée passe le filtre littéral (rebinding). À fermer quand le serveur-exposed grandit : résolution DNS + épinglage de
   l'IP résolue, ou liste blanche d'hôtes.
-- Seul `PRONOTE_ENT_KIND=ninegate` est implémenté côté SSO ; `educonnect` et `cas` sont déclarés
-  mais refusés franchement (les identifiants ne partent pas vers un ENT non configuré).
+- Connexion par le QR de l'établissement uniquement (`qrcodeLogin`). Aucun identifiant, aucun
+  SSO tiers : un établissement qui n'expose qu'un portail passe par son application.
 - Onglets Pronote réellement publiés par l'établissement : les capacités ne sont jamais devinées,
   donc un onglet non observé vaut onglet absent et **est masqué**. Inversement, des capacités non
   déterminées (`capabilities: null`, lecture en échec) ne masquent rien.
@@ -228,7 +240,7 @@ PR bloquante même si la fonctionnalité est correcte.
 
 - [`AGENTS.md`](AGENTS.md) — workflow, garde-fous, règles d'or
 - [`docs/CONVENTIONS_GIT.md`](docs/CONVENTIONS_GIT.md) — conventions de commits et branches
-- [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) — les invariants I1–I7
+- [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) — les invariants I1–I8
 - [`docs/adr/`](docs/adr/) — décisions d'architecture (stack, provider Pronote)
 
 Nouvelles dépendances : justifiées dans la PR, version épinglée, licence MIT-compatible.

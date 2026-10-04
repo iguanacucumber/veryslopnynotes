@@ -1,6 +1,6 @@
-.PHONY: check lint typecheck unit architecture contracts security check-kotlin android-check architecture-test integration integration-pronote integration-pairing integration-push integration-api e2e e2e-grades e2e-assignments e2e-manuals e2e-revision serve build
+.PHONY: check lint typecheck unit architecture contracts security check-kotlin android-compile architecture-test integration-api e2e e2e-grades e2e-assignments e2e-manuals e2e-revision serve build
 
-check: lint typecheck unit architecture contracts security check-kotlin
+check: lint typecheck unit architecture contracts security check-kotlin android-compile
 
 lint:
 	bun run agents/runtime/check-secrets.ts
@@ -23,34 +23,51 @@ contracts:
 security:
 	bun test tests/security
 
-# android/**/*.kt : garde-fou structurel, sans SDK ni réseau. Vrai compilateur
-# = `make android-check` (ci-dessous). Voir le en-tête de check-kotlin.ts.
+# android/**/*.kt : garde-fou structurel, sans SDK ni réseau. Le vrai
+# compilateur est `make android-compile` (ci-dessous, appelé par `make check`).
+# Voir le en-tête de check-kotlin.ts.
 check-kotlin:
 	bun run agents/runtime/check-kotlin.ts
 
-# Compile Kotlin via Gradle quand l'outillage EST là : android/gradlew (absent
-# du repo, wrapper non commité) ou `gradle` au PATH, ET un SDK Android
-# (ANDROID_HOME / ANDROID_SDK_ROOT / ~/Android/Sdk). Sinon message + skip, sans
-# faire échouer `make check` : ici android/ n'a jamais été compilé (#114).
-# Dès que les deux sont présents : une erreur Kotlin fait échouer la cible.
-android-check:
-	@GRADLE=""; \
-	if [ -x android/gradlew ]; then GRADLE=./gradlew; \
-	elif command -v gradle >/dev/null 2>&1; then GRADLE=gradle; fi; \
-	SDK="$${ANDROID_HOME:-$${ANDROID_SDK_ROOT:-$$HOME/Android/Sdk}}"; \
-	if [ -z "$$GRADLE" ]; then \
-		echo "android-check SKIP : ni android/gradlew ni gradle (wrapper non commité)."; \
-		echo "  compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
-	elif [ ! -d "$$SDK" ]; then \
-		echo "android-check SKIP : SDK Android absent (ANDROID_HOME/ANDROID_SDK_ROOT)."; \
-		echo "  compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
+# Compile Kotlin RÉELLE (`android-compile`) — le SEUL filet qui voit une
+# résolution de symbole, un import manquant ou une surcharge ambiguë : les miroirs
+# TS et check-kotlin ne les voient pas (piège réel : `MAX_LABEL_CHARS` non
+# qualifié dans core/Homework.kt, invisible côté TS).
+# Exigences : android/gradlew (dans le repo), un SDK Android, et un JDK 17-21 —
+# Gradle 8.7 REFUSE un JDK > 21 (échec opaque). Outillage absent = SKIP bruyant,
+# jamais un faux vert : `make check` dit alors explicitement ce qu'il n'a pas fait.
+# Installation (une fois) : JDK 17 via Adoptium, puis
+#   sdkmanager "platforms;android-34" "build-tools;34.0.0" platform-tools
+android-compile:
+	@JDK=""; \
+	for cand in "$${ANDROID_JDK_HOME}" "$${JAVA_HOME}" "$$HOME/.cache/jdk17"; do \
+	  [ -x "$$cand/bin/java" ] || continue; \
+	  v=$$("$$cand/bin/java" -version 2>&1 | sed -n 's/.*version "\([0-9][0-9]*\).*/\1/p'); \
+	  if [ -n "$$v" ] && [ "$$v" -ge 17 ] && [ "$$v" -le 21 ]; then JDK="$$cand"; break; fi; \
+	done; \
+	SDK="$${ANDROID_HOME:-$${ANDROID_SDK_ROOT:-}}"; \
+	if [ -z "$$SDK" ] && [ -f android/local.properties ]; then \
+	  SDK=$$(sed -n 's/^sdk\.dir=//p' android/local.properties); \
+	fi; \
+	if [ ! -x android/gradlew ]; then \
+	  echo "android-compile SKIP : android/gradlew absent (wrapper non commité ?)."; \
+	  echo "  compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
+	elif [ -z "$$JDK" ]; then \
+	  echo "android-compile SKIP : aucun JDK 17-21 (Gradle 8.7 refuse > 21)."; \
+	  echo "  compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
+	elif [ -z "$$SDK" ] || [ ! -d "$$SDK" ]; then \
+	  echo "android-compile SKIP : SDK Android absent (ANDROID_HOME ou android/local.properties)."; \
+	  echo "  compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
 	else \
-		echo "android-check : $$GRADLE (SDK $$SDK)"; \
-		cd android && $$GRADLE :core:compileDebugKotlin :data:compileDebugKotlin :ui:compileDebugKotlin :app:compileDebugKotlin; \
+	  echo "android-compile : JDK $$JDK, SDK $$SDK"; \
+	  cd android && JAVA_HOME="$$JDK" ANDROID_HOME="$$SDK" ./gradlew --console=plain \
+	    :core:compileDebugKotlin :data:compileDebugKotlin :ui:compileDebugKotlin :app:compileDebugKotlin; \
 	fi
 
-integration integration-pronote integration-pairing integration-push integration-api:
-	@if [ ! -f .env.local ]; then echo "skip $@ (pas de .env.local)"; else bun test tests/integration; fi
+# tests/integration : API locale sans secret (0.7.0 : plus de .env.local, donc
+# plus rien à charger — le serveur ne détient aucun credential).
+integration-api:
+	bun test tests/integration/api.test.ts
 
 e2e:
 	bun test tests/e2e
@@ -67,10 +84,9 @@ e2e-manuals:
 e2e-revision:
 	bun test tests/e2e/revision.test.ts
 
-# Serveur local : branchement complet (env -> session Pronote -> routes).
-# Sans .env.local il démarre quand même, lectures vides et écritures en 501.
+# Serveur local : PORT/HOST -> routes. 0.7.0 : aucun credential à fournir, le
+# serveur démarre vide et le compte s'ouvre via POST /v1/setup (QR envoyé par l'app).
 serve:
-	@if [ ! -f .env.local ]; then echo "aucun .env.local : lectures vides (écritures 501)"; fi
 	bun run server/infrastructure/http.ts
 
 build:

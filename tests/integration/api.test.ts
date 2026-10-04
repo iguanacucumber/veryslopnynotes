@@ -15,9 +15,8 @@ import { createMemoryStore } from "../../server/api/store";
 import { serve } from "../../server/api/router";
 import { pairedDevice } from "../unit/fixtures/pairing";
 
-// API locale, zéro secret, tourne toujours (pas de .env.local requis).
-// `make integration-api` reste skippé sans .env.local (Makefile) ; ce test
-// se lance via `bun test tests/integration` avec ou sans env.
+// API locale, zéro secret, zéro credential : ce test tourne toujours.
+// Lancement : `make integration-api` (ou `bun test tests/integration`).
 describe("integration api", () => {
   let base = "";
   let stop = () => {};

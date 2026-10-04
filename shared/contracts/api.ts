@@ -127,11 +127,11 @@ export const PAIRING_TOKEN_MAX_CHARS = 512;
 // #118 : POST /v1/setup — le flux « tout marche » en un appel.
 // L'app envoie l'URL du serveur sur une autre requête (hors contrat), puis ici
 // TOUT ce qui identifie l'établissement, et reçoit le jeton de device.
-// Deux méthodes, jamais jouées ensemble : le QR de l'établissement prime (il
-// porte sa propre preuve de détention du compte), sinon les identifiants ENT.
+// 0.7.0 : UNE seule méthode — le QR de l'app Pronote. Le serveur ne détient
+// aucun credential (ni .env, ni variable) : le QR vient de l'app à chaque
+// session, `qr.login` + `qr.jeton` + `pin` en sont la preuve de détention.
 export const SETUP_URL_MAX_CHARS = 300;
 export const SETUP_CREDENTIAL_MAX_CHARS = 256;
-export const SETUP_ENT_MAX_CHARS = 32;
 /** login/jeton sont des hex AES : long, mais borné. */
 export const SETUP_QR_FIELD_MAX_CHARS = 1024;
 /** PIN de validation : clé de déchiffrement du QR, pas un code à 6 chiffres. */
@@ -154,15 +154,10 @@ export interface SetupRequest {
    * serveur). Le serveur, lui, sait ce que c'est.
    */
   readonly schoolUrl: string;
-  /** Type ENT/CAS. Seul `ninegate` est implémenté côté intégration. */
-  readonly ent: string;
-  /** Identifiants ENT (méthode « credentials », facultative). */
-  readonly username?: string;
-  readonly password?: string;
-  /** QR de l'établissement (méthode « qr », facultative). */
-  readonly qr?: SetupQr;
-  /** PIN de validation associé au QR. */
-  readonly pin?: string;
+  /** QR affiché par l'app Pronote : la seule preuve de détention acceptée. */
+  readonly qr: SetupQr;
+  /** PIN de validation associé au QR (clé de déchiffrement). */
+  readonly pin: string;
 }
 
 /**
@@ -243,7 +238,7 @@ export interface EvaluationsResponse {
 
 // #81 cantine : menus de la fenêtre from/to (semaine courante par défaut).
 // Tableau vide = aucun menu publié sur la fenêtre (module cantine absent de
-// l'ENT ou hors périmètre) : l'app masque alors l'onglet, sans erreur.
+// l'établissement ou hors périmètre) : l'app masque alors l'onglet, sans erreur.
 // balance absent = solde non publié (Turboself/ARD non branché).
 export interface CanteenMenusResponse {
   readonly menus: CanteenMenu[];
@@ -267,12 +262,19 @@ export const HOMEWORK_MAX_QUESTION_CHARS = 2000;
  * d'écriture. Le contrat n'interdit pas les clés inconnues (`bourrage: …`) :
  * sans cette borne, un POST non authentifié de taille arbitraire est
  * entièrement bufferisé, puis accepté, et part quand même au LLM.
- * Marge au-dessus du pire cas utile : question 2000 + 8×(2000 + 200).
+ * Marge au-dessus du pire cas utile : question 2000 + 8×(2000 + 200) + clé 512.
  */
 export const HOMEWORK_MAX_BODY_CHARS = 65536;
 export const HOMEWORK_MAX_SOURCES = 8;
 export const HOMEWORK_MAX_SOURCE_CHARS = 2000;
 export const HOMEWORK_MAX_SOURCE_LABEL_CHARS = 200;
+/**
+ * 0.7.0 : clé du fournisseur LLM, ENVOYÉE PAR L'APP à chaque appel. Le serveur
+ * n'en détient aucune (ni .env, ni variable, ni disque) : elle vit dans le
+ * corps de la requête, part dans l'en-tête `Authorization` de l'appel
+ * fournisseur, et n'est ni journalisée nipersistée. Bornée comme un credential.
+ */
+export const HOMEWORK_MAX_API_KEY_CHARS = 512;
 
 export interface HomeworkSource {
   readonly text: string;
@@ -282,6 +284,8 @@ export interface HomeworkSource {
 export interface HomeworkGenerateRequest {
   readonly question: string;
   readonly sources: HomeworkSource[];
+  /** Credential de l'appelant : `writeOnly`, jamais renvoyé ni journalisé. */
+  readonly apiKey: string;
 }
 
 export interface HomeworkOkResponse {
@@ -382,32 +386,18 @@ function isSetupQr(v: unknown): v is SetupQr {
 }
 
 /**
- * #118 : valide la forme ET l'exploitabilité — au moins une méthode complète.
- * Un setup sans méthode exploitable ne consomme pas de tentative contre
- * l'ENT : 400 direct, l'app garde l'utilisateur sur l'écran du setup.
- * Champs présents mais incomplets (username sans password, qr sans jeton) =>
- * refus aussi : mieux vaut une erreur franche qu'un login à moitié fait.
+ * #118 : valide la forme ET l'exploitabilité — le trio `qr` + `pin` EST la
+ * méthode, donc il est requis. Un setup incomplet ne consomme pas de tentative
+ * contre l'établissement : 400 direct, l'app garde l'utilisateur sur l'écran du
+ * setup. Mieux vaut une erreur franche qu'un login à moitié fait.
  */
 export function isSetupRequest(v: unknown): v is SetupRequest {
   if (typeof v !== "object" || v === null) return false;
   const r = v as Record<string, unknown>;
-  const deviceName = r["deviceName"];
-  const schoolUrl = r["schoolUrl"];
-  const ent = r["ent"];
-  const username = r["username"];
-  const password = r["password"];
-  const qr = r["qr"];
-  const pin = r["pin"];
-  if (!isBoundedNonEmptyString(deviceName, SETUP_CREDENTIAL_MAX_CHARS)) return false;
-  if (!isBoundedNonEmptyString(schoolUrl, SETUP_URL_MAX_CHARS)) return false;
-  if (!isBoundedNonEmptyString(ent, SETUP_ENT_MAX_CHARS)) return false;
-  if (username !== undefined && !isBoundedNonEmptyString(username, SETUP_CREDENTIAL_MAX_CHARS)) return false;
-  if (password !== undefined && !isBoundedNonEmptyString(password, SETUP_CREDENTIAL_MAX_CHARS)) return false;
-  if (pin !== undefined && !isBoundedNonEmptyString(pin, SETUP_PIN_MAX_CHARS)) return false;
-  if (qr !== undefined && !isSetupQr(qr)) return false;
-  const hasQr = qr !== undefined && pin !== undefined;
-  const hasCredentials = username !== undefined && password !== undefined;
-  return hasQr || hasCredentials;
+  if (!isBoundedNonEmptyString(r["deviceName"], SETUP_CREDENTIAL_MAX_CHARS)) return false;
+  if (!isBoundedNonEmptyString(r["schoolUrl"], SETUP_URL_MAX_CHARS)) return false;
+  if (!isSetupQr(r["qr"])) return false;
+  return isBoundedNonEmptyString(r["pin"], SETUP_PIN_MAX_CHARS);
 }
 
 export function isSetupResponse(v: unknown): v is SetupResponse {
@@ -457,6 +447,7 @@ export function isHomeworkSource(v: unknown): v is HomeworkSource {
 export function isHomeworkGenerateRequest(v: unknown): v is HomeworkGenerateRequest {
   if (typeof v !== "object" || v === null) return false;
   const r = v as Record<string, unknown>;
+  if (!isBoundedNonEmptyString(r["apiKey"], HOMEWORK_MAX_API_KEY_CHARS)) return false;
   if (!isBoundedNonEmptyString(r["question"], HOMEWORK_MAX_QUESTION_CHARS)) return false;
   const sources = r["sources"];
   if (!Array.isArray(sources) || sources.length > HOMEWORK_MAX_SOURCES) return false;
@@ -549,7 +540,6 @@ export function isPunishmentsResponse(v: unknown): v is PunishmentsResponse {
 // --- #82 profil + média ---
 // Bornes des paramètres d'entrée de /v1/media (ref opaque, accountId).
 export const MEDIA_REF_MAX_CHARS = 200;
-export const MEDIA_ACCOUNT_ID_MAX_CHARS = 64;
 
 /**
  * Infos du compte appairé. `user: null` = compte appairé dont l'établissement
