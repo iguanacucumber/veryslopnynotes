@@ -144,22 +144,13 @@ private val TOP_BAR_ACTIONS: Map<String, List<TopAction>> = mapOf(
     ),
     ROUTE_GRADES to listOf(
         TopAction.Refresh,
-        TopAction.Go(ROUTE_COMPETENCES, "Compétences"),
-        TopAction.Go(ROUTE_SETTINGS, "Réglages"),
-        TopAction.Go(ROUTE_PAIRING, "Appairage QR+PIN"),
-        TopAction.Go(ROUTE_ALERTS, "Alertes sécurité"),
-    ),
-    // Même écran en cache que l'onglet Notes, donc mêmes destinations — sans
-    // Compétences elle-même, et #87 peut la retirer des deux (onglet inactif).
-    ROUTE_COMPETENCES to listOf(
-        TopAction.Refresh,
         TopAction.Go(ROUTE_SETTINGS, "Réglages"),
         TopAction.Go(ROUTE_PAIRING, "Appairage QR+PIN"),
         TopAction.Go(ROUTE_ALERTS, "Alertes sécurité"),
     ),
     // #172 : « Sanctions » sort du CORPS de la Vie scolaire (c'était le dernier
-    // lien de navigation en clair d'un écran) et devient une action de barre,
-    // comme Compétences. La capacité `punishments` (#87) reste le filtre : c'est
+    // lien de navigation en clair d'un écran) et devient une action de barre.
+    // La capacité `punishments` (#87) reste le filtre : c'est
     // `AppNav.kt` qui la range dans `hiddenDestinations`, seul endroit qui sait
     // lire les capacités ET naviguer. Pas de relecture ici : le bouton
     // d'en-tête de l'écran la porte déjà (`AttendanceHeader`).
@@ -183,7 +174,6 @@ private val TOP_BARS: Map<String, TopBar> = mapOf(
     ROUTE_MESSAGES to TopBar("Messages", back = ROUTE_PROFILE),
     ROUTE_ALERTS to TopBar("Alertes sécurité", back = ROUTE_INDEX),
     ROUTE_FICHES to TopBar("Fiches révision", back = ROUTE_PROFILE),
-    ROUTE_COMPETENCES to TopBar("Compétences", back = ROUTE_GRADES),
     ROUTE_SETTINGS to TopBar("Réglages", back = ROUTE_INDEX),
     // Premier lancement : il n'y a rien derrière l'assistant, donc pas de
     // flèche — une flèche qui ne sort pas de l'app vaut moins qu'aucune.

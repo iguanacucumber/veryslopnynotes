@@ -59,8 +59,8 @@ usage : shot.sh <route> [--package <pkg>] [--theme <t>] [--wait <secondes>] [--n
 
   <route>               route de l'app : index, calendar, grades, tasks,
                         profile, settings, news, canteen, attendance,
-                        messages, pairing, alerts, fiches, competences,
-                        sanctions. Avec --package, simple nom de capture.
+                        messages, pairing, alerts, fiches, sanctions. Avec
+                        --package, simple nom de capture.
   --package <pkg>       autre application (référence Papillon) : pas
                         d'installation, simple lancement + capture.
   --theme <dark|light|system>
@@ -378,9 +378,9 @@ is_locked() {
 # Sur les cinq routes d'ONGLET, c'est le libellé de l'onglet (« Accueil »,
 # « Notes », « Profil »…) que la barre d'onglets affiche sur TOUTES les routes :
 # il est donc toujours là. Ailleurs, un ÉCRAN CENTRAL le réimprime en bouton —
-# l'onglet Notes propose « Réglages », « Appairage QR+PIN », « Alertes sécurité »
-# et « Compétences », l'accueil des cartes « Actualités », « Cantine »,
-# « Vie scolaire », « Messages », le profil les mêmes. Deux exceptions : `news`
+# l'onglet Notes propose « Réglages », « Appairage QR+PIN » et « Alertes
+# sécurité », l'accueil des cartes « Actualités », « Cantine », « Vie scolaire »,
+# « Messages », le profil les mêmes. Deux exceptions : `news`
 # et `fiches`, dont le corps ne dépend que de la donnée, donc sans libellé fixe :
 # leur titre EST le témoin.
 #
@@ -399,11 +399,11 @@ is_locked() {
 #
 #     shot : la route « grades » NON PROUVÉE (« Moyennes par matière » absent).
 #
-# Le même critère a été repassé sur les quinze : `calendar` (« semaine du »),
+# Le même critère a été repassé sur les quatorze : `calendar` (« semaine du »),
 # `tasks` (« Devoirs de la semaine »), `profile` (« Détecter les onglets »),
-# `settings`, `canteen`, `attendance`, `sanctions`, `messages`, `pairing`,
-# `alerts` et `competences` portent un titre de section ou un bouton rendu HORS
-# de la branche de donnée, donc ils tiennent sans donnée. `news` et `fiches` ont
+# `settings`, `canteen`, `attendance`, `sanctions`, `messages`, `pairing` et `alerts`
+# portent un titre de section ou un bouton rendu HORS de la branche de donnée,
+# donc ils tiennent sans donnée. `news` et `fiches` ont
 # un titre de barre du haut unique, ce qui suffit (cf. le test de condition).
 #
 # #172 — LA BRANCHE D'ERREUR, ÉTAT LE PLUS AVEUGLE. `PapErrorState` ne rend que
@@ -453,10 +453,9 @@ messages|Messages|Rechercher une discussion
 pairing|Appairage|Retour
 alerts|Alertes sécurité|Injections neutralisées
 fiches|Fiches révision|
-competences|Compétences|Évaluations par compétences
 '
 
-# Ligne de la table d'une route. Vide = route inconnue (donc absente des 15).
+# Ligne de la table d'une route. Vide = route inconnue (donc absente des 14).
 witness_row() {
     printf '%s\n' "$ROUTE_WITNESSES" | grep -E "^$1[|]" | head -1 || true
 }

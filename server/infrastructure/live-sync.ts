@@ -27,7 +27,6 @@ import type {
   CanteenMenu,
   Capabilities,
   Discussion,
-  Evaluation,
   Grade,
   NewsItem,
   Period,
@@ -59,7 +58,6 @@ export interface LiveReader {
   getAssignments?(accountId: string, page?: PageRequest): Promise<Page<Assignment>>;
   getTimetable?(accountId: string, page?: PageRequest): Promise<Page<TimetableEntry>>;
   getPeriods?(accountId: string, page?: PageRequest): Promise<Page<Period>>;
-  getEvaluations?(accountId: string, page?: PageRequest): Promise<Page<Evaluation>>;
   getNews?(accountId: string, page?: PageRequest): Promise<Page<NewsItem>>;
   getMenus?(accountId: string, page?: PageRequest): Promise<Page<CanteenMenu>>;
   getAttendance?(accountId: string, page?: PageRequest): Promise<Page<AbsenceRecord>>;
@@ -104,7 +102,6 @@ const CACHEABLE_BY_PATCH: { key: keyof SnapshotPatch; resource: CacheableResourc
   { key: "grades", resource: "grades" },
   { key: "assignments", resource: "assignments" },
   { key: "entries", resource: "timetable" },
-  { key: "evaluations", resource: "evaluations" },
   { key: "news", resource: "news" },
   { key: "canteenMenus", resource: "menus" },
   { key: "absences", resource: "attendance" },
@@ -276,7 +273,6 @@ export function createLiveSync(options: LiveSyncOptions): LiveSync {
         const caps = await readCaps(account);
         return caps ? { capabilities: caps } : null;
       },
-      async () => patchOf("evaluations", await read(account, reader.getEvaluations?.bind(reader))),
       async () => patchOf("news", await read(account, reader.getNews?.bind(reader))),
       async () => patchOf("canteenMenus", await read(account, reader.getMenus?.bind(reader))),
       async () => patchOf("absences", await read(account, reader.getAttendance?.bind(reader))),

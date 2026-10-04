@@ -377,7 +377,7 @@ describe("#145 — une seule porte de notification, et zéro dépendance ajouté
     expect(NAV).toContain("CompositionLocalProvider(LocalPapNotice provides noticeHost)");
     expect(NAV).toContain("snackbarHost = { PapNoticeSnackbarHost(noticeHost) }");
     // Aucun écran ne dessine son propre snackbar : le host est unique.
-    for (const f of ["Assignments.kt", "MessagesScreen.kt", "TimetableWeek.kt", "Competences.kt"]) {
+    for (const f of ["Assignments.kt", "MessagesScreen.kt", "TimetableWeek.kt"]) {
       const src = readFileSync(join(UI, f), "utf8");
       expect({ f, host: src.includes("SnackbarHost(") }).toEqual({ f, host: false });
     }
@@ -418,12 +418,12 @@ describe("#145 — une seule porte de notification, et zéro dépendance ajouté
     expect(ASSIGNMENTS).toContain("onAction = { toggle(a, !done) }");
   });
 
-  test("retour physique : les cinq moments de l'issue, et un vocabulaire unique", () => {
+  test("retour physique : les moments de l'issue, et un vocabulaire unique", () => {
     const haptique = (f: string): string => codeOnly(readFileSync(join(UI, f), "utf8"));
-    // Bascule de devoir, sélection de compétence, QR lu, envoi de message,
-    // appairage validé.
+    // Bascule de devoir, QR lu, envoi de message, appairage validé. #184 : le
+    // cinquième moment (la sélection de compétence) a disparu avec son écran ;
+    // `select()` reste au vocabulaire du kit de mouvement, sans appelant.
     expect(haptique("Assignments.kt")).toContain("performHapticFeedback(HapticFeedbackType.LongPress)");
-    expect(haptique("Competences.kt")).toContain("haptics.select()");
     expect(haptique("QrScanner.kt")).toContain("haptics.confirm()");
     expect(haptique("MessagesScreen.kt")).toContain("haptics.confirm()");
     expect(haptique("PairingScreen.kt")).toContain("haptics.confirm()");

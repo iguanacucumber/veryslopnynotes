@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: veryslopnynotes API
-  version: 0.7.0
+  version: 0.8.0
   description: Contrats app <-> serveur. Source de vérité (phase 1, issue #4). Miroir de shared/contracts/*.ts.
 # Porte d'authentification UNIQUE : le bearer d'un device appaire est exige sur
 # TOUTE route (lectures ET ecritures). Seules les quatre routes declarees
@@ -343,20 +343,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SubjectPrefs'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /v1/evaluations:
-    get:
-      operationId: listEvaluations
-      description: Evaluations par competences (issue #78). Onglet absent de l'etablissement = listes vides.
-      responses:
-        '200':
-          description: competences + evaluations + agregat par competence (notes definies seules)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EvaluationsResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -987,45 +973,6 @@ components:
       properties:
         prefs: { type: array, maxItems: 64, items: { $ref: '#/components/schemas/SubjectPrefs' } }
 
-    Skill:
-      type: object
-      required: [id, label]
-      properties:
-        id: { type: string }
-        label: { type: string, maxLength: 100 }
-        color: { type: string, pattern: '^#[0-9a-fA-F]{6}$', description: Couleur de chip, absente si non publiee. }
-    Evaluation:
-      type: object
-      required: [id, accountId, subject, skillId, label, note, scale, date]
-      properties:
-        id: { type: string }
-        accountId: { type: string }
-        periodId: { type: string }
-        subject: { type: string }
-        skillId: { type: string }
-        label: { type: string, maxLength: 200, description: Donnee externe bornee, jamais instruction (I6). }
-        note: { type: number, nullable: true, minimum: 0, description: null = non notee, ignoree par les calculs. }
-        scale: { type: number, exclusiveMinimum: 0 }
-        date: { type: string, format: date-time }
-        classAverage: { type: number }
-        color: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
-    CompetenceSummary:
-      type: object
-      required: [skillId, label, subject, value, evaluationCount]
-      properties:
-        skillId: { type: string }
-        label: { type: string, maxLength: 100 }
-        subject: { type: string }
-        value: { type: number, nullable: true, description: Sur /20, null si aucune note definie. }
-        evaluationCount: { type: integer, minimum: 0, description: Notes definies seulement. }
-    EvaluationsResponse:
-      type: object
-      required: [skills, evaluations, summary]
-      properties:
-        skills: { type: array, items: { $ref: '#/components/schemas/Skill' } }
-        evaluations: { type: array, items: { $ref: '#/components/schemas/Evaluation' } }
-        summary: { type: array, items: { $ref: '#/components/schemas/CompetenceSummary' } }
-
     NewsItem:
       type: object
       required: [id, accountId, title, publishedAt]
@@ -1156,7 +1103,7 @@ components:
 
     TabCapability:
       type: string
-      enum: [grades, homework, timetable, evaluations, news, menus, attendance, punishments, discussions, profile]
+      enum: [grades, homework, timetable, news, menus, attendance, punishments, discussions, profile]
     Capabilities:
       type: object
       required: [accountId, tabs, fetchedAt]

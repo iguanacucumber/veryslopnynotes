@@ -266,8 +266,6 @@ object ServerConfig {
     // #83 préférences matière : GET liste, PUT upsert.
     fun subjectPrefsUrl(baseUrl: String): String = "$baseUrl/v1/subjects/prefs"
 
-    fun evaluationsUrl(baseUrl: String): String = "$baseUrl/v1/evaluations"
-
     // #79 : actualités établissement (parité Papillon, onglet Actualités).
     fun newsUrl(baseUrl: String): String = "$baseUrl/v1/news"
     // #81 : menus cantine de la fenêtre (semaine par défaut).

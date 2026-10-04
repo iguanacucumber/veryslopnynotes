@@ -48,7 +48,6 @@
                 <data android:host="pairing" />
                 <data android:host="alerts" />
                 <data android:host="fiches" />
-                <data android:host="competences" />
                 <data android:host="sanctions" />
             </intent-filter>
         </activity>

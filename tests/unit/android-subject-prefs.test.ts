@@ -290,7 +290,8 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     expect(style).toContain("fun subjectStyle(");
     expect(style).toContain("fun subjectsFromPayload(");
     expect(style).toContain("fun colorFromHex(");
-    expect(style).toContain("@Composable\nfun SubjectLegend(");
+    // #184 : `SubjectLegend` a été supprimée (seul appelant : l'écran Compétences).
+    expect(style).not.toContain("SubjectLegend");
     expect(style).toContain('private val COLOR_RE = Regex("^#[0-9a-fA-F]{6}$")');
     const theme = read(UI, "Theme.kt");
     expect(theme).toContain("enum class AppTheme");
@@ -304,7 +305,6 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     const nav = read(UI, "AppNav.kt");
     const grades = read(UI, "GradesScreen.kt");
     // Préfs appliquées aux trois onglets + thème à la racine.
-    // Regex tolérante à la mise en forme multi-lignes du CachedResourceScreen.
     for (const resource of ["CachePolicy.GRADES", "CachePolicy.ASSIGNMENTS"]) {
       expect(nav).toMatch(new RegExp(`${resource}[\\s\\S]{0,80}baseUrl`));
       // La prefs est passée à chacun des trois onglets qui affichent des matières.
@@ -314,8 +314,10 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     // matière y sont toujours passées via le même résolveur.
     expect(nav).toMatch(/TimetableRoute\([\s\S]{0,200}subjectPrefs = subjectPrefs/);
     expect(nav).toContain("subjectPrefs = subjectPrefs");
-    expect(grades).toContain("SubjectLegend(subjectsFromPayload(s.payload), subjectPrefs)");
+    // #184 : la légende `SubjectLegend` appartenait à l'écran Compétences, seul
+    // appelant supprimé. L'onglet Notes passe les prefs matière aux sections.
     expect(grades).toContain("subjectPrefs: List<SubjectPrefs>");
+    expect(grades).toContain("prefs = subjectPrefs");
     // #134 : la racine applique `PapillonTheme`, plus un `MaterialTheme` nu
     // (couleurs + typo + formes) qui n'existait qu'en clair par défaut.
     expect(nav).toContain("PapillonTheme(darkTheme = isDarkTheme(theme, isSystemInDarkTheme()))");

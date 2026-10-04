@@ -95,7 +95,6 @@ class AccountStore(
             CachePolicy.GRADES,
             CachePolicy.ASSIGNMENTS,
             CachePolicy.TIMETABLE,
-            CachePolicy.EVALUATIONS,
             CachePolicy.NEWS,
             CachePolicy.MENUS,
         )

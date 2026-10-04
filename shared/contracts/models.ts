@@ -32,7 +32,15 @@
 // 0.6.0 n'a plus de méthode accepted pour ouvrir une session (elle envoie des
 // identifiants, refusés en 400), et une app qui n'envoie pas `apiKey` se voit
 // refuser le devoir. `PORT`/`HOST` restent les seules variables lues.
-export const CONTRACTS_VERSION = "0.7.0" as const;
+// 0.8.0 : la feature COMPÉTENCES (#78) sort du contrat — la route
+// `/v1/evaluations` (`EvaluationsResponse`), les modèles `Skill`/`Evaluation`/
+// `CompetenceSummary`, la ressource cache `evaluations` et la capacité
+// `evaluations` DISPARAISSENT : les notes /20 de `/v1/grades` sont la seule vue
+// des notes. Cassant dans les deux sens : une app 0.7.0 voit l'onglet
+// Compétences absent de `tabs` => elle le masque (et sa route lui renvoie un 404
+// qu'elle sait traiter), et une app 0.8.0 contre un serveur 0.7.0 n'affiche
+// qu'un onglet en plus absent des capacités, jamais un écran cassé.
+export const CONTRACTS_VERSION = "0.8.0" as const;
 
 /** Version gabarit fiches révision (issue #30, phase 10). Stockée par fiche. */
 export const REVISION_TEMPLATE_VERSION = "fiche-v1" as const;
@@ -436,102 +444,6 @@ export function isSubjectPrefs(v: unknown): v is SubjectPrefs {
 }
 
 
-// --- #78 évaluations par compétences (parité Papillon) ---
-// Pronote ne publie les évaluations par compétences que selon la configuration
-// de l'établissement : chaque champ peut manquer. Un champ absent est OMMIS
-// (jamais 0 ni "" bidon) et une note absente vaut `note: null`.
-// ponytail: couleur = hex #RRGGBB seulement ; l'app dérive une couleur stable
-// par skillId quand l'établissement n'en publie pas. Upgrade: palette de
-// l'établissement via /v1/me (#82).
-
-/** Bornes des libellés (données externes bornées, jamais interprétées, I6). */
-export const SKILL_LABEL_MAX_CHARS = 100;
-export const EVALUATION_LABEL_MAX_CHARS = 200;
-
-const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
-
-function isBoundedString(v: unknown, max: number): v is string {
-  return typeof v === "string" && v.trim().length > 0 && v.length <= max;
-}
-
-function isOptionalHexColor(v: unknown): boolean {
-  return v === undefined || (typeof v === "string" && HEX_COLOR_RE.test(v));
-}
-
-/** Compétence (domaine) regroupant les évaluations d'une matière. */
-export interface Skill {
-  readonly id: string;
-  readonly label: string;
-  /** Couleur de chip #RRGGBB, absente si l'établissement n'en publie pas. */
-  readonly color?: string;
-}
-
-/** Évaluation rattachée à une compétence. `note: null` = non notée. */
-export interface Evaluation {
-  readonly id: string;
-  readonly accountId: string;
-  readonly periodId?: string;
-  readonly subject: string;
-  /** Clé de regroupement des chips (= domaine/compétence Pronote). */
-  readonly skillId: string;
-  readonly label: string;
-  /** Note sur `scale`, ou null si non notée : ignorée par tout calcul. */
-  readonly note: number | null;
-  readonly scale: number;
-  readonly date: string; // ISO-8601
-  /** Moyenne de classe sur l'échelle de la note, si l'établissement la publie. */
-  readonly classAverage?: number;
-  /** Couleur de la compétence telle que publiée, si elle existe. */
-  readonly color?: string;
-}
-
-/** Agrégat d'une compétence pour la chip : moyenne des notes DÉFINIES seulement. */
-export interface CompetenceSummary {
-  readonly skillId: string;
-  readonly label: string;
-  readonly subject: string;
-  /** Moyenne sur /20 des notes définies, null si la compétence n'en a aucune. */
-  readonly value: number | null;
-  /** Notes définies comptées : les évaluations non notées n'y figurent pas. */
-  readonly evaluationCount: number;
-}
-
-export function isSkill(v: unknown): v is Skill {
-  if (!isRecord(v)) return false;
-  if (!isNonEmptyString(v["id"])) return false;
-  if (!isBoundedString(v["label"], SKILL_LABEL_MAX_CHARS)) return false;
-  if (!isOptionalHexColor(v["color"])) return false;
-  return true;
-}
-
-export function isEvaluation(v: unknown): v is Evaluation {
-  if (!isRecord(v)) return false;
-  if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["accountId"])) return false;
-  if (!isNonEmptyString(v["subject"]) || !isNonEmptyString(v["skillId"])) return false;
-  if (!isBoundedString(v["label"], EVALUATION_LABEL_MAX_CHARS)) return false;
-  // #78 : note requise mais nullable. undefined (champ absent) = invalide,
-  // null = non notée. Jamais de 0 substitué à une note manquante.
-  const note = v["note"];
-  if (note !== null && (!isFiniteNumber(note) || (note as number) < 0)) return false;
-  if (!isFiniteNumber(v["scale"]) || (v["scale"] as number) <= 0) return false;
-  if (!isIsoDate(v["date"])) return false;
-  if (v["periodId"] !== undefined && !isNonEmptyString(v["periodId"])) return false;
-  if (v["classAverage"] !== undefined && !isFiniteNumber(v["classAverage"])) return false;
-  if (!isOptionalHexColor(v["color"])) return false;
-  return true;
-}
-
-export function isCompetenceSummary(v: unknown): v is CompetenceSummary {
-  if (!isRecord(v)) return false;
-  if (!isNonEmptyString(v["skillId"])) return false;
-  if (!isBoundedString(v["label"], SKILL_LABEL_MAX_CHARS)) return false;
-  if (!isNonEmptyString(v["subject"])) return false;
-  if (!isNullableNumberOrNull(v["value"])) return false;
-  if (!Number.isInteger(v["evaluationCount"]) || (v["evaluationCount"] as number) < 0) return false;
-  return true;
-}
-
-
 // --- #79 actualités établissement (parité Papillon, onglet Actualités) ---
 // Titre/corps/auteur = contenu externe : DONNÉES bornées, jamais instruction (I6).
 export const NEWS_TITLE_MAX_CHARS = 200;
@@ -615,6 +527,11 @@ export interface CanteenBalance {
 
 export function isCanteenMeal(v: unknown): v is CanteenMeal {
   return typeof v === "string" && (CANTEEN_MEALS as readonly string[]).includes(v);
+}
+
+/** Chaîne non vide, bornée en longueur UTF-16 (bornes de libellés externes). */
+function isBoundedString(v: unknown, max: number): v is string {
+  return typeof v === "string" && v.trim().length > 0 && v.length <= max;
 }
 
 function isBoundedStringArray(v: unknown, maxItems: number, maxChars: number): v is string[] {
@@ -890,7 +807,6 @@ export const TAB_CAPABILITIES = [
   "grades",
   "homework",
   "timetable",
-  "evaluations",
   "news",
   "menus",
   "attendance",

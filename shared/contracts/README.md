@@ -82,10 +82,10 @@ Les périodes de l'année restent sur `/v1/periods` (#74) — pas de doublon.
 
 
 Add-only #87 (pas de bump) : **capacités dynamiques** — `Capabilities` (`accountId`,
-`tabs`, `fetchedAt`) + `TabCapability` (dix onglets Pronote : `grades`, `homework`,
-`timetable`, `evaluations`, `news`, `menus`, `attendance`, `punishments`,
-`discussions`, `profile`) et `GET /v1/capabilities`. Onglet absent de la liste =
-capacité `false` (l'app masque l'entrée, écran avec état vide propre) ; un onglet
+`tabs`, `fetchedAt`) + `TabCapability` (neuf onglets Pronote : `grades`, `homework`,
+`timetable`, `news`, `menus`, `attendance`, `punishments`, `discussions`, `profile` —
+`evaluations` en a été retiré en 0.8.0) et `GET /v1/capabilities`. Onglet absent de la
+liste = capacité `false` (l'app masque l'entrée, écran avec état vide propre) ; un onglet
 non observé n'est **jamais** déduit actif, et un onglet absent chez l'établissement
 n'est pas une erreur de lecture. `capabilities: null` = capacités non déterminées
 (session absente, adaptateur sans détection) : l'app ne masque alors rien.
@@ -134,3 +134,14 @@ frontière, part dans l'en-tête `Authorization` de l'appel fournisseur, et n'es
 ni journalisée ni persistée. Conséquences assumées : `MEDIA_REF_SECRET` tirée au
 sort à chaque boot (les `ref` média meurent au redémarrage), push non configuré
 (pas de clé VAPID), scraping de manuels désactivé.
+
+
+**Cassant 0.8.0** (#184) : la feature **Compétences** (#78) sort du contrat. La
+route `/v1/evaluations` (`EvaluationsResponse`), les modèles `Skill`/`Evaluation`/
+`CompetenceSummary` (et leurs validateurs), la ressource cache `evaluations` et la
+capacité `evaluations` DISPARAISSENT : les notes /20 de `/v1/grades` sont la seule
+vue des notes (une moyenne par compétence n'est qu'un agrégat de notes déjà
+affichées par matière). Dans les deux sens : une app 0.7.0 voit l'onglet Compétences
+absent de `tabs` — donc elle le masque, et sa route lui répond 404 comme toute route
+hors contrat — et une app 0.8.0 contre un serveur 0.7.0 ne voit qu'un onglet de
+moins, jamais un écran cassé.

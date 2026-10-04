@@ -65,11 +65,6 @@ import fr.veryslopnynotes.data.SyncedRepository
 // La logique pure (parsing, mise en forme, géométrie, décision d'affichage)
 // vit dans `Averages.kt`.
 //
-// `CachedResourceScreen` reste en bas de fichier pour la route Compétences
-// (`section` + légende matières) : son rendu appartient à #144, mais les liens
-// de navigation qu'il portait en clair sont, eux, retirés avec ceux de l'onglet
-// Notes (même écran en cache, mêmes destinations dans la barre du haut).
-
 /**
  * Onglet Notes, câblé sur le payload `/v1/grades` en cache.
  *
@@ -373,117 +368,6 @@ private fun GradesBlankState(
             // « aucune moyenne » AU-DESSUS d'un « aucune note », ce sont deux
             // phrases pour dire la même chose.
             is UiState.Data -> GradesNothingToShow(query = query, onRefresh = onRefresh)
-        }
-    }
-}
-
-// Écran « ressource en cache » : lecture synchrone du cache au démarrage (jamais
-// de spinner si le cache est là), refresh réseau en échec = repli cache
-// (offline-first #14). Servi par la route Compétences (`section` = chips + détail,
-// #78) ; son rendu complet appartient à #144.
-//
-// #135 : ce composable (`CachedScreen`, renommé `CachedResourceScreen` parce
-// que deux routes le partagent) SORT d'`AppNav.kt` (989 lignes qui portaient la
-// coquille ET quatre écrans).
-//
-// #139 : le rendu du JSON brut tronqué DISPARAÎT (c'était le défaut de cet
-// onglet : une chaîne de caractères à la place de données, y compris dans la
-// branche d'erreur). Un écran sans section structurée ne rend donc AUCUNE donnée
-// brute : mieux vaut un vide franc qu'une chaîne illisible. L'onglet Notes a son
-// propre rendu ([GradesRoute]) ; la route Compétences garde le sien via
-// `section`. Le paramètre `showAverage` part avec lui : la moyenne est désormais
-// dans la carte héro de `GradesHero.kt`, pas dans un `Text` générique.
-//
-// #162 : les quatre boutons de navigation (`Actualiser`, `Réglages`,
-// `Appairage QR+PIN`, `Alertes sécurité`) sortent du CORPS — ils sont montés
-// dans la barre du haut (`TOP_BAR_ACTIONS` d'`AppShell.kt`, entrées Notes ET
-// Compétences : c'est le même écran en cache). D'où [refreshTick] : la barre
-// déclenche la relecture par un compteur, pas en appelant un `refresh()` local.
-// Conséquence assumée : cet écran se relit à l'ENTRÉE (comme les autres
-// onglets) au lieu d'attendre un clic.
-@Composable
-fun CachedResourceScreen(
-    resource: String,
-    repo: SyncedRepository,
-    baseUrl: String,
-    subtitle: String,
-    // #83 : prefs matière du résolveur unique (légende couleur/emoji/libellé).
-    subjectPrefs: List<SubjectPrefs> = emptyList(),
-    // #78 : bloc competencies (chips) rendu sous le titre, payload en entrée.
-    section: (@Composable (String?) -> Unit)? = null,
-    refreshTick: Int = 0,
-) {
-    // Etat initial = cache synchrone (affichage sans reseau immediat).
-    var state by remember(resource) {
-        val c = try {
-            repo.cached(resource)
-        } catch (_: Exception) {
-            null
-        }
-        mutableStateOf(if (c == null) UiState.Empty else uiStateFromCache(c, repo.isStale(resource, c)))
-    }
-    fun refresh() {
-        // Serveur non configuré : pas d'appel (I1), état erreur avec cache si dispo.
-        if (baseUrl.isBlank()) {
-            state = UiState.Error("Serveur non configuré.", (state as? UiState.Data)?.payload)
-            return
-        }
-        state = when (val s = state) {
-            // Re-affichage cache pendant reload (pas de spinner plein ecran si donnees).
-            is UiState.Data -> s
-            is UiState.Error -> if (s.cached != null) UiState.Data(s.cached, true, 0L) else UiState.Loading
-            else -> UiState.Loading
-        }
-        try {
-            repo.refreshAsync(resource, baseUrl) { o -> state = uiStateFromOutcome(o) }
-        } catch (_: Exception) {
-            state = UiState.Error("Erreur inattendue.", (state as? UiState.Data)?.payload)
-        }
-    }
-    // Cache affiché d'abord, relecture ensuite (offline-first #14) ; le compteur
-    // de la barre du haut rejoue le même effet (#162).
-    LaunchedEffect(resource, refreshTick) { refresh() }
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        // `heading()` : le sous-titre est le titre de cet écran sous la barre.
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.semantics { heading() },
-        )
-        when (val s = state) {
-            UiState.Loading -> Text("Chargement…", maxLines = 1)
-            UiState.Empty -> Text("Aucune donnée en cache. Connectez-vous puis actualisez.", maxLines = 3)
-            is UiState.Data -> {
-                if (s.isStale) Text("Données hors-ligne (périmé).", maxLines = 1)
-                // #83 : matières du payload résolues (nom seul si aucune prefs).
-                SubjectLegend(subjectsFromPayload(s.payload), subjectPrefs)
-
-                section?.invoke(s.payload)
-                if (section == null) {
-                    Text(
-                        "Pas de rendu détaillé pour cette ressource.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            is UiState.Error -> {
-                // Le VRAI message du serveur + le geste qui recommence : le
-                // texte « Erreur réseau. Réessayer. » promettait un bouton qui
-                // est parti dans la barre (#162), donc il ne reste que le
-                // message. Le rendu complet de cet écran appartient à #144.
-                PapErrorState(message = s.message, onRetry = { refresh() })
-                SubjectLegend(subjectsFromPayload(s.cached.orEmpty()), subjectPrefs)
-
-                section?.invoke(s.cached)
-            }
         }
     }
 }
