@@ -14,6 +14,11 @@ playwright/storageState*.json
 .env.local
 *.local
 
+# Captures d'écran et frames de référence (#133) : l'écran d'accueil affiche le
+# VRAI nom, l'établissement, les devoirs et les notes du téléphone de l'agent.
+/shots/
+/ref-papillon/
+
 # Données personnelles / établissement / manuels
 /data/
 /downloads/

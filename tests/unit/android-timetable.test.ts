@@ -283,7 +283,8 @@ describe("unit android EDT (#76)", () => {
     // Onglet calendrier = TimetableRoute, cache `timetable` + fenêtre de semaine.
     const nav = readFileSync(join(UI, "AppNav.kt"), "utf8");
     expect(nav).toContain("TimetableRoute(");
-    expect(nav).toContain("composable(ROUTE_CALENDAR)");
+    // sans la parenthèse fermante : #133 ajoute `deepLinks` à la route.
+    expect(nav).toContain("composable(ROUTE_CALENDAR");
     // Cache : ressource timetable déjà existante (TTL 1 h), rien de neuf créé.
     const policy = readFileSync(join(DATA, "CachePolicy.kt"), "utf8");
     expect(policy).toContain('const val TIMETABLE = "timetable"');
