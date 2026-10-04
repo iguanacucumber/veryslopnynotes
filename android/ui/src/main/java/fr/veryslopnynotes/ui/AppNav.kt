@@ -296,17 +296,18 @@ fun AppNav(
                 } else {
                     null
                 }
-                CachedResourceScreen(
-                    resource = CachePolicy.GRADES,
-                    repo = repo,
-                    baseUrl = baseUrl,
-                    subtitle = "Moyennes",
+                // #139 : l'onglet Notes a son rendu structuré (moyennes par
+                // matière, sparkline, contexte de classe, sélecteurs de période
+                // et d'algorithme) : plus de JSON brut.
+                GradesRoute(
+                    CachePolicy.GRADES,
+                    repo,
+                    baseUrl,
+                    subjectPrefs = subjectPrefs,
+                    onCompetences = gotoCompetences,
                     goSettings = { nav.navigateTo(ROUTE_SETTINGS) },
                     goPairing = { nav.navigateTo(ROUTE_PAIRING) },
                     goAlerts = { nav.navigateTo(ROUTE_ALERTS) },
-                    showAverage = true,
-                    subjectPrefs = subjectPrefs,
-                    onCompetences = gotoCompetences,
                 )
             }
             composable(ROUTE_TASKS, deepLinks = listOf(routeDeepLink(ROUTE_TASKS))) {
