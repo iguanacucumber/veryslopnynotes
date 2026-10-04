@@ -233,9 +233,12 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     expect(theme).toContain("fun rememberAppTheme()");
     expect(theme).toContain("getSharedPreferences(THEME_PREFS, Context.MODE_PRIVATE)");
 
+    // #135 : le rendu de l'onglet Notes est sorti d'AppNav.kt (GradesScreen.kt) ;
+    // le branchement et le résolveur sont toujours dans AppNav.kt.
     const nav = read(UI, "AppNav.kt");
+    const grades = read(UI, "GradesScreen.kt");
     // Préfs appliquées aux trois onglets + thème à la racine.
-    // Regex tolérante à la mise en forme multi-lignes du CachedScreen.
+    // Regex tolérante à la mise en forme multi-lignes du CachedResourceScreen.
     for (const resource of ["CachePolicy.GRADES", "CachePolicy.ASSIGNMENTS"]) {
       expect(nav).toMatch(new RegExp(`${resource}[\\s\\S]{0,80}baseUrl`));
       // La prefs est passée à chacun des trois onglets qui affichent des matières.
@@ -245,7 +248,8 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     // matière y sont toujours passées via le même résolveur.
     expect(nav).toMatch(/TimetableRoute\([\s\S]{0,200}subjectPrefs = subjectPrefs/);
     expect(nav).toContain("subjectPrefs = subjectPrefs");
-    expect(nav).toContain("SubjectLegend(subjectsFromPayload(s.payload), subjectPrefs)");
+    expect(grades).toContain("SubjectLegend(subjectsFromPayload(s.payload), subjectPrefs)");
+    expect(grades).toContain("subjectPrefs: List<SubjectPrefs>");
     // #134 : la racine applique `PapillonTheme`, plus un `MaterialTheme` nu
     // (couleurs + typo + formes) qui n'existait qu'en clair par défaut.
     expect(nav).toContain("PapillonTheme(darkTheme = isDarkTheme(theme, isSystemInDarkTheme()))");

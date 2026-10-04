@@ -13,8 +13,14 @@
     <uses-feature
         android:name="android.hardware.camera.any"
         android:required="false" />
+    <!-- #135 : thème de FENÊTRE sans barre d'action. Sans lui, la plateforme
+         pose une barre d'action qui affiche le LABEL de l'app au-dessus de la
+         barre du haut de la Compose — donc « VerySlopyNyNotes » sur les 15
+         routes, précisément la marque statique que cette issue retire de
+         l'interface, plus 56 dp perdus (cf. res/values/themes.xml). -->
     <application
         android:label="VerySlopyNyNotes"
+        android:theme="@style/Theme.Veryslopynotes"
         android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true">
         <!-- #130 : zxing déclare son activité de scan `clearTaskOnLaunch="true"`,
