@@ -41,10 +41,16 @@ Aucun identifiant n'est saisi ni stocké sur le téléphone (0.7.0 : le QR est l
 seule preuve de détention). Le QR et son PIN partent dans le POST ; le serveur ne
 les garde qu'en mémoire, pour renouveler la session, et ne les journalise jamais.
 
-Le QR de l'étape 3 se **scanne** (`ui/QrScanner.kt`, Google Code Scanner :
-module Play Services téléchargé à la demande, **aucune permission CAMERA** dans
-le manifeste, ~15 lignes d'appel). Annulation, refus ou téléphone sans Play
-Services → `null`, et le champ de collage reste le chemin de secours.
+Le QR de l'étape 3 se **scanne** (`ui/QrScanner.kt`, `zxing-android-embedded`
+4.3.0 : décodeur dans l'APK, permission CAMERA déclarée par l'AAR et demandée par
+l'activité de scan, ~20 lignes d'appel, pas d'aperçu à maintenir). Ça marche
+donc partout, **y compris sans Google Play Services** — ce que ne faisait pas le
+Google Code Scanner de #122, dont le module était téléchargé à la demande par un
+service absent (émulateur, téléphone sans GMS) et dont l'échec revenait en `null`
+sans rien afficher, donc un bouton qui semblait inerte. Annulation,
+permission refusée ou QR illisible → `null` **et une phrase qui dit quoi faire** ;
+le champ de collage reste le chemin de secours et la caméra est marquée
+optionnelle au manifeste.
 
 L'allowlist est donc `core/ServerConfig.validateBaseUrl` (et `isAllowed` en
 préfixe strict), pas une constante de build : `https` obligatoire, `http` uni-

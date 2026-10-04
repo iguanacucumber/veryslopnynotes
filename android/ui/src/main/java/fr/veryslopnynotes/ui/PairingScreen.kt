@@ -1,6 +1,5 @@
 package fr.veryslopnynotes.ui
 
-import android.content.Context
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -185,7 +184,6 @@ fun PairingRoute(
                 onNext = { next -> step = next },
             )
             SetupStep.QR -> QrStep(
-                context = context,
                 form = form,
                 onChange = { form = it },
                 onSubmit = submit,
@@ -283,7 +281,6 @@ private fun AccountStep(
  */
 @Composable
 private fun QrStep(
-    context: Context,
     form: SetupForm,
     onChange: (SetupForm) -> Unit,
     onSubmit: (SetupInput) -> Unit,
@@ -292,6 +289,16 @@ private fun QrStep(
 ) {
     var error by remember { mutableStateOf<String?>(null) }
     val qr = parseSchoolQr(form.qrRaw)
+    // #127 : rien de lu (annulé, permission refusée, QR illisible) -> une phrase
+    // qui dit quoi faire. Le silence de #122 rendait le bouton « inerte ».
+    val scan = rememberQrScanner { scanned ->
+        if (scanned != null) {
+            error = null
+            onChange(form.copy(qrRaw = scanned))
+        } else {
+            error = "Aucun QR lu (annulé, caméra refusée ou code illisible) : colle le contenu ci-dessous."
+        }
+    }
     val input = SetupInput(
         schoolUrl = form.schoolUrl,
         qr = qr,
@@ -303,10 +310,11 @@ private fun QrStep(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text("QR de l'application")
-        // #122 : scan direct, sans permission caméra. `null` = rien scanné, on
-        // ne touche à rien : le collage ci-dessous reste le repli.
+        // #127 : scan direct, décodeur dans l'APK (permission CAMERA demandée
+        // par l'activité de scan). `null` = rien de lu, on ne remplace rien et
+        // le message le dit ; le collage ci-dessous reste le repli.
         Button(
-            onClick = { scanQrCode(context) { scanned -> if (scanned != null) onChange(form.copy(qrRaw = scanned)) } },
+            onClick = scan,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Scanner le QR") }
         OutlinedTextField(

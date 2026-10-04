@@ -10,10 +10,12 @@ material3 = "1.2.1"
 compose-ui = "1.6.8"
 navigation-compose = "2.7.7"
 okhttp = "4.12.0"
-# #122 : scan du QR de l'établissement. Module Play Services téléchargé à la
-# demande (rien n'alourdit l'APK), AUCUNE permission CAMERA à déclarer, ~15
-# lignes d'appel contre ~120 avec CameraX + aperçu. Apache-2.0 (compatible MIT).
-play-services-code-scanner = "16.1.0"
+# #127 : scan du QR de l'établissement. Décodeur DANS l'APK, permission CAMERA
+# demandée par l'activité de scan : ça marche sans Google Play Services (donc
+# sur l'émulateur et sur un téléphone sans GMS), ce que ne faisait pas le module
+# Play Services de #122 — dont l'échec était SILENCIEUX (bouton inerte).
+# Apache-2.0 (compatible MIT), dépendance unique : com.google.zxing:core.
+zxing-android-embedded = "4.3.0"
 
 [libraries]
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
@@ -22,4 +24,4 @@ material3 = { module = "androidx.compose.material3:material3", version.ref = "ma
 compose-ui = { module = "androidx.compose.ui:ui", version.ref = "compose-ui" }
 navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation-compose" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
-play-services-code-scanner = { module = "com.google.android.gms:play-services-code-scanner", version.ref = "play-services-code-scanner" }
+zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxing-android-embedded" }

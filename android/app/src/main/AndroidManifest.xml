@@ -1,9 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Réseau : un seul hôte allowlist = serveur (I1). INTERNET seul requis.
+    <!-- Réseau : un seul hôte allowlist = serveur (I1).
          networkSecurityConfig : clairtext UNIQUEMENT pour la boucle locale et
          l'alias émulateur (voir res/xml/network_security_config.xml) — partout
          ailleurs HTTPS obligatoire. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- CAMERA arrive par le manifeste de zxing-android-embedded (l'AAR), qui la
+         déclare et la demande au runtime via son activité de scan. Le collage du
+         QR reste le repli, donc la caméra est marquée optionnelle : le merger
+         ajoute sinon `android.hardware.camera.any` en required, et l'app devient
+         ininstallable sur un appareil sans caméra. -->
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
     <application
         android:label="VerySlopyNyNotes"
         android:networkSecurityConfig="@xml/network_security_config"
