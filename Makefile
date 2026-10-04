@@ -100,10 +100,18 @@ e2e-manuals:
 e2e-revision:
 	bun test tests/e2e/revision.test.ts
 
-# Serveur local : PORT/HOST -> routes. 0.7.0 : aucun credential à fournir, le
-# serveur démarre vide et le compte s'ouvre via POST /v1/setup (QR envoyé par l'app).
+# Serveur local : HTTPS sur 0.0.0.0:8080 (l'app Android refuse le clairtext hors
+# émulateur, cf. android/app/src/main/res/xml/network_security_config.xml).
+# 0.7.0 : aucun credential à fournir, le serveur démarre vide et le compte
+# s'ouvre via POST /v1/setup (QR envoyé par l'app). Le certificat auto-signé est
+# généré HORS du dépôt et seulement s'il manque (agents/runtime/dev-tls.sh) ;
+# TLS_CERT_FILE/TLS_KEY_FILE fournies par ailleurs (mkcert, Let's Encrypt) sont
+# respectées telles quelles, PORT/HOST restent surchargeables.
+# 0.0.0.0 = LAN exposé : le jeton de device reste exigé sur les routes fermées,
+# le TLS ne remplace pas l'appairage.
 runServer:
-	bun run server/infrastructure/http.ts
+	@. agents/runtime/dev-tls.sh; dev_tls; \
+	PORT=8080 HOST=0.0.0.0 bun run server/infrastructure/http.ts
 
 build:
 	bun run agents/runtime/check-secrets.ts

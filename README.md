@@ -60,7 +60,7 @@ bun install
 make check                     # secrets + typecheck + unit + arch + contracts + security + compile Kotlin
 make e2e                       # tests bout-en-bout (store seed, zéro réseau)
 make integration-api           # tests d'intégration (API locale, zéro secret)
-make runServer                 # serveur branché : lecture réelle + routes (voir PORT/HOST)
+make runServer                 # serveur branché : HTTPS sur 0.0.0.0:8080 (voir PORT/HOST/TLS)
 ```
 
 Client Android :
@@ -93,12 +93,36 @@ vient de l'app, à la demande :
 | Compte de l'établissement | l'app | `POST /v1/setup` avec le QR affiché par l'application Pronote + son PIN (le serveur ne le garde qu'en mémoire, le temps de la session) |
 | Clé LLM (assistant devoirs) | l'app | champ `apiKey` de `POST /v1/homework/generate` (bornée, jamais journalisée, `writeOnly`) |
 
-Seules deux variables restent lues, et ce ne sont pas des secrets :
+Seules ces variables restent lues, et ce ne sont pas des secrets :
 
 | Variable | Rôle |
 |---|---|
-| `PORT` | port d'écoute du serveur |
-| `HOST` | hôte d'écoute (défaut `127.0.0.1`, loopback) |
+| `PORT` | port d'écoute du serveur (`runServer` : 8080) |
+| `HOST` | hôte d'écoute (défaut `127.0.0.1`, loopback ; `runServer` : `0.0.0.0`) |
+| `TLS_CERT_FILE` | chemin du certificat PEM — avec `TLS_KEY_FILE`, le serveur sert en HTTPS |
+| `TLS_KEY_FILE` | chemin de la clé privée PEM (jamais dans le dépôt, jamais journalisée) |
+
+`make runServer` génère un certificat auto-signé **hors du dépôt**
+(`~/.cache/veryslopnynotes/tls`, réutilisé d'un run à l'autre, 600 sur la clé)
+plutôt que de refuser de démarrer : l'app Android interdit le clairtext hors
+émulateur
+([`network_security_config.xml`](android/app/src/main/res/xml/network_security_config.xml)).
+Fournissez `TLS_CERT_FILE` / `TLS_KEY_FILE` (mkcert, Let's Encrypt) pour un
+certificat émis : elles sont respectées telles quelles, le Makefile ne génère
+alors rien et `openssl` n'est pas requis.
+
+Limite assumée : ce certificat auto-signé n'est dans aucune chaîne de
+confiance. Le certificat de l'APK **debug** fait confiance aux certificats
+installés par l'utilisateur
+(`android/app/src/debug/res/xml/network_security_config.xml`, absent de la
+release), donc il faut l'installer sur l'appareil — procédure complète dans
+[`android/README.md`](android/README.md). Un APK release ne peut pas joindre un
+certificat auto-signé : fournissez-lui un certificat émis (`mkcert` + sa racine
+installée, ou un vrai nom).
+
+Port : `runServer` sert le 8080, alors que l'adresse par défaut de l'app reste
+`10.0.2.2:3000` (`android/core/.../ServerConfig.kt`) — saisir `https://10.0.2.2:8080`
+depuis l'émulateur, `https://<ip-lan>:8080` depuis un téléphone.
 
 Ce qui en découle, assumé : la clé de signature des `ref` média est tirée au sort à
 chaque démarrage (une ref ne survit pas à un redémarrage, l'app la régénère), le push
