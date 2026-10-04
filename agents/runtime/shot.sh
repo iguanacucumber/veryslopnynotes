@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # shot.sh — capture d'écran d'un écran de l'app, SANS taper au doigt (#133).
 #
-#   agents/runtime/shot.sh <route> [--package <pkg>] [--wait <secondes>] [--no-build]
+#   agents/runtime/shot.sh <route> [--package <pkg>] [--wait <secondes>] [--theme <t>] [--no-build]
 #   make shot ROUTE=grades [SHOT_ARGS=--no-build]
+#   make shot ROUTE=grades SHOT_ARGS="--theme dark"   # #179 : capture en sombre
 #
 # Pourquoi ce script existe : vérifier une refonte d'interface écran par écran
 # supposait `adb shell input tap X Y`. Des coordonnées qui dépendent de la taille
@@ -42,6 +43,7 @@ REMOTE_UI_XML="/sdcard/vsn-shot-ui.xml"
 ROUTE=""
 PKG="$APP_PKG"
 WAIT_SEC=3
+THEME=""
 SERIAL=""
 RAW=""
 BUILD=1
@@ -53,7 +55,7 @@ die() {
 
 usage() {
     cat <<'USAGE'
-usage : shot.sh <route> [--package <pkg>] [--wait <secondes>] [--no-build]
+usage : shot.sh <route> [--package <pkg>] [--theme <t>] [--wait <secondes>] [--no-build]
 
   <route>               route de l'app : index, calendar, grades, tasks,
                         profile, settings, news, canteen, attendance,
@@ -61,6 +63,13 @@ usage : shot.sh <route> [--package <pkg>] [--wait <secondes>] [--no-build]
                         sanctions. Avec --package, simple nom de capture.
   --package <pkg>       autre application (référence Papillon) : pas
                         d'installation, simple lancement + capture.
+  --theme <dark|light|system>
+                        force le thème de l'APPAREIL avant la capture (#179) :
+                        le pas d'encre de matière est sensible au thème, donc
+                        une capture en clair ne prouve rien du sombre. La
+                        bascule passe par « cmd uimode night » (l'état du
+                        système), donc rien n'entre dans les données de l'app.
+                        Le nom du fichier porte le thème (tasks.dark.png).
   --wait <secondes>     délai après lancement avant la capture (défaut 3).
   --no-build            PAS de construction Gradle : recapture rapide du
                         MÊME APK, qui peut être plus vieux que les sources
@@ -214,6 +223,26 @@ launch_app() {
         printf '%s\n' "$out" >&2
         die "shot : lancement refusé — écran non atteint, rien capturé."
     fi
+}
+
+# #179 — LE THÈME, POSÉ SUR L'APPAREIL. Une recette qui ne peut pas rejouer le
+# sombre ne prouve rien du sombre : il fallait écrire `shared_prefs/settings.xml`
+# à la main. `cmd uimode night` force l'état du système, donc `AppTheme.SYSTEM`
+# (le défaut) le suit, et AUCUNE donnée de l'app n'est touchée — ni session
+# appairée, ni cache, ni préférences.
+force_theme() {
+    [ -n "$THEME" ] || return 0
+    local mode
+    case "$THEME" in
+        dark) mode=yes ;;
+        light) mode=no ;;
+        system) mode=auto ;;
+        *) usage >&2; die "--theme hors valeur : « $THEME » (dark, light ou system). Rien capturé." ;;
+    esac
+    a shell cmd uimode night "$mode" >/dev/null 2>&1 \
+        || die "shot : « cmd uimode night $mode » refusé par l'appareil — thème NON
+  forcé, donc capture NON faite : elle montrerait le thème courant."
+    printf "shot : thème de l'appareil forcé sur « %s » (night %s).\n" "$THEME" "$mode"
 }
 
 screen_size() {
@@ -567,6 +596,8 @@ main() {
         case "$arg" in
             --package) [ $# -ge 2 ] || die "--package sans valeur."; PKG="$2"; shift 2 ;;
             --package=*) PKG="${arg#*=}"; shift ;;
+            --theme) [ $# -ge 2 ] || die "--theme sans valeur."; THEME="$2"; shift 2 ;;
+            --theme=*) THEME="${arg#*=}"; shift ;;
             --wait) [ $# -ge 2 ] || die "--wait sans valeur."; WAIT_SEC="$2"; shift 2 ;;
             --wait=*) WAIT_SEC="${arg#*=}"; shift ;;
             --no-build) BUILD=0; shift ;;
@@ -598,9 +629,17 @@ main() {
             || die "shot : $PKG n'est pas installé sur l'appareil — rien capturé."
     fi
 
+    # Avant le dossier de capture : un thème refusé ne doit pas laisser un
+    # `shots/<date>/` vide, ni une capture du thème courant.
+    force_theme
+
     local name
     name="$ROUTE.png"
     [ "$PKG" = "$APP_PKG" ] || name="$ROUTE.$PKG.png"
+    # Le thème entre dans le nom : sans lui, la capture sombre ÉCRASERAIT la
+    # capture claire du même jour, et la comparaison des deux deviendrait
+    # impossible (c'est exactement la comparaison que #179 demande).
+    [ -z "$THEME" ] || name="${name%.png}.$THEME.png"
     # Le nom de capture d'une app tierce est libre (aucune liste blanche de
     # routes) : on n'accepte que des caractères de nom de fichier, sinon
     # `../../` écrireait la capture ailleurs que dans shots/.

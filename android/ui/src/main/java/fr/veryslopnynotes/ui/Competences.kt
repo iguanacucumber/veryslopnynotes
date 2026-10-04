@@ -126,16 +126,20 @@ private fun parseChipColor(hex: String): Color = try {
 }
 
 /**
- * FOND de puce : la couleur de la compétence, bornée en LUMINANCE.
+ * FOND de puce : la couleur de la compétence, bornée en LUMINANCE, dans le
+ * thème demandé.
  *
  * #144 : la puce prenait la couleur telle quelle — qu'elle vienne du serveur ou
  * d'un hachage — donc deux couleurs de luminance opposée donnaient deux écrans
  * de contraste opposés, et le texte ne pouvait pas être lisible sur les deux.
  * On applique donc le MÊME pas que Papillon pour une carte matière : [tint] à
- * 75 % vers le blanc (le pastel derrière le libellé). Le fond est alors toujours
- * clair, quelle que soit la teinte — c'est ce qui rend la paire mesurable.
+ * 75 % vers le blanc (le pastel derrière le libellé), 60 % vers le noir en
+ * thème SOMBRE (#179 : un pastel clair sur fond noir est un aplat qui brûle).
+ * Le fond est alors toujours du même côté du gris que sa page — c'est ce qui
+ * rend la paire mesurable.
  */
-fun chipSurfaceColor(hex: String): Color = tint(parseChipColor(hex), .75f)
+fun chipSurfaceColor(hex: String, dark: Boolean): Color =
+    tint(parseChipColor(hex), if (dark) SUBJECT_SURFACE_DARK_TINT else SUBJECT_SURFACE_TINT)
 
 /**
  * ENCRE de puce, choisie par contraste mesuré.
@@ -150,6 +154,11 @@ fun chipSurfaceColor(hex: String): Color = tint(parseChipColor(hex), .75f)
  * couleurs se teste sans téléphone.
  */
 fun chipContentColor(background: Color): Color = bestContentOn(background)
+
+/** Raccourci `@Composable` : le mode se LIT dans le thème ([isDarkSurface]),
+ *  donc une puce ne peut pas être éclaircie pour un écran sombre. */
+@Composable
+fun chipSurfaceColor(hex: String): Color = chipSurfaceColor(hex, isDarkSurface())
 
 private fun JSONObject.nullableDouble(key: String): Double? {
     if (isNull(key)) return null
