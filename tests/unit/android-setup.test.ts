@@ -196,7 +196,7 @@ function messageFor(repo: string, code: string): string {
   return apres;
 }
 
-describe("scan du QR (#122) : caméra sans permission, collage toujours là", () => {
+describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services", () => {
   const scanner = read(join(UI, "QrScanner.kt"));
   const screen = read(join(UI, "PairingScreen.kt"));
   const uiGradle = read(join(ANDROID, "ui/build.gradle.kts"));
@@ -205,22 +205,40 @@ describe("scan du QR (#122) : caméra sans permission, collage toujours là", ()
 
   test("dépendance épinglée dans le catalogue ET déclarée dans le module ui", () => {
     // Un module Gradle sans version explicite est une dépendance qui dérive.
-    expect(catalog).toContain('play-services-code-scanner = "16.1.0"');
-    expect(catalog).toContain('module = "com.google.android.gms:play-services-code-scanner"');
-    expect(uiGradle).toContain('implementation("com.google.android.gms:play-services-code-scanner:16.1.0")');
+    expect(catalog).toContain('zxing-android-embedded = "4.3.0"');
+    expect(catalog).toContain('module = "com.journeyapps:zxing-android-embedded"');
+    expect(uiGradle).toContain('implementation("com.journeyapps:zxing-android-embedded:4.3.0")');
   });
 
-  test("AUCUNE permission caméra déclarée (le scan est délégué à Play Services)", () => {
+  test("AUCUNE dépendance à Play Services : c'était elle qui rendait le bouton inerte", () => {
+    // #122 : le module de scan était téléchargé à la demande par un service
+    // absent (émulateur, téléphone sans GMS) et son échec revenait en `null`
+    // sans rien afficher. Le décodeur est maintenant dans l'APK.
+    for (const f of [uiGradle, catalog, scanner, screen]) {
+      expect({ fichier: f.slice(0, 40), play_services: f.includes("play-services-code-scanner") }).toEqual({
+        fichier: f.slice(0, 40),
+        play_services: false,
+      });
+    }
+  });
+
+  test("caméra OPTIONNELLE : CAMERA vient de l'AAR, le merger n'en fait pas un filtre", () => {
+    // L'AAR déclare CAMERA et la demande au runtime. Si `camera.any` restait
+    // `required` (ajouté d'office par le merger), l'app serait ininstallable
+    // sur un appareil sans caméra — alors que le collage est le repli.
     expect(manifest).not.toContain("android.permission.CAMERA");
-    expect(read(join(UI, "QrScanner.kt"))).not.toContain("Manifest.permission");
+    expect(manifest).toContain('android:name="android.hardware.camera.any"');
+    expect(manifest).toContain('android:required="false"');
   });
 
-  test("annulation ou échec = null, donc le collage reste le chemin de secours", () => {
-    expect(scanner).toContain("fun scanQrCode(");
-    expect(scanner).toContain(".addOnCanceledListener { onResult(null) }");
-    expect(scanner).toContain(".addOnFailureListener { onResult(null) }");
-    // L'appelant ne remplace la saisie que si un contenu est vraiment revenu.
-    expect(screen).toContain("if (scanned != null) onChange(form.copy(qrRaw = scanned))");
+  test("rien de lu = un message, jamais le silence qui faisait 'bouton inerte'", () => {
+    expect(scanner).toContain("fun rememberQrScanner(");
+    expect(scanner).toContain("rememberLauncherForActivityResult(ScanContract())");
+    expect(scanner).toContain("result.contents?.takeIf { it.isNotBlank() }");
+    // L'appelant ne remplace la saisie que si un contenu est vraiment revenu,
+    // ET il dit quoi faire sinon.
+    expect(screen).toContain("if (scanned != null)");
+    expect(screen).toContain("Aucun QR lu (annulé, caméra refusée ou code illisible)");
     // Et le champ de collage n'a pas disparu au profit du bouton.
     expect(screen).toContain('Text("Scanner le QR")');
     expect(screen).toContain('label = { Text("Contenu du QR (login + jeton)") }');
@@ -229,6 +247,6 @@ describe("scan du QR (#122) : caméra sans permission, collage toujours là", ()
   test("un contenu scanné passe par le même parseur que le collage", () => {
     // Deux entrées, une seule porte de sortie : pas de second parseur à diverger.
     expect(screen).toContain("val qr = parseSchoolQr(form.qrRaw)");
-    expect(scanner).toContain("Barcode.FORMAT_QR_CODE");
+    expect(scanner).toContain("ScanOptions.QR_CODE");
   });
 });

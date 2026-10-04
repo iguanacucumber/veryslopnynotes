@@ -1,37 +1,46 @@
 package fr.veryslopnynotes.ui
 
-import android.content.Context
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
-import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 
 /**
- * Scan du QR affiché par l'application de l'établissement (#122).
+ * Scan du QR affiché par l'application de l'établissement (#127).
  *
- * Google Code Scanner : le module de scan est fourni par Play Services, donc
- * AUCUNE permission caméra à déclarer au manifeste et aucun aperçu à maintenir
- * (l'écart avec CameraX + aperçu : ~120 lignes et une permission de plus pour le
- * même résultat). Le champ de collage reste le repli : un téléphone sans Play
- * Services, un refus, ou un module pas encore téléchargé ne bloque personne.
+ * zxing-android-embedded : le décodeur est DANS l'APK et l'activité de scan
+ * demande elle-même la permission CAMERA. Donc ça marche partout — téléphone sans
+ * Google Play Services, émulateur — ce que ne faisait PAS le Google Code Scanner
+ * de #122 : son module est téléchargé à la demande par un service absent, et son
+ * échec revenait en `null` sans rien afficher, donc un bouton inerte. Le champ de
+ * collage, lui, ne dépend d'aucune caméra et n'a jamais disparu.
  *
- * `onResult(null)` = rien de scanné (annulation, échec, QR non lisible par le
- * service). L'appelant ne fait alors rien d'autre : l'utilisateur est toujours
- * au même endroit, avec son collage.
+ * `onResult(null)` = rien de lu : annulation, permission refusée, ou QR que le
+ * décodeur n'a pas su lire. L'appelant ne remplace donc rien et affiche une
+ * phrase actionnable, au lieu du silence.
  */
-fun scanQrCode(
-    context: Context,
-    onResult: (String?) -> Unit,
-) {
-    val options = GmsBarcodeScannerOptions.Builder()
-        // Le QR de l'établissement est un code texte (login + jeton), pas une
-        // carte de visite : on ne demande QUE ce format, ça réduit les chances
-        // de capturer la mauvaise chose et le travail du service.
-        .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-        .enableAutoZoom()
-        .build()
-    GmsBarcodeScanning.getClient(context, options)
-        .startScan()
-        .addOnSuccessListener { barcode -> onResult(barcode.rawValue?.takeIf { it.isNotBlank() }) }
-        .addOnCanceledListener { onResult(null) }
-        .addOnFailureListener { onResult(null) }
+@Composable
+fun rememberQrScanner(onResult: (String?) -> Unit): () -> Unit {
+    val launcher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        onResult(result.contents?.takeIf { it.isNotBlank() })
+    }
+    return remember(launcher) {
+        {
+            launcher.launch(
+                ScanOptions()
+                    // Le QR de l'établissement est un code texte (login + jeton),
+                    // pas une carte de visite : on ne demande QUE ce format, ça
+                    // réduit le travail du décodeur et le risque de capturer la
+                    // mauvaise chose.
+                    .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                    .setPrompt("QR de l'application de ton établissement")
+                    .setBeepEnabled(false)
+                    // Le QR est dense : on le lit en portrait, comme l'écran qui
+                    // l'affiche. Verrouiller en paysage (défaut de la lib) le
+                    // ferait pivoter sous le nez de l'utilisateur.
+                    .setOrientationLocked(false),
+            )
+        }
+    }
 }
