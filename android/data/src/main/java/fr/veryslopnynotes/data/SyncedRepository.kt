@@ -39,7 +39,8 @@ class SyncedRepository(
     // ponytail: query de fenêtre bornée par l appelant (weekStart, #76), vide par
     // défaut = chemin inchangé. Jamais de saisie libre concaténée ici.
     fun pathFor(resource: String, baseUrl: String, query: String = ""): String = when (resource) {
-        CachePolicy.GRADES -> ServerConfig.gradesUrl(baseUrl)
+        // #139 : query `algorithm` + `periodId` (sélecteurs de l'onglet Notes).
+        CachePolicy.GRADES -> ServerConfig.gradesUrl(baseUrl, query)
             .removePrefix(baseUrl).ifEmpty { "/v1/grades" }
         CachePolicy.ASSIGNMENTS -> ServerConfig.assignmentsUrl(baseUrl)
             .removePrefix(baseUrl).ifEmpty { "/v1/assignments" }
@@ -169,6 +170,59 @@ class SyncedRepository(
                     }
                     // Contenu serveur = donnee consommee comme invalidation,
                     // jamais interpretee (I6/I7).
+                    post(cb, RefreshOutcome.Updated(body, clock()))
+                }
+            }
+        })
+    }
+
+    /**
+     * #139 : lecture des TRANCHES de l'établissement (`GET /v1/periods`), premier
+     * appel à cette route depuis l'app (le sélecteur de période de l'onglet
+     * Notes).
+     *
+     * Volontairement HORS cache : `/v1/periods` n'est pas dans
+     * `CACHEABLE_RESOURCES` (shared/contracts/cache.ts), donc l'ajouter ici
+     * reviendrait à modifier un contrat partagé pour une liste qui change une
+     * fois par an. On rend donc le même [RefreshOutcome] que le reste, mais sans
+     * écriture disque : `Updated` = payload lu, `Failed` = le message réel.
+     *
+     * Jamais d'exception vers l'UI, même Plomberie que `refreshAsync` sur un 401 :
+     * le signal de session morte reste levé par `ApiClient`, jamais ici.
+     */
+    fun fetchPeriods(baseUrl: String, cb: (RefreshOutcome) -> Unit) {
+        if (baseUrl.isBlank()) {
+            post(cb, RefreshOutcome.Failed("Serveur non configure.", null))
+            return
+        }
+        val request = try {
+            api.buildGet(ServerConfig.periodsUrl(baseUrl).removePrefix(baseUrl))
+        } catch (e: IllegalArgumentException) {
+            post(cb, RefreshOutcome.Failed("URL hors allowlist serveur", null))
+            return
+        }
+        api.client().newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                post(cb, RefreshOutcome.Failed("Hors-ligne, tranches indisponibles.", null))
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    val body = it.body?.string()
+                    if (!it.isSuccessful) {
+                        post(
+                            cb,
+                            RefreshOutcome.Failed(
+                                if (it.code == ApiClient.HTTP_UNAUTHORIZED) DeviceAuth.REJECTED_MESSAGE else "Erreur serveur ${it.code}.",
+                                null,
+                            ),
+                        )
+                        return
+                    }
+                    if (body.isNullOrEmpty()) {
+                        post(cb, RefreshOutcome.Failed("Réponse vide.", null))
+                        return
+                    }
                     post(cb, RefreshOutcome.Updated(body, clock()))
                 }
             }

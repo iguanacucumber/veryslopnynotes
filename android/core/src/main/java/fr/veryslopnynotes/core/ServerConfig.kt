@@ -210,6 +210,13 @@ object ServerConfig {
     }
 
     fun gradesUrl(baseUrl: String): String = "$baseUrl/v1/grades"
+    // #139 : query d'algorithme + de période (`algorithm=subject&periodId=p-1`),
+    // même forme que la fenêtre de semaine de l'EDT (`timetableUrl(baseUrl,
+    // query)`) : query vide = appel inchangé. La query est construite par l'app
+    // depuis des LISTES FERMÉES (algorithmes du contrat, tranches de
+    // `/v1/periods`), jamais depuis une saisie libre.
+    fun gradesUrl(baseUrl: String, query: String): String =
+        if (query.isBlank()) gradesUrl(baseUrl) else "$baseUrl/v1/grades?$query"
     fun assignmentsUrl(baseUrl: String, from: String? = null, to: String? = null, weekStart: String? = null): String =
         withQuery(assignmentsUrl(baseUrl), from, to, weekStart)
     fun assignmentsUrl(baseUrl: String): String = "$baseUrl/v1/assignments"
