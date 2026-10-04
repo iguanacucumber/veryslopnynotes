@@ -424,19 +424,19 @@ describe("briques d'interface (#136)", () => {
     expect(kt.match(/remember \{ mutableStateOf/g)?.length).toBe(1);
   });
 
-  test("les écrans qui jetaient le message serveur : un seul a été migré, par #137 et #138", () => {
+  test("les écrans qui jetaient le message serveur : EDT, Tâches et Messagerie migrés", () => {
     // Honnêteté sur le périmètre : #136 livre les BRIQUES et ne touche aucun
     // écran, donc les `Text("Erreur réseau. Réessayer.")` et les
     // « Données hors-ligne (périmé). » étaient toujours là. Ils disparaissent
     // quand un écran adopte `PapErrorState` / `PapStaleBanner`. Ce test
     // échouera le jour où le suivant le fera — c'est le témoin, pas le but.
-    // #137 (EDT) puis #138 (Tâches) sont les écrans migrés : `TimetableWeek.kt`
-    // et `Assignments.kt` sont donc sortis de la liste, et l'assertion compte
-    // les six restants.
-    const fichiers = ["Attendance.kt", "CanteenMenus.kt", "MessagesScreen.kt", "NewsScreen.kt", "RevisionSheets.kt", "SecurityAlertsScreen.kt"];
+    // #137 (EDT), #138 (Tâches) puis #142 (Messagerie) sont les écrans migrés :
+    // `TimetableWeek.kt`, `Assignments.kt` et `MessagesScreen.kt` sont donc sortis
+    // de la liste, et l'assertion compte les cinq restants.
+    const fichiers = ["Attendance.kt", "CanteenMenus.kt", "NewsScreen.kt", "RevisionSheets.kt", "SecurityAlertsScreen.kt"];
     const restants = fichiers.filter((f) => readFileSync(join(UI, f), "utf8").includes('"Erreur réseau. Réessayer."'));
     expect({ ecransPasEncoreMigres: restants.length }).toEqual({ ecransPasEncoreMigres: fichiers.length });
-    // Le témoin inversé : chaque écran migré affiche le VRAI message (#137, #138).
+    // Le témoin inversé : chaque écran migré affiche le VRAI message.
     const edt = readFileSync(join(UI, "TimetableWeek.kt"), "utf8");
     expect({ edt: edt.includes('"Erreur réseau. Réessayer."') }).toEqual({ edt: false });
     expect(edt).toContain("PapErrorState(message = error.message");
@@ -447,5 +447,17 @@ describe("briques d'interface (#136)", () => {
     expect(devoirs).toContain("PapStaleBanner(fetchedAt = fetchedAt");
     expect(devoirs).toContain("PapLoading()");
     expect(devoirs).toContain("PapEmptyState(");
+    // #142 : même migration pour la messagerie, et le message réel n'est pas
+    // affiché deux fois (bandau quand le cache est là, état d'écran sinon).
+    const messagerie = readFileSync(join(UI, "MessagesScreen.kt"), "utf8");
+    expect({ messagerie: messagerie.includes('"Erreur réseau. Réessayer."') }).toEqual({ messagerie: false });
+    expect(messagerie).toContain("PapErrorState(message = error, onRetry = onRetry)");
+    expect(messagerie).toContain("PapStaleBanner(fetchedAt = fetchedAt");
+    expect(messagerie).toContain("PapLoading()");
+    expect(messagerie).toContain("PapEmptyState(");
+    // Tirail + recherche + confirmation de suppression : les trois gestes que
+    // #142 demande par-dessus les briques.
+    expect(messagerie).toContain("HomePullToRefresh(");
+    expect(messagerie).toContain("ConfirmDialog(");
   });
 });
