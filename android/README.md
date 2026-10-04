@@ -37,6 +37,13 @@ stocké chiffré. Sans jeton appairé, le démarrage ouvre l'assistant au lieu d
 l'accueil ; après un 401 ou un redémarrage du serveur, c'est lui qui rouvre la
 session **et** le credential.
 
+Chaque étape **défile** : en paysage (rotation verrouillée), la colonne
+débordait et « Continuer » tombait hors de l'écran. Ouvrir le scan ne détruit
+plus l'assistant non plus : zxing déclare son activité `clearTaskOnLaunch`, ce
+qui relançait `MainActivity` à zéro au retour du scan — l'appartenance
+`android:clearTaskOnLaunch="false"` + `tools:replace` dans
+`app/src/main/AndroidManifest.xml` annule ce drapeau (vérifié sur l'appareil).
+
 Aucun identifiant n'est saisi ni stocké sur le téléphone (0.7.0 : le QR est la
 seule preuve de détention). Le QR et son PIN partent dans le POST ; le serveur ne
 les garde qu'en mémoire, pour renouveler la session, et ne les journalise jamais.
