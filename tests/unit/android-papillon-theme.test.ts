@@ -1,0 +1,345 @@
+// Miroir TS de la logique pure de PapillonTheme.kt — `tint` (l'`adjustColor` de
+// papillon.bzh), `subjectSurface`/`subjectContent`, luminance et rapport de
+// contraste WCAG, `bestContentOn`. Les couleurs sont des `Color(0xAARRGGBB)`
+// et des flottants, donc aucun hex n'est ré-analysé : le miroir travaille en
+// fraction 0..1 comme le Kotlin.
+//
+// Dérive assumée : ce fichier duplique le calcul Kotlin au lieu de le partager —
+// un JVM ne tourne pas dans `bun test`. Le seul garde-fou réel est le test Kotlin
+// ci-dessous qui relit PapillonTheme.kt (jetons, constantes, absence de
+// dépendance) PLUS `make android-compile` qui compile le vrai fichier. Tout ce
+// que le miroir ne voit pas : une résolution de symbole, une surcharge ambiguë,
+// un `Color(0x...)` mal typé. Upgrade: golden test Gradle (testDebugUnitTest)
+// si le miroir devient un poids.
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const UI = join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui");
+const APP = join(import.meta.dir, "..", "..", "android/app/src/main/java/fr/veryslopnynotes/app");
+
+// --- Miroir de PapillonTheme.kt ---
+type Rgb = { r: number; g: number; b: number; a: number };
+
+const color8 = (r: number, g: number, b: number, a = 1): Rgb => ({ r: r / 255, g: g / 255, b: b / 255, a });
+const hex8 = (h: string): Rgb => color8(parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16));
+const WHITE = color8(255, 255, 255);
+
+/** Compose `Color(red, green, blue, alpha)` : flottants 0..1, AUCUN arrondi 8 bits. */
+function tsTint(color: Rgb, p: number): Rgb {
+  const amount = Math.min(1, Math.abs(p));
+  const towardWhite = p >= 0;
+  const channel = (v: number): number => (towardWhite ? v + (1 - v) * amount : v - v * amount);
+  return { r: channel(color.r), g: channel(color.g), b: channel(color.b), a: color.a };
+}
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+/** Renvoie null si le hex est absent ou mal formé — jamais de couleur inventée. */
+function tsTintHex(hex: string, p: number): Rgb | null {
+  if (!HEX.test(hex)) return null;
+  return tsTint(hex8(hex), p);
+}
+
+const tsSubjectSurface = (hex: string): Rgb | null => tsTintHex(hex, 0.75);
+const tsSubjectContent = (hex: string): Rgb | null => tsTintHex(hex, -0.45);
+
+function tsLuminance(color: Rgb): number {
+  const linear = (v: number): number => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+  return 0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b);
+}
+
+function tsContrast(a: Rgb, b: Rgb): number {
+  const la = tsLuminance(a);
+  const lb = tsLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+const INK = hex8("#1F292E");
+const tsBestContentOn = (background: Rgb): Rgb =>
+  tsContrast(background, INK) >= tsContrast(background, WHITE) ? INK : WHITE;
+
+// Jetons Papillon, dans l'ordre du fichier Kotlin.
+const GREEN = hex8("#29947A");
+const GREEN_DEEP = hex8("#237E68");
+const GREEN_PALE = tsTint(GREEN, 0.94);
+const LIME = hex8("#BFE677");
+const LIME_INK = hex8("#5A7821");
+const DANGER = hex8("#DC1400");
+const BORDER = hex8("#DCDCDC");
+const SURFACE = hex8("#FFFFFF");
+const SURFACE_VARIANT = hex8("#F3F6F7");
+const SURFACE_CONTAINER = hex8("#F1F1F1");
+const DARK_SURFACE = hex8("#121212");
+const DARK_BACKGROUND = color8(0, 0, 0);
+const SECONDARY_ALPHA = 0.65;
+
+const PALETTE = [
+  "#C50017", "#DA2400", "#DD6B00", "#E8901C", "#E8B048",
+  "#6BAE00", "#37BB12", "#12BB67", "#26B290", "#26ABB2",
+  "#2DB9D8", "#009EC5", "#007FDA", "#3A56D0", "#7600CA",
+  "#962DD8", "#B300CA", "#C50066", "#DD004A", "#DD0030",
+];
+
+// Compose d'une encre semi-transparente sur son fond réel : c'est ce que fait
+// le moteur, donc c'est ce qu'il faut mesurer (jamais la teinte brute).
+const over = (fg: Rgb, bg: Rgb, alpha: number): Rgb => ({
+  r: fg.r * alpha + bg.r * (1 - alpha),
+  g: fg.g * alpha + bg.g * (1 - alpha),
+  b: fg.b * alpha + bg.b * (1 - alpha),
+  a: 1,
+});
+
+const readCode = (path: string): string =>
+  readFileSync(path, "utf8").split("\n").map((l) => l.replace(/\/\/.*$/, "")).join("\n");
+
+const rounded = (x: number): number => Math.round(x * 100) / 100;
+
+describe("unit android thème Papillon (#134)", () => {
+  test("tint : p>0 vers le blanc, p<0 vers le noir, monotone et borné", () => {
+    // Bornes : p = ±1 donne exactement le noir et le blanc, jamais au-delà.
+    for (const c of [GREEN, INK, hex8(PALETTE[0]), hex8(PALETTE[4])]) {
+      expect({ c: tsTint(c, 1) }).toEqual({ c: WHITE });
+      expect({ c: tsTint(c, -1) }).toEqual({ c: color8(0, 0, 0) });
+    }
+    // p = 0 est l'identité.
+    expect(tsTint(GREEN, 0)).toEqual(GREEN);
+    // Monotonie : vers le blanc, chaque canal croît et reste sous 1 ; vers le
+    // noir, chaque canal décroît et reste > 0 tant que la couleur n'est pas noire.
+    for (const base of [GREEN, hex8(PALETTE[11]), hex8(PALETTE[19])]) {
+      const whites = [0, 0.25, 0.5, 0.75, 1].map((p) => tsTint(base, p));
+      const blacks = [0, -0.25, -0.5, -0.75, -1].map((p) => tsTint(base, p));
+      for (let i = 1; i < whites.length; i++) {
+        for (const ch of ["r", "g", "b"] as const) {
+          expect(whites[i]![ch]).toBeGreaterThanOrEqual(whites[i - 1]![ch]);
+          expect(blacks[i]![ch]).toBeLessThanOrEqual(blacks[i - 1]![ch]);
+        }
+      }
+      // Un canal déjà au maximum ne bouge plus (le lerp sature, il n'explose pas).
+      expect(whites[whites.length - 1]!.g).toBe(1);
+    }
+    // Valeurs intermédiaires figées : une dérive de formule se voit ici.
+    expect(rounded(tsTint(GREEN, 0.25).r)).toBe(0.37);
+    expect(rounded(tsTint(GREEN, -0.5).r)).toBe(0.08);
+    // |p| > 1 est ramené dans 0..1 : jamais de couleur hors noir/blanc.
+    expect(tsTint(GREEN, 7)).toEqual(WHITE);
+    expect(tsTint(GREEN, -7)).toEqual(color8(0, 0, 0));
+  });
+
+  test("tint : hex absent ou mal formé = null, jamais de couleur inventée", () => {
+    for (const bad of ["", "#fff", "29947A", "#GGGGGG", "#29947A80", "rgb(1,2,3)"]) {
+      expect({ bad, got: tsTintHex(bad, 0.5) }).toEqual({ bad, got: null });
+      expect({ bad, surface: tsSubjectSurface(bad) }).toEqual({ bad, surface: null });
+      expect({ bad, content: tsSubjectContent(bad) }).toEqual({ bad, content: null });
+    }
+    // Minuscules acceptées (le Kotlin compile sur la même regex insensible à la casse).
+    expect(tsTintHex("#29947a", 0)).toEqual(tsTintHex("#29947A", 0));
+  });
+
+  test("palette matières : 20 couleurs, aucun doublon, toutes hex", () => {
+    expect(PALETTE).toHaveLength(20);
+    expect(new Set(PALETTE.map((h) => h.toUpperCase())).size).toBe(20);
+    for (const h of PALETTE) expect({ h, ok: HEX.test(h) }).toEqual({ h, ok: true });
+  });
+
+  test("contraste : luminance WCAG (bornes) et paires texte/fond >= 4.5", () => {
+    // Bornes de la formule : noir 0, blanc 1, et 21 pour le couple noir/blanc.
+    expect(tsLuminance(color8(0, 0, 0))).toBe(0);
+    expect(tsLuminance(WHITE)).toBe(1);
+    expect(tsContrast(color8(0, 0, 0), WHITE)).toBeCloseTo(21, 4);
+    expect(tsContrast(GREEN, GREEN)).toBe(1);
+
+    // Thème CLAIR : toute paire où du TEXTE repose sur sa surface doit passer AA.
+    const light = [
+      ["onSurface/surface", INK, SURFACE],
+      ["onBackground/background", INK, SURFACE],
+      ["onSurfaceVariant/surface", over(INK, SURFACE, SECONDARY_ALPHA), SURFACE],
+      ["onSecondary/secondary", WHITE, GREEN_DEEP],
+      ["onSecondaryContainer/secondaryContainer", INK, GREEN_PALE],
+      ["onPrimaryContainer/primaryContainer", GREEN_DEEP, GREEN_PALE],
+      ["onError/error", WHITE, DANGER],
+    ] as const;
+    for (const [name, fg, bg] of light) {
+      expect({ name, ratio: rounded(tsContrast(fg, bg)) >= 4.5 }).toEqual({ name, ratio: true });
+    }
+    // Thème SOMBRE : mêmes rôles, sur la surface #121212 et le fond #000000.
+    const dark = [
+      ["onSurface/surface", WHITE, DARK_SURFACE],
+      ["onBackground/background", WHITE, DARK_BACKGROUND],
+      ["onSurfaceVariant/surface", over(WHITE, DARK_SURFACE, SECONDARY_ALPHA), DARK_SURFACE],
+      ["onSecondary/secondary", DARK_SURFACE, hex8("#48A98B")],
+      ["onSecondaryContainer/secondaryContainer", INK, GREEN_PALE],
+      ["onPrimaryContainer/primaryContainer", tsTint(GREEN, 0.7), tsTint(GREEN, -0.35)],
+      ["onError/error", WHITE, DANGER],
+      ["outline/surface (bordure)", tsTint(INK, 0.45), DARK_SURFACE],
+    ] as const;
+    for (const [name, fg, bg] of dark) {
+      expect({ name, ratio: rounded(tsContrast(fg, bg)) >= 4.5 }).toEqual({ name, ratio: true });
+    }
+
+    // Papillon : le blanc sur le vert de marque mesure 3.74:1 — couleur
+    // d'INTERFACE, WCAG 1.4.3 n'y vise que le texte de corps. AA exige donc
+    // `onSurface` (14.84:1), pas `primary`, pour le texte.
+    expect(rounded(tsContrast(WHITE, GREEN))).toBe(3.74);
+    expect(rounded(tsContrast(INK, SURFACE))).toBe(14.84);
+  });
+
+  test("paires de marque assumées et figées : onPrimary/primary 3.74, onTertiary 3.57", () => {
+    // Ces deux couples sont des valeurs RELEVÉES sur papillon.bzh : on ne les
+    // remplace pas par un substitut qui passerait 4.5 et trahirait la marque.
+    // Elles sont figées ici pour qu'un changement de formule se voie.
+    expect(rounded(tsContrast(WHITE, GREEN))).toBe(3.74);
+    expect(rounded(tsContrast(LIME_INK, LIME))).toBe(3.57);
+    // Le vert clair ne TIENT PAS le blanc (2.87:1) : c'est pourquoi le rôle
+    // `secondary` clair est le vert profond et le sombre prend une encre sombre.
+    expect(rounded(tsContrast(WHITE, hex8("#48A98B")))).toBe(2.87);
+    expect(rounded(tsContrast(DARK_SURFACE, hex8("#48A98B")))).toBe(6.53);
+  });
+
+  test("bestContentOn : choisit le côté le plus lisible, sur les 20 couleurs", () => {
+    for (const h of PALETTE) {
+      const bg = hex8(h);
+      const ink = tsContrast(INK, bg);
+      const white = tsContrast(WHITE, bg);
+      const chosen = tsBestContentOn(bg);
+      const isInk = chosen === INK;
+      // Jamais un choix arbitraire : c'est bien l'argmax des deux côtés.
+      expect({ h, chose: isInk ? "ink" : "white", argmax: ink >= white ? "ink" : "white" }).toEqual({
+        h,
+        chose: isInk ? "ink" : "white",
+        argmax: ink >= white ? "ink" : "white",
+      });
+      // Et le côté écarté est réellement le moins bon.
+      expect(Math.max(ink, white)).toBeGreaterThan(Math.min(ink, white));
+    }
+    // Le cas réel de Competences.kt : du blanc en dur sur une puce jaune
+    // tombait à 1.1:1 — `bestContentOn` choisit l'encre, à 7.59:1.
+    const yellow = tsBestContentOn(hex8("#E8B048"));
+    expect({ isWhite: yellow === WHITE, ratio: rounded(tsContrast(yellow, hex8("#E8B048"))) }).toEqual({
+      isWhite: false,
+      ratio: 7.59,
+    });
+    // Deux colors de la palette (#DD6B00, #007FDA) n'atteignent pas 4.5 :
+    // ni le noir ni le blanc ne le peuvent. C'est documenté, pas masqué.
+    const below = PALETTE.filter((h) => Math.max(tsContrast(INK, hex8(h)), tsContrast(WHITE, hex8(h))) < 4.5);
+    expect(below.sort()).toEqual(["#007FDA", "#DD6B00"]);
+  });
+
+  test("carte matière : subjectContent sur subjectSurface >= 4.5 pour les 20 couleurs", () => {
+    let worst = { h: "", ratio: 21 };
+    for (const h of PALETTE) {
+      const bg = tsSubjectSurface(h)!;
+      const ink = tsSubjectContent(h)!;
+      const ratio = tsContrast(ink, bg);
+      expect({ h, ok: ratio >= 4.5 }).toEqual({ h, ok: true });
+      // Le fond pastel reste distinguable de la surface (une carte se voit).
+      expect(tsContrast(bg, SURFACE)).toBeGreaterThan(1);
+      if (ratio < worst.ratio) worst = { h, ratio };
+    }
+    // Le pas de Papillon (-15 %) ne suffirait pas : 2.29:1 au pire (#E8B048).
+    expect(rounded(Math.min(...PALETTE.map((h) => tsContrast(tsTintHex(h, -0.15)!, tsSubjectSurface(h)!)))))
+      .toBe(2.3);
+    // -45 % est le pas le plus clair qui repasse au-dessus des 4.5.
+    expect({ h: worst.h, ratio: rounded(worst.ratio) }).toEqual({ h: "#E8B048", ratio: 4.9 });
+  });
+});
+
+describe("unit android thème Papillon — Kotlin (#134)", () => {
+  test("jetons, schemes et câblage présents dans PapillonTheme.kt", () => {
+    // Les commentaires `//` sont retirés partout : ce fichier explique en commentaire
+    // ce qu'il supprime (le violet, le gris en dur, Dynamic Color), et ce texte
+    // ne doit pas passer pour du code encore présent.
+    const kt = readCode(join(UI, "PapillonTheme.kt"));
+    // Couleurs de marque, une par une : un hex typoqué se voit ici.
+    for (const hex of [
+      "0xFF29947AL", "0xFF48A98BL", "0xFF237E68L", "0xFFBFE677L", "0xFF5A7821L",
+      "0xFFDC1400L", "0xFF1F292EL", "0xFFDCDCDCL", "0xFFFFFFFFL", "0xFFF3F6F7L",
+      "0xFFF1F1F1L", "0xFF121212L", "0xFF000000L",
+    ]) {
+      expect({ hex, found: kt.includes(hex) }).toEqual({ hex, found: true });
+    }
+    // Formes : 25 dp, la signature Papillon.
+    expect(kt).toContain("extraLarge = 25.dp");
+    // Typographie : 18 sp gras pour le titre, Roboto par le défaut système.
+    expect(kt).toContain("titleLarge = papillonText(18, 22, FontWeight.Bold)");
+    expect(kt).toContain("bodyLarge = papillonText(15, 21)");
+    expect(kt).toContain("bodyMedium = papillonText(14, 20)");
+    expect(kt).toContain("labelSmall = papillonText(13, 17)");
+    expect(kt).toContain("fontFamily = FontFamily.SansSerif");
+    // Helpers purs : signatures attendues par le miroir ci-dessus.
+    for (const fn of [
+      "fun tint(color: Color, p: Float): Color",
+      "fun tint(hex: String, p: Float): Color?",
+      "fun subjectSurface(hex: String): Color?",
+      "fun subjectContent(hex: String): Color?",
+      "fun relativeLuminance(color: Color): Float",
+      "fun contrastRatio(a: Color, b: Color): Float",
+      "fun bestContentOn(background: Color): Color",
+    ]) {
+      expect({ fn, found: kt.includes(fn) }).toEqual({ fn, found: true });
+    }
+    // Les deux coefficients qui portent les garanties de contraste.
+    expect(kt).toContain("tint(hex, .75f)");
+    expect(kt).toContain("tint(hex, -.45f)");
+    expect(kt).toContain("const val PapillonSecondaryAlpha = 0.65f");
+    // Scheme : les deux modes, plus `MaterialTheme` complet (typo + formes).
+    expect(kt).toContain("lightColorScheme(");
+    expect(kt).toContain("darkColorScheme(");
+    expect(kt).toContain("secondaryContainer = PapillonGreenPale");
+    expect(kt).toContain("typography = PapillonTypography");
+    expect(kt).toContain("shapes = PapillonShapes");
+    expect(kt).toContain("fun PapillonTheme(darkTheme: Boolean, content: @Composable () -> Unit)");
+    // Palette : les 20 matières, et AUCUNE couleur d'interface Material par
+    // défaut ne doit survivre (le bug d'origine était le violet #6750A4).
+    for (const h of PALETTE) expect({ h, found: kt.includes(`"${h}"`) }).toEqual({ h, found: true });
+    expect(kt.includes("0xFF6750A4")).toBe(false);
+    // Module : plus aucun scheme sans argument. Les commentaires `//` sont
+    // retirés avant la recherche — AppNav.kt explique dans un commentaire
+    // qu'il appelait justement ces deux fonctions sans argument, et ce texte ne
+    // doit pas passer pour un appel.
+    for (const file of ["AppNav.kt", "Theme.kt", "SubjectStyle.kt"]) {
+      const src = readCode(join(UI, file));
+      expect({ file, bare: /lightColorScheme\(\)|darkColorScheme\(\)/.test(src) }).toEqual({ file, bare: false });
+    }
+    // Racine : le thème est appliqué UNE fois, par PapillonTheme.
+    const nav = readCode(join(UI, "AppNav.kt"));
+    expect(nav).toContain("PapillonTheme(darkTheme = isDarkTheme(theme, isSystemInDarkTheme()))");
+    expect(nav).not.toContain("import androidx.compose.material3.darkColorScheme");
+    expect(nav).not.toContain("import androidx.compose.material3.lightColorScheme");
+    // `AppTheme.values()` est déprécié : `entries` le remplace.
+    expect(nav).toContain("AppTheme.entries");
+    expect(nav).not.toContain("AppTheme.values()");
+    // MainActivity : plus de MaterialTheme extérieur, il écrasait le thème choisi.
+    const activity = readCode(join(APP, "MainActivity.kt"));
+    expect(activity).not.toContain("MaterialTheme");
+    // TimetableWeek : le gris en dur (1.5:1) cède la place à une couleur de thème.
+    const week = readCode(join(UI, "TimetableWeek.kt"));
+    expect(week).not.toContain("Color.LightGray");
+    expect(week).toContain("MaterialTheme.colorScheme.onSurfaceVariant");
+    // ZÉRO dépendance ajoutée, et pas de fichier de police embarqué : la liste des
+    // modules Gradle est FIGÉE (pas de « material3 reste le seul material » :
+    // n'importe quelle ligne ajoutée fait échouer cette égalité). Roboto vient
+    // de `FontFamily.SansSerif`, donc le dossier de ressources ne gagne aucun
+    // .ttf/.otf.
+    const uiGradle = readFileSync(join(import.meta.dir, "..", "..", "android/ui/build.gradle.kts"), "utf8");
+    expect([...uiGradle.matchAll(/(?:implementation|api|platform)\("([^"]+)"\)/g)].map((m) => m[1]!).sort()).toEqual([
+      "androidx.activity:activity-compose:1.9.2",
+      "androidx.compose.material3:material3:1.2.1",
+      "androidx.compose.ui:ui:1.6.8",
+      "androidx.compose:compose-bom:2024.06.00",
+      "androidx.navigation:navigation-compose:2.7.7",
+      "com.journeyapps:zxing-android-embedded:4.3.0",
+      "com.squareup.okhttp3:okhttp:4.12.0",
+    ]);
+    expect(uiGradle).not.toMatch(/\.(ttf|otf)\b/);
+    // Compose épinglé : aucune API plus récente que material3 1.2.1 / BOM 2024.06.00.
+    expect(uiGradle).toContain("compose-bom:2024.06.00");
+    expect(uiGradle).toContain("material3:1.2.1");
+    expect(uiGradle).toContain("kotlinCompilerExtensionVersion = \"1.5.14\"");
+    expect(uiGradle).toContain("minSdk = 26");
+    expect(uiGradle).toContain("compileSdk = 34");
+    // Dynamic Color : existe en material3 1.2.1 mais VOLONTAIREMENT absent —
+    // le vert Papillon est l'identité, la couleur du fond d'écran l'écraserait.
+    expect(kt).not.toContain("dynamicLightColorScheme");
+    expect(kt).not.toContain("dynamicDarkColorScheme");
+  });
+});
