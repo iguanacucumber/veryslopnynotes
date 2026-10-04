@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -302,7 +303,10 @@ fun NewsRoute(
     var fetchedAt by remember { mutableStateOf<Long?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     // Lus de la session : l'app n'écrit pas l'état de lecture (#79 add-only).
-    var readIds by remember { mutableStateOf(emptySet<String>()) }
+    // #147 : sauvegardés malgré tout — sans eux, la pastille « non lu » revenait
+    // sur tout ce que l'utilisateur venait de marquer lu, sans qu'il l'ait
+    // redemandé. Ce sont des IDENTIFIANTS, aucun texte de l'établissement.
+    var readIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
     fun refresh() {
         if (baseUrl.isBlank()) {
             error = "Serveur non configuré."

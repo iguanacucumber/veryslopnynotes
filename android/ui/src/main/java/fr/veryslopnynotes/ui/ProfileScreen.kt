@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -111,9 +112,12 @@ fun ProfileScreen(
 ) {
     val accounts = remember(profile) { switchableAccounts(profile) }
     val active = remember(accounts, currentAccountId) { activeAccount(accounts, currentAccountId) }
-    var sheetOpen by remember { mutableStateOf(false) }
-    // Une confirmation n'est pas une navigation : l'état tient dans l'écran.
-    var logoutAsk by remember { mutableStateOf(false) }
+    // #147 : le sélecteur de compte et sa confirmation sont de l'état d'écran.
+    // `logoutAsk` surtout : c'est le dialogue qui protège la session de l'appairé
+    // — le perdre en cours de route laissait croire que la déconnexion était
+    // acquise.
+    var sheetOpen by rememberSaveable { mutableStateOf(false) }
+    var logoutAsk by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -383,12 +387,14 @@ fun ProfileRoute(
 ) {
     var profile by remember(baseUrl) { mutableStateOf<UserProfile?>(null) }
     var loaded by remember(baseUrl) { mutableStateOf(false) }
-    var error by remember(baseUrl) { mutableStateOf("") }
+    // #147 : le message du serveur reste affiché jusqu'à la réponse de la
+    // relecture — sinon la rotation effaçait la seule trace de l'échec.
+    var error by rememberSaveable(baseUrl) { mutableStateOf("") }
     var photo by remember(baseUrl) { mutableStateOf<PhotoState>(PhotoState.Absent) }
     var accountCount by remember(baseUrl) { mutableStateOf(accounts.count()) }
     // #140 : le compte ACTIF que l'app mémorise — `AccountStore` en est la
     // source, donc l'écran n'en garde qu'une copie d'affichage.
-    var currentAccountId by remember(baseUrl) { mutableStateOf(accounts.current()) }
+    var currentAccountId by rememberSaveable(baseUrl) { mutableStateOf(accounts.current()) }
     fun refresh() {
         // Serveur non configuré : aucun appel (I1).
         if (baseUrl.isBlank()) {

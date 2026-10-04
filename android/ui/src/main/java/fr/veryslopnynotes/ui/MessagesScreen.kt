@@ -48,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -155,7 +156,9 @@ fun MessagesScreen(
     onToggleRead: (Discussion) -> Unit = {},
     onNew: () -> Unit = {},
 ) {
-    var query by remember { mutableStateOf("") }
+    // #147 : la recherche est une SAISIE d'écran, elle survit à la rotation — on
+    // ne retape pas « maths » parce que le téléphone a tourné.
+    var query by rememberSaveable { mutableStateOf("") }
     val visible = searchConversations(discussions, query)
     val unread = unreadTotal(discussions)
     // #145 : l'état affiché comme VALEUR — le `Crossfade` compare des valeurs, pas
@@ -358,6 +361,9 @@ fun DiscussionDetailScreen(
     onOpenAttachment: (MessageAttachment) -> Unit = {},
     onUndoDelete: (() -> Unit)? = null,
 ) {
+    // Volontairement PAS `rememberSaveable` : une confirmation de suppression
+    // doit MOURIR au tour de l'écran. La restaurer mettrait sous le doigt un
+    // dialogue « Supprimer la discussion » que personne n'a ouvert (#147).
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
@@ -677,10 +683,13 @@ fun NewDiscussionScreen(
     onCreate: (String, String, List<String>) -> Unit = { _, _, _ -> },
     onBack: () -> Unit = {},
 ) {
-    var subject by remember { mutableStateOf("") }
-    var body by remember { mutableStateOf("") }
-    var query by remember { mutableStateOf("") }
-    var picked by remember { mutableStateOf(listOf<String>()) }
+    // #147 : objet, message, recherche et destinataires choisis sont SAUVEGARDÉS.
+    // Une nouvelle discussion est le texte le plus long qu'un utilisateur écrive
+    // dans l'app : le perdre sur une rotation, c'est le retranscrire en entier.
+    var subject by rememberSaveable { mutableStateOf("") }
+    var body by rememberSaveable { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
+    var picked by rememberSaveable { mutableStateOf(listOf<String>()) }
     val groups = searchRecipients(recipients, query)
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -886,12 +895,20 @@ fun MessagesRoute(
     // texte à l'écran à effacer, plus de courses entre l'écriture et sa peinture —
     // une seule porte, qui colourise par sévérité et se referme seule.
     val notices = LocalPapNotice.current
+    // `open` PAS `rememberSaveable` : un fil ouvert est une NAVIGATION, et ses
+    // messages sont relus au serveur à chaque ouverture (jamais en cache).
+    // Sauvegarder le fil entreposerait des données de l'établissement dans l'état
+    // système sans rien épargner à sa relecture : on le rouvre d'un tap (#147).
     var open by remember { mutableStateOf<Discussion?>(null) }
     var messages by remember { mutableStateOf<List<DiscussionMessage>>(emptyList()) }
     var messagesLoading by remember { mutableStateOf(false) }
     var sending by remember { mutableStateOf(false) }
-    var draft by remember { mutableStateOf("") }
-    var creating by remember { mutableStateOf(false) }
+    // #147 : le brouillon de réponse est le texte le plus précieux de l'onglet —
+    // perdu, il ne se réécrit pas (et l'utilisateur paie pour le renvoyer).
+    // `creating` aussi : sinon une rotation referme la nouvelle discussion en
+    // cours de rédaction.
+    var draft by rememberSaveable { mutableStateOf("") }
+    var creating by rememberSaveable { mutableStateOf(false) }
     var recipientsLoading by remember { mutableStateOf(false) }
     var recipients by remember { mutableStateOf<List<DiscussionRecipient>>(emptyList()) }
     // Aperçu du dernier message par fil, APRÈS ouverture : `/v1/discussions` ne

@@ -5,6 +5,7 @@ import { isTimetableResponse } from "../../shared/contracts/api";
 import { isTimetableEntry } from "../../shared/contracts/models";
 import { CACHE_TTL_MS } from "../../shared/contracts/cache";
 import { syntheticTimetableEntries, syntheticTimetablePayload } from "./fixtures/timetable";
+import { frDayNames, frMonths } from "./fixtures/date-fr";
 
 // Miroir des helpers Kotlin (TimetableWeek.kt + ServerConfig/CachePolicy/
 // SyncedRepository) — doivent rester en sync. org.json = SDK Android, aucune
@@ -44,7 +45,9 @@ type Day = { day: string; lessons: Lesson[] };
 type Week = { days: Day[]; lessons: Lesson[]; next: Lesson | null };
 
 const STATUSES = ["normal", "cancelled", "moved"];
-const DAY_NAMES = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+// #147 : `DAY_NAMES` et `MONTH_NAMES` ne sont plus posés ici : ils sont lus dans
+// `core/DateFr.kt` (le fichier Kotlin qui a supprimé ses deux tables privées).
+const DAY_NAMES = frDayNames();
 
 function tsMillisOf(value: unknown): number | null {
   if (typeof value !== "string" || value.trim() === "") return null;
@@ -425,10 +428,7 @@ const tsDayNameFr = (ms: number, zone: string = ZONE): string => {
   const p = zonedAt(ms, zone);
   return capitalize(DAY_NAMES[new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay()]);
 };
-const MONTH_NAMES = [
-  "janvier", "février", "mars", "avril", "mai", "juin",
-  "juillet", "août", "septembre", "octobre", "novembre", "décembre",
-];
+const MONTH_NAMES = frMonths();
 const tsMonthNameFr = (ms: number, zone: string = ZONE): string => MONTH_NAMES[zonedAt(ms, zone).m - 1] ?? "";
 const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 const tsDayPillLabel = (ms: number, zone: string = ZONE): string =>
@@ -815,8 +815,10 @@ describe("unit android EDT par jour (#137)", () => {
       const trouvee = screen.includes(brique) || card.includes(brique);
       expect({ brique, trouvee }).toEqual({ brique, trouvee: true });
     }
-    // Le message RÉEL du serveur, plus la chaîne figée.
-    expect(screen).toContain("PapErrorState(message = error.message");
+    // Le message RÉEL du serveur, plus la chaîne figée — et #147 l'affiche
+    // AUSSI quand la semaine est là (bandeau d'erreur d'une ligne).
+    expect(screen).toContain("PapErrorState(message = failed.message");
+    expect(screen).toContain("text = failed.message");
     expect(screen.includes('"Erreur réseau. Réessayer."')).toBe(false);
     // Le bug des 168 h : plus aucune arithmétique fixe sur la semaine.
     for (const interdit of ["WEEK_MS", "7L * 24L * 60L * 60L * 1000L", "Color.LightGray"]) {

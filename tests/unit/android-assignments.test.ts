@@ -9,6 +9,7 @@ import {
   ASSIGNMENT_REF_MAX_CHARS,
   isAssignment,
 } from "../../shared/contracts/models";
+import { dayLabelFr } from "./fixtures/date-fr";
 
 // Miroir des helpers Kotlin (Assignment.kt, AssignmentsRepository.kt,
 // Assignments.kt, AssignmentsSections.kt, ServerConfig.kt) — doivent rester en
@@ -436,11 +437,9 @@ function tsAssignmentDueLabel(iso: string, nowMillis: number, zone: string = ZON
   if (ms !== null) return tsRelativeTimeFr(ms, nowMillis, zone);
   const day = tsIsoDate(iso);
   if (day === null) return "";
-  const names = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
-  // Kotlin : `dayOfWeek.value % 7` (lundi = 1 … dimanche = 7 → 0), donc JS
-  // `getUTCDay()` (dimanche = 0 … samedi = 6) donne déjà le même indice.
-  const index = new Date(`${day}T00:00:00Z`).getUTCDay();
-  return `${names[index]} ${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+  // #147 : « lundi 05/10 » vient du miroir partagé (table lue dans
+  // `core/DateFr.kt`), plus d'une liste recopiée dans ce fichier.
+  return dayLabelFr(day);
 }
 
 const REF = { id: "f1", label: "fiche.pdf", ref: "homework:0:file:0:f1" };
@@ -525,12 +524,21 @@ describe("miroir Kotlin devoirs #75", () => {
     const core = readFileSync(join(CORE, "Assignment.kt"), "utf8");
     expect(core).toContain("data class AssignmentAttachment");
     expect(core).toContain("ABSOLUTE_REF");
-    expect(core).toContain("fun dayLabelFr");
+    // #147 : le badge « lundi 05/10 » et la clé de regroupement vivent dans
+    // `core/DateFr.kt` (l'unique implémentation des dates françaises), plus dans
+    // le modèle.
+    const dateFr = readFileSync(join(CORE, "DateFr.kt"), "utf8");
+    expect(dateFr).toContain("fun dayLabelFr");
+    expect(dateFr).toContain("fun isoDayKey");
+    expect(core).not.toContain("fun dayLabelFr");
+    expect(core).not.toContain("substring(0, 10)");
     const repo = readFileSync(join(DATA, "AssignmentsRepository.kt"), "utf8");
     expect(repo).toContain("ServerConfig.assignmentsToggleUrl");
     expect(repo).toContain("fun mediaUrl");
     expect(repo).toContain("ServerConfig.mediaUrl");
     const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
+    expect(screen).toContain("dayLabelFr(day)");
+    expect(screen).toContain("isoDayKey(a.dueDate)");
     expect(screen).toContain("fun assignmentsByDay");
     expect(screen).toContain("AssignmentsRepository.mediaUrl");
     // Toggle Optimiste : retour arrière sur échec, resync du cache sur succès.

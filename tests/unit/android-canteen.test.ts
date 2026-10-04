@@ -5,6 +5,8 @@ import { CACHE_TTL_MS, cacheStatus, isCacheableResource } from "../../shared/con
 import { isCanteenMenusResponse } from "../../shared/contracts/api";
 import { isCanteenMenu } from "../../shared/contracts/models";
 import { syntheticCanteenPayload } from "./fixtures/canteen";
+import { dayLabelFr } from "./fixtures/date-fr";
+import { enumFr } from "./fixtures/enum-fr";
 
 // Miroir des helpers Kotlin (CanteenMenus.kt + CachePolicy/SyncedRepository) —
 // doivent rester en sync. org.json = SDK Android, aucune dépendance ajoutée
@@ -128,31 +130,18 @@ function tsBalanceLine(
   return `${label} · mis à jour ${tsRelative(epoch, now, timeZone)}`;
 }
 
-/** Miroir de `canteenStatusLabel` (#144) : le jeton anglais ne sort JAMAIS en clair. */
-const tsStatusLabel = (status: string | null): string | null => {
-  if (status === null || status === "") return null;
-  if (status === "served") return "Servi";
-  if (status === "planned") return "Prévu";
-  return "Statut inconnu";
-};
+/**
+ * Miroir de `canteenStatusLabel` / `canteenMealLabel` (#147) : les deux délèguent
+ * à `core/EnumFr.kt`, donc le jeton anglais ne sort JAMAIS en clair et un repas
+ * hors contrat ne devient PAS un déjeuner.
+ */
+const tsStatusLabel = (status: string | null): string | null =>
+  status === null || status === "" ? null : enumFr(status, "Statut inconnu");
 
-const DAY_NAMES = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
+// #147 : `dayLabelFr` vient du miroir partagé (table lue dans `core/DateFr.kt`).
+const tsDayLabel = dayLabelFr;
 
-function tsDayLabel(date: string): string {
-  const day = date.slice(0, 10);
-  if (day.length < 10) return day;
-  // 2026-10-05 = lundi : getUTCDay()=0 (dimanche) -> index 1.
-  const parsed = new Date(`${day}T00:00:00.000Z`);
-  const index = Number.isNaN(parsed.getTime()) ? -1 : parsed.getUTCDay();
-  const name = index < 0 ? "" : `${DAY_NAMES[index]} `;
-  return `${name}${day.slice(8, 10)}/${day.slice(5, 7)}`;
-}
-
-function tsMealLabel(meal: string): string {
-  if (meal === "breakfast") return "Petit-déjeuner";
-  if (meal === "dinner") return "Dîner";
-  return "Déjeuner";
-}
+const tsMealLabel = (meal: string): string => enumFr(meal, "Repas");
 
 describe("unit android cantine (#81)", () => {
   test("payload contrat -> semaine groupée par jour, solde affiché", () => {
@@ -170,6 +159,9 @@ describe("unit android cantine (#81)", () => {
     expect(tsMealLabel("breakfast")).toBe("Petit-déjeuner");
     expect(tsMealLabel("lunch")).toBe("Déjeuner");
     expect(tsMealLabel("dinner")).toBe("Dîner");
+    // #147 : un repas hors contrat ne devient PAS un déjeuner (« Déjeuner » par
+    // défaut, c'était inventer un menu que l'établissement n'a pas publié).
+    expect(tsMealLabel("goûter")).toBe("Repas");
   });
 
   test("#144 : statut traduit et coloré, jamais le jeton anglais", () => {
@@ -179,13 +171,25 @@ describe("unit android cantine (#81)", () => {
     expect(tsStatusLabel(null)).toBeNull();
     expect(tsStatusLabel("")).toBeNull();
     // Jeton inconnu = « Statut inconnu », JAMAIS le jeton brut en clair.
-    expect(tsStatusLabel("cancelled")).toBe("Statut inconnu");
+    // #147 : `cancelled` est connu du CONTRAT (c'est un statut de cours de
+    // `TIMETABLE_STATUSES`) : la table est plate — un seul endroit à tenir à
+    // jour — donc un jeton d'un autre enum y est traduit lui aussi. Ce qui reste
+    // vrai, c'est la règle qui compte : rien ne sort jamais en clair.
+    expect(tsStatusLabel("cancelled")).toBe("Annulé");
+    // Jeton absent du contrat entier = le repli du caller, jamais le jeton.
+    expect(tsStatusLabel("eating")).toBe("Statut inconnu");
+    expect(tsStatusLabel("SERVING")).toBe("Statut inconnu");
     const kt = codeOnly(readFileSync(join(UI, "CanteenMenus.kt"), "utf8"));
-    // Les deux jetons du contrat sont pilotés par `when`, donc la traduction
-    // existe… et un jeton inconnu a son propre libellé.
-    expect(kt).toContain('"served" -> "Servi"');
-    expect(kt).toContain('"planned" -> "Prévu"');
-    expect(kt).toContain('else -> "Statut inconnu"');
+    // #147 : la traduction est dans la table UNIQUE du contrat, plus aucun
+    // `when` par écran ; l'écran garde le jeton pour la COULEUR, qui doit décider
+    // sur le contrat et pas sur une chaîne de libellé.
+    expect(kt).toContain("enumFr(status, CANTEEN_STATUS_UNKNOWN)");
+    expect(kt).toContain('const val STATUS_SERVED = "served"');
+    expect(kt).toContain('const val STATUS_PLANNED = "planned"');
+    expect(kt).toContain("STATUS_SERVED -> MaterialTheme.colorScheme.primary");
+    expect(kt).toContain("STATUS_PLANNED -> MaterialTheme.colorScheme.tertiary");
+    // La pastille ne colore plus par comparaison de libellés français.
+    expect(kt).not.toContain('"Servi" -> MaterialTheme');
     // Aucune interpolation brute du statut dans une phrase (le défaut #144).
     expect(kt).not.toContain("(${menu.status})");
     expect(kt).not.toContain("allergènes :");

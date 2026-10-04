@@ -1,5 +1,7 @@
 package fr.veryslopnynotes.ui
 
+import fr.veryslopnynotes.core.monthFr
+import fr.veryslopnynotes.core.weekdayFr
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -26,17 +28,11 @@ import java.time.temporal.ChronoUnit
 // (« 10月 » sur un appareil japonais). Cf. le même arbitrage dans
 // `relativeTimeFr` et `formatMark`.
 
-/** Mois en toutes lettres, index 0 = janvier. Table POSÉE (jamais `MMMM` : la
- *  CLDR du téléphone donnerait « oct. », « 10月 »). */
-private val MONTHS_FR = listOf(
-    "janvier", "février", "mars", "avril", "mai", "juin",
-    "juillet", "août", "septembre", "octobre", "novembre", "décembre",
-)
-
-/** Jours de la semaine, lundi d'abord : l'ordre de `DayOfWeek`, 1 = lundi. */
-private val WEEKDAYS_FR = listOf(
-    "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
-)
+// #147 : les tables `MONTHS_FR` et `WEEKDAYS_FR` d'ici ont DISPARU. Elles étaient
+// la CINQUIÈME copie du nom de jour (et la DEUXIÈME du nom de mois), dans un
+// ordre inversé (lundi d'abord) : même donnée, deux indexations, donc une
+// obligation d'y toucher à chaque correction. Les noms sont maintenant ceux de
+// `core/DateFr.kt` — posés, jamais `EEEE`/`MMMM` (CLDR du téléphone).
 
 /** Au-delà de 30 jours d'écart, compter en jours n'aide plus : on passe au mois. */
 private const val DAYS_IN_MONTH_LIMIT = 30L
@@ -75,8 +71,7 @@ fun attendanceMillis(iso: String, zone: ZoneId = ZoneId.systemDefault()): Long? 
 fun absoluteDayFr(millis: Long, now: Long = System.currentTimeMillis(), zone: ZoneId = ZoneId.systemDefault()): String {
     val day = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
     val here = Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
-    val month = MONTHS_FR.getOrElse(day.monthValue - 1) { "" }
-    val head = "${WEEKDAYS_FR[day.dayOfWeek.value - 1]} ${day.dayOfMonth} $month"
+    val head = "${weekdayFr(day.dayOfWeek)} ${day.dayOfMonth} ${monthFr(day.monthValue)}"
     return if (day.year == here.year) head else "$head ${day.year}"
 }
 
