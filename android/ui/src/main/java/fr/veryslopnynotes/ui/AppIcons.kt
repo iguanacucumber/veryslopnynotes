@@ -1,12 +1,8 @@
 package fr.veryslopnynotes.ui
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.ui.graphics.vector.ImageVector
 
 // Icônes d'onglets #135.
@@ -26,10 +22,20 @@ import androidx.compose.ui.graphics.vector.ImageVector
 // `secondaryContainer`/`onSecondaryContainer`). 24 dp = taille par défaut d'un
 // `Icon` sans `Modifier.size`, donc lisible tel quel.
 //
-// ponytail: `Icons.Filled.*` du CORE (49 icônes), pas
-// `material-icons-extended` (plus de 10 000) : les cinq routes d'onglets s'y
-// trouvent déjà. Upgrade : une icône plus juste pour une route = une ligne dans
-// [tabIcon], une fois le besoin prouvé — pas une collection d'icônes à choisir.
+// LES QUATRE GLYPHES SONT CEUX DE PAPILLON (`PapillonIcons.kt`) : l'icône d'un
+// onglet EST le logo, et `Icons.Filled.Star` pour « Notes » (étoile = favori)
+// ou `Icons.Filled.DateRange` pour les cours ne se ressemblent pas de ce que
+// Papillon pose. Un écart de ce niveau se voit d'un coup d'œil, donc il est
+// écrit : le CINQUIÈME onglet, Profil, garde `Icons.Filled.Person` parce que
+// Papillon n'a pas de 5e onglet (son profil est un avatar d'en-tête) et qu'il
+// n'y a donc rien à relever.
+//
+// ponytail: `Icons.Filled.*` du CORE (49 icônes) pour ce qui n'a pas de
+// glyphe de référence, et quatre `ImageVector` écrits à la main pour le reste —
+// PAS `material-icons-extended` (plus de 10 000 icônes, dont un camembert qui
+// ferait exactement Notes) : une dépendance de plus pour une image serait le
+// mauvais échange. Upgrade : un glyph de plus = un `path` de plus dans
+// `PapillonIcons.kt`, une fois le besoin prouvé — pas une collection à choisir.
 
 /**
  * Icône d'un onglet. [route] : une constante `ROUTE_*` (les seules rendues
@@ -40,10 +46,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
  * qu'une exception sur une chaîne.
  */
 fun tabIcon(route: String): ImageVector = when (route) {
-    ROUTE_INDEX -> Icons.Filled.Home
-    ROUTE_CALENDAR -> Icons.Filled.DateRange
-    ROUTE_TASKS -> Icons.Filled.CheckCircle
-    ROUTE_GRADES -> Icons.Filled.Star
+    ROUTE_INDEX -> PapillonTabAccueil
+    ROUTE_CALENDAR -> PapillonTabCours
+    ROUTE_TASKS -> PapillonTabTaches
+    ROUTE_GRADES -> PapillonTabNotes
+    // ÉCART ÉCRIT : Papillon n'a pas de 5e onglet — son profil est un avatar
+    // dans l'en-tête. Il n'y a donc aucun glyphe à relever ici, et `Person` du
+    // CORE reste le meilleur glyphe disponible (cf. le KDoc du fichier).
     ROUTE_PROFILE -> Icons.Filled.Person
     else -> Icons.Filled.Info
 }

@@ -5,9 +5,11 @@
 // #135, pas l'esthétique :
 //   - une barre du haut PAR ROUTE, avec flèche de retour partout où l'on peut
 //     revenir, et le titre de la route dans le titre ;
-//   - plus aucun glyphe Unicode comme icône d'onglet, icônes Material
-//     monochromes issues de `material-icons-core` (donc zéro dépendance
-//     ajoutée : le garde-fou qui fige le build.gradle.kts est ailleurs) ;
+//   - plus aucun glyphe Unicode comme icône d'onglet, et des icônes
+//     MONOCHROMES : les quatre glyphes de la barre sont ceux de Papillon
+//     (`PapillonIcons.kt`, des `ImageVector` écrits à la main), le cinquième
+//     reste pris dans `material-icons-core` — donc toujours zéro dépendance
+//     ajoutée (le garde-fou qui fige le build.gradle.kts est ailleurs) ;
 //   - barre d'onglets masquée sur l'assistant d'appairage et les réglages ;
 //   - plus aucun `Text("<nom d'écran>")` dans le corps d'un écran (le nom ne
 //     doit pas être lu deux fois) ;
@@ -21,6 +23,7 @@ const UI = join(ROOT, "android/ui/src/main/java/fr/veryslopnynotes/ui");
 const read = (f: string) => readFileSync(join(UI, f), "utf8");
 const shell = read("AppShell.kt");
 const icons = read("AppIcons.kt");
+const papillonIcons = read("PapillonIcons.kt");
 const nav = read("AppNav.kt");
 const uiFiles = readdirSync(UI).filter((f) => f.endsWith(".kt"));
 /** Sans les commentaires : une garde qui lit le texte du fichier doit éviter de
@@ -83,14 +86,12 @@ describe("coquille applicative (#135)", () => {
     }
   });
 
-  test("icônes : Material monochromes, plus aucun glyphe Unicode, libellé annoncé", () => {
+  test("icônes : les glyphes de Papillon, monochromes, plus aucun glyphe Unicode", () => {
     // `material-icons-core` (déjà dans le graphe via material3) : pas
-    // d'extended, pas de bibliothèque ajoutée.
+    // d'extended, pas de bibliothèque ajoutée — même après le passage aux
+    // glyphes de Papillon, qui sont des `ImageVector` écrits à la main.
     expect(icons).toContain("androidx.compose.material.icons.Icons");
-    for (const name of ["Home", "DateRange", "CheckCircle", "Star", "Person"]) {
-      expect({ name, filled: icons.includes(`Icons.Filled.${name}`) }).toEqual({ name, filled: true });
-    }
-    // Le commentaire, lui, NOMME extended pour dire qu'on ne l'utilise pas.
+    expect(icons).toContain("Icons.Filled.Person");
     expect(codeOnly(icons)).not.toContain("material-icons-extended");
     // Les 5 onglets, dans l'ordre de Papillon : Accueil, EDT, Tâches, Notes, Profil.
     const order = shell.match(/private val TAB_ROUTES = listOf\(([^)]*)\)/)?.[1] ?? "";
@@ -111,6 +112,55 @@ describe("coquille applicative (#135)", () => {
     }
     // Pas d'autre icône textuelle : un `Text` ne sert plus d'icône d'onglet.
     expect(shell).not.toMatch(/icon = \{ Text\(/);
+  });
+
+  // Les quatre glyphes de la barre sont RELEVÉS sur Papillon : l'étoile de
+  // « Notes » et le calendrier de l'EDT se lisaient comme des choix Material, pas
+  // comme ceux de l'app de référence. On ne peut pas re-mesurer la fidélité au
+  // masque ici (l'APK de référence n'est pas dans le dépôt), donc ce test fixe ce
+  // qui est vérifiable : un `ImageVector` monochrome par onglet, en 24, avec un
+  // `path` unique `EvenOdd` — et AUCUNE icône Material revenue en doublon.
+  test("glyphes d'onglets : quatre `ImageVector` tracés, un par route Papillon", () => {
+    const glyphe = (nom: string): string => {
+      const m = papillonIcons.match(new RegExp(`val ${nom}: ImageVector by lazy \\{[\\s\\S]*?\\n\\}`));
+      expect({ nom, trouve: m !== null }).toEqual({ nom, trouve: true });
+      return m![0]!;
+    };
+    for (const [nom, route] of [
+      ["PapillonTabAccueil", "ROUTE_INDEX"],
+      ["PapillonTabCours", "ROUTE_CALENDAR"],
+      ["PapillonTabTaches", "ROUTE_TASKS"],
+      ["PapillonTabNotes", "ROUTE_GRADES"],
+    ] as const) {
+      const src = glyphe(nom);
+      // L'onglet est câblé à CE glyphe, pas à un `Icons.Filled.*` : c'est tout
+      // l'objet du changement.
+      expect(icons).toContain(`${route} -> ${nom}`);
+      // Un `path` par icône : deux chemins pour le trou auraient été lisibles
+      // comme deux glyphes superposés.
+      expect((src.match(/glyphePapillon\(/g) ?? []).length).toBe(1);
+      // Le tracé est LONG : une icône dessinée en quatre points serait un
+      // losange, pas une maison. On fige un plateau bas, pas la longueur exacte —
+      // un tracé plus fin reste correct.
+      const points = (src.match(/[ML]\d/g) ?? []).length;
+      expect({ nom, points: points >= 40 }).toEqual({ nom, points: true });
+    }
+    // Le constructeur COMMUN : grille 24, `EvenOdd` (le trou — arche, coche,
+    // quartier de camembert — est un sous-trac de sens opposé, donc il se perce
+    // sans second chemin), `fill` noir que l'`Icon` teinte par-dessus.
+    expect(papillonIcons).toContain("pathFillType = PathFillType.EvenOdd");
+    expect(papillonIcons).toContain("PathParser().parsePathString(d).toNodes()");
+    expect(papillonIcons).toContain("defaultWidth = GRILLE.dp");
+    expect(papillonIcons).toContain("viewportWidth = GRILLE.toFloat()");
+    expect(papillonIcons).toContain("fill = SolidColor(Color.Black)");
+    expect(papillonIcons).toContain("private const val GRILLE = 24");
+    // Les quatre `path` sont des DONNÉES de tracé, pas des images : ni bitmap,
+    // ni police, ni ressource ajoutée (le dossier `res/drawable` reste vide).
+    expect(codeOnly(papillonIcons)).not.toMatch(/\.(png|webp|xml|ttf|otf)\b/);
+    // L'ECART ÉCRIT : le 5e onglet garde `Person` du CORE, parce que Papillon n'a
+    // pas de 5e onglet. Un écart non écrit serait un onglet à corriger.
+    expect(icons).toContain("ROUTE_PROFILE -> Icons.Filled.Person");
+    expect(icons).toMatch(/\/\/ ÉCART ÉCRIT[\s\S]*?ROUTE_PROFILE -> Icons\.Filled\.Person/);
   });
 
   test("barre d'onglets : masquée sur l'appairage et les réglages, slot de badge présent", () => {
