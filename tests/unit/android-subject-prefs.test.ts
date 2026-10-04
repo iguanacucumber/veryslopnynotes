@@ -246,7 +246,9 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     expect(nav).toMatch(/TimetableRoute\([\s\S]{0,200}subjectPrefs = subjectPrefs/);
     expect(nav).toContain("subjectPrefs = subjectPrefs");
     expect(nav).toContain("SubjectLegend(subjectsFromPayload(s.payload), subjectPrefs)");
-    expect(nav).toContain("MaterialTheme(colorScheme = colorScheme)");
+    // #134 : la racine applique `PapillonTheme`, plus un `MaterialTheme` nu
+    // (couleurs + typo + formes) qui n'existait qu'en clair par défaut.
+    expect(nav).toContain("PapillonTheme(darkTheme = isDarkTheme(theme, isSystemInDarkTheme()))");
     expect(nav).toContain("prefsRepo.upsert(");
     expect(nav).toContain("prefsRepo.refresh(baseUrl)");
     expect(nav).toContain("FileSubjectPrefsStore(");
