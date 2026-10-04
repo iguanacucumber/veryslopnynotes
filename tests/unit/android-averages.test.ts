@@ -475,9 +475,9 @@ describe("unit android moyennes (#74)", () => {
     }
     expect(AVERAGE_ALGORITHMS).toEqual(["subject", "weighted", "median"]);
     // 0.7.0 : plus aucun credential serveur (`SetupRequest` QR-only, clé
-    // LLM envoyée par l'app). Aucun impact sur le rapport de moyennes, d'où le
-    // simple re-pin de version.
-    expect(CONTRACTS_VERSION).toBe("0.7.0");
+    // LLM envoyée par l'app). 0.8.0 : la feature Compétences sort du contrat
+    // (les notes restent les mêmes), d'où le simple re-pin de version.
+    expect(CONTRACTS_VERSION).toBe("0.8.0");
   });
 
   test("Kotlin : parsing + libellé, sans dépendance ajoutée", () => {
@@ -910,13 +910,13 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     // 2. Plus AUCUN lien de navigation dans le corps d'un écran : les
     // destinations sont déclarées une fois, dans la table de la barre du haut.
     const body = codeOnly(screen);
-    for (const label of ["Réglages", "Appairage QR+PIN", "Alertes sécurité", "Compétences"]) {
+    for (const label of ["Réglages", "Appairage QR+PIN", "Alertes sécurité"]) {
       expect({ label, inBody: body.includes(`Text("${label}")`) }).toEqual({ label, inBody: false });
     }
     // Plus aucun bouton de navigation : le corps de l'onglet Notes n'a plus que
     // l'action de son état vide.
     expect(body).not.toContain("TextButton(");
-    for (const dest of ["ROUTE_COMPETENCES", "ROUTE_SETTINGS", "ROUTE_PAIRING", "ROUTE_ALERTS"]) {
+    for (const dest of ["ROUTE_SETTINGS", "ROUTE_PAIRING", "ROUTE_ALERTS"]) {
       expect({ dest, inTopBar: new RegExp(`TopAction\\.Go\\(${dest}, "`).test(shell) }).toEqual({ dest, inTopBar: true });
     }
     // La barre sait naviguer ET recharger, sans valeur par défaut : un bouton
@@ -924,13 +924,13 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     expect(shell).toContain("private val TOP_BAR_ACTIONS: Map<String, List<TopAction>>");
     expect(shell).toMatch(/fun AppTopBar\(\s*\n\s*route: String\?,\s*\n\s*onBack: \(String\) -> Unit,\s*\n\s*onNavigate: \(String\) -> Unit,\s*\n\s*onRefresh: \(\) -> Unit,/);
     expect(shell).toContain("actions = { TopBarActions(actions = actions, onNavigate = onNavigate, onRefresh = onRefresh) }");
-    // #87 : la destination Compétences reste conditionnelle aux capacités, et
-    // #172 : Sanctions aussi, maintenant qu'elle est une action de la barre de la
-    // Vie scolaire (`TOP_BAR_ACTIONS`) au lieu d'un bouton dans le corps.
+    // #172 : la destination Sanctions reste conditionnelle aux capacités,
+    // maintenant qu'elle est une action de la barre de la Vie scolaire
+    // (`TOP_BAR_ACTIONS`) au lieu d'un bouton dans le corps. #184 : il ne reste
+    // que celle-là, la destination Compétences ayant été supprimée.
     expect(shell).toContain("hiddenDestinations: Set<String> = emptySet()");
     expect(shell).toMatch(/ROUTE_ATTENDANCE to listOf\(\s*\n\s*TopAction\.Go\(ROUTE_SANCTIONS, "Sanctions"\),\s*\n\s*\)/);
     expect(nav).toMatch(/hiddenDestinations = buildSet \{/);
-    expect(nav).toContain("if (!Capabilities.visible(capabilities, Capabilities.EVALUATIONS)) add(ROUTE_COMPETENCES)");
     expect(nav).toContain("if (!Capabilities.visible(capabilities, Capabilities.PUNISHMENTS)) add(ROUTE_SANCTIONS)");
     // La relecture passe par un compteur vu par les deux routes qui l'ont.
     expect(nav).toContain("onRefresh = { readTick++ }");
@@ -938,11 +938,14 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     expect(screen).toContain("refreshTick: Int = 0");
     expect(nav).toContain("refreshTick = readTick");
     // Plus de paramètre de navigation dans les deux écrans qui l'ont perdu.
-    for (const gone of ["goSettings:", "goPairing:", "goAlerts:", "onCompetences:"]) {
+    for (const gone of ["goSettings:", "goPairing:", "goAlerts:"]) {
       expect({ gone, absent: !screen.includes(gone) }).toEqual({ gone, absent: true });
     }
-    // La route Compétences, seule autre route de cet écran, garde ses args.
-    expect(nav).toMatch(/CachedResourceScreen\([\s\S]{0,300}section = \{ CompetencesSection\(it\) \}/);
+    // #184 : l'écran Compétences et le composable de cache qu'il seul servait
+    // sont supprimés : l'onglet Notes garde seul ces arguments.
+    for (const gone of ["ROUTE_COMPETENCES", "CompetencesSection", "CachedResourceScreen"]) {
+      expect({ gone, absent: !nav.includes(gone) && !screen.includes(gone) }).toEqual({ gone, absent: true });
+    }
   });
 
   test("Kotlin : plus aucune phrase où le message d'échec répète le libellé", () => {

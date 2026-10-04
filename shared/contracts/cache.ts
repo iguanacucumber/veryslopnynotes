@@ -7,7 +7,8 @@
 // l'EDT (les absences sont saisies par la vie scolaire, pas par l'app).
 // Add-only, le sync serveur reste la source de vérité. Invalidation =
 // CacheInvalidated (resource attendance/punishments), pas d'événement dédié.
-// "evaluations" (#78) : badge périmé comme les notes, même principe.
+// #184 : la ressource "evaluations" (#78) est SUPPRIMÉE du contrat — la feature
+// Compétences disparaît, les notes /20 de "grades" restent la seule vue.
 // "capabilities" (#87) ajouté en fin : la liste des onglets Pronote actifs ne
 // bouge qu'à la configuration de l'établissement. Elle est cachée comme les
 // autres (l'app masque un onglet sans réseau) et invalidée par
@@ -20,7 +21,7 @@
 // (jamais en cache disque). TTL = cadence des devoirs (arrivée fréquente).
 // Invalidation = CacheInvalidated (resource discussions) renvoyé par les
 // actions d'écriture confirmées par l'app, pas d'événement dédié.
-export const CACHEABLE_RESOURCES = ["grades", "assignments", "timetable", "news", "menus", "evaluations", "attendance", "punishments", "capabilities", "discussions", "security-alerts"] as const;
+export const CACHEABLE_RESOURCES = ["grades", "assignments", "timetable", "news", "menus", "attendance", "punishments", "capabilities", "discussions", "security-alerts"] as const;
 
 export type CacheableResource = (typeof CACHEABLE_RESOURCES)[number];
 
@@ -33,8 +34,6 @@ export const CACHE_TTL_MS: Record<CacheableResource, number> = {
   news: 60 * 60 * 1000,
   // #81 : menus publiés à la semaine, on les garde 6h pour l'affichage avion.
   menus: 6 * 60 * 60 * 1000,
-  // #78 : évaluations par compétences, même cadence que les notes.
-  evaluations: 15 * 60 * 1000,
   // #77 : vie scolaire (absences/retards/sanctions), rythme EDT.
   attendance: 60 * 60 * 1000,
   punishments: 60 * 60 * 1000,

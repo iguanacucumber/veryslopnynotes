@@ -1,17 +1,6 @@
 package fr.veryslopnynotes.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.data.SubjectPrefs
 import org.json.JSONObject
 
@@ -139,54 +128,6 @@ fun subjectColorHex(prefs: List<SubjectPrefs>, subject: String): String {
     val prefHex = subjectStyle(prefs, subject).colorHex
     if (prefHex != null && COLOR_RE.matches(prefHex)) return prefHex
     return derivedSubjectHex(subject)
-}
-
-/** Côte de la pastille de la légende : un glyphe lisible, pas un avatar. */
-private val LEGEND_AVATAR = 24.dp
-
-/**
- * Légende matières : une LIGNE PAR MATIÈRE, pastille + libellé.
- *
- * #146 : AVANT, la pastille était un `Text("■")` coloré et le libellé venait de
- * [SubjectStyle.badge] (« emoji nom ») — donc la couleur était un signal
- * AUTONOME, illisible pour un daltonien et invisible pour un lecteur d'écran,
- * et l'emoji était annoncé en double (dans la pastille ET dans le libellé).
- * La couleur n'est plus jamais le SEUL signal : la ligne porte [PapSubjectAvatar]
- * (l'emoji, ou l'initiale du nom quand la matière n'en a pas) ET le libellé en
- * toutes lettres, côte à côte, avec un écart de groupe de 8 dp.
- *
- * Le libellé n'est plus `badge` mais [SubjectStyle.label] : l'emoji est dans la
- * pastille, donc le recopier dans le texte ne ferait que l'annoncer deux fois.
- */
-@Composable
-fun SubjectLegend(subjects: List<String>, prefs: List<SubjectPrefs>) {
-    if (subjects.isEmpty()) return
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (subject in subjects) {
-            val style = subjectStyle(prefs, subject)
-            val color = colorFromHex(style.colorHex) ?: MaterialTheme.colorScheme.primary
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                // 24 dp : un glyphe dans une légende, pas un avatar d'en-tête —
-                // l'AVATAR_SIZE de 44 dp d'une carte de cours ferait dix lignes
-                // de 44 dp pour une légende.
-                PapSubjectAvatar(
-                    emoji = style.emoji ?: subjectInitial(subject),
-                    color = color,
-                    size = LEGEND_AVATAR,
-                )
-                Text(
-                    text = style.label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
 }
 
 /** Côte de la pastille de la légende : un glyphe lisible, pas un avatar. */

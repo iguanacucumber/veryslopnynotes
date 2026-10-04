@@ -37,7 +37,7 @@ const AT = "2026-10-02T07:00:00.000Z";
 // Client pronotets synthétique : periods avec grades, le reste des onglets
 // volontairement absent (établissement qui ne publie que les notes).
 const SYNTHETIC_CLIENT_FULL = {
-  periods: [{ id: "p-1", grades: async () => [], evaluations: async () => [], absences: async () => [], delays: async () => [], punishments: async () => [] }],
+  periods: [{ id: "p-1", grades: async () => [], absences: async () => [], delays: async () => [], punishments: async () => [] }],
   homework: async () => [],
   lessons: async () => [],
   informationAndSurveys: async () => [],
@@ -62,9 +62,10 @@ function caps(tabs: TabCapability[]): Capabilities {
 
 describe("unit capacités (#87)", () => {
   test("contrat : onglets connus, bornes, doublons et dates refusés", () => {
-    expect(TAB_CAPABILITIES.length).toBeGreaterThanOrEqual(10);
+    // #184 : l'onglet Compétences a quitté le contrat, il en reste neuf.
+    expect(TAB_CAPABILITIES.length).toBe(9);
     // Onglets Pronote → capacité de l'app (parité Papillon).
-    for (const t of ["grades", "homework", "timetable", "evaluations", "news", "menus", "attendance", "punishments", "discussions", "profile"]) {
+    for (const t of ["grades", "homework", "timetable", "news", "menus", "attendance", "punishments", "discussions", "profile"]) {
       expect(isTabCapability(t)).toBe(true);
       expect(TAB_CAPABILITIES as readonly string[]).toContain(t);
     }
@@ -128,7 +129,6 @@ describe("unit capacités (#87)", () => {
       "grades",
       "homework",
       "timetable",
-      "evaluations",
       "news",
       "menus",
       "attendance",
@@ -217,7 +217,6 @@ describe("unit capacités (#87)", () => {
       grades: true,
       homework: false,
       timetable: true,
-      evaluations: false,
       news: true,
       menus: false,
       attendance: true,
@@ -313,14 +312,35 @@ describe("unit capacités (#87)", () => {
     expect(repo).toContain("fun requestSyncRefresh(");
     // UI : les entrées conditionnées + le bouton de détection.
     // #135 : l'écran Profil (entrées conditionnées) est sorti d'AppNav.kt ;
-    // la détection et l'accès aux compétences restent dans la coquille.
+    // la détection reste dans la coquille.
     const nav = readFileSync(join(UI, "AppNav.kt"), "utf8");
     const profile = readFileSync(join(UI, "ProfileScreen.kt"), "utf8");
     expect(profile).toContain("Capabilities.visible(capabilities, Capabilities.NEWS)");
     expect(profile).toContain("Capabilities.visible(capabilities, Capabilities.MENUS)");
     expect(profile).toContain("Capabilities.visible(capabilities, Capabilities.ATTENDANCE)");
-    expect(nav).toContain("Capabilities.visible(capabilities, Capabilities.EVALUATIONS)");
     expect(nav).toContain("fun detectCapabilities()");
+    // #184 : la feature Compétences est supprimée — plus une seule trace de la
+    // route, de la capacité, de la ressource cache ni du chemin serveur, dans
+    // l'app comme dans les contrats.
+    const app = [
+      nav,
+      readFileSync(join(UI, "AppShell.kt"), "utf8"),
+      readFileSync(join(UI, "GradesScreen.kt"), "utf8"),
+      core,
+      policy,
+      serverConfig,
+      readFileSync(join(DATA, "SyncedRepository.kt"), "utf8"),
+      readFileSync(join(DATA, "AccountStore.kt"), "utf8"),
+      readFileSync(join(ROOT, "shared/contracts/models.ts"), "utf8"),
+      readFileSync(join(ROOT, "shared/contracts/api.ts"), "utf8"),
+      readFileSync(join(ROOT, "shared/contracts/cache.ts"), "utf8"),
+    ].join("\n");
+    // (Le nom de la route retirée vit encore dans les commentaires de version,
+    // qui doivent dire ce qui sort du contrat ; `tests/contracts` vérifie
+    // qu'elle n'est plus dans `API_ROUTES`.)
+    for (const gone of ["ROUTE_COMPETENCES", "CompetencesSection", "Capabilities.EVALUATIONS", "CachePolicy.EVALUATIONS", "evaluationsUrl"]) {
+      expect({ gone, absent: !app.includes(gone) }).toEqual({ gone, absent: true });
+    }
     // #135 : une seule entrée par capacité — les trois « Visible » du profil
     // étaient dupliqués trois fois (accident de copier-coller).
     for (const cap of ["NEWS", "MENUS", "ATTENDANCE"]) {

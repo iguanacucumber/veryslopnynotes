@@ -189,11 +189,9 @@ describe("échappatoires #147 : une seule implémentation des dates françaises"
         expect({ file, tranche: src.includes('substring(0, 10)') }).toEqual({ file, tranche: false });
       }
     }
-    // Les deux écrans qui affichaient la tranche ISO affichent un jour français.
-    for (const [file, attendu] of [
-      ["Competences.kt", "dayLabelFr(entry.date)"],
-      ["RevisionSheets.kt", "dayLabelFr(sheet.date)"],
-    ]) {
+    // L'écran qui affichait la tranche ISO affiche un jour français (l'autre,
+    // Compétences, a été supprimé en #184).
+    for (const [file, attendu] of [["RevisionSheets.kt", "dayLabelFr(sheet.date)"]]) {
       const src = readFileSync(join(UI, file as string), "utf8");
       expect({ file, attendu, trouve: src.includes(attendu as string) }).toEqual({ file, attendu, trouve: true });
     }
@@ -260,7 +258,6 @@ describe("échappatoires #147 : plus d'état de formulaire perdu à la rotation"
       ],
       "TimetableWeek.kt": ["var weekStart by rememberSaveable"],
       "Attendance.kt": ["var periodId by rememberSaveable", "var periodsOpen by rememberSaveable"],
-      "Competences.kt": ["var selectedId by rememberSaveable(ui.skills)"],
       "NewsScreen.kt": ["var readIds by rememberSaveable"],
       "ProfileScreen.kt": ["var logoutAsk by rememberSaveable", "var sheetOpen by rememberSaveable"],
       "AppNav.kt": ["var authNotice by rememberSaveable"],

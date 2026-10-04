@@ -2,8 +2,8 @@
 // Table de routes + types requête/réponse. Doit rester en sync avec
 // shared/contracts/api.openapi.yaml (test contracts l'impose).
 
-import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, Capabilities, CompetenceSummary, Device, Discussion, Evaluation, Grade, Message, NewsItem, Period, Punishment, Recipient, RevisionSheet, Skill, SubjectPrefs, TimetableEntry, UserInfo } from "./models";
-import { DISCUSSION_ID_MAX_CHARS, DISCUSSION_MAX_RECIPIENTS, DISCUSSION_SUBJECT_MAX_CHARS, isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isCapabilities, isCompetenceSummary, isDevice, isDiscussion, isEvaluation, isGrade, isMessage, isNewsItem, isPeriod, isPunishment, isRecipient, isRevisionSheet, isSkill, isSubjectPrefs, isTimetableEntry, isUserInfo, MESSAGE_BODY_MAX_CHARS, SUBJECT_PREFS_MAX_COUNT } from "./models";
+import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, Capabilities, Device, Discussion, Grade, Message, NewsItem, Period, Punishment, Recipient, RevisionSheet, SubjectPrefs, TimetableEntry, UserInfo } from "./models";
+import { DISCUSSION_ID_MAX_CHARS, DISCUSSION_MAX_RECIPIENTS, DISCUSSION_SUBJECT_MAX_CHARS, isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isCapabilities, isDevice, isDiscussion, isGrade, isMessage, isNewsItem, isPeriod, isPunishment, isRecipient, isRevisionSheet, isSubjectPrefs, isTimetableEntry, isUserInfo, MESSAGE_BODY_MAX_CHARS, SUBJECT_PREFS_MAX_COUNT } from "./models";
 import type { CacheInvalidatedData, ContractEvent, SecurityAlertData } from "./events";
 import { isContractEvent, isSecurityAlertData } from "./events";
 
@@ -54,8 +54,6 @@ export const API_ROUTES: readonly ApiRoute[] = [
   // #83 préférences matière : GET liste / PUT upsert (clé = nom de matière).
   { method: "GET", path: "/v1/subjects/prefs" },
   { method: "PUT", path: "/v1/subjects/prefs" },
-  // #78 : évaluations par compétences (chips + détail).
-  { method: "GET", path: "/v1/evaluations" },
   // #79 : actualités établissement.
   { method: "GET", path: "/v1/news" },
 
@@ -223,18 +221,6 @@ export interface PeriodsResponse {
 export interface RevisionSheetsResponse {
   readonly sheets: RevisionSheet[];
 }
-
-/**
- * #78 : évaluations par compétences. `summary` = agrégat par compétence
- * (moyenne des notes DÉFINIES seulement, `value: null` si non notée).
- * Établissement sans évaluations par compétences = trois listes vides.
- */
-export interface EvaluationsResponse {
-  readonly skills: Skill[];
-  readonly evaluations: Evaluation[];
-  readonly summary: CompetenceSummary[];
-}
-
 
 // #81 cantine : menus de la fenêtre from/to (semaine courante par défaut).
 // Tableau vide = aucun menu publié sur la fenêtre (module cantine absent de
@@ -405,23 +391,6 @@ export function isSetupResponse(v: unknown): v is SetupResponse {
   const r = v as Record<string, unknown>;
   return isDevice(r["device"]) && isBoundedNonEmptyString(r["token"], PAIRING_TOKEN_MAX_CHARS);
 }
-
-export function isEvaluationsResponse(v: unknown): v is EvaluationsResponse {
-  if (typeof v !== "object" || v === null) return false;
-  const r = v as Record<string, unknown>;
-  const s = r["skills"];
-  const e = r["evaluations"];
-  const m = r["summary"];
-  return (
-    Array.isArray(s) &&
-    s.every(isSkill) &&
-    Array.isArray(e) &&
-    e.every(isEvaluation) &&
-    Array.isArray(m) &&
-    m.every(isCompetenceSummary)
-  );
-}
-
 
 export function isCanteenMenusResponse(v: unknown): v is CanteenMenusResponse {
   if (typeof v !== "object" || v === null) return false;

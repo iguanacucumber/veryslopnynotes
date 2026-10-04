@@ -240,8 +240,7 @@ fun isUnjustified(row: AbsenceUi): Boolean = row.justified == false
  * Une tranche de la vie scolaire : nom, bornes de dates et compteurs publiés.
  *
  * [period] repasse le même objet à `GradesPeriodChips` — le sélecteur de période
- * DÉJÀ écrit par #139 (ligne DÉFILABLE, cf. `Competences.kt`), donc le rendu n'en
- * écrit pas un second.
+ * DÉJÀ écrit par #139 (ligne DÉFILABLE), donc le rendu n'en écrit pas un second.
  */
 data class AttendancePeriodUi(
     val id: String,

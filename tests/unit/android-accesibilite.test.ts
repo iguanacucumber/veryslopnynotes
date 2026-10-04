@@ -181,17 +181,18 @@ describe("unit android accessibilité #146 — l'information ne repose pas sur l
     }
   });
 
-  test("la légende matière porte une pastille ET un libellé écrit", () => {
-    const src = file("SubjectStyle.kt");
-    // Les deux, TOUJOURS : la pastille (emoji ou initiale) et le libellé en
-    // toutes lettres. C'est ce qui rend la matière identifiable sans couleur.
-    expect(src).toContain("PapSubjectAvatar(");
-    expect(src).toContain("text = style.label,");
+  test("la matière porte une pastille ET un libellé écrit", () => {
+    // #184 : l'invariant visait la légende `SubjectLegend` de l'écran Compétences,
+    // supprimée avec lui. Il tient toujours, sur la carte matière qui reste
+    // (carrossel des nouvelles notes) : les deux, TOUJOURS — la pastille (emoji
+    // ou initiale) et le libellé en toutes lettres. C'est ce qui rend la matière
+    // identifiable sans couleur.
+    const rows = file("GradesRows.kt");
+    expect(rows).toContain("PapSubjectAvatar(emoji = style.emoji, color = ink)");
+    expect(rows).toContain("text = style.label,");
     // Pas de `badge` (« emoji nom ») : l'emoji est dans la pastille, donc le
     // recopier dans le texte ne ferait que l'annoncer deux fois.
-    expect(src).not.toContain("text = style.badge");
-    // Écart de GROUPE : la légende est une liste de lignes.
-    expect(src).toContain("Column(verticalArrangement = Arrangement.spacedBy(8.dp))");
+    expect(file("SubjectStyle.kt")).not.toContain("text = style.badge");
   });
 
   test("le texte d'état ne s'appuie ni sur `primary` ni sur `error` brut", () => {
@@ -252,11 +253,11 @@ describe("unit android accessibilité #146 — rôles, états et titres", () => 
   });
 
   test("l'état d'un élément choisi existe hors du sens visuel", () => {
-    // AVANT : la sélection d'une compétence était portée par la SEULE élévation
-    // (invisible), celle d'un compte par la seule coche. `stateDescription` (or
-    // `selectable`, qui pose `selected`) doit exister là où il y a un choix.
+    // AVANT : la sélection d'un élément de liste (l'écran Compétences, supprimé
+    // en #184) était portée par la SEULE élévation (invisible), celle d'un compte
+    // par la seule coche. `stateDescription` (or `selectable`, qui pose
+    // `selected`) doit exister là où il y a un choix.
     const src = [
-      file("Competences.kt"),
       file("ProfileAccountSwitcher.kt"),
       file("SettingsSubjectEditor.kt"),
       file("Assignments.kt"),
@@ -285,7 +286,6 @@ describe("unit android accessibilité #146 — rôles, états et titres", () => 
       "Assignments.kt",
       "AttendanceRows.kt",
       "CanteenMenus.kt",
-      "Competences.kt",
       "GradesHero.kt",
       "GradesRows.kt",
       "GradesScreen.kt",

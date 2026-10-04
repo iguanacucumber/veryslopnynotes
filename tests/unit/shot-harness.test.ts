@@ -187,9 +187,8 @@ describe("marqueurs d'écran (#160)", () => {
       messages: ["MessagesScreen.kt"],
       pairing: ["PairingScreen.kt"],
       alerts: ["SecurityAlertsScreen.kt"],
-      // Titre réimprimé en bouton par l'onglet Notes (« Compétences ») et, pour
-      // les sanctions, par la Vie scolaire : le fragment vient de l'écran voisin.
-      competences: ["AppNav.kt"],
+      // Pour les sanctions, le titre est réimprimé en bouton par la Vie
+      // scolaire : le fragment vient de l'écran voisin.
       sanctions: ["Attendance.kt"],
     };
     // `news` et `fiches` n'ont pas de fragment : leur corps ne dépend que de la
@@ -953,11 +952,6 @@ const VARIANTES: Record<string, Variante> = {
     // Titre seul (pas de fragment) : l'état d'erreur se prouve donc sur la
     // barre, et c'est la seule route qui n'a pas besoin de ligne fixe.
     erreur: ["Erreur réseau. Réessayer.", "Réessayer"],
-  },
-  // AppNav.kt passe le sous-titre à l'écran en cache d'Attendance.kt.
-  competences: {
-    plein: ["Évaluations par compétences", "Touchez une compétence pour son détail.", "Détail compétence"],
-    vide: ["Évaluations par compétences", "Aucune compétence publiée par l'établissement.", "Actualiser"],
   },
 };
 
