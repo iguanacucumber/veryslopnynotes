@@ -414,7 +414,9 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(nav).toContain("changeServer(raw, baseUrl, accounts, serverStore) { url ->");
     // Le cul-de-sac « serveur non configuré » a disparu de la route
     // appairage (le champ y est toujours accessible).
-    const pairingRoute = nav.slice(nav.indexOf("composable(ROUTE_PAIRING)"), nav.indexOf('composable("alerts")'));
+    // Bornes par le DÉBUT de la déclaration de route (sans parenthèse
+    // fermante) : #133 ajoute `deepLinks` entre les deux.
+    const pairingRoute = nav.slice(nav.indexOf("composable(ROUTE_PAIRING"), nav.indexOf('composable("alerts"'));
     expect(pairingRoute).toContain("PairingRoute(");
     expect(pairingRoute).not.toContain("Serveur non configuré.");
     // Et le garde-fou 401 (#113) reste câblé comme avant.

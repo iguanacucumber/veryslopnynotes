@@ -154,7 +154,9 @@ describe("unit android compétences (#78)", () => {
     expect(kt).toContain("Aucune compétence publiée par l'établissement.");
     // Écran branché + ressource cachable.
     const nav = readFileSync(join(UI, "AppNav.kt"), "utf8");
-    expect(nav).toContain('composable("competences")');
+    // `composable("competences"` sans la parenthèse fermante : #133 ajoute
+    // l'argument `deepLinks`, la parenthèse fermante n'est plus le même texte.
+    expect(nav).toContain('composable("competences"');
     expect(nav).toContain("CompetencesSection(it)");
     expect(nav).toContain("CachePolicy.EVALUATIONS");
     const policy = readFileSync(join(DATA, "CachePolicy.kt"), "utf8");
