@@ -23,8 +23,8 @@ object DiscussionRules {
 
     val KINDS = listOf("student", "teacher", "administration")
 
-    /** 10 premiers caractères de l'ISO ; chaîne courte = libellé vide. */
-    fun dateLabel(iso: String): String = if (iso.length >= 10) iso.substring(0, 10) else ""
+    // #147 : `dateLabel` (tranche ISO) est supprimé — la messagerie affiche le
+    // temps relatif et trie sur l'INSTANT PARSÉ, jamais sur une chaîne.
 
     /** Badge non-lus ; compteur inconnu = aucun badge (jamais « 0 »). */
     fun unreadLabel(count: Int): String =

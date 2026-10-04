@@ -1,5 +1,6 @@
 package fr.veryslopnynotes.ui
 
+import fr.veryslopnynotes.core.enumFr
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.OffsetDateTime
@@ -34,6 +35,9 @@ const val ALGORITHM_WEIGHTED = "weighted"
 const val ALGORITHM_MEDIAN = "median"
 
 const val ALGORITHM_DEFAULT = ALGORITHM_SUBJECT
+
+/** Algorithme hors contrat : la puce reste lisible sans inventer de méthode. */
+private const val ALGORITHM_CHIP_FALLBACK = "Moyenne"
 
 /** Les trois choix du sélecteur, dans l'ordre du contrat. */
 val AVERAGE_ALGORITHM_CHOICES: List<String> = listOf(ALGORITHM_SUBJECT, ALGORITHM_WEIGHTED, ALGORITHM_MEDIAN)
@@ -337,13 +341,15 @@ fun algorithmLabel(algorithm: String): String = when (algorithm) {
     else -> "Moyenne générale"
 }
 
-/** Libellé court du chip d'algorithme. */
-fun algorithmChipLabel(algorithm: String): String = when (algorithm) {
-    ALGORITHM_SUBJECT -> "Matières"
-    ALGORITHM_WEIGHTED -> "Pondérée"
-    ALGORITHM_MEDIAN -> "Médiane"
-    else -> "Moyenne"
-}
+/**
+ * Libellé court du chip d'algorithme : la table du contrat (`core/EnumFr.kt`),
+ * donc jamais le jeton anglais dans une puce de sélecteur (#147).
+ *
+ * [algorithmLabel] garde ses formulations longues (« Moyenne des matières ») :
+ * c'est de la RÉDACTION d'écran, pas une traduction, et un segment de
+ * sélecteur n'a pas la place pour les écrire.
+ */
+fun algorithmChipLabel(algorithm: String): String = enumFr(algorithm, ALGORITHM_CHIP_FALLBACK)
 
 /**
  * Provenance de la moyenne, comme chez Papillon : « par l'établissement » quand

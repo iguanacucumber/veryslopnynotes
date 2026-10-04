@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.data.RefreshOutcome
@@ -93,10 +94,13 @@ fun GradesRoute(
     // ne doivent pas changer d'une ligne à l'autre. Elle est relue à chaque
     // refresh, donc un écran laissé ouvert ne vieillit pas ses libellés.
     var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
-    var algorithm by remember { mutableStateOf(ALGORITHM_DEFAULT) }
-    var periodId by remember { mutableStateOf<String?>(null) }
-    var query by remember { mutableStateOf("") }
-    var algorithmOpen by remember { mutableStateOf(false) }
+    // #147 : recherche, période choisie et algorithme sont l'ÉTAT DE L'ÉCRAN :
+    // les perdre sur une rotation renvoyait l'utilisateur à la moyenne par
+    // matière du premier trimestre, sans aucun signe de ce qu'il venait de faire.
+    var algorithm by rememberSaveable { mutableStateOf(ALGORITHM_DEFAULT) }
+    var periodId by rememberSaveable { mutableStateOf<String?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var algorithmOpen by rememberSaveable { mutableStateOf(false) }
     var periods by remember { mutableStateOf(emptyList<PeriodUi>()) }
     var periodsError by remember { mutableStateOf<String?>(null) }
     var state by remember(resource) {

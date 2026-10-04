@@ -24,10 +24,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.ServerConfig
+import fr.veryslopnynotes.core.dayLabelFr
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.DeviceAuth
 import fr.veryslopnynotes.data.RefreshOutcome
@@ -171,7 +173,8 @@ private fun RevisionSheetCard(
     PapCard(modifier = modifier.fillMaxWidth()) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(text = sheet.title, style = MaterialTheme.typography.titleMedium)
-            val meta = listOf(sheet.subject, sheet.date.take(10)).filter { it.isNotBlank() }.joinToString(" · ")
+            // #147 : « lundi 05/10 » (`dayLabelFr`) À LA PLACE de la tranche ISO brute.
+            val meta = listOf(sheet.subject, dayLabelFr(sheet.date)).filter { it.isNotBlank() }.joinToString(" · ")
             if (meta.isNotEmpty()) {
                 Text(
                     text = meta,
@@ -282,7 +285,8 @@ fun RevisionSheetsRoute(
     val context = LocalContext.current
     val main = remember { Handler(Looper.getMainLooper()) }
     var state by remember { mutableStateOf<RevisionState>(RevisionState.Loading) }
-    var notice by remember { mutableStateOf<String?>(null) }
+    // #147 : le message d'export ouvert ou non survit à la rotation.
+    var notice by rememberSaveable { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
 
     fun refresh() {
