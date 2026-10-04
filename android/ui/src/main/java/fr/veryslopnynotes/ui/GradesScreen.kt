@@ -52,6 +52,11 @@ import fr.veryslopnynotes.data.SyncedRepository
 //      avec zéro donnée : ils n'existent plus que dans la branche qui a des
 //      notes à montrer.
 //
+// #172 : la branche d'ERREUR de cet écran ne rendait aucun libellé fixe
+// (« Réessayer » est partagé par sept écrans), donc sa route n'était pas
+// prouvable hors ligne : `GradesBlankState` y porte désormais une ligne propre
+// à l'onglet, `GRADES_UNAVAILABLE`.
+//
 // Le rendu est réparti en trois fichiers, un par responsibility :
 //   - `GradesScreen.kt` (ici) : l'ÉTAT et le câblage (cache, réseau, periods) ;
 //   - `GradesHero.kt` : carte héro + sparkline `Canvas` ;
@@ -280,6 +285,16 @@ fun GradesRoute(
 }
 
 /**
+ * LIGNE FIXE de l'onglet Notes dans son état d'erreur (#172).
+ *
+ * `PapErrorState` ne rend que le message de la couche data et « Réessayer », que
+ * sept autres écrans rendent aussi : c'est la seule ligne de cet écran qui
+ * distingue sa branche d'erreur de celle d'un autre écran (le titre « Notes »
+ * est dans la barre d'onglets, donc sur TOUTES les routes).
+ */
+private const val GRADES_UNAVAILABLE = "Notes indisponibles."
+
+/**
  * Un seul message là où l'écran a des MOYENNES mais aucune note à lister :
  * recherche sans résultat, ou période sans note.
  *
@@ -336,7 +351,20 @@ private fun GradesBlankState(
                 description = "Actualisez pour lire les notes de l'établissement.",
                 action = refresh,
             )
-            is UiState.Error -> PapErrorState(message = state.message, onRetry = onRefresh)
+            // #172 : UNE LIGNE FIXE, PROPRE À CET ÉCRAN, avant l'erreur. Sans
+            // elle, cette branche ne rend que le message du serveur et
+            // « Réessayer » — que sept écrans partagent — donc `make shot
+            // ROUTE=grades` ne pourrait pas distinguer cet écran d'une dérive
+            // de navigation vers l'un d'eux : la barre d'onglets affiche déjà
+            // « Notes » sur toutes les routes (cf. le `why` de `shot.sh`).
+            is UiState.Error -> {
+                Text(
+                    text = GRADES_UNAVAILABLE,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                PapErrorState(message = state.message, onRetry = onRefresh)
+            }
             // Payload lu, mais zéro note ET zéro moyenne : pas de carte héro
             // « aucune moyenne » AU-DESSUS d'un « aucune note », ce sont deux
             // phrases pour dire la même chose.

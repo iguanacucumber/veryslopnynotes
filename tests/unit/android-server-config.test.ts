@@ -414,8 +414,10 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     // Les repositories suivent l'adresse courante : `repo` est rebâti à chaque
     // changement de serveur (`remember(baseUrl, cacheStore, tokens)`), donc la
     // route alertes — qui lit ce `repo` (#144, cache hors-ligne) lit elle aussi
-    // le serveur courant. `loadAlerts` reste le point d'injection inchangé.
-    expect(nav).toContain("loadAlerts: suspend (String) -> List<SecurityAlert>");
+    // le serveur courant. #172 : le paramètre `loadAlerts` est SUPPRIMÉ (mort
+    // depuis #144, seul `MainActivity` le passait) — un point d'injection qui
+    // n'injecte plus rien ne doit pas rester en place.
+    expect({ loadAlerts: nav.includes("loadAlerts:") }).toEqual({ loadAlerts: false });
     expect(nav).toContain("remember(baseUrl, cacheStore, tokens)");
     expect(nav).toContain("SecurityAlertsRoute(repo = repo, baseUrl = baseUrl)");
     // La route appairage reçoit le callback (pas de SettingsScreen).
