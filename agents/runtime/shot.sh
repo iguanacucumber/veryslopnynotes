@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # shot.sh — capture d'écran d'un écran de l'app, SANS taper au doigt (#133).
 #
-#   agents/runtime/shot.sh <route> [--package <pkg>] [--wait <secondes>]
-#   make shot ROUTE=grades
+#   agents/runtime/shot.sh <route> [--package <pkg>] [--wait <secondes>] [--no-build]
+#   make shot ROUTE=grades [SHOT_ARGS=--no-build]
 #
 # Pourquoi ce script existe : vérifier une refonte d'interface écran par écran
 # supposait `adb shell input tap X Y`. Des coordonnées qui dépendent de la taille
@@ -16,6 +16,12 @@
 # introuvable, capture noire, arrivée sur l'appairage au lieu de la route : on
 # sort en erreur en disant ce qui N'A PAS été fait. Une capture non contrôlée ne
 # vaut rien — c'est une image, on ne la relit pas dans un diff.
+#
+# Ce que la capture PROUVE, c'est l'arbre de travail AU MOMENT de la capture :
+# Gradle construit l'APK debug systématiquement (il incrementalise, donc quasi
+# gratuit quand rien n'a changé) et l'appareil est comparé par empreinte, pas
+# par date (#151 : une source plus récente que l'APK = APK périmé, donc
+# reconstruction ; un APK périmé sur l'appareil = réinstallation).
 #
 # Outillage (android-env.sh) : on SOURCE ce fichier de fonctions, jamais on ne
 # le réécrit — c'est lui qui connaît la borne JDK 17-21 de Gradle.
@@ -38,6 +44,7 @@ PKG="$APP_PKG"
 WAIT_SEC=3
 SERIAL=""
 RAW=""
+BUILD=1
 
 die() {
     printf '%s\n' "$@" >&2
@@ -46,7 +53,7 @@ die() {
 
 usage() {
     cat <<'USAGE'
-usage : shot.sh <route> [--package <pkg>] [--wait <secondes>]
+usage : shot.sh <route> [--package <pkg>] [--wait <secondes>] [--no-build]
 
   <route>               route de l'app : index, calendar, grades, tasks,
                         profile, settings, news, canteen, attendance,
@@ -55,6 +62,11 @@ usage : shot.sh <route> [--package <pkg>] [--wait <secondes>]
   --package <pkg>       autre application (référence Papillon) : pas
                         d'installation, simple lancement + capture.
   --wait <secondes>     délai après lancement avant la capture (défaut 3).
+  --no-build            PAS de construction Gradle : recapture rapide du
+                        MÊME APK, qui peut être plus vieux que les sources
+                        (le script le dit, bruyamment). Réservé à la
+                        re-capture d'une capture ratée, jamais au contrôle
+                        d'une modification de l'interface.
 USAGE
 }
 
@@ -79,15 +91,29 @@ need_device() {
     [ "$n" -eq 1 ] || die "adb : $n appareils connectés ($(printf '%s' "$ready" | tr '\n' ' ')). rien capturé — brancher un seul téléphone."
 }
 
-# APK debug absent ou plus vieux qu'une source : on construit. Un APK périmé
-# donne une capture de l'ancienne interface, exactement le faux vert qu'on
-# cherche à tuer ici.
-apk_is_stale() {
+# Empreinte de l'APK local, vide si absent/illisible.
+apk_sha256() {
     [ -f "$APK" ] || return 0
-    local newer
-    newer=$(find "$ANDROID_DIR" -path '*/build/*' -prune -o \
-        \( -name '*.kt' -o -name '*.kts' -o -name '*.xml' \) -newer "$APK" -print -quit)
-    [ -z "$newer" ]
+    sha256sum "$APK" 2>/dev/null | cut -d' ' -f1
+}
+
+# L'APK doit contenir EXACTEMENT l'arbre de travail courant : c'est Gradle qui
+# en est l'autorité, donc on le lance TOUJOURS (il incrementalise : ~1 s quand
+# rien n'a changé, quelques secondes sinon). #151 : une comparaison de mtimes ne
+# prouve rien — son inverse renvoyait « à jour » sur un APK plus vieux que les
+# sources (faux vert), et un motif oublié (`assets/`, `.pro`,
+# `libs.versions.toml`) aurait réintroduit le même mensonge dans l'autre
+# sens. `--no-build` est le SEUL renoncement, et il parle.
+ensure_apk() {
+    if [ "$BUILD" = 0 ]; then
+        [ -f "$APK" ] || die "shot : --no-build et APK debug absent ($APK) — rien installé, rien capturé."
+        printf "shot : --no-build : APK NON reconstruit (%s).\n" "$(apk_sha256 | cut -c1-12)" >&2
+        printf '  Les sources peuvent être plus récentes : la capture peut montrer\n' >&2
+        printf "  une interface périmée. Relancez SANS --no-build pour la prouver.\n" >&2
+        return 0
+    fi
+    build_apk
+    [ -f "$APK" ] || die "shot : construction Gradle terminée sans $APK — rien installé, rien capturé."
 }
 
 build_apk() {
@@ -115,36 +141,52 @@ build_apk() {
         ./gradlew --console=plain assembleDebug ) || die "shot : construction Gradle en échec — rien d'installé, rien capturé."
 }
 
-# mtime de l'APK réellement installé, vide si absent/illisible.
-installed_apk_mtime() {
-    local path
+# Empreinte de l'APK RÉELLEMENT installé, vide si absent ou illisible. Contenu,
+# jamais mtime : deux horloges (poste, téléphone) se mentent, un hash non.
+# `base.apk` est le fichier même que `adb install` a écrit (vérifié : sha256
+# identique au local), donc l'égalité est une preuve, pas une estimation.
+installed_apk_sha256() {
+    local path hash
     path=$(a shell dumpsys package "$PKG" | sed -n 's/.*codePath=\(.*\)/\1/p' | head -1 | tr -d '\r')
     [ -n "$path" ] || return 0
-    a shell stat -c %Y "$path/base.apk" 2>/dev/null | tr -d '\r' || true
+    hash=$(a shell sha256sum "$path/base.apk" 2>/dev/null | tr -d '\r' | awk 'NR==1 { print $1 }') || hash=""
+    printf '%s' "$hash"
 }
 
 # Jamais de `adb uninstall` ici : cela effacerait les données de l'app, donc la
 # session appairée, donc l'obligation de rescanner le QR de l'établissement. On
 # échoue et on laisse l'utilisateur trancher.
 ensure_installed() {
-    if apk_is_stale; then
-        build_apk
+    ensure_apk
+    local local_sha remote_sha
+    local_sha=$(apk_sha256)
+    remote_sha=$(installed_apk_sha256)
+    if [ -n "$local_sha" ] && [ "$local_sha" = "$remote_sha" ]; then
+        printf "shot : APK debug déjà installé sur l'appareil (empreinte %s… identique), installation évitée.\n" \
+            "$(printf '%s' "$local_sha" | cut -c1-12)"
+        return 0
     fi
-    local local_mtime remote_mtime
-    local_mtime=$(stat -c %Y "$APK")
-    remote_mtime=$(installed_apk_mtime)
-    if [ -z "$remote_mtime" ] || [ "$remote_mtime" -lt "$local_mtime" ]; then
-        printf "shot : installation de l'APK debug …\n"
-        local out
-        if ! out=$(a install -r "$APK" 2>&1); then
-            printf '%s\n' "$out" >&2
-            die "shot : installation refusée (signature différente ?). Je ne désinstalle PAS tout
+    # Empreinte illisible ou différente = installation. Le seul sens raté serait
+    # de se taire, donc on installe.
+    printf "shot : installation de l'APK debug (local %s, appareil %s) …\n" \
+        "$(printf '%s' "${local_sha:-?}" | cut -c1-12)" "$(printf '%s' "${remote_sha:-inconnu}" | cut -c1-12)"
+    local out
+    if ! out=$(a install -r "$APK" 2>&1); then
+        printf '%s\n' "$out" >&2
+        die "shot : installation refusée (signature différente ?). Je ne désinstalle PAS tout
   seul : « adb uninstall » effacerait la session appairée (QR à rescaner)."
-        fi
-        printf '%s\n' "$out" | sed 's/^/shot : /'
-    else
-        printf "shot : APK debug déjà à jour sur l'appareil, installation évitée.\n"
     fi
+    printf '%s\n' "$out" | sed 's/^/shot : /'
+    # L'installation est un fait, pas une intention : on la relit sur l'appareil.
+    remote_sha=$(installed_apk_sha256)
+    if [ -n "$remote_sha" ] && [ "$remote_sha" != "$local_sha" ]; then
+        die "shot : l'appareil fait tourner une AUTRE empreinte (${remote_sha:0:12} contre
+  ${local_sha:0:12}). Capture NON faite : elle montrerait une autre interface."
+    fi
+    # Empreinte illisible (appareil sans sha256sum) = vérification IMPOSSIBLE, pas
+    # fausse : on continue, mais on le dit — un « ça marche » sans preuve ne
+    # vaut rien.
+    [ -n "$remote_sha" ] || printf "shot : empreinte de l'APK installed ILLISIBLE sur cet appareil (pas de sha256sum) : installation non vérifiée.\n" >&2
 }
 
 launch_app() {
@@ -389,6 +431,7 @@ main() {
             --package=*) PKG="${arg#*=}"; shift ;;
             --wait) [ $# -ge 2 ] || die "--wait sans valeur."; WAIT_SEC="$2"; shift 2 ;;
             --wait=*) WAIT_SEC="${arg#*=}"; shift ;;
+            --no-build) BUILD=0; shift ;;
             -h|--help) usage; exit 0 ;;
             -*) usage >&2; die "option inconnue : $arg" ;;
             *)
