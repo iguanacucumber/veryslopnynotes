@@ -78,6 +78,17 @@ private const val CANTEEN_MEAL_FALLBACK = "Repas"
 /** Statut publié mais inconnu : jamais le jeton brut en clair. */
 private const val CANTEEN_STATUS_UNKNOWN = "Statut inconnu"
 
+/**
+ * LIGNE FIXE de l'écran « Cantine », rendue dans les TROIS états (données, vide,
+ * erreur) — comme `ATTENDANCE_HEADING` / `SANCTIONS_HEADING` (#172).
+ *
+ * #178 : elle était dans la SEULE branche qui a des menus, donc hors ligne ou à
+ * froid la capture échouait sur un écran parfaitement correct (« le témoin de
+ * l'écran a changé ») alors que la faute était celle du témoin. Un témoin qui
+ * dépend de la donnée ne prouve rien hors ligne.
+ */
+private const val CANTEEN_HEADING = "Menus de la semaine"
+
 // Jetons ACCEPÉS du contrat (`CANTEEN_MENU_STATUSES`) : la couleur et le filtre
 // comparent des jetons, les libellés viennent de `core/EnumFr.kt`.
 private const val STATUS_SERVED = "served"
@@ -441,47 +452,51 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         HomePullToRefresh(refreshing = loading, onRefresh = { refresh() }) {
-            when {
-                // Le VRAI message d'échec : l'écran ne se débrouille pas d'un « réseau ».
-                error != null && days.isEmpty() -> PapErrorState(message = error, onRetry = { refresh() })
-                days.isNotEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Menus de la semaine",
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.semantics { heading() },
-                    )
-                    if (stale) PapStaleBanner(fetchedAt = fetchedAt, onRefresh = { refresh() })
-                    // Relecture échouée alors que les menus sont là : la cause passe
-                    // en une ligne, les cartes restent affichées.
-                    val failure = error
-                    if (failure != null) {
-                        Text(
-                            text = failure,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // #178 : hors du `when`, donc présent même sans un seul menu —
+                // c'est ce qui rend la route prouvable dans ses trois états.
+                Text(
+                    text = CANTEEN_HEADING,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() },
+                )
+                when {
+                    // Le VRAI message d'échec : l'écran ne se débrouille pas d'un « réseau ».
+                    error != null && days.isEmpty() -> PapErrorState(message = error, onRetry = { refresh() })
+                    days.isNotEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (stale) PapStaleBanner(fetchedAt = fetchedAt, onRefresh = { refresh() })
+                        // Relecture échouée alors que les menus sont là : la cause passe
+                        // en une ligne, les cartes restent affichées.
+                        val failure = error
+                        if (failure != null) {
+                            Text(
+                                text = failure,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        CanteenContent(week ?: CanteenWeekUi(emptyList()))
                     }
-                    CanteenContent(week ?: CanteenWeekUi(emptyList()))
+                    loading -> PapLoading()
+                    // Capacite dynamique : aucun menu publie = onglet masque cote shell,
+                    // ici etat vide propre (pas d'erreur, pas de contenu invente).
+                    payload == null -> PapEmptyState(
+                        icon = Icons.AutoMirrored.Filled.List,
+                        title = "Aucun menu en cache",
+                        description = "Actualisez pour charger les menus de la semaine.",
+                        action = { Button(onClick = { refresh() }) { Text("Actualiser") } },
+                    )
+                    else -> PapEmptyState(
+                        icon = Icons.AutoMirrored.Filled.List,
+                        title = "Aucun menu publié cette semaine",
+                        description = "L'établissement n'a pas publié de menu sur cette période.",
+                        action = { Button(onClick = { refresh() }) { Text("Actualiser") } },
+                    )
                 }
-                loading -> PapLoading()
-                // Capacite dynamique : aucun menu publie = onglet masque cote shell,
-                // ici etat vide propre (pas d'erreur, pas de contenu invente).
-                payload == null -> PapEmptyState(
-                    icon = Icons.AutoMirrored.Filled.List,
-                    title = "Aucun menu en cache",
-                    description = "Actualisez pour charger les menus de la semaine.",
-                    action = { Button(onClick = { refresh() }) { Text("Actualiser") } },
-                )
-                else -> PapEmptyState(
-                    icon = Icons.AutoMirrored.Filled.List,
-                    title = "Aucun menu publié cette semaine",
-                    description = "L'établissement n'a pas publié de menu sur cette période.",
-                    action = { Button(onClick = { refresh() }) { Text("Actualiser") } },
-                )
             }
         }
     }

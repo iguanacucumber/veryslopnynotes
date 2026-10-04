@@ -3,7 +3,7 @@
 // Rôle : figer le comportement que le Kotlin exécute (parse /v1/me, widgets
 // d'accueil, déconnexion) + vérifier le câblage et l'absence d'URL Pronote.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { PHOTO_REF_PREFIX, isOpaquePhotoRef, isUserInfo } from "../../shared/contracts/models";
 import { CACHEABLE_RESOURCES } from "../../shared/contracts/cache";
@@ -22,6 +22,22 @@ const CORE = join(ANDROID, "core/src/main/java/fr/veryslopnynotes/core");
 const DATA = join(ANDROID, "data/src/main/java/fr/veryslopnynotes/data");
 const UI = join(ANDROID, "ui/src/main/java/fr/veryslopnynotes/ui");
 const read = (p: string) => readFileSync(p, "utf8");
+/** Les `.kt` sous `android/` (I9 regarde les mêmes fichiers). */
+function ktFiles(dir: string): string[] {
+  const out: string[] = [];
+  if (!existsSync(dir)) return out;
+  for (const e of readdirSync(dir)) {
+    const p = join(dir, e);
+    if (statSync(p).isDirectory()) {
+      if ([".git", "node_modules", "build"].includes(e)) continue;
+      out.push(...ktFiles(p));
+    } else if (e.endsWith(".kt")) out.push(p);
+  }
+  return out;
+}
+/** Source sans les commentaires : un `// … .logout()` cité ne prouve rien. */
+const codeOnly = (src: string): string =>
+  src.replace(/\/\*[\s\S]*?\*\//g, "\n").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
 
 // --- miroir de ProfileRepository.parse (android/data/ProfileRepository.kt) ---
 type Child = { accountId: string; displayName: string; classLabel: string };
@@ -111,12 +127,8 @@ class TsAccountStore {
   select(id: string): void {
     if (this.ids.includes(id.trim())) this.current = id.trim();
   }
-  remove(id: string): void {
-    this.ids = this.ids.filter((i) => i !== id.trim());
-    if (this.current === id.trim()) this.current = null;
-  }
-  isAnonymous(): boolean {
-    return this.ids.length === 0;
+  count(): number {
+    return this.ids.length;
   }
   logout(resources: readonly string[]): void {
     this.tokenCleared = true;
@@ -298,7 +310,7 @@ describe("unit android profil (#82)", () => {
 
   test("multi-compte : ids bornés, courant cohérent, aucun secret persisté", () => {
     const s = new TsAccountStore();
-    expect(s.isAnonymous()).toBe(true);
+    expect(s.count()).toBe(0); // magasin vide = aucun compte appairé
     expect(s.add("acc-fake-1")).toBe(true);
     expect(s.add("acc-fake-1")).toBe(false); // doublon
     expect(s.add("   ")).toBe(false);
@@ -311,13 +323,46 @@ describe("unit android profil (#82)", () => {
     expect(s.current).toBe("acc-fake-2");
     for (let i = 0; i < 10; i++) s.add(`acc-extra-${i}`);
     expect(s.ids).toHaveLength(8); // MAX_ACCOUNTS
-    s.remove("acc-fake-2");
-    expect(s.current).toBeNull();
+    expect(s.count()).toBe(8);
     // Le store ne persiste QUE des ids : ni nom, ni classe, ni photo, ni token.
     const store = read(join(DATA, "AccountStore.kt"));
     expect(store).toContain("MAX_ACCOUNTS = 8");
     expect(store).not.toContain("displayName");
     expect(store).not.toContain("tokenHash");
+  });
+
+  // #178 : `AccountStore.add` n'était appelé NULLE PART. I9 ne pouvait pas le
+  // voir : le nom apparaît DANS son propre fichier (`add` appelle `select`), donc
+  // il n'est pas « jamais nommé » — I9 ne regarde que les `fun`/`class` de premier
+  // niveau, pas les MÉTHODES d'une classe. Résultat : `account_ids` n'était jamais
+  // écrit, `count()` valait 0 (« 0 compte appairé »), `current()` rendait `null`
+  // et `select()` ne pouvait rien écrire.
+  //
+  // Le garde-fou est donc sur la MÉTHODE PUBLIQUE : tout ce que le magasin expose
+  // doit être nommé au-dehors de son fichier, sans quoi c'est de la surface que
+  // aucun écran n'atteint (c'est aussi pourquoi `remove`/`isAnonymous` ont été
+  // supprimés : ils n'avaient pas d'appelant).
+  test("#178 : le compte appairé s'écrit, et chaque méthode du magasin a un appelant", () => {
+    const store = read(join(DATA, "AccountStore.kt"));
+    const ailleurs = ktFiles(join(ROOT, "android"))
+      .filter((f) => !f.endsWith("AccountStore.kt"))
+      .map((f) => codeOnly(readFileSync(f, "utf8")))
+      .join("\n");
+    const sansAppelant: string[] = [];
+    for (const m of store.matchAll(/^ {4}fun ([A-Za-z]\w*)\(/gm)) {
+      const nom = m[1]!;
+      if ((ailleurs.match(new RegExp(`\\.${nom}\\(`, "g")) ?? []).length === 0) sansAppelant.push(nom);
+    }
+    expect({ sansAppelant }).toEqual({ sansAppelant: [] });
+
+    // Le câblage : l'id vient de `/v1/me` (le serveur ne renvoie PAS d'accountId
+    // sur `/v1/setup`, cf. `SetupResponse`), et la relecture du compteur se fait
+    // APRÈS l'écriture — sinon l'écran afficherait encore « 0 compte appairé ».
+    const screen = read(join(UI, "ProfileScreen.kt"));
+    expect(screen).toContain("accounts.add(p.accountId)");
+    expect(screen.indexOf("accounts.add(p.accountId)")).toBeLessThan(
+      screen.indexOf("accountCount = accounts.count()", screen.indexOf("accounts.add(p.accountId)")),
+    );
   });
 
   test("déconnexion : session invalidée + tous les caches purgés, mode anonyme", () => {
@@ -328,7 +373,7 @@ describe("unit android profil (#82)", () => {
     expect(s.tokenCleared).toBe(true);
     expect([...s.purged].sort()).toEqual([...CACHEABLE_RESOURCES].sort());
     expect(s.ids).toEqual([]);
-    expect(s.isAnonymous()).toBe(true);
+    expect(s.count()).toBe(0); // plus aucun compte connu = mode anonyme
     // Le profil n'est PAS une ressource cachable : rien de personnel ne survit.
     expect(CACHEABLE_RESOURCES as readonly string[]).not.toContain("me");
     // Câblage Kotlin : purge + invalidation de session dans logout().
