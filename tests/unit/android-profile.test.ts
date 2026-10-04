@@ -214,6 +214,35 @@ function tsGradeLabel(value: number, scale: number): string {
   return `${v}/${String(Math.round(scale))}`;
 }
 
+// --- miroir du sélecteur de compte #140 (android/ui/ProfileAccountSwitcher.kt) ---
+type Switchable = { accountId: string; displayName: string; classLabel: string };
+
+/** `switchableAccounts` : le compte de session d'abord, puis les enfants, sans
+ *  doublon d'`accountId` ni entrée sans nom, plafonné à MAX_KIDS + 1. */
+function tsSwitchableAccounts(profile: Profile | null): Switchable[] {
+  if (profile === null) return [];
+  const out = new Map<string, Switchable>();
+  const add = (id: string, name: string, klass: string) => {
+    const key = id.trim();
+    const label = name.trim();
+    if (key === "" || key.length > 64 || label === "" || out.has(key)) return;
+    out.set(key, { accountId: key, displayName: label, classLabel: klass.trim() });
+  };
+  add(profile.accountId, profile.displayName, profile.classLabel);
+  for (const k of profile.kids) {
+    if (out.size > 8) break;
+    add(k.accountId, k.displayName, k.classLabel);
+  }
+  return [...out.values()];
+}
+
+/** `activeAccount` : le compte mémorisé, sinon le premier (le compte de session). */
+function tsActiveAccount(accounts: Switchable[], currentId: string | null): Switchable | null {
+  if (accounts.length === 0) return null;
+  const id = (currentId ?? "").trim();
+  return accounts.find((a) => a.accountId === id) ?? accounts[0]!;
+}
+
 // 2026-10-03 08:30 UTC : le cours du 03 (08:00-09:00) est EN COURS.
 const NOW = Date.parse("2026-10-03T08:30:00.000Z");
 
@@ -375,7 +404,7 @@ describe("unit android profil (#82)", () => {
       "repo.fetchPhoto(p)",
       "Aucune information publiée pour ce compte.",
       "profileInitials(profile)",
-      'Text("Se déconnecter")',
+      'title = "Se déconnecter"',
     ]) {
       expect({ needle, inProfileScreen: profile.includes(needle) }).toEqual({ needle, inProfileScreen: true });
     }
@@ -401,6 +430,86 @@ describe("unit android profil (#82)", () => {
       for (const dep of ["gson", "moshi", "kotlinx-serialization", "androidx.room", "datastore", "coil", "glide", "picasso"]) {
         expect({ dep, present: g.includes(dep) }).toEqual({ dep, present: false });
       }
+    }
+  });
+
+  test("sélecteur de compte (#140) : session d'abord, enfants ensuite, courant honnête", () => {
+    const parent = tsParse(JSON.stringify({ user: syntheticParentUserInfo }))!;
+    // Le compte de session vient EN PREMIER (c'est lui que l'en-tête affiche),
+    // puis les enfants, sans doublon : un enfant qui porte l'accountId de la
+    // session ne donne pas deux lignes pour un compte.
+    const accounts = tsSwitchableAccounts(parent);
+    expect(accounts.map((a) => a.accountId)).toEqual([parent.accountId, ...parent.kids.map((k) => k.accountId)]);
+    expect(accounts[0]?.displayName).toBe(parent.displayName);
+    expect(accounts[1]).toEqual({ accountId: parent.kids[0]!.accountId, displayName: "Camille Exemple", classLabel: parent.kids[0]!.classLabel });
+    // Un enfant sans nom, ou dont l'id dépasse la borne, n'est pas sélectionnable.
+    const troue: Profile = {
+      ...parent,
+      kids: [
+        { accountId: "acc-kid-ok", displayName: "Noé Exemple", classLabel: "6E-Fake" },
+        { accountId: "  ", displayName: "Sans id", classLabel: "" },
+        { accountId: "acc".padEnd(65, "x"), displayName: "Id trop long", classLabel: "" },
+        { accountId: "acc-kid-ok", displayName: "Doublon", classLabel: "" },
+      ],
+    };
+    const troueIds = tsSwitchableAccounts(troue).map((a) => a.accountId);
+    expect(troueIds).toEqual([troue.accountId, "acc-kid-ok"]);
+    // Plafond MAX_KIDS + 1 : la liste ne peut pas déborder sur l'écran.
+    const many: Profile = {
+      ...parent,
+      kids: Array.from({ length: 12 }, (_, i) => ({ accountId: `acc-kid-${i}`, displayName: `Enfant ${i}`, classLabel: "" })),
+    };
+    expect(tsSwitchableAccounts(many)).toHaveLength(9);
+    // Aucun profil publié = aucun compte inventé pour le sélecteur.
+    expect(tsSwitchableAccounts(null)).toEqual([]);
+    // Courant : celui que l'app mémorise, sinon le premier (la session). Un id
+    // inconnu ne désigne rien — il ne remplace jamais la session par du vide.
+    expect(tsActiveAccount(accounts, parent.kids[0]!.accountId)?.displayName).toBe("Camille Exemple");
+    expect(tsActiveAccount(accounts, null)?.accountId).toBe(parent.accountId);
+    expect(tsActiveAccount(accounts, "acc-inconnu")?.accountId).toBe(parent.accountId);
+    expect(tsActiveAccount([], parent.accountId)).toBeNull();
+  });
+
+  test("Kotlin : profil en sections, avatar borné et déconnexion confirmée (#140)", () => {
+    const profile = read(join(UI, "ProfileScreen.kt"));
+    const switcher = read(join(UI, "ProfileAccountSwitcher.kt"));
+    // Avatar : la photo ne décide PLUS de la taille de l'écran (elle était
+    // rendue à sa taille intrinsèque) et elle est rognée en cercle.
+    expect(profile).toContain("ContentScale.Crop");
+    expect(profile).toContain("modifier = Modifier.size(PROFILE_AVATAR).clip(CircleShape)");
+    expect(profile).not.toMatch(/Image\(\s*\n?\s*bitmap = photo\.bitmap\.asImageBitmap\(\),[\s\S]{0,120}padding\(4\.dp\)/);
+    // Hiérarchie : des SECTIONS (en-tête + icône) et des LIGNES, plus aucun
+    // bouton pleine largeur — dont « Se déconnecter », hors d'atteinte avant.
+    expect(profile).toContain("private fun ProfileSection(");
+    for (const section of ["Compte", "Ressources", "Réglages", "Session"]) {
+      expect(profile).toContain(`ProfileSection("${section}"`);
+    }
+    expect(profile.split("Button(onClick").length - 1).toBe(0);
+    expect(profile).toContain("ConfirmDialog(");
+    expect(profile).toContain("destructive = true");
+    // Défilement : une seule racine, au plus haut (cf. #135).
+    expect(profile).toMatch(/Modifier\.fillMaxSize\(\)\.verticalScroll\(rememberScrollState\(\)\)/);
+    // Sélecteur de compte : la feuille, la bascule, et l'écriture dans le store.
+    expect(switcher).toContain("fun switchableAccounts(profile: UserProfile?): List<SwitchableAccount>");
+    expect(switcher).toContain("fun activeAccount(");
+    expect(switcher).toContain("ModalBottomSheet(");
+    expect(profile).toContain("ProfileAccountSheet(");
+    expect(profile).toContain("accounts.select(id)");
+    expect(profile).toContain("accounts.current()");
+    // La relecture passe par la barre du haut (compteur partagé avec l'onglet
+    // Notes) : le corps n'affiche plus de bouton « Charger le profil ».
+    const nav = read(join(UI, "AppNav.kt"));
+    const shell = read(join(UI, "AppShell.kt"));
+    expect(profile).toContain("refreshTick: Int = 0");
+    // Le BLOC `ProfileRoute( … )` de AppNav.kt, pas le fichier entier (l'onglet
+    // Notes a le même compteur, mais c'est la route du profil qui doit le lire).
+    const blocProfile = nav.slice(nav.indexOf("ProfileRoute("), nav.indexOf("composable(ROUTE_NEWS"));
+    expect(blocProfile).toContain("refreshTick = readTick");
+    expect(shell).toMatch(/ROUTE_PROFILE to listOf\(\s*TopAction\.Refresh,\s*\)/);
+    // Aucune régression : le profil est lu, la photo passe par le proxy, les
+    // capacités conditionnent toujours les trois entrées dynamiques.
+    for (const needle of ["repo.fetchMe", "repo.fetchPhoto(p)", "Capabilities.visible(capabilities, Capabilities.NEWS)"]) {
+      expect({ needle, present: profile.includes(needle) }).toEqual({ needle, present: true });
     }
   });
 

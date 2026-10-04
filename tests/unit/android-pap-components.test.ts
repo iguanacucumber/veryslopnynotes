@@ -424,16 +424,17 @@ describe("briques d'interface (#136)", () => {
     expect(kt.match(/remember \{ mutableStateOf/g)?.length).toBe(1);
   });
 
-  test("les écrans qui jetaient le message serveur : EDT, Tâches et Messagerie migrés", () => {
+  test("les écrans qui jetaient le message serveur : EDT, Tâches, Vie scolaire et Messagerie migrés", () => {
     // Honnêteté sur le périmètre : #136 livre les BRIQUES et ne touche aucun
     // écran, donc les `Text("Erreur réseau. Réessayer.")` et les
     // « Données hors-ligne (périmé). » étaient toujours là. Ils disparaissent
     // quand un écran adopte `PapErrorState` / `PapStaleBanner`. Ce test
     // échouera le jour où le suivant le fera — c'est le témoin, pas le but.
-    // #137 (EDT), #138 (Tâches) puis #142 (Messagerie) sont les écrans migrés :
-    // `TimetableWeek.kt`, `Assignments.kt` et `MessagesScreen.kt` sont donc sortis
-    // de la liste, et l'assertion compte les cinq restants.
-    const fichiers = ["Attendance.kt", "CanteenMenus.kt", "NewsScreen.kt", "RevisionSheets.kt", "SecurityAlertsScreen.kt"];
+    // #137 (EDT), #138 (Tâches), #141 (vie scolaire) puis #142 (messagerie)
+    // sont les écrans migrés : `TimetableWeek.kt`, `Assignments.kt`,
+    // `Attendance.kt` et `MessagesScreen.kt` sont donc sortis de la liste, et
+    // l'assertion compte les quatre restants.
+    const fichiers = ["CanteenMenus.kt", "NewsScreen.kt", "RevisionSheets.kt", "SecurityAlertsScreen.kt"];
     const restants = fichiers.filter((f) => readFileSync(join(UI, f), "utf8").includes('"Erreur réseau. Réessayer."'));
     expect({ ecransPasEncoreMigres: restants.length }).toEqual({ ecransPasEncoreMigres: fichiers.length });
     // Le témoin inversé : chaque écran migré affiche le VRAI message.
@@ -447,6 +448,13 @@ describe("briques d'interface (#136)", () => {
     expect(devoirs).toContain("PapStaleBanner(fetchedAt = fetchedAt");
     expect(devoirs).toContain("PapLoading()");
     expect(devoirs).toContain("PapEmptyState(");
+    // #141 : la vie scolaire (absences + retards, sanctions), même coquille.
+    const vieScolaire = readFileSync(join(UI, "Attendance.kt"), "utf8");
+    expect({ vieScolaire: vieScolaire.includes('"Erreur réseau. Réessayer."') }).toEqual({ vieScolaire: false });
+    expect(vieScolaire).toContain("PapErrorState(message = error?.message");
+    expect(vieScolaire).toContain("PapStaleBanner(fetchedAt = data.fetchedAt");
+    expect(vieScolaire).toContain("PapLoading()");
+    expect(vieScolaire).toContain("PapEmptyState(");
     // #142 : même migration pour la messagerie, et le message réel n'est pas
     // affiché deux fois (bandau quand le cache est là, état d'écran sinon).
     const messagerie = readFileSync(join(UI, "MessagesScreen.kt"), "utf8");

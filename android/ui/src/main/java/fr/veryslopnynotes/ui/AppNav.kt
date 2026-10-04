@@ -343,6 +343,7 @@ fun AppNav(
                     onRefreshCapabilities = { detectCapabilities() },
 
                     goMessages = { nav.navigateTo(ROUTE_MESSAGES) },
+                    refreshTick = readTick, // #140 : relecture par la barre du haut
                 )
             }
             composable(ROUTE_NEWS, deepLinks = listOf(routeDeepLink(ROUTE_NEWS))) {
@@ -360,8 +361,7 @@ fun AppNav(
                 PunishmentsRoute(repo, baseUrl, onBack = { nav.popBackStack() })
             }
             composable(ROUTE_SETTINGS, deepLinks = listOf(routeDeepLink(ROUTE_SETTINGS))) {
-                SettingsScreen(
-                    onBack = { nav.popBackStack() },
+                SettingsScreen( // #140 : plus de `onBack`, la barre porte la flèche
                     subjectPrefs = subjectPrefs,
                     onSavePrefs = { subject, color, emoji, label ->
                         prefsRepo.upsert(subject, color, emoji, label)
@@ -390,6 +390,7 @@ fun AppNav(
                         llmKeys.clear()
                         llmKeyConfigured = false
                     },
+                    accountCount = accounts.count(), // #140 : affiché, jamais écrit
                 )
             }
             composable(ROUTE_PAIRING, deepLinks = listOf(routeDeepLink(ROUTE_PAIRING))) {

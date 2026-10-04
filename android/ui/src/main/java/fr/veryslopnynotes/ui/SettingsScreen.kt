@@ -2,14 +2,26 @@ package fr.veryslopnynotes.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -18,30 +30,58 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import fr.veryslopnynotes.core.Homework
 import fr.veryslopnynotes.data.SubjectPrefs
 
-// Réglages #83 : préférences matière (couleur/emoji/libellé, offline-first via
-// SubjectPrefsRepository) + thème clair/sombre persisté (Theme.kt). Aucun effet
-// réseau hors serveur allowlist, I1 intact.
-// @OptIn: FilterChip.material3 tant qu'il reste annoté Expérimental.
+// RÉGLAGES #83, repris par #140 : quatre SECTIONS (Apparence / Matières /
+// Sécurité / Compte), thème en segment, éditeur de matière en feuille modale
+// (`SettingsSubjectEditor.kt`), clé LLM MASQUÉE. Aucun effet réseau hors serveur
+// allowlist, I1 intact.
 //
-// #135 : ce composable SORT d'`AppNav.kt` (989 lignes qui portaient la coquille
-// ET quatre écrans). Comportement inchangé, SAUF :
-//   - `Text("Réglages")` retiré : la barre du haut affiche le titre de la route
-//     (papillon.bzh), le nom de l'écran ne doit plus être lu deux fois ;
-//   - les titres de section (« Matières », « Assistant devoirs ») passent à
-//     `MaterialTheme.typography.titleMedium`, premier adopter de l'échelle
-//     livrée par #134.
-// REDESIGN : #140 (réglages : sections, couleur matière avec aperçu, clé LLM
-// masquée).
-// ponytail: pas de défilement — l'écran tient dans la fenêtre sur les captures
-// de #135, mais le jour où #140 ajoute des sections il faudra `verticalScroll`
-// (comme `ProfileRoute`, où « Se déconnecter » était hors d'atteinte).
+// #135 : ce composable était sorti d'`AppNav.kt` (989 lignes qui portaient la
+// coquille ET quatre écrans). #140 corrige ce qui restait de #83 :
+//   - un éditeur de matière TOUJOURS DÉPLOYÉ par matière, huit pastilles de
+//     couleur chacune, dans une colonne SANS défilement : douze matières
+//     composaient environ 144 pastilles et l'écran ne pouvait pas défiler. Une
+//     matière = UNE LIGNE, son édition = une feuille ;
+//   - la couleur et l'emoji ne changeaient RIEN de visible : depuis #137 / #138
+//     / #139 ils colorent la carte de cours, la carte de devoir et la pastille
+//     de note — la feuille d'édition affiche un APERÇU VIVANT de ces trois-là ;
+//   - la clé du fournisseur LLM était saisie EN CLAIR (aucune transformation
+//     visuelle) : elle se lisait par-dessus l'épaule et finissait dans la
+//     hiérarchie de vues. Elle est désormais masquée, avec une bascule de
+//     visibilité explicite ;
+//   - « Ajouter la matière » était ACTIF sur un champ vide (l'appui ne faisait
+//     rien) : le bouton est désactivé tant que le nom est vide, et un message
+//     inline dit pourquoi quand le nom dépasse la borne du contrat ;
+//   - le thème était une rangée de `FilterChip` : c'est un segment (Système /
+//     Clair / Sombre), la forme d'un choix exclusif.
+//
+// Le retour n'est PLUS un bouton du corps : la barre du haut porte déjà la
+// flèche (`TOP_BARS[ROUTE_SETTINGS]`), donc le second « Retour » était un doublon
+// — même règle que #162 pour les liens de navigation.
+//
+// La clé n'est JAMAIS pré-remplie dans le champ : on affiche seulement si une
+// clé existe (elle est chiffrée au repos dans `LlmKeyStore`), et la saisie ne
+// sort jamais de l'app — pas de log, pas d'URL, pas de message d'erreur.
+
+/** Écart entre deux sections. */
+private val BLOCK_GAP = 20.dp
+
+/** Écart entre deux lignes d'une même section. */
+private val ROW_GAP = 4.dp
+
+// @OptIn: `ModalBottomSheet` (feuille de la matière), `SingleChoiceSegmentedButtonRow`
+// et `SegmentedButton` restent annotés Expérimental dans material3 1.2.1 (le gel
+// du Compose BOM 2024.06.00).
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    onBack: () -> Unit,
     subjectPrefs: List<SubjectPrefs> = emptyList(),
     // Signature = arguments édités, validation faite par isValid (contrat).
     onSavePrefs: (String, String?, String?, String?) -> Unit = { _, _, _, _ -> },
@@ -50,121 +90,210 @@ fun SettingsScreen(
     onTheme: (AppTheme) -> Unit = {},
     // 0.7.0 : clé du fournisseur LLM. Le serveur n'en détient aucune, donc
     // elle se saisit ICI, chiffrée (LlmKeyStore). Jamais pré-remplie dans le
-    // champ : on affiche seulement si une clé existe, la saisie est en clair
-    // dans le champ de l'app (l'utilisateur veut la relire/corriger).
+    // champ : on affiche seulement si une clé existe ; la saisie est masquée,
+    // avec une bascule pour la relire quand l'utilisateur le demande.
     llmKeyConfigured: Boolean = false,
     onSaveLlmKey: (String) -> Unit = {},
     onForgetLlmKey: () -> Unit = {},
+    // #140 : l'état d'appairage de l'appareil — un réglage n'y écrit pas, il se
+    // contente de dire ce qui est déjà fait (le profil, lui, agit).
+    accountCount: Int = 1,
 ) {
+    // Matière en cours d'édition, `null` = aucune feuille ouverte. L'écran ne
+    // garde QUE le sujet : le brouillon vit dans la feuille, qui disparaît avec
+    // elle (fermer sans valider = annuler, comme chez Papillon).
+    var editing by remember { mutableStateOf<String?>(null) }
+    val editingSubject = editing
+    if (editingSubject != null) {
+        SubjectEditorSheet(
+            subject = editingSubject,
+            prefs = subjectPrefs,
+            saved = subjectPrefs.firstOrNull { it.subject.equals(editingSubject, ignoreCase = true) },
+            onSave = { color, emoji, label -> onSavePrefs(editingSubject, color, emoji, label) },
+            onDismiss = { editing = null },
+        )
+    }
+
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(BLOCK_GAP),
     ) {
-        Text("Thème : ${themeLabel(theme)}")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (mode in AppTheme.entries) {
-                FilterChip(
-                    selected = theme == mode,
-                    onClick = { onTheme(mode) },
-                    label = { Text(themeLabel(mode)) },
-                )
+        // --- Apparence : un segment, pas trois puces -----------------------
+        SettingsSection("Apparence", Icons.Filled.Star) {
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                val modes = AppTheme.entries
+                for (index in modes.indices) {
+                    val mode = modes[index]
+                    SegmentedButton(
+                        selected = theme == mode,
+                        onClick = { onTheme(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(index, modes.size),
+                    ) {
+                        Text(themeLabel(mode), maxLines = 1)
+                    }
+                }
             }
         }
-        Text("Matières", style = MaterialTheme.typography.titleMedium)
-        if (subjectPrefs.isEmpty()) {
-            Text("Aucune matière personnalisée. Le nom d'origine est affiché partout.")
-        } else {
-            for (p in subjectPrefs) {
-                SubjectPrefsEditor(
-                    subject = p.subject,
-                    color = p.color,
-                    emoji = p.emoji,
-                    label = p.label,
-                    onSave = onSavePrefs,
+
+        // --- Matières : une ligne par matière, la feuille fait le reste ----
+        SettingsSection("Matières", Icons.AutoMirrored.Filled.List) {
+            if (subjectPrefs.isEmpty()) {
+                Text(
+                    text = "Aucune matière personnalisée. Le nom d'origine est affiché partout, avec " +
+                        "une couleur dérivée de son nom.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-        }
-        // Matière inconnue = nom libre (validation isValid côté repository).
-        var newSubject by remember { mutableStateOf("") }
-        OutlinedTextField(
-            value = newSubject,
-            onValueChange = { newSubject = it },
-            label = { Text("Matière à personnaliser") },
-            singleLine = true,
-        )
-        Button(onClick = { onSavePrefs(newSubject, "", "", ""); newSubject = "" }) { Text("Ajouter la matière") }
-        Button(onClick = { onRefreshPrefs() }) { Text("Synchroniser les préférences") }
-        // Clé LLM : credential de l'utilisateur, pas une session d'appareil.
-        // "Oublier" EFFACE la valeur du store (elle n'est pas renvoyée par le
-        // serveur, personne ne peut la reconstruire à sa place).
-        Text("Assistant devoirs", style = MaterialTheme.typography.titleMedium)
-        Text(
-            if (llmKeyConfigured) {
-                "Clé enregistrée (chiffrée). Elle part avec chaque demande, jamais stockée par le serveur."
             } else {
-                "Aucune clé : l'assistant reste inactif tant qu'elle n'est pas saisie."
-            },
-        )
-        var llmKey by remember { mutableStateOf("") }
-        OutlinedTextField(
-            value = llmKey,
-            onValueChange = { llmKey = it },
-            label = { Text("Clé du fournisseur LLM") },
-            singleLine = true,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (p in subjectPrefs) {
+                    val style = subjectStyle(subjectPrefs, p.subject)
+                    val hex = subjectColorHex(subjectPrefs, p.subject)
+                    PapListItem(
+                        title = style.badge,
+                        // Le libellé n'est un SOUS-TITRE que s'il diffère du nom
+                        // affiché : sinon la ligne dirait « Maths / Maths ».
+                        subtitle = p.label?.trim()?.takeIf { it.isNotEmpty() && it != p.subject },
+                        leading = {
+                            PapSubjectAvatar(
+                                emoji = style.emoji ?: subjectInitial(p.subject),
+                                color = colorFromHex(hex) ?: MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                        onClick = { editing = p.subject },
+                    )
+                }
+            }
+            // Matière inconnue = nom libre (validation isValid côté repository).
+            var newSubject by remember { mutableStateOf("") }
+            val nameError = subjectNameError(newSubject)
+            OutlinedTextField(
+                value = newSubject,
+                onValueChange = { newSubject = it },
+                label = { Text("Matière à personnaliser") },
+                singleLine = true,
+                isError = nameError != null,
+                supportingText = {
+                    Text(nameError ?: "Le nom vient de l'établissement : vérifie son orthographe.")
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
             Button(
-                onClick = { onSaveLlmKey(llmKey); llmKey = "" },
-                enabled = llmKey.isNotBlank(),
-            ) { Text("Enregistrer la clé") }
-            TextButton(onClick = { onForgetLlmKey() }, enabled = llmKeyConfigured) { Text("Oublier") }
-        }
-        Button(onClick = onBack) { Text("Retour") }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SubjectPrefsEditor(
-    subject: String,
-    color: String?,
-    emoji: String?,
-    label: String?,
-    onSave: (String, String?, String?, String?) -> Unit,
-) {
-    var draftColor by remember(subject) { mutableStateOf(color ?: "") }
-    var draftEmoji by remember(subject) { mutableStateOf(emoji ?: "") }
-    var draftLabel by remember(subject) { mutableStateOf(label ?: "") }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(subject)
-        OutlinedTextField(
-            value = draftLabel,
-            onValueChange = { draftLabel = it },
-            label = { Text("Libellé") },
-            singleLine = true,
-        )
-        OutlinedTextField(
-            value = draftEmoji,
-            onValueChange = { draftEmoji = it },
-            label = { Text("Emoji") },
-            singleLine = true,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            for (hex in PREFS_PALETTE) {
-                FilterChip(
-                    selected = draftColor.equals(hex, ignoreCase = true),
-                    onClick = { draftColor = if (draftColor.equals(hex, ignoreCase = true)) "" else hex },
-                    label = { Text("■", color = colorFromHex(hex) ?: MaterialTheme.colorScheme.onSurface) },
-                )
+                // Champ vide ou trop long : le bouton ne s'appuie pas. AVANT il
+                // était actif et l'appui n'écrivait rien (le dépôt rejette une
+                // prefs sans sujet).
+                onClick = {
+                    val subject = newSubject.trim()
+                    if (subject.isNotEmpty() && subjectNameError(subject) == null) {
+                        onSavePrefs(subject, "", "", "")
+                        newSubject = ""
+                        // « Ajouter » ajoute : la feuille s'ouvre sur la matière
+                        // créée, sinon l'app se retrouve avec une prefs vide que
+                        // rien ne montre.
+                        editing = subject
+                    }
+                },
+                enabled = newSubject.isNotBlank() && nameError == null,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Ajouter la matière") }
+            TextButton(onClick = { onRefreshPrefs() }, modifier = Modifier.fillMaxWidth()) {
+                Text("Synchroniser les préférences")
             }
         }
-        Button(onClick = { onSave(subject, draftColor, draftEmoji, draftLabel) }) { Text("Enregistrer $subject") }
+
+        // --- Sécurité : la clé de l'assistant ------------------------------
+        SettingsSection("Sécurité", Icons.Filled.Lock) {
+            Text(text = "Assistant devoirs", style = MaterialTheme.typography.titleSmall)
+            Text(
+                text = if (llmKeyConfigured) {
+                    "Clé enregistrée (chiffrée). Elle part avec chaque demande, jamais stockée par " +
+                        "le serveur."
+                } else {
+                    "Aucune clé : l'assistant reste inactif tant qu'elle n'est pas saisie."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            var llmKey by remember { mutableStateOf("") }
+            // Masquée par DÉFAUT : une clé se COLLE, elle ne se tape pas. Le
+            // collage reste autorisé (aucun filtre de caractères) — c'est le
+            // TEXTE affiché qui est transformé, jamais la saisie.
+            var keyVisible by remember { mutableStateOf(false) }
+            OutlinedTextField(
+                value = llmKey,
+                onValueChange = { if (it.length <= Homework.MAX_API_KEY_CHARS) llmKey = it },
+                label = { Text("Clé du fournisseur LLM") },
+                singleLine = true,
+                visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                trailingIcon = {
+                    TextButton(onClick = { keyVisible = !keyVisible }) {
+                        // Pas d'icône : `Visibility` est dans
+                        // `material-icons-extended`, interdit ici. Le libellé
+                        // écrit est de toute façon plus clair qu'un œil.
+                        Text(if (keyVisible) "Masquer" else "Afficher")
+                    }
+                },
+                supportingText = {
+                    Text("Collée depuis le compte du fournisseur. Elle ne quitte jamais cet appareil.")
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        onSaveLlmKey(llmKey)
+                        // Le champ se vide après l'écriture : la clé ne reste pas
+                        // en clair dans l'arbre de vues plus longtemps qu'il le faut.
+                        llmKey = ""
+                        keyVisible = false
+                    },
+                    enabled = llmKey.isNotBlank(),
+                ) { Text("Enregistrer la clé") }
+                // "Oublier" EFFACE la valeur du store (elle n'est pas renvoyée
+                // par le serveur, personne ne peut la reconstruire à sa place).
+                TextButton(onClick = { onForgetLlmKey() }, enabled = llmKeyConfigured) { Text("Oublier") }
+            }
+        }
+
+        // --- Compte : ce qui est déjà appairé sur cet appareil --------------
+        SettingsSection("Compte", Icons.Filled.AccountCircle) {
+            PapListItem(
+                title = "Comptes appairés",
+                subtitle = if (accountCount > 1) {
+                    "$accountCount comptes · la session en cours garde ses accès"
+                } else {
+                    "1 compte · l'appairage se fait depuis le Profil"
+                },
+            )
+            Text(
+                text = "L'appairage, la déconnexion et le changement de compte sont dans l'onglet " +
+                    "Profil. Les préférences de matière sont répliquées vers le serveur de " +
+                    "l'établissement ; la clé de l'assistant ne sort jamais de l'appareil.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
-// ponytail: palette de 8 couleurs en dur (aucun Color Picker tant que le
-// besoin n'est pas prouvé), champs texte = Material3 de base.
-private val PREFS_PALETTE = listOf(
-    "#E53935", "#D81B60", "#8E24AA", "#5E35B1",
-    "#3949AB", "#1E88E5", "#43A047", "#FB8C00",
-)
+/**
+ * Un bloc de réglages : en-tête de section (`PapSectionHeader` = icône + titre
+ * en encre secondaire) puis son contenu.
+ *
+ * PAS de carte autour : un réglage = une ligne ou un champ, et un aplat de carte
+ * par réglage ferait un damier sur un écran de réglages.
+ */
+@Composable
+private fun SettingsSection(
+    title: String,
+    icon: ImageVector,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
+        PapSectionHeader(icon = icon, title = title)
+        Column(modifier = Modifier.fillMaxWidth(), content = content)
+    }
+}

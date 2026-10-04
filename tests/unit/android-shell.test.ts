@@ -199,8 +199,13 @@ describe("coquille applicative (#135)", () => {
     }
     // #134 livrait l'échelle de typo, aucun écran ne l'utilisait : les titres de
     // section restants passent maintenant par `MaterialTheme.typography`.
+    // #140 : le profil et les réglages délèguent leur titre de section à
+    // `PapSectionHeader` (la brique #136, qui pose `titleMedium`) au lieu de le
+    // styler eux-mêmes — donc ces deux fichiers comptent s'ils l'utilisent.
     for (const f of ["IndexScreen.kt", "ProfileScreen.kt", "SettingsScreen.kt", "GradesScreen.kt", "TimetableWeek.kt", "Assignments.kt", "CanteenMenus.kt", "MessagesScreen.kt"]) {
-      expect({ f, titled: read(f).includes("MaterialTheme.typography.titleMedium") }).toEqual({ f, titled: true });
+      const src = read(f);
+      const titled = src.includes("MaterialTheme.typography.titleMedium") || src.includes("PapSectionHeader(");
+      expect({ f, titled }).toEqual({ f, titled: true });
     }
   });
 
@@ -208,14 +213,21 @@ describe("coquille applicative (#135)", () => {
     const profile = read("ProfileScreen.kt");
     // #87 avait ajouté les entrées conditionnelles PAR-DESSUS trois lignes
     // d'origine restées : chaque entrée apparaissait trois fois.
+    // #140 : ce sont des LIGNES (`PapListItem(title = …)`) et non des boutons
+    // pleine largeur — le libellé apparaît donc une fois, dans le libellé de la
+    // ligne, et plus dans `{ Text("…") }`.
     for (const label of ["Actualités", "Cantine semaine", "Vie scolaire"]) {
-      const n = profile.split(`{ Text("${label}") }`).length - 1;
+      const n = profile.split(`title = "${label}"`).length - 1;
       expect({ label, occurrences: n }).toEqual({ label, occurrences: 1 });
     }
+    expect(profile.split("Button(onClick").length - 1).toBe(0);
     // Deux racines dans un slot du NavHost = débordement sans défilement : une
-    // seule racine, défilable, et le bouton le plus important reste atteignable.
+    // seule racine, défilable, et l'action la plus grave reste atteignable.
     expect(profile).toMatch(/fun ProfileRoute\([\s\S]*Modifier\.fillMaxSize\(\)\.verticalScroll\(rememberScrollState\(\)\)\)\s*\{/);
-    expect(profile).toContain('Text("Se déconnecter")');
+    expect(profile).toContain('title = "Se déconnecter"');
+    // #140 : la déconnexion détruit la session, donc elle est CONFIRMÉE.
+    expect(profile).toContain("ConfirmDialog(");
+    expect(profile).toContain("destructive = true");
   });
 
   test("fenêtre sans barre d'action : pas de marque statique au-dessus de la barre du haut", () => {

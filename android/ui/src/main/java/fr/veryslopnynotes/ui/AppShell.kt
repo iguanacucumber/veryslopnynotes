@@ -131,6 +131,13 @@ private sealed interface TopAction {
  * endroit à regarder pour savoir quelles destinations existent.
  */
 private val TOP_BAR_ACTIONS: Map<String, List<TopAction>> = mapOf(
+    // #140 : le profil se relit depuis la barre, donc le corps de l'écran
+    // n'affiche plus son bouton « Charger le profil » : c'est la seule route
+    // qui n'offre aucune destination ET dont la donnée est en mémoire (jamais
+    // en cache), donc la relecture est le geste le plus demandé de cet écran.
+    ROUTE_PROFILE to listOf(
+        TopAction.Refresh,
+    ),
     ROUTE_GRADES to listOf(
         TopAction.Refresh,
         TopAction.Go(ROUTE_COMPETENCES, "Compétences"),
