@@ -1,4 +1,4 @@
-.PHONY: check lint typecheck unit architecture contracts security check-kotlin android-compile architecture-test integration-api e2e e2e-grades e2e-assignments e2e-manuals e2e-revision runServer buildDebugApk buildRelApk build
+.PHONY: check lint typecheck unit architecture contracts security check-kotlin android-compile architecture-test integration-api e2e e2e-grades e2e-assignments e2e-manuals e2e-revision runServer buildDebugApk buildRelApk build shot papillonRef
 
 # Découverte JDK/SDK partagée par android-compile, buildDebugApk, buildRelApk :
 # une seule implémentation, sinon une des trois finit par oublier la borne 17-21.
@@ -55,6 +55,25 @@ android-compile:
 	    :core:compileDebugKotlin :data:compileDebugKotlin :ui:compileDebugKotlin :app:compileDebugKotlin; \
 	fi
 
+# Capture d'écran sur téléphone réel (#133) : `make shot ROUTE=grades`.
+# shot.sh installe l'APK debug s'il est plus vieux que les sources, ouvre
+# `veryslopnynotes://<route>` (deep link DU VARIANT DEBUG seulement) et dépose
+# la capture dans shots/<date-UTC>/. Sort en erreur si l'appareil manque, si
+# l'écran rend noir ou si l'app atterrit ailleurs que sur la route demandée :
+# une capture non vérifiée ne sert à rien. La découverte JDK/SDK est celle
+# d'android-env.sh, comme les autres cibles Gradle.
+shot:
+	@$(ANDROID_ENV); \
+	jdk=$$(android_jdk); sdk=$$(android_sdk); \
+	if [ -z "$$jdk" ] || [ -z "$$sdk" ]; then \
+	  echo "shot : outillage absent (JDK=$${jdk:-aucun}, SDK=$${sdk:-aucun})."; \
+	  android_toolchain_hint; exit 1; \
+	fi; \
+	if [ -z "$(ROUTE)" ]; then \
+	  echo "usage : make shot ROUTE=<route>   (index, calendar, grades, tasks, profile, ...)"; exit 1; \
+	fi; \
+	JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" agents/runtime/shot.sh $(ROUTE)
+
 # APK debug : clé de signature de debug (hors repo, générée par Gradle).
 buildDebugApk:
 	@$(ANDROID_ENV); \
@@ -63,7 +82,7 @@ buildDebugApk:
 	  echo "buildDebugApk : outillage absent (JDK=$${jdk:-aucun}, SDK=$${sdk:-aucun})."; \
 	  android_toolchain_hint; exit 1; \
 	fi; \
-	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleDebug; \
+	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleDebug && \
 	echo "APK debug : android/app/build/outputs/apk/debug/app-debug.apk"
 
 # APK release : signé SI les credentials de signature sont dans l'environnement
@@ -77,7 +96,7 @@ buildRelApk:
 	  echo "buildRelApk : outillage absent (JDK=$${jdk:-aucun}, SDK=$${sdk:-aucun})."; \
 	  android_toolchain_hint; exit 1; \
 	fi; \
-	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleRelease; \
+	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleRelease && \
 	echo "APK release : android/app/build/outputs/apk/release/ (sigNE si STORE_FILE présent, sinon NON signé)"
 
 # tests/integration : API locale sans secret (0.7.0 : plus de .env.local, donc
@@ -112,6 +131,13 @@ e2e-revision:
 runServer:
 	@. agents/runtime/dev-tls.sh; dev_tls; \
 	PORT=8080 HOST=0.0.0.0 bun run server/infrastructure/http.ts
+
+# Frames de RÉFÉRENCE Papillon (`make papillonRef`) : les démonstrations
+# publiques de l'application de référence, rechargées depuis papillon.bzh.
+# Réseau = échec bruyant, et RIEN de tout ça n'est requis par `make check` :
+# une référence unavailable n'a pas à faire tomber une vérification locale.
+papillonRef:
+	agents/runtime/papillon-ref.sh
 
 build:
 	bun run agents/runtime/check-secrets.ts
