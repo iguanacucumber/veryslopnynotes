@@ -417,7 +417,10 @@ is_locked() {
 # construction, une LIGNE FIXE PROPRE À L'ÉCRAN : c'est ce que portent les trois
 # écrans réparés ici — « Notes indisponibles. » (onglet Notes), « Sanctions
 # déclarées » + « Sanctions indisponibles. » (route Sanctions), « Heures
-# manquées » + « Absences indisponibles. » (route Vie scolaire).
+# manquées » + « Absences indisponibles. » (route Vie scolaire) — puis, en #178,
+# « Cantine », dont le titre est remonté HORS du `when` (`CANTEEN_HEADING`) :
+# avant, `make shot ROUTE=canteen` hors ligne échouait sur « le témoin de
+# l'écran a changé » alors que l'écran était correct.
 #
 # Ces libellés sont sans apostrophe : la table ci-dessous est une chaîne entre
 # apostrophes simples, donc un « l'instant » la fermerait au milieu (erreur de
@@ -443,7 +446,7 @@ tasks|Tâches|Devoirs de la semaine
 profile|Profil|Détecter les onglets
 settings|Réglages|Assistant devoirs
 news|Actualités|
-canteen|Cantine|Menus de la semaine
+canteen|Cantine|Menus de la semaine;Aucun menu en cache;Aucun menu publié cette semaine
 attendance|Vie scolaire|Heures manquées;Aucune absence ni retard;Absences indisponibles.
 sanctions|Sanctions|Sanctions déclarées;Sanctions indisponibles.
 messages|Messages|Rechercher une discussion

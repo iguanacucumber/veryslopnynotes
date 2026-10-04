@@ -405,8 +405,6 @@ fun ProfileRoute(
             repo.fetchMe { r ->
                 loaded = true
                 error = ""
-                accountCount = accounts.count()
-                currentAccountId = accounts.current()
                 when (r) {
                     is MeResult.Err -> error = r.message
                     is MeResult.Ok -> {
@@ -415,12 +413,29 @@ fun ProfileRoute(
                         if (p == null) {
                             photo = PhotoState.Absent
                         } else {
+                            // #178 : le compte APPAIRÉ s'écrit enfin.
+                            // `AccountStore.add` n'était appelé NULLE PART :
+                            // `account_ids` n'était donc jamais écrit, et tout
+                            // le magasin reposait sur une liste vide — `count()`
+                            // valait 0 (« 0 compte appairé » au Profil, « 1
+                            // compte » en repli aux Réglages), `current()` rendait
+                            // `null` et `select()` ne pouvait rien écrire. L'id
+                            // vient de `/v1/me`, qui publie le compte de session ;
+                            // `add` est idempotent (doublon, id invalide ou liste
+                            // pleine = false), donc son retour n'est pas une
+                            // erreur à traiter.
+                            accounts.add(p.accountId)
                             repo.fetchPhoto(p) { bitmap ->
                                 photo = if (bitmap == null) PhotoState.Absent else PhotoState.Loaded(bitmap)
                             }
                         }
                     }
                 }
+                // APRÈS le `when` : l'écriture ci-dessus doit être lue, sinon le
+                // compteur et le compte actif rejoueraient l'état d'avant la
+                // réponse du serveur (l'écran afficherait encore « 0 compte »).
+                accountCount = accounts.count()
+                currentAccountId = accounts.current()
             }
         } catch (_: Exception) {
             loaded = true

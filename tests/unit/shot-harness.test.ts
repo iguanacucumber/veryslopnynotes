@@ -818,9 +818,10 @@ interface Variante {
    * Optionnel, et ce n'est pas un oubli : il n'est listé que pour les routes dont
    * la branche d'erreur porte une ligne FIXE propre à l'écran (#172). Les autres
    * routes rendent leur témoin de chrome AVANT la branche d'état, donc leur
-   * témoin s'y lit aussi — sauf `canteen` et `messages`, dont le témoin est dans
-   * la branche de DONNÉE et qui ne sont donc pas encore prouvables hors ligne
-   * (écart signalé, non masqué : une fixture qui invente un écran mentirait).
+   * témoin s'y lit aussi — sauf `messages`, dont le témoin est dans la branche de
+   * DONNÉE et qui n'est donc pas encore prouvable hors ligne (écart signalé, non
+   * masqué : une fixture qui invente un écran mentirait). `canteen` est dans ce
+   * cas depuis #178, qui a remonté son titre hors du `when`.
    */
   erreur?: string[];
 }
@@ -884,16 +885,18 @@ const VARIANTES: Record<string, Variante> = {
     plein: ["Données hors-ligne (périmé)."],
     vide: ["Aucune actualité."],
   },
-// #172 : ÉCART CONNU, non traité ici. « CanteenMenus.kt:407` ne rend « Menus
-  // de la semaine » que dans la branche qui a des menus, donc l'état vide et
-  // l'état d'erreur de cette route ne sont pas prouvables : le témoin n'existe
-  // pas dans ces deux états. Le réparer demande une ligne dans l'écran (comme
-  // pour `grades`, `attendance` et `sanctions`), pas un habillage de fixture —
-  // une fixture qui invente un écran mentirait sur la route qu'elle prétend
-  // rejouer, et c'est exactement ce que la matrice de #172 a démasqué.
+// #178 : le témoin était dans la SEULE branche qui a des menus, donc l'état vide
+  // et l'état d'erreur n'étaient pas prouvables — `make shot ROUTE=canteen`
+  // échouait sur « le temoin de l'ecran a change » alors que l'écran était
+  // correct. L'écran porte maintenant une LIGNE FIXE dans ses trois états
+  // (`CANTEEN_HEADING`, comme `grades`/`attendance`/`sanctions`), donc les trois
+  // états sont rejoués ici. Le titrage a été fait dans l'ÉCRAN, pas dans la
+  // fixture : une fixture qui invente un écran mentirait sur la route qu'elle
+  // prétend rejouer.
   canteen: {
     plein: ["Menus de la semaine", "Actualiser"],
-    vide: ["Menus de la semaine", "Aucun menu publié cette semaine", "Actualiser"],
+    vide: ["Menus de la semaine", "Aucun menu publié cette semaine", "Aucun menu en cache", "Actualiser"],
+    erreur: ["Menus de la semaine", "Erreur réseau. Réessayer.", "Réessayer"],
   },
   // #172 : le SOUS-TITRE « Absences et retards » (#141) n'existe plus, donc le
   // témoin de l'état AVEC donnée est la carte de statut (« Heures manquées »),

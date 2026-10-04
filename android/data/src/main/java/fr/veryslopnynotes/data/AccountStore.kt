@@ -10,6 +10,13 @@ import android.content.SharedPreferences
  *   aucune donnée personnelle sur disque).
  * - `logout()` invalide la session appairée (TokenStore) ET purge tous les
  *   caches locaux : plus aucune donnée scolaire du compte déconnecté.
+ * - #178 : la SEULE écriture est [add], appelée par le Profil quand `/v1/me`
+ *   répond (`ProfileScreen.refresh`). Avant, elle n'était appelée nulle part :
+ *   `account_ids` n'était jamais écrit, donc `count()` valait 0 et `select()`
+ *   ne pouvait rien écrire. `remove` et `isAnonymous` ont été SUPPRIMÉS avec
+ *   elle — aucun écran ne les atteint (le sélecteur ne propose que des comptes
+ *   publiés par `/v1/me`, « retirer un compte » n'a pas d'écran) ; les
+ *   réintroduire le jour où un écran les rend visibles.
  * ponytail: SharedPreferences seul (une liste de chaînes), pas de Room.
  *   Upgrade: Store de comptes avec bascule par compte (hors périmètre).
  */
@@ -21,8 +28,11 @@ class AccountStore(
     private val prefs: SharedPreferences = context.applicationContext
         .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** AccountId appairés connus, bornés et valides (aucun secret). */
-    fun accountIds(): List<String> {
+    /** AccountId appairés connus, bornés et valides (aucun secret).
+     *  #178 : PRIVÉ — aucun écran ne liste les ids (le sélecteur se construit sur
+     *  ce que `/v1/me` publie), donc l'exposer ne donnait qu'une surface que
+     *  personne n'atteint. */
+    private fun accountIds(): List<String> {
         val raw = prefs.getString(KEY_IDS, null) ?: return emptyList()
         return raw.split(SEP).map { it.trim() }.filter { it.isNotEmpty() && it.length <= MAX_ACCOUNT_ID }
             .take(MAX_ACCOUNTS)
@@ -54,17 +64,6 @@ class AccountStore(
         if (!isValidAccountId(id) || !accountIds().contains(id)) return
         prefs.edit().putString(KEY_CURRENT, id).apply()
     }
-
-    fun remove(accountId: String) {
-        val id = accountId.trim()
-        val ids = accountIds().filter { it != id }
-        val edit = prefs.edit().putString(KEY_IDS, ids.joinToString(SEP))
-        if (current() == id) edit.remove(KEY_CURRENT)
-        edit.apply()
-    }
-
-    /** Aucun compte connu = mode anonyme (aucune donnée personnelle stockée). */
-    fun isAnonymous(): Boolean = accountIds().isEmpty()
 
     /**
      * Déconnexion : session appairée invalidée + TOUS les caches purgés (les
