@@ -9,6 +9,7 @@ import { createMemoryStore } from "../../server/api/store";
 import { isApiErrorBody } from "../../server/api/errors";
 import { attendancePeriods } from "../../server/domain/attendance";
 import { PronoteReadError } from "../../server/domain/ports";
+import { syntheticAccountId, syntheticQr, syntheticSessionCredentials } from "./fixtures/pronote";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
 import { PronoteSessionStore } from "../../server/integrations/pronote-sessions";
 import { isAttendanceResponse, isPunishmentsResponse } from "../../shared/contracts/api";
@@ -21,7 +22,6 @@ import {
   isPunishment,
 } from "../../shared/contracts/models";
 import { absenceFingerprint, formatAbsencePush, newAbsences } from "../../server/jobs/notify";
-import { syntheticAccountId, syntheticEntKind, syntheticPassword, syntheticUsername } from "./fixtures/pronote";
 import {
   syntheticAbsences,
   syntheticAttendanceClient,
@@ -32,23 +32,17 @@ import {
   syntheticPunishmentsPayload,
 } from "./fixtures/attendance";
 
-const creds = {
-  accountId: syntheticAccountId,
-  username: syntheticUsername,
-  password: syntheticPassword,
-  entKind: syntheticEntKind,
-};
+const creds = syntheticSessionCredentials;
 
 function fakeStore(client: unknown) {
   return new PronoteSessionStore({
-    pronoteUrl: "https://example.test/pronote/eleve.html",
     clientFactory: (async () => client) as never,
   });
 }
 
 async function readerFor(client: unknown, logs: string[] = []) {
   const store = fakeStore(client);
-  await store.authenticate({ ...creds, entKind: "ninegate" });
+  await store.authenticate({ ...creds });
   return new PronoteClientReader({ sessions: store, logger: (m) => logs.push(m) });
 }
 
@@ -161,8 +155,8 @@ describe("PronoteClientReader vie scolaire (#77)", () => {
     expect(page.nextCursor).toBeNull();
     const joined = logs.join("\n");
     expect(joined).toContain("attendance -> ok");
-    expect(joined).not.toContain(syntheticPassword);
-    expect(joined).not.toContain(syntheticUsername);
+    expect(joined).not.toContain(syntheticQr.jeton);
+    expect(joined).not.toContain(syntheticQr.login);
   });
 
   test("sanctions : nature/motif bornés, repli sans donnée publiée", async () => {

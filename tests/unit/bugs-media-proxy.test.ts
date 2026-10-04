@@ -111,7 +111,7 @@ describe("media-proxy — bugs adversariaux", () => {
 
   test("BUG: la ref est un index dans une liste re-téléchargée — un cours inséré en amont décale les index et sert silencieusement une AUTRE PJ", async () => {
     // Au moment du listage : [L0 (sans PJ), L1 (cible.pdf)] -> ref émise
-    // `lesson:1:doc:0:FID-B`. Entre-temps l'ENT publie un nouveau cours en
+    // `lesson:1:doc:0:FID-B`. Entre-temps l'établissement publie un nouveau cours en
     // tête de liste. Au téléchargement, l'index 1 désigne un autre cours.
     const atListing = [
       { id: "L0", subject: { name: "Maths" }, homeworkDocuments: [], content: async () => ({ files: () => [] }) },
@@ -147,7 +147,7 @@ describe("media-proxy — bugs adversariaux", () => {
     });
   });
 
-  test("BUG: une session expirée pendant le download est écrasée en ent_unavailable — 500 au lieu de 401, l'app n'est jamais invitée à se ré-appairer", async () => {
+  test("BUG: une session expirée pendant le download est écrasée en pronote_unavailable — 500 au lieu de 401, l'app n'est jamais invitée à se ré-appairer", async () => {
     // Toute lecture du repo mappe session/expired -> session_expired
     // (toReadError, ports.ts) ; le proxy lui renvoie 500 « media unavailable ».
     const sessions = store({
@@ -175,7 +175,7 @@ describe("media-proxy — bugs adversariaux", () => {
     expect(res.name).toBe("cours.pdf");
   });
 
-  test("BUG: aucun timeout ni abort sur le téléchargement — une PJ ENT qui ne répond jamais laisse la requête HTTP ouverte indéfiniment", async () => {
+  test("BUG: aucun timeout ni abort sur le téléchargement — une PJ qui ne répond jamais laisse la requête HTTP ouverte indéfiniment", async () => {
     // data() ne résout jamais : toutes les autres lectures ont un AbortSignal
     // (PronoteHttpClient, llm-openrouter, push-provider), pas celle-ci.
     const sessions = store({
@@ -186,21 +186,14 @@ describe("media-proxy — bugs adversariaux", () => {
         homework: async () => [],
       },
     });
-    // L'échéance est un knob de déploiement (défaut 30 s, calé sur une PJ
-    // Pronote réelle) : on le pinne ici, sinon ce test ne tient qu'avec un
-    // défaut artificially court et casse dès que le défaut est realistic.
-    const previous = process.env["MEDIA_DOWNLOAD_TIMEOUT_MS"];
-    process.env["MEDIA_DOWNLOAD_TIMEOUT_MS"] = "50";
-    try {
-      const HANG = Symbol("hang");
-      const settled = await Promise.race([
-        codeOf(downloadMedia(sessions, FAKE_ACCOUNT, "lesson:0:doc:0:FID")),
-        new Promise((r) => setTimeout(() => r(HANG), 500)),
-      ]);
-      expect(settled).not.toBe(HANG);
-    } finally {
-      if (previous === undefined) delete process.env["MEDIA_DOWNLOAD_TIMEOUT_MS"];
-      else process.env["MEDIA_DOWNLOAD_TIMEOUT_MS"] = previous;
-    }
+    // L'échéance (30 s par défaut, calée sur une PJ Pronote réelle) est pinée
+    // ici par option : sans knob, ce test ne tiendrait qu'avec un défaut
+    // artificiellement court.
+    const HANG = Symbol("hang");
+    const settled = await Promise.race([
+      codeOf(downloadMedia(sessions, FAKE_ACCOUNT, "lesson:0:doc:0:FID", undefined, { timeoutMs: 50 })),
+      new Promise((r) => setTimeout(() => r(HANG), 500)),
+    ]);
+    expect(settled).not.toBe(HANG);
   });
 });

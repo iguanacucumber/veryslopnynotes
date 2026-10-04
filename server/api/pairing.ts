@@ -131,7 +131,7 @@ export class PairingService {
   /**
    * #118 : émet un credential d'appareil SANS session d'appairage — c'est ce
    * que fait POST /v1/setup, où le jeton est la récompense d'une authentification
-   * école réussie (QR de l'établissement ou identifiants ENT) et non d'un PIN
+   * école réussie (QR de l'établissement ou identifiants Pronote) et non d'un PIN
    * lu sur un écran du serveur. Même secret, même durée de vie, même règle :
    * il ne sort qu'ici, une seule fois, jamais journalisé ni persisté en clair.
    */

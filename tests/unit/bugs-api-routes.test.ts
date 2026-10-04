@@ -80,26 +80,19 @@ describe("bugs handlers API (revue adversariale)", () => {
   //    casse l'invariant mono-compte (currentAccountId() = null avec 2 sessions),
   //    donc plus aucune résolution de session côté lecture/écriture.
   test("BUG: POST /v1/sync/refresh ouvre une session Pronote pour l'accountId fourni par le client — un POST non appairé casse la résolution mono-compte (currentAccountId() passe à null)", async () => {
-    const env = {
-      PRONOTE_URL: "https://example.test/pronote/eleve.html",
-      PRONOTE_USERNAME: "fake-user-UNREAL",
-      PRONOTE_PASSWORD: "fake-pw-9x8y7z-UNREAL",
-      PRONOTE_ENT_KIND: "ninegate",
-    };
+    // 0.7.0 : aucun credential d'environnement — le compte ouvre par le QR
+    // envoyé par l'app, et le renewal rejoue ce même QR depuis le coffre mémoire.
+    const FAKE_QR = { login: "bG9naW4tZmFrZS1VTlJFQUw=", jeton: "amV0b24tZmFrZS1VTlJFQUw=" };
+    const FAKE_URL = "https://example.test/pronote/eleve.html";
+    const creds = { accountId: "", pronoteUrl: FAKE_URL, qr: FAKE_QR, pin: "0000-UNREAL" };
     const ALIAS = "alias-injecte-par-le-client";
-    // Vrai PronoteSessionStore, fausse factory : le SSO est simulé, zéro réseau.
+    // Vrai PronoteSessionStore, fausse factory : le login est simulé, zéro réseau.
     // `renew` câblé exactement comme server/infrastructure/http.ts.
     const { createApp } = await import("../../server/infrastructure/http");
     const { PronoteSessionStore } = await import("../../server/integrations/pronote-sessions");
     const sessions = new PronoteSessionStore({
-      pronoteUrl: env.PRONOTE_URL,
       renew: async (target: string) => {
-        await sessions.authenticate({
-          accountId: target,
-          username: env.PRONOTE_USERNAME,
-          password: env.PRONOTE_PASSWORD,
-          entKind: env.PRONOTE_ENT_KIND,
-        });
+        await sessions.authenticate({ ...creds, accountId: target });
       },
       clientFactory: (async () => ({
         grades: async () => [],
@@ -116,9 +109,11 @@ describe("bugs handlers API (revue adversariale)", () => {
       getAssignments: async () => pageVide([]),
       getTimetable: async () => pageVide([]),
     };
-    const app = createApp(env, { sessions, reader });
+    // 0.7.0 : aucune session d'ambiance — c'est le QR envoyé par l'app qui
+    // l'ouvre, donc le test l'ouvre explicitement avant d'exercer la route.
+    await sessions.authenticate({ ...creds, accountId: "acc-deja-appaire" });
+    const app = createApp({ sessions, reader });
     console.log = () => {};
-    await app.warmup();
     const compteAppaire = app.sessions?.currentAccountId();
     expect(compteAppaire).toBeTruthy();
 

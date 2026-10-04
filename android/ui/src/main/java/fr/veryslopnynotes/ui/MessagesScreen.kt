@@ -33,10 +33,10 @@ import fr.veryslopnynotes.data.TokenStore
 // Onglet Messagerie #80 (parité Papillon Discussions) : liste des fils, lecture
 // d'un fil, réponse, création, lu/non-lu, suppression.
 //
-// I6 : sujet et corps de message = DONNÉES de l'ENT affichées par Text() seul
+// I6 : sujet et corps de message = DONNÉES de l'établissement affichées par Text() seul
 // (aucun WebView, aucun HTML, aucune exécution). I1 : pièces jointes via le
 // PROXY serveur /v1/media (URL construite par ServerConfig), jamais une adresse
-// Pronote/ENT. I7 : chaque écriture part d'un TAP utilisateur (bouton), jamais
+// Pronote. I7 : chaque écriture part d'un TAP utilisateur (bouton), jamais
 // d'un traitement automatique ; le cache est purgé via l'événement
 // CacheInvalidated renvoyé par le serveur.
 
@@ -172,11 +172,11 @@ private fun MessageCard(m: DiscussionMessage, baseUrl: String, accountId: String
             if (date.isNotEmpty()) Text(date)
             // Auteur absent = message du compte appairé : aucun nom deviné.
             if (m.authorName.isNotBlank()) Text(m.authorName)
-            // Corps = donnée brute de l'ENT (élève ou enseignant), jamais exécutée.
+            // Corps = donnée brute de l'établissement (élève ou enseignant), jamais exécutée.
             Text(m.body)
             for (att in m.attachments) {
                 // Téléchargement via le PROXY serveur : l'URL n'est jamais celle
-                // de l'ENT (I1). URL affichée telle quelle, pas d'Intent tant que
+                // de l'établissement (I1). URL affichée telle quelle, pas d'Intent tant que
                 // le téléchargement n'a pas été demandé.
                 Text("Pièce jointe : ${att.label} — ${ServerConfig.mediaUrl(baseUrl, accountId, att.ref)}")
             }

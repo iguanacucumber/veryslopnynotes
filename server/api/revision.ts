@@ -100,10 +100,6 @@ export async function persistRevisionSheet(kv: RevisionKv, sheet: RevisionSheet)
   await reconcileIndex(kv);
 }
 
-export async function readRevisionSheet(kv: RevisionKv, id: string): Promise<RevisionSheet | null> {
-  return loadRevisionSheet(kv, id);
-}
-
 export async function readAllRevisionSheets(kv: RevisionKv): Promise<RevisionSheet[]> {
   // Index illisible = secours sur le journal, jamais une liste vide muette :
   // les fiches existent dans le kv, l'API ne doit pas mentir sur le stock.

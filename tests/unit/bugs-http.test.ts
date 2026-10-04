@@ -1,26 +1,20 @@
 // Chasse aux bugs du point d'entrée HTTP (server/infrastructure/http.ts).
 // Un test = UN bug, et il doit être ROUGE tant que le bug est dans le source.
 // Fakes 100 % synthétiques : aucun réseau (Bun.serve uniquement sur 127.0.0.1
-// éphémère), aucun secret, aucun .env.local.
+// éphémère), aucun secret, aucun credential serveur.
 import { describe, expect, spyOn, test } from "bun:test";
 import { createApp, start } from "../../server/infrastructure/http";
 
-const ENV = {
-  PORT: "0",
-  PRONOTE_URL: "https://example.invalid/pronote/eleve.html",
-  PRONOTE_USERNAME: "compte-test",
-  PRONOTE_PASSWORD: "motdepasse-synthetique",
-  PRONOTE_ENT_KIND: "ninegate",
-};
+// 0.7.0 : plus aucune variable de credential. Le serveur se construit sans env.
 
 const EMPTY_PAGE = { items: { __untrusted: true, value: [] }, nextCursor: null };
 
 /** Store de session fake : aucun réseau, on compte ce que le source appelle. */
-function fakeSessions(account = "acc-bug") {
+function fakeSessions(account: string | null = "acc-bug") {
   const calls: string[] = [];
   const store = {
-    async authenticate(c: { accountId: string; username: string }) {
-      calls.push(`authenticate(username="${c.username}")`);
+    async authenticate(c: { accountId: string; pin: string }) {
+      calls.push(`authenticate(pin="${c.pin}")`);
       return { accountId: c.accountId };
     },
     currentAccountId: () => account,
@@ -122,7 +116,7 @@ describe("bugs http.ts", () => {
       },
     } as never;
     const { sessions } = fakeSessions();
-    const app = createApp(ENV, { reader, sessions });
+    const app = createApp({ reader, sessions });
 
     const warm = app.warmup(); // exactement ce que fait start() au boot
     while (entered === 0) await Bun.sleep(1); // warmup est entré dans la lecture
@@ -139,8 +133,8 @@ describe("bugs http.ts", () => {
   });
 
   test("BUG: POST /v1/sync/refresh répond 200 {events: []} sans aucun reader branché — faux succès (le handler impose 501 « relecture non branchée », cf. tous les autres ports absents)", async () => {
-    // Pas de PRONOTE_URL => reader null => la relecture ne peut JAMAIS aboutir.
-    const app = createApp({ PORT: "3000" }, { reader: null, sessions: null });
+    // reader null => la relecture ne peut JAMAIS aboutir.
+    const app = createApp({ reader: null, sessions: null });
     // Device appairé : la porte d'entrée laisse passer, le 501 du port absent
     // reste le statut observé (et non un 401 d'authentification).
     const auth = await appairer(app);
@@ -158,7 +152,7 @@ describe("bugs http.ts", () => {
     };
     const reader = { getGrades: boom, getAssignments: boom, getTimetable: boom } as never;
     const { sessions } = fakeSessions();
-    const app = createApp(ENV, { reader, sessions });
+    const app = createApp({ reader, sessions });
 
     const { value: grades, logs } = await withServerLogs(async () => {
       await app.warmup();
@@ -173,30 +167,26 @@ describe("bugs http.ts", () => {
     );
   });
 
-  test("BUG: l'appairage journalise « session ouverte, snapshot rafraichi » alors que la relecture vient d'être explicitement sautée — mensonge de log sur un faux succès (I6)", async () => {
-    const { sessions } = fakeSessions();
+  test("BUG: le setup journalise « snapshot rafraichi » alors que la relecture vient d'être explicitement sautée — mensonge de log sur un faux succès (I6)", async () => {
+    // Aucune session ouverte : le setup joue donc son vrai rôle (QR reçu -> auth).
+    const { sessions } = fakeSessions(null);
     // reader null : le skip est garanti (« sync -> skip (aucune session Pronote) »).
-    // Le tableau de capture est fourni PAR le helper et l'app est créée à
-    // l'intérieur du bloc : aucune closure ne lit un `const` encore en TDZ
-    // (l'assertion ne peut pas échouer sur un ReferenceError sans rapport).
     const { value, logs } = await withServerLogs(async (captures) => {
-      const app = createApp(ENV, { reader: null, sessions });
-      const startRes = await app.handler(
-        new Request("http://127.0.0.1/v1/pairing/start", {
+      const app = createApp({ reader: null, sessions });
+      const res = await app.handler(
+        new Request("http://127.0.0.1/v1/setup", {
           method: "POST",
-          body: JSON.stringify({ deviceName: "app-test" }),
+          body: JSON.stringify({
+            deviceName: "app-test",
+            schoolUrl: "https://etablissement.example.test/pronote",
+            qr: { login: "bG9naW4tZmFrZS1VTlJFQUw=", jeton: "amV0b24tZmFrZS1VTlJFQUw=" },
+            pin: "0000-UNREAL",
+          }),
         }),
       );
-      const { sessionId, code } = (await startRes.json()) as { sessionId: string; code: string };
-      const confirm = await app.handler(
-        new Request("http://127.0.0.1/v1/pairing/confirm", {
-          method: "POST",
-          body: JSON.stringify({ sessionId, code }),
-        }),
-      );
-      // Fire-and-forget : on laisse la chaîne authenticate -> run -> log se terminer.
-      for (let i = 0; i < 200 && !captures.some((l) => l.includes("pairing ->")); i += 1) await Bun.sleep(1);
-      return { status: confirm.status, app };
+      // Fire-and-forget : on laisse la chaîne authenticate -> refresh -> log finir.
+      for (let i = 0; i < 200 && !captures.some((l) => l.includes("relecture ignoree")); i += 1) await Bun.sleep(1);
+      return { status: res.status, app };
     });
 
     expect(value.status).toBe(200);
@@ -206,12 +196,21 @@ describe("bugs http.ts", () => {
       "aucun faux succès journalisé",
     );
     // ...et la ligne honnête est bien là : session ouverte, relecture ignorée.
-    expect(logs.some((l) => l.includes("pairing ->") && l.includes("relecture ignoree"))).toBe(true);
+    expect(logs.some((l) => l.includes("setup ->") && l.includes("relecture ignoree"))).toBe(true);
   });
 
-  test("BUG: warmup() ouvre une session avec un username vide quand PRONOTE_URL est posé sans identifiants — tentative d'auth sans identifiants au boot (renew et appairage sont pourtant gardés sur le même secret)", async () => {
+  test("0.7.0 : warmup() n'authentifie JAMAIS — aucun credential serveur, donc aucune session à ouvrir au boot", async () => {
     const { sessions, calls } = fakeSessions();
-    const app = createApp({ PRONOTE_URL: "https://example.invalid/pronote/eleve.html" }, { sessions });
+    const app = createApp({ sessions });
+    await app.warmup();
+    // Une session existe (fake) donc seule la renewal part : jamais un
+    // `authenticate`, qui exigerait un credential que le serveur n'a pas.
+    expect(calls.filter((c) => c.startsWith("authenticate"))).toEqual([]);
+  });
+
+  test("0.7.0 : sans session, warmup() ne fait strictement rien", async () => {
+    const { sessions, calls } = fakeSessions(null);
+    const app = createApp({ sessions });
     await app.warmup();
     expect(calls).toEqual([]);
   });

@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { PronoteHttpClient } from "../../server/integrations/PronoteHttpClient";
-import { PronoteAuthProvider } from "../../server/integrations/pronote-auth";
 import { PronoteLectureProvider } from "../../server/integrations/pronote-lectures";
-import { PronoteReadError } from "../../server/domain/ports";
+import { PronoteAuthError, PronoteReadError } from "../../server/domain/ports";
 import { isAssignment, isGrade, isTimetableEntry } from "../../shared/contracts/models";
 import {
   syntheticAccountId,
@@ -12,25 +11,22 @@ import {
   syntheticAuthToken,
   syntheticBaseUrl,
   syntheticDeviceUuid,
-  syntheticEntKind,
   syntheticGrade,
   syntheticGradesOk,
-  syntheticPassword,
   syntheticTimetableEntry,
   syntheticTimetableOk,
-  syntheticUsername,
 } from "./fixtures/pronote";
 
 function okJson(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), { status });
 }
 
-const creds = {
-  accountId: syntheticAccountId,
-  username: syntheticUsername,
-  password: syntheticPassword,
-  entKind: syntheticEntKind,
-};
+/**
+ * Source de jeton factice. 0.7.0 : plus d'auth par identifiants
+ * (`pronote-auth.ts` supprimé) — ce test porte sur la couche LECTURES, donc le
+ * jeton est fourni directement, sans réseau ni credential.
+ */
+const fakeSessions = { requireSessionToken: () => syntheticAuthToken };
 
 async function makeLectures(fetchFn: typeof fetch, logs: string[] = []) {
   const client = new PronoteHttpClient({
@@ -39,14 +35,12 @@ async function makeLectures(fetchFn: typeof fetch, logs: string[] = []) {
     retryDelayMs: 1,
     fetchFn,
   });
-  const auth = new PronoteAuthProvider({ client });
-  await auth.authenticate(creds);
   const lectures = new PronoteLectureProvider({
     client,
-    sessions: auth,
+    sessions: fakeSessions,
     logger: (m) => logs.push(m),
   });
-  return { auth, lectures };
+  return { lectures };
 }
 
 describe("PronoteLectureProvider", () => {
@@ -78,7 +72,7 @@ describe("PronoteLectureProvider", () => {
     expect(gradeHeaders["Authorization"]).toBe(`Bearer ${syntheticAuthToken}`);
     // Logs sans secret.
     expect(logs.join("\n")).not.toContain(syntheticAuthToken);
-    expect(logs.join("\n")).not.toContain(syntheticPassword);
+    expect(logs.join("\n")).not.toContain(fakeSessions.requireSessionToken());
   });
 
   test("assignments + timetable OK, contrats valides", async () => {
@@ -142,22 +136,27 @@ describe("PronoteLectureProvider", () => {
       retryDelayMs: 1,
       fetchFn,
     });
-    const auth = new PronoteAuthProvider({ client });
-    const lectures = new PronoteLectureProvider({ client, sessions: auth });
+    // Compte inconnu => requireSessionToken lève => session_expired.
+    const noToken = {
+      requireSessionToken: (): string => {
+        throw new PronoteAuthError("session expired", "session_expired");
+      },
+    };
+    const lectures = new PronoteLectureProvider({ client, sessions: noToken });
     const err = await lectures.getGrades("acc-inconnu").catch((e: unknown) => e);
     expect((err as PronoteReadError).code).toBe("session_expired");
     const errEmpty = await lectures.getGrades("  ").catch((e: unknown) => e);
     expect((errEmpty as PronoteReadError).code).toBe("session_expired");
   });
 
-  test("5xx / forme invalide -> ent_unavailable", async () => {
+  test("5xx / forme invalide -> pronote_unavailable", async () => {
     const badFetch = (async (url: string | URL | Request) => {
       if (String(url).includes("/auth")) return okJson(syntheticAuthSuccess);
       return new Response("oups", { status: 500 });
     }) as unknown as typeof fetch;
     const { lectures: l5xx } = await makeLectures(badFetch);
     expect((await l5xx.getGrades(syntheticAccountId).catch((e: unknown) => e) as PronoteReadError).code).toBe(
-      "ent_unavailable",
+      "pronote_unavailable",
     );
 
     const shapeFetch = (async (url: string | URL | Request) => {
@@ -166,7 +165,7 @@ describe("PronoteLectureProvider", () => {
     }) as unknown as typeof fetch;
     const { lectures: lBad } = await makeLectures(shapeFetch);
     expect((await lBad.getAssignments(syntheticAccountId).catch((e: unknown) => e) as PronoteReadError).code).toBe(
-      "ent_unavailable",
+      "pronote_unavailable",
     );
   });
 
@@ -195,12 +194,10 @@ describe("PronoteLectureProvider", () => {
       retryDelayMs: 1,
       fetchFn: hanging,
     });
-    const timeoutAuth = new PronoteAuthProvider({ client: timeoutClient });
-    await timeoutAuth.authenticate(creds);
     const timeoutLogs: string[] = [];
     const lTimeout = new PronoteLectureProvider({
       client: timeoutClient,
-      sessions: timeoutAuth,
+      sessions: fakeSessions,
       logger: (m) => timeoutLogs.push(m),
     });
     expect((await lTimeout.getGrades(syntheticAccountId).catch((e: unknown) => e) as PronoteReadError).code).toBe(
@@ -209,11 +206,11 @@ describe("PronoteLectureProvider", () => {
 
     for (const logs of [netLogs, timeoutLogs]) {
       expect(logs.join("\n")).not.toContain(syntheticAuthToken);
-      expect(logs.join("\n")).not.toContain(syntheticPassword);
+      expect(logs.join("\n")).not.toContain(fakeSessions.requireSessionToken());
     }
   });
 
-  test("timetable from/to invalides -> ent_unavailable", async () => {
+  test("timetable from/to invalides -> pronote_unavailable", async () => {
     const fetchFn = (async (url: string | URL | Request) => {
       if (String(url).includes("/auth")) return okJson(syntheticAuthSuccess);
       return okJson(syntheticTimetableOk);
@@ -221,7 +218,7 @@ describe("PronoteLectureProvider", () => {
     const { lectures } = await makeLectures(fetchFn);
     for (const bad of [{ from: "pas-une-date" }, { to: "xxx" }]) {
       const err = await lectures.getTimetable(syntheticAccountId, bad).catch((e: unknown) => e);
-      expect((err as PronoteReadError).code).toBe("ent_unavailable");
+      expect((err as PronoteReadError).code).toBe("pronote_unavailable");
     }
   });
 });

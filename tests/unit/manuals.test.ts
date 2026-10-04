@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { isManualsConfigured, loadManualsConfig } from "../../server/infrastructure/manuals-config";
 import {
   LocalManualProvider,
   MANUAL_INDEX_KEY,
@@ -23,33 +22,11 @@ import { ScrapeManualsError, isPlaywrightAvailable, scrapeManuals } from "../../
 import { SqliteStorageProvider } from "../../server/infrastructure/sqlite-storage";
 import { syntheticManualAccount, syntheticManualDocs } from "./fixtures/manuals";
 
-function envFull(over: Record<string, string | undefined> = {}) {
-  return {
-    MANUAL_PLATFORM: syntheticManualAccount.platform,
-    MANUAL_USERNAME: syntheticManualAccount.username,
-    MANUAL_PASSWORD: syntheticManualAccount.password,
-    ...over,
-  };
-}
-
 function tmpDb(): string {
   return join(mkdtempSync(join(tmpdir(), "vslm-")), "test.db");
 }
 
 describe("unit manuals", () => {
-  test("config null si incomplet, OK si complet (trim)", () => {
-    expect(loadManualsConfig({})).toBeNull();
-    expect(loadManualsConfig(envFull({ MANUAL_USERNAME: "" }))).toBeNull();
-    expect(loadManualsConfig(envFull({ MANUAL_PASSWORD: "  " }))).toBeNull();
-    const full = loadManualsConfig(envFull());
-    expect(full?.platform).toBe(syntheticManualAccount.platform);
-    expect(loadManualsConfig(envFull({ MANUAL_PLATFORM: "  editeur-fake  " }))?.platform).toBe(
-      "editeur-fake",
-    );
-    expect(isManualsConfigured(envFull())).toBe(true);
-    expect(isManualsConfigured({})).toBe(false);
-  });
-
   test("chunkManual découpe déterministe + source", () => {
     const chunks = chunkManual(syntheticManualDocs[0], 20);
     expect(chunks.length).toBeGreaterThan(1);
@@ -114,13 +91,13 @@ describe("unit manuals", () => {
       ScrapeManualsError,
     );
     await expect(
-      scrapeManuals(loadManualsConfig(envFull()), { startUrl: "not-a-url" }),
+      scrapeManuals(syntheticManualAccount, { startUrl: "not-a-url" }),
     ).rejects.toThrow("startUrl");
     // CI sans Playwright : message utile, jamais de credential dedans.
     if (!(await isPlaywrightAvailable())) {
       let err: Error | null = null;
       try {
-        await scrapeManuals(loadManualsConfig(envFull()), {
+        await scrapeManuals(syntheticManualAccount, {
           startUrl: "https://docs.example.invalid/page",
         });
       } catch (e) {

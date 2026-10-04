@@ -50,7 +50,7 @@ describe("bugs pronote-lectures (reader)", () => {
   });
 
   test("BUG: lessonKey découpe la date en UTC — un devoir daté à minuit local (Paris) est rattaché au jour précédent et lessonContent n'est jamais rattaché", async () => {
-    // Un devoir ENT est daté du JOUR local (minuit Paris) ; la séance est en
+    // Un devoir est daté du JOUR local (minuit Paris) ; la séance est en
     // heure locale le même jour. 2026-10-05T00:00+02:00 == 2026-10-04T22:00Z.
     const client = {
       homework: async () => [

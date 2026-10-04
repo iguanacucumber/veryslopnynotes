@@ -29,7 +29,7 @@ sealed interface MeResult {
 
 // Profil #82 : GET /v1/me via ApiClient (allowlist serveur seule, I1) et photo
 // via le PROXY serveur /v1/media à partir de la réF opaque — jamais d'adresse
-// Pronote/ENT dans l'app, jamais de WebView.
+// Pronote dans l'app, jamais de WebView.
 // ponytail: rien n'est persisté ici (mode anonyme) : le profil vit en mémoire et
 // disparaît à la déconnexion (AccountStore.logout). Upgrade: cache profil chiffré
 // si l'utilisateur demande explicitement de garder son profil hors-ligne.

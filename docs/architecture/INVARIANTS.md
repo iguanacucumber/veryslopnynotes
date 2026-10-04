@@ -2,8 +2,8 @@
 
 Format : Invariant → test → commande → emplacement.
 
-## I1 — Android sans hôte Pronote/ENT
-- Invariant : `android/` ne contient aucune URL/référence hôte Pronote/ENT. Un seul hôte serveur allowlist.
+## I1 — Android sans hôte Pronote/portail
+- Invariant : `android/` ne contient aucune URL/référence hôte Pronote ou de portail d'établissement. Un seul hôte serveur allowlist.
 - Serveur choisi à l'exécution (écran d'appairage) : l'allowlist n'est plus une
   constante de build mais `ServerConfig.validateBaseUrl` (https, sauf émulateur/
   boucle locale en http ; hôte et port bornés ; identifiants, chemin, query,
@@ -49,3 +49,20 @@ Format : Invariant → test → commande → emplacement.
 - Test : review + tests jobs/notifications (phases 5/7, `tests/e2e/`).
 - Commande : `make e2e`.
 - Emplacement : `server/jobs/*`, `server/api/*`.
+
+## I8 — Zéro credential côté serveur
+
+Le serveur ne lit **aucune** variable de credential et ne détient aucun secret :
+`PORT`/`HOST` (l'écoute) sont les seules variables lues, et uniquement dans
+`start()` (`server/infrastructure/http.ts`). Tout ce qui s'authentifie vient de
+l'app, par requête :
+
+| Ce qui s'authentifie | Où il vit | Comment il voyage |
+|---|---|---|
+| Session Pronote | mémoire du serveur, renewing par QR | QR + PIN dans `POST /v1/setup` |
+| Clé du fournisseur LLM | `LlmKeyStore` (chiffré) dans l'app | corps de `POST /v1/homework/generate` (`apiKey`, `writeOnly`) |
+| Secret d'appareil | `TokenStore` (chiffré) dans l'app | `Authorization: Bearer`, relu à chaque requête |
+
+Interdit : `.env*` dans le repo, toute clé de secret dans une variable, un secret
+en query string (un corps non), un secret journalisé. Piné par
+`tests/architecture/invariants.test.ts` (I8) et `tests/unit/android-homework.test.ts`.

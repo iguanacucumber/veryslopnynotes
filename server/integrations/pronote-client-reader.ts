@@ -1,4 +1,4 @@
-// Lectures via Client pronotets (session SSO Ninegate).
+// Lectures via Client pronotets (session Pronote).
 // Hiérarchie : Domain → PronoteReader → PronoteClientReader → pronotets → HTTP (I2).
 // Sorties marquées Untrusted (I6). Erreurs typées sans secret.
 // Pagination : limit clampée 1..100 (défaut 50), cursor = offset opaque, nextCursor null = fin.
@@ -69,13 +69,13 @@ function toReadError(err: unknown, what: string): PronoteReadError {
     if (err.code === "session_expired") return new PronoteReadError(`${what} session expired`, "session_expired");
     if (err.code === "timeout") return new PronoteReadError(`${what} timeout`, "timeout");
     if (err.code === "network") return new PronoteReadError(`${what} network`, "network");
-    return new PronoteReadError(`${what} ent unavailable`, "ent_unavailable");
+    return new PronoteReadError(`${what} pronote unavailable`, "pronote_unavailable");
   }
   const msg = err instanceof Error ? err.message : "";
   if (/session|expired|expir/i.test(msg)) return new PronoteReadError(`${what} session expired`, "session_expired");
   if (/timeout|timed out/i.test(msg)) return new PronoteReadError(`${what} timeout`, "timeout");
   if (/network|fetch failed|injoignable/i.test(msg)) return new PronoteReadError(`${what} network`, "network");
-  return new PronoteReadError(`${what} ent unavailable`, "ent_unavailable");
+  return new PronoteReadError(`${what} pronote unavailable`, "pronote_unavailable");
 }
 
 /** Écriture (#75) : mêmes classes d'erreur que la lecture, plus `unsupported`. */
@@ -187,7 +187,7 @@ function mapAssignment(
 // --- #76 EDT : statut annulé/déplacé + prof (parité Papillon onglet EDT) ---
 // pronotets ne publie ces champs que selon la configuration de l'établissement :
 // champ absent = champ OMIS côté contrat, jamais "normal" deviné ni "" vide.
-// Le statut textual est normalisé (pronotets/ENT francophones) mais reste borné :
+// Le statut textual est normalisé (pronotets/Pronote francophones) mais reste borné :
 // un libellé inconnu = absent, pas un statut inventé.
 const STATUS_WORDS: { readonly re: RegExp; readonly status: TimetableStatus }[] = [
   { re: /cancel|annul/i, status: "cancelled" },
@@ -250,7 +250,7 @@ const ASSIGNMENT_LESSON_FETCH_LIMIT = 10;
 
 /**
  * Jour CALENDRIER local de l'établissement (Europe/Paris), pas jour UTC :
- * un devoir ENT est daté du jour local (minuit Paris) et une séance du jour
+ * un devoir est daté du jour local (minuit Paris) et une séance du jour
  * local, donc l'ISO UTC de part et d'autre tombe la veille après 22h UTC.
  * Les process/tests ne tournent pas forcément en Paris : le fuseau est donc
  * explicite (jamais implicite comme les bornes de getTimetable/getMenus).
@@ -457,7 +457,7 @@ async function mapNews(accountId: string, raw: any, index: number, withBody: boo
 // pronotets n'expose que isLunch/isDinner : le petit-déjeuner est reconnu par
 // une regex simple et bornée sur le nom du repas.
 // ponytail: allergènes agrégés au repas, pas de structure par plat. Upgrade:
-// plat structuré {label, allergens, composition} si l'ENT publie la composition.
+// plat structuré {label, allergens, composition} si l'établissement publie la composition.
 const BREAKFAST_RE = /\b(petit[\s-]?d[eé]jeuner|breakfast)\b/i;
 
 function canteenMealOf(m: unknown): CanteenMeal {
@@ -602,7 +602,7 @@ function mapPunishment(accountId: string, p: any, index: number, periodId?: stri
     accountId,
     date,
     // ponytail: dateEnd non renseigné (Pronote donne un instantané + un
-    // calendrier de sanctions). Upgrade: lire `schedule` si l'ENT publie une plage.
+    // calendrier de sanctions). Upgrade: lire `schedule` si l'établissement publie une plage.
     motif: joinReasons(p?.reasons, PUNISHMENT_MOTIF_MAX_CHARS) ?? "Sanction",
     type: nature || "Sanction",
     gravity: Number.isFinite(gravity) && gravity >= 0 ? gravity : undefined,
@@ -873,13 +873,13 @@ export class PronoteClientReader implements PronoteReader {
     let to = new Date(Date.now() + 7 * 86400000);
     if (options?.from !== undefined) {
       if (typeof options.from !== "string" || Number.isNaN(Date.parse(options.from))) {
-        throw new PronoteReadError("timetable ent unavailable", "ent_unavailable");
+        throw new PronoteReadError("timetable pronote unavailable", "pronote_unavailable");
       }
       from = new Date(options.from);
     }
     if (options?.to !== undefined) {
       if (typeof options.to !== "string" || Number.isNaN(Date.parse(options.to))) {
-        throw new PronoteReadError("timetable ent unavailable", "ent_unavailable");
+        throw new PronoteReadError("timetable pronote unavailable", "pronote_unavailable");
       }
       to = new Date(options.to);
     }
@@ -1116,13 +1116,13 @@ export class PronoteClientReader implements PronoteReader {
     let to = end;
     if (options?.from !== undefined) {
       if (typeof options.from !== "string" || Number.isNaN(Date.parse(options.from))) {
-        throw new PronoteReadError("menus ent unavailable", "ent_unavailable");
+        throw new PronoteReadError("menus pronote unavailable", "pronote_unavailable");
       }
       from = new Date(options.from);
     }
     if (options?.to !== undefined) {
       if (typeof options.to !== "string" || Number.isNaN(Date.parse(options.to))) {
-        throw new PronoteReadError("menus ent unavailable", "ent_unavailable");
+        throw new PronoteReadError("menus pronote unavailable", "pronote_unavailable");
       }
       to = new Date(options.to);
     }
@@ -1545,7 +1545,7 @@ export class PronoteClientReader implements PronoteReader {
 
   /**
    * Nouvelle discussion — ÉCRITURE, action APP confirmée (I7).
-   * Destinataires : ids résolus côté serveur via les RESSOURCES de l'ENT ; un id
+   * Destinataires : ids résolus côté serveur via les RESSOURCES de l'établissement ; un id
    * demandé mais absent = 409 (jamais une discussion adressée à un id inventé).
    * ponytail: pronotets `newDiscussion` ne renvoie rien (pas d'id) : la réponse
    * API est un `ok` + invalidation de cache, l'app recharge la liste.

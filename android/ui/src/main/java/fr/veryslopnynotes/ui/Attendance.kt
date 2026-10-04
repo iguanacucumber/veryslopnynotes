@@ -85,7 +85,7 @@ private fun optInt(obj: JSONObject, key: String): Int {
     return if (v.isNaN() || v < 0) 0 else v.toInt()
 }
 
-/** Gravité publiée : texte pour l'affichage, null si l'ENT ne la publie pas. */
+/** Gravité publiée : texte pour l'affichage, null si l'établissement ne la publie pas. */
 private fun optNumber(obj: JSONObject, key: String): String? {
     val v = obj.optDouble(key, Double.NaN)
     if (v.isNaN() || v < 0) return null

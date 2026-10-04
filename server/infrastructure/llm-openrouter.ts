@@ -1,5 +1,8 @@
 // LLM OpenRouter v1 (issue #27, phase 9) — adapter LLMProvider.
-// Clé + modèle uniquement via env (.env.local), jamais en dur ni logués.
+// 0.7.0 : la clé n'est PLUS un secret du serveur. Elle arrive dans le corps de
+// la requête de l'app (`HomeworkGenerateRequest.apiKey`), vit le temps de l'appel
+// et part dans l'en-tête Authorization. Le serveur n'en détient aucune : ni env,
+// ni disque, ni log. Le modèle est une constante de code (pas un credential).
 // Corps = SafePrompt nonce-bound (I6) construit par server/ai/untrusted.ts ;
 // garde d'entrée/sortie = server/ai/guard.ts (I4/I5), scan secret rejoué ici car
 // generate()/generateSafe() SONT la frontière réseau. Aucun secret sur le fil
@@ -9,14 +12,15 @@ import { assertNoSecretsInPrompt, MAX_OUTPUT_CHARS } from "../ai/guard";
 import { buildSafePrompt } from "../ai/untrusted";
 import type { SafePrompt } from "../ai/untrusted";
 import type { LLMProvider, Untrusted } from "../domain/ports";
-import { cleanEnvValue, loadRequiredEnv } from "./env";
 
 export interface LlmConfig {
-  readonly apiKey: string;
   readonly model: string;
 }
 
-export const LLM_ENV_KEYS = ["OPENROUTER_API_KEY", "OPENROUTER_MODEL"] as const;
+/** Modèle par défaut : choix de code, PAS un credential (donc pas d'env). */
+export const LLM_DEFAULT_MODEL = "stealth/space-bunny-alpha";
+/** Longueur plausible d'une clé de fournisseur : borne le corps comme le reste. */
+const MIN_API_KEY_CHARS = 8;
 
 // URL publique du fournisseur, pas une donnée perso/établissement (règle or : seule l'URL Pronote est proscrite).
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -42,20 +46,6 @@ function normalizeTimeoutMs(value: number | undefined): number {
   return value;
 }
 
-export function loadLlmConfig(
-  env: Record<string, string | undefined> = Bun.env as Record<string, string | undefined>,
-): LlmConfig | null {
-  const got = loadRequiredEnv(env, LLM_ENV_KEYS);
-  if (!got) return null;
-  return { apiKey: got["OPENROUTER_API_KEY"], model: got["OPENROUTER_MODEL"] };
-}
-
-export function isLlmConfigured(
-  env: Record<string, string | undefined> = Bun.env as Record<string, string | undefined>,
-): boolean {
-  return loadLlmConfig(env) !== null;
-}
-
 export class LlmError extends Error {
   readonly status?: number;
   constructor(message: string, status?: number) {
@@ -71,23 +61,24 @@ export class OpenRouterProvider implements LLMProvider {
   private readonly timeoutMs: number;
   private readonly logger: (message: string) => void;
 
-  constructor(config: LlmConfig, opts: LlmProviderOptions = {}) {
-    if (!cleanEnvValue(config.apiKey) || !cleanEnvValue(config.model)) {
-      throw new LlmError("llm config incomplète");
-    }
+  constructor(config: LlmConfig = { model: LLM_DEFAULT_MODEL }, opts: LlmProviderOptions = {}) {
+    if (!config.model) throw new LlmError("llm config incomplète");
     this.config = config;
     this.fetchFn = opts.fetchFn ?? globalThis.fetch.bind(globalThis);
     this.timeoutMs = normalizeTimeoutMs(opts.timeoutMs);
     this.logger = opts.logger ?? (() => {});
   }
 
-  async generate(prompt: { system: string; data: Untrusted<string>[] }): Promise<string> {
-    return this.generateSafe(buildSafePrompt(prompt.system, prompt.data));
+  async generate(prompt: { system: string; data: Untrusted<string>[] }, apiKey?: string): Promise<string> {
+    return this.generateSafe(buildSafePrompt(prompt.system, prompt.data), apiKey);
   }
 
   // Envoie le SafePrompt DÉJÀ validé par la garde (nonce de l'appelant préservé
-  // au lieu d'un nonce régénéré ici).
-  async generateSafe(safe: SafePrompt): Promise<string> {
+  // au lieu d'un nonce régénéré ici). `apiKey` vient de l'APP : sans elle, aucun
+  // appel — le serveur ne possède aucun credential de repli.
+  async generateSafe(safe: SafePrompt, apiKey?: string): Promise<string> {
+    const key = (apiKey ?? "").trim();
+    if (key.length < MIN_API_KEY_CHARS) throw new LlmError("clé LLM absente");
     assertNoSecretsInPrompt(safe);
     let res: Response;
     try {
@@ -96,7 +87,7 @@ export class OpenRouterProvider implements LLMProvider {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          authorization: `Bearer ${this.config.apiKey}`,
+          authorization: `Bearer ${key}`,
         },
         body: JSON.stringify({
           model: this.config.model,
@@ -135,11 +126,7 @@ export class OpenRouterProvider implements LLMProvider {
   }
 }
 
-export function createLlmProvider(
-  env: Record<string, string | undefined> = Bun.env as Record<string, string | undefined>,
-  opts: LlmProviderOptions = {},
-): LLMProvider | null {
-  const config = loadLlmConfig(env);
-  if (!config) return null;
-  return new OpenRouterProvider(config, opts);
+/** Toujours branché : la clé vient de l'app, le modèle est une constante. */
+export function createLlmProvider(opts: LlmProviderOptions = {}): LLMProvider {
+  return new OpenRouterProvider({ model: LLM_DEFAULT_MODEL }, opts);
 }

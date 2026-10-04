@@ -260,7 +260,7 @@ describe("miroir Kotlin devoirs #75", () => {
     // Toggle Optimiste : retour arrière sur échec, resync du cache sur succès.
     expect(screen).toContain("Retour arrière immédiat");
     expect(screen).toContain("resync du cache");
-    // I1 : aucune URL/hôte Pronote/ENT dans le CODE de l'écran (les commentaires
+    // I1 : aucune URL/hôte Pronote dans le CODE de l'écran (les commentaires
     // sont ignorés, comme dans agents/runtime/check-architecture.ts).
     expect(stripComments(screen)).not.toMatch(/pronote|index-education/i);
     const config = readFileSync(join(CORE, "ServerConfig.kt"), "utf8");

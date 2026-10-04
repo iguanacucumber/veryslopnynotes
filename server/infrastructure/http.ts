@@ -1,5 +1,9 @@
 // Point d'entrée HTTP du serveur (composition root, référencé par Dockerfile.server).
-// Unique endroit où l'env, les sessions Pronote, le reader, le LLM et les ports
+// 0.7.0 : ZÉRO credential lu dans l'environnement. Les seules variables lues
+// sont `PORT`/`HOST` (écoute, pas un secret) ; tout ce qui s'authentifie vient de
+// l'app — le QR au setup, la clé LLM sur chaque appel. Les credentials de session
+// (QR + pin) ne vivent qu'en mémoire, le temps de la session, jamais sur disque.
+// Unique endroit où les sessions Pronote, le reader, le LLM et les ports
 // d'écriture/action sont branchés sur le routeur. Aucun secret n'est journalisé :
 // on ne logue que des compteurs et des codes d'erreur (I6, règle d'or dépôt).
 // I2 : tout le réseau Pronote passe par PronoteHttpClient (via pronotets), rien ici.
@@ -24,8 +28,6 @@ import type { LiveSync } from "./live-sync";
 import { SnapshotStore } from "./snapshot-store";
 
 const DEFAULT_PORT = 3000;
-/** Type ENT/CAS : ninegate par défaut (seul SSO implémenté, cf. ent-ninegate.ts). */
-const DEFAULT_ENT_KIND = "ninegate";
 
 export interface AppDeps {
   /**
@@ -50,83 +52,64 @@ function envValue(env: Record<string, string | undefined>, key: string): string 
   return (env[key] ?? "").trim();
 }
 
-export function createApp(
-  env: Record<string, string | undefined> = Bun.env as Record<string, string | undefined>,
-  deps: AppDeps = {},
-): App {
+/**
+ * Composition root. 0.7.0 : plusaucun paramètre d'environnement — le serveur ne
+ * lit que `PORT`/`HOST`, et uniquement dans `start()` (écoute, pas un secret).
+ */
+export function createApp(deps: AppDeps = {}): App {
   const log = (message: string) => console.log(`[server] ${message}`);
   const store = new SnapshotStore();
-  const llm = createLlmProvider(env);
-
-  const pronoteUrl = envValue(env, "PRONOTE_URL");
-  const username = envValue(env, "PRONOTE_USERNAME");
-  const password = envValue(env, "PRONOTE_PASSWORD");
-  const entKind = envValue(env, "PRONOTE_ENT_KIND") || DEFAULT_ENT_KIND;
-  const accountId = username ? accountIdFrom(username) : "";
+  const llm = createLlmProvider();
 
   /**
-   * #118 : derniers identifiants EN MÉMOIRE, par compte. Le store de session ne
-   * conserve JAMAIS de mot de passe (cf. #87) : sans ce coffre, un setup fait
-   * depuis l'app n'aurait aucun moyen de renouveler sa session 5 min plus tard.
-   * Jamais persisté, jamais journalisé. Il survit volontairement à une
-   * invalidation de session : c'est lui qui permet de rouvrir la session quand
-   * elle meurt, donc le vider à cet instant-là la rendrait irrécupérable.
+   * #118 : dernier QR EN MÉMOIRE, par compte. Le store de session ne conserve
+   * JAMAIS le credential (cf. #87) : sans ce coffre, un setup fait depuis l'app
+   * n'aurait aucun moyen de renouveler sa session 5 min plus tard. Jamais
+   * persisté, jamais journalisé. Il survit volontairement à une invalidation de
+   * session : c'est lui qui permet de rouvrir la session quand elle meurt, donc
+   * le vider à cet instant-là la rendrait irrécupérable.
    */
   const vault = new Map<string, PronoteCredentials>();
 
-  /**
-   * Credentials de renewal d'un compte : le coffre d'abord (setup app), sinon
-   * l'env (démarrage serveur). `null` = personne ne sait rouvrir cette session.
-   */
-  const credentialsToRenew = (target: string): PronoteCredentials | null => {
-    const known = vault.get(target.trim());
-    if (known) return known;
-    if (username && password && accountId) {
-      return { accountId: target, username, password, entKind, pronoteUrl };
-    }
-    return null;
-  };
-
   // `null` explicite = aucun store (tests) : ne jamais construire une session
-  // réelle depuis l'env quand le caller a dit non.
-  // #118 : le store existe même sans `PRONOTE_URL` — l'URL et les identifiants
-  // peuvent arriver par POST /v1/setup. Avant, un serveur sans env ne pouvait
-  // ouvrir aucune session, donc l'app n'avait aucun chemin de setup.
+  // réelle quand le caller a dit non. 0.7.0 : le store existe TOUJOURS, même
+  // sans la moindre variable d'environnement — l'URL, le QR et le pin arrivent
+  // par POST /v1/setup.
   let sessions: PronoteSessionStore | null = deps.sessions === undefined ? null : deps.sessions;
   if (deps.sessions === undefined) {
     sessions = new PronoteSessionStore({
-      pronoteUrl,
       logger: (m) => log(`pronote ${m}`),
-      // #87 : renewal de session. Les identifiants restent en mémoire fermée
-      // (env ou coffre du setup), jamais journalisés ni persistés.
+      // #87 : renewal de session. Le credential (QR + pin) reste dans le coffre
+      // en mémoire, jamais journalisé ni persisté ; sans lui, la session meurt
+      // et l'app doit refaire un setup.
       renew: async (target: string) => {
-        const known = credentialsToRenew(target);
+        const known = vault.get(target.trim());
         if (!known) {
-          log(`renewal -> impossible (aucun identifiant memorise pour ce compte)`);
-          throw new PronoteAuthError("renewal impossible", "ent_unavailable");
+          log(`renewal -> impossible (aucun QR memorise pour ce compte)`);
+          throw new PronoteAuthError("renewal impossible", "pronote_unavailable");
         }
-        vault.set(known.accountId, known);
         await sessions?.authenticate(known);
       },
     });
   }
+
   const reader: PronoteReader | null =
     deps.reader === undefined
       ? sessions
         ? new PronoteClientReader({ sessions, logger: (m) => log(`reader ${m}`) })
         : null
       : deps.reader;
-  // `sessions` n'est nul que sur injonction explicite des tests : le store est
-  // construit même sans env depuis #118 (le compte peut arriver par POST /v1/setup).
+  // `sessions` n'est nul que sur injonction explicite des tests. Au boot il n'y
+  // a AUCUN compte : le serveur démarre vide, le compte arrive par POST /v1/setup.
   if (!sessions) log("aucun store de session : lectures vides, ecritures indisponibles (501)");
-  else if (!pronoteUrl) log("PRONOTE_URL absent : le compte s'ouvrira via POST /v1/setup");
+  else log("aucun compte au boot : le compte s'ouvrira via POST /v1/setup (QR)");
 
   /** Mono-compte : le compte appairé par le serveur, et RIEN d'autre.
    *  L'`accountId` transporté par le client n'est qu'un indice borné : le
    *  prendre pour une identité ouvrait une session Pronote pour un compte
    *  jamais appairé, et cassait la résolution mono-compte
    *  (`currentAccountId()` = null dès qu'une 2e session existe). */
-  const resolveAccountId = (_requested: string): string => sessions?.currentAccountId() ?? accountId;
+  const resolveAccountId = (_requested: string): string => sessions?.currentAccountId() ?? "";
 
   const liveSync = createLiveSync({
     reader: reader as never,
@@ -141,17 +124,12 @@ export function createApp(
   });
 
   /**
-   * Relecture UNIQUE et sérialisée : passe par `actions.refresh`, donc warmup et
-   * l'appairage partagent le même garde-fou mono-relecture que
-   * POST /v1/sync/refresh (appeler `liveSync.run` en direct doublait la passe sur
-   * la session Pronote : rafale de `session_expired` + snapshot de diff écrit
-   * deux fois).
+   * Relecture UNIQUE et sérialisée : passe par `actions.refresh`, donc le setup
+   * et POST /v1/sync/refresh partagent le même garde-fou mono-relecture (appeler
+   * `liveSync.run` en direct doublait la passe sur la session Pronote : rafale de
+   * `session_expired` + snapshot de diff écrit deux fois).
    */
-  // `target` absent = le compte de l'env (warmup, appairage) ; fourni = le
-  // compte qu'un setup vient d'ouvrir (#118), qui n'est pas encore le compte
-  // servi par le snapshot.
-  const refreshSnapshot = (target?: string): Promise<ContractEvent[]> =>
-    liveSync.actions.refresh(target ?? accountId);
+  const refreshSnapshot = (target: string): Promise<ContractEvent[]> => liveSync.actions.refresh(target);
 
   /**
    * Journal honnête (I6) : « rempli » seulement si la relecture a réellement
@@ -163,47 +141,22 @@ export function createApp(
     else log(`${subject} snapshot rempli (${grades} note(s))`);
   };
 
-  // Appairage réussi = on ouvre la session Pronote puis on warms le snapshot.
-  // L'auth est déclenchée APRÈS la réponse (fire-and-forget) : la confirmation
-  // d'appairage ne doit pas dépendre de la disponibilité de l'ENT.
+  // Appairage = simple émission de jeton. Le compte de l'établissement, lui, ne
+  // s'ouvre que par le setup (QR) : l'appairage n'a plus de credential à jouer.
   const pairing = new PairingService();
-  const baseConfirm = pairing.confirm.bind(pairing);
-  pairing.confirm = (sessionId: string, code: string) => {
-    const result = baseConfirm(sessionId, code);
-    if (result.ok && sessions && username && password) {
-      void sessions
-        .authenticate({ accountId, username, password, entKind })
-        .then(() => {
-          // Pas de reader = relecture impossible : ne jamais annoncer un
-          // snapshot rafraichi qui n'a pas eu lieu (I6).
-          if (!reader) return log("pairing -> session ouverte, relecture ignoree (aucun reader)");
-          return refreshSnapshot().then(() => logSnapshotFilled("pairing -> session ouverte,"));
-        })
-        .catch((err: unknown) => {
-          // Jamais le message brut (peut contenir une interne) : code seulement.
-          const code2 = err instanceof Error ? err.name : "unknown";
-          log(`pairing -> authentification impossible (${code2})`);
-        });
-    }
-    return result;
-  };
 
   /**
-   * #118 : setup = authentifie le compte école PUIS émet le jeton. Le snapshot
-   * est warmed APRÈS la réponse (comme l'appairage) : le jeton ne dépend pas
+   * #118 : setup = authentifie le compte école (QR envoyé par l'app) PUIS émet le
+   * jeton. Le snapshot est warmed APRÈS la réponse : le jeton ne dépend pas
    * d'une relecture complète, et l'app tire son premier rafraîchissement.
    */
   const setup = new SetupService({
     sessions,
     issue: () => pairing.issue(),
-    // Session déjà ouverte (env au démarrage) : on ne rejoue pas une connexion,
+    // Session déjà ouverte (setup rejoué) : on ne rejoue pas une connexion,
     // sinon `currentAccountId()` verrait deux sessions et tout le mono-compte
     // s'effondrerait (#75).
     existingAccountId: () => sessions?.currentAccountId() ?? null,
-    // Épinglage d'exploitation : avec `PRONOTE_URL` renseignée, c'est CETTE école
-    // que ce serveur parle à. Sans elle, le setup accueille l'URL saisie (le
-    // serveur n'a alors aucune référence — donc aucun relais possible).
-    allowedSchoolUrl: pronoteUrl,
     onOpened: (opened, credentials) => {
       // Coffre mémoire : sans lui, la session ouverte par le setup ne pourra
       // pas être renouvelée 5 min plus tard (cf. `credentialsToRenew`).
@@ -263,14 +216,14 @@ export function createApp(
     liveSync,
     sessions,
     warmup: async () => {
-      // Sans session, ou SANS identifiants (PRONOTE_URL seul) : aucune
-      // authentification à tenter — une session ouverte avec un username vide
-      // est pire que pas de session du tout.
-      if (!sessions || !username || !password) return;
+      // 0.7.0 : plus aucun credential au boot (ni env, ni disque) — donc aucune
+      // session à ouvrir ici. La relecture part du setup, seul moment où un
+      // compte existe. Gardé pour le contrat `App` et parce qu'un serveur peut
+      // être relancé en cours de session dans les tests.
+      const account = sessions?.currentAccountId();
+      if (!reader || !sessions || !account) return;
       try {
-        await sessions.authenticate({ accountId, username, password, entKind });
-        if (!reader) return log("warmup -> aucune lecture (aucun reader), le serveur demarre vide");
-        await refreshSnapshot();
+        await refreshSnapshot(account);
         logSnapshotFilled("warmup ->");
       } catch {
         log("warmup -> echec, le serveur demarre vide (l'app retry)");
@@ -312,7 +265,7 @@ const MAX_REQUEST_BODY_BYTES = 1_048_576;
 export function start(
   env: Record<string, string | undefined> = Bun.env as Record<string, string | undefined>,
 ): ReturnType<typeof Bun.serve> {
-  const app = createApp(env);
+  const app = createApp();
   const port = parsePort(envValue(env, "PORT"));
   const hostname = envValue(env, "HOST") || "127.0.0.1";
   const server = Bun.serve({

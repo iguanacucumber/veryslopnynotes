@@ -62,17 +62,11 @@ import {
 } from "./fixtures/discussions";
 import {
   syntheticAccountId,
-  syntheticEntKind,
-  syntheticPassword,
-  syntheticUsername,
+  syntheticQr,
+  syntheticSessionCredentials,
 } from "./fixtures/pronote";
 
-const creds = {
-  accountId: syntheticAccountId,
-  username: syntheticUsername,
-  password: syntheticPassword,
-  entKind: syntheticEntKind,
-};
+const creds = syntheticSessionCredentials;
 
 /** Code hors commentaires : le test I7 porte sur le CODE, pas sur la prose (#79). */
 const codeOnly = (c: string): string =>
@@ -88,18 +82,17 @@ const codeOnly = (c: string): string =>
 
 async function readerWith(client: unknown, logger?: (message: string) => void) {
   const store = new PronoteSessionStore({
-    pronoteUrl: "https://example.test/pronote/eleve.html",
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     clientFactory: (async () => client) as never,
   });
-  await store.authenticate({ ...creds, entKind: "ninegate" });
+  await store.authenticate({ ...creds });
   return { store, reader: new PronoteClientReader({ sessions: store, logger }) };
 }
 
 describe("contrats messagerie #80", () => {
   test("modèles valides, champs absents = non publiés (jamais de valeur devinée)", () => {
     expect(isDiscussion(syntheticDiscussion)).toBe(true);
-    // unreadCount/lastMessageAt absents = l'ENT ne publie rien, pas 0.
+    // unreadCount/lastMessageAt absents = l'établissement ne publie rien, pas 0.
     expect(isDiscussion(syntheticDiscussionNoUnread)).toBe(true);
     expect(isDiscussion({ ...syntheticDiscussion, unreadCount: 0 })).toBe(true);
     expect(isDiscussion({ ...syntheticDiscussion, unreadCount: -1 })).toBe(false);

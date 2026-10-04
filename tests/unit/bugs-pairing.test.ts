@@ -2,7 +2,7 @@
 // ca13389). Un bug par test, un test RED pour le seul bug qu'il nomme.
 // Fakes 100 % synthétiques : horloge injectée (aucun sleep, aucun Date.now()),
 // PIN/sessionId déterministes, store mémoire vide, aucun réseau, aucun secret,
-// aucun .env.local. PIN synthétiques ("123456", "424242"), aucun secret-fake
+// aucun credential serveur. PIN synthétiques ("123456", "424242"), aucun secret-fake
 // réel ni URL Pronote : la règle d'or (IP serveur uniquement) n'est pas touchée.
 import { describe, expect, test } from "bun:test";
 import { PairingService } from "../../server/api/pairing";

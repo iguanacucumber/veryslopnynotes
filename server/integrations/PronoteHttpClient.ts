@@ -315,8 +315,8 @@ export class PronoteHttpClient {
     if (url.origin !== this.base.origin) return;
     for (const raw of res.headers.getSetCookie()) {
       try {
-        // `loose` : un `Set-Cookie` sans `=` (paire non conforme, courante sur les
-        // portails ENT) est sinon rejeté et la session est perdue à chaque appel.
+        // `loose` : un `Set-Cookie` sans `=` (paire non conforme, courante sur
+        // certains portails) est sinon rejeté et la session est perdue à chaque appel.
         await this.jar.setCookie(raw, url.href, { loose: true });
       } catch {
         // Cookie illisible : ignoré plutôt que fatal (la requête est tentée quand même).

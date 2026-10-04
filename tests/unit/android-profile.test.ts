@@ -227,7 +227,7 @@ describe("unit android profil (#82)", () => {
     expect(isOpaquePhotoRef("https://photos.example/p.png")).toBe(false);
   });
 
-  test("I1 : aucune adresse Pronote/ENT dans le code Kotlin (allowlist serveur seule)", () => {
+  test("I1 : aucune adresse Pronote dans le code Kotlin (allowlist serveur seule)", () => {
     const pronoteHost = /pronote|index-education|ent\.(ac-|cas|nevers)|cas\./i;
     const files = [
       join(CORE, "UserProfile.kt"),

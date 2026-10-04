@@ -1,6 +1,7 @@
-// Scrape manuels via Playwright, sessions locales jamais commitées (issue #25, phase 8).
-// Comptes via .env.local (ManualsConfig), première connexion interactive puis
-// réutilisation du fichier local sous playwright/.auth/ (gitignoré).
+// Scrape manuels via Playwright (issue #25, phase 8).
+// 0.7.0 : le compte éditeur n'est PLUS lu dans l'environnement (le serveur ne
+// détient aucun credential). `ManualsConfig` est fourni par l'appelant — donc
+// la seule façon de l'obtenir est de le faire vivre avec le processus.
 // Aucune URL/credential en dur : startUrl fourni par l'appelant (humain,
 // jamais commité), plateforme = nom symbolique. Playwright en import
 // dynamique optionnel : zéro dépendance ajoutée, e2e skippé sans navigateur.
@@ -8,9 +9,14 @@
 // ponytail: squelette extraction texte générique, pas de sélecteurs par éditeur.
 // Upgrade: sélecteurs par plateforme + pagination + PDF-detect si corpus réel.
 import { load } from "cheerio";
-import type { ManualsConfig } from "./manuals-config";
 import { truncateManualText } from "./manuals";
 import type { ManualDoc } from "./manuals";
+
+export interface ManualsConfig {
+  readonly platform: string;
+  readonly username: string;
+  readonly password: string;
+}
 
 export class ScrapeManualsError extends Error {
   constructor(message: string) {
@@ -50,7 +56,7 @@ export async function isPlaywrightAvailable(): Promise<boolean> {
 
 // Extraction texte : script/style retirés, entités HTML DÉCODÉES (« &eacute; »,
 // « &nbsp; » laissés tels quels = extrait illisible et introuvable à la
-// recherche). Cheerio déjà dépendance (cf. ent-ninegate), zéro ajoutée.
+// recherche). Cheerio déjà dépendance, zéro ajoutée.
 // Espace ajouté après chaque élément : sinon deux paragraphes se collent.
 function stripTags(html: string): string {
   const $ = load(html);
@@ -68,7 +74,7 @@ function stripTags(html: string): string {
 // Lève ScrapeManualsError si config incomplète, URL invalide ou navigateur absent.
 // Ne logue jamais username/password, seulement plateforme + compteurs.
 export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOptions): Promise<ManualDoc[]> {
-  if (!config) throw new ScrapeManualsError("manuels non configurés (MANUAL_* via .env.local)");
+  if (!config) throw new ScrapeManualsError("manuels non configurés (aucun compte éditeur fourni par l'appelant)");
   if (!isHttpUrl(opts.startUrl)) throw new ScrapeManualsError("startUrl http(s) requise (fournie par humain, jamais committée)");
   const authFile = opts.authFile ?? DEFAULT_AUTH_FILE;
   const log = opts.logger ?? (() => {});
