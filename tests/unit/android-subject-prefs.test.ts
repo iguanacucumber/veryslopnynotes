@@ -107,10 +107,76 @@ function ktSubjectsFromPayload(payload: string): string[] {
   }
 }
 
+// --- #140 : l'éditeur de matière en feuille (`SettingsSubjectEditor.kt`) ---
+
+/** `normalizeColorHex` : trim + majuscules, ou null. */
+function ktNormalizeColorHex(hex: string | null): string | null {
+  const t = (hex ?? "").trim();
+  return COLOR_RE.test(t) ? t.toUpperCase() : null;
+}
+
+/** `subjectSwatchColors` : la palette du thème, plus la couleur enregistrée
+ *  quand elle n'y figure pas (une prefs d'avant #140 doit rester visible). */
+function ktSubjectSwatchColors(current: string | null): string[] {
+  const hex = ktNormalizeColorHex(current);
+  const known = SUBJECT_PALETTE.some((h) => h.toUpperCase() === hex);
+  return hex === null || known ? SUBJECT_PALETTE : [...SUBJECT_PALETTE, hex];
+}
+
+/** `subjectPreviewHex` : le brouillon s'il est valide, sinon la couleur de la
+ *  matière (préfs puis dérivée du nom). */
+const ktSubjectPreviewHex = (prefs: Prefs[], subject: string, draftHex: string): string =>
+  ktNormalizeColorHex(draftHex) ?? ktSubjectColorHex(prefs, subject);
+
+// `stableHash` / `derivedSubjectHex` (miroir de android-timetable.test.ts, même
+// `fold(31)` sur 32 bits) : sans couleur de prefs, l'aperçu montre la couleur
+// dérivée du NOM (#137), donc le miroir doit la recalculer.
+function ktStableHash(value: string): number {
+  let acc = 7;
+  for (const c of value) acc = (acc * 31 + c.codePointAt(0)!) >>> 0;
+  return acc;
+}
+const ktDerivedSubjectHex = (subject: string): string =>
+  SUBJECT_PALETTE[ktStableHash(subject.trim().toLowerCase()) % SUBJECT_PALETTE.length]!;
+const ktSubjectColorHex = (prefs: Prefs[], subject: string): string => {
+  const hex = ktSubjectStyle(prefs, subject).colorHex;
+  return hex !== null && COLOR_RE.test(hex) ? hex : ktDerivedSubjectHex(subject);
+};
+
+/** `subjectEmojiChoices` : la palette, plus l'emoji enregistré s'il est hors
+ *  palette ET dans le contrat. */
+const ktSubjectEmojiChoices = (current: string | null): string[] => {
+  const e = (current ?? "").trim();
+  if (e === "" || [...e].length > SUBJECT_PREFS_MAX_EMOJI_CHARS) return SUBJECT_EMOJI_PALETTE;
+  return SUBJECT_EMOJI_PALETTE.includes(e) ? SUBJECT_EMOJI_PALETTE : [...SUBJECT_EMOJI_PALETTE, e];
+};
+
+/** `subjectNameError` : null si le nom est acceptable, sinon la raison. */
+function ktSubjectNameError(name: string): string | null {
+  const t = name.trim();
+  if (t === "") return null;
+  return t.length > SUBJECT_PREFS_MAX_SUBJECT_CHARS ? `${SUBJECT_PREFS_MAX_SUBJECT_CHARS} caractères maximum` : null;
+}
+
 const MATHS: Prefs = { subject: "Maths", color: "#1565C0", emoji: "🧮", label: "Matros", updatedAt: "2026-09-20T10:00:00.000Z" };
 const GRADE = { id: "g1", accountId: "acc1", subject: "Maths", value: 15, scale: 20, date: "2026-09-20T10:00:00.000Z" };
 const GRADE2 = { id: "g2", accountId: "acc1", subject: "SVT", value: 12, scale: 20, date: "2026-09-21T10:00:00.000Z" };
 const ENTRY = { id: "t1", accountId: "acc1", subject: "Histoire", start: "2026-10-03T08:00:00.000Z", end: "2026-10-03T09:00:00.000Z" };
+
+// La palette matière du thème (PapillonTheme.kt) — la SEULE source de couleurs
+// pour les pastilles de l'éditeur (#140 : avant, huit hex en dur qui n'étaient
+// mesurés par rien).
+const SUBJECT_PALETTE = [
+  "#C50017", "#DA2400", "#DD6B00", "#E8901C", "#E8B048",
+  "#6BAE00", "#37BB12", "#12BB67", "#26B290", "#26ABB2",
+  "#2DB9D8", "#009EC5", "#007FDA", "#3A56D0", "#7600CA",
+  "#962DD8", "#B300CA", "#C50066", "#DD004A", "#DD0030",
+];
+
+/** `SubjectEmojiPalette` + `subjectEmojiChoices` (SettingsSubjectEditor.kt). */
+const SUBJECT_EMOJI_PALETTE = [
+  "📘", "📐", "🔬", "🌍", "🗺️", "📜", "🧮", "🎨", "🎵", "💻", "⚽", "🌱",
+];
 
 describe("miroir Kotlin prefs matière (#83)", () => {
   test("isValid : mêmes rejets que le contrat TS", () => {
@@ -262,6 +328,108 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     expect(uiGradle).not.toContain("gson");
     expect(uiGradle).not.toContain("moshi");
     expect(uiGradle).not.toContain("datastore");
+  });
+
+  test("#140 : couleur de l'éditeur — normalisation, roue, aperçu vivant", () => {
+    // Normalisation : espaces + casse, sinon la pastille sélectionnée ne se
+    // reconnaît pas et l'utilisateur croit avoir perdu sa couleur.
+    expect(ktNormalizeColorHex(" #abcdef ")).toBe("#ABCDEF");
+    expect(ktNormalizeColorHex("#C50017")).toBe("#C50017");
+    for (const bad of ["abcdef", "#abc", "#ABCDEFG", "red", "", null, " #abcdeg "]) {
+      expect(ktNormalizeColorHex(bad)).toBeNull();
+    }
+    // La roue, c'est la PALETTE DU THÈME : 20 couleurs déjà mesurées (4.5:1
+    // sur le texte), pas huit hex en dur. Aucune couleur n'est inventée.
+    const roue = ktSubjectSwatchColors(null);
+    expect(roue).toEqual(SUBJECT_PALETTE);
+    expect(new Set(roue).size).toBe(roue.length);
+    // Une couleur déjà dans la palette ne s'ajoute pas une seconde fois.
+    expect(ktSubjectSwatchColors("#c50017")).toEqual(SUBJECT_PALETTE);
+    // Une prefs d'avant #140 (hors palette) reste sélectionnée, donc visible.
+    expect(ktSubjectSwatchColors("#1565c0")).toEqual([...SUBJECT_PALETTE, "#1565C0"]);
+    expect(ktSubjectSwatchColors("nawak")).toEqual(SUBJECT_PALETTE);
+    // Aperçu : le brouillon gagne s'il est valide ; sinon la matière garde sa
+    // couleur (préfs), sinon celle dérivée de son nom (#137).
+    expect(ktSubjectPreviewHex([MATHS], "Maths", "#37bb12")).toBe("#37BB12");
+    expect(ktSubjectPreviewHex([MATHS], "Maths", "pas une couleur")).toBe("#1565C0");
+    expect(ktSubjectPreviewHex([], "Histoire", "")).toBe(ktDerivedSubjectHex("Histoire"));
+    // Nom de matière : vide = rien à dire (le bouton est désactivé), trop long =
+    // la raison du refus, à la borne du contrat.
+    expect(ktSubjectNameError("")).toBeNull();
+    expect(ktSubjectNameError("   ")).toBeNull();
+    expect(ktSubjectNameError("Maths")).toBeNull();
+    expect(ktSubjectNameError("M".repeat(SUBJECT_PREFS_MAX_SUBJECT_CHARS))).toBeNull();
+    expect(ktSubjectNameError("M".repeat(SUBJECT_PREFS_MAX_SUBJECT_CHARS + 1))).toBe(`${SUBJECT_PREFS_MAX_SUBJECT_CHARS} caractères maximum`);
+    // Chaque emoji proposé tient dans le contrat (≤ 8 points de code), donc un
+    // choix dans la rangée n'est jamais refusé à l'écriture.
+    for (const emoji of SUBJECT_EMOJI_PALETTE) {
+      expect([...emoji].length).toBeLessThanOrEqual(SUBJECT_PREFS_MAX_EMOJI_CHARS);
+    }
+    expect(new Set(SUBJECT_EMOJI_PALETTE).size).toBe(SUBJECT_EMOJI_PALETTE.length);
+    expect(SUBJECT_EMOJI_PALETTE.length).toBeGreaterThanOrEqual(8);
+    // L'emoji ENREGISTRÉ reste dans la rangée (même règle que la couleur) :
+    // l'ancien champ était libre, donc un emoji hors palette doit rester
+    // sélectionnable — et donc retirable.
+    expect(ktSubjectEmojiChoices("🧬")).toEqual([...SUBJECT_EMOJI_PALETTE, "🧬"]);
+    expect(ktSubjectEmojiChoices("🧮")).toEqual(SUBJECT_EMOJI_PALETTE);
+    expect(ktSubjectEmojiChoices("   ")).toEqual(SUBJECT_EMOJI_PALETTE);
+    expect(ktSubjectEmojiChoices(null)).toEqual(SUBJECT_EMOJI_PALETTE);
+    // Un emoji hors contrat ne revient pas dans la rangée (il n'a jamais pu être
+    // écrit, et l'afficher proposerait un choix que l'écriture refuserait).
+    expect(ktSubjectEmojiChoices("x".repeat(SUBJECT_PREFS_MAX_EMOJI_CHARS + 1))).toEqual(SUBJECT_EMOJI_PALETTE);
+  });
+
+  test("#140 : feuille d'édition — aperçu sur les VRAIS composants, écriture inchangée", () => {
+    const sheet = read(UI, "SettingsSubjectEditor.kt");
+    const settings = read(UI, "SettingsScreen.kt");
+    const style = read(UI, "SubjectStyle.kt");
+    // L'aperçu appelle les composants que #137/#138/#139 ont rendus colorés :
+    // une carte de cours, une pastille matière et une pastille de note. Sans
+    // cela, l'aperçu ne prouverait rien du rendu final.
+    expect(sheet).toContain("PapCourseCard(");
+    expect(sheet).toContain("PapSubjectAvatar(");
+    expect(sheet).toContain("PapPill(");
+    // Les couleurs de l'éditeur sortent du thème, jamais d'un hex posé ici.
+    expect(sheet).not.toMatch(/#[0-9A-Fa-f]{6}/);
+    expect(sheet).toContain("subjectContent(");
+    // Le pastel de la carte de cours n'est pas re-écrit dans la feuille : il vient
+    // de `PapCourseCard`, donc l'aperçu et l'EDT partagent la MÊME fonction.
+    expect(read(UI, "TimetableCourseCard.kt")).toContain("subjectSurface(colorHex)");
+    expect(sheet).toContain("bestContentOn(");
+    // Les conventions #138 sont réutilisées, pas ré-derivées.
+    expect(sheet).toContain("subjectDisplayFr(");
+    expect(sheet).toContain("subjectInitial(");
+    expect(sheet).toContain("subjectColorHex(");
+    // Feuille modale (material3 1.2.1 l'a), croix = annuler, coche = valider.
+    expect(sheet).toContain("ModalBottomSheet(");
+    expect(sheet).toContain("onDismissRequest = onDismiss");
+    expect(sheet).toContain('label = "Annuler"');
+    expect(sheet).toContain('label = "Enregistrer"');
+    // Roue de pastilles circulaires : anneau blanc + coche sur la sélection.
+    expect(sheet).toContain("CircleShape");
+    expect(sheet).toContain("Modifier.border(SWATCH_RING, Color.White, CircleShape)");
+    expect(style).toContain("fun normalizeColorHex(");
+    // L'écran : une LIGNE par matière (plus de bloc déployé par matière) et le
+    // thème en segment, pas en puces.
+    expect(settings).toContain("SingleChoiceSegmentedButtonRow(");
+    // (le mot « FilterChip » reste dans l'en-tête du fichier, qui raconte ce
+    // qu'était l'ancien écran : c'est l'APPEL qui doit avoir disparu)
+    expect(settings).not.toContain("FilterChip(");
+    expect(settings).toMatch(/verticalScroll\(rememberScrollState\(\)\)/);
+    expect(settings).toContain("SubjectEditorSheet(");
+    expect(settings).toContain("AppTheme.entries");
+    // « Ajouter la matière » refuse le champ vide et dit pourquoi.
+    expect(settings).toContain("enabled = newSubject.isNotBlank() && nameError == null");
+    // Clé LLM : MASQUÉE par défaut, bascule explicite, collage inchangé (aucun
+    // filtre de caractères, seule la borne du contrat).
+    expect(settings).toContain("PasswordVisualTransformation()");
+    expect(settings).toContain("VisualTransformation.None");
+    expect(settings).toContain("KeyboardOptions(keyboardType = KeyboardType.Password)");
+    expect(settings).toContain('if (it.length <= Homework.MAX_API_KEY_CHARS) llmKey = it');
+    expect(settings).not.toContain('llmKey.isConfigured()');
+    // La clé n'est ni journalisée, ni mise dans un message, ni pré-remplie.
+    expect(settings).not.toMatch(/Log\.|println|toJson\(\).*llm/i);
+    expect(settings).not.toContain("value = llmKeys.apiKey()");
   });
 
   test("routes contrat : GET + PUT /v1/subjects/prefs déclarés", () => {
