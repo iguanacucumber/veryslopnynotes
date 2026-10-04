@@ -72,7 +72,7 @@ async function post(handler: (req: Request) => Promise<Response>, body: unknown)
 }
 
 describe("POST /v1/setup — compte école puis jeton", () => {
-  test("identifiants Pronote → session ouverte + jeton UNE SEULE FOIS", async () => {
+  test("QR de l'établissement → session ouverte + jeton UNE SEULE FOIS", async () => {
     const p = provider();
     const { setup, opened, handler } = service(p.sessions);
     const res = await post(handler, QR);

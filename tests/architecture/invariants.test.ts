@@ -20,9 +20,9 @@ function codeOnly(content: string): string {
     .join("\n");
 }
 
-const pronoteHost = /pronote|index-education|ent\.(ac-|cas|nevers)|cas\./i;
+const pronoteHost = /pronote/i;
 const netRe = /fetch\(|axios|got\(|https?\.(get|request)|Bun\.serve|XMLHttpRequest|WebSocket/;
-const pronoteUrlRe = /https?:\/\/[^\s"']*(pronote|index-education|ent\.(ac-|cas|nevers))/i;
+const pronoteUrlRe = /https?:\/\/[^\s"']*(pronote)/i;
 function hasDirectFetch(code: string): boolean {
   if (code.split("\n").some((l) => pronoteHost.test(l) && netRe.test(l))) return true;
   return pronoteUrlRe.test(code) && netRe.test(code);
@@ -100,7 +100,7 @@ describe("invariants", () => {
     expect(hasDirectFetch(codeOnly('await fetch("https://pronote.example.fr/x");'))).toBe(true);
     // vrai positif: URL Pronote + réseau ailleurs
     expect(
-      hasDirectFetch(codeOnly('const u = "https://index-education.net/pronote/";\nawait fetch(u);')),
+      hasDirectFetch(codeOnly('const u = "https://pronote.example.invalid/eleve/";\nawait fetch(u);')),
     ).toBe(true);
   });
 

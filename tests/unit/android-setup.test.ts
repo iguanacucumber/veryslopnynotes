@@ -167,7 +167,7 @@ describe("assistant : secrets et route publique", () => {
   test("chaque refus a sa phrase actionnable, et aucun ne dit « déconnecte »", () => {
     for (const [code, attendu] of [
       ["qr_rejected", "rescane le code affiché par son application"],
-      ["login_refused", "vérifie ton identifiant et ton mot de passe"],
+      ["login_refused", "regénère le QR dans son application"],
       ["school_unreachable", "réessaie dans un instant"],
       ["rate_limited", "réessaie dans quelques minutes"],
       ["not_implemented", "aucune session d'établissement branchée"],
@@ -185,6 +185,16 @@ describe("assistant : secrets et route publique", () => {
     const bloc = repo.slice(repo.indexOf("private fun failure"), repo.indexOf("private fun failure") + 2000);
     expect(bloc).not.toContain("appairage");
     expect(bloc).not.toContain("401");
+  });
+
+  test("aucune phrase ne parle d'identifiant : le QR est la seule méthode", () => {
+    // #129 : `login_refused` demandait encore « vérifie ton identifiant et ton
+    // mot de passe » alors qu'aucun identifiant n'est saisi depuis 0.7.0 : le
+    // conseil était inapplicable, donc l'utilisateur n'avait rien à corriger.
+    const bloc = repo.slice(repo.indexOf("private fun failure"), repo.indexOf("private fun failure") + 2000);
+    for (const mot of ["identifiant", "mot de passe"]) {
+      expect({ mot, dit: bloc.toLowerCase().includes(mot) }).toEqual({ mot, dit: false });
+    }
   });
 });
 

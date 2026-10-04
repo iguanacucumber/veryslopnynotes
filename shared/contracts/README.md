@@ -118,14 +118,11 @@ d'un fil sont lus à la demande et **jamais** écrits sur disque.
 I6 : le corps d'un message est une DONNÉE bornée — jamais exécutée, jamais
 interprétée, jamais remise à un LLM (test I7 dans `tests/unit/discussions.test.ts`).
 
-**Cassant 0.6.0** : plus d'ENT, plus de SSO. `SetupRequest.ent` **disparu** (le type
-de portail n'est plus une donnée du contrat ; une app 0.5.0 qui l'envoie est
-ignorée, son setup marche toujours) et le code d'erreur `ent_unreachable` (502)
-devient **`school_unreachable`** — là c'est cassant pour de vrai : une app 0.5.0
-lit ce 502 comme un code inconnu et n'affiche donc aucune phrase actionnable. La
-connexion à l'établissement est soit le QR (`qrcodeLogin`), soit un login Pronote
-direct par `username` + `password` — `isSetupRequest` n'exige donc plus que
-`deviceName` + `schoolUrl` + une méthode complète.
+**Cassant 0.6.0** : le type de portail d'établissement sort du contrat.
+`SetupRequest.ent` **disparu** (une app 0.5.0 qui l'envoie est ignorée, son setup
+marche toujours) et le code d'erreur `ent_unreachable` (502) devient
+**`school_unreachable`** — là c'est cassant pour de vrai : une app 0.5.0 lit ce
+502 comme un code inconnu et n'affiche donc aucune phrase actionnable.
 
 **Cassant 0.7.0** : **zéro credential côté serveur**. Le serveur ne lit plus
 aucune variable d'environnement de secret (`PORT`/`HOST` restent les seules
