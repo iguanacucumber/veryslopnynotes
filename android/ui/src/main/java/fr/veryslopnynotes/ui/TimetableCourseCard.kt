@@ -138,6 +138,11 @@ fun isDarkSurface(): Boolean =
  * [highlight] encadre le cours en cours (2 dp) et signale le suivant (1 dp) :
  * c'est le seul état que la carte ajoute au statut du cours (annulé, déplacé),
  * qui se lit sur le texte.
+ *
+ * #145 : le cours EN COURS pulse en plus (échelle 1 -> 1.02, opacité qui descend
+ * juste assez pour lire un battement). Le filet de 2 dp disait QUEL cours, jamais
+ * CE MOMENT-LÀ — or c'est la question que l'onglet EDT sert. La pulsation est
+ * coupée avec le reste quand le téléphone a désactivé les animations.
  */
 @Composable
 fun PapCourseCard(
@@ -165,7 +170,7 @@ fun PapCourseCard(
     }
     val spine = if (cancelled) error else colorFromHex(colorHex) ?: MaterialTheme.colorScheme.primary
     Card(
-        modifier = modifier,
+        modifier = modifier.papCurrentPulse(highlight == CourseHighlight.CURRENT),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = background),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),

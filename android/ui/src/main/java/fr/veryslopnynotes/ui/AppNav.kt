@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -132,21 +133,19 @@ private fun capabilitiesPayload(o: RefreshOutcome): String? = when (o) {
 @Composable
 fun AppNav(
     // Graine par défaut (valeur BuildConfig) : l'adresse UTILISÉE est l'état
-    // ci-dessous, alimenté par ServerStore — l'utilisateur choisit son
-    // serveur dans l'écran d'appairage. "" = non configuré (bouchon
+    // ci-dessous, alimenté par ServerStore. "" = non configuré (bouchon
     // previews/tests sans BuildConfig).
     baseUrlSeed: String = "",
-    // #75 : compte appairé, sert au toggle (écriture confirmée par l'app, I7)
-    // et au proxy des pièces jointes. Jamais un hôte Pronote (I1).
+    // #75 : compte appairé (toggle + proxy des pièces jointes), jamais un hôte.
     accountId: String = "",
     // ponytail #144 : `loadAlerts` n'est plus appelé (l'écran alertes lit le cache partagé) ; le paramètre reste pour ne pas casser `MainActivity` dans ce PR.
     @Suppress("UNUSED_PARAMETER") loadAlerts: suspend (String) -> List<SecurityAlert> = { emptyList() },
 ) {
     val nav = rememberNavController()
     val ctx = LocalContext.current.applicationContext
-    // Serveur choisi à l'exécution : `baseUrl` devient un ÉTAT. Toutes les
-    // `remember(baseUrl)` plus bas rebloquent donc leurs repositories sur la
-    // nouvelle adresse, et les routes lisent le même état.
+    // Serveur choisi à l'exécution : `baseUrl` devient un ÉTAT, donc les
+    // `remember(baseUrl)` plus bas rebloquent leurs repositories sur la nouvelle
+    // adresse et les routes lisent le même état.
     val serverStore = remember(ctx) { ServerStore(ctx) }
     // 0.7.0 : clé LLM = UN store pour tout le process (réglages + écran devoirs),
     // sinon les deux écrans raisonneraient sur deux états divergents. L'état
@@ -163,9 +162,8 @@ fun AppNav(
         }
     }
     // Session appairée UNIQUE partagée : un seul store, lu par ApiClient à
-    // chaque requête (bearer) et vidé par accounts.logout(). Deux stores
-    // divergents (chiffré côté écrans, mémoire ailleurs) laisseraient le secret
-    // vivant après une déconnexion.
+    // chaque requête (bearer) et vidé par accounts.logout() — deux stores
+    // divergents laisseraient le secret vivant après une déconnexion.
     val tokens = remember(ctx) { SessionTokens.get(ctx) }
     val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }
     val repo = remember(baseUrl, cacheStore, tokens) { SyncedRepository(api, cacheStore) }
@@ -174,13 +172,11 @@ fun AppNav(
     val accounts = remember(baseUrl, cacheStore, tokens) {
         AccountStore(ctx, cacheStore, tokens)
     }
-    // #113 : un 401 (credential révoquée/expirée — INDISTINGUABLES côté serveur)
-    // ne doit plus se traduire par des échecs silencieux. Le signal unique vient
-    // du garde-fou ApiClient (une 401 sur route protégée qui portait un bearer) ;
-    // ici on répare par le chemin EXISTANT `accounts.logout()` (secret effacé +
-    // caches purgés, aucune purge parallèle) puis on ramène à l'appairage.
-    // Anti-boucle : après logout() plus aucun bearer ne part, donc le garde-fou
-    // ne peut plus se déclencher, et on ne navigue pas deux fois.
+    // #113 : un 401 (credential révoquée/expirée — INDISTINGUABLES côté serveur) ne
+    // doit plus se traduire par des échecs silencieux. Le signal unique vient du
+    // garde-fou ApiClient ; on répare par le chemin EXISTANT `accounts.logout()`
+    // (secret effacé + caches purgés, aucune purge parallèle) puis on ramène à
+    // l'appairage. Anti-boucle : après logout() plus aucun bearer ne part.
     var authNotice by remember { mutableStateOf<String?>(null) }
     val main = remember { Handler(Looper.getMainLooper()) }
     DisposableEffect(accounts) {
@@ -253,10 +249,13 @@ fun AppNav(
     // regardent les deux routes qui l'ont) ; #87 : Compétences se retire s'il n'est pas actif.
     var readTick by remember { mutableStateOf(0) }
     val hiddenDestinations = if (Capabilities.visible(capabilities, Capabilities.EVALUATIONS)) emptySet() else setOf(ROUTE_COMPETENCES)
-    // #134 : jetons Papillon (couleurs + typo + formes) appliqués une fois à la
-    // racine. Avant : `lightColorScheme()` / `darkColorScheme()` sans argument,
-    // donc le violet Material par défaut.
+    // #145 : l'hôte des notices transitoires (succès, échec, annulation) — une
+    // fois pour toute l'application ; `LocalPapNotice` le rend lisible partout.
+    val noticeHost = rememberPapNoticeHost()
+    // #134 : jetons Papillon appliqués une fois à la racine (avant : le violet
+    // Material par défaut, sans typo ni forme).
     PapillonTheme(darkTheme = isDarkTheme(theme, isSystemInDarkTheme())) {
+    CompositionLocalProvider(LocalPapNotice provides noticeHost) {
     Scaffold(
         topBar = {
             AppTopBar(
@@ -270,13 +269,13 @@ fun AppNav(
             )
         },
         bottomBar = { AppTabBar(currentRoute) { tab -> nav.openTab(tab) } },
+        // #145 : seule porte de sortie des notices, peinte par sévérité.
+        snackbarHost = { PapNoticeSnackbarHost(noticeHost) },
     ) { pad ->
         NavHost(
             navController = nav,
             // #120 : premier lancement OU session morte = l'assistant de
-            // connexion, pas un Accueil qui ne peut rien afficher. Le secret
-            // est relu au COMPOSABLE parent (une seule source : c'est lui que
-            // l'API et l'écran d'appairage partagent).
+            // connexion, pas un Accueil qui ne peut rien afficher.
             startDestination = if (tokens.isPaired()) ROUTE_INDEX else ROUTE_PAIRING,
             modifier = Modifier.padding(pad),
         ) {
@@ -298,10 +297,8 @@ fun AppNav(
                 )
             }
             composable(ROUTE_GRADES, deepLinks = listOf(routeDeepLink(ROUTE_GRADES))) {
-                // #139 : l'onglet Notes a son rendu structuré (moyennes par
-                // matière, sparkline, contexte de classe, sélecteurs de période
-                // et d'algorithme) : plus de JSON brut. #162 : plus de lien de
-                // navigation dans le corps, tout est dans la barre du haut.
+                // #139 : rendu structuré (moyennes, sparkline, contexte de
+                // classe), plus de JSON brut ; #162 : plus de lien de navigation.
                 GradesRoute(
                     CachePolicy.GRADES,
                     repo,
@@ -445,6 +442,7 @@ fun AppNav(
                 MessagesRoute(repo, baseUrl, accountId, tokens = tokens)
             }
         }
+    }
     }
     }
 }

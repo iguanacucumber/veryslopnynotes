@@ -1,6 +1,7 @@
 package fr.veryslopnynotes.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,8 +51,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.Discussion
@@ -62,6 +61,7 @@ import fr.veryslopnynotes.core.MessageAttachment
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.DiscussionsRepository
+import fr.veryslopnynotes.data.DiscussionWriteOutcome
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SyncedRepository
 import fr.veryslopnynotes.data.TokenStore
@@ -95,9 +95,24 @@ import java.time.ZoneId
 // HTML, aucune exécution, aucun rendu de lien actif. I7 : chaque écriture part d'un
 // GESTE (carte, puce, menu, icône), jamais d'un traitement automatique. I1 : aucune
 // adresse d'établissement n'est construite ni affichée ici.
-// ponytail: pas de `Scaffold` par écran (la coquille `AppShell.kt` porte la barre
-// et le titre de la route) ni de snackbar — #145 le livre, le dialogue de
-// suppression reste d'ici là la seule porte de la suppression.
+// ponytail: pas de `Scaffold` par écran (la coquille porte la barre et le titre
+// de la route) ; le snackbar, lui, est UNIQUE et RACINE (`Motion.kt`), donc cet
+// écran ne le dessine pas.
+//
+// #145 — les trois bandeaux `Text` de la version d'avant (écriture refusée,
+// message de la liste, message du fil ouvert) sont partis dans le snackbar, avec
+// une couleur de sévérité et une fermeture automatique. Ils ne se distinguaient
+// pas : une réussite et un refus s'affichaient pareil.
+//
+// ET L'ANNULATION D'UNE SUPPRESSION N'EST PAS CÂBLÉE, DÉLIBÉRÉMENT. Le contrat
+// n'expose que `POST /v1/discussions/delete` : aucune route de restauration, ni
+// côté serveur ni dans l'app. Un « Annuler » qui rendrait une ligne locale ferait
+// promises que le rafraîchissement suivant tiendrait : la fil disparaît au premier
+// `GET /v1/discussions`. Le paramètre [DiscussionDetailScreen.onUndoDelete] reste
+// donc nul — c'est le point de branchement quand le contrat portera un
+// `POST /v1/discussions/restore`. En attendant, une suppression réussie est
+// annoncée SANS action, et une suppression refusée propose « Réessayer », qui
+// existe.
 
 /** Épaisseur du filet des bulles et des puces (1 dp, comme les cartes de #134). */
 private val HAIRLINE = 1.dp
@@ -129,7 +144,6 @@ fun MessagesScreen(
     isStale: Boolean = false,
     fetchedAt: Long? = null,
     error: String? = null,
-    notice: String? = null,
     previews: Map<String, String> = emptyMap(),
     onRefresh: () -> Unit = {},
     onRetry: () -> Unit = {},
@@ -140,10 +154,16 @@ fun MessagesScreen(
     var query by remember { mutableStateOf("") }
     val visible = searchConversations(discussions, query)
     val unread = unreadTotal(discussions)
-    // Erreur AVEC cache : les cartes s'affichent, donc l'état d'écran n'a pas sa
-    // place — le message passe en bandeau, sinon il était JETÉ (le défaut que
-    // #136 corrigeait dans les autres écrans).
-    val bannerError = if (!error.isNullOrBlank() && discussions.isNotEmpty()) error else null
+    // #145 : l'état affiché comme VALEUR — le `Crossfade` compare des valeurs, pas
+    // des branches de `when`. Les quatre cas restent ceux d'avant ; ce qui change,
+    // c'est que l'on passe de l'un à l'autre en fondu au lieu de faire disparaître
+    // la liste puis la remettre d'un frame à l'autre.
+    val stateKey = when {
+        isLoading && discussions.isEmpty() -> "loading"
+        error != null && discussions.isEmpty() -> "error"
+        visible.isEmpty() -> "empty"
+        else -> "list"
+    }
     HomePullToRefresh(refreshing = isLoading && visible.isNotEmpty(), onRefresh = onRefresh) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             // Pas de titre ici : la barre du haut porte « Messages » (#135). Cette
@@ -168,21 +188,19 @@ fun MessagesScreen(
                 }
             }
             SearchField(query = query, onQueryChange = { query = it }, label = "Rechercher une discussion")
-            if (!bannerError.isNullOrEmpty()) {
-                NoticeRow(notice = bannerError, onAction = onRetry, actionLabel = "Réessayer")
+            // #145 : le bandeau « périmé » s'ouvre au lieu d'apparaître d'un coup.
+            // Les messages d'écriture et d'échec de lecture ne passent PLUS par un
+            // `Text` ici : ils sortent par le snackbar racine, qui a une couleur de
+            // sévérité et une fermeture automatique.
+            PapAppear(visible = isStale) {
+                PapStaleBanner(fetchedAt = fetchedAt, onRefresh = onRefresh)
             }
-            // Écriture refusée (marquer lu / non lu) : le message du serveur est
-            // affiché, sinon l'utilisateur taperait en croyant avoir réussi.
-            if (!notice.isNullOrEmpty()) {
-                NoticeRow(notice = notice, onAction = null)
-            }
-            if (isStale) PapStaleBanner(fetchedAt = fetchedAt, onRefresh = onRefresh)
             // `weight(1f)` : AVANT #142, le `LazyColumn` n'était PAS pondéré et les
             // boutons qui le suivaient devenaient hors d'atteinte dès que la
             // liste débordait. Ici la zone liste occupe toute la hauteur restante
             // et les états possibles la remplissent au lieu de flotter en haut.
             Box(modifier = Modifier.weight(1f)) {
-                when {
+                Crossfade(targetState = stateKey, label = "messagesState") { _ -> when {
                     isLoading && discussions.isEmpty() -> PapLoading()
                     error != null && discussions.isEmpty() -> PapErrorState(message = error, onRetry = onRetry)
                     visible.isEmpty() -> PapEmptyState(
@@ -212,6 +230,7 @@ fun MessagesScreen(
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -297,10 +316,12 @@ private fun ConversationCard(
  * serveur a confirmé la réponse — un texte perdu sur un refus est un texte à
  * réécrire.
  *
- * [onUndoDelete] est le crochet du futur « Annuler » du snackbar (#145) ; rien ne
- * le câble aujourd'hui, le serveur n'ayant AUCUNE route de restauration : une
- * annulation ne ferait que rendre une ligne locale, disparue au rafraîchissement
- * suivant, donc une promesse que l'app ne pourrait pas tenir.
+ * [onUndoDelete] reste le point de branchement d'un « Annuler » HonestE : rien ne
+ * le câble, et c'est DÉLIBÉRÉ. Le contrat n'expose que `POST /v1/discussions/delete`
+ * — aucune route de restauration n'existe, donc un « Annuler » ne ferait que
+ * reculer l'écran et la fil reviendrait, puis disparaîtrait au `GET` suivant : une
+ * promesse que l'application ne peut pas tenir. Ce que l'app sait faire, c'est
+ * RÉESSAYER la suppression refusée, et c'est ce qu'elle propose.
  */
 @Composable
 fun DiscussionDetailScreen(
@@ -311,7 +332,6 @@ fun DiscussionDetailScreen(
     zone: ZoneId,
     isLoading: Boolean = false,
     isSending: Boolean = false,
-    notice: String? = null,
     onDraftChange: (String) -> Unit = {},
     onReply: (String) -> Unit = {},
     onReadState: (Boolean) -> Unit = {},
@@ -385,11 +405,9 @@ fun DiscussionDetailScreen(
                 }
             }
         }
-        if (!notice.isNullOrEmpty()) {
-            NoticeRow(notice = notice, onAction = onUndoDelete, actionLabel = "Annuler")
-        }
         Box(modifier = Modifier.weight(1f)) {
-            when {
+            // #145 : chargement -> messages en fondu (cf. la liste).
+            Crossfade(targetState = if (isLoading) "loading" else "messages", label = "threadState") { _ -> when {
                 isLoading -> PapLoading()
                 messages.isEmpty() -> PapEmptyState(
                     icon = Icons.Filled.MailOutline,
@@ -411,6 +429,7 @@ fun DiscussionDetailScreen(
                         )
                     }
                 }
+            }
             }
         }
         ReplyField(
@@ -542,7 +561,8 @@ private fun AttachmentChips(attachments: List<MessageAttachment>, onOpen: (Messa
 
 /**
  * Zone de réponse FIXE EN BAS : champ pondéré + icône d'envoi, retour haptique au
- * tap (le geste est parti, l'utilisateur n'attend pas).
+ * tap (le geste est parti, l'utilisateur n'attend pas) — [rememberPapHaptics]
+ * garde ce vocabulaire unique avec le reste de l'application.
  *
  * Le bouton n'occupe plus toute la largeur — AVANT #142, un `Button` vert sous un
  * champ, eux deux pleine largeur : la barre verte d'un envoi passerait pour
@@ -555,7 +575,7 @@ private fun ReplyField(
     onDraftChange: (String) -> Unit,
     onReply: (String) -> Unit,
 ) {
-    val haptics = LocalHapticFeedback.current
+    val haptics = rememberPapHaptics()
     val canSend = draft.isNotBlank() && !isSending
     Row(
         modifier = Modifier
@@ -573,7 +593,7 @@ private fun ReplyField(
         )
         IconButton(
             onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                haptics.confirm()
                 onReply(draft)
             },
             enabled = canSend,
@@ -602,7 +622,6 @@ private fun ReplyField(
 fun NewDiscussionScreen(
     recipients: List<DiscussionRecipient>,
     isLoading: Boolean = false,
-    notice: String? = null,
     onCreate: (String, String, List<String>) -> Unit = { _, _, _ -> },
     onBack: () -> Unit = {},
 ) {
@@ -645,11 +664,16 @@ fun NewDiscussionScreen(
             label = "Rechercher un destinataire",
             modifier = Modifier.padding(horizontal = 16.dp),
         )
-        if (!notice.isNullOrEmpty()) {
-            NoticeRow(notice = notice, onAction = null)
-        }
         Box(modifier = Modifier.weight(1f)) {
-            when {
+            Crossfade(
+                targetState = when {
+                    isLoading -> "loading"
+                    recipients.isEmpty() -> "none"
+                    groups.isEmpty() -> "empty"
+                    else -> "list"
+                },
+                label = "newDiscussionState",
+            ) { _ -> when {
                 isLoading -> PapLoading()
                 recipients.isEmpty() -> PapEmptyState(
                     icon = Icons.Filled.MailOutline,
@@ -703,6 +727,7 @@ fun NewDiscussionScreen(
                     }
                 }
             }
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -752,33 +777,11 @@ private fun SearchField(
     )
 }
 
-/**
- * Bandeau de message (échec d'écriture, refus du serveur) avec une action
- * optionnelle : c'est le crochet du « Annuler » du snackbar de #145.
- *
- * L'encre vient du thème (`error`), donc la cause se lit sans qu'un aplat rouge
- * soit peint derrière le texte.
- */
-@Composable
-private fun NoticeRow(notice: String, onAction: (() -> Unit)?, actionLabel: String = "Annuler") {
-    Row(
-        // `verticalScroll` : un message serveur peut être long, et une rangée de
-        // texte non défilable dans une `Column` bornée, c'est un texte coupé.
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = notice,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
-            modifier = Modifier.weight(1f),
-        )
-        if (onAction != null) TextButton(onClick = onAction) { Text(actionLabel) }
-    }
-}
+// #145 : il n'y a PLUS de rangée de message dans cet écran. Les trois usages
+// qu'elle portait (échec d'écriture, message de la liste, message du fil) sont
+// partis dans le snackbar racine, seul endroit qui sait teinter une sévérité et se
+// refermer seul. Une rangée `Text` en encre d'erreur ne pouvait ni se distinguer
+// d'une réussite, ni s'effacer.
 
 // --- Route câblée ------------------------------------------------------------
 
@@ -818,7 +821,10 @@ fun MessagesRoute(
     var loading by remember { mutableStateOf(false) }
     var stale by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var notice by remember { mutableStateOf<String?>(null) }
+    // #145 : le poste de notices racine. Il REMPLACE l'état `notice` : plus de
+    // texte à l'écran à effacer, plus de courses entre l'écriture et sa peinture —
+    // une seule porte, qui colourise par sévérité et se referme seule.
+    val notices = LocalPapNotice.current
     var open by remember { mutableStateOf<Discussion?>(null) }
     var messages by remember { mutableStateOf<List<DiscussionMessage>>(emptyList()) }
     var messagesLoading by remember { mutableStateOf(false) }
@@ -856,6 +862,12 @@ fun MessagesRoute(
                     is RefreshOutcome.Failed -> {
                         payload = discussionsFromPayload(o.cachedPayload)
                         error = o.message
+                        // #145 : échec AVEC cache = la liste reste affichée, donc pas
+                        // d'état d'écran ; le message du serveur sort donc en notice
+                        // ROUGE. Sans cache, c'est `PapErrorState` qui le montre.
+                        if (o.cachedPayload != null) {
+                            notices.show(PapNotice(errorHeadline(o.message), NoticeKind.ERROR))
+                        }
                     }
                 }
                 nowMillis = System.currentTimeMillis()
@@ -875,11 +887,11 @@ fun MessagesRoute(
         draft = ""
         // Un message d'écriture de la LISTE ne suit pas l'utilisateur dans le fil
         // qu'il vient d'ouvrir.
-        notice = null
+        notices.dismiss()
         discussionsRepo.fetchMessages(d.id) { list, err ->
             messages = list
             messagesLoading = false
-            if (err != null) notice = err
+            if (err != null) notices.show(PapNotice(errorHeadline(err), NoticeKind.ERROR))
             val last = list.lastOrNull()
             if (last != null) previews = previews + (d.id to messagePreview(last.body))
         }
@@ -888,19 +900,35 @@ fun MessagesRoute(
     fun back() {
         open = null
         messages = emptyList()
-        notice = null
+        notices.dismiss()
         draft = ""
     }
 
     fun loadRecipients() {
         creating = true
-        notice = null
+        notices.dismiss()
         recipientsLoading = true
         recipients = emptyList()
         discussionsRepo.fetchRecipients { list, err ->
             recipients = list
             recipientsLoading = false
-            if (err != null) notice = err
+            if (err != null) notices.show(PapNotice(errorHeadline(err), NoticeKind.ERROR))
+        }
+    }
+
+    /**
+     * Sortie d'écriture : une RÉUSSITE en encre normale, un REFUS en rouge — et
+     * un refus propose « Réessayer », parce que réessayer est une action que le
+     * serveur sait effectuer. Aucune n'offre d'annulation : le contrat n'a pas de
+     * route d'annulation, et un « Annuler » qui ne ferait que recharger l'écran
+     * serait faux.
+     */
+    fun writeOutcome(outcome: DiscussionWriteOutcome, success: String, retry: () -> Unit) {
+        val message = outcome.error
+        if (outcome.ok) {
+            if (success.isNotEmpty()) notices.show(PapNotice(success, NoticeKind.SUCCESS))
+        } else if (!message.isNullOrBlank()) {
+            notices.show(PapNotice(errorHeadline(message), NoticeKind.ERROR, "Réessayer", retry))
         }
     }
 
@@ -910,24 +938,27 @@ fun MessagesRoute(
     // Le fil et la nouvelle discussion sont des MODES de la route, pas des routes :
     // sans ces deux gardes, le geste système quittait l'onglet Messages au lieu de
     // revenir à la liste — l'en-tête proposait un retour que le système ignorait.
-    BackHandler(enabled = creating) { creating = false; notice = null }
+    BackHandler(enabled = creating) { creating = false; notices.dismiss() }
     BackHandler(enabled = !creating && current != null) { back() }
     if (creating) {
         NewDiscussionScreen(
             recipients = recipients,
             isLoading = recipientsLoading,
-            notice = notice,
             onCreate = { subject, body, ids ->
                 // I7 : geste utilisateur confirmé, rien d'automatique.
                 discussionsRepo.create(baseUrl, subject, body, ids) { outcome ->
-                    notice = outcome.error
+                    writeOutcome(outcome, "Discussion envoyée.") {
+                        discussionsRepo.create(baseUrl, subject, body, ids) { again ->
+                            writeOutcome(again, "Discussion envoyée.") {}
+                        }
+                    }
                     if (outcome.ok) {
                         creating = false
                         refresh()
                     }
                 }
             },
-            onBack = { creating = false; notice = null },
+            onBack = { creating = false; notices.dismiss() },
         )
     } else if (current != null) {
         DiscussionDetailScreen(
@@ -938,45 +969,60 @@ fun MessagesRoute(
             zone = zone,
             isLoading = messagesLoading,
             isSending = sending,
-            notice = notice,
             onDraftChange = { draft = it },
             onReply = { body ->
                 sending = true
-                discussionsRepo.reply(baseUrl, current.id, body) { outcome ->
-                    sending = false
-                    notice = outcome.error
-                    // Le brouillon ne s'efface que sur ACCUSÉ : un refus serveur
-                    // ne doit pas coûter le texte.
-                    if (outcome.ok) {
-                        draft = ""
-                        messages = emptyList()
-                        discussionsRepo.fetchMessages(current.id) { list, err ->
-                            messages = list
-                            messagesLoading = false
-                            if (err != null) notice = err
-                            val last = list.lastOrNull()
-                            if (last != null) previews = previews + (current.id to messagePreview(last.body))
+                // Fonction nommée, pas une lambda : c'est elle que « Réessayer »
+                // rappelle, donc le refus se réessaie avec le MÊME texte — le
+                // brouillon n'est vidé que sur accusé de réception.
+                fun send() {
+                    discussionsRepo.reply(baseUrl, current.id, body) { outcome ->
+                        sending = false
+                        writeOutcome(outcome, "Message envoyé.") { send() }
+                        if (outcome.ok) {
+                            draft = ""
+                            messages = emptyList()
+                            discussionsRepo.fetchMessages(current.id) { list, err ->
+                                messages = list
+                                messagesLoading = false
+                                if (err != null) notices.show(PapNotice(errorHeadline(err), NoticeKind.ERROR))
+                                val last = list.lastOrNull()
+                                if (last != null) previews = previews + (current.id to messagePreview(last.body))
+                            }
+                            refresh()
                         }
-                        refresh()
                     }
                 }
+                send()
             },
             onReadState = { read ->
                 discussionsRepo.setRead(baseUrl, current.id, read) { outcome ->
-                    notice = outcome.error
+                    writeOutcome(outcome, "") {
+                        discussionsRepo.setRead(baseUrl, current.id, read) { again ->
+                            writeOutcome(again, "") {}
+                        }
+                    }
                     if (outcome.ok) refresh()
                 }
             },
             // #142 : la suppression passe par `ConfirmDialog`, ouvert depuis le
             // menu du fil — plus jamais un bouton unique.
             onDelete = {
-                discussionsRepo.delete(baseUrl, current.id) { outcome ->
-                    notice = outcome.error
-                    if (outcome.ok) {
-                        back()
-                        refresh()
+                val subject = current.subject
+                fun del() {
+                    discussionsRepo.delete(baseUrl, current.id) { outcome ->
+                        // PAS de « Annuler » : le contrat n'expose que
+                        // `POST /v1/discussions/delete`, sans route de restauration —
+                        // un annuler local disparaîtrait au rafraîchissement suivant.
+                        // « Réessayer », lui, existe (cf. l'en-tête du fichier).
+                        writeOutcome(outcome, "« $subject » supprimée.") { del() }
+                        if (outcome.ok) {
+                            back()
+                            refresh()
+                        }
                     }
                 }
+                del()
             },
             onBack = { back() },
             // `/v1/media` exige le bearer du device : aucune application tierce ne
@@ -984,7 +1030,12 @@ fun MessagesRoute(
             // explique donc la limite au lieu d'ouvrir une page d'échec — voir
             // `AttachmentChips`.
             onOpenAttachment = { att ->
-                notice = "« ${att.label} » : l'ouverture dans l'application arrive bientôt. Le serveur exige la session de l'app, qu'aucune autre application ne peut porter."
+                notices.show(
+                    PapNotice(
+                        "« ${att.label} » : l'ouverture dans l'application arrive bientôt. Le serveur exige la session de l'app, qu'aucune autre application ne peut porter.",
+                        NoticeKind.INFO,
+                    ),
+                )
             },
         )
     } else {
@@ -996,7 +1047,6 @@ fun MessagesRoute(
             isStale = stale,
             fetchedAt = fetchedAt,
             error = error,
-            notice = notice,
             previews = previews,
             onRefresh = { refresh() },
             onRetry = { refresh() },
@@ -1004,7 +1054,11 @@ fun MessagesRoute(
             // La pastille est l'action : marquer lu / non lu sans passer par le fil.
             onToggleRead = { d ->
                 discussionsRepo.setRead(baseUrl, d.id, !conversationIsRead(d)) { outcome ->
-                    notice = outcome.error
+                    writeOutcome(outcome, "") {
+                        discussionsRepo.setRead(baseUrl, d.id, !conversationIsRead(d)) { again ->
+                            writeOutcome(again, "") {}
+                        }
+                    }
                     if (outcome.ok) refresh()
                 }
             },
