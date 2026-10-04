@@ -350,9 +350,14 @@ describe("unit android profil (#82)", () => {
 
   test("Kotlin : widgets + écran profil branchés, source sans dépendance ajoutée", () => {
     const widgets = read(join(UI, "HomeWidgets.kt"));
-    for (const fn of ["fun upcomingLessonsFrom(", "fun pendingHomeworkFrom(", "fun latestGradesFrom(", "fun gradeValueLabel(", "fun homeTimeLabel("]) {
+    // #139 a déplacé `gradeValueLabel` dans `Averages.kt` (avec `gradesFrom`,
+    // seul lecteur du JSON des notes) : `HomeWidgets.kt` s'y appuie au lieu de
+    // reparcourir le payload.
+    for (const fn of ["fun upcomingLessonsFrom(", "fun pendingHomeworkFrom(", "fun latestGradesFrom(", "fun homeTimeLabel("]) {
       expect(widgets).toContain(fn);
     }
+    expect(widgets).toContain("gradesFrom(payload)");
+    expect(read(join(UI, "Averages.kt"))).toContain("fun gradeValueLabel(");
     // org.json = SDK : aucune lib de parsing ajoutée.
     expect(widgets).toContain("org.json.JSONObject");
     // Écran profil : données réelles, empty state, photo + déconnexion.

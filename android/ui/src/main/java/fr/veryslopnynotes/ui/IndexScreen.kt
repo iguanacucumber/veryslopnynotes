@@ -124,7 +124,9 @@ fun IndexScreen(
     val lessons = snapshot.timetable?.let { upcomingLessonsFrom(it, nowMillis) }.orEmpty()
     val homework = snapshot.assignments?.let { pendingHomeworkFrom(it, nowMillis) }.orEmpty()
     val grades = snapshot.grades?.let { latestGradesFrom(it, limit = 1) }.orEmpty()
-    val average = snapshot.grades?.let { generalAverageFrom(it) }
+    // #139 a livre le rapport de moyennes (`averagesFrom`) : l'accueil prend la
+    // moyenne generale de la, sans relire le JSON des moyennes.
+    val average = generalAverageOf(snapshot.grades?.let { averagesFrom(it) })
     val actions = homeQuickActions(
         snapshot.news,
         snapshot.menus,

@@ -188,40 +188,27 @@ fun pendingHomeworkFrom(payload: String, nowMillis: Long, limit: Int = 3): List<
     }
 }
 
-/** Dernières notes, de la plus récente à la plus ancienne (date RÉELLEMENT analysée). */
+/**
+ * Dernières notes, de la plus récente à la plus ancienne.
+ *
+ * #139 a livré le VRAI lecteur du payload `/v1/grades` (`gradesFrom`, dates
+ * déjà analysées, tri décroissant, notes hors contrat écartées) : l'accueil
+ * n'en relit pas le JSON, il se contente de garder les trois champs dont sa
+ * carte a besoin (matière, « 15,5/20 », millis). Un seul propriétaire du JSON
+ * des notes, donc pas deux règles de tri à maintenir.
+ */
 fun latestGradesFrom(payload: String, limit: Int = 3): List<HomeGradeUi> {
-    return try {
-        val arr: JSONArray = JSONObject(payload).optJSONArray("grades") ?: JSONArray()
-        val out = mutableListOf<HomeGradeUi>()
-        for (i in 0 until arr.length()) {
-            val o: JSONObject = arr.optJSONObject(i) ?: continue
-            val subject = o.optString("subject", "").trim()
-            val date = homeMillisOf(o.optString("date", ""))
-            if (subject.isEmpty() || date == null) continue
-            if (o.isNull("value")) continue
-            val value = o.optDouble("value", Double.NaN)
-            if (value.isNaN()) continue
-            val scale = o.optDouble("scale", Double.NaN)
-            out.add(HomeGradeUi(subject, gradeValueLabel(value, scale), date))
-        }
-        out.sortedByDescending { it.dateMillis }.take(if (limit > 0) limit else HOME_MAX_ITEMS)
-    } catch (_: Exception) {
-        emptyList()
-    }
+    val grades = gradesFrom(payload)
+    return grades
+        .take(if (limit > 0) limit else HOME_MAX_ITEMS)
+        .map { HomeGradeUi(it.subject, gradeValueLabel(it.value) + scaleSuffix(it.scale), it.millis) }
 }
 
-/** "15/20" ou "15" si l'échelle n'est pas exploitable (jamais de division par 0). */
-fun gradeValueLabel(value: Double, scale: Double): String {
-    val v = String.format(Locale.FRANCE, "%.2f", value).trimEnd('0').trimEnd(',')
-    if (scale.isNaN() || scale <= 0.0) return v
-    val s = String.format(Locale.FRANCE, "%.0f", scale)
-    return "$v/$s"
-}
-
-/** "13,75" : la moyenne en GRAND, donc sans zéros inutiles ("14" et pas "14,00"). */
+/** "13,75" : la moyenne en GRAND, donc sans zéros inutiles ("14", pas "14,00"). */
 fun homeAverageNumberLabel(value: Double): String {
     if (value.isNaN()) return ""
-    return String.format(Locale.FRANCE, "%.2f", value).trimEnd('0').trimEnd(',')
+    val mark = formatMark(value)
+    return if (mark.endsWith(",00")) mark.dropLast(3) else if (mark.endsWith("0")) mark.dropLast(1) else mark
 }
 
 // --- Accès rapides -----------------------------------------------------------
