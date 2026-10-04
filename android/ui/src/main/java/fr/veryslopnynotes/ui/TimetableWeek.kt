@@ -1,5 +1,6 @@
 package fr.veryslopnynotes.ui
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -613,15 +614,20 @@ fun TimetableRoute(
         }
         val next = week?.next
         val currentStartMillis = week?.let { currentLessonOf(it.lessons, nowMillis)?.startMillis }
-        if (next != null) {
-            Text(
-                text = "Prochain cours · ${subjectStyle(subjectPrefs, next.subject).badge}" +
-                    " · ${lessonTimeLabel(next.startMillis, zone)}",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        // #145 : la ligne du prochain cours APPARAÎT (échelle 0.9 -> 1 + opacité,
+        // 300 ms mesurés) au lieu de se faire réécrire sous les yeux quand
+        // l'heure change.
+        PapEnter {
+            if (next != null) {
+                Text(
+                    text = "Prochain cours · ${subjectStyle(subjectPrefs, next.subject).badge}" +
+                        " · ${lessonTimeLabel(next.startMillis, zone)}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         val error = state as? UiState.Error
         // #166 : le tirail enveloppe l'ÉTAT ENTIER, pas seulement le pager. Le
@@ -634,7 +640,17 @@ fun TimetableRoute(
             onRefresh = { refresh() },
             modifier = Modifier.fillMaxSize(),
         ) {
-            when {
+            // #145 : changer de semaine faisait passer de « pager » à « squelette »
+            // d'un frame à l'autre — la page disparaissait puis revenait, ce qui se
+            // lit comme un défaut d'affichage. Ici le passage se fait en fondu, et la
+            // clé est l'ÉTAT (les quatre branches sont celles d'avant).
+            val stateKey = when {
+                days.isEmpty() && error != null -> "error"
+                days.isEmpty() && state is UiState.Loading -> "loading"
+                days.isEmpty() -> "empty"
+                else -> "days"
+            }
+            Crossfade(targetState = stateKey, label = "timetableState") { _ -> when {
                 // Contenu affiché : le pager prime, l'erreur est portée par le
                 // bandeau « périmé » et le pull-to-refresh (une semaine entière
                 // vaut mieux qu'un bandeau d'erreur au-dessus d'elle).
@@ -665,6 +681,7 @@ fun TimetableRoute(
                         nextStartMillis = next?.startMillis,
                     )
                 }
+            }
             }
         }
     }
