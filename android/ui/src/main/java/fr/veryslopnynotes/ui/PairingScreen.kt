@@ -28,8 +28,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.ServerConfig
 import fr.veryslopnynotes.core.ServerUrlResult
+import fr.veryslopnynotes.data.AccountStore
 import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.HealthResult
+import fr.veryslopnynotes.data.ServerStore
 import fr.veryslopnynotes.data.SessionTokens
 import fr.veryslopnynotes.data.SetupInput
 import fr.veryslopnynotes.data.SetupRepository
@@ -362,6 +364,45 @@ private fun QrStep(
         SseStatusRow(state = form.sse, onConnect = onSseConnect, onDisconnect = onSseDisconnect)
         form.lastEventPreview?.let { preview -> Text("Dernier événement : $preview") }
     }
+}
+
+/**
+ * Changement de serveur = changement d'établissement. (#135 : cette fonction
+ * vivait dans `AppNav.kt` ; elle est la logique de CET écran — changer de
+ * serveur, c'est se ré-appairer — et elle y prenait 40 lignes pour rien.) Le jeton d'appareil est
+ * un BEARER de l'ANCIEN serveur : le conserver enverrait un credential vivant
+ * au nouveau. Donc, dans cet ordre : valider (aucun effet de bord), purger
+ * session + caches par le chemin EXISTANT `accounts.logout()` (ni purge
+ * parallèle, ni nouveau store), puis persister. Un refus renvoie son message
+ * français et ne change RIEN ; `onSwitched` n'est appelé qu'une fois la purge
+ * faite et l'adresse enregistrée.
+ *
+ * ponytail: purge AVANT écriture — un stockage KO coûte alors une déconnexion,
+ * alors que l'inverse laisserait une fenêtre où le nouveau serveur est écrit et
+ * le credential de l'ancien encore vivant. Fonction top-level (pas une locale
+ * dans le composable) : la validation et l'ordre des effets n'ont rien à faire
+ * dans un corps recomposé. `when` + `is` positif : dans ce module, le plugin
+ * Compose casse le smart cast après un `!is` (vérifié à la compilation).
+ */
+internal fun changeServer(
+    raw: String,
+    current: String,
+    accounts: AccountStore,
+    serverStore: ServerStore,
+    onSwitched: (String) -> Unit,
+): String? {
+    val target = when (val validated = ServerConfig.validateBaseUrl(raw)) {
+        is ServerUrlResult.Rejected -> return validated.message
+        is ServerUrlResult.Ok -> validated.baseUrl
+    }
+    if (target == current) return null
+    // On enregistre AVANT de déconnecter : si l'écriture échoue, l'utilisateur
+    // garde sa session et son cache au lieu d'être déconnecté pour rien.
+    val saved = serverStore.save(target)
+    if (saved is ServerUrlResult.Rejected) return saved.message
+    accounts.logout()
+    onSwitched(target)
+    return null
 }
 
 /** Miroir de SETUP_PIN_MAX_CHARS (shared/contracts/api.ts). */

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -182,12 +183,16 @@ fun attendanceTotals(rows: List<AbsenceUi>): Pair<Int, Int> =
 // --- Routes : une ressource cachable par écran, état UiState commun ---
 // ponytail: coquille partagée (cache synchrone + refresh + repli hors-ligne)
 //   identique à CanteenRoute/NewsRoute, factorisée ici pour deux ressources.
+// #135 : le paramètre `title` (« Vie scolaire », « Sanctions ») et son
+//   `Text(title)` ont disparu — la barre du haut porte le titre de la route
+//   (cf. AppShell.kt), l'écran ne le répète plus. D'où les arguments NOMMÉS aux
+//   deux appelants : deux `String` consécutives en positionnel se seraient
+//   décalées en silence.
 @Composable
 private fun CachedSchoolRoute(
     repo: SyncedRepository,
     baseUrl: String,
     resource: String,
-    title: String,
     subtitle: String,
     extraLabel: String? = null,
     onExtra: (() -> Unit)? = null,
@@ -224,8 +229,7 @@ private fun CachedSchoolRoute(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(title)
-        Text(subtitle)
+        Text(subtitle, style = MaterialTheme.typography.titleMedium)
         if ((state as? UiState.Data)?.isStale == true) Text("Données hors-ligne (périmé).")
         if (state is UiState.Loading) Text("Chargement…")
         if (state is UiState.Error) Text("Erreur réseau. Réessayer.")
@@ -242,8 +246,12 @@ private fun CachedSchoolRoute(
 fun AttendanceRoute(repo: SyncedRepository, baseUrl: String, onSanctions: () -> Unit = {}) {
     var periodId by remember { mutableStateOf<String?>(null) }
     CachedSchoolRoute(
-        repo, baseUrl, CachePolicy.ATTENDANCE, "Vie scolaire", "Absences et retards",
-        "Sanctions", onSanctions,
+        repo = repo,
+        baseUrl = baseUrl,
+        resource = CachePolicy.ATTENDANCE,
+        subtitle = "Absences et retards",
+        extraLabel = "Sanctions",
+        onExtra = onSanctions,
     ) { payload ->
         val data = attendanceFrom(payload)
         val rows = absencesForPeriod(data, periodId)
@@ -282,8 +290,12 @@ fun AttendanceRoute(repo: SyncedRepository, baseUrl: String, onSanctions: () -> 
 @Composable
 fun PunishmentsRoute(repo: SyncedRepository, baseUrl: String, onBack: () -> Unit = {}) {
     CachedSchoolRoute(
-        repo, baseUrl, CachePolicy.PUNISHMENTS, "Sanctions", "Punitions vie scolaire",
-        "Retour", onBack,
+        repo = repo,
+        baseUrl = baseUrl,
+        resource = CachePolicy.PUNISHMENTS,
+        subtitle = "Punitions vie scolaire",
+        extraLabel = "Retour",
+        onExtra = onBack,
     ) { payload ->
         val rows = punishmentsFrom(payload)
         if (rows.isEmpty()) {

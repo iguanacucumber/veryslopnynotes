@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -158,8 +159,7 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Cantine")
-        Text("Menus de la semaine")
+        Text("Menus de la semaine", style = MaterialTheme.typography.titleMedium)
         if (week != null && week.balanceLabel != null) Text(week.balanceLabel)
         if ((state as? UiState.Data)?.isStale == true) Text("Données hors-ligne (périmé).")
         val days = week?.days ?: emptyList()

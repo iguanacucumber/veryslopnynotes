@@ -117,10 +117,13 @@ describe("unit android moyennes (#74)", () => {
     expect(kt).toContain("estimée");
     expect(kt).toContain("moyenne $origin");
     // Écran Notes : la mention est branchée, les autres onglets intacts.
+    // #135 : l'onglet Notes est branché dans AppNav.kt, son rendu a rejoint
+    // GradesScreen.kt — d'où les DEUX fichiers pour les DEUX responsibilities.
     const nav = readFileSync(join(UI, "AppNav.kt"), "utf8");
+    const grades = readFileSync(join(UI, "GradesScreen.kt"), "utf8");
     expect(nav).toContain("showAverage = true");
-    expect(nav).toContain("averageLabel");
-    expect(nav).toContain("generalAverageFrom");
+    expect(grades).toContain("averageLabel");
+    expect(grades).toContain("generalAverageFrom");
     // org.json vient du SDK : aucune ligne de dépendance ajoutée.
     const uiGradle = readFileSync(join(import.meta.dir, "..", "..", "android/ui/build.gradle.kts"), "utf8");
     expect(uiGradle).not.toContain("gson");

@@ -236,6 +236,11 @@ describe("unit android profil (#82)", () => {
       join(DATA, "AccountStore.kt"),
       join(UI, "HomeWidgets.kt"),
       join(UI, "AppNav.kt"),
+      // #135 : les écrans sortis d'AppNav.kt sont vérifiés au même endroit.
+      join(UI, "ProfileScreen.kt"),
+      join(UI, "IndexScreen.kt"),
+      join(UI, "GradesScreen.kt"),
+      join(UI, "SettingsScreen.kt"),
     ].map((f) => ({ f, code: read(f).replace(/\/\*[\s\S]*?\*\//g, "\n").split("\n").filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*")).map((l) => { const i = l.search(/(?<!:)\/\//); return i >= 0 ? l.slice(0, i) : l; }).join("\n") }));
     for (const { f, code } of files) expect({ file: f, hit: pronoteHost.test(code) }).toEqual({ file: f, hit: false });
     // La photo passe par le proxy : chemin /v1/media construit côté serveur config.
@@ -338,17 +343,32 @@ describe("unit android profil (#82)", () => {
     // org.json = SDK : aucune lib de parsing ajoutée.
     expect(widgets).toContain("org.json.JSONObject");
     // Écran profil : données réelles, empty state, photo + déconnexion.
+    // #135 : l'écran est sorti d'AppNav.kt (970 lignes) vers ProfileScreen.kt,
+    // l'accueil vers IndexScreen.kt. Le BRANCHAGE reste dans AppNav.kt, les
+    // COMPOSABLES dans leur fichier : on vérifie donc les deux séparément.
     const nav = read(join(UI, "AppNav.kt"));
-    expect(nav).toContain("fun ProfileRoute(");
-    expect(nav).toContain("fun ProfileScreen(");
-    expect(nav).toContain("repo.fetchMe");
-    expect(nav).toContain("repo.fetchPhoto(p)");
-    expect(nav).toContain("Aucune information publiée pour ce compte.");
-    expect(nav).toContain("profileInitials(profile)");
-    expect(nav).toContain("Text(\"Se déconnecter\")");
-    expect(nav).toContain("upcomingLessonsFrom(");
-    expect(nav).toContain("pendingHomeworkFrom(");
-    expect(nav).toContain("latestGradesFrom(");
+    const profile = read(join(UI, "ProfileScreen.kt"));
+    const index = read(join(UI, "IndexScreen.kt"));
+    expect(nav).toContain("ProfileRoute(");
+    for (const needle of [
+      "fun ProfileRoute(",
+      "fun ProfileScreen(",
+      "repo.fetchMe",
+      "repo.fetchPhoto(p)",
+      "Aucune information publiée pour ce compte.",
+      "profileInitials(profile)",
+      'Text("Se déconnecter")',
+    ]) {
+      expect({ needle, inProfileScreen: profile.includes(needle) }).toEqual({ needle, inProfileScreen: true });
+    }
+    for (const needle of ["upcomingLessonsFrom(", "pendingHomeworkFrom(", "latestGradesFrom("]) {
+      expect({ needle, inIndexScreen: index.includes(needle) }).toEqual({ needle, inIndexScreen: true });
+    }
+    // #135 : « Se déconnecter » doit être ATTEIGNABLE — donc une racine unique
+    // défilable, pas un `Button` frère d'un `Column` en `fillMaxSize` (le
+    // débordement d'environ 48 dp était sans retour possible).
+    expect(profile).toMatch(/fun ProfileRoute\([\s\S]*verticalScroll\(rememberScrollState\(\)\)/);
+    expect(index).toContain("fun IndexScreen(");
     // Les autres écrans/onglets restent branchés comme avant #82.
     expect(nav).toContain("ROUTE_NEWS");
     expect(nav).toContain("ROUTE_CANTEEN");
