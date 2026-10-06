@@ -290,6 +290,43 @@ describe("bugs live-sync (revue adversariale)", () => {
     });
   });
 
+  test("#74 : le bulletin publié alimente /v1/grades pour la SEULE période demandée", async () => {
+    const store = new SnapshotStore();
+    const note = gradeFor(ACCOUNT, "g-1");
+    const sync = createLiveSync({
+      store,
+      resolveAccountId: () => ACCOUNT,
+      reader: readerOf({
+        getGrades: async () => pageOf([{ ...note, periodId: "p-1" }]),
+        getProvidedAverages: async () =>
+          pageOf([{ periodId: "p-1", general: 14, subjects: { "maths-fake": 12 } }]),
+      }),
+    });
+    const { pairing, auth } = pairedDevice();
+    const handler = createHandler(store, pairing);
+    await sync.run(ACCOUNT);
+    // Indexé par période, pas écrasé par la dernière lue.
+    expect(store.providedAverages()).toEqual({
+      "p-1": { periodId: "p-1", general: 14, subjects: { "maths-fake": 12 } },
+    });
+    const trimestre = await (
+      await handler(new Request("http://127.0.0.1/v1/grades?periodId=p-1", { headers: auth }))
+    ).json();
+    expect({
+      general: trimestre.averages.general,
+      matiere: trimestre.averages.subjects.map((s: { origin: string; value: number | null }) => s.origin),
+    }).toEqual({
+      general: { value: 14, origin: "provided", subjectCount: 1 },
+      matiere: ["provided"],
+    });
+    // « Année » : aucun bulletin ne vaut pour toutes les périodes, donc estimation.
+    const annee = await (
+      await handler(new Request("http://127.0.0.1/v1/grades", { headers: auth }))
+    ).json();
+    expect(annee.averages.general.origin).toBe("estimated");
+    expect(annee.averages.subjects.every((s: { origin: string }) => s.origin === "estimated")).toBe(true);
+  });
+
   test("BUG: le timeout de readCaps n'est jamais annulé — chaque refresh laisse un minuteur armé (processus et tests ne rendent pas la main)", async () => {
     const TIMEOUT = 40;
     const store = new SnapshotStore();

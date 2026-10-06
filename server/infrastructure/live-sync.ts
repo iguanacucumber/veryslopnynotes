@@ -2,7 +2,7 @@
 // Deux passes, toutes deux SÉQUENTIELLES :
 //   1. cœur (notes, devoirs, EDT) via `runSync` : diff STRUCTURÉ sur empreintes,
 //      premier sync = zéro événement (pas de faux positif), I7 respecté (aucun LLM).
-//   2. ressources secondaires (périodes, compétences, actus, cantine, vie scolaire,
+//   2. ressources secondaires (périodes, bulletin publié, actus, cantine, vie scolaire,
 //      profil, capacités, messagerie) : une par une, en DÉFAVEUR — un onglet absent
 //      ou en erreur laisse l'instantané précédent intact et n'annule pas le reste.
 // Chaque ressource n'est lue qu'UNE fois par refresh, puis appliquée à l'instantané.
@@ -40,6 +40,7 @@ import type { SyncRefreshActions } from "../api/sync-refresh";
 import { PronoteAuthError, PronoteReadError } from "../domain/ports";
 import { runSync } from "../jobs/sync";
 import type { SyncSnapshot } from "../jobs/sync";
+import type { ProvidedAverages } from "../domain/averages";
 import type { SnapshotPatch, SnapshotStore } from "./snapshot-store";
 
 /** Page Pronote : `items` est wrappé `Untrusted` par le reader réel. */
@@ -58,6 +59,8 @@ export interface LiveReader {
   getAssignments?(accountId: string, page?: PageRequest): Promise<Page<Assignment>>;
   getTimetable?(accountId: string, page?: PageRequest): Promise<Page<TimetableEntry>>;
   getPeriods?(accountId: string, page?: PageRequest): Promise<Page<Period>>;
+  /** Bulletin publié : UNE entrée par période (son `periodId` est dans l'objet). */
+  getProvidedAverages?(accountId: string): Promise<Page<ProvidedAverages>>;
   getNews?(accountId: string, page?: PageRequest): Promise<Page<NewsItem>>;
   getMenus?(accountId: string, page?: PageRequest): Promise<Page<CanteenMenu>>;
   getAttendance?(accountId: string, page?: PageRequest): Promise<Page<AbsenceRecord>>;
@@ -269,6 +272,22 @@ export function createLiveSync(options: LiveSyncOptions): LiveSync {
     // l'eau pour que le snapshot reste lisible pendant le chargement.
     const secondary: (() => Promise<SnapshotPatch | null>)[] = [
       async () => patchOf("periods", await read(account, reader.getPeriods?.bind(reader))),
+      // Bulletin publié : la page donne UNE entrée par période, la table du
+      // snapshot est indexée par `periodId` (le routeur choisit le périmètre).
+      async () => {
+        const rows = await read(account, reader.getProvidedAverages?.bind(reader));
+        if (rows === null) return null;
+        // Sans prototype : la clé vient du reader (donc de Pronote), `__proto__`
+        // ne doit jamais toucher le prototype de la table.
+        const byPeriod: Record<string, ProvidedAverages> = Object.create(null) as Record<string, ProvidedAverages>;
+        for (const row of rows) {
+          const key = (row.periodId ?? "").trim();
+          // Période sans id = périmètre inconnu : la garder ici exposerait une
+          // moyenne « sans période », déjà refusée par `providedAveragesFor`.
+          if (key !== "") byPeriod[key] = row;
+        }
+        return { providedAverages: byPeriod };
+      },
       async () => {
         const caps = await readCaps(account);
         return caps ? { capabilities: caps } : null;
