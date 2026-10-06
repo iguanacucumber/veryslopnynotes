@@ -161,6 +161,15 @@ private val DATE_FR: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy
 /** Heure seule, 24 h, sans fuseau ni locale à l'oral. */
 private val CLOCK_FR: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.FRANCE)
 
+/**
+ * Date en toutes lettres, pour la ligne de note de l'onglet Notes (#192).
+ *
+ * `d` sans zéro : la référence rend `{ day: 'numeric' }`, qui vaut « 5 », pas
+ * « 05 ». Écrit avec la locale plutôt qu'avec des noms de mois en dur, donc le
+ * mois vient de `java.time` et pas d'un tableau.
+ */
+private val LONG_DATE_FR: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.FRANCE)
+
 /** Phrase de repli quand le serveur n'a rien dit d'utile. */
 private const val GENERIC_ERROR = "Erreur réseau. Réessayer."
 
@@ -238,6 +247,29 @@ fun relativeTimeFr(
     if (days < DAYS_BEFORE_DATE) return if (past) "il y a $days jours" else "dans $days jours"
     return DATE_FR.format(there)
 }
+
+/**
+ * Date d'une note, EN TOUTES LETTRES : « 5 octobre 2026 ».
+ *
+ * #192 : la ligne de note de la référence n'affiche pas une date relative. Elle
+ * rend `{ day: 'numeric', month: 'long', year: 'numeric' }` — donc un quantitatif,
+ * un mois en lettres, l'année, et RIEN d'autre (pas d'heure, pas de « il y a »).
+ * Notre ligne rendait « il y a 3 jours », ce qui est une information de SYNCHRO
+ * (elle parle de l'horloge) et pas de la note : deux notes du même jour
+ * seraient indiscernables, et une note de septembre et une de septembre de
+ * l'an passé donneraient la même chaîne.
+ *
+ * Le format estchosen à la main parce qu'il n'a pas de nom : `LL` n'a pas de
+ * forme locale fiable en `java.time` pour les mois français. `MMMM` sur
+ * `Locale.FRANCE` donne bien « octobre », et le quantitatif `d` n'a pas de
+ * zéro — d'où `"d MMMM yyyy"` et non `"dd MMMM yyyy"`, qui afficherait « 05 ».
+ *
+ * Borné comme [relativeTimeFr] : la valeur vient d'un cache lu en `Long`.
+ */
+fun longDateFr(
+    epochMillis: Long,
+    zone: ZoneId = ZoneId.systemDefault(),
+): String = LONG_DATE_FR.format(Instant.ofEpochMilli(epochMillis.coerceIn(MIN_EPOCH_MS, MAX_EPOCH_MS)).atZone(zone))
 
 /**
  * Texte du bandeau « périmé » : la phrase figée des huit écrans, PLUS

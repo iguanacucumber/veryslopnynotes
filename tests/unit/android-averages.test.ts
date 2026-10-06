@@ -414,6 +414,21 @@ const PERIODS_PAYLOAD = {
   ],
 };
 
+/**
+ * Le corps d'une fonction COMPOSABLE retiré, de `fun <nom>` à la prochaine
+ * déclaration `fun` de niveau supérieur.
+ *
+ * Utile quand une assertion porte sur « pas de X dans ce fichier » et qu'une
+ * brique nearby en a legitement : on retire la brique, pas l'assertion.
+ */
+const sansFonction = (src: string, nom: string): string => {
+  const debut = src.indexOf(`fun ${nom}(`);
+  if (debut < 0) return src;
+  const suite = src.slice(debut).replace(/^fun \S+\(/, "fun X(");
+  const fin = suite.indexOf("\nfun ");
+  return src.slice(0, debut) + (fin < 0 ? "" : suite.slice(fin));
+};
+
 describe("unit android moyennes (#74)", () => {
   test("payload contrat 0.2.0 -> mention fournie/estimée", () => {
     const provided = tsGeneralAverageOf(tsAverages(JSON.stringify({ grades: [GRADE], averages: REPORT })));
@@ -866,6 +881,86 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     });
   });
 
+  // #192 : la PREUVE de la vague, sous forme de jetons numériques. Chaque valeur
+  // est celle relevée dans la source de la référence (`ui/new/Typography.tsx`,
+  // `app/(tabs)/grades/`, `ui/new/List.tsx`) et écrite ici à côté du `val` Kotlin
+  // qu'elle attaque — donc une dérive de la source ET une dérive du test
+  // cassent ici, ce qu'aucune capture ne ferait.
+  test("géométrie de l'écran Notes : chaque jeton est la valeur relevée, pas une nôtre", () => {
+    const rows = readFileSync(join(UI, "GradesRows.kt"), "utf8");
+    const hero = readFileSync(join(UI, "GradesHero.kt"), "utf8");
+    const theme = readFileSync(join(UI, "PapillonTheme.kt"), "utf8");
+    // Bloc graphique de la carte moyenne : 140 de haut, débordant de 16 sous le
+    // corps, courbe à 24 de marge verticale, débordant de 4 à GAUCHE.
+    for (const [nom, mesure] of [
+      ["SPARK_HEIGHT", "140.dp"],
+      ["SPARK_OVERLAP", "16.dp"],
+      ["SPARK_V_MARGIN", "24.dp"],
+      ["SPARK_BLEED", "4.dp"],
+      ["SPARK_TRAIL", "18.dp"],
+      ["SPARK_WIDTH", "4.dp"],
+      ["HERO_BODY_PADDING", "18.dp"],
+      ["HERO_BODY_GAP", "1.dp"],
+    ] as const) {
+      expect({ nom, mesure, trouve: hero.includes(`${nom} = ${mesure}`) }).toEqual({ nom, mesure, trouve: true });
+    }
+    // Carte du carrousel : 200 de large, rayon 24, 8 entre les blocs, 12 entre les
+    // cartes, 14 de marge horizontale par bloc, 12 de marge verticale.
+    for (const [nom, mesure] of [
+      ["RECENT_CARD_WIDTH", "200.dp"],
+      ["RECENT_CARD_GAP", "8.dp"],
+      ["RECENT_CARD_SEPARATOR", "12.dp"],
+      ["RECENT_CARD_PADDING_H", "14.dp"],
+      ["RECENT_CARD_PADDING_V", "12.dp"],
+    ] as const) {
+      expect({ nom, mesure, trouve: rows.includes(`${nom} = ${mesure}`) }).toEqual({ nom, mesure, trouve: true });
+    }
+    // Pile de notes : coins à 20 puis 8 au contact, 4 entre les rangs, 14/16 de
+    // marge interne, 16 avant la note, 1 entre les lignes de texte.
+    for (const [nom, mesure] of [
+      ["GRADE_ROW_PADDING_V", "14.dp"],
+      ["GRADE_ROW_PADDING_H", "16.dp"],
+      ["GRADE_ROW_TRAILING_GAP", "16.dp"],
+      ["GRADE_ROW_GAP", "4.dp"],
+      ["SECTION_TITLE_GAP", "10.dp"],
+      ["SECTION_HEADER_PADDING_V", "6.dp"],
+      ["SECTION_HEADER_GAP", "6.dp"],
+      ["SECTION_GAP", "6.dp"],
+      ["STACK_GAP", "1.dp"],
+      ["SECTION_AVERAGE_GAP", "1.dp"],
+    ] as const) {
+      expect({ nom, mesure, trouve: rows.includes(`${nom} = ${mesure}`) }).toEqual({ nom, mesure, trouve: true });
+    }
+    for (const [nom, mesure] of [
+      ["GRADE_ROW_CORNER", "20"],
+      ["GRADE_ROW_CORNER_INNER", "8"],
+    ] as const) {
+      expect({ nom, mesure, trouve: rows.includes(`${nom} = ${mesure}`) }).toEqual({ nom, mesure, trouve: true });
+    }
+    // Le fond du carrousel : la matière à 21/255 par-dessus le fond, PAS le
+    // pastel opaque à 75 % vers le blanc.
+    expect(theme).toContain("const val SUBJECT_CARD_ALPHA = 21f / 255f");
+    expect({ trouve: rows.includes("subjectCardTint(it)") }).toEqual({ trouve: true });
+    expect({ pastel: rows.includes("subjectSurface(it)") }).toEqual({ pastel: false });
+    // Le rayon 24 sur les DEUX cartes du carrousel et de la carte moyenne — et
+    // PLUS AUCUN rayon 20 (`shapes.large`) dans le fichier : c'était la valeur
+    // que nous avions choisie, et elle était sur les deux.
+    //
+    // La SEULE exception tolérée est le champ de recherche, dont le rayon n'est
+    // pas mesurable : la référence utilise la SearchBar native d'expo-router,
+    // qui n'écrit ni hauteur ni rayon. Donc on retire SON corps avant de
+    // compter — sans ça, ce test porterait sur le rayon du champ et croirait
+    // qu'un rayon 20 y est un écart de carte.
+    const horsChamp = sansFonction(rows, "GradesSearchField");
+    expect({ extraLarge: horsChamp.includes("MaterialTheme.shapes.extraLarge") }).toEqual({ extraLarge: true });
+    expect({ grandRayon: horsChamp.includes("MaterialTheme.shapes.large") }).toEqual({ grandRayon: false });
+    expect({ formeVariable: rows.includes("private fun gradeRowShape(first: Boolean, last: Boolean)") })
+      .toEqual({ formeVariable: true });
+    // Le PAS de `Modifier.padding(bottom = if (last) 0.dp else GRADE_ROW_GAP)` :
+    // sans lui, la pile aurait 4 dp de bas sur son dernier rang.
+    expect(rows).toContain(".padding(bottom = if (last) 0.dp else GRADE_ROW_GAP)");
+  });
+
   test("Kotlin : un seul état, et les liens de navigation sont dans la barre du haut", () => {
     const screen = readFileSync(join(UI, "GradesScreen.kt"), "utf8");
     const rows = readFileSync(join(UI, "GradesRows.kt"), "utf8");
@@ -890,7 +985,10 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     // Les puces d'algorithme, le titre de section et le carrousel sont APRÈS le
     // retour : avec zéro donnée ils ne sont jamais rendus.
     const guard = screen.indexOf("if (!layout.content || !layout.data) {");
-    for (const brique of ["GradesSearchField(", "GradesPeriodHeaderButton(", "GradesAlgorithmChips(", "PapSectionHeader(", "GradesRecentCarousel("]) {
+    // #192 : `PapSectionHeader(` sort de la liste — l'écran ne pose plus de
+    // titre « Moyennes par matière » (chaque matière est déjà un `heading()`),
+    // et c'est `GradesSubjectSections(` qui rend maintenant les sections.
+    for (const brique of ["GradesSearchField(", "GradesPeriodHeaderButton(", "GradesAlgorithmChips(", "GradesSubjectSections(", "GradesRecentCarousel("]) {
       expect({ brique, afterGuard: screen.indexOf(brique) > guard }).toEqual({ brique, afterGuard: true });
     }
     // #190 : la rangée de chips de période a disparu du CORPS de Notes — le
