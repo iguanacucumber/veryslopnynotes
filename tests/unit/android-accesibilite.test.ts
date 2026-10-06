@@ -181,17 +181,28 @@ describe("unit android accessibilité #146 — l'information ne repose pas sur l
     }
   });
 
-  test("la matière porte une pastille ET un libellé écrit", () => {
-    // #184 : l'invariant visait la légende `SubjectLegend` de l'écran Compétences,
-    // supprimée avec lui. Il tient toujours, sur la carte matière qui reste
-    // (carrossel des nouvelles notes) : les deux, TOUJOURS — la pastille (emoji
-    // ou initiale) et le libellé en toutes lettres. C'est ce qui rend la matière
-    // identifiable sans couleur.
+  test("la matière porte un glyphe ET un libellé écrit", () => {
+    // L'invariant : la matière doit être identifiable SANS la couleur. Ce qui la
+    // rend identifiable, c'est le LIBELLÉ EN TOUTES LETTRES ; le glyphe (emoji
+    // ou initiale) ne sert qu'à la reconnaissance à l'œil.
+    //
+    // #192 : la carte du carrousel ne pose plus la PASTILLE arrondie de 44 dp
+    // (`PapSubjectAvatar`) — la référence y rend un `<Typography>` d'emoji de
+    // 18/25 à côté du nom, sans fond, dans la MÊME ligne. Le glyphe est donc
+    // passé d'une `Box` teintée à un `Text` : ce qui change, c'est le DÉCOR, pas
+    // l'information. D'où deux assertions au lieu d'une — sinon le test ne
+    // porterait plus que le décor d'une brique qui n'est plus là.
     const rows = file("GradesRows.kt");
-    expect(rows).toContain("PapSubjectAvatar(emoji = style.emoji, color = ink)");
-    expect(rows).toContain("text = style.label,");
-    // Pas de `badge` (« emoji nom ») : l'emoji est dans la pastille, donc le
-    // recopier dans le texte ne ferait que l'annoncer deux fois.
+    // L'emoji reste DÉCORATIF (annoncé nul) : sans ça, TalkBack dirait deux fois
+    // la même chose, un nom d'emoji en prime.
+    // `file()` STRIPE LES COMMENTAIRES : les motifs ci-dessous ne peuvent donc
+    // pas s'appuyer sur un mot d'explication, seulement sur la forme du code.
+    expect(rows).toMatch(/text = style\.emoji,[\s\S]{0,400}?clearAndSetSemantics \{ \}/);
+    // Le libellé écrit, en `body1` (15 sp) — donc à la taille d'un corps de
+    // texte, pas d'un libellé d'onglet.
+    expect(rows).toMatch(/text = style\.label,\s*style = MaterialTheme\.typography\.bodyLarge,/);
+    // La carte ne rejoue pas le `badge` (« emoji nom ») : l'emoji est à côté,
+    // donc le recopier dans le texte ne ferait que l'annoncer deux fois.
     expect(file("SubjectStyle.kt")).not.toContain("text = style.badge");
   });
 

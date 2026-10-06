@@ -89,6 +89,15 @@ const SUBJECT_SURFACE_TINT = 0.75;
 const SUBJECT_SURFACE_DARK_TINT = -0.6;
 const SUBJECT_CONTENT_LIGHT_TINT = -0.45;
 const SUBJECT_CONTENT_DARK_TINT = 0.55;
+/**
+ * #192 : l'opacité du fond de carte matière du CARROUSEL — le `'15'` que la
+ * référence concatène à la couleur de la matière, soit 21/255 = 0,0824.
+ *
+ * À lire comme un OCTET, pas comme un pourcentage : `15` en hexadécimal
+ * conventionnel vaudrait 21 % (0x15 = 21, et 21 % c'est 0x33), donc écrire
+ * « 15 % » ici serait deux fois trop clair. Le test le vérifie par le calcul.
+ */
+const SUBJECT_CARD_ALPHA = 21 / 255;
 
 /** `subjectSurface(hex, dark)` : le fond de carte matière du thème demandé. */
 const tsSubjectSurface = (hex: string, dark = false): Rgb | null =>
@@ -96,6 +105,17 @@ const tsSubjectSurface = (hex: string, dark = false): Rgb | null =>
 /** `subjectContent(hex, dark)` : l'encre matière du thème demandé. */
 const tsSubjectContent = (hex: string, dark = false): Rgb | null =>
   tsTintHex(hex, dark ? SUBJECT_CONTENT_DARK_TINT : SUBJECT_CONTENT_LIGHT_TINT);
+
+/**
+ * `subjectCardTint(hex)` : le fond du carrousel, matière à 8 % PAR-DESSUS le
+ * fond de l'écran.
+ *
+ * Ce n'est pas un pas : c'est une composition. Donc pas de variante sombre — la
+ * référence écrit le `'15'` en dur, hors de tout `theme.dark`, et c'est
+ * `over()` qu'il faut pour mesurer ce que le moteur rend.
+ */
+const tsSubjectCardTint = (hex: string, page: Rgb): Rgb =>
+  over(hex8(hex), page, SUBJECT_CARD_ALPHA);
 
 function tsLuminance(color: Rgb): number {
   const linear = (v: number): number => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
@@ -476,6 +496,11 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     }
     expect(kt).toContain("tint(hex, if (dark) SUBJECT_SURFACE_DARK_TINT else SUBJECT_SURFACE_TINT)");
     expect(kt).toContain("tint(hex, if (dark) SUBJECT_CONTENT_DARK_TINT else SUBJECT_CONTENT_LIGHT_TINT)");
+    // #192 : l'opacité du fond du carrousel. Le `'15'` de la référence est lu
+    // comme un OCTET — 21/255 — et non comme « 15 % », qui vaudrait 0x33.
+    expect(kt).toContain("const val SUBJECT_CARD_ALPHA = 21f / 255f");
+    expect(kt).toContain("fun subjectCardTint(hex: String): Color? =\n    papillonColor(hex)?.copy(alpha = SUBJECT_CARD_ALPHA)");
+    expect({ alpha: Math.round(SUBJECT_CARD_ALPHA * 255) }).toEqual({ alpha: 0x15 });
     expect(kt).toContain("const val PapillonSecondaryAlpha = 0.65f");
     // Scheme : les deux modes, plus `MaterialTheme` complet (typo + formes).
     expect(kt).toContain("lightColorScheme(");
@@ -694,8 +719,16 @@ describe("unit android contraste (#146) — encre de texte, clair ET sombre", ()
         const pillSurface = tsTint(raw, dark ? SUBJECT_SURFACE_DARK_TINT : SUBJECT_SURFACE_TINT);
         const pillInk = tsTint(raw, dark ? SUBJECT_CONTENT_DARK_TINT : SUBJECT_CONTENT_LIGHT_TINT);
         const page = dark ? DARK_BACKGROUND : SURFACE;
+        // #192 : le fond du carrousel de l'onglet Notes, matière à 21/255
+        // par-dessus le fond de l'écran. Il y est mesuré AVEC l'encre qui y
+        // porte du texte (le nom de la matière, le libellé de l'évaluation, la
+        // note), donc il doit passer AA dans les DEUX thèmes — sinon la mesure
+        // « subjectContent/subjectSurface » ne couvrirait plus l'écran où
+        // l'encre est réellement posée.
+        const carousel = tsSubjectCardTint(h, page);
         const cases: Array<[string, number]> = [
           ["subjectContent/subjectSurface", tsContrast(content, surface)],
+          ["subjectContent/fond du carrousel", tsContrast(content, carousel)],
           ["PapPill encre/fond", tsContrast(pillInk, pillSurface)],
           ["bestContentOn/pastille", tsContrast(tsBestContentOn(pillSurface), pillSurface)],
           ["bestContentOn/surface (carte annulée)", tsContrast(tsBestContentOn(page), page)],

@@ -869,8 +869,13 @@ const VARIANTES: Record<string, Variante> = {
   // `GradesNothingToShow` (« aucune note publiée ») et le cache vide (« Aucune
   // note en cache »). C'est ce qui manquait — la capture hors ligne échouait sur
   // « Moyennes par matière », qui ne sort qu'avec des notes.
+  //
+  // #192 : l'état PLEIN ne cite plus « Moyennes par matière » — ce titre a été
+  // retiré de l'écran, puisque chaque matière est déjà un `heading()`. Il cite
+  // « Nouvelles notes », que #192 a délibérément GARDÉ (pour le survol TalkBack)
+  // et qui ne sort donc lui aussi qu'avec des notes.
   grades: {
-    plein: ["Moyennes par matière", "Nouvelles notes", "Matière ou évaluation"],
+    plein: ["Nouvelles notes", "Matière ou évaluation"],
     vide: ["Aucune note sur cette période", "L'établissement n'a publié aucune note ici.", "Actualiser"],
     // #172 : la ligne FIXE de l'onglet Notes dans sa branche d'erreur, devant le
     // « Réessayer » que sept écrans partagent. Sans elle, la route n'était pas
@@ -1057,7 +1062,7 @@ describe("le témoin d'écran ne dépend pas de la donnée (#166)", () => {
       aucuneNotePubliee: fragments.includes("Aucune note sur cette période"),
       rechercheSansResultat: fragments.includes("Aucune note trouvée"),
       // Et le libellé de donnée reste, pour l'état plein.
-      avecDonnees: fragments.includes("Moyennes par matière"),
+      avecDonnees: fragments.includes("Nouvelles notes"),
     }).toEqual({
       cacheVide: true,
       aucuneNotePubliee: true,
