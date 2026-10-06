@@ -20,7 +20,7 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 | Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (31 routes, 7 types d'événements) |
 | Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, assistant de connexion en 3 étapes (serveur → établissement → QR scanné + PIN), SSE, aide devoirs |
 | Point d'entrée HTTP serveur (`make runServer`, Docker) | Câblé : setup (QR de l'app) → session Pronote → reader → snapshot → routes, ports d'écriture inclus. **Zéro credential serveur** |
-| Garde-fous sécurité (I1–I8) + tests | 786 tests verts dans `make check`, scan d'architecture et de secrets en CI locale |
+| Garde-fous sécurité (I1–I8) + tests | 790 tests verts dans `make check`, scan d'architecture et de secrets en CI locale |
 | Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'établissement = **vide propre** |
 
 ## Fonctionnalités
@@ -222,7 +222,7 @@ make integration-api        # API locale, zéro secret
 make build                  # image Docker + rappel APK
 ```
 
-786 tests dans `make check`, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
+790 tests dans `make check`, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
 La CI locale est `make check` : un changement qui casse un invariant est bloquant, même si
 fonctionnellement il passe.
 
@@ -232,6 +232,18 @@ vérifiée »), jamais un faux vert. Prérequis et installation : `android/READM
 
 ## Limitations connues
 
+- **Police** : l'app compose en **Figtree** (SIL OFL 1.1, sous-ensemble Latin
+  embarqué, 39,7 Ko), pas en SN Pro — la police de l'application de référence,
+  non redistribuable hors interface Apple. Figtree a été choisie parce que ses
+  largeurs d'avance sont les plus proches de celles de SN Pro parmi les polices
+  libres : 1,16 % d'écart moyen et 2,88 % au pire sur des chaînes d'interface
+  aux graisses 400/600/700, contre 2,12 % / 5,70 % pour Roboto. Le texte ne
+  sera donc jamais aligné au pixel près sur la référence.
+- **Rayons de matière** : l'application de référence tire l'encre matière à
+  −15 % vers le noir, ce qui mesure 2,28:1 au pire de sa palette — sous le
+  WCAG AA pour du texte. Nous gardons −45 % (4,87:1 au pire). Idem pour le gris
+  secondaire, composé à 53 % d'opacité chez la référence (3,32:1) contre 65 %
+  ici (4,76:1). Le contraste l'emporte sur la copie, par choix.
 - Le serveur démarre TOUJOURS vide : lectures vides et écritures en 501 plutôt qu'un `200`
   mensonger. La session et son QR vivent en mémoire, jamais sur disque — donc un redémarrage les
   perd, et l'app doit refaire son setup.
