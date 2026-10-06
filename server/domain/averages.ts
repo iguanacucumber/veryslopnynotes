@@ -215,6 +215,28 @@ export interface ProvidedAverages {
   readonly subjects?: Readonly<Record<string, number>>;
 }
 
+/**
+ * Les fournies PAR PÉRIODE (clé = `periodId` de `/v1/periods`). Pronote ne
+ * publie un bulletin que par période : une période absente de la table = l'établissement
+ * ne publie rien dessus, donc l'estimation prend le relais (jamais une moyenne
+ * d'année inventée à partir d'un trimestre).
+ */
+export type ProvidedAveragesByPeriod = Readonly<Record<string, ProvidedAverages>>;
+
+/**
+ * Les fournies du périmètre demandé, `null` sinon (estimation). Clé lue par
+ * `Object.hasOwn` : le `periodId` vient de l'URL, donc `__proto__` ne doit
+ * JAMAIS résoudre via `Object.prototype` (même garde que `discussionMessages`).
+ */
+export function providedAveragesFor(
+  byPeriod: ProvidedAveragesByPeriod | null | undefined,
+  periodId: string | null | undefined,
+): ProvidedAverages | null {
+  const key = (periodId ?? "").trim();
+  if (!byPeriod || key === "") return null;
+  return Object.hasOwn(byPeriod, key) ? (byPeriod[key] ?? null) : null;
+}
+
 /** Les fournies ne servent que si leur périmètre == celui demandé. */
 function providedFor(options: ComputeAveragesOptions): ProvidedAverages | null {
   const provided = options.provided ?? null;
