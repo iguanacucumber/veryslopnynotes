@@ -263,6 +263,34 @@ fun subjectSurface(hex: String, dark: Boolean): Color? =
 fun subjectContent(hex: String, dark: Boolean): Color? =
     tint(hex, if (dark) SUBJECT_CONTENT_DARK_TINT else SUBJECT_CONTENT_LIGHT_TINT)
 
+/**
+ * Opacité du fond d'une carte matière dans le CARROUSEL de l'onglet Notes :
+ * `21/255`, soit le `'15'` que la référence concatène à la couleur de la matière
+ * (`ui/new/CompactGrade.tsx`, branche Android).
+ *
+ * #192 : c'est un ALPHA, pas un pas vers le blanc. Notre [SUBJECT_SURFACE_TINT]
+ * (75 % vers le blanc) donne un aplat opaque — donc la teinte est diluée dans du
+ * blanc et la carte « brille » — tandis qu'à 8 % la matière se transparaît sur le
+ * fond de l'écran et la couleur se lit comme une TEINTE, pas comme une couleur.
+ * Les deux ne se ressemblent pas, et la référence est nette : c'est un aplat
+ * translucide posé sur le fond, pas un pastel calculé.
+ *
+ * 0x15 = 21, donc 21/255 = 0,0824 — le même nombre des deux côtés de l'octet,
+ * contrairement à la convention « FF = 100 % » du suffixe hexadécimal.
+ */
+const val SUBJECT_CARD_ALPHA = 21f / 255f
+
+/**
+ * Fond translucide d'une carte matière du carrousel.
+ *
+ * Pas de variante sombre, et c'est VOLONTAIRE : la référence n'en pose pas (le
+ * `'15'` est écrit en dur, hors de tout `theme.dark`). La couleur est rendue avec
+ * son alpha, donc elle se compose sur le fond de l'écran — le même fond dans les
+ * deux thèmes.
+ */
+fun subjectCardTint(hex: String): Color? =
+    papillonColor(hex)?.copy(alpha = SUBJECT_CARD_ALPHA)
+
 /** Raccourci `@Composable` des deux : le mode se LIT dans le thème
  *  ([isDarkSurface]) au lieu d'être câblé deux fois par l'appelant, donc une
  *  encre de matière ne peut pas être choisie pour le mauvais thème. */

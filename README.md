@@ -20,7 +20,7 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 | Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (31 routes, 7 types d'événements) |
 | Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, assistant de connexion en 3 étapes (serveur → établissement → QR scanné + PIN), SSE, aide devoirs |
 | Point d'entrée HTTP serveur (`make runServer`, Docker) | Câblé : setup (QR de l'app) → session Pronote → reader → snapshot → routes, ports d'écriture inclus. **Zéro credential serveur** |
-| Garde-fous sécurité (I1–I8) + tests | 792 tests verts dans `make check`, scan d'architecture et de secrets en CI locale |
+| Garde-fous sécurité (I1–I8) + tests | 795 tests verts dans `make check`, scan d'architecture et de secrets en CI locale |
 | Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'établissement = **vide propre** |
 
 ## Fonctionnalités
@@ -222,7 +222,7 @@ make integration-api        # API locale, zéro secret
 make build                  # image Docker + rappel APK
 ```
 
-792 tests dans `make check`, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
+795 tests dans `make check`, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
 La CI locale est `make check` : un changement qui casse un invariant est bloquant, même si
 fonctionnellement il passe.
 
@@ -244,6 +244,23 @@ vérifiée »), jamais un faux vert. Prérequis et installation : `android/READM
   WCAG AA pour du texte. Nous gardons −45 % (4,87:1 au pire). Idem pour le gris
   secondaire, composé à 53 % d'opacité chez la référence (3,32:1) contre 65 %
   ici (4,76:1). Le contraste l'emporte sur la copie, par choix.
+- **Données de note que la référence ne rend pas** : son type `Grade` n'a ni
+  coefficient, ni bonus, ni facultatif, ni enseignant, ni moyenne de classe — donc
+  sa ligne de note n'affiche rien de tout cela. Nous l'avons au contrat et c'est
+  utile à une moyenne : la ligne garde ces deux lignes. Les retirer alignerait le
+  pixel en supprimant une feature.
+- **Recherche dans le corps, pas dans la barre** : la référence utilise la
+  SearchBar **native** d'expo-router, qui n'écrit ni hauteur, ni rayon, ni typo
+  (tout est fourni par la plateforme). Il n'y a donc aucun jeton à recopier, et la
+  poser dans notre barre serait une feature de plus.
+- **Titre « Nouvelles notes »** : la référence rend son carrousel sans titre. On le
+  garde, parce qu'il est le seul point d'entrée du carrousel dans le menu
+  « titres » de TalkBack. Le titre « Moyennes par matière », lui, a été retiré :
+  il ne nommait rien que les en-têtes de matière ne nomment déjà.
+- **Ombres de carte** : la référence pose `elevation: 1` sur ses rangées, valeur
+  qui n'a d'effet qu'iOS et n'y dessine rien. Sur les cartes de l'onglet Notes
+  nous ne posons donc **ni ombre ni bordure** : une ombre qui n'existe pas sur la
+  plateforme visée serait un écart, pas une fidélité.
 - Le serveur démarre TOUJOURS vide : lectures vides et écritures en 501 plutôt qu'un `200`
   mensonger. La session et son QR vivent en mémoire, jamais sur disque — donc un redémarrage les
   perd, et l'app doit refaire son setup.
