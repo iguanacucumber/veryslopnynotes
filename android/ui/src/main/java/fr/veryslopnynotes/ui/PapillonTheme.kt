@@ -10,9 +10,12 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.absoluteValue
@@ -24,16 +27,62 @@ import kotlin.math.pow
 // défaut, et `MaterialTheme` ne recevait ni `typography` ni `shapes` : tout le
 // texte valait 14 sp, donc aucune hiérarchie visuelle.
 //
-// Police : SN Pro est le clone SF Pro d'Apple, absent d'Android. Roboto —
-// `FontFamily.SansSerif`, la police système d'Android — est l'équivalent le plus
-// proche côté Android, donc AUCUN fichier de police n'est embarqué (zéro
-// dépendance ajoutée, poids d'APK inchangé). Upgrade: embarquer SN Pro si sa
-// licence le permet un jour.
+// #188 : les valeurs sont désormais relevées sur la SOURCE de l'application de
+// référence (v8.5.5, GPL-3.0, lue hors dépôt et jamais copiée) au lieu d'être
+// estimées à l'œil sur le site. Ce qui change : l'échelle typographique et les
+// rayons (cf. [PapillonTypography] et [PapillonShapes]), et la police.
+//
+// Police : Papillon compose en SN Pro, le clone SF Pro d'Apple. SN Pro n'est
+// pas redistribuable hors interface Apple — on ne l'embarque donc pas, et on ne
+// copie pas un octet de ses fichiers, y compris pour mesurer. À la place, on
+// embarque FIGTREE (SIL OFL 1.1), choisie parce que ses largeurs d'avance sont
+// les plus proches de celles de SN Pro : 1.16 % d'écart moyen et 2.88 % au pire
+// sur des chaînes d'interface, aux graisses 400/600/700, contre 2.12 % / 5.70 %
+// pour Roboto (la police système d'Android, précédente). Le pire cas de Roboto
+// tombait sur les chaînes de chiffres — l'EDT est un écran de chiffres.
+// Licence dans `res/raw/figtree_ofl.txt`, embarquée dans l'APK (une licence
+// laissée dans `docs/` n'est pas livrée à l'utilisateur de l'app).
 //
 // ponytail: un jeton = une constante, pas une arborescence de rôles. Pas de
 // Dynamic Color — le vert Papillon EST l'identité, et `dynamicLightColorScheme`
 // le remplacerait par la couleur du fond d'écran. Pas de thème par matière non
 // plus : la couleur matière passe par `subjectSurface` / `subjectContent`.
+
+// --- Police ------------------------------------------------------------------
+
+/**
+ * Figtree, variable 300→900, sous-ensemble Latin + accents français (39,7 Ko,
+ * 291 glyphes).
+ *
+ * Un seul fichier pour cinq graisses : l'axe `wght` est piloté par
+ * [FontVariation], donc pas cinq `Font` à embarquer. Papillon utilise les
+ * graisses light/regular/medium/semibold/bold de SN Pro — les mêmes cinq.
+ *
+ * `FontVariation` n'est pris en compte qu'à partir d'API 26, ce qui est
+ * exactement notre `minSdk`.
+ */
+private val FIGTREE_ID = R.font.figtree_subset
+
+// `FontVariation` est marquée `@ExperimentalTextApi` : c'est le seul endroit
+// qui l'utilise, donc l'opt-in est posé ICI plutôt qu'au niveau du fichier, et
+// il est retiré en même temps que l'axe variable.
+@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+private fun figtree(weight: Int) =
+    Font(
+        resId = FIGTREE_ID,
+        weight = FontWeight(weight),
+        variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
+    )
+
+/** Les cinq graisses de SN Pro, dans l'ordre où l'application de référence les
+ *  déclare (`WEIGHTS = ["light", "regular", "medium", "semibold", "bold"]`). */
+val PapillonFont = FontFamily(
+    figtree(300),
+    figtree(400),
+    figtree(500),
+    figtree(600),
+    figtree(700),
+)
 
 // --- Couleurs de marque -----------------------------------------------------
 
@@ -290,13 +339,24 @@ fun errorTextColor(): Color = errorInk(MaterialTheme.colorScheme.error, isDarkSu
 
 // --- Formes ----------------------------------------------------------------
 
-/** 8 / 12 / 18 / 20 dp, puis 25 dp : le rayon des cartes de Papillon. */
+/**
+ * Les CINQ rayons de l'application de référence (v8.5.5), relevés sur ses
+ * composants : 8 dp sur le bloc de cours et la bordure fine, 12 dp sur la
+ * feuille d'erreur, 16 dp sur les champs de saisie et les menus d'action,
+ * 20 dp sur les puces et pastilles de matière, 24 dp sur les cartes — la carte
+ * de moyenne et la vignette de note, donc la surface la plus vue de l'app.
+ *
+ * AVANT #188 : 8 / 12 / 18 / 20 / 25. Le 18 et le 25 n'existent pas chez
+ * Papillon, et sa carte de moyenne est à 24, pas 25 : les deux cartes les plus
+ * vues de l'application rendaient donc un rayon qu'aucun écran de référence ne
+ * montre.
+ */
 val PapillonShapes = papillonShapes(
     extraSmall = 8.dp,
     small = 12.dp,
-    medium = 18.dp,
+    medium = 16.dp,
     large = 20.dp,
-    extraLarge = 25.dp,
+    extraLarge = 24.dp,
 )
 
 private fun papillonShapes(
@@ -316,40 +376,68 @@ private fun papillonShapes(
 // --- Typographie ------------------------------------------------------------
 
 /**
- * Échelle Papillon portée sur Compose : titres en gras, interligne 1.2x pour
- * display/title/headline et 1.4x pour le corps.
+ * Interlettrage du `caption` de la référence, en sp : la seule valeur qu'elle
+ * porte en `letterSpacing`. Déclarée AVANT [PapillonTypography] parce que
+ * Kotlin n'initialise un `val` de fichier que dans l'ordre de lecture — la
+ * reprendre plus bas donnerait « must be initialized ».
+ */
+private val CAPTION_TRACKING = 0.1.sp
+
+/**
+ * Échelle typographique relevée sur `ui/new/Typography.tsx` de
+ * l'application de référence (v8.5.5) : onze variantes nommées
+ * (`h1`…`h5`, `title`, `action`, `body1`, `body2`, `caption`, `header`), dont
+ * on mappe chacune sur un rôle Material3.
  *
- * `bodyMedium` reste à 14 sp : c'est le style par défaut de `MaterialTheme`, donc
- * le texte non stylé ne bouge pas. Les écrans gagnent leur hiérarchie en
- * passant explicitement à `titleMedium` / `bodyLarge`, écran par écran.
+ * L'interligne de la référence est un pourcentage de la taille ; il est
+ * calculé ici et figé (`34 → 41`, soit 120 %). Les valeurs de la référence :
+ * `34/28/24` à 120 %, `21/19/18` à 130 %, `17/15/14/13` à 140 %, le `caption`
+ * portant en plus 0,1 sp d'interlettrage — d'où [CAPTION_TRACKING].
+ *
+ * Deux écarts assumés : `bodyMedium` reste à 14 sp (style par défaut de
+ * `MaterialTheme`, donc le texte non stylé ne bouge pas de taille) et `title`
+ * vaut 18 sp sur Android, pas 17 — la référence elle-même fait cette
+ * différence de plateforme, on garde sa valeur Android.
  */
 val PapillonTypography = Typography(
+    // h1 / h2 / h3, gras, interligne 120 %.
     displayLarge = papillonText(34, 41, FontWeight.Bold),
     displayMedium = papillonText(28, 34, FontWeight.Bold),
     displaySmall = papillonText(24, 29, FontWeight.Bold),
-    headlineLarge = papillonText(22, 27, FontWeight.Bold),
-    headlineMedium = papillonText(20, 24, FontWeight.Bold),
-    headlineSmall = papillonText(18, 22, FontWeight.Bold),
-    // 18 sp gras : le titre de la barre d'application, donc le texte le plus
-    // visible de l'échelle tant qu'aucun écran n'a stylé le sien.
-    titleLarge = papillonText(18, 22, FontWeight.Bold),
-    titleMedium = papillonText(16, 22, FontWeight.Bold),
-    titleSmall = papillonText(14, 19, FontWeight.Bold),
-    bodyLarge = papillonText(15, 21),
-    bodyMedium = papillonText(14, 20),
-    bodySmall = papillonText(13, 18),
-    labelLarge = papillonText(14, 18, FontWeight.Medium),
-    labelMedium = papillonText(13, 17, FontWeight.Medium),
-    labelSmall = papillonText(13, 17),
+    // h4 / h5, gras, interligne 130 %.
+    headlineLarge = papillonText(21, 27, FontWeight.Bold),
+    headlineMedium = papillonText(19, 25, FontWeight.Bold),
+    // `title` de la référence : 18 sp sur Android, gras, 130 %. C'est le titre
+    // de la barre d'application, donc le texte le plus visible de l'échelle.
+    headlineSmall = papillonText(18, 23, FontWeight.Bold),
+    titleLarge = papillonText(18, 23, FontWeight.Bold),
+    // `action` : 17 sp medium, 140 %.
+    titleMedium = papillonText(17, 24, FontWeight.Medium),
+    // `body2` : 14 sp medium, 140 % — le corps le plus lu.
+    titleSmall = papillonText(14, 20, FontWeight.Medium),
+    // `body1` : 15 sp, SEMIBOLD sur Android (medium sur iOS), 140 %. On garde
+    // la valeur Android, donc `bodyLarge` est le seul gras du corps.
+    bodyLarge = papillonText(15, 21, FontWeight.SemiBold),
+    bodyMedium = papillonText(14, 20, FontWeight.Medium),
+    // `caption` : 13 sp medium, 140 %, + 0,1 sp d'interlettrage.
+    bodySmall = papillonText(13, 18, FontWeight.Medium, CAPTION_TRACKING),
+    labelLarge = papillonText(17, 24, FontWeight.Medium),
+    labelMedium = papillonText(13, 18, FontWeight.Medium, CAPTION_TRACKING),
+    labelSmall = papillonText(13, 18, FontWeight.Medium, CAPTION_TRACKING),
 )
 
-private fun papillonText(size: Int, lineHeight: Int, weight: FontWeight = FontWeight.Normal): TextStyle =
-    TextStyle(
-        fontFamily = FontFamily.SansSerif,
-        fontSize = size.sp,
-        lineHeight = lineHeight.sp,
-        fontWeight = weight,
-    )
+private fun papillonText(
+    size: Int,
+    lineHeight: Int,
+    weight: FontWeight = FontWeight.Normal,
+    tracking: TextUnit = TextUnit.Unspecified,
+): TextStyle = TextStyle(
+    fontFamily = PapillonFont,
+    fontSize = size.sp,
+    lineHeight = lineHeight.sp,
+    fontWeight = weight,
+    letterSpacing = tracking,
+)
 
 // --- Schemes ---------------------------------------------------------------
 
