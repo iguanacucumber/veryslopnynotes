@@ -1,3 +1,44 @@
+// Lecteur de la table `name` d'une police TrueType, sans dépendance.
+//
+// #188 : la preuve « la police embarquée EST un Figtree » ne peut pas passer par
+// un `toContain` sur le fichier en latin1 — les noms y sont en UTF-16BE, donc
+// une recherche ASCII ne trouve RIEN et le test validerait n'importe quel
+// fichier. On parse donc le répertoire SFNT puis la table `name` (nameID 1 = nom
+// de famille). Un fichier invalide lève : une police qu'on ne sait pas lire
+// n'est pas une preuve.
+function readSfntNames(bytes: Buffer): Map<number, string> {
+  const u16 = (off: number): number => bytes.readUInt16BE(off);
+  const u32 = (off: number): number => bytes.readUInt32BE(off);
+  const numTables = u16(4);
+  let nameOff = -1;
+  for (let i = 0; i < numTables; i++) {
+    const rec = 12 + i * 16;
+    if (bytes.toString("latin1", rec, rec + 4) === "name") {
+      nameOff = u32(rec + 8);
+      break;
+    }
+  }
+  if (nameOff < 0) throw new Error("pas de table `name` : ce n'est pas une police lisible");
+  const count = u16(nameOff + 2);
+  const strBase = nameOff + u16(nameOff + 4);
+  const out = new Map<number, string>();
+  for (let i = 0; i < count; i++) {
+    const rec = nameOff + 6 + i * 12;
+    const platformID = u16(rec);
+    const nameID = u16(rec + 6);
+    const len = u16(rec + 8);
+    const off = strBase + u16(rec + 10);
+    // platformID 3 (Windows) et 0 (Unicode) sont en UTF-16BE ; platformID 1
+    // (Macintosh) est en ASCII/MacRoman — lisible en latin1.
+    const raw = bytes.subarray(off, off + len);
+    const value = platformID === 1 ? raw.toString("latin1") : raw.swap16().toString("utf16le");
+    // Premier arrivé gagne pour un nameID : la référence déclare la même famille
+    // sur plusieurs plateformes, une seule suffit.
+    if (!out.has(nameID)) out.set(nameID, value.replaceAll("\0", ""));
+  }
+  return out;
+}
+
 // Miroir TS de la logique pure de PapillonTheme.kt — `tint` (l'`adjustColor` de
 // papillon.bzh), `subjectSurface`/`subjectContent`, luminance et rapport de
 // contraste WCAG, `bestContentOn`. Les couleurs sont des `Color(0xAARRGGBB)`
@@ -12,7 +53,7 @@
 // un `Color(0x...)` mal typé. Upgrade: golden test Gradle (testDebugUnitTest)
 // si le miroir devient un poids.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const UI = join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui");
@@ -367,14 +408,43 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     ]) {
       expect({ hex, found: kt.includes(hex) }).toEqual({ hex, found: true });
     }
-    // Formes : 25 dp, la signature Papillon.
-    expect(kt).toContain("extraLarge = 25.dp");
-    // Typographie : 18 sp gras pour le titre, Roboto par le défaut système.
-    expect(kt).toContain("titleLarge = papillonText(18, 22, FontWeight.Bold)");
-    expect(kt).toContain("bodyLarge = papillonText(15, 21)");
-    expect(kt).toContain("bodyMedium = papillonText(14, 20)");
-    expect(kt).toContain("labelSmall = papillonText(13, 17)");
-    expect(kt).toContain("fontFamily = FontFamily.SansSerif");
+    // #188 : les CINQ rayons, relevés sur la source de la référence (v8.5.5).
+    // AVANT : 8 / 12 / 18 / 20 / 25 — le 18 et le 25 n'existent pas chez
+    // Papillon, dont la carte de moyenne est à 24.
+    for (const radius of ["extraSmall = 8.dp", "small = 12.dp", "medium = 16.dp", "large = 20.dp", "extraLarge = 24.dp"]) {
+      expect({ radius, found: kt.includes(radius) }).toEqual({ radius, found: true });
+    }
+    expect(kt).not.toContain("25.dp");
+    expect(kt).not.toContain("18.dp");
+    // #188 : l'échelle typographique relevée sur `ui/new/Typography.tsx`.
+    // Interlignes = pourcentage de la taille, calculé et figé. `title` vaut
+    // 18 sp sur Android dans la référence elle-même (17 sur iOS) : on garde
+    // Android. `body1` est SEMIBOLD sur Android, medium sur iOS.
+    for (const style of [
+      "displayLarge = papillonText(34, 41, FontWeight.Bold)",
+      "displayMedium = papillonText(28, 34, FontWeight.Bold)",
+      "displaySmall = papillonText(24, 29, FontWeight.Bold)",
+      "headlineLarge = papillonText(21, 27, FontWeight.Bold)",
+      "headlineMedium = papillonText(19, 25, FontWeight.Bold)",
+      "headlineSmall = papillonText(18, 23, FontWeight.Bold)",
+      "titleLarge = papillonText(18, 23, FontWeight.Bold)",
+      "titleMedium = papillonText(17, 24, FontWeight.Medium)",
+      "titleSmall = papillonText(14, 20, FontWeight.Medium)",
+      "bodyLarge = papillonText(15, 21, FontWeight.SemiBold)",
+      "bodyMedium = papillonText(14, 20, FontWeight.Medium)",
+      "bodySmall = papillonText(13, 18, FontWeight.Medium, CAPTION_TRACKING)",
+      "labelLarge = papillonText(17, 24, FontWeight.Medium)",
+    ]) {
+      expect({ style, found: kt.includes(style) }).toEqual({ style, found: true });
+    }
+    // `caption` : + 0,1 sp d'interlettrage, la seule valeur que la référence
+    // porte en `letterSpacing`.
+    expect(kt).toContain("private val CAPTION_TRACKING = 0.1.sp");
+    // Police : Figtree variable, PAS Roboto. `FontFamily.SansSerif` revenu ici
+    // remettrait la police système d'Android sans qu'aucun test ne le voie.
+    expect(kt).toContain("private val FIGTREE_ID = R.font.figtree_subset");
+    expect(kt).toContain("fontFamily = PapillonFont");
+    expect(kt).not.toContain("FontFamily.SansSerif");
     // Helpers purs : signatures attendues par le miroir ci-dessus. `#179` : les
     // deux fonctions de matière portent le thème EN PARAMÈTRE (donc testables
     // sans Compose) et un raccourci `@Composable` qui le LIT dans le thème.
@@ -444,11 +514,9 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     const week = readCode(join(UI, "TimetableWeek.kt"));
     expect(week).not.toContain("Color.LightGray");
     expect(week).toContain("MaterialTheme.colorScheme.onSurfaceVariant");
-    // ZÉRO dépendance ajoutée, et pas de fichier de police embarqué : la liste des
-    // modules Gradle est FIGÉE (pas de « material3 reste le seul material » :
-    // n'importe quelle ligne ajoutée fait échouer cette égalité). Roboto vient
-    // de `FontFamily.SansSerif`, donc le dossier de ressources ne gagne aucun
-    // .ttf/.otf.
+    // ZÉRO dépendance ajoutée : la liste des modules Gradle est FIGÉE (pas de
+    // « material3 reste le seul material » : n'importe quelle ligne ajoutée fait
+    // échouer cette égalité).
     const uiGradle = readFileSync(join(import.meta.dir, "..", "..", "android/ui/build.gradle.kts"), "utf8");
     expect([...uiGradle.matchAll(/(?:implementation|api|platform)\("([^"]+)"\)/g)].map((m) => m[1]!).sort()).toEqual([
       "androidx.activity:activity-compose:1.9.2",
@@ -475,6 +543,54 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     expect(kt).toContain("const val ERROR_INK_TINT = 0.70f");
     expect(kt).toContain("fun errorInk(error: Color, dark: Boolean): Color = if (dark) tint(error, ERROR_INK_TINT) else error");
     expect(kt).toContain("fun errorTextColor(): Color = errorInk(MaterialTheme.colorScheme.error, isDarkSurface())");
+  });
+
+  // #188 : la police embarquée. Ce que ce test PROUVE, sans téléphone : le
+  // sous-ensemble existe, il est un FIGTREE (et pas un SN Pro volé, ni un
+  // Roboto renommé), sa licence OFL l'accompagne dans l'APK, et il reste sous
+  // le plafond de poids posé dans l'issue. Un fichier ré-extrait complet
+  // (600 Ko, dix fois le poids) fait échouer le plafond.
+  test("police embarquée : sous-ensemble Figtree, licence embarquée, poids plafonné", () => {
+    const resFont = join(UI, "..", "..", "..", "..", "res", "font");
+    const fontPath = join(resFont, "figtree_subset.ttf");
+    const bytes = readFileSync(fontPath);
+    // Signature TrueType 0x00010000, ou 'true' si le fichier commence par un
+    // glyphe hors format 4.0. Un fichier texte ne passerait pas.
+    const magic = bytes.readUInt32BE(0);
+    expect([0x00010000, 0x74727565]).toContain(magic);
+    // Plafond 60 Ko : le sous-ensemble mesuré fait 39,7 Ko (291 glyphes). Le
+    // fichier variable complet fait 61 Ko et le statique 200 Ko+, donc ce
+    // plafond attrape « on a oublié de sous-ensemble ».
+    expect({ ko: Math.round(bytes.byteLength / 1024) }).toEqual({ ko: expect.any(Number) });
+    expect(bytes.byteLength).toBeLessThan(60 * 1024);
+    // Figtree, pas SN Pro : le nom de famille est DANS le fichier, table `name`.
+    // Elle est en UTF-16BE (platformID 3, Windows) — un `toContain` sur du latin1
+    // ne verrait RIEN, donc le test passerait sur n'importe quelle police. On
+    // lit donc la table `name` pour de bon : c'est le seul moyen que ce test
+    // prouve autre chose que « le fichier existe ».
+    const names = readSfntNames(bytes);
+    expect({ family: names.get(1) }).toEqual({ family: expect.stringContaining("Figtree") });
+    expect({ typographicFamily: names.get(16) }).toEqual({ typographicFamily: "Figtree" });
+    expect({ copyright: names.get(0) }).toEqual({ copyright: expect.stringContaining("Figtree Project Authors") });
+    // Un fichier SN Pro (ou n'importe quelle police de la référence) ne doit
+    // JAMAIS entrer dans le dépôt : il n'est pas redistribuable. On regarde les
+    // NOMS DÉCLARÉS, pas les octets bruts — un glyphe peut contenir la suite de
+    // lettres « SFPro » par hasard.
+    const declared = [...names.values()].join(" ");
+    for (const forbidden of ["SNPro", "SN Pro", "SF Pro", "SFPro", "Papicons", "FigtreePro"]) {
+      expect({ forbidden, present: declared.includes(forbidden) }).toEqual({ forbidden, present: false });
+    }
+    // Licence : SIL OFL 1.1, dans les ressources RAW donc embarquée dans l'APK
+    // (une licence dans `docs/` n'est pas livrée à l'utilisateur de l'app).
+    const licence = readFileSync(join(resFont, "..", "raw", "figtree_ofl.txt"), "utf8");
+    expect(licence).toContain("SIL OPEN FONT LICENSE Version 1.1");
+    expect(licence).toContain("The Figtree Project Authors");
+    // Zéro .ttf/.otf ailleurs : un seul fichier de police, celui-là. Une police
+    // supplémentaire non justifiée ferait doublon de poids.
+    for (const dir of ["font"]) {
+      const files = readdirSync(join(UI, "..", "..", "..", "..", "res", dir));
+      expect({ dir, files: files.sort() }).toEqual({ dir, files: ["figtree_subset.ttf"] });
+    }
   });
 
   // #179 : les deux passers du pas de matière — la pastille (`PapPill`, qui
