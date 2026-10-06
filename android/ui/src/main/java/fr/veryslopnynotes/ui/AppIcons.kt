@@ -2,7 +2,6 @@ package fr.veryslopnynotes.ui
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.ui.graphics.vector.ImageVector
 
 // Icônes d'onglets #135.
@@ -26,9 +25,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 // onglet EST le logo, et `Icons.Filled.Star` pour « Notes » (étoile = favori)
 // ou `Icons.Filled.DateRange` pour les cours ne se ressemblent pas de ce que
 // Papillon pose. Un écart de ce niveau se voit d'un coup d'œil, donc il est
-// écrit : le CINQUIÈME onglet, Profil, garde `Icons.Filled.Person` parce que
-// Papillon n'a pas de 5e onglet (son profil est un avatar d'en-tête) et qu'il
-// n'y a donc rien à relever.
+// écrit : avant #190 il y avait un CINQUIÈME onglet, Profil, en `Person` du
+// CORE faute de glyphe de référence — la barre montrait alors un onglet de
+// plus que la référence, qui n'en a que quatre (son profil est un avatar
+// d'en-tête). L'écart a disparu avec sa cause : `tabIcon` ne couvre plus que
+// les quatre routes d'onglet, chacune avec son glyphe relevé.
 //
 // ponytail: `Icons.Filled.*` du CORE (49 icônes) pour ce qui n'a pas de
 // glyphe de référence, et quatre `ImageVector` écrits à la main pour le reste —
@@ -50,10 +51,12 @@ fun tabIcon(route: String): ImageVector = when (route) {
     ROUTE_CALENDAR -> PapillonTabCours
     ROUTE_TASKS -> PapillonTabTaches
     ROUTE_GRADES -> PapillonTabNotes
-    // ÉCART ÉCRIT : Papillon n'a pas de 5e onglet — son profil est un avatar
-    // dans l'en-tête. Il n'y a donc aucun glyphe à relever ici, et `Person` du
-    // CORE reste le meilleur glyphe disponible (cf. le KDoc du fichier).
-    ROUTE_PROFILE -> Icons.Filled.Person
+    // #190 : plus de 5e onglet. Avant, `ROUTE_PROFILE` tombait ici et
+    // renvoyait `Person` du CORE, faute de glyphe de référence à relever —
+    // un écart écrit parce que la barre montrait un onglet de plus que la
+    // référence. Profil étant devenu une route secondaire, ce cas n'existe
+    // plus : les quatre onglets ont tous leur glyphe relevé, et l'écart
+    // disparaît avec sa cause.
     else -> Icons.Filled.Info
 }
 

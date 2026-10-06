@@ -79,6 +79,9 @@ import fr.veryslopnynotes.data.SyncedRepository
  * @param refreshTick compteur de relecture venu de la barre du haut (#162) :
  *   l'action « Actualiser » de la barre rejoue le même effet qu'un `LaunchedEffect`
  *   neuf, donc la requête part sans que l'écran ait à exposer son `refresh()`.
+ * @param headerSlot case d'en-tête partagée avec la barre (#190) : c'est cet
+ *   écran qui publie son nom de période et son sélecteur. `null` = la barre
+ *   garde son titre statique, donc un appel qui l'omet continue de rendre.
  */
 @Composable
 fun GradesRoute(
@@ -87,6 +90,7 @@ fun GradesRoute(
     baseUrl: String,
     subjectPrefs: List<SubjectPrefs> = emptyList(),
     refreshTick: Int = 0,
+    headerSlot: PapHeaderSlot? = null,
 ) {
     // UNE horloge pour tout l'écran : les dates relatives (« il y a 4 jours »)
     // ne doivent pas changer d'une ligne à l'autre. Elle est relue à chaque
@@ -201,7 +205,19 @@ fun GradesRoute(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         GradesSearchField(query = query, onQueryChange = { query = it })
-        GradesPeriodChips(periods = periods, selectedId = periodId, onSelect = { periodId = it })
+        // #190 : le sélecteur de période est PUBLIE DANS LA BARRE DU HAUT, pas
+        // rendu ici — la référence y pose la période (titre + pastille à
+        // gauche). Les rendre aussi dans le corps, c'était le même contrôle
+        // deux fois sur le même écran. La fonction ne rend aucun `Column` :
+        // elle publie, donc elle est appelée AVANT tout le corps et son absence
+        // de rendu visible est la conséquence voulue.
+        GradesPeriodHeaderButton(
+            periods = periods,
+            selectedId = periodId,
+            onSelect = { periodId = it },
+            slot = headerSlot,
+            route = ROUTE_GRADES,
+        )
         val periodError = periodsError
         if (periodError != null) {
             // #162 : le message d'échec est rendu TEL QUEL. Le préfixe

@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,26 +55,34 @@ import androidx.compose.ui.text.style.TextOverflow
 private const val APP_NAME = "VerySlopyNyNotes"
 
 /**
- * Onglets dans l'ordre de Papillon : Accueil, EDT, Tâches, Notes, Profil.
- * #135 : avant, c'était Accueil, Calendrier, Notes, Tâches, Profil — Notes et
- * Tâches étaient inversés par rapport à papillon.bzh.
+ * Les QUATRE onglets de la référence (v8.5.5), dans son ordre : Accueil, Cours,
+ * Tâches, Notes.
+ *
+ * #190 : avant, cinq onglets dont Profil en 5e. La référence n'a pas de 5e
+ * onglet — son profil est un avatar d'en-tête et ses actualités sont une page
+ * liée depuis l'accueil — donc notre barre montrait un onglet de plus qu'elle
+ * et un onglet de trop : Profil, qui est devenu une destination de la barre
+ * du haut de l'accueil ([TOP_BAR_ACTIONS]).
  *
  * ponytail: une liste, pas un `Tab` avec un `when` par route : l'ordre se lit
  * d'un coup d'œil, et c'est le seul endroit à changer si un jour un onglet se
  * retire (capacité dynamique).
  */
-private val TAB_ROUTES = listOf(ROUTE_INDEX, ROUTE_CALENDAR, ROUTE_TASKS, ROUTE_GRADES, ROUTE_PROFILE)
+private val TAB_ROUTES = listOf(ROUTE_INDEX, ROUTE_CALENDAR, ROUTE_TASKS, ROUTE_GRADES)
 
 /**
  * Libellé d'un onglet — et nom annoncé de son icône : les deux viennent de la
  * MÊME fonction, ils ne peuvent donc pas diverger.
+ *
+ * #190 : « EDT » devient « Cours », le libellé exact de la référence
+ * (`Tab_Calendar`). « EDT » était une abréviation que nous avions choisie, pas
+ * une valeur relevée.
  */
 private fun tabLabel(route: String): String = when (route) {
     ROUTE_INDEX -> "Accueil"
-    ROUTE_CALENDAR -> "EDT"
+    ROUTE_CALENDAR -> "Cours"
     ROUTE_GRADES -> "Notes"
     ROUTE_TASKS -> "Tâches"
-    ROUTE_PROFILE -> "Profil"
     else -> route
 }
 
@@ -119,6 +128,67 @@ private sealed interface TopAction {
 }
 
 /**
+ * Ce que l'ÉCRAN demande à la barre du haut, publié par l'écran lui-même.
+ *
+ * #190 : la barre du haut était entièrement statique — une table `TOP_BARS` par
+ * route — donc elle ne pouvait pas afficher ce que la référence affiche sur
+ * Notes : le NOM DE LA PÉRIODE, avec un sélecteur de période à gauche. Le
+ * titre et le slot de gauche viennent donc de l'écran, qui est le seul à savoir
+ * quelle période est chargée.
+ *
+ * Publishé par `LaunchedEffect` et non par un `remember` : une écriture
+ * d'état pendant la composition voit l'écran se redessiner à chaque frame
+ * alors qu'aucune valeur n'a changé. Le `LaunchedEffect(header)` ne réécrit
+ * que quand l'en-tête RÉELLEMENT change.
+ *
+ * ponytail: deux champs, pas une hiérarchie de rôles (`title`/`subtitle`/
+ * `avatar`/`search`…). Un champ pour chaque ce que la référence montre sur
+ * Notes ; un écran qui aura besoin d'un troisième l'ajoutera ici, prouvé par
+ * son usage.
+ *
+ * @param title titre de l'écran, ou `null` pour celui de [TOP_BARS].
+ * @param leading slot de gauche de la barre (le sélecteur de période). Sur une
+ *   route secondaire, la flèche de retour reste prioritaire : sans elle on n'a
+ *   plus de retour (cf. [AppTopBar]).
+ */
+data class PapHeader(
+    val title: String? = null,
+    val leading: (@Composable () -> Unit)? = null,
+)
+
+/**
+ * La case « en-tête publié » de l'écran courant : un `mutableStateOf` que
+ * l'écran écrit et que la barre lit.
+ *
+ * Un objet passé en paramètre plutôt qu'un `CompositionLocal` : il n'y a
+ * qu'un lecteur (la barre) et qu'un écrivain (l'écran), tous deux câblés dans
+ * `AppNav.kt` — un `Local` serait la même indirection avec une portée de plus.
+ *
+ * La case est KEYÉE PAR ROUTE, et c'est ce qui rend le mécanisme sûr : un
+ * écran publie en partant, donc sans clé un en-tête resterait accroché à la
+ * barre après le changement d'écran (le titre « Trimestre 1 » sur l'Accueil).
+ * La barre ne lit donc que la case dont la route est la sienne, et une route
+ * sans en-tête retombe sur [TOP_BARS] — donc l'implémentation du mécanisme et
+ * son premier oubli sont le même test.
+ */
+@Stable
+class PapHeaderSlot {
+    private val published = mutableStateOf<Map<String, PapHeader>>(emptyMap())
+
+    /** Publie l'en-tête de [route], ou l'efface si [header] est `null`. */
+    fun publish(route: String, header: PapHeader?) {
+        published.value = if (header == null) {
+            published.value - route
+        } else {
+            published.value + (route to header)
+        }
+    }
+
+    /** L'en-tête publié par [route], ou `null` si elle n'en a pas. */
+    fun of(route: String): PapHeader? = published.value[route]
+}
+
+/**
  * Actions de la barre du haut, PAR ROUTE.
  *
  * #162 : `Actualiser`, `Compétences`, `Réglages`, `Appairage QR+PIN` et
@@ -135,6 +205,14 @@ private sealed interface TopAction {
  * endroit à regarder pour savoir quelles destinations existent.
  */
 private val TOP_BAR_ACTIONS: Map<String, List<TopAction>> = mapOf(
+    // #190 : Profil sort de la barre d'onglets (la référence n'a que quatre
+    // onglets, son profil est un avatar d'en-tête) et devient une destination
+    // de l'ACCUEIL — donc là où l'on entre quand on n'a pas d'onglet Profil
+    // sur lequel cliquer. C'est la seule porte : `TOP_BARS` porte son titre et
+    // sa flèche de retour vers l'accueil.
+    ROUTE_INDEX to listOf(
+        TopAction.Go(ROUTE_PROFILE, "Profil"),
+    ),
     // #140 : le profil se relit depuis la barre, donc le corps de l'écran
     // n'affiche plus son bouton « Charger le profil » : c'est la seule route
     // qui n'offre aucune destination ET dont la donnée est en mémoire (jamais
@@ -162,11 +240,18 @@ private val TOP_BAR_ACTIONS: Map<String, List<TopAction>> = mapOf(
 private val TOP_BARS: Map<String, TopBar> = mapOf(
     // Racines d'onglets : pas de flèche (retour = quitter l'app), pas d'action.
     ROUTE_INDEX to TopBar("Accueil"),
-    ROUTE_CALENDAR to TopBar("EDT"),
+    ROUTE_CALENDAR to TopBar("Cours"),
     ROUTE_TASKS to TopBar("Tâches"),
+    // #190 : le titre « Notes » n'est plus qu'un REPLI. L'écran Notes publie
+    // le nom de la période sélectionnée (cf. [PapHeader]) ; sans période
+    // chargée, on affiche ce qu'affiche la référence avant son premier
+    // chargement : `t('Tab_Grades')`, soit « Notes ».
     ROUTE_GRADES to TopBar("Notes"),
-    ROUTE_PROFILE to TopBar("Profil"),
-    // Secondaires : flèche de retour systématique.
+    // Secondaires : flèche de retour systématique. #190 : le profil n'est plus
+    // une racine d'onglet, donc il se range avec les autres et pointe vers
+    // l'accueil — sans ça, on arrivait dessus sans jamais pouvoir revenir.
+    // Les Actualités suivent le profil parce que c'est de là qu'on y entre.
+    ROUTE_PROFILE to TopBar("Profil", back = ROUTE_INDEX),
     ROUTE_NEWS to TopBar("Actualités", back = ROUTE_PROFILE),
     ROUTE_CANTEEN to TopBar("Cantine", back = ROUTE_PROFILE),
     ROUTE_ATTENDANCE to TopBar("Vie scolaire", back = ROUTE_PROFILE),
@@ -203,8 +288,16 @@ fun AppTopBar(
     onNavigate: (String) -> Unit,
     onRefresh: () -> Unit,
     hiddenDestinations: Set<String> = emptySet(),
+    // #190 : l'en-tête que l'ÉCRAN a publié pour CETTE route (cf. [PapHeader]).
+    // Un `PapHeaderSlot` vide par défaut, donc un appel qui oublie le mécanisme
+    // compile et rend la table statique — le cas simple reste le cas simple.
+    headerSlot: PapHeaderSlot? = null,
 ) {
     val bar = route?.let { TOP_BARS[it] }
+    // Titre publié par l'écran > titre de la table > nom de l'app. L'ordre est
+    // ce qu'il est : un écran qui sait dire quelle période est chargée doit
+    // être cru sur parole.
+    val published = route?.let { headerSlot?.of(it) }
     val actions = route
         ?.let { TOP_BAR_ACTIONS[it] }
         .orEmpty()
@@ -221,7 +314,9 @@ fun AppTopBar(
             // toucher — sans ça, les quinze routes n'avaient aucun point d'entrée
             // dans la navigation par titres.
             Text(
-                text = bar?.title ?: APP_NAME,
+                // #190 : le nom de la période sur Notes, le titre de la table
+                // partout ailleurs.
+                text = published?.title ?: bar?.title ?: APP_NAME,
                 style = MaterialTheme.typography.titleLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -231,9 +326,15 @@ fun AppTopBar(
         navigationIcon = {
             val back = bar?.back
             if (back != null) {
+                // La flèche reste PRIORITAIRE sur un `leading` publié : sans
+                // elle, un écran secondaire n'aurait plus de retour. Les deux
+                // ne se croisent donc pas sur Notes (route racine, pas de
+                // flèche) — l'ordre est écrit parce qu'un jour ils se croiseront.
                 IconButton(onClick = { onBack(back) }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
                 }
+            } else {
+                published?.leading?.invoke()
             }
         },
         // Slot d'actions contextuelles, une seule source : `TOP_BAR_ACTIONS`.

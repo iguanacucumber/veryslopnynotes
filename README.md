@@ -20,7 +20,7 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 | Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (31 routes, 7 types d'événements) |
 | Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, assistant de connexion en 3 étapes (serveur → établissement → QR scanné + PIN), SSE, aide devoirs |
 | Point d'entrée HTTP serveur (`make runServer`, Docker) | Câblé : setup (QR de l'app) → session Pronote → reader → snapshot → routes, ports d'écriture inclus. **Zéro credential serveur** |
-| Garde-fous sécurité (I1–I8) + tests | 790 tests verts dans `make check`, scan d'architecture et de secrets en CI locale |
+| Garde-fous sécurité (I1–I8) + tests | 792 tests verts dans `make check`, scan d'architecture et de secrets en CI locale |
 | Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'établissement = **vide propre** |
 
 ## Fonctionnalités
@@ -33,13 +33,13 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 - **Aide devoirs (IA)** — bouton par devoir : corrigé sourcé ou refus motivé, sources = la
   consigne et l'extrait de cours du devoir. La clé du fournisseur se saisit dans les réglages de
   l'app (chiffrée) et part dans le corps de chaque demande : le serveur n'en détient aucune.
-- **EDT** — vue semaine, professeur, salle, cours annulé/déplacé, badge « prochain cours »,
+- **Cours** (EDT) — vue semaine, professeur, salle, cours annulé/déplacé, badge « prochain cours »,
   bornes de semaine explicites en UTC.
 - **Vie scolaire** — absences, retards, sanctions, compteurs par période.
 - **Actualités, cantine, messagerie** — liste de fils, réponse, création, état lu, suppression.
 - **Profil & accueil** — nom, classe, période, photo **via proxy serveur**, multi-comptes parent,
   déconnexion qui purge session et cache local, mode anonyme.
-- **Matières personnalisées** — couleur, emoji, libellé appliqué partout (notes, devoirs, EDT),
+- **Matières personnalisées** — couleur, emoji, libellé appliqué partout (notes, devoirs, cours),
   thème clair/sombre.
 - **Capacités dynamiques** — les onglets inactifs dans ton établissement sont masqués, pas vides-cassés.
 - **Hors-ligne** — cache par ressource avec TTL et badge « périmé », repli cache si réseau KO.
@@ -197,7 +197,7 @@ lecture. Une route ajoutée est donc fermée par défaut.
 | Santé, appairage, setup (ouvertes sans jeton) | `GET /v1/health`, `POST /v1/pairing/start`, `POST /v1/pairing/confirm`, `POST /v1/setup` |
 | Notes | `GET /v1/grades` (notes + moyennes, `?algorithm=`, `?periodId=`), `GET /v1/periods` |
 | Devoirs | `GET /v1/assignments` (filtres de dates/semaine), `POST /v1/assignments/toggle` |
-| EDT | `GET /v1/timetable` (`?weekStart=`, `?from=`, `?to=`) |
+| Cours (EDT) | `GET /v1/timetable` (`?weekStart=`, `?from=`, `?to=`) |
 | Vie scolaire | `GET /v1/attendance`, `GET /v1/punishments` |
 | Actualités, cantine | `GET /v1/news`, `GET /v1/menus` |
 | Profil & médias | `GET /v1/me`, `GET /v1/media` (réf opaque uniquement) |
@@ -222,7 +222,7 @@ make integration-api        # API locale, zéro secret
 make build                  # image Docker + rappel APK
 ```
 
-790 tests dans `make check`, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
+792 tests dans `make check`, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
 La CI locale est `make check` : un changement qui casse un invariant est bloquant, même si
 fonctionnellement il passe.
 
