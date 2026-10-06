@@ -868,6 +868,7 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
 
   test("Kotlin : un seul état, et les liens de navigation sont dans la barre du haut", () => {
     const screen = readFileSync(join(UI, "GradesScreen.kt"), "utf8");
+    const rows = readFileSync(join(UI, "GradesRows.kt"), "utf8");
     const shell = readFileSync(join(UI, "AppShell.kt"), "utf8");
     const nav = readFileSync(join(UI, "AppNav.kt"), "utf8");
     const averages = readFileSync(join(UI, "Averages.kt"), "utf8");
@@ -889,9 +890,16 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     // Les puces d'algorithme, le titre de section et le carrousel sont APRÈS le
     // retour : avec zéro donnée ils ne sont jamais rendus.
     const guard = screen.indexOf("if (!layout.content || !layout.data) {");
-    for (const brique of ["GradesSearchField(", "GradesPeriodChips(", "GradesAlgorithmChips(", "PapSectionHeader(", "GradesRecentCarousel("]) {
+    for (const brique of ["GradesSearchField(", "GradesPeriodHeaderButton(", "GradesAlgorithmChips(", "PapSectionHeader(", "GradesRecentCarousel("]) {
       expect({ brique, afterGuard: screen.indexOf(brique) > guard }).toEqual({ brique, afterGuard: true });
     }
+    // #190 : la rangée de chips de période a disparu du CORPS de Notes — le
+    // sélecteur est publié dans la barre du haut (comme la référence), donc
+    // le même contrôle existait deux fois sur le même écran. Le composant
+    // reste (la Vie scolaire l'a toujours utilisé, sans barre du haut) : c'est
+    // l'APPEL de Notes qui doit avoir disparu, pas la brique.
+    expect(screen).not.toContain("GradesPeriodChips(");
+    expect(rows).toContain("fun GradesPeriodChips(");
     // L'état vide porte UNE action, l'état d'erreur le sien : plus de bloc
     // d'erreur à l'intérieur d'une page de contrôles.
     expect(screen).not.toMatch(/is UiState\.Error -> PapErrorState\([\s\S]{0,200}Les notes en cache/);

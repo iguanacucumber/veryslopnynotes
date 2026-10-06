@@ -37,11 +37,16 @@ const codeOnly = (src: string): string =>
 /** `ROUTE_CALENDAR` -> `calendar` : la table de la coquille écrit les constantes. */
 const constName = (route: string) => `ROUTE_${route.toUpperCase()}`;
 
-const TABS = ["index", "calendar", "tasks", "grades", "profile"];
-const SECONDARY = ["news", "canteen", "attendance", "sanctions", "messages", "alerts", "fiches"];
+// #190 : quatre onglets, comme la référence v8.5.5 (Accueil, Cours, Tâches,
+// Notes) — son profil est un avatar d'en-tête, pas un onglet. `profile` reste
+// dans SECONDARY : il est devenu une route secondaire, avec sa flèche de retour
+// vers l'accueil, donc c'est là que la règle « flèche sur les secondaires » le
+// vérifie.
+const TABS = ["index", "calendar", "tasks", "grades"];
+const SECONDARY = ["profile", "news", "canteen", "attendance", "sanctions", "messages", "alerts", "fiches"];
 const TITLES: Record<string, string> = {
   index: "Accueil",
-  calendar: "EDT",
+  calendar: "Cours",
   tasks: "Tâches",
   grades: "Notes",
   profile: "Profil",
@@ -90,9 +95,14 @@ describe("coquille applicative (#135)", () => {
     // d'extended, pas de bibliothèque ajoutée — même après le passage aux
     // glyphes de Papillon, qui sont des `ImageVector` écrits à la main.
     expect(icons).toContain("androidx.compose.material.icons.Icons");
-    expect(icons).toContain("Icons.Filled.Person");
     expect(codeOnly(icons)).not.toContain("material-icons-extended");
-    // Les 5 onglets, dans l'ordre de Papillon : Accueil, EDT, Tâches, Notes, Profil.
+    // #190 : plus de glyphe Material dans les icônes d'onglets. Les quatre
+    // routes d'onglet ont chacune leur glyphe RELEVÉ ; avant, `ROUTE_PROFILE`
+    // tombait sur `Icons.Filled.Person` faute de référence à relever, donc la
+    // barre portait un `material-icons-core` — laid et sans cause.
+    expect(codeOnly(icons)).not.toContain("Icons.Filled.Person");
+    expect(codeOnly(icons)).not.toContain("import androidx.compose.material.icons.filled.Person");
+    // Les 4 onglets, dans l'ordre de la référence : Accueil, Cours, Tâches, Notes.
     const order = shell.match(/private val TAB_ROUTES = listOf\(([^)]*)\)/)?.[1] ?? "";
     expect(order.split(",").map((r) => r.replace("ROUTE_", "").trim().toLowerCase())).toEqual(TABS);
     // Nom annoncé = MÊME fonction que le libellé affiché, donc rien à diverger.
@@ -156,10 +166,60 @@ describe("coquille applicative (#135)", () => {
     // Les quatre `path` sont des DONNÉES de tracé, pas des images : ni bitmap,
     // ni police, ni ressource ajoutée (le dossier `res/drawable` reste vide).
     expect(codeOnly(papillonIcons)).not.toMatch(/\.(png|webp|xml|ttf|otf)\b/);
-    // L'ECART ÉCRIT : le 5e onglet garde `Person` du CORE, parce que Papillon n'a
-    // pas de 5e onglet. Un écart non écrit serait un onglet à corriger.
-    expect(icons).toContain("ROUTE_PROFILE -> Icons.Filled.Person");
-    expect(icons).toMatch(/\/\/ ÉCART ÉCRIT[\s\S]*?ROUTE_PROFILE -> Icons\.Filled\.Person/);
+    // #190 : chaque route d'onglet est couverte par SON glyphe, et aucune autre.
+    // Un `when` qui oublierait une route tomberait sur `Info` : l'onglet
+    // s'afficherait avec le rond « i » de Material sans qu'aucun test ne le
+    // dise. Donc on compare les deux ensembles, pas seulement « au moins un ».
+    const branches = [...codeOnly(icons).matchAll(/ROUTE_([A-Z]+) -> PapillonTab/g)].map((m) => m[1]!.toLowerCase());
+    expect({ branches: branches.sort(), tabs: [...TABS].sort() }).toEqual({ branches: ["calendar", "grades", "index", "tasks"], tabs: [...TABS].sort() });
+  });
+
+  // #190 : le profil sort de la barre d'onglets. Sans destination de rechange,
+  // l'écran Profil deviendrait un cul-de-sac : plus aucun onglet n'y mène et
+  // plus aucune barre ne le propose.
+  test("Profil hors onglets : une destination le rend atteignable, et il se range", () => {
+    expect(shell).toMatch(/ROUTE_INDEX to listOf\(\s*TopAction\.Go\(ROUTE_PROFILE, "Profil"\),\s*\)/);
+    expect(TABS).not.toContain("profile");
+    // Route secondaire : il a donc une flèche, vers l'accueil (là où se trouve
+    // sa destination, donc l flin de retour et le retour Systeme coherent).
+    const line = shell.split("\n").find((l) => l.includes("ROUTE_PROFILE to TopBar(")) ?? "";
+    expect({ back: line.includes("back = ROUTE_INDEX") }).toEqual({ back: true });
+  });
+
+  // #190 : l'en-tête de l'écran Notes est PUBLIE par l'écran, pas lu dans une
+  // table. Ce test existe parce que le mécanisme est la seule chose qui
+  // distingue « le titre suit la période » de « le titre est statique » : sans
+  // lui, une régression qui retire le `publish` ne casserait aucun rendu.
+  test("en-tête publié : la case est keyée par route, et la flèche reste prioritaire", () => {
+    // Keyée par route : sans clé, l'en-tête de Notes resterait accroché à la
+    // barre après navigation (« Trimestre 1 » au-dessus de l'Accueil).
+    expect(shell).toContain("private val published = mutableStateOf<Map<String, PapHeader>>(emptyMap())");
+    expect(shell).toContain("fun publish(route: String, header: PapHeader?)");
+    expect(shell).toContain("fun of(route: String): PapHeader? = published.value[route]");
+    // Le titre publié l'emporte sur la table, sinon le mécanisme ne fait rien.
+    expect(shell).toContain("text = published?.title ?: bar?.title ?: APP_NAME");
+    // La flèche d'abord, le `leading` seulement sans elle : un écran
+    // secondaire qui publierait un sélecteur ne doit pas perdre son retour.
+    // `codeOnly` d'abord : sans ça, le commentaire qui explique l'ordre
+    // (« la flèche reste prioritaire… ») compte dans l'écart de caractères et
+    // le motif casse sur un commentaire plus long, pas sur le code.
+    expect(codeOnly(shell)).toMatch(/navigationIcon = \{[^]*?if \(back != null\) \{[^]*?\} else \{\s*published\?\.leading\?\.invoke\(\)/);
+    // Le câblage : `AppNav` crée UNE case pour toute l'app, la passe à la barre
+    // ET à l'écran. Deux cases = l'en-tête publié ne serait jamais lu.
+    expect(nav).toContain("val headerSlot = remember { PapHeaderSlot() }");
+    expect(nav).toContain("headerSlot = headerSlot");
+    expect(nav).toContain("headerSlot = headerSlot,");
+    // L'écran Notes reçoit la case et la transmet au composant qui publie :
+    // `GradesRoute` ne publie rien lui-même, c'est
+    // `GradesPeriodHeaderButton` qui appelle `publish` — donc la case doit
+    // traverser l'écran, sinon le sélecteur n'atteint jamais la barre.
+    const screen = readFileSync(join(UI, "GradesScreen.kt"), "utf8");
+    expect(screen).toContain("headerSlot: PapHeaderSlot? = null");
+    expect(screen).toContain("slot = headerSlot");
+    const rows = readFileSync(join(UI, "GradesRows.kt"), "utf8");
+    expect(rows).toContain("PapHeader(");
+    expect(rows).toContain("title = selected?.name,");
+    expect(rows).toContain("slot?.publish(");
   });
 
   test("barre d'onglets : masquée sur l'appairage et les réglages, slot de badge présent", () => {

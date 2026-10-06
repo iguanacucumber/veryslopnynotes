@@ -2,27 +2,40 @@ package fr.veryslopnynotes.ui
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -173,6 +186,171 @@ private fun GradesChipRow(modifier: Modifier = Modifier, content: @Composable ()
         content()
     }
 }
+
+/**
+ * Sélecteur de période de la BARRE DU HAUT : une pastille cliquable qui porte
+ * le nom de la période choisie, avec le chevron de la référence, et le menu
+ * déroulant en dessous.
+ *
+ * #190 : la référence pose ce sélecteur dans l'en-tête (`AndroidHeaderMenu`
+ * avec l'icône calendrier, chaque période en action de menu avec son étendue
+ * en sous-titre). Nous avons la rangée de chips `GradesPeriodChips` — exacte
+ * pour la Vie scolaire, qui n'a pas d'en-tête, mais fausse ici : le même
+ * contrôle existait deux fois sur le même écran.
+ *
+ * La pastille est un `TextButton` et non une `IconButton` : elle DOIT porter
+ * le nom de la période (« Trimestre 1 »), c'est elle qui dit ce qu'on regarde.
+ * Une icône seule obligerait à deviner la période au label de l'écran — ce que
+ * la référence refuse en faisant du nom le titre de l'écran.
+ *
+ * Le menu rend `periodLabel` (nom + étendue) comme la référence rend `title` +
+ * `subtitle`. Sans période chargée, rien n'est rendu : une pastille qui
+ * proposerait « Année » alors que le serveur n'a rien publié serait un choix
+ * qui n'a pas lieu d'être, et la référence non plus n'affiche pas de sélecteur
+ * tant que sa liste est vide.
+ *
+ * @param slot clé de route pour publier l'en-tête — c'est l'écran qui décide
+ *   du contenu de SA barre, pas la barre qui le décide pour lui.
+ */
+@Composable
+fun GradesPeriodHeaderButton(
+    periods: List<PeriodUi>,
+    selectedId: String?,
+    onSelect: (String?) -> Unit,
+    slot: PapHeaderSlot?,
+    route: String,
+    modifier: Modifier = Modifier,
+) {
+    val selected = periods.firstOrNull { it.id == selectedId }
+    // La pastille EST le titre de l'écran chez la référence (« Semestre 1 » à
+    // gauche, et le titre reprend la période). Nous gardons le titre dans la
+    // barre et la pastille à gauche des deux : même information, une seule
+    // fois à l'écran — donc on ne répète pas le nom dans les deux places.
+    LaunchedEffect(periods, selectedId, slot, route) {
+        slot?.publish(
+            route,
+            PapHeader(
+                title = selected?.name,
+                leading = if (periods.isEmpty()) {
+                    null
+                } else {
+                    {
+                        PapPeriodPill(
+                            label = selected?.name ?: "Année",
+                            periods = periods,
+                            selectedId = selectedId,
+                            onSelect = onSelect,
+                        )
+                    }
+                },
+            ),
+        )
+    }
+}
+
+/**
+ * La pastille et son menu. Séparée de [GradesPeriodHeaderButton] parce que le
+ * `LaunchedEffect` qui publie l'en-tête ne doit PAS être relancé quand le menu
+ * s'ouvre : ici, seul l'état d'ouverture change.
+ *
+ * `null` = « Année » (aucun `periodId`), comme la rangée de chips : même
+ * période « toutes », donc le même mode de lecture de l'état, d'un écran à
+ * l'autre.
+ */
+@Composable
+private fun PapPeriodPill(
+    label: String,
+    periods: List<PeriodUi>,
+    selectedId: String?,
+    onSelect: (String?) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { open = true }) {
+            Text(
+                text = label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                // La pastille annonce la période choisie : c'est son étiquette,
+                // donc elle n'est pas décorative (contrairement à l'icône d'un
+                // onglet, dont le libellé est déjà sous l'icône).
+                modifier = Modifier.semantics { contentDescription = "Période : $label" },
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                // `contentDescription = null` : le nom est déjà dans le texte
+                // de la pastille, l'annoncer en plus le ferait dire deux fois.
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        PapPeriodMenu(
+            expanded = open,
+            periods = periods,
+            selectedId = selectedId,
+            onSelect = { onSelect(it); open = false },
+            onDismiss = { open = false },
+        )
+    }
+}
+
+/**
+ * Menu des périodes. Chaque entrée porte le nom PUIS l'étendue (deux lignes),
+ * comme les actions de menu de la référence (titre + sous-titre).
+ */
+@Composable
+private fun PapPeriodMenu(
+    expanded: Boolean,
+    periods: List<PeriodUi>,
+    selectedId: String?,
+    onSelect: (String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        DropdownMenuItem(
+            text = { Text("Année") },
+            onClick = { onSelect(null) },
+        )
+        for (period in periods) {
+            DropdownMenuItem(
+                text = {
+                    Column {
+                        Text(
+                            text = period.name,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            // L'étendue est une PRÉCISION de la période, pas un
+                            // choix : la ligne entière l'annonce, donc le nom
+                            // seul se lit à voix haute, et les deux se lisent à
+                            // l'œil.
+                            modifier = Modifier.semantics(mergeDescendants = true) {},
+                        )
+                        Text(
+                            text = periodRange(period),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                },
+                // L'entrée choisie est marquée, sinon le menu ne dit pas où on
+                // est — la référence passe son état par `state: 'on'`.
+                trailingIcon = {
+                    if (period.id == selectedId) {
+                        Icon(imageVector = Icons.Filled.Check, contentDescription = null)
+                    }
+                },
+                onClick = { onSelect(period.id) },
+            )
+        }
+    }
+}
+
+/** Étendue d'une période seule (« 01/09/2026 – 05/01/2027 »), sans son nom. */
+fun periodRange(period: PeriodUi): String =
+    periodLabel(period).substringAfter("· ", period.name)
 
 /** Étendue de la période choisie, en toutes lettres (« Trimestre 1 · 01/09/2026 – … »). */
 @Composable

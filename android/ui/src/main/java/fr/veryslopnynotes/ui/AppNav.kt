@@ -244,6 +244,11 @@ fun AppNav(
     // l'onglet n'est pas actif. #172 : `punishments` s'y range maintenant aussi,
     // « Sanctions » étant devenu une action de la barre de la Vie scolaire.
     var readTick by remember { mutableStateOf(0) }
+    // #190 : case d'en-tête partagée entre l'écran qui publie (Notes) et la
+    // barre qui lit. UN objet pour toute l'app, mémorisé : `remember` sans clé
+    // survit aux changements de route, donc la case n'est pas vidée à chaque
+    // navigation.
+    val headerSlot = remember { PapHeaderSlot() }
     val hiddenDestinations = buildSet {
         if (!Capabilities.visible(capabilities, Capabilities.PUNISHMENTS)) add(ROUTE_SANCTIONS)
     }
@@ -261,6 +266,7 @@ fun AppNav(
                 onNavigate = { dest -> nav.navigateTo(dest) },
                 onRefresh = { readTick++ },
                 hiddenDestinations = hiddenDestinations,
+                headerSlot = headerSlot,
                 // Retour = d'où l'on vient ; si la pile est vide (deep link
                 // direct), on part vers la route mère de la route courante.
                 onBack = { back -> if (!nav.popBackStack()) nav.navigateTo(back) },
@@ -303,6 +309,10 @@ fun AppNav(
                     baseUrl,
                     subjectPrefs = subjectPrefs,
                     refreshTick = readTick,
+                    // #190 : la barre du haut est plus l'unique source de son
+                    // contenu — l'écran Notes y publie son nom de période et
+                    // son sélecteur.
+                    headerSlot = headerSlot,
                 )
             }
             composable(ROUTE_TASKS, deepLinks = listOf(routeDeepLink(ROUTE_TASKS))) {
