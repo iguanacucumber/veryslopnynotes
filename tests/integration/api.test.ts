@@ -97,14 +97,30 @@ describe("integration api", () => {
     expect(isApiErrorBody(await bad.json())).toBe(true);
   });
 
-  test("#74 : moyennes fournies prioritaires sur l'estimation", async () => {
+  test("#74 : moyennes fournies prioritaires, PAR PÉRIODE", async () => {
     const server = serve(
       createMemoryStore({
         grades: [
-          { id: "s1", accountId: "seed-acc", subject: "Maths", value: 12, scale: 20, date: "2026-09-20T10:00:00.000Z" },
-          { id: "s2", accountId: "seed-acc", subject: "Anglais", value: 16, scale: 20, date: "2026-09-21T10:00:00.000Z" },
+          {
+            id: "s1",
+            accountId: "seed-acc",
+            subject: "Maths",
+            value: 12,
+            scale: 20,
+            date: "2026-09-20T10:00:00.000Z",
+            periodId: "p-1",
+          },
+          {
+            id: "s2",
+            accountId: "seed-acc",
+            subject: "Anglais",
+            value: 16,
+            scale: 20,
+            date: "2026-09-21T10:00:00.000Z",
+            periodId: "p-1",
+          },
         ],
-        providedAverages: { general: 14, subjects: { maths: 12 } },
+        providedAverages: { "p-1": { periodId: "p-1", general: 14, subjects: { maths: 12 } } },
       }),
       0,
     );
@@ -126,7 +142,7 @@ describe("integration api", () => {
         })
       ).json();
       const res = await (
-        await fetch(`${url}/v1/grades`, { headers: { authorization: `Bearer ${conf.token}` } })
+        await fetch(`${url}/v1/grades?periodId=p-1`, { headers: { authorization: `Bearer ${conf.token}` } })
       ).json();
       expect(isGradesResponse(res)).toBe(true);
       expect(res.averages.general).toEqual({ value: 14, origin: "provided", subjectCount: 2 });
@@ -136,6 +152,21 @@ describe("integration api", () => {
       const anglais = res.averages.subjects.find((s: { subject: string }) => s.subject === "Anglais");
       expect(anglais.origin).toBe("estimated");
       expect(anglais.value).toBeCloseTo(16, 9);
+      // Le bulletin d'un trimestre ne vaut PAS pour l'année : sans periodId
+      // demandé, aucune fournie n'est eligible (une moyenne d'année n'existe
+      // pas chez Pronote), donc tout reste estimé.
+      const annee = await (
+        await fetch(`${url}/v1/grades`, { headers: { authorization: `Bearer ${conf.token}` } })
+      ).json();
+      expect(annee.averages.general.origin).toBe("estimated");
+      expect(annee.averages.general.value).toBeCloseTo(14, 9);
+      expect(annee.averages.subjects.every((s: { origin: string }) => s.origin === "estimated")).toBe(true);
+      // Période demandée que l'établissement ne publie pas : estimée, jamais
+      // la moyenne d'une autre période.
+      const inconnue = await (
+        await fetch(`${url}/v1/grades?periodId=p-9`, { headers: { authorization: `Bearer ${conf.token}` } })
+      ).json();
+      expect(inconnue.averages.general).toEqual({ value: null, origin: "estimated", subjectCount: 0 });
     } finally {
       server.stop(true);
     }

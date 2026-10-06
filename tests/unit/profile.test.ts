@@ -120,7 +120,7 @@ describe("unit profil #82", () => {
         entries: () => [],
         securityAlerts: () => [],
         periods: () => [],
-        providedAverages: () => null,
+        providedAverages: () => ({}),
       },
       pairing,
     );

@@ -263,6 +263,73 @@ describe("PronoteClientReader", () => {
     expect((err as PronoteReadError).code).toBe("session_expired");
   });
 
+  test("#74 : bulletin publié par période, notes illisibles écartées, session morte remontée", async () => {
+    // Un trimestre publie ses moyennes, l'autre non (bulletin non publié), le
+    // troisième est muet À LA LECTURE (droits refusés) et le quatrième renvoie
+    // une session morte : ce dernier doit faire remonter l'erreur, pas un
+    // silencieux « établissement qui ne publie rien ».
+    const client = {
+      periods: [
+        {
+          id: "period-1",
+          averages: async () => [
+            { student: "15,5", outOf: "20", classAverage: "12", subject: { name: "Mathématiques" } },
+            // Barème différent : ramené sur /20 (même règle que les notes).
+            { student: "8", outOf: "10", subject: { name: "Sport" } },
+            // Non noté : absent, jamais 0.
+            { student: "N.Rendu", outOf: "20", subject: { name: "Latin" } },
+            { student: "12", outOf: "20", subject: { name: "" } },
+          ],
+          overallAverage: async () => "14,25",
+        },
+        { id: "period-2", averages: async () => [], overallAverage: async () => "" },
+        {
+          id: "period-3",
+          averages: async () => {
+            throw new Error("Forbidden");
+          },
+        },
+        {
+          id: "period-4",
+          overallAverage: async () => {
+            throw new Error("session expired");
+          },
+        },
+      ],
+    };
+    const store = new PronoteSessionStore({ clientFactory: (async () => client) as never });
+    await store.authenticate({ ...creds });
+    const reader = new PronoteClientReader({ sessions: store });
+    const err = await reader.getProvidedAverages(syntheticAccountId).catch((e: unknown) => e);
+    // Session morte : elle REMONTE (l'app se ré-appaire), elle n'est pas avalée.
+    expect((err as PronoteReadError).code).toBe("session_expired");
+
+    // Sans la période morte : deux entrées (la publiée, la muette à la lecture
+    // est ignorée), la période sans bulletin est absente.
+    const sansMorte = {
+      periods: [
+        ...client.periods.slice(0, 3),
+        { id: "period-5", overallAverage: async () => "Non renseigné", averages: async () => [] },
+      ],
+    };
+    const store2 = new PronoteSessionStore({ clientFactory: (async () => sansMorte) as never });
+    await store2.authenticate({ ...creds });
+    const page = await new PronoteClientReader({ sessions: store2 }).getProvidedAverages(syntheticAccountId);
+    expect(page.items.__untrusted).toBe(true);
+    expect(page.nextCursor).toBeNull();
+    expect(page.items.value).toEqual([
+      {
+        periodId: "period-1",
+        general: 14.25,
+        subjects: { mathematiques: 15.5, sport: 16 },
+      },
+    ]);
+    // Session absente : erreur typée.
+    const cold = new PronoteClientReader({ sessions: store2 });
+    const coldErr = await cold.getProvidedAverages("acc-inconnu").catch((e: unknown) => e);
+    expect((coldErr as PronoteReadError).code).toBe("session_expired");
+  });
+
   test("sans session -> session_expired, from/to invalides -> pronote_unavailable", async () => {
     const store = new PronoteSessionStore({
       clientFactory: (async () => fakeClient()) as never,

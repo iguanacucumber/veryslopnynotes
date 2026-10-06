@@ -6,15 +6,16 @@
 // ponytail: mappers purs minimaux, pas de lib date.
 // #74 : moyennes de classe (average/min/max), bonus, facultative, période et
 // libellé repris de pronotets Grade. Les moyennes *de matière* et *générale*
-// fournies par l'établissement (period.averages()/overallAverage()) ne sont pas
-// encore lues : ProvidedAverages reste null, les rapports sont donc estimés,
-// ce qui est le comportement Papillon par défaut. Upgrade: getProvidedAverages
-// sur ce reader, sans toucher aux trois algorithmes.
+// fournies par l'établissement sont lues par `getProvidedAverages`
+// (period.averages()/overallAverage(), par période) : quand l'établissement ne
+// publie rien, le rapport reste estimé (comportement Papillon par défaut).
 import type { AbsenceRecord, Assignment, AssignmentLessonContent, AttachmentRef, CanteenMeal, CanteenMenu, Capabilities, ChildAccount, Discussion, Grade, Message, NewsItem, Period, Punishment, Recipient, RecipientKind, TimetableEntry, TimetableStatus, UserInfo } from "../../shared/contracts/models";
 import { ABSENCE_MOTIF_MAX_CHARS, ABSENCE_SUBJECT_MAX_CHARS, ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS, ASSIGNMENT_DESCRIPTION_MAX_CHARS, ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS, ASSIGNMENT_LESSON_TITLE_MAX_CHARS, ASSIGNMENT_MAX_ATTACHMENTS, ASSIGNMENT_REF_MAX_CHARS, CANTEEN_MAX_ALLERGEN_CHARS, CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_DISH_CHARS, CANTEEN_MAX_DISHES, DISCUSSION_ID_MAX_CHARS, DISCUSSION_MAX_PARTICIPANTS, DISCUSSION_MAX_UNREAD, DISCUSSION_PARTICIPANT_MAX_CHARS, DISCUSSION_SUBJECT_MAX_CHARS, isAbsenceRecord, isAssignment, isAttachmentRef, isCanteenMenu, isChildAccount, isDiscussion, isGrade, isMessage, isNewsItem, isOpaquePhotoRef, isPeriod, isPunishment, isRecipient, isTimetableEntry, isUserInfo, MESSAGE_AUTHOR_MAX_CHARS, MESSAGE_BODY_MAX_CHARS, NEWS_BODY_MAX_CHARS, NEWS_META_MAX_CHARS, NEWS_TITLE_MAX_CHARS, PHOTO_REF_PREFIX, PUNISHMENT_MOTIF_MAX_CHARS, PUNISHMENT_TYPE_MAX_CHARS, RECIPIENT_NAME_MAX_CHARS, TIMETABLE_ROOM_MAX_CHARS, TIMETABLE_TEACHER_MAX_CHARS, USER_CLASS_MAX_CHARS, USER_MAX_KIDS, USER_NAME_MAX_CHARS } from "../../shared/contracts/models";
 import type { PedagogicResource, PronotePage, PronotePageOptions, PronoteReader, PronoteTimetableOptions } from "../domain/ports";
 import { isPedagogicResource, PronoteAuthError, PronoteReadError, PronoteWriteError, untrusted } from "../domain/ports";
 import { capabilitiesFromProbe } from "../domain/capabilities";
+import { subjectKey } from "../domain/averages";
+import type { ProvidedAverages } from "../domain/averages";
 
 
 export interface PronoteClientReaderOptions {
@@ -155,6 +156,33 @@ function mapPeriods(raw: any[]): Period[] {
     if (isPeriod(cand)) out.push(cand);
   });
   return out;
+}
+
+/** Longueur de matière au-delà de laquelle une moyenne publiée n'est pas lue. */
+const PROVIDED_SUBJECT_MAX_CHARS = 100;
+
+/**
+ * Une moyenne PUBLIÉE par l'établissement (pronotets `Period.averages()`),
+ * ramenée sur /20 : `student` + `outOf` + `subject.name`. Valeur ou matière
+ * illisible (« N.Rendu », « Non renseigné », vide) = entrée ABSENTE, jamais un 0
+ * ni une moyenne devinée (I6). Clé = `subjectKey` : même regroupement que
+ * l'estimation, donc une matière fournie remplace la sienne estimée.
+ * Matière hors borne = absente : la clé ne sert qu'à retrouver une matière
+ * déjà bornée par le contrat, donc un nom trop long ne peut rien alimenter (et aucune
+ * chaîne arbitraire ne vit dans l'instantané).
+ */
+function mapProvidedAverage(raw: unknown): { subjectKey: string; value: number } | null {
+  const a = raw as { student?: unknown; outOf?: unknown; defaultOutOf?: unknown; subject?: unknown };
+  const subject = a?.subject;
+  const name = typeof subject === "object" && subject !== null ? (subject as { name?: unknown }).name : subject;
+  const value = toNumber(a?.student, Number.NaN);
+  if (typeof name !== "string" || name.trim() === "" || !Number.isFinite(value)) return null;
+  if (name.length > PROVIDED_SUBJECT_MAX_CHARS) return null;
+  // Barème de la matière différent de /20 : on ramène sur /20 (même règle que
+  // `addWeighted`), sinon l'app afficherait une moyenne sur l'autre barème.
+  const outOf = toNumber(a?.outOf ?? a?.defaultOutOf, 20);
+  const sur20 = Number.isFinite(outOf) && outOf > 0 && outOf !== 20 ? (value / outOf) * 20 : value;
+  return { subjectKey: subjectKey(name), value: sur20 };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -678,6 +706,79 @@ export class PronoteClientReader implements PronoteReader {
       this.logger(`periods -> error ${mapped.code}`);
       throw mapped;
     }
+  }
+
+  /**
+   * #74 (suite) : les moyennes RÉELLEMENT publiées par l'établissement, par
+   * période — `Period.averages()` (moyenne élève par matière) et
+   * `overallAverage()` (générale). C'est ce que l'app affiche en « moyenne
+   * fournie » ; sans cette lecture, tout reste `estimated`.
+   *
+   * Une période qui ne publie rien (bulletin non publié, droits refusés) est
+   * ABSENTE de la page : l'estimation prend le relais pour cette période.
+   * ponytail: pas de `classOverallAverage()` (moyenne de classe générale, hors
+   * contrat). Upgrade: rapport `Period.report()` si un jour l'app veut les
+   * commentaires d'établissement.
+   */
+  async getProvidedAverages(accountId: string): Promise<PronotePage<ProvidedAverages>> {
+    const id = (accountId ?? "").trim();
+    if (!id) throw new PronoteReadError("providedAverages session expired", "session_expired");
+    let client;
+    try {
+      await this.refreshSession(id);
+      client = this.sessions.requireClient(id);
+    } catch (err) {
+      const mapped = toReadError(err, "providedAverages");
+      this.logger(`providedAverages -> error ${mapped.code}`);
+      throw mapped;
+    }
+    const out: ProvidedAverages[] = [];
+    let muettes = 0;
+    for (const raw of (client.periods ?? []) as unknown[]) {
+      const p = raw as { id?: unknown; averages?: unknown; overallAverage?: unknown };
+      // Clé = id de la période, celle que `mapGrade` porte sur les notes : sans
+      // elle la moyenne ne serait jamais eligible au bon périmètre.
+      const periodId = typeof p?.id === "string" ? p.id : null;
+      if (!periodId) continue;
+      try {
+        // Sans prototype : la clé vient de Pronote, donc `__proto__` ne doit
+        // JAMAIS toucher le prototype de la table (même garde que
+        // `discussionMessages` du snapshot).
+        const subjects: Record<string, number> = Object.create(null) as Record<string, number>;
+        const rows = typeof p?.averages === "function"
+          ? ((await (p.averages as () => Promise<unknown>)()) as unknown[])
+          : [];
+        for (const row of Array.isArray(rows) ? rows : []) {
+          const mapped = mapProvidedAverage(row);
+          if (mapped) subjects[mapped.subjectKey] = mapped.value;
+        }
+        // Valeur non lisible = absente : `overallAverage()` renvoie "" quand
+        // l'établissement n'a rien publié.
+        const general =
+          typeof p?.overallAverage === "function"
+            ? toNumber(await (p.overallAverage as () => Promise<unknown>)(), Number.NaN)
+            : Number.NaN;
+        if (Object.keys(subjects).length === 0 && !Number.isFinite(general)) {
+          muettes += 1;
+          continue;
+        }
+        out.push({
+          periodId,
+          ...(Number.isFinite(general) ? { general } : {}),
+          ...(Object.keys(subjects).length > 0 ? { subjects } : {}),
+        });
+      } catch (err) {
+        // Session morte = l'app DOIT se ré-appairer : elle remonte, avalée elle
+        // deviendrait un « établissement ne publie rien » silencieux.
+        const mapped = toReadError(err, "providedAverages");
+        if (mapped.code === "session_expired") throw mapped;
+        muettes += 1;
+        this.logger(`providedAverages -> periode indisponible (${mapped.code})`);
+      }
+    }
+    // Compteurs seuls : aucun nom de matière, aucune valeur.
+    this.logger(`providedAverages -> ok ${out.length} (muettes ${muettes})`);
+    return { items: untrusted(out), nextCursor: null };
   }
 
   async getAssignments(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Assignment>> {

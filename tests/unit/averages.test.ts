@@ -4,6 +4,7 @@ import {
   averageWith,
   computeAverages,
   medianAlgorithmAverage,
+  providedAveragesFor,
   subjectAlgorithmAverage,
   subjectAverage,
   subjectKey,
@@ -241,6 +242,20 @@ describe("moyennes parité Papillon (#74)", () => {
     });
     expect(provided.subjects[0].origin).toBe("provided");
     expect(provided.subjects[0].value).toBe(9);
+  });
+
+  test("providedAveragesFor : la table par période, et rien d'autre", () => {
+    const table = { "p-1": { periodId: "p-1", general: 14 }, "p-2": { periodId: "p-2", general: 11 } };
+    expect(providedAveragesFor(table, "p-2")?.general).toBe(11);
+    // Période non publiée / aucune période demandée : estimation, jamais la
+    // moyenne d'une autre période.
+    expect(providedAveragesFor(table, "p-9")).toBeNull();
+    expect(providedAveragesFor(table, null)).toBeNull();
+    expect(providedAveragesFor(table, "  ")).toBeNull();
+    expect(providedAveragesFor(null, "p-1")).toBeNull();
+    // `periodId` vient de l'URL : `__proto__` ne doit pas résoudre une moyenne
+    // via Object.prototype.
+    expect(providedAveragesFor(table, "__proto__")).toBeNull();
   });
 
   test("accents et casse : même matière regroupée", () => {
