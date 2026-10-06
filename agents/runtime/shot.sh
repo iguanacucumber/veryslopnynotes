@@ -447,7 +447,7 @@ is_locked() {
 ROUTE_WITNESSES='
 index|Accueil|Afficher plus;Rien à afficher
 calendar|Cours|semaine du
-grades|Notes|Moyennes par matière;Aucune note en cache;Aucune note sur cette période;Aucune note trouvée;Notes indisponibles.
+grades|Notes|Nouvelles notes;Aucune note en cache;Aucune note sur cette période;Aucune note trouvée;Notes indisponibles.
 tasks|Tâches|Devoirs de la semaine
 profile|Profil|Détecter les onglets
 settings|Réglages|Assistant devoirs

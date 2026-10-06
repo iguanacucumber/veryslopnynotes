@@ -21,6 +21,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.data.RefreshOutcome
@@ -271,29 +272,64 @@ fun GradesRoute(
             GradesNothingToShow(query = query, onRefresh = { refresh() })
         } else {
             if (recent.isNotEmpty()) {
-                // `heading()` : « Nouvelles notes » precede le carrousel — c'est
-                // un titre de section, même sans icône.
+                // ECART ECRIT — UN TITRE QUE LA REFERENCE N'A PAS, GARDÉ POUR
+                // UNE RAISON.
+                //
+                // La référence rend le carrousel sous la carte moyenne SANS titre :
+                // son en-tête de `List` ne contient que `Averages` puis le
+                // carrousel, et aucun `Typography` ne le nomme. On le garde mal
+                // quand même, pour deux raisons qui ne sont pas le goût :
+                // (1) c'est le SEUL point d'entrée du carrousel dans le menu
+                // « titres » de TalkBack, donc le retirer prive un utilisateur
+                // non visuel du seul moyen d'y sauter sans lire les trois lignes
+                // de la carte moyenne ; (2) il nomme une zone de l'écran que
+                // rien d'autre ne nomme.
+                //
+                // `Moyennes par matière`, lui, PART — voir plus bas. La
+                // différence entre les deux n'est pas « l'un nous le veut et pas
+                // l'autre » : c'est que l'un donne un point d'entrée de
+                // navigation et l'autre n'en donnait aucun.
+                //
+                // #192 : le style passe de `titleMedium` (17 sp) au `title` de la
+                // référence (18 sp SEMIBOLD), pour qu'il ait la taille d'un titre
+                // et pas celle d'un libellé d'action.
                 Text(
                     text = "Nouvelles notes",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                    ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    // `heading()` : c'est ce que TalkBack liste sous « titres ».
                     modifier = Modifier.semantics { heading() },
                 )
                 GradesRecentCarousel(grades = recent, prefs = subjectPrefs, nowMillis = nowMillis)
             }
-            PapSectionHeader(
-                icon = Icons.Filled.Star,
-                title = "Moyennes par matière",
-                // `general.subjectCount` est le compteur du CONTRAT ; le nombre
-                // de sections affichées sert de repli quand il est absent.
-                count = report?.subjectCount?.takeIf { it > 0 } ?: groups.size,
-            )
+            // #192 : PLUS DE `PapSectionHeader` (« Moyennes par matière »), et
+            // avec lui le `count` du contrat (`general.subjectCount`) qui ne lui
+            // servait qu'à l'afficher. Ce titre-ci ne nommait rien que les
+            // en-têtes de section ne nomment déjà, et son retrait ne coûte rien :
+            // chaque matière reste un `heading()`, donc le survol de l'écran
+            // trouve les mêmes repères qu'avant. Le compteur reste lisible — c'est
+            // le nombre de notes, porté par chaque section.
+            //
+            // ÉCART ÉCRIT : la référence pose un `marginTop` de 12 sur l'en-tête
+            // de section (`gapBefore`). Nous laissons jouer le `Column` de
+            // l'écran, donc l'espacement diffère — 6 chez nous, 12 chez elle. Le
+            // 6 est la valeur que la source écrit DEUX fois dans cette zone
+            // (l'écart avant un `sectionTitle`, et celui de la `List`), donc
+            // c'est la seule qu'on puisse choisir sans trancher entre deux
+            // chemins dont un seul est emprunté.
+            //
+            // `nowMillis` n'est plus passé : les sections n'affichent plus de
+            // date relative depuis #192 (la ligne rend une date en toutes
+            // lettres, voir `longDateFr`). Seul le carrousel en garde une, et il
+            // le reçoit encore — c'est là que la référence met un
+            // `formatDistanceToNowStrict`.
             GradesSubjectSections(
                 groups = groups,
                 prefs = subjectPrefs,
                 influences = report?.influences ?: emptyList(),
-                nowMillis = nowMillis,
             )
         }
     }

@@ -105,6 +105,27 @@ function tsRelativeTimeFr(epochMillis: number, now: number, zone: string = ZONE)
   return `${pad2(there.d)}/${pad2(there.m)}/${String(there.y).padStart(4, "0")}`;
 }
 
+/** Les mois français, dans l'ordre : le miroir ne dépend pas des données de
+ *  locale de `Intl`, qui varient d'une machine à l'autre. */
+const MOIS_FR = [
+  "janvier", "février", "mars", "avril", "mai", "juin",
+  "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+];
+
+/**
+ * Miroir de `longDateFr(epochMillis, zone)` — la date EN TOUTES LETTRES de la
+ * ligne de note de l'onglet Notes (#192).
+ *
+ * `d MMMM yyyy` : le quantitatif n'a PAS de zéro (« 5 octobre 2026 », pas
+ * « 05 octobre 2026 »), le mois est en lettres et l'année tient ses quatre
+ * chiffres. Aucun jour de la semaine, aucune heure : la référence rend
+ * `{ day, month, year }` et rien d'autre.
+ */
+function tsLongDateFr(epochMillis: number, zone: string = ZONE): string {
+  const { y, m, d } = zoned(clamp(epochMillis), zone);
+  return `${d} ${MOIS_FR[m - 1]} ${String(y).padStart(4, "0")}`;
+}
+
 /** Miroir de `errorHeadline(message)`. */
 const GENERIC_ERROR = "Erreur réseau. Réessayer.";
 const tsErrorHeadline = (message: string | null | undefined): string =>
@@ -182,6 +203,57 @@ describe("briques d'interface (#136)", () => {
     expect({ veille, unJour: veille.includes("1 jour") }).toEqual({ veille, unJour: false });
     // Troncature, jamais d'arrondi en upwards : 90 min ne devient pas « 2 h ».
     expect(tsRelativeTimeFr(NOW - 90 * MIN, NOW)).toBe("il y a 1 h");
+  });
+
+  // #192 : la date de la ligne de note n'est PLUS une durée. « il y a 3 jours »
+  // parle de l'horloge, pas de la note : deux notes du même jour étaient
+  // indiscernables, et septembre 2026 ne se distinguait pas de septembre 2025.
+  test("longDateFr : en toutes lettres, quantitatif sans zéro, année sur quatre chiffres", () => {
+    // 03/10/2026 à Paris : le quantitatif à deux chiffres.
+    expect(tsLongDateFr(YESTERDAY_08)).toBe("3 octobre 2026");
+    // 01/09/2026 : le quantitatif à un chiffre, PAS de zéro devant — c'est
+    // `day: 'numeric'` côté référence, donc « 1 », et non « 01 ».
+    expect(tsLongDateFr(Date.UTC(2026, 8, 1, 6, 0))).toBe("1 septembre 2026");
+    // Les douze mois, pour qu'un mois mal orthographié se voie : c'est le seul
+    // endroit où la fonction peut se tromper silencieusement (aucun jour ne
+    // dispute le format, seul le nom change).
+    for (let m = 0; m < 12; m++) {
+      const obtenu = tsLongDateFr(Date.UTC(2026, m, 15, 12, 0));
+      expect({ mois: m + 1, obtenu }).toEqual({ mois: m + 1, obtenu: `15 ${MOIS_FR[m]} 2026` });
+    }
+    // L'ANNÉE sur quatre chiffres, même à une année basse : `yyyy` ne rend pas
+    // « 26 ».
+    expect(tsLongDateFr(Date.UTC(1770, 4, 3, 10, 0))).toBe("3 mai 1770");
+    // Pas d'heure, pas de jour de semaine, pas de suffixe : la note s'y date,
+    // elle ne s'y horodate pas.
+    const rendu = tsLongDateFr(NOW);
+    expect({ rendu, heure: /\d{1,2}:\d{2}/.test(rendu), semaine: /lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche/.test(rendu) })
+      .toEqual({ rendu: "4 octobre 2026", heure: false, semaine: false });
+  });
+
+  test("longDateFr : bornée comme relativeTimeFr, donc jamais d'exception sur une date de cache", () => {
+    // La valeur vient d'un fichier de cache lu en `Long`, donc n'importe quel
+    // entier. Sans la borne, `Long.MIN_VALUE` mettrait l'écran au milieu d'un
+    // rendu ; avec elle, on affiche une date absurde mais lisible.
+    for (const aberrant of [Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]) {
+      const obtenu = tsLongDateFr(aberrant);
+      // `[^\s\d]` et non `\w` : un mois français porte des accents (« août »,
+      // « décembre »), et `\w` est ASCII en JavaScript — donc un mois accentué
+      // ferait échouer le motif et le test porterait sur la REÇU, pas sur le
+      // fond. `[\p{L}]` le dit mieux : des lettres, quelles qu'elles.
+      const forme = /^\d{1,2} [^\s\d]+ \d{4}$/;
+      expect({ aberrant, rendu: forme.test(obtenu), vide: obtenu.length === 0 })
+        .toEqual({ aberrant, rendu: true, vide: false });
+    }
+    // Le FUSEAU décide du jour, comme pour `relativeTimeFr` : la même note peut
+    // être du 4 à Paris et du 3 à Tokyo. C'est voulu — c'est l'heure locale du
+    // poste qui compte pour une date d'évaluation.
+    // 20:00 UTC : Paris (UTC+2) est le 3 à 22 h, Tokyo (UTC+9) le 4 à 5 h. Donc
+    // le même horodatage tombe sur DEUX dates différentes — et c'est ce que veut
+    // dire « la date locale du poste ».
+    const instant = Date.UTC(2026, 9, 3, 20, 0);
+    expect({ paris: tsLongDateFr(instant, ZONE), tokyo: tsLongDateFr(instant, "Asia/Tokyo") })
+      .toEqual({ paris: "3 octobre 2026", tokyo: "4 octobre 2026" });
   });
 
   test("relativeTimeFr : `now` injecté, donc même résultat à n'importe quelle heure du jour", () => {
