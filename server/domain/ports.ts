@@ -4,6 +4,7 @@
 // Voir docs/architecture/INVARIANTS.md (I2, I3, I5, I6, I7).
 import type { AbsenceRecord, Assignment, CanteenMenu, Capabilities, Discussion, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 import { isOpaqueMediaRef } from "../../shared/contracts/models";
+import type { ProvidedAverages } from "./averages";
 
 export type Untrusted<T = string> = { readonly __untrusted: true; readonly value: T };
 
@@ -144,6 +145,13 @@ export interface PronoteReader {
   getTimetable(accountId: string, options?: PronoteTimetableOptions): Promise<PronotePage<TimetableEntry>>;
   /** Périodes scolaires (#74) : regroupement des moyennes + onglets par trimestre. */
   getPeriods?(accountId: string): Promise<PronotePage<Period>>;
+  /**
+   * Bulletin publié (#74) : UNE entrée de moyenne par période publiée (son
+   * `periodId` est dans l'objet). Page vide = établissement qui ne publie aucun
+   * bulletin (cas normal : le rapport reste estimé). Optionnelle : un adaptateur
+   * qui ne sait pas lire les bulletins laisse l'estimation en place.
+   */
+  getProvidedAverages?(accountId: string): Promise<PronotePage<ProvidedAverages>>;
   /** Ressources pédagogiques : contenus cours + PJ devoirs (proxy serveur, #84). */
   getResources?(accountId: string, page?: PronotePageOptions): Promise<PronotePage<PedagogicResource>>;
   /**

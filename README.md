@@ -26,8 +26,8 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 ## Fonctionnalités
 
 - **Notes & moyennes** — 3 algorithmes (moyenne de matière, pondérée par coefficient, médiane),
-  moyenne fournie par l'établissement ou estimée, influence de chaque note, courbe d'historique,
-  périodes (trimestres/semestres).
+  moyenne lue dans le bulletin publié par l'établissement (`/20`, par période) sinon estimée,
+  influence de chaque note, courbe d'historique, périodes (trimestres/semestres).
 - **Devoirs** — description, contenus de cours, pièces jointes, filtre par semaine,
   **toggle « fait » écrit dans Pronote** (action confirmée dans l'app, jamais déclenchée par l'IA).
 - **Aide devoirs (IA)** — bouton par devoir : corrigé sourcé ou refus motivé, sources = la

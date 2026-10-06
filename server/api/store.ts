@@ -6,7 +6,7 @@
 import type { AbsenceRecord, Assignment, CanteenBalance, CanteenMenu, Capabilities, Discussion, Grade, Message, NewsItem, Period, Punishment, Recipient, TimetableEntry, UserInfo } from "../../shared/contracts/models";
 import type { SecurityAlertData } from "../../shared/contracts/events";
 
-import type { ProvidedAverages } from "../domain/averages";
+import type { ProvidedAveragesByPeriod } from "../domain/averages";
 
 
 export interface ReadStore {
@@ -17,8 +17,11 @@ export interface ReadStore {
   securityAlerts(): SecurityAlertData[];
   /** Périodes scolaires (#74) : regroupement des moyennes + onglets par période. */
   periods(): Period[];
-  /** Moyennes fournies par l'établissement (#74), null si non publiées. */
-  providedAverages(): ProvidedAverages | null;
+  /**
+   * Moyennes fournies PAR PÉRIODE (#74) : ce que l'établissement publie
+   * réellement, sinon l'estimation. Table vide = aucun bulletin publié.
+   */
+  providedAverages(): ProvidedAveragesByPeriod;
   /**
    * Actualités établissement (#79). Optionnelle : les implémentations qui n'ont
    * pas encore la table (adaptateur SQLite #11) répondent liste vide.
@@ -78,7 +81,7 @@ export interface StoreSeed {
   readonly entries?: TimetableEntry[];
   readonly securityAlerts?: SecurityAlertData[];
   readonly periods?: Period[];
-  readonly providedAverages?: ProvidedAverages | null;
+  readonly providedAverages?: ProvidedAveragesByPeriod;
 
   readonly news?: NewsItem[];
 
@@ -187,7 +190,7 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
   const alerts = structuredClone(seed.securityAlerts ?? SEED_ALERTS);
   const periods = structuredClone(seed.periods ?? SEED_PERIODS);
   const news = structuredClone(seed.news ?? SEED_NEWS);
-  const provided = seed.providedAverages === undefined ? null : structuredClone(seed.providedAverages);
+  const provided = structuredClone(seed.providedAverages ?? {});
 
   // #81 : aucun menu par défaut (module cantine souvent absent). Le filtre de
   // fenêtre est fait par le routeur, le store reste une source de lecture.
@@ -212,7 +215,7 @@ export function createMemoryStore(seed: StoreSeed = {}): ReadStore {
     entries: () => structuredClone(entries),
     securityAlerts: () => structuredClone(alerts),
     periods: () => structuredClone(periods),
-    providedAverages: () => (provided === null ? null : structuredClone(provided)),
+    providedAverages: () => structuredClone(provided),
 
     news: () => structuredClone(news),
 

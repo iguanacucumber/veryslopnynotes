@@ -23,7 +23,7 @@ import type {
   UserInfo,
 } from "../../shared/contracts/models";
 import type { SecurityAlertData } from "../../shared/contracts/events";
-import type { ProvidedAverages } from "../domain/averages";
+import type { ProvidedAveragesByPeriod } from "../domain/averages";
 import type { ReadStore } from "../api/store";
 
 /**
@@ -36,7 +36,7 @@ export interface SnapshotPatch {
   readonly assignments?: Assignment[];
   readonly entries?: TimetableEntry[];
   readonly periods?: Period[];
-  readonly providedAverages?: ProvidedAverages | null;
+  readonly providedAverages?: ProvidedAveragesByPeriod;
   readonly news?: NewsItem[];
   readonly canteenMenus?: CanteenMenu[];
   readonly canteenBalance?: CanteenBalance | null;
@@ -71,7 +71,7 @@ export class SnapshotStore implements ReadStore {
   private stateAssignments: Assignment[] = [];
   private stateEntries: TimetableEntry[] = [];
   private statePeriods: Period[] = [];
-  private provided: ProvidedAverages | null = null;
+  private provided: ProvidedAveragesByPeriod = {};
   private stateNews: NewsItem[] = [];
   private stateCanteenMenus: CanteenMenu[] = [];
   private stateCanteenBalance: CanteenBalance | null = null;
@@ -131,7 +131,7 @@ export class SnapshotStore implements ReadStore {
     this.stateAssignments = [];
     this.stateEntries = [];
     this.statePeriods = [];
-    this.provided = null;
+    this.provided = {};
     this.stateNews = [];
     this.stateCanteenMenus = [];
     this.stateCanteenBalance = null;
@@ -160,8 +160,8 @@ export class SnapshotStore implements ReadStore {
   periods(): Period[] {
     return structuredClone(this.statePeriods);
   }
-  providedAverages(): ProvidedAverages | null {
-    return this.provided === null ? null : structuredClone(this.provided);
+  providedAverages(): ProvidedAveragesByPeriod {
+    return structuredClone(this.provided);
   }
   news(): NewsItem[] {
     return structuredClone(this.stateNews);

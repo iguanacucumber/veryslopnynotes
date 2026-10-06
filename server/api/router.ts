@@ -40,7 +40,7 @@ import type { PairingConfirmResponse, SetupResponse } from "../../shared/contrac
 import { CONTRACTS_VERSION, DEFAULT_AVERAGE_ALGORITHM, DISCUSSION_ID_MAX_CHARS, isAverageAlgorithm, isNewsItem, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT, TIMETABLE_WEEK_MAX_SPAN_DAYS } from "../../shared/contracts/models";
 import type { ContractEvent, NewsUpdatedData, SyncCompletedData, TimetableUpdatedData } from "../../shared/contracts/events";
 import { apiError } from "./errors";
-import { computeAverages } from "../domain/averages";
+import { computeAverages, providedAveragesFor } from "../domain/averages";
 import { attendancePeriods } from "../domain/attendance";
 import { handleHomeworkGenerate } from "./homework";
 import type { AssignmentActions, MediaActions } from "./assignments";
@@ -426,7 +426,7 @@ export function createHandler(
           averages: computeAverages(grades, {
             algorithm,
             periodId,
-            provided: store.providedAverages(),
+            provided: providedAveragesFor(store.providedAverages(), periodId),
           }),
         };
         return json(isGradesResponse(payload), payload);
