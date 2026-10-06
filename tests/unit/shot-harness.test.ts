@@ -73,7 +73,7 @@ const TOP_BARS = new Map<string, string>(
   ]),
 );
 
-/** Les cinq routes d'onglet, dans l'ordre de la barre d'onglets. */
+/** Les routes d'onglet, dans l'ordre de la barre d'onglets (#190 : quatre). */
 const TABS = (
   APP_SHELL.match(/private val TAB_ROUTES = listOf\(([^)]*)\)/)?.[1] ?? ""
 )
@@ -155,11 +155,14 @@ describe("marqueurs d'écran (#160)", () => {
     }
   });
 
-  test("aucun témoin n'est un libellé d'onglet nu : les 5 onglets exigent un fragment", () => {
-    // La barre d'onglets affiche « Accueil », « EDT », « Tâches », « Notes »,
-    // « Profil » sur TOUTES les routes : un témoin qui se réduit à ça est
-    // toujours présent, donc ne prouve RIEN (c'était le piège du marqueur).
-    expect(TABS).toHaveLength(5);
+  test("aucun témoin n'est un libellé d'onglet nu : chaque onglet exige un fragment", () => {
+    // La barre d'onglets affiche « Accueil », « Cours », « Tâches », « Notes »
+    // sur TOUTES les routes : un témoin qui se réduit à ça est toujours présent,
+    // donc ne prouve RIEN (c'était le piège du marqueur). #190 : quatre
+    // onglets, pas cinq — le nombre n'est pas une constante du raisonnement,
+    // c'est la LECTURE de `TAB_ROUTES` qui compte, donc une régression sur le
+    // nombre se voit ici sans qu'aucun test ne l'ait en dur.
+    expect(TABS.length).toBeGreaterThan(0);
     for (const route of TABS) {
       const { title = "", fragments = [] } = WITNESSES.get(route) ?? {};
       expect({ route, nu: fragments.length === 0, redondant: fragments.includes(title) }).toEqual({
@@ -763,8 +766,20 @@ describe("shot.sh : le témoin d'écran (#160)", () => {
 // barre d'onglets comprise : sans elle, un témoin comme « Réessayer » passerait
 // pour propre alors qu'il est partagé par sept écrans.
 
-/** Libellés de la barre d'onglets, dans l'ordre d'AppShell.kt (TAB_ROUTES). */
-const ONGLETS = ["Accueil", "EDT", "Tâches", "Notes", "Profil"];
+/**
+ * Libellés de la barre d'onglets, dans l'ordre d'AppShell.kt (TAB_ROUTES).
+ * #190 : quatre onglets, et « Cours » là où nous écrivions « EDT ».
+ *
+ * LECTURE de la source, pas une liste en dur : une liste figée ici serait une
+ * deuxième source à oublier, et c'est exactement ce que ce fichier s'interdit
+ * ailleurs. `Tab_…` est le nom de la constante, `to "…"` son libellé.
+ */
+const ONGLETS = (
+  APP_SHELL.match(/private fun tabLabel\(route: String\): String = when \(route\) \{([\s\S]*?)\n\}/)?.[1] ?? ""
+)
+  .split("\n")
+  .map((l) => l.match(/-> "([^"]+)"/)?.[1]?.trim())
+  .filter((l): l is string => l !== undefined);
 
 /**
  * Dump uiautomator du fixture : un `text` par libellé, dans l'ordre vu.

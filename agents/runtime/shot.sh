@@ -438,9 +438,15 @@ is_locked() {
 # Une refonte ne peut plus casser la vérification en silence : quand le témoin
 # manque, le message nomme CETTE table (fichier + ligne) et dit où changer le
 # titre. Le libellé d'onglet reste EXCLU comme témoin : voir plus haut.
+#
+# #190 : `calendar` s'appelle « Cours » (le libellé de la référence). `grades`
+# porte encore « Notes », mais c'est le REPLI : l'écran publie le nom de la
+# période dans la barre, donc c'est son FRAGMENT qui prouve la route, pas ce
+# titre — il reste dans la table parce que `TOP_BARS` le garde pour l'état sans
+# période, et les deux tables doivent dire la même chose.
 ROUTE_WITNESSES='
 index|Accueil|Afficher plus;Rien à afficher
-calendar|EDT|semaine du
+calendar|Cours|semaine du
 grades|Notes|Moyennes par matière;Aucune note en cache;Aucune note sur cette période;Aucune note trouvée;Notes indisponibles.
 tasks|Tâches|Devoirs de la semaine
 profile|Profil|Détecter les onglets
