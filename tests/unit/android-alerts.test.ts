@@ -183,6 +183,22 @@ describe("unit android alertes sécurité (#144)", () => {
     expect(screen).not.toContain("https://");
   });
 
+  // #148 (recette des 14 écrans) : la capture de la route `alerts` hors ligne
+  // affichait « Hors-ligne, aucune donnée en cache. » DEUX fois — en petite
+  // ligne rouge sous le témoin d'écran, puis en grand sous le triangle. Le
+  // message venait des deux côtés : `notice` (le même échec) et l'état ERROR.
+  //
+  // La ligne de cause ne sert qu'ACCOMPAGNER une liste affichée ; quand
+  // l'écran EST l'erreur, elle n'apporte rien.
+  test("#148 : le message d'échec n'est rendu qu'une fois sur l'écran Alertes", () => {
+    const screen = codeOnly(readFileSync(SCREEN, "utf8"));
+    expect(screen).toContain(
+      "if (notice != null && alertsLayout(view) != AlertsLayout.ERROR) {",
+    );
+    // Le bloc ERROR garde le message : c'est lui qui l'affiche désormais seul.
+    expect(screen).toContain("AlertsLayout.ERROR -> PapErrorState(");
+  });
+
   test("fixture hostile : conforme au contrat, et reste une donnée", () => {
     expect(isSecurityAlertData(GOOD)).toBe(true);
     expect(GOOD.excerpt.length).toBeGreaterThan(140);

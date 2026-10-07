@@ -392,6 +392,50 @@ describe("unit android profil (#82)", () => {
     expect(nav).toContain("AccountStore(ctx, cacheStore, tokens)");
   });
 
+  // #148 (recette des 14 écrans) : le PROFIL annonçait « 0 compte appairé »
+  // sur un appareil appairé, parce que `account_ids` n'est écrit que quand
+  // `/v1/me` répond — donc jamais hors ligne. Réglages affichait « 1 compte »
+  // (écrit en dur) : deux écrans, deux nombres, une seule réalité.
+  //
+  // Le plancher du compteur est la session (TokenStore), pas la liste d'ids :
+  // un jeton valide PROUVE qu'un compte est appairé.
+  test("#148 : un compte appairé reste compté même si /v1/me n'a jamais répondu", () => {
+    const store = read(join(DATA, "AccountStore.kt"));
+    const code = codeOnly(store);
+    expect(code).toContain("maxOf(accountIds().size, if (tokenStore.isPaired()) 1 else 0)");
+    // La liste d'ids reste la source du sélecteur de compte : le plancher ne
+    // fabrique aucun identifiant (donc aucun compte « courant » inventé).
+    // `current()` ne se sert PAS du plancher : sans id connu, le compte courant
+    // reste `null` (le sélecteur ne propose que ce que `/v1/me` a publié).
+    expect(code).toMatch(/fun current\(\): String\? \{[\s\S]*?accountIds\(\)\.contains\(id\)\) id else null/);
+
+    // Réglages : le nombre vient du magasin, plus de « 1 compte » en dur.
+    const settings = read(join(UI, "SettingsScreen.kt"));
+    expect(settings).toContain('"$accountCount compte · l\'appairage se fait depuis le Profil"');
+    expect(settings).not.toContain('"1 compte · l\'appairage se fait depuis le Profil"');
+
+    // Miroir : session présente, liste vide = 1 (le cas hors ligne) ; session
+    // absente = 0 (un appareil non appairé n'annonce aucun compte).
+    const compte = (ids: string[], paired: boolean): number =>
+      Math.max(ids.length, paired ? 1 : 0);
+    expect(compte([], true)).toBe(1);
+    expect(compte([], false)).toBe(0);
+    expect(compte(["a", "b"], false)).toBe(2);
+  });
+
+  // Même recette, autre écran : le Profil affichait l'état d'ERREUR
+  // (« Hors-ligne, profil indisponible. » + « Réessayer ») PUIS l'état VIDE
+  // (« Aucune information publiée pour ce compte. ») — deux affirmations
+  // opposées sur la même capture, dont une inventée : la lecture ayant échoué,
+  // on ne sait pas si l'établissement publie quelque chose.
+  test("#148 : l'état vide du profil ne s'affiche plus quand la lecture a échoué", () => {
+    const screen = read(join(UI, "ProfileScreen.kt"));
+    expect(screen).toContain("readFailed: Boolean = false");
+    expect(screen).toMatch(/profile == null && !readFailed/);
+    // Le câblage : l'écran reçoit l'échec de la lecture, pas l'inverse.
+    expect(screen).toContain("readFailed = error.isNotEmpty()");
+  });
+
   test("accueil : prochain cours, devoirs à rendre, dernières notes", () => {
     const lessons = tsUpcoming(JSON.stringify(syntheticTimetablePayload), NOW);
     // Le cours du 03 est en cours, ceux du 05 et du 06 à venir (tri croissant).

@@ -359,4 +359,27 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
     // inutilisable — et le scanner, lui, s'ouvrait très bien.
     expect(screen.split("verticalScroll(rememberScrollState())").length - 1).toBe(3);
   });
+
+  // #148 (recette des 14 écrans) : la capture de la route `pairing` montrait
+  // deux défauts qu'aucun test ne regardait — ils sont dans la même colonne,
+  // l'un sous l'autre.
+  //
+  // 1. « Retour » était un `Button` REMPLI : deux boutons verts de même poids
+  //    sur l'écran (« Retour » et « Continuer »), donc plus aucune action
+  //    principale. Le retour est secondaire : `TextButton` le dit par son encre.
+  // 2. Le titre de l'étape (« Étape 1/3 — ton serveur ») était suivi d'un
+  //    « Serveur » en 16 sp : le même mot deux fois dans la même colonne. Le
+  //    titre d'étape est le `heading()` que le survol annonce, il suffit.
+  test("#148 : retour secondaire, et pas de doublon « Serveur » dans l'étape 1", () => {
+    expect(screen).toMatch(/TextButton\(\s*onClick = \{ if \(previous != null\) step = previous else onBack\(\) \}/);
+    // « Continuer » reste le SEUL bouton rempli de l'étape serveur.
+    const boutonsRemplis = screen.match(/\n {8}Button\(/g) ?? [];
+    // QrStep + AccountStep portent chacun leur bouton d'action ; le retour de
+    // l'assistant n'en fait plus partie.
+    expect(boutonsRemplis.length).toBeLessThanOrEqual(4);
+    // Le libellé « Serveur » seul (ligne de titre) a disparu du champ.
+    expect(screen).not.toMatch(/\n {8}Text\("Serveur"\)/);
+    // ...et il reste dans le titre d'étape, qui est le repère du survol.
+    expect(screen).toContain('text = setupStepLabel(step)');
+  });
 });

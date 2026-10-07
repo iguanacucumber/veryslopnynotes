@@ -292,7 +292,12 @@ fun SettingsScreen(
                 subtitle = if (accountCount > 1) {
                     "$accountCount comptes · la session en cours garde ses accès"
                 } else {
-                    "1 compte · l'appairage se fait depuis le Profil"
+                    // #148 : « 1 compte » était ÉCRIT en dur — donc un appareil
+                    // sans session y annonçait un compte appairé, et le même
+                    // appareil affichait « 0 compte appairé » au Profil. Le
+                    // nombre vient maintenant du magasin comme partout ailleurs
+                    // (0 = aucune session, ce que `AccountStore.count()` sait).
+                    "$accountCount compte · l'appairage se fait depuis le Profil"
                 },
             )
             Text(
