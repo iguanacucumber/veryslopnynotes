@@ -105,6 +105,16 @@ fun ProfileScreen(
     capabilities: Capabilities? = null,
     onRefreshCapabilities: () -> Unit = {},
 
+    // #148 (recette des 14 écrans) : la lecture a-t-elle ÉCHOUÉ ?
+    //
+    // Sans ce drapeau, l'écran disait DEUX choses contradictoires à la fois :
+    // « Hors-ligne, profil indisponible. » + « Réessayer » (l'état d'erreur rendu
+    // par `ProfileRoute`), puis « Aucune information publiée pour ce compte. » —
+    // alors qu'on n'en sait rien : la lecture a échoué, donc « rien de publié »
+    // serait une affirmation inventée. L'état vide reste réservé au cas
+    // RÉELLEMENT sans information.
+    readFailed: Boolean = false,
+
     // #80 : messagerie (discussions).
     goMessages: () -> Unit = {},
     onSwitchAccount: (String) -> Unit = {},
@@ -129,13 +139,21 @@ fun ProfileScreen(
                 title = "Serveur non configuré",
                 description = "Appaire l'appareil pour afficher ton profil.",
             )
-        } else if (profile == null) {
+        } else if (profile == null && !readFailed) {
             // Compte appairé sans infos publiées : état vide, pas de nom d'exemple.
+            // #148 : JAMAIS quand la lecture a échoué — l'écran d'erreur du haut
+            // dit déjà « indisponible », et ajouter « aucune information publiée »
+            // affirmait une absence de données qu'on n'a pas pu vérifier.
             PapEmptyState(
                 icon = Icons.Filled.Info,
                 title = "Aucune information",
                 description = "Aucune information publiée pour ce compte.",
             )
+        } else if (profile == null) {
+            // Lecture échouée, rien d'affiché : les sections ci-dessous restent
+            // atteignables (elles ne dépendent pas du profil), et l'en-tête ne
+            // ment sur rien.
+            Unit
         } else {
             ProfileHeader(
                 name = profile.displayName,
@@ -499,6 +517,9 @@ fun ProfileRoute(
             goAttendance = goAttendance,
             capabilities = capabilities,
             onRefreshCapabilities = onRefreshCapabilities,
+            // #148 : l'écran d'erreur ci-dessus ne doit pas être suivi d'un vide
+            // qui affirme « aucune information publiée ».
+            readFailed = error.isNotEmpty(),
 
             goMessages = goMessages,
             onSwitchAccount = { id ->

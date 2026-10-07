@@ -38,7 +38,21 @@ class AccountStore(
             .take(MAX_ACCOUNTS)
     }
 
-    fun count(): Int = accountIds().size
+    /**
+     * Comptes appairés CONNUS, jamais moins que la session elle-même.
+     *
+     * #148 (recette des 14 écrans) : hors ligne, `/v1/me` ne répond pas, donc
+     * [add] n'est jamais appelé et la liste reste vide — l'écran Profil
+     * affichait « 0 compte appairé » sur un appareil APPAIRÉ (jeton présent,
+     * `base_url` écrit), pendant que Réglages affichait « 1 compte ». Deux
+     * écrans, deux nombres, pour la même réalité.
+     *
+     * Le plancher vient du [TokenStore] : une session valide PROUVE qu'un
+     * compte est appairé. Il ne sert qu'à l'affichage — la liste reste la
+     * source des identifiants, donc le sélecteur de compte ne propose toujours
+     * que ce que `/v1/me` a publié.
+     */
+    fun count(): Int = maxOf(accountIds().size, if (tokenStore.isPaired()) 1 else 0)
 
     /** Enregistre un compte appairé. false = déjà connu ou id invalide. */
     fun add(accountId: String): Boolean {

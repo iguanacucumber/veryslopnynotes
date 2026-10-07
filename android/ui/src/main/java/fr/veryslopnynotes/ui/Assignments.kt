@@ -781,15 +781,29 @@ fun AssignmentsScreen(
             }
         }
         WeekNavigator(weekRange = weekRange, onShiftWeek = onShiftWeek)
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            label = { Text("Rechercher un devoir", maxLines = 1) },
-            leadingIcon = { Icon(imageVector = Icons.Filled.Search, contentDescription = null) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        SubjectFilterRow(subjects = subjects, prefs = subjectPrefs, selected = selectedSubject, onSelect = onSubjectChange)
+        // #148 (recette des 14 écrans) : les deux contrôles de FILTRAGE ne
+        // s'affichent que s'il y a des devoirs à filtrer. Avant, ils restaient
+        // au-dessus de l'état d'erreur : « Rechercher un devoir » et les puces
+        // matière au-dessus de « Hors-ligne, aucune donnée en cache. » sont
+        // des contrôles qui ne filtrent rien — la règle de #162 (« un écran
+        // sans donnée est un état unique, pas une page de contrôles au-dessus
+        // du vide ») appliquée à cet écran comme aux sept autres.
+        if (stateKey != "loading" && stateKey != "error" && stateKey != "empty") {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                label = { Text("Rechercher un devoir", maxLines = 1) },
+                leadingIcon = { Icon(imageVector = Icons.Filled.Search, contentDescription = null) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            SubjectFilterRow(
+                subjects = subjects,
+                prefs = subjectPrefs,
+                selected = selectedSubject,
+                onSelect = onSubjectChange,
+            )
+        }
         // #145 : le bandeau « périmé » s'OUVRE au lieu d'apparaître d'un coup, et
         // le message d'écriture ne passe plus ici : c'est le snackbar racine, qui
         // a une couleur de sévérité et une fermeture automatique.
