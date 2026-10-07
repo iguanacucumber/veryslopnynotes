@@ -168,10 +168,16 @@ fun PairingRoute(
         // première étape, `popBackStack` ne peut rien faire (au premier
         // lancement l'assistant EST la route de départ ; après un 401 la pile a
         // été vidée), donc les étapes 2 et 3 n'avaient aucun chemin de retour.
+        //
+        // #148 (recette des 14 écrans) : c'était un `Button` REMPLI, donc
+        // deux boutons verts de même poids sur l'écran — « Retour » et
+        // « Continuer » — et aucun n'était plus l'action principale. Le retour
+        // est une action SECONDAIRE : `TextButton` le dit par son encre, et
+        // l'image ne change pas.
         val previous = previousStep(step)
-        Button(
+        TextButton(
             onClick = { if (previous != null) step = previous else onBack() },
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(start = 8.dp, end = 8.dp),
         ) { Text(if (previous != null) "Étape précédente" else "Retour") }
         if (!notice.isNullOrEmpty()) {
             Text(
@@ -272,7 +278,11 @@ fun ServerField(
         modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("Serveur")
+        // #148 (recette des 14 écrans) : ce « Serveur » en titre doublait
+        // l'étape juste au-dessus (« Étape 1/3 — ton serveur ») — le même mot
+        // deux fois dans la même colonne, en 16 sp puis en 14 sp. Le titre de
+        // l'étape suffit : il nomme déjà le sujet, et il est le `heading()` que
+        // le survol annonce.
         OutlinedTextField(
             value = value,
             onValueChange = onChange,
