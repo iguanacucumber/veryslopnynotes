@@ -182,7 +182,12 @@ fun SecurityAlertsScreen(
         // #145 : c'est un REFUS, pas une information — il prend la couleur
         // d'erreur. En encre secondaire, il se lisait comme la ligne du témoin
         // juste au-dessus, donc un échec ne se distinguait d'aucun succès.
-        if (notice != null) {
+        // #148 (recette des 14 écrans) : la ligne de cause ne se rend QUE si
+        // l'état affiché n'est PAS l'erreur. AVANT, `notice` (le message de
+        // l'échec) s'affichait en rouge ET l'état `ERROR` rendait le MÊME
+        // message sous le triangle — donc « Hors-ligne, aucune donnée en
+        // cache. » deux fois sur la même capture, en deux tailles.
+        if (notice != null && alertsLayout(view) != AlertsLayout.ERROR) {
             // `errorTextColor()` : le rouge de marque ne vaut que 3.70:1 sur la
             // surface SOMBRE, et ce refus est du texte.
             Text(

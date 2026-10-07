@@ -887,4 +887,21 @@ describe("carte de devoir (#161)", () => {
     const carte = code.slice(code.indexOf("private fun PapTaskCard"), code.indexOf("private fun HomeworkHelpChip"));
     expect(carte).not.toMatch(/fillMaxHeight|requiredHeight|\bheight\(|\bheightIn\(|Spacer\(Modifier\.height/);
   });
+
+  // #148 (recette des 14 écrans) : la capture de la route `tasks` hors ligne
+  // montrait « Rechercher un devoir » et les puces matière AU-DESSUS de
+  // « Hors-ligne, aucune donnée en cache. ». Ce sont des contrôles qui ne
+  // filtrent rien : exactement ce que #162 avait interdit sur les sept autres
+  // écrans (« un écran sans donnée est un état unique, pas une page de
+  // contrôles au-dessus du vide »). Le même écran ne les montrait qu'avec une
+  // liste — la règle est donc celle de #162, appliquée ici.
+  test("#148 : les filtres ne s'affichent qu'avec des devoirs à filtrer", () => {
+    const code = stripComments(readFileSync(join(UI, "Assignments.kt"), "utf8"));
+    expect(code).toMatch(
+      /if \(stateKey != "loading" && stateKey != "error" && stateKey != "empty"\) \{[\s\S]{0,600}Rechercher un devoir[\s\S]{0,400}SubjectFilterRow\(/,
+    );
+    // L'état LISTE reste le seul qui porte la barre de filtres — donc une
+    // rechercheActive change bien l'affichage des filtres avec l'état.
+    expect(code).toMatch(/stateKey = when \{[\s\S]*?else -> "list"/);
+  });
 });

@@ -884,9 +884,13 @@ const VARIANTES: Record<string, Variante> = {
     erreur: ["Notes indisponibles.", "Erreur réseau. Réessayer.", "Réessayer"],
   },
   // L'en-tête « Devoirs de la semaine » est rendu hors de la liste.
+  // #148 : l'état VIDE ne cite plus « Rechercher un devoir » — le champ de
+  // recherche et les puces matière ne sortent plus sans devoirs à filtrer (un
+  // contrôle qui ne filtre rien au-dessus d'un vide). Le témoin de la route
+  // reste l'en-tête, qui est toujours là.
   tasks: {
     plein: ["Devoirs de la semaine", "En retard", "Rechercher un devoir", "Toutes", "Actualiser"],
-    vide: ["Devoirs de la semaine", "Rechercher un devoir", "Aucun devoir cette semaine", "Rien à rendre pour le moment."],
+    vide: ["Devoirs de la semaine", "Aucun devoir cette semaine", "Rien à rendre pour le moment."],
   },
   // Les boutons de destination sont rendus inconditionnellement.
   profile: {
