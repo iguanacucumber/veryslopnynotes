@@ -867,6 +867,132 @@ describe("unit android EDT par jour (#137)", () => {
   // dessinait à cheval sur le bandeau « périmé », au milieu de l'écran, sans
   // qu'aucun geste n'ait jamais eu lieu. Le tirail est désormais celui de
   // `HomePullToRefresh` (#143), la seule implémentation du dépôt.
+  // #194 : la PREUVE de la vague, sous forme de jetons numériques. Chaque
+  // valeur est celle relevée dans `ui/components/Course.tsx` de la référence
+  // (MODE LISTE, son défaut sur téléphone) et écrite à côté du `val` Kotlin
+  // qu'elle attaque — donc une dérive de la source ET une dérive du test
+  // cassent ici, ce qu'aucune capture ne ferait.
+  test("géométrie de la carte de cours : chaque jeton est la valeur relevée", () => {
+    const card = readFileSync(join(UI, "TimetableCourseCard.kt"), "utf8");
+    const screen = readFileSync(join(UI, "TimetableWeek.kt"), "utf8");
+    // Carte : rayon 25, barre d'accent de 6 en boule, padding 14 sur les quatre
+    // côtés, 10 entre l'accent et le texte.
+    for (const [nom, mesure] of [
+      ["SPINE_WIDTH", "6.dp"],
+      ["CARD_RADIUS", "25.dp"],
+      ["CARD_PADDING_H", "14.dp"],
+      ["CARD_PADDING_V", "14.dp"],
+      ["SPINE_GAP", "10.dp"],
+      ["STACK_GAP", "2.dp"],
+    ] as const) {
+      expect({ nom, mesure, trouve: card.includes(`${nom} = ${mesure}`) }).toEqual({ nom, mesure, trouve: true });
+    }
+    // Une constante DÉCLARÉE et jamais UTILISÉE est du code mort : elle passerait
+    // le test ci-dessus tout en ne changeant aucun rendu. On compte donc les
+    // occurrences — la déclaration plus au moins un usage.
+    for (const nom of [
+      "CARD_RADIUS", "CARD_PADDING_H", "CARD_PADDING_V", "SPINE_GAP", "SPINE_WIDTH",
+      "META_ICON", "META_ICON_GAP", "META_DIVIDER_WIDTH", "META_DIVIDER_HEIGHT",
+      "META_DIVIDER_ALPHA", "META_DIVIDER_MARGIN", "META_LINE_GAP", "STACK_GAP",
+      "TIME_GUTTER_GAP", "TIME_GUTTER_PADDING_END", "TIME_START_LEADING", "TIME_END_LEADING",
+      "LUNCH_PADDING_V", "LUNCH_ALPHA", "LUNCH_DURATION_ALPHA", "CUTLERY_SIZE",
+      "TimetableCardGap", "TimetableRowGap", "TimetablePagePadding",
+    ]) {
+      const usages = (card + screen).split(nom).length - 1;
+      expect({ nom, usages: usages >= 2 }).toEqual({ nom, usages: true });
+    }
+    // Gouttière : 60 de large, 3 entre les deux heures, 2 de marge à droite,
+    // interlignes 20 et 19 — des `TextUnit`, donc en `sp` et non en `dp`.
+    for (const [nom, mesure] of [
+      ["TimetableTimeGutterWidth", "60.dp"],
+      ["TIME_GUTTER_GAP", "3.dp"],
+      ["TIME_GUTTER_PADDING_END", "2.dp"],
+      ["TIME_START_LEADING", "20.sp"],
+      ["TIME_END_LEADING", "19.sp"],
+    ] as const) {
+      expect({ nom, mesure, trouve: card.includes(`${nom} = ${mesure}`) }).toEqual({ nom, mesure, trouve: true });
+    }
+    // Ligne de méta : icônes de 20, écart de 5, séparateur 2 × 20 en boule à
+    // 50 %, marge de 8, et 1 dp entre le nom et la ligne.
+    for (const [nom, mesure] of [
+      ["META_ICON", "20.dp"],
+      ["META_ICON_GAP", "5.dp"],
+      ["META_DIVIDER_WIDTH", "2.dp"],
+      ["META_DIVIDER_HEIGHT", "20.dp"],
+      ["META_DIVIDER_ALPHA", "0.5f"],
+      ["META_DIVIDER_MARGIN", "8.dp"],
+      ["META_LINE_GAP", "1.dp"],
+      ["LUNCH_PADDING_V", "8.dp"],
+      ["LUNCH_ALPHA", "0.6f"],
+      ["CUTLERY_SIZE", "24.dp"],
+    ] as const) {
+      expect({ nom, mesure, trouve: card.includes(`${nom} = ${mesure}`) }).toEqual({ nom, mesure, trouve: true });
+    }
+    // Les TROIS espacements de la page, distincts : 10 entre deux cartes
+    // (4 + 6), 12 entre la gouttière et la carte, 12 de marge de page. Une
+    // constante pour les trois était le défaut — c'est ce qui se voit ici.
+    for (const [nom, mesure] of [
+      ["TimetableCardGap", "10.dp"],
+      ["TimetableRowGap", "12.dp"],
+      ["TimetablePagePadding", "12.dp"],
+    ] as const) {
+      expect({ nom, mesure, trouve: card.includes(`${nom} = ${mesure}`) }).toEqual({ nom, mesure, trouve: true });
+    }
+    // Et l'écran les CONSOMME séparément : le même nom en Vertical et en
+    // Horizontal serait la régression qu'on veut voir.
+    expect(screen).toContain("verticalArrangement = Arrangement.spacedBy(TimetableCardGap)");
+    expect(screen).toContain("Row(horizontalArrangement = Arrangement.spacedBy(TimetableRowGap))");
+    expect(screen).toContain("Modifier.padding(horizontal = TimetablePagePadding)");
+    // PAS sur le `contentPadding` : ce padding s'applique aussi au `stickyHeader`,
+    // et le fond de l'en-tête collant ne couvre que la largeur déduite du padding —
+    // donc les cours passaient visibles dans les 12 dp de chaque côté de
+    // l'en-tête pendant le défilement. C'est exactement ce que ce fond empêche.
+    const contentPadding = screen.slice(screen.indexOf("contentPadding = PaddingValues("), screen.indexOf(") {", screen.indexOf("contentPadding = PaddingValues(")));
+    expect({ padHorizontalDansContentPadding: /start|end/.test(contentPadding) })
+      .toEqual({ padHorizontalDansContentPadding: false });
+    // Le padding 14 est sur le CONTENEUR, donc la barre d'accent est ENCASTRÉE
+    // dans la carte et le texte a de la marge des DEUX côtés. Collée au bord et
+    // sans marge à droite, la carte se lisait comme un cadre, pas comme une
+    // fiche — c'était le défaut que #192/#193 avaient laissé sur l'onglet Cours.
+    expect(card).toContain(".padding(horizontal = CARD_PADDING_H, vertical = CARD_PADDING_V),");
+    // Le rayon est POSÉ, pas pris dans `shapes` : `shapes.large` vaut 20 et
+    // `extraLarge` 24, donc les deux sont « presque » la valeur relevée — et un
+    // rayon se voit exactement ou pas du tout.
+    expect(card).toContain("shape = RoundedCornerShape(CARD_RADIUS)");
+    // La bande de pause est une BOULE (`radius={300}`) : sur 40 dp de haut, un
+    // `RoundedCornerShape` à 20 donnait quatre coins francs là où la référence
+    // met la bande la plus douce de l'écran.
+    expect(card).toContain("shape = RoundedCornerShape(percent = 50)");
+    // `codeOnly` : sinon le commentaire qui cite `shapes.large` pour expliquer
+    // pourquoi on ne l'utilise pas ferait échouer l'assertion.
+    expect(card.replace(/\/\*[\s\S]*?\*\//g, "\n").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n"))
+      .not.toContain("MaterialTheme.shapes.large");
+    // Les deux extrémités de la barre d'accent sont des demi-cercles de 3 dp
+    // (`borderRadius: 300` sur une barre de 6) : sans ça, deux angles vifs.
+    // Le `clip(CircleShape)` doit être celui de la BARRE D'ACCENT. Sinon
+    // l'assertion passe pour le bon motif : le séparateur de méta est lui aussi
+    // en `CircleShape` (son `borderRadius: 50`), donc supprimer le clip de la
+    // barre laisserait ce test vert — sur une comparaison que c'est justement la
+    // cible.
+    const barre = card.slice(card.indexOf(".width(SPINE_WIDTH)"), card.indexOf(".background(spine)"));
+    expect({ barreEnBoule: barre.includes(".clip(CircleShape)") }).toEqual({ barreEnBoule: true });
+    // Le nom du cours : `h5` GRAS à 18 sp, interligne 24 — et pas `shapes`/
+    // `titleMedium`, qui donnait 17 sp en medium, soit la taille d'un libellé
+    // d'action pour le texte le plus gros de la carte.
+    expect(card).toContain(
+      "style = MaterialTheme.typography.titleLarge.copy(\n" +
+      "                            fontWeight = FontWeight.Bold,\n" +
+      "                            lineHeight = 24.sp,\n" +
+      "                        )",
+    );
+    // Le nom du cours tient sur DEUX lignes hors variante compacte : à une, un
+    // nom de matière long était coupé au milieu d'un mot. On lit le `maxLines`
+    // du SEUL `Text` qui porte le libellé, pas le premier du fichier — sinon
+    // l'assertion passerait sur une autre ligne.
+    const nomDuCours = card.slice(card.indexOf("text = label,"), card.indexOf("textDecoration"));
+    expect({ deuxLignes: nomDuCours.includes("maxLines = 2") }).toEqual({ deuxLignes: true });
+  });
+
   test("#166 : plus aucun `PullToRefreshContainer` de material3 1.2.1 dans l'EDT", () => {
     const screen = kotlinCode(readFileSync(join(UI, "TimetableWeek.kt"), "utf8"));
     // Le composable 1.2.1, son état, et la connexion de défilement qu'il

@@ -865,6 +865,16 @@ private fun TimetableDayPage(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(TimetableCardGap),
+        // #194 : la marge horizontale de 12 dp (`SafeHorizontalView base={12}`)
+        // est portée par les ÉLÉMENTS (voir `items` plus bas), PAS par le
+        // `contentPadding` — et c'est délibéré.
+        //
+        // Un `contentPadding` horizontal s'applique aussi au `stickyHeader`, et le
+        // fond de l'en-tête collant ne couvre que la largeur DÉDUITE de ce padding.
+        // Les cours passaient donc visibles dans les 12 dp de chaque côté de
+        // l'en-tête pendant le défilement — exactement ce que ce fond existe pour
+        // empêcher (cf. le KDoc de cette page). En mettre la marge sur les items,
+        // l'en-tête reste plein écran et les cours restent à 12 dp du bord.
         contentPadding = PaddingValues(bottom = 16.dp),
     ) {
         if (date != null && today != null) {
@@ -878,16 +888,26 @@ private fun TimetableDayPage(
         }
         items(items) { item ->
             when (item) {
-                is TimetableItemUi.Lesson -> TimetableCourseRow(
-                    lesson = item.lesson,
-                    zone = zone,
-                    subjectPrefs = subjectPrefs,
-                    highlight = highlightOf(item.lesson, currentStartMillis, nextStartMillis),
-                )
+                is TimetableItemUi.Lesson -> Box(
+                    modifier = Modifier.padding(horizontal = TimetablePagePadding),
+                ) {
+                    TimetableCourseRow(
+                        lesson = item.lesson,
+                        zone = zone,
+                        subjectPrefs = subjectPrefs,
+                        highlight = highlightOf(item.lesson, currentStartMillis, nextStartMillis),
+                    )
+                }
+                // La pause est alignée sur les CARTES : elle saute la gouttière
+                // d'heures et l'écart qui la sépare. La marge de page reste
+                // celle des cours, donc elle commence au même endroit qu'eux.
                 is TimetableItemUi.Break -> PapLunchCard(
                     label = item.pause.label,
                     duration = durationLabelOf(item.pause.endMillis - item.pause.startMillis),
-                    modifier = Modifier.padding(start = TimetableTimeGutterWidth + TimetableCardGap),
+                    modifier = Modifier.padding(
+                        start = TimetablePagePadding + TimetableTimeGutterWidth + TimetableRowGap,
+                        end = TimetablePagePadding,
+                    ),
                 )
             }
         }
@@ -907,7 +927,11 @@ private fun TimetableCourseRow(
     // (cf. `subjectColorHex`), pour que deux cours de la même matière se
     // ressemblent même avant d'avoir réglé les préférences.
     val colorHex = subjectColorHex(subjectPrefs, lesson.subject)
-    Row(horizontalArrangement = Arrangement.spacedBy(TimetableCardGap)) {
+    // #194 : 12 dp entre la gouttière d'heures et la carte (`gap: 12` sur le
+    // `flexDirection: "row"` de `Course`). Avant c'était le `TimetableCardGap` —
+    // donc la MÊME constante que l'écart vertical entre deux cartes, pour deux
+    // mesures que la référence donne pour 10 et 12.
+    Row(horizontalArrangement = Arrangement.spacedBy(TimetableRowGap)) {
         PapLessonTimeGutter(lesson = lesson, zone = zone)
         PapCourseCard(
             lesson = lesson,
