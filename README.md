@@ -20,7 +20,7 @@ de cours et manuels, avec contenu externe traité comme **donnée** et jamais co
 | Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (31 routes, 7 types d'événements) |
 | Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, assistant de connexion en 3 étapes (serveur → établissement → QR scanné + PIN), SSE, aide devoirs |
 | Point d'entrée HTTP serveur (`make runServer`, Docker) | Câblé : setup (QR de l'app) → session Pronote → reader → snapshot → routes, ports d'écriture inclus. **Zéro credential serveur** |
-| Garde-fous sécurité (I1–I8) + tests | 795 tests verts dans `make check`, scan d'architecture et de secrets en CI locale |
+| Garde-fous sécurité (I1–I8) + tests | 796 tests verts dans `make check`, scan d'architecture et de secrets en CI locale |
 | Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'établissement = **vide propre** |
 
 ## Fonctionnalités
@@ -222,7 +222,7 @@ make integration-api        # API locale, zéro secret
 make build                  # image Docker + rappel APK
 ```
 
-795 tests dans `make check`, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
+796 tests dans `make check`, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
 La CI locale est `make check` : un changement qui casse un invariant est bloquant, même si
 fonctionnellement il passe.
 
@@ -249,6 +249,17 @@ vérifiée »), jamais un faux vert. Prérequis et installation : `android/READM
   sa ligne de note n'affiche rien de tout cela. Nous l'avons au contrat et c'est
   utile à une moyenne : la ligne garde ces deux lignes. Les retirer alignerait le
   pixel en supprimant une feature.
+- **Onglet Cours : statut du cours en cours et suivant** : la référence
+  n'affiche **rien** de tout cela sur Android (son « prochain cours » vit dans un
+  accessory conditionné à iOS 26). Notre pastille « En cours », notre « Prochain »,
+  notre bordure et notre pulsation restent : c'est notre feature, et c'est
+  précisément ce que l'onglet sert.
+- **Onglet Cours : durée sur chaque carte** : la référence ne l'affiche que sous
+  un statut non annulé. Nous l'affichons toujours — c'est en plus, pas en moins.
+- **Onglet Cours : barre d'en-tête** : la référence y met un bouton calendrier à
+  gauche, le titre du **jour** au centre et un menu « Dots » à droite (mode de
+  vue + export iCal). Notre bandeau « semaine du … » avec ses deux flèches n'a
+  pas d'équivalent : c'est structurel, pas cosmétique, et pas fait.
 - **Recherche dans le corps, pas dans la barre** : la référence utilise la
   SearchBar **native** d'expo-router, qui n'écrit ni hauteur, ni rayon, ni typo
   (tout est fourni par la plateforme). Il n'y a donc aucun jeton à recopier, et la
