@@ -26,6 +26,24 @@ function days(n: number): Date {
   return new Date(Date.now() + n * 86400000);
 }
 
+/**
+ * Date dans la fenêtre par défaut de `getMenus` : la SEMAINE CIVILE (lundi 00:00
+ * → dimanche 00:00), pas « les sept prochains jours ».
+ *
+ * `days(1)` y suffisait jusqu'ici par chance (du lundi au vendredi, demain
+ * tombait encore dans la semaine) — le samedi et le dimanche, demain = lundi
+ * suivant = hors fenêtre, le menu était filtré et le transcript comptait 0, donc
+ * `make check` rouge sur `main` deux jours sur sept. Un témoin qui dépend du jour
+ * de la semaine n'est pas un témoin : il faut une date dans la fenêtre, quel que
+ * soit le jour où la suite tourne (#212).
+ */
+function thisWeekNoon(): Date {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // lundi de la semaine en cours
+  return d;
+}
+
 function fakeStore(client: unknown) {
   return { requireClient: () => client, currentAccountId: () => ACCOUNT };
 }
@@ -87,7 +105,7 @@ function fullClient(overrides: Fake = {}): Fake {
       { id: "n-1", title: "Conseil de classe", creationDate: days(-2), content: async () => "Ordre du jour." },
     ],
     menus: async () => [
-      { id: "m-1", name: "Déjeuner", date: days(1), isLunch: true, mainMeal: [{ name: "Poulet" }] },
+      { id: "m-1", name: "Déjeuner", date: thisWeekNoon(), isLunch: true, mainMeal: [{ name: "Poulet" }] },
     ],
     discussions: async () => [
       {
