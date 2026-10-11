@@ -48,16 +48,29 @@ function list(dir: string): string[] {
 }
 
 describe("invariants", () => {
+  // I1 repointé #200 : seul `android/pronote/` parle Pronote en direct (port
+  // #200, zéro dépendance). Le mot reste interdit partout ailleurs dans
+  // `android/` ; la déclaration du module dans `settings.gradle.kts` est
+  // l'unique mention tolérée hors module. Prose (INVARIANTS, AGENTS.md) en #211.
   test("I1: android sans hote Pronote", () => {
     const files = list(join(ROOT, "android")).filter((f) => {
       if (f.endsWith(".md")) return false;
+      if (f.includes("/android/pronote/")) return false;
       try {
-        return pronoteHost.test(codeOnly(readFileSync(f, "utf8")));
+        let code = codeOnly(readFileSync(f, "utf8"));
+        if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
+        return pronoteHost.test(code);
       } catch {
         return false;
       }
     });
     expect({ files }).toEqual({ files: [] });
+  });
+
+  test("I1: le module direct est déclaré une fois, et il existe", () => {
+    const settings = readFileSync(join(ROOT, "android", "settings.gradle.kts"), "utf8");
+    expect(settings).toContain('include(":app", ":core", ":data", ":ui", ":pronote")');
+    expect(list(join(ROOT, "android", "pronote")).filter((f) => f.endsWith(".kt")).length).toBeGreaterThan(0);
   });
 
   test("I1 FP: commentaires et docs ignorés", () => {
@@ -205,6 +218,13 @@ describe("invariants", () => {
       "providedAveragesFor",
       "computeAverages",
       "CapabilityProbe",
+      // Port Kotlin #200 : surface du protocole rejouée par la parité
+      // (`kotlin-pronote-parity`), branchée par le client #201 (`enleverAlea`
+      // et `sha256HexUpper` y servent à l'authentification QR/ENT).
+      "Communication",
+      "KeepAlive",
+      "enleverAlea",
+      "sha256HexUpper",
     ]);
     const morts: string[] = [];
     for (const f of files) {
