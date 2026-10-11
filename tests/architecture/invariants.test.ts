@@ -185,10 +185,27 @@ describe("invariants", () => {
   // `parseQrPayload` par `android-pairing-sse.test.ts`. Supprimer ces trois
   // fonctions supprimerait ce qu'elles vérifient : c'est la LISTE qui est
   // gardée, pas le code.
+  //
+  // Quatre noms de plus, et chacun est le POINT D'ENTRÉE du port Kotlin (#203)
+  // exécuté par le harnais de parité `tests/unit/kotlin-domain-parity.test.ts`
+  // (qui compile le vrai code et le rejoue, mieux qu'un miroir) : leurs
+  // appelants applicatifs arrivent avec #205 (repositories locaux). Ce ne sont
+  // pas des restes de refonte, c'est du code vivant sans appelant EMARQUÉ —
+  // la liste les garde jusqu'au branchement.
   test("I9: android sans code mort (aucun fun/class jamais appele)", () => {
     const files = list(join(ROOT, "android")).filter((f) => f.endsWith(".kt"));
     const code = files.map((f) => codeOnly(readFileSync(f, "utf8"))).join("\n");
-    const tolere = new Set(["MainActivity", "lessonBadgeLabel", "timetableDayLabel", "parseQrPayload"]);
+    const tolere = new Set([
+      "MainActivity",
+      "lessonBadgeLabel",
+      "timetableDayLabel",
+      "parseQrPayload",
+      // Port Kotlin #203 : points d'entrée rejoués par la parité, branchés en #205.
+      "subjectAverage",
+      "providedAveragesFor",
+      "computeAverages",
+      "CapabilityProbe",
+    ]);
     const morts: string[] = [];
     for (const f of files) {
       const src = codeOnly(readFileSync(f, "utf8"));
