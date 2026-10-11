@@ -42,12 +42,19 @@ function grep(files: string[], re: RegExp): string[] {
 
 let fail: string[] = [];
 
-// I1 : Android sans URL/hôte Pronote
+// I1 : Android sans URL/hôte Pronote — repointé #200 : seul `android/pronote/`
+// parle Pronote en direct (module du port, zéro dépendance). Le mot reste
+// interdit partout ailleurs ; `settings.gradle.kts` ne le porte que dans sa
+// déclaration de module. La prose (INVARIANTS, AGENTS.md) suit en #211.
 const pronoteHost = /pronote/i;
+const PRONOTE_DIR = join(ROOT, "android", "pronote") + "/";
 const i1 = androidFiles.filter((f) => {
   if (f.endsWith(".md")) return false; // docs légitimes ignorées
+  if (f.startsWith(PRONOTE_DIR)) return false; // le module lui-même
   try {
-    return pronoteHost.test(codeOnly(readFileSync(f, "utf8")));
+    let code = codeOnly(readFileSync(f, "utf8"));
+    if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
+    return pronoteHost.test(code);
   } catch {
     return false;
   }

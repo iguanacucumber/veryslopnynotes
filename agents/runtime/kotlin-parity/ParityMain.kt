@@ -152,7 +152,7 @@ private class JsonParser(private val text: String) {
                 when (val e = text[pos++]) {
                     '"', '\\', '/' -> out.append(e)
                     'b' -> out.append('\b')
-                    'f' -> out.append('')
+                    'f' -> out.append('\u000C')
                     'n' -> out.append('\n')
                     'r' -> out.append('\r')
                     't' -> out.append('\t')
@@ -256,8 +256,8 @@ private fun escapeStr(s: String): String {
             '\n' -> out.append("\\n")
             '\r' -> out.append("\\r")
             '\t' -> out.append("\\t")
-            '' -> out.append("\\b")
-            '' -> out.append("\\f")
+            '\b' -> out.append("\\b")
+            '\u000C' -> out.append("\\f")
             else -> if (c < ' ') out.append("\\u%04x".format(c.code)) else out.append(c)
         }
     }

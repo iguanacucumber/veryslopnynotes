@@ -536,11 +536,16 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
   });
 
   test("I1 : aucun hôte en dur dans android/, aucun hôte Pronote", () => {
+    // I1 repointé #200 : seul `android/pronote/` parle Pronote en direct (port
+    // #200) ; la déclaration du module dans `settings.gradle.kts` est l'unique
+    // mention tolérée hors module. Prose (INVARIANTS, AGENTS.md) en #211.
     const pronoteHost = /pronote/i;
     const files = androidFiles();
     expect(files.length).toBeGreaterThan(20);
     for (const f of files) {
-      const code = codeOnly(read(f));
+      if (f.includes("/android/pronote/")) continue;
+      let code = codeOnly(read(f));
+      if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
       expect({ file: f.split("/").slice(-2).join("/"), hit: pronoteHost.test(code) }).toEqual({
         file: f.split("/").slice(-2).join("/"),
         hit: false,

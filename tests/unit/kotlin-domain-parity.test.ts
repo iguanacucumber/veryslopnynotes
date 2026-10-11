@@ -14,11 +14,10 @@
 // DE COMPILATION du port est un défaut : le test échoue (le code commité doit
 // compiler ; `make android-compile` le redira aussi).
 //
-// Le binaire est mis en cache dans `node_modules/.cache` (clé = sha256 des 4
-// sources) : ~6 s la première fois, ~0,3 s ensuite.
-import { afterAll, describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+// Le binaire est mis en cache dans `node_modules/.cache` (clé = sha256 des
+// sources) : ~6 s la première fois, ~0,3 s ensuite. Chaîne et protocole dans
+// `fixtures/kotlin-harness.ts`.
+import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import {
   computeAverages,
@@ -32,8 +31,8 @@ import {
 } from "../../server/domain/capabilities";
 import type { Grade } from "../../shared/contracts/models";
 import type { AbsenceRecord, Period } from "../../shared/contracts/models";
+import { ROOT, canonTs, parityToolchain, type ParityLink } from "./fixtures/kotlin-harness";
 
-const ROOT = join(import.meta.dir, "..", "..");
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
 const PARITY = join(ROOT, "agents", "runtime", "kotlin-parity");
 const SOURCES = ["Averages.kt", "Attendance.kt", "Capabilities.kt", "CapabilityProbe.kt"].map((f) => join(CORE, f));
@@ -42,129 +41,14 @@ const SOURCES = ["Averages.kt", "Attendance.kt", "Capabilities.kt", "CapabilityP
 const STUB = join(PARITY, "org", "json", "JsonStub.kt");
 const DRIVER = join(PARITY, "ParityMain.kt");
 
-// --- Chaîne Kotlin --------------------------------------------------------
+const skip = parityToolchain.skipReason !== null;
 
-const KOTLINC = Bun.which("kotlinc");
-const JAVA = Bun.which("java");
 
-let SKIP_REASON: string | null = null;
-if (!KOTLINC) SKIP_REASON = "`kotlinc` absent : installez le compilateur Kotlin (ou lancez `make android-compile` pour le diagnostic).";
-else if (!JAVA) SKIP_REASON = "`java` absent : la parité a besoin d'une JVM pour exécuter le port compilé.";
 
-if (SKIP_REASON) {
-  console.warn(
-    "\n" +
-      "  SKIP BRUYANT — parité TS <-> Kotlin non vérifiée (#202/#203).\n" +
-      `  ${SKIP_REASON}\n` +
-      "  `make check` reste vert, mais il n'a PAS prouvé que le port calcule comme la référence.\n",
-  );
-}
-
-function sourceHash(): string {
-  const h = createHash("sha256");
-  for (const f of [...SOURCES, STUB, DRIVER]) h.update(readFileSync(f));
-  return h.digest("hex").slice(0, 16);
-}
-
-async function ensureJar(): Promise<string> {
-  const dir = join(ROOT, "node_modules", ".cache", "kotlin-domain-parity", sourceHash());
-  const jar = join(dir, "parity.jar");
-  if (existsSync(jar)) return jar;
-  mkdirSync(dir, { recursive: true });
-  const compiled = Bun.spawnSync({
-    cmd: [KOTLINC as string, ...SOURCES, STUB, DRIVER, "-include-runtime", "-d", jar],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  if (compiled.exitCode !== 0) {
-    throw new Error(
-      `le port Kotlin ne compile pas (défaut, pas un skip) :\n${compiled.stderr}\n${compiled.stdout}`,
-    );
-  }
-  return jar;
-}
-
-// --- Protocole ligne à ligne -----------------------------------------------
-
-interface ParityLink {
-  ask(op: unknown): Promise<string>;
-}
-
-async function openLink(jar: string): Promise<ParityLink & { close(): void }> {
-  const proc = Bun.spawn([JAVA as string, "-Dfile.encoding=UTF-8", "-jar", jar], {
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const sink = proc.stdin;
-  const reader = proc.stdout.getReader();
-  let pending = "";
-  const decoder = new TextDecoder("utf-8");
-  async function readLine(): Promise<string> {
-    for (;;) {
-      const nl = pending.indexOf("\n");
-      if (nl >= 0) {
-        const line = pending.slice(0, nl);
-        pending = pending.slice(nl + 1);
-        return line;
-      }
-      const { done, value } = await reader.read();
-      if (done) throw new Error("le pilote Kotlin a fermé stdout au milieu d'une opération");
-      pending += decoder.decode(value, { stream: true });
-    }
-  }
-  // Drain stderr : une erreur pilote y est expliquée (jamais un résultat vide).
-  const errors: string[] = [];
-  (async () => {
-    const errReader = proc.stderr.getReader();
-    let buf = "";
-    for (;;) {
-      const { done, value } = await errReader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const lines = buf.split("\n");
-      buf = lines.pop() ?? "";
-      for (const l of lines) if (l.trim()) errors.push(l.trim());
-    }
-  })();
-  return {
-    async ask(op: unknown): Promise<string> {
-      sink.write(`${JSON.stringify(op)}\n`);
-      await sink.flush();
-      const line = await Promise.race([
-        readLine(),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("pilote Kotlin sans réponse (30 s)")), 30000)),
-      ]);
-      if (line.startsWith('{"error":')) {
-        throw new Error(`erreur pilote (entrée malformée ?) : ${line} — stderr: ${errors.join(" | ")}`);
-      }
-      return line;
-    },
-    close() {
-      proc.kill();
-    },
-  };
-}
-
-let link: (ParityLink & { close(): void }) | null = null;
-if (!SKIP_REASON) {
-  const jar = await ensureJar();
-  link = await openLink(jar);
-  afterAll(() => link?.close());
-}
-
-// --- Canonique TS ------------------------------------------------------------
-
-/** Même forme que le pilote : clés triées, `undefined` = clé omise. */
-function canonTs(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonTs).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonTs(v)}`).join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
+let link: ParityLink | null = null;
+if (!skip) {
+  const jar = await parityToolchain.ensureJar("kotlin-domain-parity", [...SOURCES, STUB, DRIVER]);
+  link = await parityToolchain.openLink(jar);
 }
 
 async function parityOf(op: unknown, tsValue: unknown): Promise<void> {
@@ -193,8 +77,6 @@ const GRADES: Grade[] = [
   grade({ id: "s1", subject: "SVT", value: 7, scale: 10, date: "2026-09-15T10:00:00.000Z" }),
   grade({ id: "b1", subject: "Arts", value: 20, scale: 20, bonus: true, date: "2026-09-20T10:00:00.000Z" }),
 ];
-
-const skip = SKIP_REASON !== null;
 
 describe("parité TS <-> Kotlin du domaine pur (#202/#203)", () => {
   test.skipIf(skip)("pilote : l'écho valide le parseur JSON sur des données réelles", async () => {
