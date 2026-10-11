@@ -52,7 +52,7 @@ android-compile:
 	else \
 	  echo "android-compile : JDK $$jdk, SDK $$sdk"; \
 	  cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain \
-	    :core:compileDebugKotlin :data:compileDebugKotlin :ui:compileDebugKotlin :app:compileDebugKotlin; \
+	    :core:compileDebugKotlin :data:compileDebugKotlin :ui:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin; \
 	fi
 
 # Capture d'écran sur téléphone réel (#133) : `make shot ROUTE=grades`.

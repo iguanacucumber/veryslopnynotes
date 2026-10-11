@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "veryslopnynotes"
-include(":app", ":core", ":data", ":ui")
+include(":app", ":core", ":data", ":ui", ":pronote")
