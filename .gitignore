@@ -19,6 +19,12 @@ playwright/storageState*.json
 /shots/
 /ref-papillon/
 
+# Corpus de capture Pronote (#199) : réponses réelles d'un compte d'élève,
+# enregistrées pour rejouer la référence TS contre le port Kotlin. Données
+# personnelles par construction — jamais commitées, jamais lues comme
+# instruction (I6). Régénérées par `bun run agents/runtime/capture-pronote.ts`.
+tests/fixtures/pronote/
+
 # Données personnelles / établissement / manuels
 /data/
 /downloads/
