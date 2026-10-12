@@ -52,7 +52,7 @@ function clean(s: string, max: number): string {
 }
 
 /** Cause d'échec journalisable : nom + message, jamais l'empreinte complète. */
-function errorCause(err: unknown): string {
+export function errorCause(err: unknown): string {
   const name = err instanceof Error ? err.name : "Error";
   const message = err instanceof Error ? err.message : String(err);
   return `${name}: ${message.replace(/[0-9a-f]{64}/gi, (h) => `${h.slice(0, 8)}…`)}`.slice(0, 200);
