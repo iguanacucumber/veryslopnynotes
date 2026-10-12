@@ -177,7 +177,7 @@ describe("media-proxy — bugs adversariaux", () => {
 
   test("BUG: aucun timeout ni abort sur le téléchargement — une PJ qui ne répond jamais laisse la requête HTTP ouverte indéfiniment", async () => {
     // data() ne résout jamais : toutes les autres lectures ont un AbortSignal
-    // (PronoteHttpClient, llm-openrouter, push-provider), pas celle-ci.
+    // (PronoteHttpClient, llm-openrouter), pas celle-ci.
     const sessions = store({
       [FAKE_ACCOUNT]: {
         lessons: async () => [
