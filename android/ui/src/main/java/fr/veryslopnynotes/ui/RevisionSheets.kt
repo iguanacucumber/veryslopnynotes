@@ -2,7 +2,6 @@ package fr.veryslopnynotes.ui
 
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.layout.Arrangement
@@ -31,19 +30,17 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import fr.veryslopnynotes.core.ServerConfig
+import fr.veryslopnynotes.core.RevisionKv
+import fr.veryslopnynotes.core.RevisionPdf
 import fr.veryslopnynotes.core.dayLabelFr
-import fr.veryslopnynotes.data.ApiClient
-import fr.veryslopnynotes.data.DeviceAuth
-import fr.veryslopnynotes.data.RefreshOutcome
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.Response
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.IOException
+import fr.veryslopnynotes.core.isRevisionSheetValid
+import fr.veryslopnynotes.core.listRevisionSheets
+import fr.veryslopnynotes.core.loadRevisionSheet
+import java.io.File
+import java.io.FileOutputStream
 
-// Fiches révision #30 : liste des fiches sourcées + export PDF via le serveur.
+// Fiches révision #30 : liste des fiches assemblées sur l'appareil + export PDF
+// local (PdfDocument natif, #207).
 //
 // #144 — cet écran était un BIDON, et le détail est dans ce qu'il faisait :
 //   - AppNav l'appelait `RevisionSheetsScreen()`, donc `sheets` valait TOUJOURS
@@ -52,31 +49,32 @@ import java.io.IOException
 //   - il exposait deux boutons de DÉVELOPPEUR dans l'interface : « Charger » et
 //     « Simuler erreur », qui ne faisaient qu'écrire un littéral dans un `String` ;
 //   - son état était ce `String` à trois valeurs magiques ;
-//   - `RevisionSheetUi.body` n'était jamais rendu, et `ServerConfig
-//     .revisionSheetsUrl` / `revisionSheetPdfUrl` n'étaient appelés nulle part.
+//   - `RevisionSheetUi.body` n'était jamais rendu.
 //
-// La route serveur, elle, EXISTE (`GET /v1/revision-sheets` et
-// `GET /v1/revision-sheets/pdf?id=`, cf. `server/api/router.ts`) et sert la forme
-// exacte du contrat : `sheets[].body`, `sources`, `examId`, `date`. L'écran est
-// donc câblé dessus pour de vrai.
+// #206 — le serveur ne sert plus les fiches (il ne sert que des manuels) :
+// l'écran lit le store local (`RevisionKv` fichier, mêmes `listRevisionSheets`
+// que les jobs) et exporte par `FileProvider`, comme les pièces jointes des
+// devoirs. Zéro réseau, zéro allowlist.
 //
-// I6 : le corps d'une fiche est produit par le pipeline du serveur (LLM + manuel
-// de l'établissement) : c'est une DONNÉE, affichée par `Text` seul — jamais
+// I6 : le corps d'une fiche est une DONNÉE, affichée par `Text` seul — jamais
 // interprété, jamais exécuté, jamais cliquable.
-//
-// ponytail: `/v1/revision-sheets` n'est PAS dans `CACHEABLE_RESOURCES` (les
-//   fiches sont peu nombreuses et changent à chaque DS), donc PAS de cache : le
-//   GET passe par le même `ApiClient` que `fetchAssignmentsWeek` dans
-//   `Assignments.kt`, et l'état garde son horodatage pour le bandeau « périmé ».
-//   Upgrade: `revision-sheets` en ressource cachable (contrat shared) si le
-//   hors-ligne devient nécessaire.
 
-/** Bornes de lecture du payload (défensives : le contrat ne borne que le volume). */
-private const val MAX_SHEET_ID = 80
-private const val MAX_SHEET_TITLE = 200
-private const val MAX_SHEET_SUBJECT = 100
-private const val MAX_SHEET_SOURCES = 14
-private const val MAX_SOURCE_CHARS = 200
+/**
+ * Fiche du store local -> fiche affichable. Une fiche non conforme est
+ * IGNORÉE (jamais affichée à moitié) : c'est l'écran qui en fera un état
+ * vide, pas une exception.
+ */
+private fun fr.veryslopnynotes.core.RevisionSheet.toUi(): RevisionSheetUi? {
+    if (!isRevisionSheetValid(this)) return null
+    return RevisionSheetUi(
+        id = id,
+        title = title,
+        subject = subject,
+        date = date,
+        sources = sources,
+        body = body,
+    )
+}
 
 /**
  * Une fiche de révision telle que l'écran l'affiche.
@@ -120,51 +118,36 @@ private fun boundedSources(array: JSONArray?): List<String> {
 }
 
 /**
- * Payload `/v1/revision-sheets` -> fiches affichables.
- *
- * Mêmes règles que le contrat `isRevisionSheet` : `id`, `examId`, `subject`,
- * `title` et `body` non vides, `sources` non vide. Une fiche non conforme est
- * IGNORÉE (jamais affichée à moitié) ; un payload illisible donne une liste vide
- * propre — c'est l'écran qui en fera un état vide, pas une exception.
+ * Store local des fiches : fichiers du répertoire `offline/revisions` (données
+ * du compte : `AccountStore.logout()` les purge avec le reste via `clearAll`).
+ * Clés assainies (pas de `..`, pas de séparateur) : rien ne s'écrit ailleurs.
  */
-fun revisionSheetsFromPayload(payload: String?): List<RevisionSheetUi> = try {
-    if (payload == null) {
-        emptyList()
-    } else {
-        val root = JSONObject(payload)
-        val array = root.optJSONArray("sheets") ?: JSONArray()
-        val out = ArrayList<RevisionSheetUi>()
-        for (i in 0 until array.length()) {
-            val obj = array.optJSONObject(i) ?: continue
-            val id = obj.optString("id", "").trim().take(MAX_SHEET_ID)
-            val examId = obj.optString("examId", "").trim().take(MAX_SHEET_ID)
-            val title = obj.optString("title", "").trim().take(MAX_SHEET_TITLE)
-            val subject = obj.optString("subject", "").trim().take(MAX_SHEET_SUBJECT)
-            val body = obj.optString("body", "").trim()
-            val sources = boundedSources(obj.optJSONArray("sources"))
-            if (id.isEmpty() || examId.isEmpty() || title.isEmpty() || subject.isEmpty()) continue
-            if (body.isEmpty() || sources.isEmpty()) continue
-            out.add(
-                RevisionSheetUi(
-                    id = id,
-                    title = title,
-                    subject = subject,
-                    date = obj.optString("date", "").trim(),
-                    sources = sources,
-                    body = body,
-                ),
-            )
-        }
-        out.sortedByDescending { it.date }
+private class FileRevisionKv(dir: File) : RevisionKv {
+    private val dir = dir
+
+    private fun fileFor(key: String): File {
+        val safe = key.map {
+            if (it.isLetterOrDigit() || it == '-' || it == '_' || it == '.') it else '_'
+        }.joinToString("").take(120).ifEmpty { "_" }
+        return File(dir, "$safe.bin")
     }
-} catch (_: Exception) {
-    emptyList()
+
+    override fun get(key: String): ByteArray? = try {
+        fileFor(key).takeIf { it.isFile }?.readBytes()
+    } catch (_: Exception) {
+        null
+    }
+
+    override fun set(key: String, value: ByteArray) {
+        dir.mkdirs()
+        fileFor(key).writeBytes(value)
+    }
 }
 
 /**
  * Carte d'une fiche : titre, matière + date, corps EN ENTIER, sources, export.
  *
- * Le corps n'est pas tronqué : c'est la fiche, et le serveur la publie déjà
+ * Le corps n'est pas tronqué : c'est la fiche, et le store la garde déjà
  * bornée. Le tronquer afficherait une fiche incomplète sans dire qu'elle l'est.
  */
 @Composable
@@ -195,7 +178,7 @@ private fun RevisionSheetCard(
                 )
             }
             PapDivider()
-            // Donnée serveur ci-dessous (texte de fiche produit par le pipeline) :
+            // Donnée locale ci-dessous (fiche assemblée sur l'appareil) :
             // affichée telle quelle, jamais interprétée ni exécutée (I6). Elle n'est
             // PAS bornée : c'est la fiche entière, dans une liste qui défile —
             // tronquer une fiche sans écran de détail perdrait l'information.
@@ -257,10 +240,9 @@ fun RevisionSheetsScreen(
                     )
                 }
                 // Âge des fiches AFFICHÉES. Pas de `PapStaleBanner` ici, et c'est
-                // délibéré : `/v1/revision-sheets` n'est pas une ressource cachée,
-                // donc aucune donnée de cet écran ne peut être « périmée » — un
-                // bandeau « hors ligne » dirait un mensonge. La date dit la même
-                // chose sans inventer de cache.
+                // délibéré : les fiches sont lues du store local, jamais
+                // d'un cache réseau — un bandeau « hors ligne » dirait un
+                // mensonge. La date dit la même chose sans inventer de cache.
                 Text(
                     text = "Fiches rechargées ${relativeTimeFr(state.fetchedAt)}",
                     style = MaterialTheme.typography.bodySmall,
@@ -288,62 +270,82 @@ fun RevisionSheetsScreen(
 }
 
 /**
- * Route fiches : `GET /v1/revision-sheets` sur le même `ApiClient` que le reste de
- * l'app (donc la même allowlist serveur, I1, et le même jeton d'appareil), puis
- * export PDF par l'allowlist.
- *
- * L'export passe par un `Intent ACTION_VIEW` comme les pièces jointes des devoirs
- * (`Assignments.kt`) : c'est la même limite, donc la même honnêteté — l'ouvreur
- * externe ne porte pas le jeton d'appareil, donc `/v1/revision-sheets/pdf` lui
- * répondra « session requise » tant qu'aucun `FileProvider` ne sert les octets
- * téléchargés par l'app. Le bouton est donc annoncé comme tel, et l'échec est
- * dit dans l'écran plutôt que masqué. Upgrade: téléchargement par l'app +
- * `FileProvider` (module app), comme la photo du profil #82.
+ * Route fiches : lecture du store LOCAL (fiches assemblées sur l'appareil,
+ * #207), jamais de réseau. Export PDF par `FileProvider` (même motif que les
+ * pièces jointes des devoirs) : l'ouvreur externe lit des octets produits ici,
+ * aucun credential ne transite.
  */
 @Composable
-fun RevisionSheetsRoute(
-    api: ApiClient,
-    baseUrl: String,
-) {
+fun RevisionSheetsRoute() {
     val context = LocalContext.current
     val main = remember { Handler(Looper.getMainLooper()) }
+    // Même racine "offline" que les caches (données du compte : purge au
+    // logout), sous-dossier propre pour ne pas croiser les `cache_*.txt`.
+    val kv = remember(context) {
+        try {
+            FileRevisionKv(File(File(context.filesDir, "offline"), "revisions"))
+        } catch (_: Exception) {
+            null
+        }
+    }
     var state by remember { mutableStateOf<RevisionState>(RevisionState.Loading) }
     // #147 : le message d'export ouvert ou non survit à la rotation.
     var notice by rememberSaveable { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
 
+    fun post(block: () -> Unit) {
+        try {
+            main.post { block() }
+        } catch (_: Exception) {
+            block()
+        }
+    }
+
     fun refresh() {
         refreshing = true
-        fetchRevisionSheets(api, baseUrl, main) { outcome ->
-            state = when (outcome) {
-                is RefreshOutcome.Updated ->
-                    if (outcome.payload.isNullOrBlank()) {
-                        RevisionState.Empty
-                    } else {
-                        val sheets = revisionSheetsFromPayload(outcome.payload)
-                        // 200 + liste vide = aucune fiche, ce n'est pas une erreur.
-                        if (sheets.isEmpty()) RevisionState.Empty else RevisionState.Ready(sheets, outcome.fetchedAt)
-                    }
-                is RefreshOutcome.OfflineFallback ->
-                    if (outcome.payload.isNullOrBlank()) RevisionState.Empty else RevisionState.Ready(revisionSheetsFromPayload(outcome.payload), outcome.fetchedAt)
-                is RefreshOutcome.Failed -> RevisionState.Failed(outcome.message)
+        Thread {
+            val outcome = try {
+                val sheets = kv?.let { listRevisionSheets(it) }.orEmpty()
+                    .mapNotNull { it.toUi() }
+                    .sortedByDescending { it.date }
+                // Liste vide = aucune fiche, ce n'est pas une erreur.
+                if (sheets.isEmpty()) RevisionState.Empty else RevisionState.Ready(sheets, System.currentTimeMillis())
+            } catch (_: Exception) {
+                RevisionState.Failed("Fiches illisibles.")
             }
-            refreshing = false
-        }
+            post {
+                state = outcome
+                refreshing = false
+            }
+        }.start()
     }
     LaunchedEffect(Unit) { refresh() }
 
     fun exportPdf(id: String) {
-        // Chemin issu de ServerConfig seul (I1). L'id est assaini par le serveur
-        // (`revisionIdForExam` : `[A-Za-z0-9_-]`), donc il ne peut pas injecter un
-        // paramètre dans l'URL.
-        val url = ServerConfig.revisionSheetPdfUrl(baseUrl, id)
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-        if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        // ponytail: aucun journal — une URL finit dans les logs d'accès.
+        // Fiche relue du store (l'id vient de la liste affichée, donc du
+        // store) puis PDF rendu sur place : aucun réseau, aucune URL.
+        // ponytail: aucun journal — un nom de fichier finit dans les logs.
         notice = try {
+            val store = kv ?: throw IllegalStateException("store indisponible")
+            val sheet = loadRevisionSheet(store, id.trim().take(80))
+                ?: throw IllegalStateException("fiche introuvable")
+            val safeName = sheet.id.map {
+                if (it.isLetterOrDigit() || it == '-' || it == '_') it else '_'
+            }.joinToString("").take(80).ifEmpty { "fiche" }
+            val dir = File(File(context.cacheDir, "exports"), "fiches")
+            dir.mkdirs()
+            val file = File(dir, "$safeName.pdf")
+            FileOutputStream(file).use { RevisionPdf.writeSheet(sheet, it) }
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, ATTACHMENT_PROVIDER_AUTHORITY, file,
+            )
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/pdf")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
             context.startActivity(intent)
-            "L'export s'ouvre dans une autre application, qui affichera « session requise » : elle ne porte pas votre jeton d'appareil."
+            "L'export s'ouvre dans une autre application."
         } catch (_: Exception) {
             "Aucune application ne peut ouvrir cet export PDF."
         }
@@ -356,64 +358,5 @@ fun RevisionSheetsRoute(
             onRefresh = { refresh() },
             onExportPdf = { exportPdf(it) },
         )
-    }
-}
-
-/**
- * GET `/v1/revision-sheets`, jamais écrit sur disque (ressource hors
- * `CACHEABLE_RESOURCES`).
- *
- * Même plomberie que `fetchPeriods` de `SyncedRepository` et que
- * `fetchAssignmentsWeek` d'`Assignments.kt` : replis francs, un 401 reste nu
- * (le cache ne masque jamais une session morte), jamais d'exception vers l'UI.
- */
-private fun fetchRevisionSheets(
-    api: ApiClient,
-    baseUrl: String,
-    main: Handler,
-    cb: (RefreshOutcome) -> Unit,
-) {
-    if (baseUrl.isBlank()) {
-        postRevisionOutcome(main, cb, RefreshOutcome.Failed("Serveur non configuré.", null))
-        return
-    }
-    val request = try {
-        api.buildGet(ServerConfig.revisionSheetsUrl(baseUrl).removePrefix(baseUrl))
-    } catch (_: IllegalArgumentException) {
-        postRevisionOutcome(main, cb, RefreshOutcome.Failed("URL hors allowlist serveur", null))
-        return
-    }
-    api.client().newCall(request).enqueue(object : Callback {
-        override fun onFailure(call: Call, e: IOException) {
-            postRevisionOutcome(main, cb, RefreshOutcome.Failed("Fiches indisponibles hors-ligne.", null))
-        }
-
-        override fun onResponse(call: Call, response: Response) {
-            response.use {
-                if (it.code == ApiClient.HTTP_UNAUTHORIZED) {
-                    postRevisionOutcome(main, cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
-                    return
-                }
-                val body = if (it.isSuccessful) it.body?.string() else null
-                if (body.isNullOrEmpty()) {
-                    // 200 + corps vide et HTTP en échec n'ont pas la même cause,
-                    // donc pas le même message (le vocabulaire de `refreshAsync`).
-                    val message = if (it.isSuccessful) "Réponse vide." else "Réponse serveur ${it.code}."
-                    postRevisionOutcome(main, cb, RefreshOutcome.Failed(message, null))
-                    return
-                }
-                // Contenu serveur = donnée affichée, jamais interprétée (I6/I7).
-                postRevisionOutcome(main, cb, RefreshOutcome.Updated(body, System.currentTimeMillis()))
-            }
-        }
-    })
-}
-
-/** Callback sur le thread principal : Compose ne lit l'état que depuis l'UI. */
-private fun postRevisionOutcome(main: Handler, cb: (RefreshOutcome) -> Unit, outcome: RefreshOutcome) {
-    try {
-        main.post { cb(outcome) }
-    } catch (_: Exception) {
-        cb(outcome)
     }
 }

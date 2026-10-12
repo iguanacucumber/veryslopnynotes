@@ -83,7 +83,9 @@ class FileCacheStore(private val dir: File) : CacheStore {
     @Synchronized
     override fun clearAll() {
         try {
-            dir.listFiles()?.forEach { it.delete() }
+            // #206 : récursif — le sous-dossier des fiches de révision
+            // (`revisions/`, données du compte comme le reste) part avec.
+            dir.listFiles()?.forEach { it.deleteRecursively() }
         } catch (_: Exception) {
             // ponytail: purge best-effort, comme clear().
         }

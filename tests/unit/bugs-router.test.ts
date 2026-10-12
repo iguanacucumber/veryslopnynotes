@@ -17,24 +17,19 @@ import type { LLMProvider } from "../../server/domain/ports";
 import { pairedDevice } from "./fixtures/pairing";
 
 describe("bugs routeur API", () => {
-  // --- 1. fuite inter-comptes : /v1/media lit l'accountId dans l'URL ---------
-  test("BUG: /v1/media prend l'accountId dans la query et l'ouvre tel quel — n'importe quel appelant du serveur local récupère les pièces jointes / la photo d'un AUTRE compte appairé", async () => {
-    const appels: string[] = [];
-    const media = {
-      download: async (accountId: string, ref: string) => {
-        appels.push(`${accountId}|${ref}`);
-        // Octets synthétiques : une PJ déjà résolue par la session du compte visé.
-        return { name: "photo.png", bytes: new Uint8Array([137, 80, 78, 71]) };
-      },
-    };
-    const h = createHandler(createMemoryStore(), undefined, null, undefined, undefined, undefined, media);
-    const res = await h(
-      new Request("http://127.0.0.1/v1/media?accountId=compte-victime&ref=photo:4242"),
+  // --- 1. /v1/media supprimé (#206) : plus de proxy, plus de ref opaque -----
+  test("/v1/media ne résout plus rien : 404 derrière la porte d'entrée, 401 sans jeton", async () => {
+    const { pairing, auth } = pairedDevice();
+    const h = createHandler(createMemoryStore(), pairing);
+    // Sans jeton : la porte d'entrée répond 401, avant même la route.
+    const anonyme = await h(new Request("http://127.0.0.1/v1/media?accountId=acc1&ref=photo:4242"));
+    expect(anonyme.status).toBe(401);
+    // Appairé : la route n'a plus d'implémentation (media-proxy supprimé,
+    // photos/PJ résolues sur le téléphone) → 404, jamais d'octets.
+    const appaire = await h(
+      new Request("http://127.0.0.1/v1/media?accountId=acc1&ref=photo:4242", { headers: auth }),
     );
-    // Attendu : 401 sans jeton de device appairé, et AUCUNE session d'un autre
-    // compte ouverte (l'accountId doit être résolu côté serveur, pas lu dans l'URL).
-    expect(res.status).toBe(401);
-    expect(appels).toEqual([]);
+    expect(appaire.status).toBe(404);
   });
 
   // --- 2. écriture Pronote sans aucun contrôle d'authentification -----------

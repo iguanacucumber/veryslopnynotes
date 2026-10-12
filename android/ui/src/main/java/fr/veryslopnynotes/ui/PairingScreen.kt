@@ -12,8 +12,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,105 +29,70 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import fr.veryslopnynotes.core.ServerConfig
-import fr.veryslopnynotes.core.ServerUrlResult
-import fr.veryslopnynotes.data.AccountStore
-import fr.veryslopnynotes.data.ApiClient
-import fr.veryslopnynotes.data.HealthResult
-import fr.veryslopnynotes.data.ServerStore
-import fr.veryslopnynotes.data.SessionTokens
-import fr.veryslopnynotes.data.SetupInput
-import fr.veryslopnynotes.data.SetupRepository
-import fr.veryslopnynotes.data.SetupResult
+import fr.veryslopnynotes.data.PairingInput
+import fr.veryslopnynotes.data.PairingRepository
+import fr.veryslopnynotes.data.PairingResult
+import fr.veryslopnynotes.data.SessionStores
 import fr.veryslopnynotes.data.isBoundedSchoolUrl
 import fr.veryslopnynotes.data.parseSchoolQr
-import fr.veryslopnynotes.data.probeHealthBlocking
 
-// Assistant de connexion (#120) : serveur -> compte Pronote -> QR Pronote.
-// Un SEUL appel (POST /v1/setup) ouvre la session de l'établissement ET rend le
-// jeton d'appareil, là où il fallait avant coller du JSON obtenu au curl, retaper
-// un PIN, puis découvrir que l'établissement n'était même pas joignable.
+// Assistant de connexion (#120, repointé #206 : device-only) : l'adresse de
+// l'établissement PUIS le QR de l'application Pronote + son PIN. UN SEUL appel
+// ouvre la session, et il part du téléphone vers l'établissement — aucun
+// serveur intermédiaire (ADR-003). Le PIN déchiffre `login`/`jeton` sur place
+// et n'est jamais persisté : seul le jeton tourné dort chiffré (SessionStore).
 //
-// L'écran est aussi la destination du 401 (#113) : après un redémarrage serveur,
-// c'est lui qui rouvre la session ET le credential, pas l'ancien appairage.
-// Aucun hôte tiers ici : ApiClient allowlist serveur seul (I1).
+// L'écran est aussi la destination de la session morte (#113) : après un jeton
+// tourné ou une session refermée, c'est lui qui rouvre la session locale, pas
+// un ancien appairage serveur. Aucun hôte tiers ici : seul `android/pronote/`
+// parle réseau (I1).
 //
 // #145 : la validation VIBRE quand l'appairage réussit (le parcours se termine et
 // l'écran disparaît : sans retour physique, rien ne dit que c'est passé), et les
 // messages d'erreur passent en COULEUR D'ERREUR — ils étaient en encre de texte,
-// exactement comme les messages de succès (« Serveur enregistré », « Serveur
-// joignable »), donc un refus se lisait comme une validation. Ils apparaissent en
-// plus avec l'ouverture mesurée, au lieu d'apparaître d'un coup.
+// exactement comme les messages de succès, donc un refus se lisait comme une
+// validation. Ils apparaissent en plus avec l'ouverture mesurée, au lieu
+// d'apparaître d'un coup.
 @Composable
 fun PairingRoute(
-    baseUrl: String,
     onBack: () -> Unit,
-    // #113 : arrivée ici après un 401. Phrase factuelle (« credential
-    // refusée »), jamais une cause devinée ni un chrono.
+    // #113 : arrivée ici après une session morte. Phrase factuelle
+    // (« session refusée »), jamais une cause devinée ni un chrono.
     notice: String? = null,
-    // Adresse du serveur : validation + persistance en aval. Renvoie null si
-    // elle est enregistrée (la session a alors été purgée), sinon le message
-    // de refus à afficher tel quel.
-    onServerChange: (String) -> String? = { null },
-    // Setup réussi : l'assistant sort vers l'accueil. L'utilisateur n'a rien
+    // Appairage réussi : l'assistant sort vers l'accueil. L'utilisateur n'a rien
     // à confirmer de plus — sa saisie EST la preuve qu'il est son compte.
     onPaired: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val main = remember { Handler(Looper.getMainLooper()) }
-    // UN store pour l'écran : il alimente ApiClient (bearer) ET reçoit le
-    // secret de la réponse. Le client le relit à chaque requête, donc le
-    // token s'utilise tout de suite après le setup.
-    val tokens = remember(context) { SessionTokens.get(context) }
-    val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }
-    val repo = remember(api) { SetupRepository(api) }
-    // Saisie du serveur, pré-remplie avec l'adresse courante. Volontairement
-    // NON liée à `baseUrl` pour le texte : un changement de serveur ne doit pas
-    // effacer ce que l'utilisateur est en train de taper.
-    //
+    // UN store pour l'écran : la session y dort chiffrée, les dépôts la
+    // relisent au démarrage (restauration sans rescanner).
+    val sessions = remember(context) { SessionStores.get(context) }
+    val repo = remember(sessions) { PairingRepository(sessions) }
     // #147 : tout l'état de l'assistant est en `rememberSaveable`. AVANT, ZÉRO
     // `rememberSaveable` dans le module : tourner le téléphone en plein
     // appairage effaçait l'adresse tapée, l'erreur affichée et l'ÉTAPE atteinte
-    // (retour au champ serveur, QR à resscanner).
-    var serverDraft by rememberSaveable { mutableStateOf(baseUrl) }
-    var serverError by rememberSaveable { mutableStateOf<String?>(null) }
-    // Confirmation du changement (la session a été purgée) : hors `baseUrl`
-    // sinon elle serait effacée par le changement qu'elle annonce.
-    var serverSaved by rememberSaveable { mutableStateOf(false) }
-    var step by rememberSaveable { mutableStateOf(SetupStep.SERVER) }
+    // (retour au premier champ, QR à rescanner).
+    var step by rememberSaveable { mutableStateOf(SetupStep.SCHOOL) }
     var form by rememberSaveable(stateSaver = SetupFormSaver) { mutableStateOf(SetupForm()) }
-    // Version de contrat annoncée par le serveur joignable : preuve que la
-    // réponse vient bien du serveur, affichée telle quelle.
-    // PAS `rememberSaveable` : c'est la trace d'une SONDE, pas une saisie. Après
-    // une rotation, l'app n'a pas re-sondé, donc afficher « joignable » serait
-    // une affirmation sans preuve derrière elle (#147).
-    var serverVersion by remember { mutableStateOf<String?>(null) }
     val haptics = rememberPapHaptics()
 
-    /** Envoi du setup : réseau sur thread, retour sur le main. */
-    val submit: (SetupInput) -> Unit = { input ->
+    /** Envoi de l'appairage : réseau sur thread, retour sur le main. */
+    val submit: (PairingInput) -> Unit = { input ->
         form = form.copy(state = PairingState.Submitting)
         Thread {
-            val res = repo.runBlocking(deviceName(), input)
+            val res = repo.pairBlocking(input, deviceName())
             main.post {
                 when (res) {
-                    is SetupResult.Ok -> {
+                    is PairingResult.Ok -> {
                         // #145 : le parcours est terminé et l'écran va quitter —
                         // le retour physique est le seul signal qui reste.
                         haptics.confirm()
-                        try {
-                            // Le secret est montré UNE fois : s'il est absent ou
-                            // invalide, `save` échoue et RIEN n'est stocké.
-                            tokens.save(res.device.id, res.device.tokenHash, res.device.token)
-                        } catch (e: IllegalArgumentException) {
-                            form = form.copy(state = PairingState.Error("Appareil invalide"))
-                            return@post
-                        }
-                        form = form.copy(state = PairingState.Paired(res.device.id))
+                        form = form.copy(state = PairingState.Paired)
                         onPaired()
                     }
-                    is SetupResult.Err -> {
+                    is PairingResult.Err -> {
                         form = form.copy(state = PairingState.Error(res.message))
                     }
                 }
@@ -143,8 +106,8 @@ fun PairingRoute(
     ) {
         // #172 : le retour remonte D'ABORD d'un cran dans le parcours. Hors
         // première étape, `popBackStack` ne peut rien faire (au premier
-        // lancement l'assistant EST la route de départ ; après un 401 la pile a
-        // été vidée), donc les étapes 2 et 3 n'avaient aucun chemin de retour.
+        // lancement l'assistant EST la route de départ ; après une session
+        // morte la pile a été vidée), donc l'étape 2 n'avait aucun chemin de retour.
         //
         // #148 (recette des 14 écrans) : c'était un `Button` REMPLI, donc
         // deux boutons verts de même poids sur l'écran — « Retour » et
@@ -175,46 +138,7 @@ fun PairingRoute(
                 .semantics { heading() },
         )
         when (step) {
-            SetupStep.SERVER -> ServerField(
-                value = serverDraft,
-                onChange = { serverDraft = it; serverError = null; serverSaved = false },
-                error = serverError,
-                saved = serverSaved,
-                version = serverVersion,
-                onSubmit = {
-                    val refusal = onServerChange(serverDraft)
-                    if (refusal != null) {
-                        serverError = refusal
-                        return@ServerField
-                    }
-                    serverError = null
-                    serverSaved = true
-                    // Adresse VALIDÉE (donc normalisée) que la sonde doit
-                    // interroger : `api` est encore bound sur l'ancien serveur.
-                    val target = (ServerConfig.validateBaseUrl(serverDraft) as? ServerUrlResult.Ok)?.baseUrl ?: serverDraft
-                    // Sonde de joignabilité, mais SEULEMENT maintenant : l'utilisateur
-                    // vient d'appuyer sur « Continuer », donc l'appel est le sien. Sans
-                    // elle, une mauvaise adresse se découvre trois écrans plus tard,
-                    // sous la forme d'un « identifiants refusés » mensonger.
-                    Thread {
-                        val probe = probeHealthBlocking(target)
-                        main.post {
-                            when (probe) {
-                                is HealthResult.Alive -> {
-                                    serverVersion = probe.version
-                                    step = SetupStep.ACCOUNT
-                                }
-                                is HealthResult.Unreachable -> {
-                                    serverError = probe.message
-                                    serverSaved = false
-                                }
-                            }
-                        }
-                    }.start()
-                },
-                modifier = Modifier.weight(1f),
-            )
-            SetupStep.ACCOUNT -> AccountStep(
+            SetupStep.SCHOOL -> SchoolStep(
                 form = form,
                 onChange = { form = it },
                 onNext = { next -> step = next },
@@ -228,78 +152,15 @@ fun PairingRoute(
     }
 }
 
-/** Nom du device transmis au serveur. Jamais une donnée personnelle. */
+/** Nom du device transmis à l'établissement (2e tour 2FA). Jamais une donnée personnelle. */
 private fun deviceName(): String = Build.MODEL?.takeIf { it.isNotBlank() } ?: "appareil"
 
 /**
- * Champ « Serveur » : l'adresse saisie, validée À LA SOUMISSION (rien n'est
- * écrit ni purgé tant qu'elle n'est pas acceptée). Le message d'erreur est
- * celui de la validation ou de la sonde, affiché tel quel : l'écran
- * n'invente aucun diagnostic.
+ * Étape 1 : l'adresse de l'établissement, et basta. L'app ne saisit PLUS
+ * aucun identifiant — la seule preuve de détention est le QR de l'étape 2.
  */
 @Composable
-fun ServerField(
-    value: String,
-    onChange: (String) -> Unit,
-    error: String?,
-    saved: Boolean,
-    version: String?,
-    onSubmit: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        // #130 : en paysage la colonne débordait et « Continuer » tombait hors
-        // écran — l'assistant était inutilisable. Chaque étape défile donc.
-        modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        // #148 (recette des 14 écrans) : ce « Serveur » en titre doublait
-        // l'étape juste au-dessus (« Étape 1/3 — ton serveur ») — le même mot
-        // deux fois dans la même colonne, en 16 sp puis en 14 sp. Le titre de
-        // l'étape suffit : il nomme déjà le sujet, et il est le `heading()` que
-        // le survol annonce.
-        OutlinedTextField(
-            value = value,
-            onValueChange = onChange,
-            label = { Text("Adresse du serveur (https://domaine[:port])") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = serverHint(value),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        // #145 : l'erreur prend la couleur d'erreur et s'OUVRE au lieu d'apparaître
-        // d'un coup — elle était en encre de texte, comme les deux messages de
-        // succès qui l'entourent.
-        PapAppear(visible = !error.isNullOrEmpty()) {
-            // #146 : l'encre d'ERREUR du thème (le rouge de marque ne vaut que
-            // 3.70:1 sur la surface sombre) et trois lignes — le refus vient du
-            // serveur, donc de longueur inconnue.
-            error?.let {
-                Text(
-                    text = it,
-                    color = errorTextColor(),
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        if (saved) Text("Serveur enregistré. Si l'adresse change, reconnecte l'appareil.")
-        if (!version.isNullOrEmpty()) Text("Serveur joignable — contrats $version.")
-        Button(onClick = onSubmit, modifier = Modifier.fillMaxWidth()) { Text("Continuer") }
-    }
-}
-
-/**
- * Étape 2 : l'adresse de l'établissement, et basta. 0.7.0 : l'app ne saisit
- * PLUS aucun identifiant — la seule preuve de détention est le QR de l'étape 3,
- * que le serveur ne stocke pas (il le garde en mémoire le temps de la session,
- * pour la renewal, et ne le journalise jamais).
- */
-@Composable
-private fun AccountStep(
+private fun SchoolStep(
     form: SetupForm,
     onChange: (SetupForm) -> Unit,
     onNext: (SetupStep) -> Unit,
@@ -318,11 +179,10 @@ private fun AccountStep(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        // #145 : couleur d'erreur + ouverture mesurée (cf. `ServerField`).
+        // #145 : couleur d'erreur + ouverture mesurée.
         PapAppear(visible = error != null) {
-            // #146 : l'encre d'ERREUR du thème (le rouge de marque ne vaut que
-            // 3.70:1 sur la surface sombre) et trois lignes — le refus vient du
-            // serveur, donc de longueur inconnue.
+            // #146 : l'encre d'ERREUR du thème et trois lignes — le refus vient
+            // d'une saisie, donc de longueur connue mais pas forcément courte.
             error?.let {
                 Text(
                     text = it,
@@ -346,7 +206,7 @@ private fun AccountStep(
 }
 
 /**
- * Étape 3 : le QR affiché par l'application Pronote. `login` + `jeton` sont
+ * Étape 2 : le QR affiché par l'application Pronote. `login` + `jeton` sont
  * des blocs chiffrés dont la clé est le PIN : les deux sont donc nécessaires,
  * et le PIN est celui défini dans Pronote (pas un code à 6 chiffres imposé par
  * l'app). Le collage reste possible quand l'appareil n'a pas de caméra.
@@ -355,7 +215,7 @@ private fun AccountStep(
 private fun QrStep(
     form: SetupForm,
     onChange: (SetupForm) -> Unit,
-    onSubmit: (SetupInput) -> Unit,
+    onSubmit: (PairingInput) -> Unit,
 ) {
     // #147 : l'erreur du scan survit à la rotation, sinon l'utilisateur rescane
     // un QR pour apprendre la même chose.
@@ -371,7 +231,7 @@ private fun QrStep(
             error = "Aucun QR lu (annulé, caméra refusée ou code illisible) : colle le contenu ci-dessous."
         }
     }
-    val input = SetupInput(
+    val input = PairingInput(
         schoolUrl = form.schoolUrl,
         qr = qr,
         pin = form.pin.trim(),
@@ -411,12 +271,12 @@ private fun QrStep(
             // capture, donc un fichier) : `KeyboardType.NumberPassword` ne change
             // que le clavier, jamais ce qui est affiché ni ce qui est stocké
             // dans l'arbre. La transformation porte sur l'AFFICHAGE : la saisie,
-            // le collage et ce qui part dans `SetupInput` sont inchangés.
+            // le collage et ce qui part dans `PairingInput` sont inchangés.
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             modifier = Modifier.fillMaxWidth(),
         )
-        // #145 : les DEUX refus de cette étape (scan, puis setup) partagent la
+        // #145 : les DEUX refus de cette étape (scan, puis appairage) partagent la
         // couleur d'erreur et la même ouverture mesurée.
         PapAppear(visible = error != null || form.state is PairingState.Error) {
             error?.let {
@@ -429,7 +289,7 @@ private fun QrStep(
             }
             if (form.state is PairingState.Error) {
                 // `errorTextColor()` : l'encre d'erreur lisible dans les deux
-                // thèmes, trois lignes (le refus vient du serveur).
+                // thèmes, trois lignes (le refus vient de l'établissement).
                 Text(
                     text = pairingStateLabel(form.state),
                     color = errorTextColor(),
@@ -438,7 +298,7 @@ private fun QrStep(
                 )
             }
         }
-        // QR + PIN = la méthode UNIQUE (0.7.0). Un des deux seul -> refus local,
+        // QR + PIN = la méthode UNIQUE. Un des deux seul -> refus local,
         // message actionnable, aucun appel réseau.
         val pret = qr != null && form.pin.isNotBlank()
         if (pret) {
@@ -462,44 +322,5 @@ private fun QrStep(
     }
 }
 
-/**
- * Changement de serveur = changement d'établissement. (#135 : cette fonction
- * vivait dans `AppNav.kt` ; elle est la logique de CET écran — changer de
- * serveur, c'est se ré-appairer — et elle y prenait 40 lignes pour rien.) Le jeton d'appareil est
- * un BEARER de l'ANCIEN serveur : le conserver enverrait un credential vivant
- * au nouveau. Donc, dans cet ordre : valider (aucun effet de bord), purger
- * session + caches par le chemin EXISTANT `accounts.logout()` (ni purge
- * parallèle, ni nouveau store), puis persister. Un refus renvoie son message
- * français et ne change RIEN ; `onSwitched` n'est appelé qu'une fois la purge
- * faite et l'adresse enregistrée.
- *
- * ponytail: purge AVANT écriture — un stockage KO coûte alors une déconnexion,
- * alors que l'inverse laisserait une fenêtre où le nouveau serveur est écrit et
- * le credential de l'ancien encore vivant. Fonction top-level (pas une locale
- * dans le composable) : la validation et l'ordre des effets n'ont rien à faire
- * dans un corps recomposé. `when` + `is` positif : dans ce module, le plugin
- * Compose casse le smart cast après un `!is` (vérifié à la compilation).
- */
-internal fun changeServer(
-    raw: String,
-    current: String,
-    accounts: AccountStore,
-    serverStore: ServerStore,
-    onSwitched: (String) -> Unit,
-): String? {
-    val target = when (val validated = ServerConfig.validateBaseUrl(raw)) {
-        is ServerUrlResult.Rejected -> return validated.message
-        is ServerUrlResult.Ok -> validated.baseUrl
-    }
-    if (target == current) return null
-    // On enregistre AVANT de déconnecter : si l'écriture échoue, l'utilisateur
-    // garde sa session et son cache au lieu d'être déconnecté pour rien.
-    val saved = serverStore.save(target)
-    if (saved is ServerUrlResult.Rejected) return saved.message
-    accounts.logout()
-    onSwitched(target)
-    return null
-}
-
-/** Miroir de SETUP_PIN_MAX_CHARS (shared/contracts/api.ts). */
+/** Miroir de PIN_MAX_CHARS (PairingRepository) : l'écran borne la saisie, pas la sécurité. */
 private const val PIN_MAX_CHARS = 64

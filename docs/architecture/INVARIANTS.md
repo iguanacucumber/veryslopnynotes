@@ -2,14 +2,14 @@
 
 Format : Invariant → test → commande → emplacement.
 
-## I1 — Seul `android/pronote/` parle Pronote (ADR-003)
-- Invariant : hors `android/pronote/`, `android/` ne contient aucune URL/référence hôte Pronote. Le module du port (zéro dépendance) est le seul à parler Pronote en direct ; la déclaration du module dans `settings.gradle.kts` est l'unique mention tolérée hors module.
-- Hôte auxiliaire éventuel (backend, legacy) choisi à l'exécution (écran d'appairage) : l'allowlist n'est plus une
+## I1 — Seuls `android/pronote/` et le scraper parlent réseau (ADR-003)
+- Invariant : hors `android/pronote/`, `android/` ne contient aucune URL/référence hôte Pronote. Le module du port (zéro dépendance) est le seul à parler Pronote en direct ; la déclaration du module dans `settings.gradle.kts` est l'unique mention tolérée hors module. Côté app, PLUS AUCUN client HTTP vers un serveur applicatif (`ApiClient` supprimé en #206 : appairage, lectures et médias sont device-only) ; côté process, seul le scraper Playwright parle réseau (portail éditeur, `server/infrastructure/http.ts`).
+- Hôte auxiliaire (le scraper) choisi à l'exécution : l'allowlist n'est plus une
   constante de build mais `ServerConfig.validateBaseUrl` (https, sauf émulateur/
   boucle locale en http ; hôte et port bornés ; identifiants, chemin, query,
   fragment, espaces et caractères de contrôle refusés) + `isAllowed` en préfixe
-  strict. `BuildConfig.SERVER_HOST` n'est plus qu'une graine. Un changement de
-  serveur purge la session et les caches (`AccountStore.logout()`) avant usage.
+  strict. `BuildConfig.SERVER_HOST` n'est plus qu'une graine. Une déconnexion
+  purge la session et les caches (`AccountStore.logout()`).
 - Test : `tests/architecture/invariants.test.ts` (I1 : zéro mention hors module + déclaration unique) + `agents/runtime/check-architecture.ts` (I1) + `tests/unit/android-server-config.test.ts`.
 - Commande : `make architecture-test`.
 - Emplacement : `android/**/*` (tolérances : `android/pronote/**` + ligne `include(...)` de `settings.gradle.kts`). Réf : `docs/adr/003-client-direct.md`.
@@ -62,9 +62,9 @@ vient de l'app, par requête :
 
 | Ce qui s'authentifie | Où il vit | Comment il voyage |
 |---|---|---|
-| Session Pronote | mémoire du serveur, renewing par QR | QR + PIN dans `POST /v1/setup` |
-| Clé du fournisseur LLM | `LlmKeyStore` (chiffré) dans l'app | corps de `POST /v1/homework/generate` (`apiKey`, `writeOnly`) |
-| Secret d'appareil | `TokenStore` (chiffré) dans l'app | `Authorization: Bearer`, relu à chaque requête |
+| Session Pronote | téléphone : `PronoteSession` (mémoire) + `SessionStore` (chiffré) | QR + PIN déchiffrés sur place (`Client.qrcodeLogin`), jeton tourné persisté chiffré, jamais en réseau après l'appairage |
+| Clé du fournisseur LLM | `LlmKeyStore` (chiffré) dans l'app | corps HTTPS direct vers OpenRouter (`OpenRouterHomework`), jamais en URL |
+| Secret d'appareil | SUPPRIMÉ en #206 avec `TokenStore` et le bearer serveur | — |
 
 Interdit : `.env*` dans le repo, toute clé de secret dans une variable, un secret
 en query string (un corps non), un secret journalisé. Piné par

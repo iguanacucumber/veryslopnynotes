@@ -359,8 +359,8 @@ describe("unit android profil (#82)", () => {
     }
     expect({ sansAppelant }).toEqual({ sansAppelant: [] });
 
-    // Le câblage : l'id vient de `/v1/me` (le serveur ne renvoie PAS d'accountId
-    // sur `/v1/setup`, cf. `SetupResponse`), et la relecture du compteur se fait
+    // Le câblage : l'id vient du client local (jamais saisi, jamais exposé
+    // par l'appairage), et la relecture du compteur se fait
     // APRÈS l'écriture — sinon l'écran afficherait encore « 0 compte appairé ».
     const screen = read(join(UI, "ProfileScreen.kt"));
     expect(screen).toContain("accounts.add(p.accountId)");
@@ -383,7 +383,7 @@ describe("unit android profil (#82)", () => {
     // Câblage Kotlin : purge + invalidation de session dans logout().
     const store = read(join(DATA, "AccountStore.kt"));
     expect(store).toContain("fun logout()");
-    expect(store).toContain("tokenStore.clear()");
+    expect(store).toContain("sessions.clear()");
     // Purge totale via clearAll() : la liste de ressources dérive des contrats,
     // une liste codée en dur laisserait survivant une ressource ajoutee apres.
     expect(store).toContain("cacheStore.clearAll()");
@@ -391,26 +391,26 @@ describe("unit android profil (#82)", () => {
     const nav = read(join(UI, "AppNav.kt"));
     expect(nav).toContain("accounts.logout()");
     // AccountStore reçoit le store UNIQUE de session (chiffré via
-    // SessionTokens.get, repli mémoire) : c'est ce store-ci que logout() purge.
-    expect(nav).toContain("SessionTokens.get(ctx)");
-    expect(nav).toContain("AccountStore(ctx, cacheStore, tokens)");
+    // SessionStores.get, repli mémoire) : c'est ce store-ci que logout() purge.
+    expect(nav).toContain("SessionStores.get(ctx)");
+    expect(nav).toContain("AccountStore(ctx, cacheStore, sessions)");
   });
 
   // #148 (recette des 14 écrans) : le PROFIL annonçait « 0 compte appairé »
   // sur un appareil appairé, parce que `account_ids` n'est écrit que quand
-  // `/v1/me` répond — donc jamais hors ligne. Réglages affichait « 1 compte »
+  // le client local répond — donc jamais hors ligne. Réglages affichait « 1 compte »
   // (écrit en dur) : deux écrans, deux nombres, une seule réalité.
   //
-  // Le plancher du compteur est la session (TokenStore), pas la liste d'ids :
-  // un jeton valide PROUVE qu'un compte est appairé.
-  test("#148 : un compte appairé reste compté même si /v1/me n'a jamais répondu", () => {
+  // Le plancher du compteur est la session (SessionStore), pas la liste d'ids :
+  // une session persistée PROUVE qu'un compte est appairé.
+  test("#148 : un compte appairé reste compté même si le client local n'a jamais répondu", () => {
     const store = read(join(DATA, "AccountStore.kt"));
     const code = codeOnly(store);
-    expect(code).toContain("maxOf(accountIds().size, if (tokenStore.isPaired()) 1 else 0)");
+    expect(code).toContain("maxOf(accountIds().size, if (sessions.hasSession()) 1 else 0)");
     // La liste d'ids reste la source du sélecteur de compte : le plancher ne
     // fabrique aucun identifiant (donc aucun compte « courant » inventé).
     // `current()` ne se sert PAS du plancher : sans id connu, le compte courant
-    // reste `null` (le sélecteur ne propose que ce que `/v1/me` a publié).
+    // reste `null` (le sélecteur ne propose que ce que le client local a publié).
     expect(code).toMatch(/fun current\(\): String\? \{[\s\S]*?accountIds\(\)\.contains\(id\)\) id else null/);
 
     // Réglages : le nombre vient du magasin, plus de « 1 compte » en dur.

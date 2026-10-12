@@ -225,9 +225,6 @@ describe("échappatoires #147 : plus d'état de formulaire perdu à la rotation"
     // la question posée à l'assistant.
     const attendu: Record<string, string[]> = {
       "PairingScreen.kt": [
-        "var serverDraft by rememberSaveable",
-        "var serverError by rememberSaveable",
-        "var serverSaved by rememberSaveable",
         "var step by rememberSaveable",
         "var form by rememberSaveable(stateSaver = SetupFormSaver)",
       ],

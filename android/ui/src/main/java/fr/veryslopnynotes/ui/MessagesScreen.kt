@@ -68,7 +68,6 @@ import fr.veryslopnynotes.data.DiscussionsRepository
 import fr.veryslopnynotes.data.DiscussionWriteOutcome
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SyncedRepository
-import fr.veryslopnynotes.data.TokenStore
 import java.time.ZoneId
 
 // MESSAGERIE #142 — liste de fils, fil, nouvelle discussion.
@@ -570,15 +569,15 @@ private fun MessageBubble(
  * AVANT #142, chaque pièce s'affichait par son URL de proxy en TEXTE PLAT —
  * illisible à l'œil, et une URL finit dans les logs : plus rien ne l'affiche.
  *
- * Le tap appelle [onOpen]. La seule réponse HONNÊTE aujourd'hui : `/v1/media`
- * exige le jeton du device, qu'aucune application tierce ne peut porter (401), et
- * le lui refuser reviendrait à DONNER un credential à un tiers ; les octets
- * ouverts DANS l'app demandent un `FileProvider` (module app) + une lecture par
- * l'app, comme la photo #82. Tant que ce n'est pas là, la puce dit pourquoi au
- * lieu de déclencher un 401 devant l'utilisateur.
- * ponytail: upgrade = `FileProvider` + lecture sur le client local (même motif
- * que les PJ des devoirs, #205) puis rendu in-app (image, puis `PdfRenderer`).
- * Aucune seconde copie des octets.
+ * Le tap appelle [onOpen]. La seule réponse HONNÊTE aujourd'hui : les messages
+ * lus sur le client local ne portent pas leurs pièces jointes (le port
+ * `android/pronote/` n'expose pas les fichiers des messages), donc il n'y a
+ * rien à ouvrir — et certainement pas un `Intent` sortant avec un credential.
+ * Tant que ce n'est pas là, la puce dit pourquoi au lieu d'ouvrir une page
+ * d'échec.
+ * ponytail: upgrade = exposer les fichiers des messages côté client local
+ * (même motif que les PJ des devoirs, #205) + `FileProvider` puis rendu
+ * in-app (image, puis `PdfRenderer`). Aucune seconde copie des octets.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -865,14 +864,11 @@ fun MessagesRoute(
     baseUrl: String,
     // `accountId` reste un paramètre de la route (`AppNav.kt` le passe) mais n'est
     // plus utilisé : AVANT #142, il servait à CONSTRUIRE l'URL du proxy /v1/media,
-    // affichée en clair dans chaque bulle. Aucune URL n'est plus construite ici (le
-    // proxy exige le jeton du device), donc le compte n'a plus rien à afficher.
+    // affichée en clair dans chaque bulle. Aucune URL n'est plus construite ici
+    // (les pièces jointes se lisent sur le client local), donc le compte n'a
+    // plus rien à afficher.
     @Suppress("UNUSED_PARAMETER")
     accountId: String,
-    // Bearer du device appairé (contrat 0.4.0) : conservé pour la signature de
-    // route (`AppNav` le passe), lectures sur le client local (#205, ADR-003).
-    @Suppress("UNUSED_PARAMETER")
-    tokens: TokenStore? = null,
 ) {
     val discussionsRepo = remember { DiscussionsRepository() }
     val zone = remember { ZoneId.systemDefault() }
@@ -1104,14 +1100,13 @@ fun MessagesRoute(
                 del()
             },
             onBack = { back() },
-            // `/v1/media` exige le bearer du device : aucune application tierce ne
-            // peut le porter, et lui en donner un serait l'exposer (401). La puce
-            // explique donc la limite au lieu d'ouvrir une page d'échec — voir
-            // `AttachmentChips`.
+            // Les messages lus en local ne portent pas leurs pièces jointes :
+            // rien à ouvrir pour l'instant. La puce explique donc la limite au
+            // lieu d'ouvrir une page d'échec — voir `AttachmentChips`.
             onOpenAttachment = { att ->
                 notices.show(
                     PapNotice(
-                        "« ${att.label} » : l'ouverture dans l'application arrive bientôt. Le serveur exige la session de l'app, qu'aucune autre application ne peut porter.",
+                        "« ${att.label} » : l'ouverture dans l'application arrive bientôt. Les messages ne portent pas encore leurs pièces jointes.",
                         NoticeKind.INFO,
                     ),
                 )

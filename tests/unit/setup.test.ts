@@ -55,7 +55,7 @@ function service(sessions: unknown, opts: Record<string, unknown> = {}) {
     logger: (m) => logs.push(m),
     ...opts,
   });
-  return { setup, pairing, opened, logs, handler: createHandler(createMemoryStore(), pairing, null, undefined, undefined, null, null, null, null, setup) };
+  return { setup, pairing, opened, logs, handler: createHandler(createMemoryStore(), pairing, null, undefined, undefined, null, null, null, setup) };
 }
 
 const QR: SetupRequest = {

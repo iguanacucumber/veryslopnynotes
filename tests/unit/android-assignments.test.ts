@@ -12,7 +12,7 @@ import {
 import { dayLabelFr } from "./fixtures/date-fr";
 
 // Miroir des helpers Kotlin (Assignment.kt, AssignmentsRepository.kt,
-// Assignments.kt, AssignmentsSections.kt, ServerConfig.kt) — doivent rester en
+// Assignments.kt, AssignmentsSections.kt) — doivent rester en
 // sync. org.json = SDK Android, aucune dépendance ajoutée (le build Gradle n'est
 // pas exécuté par `make check`). Instants injectés : aucun Date.now()
 // incontrôlé.
@@ -68,24 +68,11 @@ function stripComments(src: string): string {
     .join("\n");
 }
 
-// --- ServerConfig.mediaUrl (kotlin) ---
-function tsUrlEncode(value: string): string {
-  const chars = [...value.trim().slice(0, 200)];
-  let out = "";
-  for (const c of chars) {
-    const code = c.codePointAt(0) as number;
-    if (/[a-zA-Z0-9\-_.]/.test(c)) out += c;
-    else out += "%" + code.toString(16).toUpperCase().padStart(2, "0");
-  }
-  return out;
-}
-
-function tsMediaUrl(baseUrl: string, accountId: string, ref: string): string {
-  return `${baseUrl}/v1/media?accountId=${tsUrlEncode(accountId)}&ref=${tsUrlEncode(ref)}`;
-}
-
-function tsAssignmentsToggleUrl(baseUrl: string): string {
-  return `${baseUrl}/v1/assignments/toggle`;
+// --- Résolution locale des PJ (AssignmentsRepository.fetchAttachment) ---
+// #206 : plus de `ServerConfig.mediaUrl` (proxy supprimé) — la `ref` reste une
+// clé locale (jamais une URL), résolue sur le client du téléphone.
+function tsFetchAttachmentKey(homeworkId: string, attachmentId: string): string {
+  return `${homeworkId}|${attachmentId}`;
 }
 
 // --- AssignmentsRepository.parse (kotlin) ---
@@ -488,9 +475,8 @@ describe("miroir Kotlin devoirs #75", () => {
     }
     // Aucune des refs rejetées n'est acceptée par le contrat TS non plus.
     expect(isAssignment({ ...FULL, attachments: [{ ...REF, ref: "//x/y" }] })).toBe(false);
-    expect(tsMediaUrl("https://srv.example.test", "acc1", REF.ref)).toBe(
-      "https://srv.example.test/v1/media?accountId=acc1&ref=homework%3A0%3Afile%3A0%3Af1",
-    );
+    // #206 : la PJ se résout en local (devoir + pièce), jamais par URL serveur.
+    expect(tsFetchAttachmentKey("a1", "f1")).toBe("a1|f1");
   });
 
   test("groupe par jour : badge semaine dérivé de dueDate, ordre croissant", () => {
@@ -557,8 +543,11 @@ describe("miroir Kotlin devoirs #75", () => {
     // sont ignorés, comme dans agents/runtime/check-architecture.ts).
     expect(stripComments(screen)).not.toMatch(/pronote|index-education/i);
     const config = readFileSync(join(CORE, "ServerConfig.kt"), "utf8");
-    expect(config).toContain("/v1/media?accountId=");
-    expect(config).toContain("/v1/assignments/toggle");
+    // #206 : ServerConfig ne connaît que le scraper — ni proxy média, ni
+    // toggle serveur (le téléphone fait les deux en local).
+    expect(config).not.toContain("/v1/media");
+    expect(config).not.toContain("/v1/assignments/toggle");
+    expect(config).toContain('const val MANUALS_SCRAPE_PATH = "/v1/manuals/scrape"');
     // org.json vient du SDK : aucune ligne de dépendance ajoutée.
     const uiGradle = readFileSync(join(import.meta.dir, "..", "..", "android/ui/build.gradle.kts"), "utf8");
     expect(uiGradle).not.toContain("gson");

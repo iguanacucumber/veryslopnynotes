@@ -23,7 +23,6 @@ import {
   isGradesResponse,
   isMeResponse,
   isNewsResponse,
-  MEDIA_REF_MAX_CHARS,
   isPairingConfirmRequest,
   isPairingConfirmResponse,
   isPairingStartRequest,
@@ -43,7 +42,7 @@ import { apiError } from "./errors";
 import { computeAverages, providedAveragesFor } from "../domain/averages";
 import { attendancePeriods } from "../domain/attendance";
 import { handleHomeworkGenerate } from "./homework";
-import type { AssignmentActions, MediaActions } from "./assignments";
+import type { AssignmentActions } from "./assignments";
 import { handleAssignmentsToggle } from "./assignments";
 import type { SyncRefreshActions } from "./sync-refresh";
 import { handleSyncRefresh } from "./sync-refresh";
@@ -59,54 +58,6 @@ import type { ReadStore } from "./store";
 import type { SubjectPrefsStore } from "./subject-prefs";
 import { createSubjectPrefsMemoryStore } from "./subject-prefs";
 import type { LLMProvider } from "../domain/ports";
-import type { MediaPayload } from "../infrastructure/media-proxy";
-import { MediaProxyError } from "../infrastructure/media-proxy";
-
-/**
- * #82 : résolution serveur d'une réf opaque (photo de profil, pièce jointe).
- * L'app n'a jamais d'adresse Pronote (I1, règle d'or média) : elle appelle
- * /v1/media et le serveur télécharge via la session appairée.
- * ponytail: fonction injectée, null = 501 explicite (aucun accès direct depuis
- * le routeur). Upgrade: câblage sur PronoteSessionStore au démarrage serveur.
- */
-export type MediaResolver = (accountId: string, ref: string) => Promise<MediaPayload>;
-
-/** Types MIME déduits de l'extension du nom renvoyé par le proxy (defaut = binaire). */
-const MEDIA_CONTENT_TYPES: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  pdf: "application/pdf",
-};
-
-function mediaContentType(name: string): string {
-  const ext = (name.toLowerCase().split(".").pop() ?? "").trim();
-  return MEDIA_CONTENT_TYPES[ext] ?? "application/octet-stream";
-}
-
-/** Nom ASCII pour l'en-tête (le nom lisible part dans filename*). */
-function asciiFileName(name: string): string {
-  const clean = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_").trim();
-  return clean || "fichier";
-}
-
-/** Normalise les deux ports média (fonction #82 / objet `download` #75). */
-function mediaResolver(media: MediaResolver | MediaActions | null): MediaResolver | null {
-  if (media === null) return null;
-  if (typeof media === "function") return media;
-  if (typeof media.download === "function") return (accountId, ref) => media.download(accountId, ref);
-  return null;
-}
-
-/**
- * #82 : une ref est un jeton opaque. Toute forme d'adresse est refusée avant le
- * proxy (défense en profondeur, même si le proxy revalide de son côté).
- */
-function isMediaRef(v: string): boolean {
-  return v.length > 0 && v.length <= MEDIA_REF_MAX_CHARS && !v.includes("//") && !v.includes("..");
-}
 
 /** Longueur max d'un periodId reflété dans la réponse (borne d'entrée utilisateur). */
 const PERIOD_ID_MAX_CHARS = 64;
@@ -341,15 +292,14 @@ export function createHandler(
   // #83 : préférences matière. Interface d'écriture séparée de ReadStore, NoOp
   // par défaut pour les appels existants (5e paramètre, aucun appel cassé).
   subjectPrefs: SubjectPrefsStore = createSubjectPrefsMemoryStore(),
-  // #75 : écriture "fait" (I7, action APP confirmée) et proxy média. Absents par
-  // défaut = 501 honnête, jamais un faux succès ni une URL Pronote côté app.
+  // #75 : écriture "fait" (I7, action APP confirmée). Absente par défaut =
+  // 501 honnête, jamais un faux succès.
   assignmentActions: AssignmentActions | null = null,
-  // #75/#82/#84 : proxy média unique (PJ devoirs + photo de profil). Les deux
-  // ports (fonction #82, objet `download` #75) sont acceptés et normalisés :
-  // une seule implémentation de la route, un seul contrat.
-  media: MediaResolver | MediaActions | null = null,
+  // #206 : le proxy média est supprimé (photos/PJ résolues sur le téléphone) :
+  // GET /v1/media tombe en 404 (route sans implémentation, #210 la sort du
+  // contrat). Le 7e paramètre est donc `syncRefresh` (#87).
   // #87 : relecture synchrone pour le pull-refresh (POST /v1/sync/refresh).
-  // Absente par défaut = 501 honnête, aucun appelant existant cassé (8e
+  // Absente par défaut = 501 honnête, aucun appelant existant cassé (7e
   // paramètre ; le câblage réel reste au démarrage du serveur).
   syncRefresh: SyncRefreshActions | null = null,
 
@@ -357,7 +307,7 @@ export function createHandler(
   // CONFIRMÉES (I7). Absent par défaut = 501 honnête, jamais un faux succès.
   discussionActions: DiscussionActions | null = null,
   // #118 : POST /v1/setup (compte école + jeton en un appel). Absent par défaut
-  // = 501 honnête, comme les autres ports non branchés (10e paramètre, aucun
+  // = 501 honnête, comme les autres ports non branchés (9e paramètre, aucun
   // appelant existant cassé).
   setup: SetupService | null = null,
 ): (req: Request) => Promise<Response> {
@@ -365,7 +315,6 @@ export function createHandler(
     try {
       const url = new URL(req.url);
       const path = url.pathname;
-      const download = mediaResolver(media);
       // Une path peut porter GET + PUT (#83) : on matche path puis méthode,
       // sinon 405 sur la mauvaise méthode au lieu de 404/405 incohérent.
       const routes = API_ROUTES.filter((r) => r.path === path);
@@ -383,7 +332,7 @@ export function createHandler(
           allow: routes.map((r) => r.method).join(", "),
         });
       }
-      const res = await dispatch(req, url, path, method, download);
+      const res = await dispatch(req, url, path, method);
       return isHead ? new Response(null, { status: res.status, headers: res.headers }) : res;
     } catch {
       // Aucun THROW ne sort du handler (URL illisible, store qui lève, port qui
@@ -398,7 +347,6 @@ export function createHandler(
     url: URL,
     path: string,
     method: string,
-    download: MediaResolver | null,
   ): Promise<Response> {
     // Porte d'entrée unique : rien n'est lu (ni body, ni store, ni port) sur
     // une route fermée sans jeton d'un device appairé.
@@ -457,40 +405,10 @@ export function createHandler(
       case "/v1/assignments/toggle": {
         return handleAssignmentsToggle(req, assignmentActions, servedAccountId(store) ?? "");
       }
-      // #75 : proxy des pièces jointes (ref opaque → octets). Jamais d'URL
-      // Pronote dans l'app (I1), jamais de WebView distante.
-      case "/v1/media": {
-        // Lecture des données d'un compte appairé : jeton exigé (porte
-        // d'entrée) et le compte est résolu côté SERVEUR (servedAccountId /
-        // session appairée du proxy). L'`accountId` de la query est IGNORÉ :
-        // le prendre pour une identité ouvrait la session d'un autre compte
-        // appairé.
-        const ref = (url.searchParams.get("ref") ?? "").trim();
-        if (!isMediaRef(ref)) return apiError("bad_request", "invalid media ref");
-        if (!download) return apiError("not_implemented", "media proxy absent");
-        let file: MediaPayload;
-        try {
-          file = await download(servedAccountId(store) ?? "", ref);
-        } catch (err) {
-          // Jamais le message d'erreur brut (il peut contenir une interne).
-          if (err instanceof MediaProxyError) {
-            if (err.code === "bad_ref") return apiError("bad_request", "invalid media ref");
-            if (err.code === "session_expired") return apiError("unauthorized", "session expirée");
-            if (err.code === "not_found") return apiError("not_found", "unknown media ref");
-          }
-          return apiError("internal", "media unavailable");
-        }
-        const type = mediaContentType(file.name);
-        return new Response(file.bytes as unknown as BodyInit, {
-          headers: {
-            "content-type": type,
-            "content-length": String(file.bytes.byteLength),
-            "cache-control": "private, max-age=600",
-            // Image = affichage direct (photo de profil), sinon téléchargement.
-            "content-disposition": `${type.startsWith("image/") ? "inline" : "attachment"}; filename="${asciiFileName(file.name)}"; filename*=UTF-8''${encodeURIComponent(file.name)}`,
-          },
-        });
-      }
+      // #206 : le proxy média est supprimé (photos/PJ résolues sur le
+      // téléphone, `server/infrastructure/media-proxy.ts` + REF_SECRET avec) :
+      // la route tombe dans `default` (404). Le contrat (`API_ROUTES`) sera
+      // nettoyé en #210 avec les 30 autres routes métier mortes.
       case "/v1/timetable": {
         // #76 : fenêtre weekStart (semaine) ou from/to, bornees et valides.
         // Date d'entrée illisible = 400 sans répliquer l'input ; aucune fenêtre
@@ -757,9 +675,9 @@ export function serve(
   llm?: LLMProvider | null,
   revisions?: RevisionListStore,
   subjectPrefs?: SubjectPrefsStore,
-  // #75 : toggle "fait" (écriture confirmée par l'app) + proxy média.
+  // #75 : toggle "fait" (écriture confirmée par l'app).
   assignmentActions?: AssignmentActions | null,
-  media?: MediaResolver | MediaActions | null,
+  // #87 : relecture synchrone pour le pull-refresh (POST /v1/sync/refresh).
   syncRefresh?: SyncRefreshActions | null,
 
   // #80 : écritures de messagerie confirmées par l'app (I7).
@@ -775,7 +693,6 @@ export function serve(
       revisions ?? createRevisionMemoryStore(),
       subjectPrefs ?? createSubjectPrefsMemoryStore(),
       assignmentActions ?? null,
-      media ?? null,
       syncRefresh ?? null,
 
       discussionActions ?? null,

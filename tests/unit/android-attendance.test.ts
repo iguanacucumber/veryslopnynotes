@@ -267,8 +267,9 @@ describe("unit android vie scolaire (#77)", () => {
     expect(repo).toContain("CachePolicy.ATTENDANCE -> attendancePayload(client)");
     expect(repo).toContain("CachePolicy.PUNISHMENTS -> punishmentsPayload(client)");
     const config = readFileSync(join(CORE, "ServerConfig.kt"), "utf8");
-    expect(config).toContain('fun attendanceUrl(baseUrl: String): String = "$baseUrl/v1/attendance"');
-    expect(config).toContain('fun punishmentsUrl(baseUrl: String): String = "$baseUrl/v1/punishments"');
+    // #206 : ServerConfig ne connaît que le scraper — plus de routes vie scolaire.
+    expect(config).not.toContain("fun attendanceUrl");
+    expect(config).not.toContain("fun punishmentsUrl");
   });
 
   test("Kotlin : écran branché depuis le profil, org.json, zéro dépendance ajoutée (I1/I6)", () => {
