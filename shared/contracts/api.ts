@@ -91,6 +91,14 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "POST", path: "/v1/discussions/reply" },
   { method: "POST", path: "/v1/discussions/read-state" },
   { method: "POST", path: "/v1/discussions/delete" },
+
+  // #209 : scraper Playwright minimal — le serveur ne sert QUE des manuels
+  // (plain HTTPS, sans auth : décision utilisateur du 2026-10-11, risque
+  // accepté documenté côté server/infrastructure/http.ts). Credentials portail
+  // + startUrl injectés par l'appelant dans le corps (writeOnly), jamais en
+  // env ni commités. Les 31 routes métier restent listées (mortes côté process,
+  // suppression physique en #210) pour ne pas casser les tests existants.
+  { method: "POST", path: "/v1/manuals/scrape" },
 ] as const;
 
 export interface HealthResponse {
@@ -706,4 +714,87 @@ export function isDiscussionActionResponse(v: unknown): v is DiscussionActionRes
   if (e.type !== "CacheInvalidated") return false;
   const d = e.data as { resource?: unknown };
   return d.resource === "discussions";
+}
+
+// --- #209 scraper Playwright minimal (page -> ManualDoc) ---
+// Corps POST borné AVANT parse comme les autres routes ouvertes : sans borne,
+// un POST non authentifié de taille arbitraire est entièrement bufferisé.
+// `password`/`username`/`startUrl` sont writeOnly : jamais journalisés, jamais
+// persistés, jamais renvoyés (seul le cookie jar Playwright vit sur disque,
+// hors dépôt). `authFile` = chemin du jar réutilisé entre runs : relatif sans
+// `..` uniquement (jamais d'écriture absolue pilotée par l'appelant).
+export const MANUALS_SCRAPE_PATH = "/v1/manuals/scrape";
+export const MANUALS_SCRAPE_MAX_BODY_CHARS = 8192;
+export const MANUALS_SCRAPE_PLATFORM_MAX_CHARS = 100;
+export const MANUALS_SCRAPE_CREDENTIAL_MAX_CHARS = 512;
+export const MANUALS_SCRAPE_URL_MAX_CHARS = 2000;
+export const MANUALS_SCRAPE_AUTH_FILE_MAX_CHARS = 300;
+
+export interface ManualsScrapeRequest {
+  readonly platform: string;
+  readonly username: string;
+  /** Credential de l'appelant : `writeOnly`, jamais renvoyé ni journalisé. */
+  readonly password: string;
+  /** URL de départ fournie par l'humain (jamais committée). */
+  readonly startUrl: string;
+  /** Jar cookies réutilisé entre runs (défaut = jar du serveur). */
+  readonly authFile?: string;
+  /** false = première connexion interactive visible. */
+  readonly headless?: boolean;
+}
+
+/**
+ * Miroir contrat de `ManualDoc` (server/infrastructure/manuals.ts) : le
+ * contrat partagé ne remonte pas vers server/ (sens des dépendances).
+ */
+export interface ManualsScrapeDoc {
+  readonly id: string;
+  readonly platform: string;
+  readonly title: string;
+  readonly subject: string;
+  readonly page: number;
+  readonly excerpt: string;
+}
+
+export interface ManualsScrapeResponse {
+  readonly docs: ManualsScrapeDoc[];
+}
+
+export function isManualsScrapeRequest(v: unknown): v is ManualsScrapeRequest {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  if (!isBoundedNonEmptyString(r["platform"], MANUALS_SCRAPE_PLATFORM_MAX_CHARS)) return false;
+  if (!isBoundedNonEmptyString(r["username"], MANUALS_SCRAPE_CREDENTIAL_MAX_CHARS)) return false;
+  if (!isBoundedNonEmptyString(r["password"], MANUALS_SCRAPE_CREDENTIAL_MAX_CHARS)) return false;
+  if (!isBoundedNonEmptyString(r["startUrl"], MANUALS_SCRAPE_URL_MAX_CHARS)) return false;
+  if (!/^https?:\/\//i.test(r["startUrl"] as string)) return false;
+  const authFile = r["authFile"];
+  if (authFile !== undefined) {
+    if (!isBoundedNonEmptyString(authFile, MANUALS_SCRAPE_AUTH_FILE_MAX_CHARS)) return false;
+    const p = (authFile as string).trim();
+    if (p.startsWith("/") || p.includes("..")) return false;
+  }
+  const headless = r["headless"];
+  return headless === undefined || typeof headless === "boolean";
+}
+
+export function isManualsScrapeDoc(v: unknown): v is ManualsScrapeDoc {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    isBoundedNonEmptyString(r["id"], 200) &&
+    isBoundedNonEmptyString(r["platform"], MANUALS_SCRAPE_PLATFORM_MAX_CHARS) &&
+    isBoundedNonEmptyString(r["title"], 200) &&
+    isBoundedNonEmptyString(r["subject"], 100) &&
+    Number.isInteger(r["page"]) &&
+    (r["page"] as number) >= 1 &&
+    typeof r["excerpt"] === "string" &&
+    (r["excerpt"] as string).length <= 8000
+  );
+}
+
+export function isManualsScrapeResponse(v: unknown): v is ManualsScrapeResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const d = (v as Record<string, unknown>)["docs"];
+  return Array.isArray(d) && d.every(isManualsScrapeDoc);
 }

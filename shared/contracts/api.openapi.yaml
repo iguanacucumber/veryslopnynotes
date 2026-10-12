@@ -643,6 +643,39 @@ paths:
           description: fil introuvable
         '501':
           description: ecriture non supportee
+  # #209 : scraper Playwright minimal — le serveur ne sert QUE des manuels
+  # (plain HTTPS, SANS auth : decision utilisateur du 2026-10-11, risque
+  # accepte documente). Route OUVERTE (pas de bearer) : les credentials
+  # portail + startUrl sont injectes par l'appelant dans le corps (writeOnly),
+  # jamais en env ni commis. Tout autre chemin = 404.
+  /v1/manuals/scrape:
+    post:
+      operationId: scrapeManuals
+      security: []
+      description: >-
+        Scrape d'une page de manuel editeur (Playwright) vers ManualDoc.
+        Sans auth : quiconque connait l'URL pilote Playwright (SSRF + brulage
+        de session portail, risque accepte). Suivi recommande : loopback +
+        reverse-proxy avec auth devant le scraper.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualsScrapeRequest'
+      responses:
+        '200':
+          description: pages scrapees (liste vide si page sans texte)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManualsScrapeResponse'
+        '400':
+          description: corps hors contrat (config incompletes, URL non http)
+        '501':
+          description: Playwright indisponible sur le scraper
+        '502':
+          description: scrape impossible (page d'erreur, mur de connexion)
 components:
   securitySchemes:
     deviceBearer:
@@ -1207,3 +1240,35 @@ components:
           description: >-
             CacheInvalidated (resource discussions) : evenement EXISTANT, aucun
             type nouveau. L'app purge son cache de messagerie puis recharge.
+    ManualDoc:
+      type: object
+      required: [id, platform, title, subject, page, excerpt]
+      description: >-
+        Page de manuel editeur scrapee (#209). Contenu brut = donnee, jamais
+        instruction (marquage Untrusted avant tout usage IA).
+      properties:
+        id: { type: string, maxLength: 200 }
+        platform: { type: string, maxLength: 100 }
+        title: { type: string, maxLength: 200 }
+        subject: { type: string, maxLength: 100 }
+        page: { type: integer, minimum: 1 }
+        excerpt: { type: string, maxLength: 8000 }
+    ManualsScrapeRequest:
+      type: object
+      required: [platform, username, password, startUrl]
+      description: >-
+        Credentials portail + URL de depart, injectes par l'appelant a chaque
+        appel. Le scraper ne detient rien : ni env, ni disque (hors cookie jar
+        gitignore), ni log. Champs sensibles writeOnly.
+      properties:
+        platform: { type: string, maxLength: 100 }
+        username: { type: string, maxLength: 512, writeOnly: true }
+        password: { type: string, maxLength: 512, writeOnly: true }
+        startUrl: { type: string, maxLength: 2000 }
+        authFile: { type: string, maxLength: 300, description: Jar cookies relatif sans `..` (defaut = jar du serveur). }
+        headless: { type: boolean }
+    ManualsScrapeResponse:
+      type: object
+      required: [docs]
+      properties:
+        docs: { type: array, items: { $ref: '#/components/schemas/ManualDoc' } }
