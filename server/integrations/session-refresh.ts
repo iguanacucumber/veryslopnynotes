@@ -11,7 +11,7 @@
 //   - retry ≤ 1 : un seul nouvel essai après backoff court.
 //
 // Horloge ET sleeper sont INJECTÉS : aucun `setTimeout` réel, aucun `Date.now()`
-// caché → le test est déterministe (tests/unit/sync-refresh.test.ts).
+// caché → le test est déterministe (ex-`tests/unit/sync-refresh.test.ts`, supprimé en #210).
 // Aucun secret stocké ici : la renewal est fournie par l'appelant qui détient
 // les credentials (PronoteSessionStore ne les conserve pas non plus).
 // ponytail: pas de file d'attente, pas de backoff exponentiel, pas de jitter.

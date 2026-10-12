@@ -34,7 +34,7 @@ export function capabilitiesFromProbe(accountId: string, probe: CapabilityProbe,
 /**
  * Capacité d'un onglet. `null`/absent = capacités non déterminées : la
  * réponse n'affirme rien, donc faux côté serveur (l'app applique sa propre
- * règle sur `CapabilitiesResponse.capabilities === null` : rien n'est masqué).
+ * règle sur capabilities nulles : rien n'est masqué).
  */
 export function hasCapability(caps: Capabilities | null | undefined, tab: TabCapability): boolean {
   return caps?.tabs.includes(tab) === true;

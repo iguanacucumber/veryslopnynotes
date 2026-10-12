@@ -3,7 +3,7 @@ package fr.veryslopnynotes.core
 /**
  * Compteurs de présence par période (#77, port Kotlin #203).
  *
- * Port fidèle de `server/domain/attendance.ts` (la référence). Fonction pure :
+ * Porté de `server/domain/attendance.ts` (supprimé en #210 : ce port est la référence). Fonction pure :
  * aucun Pronote, aucun HTTP, aucun SQLite (I3). Les compteurs sont DÉRIVÉS des
  * absences publiées (kind + durationMinutes) — aucune valeur devinée, aucun
  * effet métier ici : la détection de nouvelle absence se fait sur ces données

@@ -1,8 +1,8 @@
 package fr.veryslopnynotes.core
 
 // Garde LLM I4/I5 : sans outils, sans reseau, sans secrets. Sortie texte/JSON validee.
-// Port fidele de server/ai/guard.ts, qui reste la REFERENCE (cf.
-// tests/unit/kotlin-ai-parity.test.ts). Aucun acces reseau/env/outil ici (scan
+// Port fidele de server/ai/guard.ts (supprimé en #210 : ce port est la source
+// de vérité). Aucun acces reseau/env/outil ici (scan
 // check-architecture). Stdlib + java.util uniquement, sans dependance.
 // Les appels provider sont BLOQUANTS (pas de coroutines sans dependance,
 // meme doctrine que le module pronote) : jamais sur le thread UI.

@@ -19,8 +19,8 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 // LLM OpenRouter sur l'appareil — adaptateur LlmProvider.
-// Port fidele de server/infrastructure/llm-openrouter.ts, qui reste la
-// REFERENCE du protocole (modele en constante, Bearer, budget tokens, rejets).
+// Porté de server/infrastructure/llm-openrouter.ts (supprimé en #210 : ce port
+// est la REFERENCE du protocole — modele en constante, Bearer, budget tokens, rejets).
 // La cle n'est JAMAIS un champ : elle arrive en parametre a chaque appel,
 // vit le temps de l'appel et part dans l'en-tete Authorization. Ni env,
 // ni disque, ni log. Le modele est une constante de code (pas un credential).

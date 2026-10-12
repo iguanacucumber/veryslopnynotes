@@ -57,10 +57,8 @@ JDK 17-21 (Gradle 8.7 refuse un JDK plus récent).
 
 ```bash
 bun install
-make check                     # secrets + typecheck + unit + arch + contracts + security + compile Kotlin
-make e2e                       # tests bout-en-bout (store seed, zéro réseau)
-make integration-api           # tests d'intégration (API locale, zéro secret)
-make runServer                 # serveur branché : HTTPS sur 0.0.0.0:8080 (voir PORT/HOST/TLS)
+make check                     # secrets + typecheck + unit + arch + contracts + compile Kotlin
+make runServer                 # scraper manuels : HTTPS sur 0.0.0.0:8080 (voir PORT/HOST/TLS)
 ```
 
 Client Android :
@@ -168,13 +166,13 @@ Le domaine ne connaît ni SQLite ni le framework HTTP ; chaque dépendance est u
 
 | # | Invariant | Test |
 |---|---|---|
-| I1 | Seul `android/pronote/` parle Pronote, zéro mention hors module ; médias par proxy | `make architecture-test` |
-| I2 | Un seul point d'accès réseau Pronote par runtime (`HttpSession`/`Client` ; `PronoteHttpClient` legacy) | idem + scan de définitions |
-| I3 | `server/domain/` + `android/core/` sans SQLite ni framework HTTP | `tests/architecture` + parité Kotlin |
-| I4 | Aucun secret dans les prompts LLM | `make security` + scan |
-| I5 | LLM sans outils, sans réseau, sans secret ; clé en store chiffré côté app | idem |
-| I6 | Contenu externe = donnée bornée, délimiteurs à nonce | `tests/security/pipeline.test.ts` |
-| I7 | Aucun effet de bord depuis une sortie LLM libre | tests unitaires + revue |
+| I1 | Seul `android/pronote/` parle Pronote, zéro mention hors module | `make architecture-test` |
+| I2 | Un seul point d'accès réseau Pronote par runtime (`Client` ; `PronoteHttpClient` legacy #199) | idem + scan de définitions |
+| I3 | `server/domain/` résiduel + `android/core/` sans SQLite ni framework HTTP | `tests/architecture` + `check-architecture` |
+| I4 | Aucun secret dans les prompts LLM | `tests/architecture` + scan |
+| I5 | LLM sans outils, sans réseau, sans secret ; clé en store chiffré côté app | idem + miroirs Android |
+| I6 | Contenu externe = donnée bornée, délimiteurs à nonce | `tests/architecture` + miroirs Android |
+| I7 | Aucun effet de bord depuis une sortie LLM libre (jobs device sans LLM, plus de `server/jobs/`) | `tests/architecture` + revue |
 
 Détails : [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md).
 
@@ -224,15 +222,14 @@ lecture. Une route ajoutée est donc fermée par défaut.
 ## Tests et garde-fous
 
 ```bash
-make check                  # tout : secrets, typecheck, unit, arch, contracts, security, compile Kotlin
-make unit / contracts / architecture-test / security
+make check                  # tout : secrets, typecheck, unit, arch, contracts, compile Kotlin
+make unit / contracts / architecture-test
 make android-compile        # compile Gradle des 4 modules Android (JDK 17-21 + SDK requis)
-make e2e                    # bout-en-bout sur store seed, zéro réseau
-make integration-api        # API locale, zéro secret
 make build                  # image Docker + rappel APK
 ```
 
-796 tests dans `make check`, fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
+486 tests verts dans `make check` (460 unit + 20 archi + 6 contracts ; 1 skip bruyant
+sans corpus #199), fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
 La CI locale est `make check` : un changement qui casse un invariant est bloquant, même si
 fonctionnellement il passe.
 

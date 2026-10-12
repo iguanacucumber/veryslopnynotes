@@ -1,9 +1,9 @@
 // check-architecture.ts — garde-fous I1/I2/I3/I5 (+I4 secrets LLM). I6/I7 = tests/review, pas scannables en regex.
 // I1 android sans hôte Pronote — FP: .md ignorés, commentaires /* */ et // ignorés. ponytail: plafond regex, upgrade dependency-cruiser phase 1.
 // I2 unique PronoteHttpClient, seul accès réseau — FP: commentaires ignorés, fetch hors Pronote ignoré (exige hôte+réseau même ligne OU URL Pronote + réseau). ponytail: plafond regex, upgrade AST phase 1.
-// I3 domain sans sqlite/HTTP — FP: block comments, javadoc *, imports multi-lignes ([^;]* couvre \n). ponytail: plafond regex, upgrade AST/dependency-cruiser.
-// I4 secrets dans server/ai refusés — commentaires ignorés. ponytail: doublon volontaire avec check-secrets, upgrade gitleaks.
-// I5 LLM sans outils/réseau/secrets — FP: commentaires ignorés, tools: [] vide autorisé. ponytail: plafond regex sur server/ai, upgrade AST.
+// I3 domaine sans sqlite/HTTP : `server/domain/` résiduel (#199, capture) et `android/core/` (port #203, stdlib seule) — FP: block comments, javadoc *, imports multi-lignes ([^;]* couvre \n). ponytail: plafond regex, upgrade AST/dependency-cruiser.
+// I4 secrets dans l'IA refusés (`server/ai/` supprimé en #210, reste `android/core/`) — commentaires ignorés. ponytail: doublon volontaire avec check-secrets, upgrade gitleaks.
+// I5 LLM sans outils/réseau/secrets — FP: commentaires ignorés, tools: [] vide autorisé. ponytail: plafond regex sur android/core (`server/ai/` supprimé en #210), upgrade AST.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -26,6 +26,7 @@ function listFiles(dir: string, out: string[] = []): string[] {
 }
 
 const androidFiles = listFiles(join(ROOT, "android"));
+const androidCoreFiles = listFiles(join(ROOT, "android", "core"));
 const domainFiles = listFiles(join(ROOT, "server/domain"));
 const serverFiles = listFiles(join(ROOT, "server"));
 const allFiles = listFiles(ROOT);
@@ -87,7 +88,9 @@ const directFetch = serverFiles.filter((f) => {
 });
 if (directFetch.length) fail.push(`I2: accès réseau Pronote hors client: ${directFetch.join(", ")}`);
 
-// I3 : domaine sans sqlite ni framework HTTP (imports/usage réel, pas commentaires)
+// I3 : domaine sans sqlite ni framework HTTP (imports/usage réel, pas commentaires).
+// #210 : `server/domain/` résiduel (capture #199) ET `android/core/` (port #203,
+// stdlib + plateforme seules, zéro dépendance).
 // ponytail: strip block //ligne avant match. Upgrade: vrai AST/dependency-cruiser phase 1.
 function codeOnly(content: string): string {
   const noBlock = content
@@ -105,7 +108,7 @@ function codeOnly(content: string): string {
     })
     .join("\n");
 }
-const i3 = domainFiles.filter((f) => {
+const i3 = [...domainFiles, ...androidCoreFiles].filter((f) => {
   try {
     const c = codeOnly(readFileSync(f, "utf8"));
     return (
@@ -116,12 +119,12 @@ const i3 = domainFiles.filter((f) => {
     return false;
   }
 });
-if (i3.length) fail.push(`I3: domain dépend sqlite/HTTP: ${i3.join(", ")}`);
+if (i3.length) fail.push(`I3: domaine dépend sqlite/HTTP: ${i3.join(", ")}`);
 
-// I5 + I4 : LLM sans outils/réseau/secrets (I6/I7 non scannables ici — voir tests/security + review/e2e)
-// Port #204 : le module IA vit aussi dans `android/core/` (mêmes scans, mêmes
-// motifs) ; `android/data/OpenRouterLlm.kt` est EXCLU (c'est l'appel HTTP
-// fournisseur autorisé, piné par tests/security/pipeline.test.ts, jamais scanné
+// I5 + I4 : LLM sans outils/réseau/secrets (I6/I7 non scannables ici — voir miroirs unitaires Android + review)
+// Port #204 : le module IA vit dans `android/core/` (mêmes scans, mêmes
+// motifs), `server/ai/` ayant été supprimé en #210 ; `android/data/OpenRouterLlm.kt est EXCLU (c'est l'appel HTTP
+// fournisseur autorisé, piné par tests/unit/android-homework.test.ts, jamais scanné
 // comme du pur).
 const llmFiles = listFiles(join(ROOT, "server/ai"));
 const ANDROID_AI = ["Untrusted.kt", "LlmGuard.kt", "AiPrompts.kt", "HomeworkAi.kt", "RevisionAi.kt", "Humanize.kt"].map(
@@ -136,7 +139,7 @@ const i4 = llmFiles.filter((f) => {
     return false;
   }
 });
-if (i4.length) fail.push(`I4: secret dans server/ai: ${i4.join(", ")}`);
+if (i4.length) fail.push(`I4: secret dans IA: ${i4.join(", ")}`);
 const i5 = llmFiles.filter((f) => {
   try {
     const c = codeOnly(readFileSync(f, "utf8"));

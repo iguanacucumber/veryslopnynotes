@@ -1,8 +1,8 @@
 package fr.veryslopnynotes.core
 
 // Consignes fixes + assemblage via Untrusted.kt (I6).
-// Port fidele de server/ai/prompt.ts, qui reste la REFERENCE (cf.
-// tests/unit/kotlin-ai-parity.test.ts). Aucun secret, aucun acces reseau,
+// Port fidele de server/ai/prompt.ts (supprimé en #210 : ce port est la
+// source de vérité). Aucun secret, aucun acces reseau,
 // aucun outil (I4/I5). Stdlib uniquement.
 
 // ponytail: consignes en constantes, jamais construites depuis externe.

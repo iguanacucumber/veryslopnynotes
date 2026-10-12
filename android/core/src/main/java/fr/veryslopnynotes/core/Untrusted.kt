@@ -3,8 +3,8 @@ package fr.veryslopnynotes.core
 import java.util.UUID
 
 // Pipeline I6 : contenu externe = Untrusted, entre delimiteurs a nonce, declare donnee.
-// Port fidele de server/ai/untrusted.ts, qui reste la REFERENCE (cf.
-// tests/unit/kotlin-ai-parity.test.ts). Aucun secret, aucun acces reseau, aucun
+// Port fidele de server/ai/untrusted.ts (supprimé en #210 : ce port est la
+// source de vérité). Aucun secret, aucun acces reseau, aucun
 // outil ici (I4/I5). Stdlib + java.util uniquement (aucune dependance,
 // ni Android ni org.json) : ce fichier compile avec kotlinc seul.
 //
