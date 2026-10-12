@@ -30,7 +30,7 @@ export interface ParityLink {
 export interface ParityToolchain {
   readonly skipReason: string | null;
   ensureJar(cacheName: string, sources: string[]): Promise<string>;
-  openLink(jar: string): Promise<ParityLink>;
+  openLink(jar: string, opts?: { timezone?: string }): Promise<ParityLink>;
 }
 
 function toolchain(): ParityToolchain {
@@ -74,8 +74,11 @@ function toolchain(): ParityToolchain {
     return jar;
   }
 
-  async function openLink(jar: string): Promise<ParityLink> {
-    const proc = Bun.spawn([java as string, "-Dfile.encoding=UTF-8", "-jar", jar], {
+  async function openLink(jar: string, opts?: { timezone?: string }): Promise<ParityLink> {
+    // Même fuseau des deux côtés : `bun test` fige UTC, la JVM prend le
+    // système — sans ça les `LocalDateTime` muraux divergent d'autant d'heures.
+    const timezone = opts?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const proc = Bun.spawn([java as string, "-Dfile.encoding=UTF-8", `-Duser.timezone=${timezone}`, "-jar", jar], {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",

@@ -21,6 +21,17 @@ import javax.crypto.spec.SecretKeySpec
 /** MD5 brut (clé/IV de session). */
 fun md5(data: ByteArray): ByteArray = MessageDigest.getInstance("MD5").digest(data)
 
+/**
+ * Bourrage PKCS#7 manuel (comme `pkcs7Pad` côté TS) : complète au multiple de
+ * `blockSize`, un bloc ENTIER si déjà aligné. Utilisé AVANT `aesEncrypt` (qui
+ * bourre une seconde fois) pour les URL magiques `FichiersExternes` — les deux
+ * couches font partie du protocole, pas d'un choix.
+ */
+fun pkcs7Pad(data: ByteArray, blockSize: Int = 16): ByteArray {
+    val padLen = blockSize - (data.size % blockSize)
+    return data + ByteArray(padLen) { padLen.toByte() }
+}
+
 /** SHA-256 hexadécimal MAJUSCULE d'une chaîne UTF-8 (mot de passe ENT, #201). */
 fun sha256HexUpper(data: String): String {
     val digest = MessageDigest.getInstance("SHA-256").digest(data.toByteArray(Charsets.UTF_8))
