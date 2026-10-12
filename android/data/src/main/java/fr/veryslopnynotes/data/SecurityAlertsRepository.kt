@@ -1,29 +1,14 @@
 package fr.veryslopnynotes.data
 
 import fr.veryslopnynotes.core.SecurityAlert
-import fr.veryslopnynotes.core.ServerConfig
 import org.json.JSONArray
 import org.json.JSONObject
 
-// Dépôt alertes sécurité (#21) : GET /v1/security/alerts via ApiClient
-// allowlist seule (I1). Parse org.json (SDK, sans nouvelle dépendance).
-// Excerpt gardé comme donnée brute, jamais interprété (I6 : pas de
+// Dépôt alertes sécurité (#21) : parse du payload local (#205).
+// Le contenu est balayé sur l'appareil (`SecurityAlert.scanTextsForInjections`,
+// I6) : l'extrait reste une DONNÉE bornée, jamais interprétée (pas de
 // WebView/Html ici ni côté ui).
-class SecurityAlertsRepository(
-    private val api: ApiClient,
-) {
-    fun request(): okhttp3.Request =
-        api.buildGet("/v1/security/alerts")
-
-    fun fetch(): List<SecurityAlert> {
-        val call = api.client().newCall(request())
-        call.execute().use { res ->
-            require(res.isSuccessful) { "alertes HTTP ${res.code}" }
-            val body = res.body?.string().orEmpty()
-            return parse(body)
-        }
-    }
-
+class SecurityAlertsRepository {
     companion object {
         // ponytail: parse manuel org.json, pas de serializer. Upgrade: kotlinx.serialization si modèles > 10.
         fun parse(body: String): List<SecurityAlert> {
@@ -42,7 +27,5 @@ class SecurityAlertsRepository(
             }
             return out
         }
-
-        fun url(baseUrl: String): String = ServerConfig.securityAlertsUrl(baseUrl)
     }
 }

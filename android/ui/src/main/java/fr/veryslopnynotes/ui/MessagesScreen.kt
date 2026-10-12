@@ -63,7 +63,6 @@ import fr.veryslopnynotes.core.DiscussionMessage
 import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.DiscussionRules
 import fr.veryslopnynotes.core.MessageAttachment
-import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.DiscussionsRepository
 import fr.veryslopnynotes.data.DiscussionWriteOutcome
@@ -577,8 +576,9 @@ private fun MessageBubble(
  * ouverts DANS l'app demandent un `FileProvider` (module app) + une lecture par
  * l'app, comme la photo #82. Tant que ce n'est pas là, la puce dit pourquoi au
  * lieu de déclencher un 401 devant l'utilisateur.
- * ponytail: upgrade = `FileProvider` + `api.buildGet(mediaPath)` puis rendu in-app
- * (image, puis `PdfRenderer`). Aucune seconde copie du client média.
+ * ponytail: upgrade = `FileProvider` + lecture sur le client local (même motif
+ * que les PJ des devoirs, #205) puis rendu in-app (image, puis `PdfRenderer`).
+ * Aucune seconde copie des octets.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -856,9 +856,9 @@ private fun SearchField(
 // --- Route câblée ------------------------------------------------------------
 
 // Route câblée : liste depuis le cache `discussions` (offline-first), puis refresh
-// réseau ; ouverture d'un fil = lecture serveur de ses messages (jamais en cache,
-// donnée personnelle) ; chaque écriture part d'un geste, puis relance un refresh de
-// la liste (le serveur renvoie l'invalidation).
+// local ; ouverture d'un fil = lecture de ses messages sur le client (jamais en
+// cache, donnée personnelle) ; chaque écriture part d'un geste, puis relance un
+// refresh de la liste.
 @Composable
 fun MessagesRoute(
     repo: SyncedRepository,
@@ -869,11 +869,12 @@ fun MessagesRoute(
     // proxy exige le jeton du device), donc le compte n'a plus rien à afficher.
     @Suppress("UNUSED_PARAMETER")
     accountId: String,
-    // Bearer du device appairé (contrat 0.4.0), relu à chaque requête.
+    // Bearer du device appairé (contrat 0.4.0) : conservé pour la signature de
+    // route (`AppNav` le passe), lectures sur le client local (#205, ADR-003).
+    @Suppress("UNUSED_PARAMETER")
     tokens: TokenStore? = null,
 ) {
-    val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }
-    val discussionsRepo = remember(api) { DiscussionsRepository(api) }
+    val discussionsRepo = remember { DiscussionsRepository() }
     val zone = remember { ZoneId.systemDefault() }
     // Cache synchrone au démarrage (affichage hors-ligne sans attendre le réseau) :
     // UNE seule lecture du fichier, les deux champs en sortent — et elle est

@@ -183,21 +183,34 @@ describe("android homework — client de /v1/homework/generate (0.7.0)", () => {
 });
 
 describe("android homework — le credential reste dans l'app", () => {
-  test("la clé part dans le CORPS, jamais en URL ni en log", () => {
+  test("la clé part en en-tête Bearer direct fournisseur, jamais en URL ni en log", () => {
+    // #205 : plus de route serveur (`POST /v1/homework/generate` morte) — la
+    // génération passe par `OpenRouterHomework` + `OpenRouterLlm` direct.
+    const hw = stripComments(src(DATA, "OpenRouterLlm.kt"));
+    // Clé relue du store à CHAQUE appel, jamais mémorisée : pas de champ.
+    expect(hw).toMatch(/val apiKey = keys\.apiKey\(\)/);
+    expect(hw).not.toMatch(/private val apiKey|var apiKey/);
+    // Sans clé, pas d'appel.
+    expect(hw).toMatch(/if \(apiKey\.isNullOrEmpty\(\)\)/);
+    // Seule interpolation de la clé de tout le fichier : l'en-tête Bearer.
+    expect(hw).toMatch(/\.header\("Authorization", "Bearer \$key"\)/);
+    // Aucune clé dans une URL/query : les `?` du fichier sont des types
+    // nullables (`apiKey: String?`), jamais une query — donc on exige
+    // l'absence de `?`/`&` APRES un usage de la clé sur la même ligne.
+    expect(hw).not.toMatch(/\$key[^\n]*[?&]|\?[^:\n]*apiKey|=.*\?.*apiKey/);
+    expect(hw).not.toMatch(/Log\.|println|printStackTrace/);
+    // Client NU (jamais api.client()) : un 401 fournisseur n'invalide jamais
+    // la session d'appareil.
+    expect(hw).toMatch(/client: OkHttpClient = OkHttpClient\(\)/);
+    expect(hw).not.toMatch(/api\.client\(\)/);
+    expect(hw).not.toMatch(/DeviceAuth/);
+    // HomeworkRepository ne garde que les contrats partagés (question,
+    // sources, parse) : aucune génération, aucun HTTP.
     const repo = stripComments(src(DATA, "HomeworkRepository.kt"));
-    // Corps : c'est le seul endroit autorisé.
-    expect(repo).toMatch(/\.put\("apiKey", apiKey\)/);
-    expect(repo).toMatch(/buildPost\(ServerConfig\.homeworkGeneratePath\(\)/);
-    // Aucune URL/query qui transporte la clé, aucun log.
-    expect(repo).not.toMatch(/apiKey[^\n]*[?&]/);
-    expect(repo).not.toMatch(/homeworkGenerateUrl/);
-    expect(repo).not.toMatch(/Log\.|println|printStackTrace/);
-    // Relue à CHAQUE appel (elle change quand l'utilisateur la réécrit) et jamais
-    // mémorisée dans le dépôt : pas de champ `apiKey` ni de `var`.
-    expect(repo).toMatch(/val apiKey = keys\.apiKey\(\)/);
-    expect(repo).not.toMatch(/private val apiKey|var apiKey/);
-    // Sans clé, pas d'appel : le serveur refuserait (400) l'aller-retour.
-    expect(repo).toMatch(/if \(apiKey\.isNullOrEmpty\(\)\)/);
+    expect(repo).not.toMatch(/buildPost|OkHttp|newCall|ServerConfig/);
+    expect(repo).toMatch(/fun sourcesFor/);
+    expect(repo).toMatch(/fun questionFor/);
+    expect(repo).toMatch(/fun parse/);
   });
 
   test("clé chiffrée au repos, jamais en prefs simples", () => {
@@ -225,10 +238,16 @@ describe("android homework — le credential reste dans l'app", () => {
   });
 
   test("l'écran n'affiche ni fournisseur ni clé, et n'exécute rien", () => {
-    const help = stripComments(src(UI, "HomeworkHelp.kt"));
+    const help = stripComments(src(UI, "HomeworkHelp.kt"))
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("import "))
+      .join("\n");
     // Contenu serveur = DONNÉE : Text() seul, jamais WebView/HTML (I6).
     expect(help).not.toMatch(/WebView|AndroidView|Html/);
-    expect(help).not.toMatch(/sk-or-v1|openrouter/i);
+    // Le nom du fournisseur n'est pas une donnée affichée : il ne vit que
+    // dans l'import du dépôt (`OpenRouterHomework`), jamais dans un Text().
+    expect(help).not.toMatch(/sk-or-v1/);
+    expect(help).not.toMatch(/Text\([^)]*openrouter/i);
     // La clé n'est ni affichée ni journalisée par l'écran.
     expect(help).not.toMatch(/apiKey/);
     // Pas de source affichée = pas d'envoi possible (le serveur refuserait sans appel).

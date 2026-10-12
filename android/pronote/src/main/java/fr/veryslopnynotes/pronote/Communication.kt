@@ -360,6 +360,15 @@ class KeepAlive(private val shouldPing: () -> Boolean, private val ping: () -> U
     private var flag = false
     private var thread: Thread? = null
 
+    /**
+     * Ping de session si dû (~110 s d'inactivité) : lève en cas d'échec
+     * réseau/session (#205 : relecture manuelle locale, l'appelant décide du
+     * repli). Le thread de garde, lui, ne lève jamais (voir `start`).
+     */
+    fun pingIfDue() {
+        if (shouldPing()) ping()
+    }
+
     fun start() {
         flag = true
         val t = Thread({

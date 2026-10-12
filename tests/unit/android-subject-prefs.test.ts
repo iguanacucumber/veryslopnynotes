@@ -277,8 +277,12 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     // Hors-ligne : lecture locale d'abord, réseau seulement en repli/push.
     expect(data).toContain("fun prefs(): List<SubjectPrefs> = try");
     expect(data).toContain("Instant.now().toString()");
-    // Chemins issus de ServerConfig seul (I1) + aucune nouvelle dépendance.
-    expect(data).toContain("ServerConfig.subjectPrefsUrl(baseUrl)");
+    // #205 : plus de réplication serveur (téléphone seul, ADR-003) — le
+    // fichier EST la vérité, aucune dépendance ajoutée.
+    expect(data).not.toContain("ServerConfig.");
+    expect(data).not.toContain("api.buildGet");
+    expect(data).not.toContain("api.buildPost");
+    expect(data).not.toContain("api.client()");
     expect(data).not.toContain("index-education");
     const dataGradle = read(join(ROOT, "android/data"), "build.gradle.kts");
     expect(dataGradle).not.toContain("room");

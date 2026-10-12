@@ -42,10 +42,12 @@ function grep(files: string[], re: RegExp): string[] {
 
 let fail: string[] = [];
 
-// I1 : Android sans URL/hôte Pronote — repointé #200 : seul `android/pronote/`
-// parle Pronote en direct (module du port, zéro dépendance). Le mot reste
-// interdit partout ailleurs ; `settings.gradle.kts` ne le porte que dans sa
-// déclaration de module. La prose (INVARIANTS, AGENTS.md) suit en #211.
+// I1 : Android sans URL/hôte Pronote — repointé #200 puis #205 : seul
+// `android/pronote/` parle Pronote en direct (module du port) ; depuis #205,
+// `data`/`ui` manipulent les TYPES du client local (dépendance
+// `project(":pronote")`, ADR-003) — câblage sanctionné, pas un hôte. Le mot
+// reste interdit partout ailleurs ; `settings.gradle.kts` ne le porte que
+// dans sa déclaration de module. La prose (INVARIANTS, AGENTS.md) suit en #211.
 const pronoteHost = /pronote/i;
 const PRONOTE_DIR = join(ROOT, "android", "pronote") + "/";
 const i1 = androidFiles.filter((f) => {
@@ -54,6 +56,10 @@ const i1 = androidFiles.filter((f) => {
   try {
     let code = codeOnly(readFileSync(f, "utf8"));
     if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
+    code = code
+      .replace(/project\(":pronote"\)/g, "")
+      .replace(/PronoteSession|PronoteClientProvider/g, "")
+      .replace(/fr\.veryslopnynotes\.pronote/g, "");
     return pronoteHost.test(code);
   } catch {
     return false;

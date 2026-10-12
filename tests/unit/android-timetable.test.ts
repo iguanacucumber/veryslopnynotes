@@ -306,7 +306,9 @@ describe("unit android EDT (#76)", () => {
     expect(policy).toContain('const val TIMETABLE = "timetable"');
     expect(policy).toContain("TTL_TIMETABLE_MS = 60L * 60L * 1000L");
     const repo = readFileSync(join(DATA, "SyncedRepository.kt"), "utf8");
-    expect(repo).toContain("ServerConfig.timetableUrl(baseUrl, query)");
+    // #205 : EDT lu sur le client local (fenêtre `weekStart` relayée), plus de
+    // chemin serveur.
+    expect(repo).toContain("CachePolicy.TIMETABLE -> timetablePayload(client, q)");
     const config = readFileSync(join(CORE, "ServerConfig.kt"), "utf8");
     expect(config).toContain("fun timetableUrl(baseUrl: String, query: String): String");
     // org.json vient du SDK : aucune ligne de dépendance ajoutée.
