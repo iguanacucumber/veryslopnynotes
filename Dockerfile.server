@@ -1,4 +1,7 @@
-# Release serveur (issue #32) : image minimale, sans secret.
+# Release scraper manuels (issue #209) : image minimale, sans secret.
+# #209 : le process ne sert QUE des manuels (plain HTTPS, sans auth — risque
+# accepte documente dans server/infrastructure/http.ts). Seuls http.ts +
+# manuals-*.ts sont vivants ; le reste de server/ part en #210.
 # Base épinglée exacte (ADR-001, `bun --version` 1.4.2). Digest : `docker pull
 # oven/bun:1.4.2` puis figer `FROM oven/bun:1.4.2@sha256:<digest>` (daemon
 # absent en local, tag exact en attendant).
