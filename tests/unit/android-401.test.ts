@@ -180,6 +180,17 @@ describe("unit android 401 : session perdue -> appairage (#113)", () => {
     const calls = files.filter((f) => codeOnly(read(f)).includes("newCall("));
     expect(calls.length).toBeGreaterThan(8);
     for (const f of calls) {
+      // Exemption #204 : l'appel direct au fournisseur LLM ne passe PAS par le
+      // client gardé — un 401 OpenRouter (clé LLM refusée) ne doit JAMAIS
+      // invalider la session d'appareil. Gardes compensatoires pinnés ici :
+      // aucune référence au client gardé ni au signal de session.
+      if (f.split("/").pop() === "OpenRouterLlm.kt") {
+        const c = codeOnly(read(f));
+        expect(c).not.toContain("api.client()");
+        expect(c).not.toContain("DeviceAuth");
+        expect(c).not.toContain("UnauthorizedGuard");
+        continue;
+      }
       expect({ file: f.split("/").pop(), viaApi: codeOnly(read(f)).includes("api.client().newCall(") }).toEqual({
         file: f.split("/").pop(),
         viaApi: true,

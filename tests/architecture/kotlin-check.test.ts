@@ -98,6 +98,24 @@ describe("check-kotlin", () => {
     expect(run({ "NoFalsePositive.kt": NO_FP }).code).toBe(0);
   });
 
+  // Régression #204 : `fun interface` n'est pas une fonction. Le script y voyait
+  // un `fun` nommé `interface`, sautait aux parenthèses de la méthode SAM et
+  // mangeait l'accolade du corps (faux « accolades déséquilibrées » sur du code
+  // qui compile — LlmGuard.kt).
+  test("fun interface SAM = OK, méthode dedans sans doublon", () => {
+    const src = [
+      "package p",
+      "",
+      "fun interface Provider {",
+      "    fun generate(system: String, data: List<String>): String",
+      "}",
+      "",
+      "interface Plain : Provider",
+      "",
+    ].join("\n");
+    expect(run({ "Sam.kt": src }).code).toBe(0);
+  });
+
   test("accolades non fermées = FAIL", () => {
     const { code, out } = run({ "Broken.kt": "package p\n\nobject O {\n    fun f(): Int = 1\n" });
     expect(code).toBe(1);
