@@ -3,7 +3,6 @@ package fr.veryslopnynotes.ui
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import fr.veryslopnynotes.core.ServerConfig
-import fr.veryslopnynotes.data.SseState
 
 // États de l'assistant de connexion (#120). Trois étapes, dans l'ordre où
 // l'utilisateur les vit : le serveur, puis son compte Pronote, puis le QR de
@@ -34,8 +33,6 @@ data class SetupForm(
     val qrRaw: String = "",
     val pin: String = "",
     val state: PairingState = PairingState.Idle,
-    val sse: SseState = SseState.Disconnected,
-    val lastEventPreview: String? = null,
 )
 
 /**
@@ -52,9 +49,9 @@ data class SetupForm(
  *    règle « provisoire, jamais stocké ». Le coût est un rescane après rotation,
  *    et l'étape atteinte est restaurée : l'utilisateur retombe sur l'étape 3,
  *    pas sur le champ serveur.
- *  - `state`, `sse` et `lastEventPreview` : états de MACHINE (un envoi en
- *    cours, une connexion SSE). Restaurer « Connexion… » afficherait un écran
- *    figé sur une requête morte, donc ils repartent à leur valeur initiale.
+ *  - `state` : état de MACHINE (un envoi en cours). Restaurer
+ *    « Connexion… » afficherait un écran figé sur une requête morte, donc il
+ *    repart à sa valeur initiale.
  */
 val SetupFormSaver: Saver<SetupForm, Any> = listSaver(
     save = { listOf(it.schoolUrl) },
@@ -89,22 +86,6 @@ fun previousStep(step: SetupStep): SetupStep? = when (step) {
     SetupStep.SERVER -> null
     SetupStep.ACCOUNT -> SetupStep.SERVER
     SetupStep.QR -> SetupStep.ACCOUNT
-}
-
-/**
- * État des notifications en direct, en FRANÇAIS COURANT (#172).
- *
- * « SSE reconnexion… (essai 3, 1500 ms) » était un état d'exécution, lu par un
- * élève au premier lancement : de l'outillage exposé comme de l'interface.
- * L'écart de reprise reste dit (il explique une coupure), en secondes et sans
- * jargon, parce que le délai est la seule chose qu'un utilisateur peut attendre.
- */
-fun sseLabel(s: SseState): String = when (s) {
-    is SseState.Disconnected -> "Notifications en direct : arrêtées."
-    is SseState.Connecting -> "Notifications en direct : connexion…"
-    is SseState.Connected -> "Notifications en direct : actives (${s.received} reçues)."
-    is SseState.WaitingRetry -> "Notifications en direct : nouvelle tentative dans ${s.delayMs / 1000} s."
-    is SseState.Failed -> "Notifications en direct : échec — ${s.message}"
 }
 
 /**

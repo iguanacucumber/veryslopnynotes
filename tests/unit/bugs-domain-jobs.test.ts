@@ -1,5 +1,5 @@
 // Revue adversariale : bugs réels du domaine (moyennes/compétences/capacités/
-// ports) et des jobs (PDF fiche, moteur de sync, notif, diff de notes).
+// ports) et des jobs (PDF fiche, notif, diff de notes).
 // Chaque test cible UN bug et doit être ROUGE tant que le bug existe.
 // Fixtures 100 % synthétiques : aucun réseau, aucun secret, aucune URL réelle,
 // aucune horloge réelle (instants ISO explicites, aucun `sleep` de production).
@@ -10,8 +10,6 @@ import { isPedagogicResource } from "../../server/domain/ports";
 import { disabledTabs } from "../../server/domain/capabilities";
 import { diffGrades } from "../../server/jobs/grades";
 import { formatAbsencePush } from "../../server/jobs/notify";
-import { startSyncLoop } from "../../server/jobs/sync";
-import type { SyncSink, SyncSource } from "../../server/jobs/sync";
 import {
   assembleRevisionSheet,
   listRevisionSheets,
@@ -54,11 +52,6 @@ function memoryKv(): RevisionKv {
   };
 }
 
-const emptySink: SyncSink = {
-  loadSnapshot: async () => null,
-  saveSnapshot: async () => {},
-};
-
 describe("bugs adversoriaux — domaine + jobs", () => {
   test("BUG: renderRevisionPdf calcule les offsets xref en caractères et non en octets — 100 % des fiches révision (accents + tiret cadratin) sortent en PDF structurellement invalide", () => {
     // Le titre contient déjà « révision » et le corps du PDF un tiret cadratin :
@@ -70,68 +63,6 @@ describe("bugs adversoriaux — domaine + jobs", () => {
     const declared = Number(raw.match(/startxref\s+(\d+)/)?.[1]);
     const reel = raw.indexOf("xref\n0 6");
     expect(declared).toBe(reel);
-  });
-
-  test("BUG: startSyncLoop n'a pas de verrou d'exclusion — deux ticks se chevauchent, relisent le même snapshot et émettent deux fois le même GradeCreated", async () => {
-    let enCours = 0;
-    let maxEnCours = 0;
-    let relacher: () => void = () => {};
-    const source: SyncSource = {
-      grades: async () => {
-        enCours += 1;
-        maxEnCours = Math.max(maxEnCours, enCours);
-        await new Promise<void>((r) => {
-          relacher = r;
-        });
-        enCours -= 1;
-        return [];
-      },
-      assignments: async () => [],
-      entries: async () => [],
-    };
-    // Intervalle court + relecture bloquée : le 2e tick part avant la fin du 1er.
-    const stop = startSyncLoop(source, emptySink, 1, () => {});
-    try {
-      await new Promise((r) => setTimeout(r, 25));
-      // La doc du module promet « le tick ne se chevauche pas ».
-      expect(maxEnCours).toBe(1);
-    } finally {
-      stop();
-      relacher();
-    }
-  });
-
-  test("BUG: le rattrapage d'erreur de startSyncLoop rappelle onResult hors du try — la rejection non gérée échappe et tue le process serveur", async () => {
-    const source: SyncSource = {
-      grades: async () => {
-        throw new Error("pronote indisponible");
-      },
-      assignments: async () => [],
-      entries: async () => [],
-    };
-    const captures: string[] = [];
-    const surRejection = (e: unknown) => {
-      captures.push(String(e));
-    };
-    process.on("unhandledRejection", surRejection);
-    // maxRuns 1 = un seul tour, intervalle long : aucun tick parasite.
-    const stop = startSyncLoop(
-      source,
-      emptySink,
-      60_000,
-      () => {
-        throw new Error("dispatcher de push KO");
-      },
-      1,
-    );
-    try {
-      await new Promise((r) => setTimeout(r, 0));
-      stop();
-      expect(captures).toEqual([]);
-    } finally {
-      stop();
-      process.off("unhandledRejection", surRejection);
-    }
   });
 
   test("BUG: l'historique de computeAverages est fenêtré sur les N dernières notes — le dernier point de la courbe contredit la moyenne générale affichée", () => {

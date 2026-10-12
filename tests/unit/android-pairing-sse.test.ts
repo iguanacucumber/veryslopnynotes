@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { PAIRING_TOKEN_MAX_CHARS, isPairingConfirmRequest, isPairingConfirmResponse, isPairingStartResponse } from "../../shared/contracts/api";
 import { isContractEvent } from "../../shared/contracts/events";
@@ -16,7 +16,9 @@ function read(p: string): string {
 
 // Miroirs TS des helpers Kotlin (doivent rester en sync) :
 // - QrPayload.kt : isValidPin = ^[0-9]{6}$, parse JSON {sessionId, code} ou "sessionId|code"
-// - SseClient.kt : extractSseData("data: {...}") + backoff 1s<<n plafonné 30s
+// #208 : le miroir SSE (SseClient.kt : extractSseData + backoff) est SUPPRIMÉ
+// avec le client — sans serveur, ni SSE, ni push, ni cron. Le sync périodique
+// vit sur le téléphone (PeriodicSyncWorker, WorkManager).
 function tsIsValidPin(code: string): boolean {
   return /^[0-9]{6}$/.test(code.trim());
 }
@@ -43,19 +45,6 @@ function tsParseQr(raw: string): { sessionId: string; code: string } | null {
     return { sessionId, code };
   }
   return null;
-}
-
-function tsExtractSseData(line: string): string | null {
-  const t = line.trim();
-  if (!t || t.startsWith(":")) return null;
-  if (!t.startsWith("data:")) return null;
-  const v = t.slice("data:".length).trim();
-  return v ? v : null;
-}
-
-function tsBackoffMs(attempt: number): number {
-  const shift = Math.max(0, Math.min(5, attempt));
-  return Math.min(30_000, 1_000 * 2 ** shift);
 }
 
 function codeOnly(content: string): string {
@@ -109,20 +98,23 @@ function tsAuthorization(path: string, token: string | null): string | null {
   return `Bearer ${token}`;
 }
 
-describe("unit android pairing/SSE (#15)", () => {
+describe("unit android pairing (#15) + sync périodique (#208)", () => {
   test("fichiers app présents (diff minimal, zone autorisée)", () => {
     for (const f of [
       join(DATA, "QrPayload.kt"),
       join(DATA, "PairingRepository.kt"),
       join(DATA, "TokenStore.kt"),
-      join(DATA, "SseClient.kt"),
+      join(DATA, "PeriodicSyncWorker.kt"),
       join(DATA, "ApiClient.kt"),
       join(UI, "PairingUiState.kt"),
       join(UI, "PairingScreen.kt"),
-      join(UI, "SseStatusRow.kt"),
       join(UI, "AppNav.kt"),
     ]) {
       expect(existsSync(f), `manquant: ${f}`).toBe(true);
+    }
+    // #208 : SSE supprimé — aucune résurrection partielle.
+    for (const f of [join(DATA, "SseClient.kt"), join(UI, "SseStatusRow.kt")]) {
+      expect(existsSync(f), `ressuscité: ${f}`).toBe(false);
     }
   });
 
@@ -153,18 +145,9 @@ describe("unit android pairing/SSE (#15)", () => {
     expect(kt).toContain("^[0-9]{6}$");
   });
 
-  test("SSE : extraction data: + backoff + enveloppe contrat", () => {
-    expect(tsExtractSseData("data: {\"a\":1}")).toBe('{"a":1}');
-    expect(tsExtractSseData("data:{\"a\":1}")).toBe('{"a":1}');
-    expect(tsExtractSseData(": commentaire")).toBeNull();
-    expect(tsExtractSseData("event: message")).toBeNull();
-    expect(tsExtractSseData("data: ")).toBeNull();
-
-    expect(tsBackoffMs(0)).toBe(1_000);
-    expect(tsBackoffMs(1)).toBe(2_000);
-    expect(tsBackoffMs(5)).toBe(30_000);
-    expect(tsBackoffMs(9)).toBe(30_000);
-
+  test("#208 : SSE supprimé, zéro référence morte, WorkManager planifié", () => {
+    // L'enveloppe contrat reste valide (la route serveur vit sa propre fin de
+    // vie ailleurs) : c'est le CLIENT Android qui ne la consomme plus.
     const evt = {
       v: CONTRACTS_VERSION,
       type: "SyncCompleted",
@@ -172,45 +155,32 @@ describe("unit android pairing/SSE (#15)", () => {
       data: { accountId: "seed-acc", grades: 1, assignments: 2 },
     };
     expect(isContractEvent(evt)).toBe(true);
-    expect(tsExtractSseData(`data: ${JSON.stringify(evt)}`)).toContain("SyncCompleted");
 
-    const sseKt = read(join(DATA, "SseClient.kt"));
-    expect(sseKt).toContain("extractSseData");
-    expect(sseKt).toContain("sseBackoffDelayMs");
-    expect(sseKt).toContain("SseState");
-    expect(sseKt).toContain("WaitingRetry");
-    expect(sseKt).toContain("Connected");
-
-    // #172 : l'état est affiché en français courant, jamais en jargon d'outillage
-    // (« SSE reconnexion… (essai 3, 1500 ms) ») : l'écran d'appairage est le
-    // PREMIER écran que voit un élève.
-    const uiState = read(join(UI, "PairingUiState.kt"));
-    const uiStateCode = codeOnly(uiState);
-    expect(uiStateCode).toContain("fun sseLabel(");
-    expect(uiStateCode).toContain("Notifications en direct : actives");
-    expect(uiStateCode).toContain("Notifications en direct : nouvelle tentative dans");
-    // Le délai est dit en SECONDES (c'est la seule chose qu'on peut attendre),
-    // jamais en millisecondes ni avec un numéro d'essai.
-    expect(uiStateCode).toContain("${s.delayMs / 1000} s.");
-    // Le KDoc, lui, CITE l'ancien libellé pour dire qu'il a disparu : c'est le
-    // code, commentaires vidés, qui ne doit plus le porter.
-    for (const jargon of ["SSE connecté", "SSE reconnexion", "essai ${s.attempt}", "${s.delayMs} ms"]) {
-      expect({ jargon, present: uiStateCode.includes(jargon) }).toEqual({ jargon, present: false });
+    // Aucune référence SSE dans le CODE Android (commentaires exclus) : ni
+    // client, ni états, ni ligne d'état, ni libellé, ni câblage d'écran.
+    const ktFiles = [
+      ...readdirSync(DATA).map((f) => join(DATA, f)),
+      ...readdirSync(UI).map((f) => join(UI, f)),
+    ].filter((f) => f.endsWith(".kt"));
+    for (const f of ktFiles) {
+      const code = codeOnly(read(f));
+      for (const ref of ["SseClient", "SseState", "SseListener", "SseStatusRow", "sseLabel", "extractSseData", "sseBackoffDelayMs"]) {
+        expect({ file: f.split("/").pop(), ref, present: code.includes(ref) }).toEqual({
+          file: f.split("/").pop(),
+          ref,
+          present: false,
+        });
+      }
     }
-    const sseRow = read(join(UI, "SseStatusRow.kt"));
-    expect(sseRow).toContain("Reconnecter");
-    expect(sseRow).toContain("Déconnecter");
-    // #172 : la ligne est un DIAGNOSTIC replié, plus le parcours de l'écran. Sans
-    // ça, un état d'exécution (connexion, reprise, JSON du dernier événement)
-    // s'affiche sous les deux seuls gestes qui comptent au premier lancement.
-    const screen = read(join(UI, "PairingScreen.kt"));
-    const repli = screen.slice(screen.indexOf("var sseDetails"));
-    expect(screen).toContain("var sseDetails by remember { mutableStateOf(false) }");
-    expect(repli).toContain("if (sseDetails) {");
-    expect(repli.indexOf("SseStatusRow(")).toBeGreaterThan(repli.indexOf("if (sseDetails) {"));
-    // La connexion au setup passe par les DEUX portes (succès + geste manual) :
-    // replier l'affichage ne doit pas rendre le bouton mort.
-    expect(screen).toContain("sse.connect(listener)");
+    // Le sync périodique est planifié au démarrage (travail unique, contraintes
+    // + backoff dans le worker).
+    const main = read(join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/MainActivity.kt"));
+    expect(main).toContain("PeriodicSyncWorker.schedule(this)");
+    const worker = read(join(DATA, "PeriodicSyncWorker.kt"));
+    expect(worker).toContain("enqueueUniquePeriodicWork");
+    expect(worker).toContain("ExistingPeriodicWorkPolicy.KEEP");
+    expect(worker).toContain("setRequiresBatteryNotLow(true)");
+    expect(worker).toContain("NetworkType.CONNECTED");
   });
 
   test("I1 : aucun appel direct tiers, allowlist serveur seule", () => {
@@ -223,23 +193,26 @@ describe("unit android pairing/SSE (#15)", () => {
       join(DATA, "QrPayload.kt"),
       join(DATA, "PairingRepository.kt"),
       join(DATA, "TokenStore.kt"),
-      join(DATA, "SseClient.kt"),
+      join(DATA, "PeriodicSyncWorker.kt"),
       join(DATA, "ApiClient.kt"),
       join(UI, "PairingUiState.kt"),
       join(UI, "PairingScreen.kt"),
-      join(UI, "SseStatusRow.kt"),
       join(UI, "AppNav.kt"),
     ].map((f) => ({ f, code: codeOnly(read(f)) }));
     for (const { f, code } of allKt) {
-      expect({ file: f, hit: pronoteHost.test(code) }).toEqual({ file: f, hit: false });
+      // Même tolérance que check-architecture.ts (I1 repointé #200 puis #205) :
+      // `data`/`ui` manipulent les TYPES du client local (dépendance
+      // `project(":pronote")`, ADR-003) — câblage sanctionné, pas un hôte.
+      const sanctionne = code
+        .replace(/project\(":pronote"\)/g, "")
+        .replace(/PronoteSession|PronoteClientProvider/g, "")
+        .replace(/fr\.veryslopnynotes\.pronote/g, "");
+      expect({ file: f, hit: pronoteHost.test(sanctionne) }).toEqual({ file: f, hit: false });
     }
     const repo = read(join(DATA, "PairingRepository.kt"));
     expect(repo).toContain("ServerConfig");
     expect(repo).toContain("isAllowed");
     expect(repo).toContain("pairingConfirmUrl");
-    const sse = read(join(DATA, "SseClient.kt"));
-    expect(sse).toContain("api.buildGet");
-    expect(sse).toContain("/v1/events");
   });
 
   test("token sécurisé : empreinte + secret, chiffré, jamais journalisé", () => {
@@ -340,13 +313,19 @@ describe("unit android pairing/SSE (#15)", () => {
     expect(api).toContain("client: OkHttpClient = OkHttpClient()");
   });
 
-  test("deps : une seule ajoutée, épinglée (security-crypto)", () => {
+  test("deps : deux ajoutées, épinglées (security-crypto, work-runtime)", () => {
     const dataGradle = read(join(ROOT, "android/data/build.gradle.kts"));
     expect(dataGradle).toContain("com.squareup.okhttp3:okhttp:4.12.0");
     expect(dataGradle).toContain("androidx.security:security-crypto:1.1.0");
+    // #208 : sync périodique sans serveur = WorkManager, version épinglée au
+    // catalogue, sans client SSE.
+    expect(dataGradle).toContain("libs.work.runtime.ktx");
     expect(dataGradle).not.toContain("okhttp-sse");
     expect(dataGradle).not.toContain("mlkit");
     expect(dataGradle).not.toContain("zxing");
+    const catalog = read(join(ROOT, "android/gradle/libs.versions.toml"));
+    expect(catalog).toContain('work = "2.9.0"');
+    expect(catalog).toContain("work-runtime-ktx");
     const uiGradle = read(join(ROOT, "android/ui/build.gradle.kts"));
     expect(uiGradle).toContain('implementation(project(":data"))');
     expect(uiGradle).toContain('implementation(project(":core"))');
