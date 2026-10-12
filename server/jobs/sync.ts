@@ -4,6 +4,9 @@
 // stockage SQLite (#11) se brancheront sans changer le moteur.
 // Premier sync = zéro alerte (pas de faux positifs, FEATURES.md).
 // Idempotent : mêmes données rejouées → zéro événement.
+// #208 : la boucle serveur (startSyncLoop) est SUPPRIMÉE — le sync périodique
+// vit sur le téléphone (WorkManager, PeriodicSyncWorker). Reste runSync
+// (one-shot, utilisé par live-sync).
 
 import { CONTRACTS_VERSION, isAssignment, isGrade, isTimetableEntry } from "../../shared/contracts/models";
 import type { Assignment, Grade, TimetableEntry } from "../../shared/contracts/models";
@@ -131,68 +134,10 @@ export async function runSync(source: SyncSource, sink: SyncSink, at = new Date(
   return { firstRun: false, events: [], snapshot: previous };
 }
 
-function emptySnapshot(): SyncSnapshot {
-  return { version: 0, at: "", gradeIds: [], gradePrints: {}, assignmentIds: [], entryIds: [] };
-}
-
 function snapshotChanged(a: SyncSnapshot, b: SyncSnapshot): boolean {
   return (
     JSON.stringify(a.gradeIds) !== JSON.stringify(b.gradeIds) ||
     JSON.stringify(a.assignmentIds) !== JSON.stringify(b.assignmentIds) ||
     JSON.stringify(a.entryIds) !== JSON.stringify(b.entryIds)
   );
-}
-
-/**
- * Boucle de sync d'arrière-plan. `maxRuns` (0 = illimité, défaut inchangé)
- * borne le nombre de tours : un sync manuel/one-shot s'arrête tout seul au lieu
- * de laisser un intervalle tourner pour rien. Le tick ne se chevauche pas
- * (jamais deux relectures simultanées, comme le refresh de session : un tick
- * déclenché pendant un tour en cours est IGNORÉ) et un échec ne crashe jamais
- * l'ordonnanceur — l'erreur du tour ET celle du `onResult` de secours sont
- * absorbées, donc aucune rejection ne s'échappe jamais.
- */
-export function startSyncLoop(
-  source: SyncSource,
-  sink: SyncSink,
-  intervalMs: number,
-  onResult: (result: SyncResult) => void,
-  maxRuns = 0,
-): () => void {
-  let stopped = false;
-  let runs = 0;
-  // Exclusion mutuelle : un seul tour en vol. Sans ça, deux ticks se chevauchent,
-  // relisent le même snapshot et émettent deux fois le même GradeCreated.
-  let enCours = false;
-  const tick = async () => {
-    if (stopped || enCours) return;
-    enCours = true;
-    runs += 1;
-    try {
-      onResult(await runSync(source, sink));
-    } catch {
-      // Le job ne crashe jamais l'ordonnanceur : run vide, snapshot conservé si dispo.
-      // Le rattrapage reste DANS le try : un `onResult` KO ici ne doit pas
-      // devenir une rejection non gérée (elle tuerait le process serveur).
-      const kept = await sink.loadSnapshot().catch(() => null);
-      try {
-        onResult({ firstRun: runs === 1, events: [], snapshot: kept ?? emptySnapshot() });
-      } catch {
-        // Dispatcher de push KO et rattrapage KO : rien à notifier, on continue.
-      }
-    } finally {
-      enCours = false;
-    }
-    // Budget de tours atteint = arrêt propre (pas de tick orphelin).
-    if (maxRuns > 0 && runs >= maxRuns) {
-      stopped = true;
-      clearInterval(timer);
-    }
-  };
-  const timer = setInterval(tick, intervalMs);
-  void tick();
-  return () => {
-    stopped = true;
-    clearInterval(timer);
-  };
 }

@@ -18,7 +18,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,9 +41,6 @@ import fr.veryslopnynotes.data.SessionTokens
 import fr.veryslopnynotes.data.SetupInput
 import fr.veryslopnynotes.data.SetupRepository
 import fr.veryslopnynotes.data.SetupResult
-import fr.veryslopnynotes.data.SseClient
-import fr.veryslopnynotes.data.SseListener
-import fr.veryslopnynotes.data.SseState
 import fr.veryslopnynotes.data.isBoundedSchoolUrl
 import fr.veryslopnynotes.data.parseSchoolQr
 import fr.veryslopnynotes.data.probeHealthBlocking
@@ -88,7 +84,6 @@ fun PairingRoute(
     val tokens = remember(context) { SessionTokens.get(context) }
     val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }
     val repo = remember(api) { SetupRepository(api) }
-    val sse = remember(api) { SseClient(api) }
     // Saisie du serveur, pré-remplie avec l'adresse courante. Volontairement
     // NON liée à `baseUrl` pour le texte : un changement de serveur ne doit pas
     // effacer ce que l'utilisateur est en train de taper.
@@ -112,23 +107,6 @@ fun PairingRoute(
     var serverVersion by remember { mutableStateOf<String?>(null) }
     val haptics = rememberPapHaptics()
 
-    // ponytail: callbacks OkHttp hors main → post main. Upgrade: Flow/ViewModel.
-    val listener = remember {
-        object : SseListener {
-            override fun onState(s: SseState) {
-                main.post { form = form.copy(sse = s) }
-            }
-
-            override fun onEvent(json: String) {
-                main.post { form = form.copy(lastEventPreview = json.take(120)) }
-            }
-        }
-    }
-
-    DisposableEffect(sse) {
-        onDispose { sse.disconnect() }
-    }
-
     /** Envoi du setup : réseau sur thread, retour sur le main. */
     val submit: (SetupInput) -> Unit = { input ->
         form = form.copy(state = PairingState.Submitting)
@@ -149,7 +127,6 @@ fun PairingRoute(
                             return@post
                         }
                         form = form.copy(state = PairingState.Paired(res.device.id))
-                        sse.connect(listener)
                         onPaired()
                     }
                     is SetupResult.Err -> {
@@ -246,8 +223,6 @@ fun PairingRoute(
                 form = form,
                 onChange = { form = it },
                 onSubmit = submit,
-                onSseConnect = { sse.connect(listener) },
-                onSseDisconnect = { sse.disconnect(); form = form.copy(sse = SseState.Disconnected) },
             )
         }
     }
@@ -381,8 +356,6 @@ private fun QrStep(
     form: SetupForm,
     onChange: (SetupForm) -> Unit,
     onSubmit: (SetupInput) -> Unit,
-    onSseConnect: () -> Unit,
-    onSseDisconnect: () -> Unit,
 ) {
     // #147 : l'erreur du scan survit à la rotation, sinon l'utilisateur rescane
     // un QR pour apprendre la même chose.
@@ -483,24 +456,9 @@ private fun QrStep(
                 },
             )
         }
-        // #172 : l'état SSE sort du parcours principal. L'état brut (« SSE
-        // reconnexion… (essai 3, 1500 ms) ») et le dernier événement écrit
-        // étaient un TABLEAU DE BORD d'exploitation, visible par un élève dès la
-        // première étape, sous les deux seuls gestes qui comptent (scanner le QR,
-        // saisir son PIN). Ils sont repliés derrière UN bouton — repliés, pas
-        // supprimés : c'est le seul endroit de l'app où l'on peut constater si
-        // les notifications en direct fonctionnent, donc le diagnostic doit
-        // rester atteignable. Ouvert, il dit la même chose en français courant
-        // (`sseLabel`), et le JSON brut reste sous le même dépliant que les
-        // « Détails » de `PapErrorState` : une donnée affichée, jamais exécutée.
-        var sseDetails by remember { mutableStateOf(false) }
-        TextButton(onClick = { sseDetails = !sseDetails }) {
-            Text(if (sseDetails) "Masquer l'état des notifications" else "État des notifications")
-        }
-        if (sseDetails) {
-            SseStatusRow(state = form.sse, onConnect = onSseConnect, onDisconnect = onSseDisconnect)
-            form.lastEventPreview?.let { preview -> Text("Dernier événement : $preview") }
-        }
+        // #208 : plus de diagnostic SSE — sans serveur il n'y a plus de flux
+        // serveur→app, donc plus d'état de connexion à replier ici. Le sync
+        // de fond est passé à WorkManager (PeriodicSyncWorker).
     }
 }
 
