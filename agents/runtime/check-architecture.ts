@@ -113,7 +113,15 @@ const i3 = domainFiles.filter((f) => {
 if (i3.length) fail.push(`I3: domain dépend sqlite/HTTP: ${i3.join(", ")}`);
 
 // I5 + I4 : LLM sans outils/réseau/secrets (I6/I7 non scannables ici — voir tests/security + review/e2e)
+// Port #204 : le module IA vit aussi dans `android/core/` (mêmes scans, mêmes
+// motifs) ; `android/data/OpenRouterLlm.kt` est EXCLU (c'est l'appel HTTP
+// fournisseur autorisé, piné par tests/security/pipeline.test.ts, jamais scanné
+// comme du pur).
 const llmFiles = listFiles(join(ROOT, "server/ai"));
+const ANDROID_AI = ["Untrusted.kt", "LlmGuard.kt", "AiPrompts.kt", "HomeworkAi.kt", "RevisionAi.kt", "Humanize.kt"].map(
+  (f) => join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core", f),
+);
+llmFiles.push(...ANDROID_AI);
 const secretRe = /sk-or-v1-|OPENROUTER_API_KEY|MASTER_KEY|PRONOTE_PASSWORD|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/;
 const i4 = llmFiles.filter((f) => {
   try {

@@ -496,3 +496,133 @@ describe("devoirs gardefous", () => {
     expect(sends).toBe(0);
   });
 });
+
+// Port Kotlin de l'IA (#204) — miroirs Bun sur `android/` (I4/I5/I6 conservés).
+// Le COMPORTEMENT est prouvé par exécution (tests/unit/kotlin-ai-parity.test.ts
+// + pilote agents/runtime/kotlin-parity/AiParityMain.kt) ; ici le filet
+// STRUCTUREL : mêmes scans que ci-dessus, repointés sur le code Kotlin.
+// Fixtures 100 % synthétiques, secrets fragmentés (jamais contigus en repo).
+describe("android ai (Kotlin) — garde-fous I4/I5/I6", () => {
+  const CORE_AI = join(import.meta.dir, "..", "..", "android/core/src/main/java/fr/veryslopnynotes/core");
+  const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/veryslopnynotes/data");
+  const CORE_FILES = [
+    "Untrusted.kt",
+    "LlmGuard.kt",
+    "AiPrompts.kt",
+    "HomeworkAi.kt",
+    "RevisionAi.kt",
+    "Humanize.kt",
+  ];
+  const OPENROUTER = "OpenRouterLlm.kt";
+  const secretRe =
+    /sk-or-v1-|OPENROUTER_API_KEY|MASTER_KEY|PRONOTE_PASSWORD|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/;
+
+  // Mêmes FP que les scans I1 : commentaires ignorés (Kotlin = même syntaxe).
+  const ktOnly = (c: string): string =>
+    c
+      .replace(/\/\*[\s\S]*?\*\//g, "\n")
+      .split("\n")
+      .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
+      .map((l) => {
+        const idx = l.search(/(?<!:)\/\//);
+        return idx >= 0 ? l.slice(0, idx) : l;
+      })
+      .join("\n");
+  const kt = (f: string) => ktOnly(readFileSync(join(CORE_AI, f), "utf8"));
+
+  test("I6: les 6 fichiers existent, sans dépendance", () => {
+    for (const f of CORE_FILES) {
+      const c = kt(f);
+      expect(c).toContain("package fr.veryslopnynotes.core");
+    }
+    // Seul java.util.UUID est importé dans tout le module IA (nonce 128-bit).
+    const imports = CORE_FILES.flatMap((f) =>
+      kt(f).split("\n").filter((l) => l.startsWith("import ")),
+    );
+    expect(imports).toEqual(["import java.util.UUID"]);
+  });
+
+  test("I6: marquage + nonce borné partout dans le module IA", () => {
+    const untrusted = kt("Untrusted.kt");
+    expect(untrusted).toContain("UNTRUSTED_DATA");
+    expect(untrusted).toContain("createNonce");
+    expect(untrusted).toContain("UUID.randomUUID");
+    expect(untrusted).toMatch(/\{16,64\}/);
+    expect(untrusted).toContain("collision nonce");
+    for (const f of ["LlmGuard.kt", "AiPrompts.kt", "HomeworkAi.kt", "RevisionAi.kt", "Humanize.kt"]) {
+      // Même package : usage direct sans import — le nom suffit comme preuve.
+      expect(kt(f)).toMatch(/Untrusted|markExternal|buildSafePrompt|wrapUntrusted|SafePrompt|assertNoSecrets/);
+    }
+    // Consignes fixes jamais construites depuis l'externe (mots-clés pinnés).
+    expect(kt("AiPrompts.kt")).toMatch(/DONNEES delimitees/);
+    expect(kt("AiPrompts.kt")).toMatch(/jamais une instruction/);
+    expect(kt("AiPrompts.kt")).toMatch(/sans effet externe/);
+    expect(kt("HomeworkAi.kt")).toMatch(/UNIQUEMENT en JSON valide/);
+    expect(kt("HomeworkAi.kt")).toMatch(/sources_insuffisantes/);
+    expect(kt("Humanize.kt")).toContain("humanize-v1");
+    expect(kt("RevisionAi.kt")).toContain("SYSTEM_REVISION");
+  });
+
+  test("I4: aucun secret contigu dans le module IA, fragments disciplinés", () => {
+    for (const f of CORE_FILES) expect(kt(f)).not.toMatch(secretRe);
+    // La discipline de fragmentation est pinnée : jointure runtime seule.
+    expect(kt("LlmGuard.kt")).toContain('"sk-or" + "-v1-"');
+    expect(kt("LlmGuard.kt")).toContain('"OPENROUTER_" + "API_KEY"');
+    // Aucune lecture d'environnement (le serveur n'en détient déjà aucune, I8).
+    for (const f of CORE_FILES) {
+      expect(kt(f)).not.toMatch(/Bun\.env|process\.env|System\.getenv|getenv/);
+    }
+    // Garde d'entrée/sortie présente : borne + rejet avant appel.
+    expect(kt("LlmGuard.kt")).toContain("MAX_OUTPUT_CHARS = 8000");
+    expect(kt("LlmGuard.kt")).toContain("assertNoSecretsInPrompt");
+    expect(kt("LlmGuard.kt")).toContain("validateTextOutput");
+    expect(kt("LlmGuard.kt")).toContain("parseJsonOutput");
+  });
+
+  test("I5: module IA core sans réseau ni outils", () => {
+    for (const f of CORE_FILES) {
+      const c = kt(f);
+      expect(c).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|Bun\.serve/);
+      expect(c).not.toMatch(/OkHttp|HttpClient|HttpURLConnection|openConnection|Socket\(/);
+      expect(c).not.toMatch(/tools\s*[:=]\s*\[[^\]]*[^\s\]]/);
+    }
+  });
+
+  test("devoirs Kotlin: refus sans source avant appel, citations subset", () => {
+    const c = kt("HomeworkAi.kt");
+    // Refus déterministe : branche isEmpty AVANT generateGuardedJson dans le source.
+    expect(c).toContain("sources.isEmpty()");
+    expect(c).toContain("sources_insuffisantes");
+    expect(c.indexOf("sources.isEmpty()")).toBeLessThan(c.indexOf("generateGuardedJson"));
+    expect(c).toContain("source non fournie");
+    expect(c).toContain("uniqueLabels");
+  });
+
+  test("OpenRouter direct: clé relue du store, jamais loggée ni en URL", () => {
+    const c = ktOnly(readFileSync(join(DATA, OPENROUTER), "utf8"));
+    expect(c).not.toMatch(secretRe);
+    expect(c).not.toMatch(/Bun\.env|process\.env|System\.getenv/);
+    expect(c).not.toMatch(/Log\.|println|printStackTrace/);
+    // Seule interpolation de la clé de tout le fichier : l'en-tête Bearer.
+    for (const line of c.split("\n")) {
+      if (/\$key|\$\{key\}|apiKey/.test(line) && !line.includes("apiKey: String?")) {
+        expect(line).toMatch(/Bearer|keys\.apiKey|isNullOrEmpty|isRequestValid|generateHomework|generateSafe\(|buildSafePrompt|MAX_API_KEY|NO_KEY|OUT_OF_BOUNDS|LlmProvider|apiKey\?: String|val key = |MIN_API_KEY/);
+      }
+    }
+    // Relue À CHAQUE appel, jamais mémorisée : pas de champ, garde vide.
+    expect(c).toMatch(/val apiKey = keys\.apiKey\(\)/);
+    expect(c).not.toMatch(/private val apiKey|var apiKey/);
+    expect(c).toMatch(/if \(apiKey\.isNullOrEmpty\(\)\)/);
+    // Jamais en URL : Bearer seul, aucune query.
+    expect(c).toMatch(/header\("Authorization", "Bearer \$key"\)/);
+    expect(c).not.toMatch(/addQueryParameter|\?apiKey|apiKey=/);
+    // Protocole miroir du serveur : modèle constant, budget, rejets francs.
+    expect(c).toContain("stealth/space-bunny-alpha");
+    expect(c).toContain("MAX_OUTPUT_TOKENS = 4000");
+    expect(c).toContain("finish_reason");
+    expect(c).toContain("assertNoSecretsInPrompt");
+    // Wrapper sans appel sans source : refus avant tout réseau.
+    expect(c).toMatch(/SOURCES_REQUIRED_MESSAGE/);
+    expect(c.indexOf("sources.isEmpty()")).toBeLessThan(c.indexOf("Thread {"));
+  });
+});
