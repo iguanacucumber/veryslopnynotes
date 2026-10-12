@@ -218,6 +218,23 @@ describe("invariants", () => {
       "providedAveragesFor",
       "computeAverages",
       "CapabilityProbe",
+      // Port Kotlin #207 : jobs + PDF, points d'entrée rejoués par la parité
+      // `kotlin-jobs-parity` (diff notes, détection DS, notifs, fiches). La
+      // consommation applicative (repositories locaux, export) arrive après.
+      "fingerprint",
+      "diffGrades",
+      "detectExams",
+      "notifyGradeEvents",
+      "notifySyncResult",
+      "absenceFingerprint",
+      "newAbsences",
+      "formatAbsencePush",
+      "assembleRevisionSheet",
+      "notifyRevisionSheets",
+      "saveRevisionSheet",
+      "loadRevisionSheet",
+      "listRevisionSheets",
+      "RevisionPdf",
       // Port Kotlin #200/#201 : surface du protocole rejouée par la parité
       // (`kotlin-pronote-parity`, `kotlin-pronote-client-parity`). `enleverAlea`
       // seul attend un appelant (désentrelacement QR/ENT, #205 ou client futur).
