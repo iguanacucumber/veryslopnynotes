@@ -30,7 +30,6 @@ function codeOnly(content: string): string {
 
 const kt = {
   api: join(DATA, "ApiClient.kt"),
-  sse: join(DATA, "SseClient.kt"),
   synced: join(DATA, "SyncedRepository.kt"),
   tokens: join(DATA, "TokenStore.kt"),
   accounts: join(DATA, "AccountStore.kt"),
@@ -39,7 +38,6 @@ const kt = {
 };
 
 const HTTP_UNAUTHORIZED = 401;
-const MAX_ATTEMPTS_BEFORE_FAILED = 20;
 // Miroir de ApiClient.PUBLIC_PATHS (= ServerConfig).
 const PUBLIC_PATHS = ["/v1/pairing/start", "/v1/pairing/confirm", "/v1/health"];
 // Miroir de DeviceAuth.REJECTED_MESSAGE (lu plus bas dans le Kotlin).
@@ -98,31 +96,6 @@ const DeviceAuthMirror = {
   },
 };
 
-// Miroir de SseClient.onResponse/scheduleRetry. `stopOn401` = le garde-fou #113 ;
-// à false, c'est le comportement d'avant (reconnexion sur TOUT non-2xx).
-function tsSseRun(statuses: number[], stopOn401: boolean): { connects: number; failed: boolean } {
-  let closed = false;
-  let attempt = 0;
-  let connects = 0;
-  let failed = false;
-  for (const code of statuses) {
-    if (closed) break;
-    connects += 1;
-    if (code >= 200 && code < 300) {
-      attempt = 0;
-      continue;
-    }
-    if (stopOn401 && code === HTTP_UNAUTHORIZED) {
-      closed = true;
-      failed = true;
-      break;
-    }
-    attempt += 1; // scheduleRetry (backoff 1s, 2s, 4s… plafonné 30s)
-    if (attempt > MAX_ATTEMPTS_BEFORE_FAILED) failed = true;
-  }
-  return { connects, failed };
-}
-
 describe("unit android 401 : session perdue -> appairage (#113)", () => {
   test("réalité serveur : un refus = un 401 unique, sans cause révélée", () => {
     // requireDevice (server/api/router.ts) : inconnu / révoqué / expiré partagent
@@ -146,7 +119,6 @@ describe("unit android 401 : session perdue -> appairage (#113)", () => {
     const forbidden = /revok|révoqu|expir|unknown device|inconnu/i;
     expect(forbidden.test(codeOnly(read(kt.api)))).toBe(false);
     expect(forbidden.test(codeOnly(read(kt.synced)))).toBe(false);
-    expect(forbidden.test(codeOnly(read(kt.sse)))).toBe(false);
   });
 
   test("garde-fou : 401 + route protégée + bearer parti = signal, sinon rien", () => {
@@ -168,12 +140,14 @@ describe("unit android 401 : session perdue -> appairage (#113)", () => {
     // Un seul garde-fou HTTP lève le signal (ApiClient : 401 + route protégée
     // + bearer parti), PLUS les dépôts locaux qui détectent une session
     // TÉLÉPHONE morte (`isSessionFailure`, #205 : plus de HTTP métier, donc
-    // plus de 401 à observer). Un seul endroit s'y abonne.
+    // plus de 401 à observer) et le worker de fond (#208 : même règle dans
+    // `doWork`, sans boucle de retry sur une session morte). Un seul endroit
+    // s'y abonne.
     const files = [...readdirSync(DATA).map((f) => join(DATA, f)), ...readdirSync(UI).map((f) => join(UI, f))];
     const raises = files.filter((f) => codeOnly(read(f)).includes("DeviceAuth.reject()"));
     const subs = files.filter((f) => codeOnly(read(f)).includes("DeviceAuth.setOnRejected"));
     expect(raises.map((f) => f.split("/").pop()).sort()).toEqual(
-      ["ApiClient.kt", "AssignmentsRepository.kt", "DiscussionsRepository.kt", "ProfileRepository.kt", "SyncedRepository.kt"].sort(),
+      ["ApiClient.kt", "AssignmentsRepository.kt", "DiscussionsRepository.kt", "PeriodicSyncWorker.kt", "ProfileRepository.kt", "SyncedRepository.kt"].sort(),
     );
     // Le garde HTTP reste le seul à décider sur un statut (les dépôts locaux
     // lèvent sur une EXCEPTION de session, jamais sur un code HTTP).
@@ -191,7 +165,7 @@ describe("unit android 401 : session perdue -> appairage (#113)", () => {
     expect(clients.map((f) => f.split("/").pop()).sort()).toEqual(["ApiClient.kt", "OpenRouterLlm.kt"].sort());
     const calls = files.filter((f) => codeOnly(read(f)).includes("newCall("));
     expect(calls.map((f) => f.split("/").pop()).sort()).toEqual(
-      ["OpenRouterLlm.kt", "PairingRepository.kt", "RevisionSheets.kt", "SetupRepository.kt", "SseClient.kt"].sort(),
+      ["OpenRouterLlm.kt", "PairingRepository.kt", "RevisionSheets.kt", "SetupRepository.kt"].sort(),
     );
     for (const f of calls) {
       // Exemption #204 : l'appel direct au fournisseur LLM ne passe PAS par le
@@ -238,31 +212,9 @@ describe("unit android 401 : session perdue -> appairage (#113)", () => {
     expect(other.token).not.toBeNull(); // session intacte, cache/repli habituels
   });
 
-  test("SSE : un 401 arrête le flux au lieu de boucler sur un jeton mort", () => {
-    const forever = Array.from({ length: 40 }, () => HTTP_UNAUTHORIZED);
-    // Avant le garde-fou : reconnexion jusqu'au plafond, le même jeton rejoué.
-    expect(tsSseRun(forever, false).connects).toBeGreaterThan(1);
-    // Après : une seule connexion, état Failed, aucune reconnexion.
-    expect(tsSseRun(forever, true)).toEqual({ connects: 1, failed: true });
-    // Une panne serveur reste, elle, un retry borné (comportement inchangé).
-    const panne = Array.from({ length: 40 }, () => 503);
-    expect(tsSseRun(panne, true).connects).toBe(40);
-    expect(tsSseRun([200], true)).toEqual({ connects: 1, failed: false });
-
-    const sse = read(kt.sse);
-    expect(sse).toContain("if (code == ApiClient.HTTP_UNAUTHORIZED) {");
-    expect(sse).toContain("closed = true");
-    expect(sse).toContain("SseState.Failed(DeviceAuth.REJECTED_MESSAGE)");
-    // La sortie 401 précède le scheduleRetry : on ne reprogramme aucun essai.
-    expect(sse.indexOf("if (code == ApiClient.HTTP_UNAUTHORIZED) {")).toBeLessThan(
-      sse.indexOf('scheduleRetry(listener, "HTTP $code")'),
-    );
-    expect(sse).toContain("private const val MAX_ATTEMPTS_BEFORE_FAILED = 20");
-  });
-
   test("Kotlin : un seul point d'observation, message neutre, réparation par logout()", () => {
     const api = read(kt.api);
-    // UN intercepteur partagé par toutes les requêtes (repositories, SSE, média).
+    // UN intercepteur partagé par toutes les requêtes (repositories, setup, fiches).
     expect(api).toContain("client: OkHttpClient = OkHttpClient()");
     expect(api).toContain("client.newBuilder()");
     expect(api).toContain("addInterceptor(UnauthorizedGuard { isPublicPath(it) })");

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { isContractEvent } from "../../shared/contracts/events";
 import type { Assignment, Grade, TimetableEntry } from "../../shared/contracts/models";
-import { runSync, startSyncLoop } from "../../server/jobs/sync";
+import { runSync } from "../../server/jobs/sync";
 import type { SyncSink, SyncSnapshot, SyncSource } from "../../server/jobs/sync";
 
 const grade = (id: string): Grade => ({
@@ -74,20 +74,5 @@ describe("unit sync", () => {
     const res = await runSync(h.source, h.sink);
     expect(res.firstRun).toBe(true);
     expect(res.events).toEqual([]);
-
-    const throwing: SyncSource = {
-      grades: async () => {
-        throw new Error("down");
-      },
-      assignments: async () => [],
-      entries: async () => [],
-    };
-    let runs = 0;
-    const stop = startSyncLoop(throwing, h.sink, 5, () => {
-      runs += 1;
-    });
-    await new Promise((r) => setTimeout(r, 40));
-    stop();
-    expect(runs).toBeGreaterThanOrEqual(2);
   });
 });
