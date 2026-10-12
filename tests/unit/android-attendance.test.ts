@@ -263,9 +263,9 @@ describe("unit android vie scolaire (#77)", () => {
     expect(policy).toContain('const val PUNISHMENTS = "punishments"');
     expect(policy).toContain("TTL_ATTENDANCE_MS = 60L * 60L * 1000L");
     const repo = readFileSync(join(DATA, "SyncedRepository.kt"), "utf8");
-    expect(repo).toContain("CachePolicy.ATTENDANCE -> ServerConfig.attendanceUrl(baseUrl)");
-    expect(repo).toContain('ifEmpty { "/v1/attendance" }');
-    expect(repo).toContain("CachePolicy.PUNISHMENTS -> ServerConfig.punishmentsUrl(baseUrl)");
+    // #205 : vie scolaire lue sur le client local, plus de chemin serveur.
+    expect(repo).toContain("CachePolicy.ATTENDANCE -> attendancePayload(client)");
+    expect(repo).toContain("CachePolicy.PUNISHMENTS -> punishmentsPayload(client)");
     const config = readFileSync(join(CORE, "ServerConfig.kt"), "utf8");
     expect(config).toContain('fun attendanceUrl(baseUrl: String): String = "$baseUrl/v1/attendance"');
     expect(config).toContain('fun punishmentsUrl(baseUrl: String): String = "$baseUrl/v1/punishments"');

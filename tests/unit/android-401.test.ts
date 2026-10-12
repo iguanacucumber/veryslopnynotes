@@ -165,20 +165,34 @@ describe("unit android 401 : session perdue -> appairage (#113)", () => {
       expect(tsIsSessionRejection(code, "/v1/grades", true)).toBe(false);
     }
 
-    // Un seul endroit lève le signal (pas de 401 traité écran par écran) et un
-    // seul endroit s'y abonne.
+    // Un seul garde-fou HTTP lève le signal (ApiClient : 401 + route protégée
+    // + bearer parti), PLUS les dépôts locaux qui détectent une session
+    // TÉLÉPHONE morte (`isSessionFailure`, #205 : plus de HTTP métier, donc
+    // plus de 401 à observer). Un seul endroit s'y abonne.
     const files = [...readdirSync(DATA).map((f) => join(DATA, f)), ...readdirSync(UI).map((f) => join(UI, f))];
     const raises = files.filter((f) => codeOnly(read(f)).includes("DeviceAuth.reject()"));
     const subs = files.filter((f) => codeOnly(read(f)).includes("DeviceAuth.setOnRejected"));
-    expect(raises.map((f) => f.split("/").pop())).toEqual(["ApiClient.kt"]);
+    expect(raises.map((f) => f.split("/").pop()).sort()).toEqual(
+      ["ApiClient.kt", "AssignmentsRepository.kt", "DiscussionsRepository.kt", "ProfileRepository.kt", "SyncedRepository.kt"].sort(),
+    );
+    // Le garde HTTP reste le seul à décider sur un statut (les dépôts locaux
+    // lèvent sur une EXCEPTION de session, jamais sur un code HTTP).
+    expect(codeOnly(read(join(DATA, "ApiClient.kt")))).toContain("response.code == ApiClient.HTTP_UNAUTHORIZED");
+    for (const f of ["SyncedRepository.kt", "AssignmentsRepository.kt", "DiscussionsRepository.kt", "ProfileRepository.kt"]) {
+      expect(codeOnly(read(join(DATA, f)))).toContain("isSessionFailure(e)");
+    }
     expect(subs.map((f) => f.split("/").pop())).toEqual(["AppNav.kt"]);
-    // Couverture : ApiClient est le SEUL endroit qui fabrique un OkHttpClient,
-    // donc le garde-fou voit 100% des réponses (repositories, SSE, média,
-    // appairage — les routes publiques seules en sont exemptes, par contrat).
+    // Couverture : ApiClient est le SEUL endroit qui fabrique un OkHttpClient
+    // gardé (donc le garde-fou voit 100% des réponses serveur restantes :
+    // appairage, setup, SSE, fiches — #205 : les dépôts métier ne font plus
+    // de HTTP). OpenRouterLlm fabrique le sien, hors garde (exemption #204,
+    // voir plus bas).
     const clients = files.filter((f) => codeOnly(read(f)).includes("OkHttpClient("));
-    expect(clients.map((f) => f.split("/").pop())).toEqual(["ApiClient.kt"]);
+    expect(clients.map((f) => f.split("/").pop()).sort()).toEqual(["ApiClient.kt", "OpenRouterLlm.kt"].sort());
     const calls = files.filter((f) => codeOnly(read(f)).includes("newCall("));
-    expect(calls.length).toBeGreaterThan(8);
+    expect(calls.map((f) => f.split("/").pop()).sort()).toEqual(
+      ["OpenRouterLlm.kt", "PairingRepository.kt", "RevisionSheets.kt", "SetupRepository.kt", "SseClient.kt"].sort(),
+    );
     for (const f of calls) {
       // Exemption #204 : l'appel direct au fournisseur LLM ne passe PAS par le
       // client gardé — un 401 OpenRouter (clé LLM refusée) ne doit JAMAIS
@@ -277,9 +291,12 @@ describe("unit android 401 : session perdue -> appairage (#113)", () => {
     expect(message).not.toMatch(/expir|révoqu|inconnu/i);
 
     // Le repository réutilise la plomberie existante (RefreshOutcome.Failed),
-    // aucune file de retry ni nouveau type d'échec.
+    // aucune file de retry ni nouveau type d'échec. #205 : la session morte
+    // se détecte sur l'EXCEPTION du client local (`isSessionFailure`), plus
+    // sur un statut HTTP — le cache ne masque toujours pas une session morte.
     const synced = read(kt.synced);
-    expect(synced).toContain("it.code == ApiClient.HTTP_UNAUTHORIZED");
+    expect(synced).toContain("isSessionFailure(e)");
+    expect(synced).toContain("private val provider: PronoteClientProvider = { PronoteSession.client }");
     expect(synced).toContain("RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null)");
     expect(synced).toContain("sealed interface RefreshOutcome");
     expect(codeOnly(synced)).not.toContain("setOnRejected");

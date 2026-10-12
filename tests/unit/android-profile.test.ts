@@ -281,8 +281,12 @@ describe("unit android profil (#82)", () => {
     expect(isOpaquePhotoRef("https://photos.example/p.png")).toBe(false);
   });
 
-  test("I1 : aucune adresse Pronote dans le code Kotlin (allowlist serveur seule)", () => {
+  test("I1 : aucune adresse Pronote dans le code Kotlin (client local seul)", () => {
     const pronoteHost = /pronote/i;
+    // #205 : les dépôts manipulent les TYPES du client local (`PronoteSession`,
+    // `PronoteClientProvider`, paquet `fr.veryslopnynotes.pronote`) — aucune
+    // adresse là-dedans (même sanction que android-server-config.test.ts).
+    const sanctioned = /PronoteSession|PronoteClientProvider|fr\.veryslopnynotes\.pronote|project\(":pronote"\)/g;
     const files = [
       join(CORE, "UserProfile.kt"),
       join(CORE, "ServerConfig.kt"),
@@ -295,17 +299,17 @@ describe("unit android profil (#82)", () => {
       join(UI, "IndexScreen.kt"),
       join(UI, "GradesScreen.kt"),
       join(UI, "SettingsScreen.kt"),
-    ].map((f) => ({ f, code: read(f).replace(/\/\*[\s\S]*?\*\//g, "\n").split("\n").filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*")).map((l) => { const i = l.search(/(?<!:)\/\//); return i >= 0 ? l.slice(0, i) : l; }).join("\n") }));
+    ].map((f) => ({ f, code: read(f).replace(/\/\*[\s\S]*?\*\//g, "\n").split("\n").filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*")).map((l) => { const i = l.search(/(?<!:)\/\//); return i >= 0 ? l.slice(0, i) : l; }).join("\n").replace(sanctioned, "") }));
     for (const { f, code } of files) expect({ file: f, hit: pronoteHost.test(code) }).toEqual({ file: f, hit: false });
-    // La photo passe par le proxy : chemin /v1/media construit côté serveur config.
-    const config = read(join(CORE, "ServerConfig.kt"));
-    expect(config).toContain("fun meUrl(baseUrl: String): String = \"$baseUrl/v1/me\"");
-    expect(config).toContain("fun mediaPath(ref: String, accountId: String): String");
-    expect(config).toContain("/v1/media?ref=");
+    // La photo est lue par le client local (#205) : réf opaque `photo:<id>`
+    // résolue sur `client.info.profilePicture`, jamais une URL d'établissement.
     const repo = read(join(DATA, "ProfileRepository.kt"));
-    expect(repo).toContain("api.buildGet(path)");
+    expect(repo).toContain("private val provider: PronoteClientProvider = { PronoteSession.client }");
+    expect(repo).toContain("mePayload(client)");
+    expect(repo).toContain("client.info.profilePicture");
     expect(repo).toContain("BitmapFactory.decodeByteArray");
     expect(repo).toContain("PHOTO_MAX_BYTES");
+    expect(repo).not.toContain("ServerConfig.");
   });
 
   test("multi-compte : ids bornés, courant cohérent, aucun secret persisté", () => {

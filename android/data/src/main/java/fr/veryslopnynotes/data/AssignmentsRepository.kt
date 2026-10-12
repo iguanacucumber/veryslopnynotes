@@ -1,71 +1,114 @@
 package fr.veryslopnynotes.data
 
+import android.os.Handler
+import android.os.Looper
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.AssignmentAttachment
 import fr.veryslopnynotes.core.AssignmentLessonContent
-import fr.veryslopnynotes.core.ServerConfig
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDateTime
 
-// Dépôt devoirs #75 : parse du payload /v1/assignments + écriture "fait".
+// Dépôt devoirs #75 : parse du payload local + écriture "fait" sur le client.
 // org.json = SDK Android (aucune dépendance ajoutée). Un devoir non conforme au
 // contrat (ref en URL absolue, description hors borne) est rejeté = jamais de
-// ligne affichée qui pointerait ailleurs que le proxy serveur (I1).
+// ligne affichée qui pointerait ailleurs (I1).
 // I7 : le toggle part d'un TAP utilisateur (action confirmée), jamais d'une
-// sortie LLM ; le serveur refuse toute écriture non confirmée par l'app.
+// sortie LLM. Les pièces jointes se téléchargent sur le client local
+// (FileProvider côté UI) : plus de proxy serveur.
 data class ToggleOutcome(val assignment: Assignment?, val error: String?)
 
+/** Pièce jointe téléchargée : nom pour l'ouvreur, octets à partager. */
+data class AttachmentData(val name: String, val bytes: ByteArray)
+
 // ponytail: refresh + toggle dans un seul dépôt (pas de ViewModel avant #82).
-class AssignmentsRepository(private val api: ApiClient) {
+class AssignmentsRepository(
+    private val provider: PronoteClientProvider = { PronoteSession.client },
+    private val main: Handler = Handler(Looper.getMainLooper()),
+) {
 
     // Toggle Optimiste : l'UI bascule l'affichage d'abord, puis revert si échec.
+    // Fenêtre miroir du serveur (-7/+21 j) : le devoir basculé s'y trouve.
     fun toggle(baseUrl: String, assignmentId: String, done: Boolean, onDone: (ToggleOutcome) -> Unit) {
         if (baseUrl.isBlank()) {
             onDone(ToggleOutcome(null, "Serveur non configuré."))
             return
         }
-        // accountId absent = serveur mono-compte, il résout sa session appairée.
-        val body = JSONObject()
-            .put("assignmentId", assignmentId)
-            .put("done", done)
-            .toString()
-        val request = try {
-            // Chemin issu de ServerConfig seul (I1), comme les autres dépôts.
-            api.buildPost(ServerConfig.assignmentsToggleUrl(baseUrl).removePrefix(baseUrl), body.toRequestBody(JSON))
-        } catch (_: IllegalArgumentException) {
-            onDone(ToggleOutcome(null, "URL hors allowlist serveur"))
+        val target = assignmentId.trim()
+        if (target.isEmpty()) {
+            post { onDone(ToggleOutcome(null, "Devoir introuvable.")) }
             return
         }
-        api.client().newCall(request).enqueue(object : okhttp3.Callback {
-            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                onDone(ToggleOutcome(null, "Hors-ligne, retour arrière."))
+        Thread {
+            val client = provider()
+            if (client == null) {
+                post { onDone(ToggleOutcome(null, "Hors-ligne, retour arrière.")) }
+                return@Thread
             }
-
-            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-                response.use {
-                    if (!it.isSuccessful) {
-                        // 401 = session expirée, 409 = devoir introuvable, 501 = non supporté.
-                        onDone(ToggleOutcome(null, "Toggle refusé (HTTP ${it.code})."))
-                        return
-                    }
-                    val payload = it.body?.string().orEmpty()
-                    val updated = parseToggle(payload)
-                    if (updated == null) {
-                        onDone(ToggleOutcome(null, "Réponse illisible."))
-                    } else {
-                        // Cache local invalidé : le payload complet sera rechargé au pull-refresh.
-                        onDone(ToggleOutcome(updated, null))
-                    }
+            try {
+                val now = LocalDateTime.now()
+                val found = client.homework(now.minusDays(7), now.plusDays(21))
+                    .firstOrNull { it.id == target }
+                if (found == null) {
+                    post { onDone(ToggleOutcome(null, "Toggle refusé (devoir introuvable).")) }
+                    return@Thread
+                }
+                found.setDone(done)
+                val payload = JSONObject().put("assignment", assignmentJson(found, 0, null)).toString()
+                val updated = parseToggle(payload)?.copy(done = done)
+                if (updated == null) {
+                    post { onDone(ToggleOutcome(null, "Réponse illisible.")) }
+                } else {
+                    // Cache local invalidé : le payload complet sera rechargé au pull-refresh.
+                    post { onDone(ToggleOutcome(updated, null)) }
+                }
+            } catch (e: Exception) {
+                if (isSessionFailure(e)) {
+                    DeviceAuth.reject()
+                    post { onDone(ToggleOutcome(null, DeviceAuth.REJECTED_MESSAGE)) }
+                } else {
+                    post { onDone(ToggleOutcome(null, "Hors-ligne, retour arrière.")) }
                 }
             }
-        })
+        }.start()
+    }
+
+    /**
+     * Octets d'une PJ pour l'ouvreur externe (FileProvider côté UI) : la `ref`
+     * opaque `homework:<i>:file:<di>:<fileId>` est résolue sur le client local,
+     * jamais une URL d'établissement dans l'app (I1).
+     */
+    fun fetchAttachment(homeworkId: String, attachmentId: String, onDone: (AttachmentData?) -> Unit) {
+        Thread {
+            val data = try {
+                val client = provider() ?: return@Thread post { onDone(null) }
+                val now = LocalDateTime.now()
+                val hw = client.homework(now.minusDays(7), now.plusDays(21))
+                    .firstOrNull { it.id == homeworkId } ?: return@Thread post { onDone(null) }
+                val file = try {
+                    hw.files()
+                } catch (_: Exception) {
+                    emptyList()
+                }.firstOrNull { it.id == attachmentId } ?: return@Thread post { onDone(null) }
+                val bytes = file.data()
+                val name = file.name.trim().take(200).ifEmpty { "piece-jointe" }
+                AttachmentData(name, bytes)
+            } catch (_: Exception) {
+                null
+            }
+            post { onDone(data) }
+        }.start()
+    }
+
+    private fun post(block: () -> Unit) {
+        try {
+            main.post { block() }
+        } catch (_: Exception) {
+            block()
+        }
     }
 
     companion object {
-        private val JSON = "application/json; charset=utf-8".toMediaType()
-
         // ponytail: parse manuel org.json, pas de serializer. Upgrade: kotlinx.serialization si modèles > 10.
         fun parse(body: String): List<Assignment> {
             val root = JSONObject(body)
@@ -116,7 +159,7 @@ class AssignmentsRepository(private val api: ApiClient) {
             }
         }
 
-        /** Réponse du toggle : {assignment, event}. L'event sert d'invalidation de cache. */
+        /** Réponse du toggle : {assignment}. */
         fun parseToggle(body: String): Assignment? {
             return try {
                 val root = JSONObject(body)
@@ -125,9 +168,5 @@ class AssignmentsRepository(private val api: ApiClient) {
                 null
             }
         }
-
-        /** URL de téléchargement d'une PJ : PROXY SERVEUR, jamais une URL Pronote (I1). */
-        fun mediaUrl(baseUrl: String, accountId: String, ref: String): String =
-            ServerConfig.mediaUrl(baseUrl, accountId, ref)
     }
 }

@@ -2,17 +2,11 @@ package fr.veryslopnynotes.data
 
 import android.os.Handler
 import android.os.Looper
-import fr.veryslopnynotes.core.ServerConfig
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.IOException
 import java.time.Instant
 
 // Préférences matière #83 (parité Papillon) : couleur #RRGGBB, emoji court,
@@ -156,11 +150,9 @@ class InMemorySubjectPrefsStore : SubjectPrefsLocalStore {
 }
 
 // Offline-first : l'affichage lit le FICHIER local (survit au restart, lisible
-// hors ligne). Le serveur ne sert qu'à répliquer : PUT à chaque édition,
-// GET au refresh puis fusion (local gagne). Callback sur main thread comme
-// SyncedRepository. I1 : chemins issus de ServerConfig seul.
+// hors ligne). #205 : plus de réplication serveur (téléphone seul, ADR-003) —
+// le fichier EST la vérité. Callback sur main thread comme SyncedRepository.
 class SubjectPrefsRepository(
-    private val api: ApiClient,
     private val local: SubjectPrefsLocalStore,
     private val main: Handler = Handler(Looper.getMainLooper()),
 ) {
@@ -170,8 +162,8 @@ class SubjectPrefsRepository(
         emptyList()
     }
 
-    // Édition : écriture locale immédiate (offline) + PUT serveur best-effort.
-    // updatedAt horodaté par l'appareil (le local gagne, cf. mergeSubjectPrefs).
+    // Édition : écriture locale immédiate (offline).
+    // updatedAt horodaté par l'appareil.
     fun upsert(subject: String, color: String?, emoji: String?, label: String?) {
         val p = SubjectPrefs(
             subject = subject.trim(),
@@ -182,32 +174,11 @@ class SubjectPrefsRepository(
         )
         if (!SubjectPrefs.isValid(p)) return
         write(mergeSubjectPrefs(prefs(), listOf(p)))
-        push(p, api.baseUrl, null)
     }
 
-    // Refresh : GET serveur + fusion, la liste locale fait foi en cas d'échec.
+    // Refresh : la liste locale fait foi (aucun distant à fusionner).
     fun refresh(baseUrl: String, onDone: (List<SubjectPrefs>) -> Unit) {
-        val request = try {
-            api.buildGet(ServerConfig.subjectPrefsUrl(baseUrl).removePrefix(baseUrl))
-        } catch (_: IllegalArgumentException) {
-            post(onDone, prefs())
-            return
-        }
-        api.client().newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                post(onDone, prefs())
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    val body = if (it.isSuccessful) it.body?.string() else null
-                    val remote = if (body.isNullOrEmpty()) emptyList() else SubjectPrefs.listFromJson(body)
-                    val merged = mergeSubjectPrefs(prefs(), remote)
-                    write(merged)
-                    post(onDone, merged)
-                }
-            }
-        })
+        post(onDone, prefs())
     }
 
     private fun write(prefs: List<SubjectPrefs>) {
@@ -216,31 +187,6 @@ class SubjectPrefsRepository(
         } catch (_: Exception) {
             // ponytail: prefs = préférences, pas de donnée critique (perdues, pas crash).
         }
-    }
-
-    private fun push(p: SubjectPrefs, baseUrl: String, onDone: (() -> Unit)?) {
-        if (baseUrl.isBlank()) {
-            onDone?.invoke()
-            return
-        }
-        val request = try {
-            Request.Builder()
-                .url(ServerConfig.subjectPrefsUrl(baseUrl))
-                .put(p.jsonBody())
-                .build()
-        } catch (_: IllegalArgumentException) {
-            onDone?.invoke()
-            return
-        }
-        api.client().newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                onDone?.invoke()
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use { onDone?.invoke() }
-            }
-        })
     }
 
     private fun post(onDone: (List<SubjectPrefs>) -> Unit, prefs: List<SubjectPrefs>) {

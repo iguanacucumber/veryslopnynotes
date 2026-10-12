@@ -29,11 +29,12 @@ import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.Homework
 import fr.veryslopnynotes.core.HomeworkOutcome
 import fr.veryslopnynotes.data.HomeworkRepository
+import fr.veryslopnynotes.data.OpenRouterHomework
 
-// Aide devoirs (contrat 0.7.0) : le PREMIER et SEUL écran qui consomme
-// /v1/homework/generate. Le serveur ne détient aucune clé LLM, donc cette clé
-// est saisie par l'utilisateur dans les Réglages (LlmKeyStore) et relue à
-// chaque appel — jamais-affichée ici, jamais journalisée.
+// Aide devoirs : dialogue branché sur l'IA embarquée (`OpenRouterHomework`,
+// #205 : plus de route serveur). La clé LLM est saisie par l'utilisateur dans
+// les Réglages (LlmKeyStore) et relue à chaque appel — jamais affichée ici,
+// jamais journalisée.
 //
 // Sources = le devoir lui-même (consigne + extrait de cours). Zéro source = refus
 // SANS appel modèle côté serveur : l'écran affiche donc les étiquettes avant de
@@ -83,8 +84,7 @@ val HomeworkOutcomeSaver: Saver<HomeworkOutcome?, Any> = listSaver(
 @Composable
 fun HomeworkHelpDialog(
     assignment: Assignment,
-    baseUrl: String,
-    repo: HomeworkRepository,
+    repo: OpenRouterHomework,
     keyConfigured: Boolean,
     onDismiss: () -> Unit,
 ) {
@@ -103,7 +103,7 @@ fun HomeworkHelpDialog(
         error = null
         outcome = null
         pending = true
-        repo.generate(baseUrl, question, sources) { r ->
+        repo.generate(question, sources) { r ->
             pending = false
             if (r.outcome != null) outcome = r.outcome else error = r.error
         }

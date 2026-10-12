@@ -159,7 +159,7 @@ fun AppNav(
     // divergents laisseraient le secret vivant après une déconnexion.
     val tokens = remember(ctx) { SessionTokens.get(ctx) }
     val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }
-    val repo = remember(baseUrl, cacheStore, tokens) { SyncedRepository(api, cacheStore) }
+    val repo = remember(cacheStore) { SyncedRepository(cacheStore) }
     // #82 : comptes appairés + déconnexion (session invalidée + cache purgé).
     // Seuls des accountId sont persistés, aucune donnée personnelle.
     val accounts = remember(baseUrl, cacheStore, tokens) {
@@ -189,16 +189,17 @@ fun AppNav(
         }
         onDispose { DeviceAuth.setOnRejected(null) }
     }
-    val profileRepo = remember(baseUrl, tokens) { ProfileRepository(ApiClient(baseUrl, tokens = tokens)) }
+    // #205 : dépôts locaux (client du téléphone + cache, ADR-003).
+    val profileRepo = remember { ProfileRepository() }
     // #83 : prefs matière = fichier local (survit au restart, lisible hors
-    // ligne), répliqué vers le serveur allowlist seul (I1).
-    val prefsRepo = remember(baseUrl, tokens) {
+    // ligne). #205 : plus de réplication serveur, le fichier EST la vérité.
+    val prefsRepo = remember {
         val store = try {
             FileSubjectPrefsStore(java.io.File(ctx.filesDir, "offline/subject_prefs.json"))
         } catch (_: Exception) {
             InMemorySubjectPrefsStore()
         }
-        SubjectPrefsRepository(ApiClient(baseUrl, tokens = tokens), store)
+        SubjectPrefsRepository(store)
     }
     var subjectPrefs by remember { mutableStateOf(prefsRepo.prefs()) }
     // #87 : capacites dynamiques (onglets Pronote actifs de l'etablissement).
@@ -322,9 +323,7 @@ fun AppNav(
                     CachePolicy.ASSIGNMENTS,
                     repo,
                     baseUrl,
-                    accountId,
                     subjectPrefs = subjectPrefs,
-                    tokens = tokens,
                     llmKeys = llmKeys,
                 )
             }

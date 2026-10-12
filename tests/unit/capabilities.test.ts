@@ -306,9 +306,9 @@ describe("unit capacités (#87)", () => {
     expect(policy).toContain('const val CAPABILITIES = "capabilities"');
     expect(policy).toContain("const val TTL_CAPABILITIES_MS = 24L * 60L * 60L * 1000L");
     expect(policy).toContain("resource == CAPABILITIES");
-    // SyncedRepository : chemin allowlist + pull-refresh (aucune écriture Pronote).
+    // SyncedRepository : lecture locale + relecture manuelle (aucune écriture).
     const repo = readFileSync(join(DATA, "SyncedRepository.kt"), "utf8");
-    expect(repo).toContain("CachePolicy.CAPABILITIES -> ServerConfig.capabilitiesUrl(baseUrl)");
+    expect(repo).toContain("CachePolicy.CAPABILITIES -> capabilitiesPayload(client)");
     expect(repo).toContain("fun requestSyncRefresh(");
     // UI : les entrées conditionnées + le bouton de détection.
     // #135 : l'écran Profil (entrées conditionnées) est sorti d'AppNav.kt ;
