@@ -87,8 +87,10 @@ describe("invariants", () => {
     expect(pronoteHost.test(codeOnly('const url = "https://pronote.example.fr/";'))).toBe(true);
   });
 
-  test("I3: domain sans sqlite ni framework HTTP", () => {
-    const files = list(join(ROOT, "server/domain")).filter((f) => {
+  test("I3: domaine sans sqlite ni framework HTTP (server résiduel + android/core)", () => {
+    // #210 : `server/domain/` résiduel (capture #199 : ports/averages/
+    // capabilities) ET `android/core/` (port #203, stdlib + plateforme seules).
+    const files = [...list(join(ROOT, "server/domain")), ...list(join(ROOT, "android/core"))].filter((f) => {
       const code = codeOnly(readFileSync(f, "utf8"));
       return sqliteRe.test(code) || httpRe.test(code);
     });
@@ -104,10 +106,18 @@ describe("invariants", () => {
     expect(sqliteRe.test(codeOnly('const a = 1; // sqlite'))).toBe(false);
   });
 
-  test("I2: un seul PronoteHttpClient", () => {
+  test("I2: un seul PronoteHttpClient (legacy capture #199) + un seul Client android", () => {
+    // Côté serveur il ne reste que le chemin legacy de l'outil de capture
+    // (#199) : toute requête Pronote y passe par l'unique PronoteHttpClient.
     const server = list(join(ROOT, "server"));
     const defs = server.filter((f) => /class PronoteHttpClient/.test(readFileSync(f, "utf8")));
-    expect(defs.length).toBeLessThanOrEqual(1);
+    expect(defs.map((f) => f.replace(ROOT, ""))).toEqual(["/server/integrations/PronoteHttpClient.ts"]);
+    // Côté app, tout accès réseau Pronote passe par l'unique `Client` dans
+    // `android/pronote/` (ADR-003) ; aucun autre module ne fait de réseau.
+    const pronote = list(join(ROOT, "android", "pronote"));
+    expect(pronote.filter((f) => f.endsWith(".kt")).length).toBeGreaterThan(0);
+    const clients = pronote.filter((f) => /^class Client\(/m.test(codeOnly(readFileSync(f, "utf8"))));
+    expect(clients.map((f) => f.replace(ROOT, ""))).toHaveLength(1);
   });
 
   test("I2 FP: fetch hors Pronote ignoré, accès direct détecté", () => {
@@ -123,19 +133,19 @@ describe("invariants", () => {
     ).toBe(true);
   });
 
-  test("I4/I5: server/ai + android IA sans reseau/secrets/outils", () => {
-    const aiFiles = list(join(ROOT, "server/ai"));
-    expect(aiFiles.length).toBeGreaterThanOrEqual(2);
-    // Port #204 : mêmes scans sur le module IA Kotlin (`android/core/`, sans
-    // dépendance). L'appel HTTP fournisseur (`data/OpenRouterLlm.kt`) est hors
-    // scan ici : piné par tests/security/pipeline.test.ts.
+  test("I4/I5: IA android sans reseau/secrets/outils (server/ai supprimé en #210)", () => {
+    // #210 : `server/ai/` est supprimé (module porté sur le téléphone, #204).
+    // Mêmes scans sur le module IA Kotlin (`android/core/`, sans dépendance).
+    // L'appel HTTP fournisseur (`data/OpenRouterLlm.kt`) est hors scan ici :
+    // piné par tests/unit/android-homework.test.ts.
+    expect(existsSync(join(ROOT, "server", "ai"))).toBe(false);
     const ANDROID_AI = ["Untrusted.kt", "LlmGuard.kt", "AiPrompts.kt", "HomeworkAi.kt", "RevisionAi.kt", "Humanize.kt"].map(
       (f) => join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core", f),
     );
     for (const f of ANDROID_AI) expect(existsSync(f)).toBe(true);
     const secretRe =
       /sk-or-v1-|OPENROUTER_API_KEY|MASTER_KEY|PRONOTE_PASSWORD|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/;
-    for (const f of [...aiFiles, ...ANDROID_AI]) {
+    for (const f of ANDROID_AI) {
       const c = codeOnly(readFileSync(f, "utf8"));
       expect({ file: f, kind: "secret" }).toEqual({ file: f, kind: "secret" });
       expect(c).not.toMatch(secretRe);
@@ -179,22 +189,19 @@ describe("invariants", () => {
     expect(existsSync(join(ROOT, ".env.local"))).toBe(false);
   });
 
-  test("I6: pipeline Untrusted + nonce partout dans server/ai", () => {
-    const aiFiles = list(join(ROOT, "server/ai"));
-    const untrusted = aiFiles.find((f) => f.endsWith("untrusted.ts"));
-    expect(untrusted).toBeDefined();
-    const base = codeOnly(readFileSync(untrusted!, "utf8"));
-    expect(base).toContain("UNTRUSTED_DATA");
-    expect(base).toContain("nonce");
-    expect(base).toContain("createNonce");
-    for (const f of aiFiles) {
-      if (f.endsWith("untrusted.ts")) continue;
-      const c = readFileSync(f, "utf8");
-      expect(c).toMatch(/from\s+["']\.\/untrusted["']/);
-      expect(c).toMatch(/markExternal|wrapUntrusted|buildSafePrompt/);
-    }
+  test("I6: pipeline Untrusted (ports TS résiduels + port Kotlin)", () => {
+    // #210 : `server/ai/` est supprimé avec le serveur ; le marquage vit dans
+    // `server/domain/ports.ts` (chemin de capture #199) et dans le port Kotlin
+    // (`android/core/Untrusted.kt`, rejoué par les miroirs devoirs).
     const ports = codeOnly(readFileSync(join(ROOT, "server/domain/ports.ts"), "utf8"));
     expect(ports).toContain("untrusted");
+    const kt = readFileSync(
+      join(ROOT, "android/core/src/main/java/fr/veryslopnynotes/core/Untrusted.kt"),
+      "utf8",
+    );
+    expect(kt).toContain("UNTRUSTED_DATA");
+    expect(kt).toContain("nonce");
+    expect(kt).toContain("createNonce");
   });
 
   // I9 (#172) : AUCUN CODE MORT dans `android/`.
@@ -212,12 +219,12 @@ describe("invariants", () => {
   // fonctions supprimerait ce qu'elles vérifient : c'est la LISTE qui est
   // gardée, pas le code.
   //
-  // Quatre noms de plus, et chacun est le POINT D'ENTRÉE du port Kotlin (#203)
-  // exécuté par le harnais de parité `tests/unit/kotlin-domain-parity.test.ts`
-  // (qui compile le vrai code et le rejoue, mieux qu'un miroir) : leurs
-  // appelants applicatifs arrivent avec #205 (repositories locaux). Ce ne sont
-  // pas des restes de refonte, c'est du code vivant sans appelant EMARQUÉ —
-  // la liste les garde jusqu'au branchement.
+  // Quatre noms de plus, et chacun est le POINT D'ENTRÉE du port Kotlin (#203),
+  // rejoué par les miroirs `tests/unit/android-*.test.ts` (la parité
+  // différentielle `kotlin-domain-parity` est supprimée en #210 avec le
+  // serveur) : leurs appelants applicatifs arrivent avec #205 (repositories
+  // locaux). Ce ne sont pas des restes de refonte, c'est du code vivant sans
+  // appelant remarqué — la liste les garde jusqu'au branchement.
   test("I9: android sans code mort (aucun fun/class jamais appele)", () => {
     const files = list(join(ROOT, "android")).filter((f) => f.endsWith(".kt"));
     const code = files.map((f) => codeOnly(readFileSync(f, "utf8"))).join("\n");
@@ -226,14 +233,14 @@ describe("invariants", () => {
       "lessonBadgeLabel",
       "timetableDayLabel",
       "parseQrPayload",
-      // Port Kotlin #203 : points d'entrée rejoués par la parité, branchés en #205.
+      // Port Kotlin #203 : points d'entrée rejoués par les miroirs, branchés en #205.
       "subjectAverage",
       "providedAveragesFor",
       "computeAverages",
       "CapabilityProbe",
-      // Port Kotlin #207 : jobs + PDF, points d'entrée rejoués par la parité
-      // `kotlin-jobs-parity` (diff notes, détection DS, notifs, fiches). La
-      // consommation applicative (repositories locaux, export) arrive après.
+      // Port Kotlin #207 : jobs + PDF, points d'entrée rejoués par les miroirs
+      // (diff notes, détection DS, notifs, fiches ; parité supprimée en #210).
+      // La consommation applicative (repositories locaux, export) arrive après.
       "fingerprint",
       "diffGrades",
       "detectExams",
@@ -253,10 +260,10 @@ describe("invariants", () => {
       // seul attend un appelant (désentrelacement QR/ENT, #205 ou client futur).
       "enleverAlea",
       // Port Kotlin #204 (IA, garde-fous I4/I5/I6) : points d'entrée rejoués par
-      // la parité exécutée `tests/unit/kotlin-ai-parity.test.ts` (mieux qu'un
-      // miroir), appelants applicatifs à venir avec le câblage sur l'appareil.
-      // `OpenRouterHomework` seul n'est pas rejoué (pas de réseau en parité) :
-      // il est piné par tests/security/pipeline.test.ts (clé relue du store,
+      // les miroirs `tests/unit/android-homework.test.ts` (parité exécutée
+      // supprimée en #210), appelants applicatifs à venir avec le câblage sur
+      // l'appareil. `OpenRouterHomework` seul n'est pas rejoué (pas de réseau
+      // en miroir) : il est piné par android-homework (clé relue du store,
       // jamais loggée ni en URL).
       "generateGuarded",
       "buildHomeworkPrompt",
@@ -284,16 +291,19 @@ describe("invariants", () => {
     expect({ morts }).toEqual({ morts: [] });
   });
 
-  test("I7: jobs sans LLM, effets sur donnees structurees uniquement", () => {
-    const jobFiles = list(join(ROOT, "server/jobs"));
-    expect(jobFiles.length).toBeGreaterThan(0);
+  test("I7: pas de jobs serveur, jobs device sans LLM", () => {
+    // #210 : `server/jobs/` est supprimé avec le serveur (jobs portés en
+    // Kotlin natif, #207). Les jobs device (`android/core/`) ne touchent ni
+    // LLM ni réseau : effets sur données structurées uniquement.
+    expect(existsSync(join(ROOT, "server", "jobs"))).toBe(false);
+    const CORE = join(ROOT, "android/core/src/main/java/fr/veryslopnynotes/core");
+    const jobFiles = ["GradeDiff.kt", "ExamDetect.kt", "NotifyFormat.kt", "RevisionSheet.kt", "RevisionAi.kt", "HomeworkAi.kt"].map(
+      (f) => join(CORE, f),
+    );
+    for (const f of jobFiles) expect(existsSync(f)).toBe(true);
     const offenders = jobFiles.filter((f) => {
       const c = codeOnly(readFileSync(f, "utf8"));
-      return (
-        /server\/ai|LLMProvider|from\s+['"][^'"]*\/ai['"]/.test(c) ||
-        /\bgenerate\s*\(/.test(c) ||
-        /fetch\s*\(/.test(c)
-      );
+      return /fetch\s*\(|XMLHttpRequest|WebSocket/.test(c) || /generate\s*\(/.test(c);
     });
     expect({ offenders }).toEqual({ offenders: [] });
   });

@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import {
   CACHE_TTL_MS,
   cacheStatus,
@@ -48,8 +46,5 @@ describe("contracts cache", () => {
         data: { resource: "grades", reason: "unknown" },
       }),
     ).toBe(false);
-    // ponytail: substring check volontaire (cf. contracts.test.ts).
-    const raw = readFileSync(join(import.meta.dir, "..", "..", "shared/contracts/api.openapi.yaml"), "utf8");
-    expect(raw).toContain("CacheInvalidated");
   });
 });

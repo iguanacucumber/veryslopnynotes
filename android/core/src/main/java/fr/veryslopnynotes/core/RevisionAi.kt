@@ -1,15 +1,15 @@
 package fr.veryslopnynotes.core
 
 // Fiches revision — pipeline phase 6/9.
-// Port fidele de server/ai/revision.ts, qui reste la REFERENCE (cf.
-// tests/unit/kotlin-ai-parity.test.ts). Contenu externe = Untrusted + nonce,
+// Port fidele de server/ai/revision.ts (supprimé en #210 : ce port est la
+// source de vérité). Contenu externe = Untrusted + nonce,
 // declare donnee (I6). Sans outils, sans reseau, sans secrets (I4/I5).
 // Declenchement = structure cote jobs (I7) ; ici seul remplissage valide.
 // Sortie modele = JSON {fiche} valide, sources citees cote jobs.
 // Les appels provider sont BLOQUANTS : jamais sur le thread UI.
 
 // Candidat examen : champs utilises par buildRevisionDocs cote TS
-// (ExamCandidate de server/jobs/exams.ts : source/confiance hors perimetre IA).
+// (ExamCandidate d'ExamDetect.kt : source/confiance hors perimetre IA).
 data class RevisionExam(
     val id: String,
     val subject: String,

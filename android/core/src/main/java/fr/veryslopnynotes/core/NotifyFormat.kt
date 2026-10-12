@@ -8,8 +8,8 @@ import java.time.format.DateTimeFormatter
 
 // Formatage des notifications sur données structurées (port Kotlin #207).
 //
-// Port fidèle de `server/jobs/notify.ts`, qui reste la RÉFÉRENCE (cf.
-// `tests/unit/kotlin-jobs-parity.test.ts`). Push sur delta uniquement, premier
+// Porté de `server/jobs/notify.ts` (supprimé en #210 : ce port est la source
+// de vérité). Push sur delta uniquement, premier
 // passage silencieux, fan-out un envoi par appareil, échec local par appareil
 // (fail-soft). Aucun appel LLM, aucune sortie libre ne déclenche d'envoi (I7).
 // Logs = compteurs seuls, jamais de token en clair.
@@ -35,7 +35,7 @@ private const val ISO_DAY_CHARS = 10
 
 /**
  * Jour civil d'un instant ISO, « AAAA-MM-JJ », vu par l'élève (fuseau
- * Europe/Paris). Miroir de `localDay` (`shared/contracts/api.ts`) : instant
+ * Europe/Paris ; ex-miroir du helper contrat TS, supprimé en #210) : instant
  * illisible = dix premiers caractères, jamais d'exception.
  */
 fun localDay(iso: String): String {

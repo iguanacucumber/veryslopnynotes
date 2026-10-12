@@ -9,7 +9,6 @@ import {
   isSubjectPrefs,
 } from "../../shared/contracts/models";
 import { isSubjectPrefsResponse } from "../../shared/contracts/api";
-import { API_ROUTES } from "../../shared/contracts/api";
 
 // Miroirs TS des helpers Kotlin non triviaux (android/data/SubjectPrefs.kt,
 // android/ui/SubjectStyle.kt, android/ui/Theme.kt) — même logique, tests en bun
@@ -437,14 +436,5 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     // La clé n'est ni journalisée, ni mise dans un message, ni pré-remplie.
     expect(settings).not.toMatch(/Log\.|println|toJson\(\).*llm/i);
     expect(settings).not.toContain("value = llmKeys.apiKey()");
-  });
-
-  test("routes contrat : GET + PUT /v1/subjects/prefs déclarés", () => {
-    const routes = API_ROUTES.filter((r) => r.path === "/v1/subjects/prefs").map((r) => r.method).sort();
-    expect(routes).toEqual(["GET", "PUT"]);
-    const openapi = readFileSync(join(ROOT, "shared/contracts/api.openapi.yaml"), "utf8");
-    expect(openapi).toContain("/v1/subjects/prefs:");
-    expect(openapi).toContain("SubjectPrefsResponse:");
-    expect(openapi).toContain("pattern: '^#[0-9a-fA-F]{6}$'");
   });
 });

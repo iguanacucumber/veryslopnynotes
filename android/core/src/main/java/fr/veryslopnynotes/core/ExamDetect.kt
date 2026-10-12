@@ -5,8 +5,8 @@ import java.util.Locale
 
 // Détection DS/interro sur données structurées (port Kotlin #207).
 //
-// Port fidèle de `server/jobs/exams.ts`, qui reste la RÉFÉRENCE (cf.
-// `tests/unit/kotlin-jobs-parity.test.ts`). Heuristique à mots-frontières sur
+// Porté de `server/jobs/exams.ts` (supprimé en #210 : ce port est la source
+// de vérité). Heuristique à mots-frontières sur
 // titres devoirs (+ sujet/salle EDT quand libellés dispos). `high` = effet
 // notif auto possible ; `needs_confirm` = confirmation app obligatoire, aucun
 // effet métier direct. Aucun LLM : fonction pure (I7).

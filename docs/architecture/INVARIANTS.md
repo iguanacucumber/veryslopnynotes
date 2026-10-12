@@ -15,40 +15,40 @@ Format : Invariant → test → commande → emplacement.
 - Emplacement : `android/**/*` (tolérances : `android/pronote/**` + ligne `include(...)` de `settings.gradle.kts`). Réf : `docs/adr/003-client-direct.md`.
 
 ## I2 — Un seul point d'accès réseau Pronote par runtime (ADR-003)
-- Invariant : côté serveur, toute requête Pronote passe par l'unique `PronoteHttpClient` tant que le chemin legacy vit. Hiérarchie Domain → PronoteProvider → adapter → PronoteHttpClient → HTTP. Côté app, tout accès réseau Pronote passe par `HttpSession`/`Client` dans `android/pronote/` ; aucun autre module Android ne fait de réseau vers Pronote (pinné par I1).
-- Test : `tests/architecture/invariants.test.ts` (I2 : ≤ 1 définition serveur + scan accès direct) + `agents/runtime/check-architecture.ts` (I2).
+- Invariant : côté serveur il ne reste que le chemin legacy de l'outil de capture (#199) : toute requête Pronote y passe par l'unique `PronoteHttpClient`. Côté app, tout accès réseau Pronote passe par l'unique `Client` dans `android/pronote/` ; aucun autre module Android ne fait de réseau vers Pronote (pinné par I1).
+- Test : `tests/architecture/invariants.test.ts` (I2 : 1 définition serveur legacy + 1 `Client` android) + `agents/runtime/check-architecture.ts` (I2).
 - Commande : `make architecture-test`.
-- Emplacement : `server/integrations/PronoteHttpClient.ts` + `android/pronote/HttpSession.kt`, `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
+- Emplacement : `server/integrations/PronoteHttpClient.ts` (legacy #199) + `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
 
 ## I3 — Domaine sans SQLite ni HTTP
-- Invariant : `server/domain/` ne dépend ni de SQLite ni du framework HTTP. Ports = interfaces. `android/core/` (port #203) suit la même règle : stdlib + plateforme seules, zéro dépendance.
-- Test : `tests/architecture/invariants.test.ts` (I3, côté serveur) + `tests/unit/kotlin-domain-parity.test.ts` (parité du port, vrai code compilé et rejoué).
+- Invariant : `server/domain/` résiduel (capture #199 : ports/averages/capabilities) ne dépend ni de SQLite ni du framework HTTP. `android/core/` (port #203) suit la même règle : stdlib + plateforme seules, zéro dépendance.
+- Test : `tests/architecture/invariants.test.ts` (I3, serveur résiduel + `android/core/`).
 - Commande : `make architecture-test`.
 - Emplacement : `server/domain/ports.ts` + `android/core/`.
 
 ## I4 — Pas de secrets dans prompts LLM
-- Invariant : aucun secret/token/credential dans prompt LLM.
-- Test : `tests/security/pipeline.test.ts` (I4/I5) + `agents/runtime/check-secrets.ts`.
-- Commande : `make check` (security + lint).
-- Emplacement : `server/ai/*`.
+- Invariant : aucun secret/token/credential dans prompt LLM (`server/ai/` supprimé en #210, module porté dans `android/core/`, #204).
+- Test : `tests/architecture/invariants.test.ts` (I4, module IA Kotlin) + `agents/runtime/check-secrets.ts`.
+- Commande : `make check` (architecture-test + lint).
+- Emplacement : `android/core/*Ai*.kt`, `android/core/AiPrompts.kt`.
 
 ## I5 — LLM sans outils/réseau/secrets
 - Invariant : LLM sans outils, accès réseau, secrets. Sortie texte/JSON validé. Côté app, aucun prompt n'est assemblé : la clé vit dans le store chiffré et ne voyage qu'en corps `writeOnly` (voir I8).
-- Test : `tests/security/pipeline.test.ts` + `check-architecture.ts` (scan `server/ai/`).
+- Test : `tests/architecture/invariants.test.ts` + `check-architecture.ts` (scan `android/core/`) + `tests/unit/android-homework.test.ts` (miroirs).
 - Commande : `make check`.
-- Emplacement : `server/ai/*` + `android/data/` (store de clé, dépôt devoirs). Réf : `docs/adr/003-client-direct.md`.
+- Emplacement : `android/core/` (IA) + `android/data/` (store de clé, dépôt devoirs). Réf : `docs/adr/003-client-direct.md`.
 
 ## I6 — Contenu externe = UNTRUSTED_DATA
-- Invariant : tout contenu externe marqué `Untrusted` avant traitement IA, entre délimiteurs à nonce, déclaré données.
-- Test : `tests/security/pipeline.test.ts` (I6) + fixtures attaques (phase 6).
+- Invariant : tout contenu externe marqué `Untrusted` avant traitement IA, entre délimiteurs à nonce, déclaré données (`server/ai/` supprimé en #210 : le marquage vit dans `server/domain/ports.ts` pour la capture #199 et dans `android/core/Untrusted.kt` pour l'app).
+- Test : `tests/architecture/invariants.test.ts` (I6) + `tests/unit/android-homework.test.ts` (miroirs).
 - Commande : `make check`.
-- Emplacement : `server/domain/ports.ts` (`untrusted()`), `server/ai/*`.
+- Emplacement : `server/domain/ports.ts` (`untrusted()`), `android/core/Untrusted.kt`.
 
 ## I7 — Pas d'effet bord via sortie libre LLM
-- Invariant : aucun effet métier déclenché par sortie libre LLM. Notifications/détection DS sur données structurées Pronote, sinon confirmation app.
-- Test : review + tests jobs/notifications (phases 5/7, `tests/e2e/`).
-- Commande : `make e2e`.
-- Emplacement : `server/jobs/*`, `server/api/*`.
+- Invariant : aucun effet métier déclenché par sortie libre LLM. `server/jobs/` supprimé en #210 (jobs portés en Kotlin natif, #207) ; les jobs device ne touchent ni LLM ni réseau. Notifications/détection DS sur données structurées Pronote, sinon confirmation app.
+- Test : `tests/architecture/invariants.test.ts` (I7 : pas de `server/jobs/`, jobs device sans LLM/réseau).
+- Commande : `make architecture-test`.
+- Emplacement : `android/core/GradeDiff.kt`, `ExamDetect.kt`, `NotifyFormat.kt`, `RevisionSheet.kt`.
 
 ## I8 — Zéro credential côté serveur
 

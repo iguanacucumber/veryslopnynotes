@@ -9,11 +9,11 @@
 // le HTTPS nu spécifié, rien de plus.
 //
 // Routes : GET /v1/health (sonde), POST /v1/manuals/scrape (page -> ManualDoc).
-// Tout le reste = 404, y compris les 31 anciennes routes métier : leurs
-// fichiers (server/api/, domain/, jobs/, integrations/, ai/) restent sur
-// disque pour #210 (suppression physique + repointage complet des tests), mais
-// le process ne les sert plus — un scan de surface du process ne voit que les
-// manuels.
+// Tout le reste = 404 : les 31 anciennes routes métier sont supprimées (#210),
+// avec leurs handlers (server/api sauf setup, server/jobs, ex-server/ai/) et
+// leurs contrats — un scan de surface du process ne voit que les manuels.
+// Restent sur disque, hors process : le client Pronote TS + `accountIdFrom`,
+// dépendances de l'outil de capture du corpus (#199, encore ouvert).
 //
 // Credentials portail (platform/username/password/startUrl) injectés par
 // l'appelant dans le corps (writeOnly) : jamais en env, jamais commités,

@@ -8,14 +8,12 @@ import java.io.OutputStream
 // Export PDF d'une fiche de révision via `PdfDocument` natif (port Kotlin #207).
 //
 // Remplace le writer PDF-1.4 maison du serveur (octets + xref assemblés à la
-// main, tombé sur les accents — cf. le test xref de `bugs-domain-jobs`) : sur
-// l'appareil, le système compose le PDF lui-même. API 26 (minSdk), ZÉRO
-// dépendance — c'est tout l'objet de ce fichier.
+// main, tombé sur les accents) : sur l'appareil, le système compose le PDF
+// lui-même. API 26 (minSdk), ZÉRO dépendance — c'est tout l'objet de ce fichier.
 //
 // Le CONTENU dessiné vient de `revisionPdfLines` (même découpage titre/date/
-// corps/gabarit que la référence, rejoué en parité dans
-// `tests/unit/kotlin-jobs-parity.test.ts`) : ce fichier ne fait que paginer et
-// dessiner, aucune logique métier.
+// corps/gabarit que l'ex-référence serveur, supprimée en #210) : ce fichier ne
+// fait que paginer et dessiner, aucune logique métier.
 //
 // Fichier non rejoué par le harnais `kotlinc` seul (`android.graphics` vient du
 // SDK) : vérifié par `check-kotlin` (structure) + `make android-compile` (le

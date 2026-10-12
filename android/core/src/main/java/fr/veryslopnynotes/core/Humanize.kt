@@ -1,8 +1,8 @@
 package fr.veryslopnynotes.core
 
 // Humanize devoirs : VALIDATE -> RENDER avec gabarit versionne.
-// Port fidele de server/ai/humanize.ts, qui reste la REFERENCE (cf.
-// tests/unit/kotlin-ai-parity.test.ts). Contenu = donnee, jamais instruction
+// Port fidele de server/ai/humanize.ts (supprimé en #210 : ce port est la
+// source de vérité). Contenu = donnee, jamais instruction
 // (I6/I7) : RENDER pur, sans eval, sans execution du contenu, sans
 // reseau/outils/secrets (I4/I5). Version gabarit stockee par corrige ->
 // reproductibilite. Stdlib uniquement (serialisation via LlmGuard, pas d'org.json
