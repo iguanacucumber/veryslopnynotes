@@ -26,8 +26,8 @@ import { pairedDevice } from "./fixtures/pairing";
 import { createMemoryStore } from "../../server/api/store";
 import { isApiErrorBody } from "../../server/api/errors";
 import { isSyncRefreshResponse } from "../../shared/contracts/api";
-import { runSync, startSyncLoop } from "../../server/jobs/sync";
-import type { SyncResult, SyncSink, SyncSnapshot, SyncSource } from "../../server/jobs/sync";
+import { runSync } from "../../server/jobs/sync";
+import type { SyncSink, SyncSnapshot, SyncSource } from "../../server/jobs/sync";
 import { notifySyncResult } from "../../server/jobs/notify";
 import type { GradePushSender } from "../../server/jobs/notify";
 import {
@@ -407,27 +407,6 @@ describe("unit sync refresh (#87)", () => {
     expect(second.events.every(isContractEvent)).toBe(true);
     // Rejeu identique : aucun événement (le pull-refresh n'envoie rien à vide).
     expect((await runSync(source, sink, AT)).events).toEqual([]);
-  });
-
-  test("sync d'arrière-plan borné : maxRuns arrête la boucle, 1er run silencieux", async () => {
-    const grades = [syntheticGrade("g1", 14)];
-    const source: SyncSource = {
-      grades: async () => grades,
-      assignments: async () => [] as Assignment[],
-      entries: async () => [] as TimetableEntry[],
-    };
-    const { sink } = memorySink();
-    const results: SyncResult[] = [];
-    const stop = startSyncLoop(source, sink, 5, (r) => results.push(r), 2);
-    await new Promise((r) => setTimeout(r, 60));
-    stop();
-    // Deux tours au maximum, pas plus (budget respecté, pas de tick orphelin).
-    expect(results.length).toBeLessThanOrEqual(2);
-    expect(results.length).toBeGreaterThanOrEqual(1);
-    // Premier tour = snapshot initial, zéro événement, donc zéro alerte.
-    expect(results[0].firstRun).toBe(true);
-    expect(results[0].events).toEqual([]);
-    for (const r of results) for (const e of r.events) expect(e.type === "GradeCreated" || e.type === "TimetableUpdated").toBe(true);
   });
 
   test("route POST /v1/sync/refresh : 405 sur GET, 501 par défaut", async () => {

@@ -1,13 +1,15 @@
-// Revue adversariale push (push-config / push-provider / notify).
+// Revue adversariale push (notify).
+// #208 : le transport push (push-provider : Noop/Http) est SUPPRIMÉ — sans
+// serveur il n'y a plus rien à pousser. Reste le formatage/comptage des
+// notifications (notify), testé ici avec des senders factices.
 // Chaque test cible UN bug et doit être ROUGE sur le code actuel.
-// Aucun réseau : fetch global stubbé puis restauré (afterEach).
+// Aucun réseau : senders factices uniquement, aucun fetch.
 // Données synthétiques uniquement, aucun secret réel (jetons "a"*64, clés factices).
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { localDay } from "../../shared/contracts/api";
 import { CONTRACTS_VERSION } from "../../shared/contracts/models";
 import type { AbsenceRecord, Device, Grade } from "../../shared/contracts/models";
 import type { ContractEvent } from "../../shared/contracts/events";
-import { HttpPushProvider, PushError, createPushProvider } from "../../server/infrastructure/push-provider";
 import { formatAbsencePush, formatGradePush, newAbsences, notifyGradeEvents } from "../../server/jobs/notify";
 import type { GradePushSender } from "../../server/jobs/notify";
 
@@ -54,31 +56,28 @@ function aSurrogateSeul(s: string): boolean {
   return /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(s);
 }
 
-const fetchReel = globalThis.fetch;
-
-afterEach(() => {
-  // Restaure le vrai fetch : aucun stub ne doit fuir vers les autres tests.
-  globalThis.fetch = fetchReel;
-});
-
 describe("bugs push", () => {
-  // 1. CRITIQUE : un provider qui ne livre RIEN résout sans erreur -> `sent`
+  // 1. CRITIQUE : un sender qui ne livre RIEN résout sans erreur -> `sent`
   //    incrémenté -> le job se croit notifié alors que la push est perdue.
-  test("BUG: push comptée comme envoyée alors que le provider ne livre rien (noop / provider symbolique) — le job rapporte un succès alors que la notification est perdue", async () => {
-    const sansConfig = createPushProvider(null); // aucune config injectée => Noop
-    const resNoop = await notifyGradeEvents([gradeEvent(grade("g1"))], DEVICES, sansConfig);
-    expect(resNoop.sent).toBe(0);
+  //    #208 : le provider réel est supprimé, le stub `delivers: false` garde
+  //    la couverture du garde-fou côté notify.
+  test("BUG: push comptée comme envoyée alors que le sender ne livre rien (delivers: false) — le job rapporte un succès alors que la notification est perdue", async () => {
+    const muet: GradePushSender = { delivers: false, send: async () => {} };
+    const resMuet = await notifyGradeEvents([gradeEvent(grade("g1"))], DEVICES, muet);
+    expect(resMuet.sent).toBe(0);
 
-    // Même défaut chez HttpPushProvider quand le provider n'est pas une URL :
-    // il log « skip » et résout, donc l'appelant compte une livraison.
-    const symbolique = createPushProvider({
-      provider: "webpush",
-      vapidPublicKey: "PUB-FAKE",
-      vapidPrivateKey: "PRIV-FAKE",
-      subject: "mailto:push@example.invalid",
-    });
-    const resSymbolique = await notifyGradeEvents([gradeEvent(grade("g1"))], DEVICES, symbolique);
-    expect(resSymbolique.sent).toBe(0);
+    // Même défaut quand le sender ne déclare rien mais n'envoie rien : un
+    // « succès » qui n'a rien transmis ne doit pas être compté.
+    let transmis = 0;
+    const silencieux: GradePushSender = {
+      delivers: false,
+      send: async () => {
+        transmis += 1;
+      },
+    };
+    const resSilencieux = await notifyGradeEvents([gradeEvent(grade("g1"))], DEVICES, silencieux);
+    expect(resSilencieux.sent).toBe(0);
+    expect(transmis).toBe(0);
   });
 
   // 2. CRITIQUE : `catch {}` avale la cause ; le journal ne garde que des
@@ -87,43 +86,13 @@ describe("bugs push", () => {
   test("BUG: cause d'échec d'envoi avalée (compteurs seuls au log) — une panne du provider est indiscernable d'un succès et la notification perdue n'est jamais rejouée", async () => {
     const logs: string[] = [];
     const { calls, sender } = recorder(() => {
-      throw new PushError("push http 503", 503);
+      throw new Error("push http 503");
     });
     const res = await notifyGradeEvents([gradeEvent(grade("g1"))], DEVICES, sender, (m) => logs.push(m));
     expect(calls.length).toBe(2);
     expect(res.failed).toBe(2);
     // La cause doit rester observable (503) pour l'exploitation et le rejeu.
     expect(logs.join("\n")).toContain("503");
-  });
-
-  // 3. SÉCURITÉ : un endpoint push distant en http:// est accepté -> note et
-  //    empreinte de device en clair sur le réseau. Seul le loopback (test
-  //    d'intégration local) a une raison d'être en clair.
-  test("BUG: endpoint push distant en http:// accepté — note et hash de device transmis en clair (seul le loopback doit être toléré)", async () => {
-    let calls = 0;
-    globalThis.fetch = (async () => {
-      calls += 1;
-      return new Response("{}", { status: 200 });
-    }) as unknown as typeof fetch;
-
-    const distant = new HttpPushProvider({
-      provider: "http://push.example.invalid/send",
-      vapidPublicKey: "PUB-FAKE",
-      vapidPrivateKey: "PRIV-FAKE",
-      subject: "mailto:push@example.invalid",
-    });
-    await distant.send(HASH_A, { title: "Nouvelle note", body: "15/20 en Maths" }).catch(() => {});
-    expect(calls).toBe(0);
-
-    // Garde-fou : le loopback http reste accepté (test d'intégration local).
-    const loopback = new HttpPushProvider({
-      provider: "http://127.0.0.1:9/send",
-      vapidPublicKey: "PUB-FAKE",
-      vapidPrivateKey: "PRIV-FAKE",
-      subject: "mailto:push@example.invalid",
-    });
-    await loopback.send(HASH_A, { title: "Nouvelle note", body: "15/20 en Maths" }).catch(() => {});
-    expect(calls).toBe(1);
   });
 
   // 4. FAUX AFFICHAGE : record.date est un ISO UTC ; `.slice(0, 10)` renvoie

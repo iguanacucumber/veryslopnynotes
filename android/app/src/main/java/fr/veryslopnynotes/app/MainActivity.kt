@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import fr.veryslopnynotes.ui.AppNav
+import fr.veryslopnynotes.data.PeriodicSyncWorker
 
 // Shell phase 4 (#13) + offline #14 + appairage/SSE #15 + alertes #21.
 // Navigation Material3 + routes "pairing" (QR+PIN, token chiffré) et
@@ -23,6 +24,10 @@ class MainActivity : ComponentActivity() {
         // contenu ne passe dessous. ponytail: la fonction d'activity-compose
         // déjà présente (zéro dépendance ajoutée).
         enableEdgeToEdge()
+        // #208 : sync périodique de fond SANS serveur (notes/devoirs/EDT,
+        // 6 h, réseau connecté + batterie non faible). KEEP : une seule
+        // planification, jamais deux. Ni SSE, ni push, ni cron serveur.
+        PeriodicSyncWorker.schedule(this)
         val baseUrlSeed = fr.veryslopnynotes.core.ServerConfig.baseUrl(
             BuildConfig.SERVER_SCHEME,
             BuildConfig.SERVER_HOST,

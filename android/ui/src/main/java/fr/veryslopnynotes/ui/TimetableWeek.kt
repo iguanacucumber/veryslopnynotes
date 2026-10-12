@@ -563,8 +563,9 @@ fun TimetableRoute(
         }
     }
     // ponytail: auto-refresh à l'ouverture + navigation de semaine + pull
-    // (pas de WorkManager avant le sync périodique #82). Une seule clé : un
-    // LaunchedEffect par clé d'écran, pas de double appel au premier rendu.
+    // (le sync périodique de fond est passé à WorkManager : PeriodicSyncWorker,
+    // #208). Une seule clé : un LaunchedEffect par clé d'écran, pas de double
+    // appel au premier rendu.
     LaunchedEffect(weekStart) { refresh() }
     // L'horloge de l'écran (cf. CLOCK_TICK_MS) : sans elle la mise en avant du
     // cours en cours et le sous-titre « Aujourd'hui » vieilliraient.
