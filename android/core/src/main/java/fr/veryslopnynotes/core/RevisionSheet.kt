@@ -4,9 +4,9 @@ import java.time.Instant
 
 // Fiches révision : déclenchement structuré + assemblage + stockage (port Kotlin #207).
 //
-// Port fidèle de `server/jobs/revision.ts` (hors `renderRevisionPdf`, le writer
-// PDF-1.4 maison que `RevisionPdf.kt` remplace par `PdfDocument` natif), qui
-// reste la RÉFÉRENCE (cf. `tests/unit/kotlin-jobs-parity.test.ts`). Données
+// Porté de `server/jobs/revision.ts` (supprimé en #210, hors `renderRevisionPdf`,
+// le writer PDF-1.4 maison que `RevisionPdf.kt` remplace par `PdfDocument` natif :
+// ce port est la source de vérité). Données
 // structurées uniquement : `ExamCandidate` issu de `detectExams`. Aucun appel
 // modèle ici, aucune sortie libre ne déclenche d'envoi (I7). `high` seul pousse
 // en auto ; `needs_confirm` = confirmation app obligatoire, aucun effet auto.

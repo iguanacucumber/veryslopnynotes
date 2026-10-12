@@ -29,12 +29,12 @@ import {
 } from "./primitives";
 
  // --- #80 messagerie : lectures + ÉCRITURES (actions APP confirmées, I7) ---
-// Les 4 écritures (create/reply/read-state/delete) n'ont qu'une seule porte
-// d'entrée : les routes POST /v1/discussions/* de server/api/discussions.ts,
-// donc un geste CONFIRMÉ de l'app — jamais une sortie LLM (I7). Le port de
+// Les 4 écritures (create/reply/read-state/delete) n'avaient qu'une seule porte
+// d'entrée côté serveur : les ex-routes POST /v1/discussions/* (supprimées en
+// #210) — donc un geste CONFIRMÉ de l'app, jamais une sortie LLM (I7). Le port de
 // LECTURE PronoteReader n'expose aucune écriture (voir ports.ts).
 // ponytail: ce bloc vit dans le reader comme `setAssignmentDone` (#75) : la
-// session Pronote reste côté serveur, jamais dans l'app (I2).
+// session Pronote reste encapsulée dans le reader, jamais dans l'appelant (I2).
 
 /**
  * Liste des fils de discussion. `null` = onglet Discussions indisponible

@@ -862,7 +862,7 @@ export function isCapabilityEnabled(caps: Capabilities | null | undefined, tab: 
 // --- #80 messagerie (parité Papillon, onglet Discussions) ---
 // TOUT texte de messagerie (élève, enseignant, administration) est une DONNÉE
 // non fiable : bornée, jamais exécutée ni interprétée, et JAMAIS remise à un LLM
-// (I6 — le test I7 de tests/unit/discussions.test.ts le prouve sur server/ai/).
+// (I6 — jamais remis à un LLM, piné par tests/unit/android-discussions.test.ts).
 // Les écritures (répondre, créer, lu/non-lu, supprimer) sont des ACTIONS APP
 // CONFIRMÉES : route API explicite, jamais déclenchées par une sortie LLM (I7).
 // Règle de mapping (comme #75/#77/#79) : champ absent = l'établissement ne le publie pas,

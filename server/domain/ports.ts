@@ -124,7 +124,7 @@ export interface PronoteTimetableOptions extends PronotePageOptions {
 }
 
 export interface PronotePage<T> {
-  /** Contenu externe brut : donnée, jamais instruction (I6). Passer par server/ai/untrusted.ts avant LLM. */
+  /** Contenu externe brut : donnée, jamais instruction (I6). Passer par `android/core/Untrusted.kt` (marquage nonce) avant LLM. */
   readonly items: Untrusted<T[]>;
   readonly nextCursor: string | null;
 }
@@ -204,9 +204,9 @@ export interface PronoteReader {
    * Discussions absent de l'établissement (ou droits non accordés) = page VIDE,
    * jamais une erreur (capacités dynamiques, comme #77/#79/#81).
    * ponytail: ce port de LECTURE n'expose AUCUNE écriture. Répondre / créer /
-   * lu-non-lu / supprimer passent par des ports d'action séparés côté API
-   * (server/api/discussions.ts), donc uniquement par une action APP confirmée
-   * (I7) — jamais depuis une sortie LLM.
+   * lu-non-lu / supprimer passaient par des ports d'action séparés côté API
+   * (ex-server/api/discussions.ts, supprimé en #210), donc uniquement par une
+   * action APP confirmée (I7) — jamais depuis une sortie LLM.
    */
   getDiscussions?(accountId: string, page?: PronotePageOptions): Promise<PronotePage<Discussion>>;
   /** Messages d'UN fil ; fil illisible ou absent = page vide (pas une erreur). */

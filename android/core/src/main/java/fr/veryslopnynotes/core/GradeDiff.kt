@@ -5,9 +5,8 @@ import kotlin.math.floor
 
 // Diff structurée des notes (port Kotlin #207).
 //
-// Port fidèle de `server/jobs/grades.ts`, qui reste la RÉFÉRENCE : les deux
-// implémentations sont rejouées sur les mêmes fixtures et comparées (cf.
-// `tests/unit/kotlin-jobs-parity.test.ts`). Données structurées uniquement :
+// Porté de `server/jobs/grades.ts` (supprimé en #210 : ce port est la source
+// de vérité, rejoué par les miroirs `tests/unit/android-*.test.ts`). Données structurées uniquement :
 // aucun appel LLM, aucune sortie libre ne déclenche d'événement (I7).
 // Correction de note = événement dédié (nouvelle information à notifier).
 // Les champs de contexte (bonus/facultatif, moyennes de classe, libellé,
