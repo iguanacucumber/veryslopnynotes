@@ -168,8 +168,10 @@ describe("unit android alertes sécurité (#144)", () => {
     expect(policy).toContain("resource == SECURITY_ALERTS");
     expect(policy).toContain("SECURITY_ALERTS -> TTL_SECURITY_ALERTS_MS");
     const repo = readFileSync(join(DATA, "SyncedRepository.kt"), "utf8");
-    expect(repo).toContain("CachePolicy.SECURITY_ALERTS -> ServerConfig.securityAlertsUrl(baseUrl)");
-    expect(repo).toContain('ifEmpty { "/v1/security/alerts" }');
+    // #205 : alertes = balayage local des contenus en cache (aucun réseau),
+    // plus de route serveur.
+    expect(repo).toContain("CachePolicy.SECURITY_ALERTS -> alertsPayload(scanTexts())");
+    expect(repo).not.toContain("securityAlertsUrl");
     // L'écran consomme le cache partagé (comme les 8 autres), pas un état local.
     const screen = codeOnly(readFileSync(SCREEN, "utf8"));
     expect(screen).toContain("repo.cached(CachePolicy.SECURITY_ALERTS)");

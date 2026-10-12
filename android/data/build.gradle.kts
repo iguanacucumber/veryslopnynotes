@@ -23,6 +23,9 @@ android {
 
 dependencies {
     implementation(project(":core"))
+    // #205 : les dépôts lisent le client local (port #200/#201), plus le
+    // serveur métier. Dépendance inter-modules, pas une dépendance ajoutée.
+    implementation(project(":pronote"))
     // ponytail: OkHttp seul client HTTP (allowlist serveur).
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // #15 : stockage token sécurisé (EncryptedSharedPreferences, Apache-2.0).

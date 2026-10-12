@@ -815,16 +815,20 @@ describe("unit android onglet Notes (#139)", () => {
   test("côté data : query des notes + première lecture de /v1/periods", () => {
     const repo = readFileSync(join(DATA, "SyncedRepository.kt"), "utf8");
     const config = readFileSync(join(CORE, "ServerConfig.kt"), "utf8");
-    // Le sélecteur de période change RÉELLEMENT la requête envoyée au serveur.
+    // Le sélecteur de période change RÉELLEMENT la lecture locale (query
+    // `algorithm` + `periodId` relayée au payload, #205 : plus de serveur).
     expect(config).toContain('fun gradesUrl(baseUrl: String, query: String)');
-    expect(repo).toContain("ServerConfig.gradesUrl(baseUrl, query)");
-    // /v1/periods : allowlist serveur seule (I1), 401 comme les autres lectures.
+    expect(repo).toContain("CachePolicy.GRADES -> gradesPayload(client, q)");
+    // Tranches lues sur le client local (hors cache, comme avant) : session
+    // morte = signal nu, jamais masqué par le cache.
     expect(repo).toContain("fun fetchPeriods(");
-    expect(repo).toContain("ServerConfig.periodsUrl(baseUrl)");
+    expect(repo).toContain("periodsPayload(client)");
     expect(repo).toContain("RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE");
-    // Le garde-fou 401 reste UNIQUE : ce fichier ne lève jamais le signal.
-    expect(repo).not.toContain("DeviceAuth.reject()");
-    expect(repo).toContain("api.client().newCall(");
+    // #205 : le dépôt lève le signal sur exception de session locale (plus de
+    // 401 HTTP à observer) — même Failed nu, même réparation par logout().
+    expect(repo).toContain("isSessionFailure(e)");
+    expect(repo).toContain("DeviceAuth.reject()");
+    expect(repo).toContain("private val provider: PronoteClientProvider = { PronoteSession.client }");
   });
 });
 describe("unit android onglet Notes, états et navigation (#162)", () => {

@@ -1,85 +1,86 @@
 package fr.veryslopnynotes.data
 
+import android.os.Handler
+import android.os.Looper
 import fr.veryslopnynotes.core.Discussion
 import fr.veryslopnynotes.core.DiscussionMessage
 import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.DiscussionRules
 import fr.veryslopnynotes.core.MessageAttachment
-import fr.veryslopnynotes.core.ServerConfig
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
 
 /**
  * Messagerie #80 : lecture de la liste des fils (cache `discussions`), des
- * messages d'un fil et des destinataires, plus les 4 ÉCRITURES.
+ * messages d'un fil et des destinataires, plus les 4 ÉCRITURES — le tout sur
+ * le client local (#205, ADR-003).
  *
  * I7 : une écriture ne part que d'un GESTE de l'utilisateur (répondre, créer,
  * marquer lu, supprimer) — aucun appel automatique, aucune donnée de messagerie
- * n'est réinjectée dans une requête d'IA. Le serveur refuse de toute façon toute
- * écriture non confirmée par l'app.
- * I1 : tous les chemins viennent de ServerConfig (serveur allowlist seul), les
- * pièces jointes passent par le proxy /v1/media — aucune adresse d'établissement ici.
+ * n'est réinjectée dans une requête d'IA.
+ * I1 : aucune adresse d'établissement ici (seul `android/pronote/` parle au
+ * serveur de l'établissement) ; les pièces jointes ne sont pas téléchargées
+ * (l'écran affiche une notice, comme avant).
  * I6 : corps/sujets = DONNÉES affichées telles quelles, jamais exécutées.
  */
 data class DiscussionWriteOutcome(val ok: Boolean, val error: String?)
 
-class DiscussionsRepository(private val api: ApiClient) {
-
-    fun discussionsRequest(): Request = api.buildGet(ServerConfig.discussionsPath())
-
-    fun messagesRequest(discussionId: String): Request =
-        api.buildGet(ServerConfig.discussionMessagesPath(discussionId))
-
-    fun recipientsRequest(): Request = api.buildGet(ServerConfig.discussionRecipientsPath())
+class DiscussionsRepository(
+    private val provider: PronoteClientProvider = { PronoteSession.client },
+    private val main: Handler = Handler(Looper.getMainLooper()),
+) {
 
     /**
      * Messages d'un fil : lus à la demande, JAMAIS en cache (donnée personnelle).
      * Fil vide/illisible = liste vide, l'écran affiche son état vide propre.
      */
     fun fetchMessages(discussionId: String, cb: (List<DiscussionMessage>, String?) -> Unit) {
-        val call = api.client().newCall(messagesRequest(discussionId))
-        call.enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                cb(emptyList(), "Hors-ligne, messages indisponibles.")
+        Thread {
+            val client = provider()
+            if (client == null) {
+                post { cb(emptyList(), "Hors-ligne, messages indisponibles.") }
+                return@Thread
             }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!it.isSuccessful) {
-                        cb(emptyList(), "Messages indisponibles (HTTP ${it.code}).")
-                        return
-                    }
-                    cb(parseMessages(it.body?.string().orEmpty()), null)
+            try {
+                val target = boundedCp(discussionId, 64)
+                val discussion = client.discussions().firstOrNull { it.id == target }
+                if (discussion == null) {
+                    post { cb(emptyList(), "Fil introuvable.") }
+                    return@Thread
+                }
+                val body = messagesPayload(discussionId, discussion)
+                post { cb(parseMessages(body), null) }
+            } catch (e: Exception) {
+                if (isSessionFailure(e)) {
+                    DeviceAuth.reject()
+                    post { cb(emptyList(), DeviceAuth.REJECTED_MESSAGE) }
+                } else {
+                    post { cb(emptyList(), "Hors-ligne, messages indisponibles.") }
                 }
             }
-        })
+        }.start()
     }
 
     /** Destinataires d'une nouvelle discussion (sélecteur). Vide = onglet absent. */
     fun fetchRecipients(cb: (List<DiscussionRecipient>, String?) -> Unit) {
-        val call = api.client().newCall(recipientsRequest())
-        call.enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                cb(emptyList(), "Hors-ligne, destinataires indisponibles.")
+        Thread {
+            val client = provider()
+            if (client == null) {
+                post { cb(emptyList(), "Hors-ligne, destinataires indisponibles.") }
+                return@Thread
             }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!it.isSuccessful) {
-                        cb(emptyList(), "Destinataires indisponibles (HTTP ${it.code}).")
-                        return
-                    }
-                    cb(parseRecipients(it.body?.string().orEmpty()), null)
+            try {
+                val body = recipientsPayload(client)
+                post { cb(parseRecipients(body), null) }
+            } catch (e: Exception) {
+                if (isSessionFailure(e)) {
+                    DeviceAuth.reject()
+                    post { cb(emptyList(), DeviceAuth.REJECTED_MESSAGE) }
+                } else {
+                    post { cb(emptyList(), "Hors-ligne, destinataires indisponibles.") }
                 }
             }
-        })
+        }.start()
     }
 
     /** Nouvelle discussion (I7 : geste utilisateur confirmé). */
@@ -89,99 +90,140 @@ class DiscussionsRepository(private val api: ApiClient) {
         body: String,
         recipientIds: List<String>,
         cb: (DiscussionWriteOutcome) -> Unit,
-    ) = postAction(
-        ServerConfig.discussionCreatePath(),
-        baseUrl,
-        JSONObject()
-            .put("subject", subject)
-            .put("body", body)
-            .put("recipientIds", jsonArrayOf(recipientIds))
-            .toString(),
-        "Création impossible.",
-        cb,
-    )
-
-    /** Réponse dans un fil (I7). */
-    fun reply(baseUrl: String, discussionId: String, body: String, cb: (DiscussionWriteOutcome) -> Unit) =
-        postAction(
-            ServerConfig.discussionReplyPath(),
-            baseUrl,
-            JSONObject().put("discussionId", discussionId).put("body", body).toString(),
-            "Réponse impossible.",
-            cb,
-        )
-
-    /** Marquer lu / non-lu (I7). */
-    fun setRead(baseUrl: String, discussionId: String, read: Boolean, cb: (DiscussionWriteOutcome) -> Unit) =
-        postAction(
-            ServerConfig.discussionReadStatePath(),
-            baseUrl,
-            JSONObject().put("discussionId", discussionId).put("read", read).toString(),
-            "État de lecture refusé.",
-            cb,
-        )
-
-    /** Mise à la corbeille (I7). */
-    fun delete(baseUrl: String, discussionId: String, cb: (DiscussionWriteOutcome) -> Unit) =
-        postAction(
-            ServerConfig.discussionDeletePath(),
-            baseUrl,
-            JSONObject().put("discussionId", discussionId).toString(),
-            "Suppression impossible.",
-            cb,
-        )
-
-    /** Enveloppe commune des 4 actions : `{ok, event}`. */
-    private fun postAction(
-        path: String,
-        baseUrl: String,
-        body: String,
-        failure: String,
-        cb: (DiscussionWriteOutcome) -> Unit,
     ) {
         if (baseUrl.isBlank()) {
             cb(DiscussionWriteOutcome(false, "Serveur non configuré."))
             return
         }
-        val request = try {
-            // Chemin issu de ServerConfig seul (I1).
-            api.buildPost(path, body.toRequestBody(JSON))
-        } catch (_: IllegalArgumentException) {
-            cb(DiscussionWriteOutcome(false, "URL hors allowlist serveur"))
+        val title = boundedCp(subject, 200)
+        val text = boundedCp(body, 4000)
+        val ids = recipientIds.map { boundedCp(it, 64) }.filter { it.isNotEmpty() }
+        if (title.isEmpty() || text.isEmpty() || ids.isEmpty()) {
+            post { cb(DiscussionWriteOutcome(false, "Création impossible.")) }
             return
         }
-        api.client().newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                cb(DiscussionWriteOutcome(false, "Hors-ligne, retour arrière."))
+        Thread {
+            val client = provider()
+            if (client == null) {
+                post { cb(DiscussionWriteOutcome(false, "Hors-ligne, retour arrière.")) }
+                return@Thread
             }
+            val outcome = writeLocal("Création impossible.") {
+                val matched = client.getRecipients().filter { it.id in ids }
+                if (matched.isEmpty()) throw IllegalArgumentException("destinataires inconnus")
+                client.newDiscussion(title, text, matched)
+            }
+            post { cb(outcome) }
+        }.start()
+    }
 
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!it.isSuccessful) {
-                        // 401 session expirée, 409 indisponible, 501 non supporté.
-                        cb(DiscussionWriteOutcome(false, "$failure (HTTP ${it.code})."))
-                        return
-                    }
-                    val outcome = parseAction(it.body?.string().orEmpty())
-                    cb(outcome ?: DiscussionWriteOutcome(false, "Réponse illisible."))
-                }
+    /** Réponse dans un fil (I7). */
+    fun reply(baseUrl: String, discussionId: String, body: String, cb: (DiscussionWriteOutcome) -> Unit) {
+        if (baseUrl.isBlank()) {
+            cb(DiscussionWriteOutcome(false, "Serveur non configuré."))
+            return
+        }
+        val target = boundedCp(discussionId, 64)
+        val text = boundedCp(body, 4000)
+        if (target.isEmpty() || text.isEmpty()) {
+            post { cb(DiscussionWriteOutcome(false, "Réponse impossible.")) }
+            return
+        }
+        Thread {
+            val client = provider()
+            if (client == null) {
+                post { cb(DiscussionWriteOutcome(false, "Hors-ligne, retour arrière.")) }
+                return@Thread
             }
-        })
+            val outcome = writeLocal("Réponse impossible.") {
+                val discussion = client.discussions().firstOrNull { it.id == target }
+                    ?: throw IllegalArgumentException("fil introuvable")
+                discussion.reply(text)
+            }
+            post { cb(outcome) }
+        }.start()
+    }
+
+    /** Marquer lu / non-lu (I7). */
+    fun setRead(baseUrl: String, discussionId: String, read: Boolean, cb: (DiscussionWriteOutcome) -> Unit) {
+        if (baseUrl.isBlank()) {
+            cb(DiscussionWriteOutcome(false, "Serveur non configuré."))
+            return
+        }
+        val target = boundedCp(discussionId, 64)
+        if (target.isEmpty()) {
+            post { cb(DiscussionWriteOutcome(false, "État de lecture refusé.")) }
+            return
+        }
+        Thread {
+            val client = provider()
+            if (client == null) {
+                post { cb(DiscussionWriteOutcome(false, "Hors-ligne, retour arrière.")) }
+                return@Thread
+            }
+            val outcome = writeLocal("État de lecture refusé.") {
+                val discussion = client.discussions().firstOrNull { it.id == target }
+                    ?: throw IllegalArgumentException("fil introuvable")
+                discussion.markAs(read)
+            }
+            post { cb(outcome) }
+        }.start()
+    }
+
+    /** Mise à la corbeille (I7). */
+    fun delete(baseUrl: String, discussionId: String, cb: (DiscussionWriteOutcome) -> Unit) {
+        if (baseUrl.isBlank()) {
+            cb(DiscussionWriteOutcome(false, "Serveur non configuré."))
+            return
+        }
+        val target = boundedCp(discussionId, 64)
+        if (target.isEmpty()) {
+            post { cb(DiscussionWriteOutcome(false, "Suppression impossible.")) }
+            return
+        }
+        Thread {
+            val client = provider()
+            if (client == null) {
+                post { cb(DiscussionWriteOutcome(false, "Hors-ligne, retour arrière.")) }
+                return@Thread
+            }
+            val outcome = writeLocal("Suppression impossible.") {
+                val discussion = client.discussions().firstOrNull { it.id == target }
+                    ?: throw IllegalArgumentException("fil introuvable")
+                discussion.delete()
+            }
+            post { cb(outcome) }
+        }.start()
+    }
+
+    /** Écriture locale : succès = pas d'exception ; fil fermé/session = message. */
+    private fun writeLocal(failure: String, block: () -> Unit): DiscussionWriteOutcome {
+        return try {
+            block()
+            DiscussionWriteOutcome(true, null)
+        } catch (e: Exception) {
+            if (isSessionFailure(e)) {
+                DeviceAuth.reject()
+                DiscussionWriteOutcome(false, DeviceAuth.REJECTED_MESSAGE)
+            } else if (e is IllegalArgumentException) {
+                DiscussionWriteOutcome(false, "$failure (Fil introuvable).")
+            } else if (e.javaClass.simpleName == "DiscussionClosed") {
+                DiscussionWriteOutcome(false, "$failure (Fil fermé).")
+            } else {
+                DiscussionWriteOutcome(false, "$failure (Hors-ligne).")
+            }
+        }
+    }
+
+    private fun post(block: () -> Unit) {
+        try {
+            main.post { block() }
+        } catch (_: Exception) {
+            block()
+        }
     }
 
     companion object {
-        private val JSON = "application/json; charset=utf-8".toMediaType()
-
-        /** UNKNOWN_UNREAD : champ absent = l'établissement ne publie pas le compteur. */
-        private fun unreadOf(o: JSONObject): Int =
-            if (o.isNull("unreadCount")) DiscussionRules.UNKNOWN_UNREAD else o.optInt("unreadCount", DiscussionRules.UNKNOWN_UNREAD)
-
-        private fun jsonArrayOf(ids: List<String>): JSONArray {
-            val arr = JSONArray()
-            for (id in ids) arr.put(id)
-            return arr
-        }
-
         // ponytail: parse manuel org.json (SDK, sans dépendance). Upgrade:
         // kotlinx.serialization si les modèles de messagerie dépassent 10 types.
         fun parse(body: String): List<Discussion> {
@@ -261,26 +303,9 @@ class DiscussionsRepository(private val api: ApiClient) {
             return out
         }
 
-        /**
-         * Réponse d'action : `ok === true` ET invalidation de la ressource
-         * `discussions` (événement EXISTANT CacheInvalidated). Une réponse qui
-         * ne le prouve pas = échec affiché, pas de faux succès.
-         */
-        fun parseAction(body: String): DiscussionWriteOutcome? {
-            return try {
-            val root = JSONObject(body)
-            val event = root.optJSONObject("event") ?: return null
-            val resource = event.optJSONObject("data")?.optString("resource", "") ?: ""
-            val type = event.optString("type", "")
-            if (root.optBoolean("ok", false) && type == "CacheInvalidated" && resource == "discussions") {
-                DiscussionWriteOutcome(true, null)
-            } else {
-                DiscussionWriteOutcome(false, "Réponse illisible.")
-            }
-            } catch (_: Exception) {
-                null
-            }
-        }
+        /** UNKNOWN_UNREAD : champ absent = l'établissement ne publie pas le compteur. */
+        private fun unreadOf(o: JSONObject): Int =
+            if (o.isNull("unreadCount")) DiscussionRules.UNKNOWN_UNREAD else o.optInt("unreadCount", DiscussionRules.UNKNOWN_UNREAD)
 
         /** Liste des fils depuis le cache : payload absent/illisible = vide. */
         fun discussionsFromPayload(payload: String?): List<Discussion> = try {

@@ -284,8 +284,8 @@ describe("unit android cantine (#81)", () => {
     expect(policy).toContain('const val MENUS = "menus"');
     expect(policy).toContain("TTL_MENUS_MS = 6L * 60L * 60L * 1000L");
     const repo = readFileSync(join(DATA, "SyncedRepository.kt"), "utf8");
-    expect(repo).toContain("CachePolicy.MENUS -> ServerConfig.menusUrl(baseUrl)");
-    expect(repo).toContain('ifEmpty { "/v1/menus" }');
+    // #205 : cantine lue sur le client local, plus de chemin serveur.
+    expect(repo).toContain("CachePolicy.MENUS -> menusPayload(client)");
     const config = readFileSync(join(CORE, "ServerConfig.kt"), "utf8");
     expect(config).toContain('fun menusUrl(baseUrl: String): String = "$baseUrl/v1/menus"');
   });

@@ -5,17 +5,10 @@ import android.graphics.BitmapFactory
 import android.os.Handler
 import android.os.Looper
 import fr.veryslopnynotes.core.ChildAccount
-import fr.veryslopnynotes.core.ServerConfig
 import fr.veryslopnynotes.core.UserProfile
 import fr.veryslopnynotes.core.UserProfileRules
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.Request
-import okhttp3.Response
-import org.json.JSONObject
-import java.io.IOException
 
-/** Photo de profil : absente (réF non publiée ou média KO) ou décodée du proxy. */
+/** Photo de profil : absente (non publiée ou lecture KO) ou décodée du client local. */
 sealed interface PhotoState {
     data object Absent : PhotoState
     data class Loaded(val bitmap: Bitmap) : PhotoState
@@ -27,61 +20,59 @@ sealed interface MeResult {
     data class Err(val message: String) : MeResult
 }
 
-// Profil #82 : GET /v1/me via ApiClient (allowlist serveur seule, I1) et photo
-// via le PROXY serveur /v1/media à partir de la réF opaque — jamais d'adresse
-// Pronote dans l'app, jamais de WebView.
+// Profil #82 : lu sur le client local (#205, ADR-003) et photo téléchargée par
+// le client — jamais d'adresse d'établissement dans l'app, jamais de WebView.
 // ponytail: rien n'est persisté ici (mode anonyme) : le profil vit en mémoire et
 // disparaît à la déconnexion (AccountStore.logout). Upgrade: cache profil chiffré
 // si l'utilisateur demande explicitement de garder son profil hors-ligne.
 class ProfileRepository(
-    private val api: ApiClient,
+    private val provider: PronoteClientProvider = { PronoteSession.client },
     // Rappel sur le thread principal comme SyncedRepository : l'état Compose
     // n'est jamais écrit depuis le thread OkHttp.
     private val main: Handler = Handler(Looper.getMainLooper()),
 ) {
-    fun meRequest(): Request = api.buildGet(ME_PATH)
-
     /** Async (comme SyncedRepository) : le profil n'est JAMAIS écrit sur disque. */
     fun fetchMe(cb: (MeResult) -> Unit) {
-        val call = api.client().newCall(meRequest())
-        call.enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
+        Thread {
+            val client = provider()
+            if (client == null) {
                 post(cb, MeResult.Err("Hors-ligne, profil indisponible."))
+                return@Thread
             }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!it.isSuccessful) {
-                        post(cb, MeResult.Err("Profil indisponible (HTTP ${it.code})."))
-                        return
-                    }
-                    // user null = infos non publiées : ce n'est pas une erreur.
-                    post(cb, MeResult.Ok(parse(it.body?.string().orEmpty())))
+            try {
+                // user null = infos non publiées : ce n'est pas une erreur.
+                post(cb, MeResult.Ok(parse(mePayload(client))))
+            } catch (e: Exception) {
+                if (isSessionFailure(e)) {
+                    DeviceAuth.reject()
+                    post(cb, MeResult.Err(DeviceAuth.REJECTED_MESSAGE))
+                } else {
+                    post(cb, MeResult.Err("Hors-ligne, profil indisponible."))
                 }
             }
-        })
+        }.start()
     }
 
     /**
-     * Photo via le proxy serveur : /v1/media?ref=<réF opaque> (allowlist
-     * contrôlée par ApiClient). Réf absente/invalide ou échec = null, l'UI
-     * affiche les initiales. Aucune URL Pronote n'est jamais construite ici.
+     * Photo lue par le client local depuis la réf opaque `photo:<id>` (jamais
+     * une URL d'établissement ici). Réf absente/invalide ou échec = null, l'UI
+     * affiche les initiales.
      */
     fun fetchPhoto(profile: UserProfile, cb: (Bitmap?) -> Unit) {
-        val path = photoPath(profile) ?: run { post(cb, null); return }
-        val call = api.client().newCall(api.buildGet(path))
-        call.enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                post(cb, null)
+        Thread {
+            val bytes = try {
+                val client = provider() ?: return@Thread post(cb, null)
+                val ref = profile.photoRef.trim()
+                if (!UserProfileRules.isValidPhotoRef(ref)) return@Thread post(cb, null)
+                val wantId = ref.removePrefix("photo:")
+                val pic = client.info.profilePicture
+                if (pic == null || pic.id != wantId) return@Thread post(cb, null)
+                pic.data()
+            } catch (_: Exception) {
+                return@Thread post(cb, null)
             }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    val bytes = if (it.isSuccessful) it.body?.bytes() else null
-                    post(cb, if (bytes == null) null else decodePhoto(bytes))
-                }
-            }
-        })
+            post(cb, decodePhoto(bytes))
+        }.start()
     }
 
     private fun <T> post(cb: (T) -> Unit, value: T) {
@@ -93,28 +84,20 @@ class ProfileRepository(
     }
 
     companion object {
-        const val ME_PATH = "/v1/me"
-
         // Borne de décodage : une photo d'identité ne dépasse pas quelques
         // dizaines de Ko. Au-delà = payload refusé (pas de OOM sur l'UI thread).
         const val PHOTO_MAX_BYTES = 2 * 1024 * 1024
         private const val PHOTO_MAX_PX = 512
 
-        /** Chemin proxy de la photo, ou null si le contrat n'en publie pas. */
-        fun photoPath(profile: UserProfile): String? {
-            if (!UserProfileRules.isValidPhotoRef(profile.photoRef)) return null
-            if (!UserProfileRules.isValidAccountId(profile.accountId)) return null
-            return ServerConfig.mediaPath(profile.photoRef, profile.accountId)
-        }
-
         /**
-         * Payload /v1/me -> profil. `user` absent ou null = établissement sans
-         * infos publiées : null (écran vide), jamais de profil d'exemple.
-         * Toute valeur non conforme au contrat fait échouer isValid.
-         */
+          * Payload local (`mePayload`) -> profil. `user` absent ou null =
+          * établissement sans infos publiées : null (écran vide), jamais de
+          * profil d'exemple. Toute valeur non conforme au contrat fait échouer
+          * isValid.
+          */
         fun parse(body: String): UserProfile? {
             return try {
-                val root = JSONObject(body)
+                val root = org.json.JSONObject(body)
                 if (root.isNull("user")) return null
                 val u = root.optJSONObject("user") ?: return null
                 val accountId = u.optString("accountId", "").trim()
@@ -151,7 +134,7 @@ class ProfileRepository(
         }
 
         /**
-         * Décode les octets renvoyés par le proxy serveur. Bornes : taille
+         * Décode les octets lus par le client local. Bornes : taille
          * maximale + rééchantillonnage, sinon null (avatar de repli).
          */
         fun decodePhoto(bytes: ByteArray): Bitmap? {

@@ -280,10 +280,13 @@ describe("unit android actus (#79)", () => {
       expect({ bad, found: screen.includes(bad) }).toEqual({ bad, found: false });
     }
     const repo = codeOnly(readFileSync(K_FILES.repo, "utf8"));
-    expect(repo).toContain('"/v1/news"');
-    expect(repo).toContain("buildGet");
+    // #205 : parse du payload local (plus de GET serveur) — org.json du SDK.
     expect(repo).toContain("org.json.JSONObject");
+    expect(repo).toContain("fun parse");
     expect(repo).toContain("isValid");
+    expect(repo).not.toContain("ServerConfig.");
+    expect(repo).not.toContain("buildGet");
+    expect(repo).not.toContain("api.client()");
     for (const bad of ["WebView", "Html.fromHtml", "loadData", "setJavaScriptEnabled"]) {
       expect({ bad, found: repo.includes(bad) }).toEqual({ bad, found: false });
     }

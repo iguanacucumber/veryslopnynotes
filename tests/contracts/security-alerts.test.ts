@@ -135,11 +135,14 @@ describe("contracts security alerts (#21)", () => {
     const model = readFileSync(CORE_MODEL, "utf8");
     expect(model).toContain("sanitizeExcerpt");
     expect(model).toContain("injection_neutralized");
-    const config = readFileSync(CORE_CONFIG, "utf8");
-    expect(config).toContain("/v1/security/alerts");
+    expect(model).toContain("scanTextsForInjections");
     const repo = codeOnly(readFileSync(DATA_REPO, "utf8"));
-    expect(repo).toContain("/v1/security/alerts");
-    expect(repo).toContain("buildGet");
+    // #205 : parse du payload LOCAL (balayé sur l'appareil), plus de GET.
+    expect(repo).toContain("fun parse");
+    expect(repo).toContain("SecurityAlert.isValid");
+    expect(repo).not.toContain("ServerConfig.");
+    expect(repo).not.toContain("buildGet");
+    expect(repo).not.toContain("api.client()");
     for (const bad of ["WebView", "Html.fromHtml", "loadData", "setJavaScriptEnabled"]) {
       expect({ bad, found: repo.includes(bad) }).toEqual({ bad, found: false });
     }
