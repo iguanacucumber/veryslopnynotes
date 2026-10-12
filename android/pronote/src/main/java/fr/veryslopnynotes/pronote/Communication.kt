@@ -32,12 +32,12 @@ val PRONOTE_HEADERS_MOBILE = mapOf("User-Agent" to "iPhone")
  * Espaces blancs JS (`String.trim`, préfixe `parseInt`) : ASCII + NBSP, pas tout
  * Unicode — le protocole n'émet que de l'ASCII, mais autant être exact.
  */
-private fun isJsSpace(c: Char): Boolean =
+internal fun isJsSpace(c: Char): Boolean =
     c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\u000B' || c == '\u000C' || c == '\u00A0'
 
-private fun jsTrim(s: String): String = s.trim { isJsSpace(it) }
+internal fun jsTrim(s: String): String = s.trim { isJsSpace(it) }
 
-private fun jsTrimStart(s: String): String = s.trimStart { isJsSpace(it) }
+internal fun jsTrimStart(s: String): String = s.trimStart { isJsSpace(it) }
 
 /**
  * Supprime l'entrelacement de caractères de PRONOTE sur certains champs
