@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import fr.veryslopnynotes.ui.AppNav
+import fr.veryslopnynotes.data.PeriodicSyncWorker
 
 // Shell phase 4 (#13) + offline #14 + appairage/SSE #15 + alertes #21.
 // Navigation Material3 + routes "pairing" (QR+PIN, token chiffré) et

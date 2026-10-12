@@ -31,4 +31,8 @@ dependencies {
     // #15 : stockage token sécurisé (EncryptedSharedPreferences, Apache-2.0).
     // Version épinglée, licence MIT-compatible, justifiée en PR.
     implementation("androidx.security:security-crypto:1.1.0")
+    // #208 : sync périodique de fond SANS serveur (ni SSE, ni push, ni cron).
+    // Version épinglée au catalogue (libs.versions.toml), Apache-2.0
+    // MIT-compatible, justification en PR. Manifest : aucun composant exporté.
+    implementation(libs.work.runtime.ktx)
 }
