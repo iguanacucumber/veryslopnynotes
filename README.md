@@ -1,8 +1,10 @@
 # veryslopnynotes
 
 Client Android + serveur self-hosted pour consulter son Pronote : notes et moyennes, devoirs, EDT,
-vie scolaire, actualités, cantine, messagerie, profil. Le **serveur est le seul** à parler à
-Pronote (IP du serveur uniquement) ; le téléphone ne connaît qu'un hôte serveur.
+vie scolaire, actualités, cantine, messagerie, profil. Le **téléphone est le seul** à parler à
+Pronote (`android/pronote/` seul, [ADR-003](docs/adr/003-client-direct.md)) ; aucune session
+ne quitte l'appareil. Le serveur restant est un auxiliaire (aide devoirs IA, clé
+reçue par appel) qui ne voit jamais la session Pronote.
 
 Surcouche IA limitée et sourcée : assistant de devoirs et fiches de révision construits à partir
 de cours et manuels, avec contenu externe traité comme **donnée** et jamais comme instruction.
@@ -71,6 +73,11 @@ make buildRelApk               # APK release (signé si STORE_FILE est dans l'en
 Les trois commandes Gradle (`buildDebugApk`, `buildRelApk`, `android-compile`) trouvent
 leur JDK et leur SDK toutes seules, et **échouent** si l'outillage manque : un APK
 demandé en silence n'en est pas un. Prérequis et installation : `android/README.md`.
+
+Sans serveur (cible #205, [ADR-003](docs/adr/003-client-direct.md)) : les lectures
+directes n'exigent aucun backend — le téléphone parle à l'établissement seul.
+`make runServer` ne sert alors que l'auxiliaire IA (aide devoirs, clé reçue par
+appel), qui ne voit jamais la session Pronote.
 
 Hôte serveur côté app : `android/local.properties` (non commité) ou env `SERVER_HOST`.
 Défaut émulateur `10.0.2.2:3000` ; hors émulateur, HTTPS obligatoire. Cet hôte
@@ -152,18 +159,19 @@ tests/            unit, contracts, architecture, security, integration, e2e
 docs/             ADR, invariants, roadmap, sécurité, release
 ```
 
-Flux de lecture : `app → (hôte serveur unique) → API → PronoteReader → pronotets → PronoteHttpClient → HTTP`.
+Flux de lecture (cible #205, ADR-003) : `app → android/pronote/ → HTTP`.
+Legacy (serveur mort en attente de suppression) : `app → (hôte serveur) → API → PronoteReader → pronotets → PronoteHttpClient → HTTP`.
 Le domaine ne connaît ni SQLite ni le framework HTTP ; chaque dépendance est un port.
 
 ### Invariants (bloquants, un test chacun)
 
 | # | Invariant | Test |
 |---|---|---|
-| I1 | Android sans aucun hôte Pronote/portail, médias par proxy serveur | `make architecture-test` |
-| I2 | Un seul `PronoteHttpClient`, seul accès réseau Pronote | idem + scan de définitions |
-| I3 | `server/domain/` sans SQLite ni framework HTTP | `tests/architecture` |
+| I1 | Seul `android/pronote/` parle Pronote, zéro mention hors module ; médias par proxy | `make architecture-test` |
+| I2 | Un seul point d'accès réseau Pronote par runtime (`HttpSession`/`Client` ; `PronoteHttpClient` legacy) | idem + scan de définitions |
+| I3 | `server/domain/` + `android/core/` sans SQLite ni framework HTTP | `tests/architecture` + parité Kotlin |
 | I4 | Aucun secret dans les prompts LLM | `make security` + scan |
-| I5 | LLM sans outils, sans réseau, sans secret | idem |
+| I5 | LLM sans outils, sans réseau, sans secret ; clé en store chiffré côté app | idem |
 | I6 | Contenu externe = donnée bornée, délimiteurs à nonce | `tests/security/pipeline.test.ts` |
 | I7 | Aucun effet de bord depuis une sortie LLM libre | tests unitaires + revue |
 
@@ -171,8 +179,9 @@ Détails : [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md).
 
 ## Règles d'or
 
-1. **Réseau** — toute requête Pronote part de l'IP du serveur, session sérialisée, User-Agent
-   constant. L'app ne connaît qu'un hôte allowlist. Médias via proxy serveur, jamais de WebView distante.
+1. **Réseau** — toute requête Pronote part du téléphone (`android/pronote/` seul, ADR-003),
+   session jamais hors de l'appareil. L'hôte backend auxiliaire éventuel reste allowlist
+   à l'exécution. Médias via proxy, jamais de WebView distante.
 2. **IA** — tout contenu non écrit par l'utilisateur est une donnée, jamais une instruction.
    Sortie LLM validée, sans outil ni effet de bord libre.
 3. **Dépôt public** — pas de secret, pas d'IP/domaine, pas d'URL d'établissement, pas de donnée
@@ -307,7 +316,7 @@ PR bloquante même si la fonctionnalité est correcte.
 - [`AGENTS.md`](AGENTS.md) — workflow, garde-fous, règles d'or
 - [`docs/CONVENTIONS_GIT.md`](docs/CONVENTIONS_GIT.md) — conventions de commits et branches
 - [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) — les invariants I1–I8
-- [`docs/adr/`](docs/adr/) — décisions d'architecture (stack, provider Pronote)
+- [`docs/adr/`](docs/adr/) — décisions d'architecture (stack, provider Pronote, client direct)
 
 Nouvelles dépendances : justifiées dans la PR, version épinglée, licence MIT-compatible.
 
