@@ -1,0 +1,489 @@
+package fr.veryslopnynotes.core
+
+import java.time.Instant
+
+// Fiches révision : déclenchement structuré + assemblage + stockage (port Kotlin #207).
+//
+// Port fidèle de `server/jobs/revision.ts` (hors `renderRevisionPdf`, le writer
+// PDF-1.4 maison que `RevisionPdf.kt` remplace par `PdfDocument` natif), qui
+// reste la RÉFÉRENCE (cf. `tests/unit/kotlin-jobs-parity.test.ts`). Données
+// structurées uniquement : `ExamCandidate` issu de `detectExams`. Aucun appel
+// modèle ici, aucune sortie libre ne déclenche d'envoi (I7). `high` seul pousse
+// en auto ; `needs_confirm` = confirmation app obligatoire, aucun effet auto.
+// Contenu assemblé depuis texte validé + sources citées, gabarit versionné
+// stocké par fiche. Push = payload structuré (sujet/date), jamais texte modèle.
+// Logs = compteurs seuls, jamais de token en clair.
+//
+// `RevisionKv` est bloquant (pas de coroutines dans `core`, zéro dépendance) ;
+// l'appelant expose le thread. Le JSON du stockage est lu/écrit à la main
+// (stdlib seule) : les fiches survivent à un aller-retour exact.
+//
+// Pur : aucun réseau, aucun SQLite, aucun Android (I3).
+//
+// ponytail: index + journal comme la référence (un index illisible ne fait
+// jamais disparaître une fiche déjà stockée). Upgrade: stockage versionné
+// partagé quand les repositories locaux (#205) branchent ce module.
+
+/** Version gabarit fiches révision, stockée par fiche. */
+const val REVISION_TEMPLATE_VERSION = "fiche-v1"
+
+/** Fiche de révision assemblée depuis texte validé + sources citées. */
+data class RevisionSheet(
+    val id: String,
+    val examId: String,
+    val subject: String,
+    val date: String,
+    val title: String,
+    val body: String,
+    val sources: List<String>,
+    val templateVersion: String,
+    val createdAt: String,
+)
+
+/** Miroir de `isRevisionSheet` : c'est lui qui décide si une fiche compte. */
+fun isRevisionSheetValid(s: RevisionSheet): Boolean {
+    if (s.id.isBlank() || s.examId.isBlank()) return false
+    if (s.subject.isBlank() || s.title.isBlank()) return false
+    if (s.body.isBlank()) return false
+    if (!isIsoDateLike(s.date) || !isIsoDateLike(s.createdAt)) return false
+    if (s.sources.isEmpty() || s.sources.any { it.isBlank() }) return false
+    if (s.templateVersion != REVISION_TEMPLATE_VERSION) return false
+    return true
+}
+
+/** Envoi structuré : décidé par `ExamCandidate` high, pas par texte modèle. */
+interface RevisionPushSender {
+    fun send(deviceTokenHash: String, title: String, body: String)
+}
+
+data class RevisionNotifyResult(
+    val sent: Int,
+    val failed: Int,
+    val sheets: Int,
+    val devices: Int,
+)
+
+/** Stockage kv minimal (miroir du provider de stockage, autres lanes actives dessus). */
+interface RevisionKv {
+    fun get(key: String): ByteArray?
+    fun set(key: String, value: ByteArray)
+}
+
+private const val SHEET_PREFIX = "revision:sheet:"
+private const val INDEX_KEY = "revision:index"
+private const val INDEX_JOURNAL_KEY = "revision:index:journal"
+
+private fun cleanRevision(s: String, max: Int): String {
+    val t = s.trim().replace(Regex("\\s+"), " ")
+    return if (t.length > max) t.substring(0, max) else t
+}
+
+private fun sheetKey(id: String): String = "$SHEET_PREFIX$id"
+
+/**
+ * Id déterministe par examen : rejouable, zéro doublon. L'assainissement est
+ * PERDANT (« a/b » et « a?b » donneraient la même fiche, l'une écrasant
+ * l'autre) : un suffixe dérivé de l'id brut (FNV-1a 32 bits, sans collision
+ * pratique) garantit l'unicité tout en gardant un id lisible et rejouable.
+ */
+fun revisionIdForExam(examId: String): String {
+    val raw = examId.trim()
+    val safe = Regex("[^A-Za-z0-9_-]+").replace(raw, "-").take(80)
+    val base = safe.ifEmpty { "exam" }
+    return if (raw == safe) "fiche-$base" else "fiche-$base-${fnv1aRevision(raw)}"
+}
+
+/** FNV-1a 32 bits en base 36 : suffixe court, déterministe. */
+private fun fnv1aRevision(s: String): String {
+    var h = 0x811c9dc5.toInt()
+    for (i in s.indices) {
+        h = h xor s[i].code
+        h = h * 0x01000193
+    }
+    return h.toUInt().toString(36)
+}
+
+fun buildRevisionTitle(exam: ExamCandidate): String {
+    val subject = exam.subject.trim().ifEmpty { "matière" }
+    return cleanRevision("Fiche révision $subject — ${exam.matched} ${localDay(exam.date)}", 120)
+}
+
+// Seule confiance haute pousse en auto (I7). Incertain = app confirme.
+fun shouldPushForExam(exam: ExamCandidate): Boolean = exam.confidence == EXAM_CONFIDENCE_HIGH
+
+fun formatRevisionPush(exam: ExamCandidate): GradePush {
+    val subject = exam.subject.trim().ifEmpty { "matière" }
+    val title = cleanRevision("Fiche révision dispo en $subject", 120)
+    val body = cleanRevision("DS ${exam.matched} le ${localDay(exam.date)} en $subject : fiche prête", 1000)
+    return GradePush(title = title, body = body)
+}
+
+private fun dedupeRevisionSources(sources: List<String>): List<String> {
+    val out = mutableListOf<String>()
+    for (s in sources) {
+        val t = s.trim()
+        if (t.isEmpty() || out.contains(t)) continue
+        out.add(t)
+    }
+    return out
+}
+
+// Assemble fiche depuis texte validé + sources. Exige sources non-vides
+// (refus propre si corpus insuffisant). Corps cite toujours.
+fun assembleRevisionSheet(
+    exam: ExamCandidate,
+    ficheText: String,
+    sources: List<String>,
+    now: String = Instant.now().toString(),
+): RevisionSheet {
+    val text = ficheText.trim()
+    if (text.isEmpty()) throw IllegalArgumentException("fiche vide (refus)")
+    val deduped = dedupeRevisionSources(sources)
+    if (deduped.isEmpty()) throw IllegalArgumentException("sources insuffisantes (refus)")
+    val cited = if (text.contains("Sources :")) {
+        text
+    } else {
+        "$text\n\nSources :\n${deduped.joinToString("\n") { "- $it" }}"
+    }
+    val sheet = RevisionSheet(
+        id = revisionIdForExam(exam.id),
+        examId = exam.id,
+        subject = exam.subject,
+        date = exam.date,
+        title = buildRevisionTitle(exam),
+        body = cited,
+        sources = deduped,
+        templateVersion = REVISION_TEMPLATE_VERSION,
+        createdAt = now,
+    )
+    if (!isRevisionSheetValid(sheet)) throw IllegalArgumentException("fiche invalide (contrat)")
+    return sheet
+}
+
+fun notifyRevisionSheets(
+    sheets: List<RevisionSheet>,
+    examsById: Map<String, ExamCandidate>,
+    devices: List<PushDevice>,
+    sender: RevisionPushSender,
+    logger: (String) -> Unit = {},
+): RevisionNotifyResult {
+    val targets = devices.filter { isTokenHash(it.tokenHash) }
+    var sent = 0
+    var failed = 0
+    var pushed = 0
+    for (sheet in sheets) {
+        if (!isRevisionSheetValid(sheet)) continue
+        val exam = examsById[sheet.examId] ?: continue
+        if (!shouldPushForExam(exam)) continue
+        val payload = formatRevisionPush(exam)
+        pushed += 1
+        for (d in targets) {
+            try {
+                sender.send(d.tokenHash, payload.title, payload.body)
+                sent += 1
+            } catch (_: Exception) {
+                failed += 1
+            }
+        }
+    }
+    logger("notify revision sheets=$pushed devices=${targets.size} sent=$sent failed=$failed")
+    return RevisionNotifyResult(sent = sent, failed = failed, sheets = pushed, devices = targets.size)
+}
+
+// --- Stockage kv -------------------------------------------------------------
+
+fun revisionSheetJson(sheet: RevisionSheet): String {
+    val sources = sheet.sources.joinToString(",") { jsonStr(it) }
+    return "{\"id\":${jsonStr(sheet.id)}," +
+        "\"examId\":${jsonStr(sheet.examId)}," +
+        "\"subject\":${jsonStr(sheet.subject)}," +
+        "\"date\":${jsonStr(sheet.date)}," +
+        "\"title\":${jsonStr(sheet.title)}," +
+        "\"body\":${jsonStr(sheet.body)}," +
+        "\"sources\":[$sources]," +
+        "\"templateVersion\":${jsonStr(sheet.templateVersion)}," +
+        "\"createdAt\":${jsonStr(sheet.createdAt)}}"
+}
+
+private fun revisionIndexJson(ids: List<String>): String =
+    "[${ids.joinToString(",") { jsonStr(it) }}]"
+
+/** Mini-lecteur JSON (objets/tableaux/chaînes) : juste ce que le kv stocke. */
+private class RevisionJsonReader(private val text: String) {
+    private var pos = 0
+
+    fun read(): Any? {
+        skipWs()
+        if (pos >= text.length) throw IllegalArgumentException("JSON vide")
+        return readValue()
+    }
+
+    fun end(): Boolean {
+        skipWs()
+        return pos == text.length
+    }
+
+    private fun skipWs() {
+        while (pos < text.length && text[pos] in " \t\n\r") pos++
+    }
+
+    private fun readValue(): Any? {
+        skipWs()
+        if (pos >= text.length) throw IllegalArgumentException("fin inattendue")
+        return when (val c = text[pos]) {
+            '{' -> readObj()
+            '[' -> readArr()
+            '"' -> readStr()
+            't' -> {
+                expect("true")
+                true
+            }
+            'f' -> {
+                expect("false")
+                false
+            }
+            'n' -> {
+                expect("null")
+                null
+            }
+            '-', in '0'..'9' -> readNum()
+            else -> throw IllegalArgumentException("caractère '$c' à $pos")
+        }
+    }
+
+    private fun expect(word: String) {
+        if (!text.startsWith(word, pos)) throw IllegalArgumentException("attendu $word à $pos")
+        pos += word.length
+    }
+
+    private fun readObj(): Map<String, Any?> {
+        pos++ // {
+        val map = LinkedHashMap<String, Any?>()
+        skipWs()
+        if (pos < text.length && text[pos] == '}') {
+            pos++
+            return map
+        }
+        while (true) {
+            skipWs()
+            if (pos >= text.length || text[pos] != '"') throw IllegalArgumentException("clé attendue à $pos")
+            val key = readStr()
+            skipWs()
+            if (pos >= text.length || text[pos] != ':') throw IllegalArgumentException("':' attendu à $pos")
+            pos++
+            map[key] = readValue()
+            skipWs()
+            if (pos >= text.length) throw IllegalArgumentException("fin d'objet inattendue")
+            if (text[pos] == '}') {
+                pos++
+                return map
+            }
+            if (text[pos] != ',') throw IllegalArgumentException("',' attendue à $pos")
+            pos++
+        }
+    }
+
+    private fun readArr(): List<Any?> {
+        pos++ // [
+        val list = mutableListOf<Any?>()
+        skipWs()
+        if (pos < text.length && text[pos] == ']') {
+            pos++
+            return list
+        }
+        while (true) {
+            list.add(readValue())
+            skipWs()
+            if (pos >= text.length) throw IllegalArgumentException("fin de tableau inattendue")
+            if (text[pos] == ']') {
+                pos++
+                return list
+            }
+            if (text[pos] != ',') throw IllegalArgumentException("',' attendue à $pos")
+            pos++
+        }
+    }
+
+    private fun readStr(): String {
+        pos++ // "
+        val out = StringBuilder()
+        while (true) {
+            if (pos >= text.length) throw IllegalArgumentException("chaîne non fermée")
+            val c = text[pos++]
+            if (c == '"') return out.toString()
+            if (c == '\\') {
+                if (pos >= text.length) throw IllegalArgumentException("échapée tronquée")
+                when (val e = text[pos++]) {
+                    '"', '\\', '/' -> out.append(e)
+                    'b' -> out.append('\b')
+                    'f' -> out.append('\u000C')
+                    'n' -> out.append('\n')
+                    'r' -> out.append('\r')
+                    't' -> out.append('\t')
+                    'u' -> {
+                        if (pos + 4 > text.length) throw IllegalArgumentException("\\u tronqué")
+                        val hi = text.substring(pos, pos + 4).toInt(16)
+                        pos += 4
+                        if (hi in 0xD800..0xDBFF && pos + 6 <= text.length &&
+                            text[pos] == '\\' && text[pos + 1] == 'u'
+                        ) {
+                            val lo = text.substring(pos + 2, pos + 6).toInt(16)
+                            if (lo in 0xDC00..0xDFFF) {
+                                out.appendCodePoint(0x10000 + ((hi - 0xD800) shl 10) + (lo - 0xDC00))
+                                pos += 6
+                                continue
+                            }
+                        }
+                        out.append(hi.toChar())
+                    }
+                    else -> throw IllegalArgumentException("échapée '\\$e' à $pos")
+                }
+                continue
+            }
+            if (c < ' ') throw IllegalArgumentException("contrôle brut en chaîne à $pos")
+            out.append(c)
+        }
+    }
+
+    private fun readNum(): Double {
+        val start = pos
+        if (pos < text.length && text[pos] == '-') pos++
+        while (pos < text.length && text[pos] in '0'..'9') pos++
+        if (pos < text.length && text[pos] == '.') {
+            pos++
+            while (pos < text.length && text[pos] in '0'..'9') pos++
+        }
+        if (pos < text.length && (text[pos] == 'e' || text[pos] == 'E')) {
+            pos++
+            if (pos < text.length && (text[pos] == '+' || text[pos] == '-')) pos++
+            while (pos < text.length && text[pos] in '0'..'9') pos++
+        }
+        return text.substring(start, pos).toDouble()
+    }
+}
+
+private fun parseStringArray(text: String): List<String>? {
+    val reader = RevisionJsonReader(text)
+    val v = try {
+        reader.read()
+    } catch (_: Exception) {
+        return null
+    }
+    if (!reader.end() || v !is List<*>) return null
+    if (v.any { it !is String }) return null
+    @Suppress("UNCHECKED_CAST")
+    return v as List<String>
+}
+
+fun parseRevisionSheetJson(text: String): RevisionSheet? {
+    return try {
+        val reader = RevisionJsonReader(text)
+        val v = reader.read()
+        if (!reader.end() || v !is Map<*, *>) return null
+        @Suppress("UNCHECKED_CAST")
+        val o = v as Map<String, Any?>
+        fun str(key: String): String? = o[key] as? String
+        val sources = o["sources"] as? List<*> ?: return null
+        if (sources.any { it !is String }) return null
+        @Suppress("UNCHECKED_CAST")
+        val sheet = RevisionSheet(
+            id = str("id") ?: return null,
+            examId = str("examId") ?: return null,
+            subject = str("subject") ?: return null,
+            date = str("date") ?: return null,
+            title = str("title") ?: return null,
+            body = str("body") ?: return null,
+            sources = sources as List<String>,
+            templateVersion = str("templateVersion") ?: return null,
+            createdAt = str("createdAt") ?: return null,
+        )
+        if (!isRevisionSheetValid(sheet)) null else sheet
+    } catch (_: Exception) {
+        null
+    }
+}
+
+/** ids d'un index : `[]` si absent, `null` si ILLISIBLE (à ne pas écraser). */
+private fun readIdIndex(store: RevisionKv, key: String): List<String>? {
+    val raw = store.get(key) ?: return emptyList()
+    return try {
+        parseStringArray(raw.toString(Charsets.UTF_8))
+    } catch (_: Exception) {
+        null
+    }
+}
+
+/**
+ * Union index + journal : un index illisible ne doit JAMAIS faire disparaître
+ * une fiche déjà présente dans le kv.
+ */
+private fun allKnownIds(store: RevisionKv): List<String> {
+    val index = readIdIndex(store, INDEX_KEY) ?: emptyList()
+    val journal = readIdIndex(store, INDEX_JOURNAL_KEY) ?: emptyList()
+    return (index + journal).toSet().sorted()
+}
+
+fun saveRevisionSheet(store: RevisionKv, sheet: RevisionSheet) {
+    if (!isRevisionSheetValid(sheet)) throw IllegalArgumentException("fiche invalide (contrat)")
+    store.set(sheetKey(sheet.id), revisionSheetJson(sheet).toByteArray(Charsets.UTF_8))
+    val ids = allKnownIds(store).toMutableList()
+    if (!ids.contains(sheet.id)) {
+        ids.add(sheet.id)
+        ids.sort()
+        val encoded = revisionIndexJson(ids).toByteArray(Charsets.UTF_8)
+        store.set(INDEX_KEY, encoded)
+        // Le journal est la source de vérité qui ne rétrécit jamais : même si
+        // l'index est corrompu au prochain tour, l'id reste listable.
+        store.set(INDEX_JOURNAL_KEY, encoded)
+    }
+}
+
+fun loadRevisionSheet(store: RevisionKv, id: String): RevisionSheet? {
+    val raw = store.get(sheetKey(id)) ?: return null
+    return try {
+        parseRevisionSheetJson(raw.toString(Charsets.UTF_8))
+    } catch (_: Exception) {
+        null
+    }
+}
+
+fun listRevisionSheets(store: RevisionKv): List<RevisionSheet> {
+    val out = mutableListOf<RevisionSheet>()
+    for (id in allKnownIds(store)) {
+        val s = loadRevisionSheet(store, id)
+        if (s != null) out.add(s)
+    }
+    return out
+}
+
+// --- Mise en page PDF (pure, rejouée en parité) -------------------------------
+
+/** Corps découpé en lignes affichables : ce que `RevisionPdf` dessine. */
+const val REVISION_PDF_MAX_LINES = 60
+const val REVISION_PDF_WRAP = 90
+
+fun revisionPdfLines(sheet: RevisionSheet): List<String> {
+    if (!isRevisionSheetValid(sheet)) throw IllegalArgumentException("fiche invalide (contrat)")
+    val raw = listOf(sheet.title, "${sheet.subject} — ${localDay(sheet.date)}", "") +
+        sheet.body.split("\n") + listOf("", "Gabarit ${sheet.templateVersion}")
+    return raw.flatMap { l -> if (l.trim().isEmpty()) listOf(" ") else splitRevisionLine(l, REVISION_PDF_WRAP) }
+        .take(REVISION_PDF_MAX_LINES)
+}
+
+private fun splitRevisionLine(line: String, max: Int): List<String> {
+    if (line.length <= max) return listOf(line.ifEmpty { " " })
+    val words = line.split(Regex("\\s+"))
+    val out = mutableListOf<String>()
+    var cur = ""
+    for (w in words) {
+        val add = (if (cur.isEmpty()) 0 else 1) + w.length
+        if (cur.length + add > max && cur.isNotEmpty()) {
+            out.add(cur)
+            cur = w
+        } else {
+            cur = if (cur.isEmpty()) w else "$cur $w"
+        }
+    }
+    if (cur.isNotEmpty()) out.add(cur)
+    return out.ifEmpty { listOf(" ") }
+}
