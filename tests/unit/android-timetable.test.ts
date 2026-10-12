@@ -310,7 +310,8 @@ describe("unit android EDT (#76)", () => {
     // chemin serveur.
     expect(repo).toContain("CachePolicy.TIMETABLE -> timetablePayload(client, q)");
     const config = readFileSync(join(CORE, "ServerConfig.kt"), "utf8");
-    expect(config).toContain("fun timetableUrl(baseUrl: String, query: String): String");
+    // #206 : ServerConfig ne connaît que le scraper — plus de route EDT.
+    expect(config).not.toContain("fun timetableUrl");
     // org.json vient du SDK : aucune ligne de dépendance ajoutée.
     const uiGradle = readFileSync(join(import.meta.dir, "..", "..", "android/ui/build.gradle.kts"), "utf8");
     for (const dep of ["gson", "moshi", "kotlinx-serialization", "accompanist", "swiperefresh"]) {

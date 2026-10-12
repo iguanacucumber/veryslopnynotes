@@ -1,5 +1,5 @@
 // Module ui : navigation Compose Material3 + écrans offline #14,
-// pairing/SSE #15, alertes #21 via core+data.
+// appairage local #206, alertes #21 via core+data.
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
@@ -41,11 +41,9 @@ dependencies {
     // dans activity-compose, que `app` déclare mais pas `ui`.
     implementation("androidx.activity:activity-compose:1.9.2")
     implementation("androidx.navigation:navigation-compose:2.7.7")
-    // `ApiClient` expose `OkHttpClient` dans sa surface publique et l'écran
-    // d'appairage construit un client : le module UI manipule donc le type
-    // directement. `data` le déclare en `implementation` (donc absent de notre
-    // classpath de compilation) : on le déclare ici aussi, version alignée.
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // #206 : plus de client HTTP dans l'UI (appairage et lectures device-only,
+    // `ApiClient` supprimé) — OkHttp ne vit plus que dans `data` (fournisseur
+    // LLM direct), qui l'expose en `implementation`.
     // #127 : scan du QR affiché par l'application de l'établissement. Le
     // décodeur est dans l'APK et l'activité de scan demande elle-même la
     // permission CAMERA : aucune dépendance à Google Play Services, donc le

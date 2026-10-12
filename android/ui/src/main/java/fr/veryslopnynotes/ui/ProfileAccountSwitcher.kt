@@ -40,13 +40,13 @@ import fr.veryslopnynotes.core.UserProfileRules
 // n'existait aucun moyen de changer de compte. Les enfants étaient déjà
 // analysés (`ProfileRepository.parse`), donc la donnée existait.
 //
-// La session appairée reste MONO-COMPTE côté serveur (bearer d'appareil,
-// contrat 0.4.0) : basculer change le compte ACTIF de l'app, celui qu'elle
-// mémorise (`AccountStore.select`) et qu'elle propose au proxy média. L'écran ne
+// La session reste MONO-COMPTE (un jeton d'établissement sur le téléphone :
+// plus de bearer serveur depuis #206) : basculer change le compte ACTIF de
+// l'app, celui qu'elle mémorise (`AccountStore.select`). L'écran ne
 // prétend donc pas recharger les notes d'un autre enfant : il affiche le compte
 // actif, et c'est tout — le `ponytail:` est écrit là, dans le `why`, pas
-// enfoui dans le composant. Upgrade: quand le serveur publiera des données par
-// compte, c'est le `refresh()` du routeur qu'il faudra armer d'ici.
+// enfoui dans le composant. Upgrade: quand le client local lira plusieurs
+// comptes, c'est le `refresh()` des dépôts qu'il faudra armer d'ici.
 //
 // La liste et le compte courant sont des fonctions PURES (`switchableAccounts`,
 // `activeAccount`) : leur miroir est `tests/unit/android-profile.test.ts`.

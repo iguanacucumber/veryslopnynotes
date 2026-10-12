@@ -5,17 +5,17 @@ import android.content.SharedPreferences
 
 /**
  * Comptes appairés + déconnexion (#82, multi-compte parent).
- * - Persiste UNIQUEMENT des accountId (jamais nom, classe, photo, token) :
+ * - Persiste UNIQUEMENT des accountId (jamais nom, classe, photo, jeton) :
  *   liste bornée + compte courant. Le profil reste en mémoire (mode anonyme :
  *   aucune donnée personnelle sur disque).
- * - `logout()` invalide la session appairée (TokenStore) ET purge tous les
+ * - `logout()` invalide la session appairée (SessionStore) ET purge tous les
  *   caches locaux : plus aucune donnée scolaire du compte déconnecté.
- * - #178 : la SEULE écriture est [add], appelée par le Profil quand `/v1/me`
- *   répond (`ProfileScreen.refresh`). Avant, elle n'était appelée nulle part :
+ * - #178 : la SEULE écriture est [add], appelée par le Profil quand le client
+ *   local répond (`ProfileScreen.refresh`). Avant, elle n'était appelée nulle part :
  *   `account_ids` n'était jamais écrit, donc `count()` valait 0 et `select()`
  *   ne pouvait rien écrire. `remove` et `isAnonymous` ont été SUPPRIMÉS avec
  *   elle — aucun écran ne les atteint (le sélecteur ne propose que des comptes
- *   publiés par `/v1/me`, « retirer un compte » n'a pas d'écran) ; les
+ *   publiés par le client local, « retirer un compte » n'a pas d'écran) ; les
  *   réintroduire le jour où un écran les rend visibles.
  * ponytail: SharedPreferences seul (une liste de chaînes), pas de Room.
  *   Upgrade: Store de comptes avec bascule par compte (hors périmètre).
@@ -23,7 +23,7 @@ import android.content.SharedPreferences
 class AccountStore(
     context: Context,
     private val cacheStore: CacheStore,
-    private val tokenStore: TokenStore,
+    private val sessions: SessionStore,
 ) {
     private val prefs: SharedPreferences = context.applicationContext
         .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -41,18 +41,18 @@ class AccountStore(
     /**
      * Comptes appairés CONNUS, jamais moins que la session elle-même.
      *
-     * #148 (recette des 14 écrans) : hors ligne, `/v1/me` ne répond pas, donc
+     * #148 (recette des 14 écrans) : hors ligne, le client local ne répond pas, donc
      * [add] n'est jamais appelé et la liste reste vide — l'écran Profil
-     * affichait « 0 compte appairé » sur un appareil APPAIRÉ (jeton présent,
-     * `base_url` écrit), pendant que Réglages affichait « 1 compte ». Deux
+     * affichait « 0 compte appairé » sur un appareil APPAIRÉ (session
+     * persistée), pendant que Réglages affichait « 1 compte ». Deux
      * écrans, deux nombres, pour la même réalité.
      *
-     * Le plancher vient du [TokenStore] : une session valide PROUVE qu'un
+     * Le plancher vient du [SessionStore] : une session persistée PROUVE qu'un
      * compte est appairé. Il ne sert qu'à l'affichage — la liste reste la
      * source des identifiants, donc le sélecteur de compte ne propose toujours
-     * que ce que `/v1/me` a publié.
+     * que ce que le client local a publié.
      */
-    fun count(): Int = maxOf(accountIds().size, if (tokenStore.isPaired()) 1 else 0)
+    fun count(): Int = maxOf(accountIds().size, if (sessions.hasSession()) 1 else 0)
 
     /** Enregistre un compte appairé. false = déjà connu ou id invalide. */
     fun add(accountId: String): Boolean {
@@ -81,13 +81,12 @@ class AccountStore(
 
     /**
      * Déconnexion : session appairée invalidée + TOUS les caches purgés (les
-     * notes/devoirs/EDT sont des données du compte déconnecté). `tokenStore.clear()`
-     * efface l'id, l'empreinte ET le secret porteur (contrat 0.4.0) : après
-     * cette ligne, plus aucune requête ne part avec un `Authorization` valide.
-     * Le profil, lu en mémoire, est abandonné par l'appelant.
+     * notes/devoirs/EDT sont des données du compte déconnecté). `sessions.clear()`
+     * efface le jeton persisté : après cette ligne, plus aucune lecture ne peut
+     * rouvrir la session. Le profil, lu en mémoire, est abandonné par l'appelant.
      */
     fun logout() {
-        tokenStore.clear()
+        sessions.clear()
         // #205 : la session locale part avec le reste (plus de client, repli
         // cache impossible : les ressources sont purgees juste apres).
         PronoteSession.clear()

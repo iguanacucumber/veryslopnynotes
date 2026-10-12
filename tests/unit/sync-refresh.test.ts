@@ -421,7 +421,7 @@ describe("unit sync refresh (#87)", () => {
     const anonyme = await handler(new Request("http://127.0.0.1/v1/sync/refresh", { method: "POST", body: "{}" }));
     expect(anonyme.status).toBe(401);
     // Câblé : la relecture passe par les événements returned, pas par le store.
-    const cable = createHandler(createMemoryStore(), pairing, undefined, undefined, undefined, null, null, {
+    const cable = createHandler(createMemoryStore(), pairing, undefined, undefined, undefined, null, {
       refresh: async () => [
         { v: CONTRACTS_VERSION, type: "SyncCompleted", at: AT, data: { accountId: syntheticAccountId, grades: 2, assignments: 1 } },
       ],

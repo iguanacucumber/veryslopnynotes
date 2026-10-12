@@ -1,11 +1,11 @@
-// Assistant de connexion Android (#120) — serveur -> établissement -> QR.
-// Kotlin n'a pas de src/test dans ce dépôt : on rejoue donc la logique pure en
-// TypeScript (tableau rejouable contre le vrai Kotlin) et on vérifie par lecture
-// de source ce que seul l'écran peut garantir : l'ordre des étapes, le gate au
-// lancement, et le fait que le mot de passe de l'établissement n'est écrit
+// Assistant de connexion Android (#120, repointé #206 : device-only) —
+// établissement -> QR. Kotlin n'a pas de src/test dans ce dépôt : on rejoue
+// donc la logique pure en TypeScript (tableau rejouable contre le vrai Kotlin)
+// et on vérifie par lecture de source ce que seul l'écran peut garantir :
+// l'ordre des étapes, le gate au lancement, et le fait que le PIN n'est écrit
 // nulle part.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -18,7 +18,7 @@ function read(file: string): string {
   return readFileSync(file, "utf8");
 }
 
-/** Miroir de `parseSchoolQr` (SetupRepository.kt) — rejouable tel quel. */
+/** Miroir de `parseSchoolQr` (PairingRepository.kt) — rejouable tel quel. */
 function tsParseSchoolQr(raw: string): { login: string; jeton: string; url: string | null } | null {
   const text = raw.trim();
   if (text === "") return null;
@@ -53,7 +53,7 @@ describe("QR de l'établissement : parsing (miroir exécutable)", () => {
     const compact = "a1b2|c3d4|https://etab.exemple/eleve";
     expect(tsParseSchoolQr(json)).toEqual({ login: "a1b2", jeton: "c3d4", url: "https://etab.exemple/eleve" });
     expect(tsParseSchoolQr(compact)).toEqual(tsParseSchoolQr(json));
-    // L'URL est facultative : c'est alors celle saisie à l'étape 2 qui fait foi.
+    // L'URL est facultative : c'est alors celle saisie à l'étape 1 qui fait foi.
     expect(tsParseSchoolQr('{"login":"a1b2","jeton":"c3d4"}')).toEqual({ login: "a1b2", jeton: "c3d4", url: null });
     expect(tsParseSchoolQr("a1b2|c3d4")).toEqual({ login: "a1b2", jeton: "c3d4", url: null });
   });
@@ -81,61 +81,57 @@ describe("assistant : le parcours est bien l'ordre annoncé", () => {
   const screen = read(join(UI, "PairingScreen.kt"));
   const state = read(join(UI, "PairingUiState.kt"));
 
-  test("trois étapes nommées, dans l'ordre", () => {
+  test("deux étapes nommées, dans l'ordre — plus d'étape serveur", () => {
     expect(state).toContain("enum class SetupStep");
-    expect(state).toContain("SERVER,");
-    expect(state).toContain("ACCOUNT,");
+    expect(state).toContain("SCHOOL,");
     expect(state).toContain("QR,");
-    for (const label of ["Étape 1/3", "Étape 2/3", "Étape 3/3"]) {
+    expect(state).not.toContain("SERVER");
+    expect(state).not.toContain("ACCOUNT");
+    for (const label of ["Étape 1/2", "Étape 2/2"]) {
       expect(state).toContain(label);
     }
+    expect(state).not.toContain("1/3");
   });
 
-  test("étape 1 : valider PUIS sonder, et ne passer à l'étape 2 que si ça répond", () => {
-    // L'ordre importe : écrire l'adresse avant de l'appeler (changeServer purge
-    // la session), et ne PAS avancer sur un serveur muet.
-    const valider = screen.indexOf("val refusal = onServerChange(serverDraft)");
-    const sonder = screen.indexOf("probeHealthBlocking(target)");
-    const avancer = screen.indexOf("step = SetupStep.ACCOUNT");
-    expect({ valider, sonder, avancer }).toEqual({ valider: valider, sonder: sonder, avancer: avancer });
-    expect(valider).toBeGreaterThan(-1);
-    expect(sonder).toBeGreaterThan(valider);
-    expect(avancer).toBeGreaterThan(sonder);
-    expect(screen).toContain("is HealthResult.Alive ->");
-    expect(screen).toContain("is HealthResult.Unreachable ->");
-  });
-
-  test("étape 2 : l'adresse de l'établissement est la seule saisie — 0.7.0 n'a plus d'identifiants", () => {
+  test("étape 1 : l'adresse de l'établissement, validée en local, sans sonde réseau", () => {
+    // #206 : plus d'étape serveur, donc plus de sonde de joignabilité — le
+    // téléphone parlera à l'établissement à l'étape 2, avec le QR.
     expect(screen).toContain("isBoundedSchoolUrl(form.schoolUrl)");
     expect(screen).toContain("Adresse de l'établissement absente : elle est obligatoire.");
+    expect(screen).toContain("onNext(SetupStep.QR)");
+    expect(screen).not.toContain("probeHealthBlocking");
+    expect(screen).not.toContain("HealthResult");
+    expect(screen).not.toContain("onServerChange");
+    expect(screen).not.toContain("changeServer");
     // Aucun champ identifiant/mot de passe ne subsiste dans l'app.
     expect(state).not.toContain("val username");
     expect(state).not.toContain("val password");
     expect(state).not.toContain("hasCredentials");
   });
 
-  test("étape 3 : QR + PIN, la méthode UNIQUE — un des deux seul ne part pas", () => {
+  test("étape 2 : QR + PIN, la méthode UNIQUE — un des deux seul ne part pas", () => {
     expect(screen).toContain("val qr = parseSchoolQr(form.qrRaw)");
     // Le Pin est la clé de déchiffrement du QR : sans lui, le QR ne sert à rien.
     expect(screen).toContain("Code PIN du QR obligatoire : il déchiffre le contenu scanné.");
     expect(screen).toContain("QR illisible : rescane-le ou colle-le en JSON.");
     expect(screen).toContain("val pret = qr != null && form.pin.isNotBlank()");
-    // Le QR + le pin partent dans la MÊME requête : c'est la seule méthode.
+    // Le QR + le pin partent dans la MÊME session locale : c'est la seule méthode.
     expect(screen).toContain("qr = qr");
     expect(screen).toContain("pin = form.pin.trim()");
   });
 
-  test("succès : le secret est stocké chiffré puis on quitte l'assistant", () => {
-    expect(screen).toContain("tokens.save(res.device.id, res.device.tokenHash, res.device.token)");
+  test("succès : la session est persistée chiffrée puis on quitte l'assistant", () => {
+    // L'écran ne manipule aucun bearer : le dépôt range la session.
+    expect(screen).toContain("PairingResult.Ok");
     expect(screen).toContain("onPaired()");
     expect(read(join(UI, "AppNav.kt"))).toContain("onPaired = {");
   });
 
-  test("gate au lancement : sans secret appairé, on n'ouvre pas l'accueil", () => {
+  test("gate au lancement : sans session persistée, on n'ouvre pas l'accueil", () => {
     const nav = read(join(UI, "AppNav.kt"));
-    expect(nav).toContain("startDestination = if (tokens.isPaired()) ROUTE_INDEX else ROUTE_PAIRING");
-    // Le test du secret le plus hateful : `isPaired()` exige l'ID ET le secret.
-    expect(read(join(DATA, "TokenStore.kt"))).toContain("fun isPaired(): Boolean = deviceId() != null && token() != null");
+    expect(nav).toContain("startDestination = if (sessions.hasSession()) ROUTE_INDEX else ROUTE_PAIRING");
+    // Le plancher est la session chiffrée, pas une liste.
+    expect(read(join(DATA, "SessionStore.kt"))).toContain("fun hasSession(): Boolean = load() != null");
   });
 });
 
@@ -150,7 +146,7 @@ describe("assistant : le PIN est un secret affiché comme tel (#172)", () => {
     // `visualTransformation`, les chiffres sont lisibles par-dessus l'épaule ET
     // présents tels quels dans l'arbre de vues — ce que relit `uiautomator dump`,
     // donc une capture, donc un fichier. La transformation porte sur l'AFFICHAGE
-    // : la saisie, le collage et ce qui part dans la requête sont inchangés.
+    // : la saisie, le collage et ce qui part dans la session sont inchangés.
     const champs = [
       ["PairingScreen.kt", screen],
       ["SettingsScreen.kt", settings],
@@ -165,7 +161,7 @@ describe("assistant : le PIN est un secret affiché comme tel (#172)", () => {
         .join("\n");
       const claviers = [...code.matchAll(/KeyboardType\.(NumberPassword|Password)/g)];
       // Le PIN de l'appairage et la clé de l'assistant : les deux seuls secrets
-      // que l'app saisit (0.7.0 : plus aucun mot de passe de compte).
+      // que l'app saisit (plus aucun mot de passe de compte).
       expect({ fichier, champsSecret: claviers.length }).toEqual({ fichier, champsSecret: 1 });
       for (const m of claviers) {
         // Fenêtre autour de la déclaration du clavier : la transformation doit
@@ -183,8 +179,8 @@ describe("assistant : le PIN est un secret affiché comme tel (#172)", () => {
   test("le PIN : masqué, borné, et JAMAIS journalisé ni rendu", () => {
     expect(screen).toContain("visualTransformation = PasswordVisualTransformation()");
     expect(screen).toContain("keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)");
-    // La borne de saisie reste en place (64 caractères, cf. SETUP_PIN_MAX_CHARS) :
-    // masquer n'a rien changé à ce qui est accepté.
+    // La borne de saisie reste en place (64 caractères) : masquer n'a rien
+    // changé à ce qui est accepté.
     expect(screen).toContain("if (v.length <= PIN_MAX_CHARS)");
     // Ni journal, ni copie du PIN dans un état d'affichage.
     const code = screen
@@ -196,23 +192,23 @@ describe("assistant : le PIN est un secret affiché comme tel (#172)", () => {
       expect({ fuite, presente: code.includes(fuite) }).toEqual({ fuite, presente: false });
     }
     // `SetupForm` ne le journalise pas davantage : `pin` y est un `String` simple,
-    // jamais rendu — le champ masqué est la seule surface d'affichage.
-    expect(state).toContain("val pin: String = \"\"");
+    // jamais rendu — le champ masqué est la seule surface d'affichage, et le
+    // `toString()` est rédigé (pas de PIN en clair dans un rapport de crash).
+    expect(state).toContain('val pin: String = ""');
+    expect(state).toContain("qrRaw=***, pin=***");
   });
 
   test("le parcours a un retour en arrière (miroir exécutable)", () => {
     // L'escalier était à sens unique : 1 → 2 → 3. Le « Retour » du haut appelle
     // `popBackStack`, qui ne peut rien faire au premier lancement (l'appairage est
-    // la route de départ) ni après un 401 (pile vidée) : les étapes 2 et 3
-    // n'avaient aucun chemin de retour, donc une adresse mal saisie ne pouvait
+    // la route de départ) ni après une session morte (pile vidée) : l'étape 2
+    // n'avait aucun chemin de retour, donc une adresse mal saisie ne pouvait
     // plus être corrigée. On rejoue le miroir ci-dessous, on lit l'écran pour le
     // branchement.
-    const tsPrecedente = (step: "SERVER" | "ACCOUNT" | "QR"): string | null =>
-      step === "SERVER" ? null : step === "ACCOUNT" ? "SERVER" : "ACCOUNT";
-    // Les étapes depuis lesquelles on peut reculer (la première n'en a pas).
-    const depuis: ("SERVER" | "ACCOUNT" | "QR")[] = ["ACCOUNT", "QR"];
-    expect({ un_cran: depuis.map(tsPrecedente) }).toEqual({ un_cran: ["SERVER", "ACCOUNT"] });
-    expect({ premier: tsPrecedente("SERVER") }).toEqual({ premier: null });
+    const tsPrecedente = (step: "SCHOOL" | "QR"): string | null => (step === "SCHOOL" ? null : "SCHOOL");
+    // La seule étape depuis laquelle on peut reculer (la première n'en a pas).
+    expect({ un_cran: tsPrecedente("QR") }).toEqual({ un_cran: "SCHOOL" });
+    expect({ premier: tsPrecedente("SCHOOL") }).toEqual({ premier: null });
     // L'écran : le bouton de retour choisit entre l'étape précédente et la sortie.
     expect(state).toContain("fun previousStep(step: SetupStep): SetupStep?");
     expect(screen).toContain("val previous = previousStep(step)");
@@ -223,38 +219,36 @@ describe("assistant : le PIN est un secret affiché comme tel (#172)", () => {
   });
 });
 
-describe("assistant : secrets et route publique", () => {
-  const repo = read(join(DATA, "SetupRepository.kt"));
-  const api = read(join(DATA, "ApiClient.kt"));
+describe("assistant : secrets et refus actionnables", () => {
+  const repo = read(join(DATA, "PairingRepository.kt"));
 
-  test("/v1/setup est publique : aucun bearer sur la route qui rend le secret", () => {
-    expect(read(join(CORE, "ServerConfig.kt"))).toContain('const val SETUP_PATH = "/v1/setup"');
-    expect(api).toContain("ServerConfig.SETUP_PATH,");
-    // Miroir de OPEN_WITHOUT_DEVICE côté serveur.
-    expect(read(join(ROOT, "server/api/router.ts"))).toContain('"/v1/setup",');
+  test("aucun appel serveur : l'appairage est local, POST /v1/setup supprimé côté app", () => {
+    expect(existsSync(join(DATA, "SetupRepository.kt"))).toBe(false);
+    expect(existsSync(join(DATA, "ApiClient.kt"))).toBe(false);
+    expect(repo).toContain("Client.qrcodeLogin(");
+    expect(repo).not.toContain("POST /v1/setup");
+    expect(repo).not.toContain("/v1/setup");
   });
 
-  test("le mot de passe de l'établissement n'est écrit sur AUCUN support", () => {
-    // Il vit dans le POST /v1/setup, chez le serveur en mémoire. Ni SharedPrefs,
-    // ni fichier, ni log : le seul stockage de l'app reste le jeton d'appareil.
-    for (const forbidden of ["SharedPreferences", "getSharedPreferences", "EncryptedSharedPreferences", "openFileOutput"]) {
-      expect({ fichier: "SetupRepository.kt", contient: forbidden, trouve: repo.includes(forbidden) }).toEqual({
-        fichier: "SetupRepository.kt",
+  test("le PIN n'est écrit sur AUCUN support", () => {
+    // Il déchiffre le QR en mémoire, au moment de l'appairage. Ni SharedPrefs,
+    // ni fichier, ni log : le seul stockage de l'app reste la session chiffrée.
+    for (const forbidden of ["SharedPreferences", "getSharedPreferences", "EncryptedSharedPreferences", "openFileOutput", "KEY_PIN"]) {
+      expect({ fichier: "PairingRepository.kt", contient: forbidden, trouve: repo.includes(forbidden) }).toEqual({
+        fichier: "PairingRepository.kt",
         contient: forbidden,
         trouve: false,
       });
     }
-    // Et l'écran ne le journalise pas davantage.
+    // Et le dépôt ne le journalise pas davantage.
     expect(repo).not.toMatch(/Log\.[vdiew]\(|println\(/);
   });
 
   test("chaque refus a sa phrase actionnable, et aucun ne dit « déconnecte »", () => {
     for (const [code, attendu] of [
       ["qr_rejected", "rescane le code affiché par son application"],
-      ["login_refused", "regénère le QR dans son application"],
+      ["login_refused", "régénère le QR dans son application"],
       ["school_unreachable", "réessaie dans un instant"],
-      ["rate_limited", "réessaie dans quelques minutes"],
-      ["not_implemented", "aucune session d'établissement branchée"],
     ] as const) {
       // On vérifie le CONSEIL contenu dans la phrase, pas la phrase entière :
       // c'est le conseil qui corrige la saisie, le reste est de la mise en forme.
@@ -264,30 +258,34 @@ describe("assistant : secrets et route publique", () => {
         dit: true,
       });
     }
-    // Un refus de saisie ne doit jamais proposer l'appairage : ce serait
-    // renvoyer l'utilisateur dans un cul-de-sac (le setup est la seule porte).
+    // Un refus de saisie ne doit jamais proposer l'appairage : l'utilisateur
+    // est DÉJÀ en train de s'appairer.
     const bloc = repo.slice(repo.indexOf("private fun failure"), repo.indexOf("private fun failure") + 2000);
-    expect(bloc).not.toContain("appairage");
     expect(bloc).not.toContain("401");
   });
 
   test("aucune phrase ne parle d'identifiant : le QR est la seule méthode", () => {
-    // #129 : `login_refused` demandait encore « vérifie ton identifiant et ton
-    // mot de passe » alors qu'aucun identifiant n'est saisi depuis 0.7.0 : le
-    // conseil était inapplicable, donc l'utilisateur n'avait rien à corriger.
-    const bloc = repo.slice(repo.indexOf("private fun failure"), repo.indexOf("private fun failure") + 2000);
-    for (const mot of ["identifiant", "mot de passe"]) {
-      expect({ mot, dit: bloc.toLowerCase().includes(mot) }).toEqual({ mot, dit: false });
+    // Les PHRASES affichées (pas le code qui les choisit : le détecteur
+    // `isLoginRefused` lit des mots de lib, jamais affichés) ne doivent pas
+    // demander un identifiant qu'on ne saisit pas : le conseil serait
+    // inapplicable, donc l'utilisateur n'aurait rien à corriger.
+    for (const code of ["qr_rejected", "login_refused", "school_unreachable", "mfa_required"] as const) {
+      const phrase = messageFor(repo, code).toLowerCase();
+      for (const mot of ["identifiant", "mot de passe"]) {
+        expect({ code, mot, dit: phrase.includes(mot) }).toEqual({ code, mot, dit: false });
+      }
     }
   });
 });
 
-/** Extrait la phrase du `when` de `failure()` pour un code donné. */
+/** Extrait la phrase du `PairingResult.Err` pour un code donné. */
 function messageFor(repo: string, code: string): string {
-  const ligne = repo.split("\n").find((l) => l.includes(`"${code}" ->`));
+  const ligne = repo.split("\n").find((l) => l.includes(`"${code}",`));
   if (!ligne) throw new Error(`code absent du mapping: ${code}`);
-  const apres = ligne.slice(ligne.indexOf("->") + 2).trim().replace(/^"|",?$/g, "");
-  return apres;
+  const quoted = [...ligne.matchAll(/"([^"]*)"/g)].map((m) => m[1] as string);
+  const phrase = quoted.slice(1).join(" ");
+  if (!phrase) throw new Error(`phrase absente pour: ${code}`);
+  return phrase;
 }
 
 describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services", () => {
@@ -347,7 +345,7 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
   test("annuler le scan NE DÉTRUIT PAS l'assistant (clearTaskOnLaunch de la lib)", () => {
     // Constaté sur l'appareil : zxing déclare son activité `clearTaskOnLaunch`,
     // donc ouvrir le scan DÉTRUISAIT MainActivity — au retour on se retrouvait
-    // à l'étape 1, serveur et adresse d'établissement compris, saisis à perdu.
+    // à l'étape 1, saisie d'établissement comprise, saisie à perdu.
     expect(manifest).toContain('android:name="com.journeyapps.barcodescanner.CaptureActivity"');
     expect(manifest).toContain('android:clearTaskOnLaunch="false"');
     expect(manifest).toContain('tools:replace="android:clearTaskOnLaunch"');
@@ -357,7 +355,7 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
     // Le téléphone en rotation verrouillée (paysage) : la colonne débordait, le
     // bouton était hors de l'écran et donc inatteignable. L'assistant était
     // inutilisable — et le scanner, lui, s'ouvrait très bien.
-    expect(screen.split("verticalScroll(rememberScrollState())").length - 1).toBe(3);
+    expect(screen.split("verticalScroll(rememberScrollState())").length - 1).toBe(2);
   });
 
   // #148 (recette des 14 écrans) : la capture de la route `pairing` montrait
@@ -367,19 +365,18 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
   // 1. « Retour » était un `Button` REMPLI : deux boutons verts de même poids
   //    sur l'écran (« Retour » et « Continuer »), donc plus aucune action
   //    principale. Le retour est secondaire : `TextButton` le dit par son encre.
-  // 2. Le titre de l'étape (« Étape 1/3 — ton serveur ») était suivi d'un
-  //    « Serveur » en 16 sp : le même mot deux fois dans la même colonne. Le
-  //    titre d'étape est le `heading()` que le survol annonce, il suffit.
-  test("#148 : retour secondaire, et pas de doublon « Serveur » dans l'étape 1", () => {
+  // 2. Le titre de l'étape était suivi d'un doublon : le même mot deux fois
+  //    dans la même colonne. Le titre d'étape est le `heading()` que le survol
+  //    annonce, il suffit.
+  test("#148 : retour secondaire, et pas de doublon dans l'étape 1", () => {
     expect(screen).toMatch(/TextButton\(\s*onClick = \{ if \(previous != null\) step = previous else onBack\(\) \}/);
-    // « Continuer » reste le SEUL bouton rempli de l'étape serveur.
+    // « Continuer » reste un bouton rempli d'étape ; le retour de l'assistant
+    // n'en fait plus partie.
     const boutonsRemplis = screen.match(/\n {8}Button\(/g) ?? [];
-    // QrStep + AccountStep portent chacun leur bouton d'action ; le retour de
+    // QrStep porte ses boutons d'action, SchoolStep le sien ; le retour de
     // l'assistant n'en fait plus partie.
     expect(boutonsRemplis.length).toBeLessThanOrEqual(4);
-    // Le libellé « Serveur » seul (ligne de titre) a disparu du champ.
-    expect(screen).not.toMatch(/\n {8}Text\("Serveur"\)/);
-    // ...et il reste dans le titre d'étape, qui est le repère du survol.
+    // ...et le titre d'étape reste le repère du survol.
     expect(screen).toContain('text = setupStepLabel(step)');
   });
 });

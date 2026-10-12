@@ -299,8 +299,9 @@ describe("unit capacités (#87)", () => {
     const core = readFileSync(join(CORE, "Capabilities.kt"), "utf8");
     expect(core).toContain("fun visible(caps: Capabilities?, tab: String): Boolean = caps?.isEnabled(tab) ?: true");
     const serverConfig = readFileSync(join(CORE, "ServerConfig.kt"), "utf8");
-    expect(serverConfig).toContain('fun capabilitiesUrl(baseUrl: String): String = "$baseUrl/v1/capabilities"');
-    expect(serverConfig).toContain('fun syncRefreshUrl(baseUrl: String): String = "$baseUrl/v1/sync/refresh"');
+    // #206 : ServerConfig ne connaît que le scraper — plus de routes capacités.
+    expect(serverConfig).not.toContain("fun capabilitiesUrl");
+    expect(serverConfig).not.toContain("fun syncRefreshUrl");
     // CachePolicy : ressource capabilities + TTL (miroir CACHE_TTL_MS).
     const policy = readFileSync(join(DATA, "CachePolicy.kt"), "utf8");
     expect(policy).toContain('const val CAPABILITIES = "capabilities"');

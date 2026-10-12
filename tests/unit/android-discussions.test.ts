@@ -446,6 +446,8 @@ describe("unit android messagerie (#80)", () => {
     expect(core).toContain("UNKNOWN_UNREAD");
 
     const config = codeOnly(readFileSync(K_FILES.config, "utf8"));
+    // #206 : ServerConfig ne connaît que le scraper — la messagerie se lit
+    // sur le client local, plus aucune route serveur ici.
     for (const path of [
       "/v1/discussions",
       "/v1/discussions/messages",
@@ -454,7 +456,7 @@ describe("unit android messagerie (#80)", () => {
       "/v1/discussions/read-state",
       "/v1/discussions/delete",
     ]) {
-      expect({ path, found: config.includes(path) }).toEqual({ path, found: true });
+      expect({ path, found: config.includes(path) }).toEqual({ path, found: false });
     }
 
     const policy = readFileSync(K_FILES.policy, "utf8");
@@ -881,10 +883,9 @@ describe("logique affichable de la messagerie (#142)", () => {
     expect(screen).toContain("IconButton(");
     expect(screen).not.toContain('Button(onClick = { onReply(draft) }');
 
-    // Pièces jointes : une PUCE, jamais l'URL du proxy en texte. Le proxy exige
-    // le bearer du device : aucune application tierce ne le porte, donc AUCUN
-    // `Intent` sortant (le lui donner serait lui exposer un credential), et
-    // l'URL n'est ni affichée ni journalisée.
+    // Pièces jointes : une PUCE, jamais une URL en texte. Les messages lus en
+    // local ne portent pas leurs fichiers : AUCUN `Intent` sortant (il n'y a
+    // rien à ouvrir pour l'instant), et rien n'est affiché ni journalisé.
     expect(screen).toContain("AttachmentChips(");
     expect(screen).toContain("att.label");
     for (const interdit of ["ServerConfig.mediaUrl", "mediaUrl(", "ACTION_VIEW", "Intent(", "Uri.parse", "Log."]) {

@@ -1,12 +1,14 @@
 # android/ — client natif from scratch (phase 4, issue #13)
 
-Règle d'or réseau : aucun hôte tiers ici. Un seul hôte serveur allowlist
-(jamais en dur), un seul OkHttp (`data/ApiClient`), médias via proxy serveur,
-pas de WebView distante. Voir `docs/architecture/INVARIANTS.md` (I1) et
-`core/ServerConfig`.
+Règle d'or réseau : le téléphone parle à l'établissement en direct
+(`android/pronote/`, ADR-003), jamais à un hôte tiers. Plus aucun client HTTP
+vers un serveur applicatif (#206 : appairage, lectures et médias sont
+device-only) ; le seul hôte choisi à l'exécution est le scraper de manuels
+(allowlist `core/ServerConfig`, jamais en dur), pas de WebView distante. Voir
+`docs/architecture/INVARIANTS.md` (I1) et `core/ServerConfig`.
 
 Modules : `app/` (Activity + navigation), `core/` (config allowlist),
-`data/` (client HTTP unique), `ui/` (écrans Compose Material3).
+`data/` (session + dépôts locaux), `ui/` (écrans Compose Material3).
 
 ## Serveur : choisi à l'exécution, le build fournit le défaut
 
@@ -25,17 +27,18 @@ affichée ailleurs, jamais loggée, jamais mise en URL. Elle part dans le **corp
 Onglet Tâches → bouton « Aide devoirs » sur un devoir : les sources sont la consigne et
 l'extrait de cours de ce devoir, la réponse est un corrigé sourcé ou un refus motivé. Sans clé,
 l'assistant reste inactif (aucun appel). Le serveur ne détient aucune clé : c'est une
-credential d'app, comme le bearer d'appareil.
+credential d'app, comme le jeton de session.
 
-## Assistant de connexion (3 étapes, un seul appel)
+## Assistant de connexion (2 étapes, device-only, #206)
 
-Lancement → **1. ton serveur** (validé, puis `GET /v1/health` : sa version de
-contrat s'affiche) → **2. ton établissement** (son adresse élève) → **3. le QR de
-l'application de l'établissement** (contenu `login`+`jeton` + son PIN, scanné ou
-collé). Un seul `POST /v1/setup` ouvre la session ET rend le jeton d'appareil,
-stocké chiffré. Sans jeton appairé, le démarrage ouvre l'assistant au lieu de
-l'accueil ; après un 401 ou un redémarrage du serveur, c'est lui qui rouvre la
-session **et** le credential.
+Lancement → **1. ton établissement** (son adresse élève, validée en local) →
+**2. le QR de l'application de l'établissement** (contenu `login`+`jeton` + son
+PIN, scanné ou collé). Le téléphone ouvre la session en direct
+(`Client.qrcodeLogin`, ADR-003) : aucun serveur intermédiaire, aucun
+`POST /v1/setup`. Le PIN déchiffre le QR sur place et n'est jamais persisté ;
+seul le jeton tourné dort chiffré (`SessionStore`). Sans session persistée, le
+démarrage ouvre l'assistant au lieu de l'accueil ; après une session morte
+(jeton tourné, session refermée), c'est lui qui rouvre la session locale.
 
 Chaque étape **défile** : en paysage (rotation verrouillée), la colonne
 débordait et « Continuer » tombait hors de l'écran. Ouvrir le scan ne détruit
@@ -44,11 +47,12 @@ qui relançait `MainActivity` à zéro au retour du scan — l'appartenance
 `android:clearTaskOnLaunch="false"` + `tools:replace` dans
 `app/src/main/AndroidManifest.xml` annule ce drapeau (vérifié sur l'appareil).
 
-Aucun identifiant n'est saisi ni stocké sur le téléphone (0.7.0 : le QR est la
-seule preuve de détention). Le QR et son PIN partent dans le POST ; le serveur ne
-les garde qu'en mémoire, pour renouveler la session, et ne les journalise jamais.
+Aucun identifiant n'est saisi ni stocké sur le téléphone (le QR est la
+seule preuve de détention). Le QR et son PIN ne quittent pas l'appareil : le
+PIN déchiffre `login`+`jeton` en mémoire, au moment de l'appairage, et n'est
+ni persisté, ni journalisé.
 
-Le QR de l'étape 3 se **scanne** (`ui/QrScanner.kt`, `zxing-android-embedded`
+Le QR de l'étape 2 se **scanne** (`ui/QrScanner.kt`, `zxing-android-embedded`
 4.3.0 : décodeur dans l'APK, permission CAMERA déclarée par l'AAR et demandée par
 l'activité de scan, ~20 lignes d'appel, pas d'aperçu à maintenir). Ça marche
 donc partout, **y compris sans Google Play Services** — ce que ne faisait pas le
@@ -63,9 +67,9 @@ L'allowlist est donc `core/ServerConfig.validateBaseUrl` (et `isAllowed` en
 préfixe strict), pas une constante de build : `https` obligatoire, `http` uni-
 quement pour `10.0.2.2`/`localhost`, hôte IPv4/IPv6-littérale/nom DNS borné,
 port 1-65535, et refus de tout identifiant, chemin, query, fragment, espace ou
-caractère de contrôle. Un changement de serveur invalide la session et purge
-les caches par le chemin existant `AccountStore.logout()` (le jeton d'appareil
-est un bearer pour l'ancien serveur), AVANT d'utiliser la nouvelle adresse.
+caractère de contrôle. Elle ne valide plus que l'adresse du scraper de manuels
+(#209) : l'app ne parle plus métier à personne. Une déconnexion invalide la
+session et purge les caches par le chemin existant `AccountStore.logout()`.
 
 ## Config hôte serveur (jamais commité, jamais en dur)
 

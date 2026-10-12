@@ -292,10 +292,8 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     const config = read(join(CORE, "ServerConfig.kt"));
     expect(config).toContain("fun isAllowed(url: String, baseUrl: String): Boolean =");
     expect(config).toContain("url == baseUrl || url.startsWith(baseUrl.trimEnd('/') + \"/\")");
-    // ApiClient garde l'allowlist en PREMIER filtre, inchangé.
-    const api = codeOnly(read(join(DATA, "ApiClient.kt")));
-    expect(api).toContain("require(ServerConfig.isAllowed(url, baseUrl))");
-    expect(api.indexOf("ServerConfig.isAllowed")).toBeLessThan(api.indexOf("Authorization"));
+    // #206 : plus d'ApiClient (device-only) — l'allowlist reste la primitive
+    // du scraper (`manualsScrapeUrl`), vérifiée ci-dessous.
   });
 
   test("Kotlin : la validation porte toutes les règles, la graine reste le défaut", () => {
@@ -378,64 +376,42 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(stores.map((f) => f.split("/").pop())).toEqual(["ServerStore.kt"]);
   });
 
-  test("changement de serveur : purge AVANT le nouveau serveur, chemin logout() existant", () => {
+  test("adresse du scraper : état + store, déconnexion purge par logout()", () => {
     const nav = read(join(UI, "AppNav.kt"));
     const navCode = codeOnly(nav);
-    // L'adresse courante est un ÉTAT, la graine du build n'est qu'un défaut.
+    // L'adresse du scraper est un ÉTAT, la graine du build n'est qu'un défaut.
     expect(nav).toContain("baseUrlSeed: String = \"\"");
     expect(nav).toContain("val serverStore = remember(ctx) { ServerStore(ctx) }");
-    expect(nav).toContain("var baseUrl by remember(serverStore) { mutableStateOf(serverStore.baseUrl(baseUrlSeed)) }");
-    // Ordre SÉCURITÉ : valider (sans effet) -> persister -> logout() (secret +
-    // caches) -> basculer l'état.
-    //   - logout() AVANT onSwitched : le bearer de l'ancien serveur ne peut pas
-    //     partir vers le nouveau, il est effacé avant que la nouvelle adresse
-    //     ne soit utilisée. C'est LA propriété qui compte.
-    //   - save() AVANT logout() : si l'écriture échoue, l'utilisateur garde sa
-    //     session et son cache au lieu d'être déconnecté pour rien.
-    // #135 : `changeServer` a quitté AppNav.kt pour l'assistant d'appairage,
-    // dont il est la logique (changer de serveur = se ré-appairer). Son ordre
-    // reste vérifié, dans son nouveau fichier.
-    const pairing = read(join(UI, "PairingScreen.kt"));
-    // `internal` et non `private` : la fonction est appelée par AppNav.kt,
-    // dans le même module — la visibility module suffit, elle ne sort pas du module.
-    const fn = pairing.slice(pairing.indexOf("fun changeServer("));
-    const order = ["ServerConfig.validateBaseUrl(raw)", "serverStore.save(target)", "accounts.logout()", "onSwitched(target)"];
-    const positions = order.map((needle) => fn.indexOf(needle));
-    for (const p of positions) expect(p).toBeGreaterThan(-1);
-    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
-    // Le refus sort AVANT toute action de bord (rien n'est modifié).
-    expect(fn.indexOf("is ServerUrlResult.Rejected -> return validated.message")).toBeLessThan(positions[1] as number);
+    expect(nav).toContain("val baseUrl = remember(serverStore) { serverStore.baseUrl(baseUrlSeed) }");
+    // #206 : plus de changement de serveur dans l'appairage (device-only,
+    // aucune route serveur à repointer) — donc plus de changeServer nulle part.
+    expect(nav).not.toContain("changeServer");
+    expect(nav).not.toContain("onServerChange");
+    expect(read(join(UI, "PairingScreen.kt"))).not.toContain("fun changeServer(");
     // Aucune purge parallèle : tout passe par AccountStore.logout().
     expect(navCode).not.toContain("clearAll(");
-    expect(navCode).not.toContain("tokenStore.clear(");
-    expect(navCode).not.toContain("TokenStore(");
+    expect(navCode).not.toContain("sessions.clear(");
+    expect(navCode).not.toContain("SessionTokens(");
     // Le chemin de purge est bien celui du AccountStore existant.
     expect(accounts_has_logout()).toBe(true);
-    // Les repositories suivent l'adresse courante : `repo` est rebâti à chaque
-    // changement de serveur (`remember(baseUrl, cacheStore, tokens)`), donc la
-    // route alertes — qui lit ce `repo` (#144, cache hors-ligne) lit elle aussi
-    // le serveur courant. #172 : le paramètre `loadAlerts` est SUPPRIMÉ (mort
-    // depuis #144, seul `MainActivity` le passait) — un point d'injection qui
-    // n'injecte plus rien ne doit pas rester en place.
+    // Les repositories suivent le cache partagé ; la route alertes lit ce
+    // `repo` (#144, cache hors-ligne). #172 : le paramètre `loadAlerts` est
+    // SUPPRIMÉ (mort depuis #144, seul `MainActivity` le passait) — un point
+    // d'injection qui n'injecte plus rien ne doit pas rester en place.
     expect({ loadAlerts: nav.includes("loadAlerts:") }).toEqual({ loadAlerts: false });
-    expect(nav).toContain("remember(baseUrl, cacheStore, tokens)");
     expect(nav).toContain("SecurityAlertsRoute(repo = repo, baseUrl = baseUrl)");
-    // La route appairage reçoit le callback (pas de SettingsScreen).
-    expect(nav).toContain("onServerChange = { raw ->");
-    expect(nav).toContain("changeServer(raw, baseUrl, accounts, serverStore) { url ->");
-    // Le cul-de-sac « serveur non configuré » a disparu de la route
-    // appairage (le champ y est toujours accessible).
-    // Bornes par le DÉBUT de la déclaration de route (sans parenthèse
-    // fermante) : #133 ajoute `deepLinks` entre les deux.
-    // #135 : `alerts` a reçu sa constante (c'était un littéral nu), donc la
-    // borne de la tranche suit la constante, plus le littéral.
+    // La route appairage ne reçoit plus d'adresse serveur (device-only).
     const pairingRoute = nav.slice(nav.indexOf("composable(ROUTE_PAIRING"), nav.indexOf("composable(ROUTE_ALERTS"));
     expect(pairingRoute).toContain("PairingRoute(");
+    expect(pairingRoute).not.toContain("baseUrl");
     expect(pairingRoute).not.toContain("Serveur non configuré.");
-    // Et le garde-fou 401 (#113) reste câblé comme avant.
-    expect(nav).toContain("DeviceAuth.setOnRejected");
-    expect(nav).toContain("accounts.logout()");
-    expect(nav).toContain("authNotice = DeviceAuth.REJECTED_MESSAGE");
+    // Et le garde-fou de session morte (#113) reste câblé : la réparation
+    // vit dans `SessionGate` (extrait d'AppNav en #206, #135), l'état ici.
+    expect(nav).toContain("SessionGate(sessions = sessions, accounts = accounts, nav = nav, onNotice = { authNotice = it })");
+    const gate = read(join(UI, "SessionGate.kt"));
+    expect(gate).toContain("DeviceAuth.setOnRejected");
+    expect(gate).toContain("accounts.logout()");
+    expect(gate).toContain("onNotice(DeviceAuth.REJECTED_MESSAGE)");
   });
 
   test("grain de build : plus de valeur figée côté app, et pas de cleartext ajouté", () => {
@@ -473,66 +449,60 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     }
   });
 
-  test("UI : le champ est sur l'écran d'appairage, honnête sur la joignabilité", () => {
-    const screen = read(join(UI, "PairingScreen.kt"));
-    expect(screen).toContain("onServerChange: (String) -> String? = { null }");
-    // #147 : le brouillon d'adresse est `rememberSaveable` (rotation / low
-    // memory), pas un `remember` qui le rendait au champ vide.
-    expect(screen).toContain("var serverDraft by rememberSaveable { mutableStateOf(baseUrl) }");
-    expect(screen).toContain("ServerField(");
-    expect(screen).toContain("val refusal = onServerChange(serverDraft)");
-    expect(screen).toContain('label = { Text("Adresse du serveur (https://domaine[:port])") }');
-    expect(screen).toContain('Text("Continuer")');
-    // #146 : borné sur deux lignes (le message vient du serveur).
-    expect(screen).toContain("text = serverHint(value),");
-    // Erreur affichée telle quelle, confirmation après purge de la session.
-    // #145 : elle s'OUVRE au lieu d'apparaître d'un coup, et elle prend la couleur
-    // d'erreur — avant c'était un `Text` en encre normale, comme le message de
-    // succès juste en dessous (« Serveur enregistré »).
-    expect(screen).toContain("PapAppear(visible = !error.isNullOrEmpty()) {");
-    // #146 : l'encre d'ERREUR du thème — le rouge de marque ne vaut que 3.70:1
-    // sur la surface SOMBRE, et ce refus est du texte.
-    expect(screen).toContain("color = errorTextColor(),");
-    expect(screen).toContain("Serveur enregistré. Si l'adresse change, reconnecte l'appareil.");
-    // #120 : un refus d'adresse arrête ICI. Passer à l'étape du compte quand
-    // le serveur ne répond pas, c'est faire découvrir une mauvaise adresse
-    // trois écrans plus tard, sous la forme d'un « identifiants refusés ».
-    expect(screen).toContain("step = SetupStep.ACCOUNT");
-    // Le repo SSE/HTTP est rebouclé sur la nouvelle adresse, pas sur l'ancienne.
-    expect(screen).toContain("val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }");
-
-    const state = read(join(UI, "PairingUiState.kt"));
-    expect(state).toContain("fun serverHint(value: String): String");
-    expect(state).toContain("ServerConfig.isLoopbackHost(host)");
-    // Le port ne doit pas masquer l'adresse émulateur (défaut de build).
-    expect(state).toContain("substringBefore(':')");
-    for (const [value, kind] of [
-      ["http://10.0.2.2:3000", "emulateur"],
-      ["http://10.0.2.2", "emulateur"],
-      ["http://localhost:3000", "emulateur"],
-      ["http://127.0.0.1:3000", "emulateur"],
-      ["https://notes.exemple.fr", "https"],
-      ["https://notes.exemple.fr:8443", "https"],
-      ["", "https"],
-      ["pas-une-url", "https"],
-    ] as [string, "emulateur" | "https"][]) {
-      expect({ value, kind: tsServerHint(value) }).toEqual({ value, kind });
+  test("ServerConfig ne connaît que le scraper : zéro route métier côté app", () => {
+    // #206 : l'app ne parle plus métier à personne (le téléphone lit
+    // l'établissement en direct) — les builders de routes meurent ici, il ne
+    // reste que la validation d'URL + la route du scraper (#209).
+    const config = read(join(CORE, "ServerConfig.kt"));
+    expect(config).toContain("fun validateBaseUrl(raw: String): ServerUrlResult");
+    expect(config).toContain("fun isAllowed(url: String, baseUrl: String): Boolean =");
+    expect(config).toContain('const val MANUALS_SCRAPE_PATH = "/v1/manuals/scrape"');
+    expect(config).toContain("fun manualsScrapeUrl(baseUrl: String): String");
+    for (const mort of [
+      "fun gradesUrl",
+      "fun assignmentsUrl",
+      "fun assignmentsToggleUrl",
+      "fun homeworkGenerateUrl",
+      "fun mediaUrl",
+      "fun mediaPath",
+      "fun timetableUrl",
+      "fun pairingStartUrl",
+      "fun pairingConfirmUrl",
+      "fun setupUrl",
+      "fun revisionSheetsUrl",
+      "fun revisionSheetPdfUrl",
+      "fun subjectPrefsUrl",
+      "fun newsUrl",
+      "fun menusUrl",
+      "fun attendanceUrl",
+      "fun punishmentsUrl",
+      "fun capabilitiesUrl",
+      "fun syncRefreshUrl",
+      "fun discussionsUrl",
+      "fun discussionsPath",
+      "fun meUrl",
+      "fun periodsUrl",
+      "fun eventsUrl",
+      "fun securityAlertsUrl",
+      "PAIRING_START_PATH",
+      "PAIRING_CONFIRM_PATH",
+      "SETUP_PATH",
+      "HEALTH_PATH",
+      "HOMEWORK_GENERATE_PATH",
+    ]) {
+      expect({ mort, present: config.includes(mort) }).toEqual({ mort, present: false });
     }
-    // Le défaut de build (alias émulateur) est annoncé comme tel, et le clair
-    // comme réservé à l'émulateur : pas de échec muet sur téléphone.
-    expect(state).toContain("Adresse d'émulateur : elle ne fonctionne que dans l'émulateur Android.");
-    expect(state).toContain("Sur un téléphone, utilisez l'adresse https de votre serveur");
-    expect(state).toContain("http est réservé à l'émulateur et à la boucle locale");
-    // #120 : la sonde de joignabilité EXISTE, mais seulement sur appui
-    // explicite (« Continuer ») et elle vit dans le dépôt, pas dans l'écran :
-    // l'écran ne fait aucun appel direct. C'est la seule façon de distinguer
-    // « mauvaise adresse » de « identifiants refusés » pour l'utilisateur.
-    expect(screen).toContain("probeHealthBlocking(target)");
-    expect(codeOnly(screen)).not.toContain("api.buildGet(");
-    expect(codeOnly(screen)).not.toContain("client().newCall(");
-    const repo = read(join(DATA, "SetupRepository.kt"));
-    expect(repo).toContain("fun probeHealthBlocking(baseUrl: String): HealthResult");
-    expect(repo).toContain("ServerConfig.HEALTH_PATH");
+    // L'écran d'appairage ne connaît plus aucune adresse serveur : ni champ,
+    // ni sonde, ni callback — juste l'établissement puis le QR.
+    const screen = read(join(UI, "PairingScreen.kt"));
+    expect(screen).not.toContain("ServerField(");
+    expect(screen).not.toContain("serverDraft");
+    expect(screen).not.toContain("serverHint");
+    expect(screen).not.toContain("probeHealthBlocking");
+    expect(screen).not.toContain("ServerConfig.");
+    const state = read(join(UI, "PairingUiState.kt"));
+    expect(state).not.toContain("serverHint");
+    expect(state).not.toContain("ServerConfig.");
   });
 
   test("I1 : aucun hôte en dur dans android/, aucun hôte Pronote", () => {
@@ -567,7 +537,11 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     // de serveur : catégorie distincte, comme le modèle en constante de code ;
     // jamais d'identifiant ni de secret dedans). Un hôte réel d'établissement
     // passé en dur (ou dans un message) casserait cette liste.
-    const allowed = new Set(["https://domaine[:port]", "https://domaine[:port].", "https://openrouter.ai/api/v1/chat/completions"]);
+    // #206 : le gabarit "https://domaine[:port]" (label du champ serveur
+    // supprimé) a disparu ; restent le gabarit des messages de refus (avec son
+    // point), l'endpoint public du fournisseur LLM, et les deux gardes de
+    // schéma du store de session (pas des hôtes : juste "https://" / "http://").
+    const allowed = new Set(["https://domaine[:port].", "https://openrouter.ai/api/v1/chat/completions", "https://", "http://"]);
     const urls = new Set<string>();
     for (const f of files.filter((f) => /\.(kt|kts)$/.test(f))) {
       for (const m of codeOnly(read(f)).matchAll(/https?:\/\/[^"' )`]*/g)) urls.add(m[0] as string);
@@ -576,12 +550,15 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
   });
 });
 
-// `logout()` existe bien (le chemin de purge appelé au changement de serveur).
+// `logout()` existe bien (le chemin de purge appelé à la déconnexion) :
+// session persistée PUIS session mémoire PUIS caches (un jeton vivant après
+// la purge des caches partirait vers des lectures fantômes).
 function accounts_has_logout(): boolean {
   const accounts = read(join(DATA, "AccountStore.kt"));
   return (
     accounts.includes("fun logout()") &&
-    accounts.indexOf("tokenStore.clear()") < accounts.indexOf("cacheStore.clearAll()")
+    accounts.indexOf("sessions.clear()") < accounts.indexOf("PronoteSession.clear()") &&
+    accounts.indexOf("PronoteSession.clear()") < accounts.indexOf("cacheStore.clearAll()")
   );
 }
 

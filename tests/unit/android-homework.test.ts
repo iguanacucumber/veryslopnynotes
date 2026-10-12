@@ -216,22 +216,24 @@ describe("android homework — le credential reste dans l'app", () => {
   test("clé chiffrée au repos, jamais en prefs simples", () => {
     const store = stripComments(src(DATA, "LlmKeyStore.kt"));
     expect(store).toMatch(/encryptedPrefs\(context, PREFS\)/);
-    // Un seul point de construction des prefs chiffrées (TokenStore + clé LLM).
+    // Un seul point de construction des prefs chiffrées (session + clé LLM).
     expect(store).not.toMatch(/getSharedPreferences/);
     expect(store).not.toMatch(/EncryptedSharedPreferences\.create/);
-    const tokens = stripComments(src(DATA, "TokenStore.kt"));
-    expect(tokens).toMatch(/internal fun encryptedPrefs\(context: Context, name: String\)/);
+    const sessions = stripComments(src(DATA, "SessionStore.kt"));
+    expect(sessions).toMatch(/internal fun encryptedPrefs\(context: Context, name: String\)/);
+    // #206 : plus de repli en clair — un Keystore KO jette, il n'écrit pas.
+    expect(sessions).not.toMatch(/MODE_PRIVATE/);
     // Bornes de credential + messages d'erreur sans la clé.
     expect(store).toMatch(/require\(secret\.length <= Homework\.MAX_API_KEY_CHARS\)/);
     expect(store).not.toMatch(/Log\.|println/);
-    // Un store unique pour tout le process, comme le bearer.
+    // Un store unique pour tout le process, comme la session.
     expect(store).toMatch(/object LlmKeys/);
     expect(store).toMatch(/@Volatile/);
   });
 
   test("le logout n'efface PAS la clé : c'est celle de l'utilisateur, pas une session", () => {
     const store = stripComments(src(DATA, "AccountStore.kt"));
-    expect(store).toMatch(/fun logout\(\)[\s\S]*tokenStore\.clear\(\)/);
+    expect(store).toMatch(/fun logout\(\)[\s\S]*sessions\.clear\(\)/);
     // Le secret de session part, la clé LLM reste (elle n'est pas reconstructible
     // par le serveur : un ré-appairage ne doit pas coûter une nouvelle saisie).
     expect(store).not.toMatch(/llmKeys|LlmKeys|LlmKeyStore/);
@@ -253,14 +255,6 @@ describe("android homework — le credential reste dans l'app", () => {
     // Pas de source affichée = pas d'envoi possible (le serveur refuserait sans appel).
     expect(help).toMatch(/Homework\.uniqueLabels\(sources\)/);
     expect(help).toMatch(/SOURCES_REQUIRED_MESSAGE/);
-  });
-
-  test("ServerConfig expose le chemin, et il n'est public QUE si la route l'est", () => {
-    const config = stripComments(src(CORE, "ServerConfig.kt"));
-    expect(config).toMatch(/const val HOMEWORK_GENERATE_PATH = "\/v1\/homework\/generate"/);
-    const api = stripComments(src(DATA, "ApiClient.kt"));
-    // Route protégée : le bearer d/device part avec, comme toute autre route.
-    expect(api).not.toMatch(/HOMEWORK_GENERATE_PATH/);
   });
 
   test("l'écran Tâches expose le déclencheur et le dialogue, câblés par AppNav", () => {

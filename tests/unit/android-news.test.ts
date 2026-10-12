@@ -298,7 +298,8 @@ describe("unit android actus (#79)", () => {
     expect(core).not.toContain("substring(0, 10)");
     expect(core).toContain("fun readLabel");
     const config = readFileSync(K_FILES.config, "utf8");
-    expect(config).toContain("/v1/news");
+    // #206 : ServerConfig ne connaît que le scraper — plus de route actus.
+    expect(config).not.toContain("/v1/news");
     const policy = readFileSync(K_FILES.policy, "utf8");
     expect(policy).toContain('const val NEWS = "news"');
     expect(policy).toContain("TTL_NEWS_MS");

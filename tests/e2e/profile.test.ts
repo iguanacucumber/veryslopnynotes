@@ -1,16 +1,16 @@
 // e2e profil #82 (parité Papillon onglets index + profile).
 // Zéro réseau réel, zéro credential serveur : store seed + createHandler en mémoire.
 // Parcours : seed → GET /v1/me → garde-fou → miroir app (parse) → periods →
-// /v1/media (photo par réf opaque) → multi-compte parent → state vide.
+// multi-compte parent → state vide.
+// #206 : /v1/media est supprimé (photo lue sur le téléphone) — ce fichier ne
+// teste plus que /v1/me.
 import { describe, expect, test } from "bun:test";
 import { PHOTO_REF_PREFIX, isUserInfo } from "../../shared/contracts/models";
 import { isMeResponse } from "../../shared/contracts/api";
 import { API_ROUTES } from "../../shared/contracts/api";
 import { createHandler } from "../../server/api/router";
-import type { MediaResolver } from "../../server/api/router";
 import { createMemoryStore } from "../../server/api/store";
 import { PairingService } from "../../server/api/pairing";
-import { MediaProxyError } from "../../server/infrastructure/media-proxy";
 import { cacheStatus } from "../../shared/contracts/cache";
 import {
   syntheticParentUserInfo,
@@ -38,13 +38,8 @@ function parseApp(payload: string | null): { displayName: string; classLabel: st
   }
 }
 
-const fakeMedia: MediaResolver = async (_accountId, ref) => {
-  if (ref === "photo:absent") throw new MediaProxyError("media not found", "not_found");
-  return { name: "photo.png", bytes: new Uint8Array([137, 80, 78, 71]) };
-};
-
 /**
- * /v1/media lit les données d'un compte appairé : la route exige le jeton d'un
+ * /v1/me lit les données d'un compte appairé : la route exige le jeton d'un
  * device APPAIRÉ. `confirm` ne renvoie que `tokenHash` (le secret ne sort
  * JAMAIS de l'API), on récupère donc le token brut côté service et on
  * présente l'en-tête comme le ferait l'app.
@@ -77,21 +72,14 @@ describe("e2e profil", () => {
     expect(body).not.toMatch(/sk-or-v1-|OPENROUTER_API_KEY|PRONOTE_PASSWORD/);
   });
 
-  test("compte parent : /v1/me porte les enfants, la photo part par le proxy", async () => {
+  test("compte parent : /v1/me porte les enfants (la photo part en local, #206)", async () => {
     const { pairing, auth } = paired();
-    const handler = createHandler(
-      createMemoryStore({ userInfo: syntheticParentUserInfo }),
-      pairing,
-      null,
-      undefined,
-      undefined,
-      null,
-      fakeMedia,
-    );
+    const handler = createHandler(createMemoryStore({ userInfo: syntheticParentUserInfo }), pairing);
     const me = await (await handler(new Request("http://127.0.0.1/v1/me", { headers: auth }))).text();
     expect(JSON.parse(me).user.hasKids).toBe(true);
     expect(JSON.parse(me).user.kids.length).toBe(2);
-    // L'app ne connaît que la réf : elle demande les octets au serveur.
+    // L'app ne connaît que la réf `photo:<id>` : les octets se lisent sur le
+    // téléphone (ProfileRepository.fetchPhoto), plus par /v1/media (404).
     const app = parseApp(me);
     expect(app?.photoRef).toBe(`${PHOTO_REF_PREFIX}file-fake-1`);
     const media = await handler(
@@ -99,13 +87,7 @@ describe("e2e profil", () => {
         headers: auth,
       }),
     );
-    expect(media.status).toBe(200);
-    expect(media.headers.get("content-type")).toBe("image/png");
-    // Média absent = 404 propre (l'app retombe sur les initiales).
-    const missing = await handler(
-      new Request("http://127.0.0.1/v1/media?ref=photo:absent&accountId=acc-fake-parent", { headers: auth }),
-    );
-    expect(missing.status).toBe(404);
+    expect(media.status).toBe(404);
   });
 
   test("compte sans infos : /v1/me → user null, l'app affiche un état vide", async () => {

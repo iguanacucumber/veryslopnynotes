@@ -1,146 +1,247 @@
 package fr.veryslopnynotes.data
 
-import fr.veryslopnynotes.core.ServerConfig
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
+import fr.veryslopnynotes.pronote.Client
+import fr.veryslopnynotes.pronote.ClientOptions
+import fr.veryslopnynotes.pronote.MFAError
+import fr.veryslopnynotes.pronote.QRCodeDecryptError
+import fr.veryslopnynotes.pronote.QrCode
+import fr.veryslopnynotes.pronote.QrLoginOptions
 import java.io.IOException
+import java.util.UUID
+import org.json.JSONObject
 
-// Appareil appairé (#15). `token` est le SECRET porteur des routes protégées :
-// il ne se lit qu'ici (réponse d'appairage) et va droit dans le TokenStore
-// chiffré. Classe simple et non `data class` VOLONTAIREMENT : le toString()
-// généré par `data` ferait fuiter un bearer dans un log ou un rapport de crash.
-// ponytail: pas de sérialisation ici (le secret ne se copie jamais ailleurs).
-class PairedDevice(
-    val id: String,
-    val tokenHash: String,
-    val token: String,
+// Payload du QR affiché par l'application Pronote (#120). `login` et
+// `jeton` sont des blocs chiffrés dont la clé est le PIN : il faut les deux
+// pour ouvrir la session, et le PIN est celui défini dans Pronote (pas un
+// code imposé par l'app). `url` n'est pas toujours présent dans le QR —
+// sinon c'est l'URL saisie à l'étape 1 qui fait foi.
+//
+// `toString()` rédigé : `login`/`jeton` sont des chiffrés, mais ils n'ont
+// rien à faire dans un rapport de crash.
+data class SchoolQr(
+    val login: String,
+    val jeton: String,
+    val url: String? = null,
 ) {
-    // Secret JAMAIS imprimé : ni crash, ni log, ni capture d'écran de debug.
-    override fun toString(): String = "PairedDevice(id=$id, tokenHash=$tokenHash, token=***)"
+    override fun toString(): String = "SchoolQr(login=***, jeton=***, url=$url)"
 }
 
+/**
+ * Ce que l'utilisateur a rempli à l'écran, avant l'envoi. Le QR et son PIN
+ * sont la preuve de détention ET la seule méthode — aucun identifiant n'est
+ * saisi ni stocké. Le refus « QR/PIN manquant » est rendu tel quel par l'app.
+ *
+ * `toString()` rédigé : le PIN en clair dans un rapport de crash, jamais.
+ */
+data class PairingInput(
+    val schoolUrl: String,
+    val qr: SchoolQr? = null,
+    val pin: String = "",
+) {
+    override fun toString(): String = "PairingInput(schoolUrl=$schoolUrl, qr=$qr, pin=***)"
+}
+
+/** Sortie de l'appairage local, avec un message prêt à afficher pour chaque refus. */
 sealed interface PairingResult {
-    data class Ok(val device: PairedDevice) : PairingResult
-    data class Err(val kind: String, val message: String) : PairingResult
+    data class Ok(val schoolUrl: String) : PairingResult
+    data class Err(val code: String, val message: String) : PairingResult
 }
 
-// Dépôt appairage côté app (#15). Toute requête passe par ApiClient vers
-// la allowlist serveur seule (ServerConfig). Aucun appel direct tiers ici.
-// Les deux routes d'appairage construisent leur Request ici (et non via
-// ApiClient.buildPost) : ce sont les seules où AUCUN bearer ne doit partir.
+/** Sortie de la restauration au démarrage (store chiffré → client local). */
+sealed interface RestoreResult {
+    /** Session reconstruite (`PronoteSession` remplie) : l'app lit le téléphone. */
+    data object Restored : RestoreResult
+    /** Jamais appairé : l'écran d'appairage est la route de départ. */
+    data object NoSession : RestoreResult
+    /** Jeton mort (tourné, révoqué) : le store est vidé, cap sur l'appairage. */
+    data class Dead(val message: String) : RestoreResult
+    /** Réseau KO : le store est GARDÉ (la session n'est pas morte, juste
+     * injoignable), l'app lit ses caches. */
+    data object Offline : RestoreResult
+}
+
+// Appairage 100 % sur l'appareil (#206, ADR-003) : le QR de l'établissement +
+// son PIN ouvrent la session Pronote DIRECTEMENT (`Client.qrcodeLogin`, le
+// port `android/pronote/`), sans serveur intermédiaire. Le PIN déchiffre
+// `login`/`jeton` sur le téléphone et n'en sort jamais — il n'est ni persisté
+// (voir `SessionStore`), ni journalisé, ni dans un message d'erreur.
+//
+// Bloquant (réseau Pronote, jamais le thread UI : l'écran file en tâche de
+// fond). I1 : seul `android/pronote/` parle au serveur de l'établissement ;
+// ce dépôt ne fait que lui passer le QR et ranger la session qui en sort.
+// ponytail: pas de sérialisation locale du credential — le jeton va droit
+// dans le SessionStore chiffré, comme l'ancien bearer allait dans le TokenStore.
 class PairingRepository(
-    private val api: ApiClient,
+    private val sessions: SessionStore,
+    private val provider: PronoteClientProvider = { PronoteSession.client },
 ) {
-    private val jsonMedia = "application/json; charset=utf-8".toMediaType()
-
-    fun startRequest(deviceName: String): Request {
-        val body = JSONObject().put("deviceName", deviceName).toString().toRequestBody(jsonMedia)
-        val url = ServerConfig.pairingStartUrl(api.baseUrl)
-        require(ServerConfig.isAllowed(url, api.baseUrl)) { "URL hors allowlist serveur" }
-        return Request.Builder().url(url).post(body).build()
+    /**
+     * Appaire : QR + PIN → session locale + session persistée. Le `uuid`
+     * identifie CET appareil auprès de l'établissement (2e tour 2FA) : un par
+     * appairage, persisté avec la session (le re-pair en régénère un).
+     */
+    fun pairBlocking(input: PairingInput, deviceName: String = "", uuid: String = newUuid()): PairingResult {
+        val schoolUrl = input.schoolUrl.trim()
+        if (schoolUrl.isEmpty()) return PairingResult.Err("bad_request", "Adresse de l'établissement absente")
+        // QR + PIN = la seule méthode : sans les deux, pas d'appel réseau (le
+        // téléphone refuserait comme l'établissement, en plus lent).
+        val qr = input.qr
+        val pin = input.pin.trim()
+        if (qr == null || pin.isEmpty()) {
+            return PairingResult.Err("bad_request", "QR de l'établissement et son PIN requis")
+        }
+        if (pin.length > PIN_MAX_CHARS) {
+            return PairingResult.Err("bad_request", "PIN refusé : vérifie le code défini dans ton compte établissement.")
+        }
+        val qrUrl = qr.url?.trim().orEmpty().ifEmpty { schoolUrl }
+        val client = try {
+            Client.qrcodeLogin(
+                QrCode(login = qr.login, jeton = qr.jeton, url = qrUrl),
+                pin,
+                uuid,
+                QrLoginOptions(deviceName = deviceName.trim().ifEmpty { null }),
+            )
+        } catch (e: IllegalArgumentException) {
+            // URL sans hôte (saisie de l'étape 1 ou QR sans URL) : la faute est
+            // locale et corrigeable, pas un établissement muet.
+            return PairingResult.Err("bad_request", "Adresse de l'établissement invalide : vérifie l'adresse saisie à l'étape 1.")
+        } catch (e: Exception) {
+            return failure(e)
+        }
+        // La session vit en mémoire (lectures) ET sur disque chiffré (redémarrage).
+        PronoteSession.set(client)
+        try {
+            // Déstructuré, pas nommé : le champ du port s'appelle `pronoteUrl`
+            // (I1 : ce mot ne figure dans aucun identifiant hors `android/pronote/`).
+            val (endpoint, username, password, clientId, rebuiltUuid) = client.exportCredentials()
+            sessions.save(
+                StoredSession(
+                    endpointUrl = endpoint,
+                    username = username,
+                    password = password,
+                    uuid = rebuiltUuid,
+                    clientIdentifier = clientId,
+                    schoolUrl = schoolUrl,
+                ),
+            )
+        } catch (_: Exception) {
+            PronoteSession.clear()
+            return PairingResult.Err("internal", "Session illisible : réessaie l'appairage.")
+        }
+        return PairingResult.Ok(schoolUrl)
     }
 
-    fun confirmRequest(sessionId: String, code: String): Request {
-        require(sessionId.isNotBlank()) { "sessionId vide" }
-        require(isValidPin(code)) { "PIN invalide (6 chiffres attendus)" }
-        val payload = JSONObject().put("sessionId", sessionId).put("code", code.trim()).toString()
-            .toRequestBody(jsonMedia)
-        val url = ServerConfig.pairingConfirmUrl(api.baseUrl)
-        require(ServerConfig.isAllowed(url, api.baseUrl)) { "URL hors allowlist serveur" }
-        return Request.Builder().url(url).post(payload).build()
-    }
-
-    fun parseStartResponse(json: String): QrPayload? {
-        return try {
-            val o = JSONObject(json)
-            val sessionId = o.optString("sessionId", "").trim()
-            val code = o.optString("code", "").trim()
-            if (sessionId.isEmpty() || !isValidPin(code)) null else QrPayload(sessionId, code)
+    /**
+     * Restauration au démarrage : le jeton persisté rouvre la session SANS
+     * rescanner (`Client.tokenLogin`). Session morte = store vidé (un jeton
+     * mort ne ressuscitera pas) ; réseau KO = store gardé (la session n'est
+     * pas morte, l'app lit ses caches).
+     */
+    fun restoreBlocking(): RestoreResult {
+        val stored = try {
+            sessions.load()
         } catch (_: Exception) {
             null
+        } ?: return RestoreResult.NoSession
+        if (provider() != null) return RestoreResult.Restored
+        return try {
+            val client = Client.tokenLogin(
+                stored.endpointUrl,
+                stored.username,
+                stored.password,
+                stored.uuid,
+                ClientOptions(clientIdentifier = stored.clientIdentifier),
+            )
+            PronoteSession.set(client)
+            RestoreResult.Restored
+        } catch (e: Exception) {
+            if (e is IOException || !isSessionFailure(e)) {
+                RestoreResult.Offline
+            } else {
+                try {
+                    sessions.clear()
+                } catch (_: Exception) {
+                }
+                RestoreResult.Dead(DeviceAuth.REJECTED_MESSAGE)
+            }
         }
     }
 
     /**
-     * Réponse d'appairage 0.4.0 : `{ device: { id, tokenHash }, token }`.
-     * Le secret ne sort QU'ici, une seule fois, à l'appairage. S'il est absent
-     * ou incohérent avec son empreinte (tokenHash = sha256(token), contrat
-     * `Device`), on renvoie `null` = échec BRUYANT (confirmBlocking → Err) :
-     * mieux vaut un appairage raté qu'un credential stocké que l'app ne peut
-     * jamais présenter (toutes les routes protégées répondraient 401).
-     * La forme plate 0.3.0 (`{ id, tokenHash }`) n'est donc plus acceptée :
-     * elle ne contient aucun secret exploitable.
+     * Erreur d'appairage → phrase actionnable. On ne dit jamais « recommence »
+     * quand « rescane » est la bonne réponse, et jamais un diagnostic deviné :
+     * un message brut de la lib ne sort pas (I6, règle d'or).
      */
-    fun parseConfirmResponse(json: String): PairedDevice? {
-        return try {
-            val o = JSONObject(json)
-            val device = o.optJSONObject("device") ?: return null
-            val id = device.optString("id", "").trim()
-            val tokenHash = device.optString("tokenHash", "").trim()
-            val token = o.optString("token", "").trim()
-            if (id.isEmpty() || !TOKEN_HASH_RE.matches(tokenHash)) return null
-            if (!isUsableToken(token)) return null
-            // Intégrité : le secret doit être celui de l'empreinte annoncée,
-            // sinon le serveur le refusera (verifyDeviceToken = sha256).
-            if (sha256Hex(token) != tokenHash.lowercase()) return null
-            PairedDevice(id, tokenHash, token)
-        } catch (_: Exception) {
-            null
+    private fun failure(e: Exception): PairingResult.Err {
+        if (e is IOException) {
+            return PairingResult.Err("network", e.message ?: "Réseau indisponible")
         }
-    }
-
-    fun startBlocking(deviceName: String): PairingResult {
-        if (deviceName.isBlank()) return PairingResult.Err("bad_request", "nom d'appareil vide")
-        return try {
-            api.client().newCall(startRequest(deviceName.trim())).execute().use { res ->
-                val body = res.body?.string().orEmpty()
-                if (!res.isSuccessful) return PairingResult.Err("http_${res.code}", body.take(200))
-                val parsed = parseStartResponse(body)
-                    ?: return PairingResult.Err("internal", "réponse appairage invalide")
-                // start ne rend pas de device : on expose via QrPayload détourné.
-                // L'appelant enchaîne confirm(sessionId, code) puis stocke le device.
-                PairingResult.Err("need_confirm", "${parsed.sessionId}|${parsed.code}")
-            }
-        } catch (e: IOException) {
-            PairingResult.Err("network", e.message ?: "réseau indisponible")
-        }
-    }
-
-    fun confirmBlocking(sessionId: String, code: String): PairingResult {
-        if (sessionId.isBlank() || !isValidPin(code)) {
-            return PairingResult.Err("bad_request", "session ou PIN invalide")
-        }
-        return try {
-            api.client().newCall(confirmRequest(sessionId, code)).execute().use { res ->
-                val body = res.body?.string().orEmpty()
-                if (!res.isSuccessful) return PairingResult.Err("http_${res.code}", body.take(200))
-                val device = parseConfirmResponse(body)
-                    ?: return PairingResult.Err("internal", "appairage incomplet : secret absent ou invalide")
-                PairingResult.Ok(device)
-            }
-        } catch (e: IOException) {
-            PairingResult.Err("network", e.message ?: "réseau indisponible")
+        val message = e.message.orEmpty()
+        return when {
+            e is QRCodeDecryptError ->
+                PairingResult.Err("qr_rejected", "QR ou PIN refusé par l'établissement : rescane le code affiché par son application.")
+            e is MFAError ->
+                PairingResult.Err("mfa_required", "Ce compte exige une vérification supplémentaire que l'app ne prend pas en charge.")
+            isSessionFailure(e) || message.isNotBlank() && isLoginRefused(message) ->
+                PairingResult.Err("login_refused", "Compte refusé par l'établissement : régénère le QR dans son application, puis rescane-le.")
+            else ->
+                PairingResult.Err("school_unreachable", "L'établissement ne répond pas : réessaie dans un instant.")
         }
     }
 
     companion object {
-        private val TOKEN_HASH_RE = Regex("^[0-9a-fA-F]{64}$")
+        /** Miroir de SETUP_PIN_MAX_CHARS (shared/contracts/api.ts). */
+        const val PIN_MAX_CHARS = 64
 
-        // Miroir de PAIRING_TOKEN_MAX_CHARS (shared/contracts/api.ts).
-        private const val TOKEN_MAX_CHARS = 512
-
-        private fun isUsableToken(token: String): Boolean =
-            token.isNotEmpty() && token.length <= TOKEN_MAX_CHARS
-
-        /** Empreinte hexadécimale minuscule du secret (32 octets = 64 chars). */
-        private fun sha256Hex(value: String): String {
-            val digest = java.security.MessageDigest.getInstance("SHA-256")
-                .digest(value.toByteArray(Charsets.UTF_8))
-            val out = StringBuilder(64)
-            for (b in digest) out.append(String.format(java.util.Locale.ROOT, "%02x", b.toInt() and 0xff))
-            return out.toString()
-        }
+        fun newUuid(): String = UUID.randomUUID().toString()
     }
 }
+
+/** Message brut qui parle d'identifiants = compte refusé (jamais affiché tel quel). */
+private fun isLoginRefused(message: String): Boolean =
+    Regex("login|credential|username|password|identifiant|refus", RegexOption.IGNORE_CASE)
+        .containsMatchIn(message)
+
+// Miroir de SETUP_* (shared/contracts/api.ts). Bornes appliquées à la saisie :
+// l'établissement revalide de son côté.
+private const val SCHOOL_QR_FIELD_MAX_CHARS = 1024
+private const val SCHOOL_URL_MAX_CHARS = 300
+
+/** URL d'établissement bornée avant usage (le client revalide de son côté). */
+fun isBoundedSchoolUrl(value: String): Boolean {
+    val text = value.trim()
+    return text.isNotEmpty() && text.length <= SCHOOL_URL_MAX_CHARS
+}
+
+/**
+ * Contenu scanné/collé → payload du QR de l'établissement.
+ * Deux formes acceptées : le JSON que produit l'application de l'établissement
+ * (`{"login":…,"jeton":…}`) et la forme compacte `login|jeton[|url]`, qui permet
+ * de recopier le QR à la main quand l'appareil n'a pas de caméra utilisable.
+ * Renvoie `null` plutôt que de lever : l'appelant affiche « QR illisible ».
+ */
+fun parseSchoolQr(raw: String): SchoolQr? {
+    val text = raw.trim()
+    if (text.isEmpty()) return null
+    if (text.startsWith("{")) {
+        return try {
+            val o = JSONObject(text)
+            val login = o.optString("login", "").trim()
+            val jeton = o.optString("jeton", "").trim()
+            val url = o.optString("url", "").trim()
+            if (!bounded(login) || !bounded(jeton)) null else SchoolQr(login, jeton, url.ifEmpty { null })
+        } catch (_: Exception) {
+            null
+        }
+    }
+    val parts = text.split('|')
+    if (parts.size < 2) return null
+    val login = parts[0].trim()
+    val jeton = parts[1].trim()
+    val url = parts.getOrNull(2)?.trim().orEmpty()
+    if (!bounded(login) || !bounded(jeton)) return null
+    return SchoolQr(login, jeton, url.ifEmpty { null })
+}
+
+private fun bounded(value: String): Boolean =
+    value.isNotEmpty() && value.length <= SCHOOL_QR_FIELD_MAX_CHARS
