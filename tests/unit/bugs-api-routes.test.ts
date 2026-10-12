@@ -21,32 +21,10 @@ import {
 import { createSubjectPrefsMemoryStore } from "../../server/api/subject-prefs";
 
 /**
- * Appaire un device comme le fait l'app, VIA les deux seules routes ouvertes :
- * le `PairingService` est interne à `createApp` (non injectable), le parcours
- * réel start -> confirm est donc le seul moyen d'obtenir le bearer. PIN et
- * token synthétiques, aucun réseau, aucun secret en dur.
+ * #209 : plus d'appairage — le scraper est sans auth, et l'ancien composition
+ * root (createApp + sessions) est parti. Helper supprimé (la suppression
+ * physique des fichiers suit en #210).
  */
-async function appairer(
-  app: { handler: (req: Request) => Promise<Response> },
-): Promise<{ authorization: string }> {
-  const start = await app.handler(
-    new Request("http://127.0.0.1/v1/pairing/start", {
-      method: "POST",
-      body: JSON.stringify({ deviceName: "pixel-test" }),
-    }),
-  );
-  const { sessionId, code } = (await start.json()) as { sessionId: string; code: string };
-  const confirm = await app.handler(
-    new Request("http://127.0.0.1/v1/pairing/confirm", {
-      method: "POST",
-      body: JSON.stringify({ sessionId, code }),
-    }),
-  );
-  const { token } = (await confirm.json()) as { token: string };
-  // Le bearer des routes fermées : sans lui, le 401 de la porte d'entrée
-  // masquerait le 200 que ce test attend du pull-refresh.
-  return { authorization: `Bearer ${token}` };
-}
 
 // Horodatages figés : aucun Date.now() caché, aucun sommeil dans ces tests.
 const AT = "2026-10-02T07:00:00.000Z";
@@ -74,66 +52,9 @@ function fauxLlm(): { appels: () => number; llm: LLMProvider } {
 }
 
 describe("bugs handlers API (revue adversariale)", () => {
-  // 1. AUTHZ : l'accountId du client est accepté tel quel sur le pull-refresh, et
-  //    la composition root l'utilise pour OUVRIR une session Pronote : un POST
-  //    non authentifié crée une session pour un id que personne n'a appairé et
-  //    casse l'invariant mono-compte (currentAccountId() = null avec 2 sessions),
-  //    donc plus aucune résolution de session côté lecture/écriture.
-  test("BUG: POST /v1/sync/refresh ouvre une session Pronote pour l'accountId fourni par le client — un POST non appairé casse la résolution mono-compte (currentAccountId() passe à null)", async () => {
-    // 0.7.0 : aucun credential d'environnement — le compte ouvre par le QR
-    // envoyé par l'app, et le renewal rejoue ce même QR depuis le coffre mémoire.
-    const FAKE_QR = { login: "bG9naW4tZmFrZS1VTlJFQUw=", jeton: "amV0b24tZmFrZS1VTlJFQUw=" };
-    const FAKE_URL = "https://example.test/pronote/eleve.html";
-    const creds = { accountId: "", pronoteUrl: FAKE_URL, qr: FAKE_QR, pin: "0000-UNREAL" };
-    const ALIAS = "alias-injecte-par-le-client";
-    // Vrai PronoteSessionStore, fausse factory : le login est simulé, zéro réseau.
-    // `renew` câblé exactement comme server/infrastructure/http.ts.
-    const { createApp } = await import("../../server/infrastructure/http");
-    const { PronoteSessionStore } = await import("../../server/integrations/pronote-sessions");
-    const sessions = new PronoteSessionStore({
-      renew: async (target: string) => {
-        await sessions.authenticate({ ...creds, accountId: target });
-      },
-      clientFactory: (async () => ({
-        grades: async () => [],
-        homework: async () => [],
-        lessons: async () => [],
-      })) as never,
-    });
-    const pageVide = <T,>(value: T[]) => ({
-      items: { __untrusted: true, value } as Untrusted<T[]>,
-      nextCursor: null,
-    });
-    const reader = {
-      getGrades: async () => pageVide([]),
-      getAssignments: async () => pageVide([]),
-      getTimetable: async () => pageVide([]),
-    };
-    // 0.7.0 : aucune session d'ambiance — c'est le QR envoyé par l'app qui
-    // l'ouvre, donc le test l'ouvre explicitement avant d'exercer la route.
-    await sessions.authenticate({ ...creds, accountId: "acc-deja-appaire" });
-    const app = createApp({ sessions, reader });
-    console.log = () => {};
-    const compteAppaire = app.sessions?.currentAccountId();
-    expect(compteAppaire).toBeTruthy();
-
-    // Le client envoie l'accountId de SON choix : le serveur doit viser la session
-    // appairée (comme le fait une requête sans accountId), jamais un id inventé.
-    // Device appairé (bearer) : c'est le 200 métier du pull-refresh qui est observé.
-    const auth = await appairer(app);
-    const res = await app.handler(
-      new Request("http://127.0.0.1/v1/sync/refresh", {
-        method: "POST",
-        headers: auth,
-        body: JSON.stringify({ accountId: ALIAS }),
-      }),
-    );
-    expect(res.status).toBe(200);
-    // ROUGE : une session Pronote a été ouverte pour un id jamais appairé, et la
-    // résolution mono-compte du serveur est désormais cassée (null = 0 ou >=2).
-    expect(app.sessions?.isAuthenticated(ALIAS)).toBe(false);
-    expect(app.sessions?.currentAccountId()).toBe(compteAppaire);
-  });
+  // #209 : le test du mono-compte via createApp est parti avec l'ancien
+  // composition root (POST /v1/sync/refresh + sessions Pronote ne sont plus
+  // servis ; suppression physique en #210). Sujets restants : 2-7.
 
   // 2. DONNÉES : clé de prefs matière = nom brut, sans normalisation. Deux
   //    orthographes de la même matière ("Maths" / "maths") deviennent DEUX

@@ -14,8 +14,9 @@ import { truncateManualText } from "./manuals";
 import type { PedagogicResource, PronoteReader } from "../domain/ports";
 import type { ManualsConfig } from "./manuals-scrape";
 import { isPlaywrightAvailable, scrapeManuals } from "./manuals-scrape";
+import { MANUALS_SCRAPE_PATH, isManualsScrapeResponse } from "../../shared/contracts/api";
 
-export type ResourceOrigin = "pronote-session" | "playwright-fallback";
+export type ResourceOrigin = "pronote-session" | "playwright-fallback" | "scraper-https";
 
 export interface ResourceCorpus {
   readonly docs: ManualDoc[];
@@ -100,4 +101,68 @@ export async function collectResourceCorpus(options: {
     log("resources playwright -> skip (config/url/navigateur manquant)");
   }
   return { docs: [], origin: "pronote-session", counts };
+}
+
+/**
+ * Inversion #209 : le client appelle le scraper en HTTPS nu, sans auth
+ * (décision utilisateur du 2026-10-11). Credentials portail injectés par
+ * l'appelant dans le corps, jamais en env ni commités, jamais journalisés
+ * (compteurs seuls). Ne lève JAMAIS : repli vide propre si le scraper est KO
+ * (injoignable, non-200, payload hors contrat).
+ */
+export async function fetchResourceCorpusViaScraper(options: {
+  /** Base du scraper, validée côté app (ex. `https://hote:8080`). */
+  readonly scraperBaseUrl: string;
+  readonly manuals: ManualsConfig;
+  readonly startUrl: string;
+  readonly doFetch?: typeof fetch;
+  readonly logger?: (message: string) => void;
+}): Promise<ResourceCorpus> {
+  const log = options.logger ?? (() => {});
+  const KO: ResourceCorpus = { docs: [], origin: "scraper-https", counts: {} };
+  const base = options.scraperBaseUrl.replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(base)) {
+    log("resources scraper -> base URL refusee");
+    return KO;
+  }
+  try {
+    const doFetch = options.doFetch ?? fetch;
+    const res = await doFetch(`${base}${MANUALS_SCRAPE_PATH}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        platform: options.manuals.platform,
+        username: options.manuals.username,
+        password: options.manuals.password,
+        startUrl: options.startUrl,
+      }),
+    });
+    if (!res.ok) {
+      log(`resources scraper -> HTTP ${res.status}, repli vide`);
+      return KO;
+    }
+    const payload: unknown = await res.json();
+    if (!isManualsScrapeResponse(payload)) {
+      log("resources scraper -> payload hors contrat, repli vide");
+      return KO;
+    }
+    const docs: ManualDoc[] = [];
+    for (const d of payload.docs) {
+      const excerpt = d.excerpt.trim();
+      if (!excerpt) continue;
+      docs.push({
+        id: d.id,
+        platform: d.platform,
+        title: d.title.slice(0, 200),
+        subject: d.subject.slice(0, 100),
+        page: d.page,
+        excerpt: truncateManualText(excerpt, 4000),
+      });
+    }
+    log(`resources scraper -> ${docs.length} docs`);
+    return { docs, origin: "scraper-https", counts: {} };
+  } catch {
+    log("resources scraper -> injoignable, repli vide");
+    return KO;
+  }
 }
