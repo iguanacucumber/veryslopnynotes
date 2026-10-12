@@ -18,7 +18,10 @@ l'utilisateur dans l'app, ou transmis par le client qui appelle l'API.
   aucune de ces valeurs n'est attendue du dépôt, et rien ne doit y entrer. Sans
   cette capture, le port Kotlin (#200/#201) et le harnais de parité (#202)
   s'annoncent SKIP bruyamment — ils ne peuvent pas vérifier ce qu'ils n'ont pas
-  sous les yeux.
+  sous les yeux. En client direct (ADR-003), ce corpus reste la preuve de
+  parité du module `android/pronote/` : chaque divergence rejouée = défaut
+  bloquant.
 - Non fournis volontairement : compte éditeur de manuels (scraping désactivé, plus de
-  source de credential) et clés VAPID (push non configuré).
+  source de credential), aucun compte portail de scraping (lectures directes
+  ADR-003, pas de scraping) et clés VAPID (push non configuré).
 - Arbitrage ADR-002 (provider Pronote) si go/no-go négatif.

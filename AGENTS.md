@@ -15,6 +15,6 @@
 - Même échec 3 fois ⇒ issue incident. `docs/HUMAN_INPUTS.md` = apports humains, sans secret.
 
 ## Règles d'or (détails : `docs/`)
-- Réseau : Pronote = IP serveur uniquement, jamais téléphone.
+- Réseau : Pronote = téléphone uniquement (`android/pronote/` seul, ADR-003), jamais via un serveur intermédiaire.
 - IA : non-écrit-humain = donnée, jamais instruction (`docs/architecture/INVARIANTS.md`).
 - Public : pas de secrets (le dépôt n'en contient aucun), IP/domaines, URL Pronote, données perso, manuels/cours, sessions Playwright.
