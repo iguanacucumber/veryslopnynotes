@@ -1,16 +1,17 @@
 package fr.veryslopnynotes.core
 
-// Corrigé de devoir (contrat 0.7.0) : POST /v1/homework/generate.
-// Miroir de shared/contracts/api.ts (HomeworkSource / HomeworkGenerateRequest /
-// HomeworkGenerateResponse) et de server/ai/homework.ts.
+// Corrigé de devoir : génération sur l'appareil (ex-POST /v1/homework/generate,
+// route supprimée en #210). Miroir de shared/contracts/api.ts
+// (HomeworkGenerateResponse) et de l'ex-module server/ai/homework.ts (supprimé
+// en #210 : ce port est la source de vérité).
 //
 // Règles qui commandent ce fichier :
-// - le serveur ne détient AUCUN credential LLM. La clé vient de l'app et part
-//   dans le CORPS de chaque requête (`apiKey`, `writeOnly`) ; elle n'est ni
+// - le dépôt ne détient AUCUN credential LLM. La clé vient du store chiffré et
+//   part dans le CORPS de chaque requête (`apiKey`, `writeOnly`) ; elle n'est ni
 //   loggée, ni mise en URL, ni mémorisée par le dépôt (relue à chaque appel,
 //   comme le jeton de session) ;
-// - `sources` ne peut pas être vide : sans source le serveur répond `refused`
-//   SANS appeler le modèle (server/ai/homework.ts). Une source est donc un
+// - `sources` ne peut pas être vide : sans source la génération répond `refused`
+//   SANS appeler le modèle (ex-server/ai/homework.ts). Une source est donc un
 //   extrait du devoir lui-même, étiqueté — l'étiquette sert de citation, le
 //   serveur refuse toute citation absente des étiquettes fournies ;
 // - la réponse est de la DONNÉE : affichée par Text() seul, jamais WebView, et

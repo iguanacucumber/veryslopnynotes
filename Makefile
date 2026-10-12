@@ -1,10 +1,10 @@
-.PHONY: check lint typecheck unit architecture contracts security check-kotlin android-compile architecture-test integration-api e2e e2e-grades e2e-assignments e2e-manuals e2e-revision runServer buildDebugApk buildRelApk build shot papillonRef
+.PHONY: check lint typecheck unit architecture contracts check-kotlin android-compile runServer buildDebugApk buildRelApk build shot papillonRef
 
 # Découverte JDK/SDK partagée par android-compile, buildDebugApk, buildRelApk :
 # une seule implémentation, sinon une des trois finit par oublier la borne 17-21.
 ANDROID_ENV = . agents/runtime/android-env.sh
 
-check: lint typecheck unit architecture contracts security check-kotlin android-compile
+check: lint typecheck unit architecture contracts check-kotlin android-compile
 
 lint:
 	bun run agents/runtime/check-secrets.ts
@@ -23,9 +23,6 @@ architecture-test:
 
 contracts:
 	bun test tests/contracts
-
-security:
-	bun test tests/security
 
 # android/**/*.kt : garde-fou structurel, sans SDK ni réseau. Le vrai
 # compilateur est `make android-compile` (ci-dessous, appelé par `make check`).
@@ -106,26 +103,6 @@ buildRelApk:
 	fi; \
 	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleRelease && \
 	echo "APK release : android/app/build/outputs/apk/release/ (sigNE si STORE_FILE présent, sinon NON signé)"
-
-# tests/integration : API locale sans secret (0.7.0 : plus de .env.local, donc
-# plus rien à charger — le serveur ne détient aucun credential).
-integration-api:
-	bun test tests/integration/api.test.ts
-
-e2e:
-	bun test tests/e2e
-
-e2e-grades:
-	bun test tests/e2e/grades.test.ts
-
-e2e-assignments:
-	bun test tests/e2e/assignments.test.ts
-
-e2e-manuals:
-	bun test tests/e2e/manuals.test.ts
-
-e2e-revision:
-	bun test tests/e2e/revision.test.ts
 
 # Scraper manuels (#209) : HTTPS sur 0.0.0.0:8080 (l'app Android refuse le
 # clairtext hors émulateur, cf. android/app/src/main/res/xml/network_security_config.xml).

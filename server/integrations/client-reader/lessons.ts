@@ -276,8 +276,9 @@ async function lessonContents(
 
 /**
  * #75 : bascule "fait" — ÉCRITURE vers Pronote, action APP confirmée (I7).
- * Jamais appelée depuis une sortie LLM : la seule porte d'entrée est
- * POST /v1/assignments/toggle (server/api/assignments.ts).
+ * Jamais appelée depuis une sortie LLM : l'ex-porte d'entrée serveur
+ * (POST /v1/assignments/toggle, supprimée en #210) l'imposait, l'appelant
+ * appareil actuel (android/pronote/) garde la règle.
  * Erreurs typées : `unsupported` si l'adaptateur n'expose pas setDone,
  * `session_expired` (401), `not_found` (409). Jamais de faux succès.
  */

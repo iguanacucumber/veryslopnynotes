@@ -1,6 +1,6 @@
-// Scraper-only (#209) : le process ne sert QUE des manuels.
+// Scraper-only (#209, #210) : le process ne sert QUE des manuels.
 // Surface : GET /v1/health + POST /v1/manuals/scrape, sans auth. Tout le reste
-// (les 31 routes métier) = 404. Credentials portail injectés par l'appelant
+// (les 28 chemins métier supprimés en #210) = 404. Credentials portail injectés par l'appelant
 // dans le corps, jamais en env ni commités, jamais journalisés.
 // Fakes 100 % synthétiques : scrape injecté, aucun navigateur, aucun réseau
 // externe (Bun.serve uniquement sur 127.0.0.1 éphémère pour le client HTTPS).
@@ -62,13 +62,46 @@ describe("scraper-only (#209)", () => {
     expect(await head.text()).toBe("");
   });
 
-  test("surface : les 31 routes métier + chemins inconnus = 404, avec ou sans bearer", async () => {
+  test("surface : les 28 chemins métier + chemins inconnus = 404, avec ou sans bearer", async () => {
     const app = createApp({ scrape: fakeScrape().scrape });
     const auth = { authorization: "Bearer jeton-jamais-vu" };
-    const olds = API_ROUTES.map((r) => r.path).filter(
-      (p) => p !== "/v1/health" && p !== "/v1/manuals/scrape",
-    );
-    expect(olds.length).toBeGreaterThanOrEqual(30);
+    // #210 : la table ne liste plus que le vivant ; les 31 routes métier
+    // supprimées restent 404 par construction (rejet avant toute lecture).
+    expect(API_ROUTES).toEqual([
+      { method: "GET", path: "/v1/health" },
+      { method: "POST", path: "/v1/manuals/scrape" },
+    ]);
+    const olds = [
+      "/v1/pairing/start",
+      "/v1/pairing/confirm",
+      "/v1/setup",
+      "/v1/grades",
+      "/v1/periods",
+      "/v1/assignments",
+      "/v1/assignments/toggle",
+      "/v1/timetable",
+      "/v1/events",
+      "/v1/security/alerts",
+      "/v1/homework/generate",
+      "/v1/revision-sheets",
+      "/v1/revision-sheets/pdf",
+      "/v1/subjects/prefs",
+      "/v1/news",
+      "/v1/menus",
+      "/v1/attendance",
+      "/v1/punishments",
+      "/v1/me",
+      "/v1/media",
+      "/v1/capabilities",
+      "/v1/sync/refresh",
+      "/v1/discussions",
+      "/v1/discussions/messages",
+      "/v1/discussions/recipients",
+      "/v1/discussions/reply",
+      "/v1/discussions/read-state",
+      "/v1/discussions/delete",
+    ];
+    expect(olds.length).toBeGreaterThanOrEqual(28);
     for (const path of [...olds, "/v1/inconnu", "/"]) {
       for (const headers of [{}, auth]) {
         const res = await app.handler(

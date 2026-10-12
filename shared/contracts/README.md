@@ -1,8 +1,15 @@
-# shared/contracts/ — source de vérité app↔serveur
+# shared/contracts/ — source de vérité scraper + validateurs de données
 `api.openapi.yaml` (miroir), `models.ts`, `events.ts`, `api.ts`, `cache.ts` + validateurs `is*`.
 Événements (`GradeCreated`, `AssignmentUpdated`, `TimetableUpdated`, `SyncCompleted`, `CacheInvalidated`).
 Cache : TTL par ressource + `cacheStatus()` (badge périmé app, phase 4 #14), invalidation par événement.
 Les API convertissent domaine → contrats, sans logique Pronote/métier.
+
+**#210 (débranchement)** : `api.ts`/`api.openapi.yaml` ne listent plus que
+`GET /v1/health` + `POST /v1/manuals/scrape` — les 31 routes métier sont
+supprimées avec le serveur applicatif (app device-only, ADR-003). Les
+garde-fous de RÉPONSE (`isGradesResponse`, …) restent pour les miroirs
+`tests/unit/android-*.test.ts`. Le reste de ce fichier est le CHANGELOG de
+l'API supprimée (historique, comme `git log`).
 
 Version : `CONTRACTS_VERSION` (`models.ts`) = `info.version` (`api.openapi.yaml`) = `v` des événements.
 v0 (`0.1.0`, phase 1, issue #4) : notes, devoirs, EDT, appairage QR+PIN, santé, SSE.
@@ -70,7 +77,8 @@ gravité optionnelle), `AttendancePeriod` (compteurs dérivés par période) + r
 (TTL 60 min). Onglet vie scolaire inactif côté établissement = listes vides (200),
 jamais 500. Invalidation = `CacheInvalidated` (resource `attendance`), pas d'événement
 dédié ; la détection de nouvelle absence se fait sur comparaison de données structurées
-(`newAbsences` dans `server/jobs/notify.ts`), jamais sur une sortie LLM (I7).
+(ex-`newAbsences` de `server/jobs/notify.ts`, supprimé en #210 — voir
+`android/core/NotifyFormat.kt`), jamais sur une sortie LLM (I7).
 
 
 Add-only #82 (pas de bump) : `UserInfo` (+`ChildAccount`) et `GET /v1/me` (`user: null` =
@@ -116,7 +124,8 @@ actions. Ressource cache `discussions` = **liste des fils seulement** (TTL 15 mi
 donnée personnelle purgée au logout par le `clearAll()` global #82) ; les messages
 d'un fil sont lus à la demande et **jamais** écrits sur disque.
 I6 : le corps d'un message est une DONNÉE bornée — jamais exécutée, jamais
-interprétée, jamais remise à un LLM (test I7 dans `tests/unit/discussions.test.ts`).
+interprétée, jamais remise à un LLM (ex-test `tests/unit/discussions.test.ts`, supprimé en #210 ;
+piné par `tests/unit/android-discussions.test.ts`).
 
 **Cassant 0.6.0** : le type de portail d'établissement sort du contrat.
 `SetupRequest.ent` **disparu** (une app 0.5.0 qui l'envoie est ignorée, son setup

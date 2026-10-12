@@ -1,8 +1,8 @@
 package fr.veryslopnynotes.core
 
 // Devoirs generate v1 — GENERATE -> VALIDATE sur Untrusted.
-// Port fidele de server/ai/homework.ts, qui reste la REFERENCE (cf.
-// tests/unit/kotlin-ai-parity.test.ts). JSON valide par schema, sources citees,
+// Port fidele de server/ai/homework.ts (supprimé en #210 : ce port est la
+// source de vérité). JSON valide par schema, sources citees,
 // refus propre si insuffisant.
 // I4 : consigne fixe, aucun secret, garde assertNoSecretsInPrompt via guard.
 // I6 : question + sources marquees Untrusted, delimiteurs nonce via guard.
@@ -47,7 +47,7 @@ object HomeworkAi {
     // VALIDATE : JSON du modele -> HomeworkOutcome. Meme schema que
     // isHomeworkGenerateResponse cote TS : ok exige des sources citees,
     // chaque citation doit reprendre une etiquette fournie.
-    // Meme requete que isHomeworkGenerateRequest : sources VIDES autorisees
+    // Meme requete que l'ex-garde contrat TS (supprimée en #210) : sources VIDES autorisees
     // (le refus deterministe suit), bornes sur question/cle/lot.
     fun parseHomeworkResponse(raw: JsonValue, allowedLabels: Set<String>): HomeworkOutcome {
         val obj = raw as? JsonValue.Obj ?: throw AiError("réponse devoirs invalide (schéma)")
@@ -94,7 +94,7 @@ object HomeworkAi {
         throw AiError("réponse devoirs invalide (schéma)")
     }
 
-    // Requete valide au sens du contrat (isHomeworkGenerateRequest) : question
+    // Requete valide au sens de l'ex-garde contrat TS (supprimée en #210) : question
     // et cle bornees non-vides, lot borne, sources valides — mais lot VIDE
     // autorise (le refus deterministe sans appel LLM suit). Differt de
     // Homework.isRequestValid, qui exige un lot non-vide cote app.

@@ -48,7 +48,7 @@ export const syntheticAbsences: AbsenceRecord[] = [
   },
 ];
 
-/** Compteurs attendus côté serveur (derived, cf. server/domain/attendance.ts). */
+/** Compteurs attendus (derived, cf. android/core/Attendance.kt ; ex-server/domain/attendance.ts supprimé en #210). */
 export const syntheticAttendancePeriods: AttendancePeriod[] = [
   { periodId: "p-1", name: "Trimestre 1", absences: 2, late: 1, missingMinutes: 250 },
   { periodId: "p-2", name: "Trimestre 2", absences: 1, late: 0, missingMinutes: 0 },
