@@ -258,6 +258,12 @@ object ServerConfig {
     const val SETUP_PATH = "/v1/setup"
     const val HEALTH_PATH = "/v1/health"
 
+    // #209 : le serveur n'est plus qu'un scraper de manuels (plain HTTPS, sans
+    // auth). validateBaseUrl ne valide donc plus qu'une URL de scraper ; les
+    // chemins metier ci-dessus sont morts cote process (suppression en #210).
+    const val MANUALS_SCRAPE_PATH = "/v1/manuals/scrape"
+    fun manualsScrapeUrl(baseUrl: String): String = baseUrl + MANUALS_SCRAPE_PATH
+
     fun pairingStartUrl(baseUrl: String): String = baseUrl + PAIRING_START_PATH
     fun pairingConfirmUrl(baseUrl: String): String = baseUrl + PAIRING_CONFIRM_PATH
     fun setupUrl(baseUrl: String): String = baseUrl + SETUP_PATH
