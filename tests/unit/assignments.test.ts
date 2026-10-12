@@ -26,7 +26,6 @@ import { createHandler } from "../../server/api/router";
 import { createMemoryStore } from "../../server/api/store";
 import { PairingService } from "../../server/api/pairing";
 import { isApiErrorBody } from "../../server/api/errors";
-import { downloadMedia, mediaActions, MediaProxyError } from "../../server/infrastructure/media-proxy";
 import {
   syntheticAccountId,
   syntheticQr,
@@ -242,7 +241,7 @@ describe("routes #75", () => {
   // Le token n'est jamais exposé par l'API (seul `tokenHash` sort du confirm) :
   // ici il vient du service, comme le ferait le client appairé.
   // Renvoie le handler et l'en-tête `Authorization` du device appairé.
-  function appaired(actions: unknown = null, media: unknown = null) {
+  function appaired(actions: unknown = null) {
     const pairing = new PairingService();
     const started = pairing.start("pixel-test");
     const confirmed = pairing.confirm(started.sessionId, started.code);
@@ -250,7 +249,7 @@ describe("routes #75", () => {
     const token = pairing.tokenOf(confirmed.device.id);
     if (token === null) throw new Error("jeton de test indisponible");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const h = createHandler(createMemoryStore({ assignments: seed }), pairing, null, undefined, undefined, actions as any, media as any);
+    const h = createHandler(createMemoryStore({ assignments: seed }), pairing, null, undefined, undefined, actions as any);
     return { h, auth: { authorization: `Bearer ${token}` } };
   }
   const actions = {
@@ -375,60 +374,19 @@ describe("routes #75", () => {
     expect(bad.status).toBe(400);
   });
 
-  test("GET /v1/media : proxy serveur sur le compte du SERVEUR, sans jeton 401, ref en URL refusée avant tout appel", async () => {
-    const appels: string[] = [];
-    const media = {
-      download: async (accountId: string, ref: string) => {
-        appels.push(`${accountId}|${ref}`);
-        return { name: "fiche.pdf", bytes: new Uint8Array([1, 2, 3]) };
-      },
-    };
-    // Sans jeton d'appareil appairé : 401 et ZÉRO résolution (le compte d'un
-    // autre ne doit jamais pouvoir être ouvert par un appelant local).
-    const { h, auth } = appaired(null, media);
+  test("GET /v1/media : proxy supprimé (#206) — 404 appairé, 401 anonyme, jamais d'octets", async () => {
+    // Sans jeton d'appareil appairé : 401 (porte d'entrée, avant la route).
+    const { h, auth } = appaired(actions);
     const anonime = await h(
       new Request("http://127.0.0.1/v1/media?accountId=acc1&ref=" + encodeURIComponent(REF.ref)),
     );
     expect(anonime.status).toBe(401);
-    expect(appels).toEqual([]);
-
+    // Appairé : la route n'a plus d'implémentation (media-proxy supprimé, les
+    // PJ se lisent sur le téléphone) → 404, jamais d'octets.
     const res = await h(
       new Request("http://127.0.0.1/v1/media?accountId=acc1&ref=" + encodeURIComponent(REF.ref), { headers: auth }),
     );
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-disposition")).toContain("fiche.pdf");
-    // L'accountId de la query est IGNORÉ : le serveur résout son propre compte
-    // (ici le compte appairé du store), jamais celui réclamé par le client.
-    expect(appels).toEqual([`seed-acc|${REF.ref}`]);
-    const sansRef = await h(new Request("http://127.0.0.1/v1/media", { headers: auth }));
-    expect(sansRef.status).toBe(400);
-    expect(appels).toHaveLength(1);
-    // Le vrai proxy refuse une ref qui est une URL, sans sortir les octets.
-    const sessions = {
-      requireClient: () => {
-        throw new Error("session");
-      },
-      currentAccountId: () => syntheticAccountId,
-    };
-    const err = await downloadMedia(
-      sessions,
-      "",
-      "https://pronote.example.invalid/fichiers/x.pdf",
-    ).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(MediaProxyError);
-    expect((err as MediaProxyError).code).toBe("bad_ref");
-    // Adaptateur de port : accountId vide -> session appairée unique.
-    const adapter = mediaActions({
-      requireClient: () => ({
-        homework: async () => [
-          { id: "h1", files: () => [{ name: "fiche.pdf", data: async () => Buffer.from([1, 2, 3]) }] },
-        ],
-      }),
-      currentAccountId: () => syntheticAccountId,
-    });
-    const bytes = await adapter.download("", "homework:0:file:0:f1");
-    expect(bytes.name).toBe("fiche.pdf");
-    expect([...bytes.bytes]).toEqual([1, 2, 3]);
+    expect(res.status).toBe(404);
   });
 
   test("I7 : aucun chemin depuis une sortie libre LLM vers l'écriture 'fait'", async () => {

@@ -550,7 +550,6 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
       "androidx.compose:compose-bom:2024.06.00",
       "androidx.navigation:navigation-compose:2.7.7",
       "com.journeyapps:zxing-android-embedded:4.3.0",
-      "com.squareup.okhttp3:okhttp:4.12.0",
     ]);
     expect(uiGradle).not.toMatch(/\.(ttf|otf)\b/);
     // Compose épinglé : aucune API plus récente que material3 1.2.1 / BOM 2024.06.00.

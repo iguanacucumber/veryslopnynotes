@@ -8,7 +8,7 @@ package fr.veryslopnynotes.core
 // - le serveur ne détient AUCUN credential LLM. La clé vient de l'app et part
 //   dans le CORPS de chaque requête (`apiKey`, `writeOnly`) ; elle n'est ni
 //   loggée, ni mise en URL, ni mémorisée par le dépôt (relue à chaque appel,
-//   comme le bearer d'appareil) ;
+//   comme le jeton de session) ;
 // - `sources` ne peut pas être vide : sans source le serveur répond `refused`
 //   SANS appeler le modèle (server/ai/homework.ts). Une source est donc un
 //   extrait du devoir lui-même, étiqueté — l'étiquette sert de citation, le

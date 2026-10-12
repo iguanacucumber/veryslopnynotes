@@ -79,12 +79,13 @@ directes n'exigent aucun backend — le téléphone parle à l'établissement se
 `make runServer` ne sert alors que l'auxiliaire IA (aide devoirs, clé reçue par
 appel), qui ne voit jamais la session Pronote.
 
-Hôte serveur côté app : `android/local.properties` (non commité) ou env `SERVER_HOST`.
+Hôte auxiliaire côté app : `android/local.properties` (non commité) ou env `SERVER_HOST`.
 Défaut émulateur `10.0.2.2:3000` ; hors émulateur, HTTPS obligatoire. Cet hôte
-n'est qu'un défaut : l'adresse réelle se saisit à l'étape 1 de l'assistant de
-connexion. L'assistant ouvre la session : adresse du serveur, puis adresse de
-l'établissement et **QR affiché par l'application Pronote + son PIN** — un seul
-`POST /v1/setup` rend le jeton de device. Aucun identifiant n'est saisi nulle part. Détails : [`android/README.md`](android/README.md).
+n'est que l'adresse du scraper de manuels : l'assistant de connexion ne le
+demande plus. L'assistant ouvre la session sur le téléphone : adresse de
+l'établissement, puis **QR affiché par l'application Pronote + son PIN** — aucun
+serveur intermédiaire, le PIN déchiffre le QR sur place et n'est jamais persisté.
+Aucun identifiant n'est saisi nulle part. Détails : [`android/README.md`](android/README.md).
 Détails build/signature : [`android/README.md`](android/README.md) et [`docs/RELEASE.md`](docs/RELEASE.md).
 
 ## Configuration
@@ -95,7 +96,7 @@ vient de l'app, à la demande :
 
 | Ce qui s'authentifie | Qui l'envoie | Comment |
 |---|---|---|
-| Compte de l'établissement | l'app | `POST /v1/setup` avec le QR affiché par l'application Pronote + son PIN (le serveur ne le garde qu'en mémoire, le temps de la session) |
+| Compte de l'établissement | l'app | QR affiché par l'application Pronote + son PIN, déchiffrés sur place (`Client.qrcodeLogin`) — le jeton tourné dort chiffré sur le téléphone, jamais en réseau après l'appairage |
 | Clé LLM (assistant devoirs) | l'app | champ `apiKey` de `POST /v1/homework/generate` (bornée, jamais journalisée, `writeOnly`) |
 
 Seules ces variables restent lues, et ce ne sont pas des secrets :

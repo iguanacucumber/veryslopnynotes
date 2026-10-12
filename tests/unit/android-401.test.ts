@@ -1,16 +1,16 @@
-// #113 : récupération d'un 401 côté Android (jeton d'appareil révoqué/expiré).
-// Le build Gradle n'est pas exécuté ici : on Miroite la logique Kotlin en TS
-// ET on garde statiquement le câblage (technique de android-pairing-sse.test.ts).
+// #113 repointé #206 : session Pronote LOCALE morte (jeton tourné, session
+// refermée — le client ne distingue pas). Plus de 401 serveur : l'app n'a plus
+// de bearer ni d'`ApiClient`, ce sont les dépôts locaux qui lèvent le signal
+// sur `isSessionFailure`. Le build Gradle ne tourne pas ici : on rejoue la
+// logique en TS ET on garde statiquement le câblage.
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CACHEABLE_RESOURCES } from "../../shared/contracts/cache";
-import { apiError } from "../../server/api/errors";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const DATA = join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data");
 const UI = join(ROOT, "android/ui/src/main/java/fr/veryslopnynotes/ui");
-const SERVER_API = join(ROOT, "server/api");
 
 function read(p: string): string {
   return readFileSync(p, "utf8");
@@ -29,42 +29,30 @@ function codeOnly(content: string): string {
 }
 
 const kt = {
-  api: join(DATA, "ApiClient.kt"),
+  auth: join(DATA, "DeviceAuth.kt"),
+  sessions: join(DATA, "SessionStore.kt"),
   synced: join(DATA, "SyncedRepository.kt"),
-  tokens: join(DATA, "TokenStore.kt"),
   accounts: join(DATA, "AccountStore.kt"),
   nav: join(UI, "AppNav.kt"),
   pairing: join(UI, "PairingScreen.kt"),
 };
 
-const HTTP_UNAUTHORIZED = 401;
-// Miroir de ApiClient.PUBLIC_PATHS (= ServerConfig).
-const PUBLIC_PATHS = ["/v1/pairing/start", "/v1/pairing/confirm", "/v1/health"];
 // Miroir de DeviceAuth.REJECTED_MESSAGE (lu plus bas dans le Kotlin).
-const REJECTED_MESSAGE = "Credential d'appareil refusée : ré-appairez l'appareil.";
-
-// Miroir de ApiClient.UnauthorizedGuard.intercept : un 401 n'invalide la session
-// que si la requête PARTAIT avec un bearer sur une route protégée.
-function tsIsSessionRejection(code: number, path: string, bearerSent: boolean): boolean {
-  if (code !== HTTP_UNAUTHORIZED) return false;
-  if (PUBLIC_PATHS.includes(path.split("?")[0] ?? "")) return false;
-  return bearerSent;
-}
+const REJECTED_MESSAGE = "Session refusée par l'établissement : ré-appairez l'appareil (QR + PIN).";
 
 /**
  * App + garde-fou en miniature : l'app n'a QU'un traitement du signal
- * (AppNav : accounts.logout() puis navigation), et `token = null` après le
- * logout est exactement ce qui empêche la boucle (plus aucun bearer au vol).
+ * (AppNav : accounts.logout() puis navigation), et la session vidée après le
+ * logout est exactement ce qui empêche la boucle (plus rien à invalider).
  */
-class TsAppOn401 {
-  token: string | null = "secret-synthetique-android-1";
+class TsAppDeadSession {
+  session: string | null = "jeton-synthetique-android-1";
   raises = 0;
   logouts = 0;
   purged: string[] = [];
   navigations: string[] = [];
   notice: string | null = null;
   route = "grades";
-  readonly states: string[] = ["grades"];
 
   constructor() {
     // DeviceAuth.setOnRejected { … } (AppNav) : réparation + navigation.
@@ -73,19 +61,17 @@ class TsAppOn401 {
       this.notice = REJECTED_MESSAGE;
       this.logouts += 1; // accounts.logout()
       this.purged.push(...CACHEABLE_RESOURCES); // cacheStore.clearAll()
-      this.token = null; // tokenStore.clear()
+      this.session = null; // sessions.clear() + PronoteSession.clear()
       if (this.route !== "pairing") {
         this.route = "pairing";
-        this.states.push("pairing");
         this.navigations.push("pairing");
       }
     };
   }
 
-  /** Une réponse qui traverse l'intercepteur (bearer relu à la construction). */
-  reply(code: number, path: string): void {
-    const bearerSent = !PUBLIC_PATHS.includes(path.split("?")[0] ?? "") && this.token !== null;
-    if (tsIsSessionRejection(code, path, bearerSent)) DeviceAuthMirror.reject();
+  /** Un dépôt local dont le client lève en `isSessionFailure`. */
+  depotEchecSession(): void {
+    if (this.session !== null) DeviceAuthMirror.reject();
   }
 }
 
@@ -96,201 +82,125 @@ const DeviceAuthMirror = {
   },
 };
 
-describe("unit android 401 : session perdue -> appairage (#113)", () => {
-  test("réalité serveur : un refus = un 401 unique, sans cause révélée", () => {
-    // requireDevice (server/api/router.ts) : inconnu / révoqué / expiré partagent
-    // le MÊME statut et le MÊME message. Donc l'app NE PEUT PAS distinguer
-    // révocation et expiration, et ne doit rien afficher qui l'affirme.
-    const refus = apiError("unauthorized", "jeton d'appareil invalide");
-    expect(refus.status).toBe(HTTP_UNAUTHORIZED);
-    // Un seul corps possible : ni cause, ni indice (revocable/expired/WWW-Authenticate
-    // ne parle que du type de jeton, pas de la raison du refus).
-    const corps: unknown = JSON.parse(
-      '{"error":{"code":"unauthorized","message":"jeton d\'appareil invalide"}}',
-    );
-    expect(corps).toEqual({ error: { code: "unauthorized", message: "jeton d'appareil invalide" } });
-    const router = read(join(SERVER_API, "router.ts"));
-    expect(router).toContain('apiError("unauthorized", "jeton d\'appareil invalide")');
-    const errors = read(join(SERVER_API, "errors.ts"));
-    expect(errors).toContain("unauthorized: 401");
-
-    // Aucune mention de cause (expiré/révoqué/inconnu) dans le CODE Kotlin du
-    // garde-fou et du repository : l'app ne devine rien (commentaires exclus).
-    const forbidden = /revok|révoqu|expir|unknown device|inconnu/i;
-    expect(forbidden.test(codeOnly(read(kt.api)))).toBe(false);
-    expect(forbidden.test(codeOnly(read(kt.synced)))).toBe(false);
-  });
-
-  test("garde-fou : 401 + route protégée + bearer parti = signal, sinon rien", () => {
-    expect(tsIsSessionRejection(HTTP_UNAUTHORIZED, "/v1/grades", true)).toBe(true);
-    expect(tsIsSessionRejection(HTTP_UNAUTHORIZED, "/v1/media?ref=discussion%3Ad1", true)).toBe(true);
-    expect(tsIsSessionRejection(HTTP_UNAUTHORIZED, "/v1/events", true)).toBe(true);
-    // 401 sur route PUBLIQUE = appairage refusé, pas une session perdue.
-    for (const p of PUBLIC_PATHS) {
-      expect(tsIsSessionRejection(HTTP_UNAUTHORIZED, p, true)).toBe(false);
+describe("unit android session morte -> appairage (#113, #206 device-only)", () => {
+  test("plus de client HTTP métier côté app : ni ApiClient, ni bearer serveur", () => {
+    // L'appairage et les lectures sont device-only : aucun fichier ne doit
+    // ressusciter le bearer serveur.
+    for (const f of [join(DATA, "ApiClient.kt"), join(DATA, "TokenStore.kt"), join(DATA, "SetupRepository.kt"), join(DATA, "QrPayload.kt")]) {
+      expect(existsSync(f), `ressuscité: ${f}`).toBe(false);
     }
-    // Jamais appairé (aucun bearer parti) : rien à réparer, donc pas de boucle
-    // d'appairage pour une app qui n'a jamais appairé.
-    expect(tsIsSessionRejection(HTTP_UNAUTHORIZED, "/v1/grades", false)).toBe(false);
-    // Les autres statuts restent de l'affichage ordinaire.
-    for (const code of [200, 304, 404, 409, 500, 501, 503]) {
-      expect(tsIsSessionRejection(code, "/v1/grades", true)).toBe(false);
-    }
-
-    // Un seul garde-fou HTTP lève le signal (ApiClient : 401 + route protégée
-    // + bearer parti), PLUS les dépôts locaux qui détectent une session
-    // TÉLÉPHONE morte (`isSessionFailure`, #205 : plus de HTTP métier, donc
-    // plus de 401 à observer) et le worker de fond (#208 : même règle dans
-    // `doWork`, sans boucle de retry sur une session morte). Un seul endroit
-    // s'y abonne.
     const files = [...readdirSync(DATA).map((f) => join(DATA, f)), ...readdirSync(UI).map((f) => join(UI, f))];
-    const raises = files.filter((f) => codeOnly(read(f)).includes("DeviceAuth.reject()"));
-    const subs = files.filter((f) => codeOnly(read(f)).includes("DeviceAuth.setOnRejected"));
-    expect(raises.map((f) => f.split("/").pop()).sort()).toEqual(
-      ["ApiClient.kt", "AssignmentsRepository.kt", "DiscussionsRepository.kt", "PeriodicSyncWorker.kt", "ProfileRepository.kt", "SyncedRepository.kt"].sort(),
-    );
-    // Le garde HTTP reste le seul à décider sur un statut (les dépôts locaux
-    // lèvent sur une EXCEPTION de session, jamais sur un code HTTP).
-    expect(codeOnly(read(join(DATA, "ApiClient.kt")))).toContain("response.code == ApiClient.HTTP_UNAUTHORIZED");
-    for (const f of ["SyncedRepository.kt", "AssignmentsRepository.kt", "DiscussionsRepository.kt", "ProfileRepository.kt"]) {
-      expect(codeOnly(read(join(DATA, f)))).toContain("isSessionFailure(e)");
-    }
-    expect(subs.map((f) => f.split("/").pop())).toEqual(["AppNav.kt"]);
-    // Couverture : ApiClient est le SEUL endroit qui fabrique un OkHttpClient
-    // gardé (donc le garde-fou voit 100% des réponses serveur restantes :
-    // appairage, setup, SSE, fiches — #205 : les dépôts métier ne font plus
-    // de HTTP). OpenRouterLlm fabrique le sien, hors garde (exemption #204,
-    // voir plus bas).
+    // Seul l'appel direct au fournisseur LLM fait du HTTP (exemption #204) :
+    // aucun dépôt ne fabrique de client gardé, aucun n'émet d'appel réseau.
     const clients = files.filter((f) => codeOnly(read(f)).includes("OkHttpClient("));
-    expect(clients.map((f) => f.split("/").pop()).sort()).toEqual(["ApiClient.kt", "OpenRouterLlm.kt"].sort());
+    expect(clients.map((f) => f.split("/").pop()).sort()).toEqual(["OpenRouterLlm.kt"]);
     const calls = files.filter((f) => codeOnly(read(f)).includes("newCall("));
-    expect(calls.map((f) => f.split("/").pop()).sort()).toEqual(
-      ["OpenRouterLlm.kt", "PairingRepository.kt", "RevisionSheets.kt", "SetupRepository.kt"].sort(),
-    );
-    for (const f of calls) {
-      // Exemption #204 : l'appel direct au fournisseur LLM ne passe PAS par le
-      // client gardé — un 401 OpenRouter (clé LLM refusée) ne doit JAMAIS
-      // invalider la session d'appareil. Gardes compensatoires pinnés ici :
-      // aucune référence au client gardé ni au signal de session.
-      if (f.split("/").pop() === "OpenRouterLlm.kt") {
-        const c = codeOnly(read(f));
-        expect(c).not.toContain("api.client()");
-        expect(c).not.toContain("DeviceAuth");
-        expect(c).not.toContain("UnauthorizedGuard");
-        continue;
-      }
-      expect({ file: f.split("/").pop(), viaApi: codeOnly(read(f)).includes("api.client().newCall(") }).toEqual({
+    expect(calls.map((f) => f.split("/").pop()).sort()).toEqual(["OpenRouterLlm.kt"]);
+    // Aucune trace du bearer serveur dans le code Kotlin (commentaires exclus).
+    for (const f of files) {
+      expect({ file: f.split("/").pop(), bearer: /Bearer \$token|tokenHash|SessionTokens/.test(codeOnly(read(f))) }).toEqual({
         file: f.split("/").pop(),
-        viaApi: true,
+        bearer: false,
       });
     }
   });
 
-  test("anti-boucle : le refus est réparé UNE fois, pas rejoué en boucle", () => {
-    const app = new TsAppOn401();
-    // 5 requêtes protégées qui reviennent toutes en 401 (token révoqué).
-    for (const p of ["/v1/grades", "/v1/assignments", "/v1/timetable", "/v1/news", "/v1/menus"]) {
-      app.reply(HTTP_UNAUTHORIZED, p);
+  test("garde-fou : les dépôts locaux lèvent sur isSessionFailure, un seul s'abonne", () => {
+    const files = [...readdirSync(DATA).map((f) => join(DATA, f)), ...readdirSync(UI).map((f) => join(UI, f))];
+    const raises = files.filter((f) => codeOnly(read(f)).includes("DeviceAuth.reject()"));
+    expect(raises.map((f) => f.split("/").pop()).sort()).toEqual(
+      ["AssignmentsRepository.kt", "DiscussionsRepository.kt", "PeriodicSyncWorker.kt", "ProfileRepository.kt", "SyncedRepository.kt"].sort(),
+    );
+    // Les dépôts lèvent sur une EXCEPTION de session, jamais sur un code HTTP.
+    for (const f of ["SyncedRepository.kt", "AssignmentsRepository.kt", "DiscussionsRepository.kt", "ProfileRepository.kt"]) {
+      expect(codeOnly(read(join(DATA, f)))).toContain("isSessionFailure(e)");
     }
-    expect(app.raises).toBe(1); // un seul signal, donc une seule réparation
+    const subs = files.filter((f) => codeOnly(read(f)).includes("DeviceAuth.setOnRejected"));
+    expect(subs.map((f) => f.split("/").pop())).toEqual(["SessionGate.kt"]);
+  });
+
+  test("anti-boucle : le refus est réparé UNE fois, pas rejoué en boucle", () => {
+    const app = new TsAppDeadSession();
+    // 5 dépôts qui échouent en session morte : UN seul signal, donc une seule
+    // réparation (le premier logout vide la session, les suivants n'ont rien).
+    for (let i = 0; i < 5; i++) app.depotEchecSession();
+    expect(app.raises).toBe(1);
     expect(app.logouts).toBe(1);
     expect([...app.purged].sort()).toEqual([...CACHEABLE_RESOURCES].sort());
     expect(app.navigations).toEqual(["pairing"]);
     expect(app.route).toBe("pairing");
     expect(app.notice).toBe(REJECTED_MESSAGE);
-    // Après réparation, plus aucun bearer ne part : les 401 suivants (routes
-    // protégées, utilisateur non appairé) NE relancent rien. C'est la garantie
-    // qu'on ne retombe pas indéfiniment sur l'écran d'appairage.
-    expect(app.token).toBeNull();
-    for (const p of ["/v1/grades", "/v1/assignments", "/v1/timetable"]) app.reply(HTTP_UNAUTHORIZED, p);
+    // Après réparation, plus de session : les échecs suivants NE relancent
+    // rien. C'est la garantie qu'on ne retombe pas sur l'écran d'appairage.
+    expect(app.session).toBeNull();
+    for (let i = 0; i < 3; i++) app.depotEchecSession();
     expect(app.raises).toBe(1);
     expect(app.navigations).toEqual(["pairing"]);
-    // Le signal ne se déclenche pas non plus sur une panne réseau ou un 500.
-    const other = new TsAppOn401();
-    for (const code of [500, 503, 404]) other.reply(code, "/v1/grades");
-    expect(other.raises).toBe(0);
-    expect(other.token).not.toBeNull(); // session intacte, cache/repli habituels
   });
 
-  test("Kotlin : un seul point d'observation, message neutre, réparation par logout()", () => {
-    const api = read(kt.api);
-    // UN intercepteur partagé par toutes les requêtes (repositories, setup, fiches).
-    expect(api).toContain("client: OkHttpClient = OkHttpClient()");
-    expect(api).toContain("client.newBuilder()");
-    expect(api).toContain("addInterceptor(UnauthorizedGuard { isPublicPath(it) })");
-    expect(api).toContain("const val HTTP_UNAUTHORIZED = 401");
-    expect(api).toContain('private const val HEADER_AUTHORIZATION = "Authorization"');
-    expect(api).toContain("DeviceAuth.reject()");
-    expect(api).toContain("fun setOnRejected(listener: (() -> Unit)?)");
-    // Le rejet est conditionné par les trois garde-fous, dans le bon ordre.
-    const apiCode = codeOnly(api);
-    expect(apiCode).toContain("response.code == ApiClient.HTTP_UNAUTHORIZED");
-    expect(apiCode).toContain("!isPublic(request.url.encodedPath)");
-    expect(apiCode).toContain("request.header(HEADER_AUTHORIZATION) != null");
-    const dernierGarde = apiCode.indexOf("request.header(HEADER_AUTHORIZATION) != null");
-    expect(apiCode.indexOf("response.code == ApiClient.HTTP_UNAUTHORIZED")).toBeLessThan(dernierGarde);
-    expect(apiCode.indexOf("!isPublic(request.url.encodedPath)")).toBeLessThan(dernierGarde);
-    expect(dernierGarde).toBeLessThan(apiCode.indexOf("DeviceAuth.reject()"));
-    // Le bearer reste attaché à la construction, sur les mêmes règles qu'avant.
-    expect(api).toContain('builder.header("Authorization", "Bearer $token")');
-    expect(api).toContain("private fun builder(path: String): Request.Builder");
-    for (const p of ["PAIRING_START_PATH", "PAIRING_CONFIRM_PATH", "HEALTH_PATH"]) {
-      expect(api).toContain(`ServerConfig.${p}`);
-    }
-    // Message unique, sans cause devinée (le serveur ne dit rien de plus).
-    const message = /const val REJECTED_MESSAGE = "([^"]+)"/.exec(api)?.[1];
+  test("Kotlin : signal unique, message neutre, réparation par logout()", () => {
+    const auth = read(kt.auth);
+    // UN objet, un message, un listener : pas de bus d'événements.
+    expect(auth).toContain("object DeviceAuth");
+    expect(auth).toContain("fun setOnRejected(listener: (() -> Unit)?)");
+    expect(auth).toContain("internal fun reject()");
+    // Message unique, sans cause devinée (le client ne distingue rien).
+    const message = /const val REJECTED_MESSAGE = "([^"]+)"/.exec(auth)?.[1];
     expect(message).toBe(REJECTED_MESSAGE);
     expect(message).not.toMatch(/expir|révoqu|inconnu/i);
-
-    // Le repository réutilise la plomberie existante (RefreshOutcome.Failed),
-    // aucune file de retry ni nouveau type d'échec. #205 : la session morte
-    // se détecte sur l'EXCEPTION du client local (`isSessionFailure`), plus
-    // sur un statut HTTP — le cache ne masque toujours pas une session morte.
-    const synced = read(kt.synced);
-    expect(synced).toContain("isSessionFailure(e)");
-    expect(synced).toContain("private val provider: PronoteClientProvider = { PronoteSession.client }");
-    expect(synced).toContain("RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null)");
-    expect(synced).toContain("sealed interface RefreshOutcome");
-    expect(codeOnly(synced)).not.toContain("setOnRejected");
-
-    // Traitement unique côté UI : réparation par le chemin EXISTANT puis
-    // navigation vers l'appairage (pile vidée : plus d'onglet protégé derrière).
-    const nav = read(kt.nav);
-    expect(nav).toContain('const val ROUTE_PAIRING = "pairing"');
-    expect(nav).toContain("DeviceAuth.setOnRejected");
-    expect(nav).toContain("accounts.logout()");
-    expect(nav).toContain("authNotice = DeviceAuth.REJECTED_MESSAGE");
-    expect(nav).toContain("if (nav.currentDestination?.route != ROUTE_PAIRING) {");
-    expect(nav).toContain("nav.navigate(ROUTE_PAIRING) {");
-    expect(nav).toContain("popUpTo(nav.graph.findStartDestination().id) { inclusive = true }");
-    expect(nav).toContain("onDispose { DeviceAuth.setOnRejected(null) }");
-    expect(nav).toContain("notice = authNotice,");
-    const navCode = codeOnly(nav);
-    // Pas de purge parallèle : tout passe par AccountStore.logout().
-    expect(navCode).not.toContain("clearAll(");
-    expect(navCode).not.toContain("tokenStore.clear(");
-    // Jamais de secret journalisé.
-    expect(navCode).not.toMatch(/Log\.[vdiew]\(|println\(/);
-    expect(codeOnly(api)).not.toMatch(/Log\.[vdiew]\(|println\(/);
 
     // Le chemin de purge est bien celui du AccountStore existant.
     const accounts = read(kt.accounts);
     expect(accounts).toContain("fun logout()");
-    expect(accounts).toContain("tokenStore.clear()");
+    expect(accounts).toContain("sessions.clear()");
+    expect(accounts).toContain("PronoteSession.clear()");
     expect(accounts).toContain("cacheStore.clearAll()");
-    // Le secret reste chiffré et effacé par le store, jamais recopyé ailleurs.
-    const tokens = read(kt.tokens);
-    expect(tokens).toContain("EncryptedSharedPreferences");
-    expect(tokens).toContain("fun clear()");
-    expect(tokens).toContain("remove(KEY_TOKEN)");
+    // Le jeton reste chiffré et effacé par le store, jamais recopié ailleurs.
+    const sessions = read(kt.sessions);
+    expect(sessions).toContain("EncryptedSharedPreferences");
+    expect(sessions).toContain("fun clear()");
+    // #206 : plus de repli en clair — un Keystore KO jette, il n'écrit pas.
+    expect(codeOnly(sessions)).not.toContain("MODE_PRIVATE");
+    expect(codeOnly(sessions)).not.toContain("getSharedPreferences(");
+
+    // Traitement unique côté UI : le portier de session (`SessionGate`,
+    // extrait d'AppNav en #206 pour garder le graphe sous ~450 lignes, #135)
+    // répare par le chemin EXISTANT puis navigue vers l'appairage (pile vidée :
+    // plus d'onglet protégé derrière).
+    const gate = read(join(UI, "SessionGate.kt"));
+    expect(gate).toContain("fun SessionGate(");
+    expect(gate).toContain("DeviceAuth.setOnRejected");
+    expect(gate).toContain("accounts.logout()");
+    expect(gate).toContain("onNotice(DeviceAuth.REJECTED_MESSAGE)");
+    expect(gate).toContain("if (nav.currentDestination?.route != ROUTE_PAIRING) {");
+    expect(gate).toContain("nav.navigate(ROUTE_PAIRING) {");
+    expect(gate).toContain("popUpTo(nav.graph.findStartDestination().id) { inclusive = true }");
+    expect(gate).toContain("onDispose { DeviceAuth.setOnRejected(null) }");
+    // Restauration au démarrage : jeton mort = store vidé (cap appairage),
+    // réseau KO = store gardé (caches intacts).
+    expect(gate).toContain("pairing.restoreBlocking()");
+    expect(gate).toContain("is RestoreResult.Dead");
+    expect(gate).toContain("RestoreResult.Offline");
+    const nav = read(kt.nav);
+    expect(nav).toContain('const val ROUTE_PAIRING = "pairing"');
+    expect(nav).toContain("SessionGate(sessions = sessions, accounts = accounts, nav = nav, onNotice = { authNotice = it })");
+    expect(nav).toContain("notice = authNotice,");
+    const navCode = codeOnly(nav);
+    // Pas de purge parallèle : tout passe par AccountStore.logout().
+    expect(navCode).not.toContain("clearAll(");
+    expect(navCode).not.toContain("sessions.clear(");
+    // Jamais de secret journalisé.
+    expect(navCode).not.toMatch(/Log\.[vdiew]\(|println\(/);
 
     // L'écran d'appairage affiche la raison factuelle, sans chrono ni devinette.
     const pairing = read(kt.pairing);
     expect(pairing).toContain("notice: String? = null,");
-    // #146 : le même texte, désormais borné sur trois lignes (le message est
-    // celui du serveur, donc de longueur inconnue) — la condition est inchangée.
+    // #146 : le même texte, borné sur trois lignes (le message est celui de
+    // l'établissement, donc de longueur inconnue) — la condition est inchangée.
     expect(pairing).toContain("if (!notice.isNullOrEmpty()) {");
     expect(pairing).toMatch(/Text\(\s*text = notice,\s*maxLines = 3,/);
-    expect(pairing).toContain("tokens.save(res.device.id, res.device.tokenHash, res.device.token)");
+    // La session va droit dans le store chiffré : aucun bearer manipulé ici.
+    expect(pairing).toContain("PairingRepository(sessions)");
+    expect(codeOnly(pairing)).not.toContain("tokens.save(");
   });
 });

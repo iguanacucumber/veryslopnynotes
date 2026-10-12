@@ -131,9 +131,9 @@ import java.time.ZoneId
 // réelle — le serveur expose la même route dans les deux sens — donc le snackbar
 // peut l'offrir honnêtement, contrairement à une suppression de fil.
 //
-// Contenu serveur = DONNÉE affichée par `Text()` seul (I6) ; pièce jointe = URL
-// du proxy /v1/media, aucune adresse d'établissement dans l'app (I1), URL jamais
-// journalisée (une URL finit dans les logs d'accès).
+// Contenu local = DONNÉE affichée par `Text()` seul (I6) ; pièce jointe = octets
+// lus sur le client local puis servis à l'ouvreur par un FileProvider, aucune
+// adresse d'établissement dans l'app (I1), rien de journalisé.
 
 /** Épaisseur du filet des cartes et des puces. */
 private val HAIRLINE = 1.dp

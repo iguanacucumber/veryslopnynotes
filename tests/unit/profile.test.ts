@@ -12,7 +12,6 @@ import { createMemoryStore } from "../../server/api/store";
 import { PairingService } from "../../server/api/pairing";
 import { isApiErrorBody } from "../../server/api/errors";
 import { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
-import { MediaProxyError, downloadMedia } from "../../server/infrastructure/media-proxy";
 import { CACHEABLE_RESOURCES, CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
 import {
   syntheticAccountId,
@@ -127,127 +126,22 @@ describe("unit profil #82", () => {
     expect(await (await legacy(new Request("http://127.0.0.1/v1/me", { headers: auth }))).text()).toBe('{"user":null}');
   });
 
-  test("GET /v1/media : réf opaque seulement, octets streamés par le serveur", async () => {
-    const seen: { accountId: string; ref: string }[] = [];
+  test("GET /v1/media : proxy supprimé (#206) — 404 appairé, 401 anonyme, jamais d'octets", async () => {
     const { pairing, auth } = paired();
-    const handler = createHandler(
-      createMemoryStore({ userInfo: syntheticUserInfo }),
-      pairing,
-      null,
-      undefined,
-      undefined,
-      null,
-      async (accountId: string, ref: string) => {
-        seen.push({ accountId, ref });
-        return { name: "photo.png", bytes: new Uint8Array([1, 2, 3, 4]) };
-      },
-    );
-    // L'app ne connaît qu'une réf opaque et un `accountId` d'indice : le
-    // serveur sert SON compte (celui du store), jamais celui de la query —
-    // prendre l'indice du client ouvrait la session d'un autre compte appairé.
-    const ok = await handler(
-      new Request(`http://127.0.0.1/v1/media?ref=${PHOTO_REF_PREFIX}f-1&accountId=acc-fake-autre`, {
-        headers: auth,
-      }),
-    );
-    expect(ok.status).toBe(200);
-    expect(ok.headers.get("content-type")).toBe("image/png");
-    expect(new Uint8Array(await ok.arrayBuffer()).length).toBe(4);
-    expect(seen).toEqual([{ accountId: syntheticAccountId, ref: `${PHOTO_REF_PREFIX}f-1` }]);
-    // Réf en forme d'adresse = refus AVANT le proxy (aucune fuite possible).
-    for (const ref of ["https://photos.example/p.png", "//photos.example/p.png", "", "../../etc"]) {
-      const res = await handler(
-        new Request(`http://127.0.0.1/v1/media?ref=${ref}&accountId=${syntheticAccountId}`, { headers: auth }),
-      );
-      expect({ ref, status: res.status }).toEqual({ ref, status: 400 });
-    }
-    // Aucun de ces refus n'a atteint le proxy.
-    expect(seen).toHaveLength(1);
-    // Sans jeton d'appareil appairé = 401 AVANT toute lecture : le proxy n'est
-    // jamais appelé (le refus ne divulgue ni l'état du store ni l'existence
-    // de la réf), et le corps d'erreur reste typé.
+    const handler = createHandler(createMemoryStore({ userInfo: syntheticUserInfo }), pairing);
+    // Sans jeton : 401 (porte d'entrée, avant la route).
     const sansJeton = await handler(
       new Request(`http://127.0.0.1/v1/media?ref=${PHOTO_REF_PREFIX}f-1&accountId=${syntheticAccountId}`),
     );
     expect(sansJeton.status).toBe(401);
-    expect(isApiErrorBody(JSON.parse(await sansJeton.text()))).toBe(true);
-    // Jeton inconnu (device jamais appairé) = même 401 unique, pas d'oracle.
-    const fauxJeton = await handler(
-      new Request(`http://127.0.0.1/v1/media?ref=${PHOTO_REF_PREFIX}f-1&accountId=${syntheticAccountId}`, {
-        headers: { authorization: "Bearer jeton-inconnu" },
-      }),
-    );
-    expect(fauxJeton.status).toBe(401);
-    expect(seen).toHaveLength(1);
-    // `accountId` ABSENT de la query n'est plus un 400 : le compte vient du
-    // serveur (avant, ce 400 bloquait la lecture légitime d'un client qui n'a
-    // pas encore son /v1/me).
-    const sansAccountId = await handler(
-      new Request(`http://127.0.0.1/v1/media?ref=${PHOTO_REF_PREFIX}f-2`, { headers: auth }),
-    );
-    expect(sansAccountId.status).toBe(200);
-    expect(seen).toEqual([
-      { accountId: syntheticAccountId, ref: `${PHOTO_REF_PREFIX}f-1` },
-      { accountId: syntheticAccountId, ref: `${PHOTO_REF_PREFIX}f-2` },
-    ]);
-    // Sans proxy injecté = 501 explicite (jamais d'accès direct depuis le routeur).
-    const noProxy = createHandler(createMemoryStore({ userInfo: syntheticUserInfo }), pairing);
-    const res = await noProxy(
-      new Request(`http://127.0.0.1/v1/media?ref=${PHOTO_REF_PREFIX}f-1&accountId=${syntheticAccountId}`, {
-        headers: auth,
-      }),
-    );
-    expect(res.status).toBe(501);
-    expect(seen).toHaveLength(2);
-  });
-
-  test("GET /v1/media : erreurs du proxy mappées sans message interne", async () => {
-    const { pairing, auth } = paired();
-    const handler = createHandler(
-      createMemoryStore({ userInfo: syntheticUserInfo }),
-      pairing,
-      null,
-      undefined,
-      undefined,
-      null,
-      async () => {
-        throw new MediaProxyError("échec interne 10.0.0.1", "pronote_unavailable");
-      },
-    );
+    // Appairé : la route n'a plus d'implémentation (media-proxy supprimé, la
+    // photo se lit sur le téléphone) → 404, jamais d'octets.
     const res = await handler(
       new Request(`http://127.0.0.1/v1/media?ref=${PHOTO_REF_PREFIX}f-1&accountId=${syntheticAccountId}`, {
         headers: auth,
       }),
     );
-    expect(res.status).toBe(500);
-    expect(await res.text()).not.toContain("10.0.0.1");
-  });
-
-  test("media proxy : la photo est résolue par réf opaque, l'URL ne sort pas", async () => {
-    const client = syntheticProfileClient();
-    const payload = await downloadMedia({ requireClient: () => client }, syntheticAccountId, `${PHOTO_REF_PREFIX}file-fake-1`);
-    expect(payload.name).toBe("photo.png");
-    // Aucun octet d'adresse dans le nom renvoyé (nom = extension seulement).
-    expect(payload.name).not.toMatch(/https?:\/\//);
-    // Établissement sans photo publiée = not_found typée, pas d'image inventée.
-    const noPic = syntheticProfileClient({ pictureId: null });
-    let code = "";
-    try {
-      await downloadMedia({ requireClient: () => noPic }, syntheticAccountId, `${PHOTO_REF_PREFIX}f-1`);
-    } catch (err) {
-      code = (err as MediaProxyError).code;
-    }
-    expect(code).toBe("not_found");
-    // Réf en forme d'URL = bad_ref, le proxy ne tente aucun téléchargement.
-    for (const ref of ["https://photos.example/p.png", "//x/p.png", "photo:https://x/p.png"]) {
-      let code = "";
-      try {
-        await downloadMedia({ requireClient: () => client }, syntheticAccountId, ref);
-      } catch (err) {
-        code = (err as MediaProxyError).code;
-      }
-      expect({ ref, code }).toEqual({ ref, code: "bad_ref" });
-    }
+    expect(res.status).toBe(404);
   });
 
   test("reader getUserInfo : nom publié → profil + période courante, sans secret dans les logs", async () => {

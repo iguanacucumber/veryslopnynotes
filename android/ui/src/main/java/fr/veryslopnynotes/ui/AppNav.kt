@@ -1,14 +1,11 @@
 package fr.veryslopnynotes.ui
 
-import android.os.Handler
-import android.os.Looper
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,9 +23,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navDeepLink
 import fr.veryslopnynotes.core.Capabilities
 import fr.veryslopnynotes.data.AccountStore
-import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.CachePolicy
-import fr.veryslopnynotes.data.DeviceAuth
 import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.FileSubjectPrefsStore
 import fr.veryslopnynotes.data.InMemoryCacheStore
@@ -37,16 +32,15 @@ import fr.veryslopnynotes.data.LlmKeys
 import fr.veryslopnynotes.data.ProfileRepository
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.ServerStore
+import fr.veryslopnynotes.data.SessionStores
 import fr.veryslopnynotes.data.SubjectPrefsRepository
 import fr.veryslopnynotes.data.SyncedRepository
-import fr.veryslopnynotes.data.SessionTokens
 
 // Graphe de navigation et état de la session. La COQUILLE (barre du haut par
 // route, barre d'onglets, icônes) vit dans `AppShell.kt` et `AppIcons.kt`, les
 // ÉCRANS chacun dans son fichier : avant #135 ce fichier faisait 989 lignes et
 // portait la coquille ET quatre écrans.
-// #135 : chaque `navigate` passe par `navigateTo`/`openTab` (`launchSingleTop`),
-// et `changeServer` a rejoint l'assistant d'appairage, dont il est la logique.
+// #135 : chaque `navigate` passe par `navigateTo`/`openTab` (`launchSingleTop`).
 //
 // Parité Papillon #86 : 5 onglets + settings, et des routes secondaires hors
 // onglets (pairing, alerts, fiches, news, canteen, attendance, messages,
@@ -72,8 +66,8 @@ const val ROUTE_ATTENDANCE = "attendance"
 // #80 : messagerie (parité Papillon Discussions), hors onglets comme les autres
 // capacités dynamiques : visible seulement si l'établissement publie des fils.
 const val ROUTE_MESSAGES = "messages"
-// #113 : écran d'appairage = destination de secours quand le serveur refuse la
-// credential d'appareil (401). Une seule constante pour tous les `navigate`.
+// #113 : écran d'appairage = destination de secours quand la session locale
+// meurt (jeton tourné, session refermée). Une seule constante pour tous les `navigate`.
 const val ROUTE_PAIRING = "pairing"
 // #135 : ces quatre routes se naviguaient en LITTERAL NU pendant que onze autres
 // avaient une constante — une faute de frappe ne se voyait qu'à la compilation.
@@ -130,22 +124,26 @@ fun AppNav(
     // ci-dessous, alimenté par ServerStore. "" = non configuré (bouchon
     // previews/tests sans BuildConfig).
     baseUrlSeed: String = "",
-    // #75 : compte appairé (toggle + proxy des pièces jointes), jamais un hôte.
+    // #75 : compte courant (jamais un hôte) : transmis aux routes qui
+    // l'affichent, et l'écriture reste une action utilisateur confirmée (I7).
     accountId: String = "",
     // #172 : `loadAlerts` retiré — mort depuis #144 (l'écran Alertes lit le cache).
 ) {
     val nav = rememberNavController()
     val ctx = LocalContext.current.applicationContext
-    // Serveur choisi à l'exécution : `baseUrl` devient un ÉTAT, donc les
-    // `remember(baseUrl)` plus bas rebloquent leurs repositories sur la nouvelle
-    // adresse et les routes lisent le même état.
+    // Adresse du scraper : `baseUrl` est lue UNE fois au démarrage (graine +
+    // choix persisté) puis partagée en lecture seule par les routes.
     val serverStore = remember(ctx) { ServerStore(ctx) }
     // 0.7.0 : clé LLM = UN store pour tout le process (réglages + écran devoirs),
     // sinon les deux écrans raisonneraient sur deux états divergents. L'état
     // d'affichage est relu après chaque écriture : le store est la vérité.
     val llmKeys = remember(ctx) { LlmKeys.get(ctx) }
     var llmKeyConfigured by remember(llmKeys) { mutableStateOf(llmKeys.isConfigured()) }
-    var baseUrl by remember(serverStore) { mutableStateOf(serverStore.baseUrl(baseUrlSeed)) }
+    // Adresse du scraper de manuels (ServerConfig ne valide plus que ça, #209)
+    // : graine de build + choix persisté. Les dépôts locaux l'ignorent (le
+    // téléphone parle à l'établissement en direct) ; elle resservira à la
+    // récupération du corpus via le scraper.
+    val baseUrl = remember(serverStore) { serverStore.baseUrl(baseUrlSeed) }
     // ponytail: fichier natif seul (pas de Room). Repli memoire si stockage KO.
     val cacheStore = remember(baseUrl) {
         try {
@@ -154,41 +152,25 @@ fun AppNav(
             InMemoryCacheStore()
         }
     }
-    // Session appairée UNIQUE partagée : un seul store, lu par ApiClient à
-    // chaque requête (bearer) et vidé par accounts.logout() — deux stores
-    // divergents laisseraient le secret vivant après une déconnexion.
-    val tokens = remember(ctx) { SessionTokens.get(ctx) }
-    val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }
+    // Session Pronote UNIQUE partagée : le store chiffré (lu au démarrage par
+    // restauration, vidé par accounts.logout()) + le client en mémoire. Deux
+    // stores divergents laisseraient le jeton vivant après une déconnexion.
+    val sessions = remember(ctx) { SessionStores.get(ctx) }
+    // #205 : dépôts locaux (client du téléphone + cache, ADR-003).
     val repo = remember(cacheStore) { SyncedRepository(cacheStore) }
     // #82 : comptes appairés + déconnexion (session invalidée + cache purgé).
     // Seuls des accountId sont persistés, aucune donnée personnelle.
-    val accounts = remember(baseUrl, cacheStore, tokens) {
-        AccountStore(ctx, cacheStore, tokens)
+    val accounts = remember(cacheStore, sessions) {
+        AccountStore(ctx, cacheStore, sessions)
     }
-    // #113 : un 401 (credential révoquée/expirée — INDISTINGUABLES côté serveur) ne
-    // doit plus se traduire par des échecs silencieux. Le signal unique vient du
-    // garde-fou ApiClient ; on répare par le chemin EXISTANT `accounts.logout()`
-    // (secret effacé + caches purgés, aucune purge parallèle) puis on ramène à
-    // l'appairage. Anti-boucle : après logout() plus aucun bearer ne part.
-    // #147 : survit à la rotation — sans la phrase « Credential refusée », un
-    // écran de connexion ressemble à une panne.
+    // #113 : une session morte (jeton tourné, session refermée — le client ne
+    // distingue pas) ne doit plus se traduire par des échecs silencieux. La
+    // réparation vit dans `SessionGate` (signal des dépôts locaux +
+    // restauration au démarrage) ; ici ne reste que la phrase factuelle qui
+    // survit à la rotation (#147 : sans elle, un écran de connexion ressemble
+    // à une panne).
     var authNotice by rememberSaveable { mutableStateOf<String?>(null) }
-    val main = remember { Handler(Looper.getMainLooper()) }
-    DisposableEffect(accounts) {
-        DeviceAuth.setOnRejected {
-            main.post {
-                authNotice = DeviceAuth.REJECTED_MESSAGE
-                accounts.logout()
-                if (nav.currentDestination?.route != ROUTE_PAIRING) {
-                    nav.navigate(ROUTE_PAIRING) {
-                        popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
-                        launchSingleTop = true
-                    }
-                }
-            }
-        }
-        onDispose { DeviceAuth.setOnRejected(null) }
-    }
+    SessionGate(sessions = sessions, accounts = accounts, nav = nav, onNotice = { authNotice = it })
     // #205 : dépôts locaux (client du téléphone + cache, ADR-003).
     val profileRepo = remember { ProfileRepository() }
     // #83 : prefs matière = fichier local (survit au restart, lisible hors
@@ -215,10 +197,10 @@ fun AppNav(
         )
     }
     /**
-     * Detecte les onglets actifs : lecture de /v1/capabilities (ressource
-     * cachee, offline-first) puis relecture forcee POST /v1/sync/refresh
-     * (lecture seule cote serveur, aucun effet metier : I7), suivie d'une
-     * nouvelle lecture de la liste. Un echec reseau laisse l'etat courant.
+     * Detecte les onglets actifs : lecture des capacités (ressource
+     * cachee, offline-first) puis ping de session local (aucun effet
+     * metier : I7), suivie d'une nouvelle lecture de la liste. Un
+     * echec laisse l'etat courant.
      */
     fun detectCapabilities() {
         if (baseUrl.isBlank()) return
@@ -281,7 +263,7 @@ fun AppNav(
             navController = nav,
             // #120 : premier lancement OU session morte = l'assistant de
             // connexion, pas un Accueil qui ne peut rien afficher.
-            startDestination = if (tokens.isPaired()) ROUTE_INDEX else ROUTE_PAIRING,
+            startDestination = if (sessions.hasSession()) ROUTE_INDEX else ROUTE_PAIRING,
             modifier = Modifier.padding(pad),
         ) {
             composable(ROUTE_INDEX, deepLinks = listOf(routeDeepLink(ROUTE_INDEX))) {
@@ -317,8 +299,8 @@ fun AppNav(
                 )
             }
             composable(ROUTE_TASKS, deepLinks = listOf(routeDeepLink(ROUTE_TASKS))) {
-                // #75 : devoirs de la semaine (contenus + PJ via proxy), toggle
-                // Optimiste avec retour arrière, pull-refresh.
+                // #75 : devoirs de la semaine (contenus + PJ lues en local),
+                // toggle Optimiste avec retour arrière, pull-refresh.
                 AssignmentsRoute(
                     CachePolicy.ASSIGNMENTS,
                     repo,
@@ -397,26 +379,16 @@ fun AppNav(
                 )
             }
             composable(ROUTE_PAIRING, deepLinks = listOf(routeDeepLink(ROUTE_PAIRING))) {
-                // Serveur vide = aucune graine de build : on montre QUAND MÊME
-                // le champ (c'est là que l'utilisateur saisit son adresse), pas
-                // un cul-de-sac — sans serveur, on ne peut pas appairer.
-                // #113 : `notice` = raison factuelle de l'arrivée ici (credential
+                // #113 : `notice` = raison factuelle de l'arrivée ici (session
                 // refusée). Pas de cause devinée, pas de bouton « réessayer » :
                 // le seul geste utile est l'appairage.
                 PairingRoute(
-                    baseUrl = baseUrl,
                     onBack = { nav.popBackStack() },
                     notice = authNotice,
-                    // null = enregistrée (session purgée), sinon message à afficher.
-                    onServerChange = { raw ->
-                        changeServer(raw, baseUrl, accounts, serverStore) { url ->
-                            authNotice = null
-                            baseUrl = url
-                        }
-                    },
-                    // Setup réussi = la session ET le credential sont en place :
-                    // on va droit à l'accueil. Aucun écran de confirmation à
-                    // faire valider, l'utilisateur n'a plus rien à prouver.
+                    // Appairage réussi = la session locale ET persistée est en
+                    // place : on va droit à l'accueil. Aucun écran de
+                    // confirmation à faire valider, l'utilisateur n'a plus rien
+                    // à prouver.
                     onPaired = {
                         if (!nav.popBackStack(ROUTE_INDEX, inclusive = false)) {
                             nav.navigateTo(ROUTE_INDEX)
@@ -429,12 +401,12 @@ fun AppNav(
             }
             // #144 : appelé SANS argument avant, donc `sheets` vide pour toujours.
             composable(ROUTE_FICHES, deepLinks = listOf(routeDeepLink(ROUTE_FICHES))) {
-                RevisionSheetsRoute(api = api, baseUrl = baseUrl)
+                RevisionSheetsRoute()
             }
             // #80 : messagerie — liste des fils (cache), lecture d'un fil, réponse,
             // création, lu/non-lu et suppression (boutons = actions confirmées, I7).
             composable(ROUTE_MESSAGES, deepLinks = listOf(routeDeepLink(ROUTE_MESSAGES))) {
-                MessagesRoute(repo, baseUrl, accountId, tokens = tokens)
+                MessagesRoute(repo, baseUrl, accountId)
             }
         }
     }
