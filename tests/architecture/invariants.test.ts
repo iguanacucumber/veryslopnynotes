@@ -218,13 +218,10 @@ describe("invariants", () => {
       "providedAveragesFor",
       "computeAverages",
       "CapabilityProbe",
-      // Port Kotlin #200 : surface du protocole rejouée par la parité
-      // (`kotlin-pronote-parity`), branchée par le client #201 (`enleverAlea`
-      // et `sha256HexUpper` y servent à l'authentification QR/ENT).
-      "Communication",
-      "KeepAlive",
+      // Port Kotlin #200/#201 : surface du protocole rejouée par la parité
+      // (`kotlin-pronote-parity`, `kotlin-pronote-client-parity`). `enleverAlea`
+      // seul attend un appelant (désentrelacement QR/ENT, #205 ou client futur).
       "enleverAlea",
-      "sha256HexUpper",
     ]);
     const morts: string[] = [];
     for (const f of files) {
