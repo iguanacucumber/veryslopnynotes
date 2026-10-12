@@ -552,9 +552,12 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
       });
     }
     // Les SEULES chaînes ressemblant à une URL dans le code Kotlin de
-    // android/ : le gabarit affiché dans l'écran d'appairage. Un hôte réel
+    // android/ : le gabarit affiché dans l'écran d'appairage, plus (#204)
+    // l'endpoint PUBLIC du fournisseur LLM (pas un hôte d'établissement ni
+    // de serveur : catégorie distincte, comme le modèle en constante de code ;
+    // jamais d'identifiant ni de secret dedans). Un hôte réel d'établissement
     // passé en dur (ou dans un message) casserait cette liste.
-    const allowed = new Set(["https://domaine[:port]", "https://domaine[:port]."]);
+    const allowed = new Set(["https://domaine[:port]", "https://domaine[:port].", "https://openrouter.ai/api/v1/chat/completions"]);
     const urls = new Set<string>();
     for (const f of files.filter((f) => /\.(kt|kts)$/.test(f))) {
       for (const m of codeOnly(read(f)).matchAll(/https?:\/\/[^"' )`]*/g)) urls.add(m[0] as string);
