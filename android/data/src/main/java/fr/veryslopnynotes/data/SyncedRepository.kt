@@ -2,14 +2,8 @@ package fr.veryslopnynotes.data
 
 import android.os.Handler
 import android.os.Looper
-import fr.veryslopnynotes.core.ServerConfig
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
+import fr.veryslopnynotes.core.SecurityAlert
 import org.json.JSONObject
-import java.io.IOException
 
 // Resultat refresh reseau avec repli cache (affichage sans reseau).
 // Jamais d'exception vers UI : tout echec = Failed avec cache si dispo.
@@ -19,215 +13,227 @@ sealed interface RefreshOutcome {
     data class Failed(val message: String, val cachedPayload: String?) : RefreshOutcome
 }
 
-// Depots offline-first par ressource cachable.
+// Depots offline-first par ressource cachable (#205, ADR-003).
 // Lecture : loadCached() synchrone (jamais de reseau). Ecriture : refreshAsync()
-// tente GET serveur allowlist via ApiClient, sauve en cache au succes,
-// replie sur cache a l'echec (avion/serveur KO). Invalidation active via
-// evenement CacheInvalidated serveur (reason sync/expiry/manual) -> clear().
-// I1 : aucun appel hors allowlist serveur ; paths issus de ServerConfig seuls.
+// lit le CLIENT LOCAL (tache de fond, jamais le thread UI), sauve en cache au
+// succes, replie sur le cache a l'echec (avion/session KO). `baseUrl` reste un
+// parametre des signatures (les ecrans le passent) mais ne sert plus : aucune
+// requete serveur metier ne part d'ici. Invalidation active via
+// evenement local -> clear().
+// I1 : aucun appel hors telephone ; seul `android/pronote/` parle au serveur
+// de l'etablissement, via le client tenu par [PronoteSession] (#206 le remplit).
 class SyncedRepository(
-    private val api: ApiClient,
     private val store: CacheStore,
     private val clock: () -> Long = System::currentTimeMillis,
     private val main: Handler = Handler(Looper.getMainLooper()),
+    private val provider: PronoteClientProvider = { PronoteSession.client },
 ) {
     fun cached(resource: String): CachedEntry? = store.load(resource)
 
     fun isStale(resource: String, entry: CachedEntry, now: Long = clock()): Boolean =
         CachePolicy.isStale(resource, entry.fetchedAt, now)
 
-    // ponytail: query de fenêtre bornée par l appelant (weekStart, #76), vide par
-    // défaut = chemin inchangé. Jamais de saisie libre concaténée ici.
-    fun pathFor(resource: String, baseUrl: String, query: String = ""): String = when (resource) {
-        // #139 : query `algorithm` + `periodId` (sélecteurs de l'onglet Notes).
-        CachePolicy.GRADES -> ServerConfig.gradesUrl(baseUrl, query)
-            .removePrefix(baseUrl).ifEmpty { "/v1/grades" }
-        CachePolicy.ASSIGNMENTS -> ServerConfig.assignmentsUrl(baseUrl)
-            .removePrefix(baseUrl).ifEmpty { "/v1/assignments" }
-        CachePolicy.TIMETABLE -> ServerConfig.timetableUrl(baseUrl, query)
-            .removePrefix(baseUrl).ifEmpty { "/v1/timetable" }
-        CachePolicy.NEWS -> ServerConfig.newsUrl(baseUrl)
-            .removePrefix(baseUrl).ifEmpty { "/v1/news" }
-        CachePolicy.MENUS -> ServerConfig.menusUrl(baseUrl)
-            .removePrefix(baseUrl).ifEmpty { "/v1/menus" }
-        // #77 : vie scolaire (absences/retards + compteurs, sanctions).
-        CachePolicy.ATTENDANCE -> ServerConfig.attendanceUrl(baseUrl)
-            .removePrefix(baseUrl).ifEmpty { "/v1/attendance" }
-        CachePolicy.PUNISHMENTS -> ServerConfig.punishmentsUrl(baseUrl)
-            .removePrefix(baseUrl).ifEmpty { "/v1/punishments" }
-        // #87 : onglets actifs de l'etablissement (capacites dynamiques).
-        CachePolicy.CAPABILITIES -> ServerConfig.capabilitiesUrl(baseUrl)
-            .removePrefix(baseUrl).ifEmpty { "/v1/capabilities" }
-
-        // #80 : liste des fils de messagerie (les messages ne sont pas en cache).
-        CachePolicy.DISCUSSIONS -> ServerConfig.discussionsUrl(baseUrl)
-            .removePrefix(baseUrl).ifEmpty { "/v1/discussions" }
-        // #144 : alertes sécurité — même plomberie que les autres, donc le cache
-        // hors-ligne distingue « aucune menace » de « pas de réseau ».
-        CachePolicy.SECURITY_ALERTS -> ServerConfig.securityAlertsUrl(baseUrl)
-            .removePrefix(baseUrl).ifEmpty { "/v1/security/alerts" }
-        else -> throw IllegalArgumentException("ressource non cachable: $resource")
-    }
-
-    // Invalidation active (CacheInvalidated) : purge ressource, UI retombe sur Empty.
+    // Invalidation active : purge ressource, UI retombe sur Empty.
     fun invalidate(resource: String) {
         if (CachePolicy.isCacheable(resource)) store.clear(resource)
     }
 
-    // GET serveur async (OkHttp enqueue, pas de coroutines). Callback sur main thread.
+    // Lecture locale async (Thread de fond, pas de coroutines). Callback sur main
+    // thread. Le payload ecrit le cache (fenetre demandee, comme avant).
     // ponytail: une seule clé de cache par ressource : la requête de la fenêtre
     //   demandée écrase le payload précédent (semaine courante en pratique).
     //   Upgrade: clé de cache = ressource + fenêtre.
     fun refreshAsync(resource: String, baseUrl: String, query: String = "", cb: (RefreshOutcome) -> Unit) {
         require(CachePolicy.isCacheable(resource)) { "ressource non cachable: $resource" }
-        val request = try {
-            api.buildGet(pathFor(resource, baseUrl, query))
-        } catch (e: IllegalArgumentException) {
-            post(cb, RefreshOutcome.Failed("URL hors allowlist serveur", store.load(resource)?.payload))
-            return
-        }
-        api.client().newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                val c = store.load(resource)
-                if (c != null) {
-                    post(cb, RefreshOutcome.OfflineFallback(c.payload, c.fetchedAt, isStale(resource, c)))
-                } else {
-                    post(cb, RefreshOutcome.Failed("Hors-ligne, aucune donnée en cache.", null))
-                }
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    if (!it.isSuccessful) {
-                        // 401 : credential d'appareil refusée. Le cache ne masque
-                        // PAS une session morte (l'utilisateur verrait des données
-                        // périmées comme si tout allait bien) : Failed nu, même
-                        // plomberie que les autres échecs, et le garde-fou ApiClient
-                        // renvoie vers l'appairage.
-                        if (it.code == ApiClient.HTTP_UNAUTHORIZED) {
-                            post(cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
-                            return
-                        }
-                        val c = store.load(resource)
-                        if (c != null) {
-                            post(cb, RefreshOutcome.OfflineFallback(c.payload, c.fetchedAt, isStale(resource, c)))
-                        } else {
-                            post(cb, RefreshOutcome.Failed("Erreur serveur ${it.code}.", null))
-                        }
-                        return
-                    }
-                    val body = it.body?.string()
-                    if (body.isNullOrEmpty()) {
-                        val c = store.load(resource)
-                        post(cb, RefreshOutcome.Failed("Réponse vide.", c?.payload))
-                        return
-                    }
-                    // Contenu serveur = donnee affichee, jamais interpretee (I6/I7).
-                    val now = clock()
-                    try {
-                        store.save(resource, body, now)
-                    } catch (_: Exception) {
-                        post(cb, RefreshOutcome.Failed("Cache illisible.", body))
-                        return
-                    }
-                    post(cb, RefreshOutcome.Updated(body, now))
-                }
-            }
-        })
+        readAsync(save = true, resource = resource, query = query, cb = cb)
     }
 
     /**
-     * #87 : pull-refresh manuel (app -> serveur -> relecture Pronote bornee).
-     * POST /v1/sync/refresh : aucune ecriture Pronote, donc pas de confirmation
-     * supplementaire (I7 : ce chemin ne declenche aucun LLM). La reponse porte
-     * les evenements de sync (types existants) : l'appelant les traite comme
-     * une invalidation de cache. accountId absent = serveur mono-compte.
+     * Lecture locale SANS ecriture cache (semaines non courantes : l'ecran
+     * Devoirs/EDT affiche une autre semaine sans ecraser la courante, comme
+     * l'ancien GET fenetre qui ne persistait pas).
+     */
+    fun fetchAsync(resource: String, query: String = "", cb: (RefreshOutcome) -> Unit) {
+        require(CachePolicy.isCacheable(resource)) { "ressource non cachable: $resource" }
+        readAsync(save = false, resource = resource, query = query, cb = cb)
+    }
+
+    private fun readAsync(save: Boolean, resource: String, query: String, cb: (RefreshOutcome) -> Unit) {
+        Thread {
+            val outcome = try {
+                val payload = readLocal(resource, query)
+                if (save) {
+                    try {
+                        store.save(resource, payload, clock())
+                    } catch (_: Exception) {
+                        post(cb, RefreshOutcome.Failed("Cache illisible.", payload))
+                        return@Thread
+                    }
+                    post(cb, RefreshOutcome.Updated(payload, clock()))
+                } else {
+                    post(cb, RefreshOutcome.Updated(payload, clock()))
+                }
+            } catch (e: NoLocalSession) {
+                post(cb, cachedOrFailed(resource, "Hors-ligne, aucune donnée en cache."))
+            } catch (e: Exception) {
+                if (isSessionFailure(e)) {
+                    // Session locale morte : le cache ne masque PAS une session
+                    // morte (des donnees perimees comme si tout allait bien) :
+                    // Failed nu, et le signal renvoie vers l'appairage (#113).
+                    DeviceAuth.reject()
+                    post(cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
+                } else {
+                    post(cb, cachedOrFailed(resource, "Hors-ligne, aucune donnée en cache."))
+                }
+            }
+        }.start()
+    }
+
+    private fun cachedOrFailed(resource: String, message: String): RefreshOutcome {
+        val c = try {
+            store.load(resource)
+        } catch (_: Exception) {
+            null
+        }
+        return if (c != null) {
+            RefreshOutcome.OfflineFallback(c.payload, c.fetchedAt, isStale(resource, c))
+        } else {
+            RefreshOutcome.Failed(message, null)
+        }
+    }
+
+    /**
+     * #87 : relecture manuelle : aucun effet metier, donc pas de confirmation
+     * supplementaire (I7 : ce chemin ne declenche aucun LLM). Localement =
+     * ping de session (`keepAlive`) : vivante = l'appelant recharge ses
+     * ressources, morte = signal d'appairage.
      */
     fun requestSyncRefresh(baseUrl: String, accountId: String = "", cb: (RefreshOutcome) -> Unit) {
         if (baseUrl.isBlank()) {
             post(cb, RefreshOutcome.Failed("Serveur non configure.", null))
             return
         }
-        val request = try {
-            val body = JSONObject().apply {
-                if (accountId.isNotBlank()) put("accountId", accountId.trim())
-            }.toString().toRequestBody(JSON_MEDIA)
-            api.buildPost(ServerConfig.syncRefreshUrl(baseUrl).removePrefix(baseUrl), body)
-        } catch (e: IllegalArgumentException) {
-            post(cb, RefreshOutcome.Failed("URL hors allowlist serveur", null))
-            return
-        }
-        api.client().newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                post(cb, RefreshOutcome.Failed("Relecture indisponible (hors-ligne).", null))
+        Thread {
+            val client = try {
+                provider()
+            } catch (_: Exception) {
+                null
             }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    val body = it.body?.string()
-                    if (!it.isSuccessful || body.isNullOrEmpty()) {
-                        post(cb, RefreshOutcome.Failed("Relecture indisponible (HTTP ${it.code}).", null))
-                        return
-                    }
-                    // Contenu serveur = donnee consommee comme invalidation,
-                    // jamais interpretee (I6/I7).
-                    post(cb, RefreshOutcome.Updated(body, clock()))
+            if (client == null) {
+                post(cb, RefreshOutcome.Failed("Relecture indisponible (hors-ligne).", null))
+                return@Thread
+            }
+            try {
+                client.keepAlive().pingIfDue()
+                // Contenu local = invalidation, jamais interprete (I6/I7).
+                post(cb, RefreshOutcome.Updated("{\"synced\":true}", clock()))
+            } catch (e: Exception) {
+                if (isSessionFailure(e)) {
+                    DeviceAuth.reject()
+                    post(cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
+                } else {
+                    post(cb, RefreshOutcome.Failed("Relecture indisponible (hors-ligne).", null))
                 }
             }
-        })
+        }.start()
     }
 
     /**
-     * #139 : lecture des TRANCHES de l'établissement (`GET /v1/periods`), premier
-     * appel à cette route depuis l'app (le sélecteur de période de l'onglet
-     * Notes).
+     * Tranches de l'etablissement, lues sur le client local.
      *
-     * Volontairement HORS cache : `/v1/periods` n'est pas dans
-     * `CACHEABLE_RESOURCES` (shared/contracts/cache.ts), donc l'ajouter ici
-     * reviendrait à modifier un contrat partagé pour une liste qui change une
-     * fois par an. On rend donc le même [RefreshOutcome] que le reste, mais sans
-     * écriture disque : `Updated` = payload lu, `Failed` = le message réel.
-     *
-     * Jamais d'exception vers l'UI, même Plomberie que `refreshAsync` sur un 401 :
-     * le signal de session morte reste levé par `ApiClient`, jamais ici.
+     * Volontairement HORS cache (comme avant) : `/v1/periods` n'est pas dans
+     * les ressources cachables, donc pas d'ecriture disque : `Updated` = payload
+     * lu, `Failed` = le message réel. Jamais d'exception vers l'UI.
      */
     fun fetchPeriods(baseUrl: String, cb: (RefreshOutcome) -> Unit) {
         if (baseUrl.isBlank()) {
             post(cb, RefreshOutcome.Failed("Serveur non configure.", null))
             return
         }
-        val request = try {
-            api.buildGet(ServerConfig.periodsUrl(baseUrl).removePrefix(baseUrl))
-        } catch (e: IllegalArgumentException) {
-            post(cb, RefreshOutcome.Failed("URL hors allowlist serveur", null))
-            return
-        }
-        api.client().newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                post(cb, RefreshOutcome.Failed("Hors-ligne, tranches indisponibles.", null))
+        Thread {
+            val client = try {
+                provider()
+            } catch (_: Exception) {
+                null
             }
-
-            override fun onResponse(call: Call, response: Response) {
-                response.use {
-                    val body = it.body?.string()
-                    if (!it.isSuccessful) {
-                        post(
-                            cb,
-                            RefreshOutcome.Failed(
-                                if (it.code == ApiClient.HTTP_UNAUTHORIZED) DeviceAuth.REJECTED_MESSAGE else "Erreur serveur ${it.code}.",
-                                null,
-                            ),
-                        )
-                        return
-                    }
-                    if (body.isNullOrEmpty()) {
-                        post(cb, RefreshOutcome.Failed("Réponse vide.", null))
-                        return
-                    }
-                    post(cb, RefreshOutcome.Updated(body, clock()))
+            if (client == null) {
+                post(cb, RefreshOutcome.Failed("Hors-ligne, tranches indisponibles.", null))
+                return@Thread
+            }
+            try {
+                post(cb, RefreshOutcome.Updated(periodsPayload(client), clock()))
+            } catch (e: Exception) {
+                if (isSessionFailure(e)) {
+                    DeviceAuth.reject()
+                    post(cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
+                } else {
+                    post(cb, RefreshOutcome.Failed("Hors-ligne, tranches indisponibles.", null))
                 }
             }
-        })
+        }.start()
+    }
+
+    /**
+     * Lecture d'une ressource sur le client local. `null` = pas de session
+     * ([NoLocalSession] : repli cache, comme un reseau KO).
+     */
+    private fun readLocal(resource: String, query: String): String {
+        val client = try {
+            provider()
+        } catch (_: Exception) {
+            null
+        } ?: throw NoLocalSession()
+        val q = parseQuery(query)
+        return when (resource) {
+            CachePolicy.GRADES -> gradesPayload(client, q)
+            CachePolicy.ASSIGNMENTS -> assignmentsPayload(client, q)
+            CachePolicy.TIMETABLE -> timetablePayload(client, q)
+            CachePolicy.NEWS -> newsPayload(client)
+            CachePolicy.MENUS -> menusPayload(client)
+            CachePolicy.ATTENDANCE -> attendancePayload(client)
+            CachePolicy.PUNISHMENTS -> punishmentsPayload(client)
+            CachePolicy.CAPABILITIES -> capabilitiesPayload(client)
+            CachePolicy.DISCUSSIONS -> discussionsPayload(client)
+            // Alertes : balayage des contenus DEJA en cache (aucun reseau :
+            // marche hors ligne, frais = « verifie, rien trouve »).
+            CachePolicy.SECURITY_ALERTS -> alertsPayload(scanTexts())
+            else -> throw IllegalArgumentException("ressource non cachable: $resource")
+        }
+    }
+
+    private fun scanTexts(): List<SecurityAlert.ScannableText> {
+        val out = mutableListOf<SecurityAlert.ScannableText>()
+        for (resource in listOf(CachePolicy.NEWS, CachePolicy.ASSIGNMENTS, CachePolicy.DISCUSSIONS)) {
+            val payload = try {
+                store.load(resource)?.payload
+            } catch (_: Exception) {
+                null
+            } ?: continue
+            val source = when (resource) {
+                CachePolicy.NEWS -> "news"
+                CachePolicy.ASSIGNMENTS -> "homework"
+                else -> "discussions"
+            }
+            try {
+                val root = JSONObject(payload)
+                val key = when (resource) {
+                    CachePolicy.NEWS -> "news"
+                    CachePolicy.ASSIGNMENTS -> "assignments"
+                    else -> "discussions"
+                }
+                val arr = root.optJSONArray(key) ?: continue
+                for (i in 0 until arr.length()) {
+                    val o = arr.optJSONObject(i) ?: continue
+                    for (field in listOf("body", "description", "subject", "title")) {
+                        val text = o.optString(field, "")
+                        if (text.isNotBlank()) out.add(SecurityAlert.ScannableText(source, text))
+                    }
+                }
+            } catch (_: Exception) {
+                continue
+            }
+        }
+        return out
     }
 
     private fun post(cb: (RefreshOutcome) -> Unit, o: RefreshOutcome) {
@@ -239,5 +245,5 @@ class SyncedRepository(
     }
 }
 
-// #87 : corps JSON du pull-refresh (application/json, stdlib + OkHttp).
-private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
+/** Pas de session locale : repli cache, exactement comme un reseau KO. */
+private class NoLocalSession : Exception()

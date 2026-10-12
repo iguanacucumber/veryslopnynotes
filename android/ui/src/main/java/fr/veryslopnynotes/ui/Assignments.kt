@@ -1,10 +1,8 @@
 package fr.veryslopnynotes.ui
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import android.os.Handler
-import android.os.Looper
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -82,22 +80,17 @@ import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.AssignmentAttachment
 import fr.veryslopnynotes.core.AssignmentLessonContent
-import fr.veryslopnynotes.core.ServerConfig
 import fr.veryslopnynotes.core.dayLabelFr
 import fr.veryslopnynotes.core.isoDayKey
-import fr.veryslopnynotes.data.ApiClient
 import fr.veryslopnynotes.data.AssignmentsRepository
-import fr.veryslopnynotes.data.DeviceAuth
 import fr.veryslopnynotes.data.HomeworkRepository
 import fr.veryslopnynotes.data.LlmKeyStore
+import fr.veryslopnynotes.data.OpenRouterHomework
+import fr.veryslopnynotes.data.OpenRouterLlm
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SyncedRepository
-import fr.veryslopnynotes.data.TokenStore
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.Response
-import java.io.IOException
+import java.io.File
 import java.time.ZoneId
 
 // Onglet Tâches #75, refait à la Papillon #138 : cartes de devoir, sections
@@ -411,7 +404,7 @@ private fun PapTaskCard(
     nowMillis: Long,
     zone: ZoneId,
     onToggle: (Assignment, Boolean) -> Unit,
-    onOpenAttachment: (AssignmentAttachment) -> Unit,
+    onOpenAttachment: (Assignment, AssignmentAttachment) -> Unit,
     onHelp: ((Assignment) -> Unit)?,
 ) {
     val style = subjectStyle(prefs, a.subject)
@@ -535,7 +528,7 @@ private fun PapTaskCard(
                 PapPill(text = "Cours : ${lesson.title}", color = tint)
             }
             if (a.attachments.isNotEmpty()) {
-                AttachmentChips(attachments = a.attachments, onOpen = onOpenAttachment)
+                AttachmentChips(attachments = a.attachments, onOpen = { att -> onOpenAttachment(a, att) })
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -662,9 +655,9 @@ private fun DoneToggle(done: Boolean, color: Color?, onToggle: () -> Unit) {
  * texte (`Pièce jointe : fiche.pdf — https://…`), donc illisible et impossible
  * à ouvrir.
  *
- * L'URL n'est construite qu'au tap, dans la route, à partir de la `ref` OPAQUE :
- * elle n'est jamais journalisée et pointe le proxy serveur (`/v1/media`), jamais
- * un hôte tiers — aucune adresse d'établissement ne sort de l'app (I1).
+ * L'ouverture part au tap, dans la route : les octets sont téléchargés sur le
+ * client local puis servis à l'ouvreur par un FileProvider — aucune adresse
+ * d'établissement ne sort de l'app (I1).
  */
 @Composable
 private fun AttachmentChips(attachments: List<AssignmentAttachment>, onOpen: (AssignmentAttachment) -> Unit) {
@@ -728,7 +721,7 @@ fun AssignmentsScreen(
     onShiftWeek: (Long) -> Unit,
     onToggleDoneSection: () -> Unit,
     onToggle: (Assignment, Boolean) -> Unit,
-    onOpenAttachment: (AssignmentAttachment) -> Unit,
+    onOpenAttachment: (Assignment, AssignmentAttachment) -> Unit,
     // 0.7.0 : null = aucun assistant (pas de dépôt injecté) = pas de bouton.
     onHelp: ((Assignment) -> Unit)? = null,
 ) {
@@ -900,27 +893,22 @@ fun AssignmentsScreen(
 }
 
 // Route câblée sur SyncedRepository (ressource "assignments", TTL 15 min) :
-// cache synchrone au démarrage, refresh réseau, repli cache hors-ligne.
+// cache synchrone au démarrage, refresh local, repli cache hors-ligne.
 // Toggle Optimiste : l'affichage bascule tout de suite, retour arrière si le
-// serveur refuse (401 session expirée / 409 inconnu / 501 non supporté / réseau).
+// client refuse (session perdue / devoir introuvable / réseau).
 @Composable
 fun AssignmentsRoute(
     resource: String,
     repo: SyncedRepository,
     baseUrl: String,
-    accountId: String,
     subjectPrefs: List<SubjectPrefs> = emptyList(),
-    // Bearer du device appairé (contrat 0.4.0), relu à chaque requête.
-    tokens: TokenStore? = null,
     // Clé LLM de l'appelant (0.7.0) : null = assistant non câblé, donc ni
     // bouton ni appel. Elle reste dans le store, jamais dans l'état d'écran.
     llmKeys: LlmKeyStore? = null,
 ) {
-    val api = remember(baseUrl, tokens) { ApiClient(baseUrl, tokens = tokens) }
-    val toggleRepo = remember(api) { AssignmentsRepository(api) }
-    val helpRepo = remember(api, llmKeys) { llmKeys?.let { HomeworkRepository(api, it) } }
+    val toggleRepo = remember { AssignmentsRepository() }
+    val helpRepo = remember(llmKeys) { llmKeys?.let { OpenRouterHomework(OpenRouterLlm(), it) } }
     val zone = remember { ZoneId.systemDefault() }
-    val main = remember { Handler(Looper.getMainLooper()) }
     val context = LocalContext.current
     // #147 : le devoir ouvert dans l'Assistant est SAUVEGARDÉ. Sans lui, une
     // rotation refermerait le dialogue — et sa question, son corrigé et son
@@ -989,9 +977,9 @@ fun AssignmentsRoute(
             if (week == weekStartIso(nowMillis, zone)) {
                 repo.refreshAsync(resource, baseUrl) { o -> accept(o) }
             } else {
-                // Semaine différente : la plage part DANS la requête — c'est le
-                // point de #138 — donc ce chemin ne passe pas par le cache.
-                fetchAssignmentsWeek(api, baseUrl, week, repo, resource, main) { o -> accept(o) }
+                // Semaine différente : lue sur le client local SANS écraser le
+                // cache de la semaine courante (repli : le cache courant).
+                repo.fetchAsync(resource, "weekStart=$week") { o -> accept(o) }
             }
         } catch (_: Exception) {
             state = UiState.Error("Erreur inattendue.", (state as? UiState.Data)?.payload)
@@ -1045,29 +1033,37 @@ fun AssignmentsRoute(
     val sections = assignmentSections(visible, nowMillis, zone)
     val errorMessage = (state as? UiState.Error)?.message
 
-    fun openAttachment(att: AssignmentAttachment) {
-        // Jamais d'adresse d'établissement : la `ref` opaque passe par le PROXY
-        // serveur, qui résout et stream les octets (règle d'or média).
-        val url = AssignmentsRepository.mediaUrl(baseUrl, accountId, att.ref)
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-        if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        // ponytail: aucun journal — une URL finit dans les logs d'accès. Le proxy
-        // exige le jeton d'appareil, qu'aucune application externe ne peut porter :
-        // l'ouvreur affiche donc « session requise » tant qu'aucun FileProvider
-        // (module app) ne sert les octets téléchargés par l'app.
-        // Upgrade: FileProvider + téléchargement par l'app, comme la photo #82.
-        // #145 : l'échec sort en notice ROUGE (c'est une action qui a échoué, pas
-        // un état de l'écran), et elle disparaît seule.
-        val opened = try {
-            context.startActivity(intent)
-            true
-        } catch (_: Exception) {
-            false
-        }
-        if (!opened) {
-            notices.show(
-                PapNotice("Aucune application ne peut ouvrir cette pièce jointe.", NoticeKind.ERROR),
-            )
+    fun openAttachment(a: Assignment, att: AssignmentAttachment) {
+        // Jamais d'adresse d'établissement : la `ref` opaque est résolue sur
+        // le client local, et les octets sont servis à l'ouvreur par un
+        // FileProvider (module app). Aucun secret ne part (I1).
+        // #145 : l'échec sort en notice ROUGE (c'est une action qui a échoué,
+        // pas un état de l'écran), et elle disparaît seule.
+        toggleRepo.fetchAttachment(a.id, att.id) { data ->
+            if (data == null) {
+                notices.show(PapNotice("Pièce jointe illisible hors-ligne.", NoticeKind.ERROR))
+                return@fetchAttachment
+            }
+            val opened = try {
+                val file = writeAttachmentFile(context, a.id, att, data.bytes)
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context, ATTACHMENT_PROVIDER_AUTHORITY, file,
+                )
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, mimeOf(data.name))
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+                true
+            } catch (_: Exception) {
+                false
+            }
+            if (!opened) {
+                notices.show(
+                    PapNotice("Aucune application ne peut ouvrir cette pièce jointe.", NoticeKind.ERROR),
+                )
+            }
         }
     }
 
@@ -1102,7 +1098,7 @@ fun AssignmentsRoute(
         },
         onToggleDoneSection = { doneOpen = !doneOpen },
         onToggle = { a, done -> toggle(a, done) },
-        onOpenAttachment = { att -> openAttachment(att) },
+        onOpenAttachment = { a, att -> openAttachment(a, att) },
         onHelp = if (helpRepo == null) null else ({ a -> helpFor = a }),
     )
     // Le dialogue porte son propre état (question éditable, résultat) : il est
@@ -1112,7 +1108,6 @@ fun AssignmentsRoute(
     if (current != null && helpRepo != null) {
         HomeworkHelpDialog(
             assignment = current,
-            baseUrl = baseUrl,
             repo = helpRepo,
             keyConfigured = llmKeys?.isConfigured() == true,
             onDismiss = { helpFor = null },
@@ -1120,86 +1115,41 @@ fun AssignmentsRoute(
     }
 }
 
+/** Autorité FileProvider (manifeste app) : seul `cacheDir/attachments/` est partagé. */
+const val ATTACHMENT_PROVIDER_AUTHORITY = "fr.veryslopnynotes.app.fileprovider"
+
+// Borne d'ouverture : une PJ de devoir ne dépasse pas quelques Mo. Au-delà =
+// refus (pas de OOM ni de cache qui explose), l'écran affiche son repli.
+private const val ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
+
 /**
- * GET /v1/assignments?weekStart=<lundi> : la fenêtre part au SERVEUR.
- *
- * `SyncedRepository.pathFor` ignore la query de `assignments` (seule `timetable`
- * la relaie), donc la fenêtre passe par ce GET, sur le MÊME `ApiClient` — donc
- * la même allowlist serveur (I1) et le même bearer relu à chaque requête. Les
- * replis sont ceux de `refreshAsync` : cache s'il existe (bandeau « périmé »),
- * sinon échec franc ; un 401 reste nu, le cache ne masque pas une session morte.
- *
- * ponytail: ce chemin ne peut pas écrire le cache disque (le `CacheStore` est
- * privé de `SyncedRepository`) : seule la semaine courante reste mémorisée pour
- * l'affichage hors-ligne. Upgrade: relayer `query` dans `pathFor(ASSIGNMENTS)`
- * (module data) et supprimer cette fonction.
+ * Octets lus sur le client local -> fichier du cache servi au viewer externe
+ * via FileProvider. Noms assainis (pas de `..`, pas de séparateur) : le chemin
+ * reste sous `attachments/<devoir>/`, jamais d'écriture ailleurs (I1).
  */
-private fun fetchAssignmentsWeek(
-    api: ApiClient,
-    baseUrl: String,
-    weekStart: String,
-    repo: SyncedRepository,
-    resource: String,
-    main: Handler,
-    cb: (RefreshOutcome) -> Unit,
-) {
-    val request = try {
-        // Chemin issu de ServerConfig seul (I1), jamais une URL concaténée ici.
-        val url = ServerConfig.assignmentsUrl(baseUrl, null, null, weekStart)
-        api.buildGet(url.removePrefix(baseUrl))
-    } catch (_: IllegalArgumentException) {
-        assignmentsOffline(main, cb, repo, resource, "URL hors allowlist serveur")
-        return
-    }
-    api.client().newCall(request).enqueue(object : Callback {
-        override fun onFailure(call: Call, e: IOException) {
-            assignmentsOffline(main, cb, repo, resource, "Hors-ligne, aucune donnée en cache.")
-        }
-
-        override fun onResponse(call: Call, response: Response) {
-            response.use {
-                if (it.code == ApiClient.HTTP_UNAUTHORIZED) {
-                    postOutcome(main, cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
-                    return
-                }
-                val body = if (it.isSuccessful) it.body?.string() else null
-                if (body.isNullOrEmpty()) {
-                    assignmentsOffline(main, cb, repo, resource, "Réponse serveur ${it.code}.")
-                    return
-                }
-                // Contenu serveur = donnée affichée, jamais interprétée (I6).
-                postOutcome(main, cb, RefreshOutcome.Updated(body, System.currentTimeMillis()))
-            }
-        }
-    })
+fun writeAttachmentFile(context: Context, homeworkId: String, att: AssignmentAttachment, bytes: ByteArray): File {
+    require(bytes.isNotEmpty() && bytes.size <= ATTACHMENT_MAX_BYTES) { "pièce jointe hors borne" }
+    val safeId = homeworkId.trim().take(64).map { if (it.isLetterOrDigit() || it == '-' || it == '_') it else '_' }.joinToString("").ifEmpty { "devoir" }
+    val rawName = att.label.trim().substringAfterLast('/').substringAfterLast('\\').take(200)
+    val safeName = rawName.map { if (it.isLetterOrDigit() || it == '-' || it == '_' || it == '.') it else '_' }.joinToString("").trim('.', '_').ifEmpty { "piece-jointe" }
+    val dir = File(File(context.cacheDir, "attachments"), safeId)
+    dir.mkdirs()
+    val file = File(dir, safeName)
+    require(file.canonicalPath.startsWith(dir.canonicalPath + File.separator)) { "nom de pièce jointe refusé" }
+    file.writeBytes(bytes)
+    return file
 }
 
-/** Repli hors-ligne commun aux deux causes d'échec de la fenêtre. */
-private fun assignmentsOffline(
-    main: Handler,
-    cb: (RefreshOutcome) -> Unit,
-    repo: SyncedRepository,
-    resource: String,
-    message: String,
-) {
-    val entry = try {
-        repo.cached(resource)
-    } catch (_: Exception) {
-        null
-    }
-    val outcome = if (entry != null) {
-        RefreshOutcome.OfflineFallback(entry.payload, entry.fetchedAt, repo.isStale(resource, entry))
-    } else {
-        RefreshOutcome.Failed(message, null)
-    }
-    postOutcome(main, cb, outcome)
-}
-
-/** Callback sur le thread UI, comme `SyncedRepository.post`. */
-private fun postOutcome(main: Handler, cb: (RefreshOutcome) -> Unit, outcome: RefreshOutcome) {
-    try {
-        main.post { cb(outcome) }
-    } catch (_: Exception) {
-        cb(outcome)
-    }
+/** Type MIME depuis l'extension, défaut binaire. */
+fun mimeOf(name: String): String = when (name.trim().substringAfterLast('.', "").lowercase()) {
+    "pdf" -> "application/pdf"
+    "jpg", "jpeg" -> "image/jpeg"
+    "png" -> "image/png"
+    "gif" -> "image/gif"
+    "webp" -> "image/webp"
+    "txt" -> "text/plain"
+    "html", "htm" -> "text/html"
+    "mp4" -> "video/mp4"
+    "mp3" -> "audio/mpeg"
+    else -> "application/octet-stream"
 }

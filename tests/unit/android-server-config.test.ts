@@ -546,6 +546,16 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
       if (f.includes("/android/pronote/")) continue;
       let code = codeOnly(read(f));
       if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
+      // #205 : `data` et `ui` dépendent du module local (`project(":pronote")`,
+      // ADR-003) — la déclaration de dépendance est le câblage sanctionné, pas
+      // un hôte : on la retire avant le balayage, comme l'`include` ci-dessus.
+      code = code.replace(/project\(":pronote"\)/g, "");
+      // #205 : les dépôts manipulent les TYPES du client local (`PronoteSession`,
+      // `PronoteClientProvider`, paquet `fr.veryslopnynotes.pronote`) — aucune
+      // adresse là-dedans, le garde-fou des URL en dur ci-dessous reste entier.
+      code = code
+        .replace(/PronoteSession|PronoteClientProvider/g, "")
+        .replace(/fr\.veryslopnynotes\.pronote/g, "");
       expect({ file: f.split("/").slice(-2).join("/"), hit: pronoteHost.test(code) }).toEqual({
         file: f.split("/").slice(-2).join("/"),
         hit: false,

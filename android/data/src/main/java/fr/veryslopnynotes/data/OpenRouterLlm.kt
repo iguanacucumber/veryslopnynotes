@@ -38,8 +38,9 @@ class OpenRouterLlm(
     // 401 confondrait « cle LLM refusee » avec « session d'appareil perdue »
     // et renverrait l'utilisateur a l'appairage pour une simple cle fausse —
     // un 401 OpenRouter n'invalide JAMAIS l'appareil). newBuilder() partage
-    // pool et dispatcher sans reprendre les intercepteurs.
-    client: OkHttpClient,
+    // pool et dispatcher sans reprendre les intercepteurs. Défaut = client
+    // vierge (l'UI n'a pas à construire d'OkHttpClient elle-même).
+    client: OkHttpClient = OkHttpClient(),
 ) : SafePromptProvider {
     private val timeout = normalizeTimeoutMs(timeoutMs)
     private val http: OkHttpClient = client.newBuilder()
@@ -133,7 +134,7 @@ class OpenRouterLlm(
 
 // Generation devoirs sur l'appareil : prompt core (I6) + OpenRouter direct +
 // validation core (I4/I5), cle relue du store a CHAQUE appel.
-// Meme discipline que HomeworkRepository (route serveur) : corps seul, jamais en
+// Meme discipline que l'ancien HomeworkRepository serveur : corps seul, jamais en
 // query, jamais journalisee, jamais gardee en champ. Sans cle on n'appelle pas.
 // Reponse = DONNEE validee (citations parmi les etiquettes fournies).
 class OpenRouterHomework(

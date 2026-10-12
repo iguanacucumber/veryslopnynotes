@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- #205 : pièces jointes des devoirs, lues sur le client local puis servies
+         au viewer externe. Ce seul sous-dossier du cache est partageable. -->
+    <cache-path name="attachments" path="attachments/" />
+</paths>

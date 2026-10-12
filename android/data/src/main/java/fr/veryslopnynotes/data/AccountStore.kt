@@ -88,6 +88,9 @@ class AccountStore(
      */
     fun logout() {
         tokenStore.clear()
+        // #205 : la session locale part avec le reste (plus de client, repli
+        // cache impossible : les ressources sont purgees juste apres).
+        PronoteSession.clear()
         // Purge totale : la liste de ressources dérive des contrats, une liste
         // codée en dur laisserait fuiter la donnee d'une ressource ajoutée plus tard.
         cacheStore.clearAll()

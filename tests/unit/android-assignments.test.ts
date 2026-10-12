@@ -533,14 +533,23 @@ describe("miroir Kotlin devoirs #75", () => {
     expect(core).not.toContain("fun dayLabelFr");
     expect(core).not.toContain("substring(0, 10)");
     const repo = readFileSync(join(DATA, "AssignmentsRepository.kt"), "utf8");
-    expect(repo).toContain("ServerConfig.assignmentsToggleUrl");
-    expect(repo).toContain("fun mediaUrl");
-    expect(repo).toContain("ServerConfig.mediaUrl");
+    // #205 : toggle + PJ sur le client local (ADR-003), plus de route serveur.
+    expect(repo).toContain("private val provider: PronoteClientProvider = { PronoteSession.client }");
+    expect(repo).toContain("found.setDone(done)");
+    expect(repo).toContain("fun fetchAttachment");
+    expect(repo).toContain("fun parseToggle");
+    expect(repo).not.toContain("ServerConfig.");
+    expect(repo).not.toContain("api.buildPost");
+    expect(repo).not.toContain("api.client()");
     const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
     expect(screen).toContain("dayLabelFr(day)");
     expect(screen).toContain("isoDayKey(a.dueDate)");
     expect(screen).toContain("fun assignmentsByDay");
-    expect(screen).toContain("AssignmentsRepository.mediaUrl");
+    // #205 : plus de proxy serveur — la `ref` opaque est résolue sur le client
+    // local, octets servis au viewer par FileProvider (module app).
+    expect(screen).toContain("toggleRepo.fetchAttachment(a.id, att.id)");
+    expect(screen).toContain("FileProvider.getUriForFile");
+    expect(screen).toContain("ATTACHMENT_PROVIDER_AUTHORITY");
     // Toggle Optimiste : retour arrière sur échec, resync du cache sur succès.
     expect(screen).toContain("Retour arrière immédiat");
     expect(screen).toContain("resync du cache");
@@ -683,9 +692,10 @@ describe("sections, filtres et semaine (#138)", () => {
 
   test("Kotlin : la semaine part dans la QUERY de l'API, pas dans un filtre local", () => {
     const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
-    // La plage est passée au serveur via ServerConfig (chemin issu de core seul).
-    expect(screen).toContain("ServerConfig.assignmentsUrl(baseUrl, null, null, weekStart)");
-    expect(screen).toContain("api.buildGet(url.removePrefix(baseUrl))");
+    // La fenêtre part dans la QUERY lue par le client local (`fetchAsync` :
+    // la semaine non courante n'écrase pas le cache de la courante).
+    expect(screen).toContain('repo.fetchAsync(resource, "weekStart=$week")');
+    expect(screen).toContain("repo.refreshAsync(resource, baseUrl)");
     // Changer de semaine RELANCE le chargement (pas de filtre en mémoire).
     expect(screen).toContain("LaunchedEffect(week) { refresh() }");
     expect(screen).toContain("week = shiftWeekIso(week, weeks)");
@@ -716,11 +726,12 @@ describe("sections, filtres et semaine (#138)", () => {
     expect(screen).toContain("Voir plus");
   });
 
-  test("Kotlin : pièce jointe = puce cliquable + Intent sur le PROXY, jamais d'hôte tiers", () => {
+  test("Kotlin : pièce jointe = puce cliquable + Intent sur FileProvider, jamais d'hôte tiers", () => {
     const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
     expect(screen).toContain("private fun AttachmentChips");
-    expect(screen).toContain("AssignmentsRepository.mediaUrl(baseUrl, accountId, att.ref)");
-    expect(screen).toContain("Intent(Intent.ACTION_VIEW, Uri.parse(url))");
+    expect(screen).toContain("toggleRepo.fetchAttachment(a.id, att.id)");
+    expect(screen).toContain("FileProvider.getUriForFile");
+    expect(screen).toContain("writeAttachmentFile(context, a.id, att, data.bytes)");
     expect(screen).toContain("context.startActivity(intent)");
     // L'URL du proxy ne doit JAMAIS être journalisée (elle finit dans les logs).
     const code = stripComments(screen);

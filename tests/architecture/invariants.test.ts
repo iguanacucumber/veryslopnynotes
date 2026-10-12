@@ -48,10 +48,12 @@ function list(dir: string): string[] {
 }
 
 describe("invariants", () => {
-  // I1 repointé #200 : seul `android/pronote/` parle Pronote en direct (port
-  // #200, zéro dépendance). Le mot reste interdit partout ailleurs dans
-  // `android/` ; la déclaration du module dans `settings.gradle.kts` est
-  // l'unique mention tolérée hors module. Prose (INVARIANTS, AGENTS.md) en #211.
+  // I1 repointé #200 puis #205 : seul `android/pronote/` parle Pronote en
+  // direct ; depuis #205, `data`/`ui` manipulent les TYPES du client local
+  // (dépendance `project(":pronote")`, ADR-003) — câblage sanctionné, pas un
+  // hôte. Le mot reste interdit partout ailleurs dans `android/` ; la
+  // déclaration du module dans `settings.gradle.kts` est l'unique mention
+  // tolérée hors module. Prose (INVARIANTS, AGENTS.md) en #211.
   test("I1: android sans hote Pronote", () => {
     const files = list(join(ROOT, "android")).filter((f) => {
       if (f.endsWith(".md")) return false;
@@ -59,6 +61,10 @@ describe("invariants", () => {
       try {
         let code = codeOnly(readFileSync(f, "utf8"));
         if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
+        code = code
+          .replace(/project\(":pronote"\)/g, "")
+          .replace(/PronoteSession|PronoteClientProvider/g, "")
+          .replace(/fr\.veryslopnynotes\.pronote/g, "");
         return pronoteHost.test(code);
       } catch {
         return false;

@@ -405,19 +405,31 @@ describe("unit android messagerie (#80)", () => {
     const repo = codeOnly(readFileSync(K_FILES.repo, "utf8"));
     expect(repo).toContain("org.json.JSONObject");
     expect(repo).toContain("fun parse");
-    expect(repo).toContain("fun parseAction");
+    expect(repo).toContain("fun parseMessages");
+    expect(repo).toContain("fun parseRecipients");
     expect(repo).toContain("isValid()");
-    for (const path of [
-      "ServerConfig.discussionsPath()",
-      "ServerConfig.discussionMessagesPath(discussionId)",
-      "ServerConfig.discussionRecipientsPath()",
-      "ServerConfig.discussionCreatePath()",
-      "ServerConfig.discussionReplyPath()",
-      "ServerConfig.discussionReadStatePath()",
-      "ServerConfig.discussionDeletePath()",
+    // #205 : lectures ET écritures sur le client local (ADR-003), plus
+    // aucune route serveur. Les parseurs restent (mêmes payloads).
+    expect(repo).toContain("private val provider: PronoteClientProvider = { PronoteSession.client }");
+    expect(repo).not.toContain("ServerConfig.");
+    expect(repo).not.toContain("api.buildGet");
+    expect(repo).not.toContain("api.buildPost");
+    expect(repo).not.toContain("api.client()");
+    for (const call of [
+      "client.discussions()",
+      "discussion.reply(",
+      "discussion.markAs(",
+      "discussion.delete()",
+      "client.getRecipients()",
+      "client.newDiscussion(",
+      "messagesPayload(",
+      "recipientsPayload(",
     ]) {
-      expect({ path, found: repo.includes(path) }).toEqual({ path, found: true });
+      expect({ call, found: repo.includes(call) }).toEqual({ call, found: true });
     }
+    // Succès d'écriture = pas d'exception ; fil fermé/session = message.
+    expect(repo).toContain("DiscussionClosed");
+    expect(repo).toContain("isSessionFailure(e)");
     // Messages JAMAIS en cache : seuls fetchMessages + parse (lecture à la demande).
     expect(repo).toContain("fun fetchMessages");
     expect(repo).not.toMatch(/store\.save|CacheStore|cacheStore/);
