@@ -117,12 +117,19 @@ describe("invariants", () => {
     ).toBe(true);
   });
 
-  test("I4/I5: server/ai sans reseau/secrets/outils", () => {
+  test("I4/I5: server/ai + android IA sans reseau/secrets/outils", () => {
     const aiFiles = list(join(ROOT, "server/ai"));
     expect(aiFiles.length).toBeGreaterThanOrEqual(2);
+    // Port #204 : mêmes scans sur le module IA Kotlin (`android/core/`, sans
+    // dépendance). L'appel HTTP fournisseur (`data/OpenRouterLlm.kt`) est hors
+    // scan ici : piné par tests/security/pipeline.test.ts.
+    const ANDROID_AI = ["Untrusted.kt", "LlmGuard.kt", "AiPrompts.kt", "HomeworkAi.kt", "RevisionAi.kt", "Humanize.kt"].map(
+      (f) => join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core", f),
+    );
+    for (const f of ANDROID_AI) expect(existsSync(f)).toBe(true);
     const secretRe =
       /sk-or-v1-|OPENROUTER_API_KEY|MASTER_KEY|PRONOTE_PASSWORD|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/;
-    for (const f of aiFiles) {
+    for (const f of [...aiFiles, ...ANDROID_AI]) {
       const c = codeOnly(readFileSync(f, "utf8"));
       expect({ file: f, kind: "secret" }).toEqual({ file: f, kind: "secret" });
       expect(c).not.toMatch(secretRe);
@@ -239,6 +246,17 @@ describe("invariants", () => {
       // (`kotlin-pronote-parity`, `kotlin-pronote-client-parity`). `enleverAlea`
       // seul attend un appelant (désentrelacement QR/ENT, #205 ou client futur).
       "enleverAlea",
+      // Port Kotlin #204 (IA, garde-fous I4/I5/I6) : points d'entrée rejoués par
+      // la parité exécutée `tests/unit/kotlin-ai-parity.test.ts` (mieux qu'un
+      // miroir), appelants applicatifs à venir avec le câblage sur l'appareil.
+      // `OpenRouterHomework` seul n'est pas rejoué (pas de réseau en parité) :
+      // il est piné par tests/security/pipeline.test.ts (clé relue du store,
+      // jamais loggée ni en URL).
+      "generateGuarded",
+      "buildHomeworkPrompt",
+      "RevisionAi",
+      "Humanize",
+      "OpenRouterHomework",
     ]);
     const morts: string[] = [];
     for (const f of files) {

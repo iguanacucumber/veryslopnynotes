@@ -217,6 +217,11 @@ function checkFile(path: string): string[] {
       let j = after;
       const ws = () => { while (j < n && /\s/.test(src[j]!)) j++; };
       ws();
+      // `fun interface` n'est pas une fonction : c'est la déclaration
+      // d'interface SAM qui suit. Sans ce garde, `interface` passe pour un nom
+      // de fonction et le saut aux paramètres mange l'accolade du corps
+      // (faux « accolades déséquilibrées », vu sur LlmGuard.kt #204).
+      if (/^interface(?![A-Za-z0-9_])/.test(src.slice(j))) { i = after; continue; }
       if (src[j] === "<") { // paramètres de type (peuvent contenir `->` et `()`)
         let d = 0;
         for (; j < n; j++) {
