@@ -1,9 +1,9 @@
-// Devoirs enrichis #75 : toggle "fait" + proxy de pièces jointes.
+// Devoirs enrichis #75 : toggle "fait".
 // I7 : l'écriture Pronote (`toggleAssignmentDone`) n'est atteignable que par
 // cette route, donc par une action APP confirmée. Aucun appel depuis le code IA
 // (le test I7 le prouve), aucun autre effet de bord.
-// Règle d'or média : l'app n'a JAMAIS d'URL Pronote, elle passe une `ref` opaque
-// que le serveur résout via downloadMedia (media-proxy, #84).
+// #206 : le proxy de pièces jointes est supprimé avec `media-proxy.ts` (les
+// PJ se lisent sur le téléphone) — ce module ne fait plus que le toggle.
 import {
   isAssignmentsToggleRequest,
   isAssignmentsToggleResponse,
@@ -13,17 +13,11 @@ import { CONTRACTS_VERSION, isAssignment } from "../../shared/contracts/models";
 import type { Assignment } from "../../shared/contracts/models";
 import type { ContractEvent } from "../../shared/contracts/events";
 import { PronoteWriteError } from "../domain/ports";
-import type { MediaPayload } from "../infrastructure/media-proxy";
 import { apiError } from "./errors";
 
 /** Port d'écriture côté API : implémenté par le reader Pronote (jamais par l'IA). */
 export interface AssignmentActions {
   setAssignmentDone(accountId: string, assignmentId: string, done: boolean): Promise<Assignment>;
-}
-
-/** Port média : résolution d'une `ref` opaque en octets (session Pronote serveur). */
-export interface MediaActions {
-  download(accountId: string, ref: string): Promise<MediaPayload>;
 }
 
 /** accountId absent = serveur mono-compte résout sa session appairée (côté

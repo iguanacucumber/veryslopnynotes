@@ -192,7 +192,6 @@ describe("porte d'authentification du routeur", () => {
       undefined,
       undefined,
       assignmentActions,
-      undefined,
       syncRefresh,
       discussionActions,
     );

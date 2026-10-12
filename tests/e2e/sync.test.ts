@@ -93,7 +93,7 @@ describe("e2e sync (#87)", () => {
     const source = memorySource(grades);
     // Relecture branchée sur le moteur de sync réel (données structurées).
     let appels = 0;
-    const handler = createHandler(createMemoryStore({ capabilities: CAPS }), PAIRING, undefined, undefined, undefined, null, null, {
+    const handler = createHandler(createMemoryStore({ capabilities: CAPS }), PAIRING, undefined, undefined, undefined, null, {
       refresh: async (accountId) => {
         appels += 1;
         const result = await refreshOnce(source, sink);

@@ -287,7 +287,8 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     const dataGradle = read(join(ROOT, "android/data"), "build.gradle.kts");
     expect(dataGradle).not.toContain("room");
     expect(dataGradle).not.toContain("datastore");
-    expect(read(CORE, "ServerConfig.kt")).toContain("fun subjectPrefsUrl(baseUrl: String)");
+    // #206 : ServerConfig ne connaît que le scraper — plus de route prefs.
+    expect(read(CORE, "ServerConfig.kt")).not.toContain("fun subjectPrefsUrl");
 
     // UI : résolveur unique + thème, écrans non cassés.
     const style = read(UI, "SubjectStyle.kt");

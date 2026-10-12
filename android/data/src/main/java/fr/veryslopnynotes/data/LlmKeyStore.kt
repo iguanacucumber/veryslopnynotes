@@ -7,18 +7,18 @@ import fr.veryslopnynotes.core.Homework
 /**
  * Clé du fournisseur LLM de l'assistant devoirs (contrat 0.7.0).
  *
- * MÊME DISCIPLINE que le bearer d'appareil (TokenStore), parce que c'est la même
+ * MÊME DISCIPLINE que la session Pronote (SessionStore), parce que c'est la même
  * catégorie : un credential que l'APP détient et qui n'existe nulle part
  * ailleurs — le serveur ne lit aucun env, ne stocke rien (`server/infrastructure/http.ts`).
  * Donc : chiffré au repos (EncryptedSharedPreferences via [encryptedPrefs]),
  * jamais en SharedPreferences simple, jamais journalisé, jamais dans un
  * `toString()`, jamais dans un message d'erreur, jamais dans une URL. Lu à
  * CHAQUE requête, jamais mis en cache dans le dépôt (il change quand
- * l'utilisateur le réécrit) : même règle que le bearer.
+ * l'utilisateur le réécrit) : même règle que le jeton de session.
  *
  * Elle n'est PAS effacée au logout : c'est la clé de l'utilisateur, pas une
- * session d'appareil. Un ré-appairage (serveur VPS changé) ne doit pas
- * obliger à payer une nouvelle saisie. Elle est effacée par [clear], donc par
+ * session d'établissement. Un ré-appairage (nouveau QR) ne doit pas
+ * obliger à ressaisir la clé. Elle est effacée par [clear], donc par
  * « Oublier » dans les réglages et par la désinstallation.
  * ponytail: un fichier, une entrée, pas de rotation. Upgrade: plusieurs clés
  * (un fournisseur par matière) si le contrat gagne un `provider`.
@@ -81,9 +81,13 @@ class InMemoryLlmKeyStore : LlmKeyStore {
 
 /**
  * UN store pour tout le process (réglages, écran devoirs), comme
- * [SessionTokens] : deux instances = deux états divergents, et l'écran
+ * [SessionStores] : deux instances = deux états divergents, et l'écran
  * Réglages pourrait afficher « clé configurée » alors que le dépôt en ignore
  * une autre.
+ *
+ * La sonde `isConfigured()` force l'init paresseuse DANS le `try` : un
+ * Keystore KO bascule sur le secours mémoire (clé perdue au redémarrage,
+ * jamais écrite en clair — même contrat que la session, #206).
  * ponytail: double-checked locking sur un @Volatile, pas de framework de DI.
  */
 object LlmKeys {
@@ -98,7 +102,7 @@ object LlmKeys {
     }
 
     private fun newStore(context: Context): LlmKeyStore = try {
-        EncryptedLlmKeyStore(context)
+        EncryptedLlmKeyStore(context).also { it.isConfigured() }
     } catch (_: Exception) {
         InMemoryLlmKeyStore()
     }

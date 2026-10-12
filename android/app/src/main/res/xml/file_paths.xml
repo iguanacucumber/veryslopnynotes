@@ -3,4 +3,7 @@
     <!-- #205 : pièces jointes des devoirs, lues sur le client local puis servies
          au viewer externe. Ce seul sous-dossier du cache est partageable. -->
     <cache-path name="attachments" path="attachments/" />
+    <!-- #206 : exports PDF des fiches de révision, rendus sur place puis servis
+         au viewer externe (même motif que les pièces jointes). -->
+    <cache-path name="exports" path="exports/" />
 </paths>

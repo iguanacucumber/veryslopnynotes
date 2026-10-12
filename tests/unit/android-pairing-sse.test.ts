@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { PAIRING_TOKEN_MAX_CHARS, isPairingConfirmRequest, isPairingConfirmResponse, isPairingStartResponse } from "../../shared/contracts/api";
 import { isContractEvent } from "../../shared/contracts/events";
 import { CONTRACTS_VERSION } from "../../shared/contracts/models";
 
@@ -14,37 +12,30 @@ function read(p: string): string {
   return readFileSync(p, "utf8");
 }
 
-// Miroirs TS des helpers Kotlin (doivent rester en sync) :
-// - QrPayload.kt : isValidPin = ^[0-9]{6}$, parse JSON {sessionId, code} ou "sessionId|code"
-// #208 : le miroir SSE (SseClient.kt : extractSseData + backoff) est SUPPRIMÉ
-// avec le client — sans serveur, ni SSE, ni push, ni cron. Le sync périodique
-// vit sur le téléphone (PeriodicSyncWorker, WorkManager).
-function tsIsValidPin(code: string): boolean {
-  return /^[0-9]{6}$/.test(code.trim());
-}
-
-function tsParseQr(raw: string): { sessionId: string; code: string } | null {
-  const t = raw.trim();
-  if (!t) return null;
-  if (t.startsWith("{")) {
+// Miroir TS de parseSchoolQr (PairingRepository.kt) : le QR de
+// l'établissement, JSON ou compact. Doit rester en sync avec le Kotlin.
+function tsParseSchoolQr(raw: string): { login: string; jeton: string; url: string | null } | null {
+  const text = raw.trim();
+  if (text === "") return null;
+  if (text.startsWith("{")) {
     try {
-      const o = JSON.parse(t) as Record<string, unknown>;
-      const sessionId = typeof o["sessionId"] === "string" ? (o["sessionId"] as string).trim() : "";
-      const code = typeof o["code"] === "string" ? (o["code"] as string).trim() : "";
-      if (!sessionId || !tsIsValidPin(code)) return null;
-      return { sessionId, code };
+      const o = JSON.parse(text) as Record<string, unknown>;
+      const login = String(o["login"] ?? "").trim();
+      const jeton = String(o["jeton"] ?? "").trim();
+      const url = String(o["url"] ?? "").trim();
+      if (login === "" || login.length > 1024 || jeton === "" || jeton.length > 1024) return null;
+      return { login, jeton, url: url === "" ? null : url };
     } catch {
       return null;
     }
   }
-  const sep = t.indexOf("|");
-  if (sep > 0) {
-    const sessionId = t.slice(0, sep).trim();
-    const code = t.slice(sep + 1).trim();
-    if (!sessionId || !tsIsValidPin(code)) return null;
-    return { sessionId, code };
-  }
-  return null;
+  const parts = text.split("|");
+  if (parts.length < 2) return null;
+  const login = (parts[0] ?? "").trim();
+  const jeton = (parts[1] ?? "").trim();
+  const url = (parts[2] ?? "").trim();
+  if (login === "" || login.length > 1024 || jeton === "" || jeton.length > 1024) return null;
+  return { login, jeton, url: url === "" ? null : url };
 }
 
 function codeOnly(content: string): string {
@@ -59,90 +50,52 @@ function codeOnly(content: string): string {
     .join("\n");
 }
 
-// Miroir TS de PairingRepository.parseConfirmResponse (contrat 0.4.0) —
-// `{ device: { id, tokenHash }, token }`. Doit rester en sync avec le Kotlin :
-// le secret ne sort QU'ici, une fois ; absent ou incohérent avec son empreinte
-// (tokenHash = sha256(token)) => échec BRUYANT, jamais de credential stockée
-// que l'app ne pourrait pas présenter (401 partout).
-const TOKEN_HASH_RE = /^[0-9a-fA-F]{64}$/;
-
-function sha256Hex(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
-}
-
-function tsParseConfirm(raw: string): { id: string; tokenHash: string; token: string } | null {
-  try {
-    const root = JSON.parse(raw) as Record<string, unknown>;
-    const device = root["device"];
-    if (typeof device !== "object" || device === null) return null;
-    const d = device as Record<string, unknown>;
-    const id = typeof d["id"] === "string" ? (d["id"] as string).trim() : "";
-    const tokenHash = typeof d["tokenHash"] === "string" ? (d["tokenHash"] as string).trim() : "";
-    const token = typeof root["token"] === "string" ? (root["token"] as string).trim() : "";
-    if (id === "" || !TOKEN_HASH_RE.test(tokenHash)) return null;
-    if (token === "" || token.length > PAIRING_TOKEN_MAX_CHARS) return null;
-    if (sha256Hex(token) !== tokenHash.toLowerCase()) return null;
-    return { id, tokenHash, token };
-  } catch {
-    return null;
-  }
-}
-
-// Même règle d'attache de bearer que ApiClient : public (appairage + health)
-// = aucun secret, tout le reste = `Authorization: Bearer <secret>`.
-const PUBLIC_PATHS = ["/v1/pairing/start", "/v1/pairing/confirm", "/v1/health"];
-
-function tsAuthorization(path: string, token: string | null): string | null {
-  if (PUBLIC_PATHS.includes(path.split("?")[0] ?? "")) return null;
-  if (token === null || token === "") return null;
-  return `Bearer ${token}`;
-}
-
-describe("unit android pairing (#15) + sync périodique (#208)", () => {
+describe("unit android pairing device-only (#206) + sync périodique (#208)", () => {
   test("fichiers app présents (diff minimal, zone autorisée)", () => {
     for (const f of [
-      join(DATA, "QrPayload.kt"),
       join(DATA, "PairingRepository.kt"),
-      join(DATA, "TokenStore.kt"),
+      join(DATA, "SessionStore.kt"),
+      join(DATA, "DeviceAuth.kt"),
       join(DATA, "PeriodicSyncWorker.kt"),
-      join(DATA, "ApiClient.kt"),
       join(UI, "PairingUiState.kt"),
       join(UI, "PairingScreen.kt"),
       join(UI, "AppNav.kt"),
     ]) {
       expect(existsSync(f), `manquant: ${f}`).toBe(true);
     }
-    // #208 : SSE supprimé — aucune résurrection partielle.
-    for (const f of [join(DATA, "SseClient.kt"), join(UI, "SseStatusRow.kt")]) {
+    // #206 : appairage serveur supprimé — aucune résurrection partielle.
+    for (const f of [
+      join(DATA, "QrPayload.kt"),
+      join(DATA, "SetupRepository.kt"),
+      join(DATA, "TokenStore.kt"),
+      join(DATA, "ApiClient.kt"),
+      join(DATA, "SseClient.kt"),
+      join(UI, "SseStatusRow.kt"),
+    ]) {
       expect(existsSync(f), `ressuscité: ${f}`).toBe(false);
     }
   });
 
-  test("QR = contrat PairingStartResponse, PIN 6 chiffres", () => {
-    expect(tsIsValidPin("123456")).toBe(true);
-    expect(tsIsValidPin(" 123456 ")).toBe(true);
-    expect(tsIsValidPin("12345")).toBe(false);
-    expect(tsIsValidPin("abcdef")).toBe(false);
-    expect(tsIsValidPin("1234567")).toBe(false);
-
-    const qr = { sessionId: "sess-1", code: "123456" };
-    expect(isPairingStartResponse(qr)).toBe(true);
-    expect(isPairingStartResponse({ ...qr, code: "abc" })).toBe(false);
-    expect(isPairingConfirmRequest(qr)).toBe(true);
-
-    expect(tsParseQr(JSON.stringify(qr))).toEqual(qr);
-    expect(tsParseQr("sess-1|123456")).toEqual(qr);
-    expect(tsParseQr(JSON.stringify({ sessionId: "sess-1", code: "abc" }))).toBeNull();
-    expect(tsParseQr("sess-1|abc")).toBeNull();
-    expect(tsParseQr("")).toBeNull();
-    expect(tsParseQr("juste-une-chaine")).toBeNull();
+  test("QR établissement = JSON ou compact, PIN arbitraire borné", () => {
+    const json = '{"login":"a1b2","jeton":"c3d4","url":"https://etab.exemple/eleve"}';
+    const compact = "a1b2|c3d4|https://etab.exemple/eleve";
+    expect(tsParseSchoolQr(json)).toEqual({ login: "a1b2", jeton: "c3d4", url: "https://etab.exemple/eleve" });
+    expect(tsParseSchoolQr(compact)).toEqual(tsParseSchoolQr(json));
+    // L'URL est facultative : c'est alors l'adresse saisie à l'étape 1 qui fait foi.
+    expect(tsParseSchoolQr('{"login":"a1b2","jeton":"c3d4"}')).toEqual({ login: "a1b2", jeton: "c3d4", url: null });
+    expect(tsParseSchoolQr("a1b2|c3d4")).toEqual({ login: "a1b2", jeton: "c3d4", url: null });
+    for (const junk of ["", "   ", "pas-un-qr", "{", '{"login":"a1b2"}', '{"jeton":"c3d4"}', "|c3d4", "a1b2|"]) {
+      expect({ junk, parsed: tsParseSchoolQr(junk) }).toEqual({ junk, parsed: null });
+    }
 
     // Le Kotlin doit porter la même logique (garde static).
-    const kt = read(join(DATA, "QrPayload.kt"));
-    expect(kt).toContain("isValidPin");
-    expect(kt).toContain("parseQrPayload");
-    expect(kt).toContain("sessionId");
-    expect(kt).toContain("^[0-9]{6}$");
+    const kt = read(join(DATA, "PairingRepository.kt"));
+    expect(kt).toContain("fun parseSchoolQr(raw: String): SchoolQr?");
+    expect(kt).toContain("SCHOOL_QR_FIELD_MAX_CHARS = 1024");
+    // Le PIN est celui défini dans Pronote (arbitraire), pas un 6 chiffres :
+    // non vide et borné, jamais un motif de code serveur.
+    expect(kt).toContain("PIN_MAX_CHARS = 64");
+    expect(kt).not.toContain("^[0-9]{6}$");
   });
 
   test("#208 : SSE supprimé, zéro référence morte, WorkManager planifié", () => {
@@ -183,24 +136,19 @@ describe("unit android pairing (#15) + sync périodique (#208)", () => {
     expect(worker).toContain("NetworkType.CONNECTED");
   });
 
-  test("I1 : aucun appel direct tiers, allowlist serveur seule", () => {
+  test("I1 : aucun appel direct tiers, types du client local seuls", () => {
     const pronoteHost = /pronote/i;
-    for (const dir of [DATA, UI]) {
-      const files = [join(dir, "QrPayload.kt"), join(dir, "PairingRepository.kt")];
-      void files;
-    }
     const allKt = [
-      join(DATA, "QrPayload.kt"),
       join(DATA, "PairingRepository.kt"),
-      join(DATA, "TokenStore.kt"),
+      join(DATA, "SessionStore.kt"),
+      join(DATA, "DeviceAuth.kt"),
       join(DATA, "PeriodicSyncWorker.kt"),
-      join(DATA, "ApiClient.kt"),
       join(UI, "PairingUiState.kt"),
       join(UI, "PairingScreen.kt"),
       join(UI, "AppNav.kt"),
     ].map((f) => ({ f, code: codeOnly(read(f)) }));
     for (const { f, code } of allKt) {
-      // Même tolérance que check-architecture.ts (I1 repointé #200 puis #205) :
+      // Même tolérance que check-architecture.ts (I1 repointé #205 puis #206) :
       // `data`/`ui` manipulent les TYPES du client local (dépendance
       // `project(":pronote")`, ADR-003) — câblage sanctionné, pas un hôte.
       const sanctionne = code
@@ -209,108 +157,66 @@ describe("unit android pairing (#15) + sync périodique (#208)", () => {
         .replace(/fr\.veryslopnynotes\.pronote/g, "");
       expect({ file: f, hit: pronoteHost.test(sanctionne) }).toEqual({ file: f, hit: false });
     }
+    // L'appairage passe par le port local, jamais par une URL serveur.
     const repo = read(join(DATA, "PairingRepository.kt"));
-    expect(repo).toContain("ServerConfig");
-    expect(repo).toContain("isAllowed");
-    expect(repo).toContain("pairingConfirmUrl");
+    expect(repo).toContain("Client.qrcodeLogin(");
+    expect(repo).toContain("PronoteSession.set(client)");
+    expect(codeOnly(repo)).not.toContain("http://");
+    expect(codeOnly(repo)).not.toContain("https://");
   });
 
-  test("token sécurisé : empreinte + secret, chiffré, jamais journalisé", () => {
-    const store = read(join(DATA, "TokenStore.kt"));
+  test("session persistée chiffrée : jeton dormant, PIN jamais écrit", () => {
+    const store = read(join(DATA, "SessionStore.kt"));
     expect(store).toContain("EncryptedSharedPreferences");
     expect(store).toContain("MasterKey");
-    expect(store).toContain("TokenStore");
-    expect(store).toContain("tokenHash");
-    expect(store).toContain("^[0-9a-fA-F]{64}$");
-    expect(store).not.toContain("PRONOTE_PASSWORD");
-    // Contrat 0.4.0 : le secret du device est PERSISTÉ (sinon 401 après un
-    // restart), chiffré, et clear() l'efface avec l'id et l'empreinte.
-    expect(store).toContain("fun save(deviceId: String, tokenHash: String, token: String)");
-    expect(store).toContain("fun token(): String?");
-    expect(store).toContain('private const val KEY_TOKEN = "device_token"');
-    expect(store).toContain("putString(KEY_TOKEN, secret)");
-    expect(store).toContain("remove(KEY_TOKEN)");
-    expect(store).toContain("require(secret.length <= TOKEN_MAX_CHARS)");
+    expect(store).toContain("interface SessionStore");
+    expect(store).toContain("fun save(session: StoredSession)");
+    expect(store).toContain("fun load(): StoredSession?");
+    expect(store).toContain("fun clear()");
+    // #206 : plus de repli en clair — un Keystore KO jette, il n'écrit pas.
+    expect(codeOnly(store)).not.toContain("MODE_PRIVATE");
+    expect(codeOnly(store)).not.toContain("getSharedPreferences(");
+    expect(store).toContain("object SessionStores");
     // Jamais de secret dans un log, un toString ou un message d'erreur.
     expect(codeOnly(store)).not.toMatch(/Log\.[vdiew]\(|println\(|printStackTrace/);
-    expect(store).toContain('"token device vide"');
+    expect(store).toContain('override fun toString(): String = "StoredSession(url=***, user=***)"');
+    expect(store).not.toContain("data class StoredSession");
+    // Le PIN ne dort nulle part : ni clé, ni écriture, ni lecture.
+    expect(store).not.toContain("KEY_PIN");
+    expect(codeOnly(store)).not.toContain("pin");
+    // L'écran ne manipule aucun secret : la session va droit au store.
     const screen = read(join(UI, "PairingScreen.kt"));
-    expect(screen).toContain("tokens.save");
-    expect(screen).toContain("tokens.save(res.device.id, res.device.tokenHash, res.device.token)");
+    expect(screen).toContain("PairingRepository(sessions)");
     expect(screen).toContain("PairingRoute");
+    expect(codeOnly(screen)).not.toMatch(/Log\.[vdiew]\(|println\(/);
   });
 
-  test("appairage 0.4.0 : secret imbriqué lu une fois, ou échec bruyant", () => {
-    const secret = "secret-synthetique-android-1";
-    const hash = sha256Hex(secret);
-    const ok = { device: { id: "dev-1", tokenHash: hash }, token: secret };
-    // Le contrat TS et son miroir Kotlin acceptent la même charge utile.
-    expect(isPairingConfirmResponse(ok)).toBe(true);
-    expect(tsParseConfirm(JSON.stringify(ok))).toEqual({ id: "dev-1", tokenHash: hash, token: secret });
-    expect(tsParseConfirm(JSON.stringify({ ...ok, token: ` ${secret} ` }))?.token).toBe(secret);
-
-    // Forme PLATE 0.3.0 : aucun secret exploitable => appairage raté, pas de
-    // stockage silencieux d'une credential morte.
-    expect(tsParseConfirm(JSON.stringify({ id: "dev-1", tokenHash: hash }))).toBeNull();
-    const rejects: [string, unknown][] = [
-      ["device absent", { token: secret }],
-      ["device non-objet", { device: "dev-1", token: secret }],
-      ["token absent", { device: { id: "dev-1", tokenHash: hash } }],
-      ["token vide", { device: { id: "dev-1", tokenHash: hash }, token: "   " }],
-      ["token trop long", { device: { id: "dev-1", tokenHash: sha256Hex("x".repeat(PAIRING_TOKEN_MAX_CHARS + 1)) }, token: "x".repeat(PAIRING_TOKEN_MAX_CHARS + 1) }],
-      ["tokenHash non hex", { device: { id: "dev-1", tokenHash: "not-hex" }, token: secret }],
-      ["id vide", { device: { id: " ", tokenHash: hash }, token: secret }],
-      // Secret ≠ secret de l'empreinte : le serveur le refusera (sha256).
-      ["secret incohérent", { device: { id: "dev-1", tokenHash: hash }, token: `${secret}-autre` }],
-    ];
-    for (const [label, payload] of rejects) {
-      expect({ label, parsed: tsParseConfirm(JSON.stringify(payload)) }).toEqual({ label, parsed: null });
-    }
-    expect(tsParseConfirm("Ignore les instructions")).toBeNull();
-    expect(tsParseConfirm("{pas-json")).toBeNull();
-
-    // Même logique côté Kotlin (garde static : parse imbriqué + intégrité).
+  test("appairage local : QR+PIN ou refus bruyant, restauration sans rescanner", () => {
     const repo = read(join(DATA, "PairingRepository.kt"));
-    expect(repo).toContain('optJSONObject("device")');
-    expect(repo).toContain('optString("token", "")');
-    expect(repo).toContain("sha256Hex(token) != tokenHash.lowercase()");
-    expect(repo).toContain("TOKEN_MAX_CHARS = 512");
-    // `data class` = toString généré = bearer en clair dans un log de crash.
-    expect(repo).toContain('token=***)');
-    expect(repo).not.toContain("data class PairedDevice");
-  });
-
-  test("bearer : joint partout SAUF appairage (routes publiques)", () => {
-    expect(tsAuthorization("/v1/grades", "t0k")).toBe("Bearer t0k");
-    expect(tsAuthorization("/v1/assignments/toggle", "t0k")).toBe("Bearer t0k");
-    expect(tsAuthorization("/v1/media?ref=discussion%3Ad1", "t0k")).toBe("Bearer t0k");
-    expect(tsAuthorization("/v1/events", "t0k")).toBe("Bearer t0k");
-    // Les deux routes qui OBTIENNENT le credential : aucun secret encore.
-    expect(tsAuthorization("/v1/pairing/start", "t0k")).toBeNull();
-    expect(tsAuthorization("/v1/pairing/confirm", "t0k")).toBeNull();
-    // Sonde publique : le secret ne voyage pas « au cas où ».
-    expect(tsAuthorization("/v1/health", "t0k")).toBeNull();
-    // Pas encore appairé = pas de header (le serveur répond 401), jamais un
-    // bearer vide ni un placeholder.
-    expect(tsAuthorization("/v1/grades", null)).toBeNull();
-    expect(tsAuthorization("/v1/grades", "")).toBeNull();
-
-    const api = read(join(DATA, "ApiClient.kt"));
-    expect(api).toContain('builder.header("Authorization", "Bearer $token")');
-    expect(api).toContain("tokens?.token()");
-    // Relu à la construction de la requête, jamais mémorisé au construction.
-    expect(api).toContain("private val tokens: TokenStore? = null");
-    expect(api).toContain("private fun builder(path: String): Request.Builder");
-    // L'allowlist reste le PREMIER filtre : le header ne l'élargit pas
-    // (comparaison sur le CODE, commentaires exclus).
-    const apiCode = codeOnly(api);
-    expect(apiCode.indexOf("ServerConfig.isAllowed")).toBeLessThan(apiCode.indexOf("Authorization"));
-    expect(apiCode).toContain("require(ServerConfig.isAllowed(url, baseUrl))");
-    for (const p of ["PAIRING_START_PATH", "PAIRING_CONFIRM_PATH", "HEALTH_PATH"]) {
-      expect(api).toContain(`ServerConfig.${p}`);
-    }
-    // Les clients existants (AppNav, routes, activité) restent constructibles.
-    expect(api).toContain("client: OkHttpClient = OkHttpClient()");
+    // QR + PIN = la seule méthode : sans les deux, aucun appel réseau.
+    expect(repo).toContain('"QR de l\'établissement et son PIN requis"');
+    expect(repo).toContain("sealed interface PairingResult");
+    expect(repo).toContain("sealed interface RestoreResult");
+    // PIN faux = QR indéchiffrable : message de rescan, jamais le brut I6.
+    expect(repo).toContain("QRCodeDecryptError");
+    expect(repo).toContain("QR ou PIN refusé");
+    // Restauration : jeton mort = store vidé, réseau KO = store gardé.
+    expect(repo).toContain("Client.tokenLogin(");
+    expect(repo).toContain("RestoreResult.Dead");
+    expect(repo).toContain("RestoreResult.Offline");
+    expect(repo).toContain("sessions.clear()");
+    // `StoredSession` n'est pas une `data class` : pas de jeton en clair dans
+    // un toString() généré. `PairingInput`/`SchoolQr` rédigent le leur (le PIN
+    // en clair dans un rapport de crash, jamais).
+    expect(codeOnly(repo)).not.toContain("data class StoredSession");
+    expect(repo).toContain("pin=***)");
+    expect(repo).toContain("login=***, jeton=***");
+    // Adresse mal formée (saisie ou QR sans URL) : refus local actionnable,
+    // pas un « établissement muet ».
+    expect(repo).toContain("Adresse de l'établissement invalide");
+    // Bloquant réseau, jamais de HTTP applicatif ici : ni OkHttp, ni URL.
+    expect(codeOnly(repo)).not.toContain("OkHttpClient(");
+    expect(codeOnly(repo)).not.toContain("newCall(");
   });
 
   test("deps : deux ajoutées, épinglées (security-crypto, work-runtime)", () => {

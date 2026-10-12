@@ -287,7 +287,8 @@ describe("unit android cantine (#81)", () => {
     // #205 : cantine lue sur le client local, plus de chemin serveur.
     expect(repo).toContain("CachePolicy.MENUS -> menusPayload(client)");
     const config = readFileSync(join(CORE, "ServerConfig.kt"), "utf8");
-    expect(config).toContain('fun menusUrl(baseUrl: String): String = "$baseUrl/v1/menus"');
+    // #206 : ServerConfig ne connaît que le scraper — plus de route menus.
+    expect(config).not.toContain("fun menusUrl");
   });
 
   test("Kotlin : écran branché, org.json, zéro dépendance ajoutée (I1/I6)", () => {

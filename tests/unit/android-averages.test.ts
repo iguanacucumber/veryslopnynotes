@@ -812,12 +812,11 @@ describe("unit android onglet Notes (#139)", () => {
     }
   });
 
-  test("côté data : query des notes + première lecture de /v1/periods", () => {
+  test("côté data : query des notes + lecture locale des tranches", () => {
     const repo = readFileSync(join(DATA, "SyncedRepository.kt"), "utf8");
-    const config = readFileSync(join(CORE, "ServerConfig.kt"), "utf8");
     // Le sélecteur de période change RÉELLEMENT la lecture locale (query
-    // `algorithm` + `periodId` relayée au payload, #205 : plus de serveur).
-    expect(config).toContain('fun gradesUrl(baseUrl: String, query: String)');
+    // `algorithm` + `periodId` relayée au payload, #205 : plus de serveur ;
+    // #206 : plus aucun builder d'URL serveur dans ServerConfig).
     expect(repo).toContain("CachePolicy.GRADES -> gradesPayload(client, q)");
     // Tranches lues sur le client local (hors cache, comme avant) : session
     // morte = signal nu, jamais masqué par le cache.
