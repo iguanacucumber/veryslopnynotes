@@ -30,8 +30,15 @@ sealed interface PairingState {
 // l'application + son PIN, tous deux provisoires.
 //
 // `toString()` rédigé : le PIN en clair dans un rapport de crash, jamais.
+
+/** Adresse pré-remplie de l'établissement (#213) : exemple réel, écrasable à la saisie. */
+private const val DEFAULT_SCHOOL_URL = "https://9741050y.index-education.net/pronote"
+
 data class SetupForm(
-    val schoolUrl: String = "",
+    // Valeur pré-remplie (#213) : l'adresse de notre établissement, pour que
+    // l'Étape 1/2 parte sur du concret plutôt qu'un champ vide. L'utilisateur
+    // peut l'écraser librement — ce n'est PAS une contrainte.
+    val schoolUrl: String = DEFAULT_SCHOOL_URL,
     val qrRaw: String = "",
     val pin: String = "",
     val state: PairingState = PairingState.Idle,

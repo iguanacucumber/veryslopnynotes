@@ -62,6 +62,9 @@ describe("invariants", () => {
         let code = codeOnly(readFileSync(f, "utf8"));
         if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
         code = code
+          // #213 : pré-remplissage appairage = URL réelle de NOTRE
+          // établissement (choix utilisateur explicite). Exception nominative.
+          .replace("https://9741050y.index-education.net/pronote", "")
           .replace(/project\(":pronote"\)/g, "")
           .replace(/PronoteSession|PronoteClientProvider/g, "")
           .replace(/fr\.veryslopnynotes\.pronote/g, "");
