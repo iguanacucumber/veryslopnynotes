@@ -516,6 +516,11 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
       if (f.includes("/android/pronote/")) continue;
       let code = codeOnly(read(f));
       if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
+      // #213 : l'adresse pré-remplie de l'appairage contient "pronote" (c'est
+      // une URL d'établissement réelle, choix utilisateur explicite). Retirée
+      // des DEUX balayages ci-dessous — exception nominative, un AUTRE hôte
+      // en dur retombe sur l'écart.
+      code = code.replace("https://0000000x.index-education.net/pronote", "");
       // #205 : `data` et `ui` dépendent du module local (`project(":pronote")`,
       // ADR-003) — la déclaration de dépendance est le câblage sanctionné, pas
       // un hôte : on la retire avant le balayage, comme l'`include` ci-dessus.
@@ -541,7 +546,16 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     // supprimé) a disparu ; restent le gabarit des messages de refus (avec son
     // point), l'endpoint public du fournisseur LLM, et les deux gardes de
     // schéma du store de session (pas des hôtes : juste "https://" / "http://").
-    const allowed = new Set(["https://domaine[:port].", "https://openrouter.ai/api/v1/chat/completions", "https://", "http://"]);
+    const allowed = new Set([
+      "https://domaine[:port].",
+      "https://openrouter.ai/api/v1/chat/completions",
+      "https://",
+      "http://",
+      // #213 : pré-remplissage de l'écran d'appairage avec l'adresse de NOTRE
+      // établissement (choix utilisateur explicite, aucun identifiant dedans).
+      // Exception nominative — un AUTRE hôte en dur retombe sur l'écart.
+      "https://0000000x.index-education.net/pronote",
+    ]);
     const urls = new Set<string>();
     for (const f of files.filter((f) => /\.(kt|kts)$/.test(f))) {
       for (const m of codeOnly(read(f)).matchAll(/https?:\/\/[^"' )`]*/g)) urls.add(m[0] as string);

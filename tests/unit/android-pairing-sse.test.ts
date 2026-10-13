@@ -147,11 +147,17 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
       join(UI, "PairingScreen.kt"),
       join(UI, "AppNav.kt"),
     ].map((f) => ({ f, code: codeOnly(read(f)) }));
+    // #213 : l'URL de NOTRE établissement est pré-remplie dans l'écran
+    // d'appairage (choix utilisateur explicite — c'est notre lycée, pas un
+    // hôte tiers). Exception nominative, pas une brèche : un AUTRE hôte en
+    // dur retombe sur `hit: true` et casse le test.
+    const allowedSchool = "https://0000000x.index-education.net/pronote";
     for (const { f, code } of allKt) {
       // Même tolérance que check-architecture.ts (I1 repointé #205 puis #206) :
       // `data`/`ui` manipulent les TYPES du client local (dépendance
       // `project(":pronote")`, ADR-003) — câblage sanctionné, pas un hôte.
       const sanctionne = code
+        .replace(allowedSchool, "")
         .replace(/project\(":pronote"\)/g, "")
         .replace(/PronoteSession|PronoteClientProvider/g, "")
         .replace(/fr\.veryslopnynotes\.pronote/g, "");

@@ -58,6 +58,10 @@ const i1 = androidFiles.filter((f) => {
     let code = codeOnly(readFileSync(f, "utf8"));
     if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
     code = code
+      // #213 : l'adresse pré-remplie de l'écran d'appairage contient
+      // "pronote" (URL réelle de NOTRE établissement, choix utilisateur
+      // explicite). Exception nominative — un AUTRE hôte en dur retombe ici.
+      .replace("https://0000000x.index-education.net/pronote", "")
       .replace(/project\(":pronote"\)/g, "")
       .replace(/PronoteSession|PronoteClientProvider/g, "")
       .replace(/fr\.veryslopnynotes\.pronote/g, "");
