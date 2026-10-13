@@ -175,7 +175,7 @@ private fun SchoolStep(
             value = form.schoolUrl,
             onValueChange = { onChange(form.copy(schoolUrl = it)) },
             label = { Text("Adresse de l'établissement") },
-            supportingText = { Text("Celle de ton espace élève, avec son port si besoin.") },
+            supportingText = { Text("Exemple : le lycée Louis Payen. Celle de ton espace élève, avec son port si besoin.") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
