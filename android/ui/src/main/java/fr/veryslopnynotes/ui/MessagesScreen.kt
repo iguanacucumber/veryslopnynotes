@@ -2,7 +2,6 @@ package fr.veryslopnynotes.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
@@ -123,9 +122,6 @@ import java.time.ZoneId
 // `POST /v1/discussions/restore`. En attendant, une suppression réussie est
 // annoncée SANS action, et une suppression refusée propose « Réessayer », qui
 // existe.
-
-/** Épaisseur du filet des bulles et des puces (1 dp, comme les cartes de #134). */
-private val HAIRLINE = 1.dp
 
 // Liste des fils depuis le cache : payload absent ou illisible = liste vide propre.
 fun discussionsFromPayload(payload: String?): List<Discussion> = try {
@@ -572,7 +568,6 @@ private fun MessageBubble(
             modifier = Modifier.fillMaxWidth(0.85f),
             shape = MaterialTheme.shapes.medium,
             color = container,
-            border = BorderStroke(HAIRLINE, MaterialTheme.colorScheme.outline),
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -639,7 +634,6 @@ private fun AttachmentChips(attachments: List<MessageAttachment>, onOpen: (Messa
                 modifier = Modifier.clickable(onClickLabel = "Ouvrir la pièce jointe", role = Role.Button) { onOpen(att) },
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(HAIRLINE, MaterialTheme.colorScheme.outline),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),

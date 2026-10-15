@@ -189,14 +189,24 @@ fun ProfileScreen(
                     onClick = { sheetOpen = true },
                 )
             }
-            Text(
-                text = if (accountCount > 1) "$accountCount comptes appairés" else "$accountCount compte appairé",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 2.dp),
-            )
+            // Compteur de comptes : le chiffre en toutes lettres + sa pastille
+            // (`PapBadge`, la pastille de compteur de l'app — `count <= 0` ne
+            // rend rien, donc un appareil sans session n'affiche que le texte).
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = if (accountCount > 1) "$accountCount comptes appairés" else "$accountCount compte appairé",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                PapBadge(count = accountCount)
+            }
         }
 
         // --- Ressources de l'établissement (capacités #87) ------------------

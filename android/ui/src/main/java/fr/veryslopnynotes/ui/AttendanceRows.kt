@@ -1,7 +1,7 @@
 package fr.veryslopnynotes.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,7 +19,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -63,13 +62,15 @@ import fr.veryslopnynotes.data.SubjectPrefs
 //     teinte erreur, retard = teinte avertissement (`tertiary`, le thème ne pose
 //     aucun rôle « avertissement »), le reste (`PunishmentCard`, repli) =
 //     `surfaceVariant`. Le libellé de statut ne change pas, aucun motif inventé ;
-//   - pastille de justificatif UNIFIÉE (même `shapes.small` dans les deux états,
-//     pleine quand injustifiée = alerte, en contour quand justifiée = réglée —
-//     polarité inverse de `DoneToggle`, où le plein récompense le fait : ici le
-//     plein attire l'œil sur ce qui reste à justifier), libellés français
-//     inchangés via `justifiedBadge`. Non cliquable : AUCUN `Role` (un rôle
-//     promettrait une action), l'état est nommé en français via
-//     `stateDescription`. Zéro rayure, comme l'EDT (`TimetableWeek.kt`) ;
+//   - pastille de justificatif = `PapPill` (l'unique pastille de l'app, #265) :
+//     teinte erreur quand injustifiée = alerte (elle attire l'œil), teinte
+//     primaire quand justifiée = réglée (elle se tait) — polarité inverse de
+//     `DoneToggle`, où le plein récompense le fait : ici la couleur attire
+//     l'œil sur ce qui reste à justifier. Mêmes pas teintés mesurés que
+//     partout ailleurs, libellés français inchangés via `justifiedBadge`.
+//     Non cliquable : AUCUN `Role` (un rôle promettrait une action), l'état
+//     est nommé en français via `stateDescription`. Zéro rayure, comme
+//     l'EDT (`TimetableWeek.kt`) ;
 //   - dates d'AFFICHAGE en toutes lettres (`longDateFr`, comme les lignes de
 //     notes depuis #192) : une date d'absence n'est pas une synchro, donc pas de
 //     « il y a » — `relativeDayFr` reste dans `AttendanceFormat.kt` (logique
@@ -111,9 +112,6 @@ private fun sectionIcon(kind: String): ImageVector =
  */
 private const val ERROR_SURFACE_LIGHT_TINT = 0.82f
 
-/** Filet de la pastille en contour : 1 dp, comme les puces de Devoirs. */
-private val PILL_BORDER = 1.dp
-
 /**
  * Fond d'une carte d'événement, par STATUT : erreur teintée pour une absence,
  * ambre (`tertiary`, pas de rôle « avertissement » au thème) pour un retard,
@@ -127,45 +125,6 @@ private fun attendanceCardColor(kind: String): Color {
         "absence" -> tint(scheme.error, if (dark) SUBJECT_SURFACE_DARK_TINT else ERROR_SURFACE_LIGHT_TINT)
         "late" -> tint(scheme.tertiary, if (dark) -WARNING_CONTAINER_TINT else WARNING_CONTAINER_TINT)
         else -> scheme.surfaceVariant
-    }
-}
-
-/**
- * Pastille de justificatif, la MÊME forme dans les deux états (`shapes.small`)
- * : pleine teinte erreur quand injustifiée (c'est l'alerte, elle attire
- * l'œil), en contour teinte primaire quand justifiée (réglée, elle se tait).
- * Libellés français via `justifiedBadge`, rendus tels quels.
- *
- * Non cliquable : pas de `Role` (un `Checkbox`/`Button` promettrait un geste
- * qui n'existe pas — le justificatif vient de l'établissement), donc
- * `stateDescription` nomme l'état en français pour un lecteur d'écran.
- */
-@Composable
-private fun JustifiedPill(
-    label: String,
-    unjustified: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    if (label.isEmpty()) return
-    val scheme = MaterialTheme.colorScheme
-    val dark = isDarkSurface()
-    val color = if (unjustified) scheme.error else scheme.primary
-    val background = tint(color, if (dark) SUBJECT_SURFACE_DARK_TINT else SUBJECT_SURFACE_TINT)
-    val ink = tint(color, if (dark) SUBJECT_CONTENT_DARK_TINT else SUBJECT_CONTENT_LIGHT_TINT)
-    Surface(
-        modifier = modifier.semantics { stateDescription = "Justificatif : $label" },
-        shape = MaterialTheme.shapes.small,
-        color = background,
-        border = if (unjustified) null else BorderStroke(PILL_BORDER, ink),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = ink,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-        )
     }
 }
 
@@ -420,7 +379,25 @@ fun AttendanceEventCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    JustifiedPill(label = badge, unjustified = unjustified)
+                    if (badge.isNotEmpty()) {
+                        // Pastille UNIFIÉE (`PapPill`, la seule forme de pastille
+                        // de l'app) : teinte erreur quand injustifiée (c'est
+                        // l'alerte, elle attire l'œil), teinte primaire quand
+                        // justifiée (réglée, elle se tait). Libellés français
+                        // inchangés via `justifiedBadge`. Non cliquable : AUCUN
+                        // `Role` (un rôle promettrait une action), l'état est
+                        // nommé en français via `stateDescription`.
+                        Box(
+                            modifier = Modifier.semantics {
+                                stateDescription = "Justificatif : $badge"
+                            },
+                        ) {
+                            PapPill(
+                                text = badge,
+                                color = if (unjustified) scheme.error else scheme.primary,
+                            )
+                        }
+                    }
                     if (subject != null) {
                         // #139 : couleur de matière, prefs d'abord sinon dérivée du
                         // nom — donc la même colonne vertébrale que partout ailleurs.
