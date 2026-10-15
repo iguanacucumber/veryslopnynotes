@@ -392,7 +392,14 @@ describe("briques d'interface (#136)", () => {
     expect(kt).toContain(".clip(CircleShape)");
     expect(kt).toContain("fun PapSubjectAvatar(");
     expect(kt).toContain("private val AVATAR_SIZE = 44.dp");
-    expect(kt).toContain("private const val AVATAR_TINT_ALPHA = 0.31f");
+    // #261 : la pastille reprend le pas `subjectSurface` (même hex d'entrée que
+    // la carte et la puce), plus d'alpha ad hoc.
+    expect(kt).toContain("tint(color, if (dark) SUBJECT_SURFACE_DARK_TINT else SUBJECT_SURFACE_TINT)");
+    expect(kt).not.toContain("AVATAR_TINT_ALPHA");
+    // #261 : `PapCard` défaut `surface` (le héro Notes garde `surfaceVariant`
+    // sans bord, cf. GradesHero.kt).
+    expect(kt).toContain("containerColor: Color = MaterialTheme.colorScheme.surface,");
+    expect(kt).not.toContain("containerColor: Color = MaterialTheme.colorScheme.surfaceVariant,");
     expect(kt).toContain("private const val BADGE_MAX = 99");
     // Zéro hex, zéro `Color(` : toute couleur vient de PapillonTheme.kt.
     expect({ hex: /0x[0-9A-Fa-f]{6,}/.test(kt) }).toEqual({ hex: false });
