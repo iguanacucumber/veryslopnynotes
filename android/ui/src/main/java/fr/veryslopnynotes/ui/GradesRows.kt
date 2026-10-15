@@ -574,7 +574,10 @@ fun GradesRecentCarousel(
         // deux cartes était donc le bon, et la respiration interne la mauvaise.
         horizontalArrangement = Arrangement.spacedBy(RECENT_CARD_SEPARATOR),
     ) {
-        for (grade in grades) {
+        // #263 : stagger 30 ms par carte (`PapEnter`, coupé quand le téléphone
+        // coupe les animations).
+        for ((index, grade) in grades.withIndex()) {
+            PapEnter(staggerIndex = index) {
             val style = subjectStyle(prefs, grade.subject)
             val ink = subjectInk(style.colorHex)
             // #192 : rayon 24 et fond TRANSLUCIDE à 8 % (`subjectColor + '15'`).
@@ -689,6 +692,7 @@ fun GradesRecentCarousel(
                     )
                 }
             }
+            }
         }
     }
 }
@@ -714,7 +718,9 @@ fun GradesSubjectSections(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(SECTION_GAP),
     ) {
-        for (group in groups) {
+        // #263 : stagger 30 ms par matière.
+        for ((sectionIndex, group) in groups.withIndex()) {
+            PapEnter(staggerIndex = sectionIndex) {
             val style = subjectStyle(prefs, group.subject)
             Column(verticalArrangement = Arrangement.spacedBy(SECTION_HEADER_GAP)) {
                 // #192 : l'en-tête porte sa propre marge verticale — relevée dans
@@ -836,6 +842,7 @@ fun GradesSubjectSections(
                         last = index == lastIndex,
                     )
                 }
+            }
             }
         }
     }
