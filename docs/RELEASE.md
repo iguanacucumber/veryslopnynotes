@@ -20,6 +20,17 @@ perso dans le livrable. Clé signature TOUJOURS hors repo.
 Toutes compatibles MIT (MIT + Apache-2.0). Nouvelle dép = justifiée,
 épinglée, licence MIT-compatible (ADR-001).
 
+## Android toolchain
+
+Builds require JDK 17–21 and Android SDK 34 (`platforms;android-34`,
+`build-tools;34.0.0`, `platform-tools`). Set `ANDROID_HOME` or `sdk.dir` in
+`android/local.properties`; JDK detection accepts `ANDROID_JDK_HOME`.
+
+`make check` runs `android-compile` in parallel with other checks. If JDK or SDK
+is missing, it reports an explicit skip; APK build targets fail instead. The
+check compiles Kotlin modules with Gradle and is the only check that resolves
+Kotlin symbols and overloads.
+
 ## Serveur (Docker)
 
 ```sh

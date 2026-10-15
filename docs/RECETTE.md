@@ -33,14 +33,14 @@ et l'appairage exige le QR de l'établissement, qui n'est pas dans le dépôt).
 Toutes les captures sont donc l'état **hors ligne** ; seul l'onglet Notes a un
 cache (notes, moyennes, carrousel). Les états « établissement qui publie
 beaucoup » ne sont pas rejouables ici : ils sont couverts par
-`tests/e2e/*` (données de fixture) et par les captures des issues #188-#194,
-prises sur un appareil appairé. C'est la seule limite de ce passage.
+les tests unitaires avec données synthétiques. Aucun test de bout en bout sur un
+compte réel n'est exécuté par défaut. C'est la seule limite de ce passage.
 
 ## Écran par écran : ce qui reste loin de la référence, et pourquoi
 
 Référence = les démonstrations publiques de Papillon v8.5.5 (`ref-papillon/`),
 plus le profil d'écran des issues précédentes (géométrie relevée dans la source
-de la référence). « Papillon » = l'application de référence, pas l'our.
+de la référence). « Papillon » = l'application de référence.
 
 | route | écart | raison |
 |---|---|---|
@@ -49,13 +49,13 @@ de la référence). « Papillon » = l'application de référence, pas l'our.
 | **Accueil** | la ligne d'état d'un accès rapide est tronquée à 34 caractères (`homeEllipsis`) | une carte de grille 2×2 ne peut pas faire taller ses voisines. Ellipse explicite, jamais une coupure nette. |
 | **Cours** | barre du haut « semaine du 05/10/2026 » au lieu du sélecteur de période + pastille de la référence | le sélecteur de période existe, mais il est posé DANS la barre chez nous aussi (`PapHeader`) ; la référence le fait sur une carte flottante au-dessus. Différence de placement assumée (#190). |
 | **Cours** | carte de cours : rayon 25, barre d'accent à bout arrondi, nom 18 sp gras | relevés sur `ui/components/Course.tsx` de la v8.5.5 (#194). Pas d'écart. |
-| **Notes** | bandeau hors-ligne + ligne « Hors-ligne, tranches indisponibles. » | deux faits distincts : le sélecteur de période est hors cache (`/v1/periods` n'est pas cachable), les notes viennent du cache périmé. Deux énoncés vrais, pas un doublon. |
+| **Notes** | bandeau hors-ligne + ligne « Hors-ligne, tranches indisponibles. » | deux faits distincts : les périodes sont lues en direct et ne sont pas mises en cache ; les notes viennent du cache périmé. Deux énoncés vrais, pas un doublon. |
 | **Notes** | le grand nombre est collé au tracé de la courbe | mesuré sur la référence (le `Canvas` déborde sous le corps, `paddingTop: 0`). |
 | **Tâches** | « Semaine 41 » + « Devoirs de la semaine », puis la plage `05/10 – 11/10` | le numéro ISO est l'en-tête de la référence ; la plage est dans le navigateur. Deux informations, une seule fois chacune. |
 | **Profil** | écran à sections (Compte / Ressources / Réglages / Session) au lieu d'une liste continue | l'en-tête de la référence est un avatar ; les sections servent le survol (« Se déconnecter » doit être atteignable sans défiler, cf. #135). |
 | **Profil** | flèche de retour dans la barre, comme les 12 autres routes secondaires | standard : c'est l'appairage qui n'en a pas (ligne suivante). |
-| **Appairage** | retour sous forme de `TextButton` dans le corps, pas de flèche dans la barre | au premier lancement l'assistant EST la route de départ : une flèche ne pourrait que sortir de l'app. Le geste reste là (étapes 2 et 3 remontent d'un cran, #172). |
-| **Appairage** | assistant en 3 étapes écrites | contrainte Material : la référence fait le QR en une page. Notre étape 1 (adresse du serveur) n'existe pas chez elle parce qu'elle est servie par son propre serveur. |
+| **Appairage** | retour sous forme de `TextButton` dans le corps, pas de flèche dans la barre | au premier lancement l'assistant est la route de départ : une flèche ne pourrait que sortir de l'app. Le retour sert à revenir du QR à l'établissement. |
+| **Appairage** | assistant en 2 étapes écrites | la référence fait le QR en une page ; ici l'étape établissement précède le QR et son PIN. |
 | **Messages** | « 0 discussion » et la barre de recherche avant l'état d'erreur | le compteur et la recherche sont du chrome d'écran, pas des filtres de contenu ; les retirer au vide ferait perdre le point d'entrée « Nouvelle ». Écart assumé, contrairement à `Tâches` où les filtres ne filtrent RIENT (#148). |
 | **Cantine / Vie scolaire / Sanctions / Actualités / Fiches révision / Alertes sécurité** | ligne de titre fixe au-dessus de l'état (« Menus de la semaine », « Absences indisponibles. »…) | ces lignes ont été ajoutées en #172/#178 pour que la capture hors ligne PROUVE la route (le titre de la barre d'onglets se lit partout, « Réessayer » est partagé par sept écrans). Elles nomment ce que l'écran cherche, jamais la donnée. |
 
@@ -68,7 +68,7 @@ de la référence). « Papillon » = l'application de référence, pas l'our.
 | Alertes sécurité | « Hors-ligne, aucune donnée en cache. » affiché deux fois (ligne rouge + grand bloc d'erreur) | la ligne de cause ne se rend plus quand l'écran EST l'état d'erreur |
 | Tâches | « Rechercher un devoir » + puces matière au-dessus de « Hors-ligne, aucune donnée en cache. » — des contrôles qui ne filtrent rien, au-dessus d'un vide | les deux contrôles ne sortent qu'avec une liste |
 | Appairage | « Retour » en bouton VERT REMPLI, à côté de « Continuer » : deux actions principales, donc aucune | `TextButton` (l'encre dit « secondaire ») |
-| Appairage | « Étape 1/3 — ton serveur » suivi d'un titre « Serveur » : le même mot deux fois dans la même colonne | le titre de l'étape suffit (c'est lui le `heading()` du survol) |
+| Appairage | ancien libellé du serveur répété dans l'étape initiale | le titre suffit ; l'étape actuelle porte sur l'établissement |
 
 ## États vérifiés
 
