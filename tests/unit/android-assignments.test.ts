@@ -323,11 +323,9 @@ function tsFilterAssignments(list: Item[], subject: string | null | undefined, q
 
 // --- #161 : ce que la carte affiche vraiment ---------------------------------
 //
-// Le lecteur serveur (`server/integrations/pronote-client-reader.ts`,
-// `mapAssignment`) ne lit qu'UN champ descriptif chez Pronote et le publie
-// DEUX fois : `title = description.slice(0, 200)` et `description = le texte
-// entier`. Les deux champs arrivaient donc sur la carte, l'un sous la matière
-// (sous-titre), l'autre dans le corps — la consigne, deux fois de suite.
+// La lecture historique publiait un champ descriptif deux fois :
+// `title = description.slice(0, 200)` et `description = le texte entier`.
+// La carte affichait donc la consigne deux fois, sous la matière et dans le corps.
 
 /** Miroir de `assignmentCardText` : titre et corps ne peuvent PAS porter le même
  *  texte ; la comparaison se fait sur le texte plié (casse + accents). */

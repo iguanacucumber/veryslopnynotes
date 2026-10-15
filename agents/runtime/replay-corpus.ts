@@ -1,4 +1,4 @@
-// replay-corpus.ts — rejoue le corpus #199 en JSON attendu (#202).
+// replay-corpus.ts — rejoue le corpus local en JSON attendu (#202).
 //
 // Le corpus (`tests/fixtures/pronote/<domaine>.json`, gitignoré, données
 // d'élève) contient déjà la sortie des readers TS. Ce script n'y touche pas :
@@ -16,7 +16,7 @@
 // l'attendu dérive de données personnelles comme le corpus).
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CORPUS_DIR } from "./capture-pronote";
+import { CORPUS_DIR } from "./corpus-path";
 
 const ROOT = join(import.meta.dir, "..", "..");
 export const EXPECTED_DIR = join(ROOT, "node_modules", ".cache", "corpus-expected");
@@ -56,7 +56,7 @@ export function replayDomain(domain: string, dir: string = CORPUS_DIR): string {
   const file = join(dir, `${domain}.json`);
   if (!existsSync(file)) {
     throw new Error(
-      `replay : domaine absent du corpus (${domain}) — lancez bun run agents/runtime/capture-pronote.ts (#199)`,
+      `replay : domaine absent du corpus local (${domain})`,
     );
   }
   const body: unknown = JSON.parse(readFileSync(file, "utf8"));
@@ -71,7 +71,7 @@ export function replayCorpus(dir: string = CORPUS_DIR): Record<string, string> {
   const domains = replayDomains(dir);
   if (domains.length === 0) {
     throw new Error(
-      `replay : corpus absent (${dir}) — lancez bun run agents/runtime/capture-pronote.ts sur un compte réel (#199)`,
+      `replay : corpus local absent (${dir})`,
     );
   }
   const out: Record<string, string> = {};

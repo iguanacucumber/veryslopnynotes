@@ -1,18 +1,12 @@
-# server/ — scraper manuels + legacy capture (#210)
+# server/ — scraper de manuels
 
-Le serveur applicatif est mort (app device-only, ADR-003). Reste :
+L'app parle directement à Pronote et à OpenRouter ; ce serveur ne participe pas
+à ces flux (ADR-003). Il ne sert que deux routes :
 
-- `infrastructure/http.ts` + `manuals.ts` + `manuals-scrape.ts` : le scraper
-  manuels (#209) — plain HTTPS, sans auth, GET /v1/health +
-  POST /v1/manuals/scrape. Seul process servi (`make runServer`, Dockerfile).
-  Endpoint sans auth = risque SSRF et d'épuisement du compte éditeur ; garder
-  en loopback/réseau de confiance ou placer un proxy authentifié devant.
-- `integrations/` (sauf lectures supprimées) + `domain/ports.ts` +
-  `domain/averages.ts` + `domain/capabilities.ts` + `api/setup.ts`
-  (`accountIdFrom` seul) : le client Pronote TS, dépendance de l'outil de
-  capture du corpus (#199, encore ouvert : `agents/runtime/capture-pronote.ts`).
-  Hors process, jamais servi. Meurt avec #199.
+- `GET /v1/health` pour la sonde.
+- `POST /v1/manuals/scrape` pour extraire une page de manuel.
 
-Tout le reste (`server/ai/`, `server/jobs/`, le reste de `server/api/`,
-`server/domain/attendance.ts`, les 31 routes et leurs contrats) est supprimé
-en #210 : voir `shared/contracts/api.ts` (2 routes) et `docs/architecture/INVARIANTS.md`.
+Le scraper est sans authentification et accepte identifiants éditeur dans le
+corps de requête. Risque SSRF et d'épuisement du compte : garder sur réseau de
+confiance ou placer un proxy authentifié devant. `make runServer` et Docker
+lancent ce seul service.
