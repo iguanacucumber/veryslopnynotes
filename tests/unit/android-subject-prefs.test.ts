@@ -417,6 +417,10 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     // Roue de pastilles circulaires : anneau blanc + coche sur la sélection.
     expect(sheet).toContain("CircleShape");
     expect(sheet).toContain("Modifier.border(SWATCH_RING, Color.White, CircleShape)");
+    // Rayon de feuille posé une fois (#256) : 28 dp haut uniquement, pas de
+    // pastille ni de carte — la feuille n'est ni un bouton ni une carte.
+    expect(sheet).toContain("private val SHEET_RADIUS = 28.dp");
+    expect(sheet).toContain("RoundedCornerShape(topStart = SHEET_RADIUS, topEnd = SHEET_RADIUS)");
     expect(style).toContain("fun normalizeColorHex(");
     // L'écran : une LIGNE par matière (plus de bloc déployé par matière) et le
     // thème en segment, pas en puces.
