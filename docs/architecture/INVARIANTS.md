@@ -74,3 +74,12 @@ pour l'exposer, placer un proxy authentifié devant lui.
 
 Piné par `tests/architecture/invariants.test.ts` (I8),
 `tests/unit/android-homework.test.ts` et `tests/unit/scraper-only.test.ts`.
+
+## I9 — Pas de code mort dans `android/`
+- Invariant : aucun `fun`/`class` de premier niveau sans appelant dans le code
+  Kotlin. Liste de tolérance = points d'entrée du port rejoués par les
+  miroirs (`lessonBadgeLabel`/`timetableDayLabel`, surface `pronote/`,
+  jobs, IA) : c'est la liste qui est gardée, pas du code oublié.
+- Test : `tests/architecture/invariants.test.ts` (I9).
+- Commande : `make architecture-test`.
+- Emplacement : `android/**/*`.
