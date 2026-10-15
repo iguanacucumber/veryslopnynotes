@@ -898,10 +898,14 @@ describe("logique affichable de la messagerie (#142)", () => {
       expect({ interdit, present: screen.includes(interdit) }).toEqual({ interdit, present: false });
     }
 
-    // Briques de #136 adoptées : états, tirail, dialogue.
-    for (const brique of ["PapLoading(", "PapEmptyState(", "PapErrorState(", "PapStaleBanner(", "HomePullToRefresh(", "PapSubjectAvatar(", "PapPill("]) {
+    // Briques de #136 adoptées : états, tirail, dialogue (bandeau hors-ligne retiré).
+    for (const brique of ["PapLoading(", "PapEmptyState(", "PapErrorState(", "HomePullToRefresh(", "PapSubjectAvatar(", "PapPill("]) {
       expect({ brique, presente: screen.includes(brique) }).toEqual({ brique, presente: true });
     }
+    expect({ brique: "PapStaleBanner(", presente: screen.includes("PapStaleBanner(") }).toEqual({
+      brique: "PapStaleBanner(",
+      presente: false,
+    });
     // `kind` brut jamais imprimé (critère d'acceptation de #142).
     expect(screen).not.toContain("(${r.kind})");
     expect(screen).toContain("group.label");

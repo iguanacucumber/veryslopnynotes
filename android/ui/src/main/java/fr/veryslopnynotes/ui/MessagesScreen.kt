@@ -199,13 +199,6 @@ fun MessagesScreen(
                 }
             }
             SearchField(query = query, onQueryChange = { query = it }, label = "Rechercher une discussion")
-            // #145 : le bandeau « périmé » s'ouvre au lieu d'apparaître d'un coup.
-            // Les messages d'écriture et d'échec de lecture ne passent PLUS par un
-            // `Text` ici : ils sortent par le snackbar racine, qui a une couleur de
-            // sévérité et une fermeture automatique.
-            PapAppear(visible = isStale) {
-                PapStaleBanner(fetchedAt = fetchedAt, onRefresh = onRefresh)
-            }
             // `weight(1f)` : AVANT #142, le `LazyColumn` n'était PAS pondéré et les
             // boutons qui le suivaient devenaient hors d'atteinte dès que la
             // liste débordait. Ici la zone liste occupe toute la hauteur restante

@@ -732,9 +732,10 @@ describe("sections, filtres et semaine (#138)", () => {
     expect(uiGradle).not.toContain('"androidx.compose.material:material"');
     // Les briques de #136 sont utilisées, pas réécrites.
     const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
-    for (const brick of ["PapLoading", "PapEmptyState", "PapErrorState", "PapStaleBanner", "PapSubjectAvatar", "PapPill"]) {
+    for (const brick of ["PapLoading", "PapEmptyState", "PapErrorState", "PapSubjectAvatar", "PapPill"]) {
       expect(screen).toContain(brick);
     }
+    expect(screen).not.toContain("PapStaleBanner");
     // Aucune couleur en dur : tout vient des jetons du thème.
     const sections = readFileSync(join(UI, "AssignmentsSections.kt"), "utf8");
     expect(codeOnly(sections)).not.toMatch(/Color\(|0x[0-9A-Fa-f]{6}/);
