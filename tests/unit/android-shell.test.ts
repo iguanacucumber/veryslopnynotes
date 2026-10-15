@@ -310,7 +310,8 @@ describe("coquille applicative (#135)", () => {
     // #134 livrait l'échelle de typo, aucun écran ne l'utilisait : les titres de
     // section restants passent maintenant par `MaterialTheme.typography`.
     // #140 : le profil et les réglages délèguent leur titre de section à
-    // `PapSectionHeader` (la brique #136, qui pose `titleMedium`) au lieu de le
+    // `PapSectionHeader` (la brique #136, qui pose `titleLarge` dé-graissé —
+    // 18 sp semibold depuis #264) au lieu de le
     // styler eux-mêmes — donc ces deux fichiers comptent s'ils l'utilisent.
     for (const f of ["IndexScreen.kt", "ProfileScreen.kt", "SettingsScreen.kt", "GradesScreen.kt", "TimetableWeek.kt", "Assignments.kt", "CanteenMenus.kt", "MessagesScreen.kt"]) {
       const src = read(f);

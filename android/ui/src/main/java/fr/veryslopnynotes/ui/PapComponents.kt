@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -48,6 +49,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -326,6 +328,9 @@ fun PapDivider(modifier: Modifier = Modifier) {
  *
  * [count] s'affiche après le titre (une pastille, pas un chiffre collé au mot),
  * [action] est le point d'accroche du bouton de droite — vide partout aujourd'hui.
+ *
+ * #264 : 18 sp semibold (`titleLarge` dé-graissé), le seul titre de section de
+ * l'échelle — pas `titleMedium` (17 sp, taille d'un libellé d'action).
  */
 @Composable
 fun PapSectionHeader(
@@ -349,7 +354,7 @@ fun PapSectionHeader(
         // le lire ligne à ligne.
         Text(
             text = title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
             color = tint,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -628,6 +633,9 @@ fun PapLoadingBlock(modifier: Modifier = Modifier) {
  * un fond noir, avec une encre assombrie dessus, était illisible. Le pas vient
  * du thème, donc une pastille de note, une pastille « en cours » et une
  * pastille d'absence se rééquilibrent ensemble.
+ *
+ * #264 : PILULE (`CircleShape`), pas `shapes.small` (12) — un seul rayon par
+ * usage, et une puce reste une puce quelle que soit sa hauteur.
  */
 @Composable
 fun PapPill(text: String, color: Color, modifier: Modifier = Modifier) {
@@ -635,7 +643,7 @@ fun PapPill(text: String, color: Color, modifier: Modifier = Modifier) {
     val dark = isDarkSurface()
     Box(
         modifier = modifier
-            .clip(MaterialTheme.shapes.small)
+            .clip(CircleShape)
             .background(tint(color, if (dark) SUBJECT_SURFACE_DARK_TINT else SUBJECT_SURFACE_TINT))
             .padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
