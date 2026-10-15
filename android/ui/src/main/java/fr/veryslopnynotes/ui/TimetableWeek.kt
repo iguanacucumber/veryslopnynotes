@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -896,6 +896,9 @@ private fun TimetableDayPage(
 ) {
     val date = remember(day.day) { runCatching { LocalDate.parse(day.day) }.getOrNull() }
     val items = remember(day.day, zone) { dayItemsUi(day.lessons, zone) }
+    // #263 : stagger + placement animé des cartes du jour, coupés quand le
+    // téléphone coupe les animations.
+    val motionOn = rememberMotionOn()
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(TimetableCardGap),
@@ -920,10 +923,12 @@ private fun TimetableDayPage(
                 )
             }
         }
-        items(items) { item ->
+        itemsIndexed(items) { index, item ->
+            // #263 : chaque carte du jour apparaît en stagger 30 ms.
+            PapEnter(staggerIndex = index) {
             when (item) {
                 is TimetableItemUi.Lesson -> Box(
-                    modifier = Modifier.padding(horizontal = TimetablePagePadding),
+                    modifier = Modifier.padding(horizontal = TimetablePagePadding).animateItemPlacement(motionPlacementSpec(motionOn)),
                 ) {
                     TimetableCourseRow(
                         lesson = item.lesson,
@@ -938,11 +943,14 @@ private fun TimetableDayPage(
                 is TimetableItemUi.Break -> PapLunchCard(
                     label = item.pause.label,
                     duration = durationLabelOf(item.pause.endMillis - item.pause.startMillis),
-                    modifier = Modifier.padding(
-                        start = TimetablePagePadding + TimetableTimeGutterWidth + TimetableRowGap,
-                        end = TimetablePagePadding,
-                    ),
+                    modifier = Modifier
+                        .padding(
+                            start = TimetablePagePadding + TimetableTimeGutterWidth + TimetableRowGap,
+                            end = TimetablePagePadding,
+                        )
+                        .animateItemPlacement(motionPlacementSpec(motionOn)),
                 )
+            }
             }
         }
     }

@@ -7,7 +7,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -280,7 +279,9 @@ fun longDateFr(
  * rend la carte sans filet, pour le cas où le parent en fournit un.
  *
  * [onClick] nul = carte non cliquable, donc pas de `Indication` parasite ni de
- * min-height d'appui.
+ * min-height d'appui. Non nul = [Modifier.papPressable] (#263 : échelle 0.95 +
+ * alpha 0.7 + ripple, zone de toucher intacte car le `graphicsLayer` passe
+ * avant le `clickable`).
  */
 @Composable
 fun PapCard(
@@ -298,9 +299,9 @@ fun PapCard(
             Column(modifier = Modifier.padding(CARD_PADDING), content = content)
         }
     } else {
+        val click = onClick
         Card(
-            onClick = onClick,
-            modifier = modifier,
+            modifier = modifier.papPressable(role = Role.Button, onClick = click),
             shape = shape,
             colors = colors,
             elevation = elevation,
@@ -428,7 +429,8 @@ fun PapSectionHeader(
  * [trailing] (valeur, chevron, bouton).
  *
  * On ne rend RIEN si le titre est vide : une ligne sans titre est un aplat, pas
- * une information.
+ * une information. #263 : la ligne cliquable passe par [Modifier.papPressable]
+ * (même presse que les cartes, zone intacte).
  */
 @Composable
 fun PapListItem(
@@ -446,7 +448,7 @@ fun PapListItem(
             // `role = Role.Button` : la ligne ouvre une destination, donc un
             // lecteur d'écran doit l'annoncer comme un bouton — un `Row` cliquable
             // sans rôle se fait annoncer comme du texte qu'on active.
-            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.papPressable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(horizontal = CARD_PADDING, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -596,19 +598,26 @@ fun PapErrorState(
  * Animation par [rememberInfiniteTransition] (déjà dans le BOM) : pas de
  * bibliothèque de shimmer, donc AUCUNE dépendance ajoutée. Le tout est annoncé
  * une fois aux lecteurs d'écran (« Chargement en cours ») au lieu de laisser
- * lire des boîtes vides.
+ * lire des boîtes vides. #263 : 6 lignes par défaut partout, pulsation coupée
+ * quand le téléphone a désactivé les animations (squelette fixe).
  */
 @Composable
 fun PapLoading(modifier: Modifier = Modifier, rows: Int = SKELETON_ROWS) {
-    val pulse by rememberInfiniteTransition(label = "papSkeleton").animateFloat(
-        initialValue = SKELETON_ALPHA_MIN,
-        targetValue = SKELETON_ALPHA_MAX,
-        animationSpec = infiniteRepeatable(
-            animation = tween(SKELETON_PERIOD_MS),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "papSkeletonAlpha",
-    )
+    val motionOn = rememberMotionOn()
+    val pulse: Float = if (motionOn) {
+        val animated by rememberInfiniteTransition(label = "papSkeleton").animateFloat(
+            initialValue = SKELETON_ALPHA_MIN,
+            targetValue = SKELETON_ALPHA_MAX,
+            animationSpec = infiniteRepeatable(
+                animation = tween(SKELETON_PERIOD_MS),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "papSkeletonAlpha",
+        )
+        animated
+    } else {
+        SKELETON_ALPHA_MAX
+    }
     val count = rows.coerceIn(1, 20)
     Column(
         modifier = modifier

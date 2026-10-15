@@ -2,7 +2,6 @@ package fr.veryslopnynotes.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -332,9 +331,11 @@ fun GradesAverageHero(
                         // voyait ni bouton ni taille d'appui. `Role.Button` +
                         // `heightIn(min = TouchTarget)` : la cible fait 48 dp et le
                         // chevron a son propre libellé d'action.
+                        // #263 : `papPressable` au lieu de `clickable` — même
+                        // cible 48 dp, avec l'échelle + l'alpha de presse.
                         Modifier
                             .heightIn(min = TouchTarget)
-                            .clickable(
+                            .papPressable(
                                 onClickLabel = "Changer de calcul de moyenne",
                                 role = Role.Button,
                                 onClick = onAlgorithmClick,

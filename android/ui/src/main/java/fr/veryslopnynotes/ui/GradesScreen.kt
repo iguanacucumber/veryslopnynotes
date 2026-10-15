@@ -254,10 +254,14 @@ fun GradesRoute(
             )
         }
 
-        GradesAverageHero(
-            report = report,
-            onAlgorithmClick = { algorithmOpen = !algorithmOpen },
-        )
+        // #263 : le héro apparaît en stagger 0 (coupé quand le téléphone coupe
+        // les animations) ; les matières suivent dans `GradesSubjectSections`.
+        PapEnter {
+            GradesAverageHero(
+                report = report,
+                onAlgorithmClick = { algorithmOpen = !algorithmOpen },
+            )
+        }
         GradesHistoryNote(report)
         // Papillon ouvre le choix du calcul depuis le chevron de la carte héro,
         // donc les chips ne sortent que sur demande : sans données il n'y a pas
