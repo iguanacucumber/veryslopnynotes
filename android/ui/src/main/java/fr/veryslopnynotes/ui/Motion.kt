@@ -83,6 +83,13 @@ import kotlinx.coroutines.launch
 /** Durée d'une apparition, disparition ou placement, en millisecondes. */
 const val MOTION_ENTER_MS = 300
 
+/** Durée de sortie mesurée (`FadeOut 150`) : un départ lent retarde l'écran suivant. */
+const val MOTION_EXIT_MS = 150
+
+/** Durée d'apparition de l'opacité mesurée (`FadeInUp 200`). L'échelle et la
+ * hauteur gardent [MOTION_ENTER_MS] : seul le fondu est plus bref. */
+const val MOTION_FADE_IN_MS = 200
+
 /**
  * Courbe d'apparition mesurée : `cubic-bezier(0.3, 0.3, 0, 1)` — elle part vite
  * puis se pose sans dépassement. Exposée en VALEUR pour que les quatre briques
@@ -150,6 +157,14 @@ fun motionDamping(motionOn: Boolean): Float = if (motionOn) MOTION_PRESS_DAMPING
 fun motionEnterSpec(motionOn: Boolean): FiniteAnimationSpec<Float> =
     tween(motionMs(motionOn, MOTION_ENTER_MS), easing = MOTION_ENTER_EASING)
 
+/** Spéc de fondu d'entrée : 200 ms mesurés, même courbe. */
+fun motionFadeInSpec(motionOn: Boolean): FiniteAnimationSpec<Float> =
+    tween(motionMs(motionOn, MOTION_FADE_IN_MS), easing = MOTION_ENTER_EASING)
+
+/** Spéc de sortie : 150 ms mesurés, même courbe. */
+fun motionExitSpec(motionOn: Boolean): FiniteAnimationSpec<Float> =
+    tween(motionMs(motionOn, MOTION_EXIT_MS), easing = MOTION_ENTER_EASING)
+
 /** Même durée et même courbe, pour un placement d'élément de liste (`IntOffset`). */
 fun motionPlacementSpec(motionOn: Boolean): FiniteAnimationSpec<IntOffset> =
     tween(motionMs(motionOn, MOTION_ENTER_MS), easing = MOTION_ENTER_EASING)
@@ -209,7 +224,8 @@ fun rememberPapHaptics(): PapHaptics {
 // --- Briques de mouvement ----------------------------------------------------
 
 /**
- * Bandeau qui APPARAÎT : la hauteur s'ouvre avec l'opacité, 300 ms mesurés.
+ * Bandeau qui APPARAÎT : la hauteur s'ouvre avec l'opacité (fondu 200 ms,
+ * hauteur 300 ms mesurés) ; la sortie est brève (150 ms mesurés).
  *
  * AVANT #145, un bandeau (bandeau « périmé », message de l'assistant d'appairage)
  * s'ajoutait d'un coup et poussait tout ce qui est en dessous de 40 dp, d'un coup
@@ -222,16 +238,16 @@ fun PapAppear(visible: Boolean, modifier: Modifier = Modifier, content: @Composa
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,
-        enter = fadeIn(motionEnterSpec(motionOn)) + expandVertically(motionHeightSpec(motionOn)),
-        exit = shrinkVertically(motionHeightSpec(motionOn)) + fadeOut(motionEnterSpec(motionOn)),
+        enter = fadeIn(motionFadeInSpec(motionOn)) + expandVertically(motionHeightSpec(motionOn)),
+        exit = shrinkVertically(motionHeightSpec(motionOn)) + fadeOut(motionExitSpec(motionOn)),
     ) {
         content()
     }
 }
 
 /**
- * Élément qui APPARAÎT : échelle [MOTION_ENTER_SCALE] -> 1 et opacité 0 -> 1,
- * 300 ms, `cubicBezier(0.3, 0.3, 0, 1)` — les valeurs mesurées de l'app de
+ * Élément qui APPARAÎT : échelle [MOTION_ENTER_SCALE] -> 1 (300 ms) et opacité
+ * 0 -> 1 (200 ms), `cubicBezier(0.3, 0.3, 0, 1)` — les valeurs mesurées de l'app de
  * référence, donc le détail d'une compétence choisie ou le prochain cours
  * apparaissent au lieu d'être téléportés en place.
  */
@@ -241,7 +257,7 @@ fun PapEnter(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     AnimatedVisibility(
         visible = true,
         modifier = modifier,
-        enter = fadeIn(motionEnterSpec(motionOn)) +
+        enter = fadeIn(motionFadeInSpec(motionOn)) +
             scaleIn(initialScale = MOTION_ENTER_SCALE, animationSpec = motionEnterSpec(motionOn)),
     ) {
         content()
