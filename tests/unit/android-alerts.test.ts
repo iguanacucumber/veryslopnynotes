@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { CACHE_TTL_MS, cacheStatus, isCacheableResource } from "../../shared/contracts/cache";
 import { SECURITY_ALERT_KINDS, isSecurityAlertData } from "../../shared/contracts/events";
 import type { SecurityAlertData } from "../../shared/contracts/events";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const UI = join(ROOT, "android/ui/src/main/java/fr/veryslopnynotes/ui");
@@ -21,13 +22,6 @@ const SCREEN = join(UI, "SecurityAlertsScreen.kt");
 
 /** Sans les commentaires : une garde de source ne doit pas confondre un `//` qui
  *  NOMME un défaut avec le défaut lui-même. */
-const codeOnly = (c: string): string =>
-  c
-    .replace(/\/\*[\s\S]*?\*\//g, "\n")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .join("\n");
-
 // --- Miroir de `SecurityAlertsScreen.kt` ---
 
 type View =

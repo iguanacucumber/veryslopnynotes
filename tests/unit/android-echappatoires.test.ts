@@ -27,6 +27,7 @@ import {
 import { SECURITY_ALERT_KINDS } from "../../shared/contracts/events";
 import { ENUM_FR_KT, enumFr, isFrenchLabel, kotlinEnumTable } from "./fixtures/enum-fr";
 import { dayLabelFr, frDayNames, frMonths } from "./fixtures/date-fr";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const ANDROID = join(ROOT, "android");
@@ -35,13 +36,6 @@ const CORE = join(ANDROID, "core/src/main/java/fr/veryslopnynotes/core");
 
 /** Sans les commentaires : une garde de source ne doit pas confondre un `//` qui
  *  NOMME un défaut avec le défaut lui-même. */
-const codeOnly = (c: string): string =>
-  c
-    .replace(/\/\*[\s\S]*?\*\//g, "\n")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .join("\n");
-
 const ktFiles = (dir: string): string[] =>
   readdirSync(dir)
     .filter((f) => f.endsWith(".kt"))

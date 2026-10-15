@@ -17,6 +17,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const UI = join(ROOT, "android/ui/src/main/java/fr/veryslopnynotes/ui");
@@ -28,12 +29,6 @@ const nav = read("AppNav.kt");
 const uiFiles = readdirSync(UI).filter((f) => f.endsWith(".kt"));
 /** Sans les commentaires : une garde qui lit le texte du fichier doit éviter de
  *  confondre un `//` qui NOMME une mauvaise pratique avec la pratique. */
-const codeOnly = (src: string): string =>
-  src
-    .replace(/\/\*[\s\S]*?\*\//g, "\n")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .join("\n");
 /** `ROUTE_CALENDAR` -> `calendar` : la table de la coquille écrit les constantes. */
 const constName = (route: string) => `ROUTE_${route.toUpperCase()}`;
 

@@ -10,6 +10,7 @@ import {
   syntheticPunishmentsPayload,
 } from "./fixtures/attendance";
 import { frDayNames, frMonths } from "./fixtures/date-fr";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 // Miroir des helpers Kotlin (Attendance.kt + AttendanceFormat.kt +
 // CachePolicy/SyncedRepository/ServerConfig) — doivent rester en sync. org.json =
@@ -519,14 +520,6 @@ const CORE_ICONS = new Set([
   "Menu", "MoreVert", "Notifications", "Person", "Phone", "Place", "PlayArrow", "Refresh", "Search", "Send",
   "Settings", "Share", "ShoppingCart", "Star", "ThumbUp", "Warning",
 ]);
-
-const codeOnly = (s: string): string =>
-  s
-    .replace(/\/\*[\s\S]*?\*\//g, "\n")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .join("\n");
-
 describe("vie scolaire : rendu (#141)", () => {
   test("aucune date ISO ne fuit : deux formes lues, deux libellés français", () => {
     // Les dates du contrat sont lues comme des INSTANTS…

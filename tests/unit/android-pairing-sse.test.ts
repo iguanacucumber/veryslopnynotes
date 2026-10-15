@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { isContractEvent } from "../../shared/contracts/events";
 import { CONTRACTS_VERSION } from "../../shared/contracts/models";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const DATA = join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data");
@@ -37,19 +38,6 @@ function tsParseSchoolQr(raw: string): { login: string; jeton: string; url: stri
   if (login === "" || login.length > 1024 || jeton === "" || jeton.length > 1024) return null;
   return { login, jeton, url: url === "" ? null : url };
 }
-
-function codeOnly(content: string): string {
-  const noBlock = content.replace(/\/\*[\s\S]*?\*\//g, "\n");
-  return noBlock
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .map((l) => {
-      const idx = l.search(/(?<!:)\/\//);
-      return idx >= 0 ? l.slice(0, idx) : l;
-    })
-    .join("\n");
-}
-
 describe("unit android pairing device-only (#206) + sync périodique (#208)", () => {
   test("fichiers app présents (diff minimal, zone autorisée)", () => {
     for (const f of [

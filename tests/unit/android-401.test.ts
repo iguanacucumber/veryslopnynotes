@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CACHEABLE_RESOURCES } from "../../shared/contracts/cache";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const DATA = join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data");
@@ -15,19 +16,6 @@ const UI = join(ROOT, "android/ui/src/main/java/fr/veryslopnynotes/ui");
 function read(p: string): string {
   return readFileSync(p, "utf8");
 }
-
-function codeOnly(content: string): string {
-  const noBlock = content.replace(/\/\*[\s\S]*?\*\//g, "\n");
-  return noBlock
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .map((l) => {
-      const idx = l.search(/(?<!:)\/\//);
-      return idx >= 0 ? l.slice(0, idx) : l;
-    })
-    .join("\n");
-}
-
 const kt = {
   auth: join(DATA, "DeviceAuth.kt"),
   sessions: join(DATA, "SessionStore.kt"),
