@@ -489,7 +489,7 @@ fun PapErrorState(
             imageVector = Icons.Filled.Warning,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(48.dp),
         )
         Text(
             text = errorHeadline(message),
