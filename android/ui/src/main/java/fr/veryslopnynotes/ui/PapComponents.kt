@@ -114,9 +114,6 @@ private const val SKELETON_PERIOD_MS = 900
 /** Nombre de lignes du squelette de liste, quand l'écran n'en demande pas. */
 private const val SKELETON_ROWS = 6
 
-/** Pastille matière : la couleur de matière ramenée à 31 % au-dessus du fond. */
-private const val AVATAR_TINT_ALPHA = 0.31f
-
 /** Côte de la pastille matière. 44 dp avec un rayon de 20 reste un carré
  *  arrondi (44 / 2 = 22 > 20) ; 40 dp donnerait un disque. */
 private val AVATAR_SIZE = 44.dp
@@ -273,6 +270,10 @@ fun longDateFr(
  * Carte : rayon 20 dp ([MaterialTheme.shapes] de #134), 1 dp d'élévation, et un
  * FILET plutôt qu'une ombre.
  *
+ * #261 : le défaut est `surface` — Papillon pose ses cartes en blanc sur fond
+ * blanc, séparées par la bordure du thème, pas en gris. Le héro Notes garde
+ * `surfaceVariant` SANS bord (relevé) ; les secondaires suivent le défaut.
+ *
  * Sur Android, une ombre à 1 dp est invisible (elle se noie dans le fond) et
  * coûte un calque de rendu ; papillon.bzh pose donc une bordure. `border = null`
  * rend la carte sans filet, pour le cas où le parent en fournit un.
@@ -284,7 +285,7 @@ fun longDateFr(
 fun PapCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceVariant,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
     border: BorderStroke? = BorderStroke(HAIRLINE, MaterialTheme.colorScheme.outline),
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -658,13 +659,13 @@ fun PapPill(text: String, color: Color, modifier: Modifier = Modifier) {
 }
 
 /**
- * Pastille matière : carré arrondi (rayon 20 dp) teinté à 31 % de la couleur,
- * emoji centré.
+ * Pastille matière : carré arrondi (rayon 20 dp) sur le MÊME pas que la carte
+ * et la pastille ([SUBJECT_SURFACE_TINT] en clair, [SUBJECT_SURFACE_DARK_TINT]
+ * en sombre — #261, un seul pas par thème), emoji centré.
  *
- * 31 % n'est pas une convention : c'est l'alpha qui garde l'emoji lisible sur
- * le fond pastel sans le laver. L'encre n'a pas à être choisie ici — il n'y a
- * pas de texte, seulement un glyphe — donc le risque de contraste du `ponytail:`
- * de [PapPill] ne se pose pas.
+ * L'encre n'a pas à être choisie ici — il n'y a pas de texte, seulement un
+ * glyphe — donc le risque de contraste du `ponytail:` de [PapPill] ne se pose
+ * pas.
  *
  * [emoji] vide = pastille vide (la matière n'a pas d'emoji), pas d'initiales
  * inventées : le libellé reste porté par la ligne, en toutes lettres.
@@ -676,11 +677,12 @@ fun PapSubjectAvatar(
     modifier: Modifier = Modifier,
     size: Dp = AVATAR_SIZE,
 ) {
+    val dark = isDarkSurface()
     Box(
         modifier = modifier
             .size(size)
             .clip(MaterialTheme.shapes.large)
-            .background(color.copy(alpha = AVATAR_TINT_ALPHA)),
+            .background(tint(color, if (dark) SUBJECT_SURFACE_DARK_TINT else SUBJECT_SURFACE_TINT)),
         contentAlignment = Alignment.Center,
     ) {
         if (!emoji.isNullOrEmpty()) {
