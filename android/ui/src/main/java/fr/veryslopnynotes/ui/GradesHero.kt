@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -115,6 +116,12 @@ private val HERO_BODY_GAP = 1.dp
  * La courbe est DÉCORATIVE : elle est annoncée une fois par
  * [sparklineDescription] (« Évolution de la moyenne : de 12,00 à 14,87. »),
  * donc un lecteur d'écran n'a jamais droit à une boîte vide.
+ *
+ * Embellissement Papillon (Canvas seul, sans bibliothèque) : un remplissage
+ * d'aire subtil sous la courbe (vert à 10 % fondu vers transparent en bas,
+ * peint AVANT le trait) et un halo translucide (~3x le rayon du point, vert à
+ * 18 %) derrière le point final. Les alphas restent bas pour que le thème
+ * sombre reste lisible.
  */
 @Composable
 fun AverageSparkline(
@@ -146,14 +153,32 @@ fun AverageSparkline(
         if (points.isEmpty()) return@Canvas
         val at = { p: SparkPoint -> Offset(p.x, top + p.y) }
         if (points.size == 1) {
-            drawCircle(color = color, radius = dot, center = at(points.first()))
+            val only = at(points.first())
+            drawCircle(color = color.copy(alpha = 0.18f), radius = dot * 3, center = only)
+            drawCircle(color = color, radius = dot, center = only)
             return@Canvas
         }
         val path = Path()
         path.moveTo(points.first().x, top + points.first().y)
         for (i in 1 until points.size) path.lineTo(points[i].x, top + points[i].y)
+        val fill = Path().apply {
+            moveTo(points.first().x, top + points.first().y)
+            for (i in 1 until points.size) lineTo(points[i].x, top + points[i].y)
+            lineTo(points.last().x, size.height)
+            lineTo(points.first().x, size.height)
+            close()
+        }
+        drawPath(
+            path = fill,
+            brush = Brush.verticalGradient(
+                colors = listOf(color.copy(alpha = 0.10f), Color.Transparent),
+                startY = top,
+                endY = size.height,
+            ),
+        )
         drawPath(path = path, color = color, style = Stroke(width = SPARK_WIDTH.toPx(), cap = StrokeCap.Round))
         val last = at(points.last())
+        drawCircle(color = color.copy(alpha = 0.18f), radius = dot * 3, center = last)
         drawCircle(color = color, radius = dot, center = last)
     }
 }

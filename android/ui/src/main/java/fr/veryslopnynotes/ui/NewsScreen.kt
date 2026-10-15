@@ -1,19 +1,17 @@
 package fr.veryslopnynotes.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,9 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.NewsItem
@@ -53,9 +49,18 @@ import java.time.ZoneId
 //     seul bout de texte ;
 //   - aucun PullToRefresh, alors que l'accueil en a un (`HomePullToRefresh`).
 //
-// L'écran regroupe donc par `category`, pose une PASTILLE sur ce qui n'est pas
-// lu, et dit l'auteur et la date en temps RELATIF (« il y a 4 min ») : la
-// fonction est celle de `PapComponents.kt`, [relativeTimeFr], donc testable.
+// L'écran regroupe donc par `category`, pose une PASTILLE « Non lue » sur ce
+// qui n'est pas lu, et dit l'auteur et la date en TOUTES LETTRES
+// (« 2 octobre 2026 », [longDateFr]) : une actualité se DATE, elle ne dit pas
+// l'âge de sa synchronisation (« il y a 4 min » parle de l'horloge, pas de
+// l'acte — même arbitrage que la ligne de note #192).
+//
+// Polish Papillon : carte PLATE teintée `surfaceVariant` (fond, élévation 0,
+// sans filet — même pattern que `GradeRow` / devoirs), titre 18 sp semibold
+// maxLines 2, méta `onSurfaceVariant`, pastille unique `PapPill` « Non lue »
+// (accordée à « actualité »). La catégorie reste dans l'en-tête de groupe
+// (`PapSectionHeader`) : la dupliquer en pastille par carte serait du bruit.
+// Rythme 12 dp dehors comme dedans ; refresh/vide/erreur inchangés.
 //
 // ponytail: le contrat n'expose AUCUNE écriture de lecture (#79, add-only) :
 //   l'état « lu » posé par l'utilisateur est donc portée par l'ÉCRAN, pour la
@@ -72,8 +77,8 @@ data class NewsGroupUi(val category: String, val items: List<NewsItem>)
 /** Lignes du corps d'une carte : au-delà, la carte tronque avec une ellipse. */
 private const val NEWS_BODY_MAX_LINES = 4
 
-/** Côte de la pastille « non lu ». */
-private val UNREAD_DOT = 8.dp
+/** Pastille « non lue » : accordée à « actualité » (féminin), portée par `PapPill`. */
+private const val NEWS_UNREAD_LABEL = "Non lue"
 
 // Payload cache illisible/absent = liste vide propre (jamais d'exception UI).
 fun newsFromPayload(payload: String?): List<NewsItem> = try {
@@ -112,19 +117,26 @@ fun newsGroups(news: List<NewsItem>): List<NewsGroupUi> {
 }
 
 /**
- * Ligne auteur + date, en temps relatif.
+ * Ligne auteur + date, en TOUTES LETTRES (« Par Vie scolaire · 2 octobre 2026 »).
  *
- * `now` et `zone` sont INJECTÉS : « il y a 4 min » dépend de l'horloge ET du
- * fuseau, donc la fonction serait sinon impossible à tester (même choix que
- * [relativeTimeFr]). Date illisible = pas de ligne du tout, plutôt qu'une date
- * devinée.
+ * CHANGEMENT D'AFFICHAGE documenté : AVANT c'était du temps relatif
+ * (`relativeTimeFr`, « il y a 2 h » / « hier 09:00 ») ; c'est désormais
+ * [longDateFr], comme la ligne de note #192 — une actualité se date, deux
+ * actes du même jour restent distinguables et un acte de l'an passé ne donne
+ * plus la même chaîne qu'un acte de septembre. Display-only : le tri et le
+ * regroupement comparent toujours `publishedAt` brut.
+ *
+ * `now` est CONSERVÉ pour compatibilité d'appel (appelants + miroir TS) mais
+ * IGNORÉ à l'affichage : une date absolue ne dépend ni de l'horloge ni du
+ * moment. `zone` décide du jour affiché. Date illisible = pas de ligne du
+ * tout, plutôt qu'une date devinée.
  */
 fun newsByline(item: NewsItem, now: Long, zone: ZoneId): String {
     // Lecteur ISO déjà écrit et testé pour l'accueil (`homeMillisOf`) : `Z`,
     // décalage explicite et date seule. Réécrire le parsing ici aurait été un
     // troisième exemplaire du même.
     val epoch = homeMillisOf(item.publishedAt) ?: return ""
-    val date = relativeTimeFr(epoch, now, zone)
+    val date = longDateFr(epoch, zone)
     val author = item.author.trim()
     return if (author.isEmpty()) date else "Par $author · $date"
 }
@@ -201,13 +213,17 @@ fun NewsScreen(
 }
 
 /**
- * Carte d'une actualité : PASTILLE non lu, titre en gras, auteur + date
- * relatifs, corps borné à [NEWS_BODY_MAX_LINES] lignes et l'action « marquer
- * lu ».
+ * Carte d'une actualité : pastille « Non lue », titre 18 sp semibold, auteur +
+ * date en toutes lettres, corps borné à [NEWS_BODY_MAX_LINES] lignes et
+ * l'action « marquer lu ».
  *
- * Le corps est borné en LIGNES, pas en un bouton « Lire la suite » qui n'aurait
- * nulle part où mener : sans écran de détail, un bouton de plus serait un bouton
- * mort. Le texte entier reste dans le payload, donc rien n'est perdu.
+ * Carte PLATE teintée `surfaceVariant`, élévation 0, sans filet — le pattern
+ * de `GradeRow` / devoirs (pas `PapCard`, qui pose 1 dp d'élévation + filet).
+ * Pas de teinte par catégorie : le contrat ne publie aucune couleur, et un
+ * aplat dérivé du nom inventerait une matière. Le corps est borné en LIGNES,
+ * pas en un bouton « Lire la suite » qui n'aurait nulle part où mener : sans
+ * écran de détail, un bouton de plus serait un bouton mort. Le texte entier
+ * reste dans le payload, donc rien n'est perdu.
  */
 @Composable
 fun NewsCard(
@@ -217,35 +233,41 @@ fun NewsCard(
     zone: ZoneId,
     modifier: Modifier = Modifier,
 ) {
-    PapCard(modifier = modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        // Ni bordure ni ombre : la référence n'en pose pas, et un filet de 1 dp
+        // sur un aplat teinté se lit comme un contour de découpe.
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (!item.read) {
-                    // La pastille est DÉCORATIVE pour l'œil mais ANNONCÉE : c'est
-                    // elle qui porte « non lu » pour un lecteur d'écran (le
-                    // libellé texte « Non lu » avait été retiré).
-                    Box(
-                        modifier = Modifier
-                            .size(UNREAD_DOT)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                            .semantics { contentDescription = "Actualité non lue" },
-                    )
-                }
                 // `item.title` vient de l'établissement : AVANT #146 il n'était
                 // pas borné, alors que le corps, lui, l'était. Deux lignes : le
                 // titre d'un acte tient en deux lignes, le reste se lit dans le
-                // corps ou plus tard.
+                // corps ou plus tard. 18 sp semibold = le `title` de la
+                // référence (même correction que la ligne de note #192).
                 Text(
                     text = item.title,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                if (!item.read) {
+                    // Pastille UNIQUE « Non lue » : le point de 8 dp ne portait
+                    // l'état que par la couleur (invisible sans elle) ; `PapPill`
+                    // le nomme en français, dans la seule forme de pastille de
+                    // l'app — aucune image inventée, aucune donnée ajoutée.
+                    PapPill(text = NEWS_UNREAD_LABEL, color = MaterialTheme.colorScheme.primary)
+                }
             }
             val byline = newsByline(item, now, zone)
             if (byline.isNotEmpty()) {
