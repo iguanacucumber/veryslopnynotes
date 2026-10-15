@@ -964,9 +964,10 @@ fun MessagesRoute(
     var previews by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     fun refresh() {
-        // Serveur non configuré : aucun appel (I1), état erreur avec cache si dispo.
+        // Serveur non configuré : aucun appel (I1). Sans fils, état vide
+        // propre — jamais d'écran d'erreur plein-écran (#260).
         if (baseUrl.isBlank()) {
-            error = "Serveur non configuré."
+            loading = false
             return
         }
         loading = true
@@ -987,10 +988,14 @@ fun MessagesRoute(
                     }
                     is RefreshOutcome.Failed -> {
                         payload = discussionsFromPayload(o.cachedPayload)
-                        error = o.message
+                        // Sans cache : état vide propre, pas d'écran d'erreur
+                        // plein-écran pour l'absence de connexion (#260). Avec
+                        // cache, la liste reste affichée et le message sort en
+                        // notice ROUGE (ci-dessous).
+                        error = if (o.cachedPayload == null) null else o.message
                         // #145 : échec AVEC cache = la liste reste affichée, donc pas
                         // d'état d'écran ; le message du serveur sort donc en notice
-                        // ROUGE. Sans cache, c'est `PapErrorState` qui le montre.
+                        // ROUGE. Sans cache, c'est l'état vide qui le montre.
                         if (o.cachedPayload != null) {
                             notices.show(PapNotice(errorHeadline(o.message), NoticeKind.ERROR))
                         }

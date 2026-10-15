@@ -28,7 +28,7 @@ function refresh(
       fetchedAt: cached.fetchedAt,
       stale: cacheStatus(resource, cached.fetchedAt, now) === "stale",
     };
-  return { kind: "failed", message: net.ok ? "Réponse vide." : "Hors-ligne, aucune donnée en cache.", cached: null };
+  return { kind: "failed", message: net.ok ? "Réponse vide." : "Aucune donnée en cache.", cached: null };
 }
 
 describe("offline android (#14)", () => {

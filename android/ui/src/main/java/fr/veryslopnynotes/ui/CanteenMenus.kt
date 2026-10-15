@@ -440,9 +440,10 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
     // qu'en « aucun menu en cache » pendant une frame.
     var loading by remember { mutableStateOf(true) }
     fun refresh() {
-        // Serveur non configuré : pas d'appel (I1).
+        // Serveur non configuré : pas d'appel (I1). Sans donnée, état vide
+        // propre — jamais d'écran d'erreur plein-écran (#260).
         if (baseUrl.isBlank()) {
-            error = "Serveur non configuré."
+            loading = false
             return
         }
         loading = true
@@ -464,7 +465,9 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
                     is RefreshOutcome.Failed -> {
                         payload = o.cachedPayload
                         stale = true
-                        error = o.message
+                        // Sans cache : état vide propre, pas d'écran d'erreur
+                        // plein-écran pour l'absence de connexion (#260).
+                        error = if (o.cachedPayload == null) null else o.message
                     }
                 }
                 loading = false

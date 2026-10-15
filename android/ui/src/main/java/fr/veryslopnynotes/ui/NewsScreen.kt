@@ -330,7 +330,9 @@ fun NewsRoute(
     var readIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
     fun refresh() {
         if (baseUrl.isBlank()) {
-            error = "Serveur non configuré."
+            // Serveur non configuré : aucun appel (I1). Sans donnée, état vide
+            // propre — jamais d'écran d'erreur plein-écran (#260).
+            if (news.isEmpty()) error = null else error = "Serveur non configuré."
             return
         }
         loading = true
@@ -351,7 +353,9 @@ fun NewsRoute(
                     }
                     is RefreshOutcome.Failed -> {
                         news = newsFromPayload(o.cachedPayload)
-                        error = o.message
+                        // Sans cache : état vide propre, pas d'écran d'erreur
+                        // plein-écran pour l'absence de connexion (#260).
+                        error = if (o.cachedPayload == null) null else o.message
                     }
                 }
                 loading = false

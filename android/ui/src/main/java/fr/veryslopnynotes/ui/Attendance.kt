@@ -290,9 +290,11 @@ private fun CachedSchoolRoute(
         mutableStateOf(uiStateFromCache(c, c != null && repo.isStale(resource, c)))
     }
     fun refresh() {
-        // Serveur non configuré : pas d'appel (I1).
+        // Serveur non configuré : pas d'appel (I1). Sans rien d'affiché, état
+        // vide propre — jamais d'écran d'erreur plein-écran (#260).
         if (baseUrl.isBlank()) {
-            state = UiState.Error("Serveur non configuré.", (state as? UiState.Data)?.payload)
+            state = (state as? UiState.Data)?.let { UiState.Error("Serveur non configuré.", it.payload) }
+                ?: UiState.Empty
             return
         }
         state = when (val s = state) {
@@ -304,7 +306,8 @@ private fun CachedSchoolRoute(
         try {
             repo.refreshAsync(resource, baseUrl) { o -> state = uiStateFromOutcome(o) }
         } catch (_: Exception) {
-            state = UiState.Error("Erreur inattendue.", (state as? UiState.Data)?.payload)
+            state = (state as? UiState.Data)?.let { UiState.Error("Erreur inattendue.", it.payload) }
+                ?: UiState.Empty
         }
     }
     // Cache affiché d'abord, relecture ensuite (offline-first #14). Le compteur
@@ -408,11 +411,11 @@ fun AttendanceRoute(
                         periods = periodsFrom(o.payload)
                         periodsError = null
                     }
-                    is RefreshOutcome.Failed -> periodsError = o.message
+                    is RefreshOutcome.Failed -> periodsError = if (isSilentOffline(o.message)) null else o.message
                 }
             }
         } catch (_: Exception) {
-            periodsError = "Tranches indisponibles."
+            periodsError = null
         }
     }
 
