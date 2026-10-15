@@ -12,6 +12,8 @@ Il faut verrouiller versions et choix avant code métier (bloque phases 2-10).
 - **Android** : natif Kotlin, Gradle, Jetpack Compose (Material3), un seul client OkHttp allowlist serveur (I1).
   Versions Gradle/Kotlin/AGP/compileSdk figées phase 4 à création du premier module (#13) — pas de code Android avant.
 - **Tests/outillage** : `bun test` built-in, `make check` = lint + typecheck + unit + architecture + contracts + security.
+  Étapes indépendantes lancées en parallèle par `agents/runtime/check.ts` (168 s → 4 s : chaque
+  étape est mémoire-tampon et affichée seule, code de sortie global ; recettes = Makefile, source unique).
   Pas d'ESLint : `tsc` strict + scripts `agents/runtime/` suffisent (décision paresseuse, réversible en PR justifiée).
 - **Dépendances** : versions exactes + `bun.lock` commité + `bun audit`. Nouvelle dép = justifiée, épinglée, licence MIT-compatible.
 
