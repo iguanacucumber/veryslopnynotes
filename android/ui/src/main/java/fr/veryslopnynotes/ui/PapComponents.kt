@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -489,7 +490,7 @@ fun PapErrorState(
             imageVector = Icons.Filled.Warning,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(48.dp),
         )
         Text(
             text = errorHeadline(message),
@@ -512,7 +513,11 @@ fun PapErrorState(
         }
         Button(
             onClick = onRetry,
-            modifier = Modifier.padding(top = 8.dp),
+            // Bouton 50 dp de haut, 20 dp de côté (#258) : les mesures du
+            // bouton de référence (`height 50`, `paddingH 20`, pastille) — le
+            // 40 dp par défaut de Material3 tassait le geste principal.
+            modifier = Modifier.padding(top = 8.dp).height(50.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp),
         ) {
             Text("Réessayer")
         }
