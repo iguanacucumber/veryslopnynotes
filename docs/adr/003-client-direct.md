@@ -29,13 +29,12 @@ composant à compromettre pour acheminer des secrets qui n'ont pas à voyager.
   côté serveur tant que le chemin legacy vit (scan inchangé jusqu'à la
   suppression du serveur mort).
 - **I3/I5 étendus à `android/`** : `android/core/` suit la même pureté que
-  `server/domain/` (port #203, harnais de parité) ; côté app aucun prompt LLM
-  n'est assemblé — la clé vit dans le store chiffré et ne voyage qu'en corps
-  `writeOnly` (I8).
-- **Transition explicite** : le chemin serveur reste en place jusqu'à sa
-  suppression (issue dédiée) ; le branchement app arrive en #205 (points
-  d'entrée tolérés par I9 jusque-là). Aucun nouveau code ne passe par le
-  serveur.
+  `server/domain/` ; l'app assemble et valide les prompts localement. La clé
+  reste chiffrée sur l'appareil et part directement à OpenRouter dans
+  `Authorization` (I8).
+- **Transition terminée** : depuis #205, aucun nouveau code Pronote ne passe
+  par le serveur. Le client TypeScript restant sert uniquement à capturer le
+  corpus #199, hors processus.
 
 ## Alternatives rejetées
 
@@ -54,27 +53,21 @@ composant à compromettre pour acheminer des secrets qui n'ont pas à voyager.
   voyait que le réseau du serveur ; désormais chaque client présente le sien.
   Pas d'anonymisation par intermédiaire, et un réseau scolaire filtrant peut
   bloquer un client là où il laissait passer un serveur.
-- **Plus de point de contrôle central** : filtrage (hôtes privés et loopback
-  refusés), borne d'échecs, audit — tout ce que le serveur appliquait en un
-  point doit être répliqué par appareil (validation d'hôte côté
-  `android/pronote/`, purge session). Le garde anti-rebinding serveur ne couvre
-  plus le téléphone : à fermer côté client au branchement (#205).
+- **Plus de point de contrôle central** : la validation côté serveur ne couvre
+  plus le téléphone. Le client valide l'adresse saisie et la session est purgée
+  au logout ou au changement d'établissement.
 - **Session sur appareil perdu ou volé** : atténué par la purge existante
   (logout, changement d'hôte) et l'absence de persistance disque côté serveur
   (rien à moissonner côté backend) ; le chiffrement au repos côté app reste du
   ressort du store (voir I8).
 - **Dérive de parité TS↔Kotlin** : atténuée par les harnais
-  (`kotlin-pronote-parity`, `kotlin-pronote-client-parity`,
-  `kotlin-domain-parity`) qui compilent et rejouent le vrai code ; toute
-  divergence = défaut bloquant.
+  `kotlin-pronote-parity` et `kotlin-pronote-client-parity`, qui compilent et
+  rejouent le vrai code ; toute divergence = défaut bloquant.
 
 ## Conséquences
 
 - INVARIANTS I1/I2/I3/I5 réécrits ; `AGENTS.md` (règle réseau), `README.md`
   (démarrage sans serveur), `docs/HUMAN_INPUTS.md` (corpus, compte scraper)
   alignés.
-- Scans inchangés (I1 repointé en #216, I2 serveur ≤ 1 définition, I3
-  `server/domain/`, I5 `server/ai/`) : `make check` reste vert pendant la
-  transition.
-- Branchement #205 + suppression du serveur mort : issues dédiées, pas cette
-  ADR.
+- Scans et invariants sont alignés sur l'accès direct : `make check` vérifie le
+  client Android et les contraintes du scraper restant.
