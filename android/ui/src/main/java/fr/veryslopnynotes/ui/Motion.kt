@@ -1,7 +1,11 @@
 package fr.veryslopnynotes.ui
 
 import android.animation.ValueAnimator
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FiniteAnimationSpec
@@ -122,6 +126,13 @@ const val MOTION_PRESS_ALPHA = 0.7f
 const val MOTION_PRESS_IN_MS = 30
 const val MOTION_PRESS_OUT_MS = 200
 
+/**
+ * Écart entre deux éléments d'une liste qui apparaissent (`PapEnter` stagger) :
+ * 30 ms — le même pas que l'enfoncement de presse, donc un seul chiffre à
+ * retenir pour « vite ». `motionStaggerDelay` le multiplie par l'index.
+ */
+const val MOTION_STAGGER_MS = 30
+
 /** Durée d'un aller-retour de la pulsation « en cours ». */
 const val CURRENT_PULSE_MS = 2_400
 
@@ -150,6 +161,10 @@ fun rememberMotionOn(): Boolean = remember { systemAnimationsEnabled() }
 /** Durée appliquée : 0 ms quand le mouvement est coupé, donc l'état saute. */
 fun motionMs(motionOn: Boolean, ms: Int): Int = if (motionOn) ms else 0
 
+/** Délai stagger d'un élément de liste : `index × 30 ms`, 0 quand coupé. */
+fun motionStaggerDelay(motionOn: Boolean, index: Int): Int =
+    if (motionOn) index.coerceAtLeast(0) * MOTION_STAGGER_MS else 0
+
 /** Amortissement du ressort de presse : 1 sans mouvement, donc aucun rebond. */
 fun motionDamping(motionOn: Boolean): Float = if (motionOn) MOTION_PRESS_DAMPING else 1f
 
@@ -176,6 +191,50 @@ fun motionHeightSpec(motionOn: Boolean): FiniteAnimationSpec<IntSize> =
 /** Spéc du ressort de presse : amortissement mesuré, ou 1 (aucun rebond) coupé. */
 fun motionPressSpec(motionOn: Boolean): FiniteAnimationSpec<Float> =
     spring(dampingRatio = motionDamping(motionOn), stiffness = MOTION_PRESS_STIFFNESS)
+
+// --- Transitions de navigation (#263) ---------------------------------------
+
+/**
+ * Entrée d'écran (`NavHost`) : fondu + glissé, 300 ms, même courbe
+ * `cubicBezier(0.3, 0.3, 0, 1)` que [MOTION_ENTER_EASING] — aucune courbe
+ * ajoutée, les deux specs réutilisent les jetons d'entrée.
+ *
+ * Extension du scope de transition : `slideIntoContainer`/`slideOutOfContainer`
+ * sont des membres du scope (pas d'import top-level possible), donc l'appel se
+ * fait dans les lambdas `enterTransition` de `AppNav.kt`, jamais hors d'un
+ * `NavHost`.
+ * `motionOn == false` = durées 0, donc l'écran saute au lieu de glisser.
+ */
+fun AnimatedContentTransitionScope<*>.motionNavEnter(motionOn: Boolean): EnterTransition =
+    fadeIn(tween(motionMs(motionOn, MOTION_ENTER_MS), easing = MOTION_ENTER_EASING)) +
+        slideIntoContainer(
+            SlideDirection.Start,
+            tween(motionMs(motionOn, MOTION_ENTER_MS), easing = MOTION_ENTER_EASING),
+        )
+
+/** Sortie d'écran : même geste, 150 ms mesurés, même courbe. */
+fun AnimatedContentTransitionScope<*>.motionNavExit(motionOn: Boolean): ExitTransition =
+    fadeOut(tween(motionMs(motionOn, MOTION_EXIT_MS), easing = MOTION_ENTER_EASING)) +
+        slideOutOfContainer(
+            SlideDirection.Start,
+            tween(motionMs(motionOn, MOTION_EXIT_MS), easing = MOTION_ENTER_EASING),
+        )
+
+/** Retour pile : même durées, glissé inversé (l'écran revient de droite). */
+fun AnimatedContentTransitionScope<*>.motionNavPopEnter(motionOn: Boolean): EnterTransition =
+    fadeIn(tween(motionMs(motionOn, MOTION_ENTER_MS), easing = MOTION_ENTER_EASING)) +
+        slideIntoContainer(
+            SlideDirection.End,
+            tween(motionMs(motionOn, MOTION_ENTER_MS), easing = MOTION_ENTER_EASING),
+        )
+
+/** Sortie vers l'arrière : 150 ms, glissé inversé. */
+fun AnimatedContentTransitionScope<*>.motionNavPopExit(motionOn: Boolean): ExitTransition =
+    fadeOut(tween(motionMs(motionOn, MOTION_EXIT_MS), easing = MOTION_ENTER_EASING)) +
+        slideOutOfContainer(
+            SlideDirection.End,
+            tween(motionMs(motionOn, MOTION_EXIT_MS), easing = MOTION_ENTER_EASING),
+        )
 
 /** Pulsation « en cours » : échelle 1 -> [CURRENT_PULSE_SCALE] selon la phase. */
 fun pulseScale(phase: Float): Float =
@@ -250,15 +309,42 @@ fun PapAppear(visible: Boolean, modifier: Modifier = Modifier, content: @Composa
  * 0 -> 1 (200 ms), `cubicBezier(0.3, 0.3, 0, 1)` — les valeurs mesurées de l'app de
  * référence, donc le détail d'une compétence choisie ou le prochain cours
  * apparaissent au lieu d'être téléportés en place.
+ *
+ * [staggerIndex] = rang dans une liste (`#263`) : le délai vaut
+ * [motionStaggerDelay] (`index × [MOTION_STAGGER_MS]`), donc 0 quand le
+ * téléphone a désactivé les animations — et à 0 la spec est celle d'avant, sans
+ * délai.
  */
 @Composable
-fun PapEnter(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun PapEnter(
+    modifier: Modifier = Modifier,
+    staggerIndex: Int = 0,
+    content: @Composable () -> Unit,
+) {
     val motionOn = rememberMotionOn()
+    val delay = motionStaggerDelay(motionOn, staggerIndex)
     AnimatedVisibility(
         visible = true,
         modifier = modifier,
-        enter = fadeIn(motionFadeInSpec(motionOn)) +
-            scaleIn(initialScale = MOTION_ENTER_SCALE, animationSpec = motionEnterSpec(motionOn)),
+        enter = if (delay == 0) {
+            fadeIn(motionFadeInSpec(motionOn)) +
+                scaleIn(initialScale = MOTION_ENTER_SCALE, animationSpec = motionEnterSpec(motionOn))
+        } else {
+            fadeIn(
+                tween(
+                    durationMillis = motionMs(motionOn, MOTION_FADE_IN_MS),
+                    delayMillis = delay,
+                    easing = MOTION_ENTER_EASING,
+                ),
+            ) + scaleIn(
+                initialScale = MOTION_ENTER_SCALE,
+                animationSpec = tween(
+                    durationMillis = motionMs(motionOn, MOTION_ENTER_MS),
+                    delayMillis = delay,
+                    easing = MOTION_ENTER_EASING,
+                ),
+            )
+        },
     ) {
         content()
     }

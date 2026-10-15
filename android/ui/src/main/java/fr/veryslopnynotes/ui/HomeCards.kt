@@ -2,7 +2,6 @@ package fr.veryslopnynotes.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -144,7 +143,9 @@ fun HomeMoreButton(onClick: () -> Unit, label: String = "Afficher plus") {
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .border(1.dp, MaterialTheme.colorScheme.outline, shape)
-            .clickable(onClickLabel = label, role = Role.Button, onClick = onClick)
+            // #263 : même presse que les cartes (échelle + alpha + ripple),
+            // cible 48 dp intacte (`defaultMinSize` avant le `graphicsLayer`).
+            .papPressable(onClickLabel = label, role = Role.Button, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

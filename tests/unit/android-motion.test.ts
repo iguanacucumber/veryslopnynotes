@@ -487,3 +487,88 @@ describe("#145 — une seule porte de notification, et zéro dépendance ajouté
     }
   });
 });
+
+describe("#263 — motion partout : nav, stagger, presse", () => {
+  const pap = (f: string): string => readFileSync(join(UI, f), "utf8");
+  const code = (f: string): string => codeOnly(pap(f));
+
+  test("stagger 30 ms, posé une fois et coupé avec le reste", () => {
+    expect(MOTION).toContain("const val MOTION_STAGGER_MS = 30");
+    expect(MOTION.match(/const val MOTION_STAGGER_MS/g)?.length ?? 0).toBe(1);
+    expect(kt).toContain("fun motionStaggerDelay(motionOn: Boolean, index: Int): Int =");
+    expect(kt).toContain("index.coerceAtLeast(0) * MOTION_STAGGER_MS else 0");
+    // `PapEnter` porte le rang, le délai passe par `motionStaggerDelay`.
+    expect(kt).toMatch(/fun PapEnter\(\s*modifier: Modifier = Modifier,\s*staggerIndex: Int = 0,/);
+    expect(kt).toContain("val delay = motionStaggerDelay(motionOn, staggerIndex)");
+    // À 0, la spec est celle d'avant (mêmes jetons, mêmes miroirs #145).
+    expect(kt).toContain("fadeIn(motionFadeInSpec(motionOn))");
+    expect(kt).toContain("scaleIn(initialScale = MOTION_ENTER_SCALE, animationSpec = motionEnterSpec(motionOn))");
+    expect(kt).toContain("delayMillis = delay,");
+  });
+
+  test("nav : fondu + glissé 300 enter / 150 exit, même courbe, sans courbe ajoutée", () => {
+    // Extensions du scope : `slideIntoContainer` n'existe que sur ce receveur.
+    for (const fn of ["motionNavEnter", "motionNavExit", "motionNavPopEnter", "motionNavPopExit"]) {
+      expect(kt).toContain(`fun AnimatedContentTransitionScope<*>.${fn}(motionOn: Boolean)`);
+    }
+    expect(kt).toContain("fadeIn(tween(motionMs(motionOn, MOTION_ENTER_MS), easing = MOTION_ENTER_EASING))");
+    expect(kt).toContain("fadeOut(tween(motionMs(motionOn, MOTION_EXIT_MS), easing = MOTION_ENTER_EASING))");
+    expect(kt).toContain("slideIntoContainer(");
+    expect(kt).toContain("slideOutOfContainer(");
+    expect(kt).toContain("SlideDirection.Start");
+    expect(kt).toContain("SlideDirection.End");
+    // Une seule courbe dans tout le fichier : la nav réutilise l'easing d'entrée.
+    expect((kt.match(/CubicBezierEasing\(/g) ?? []).length).toBe(1);
+    expect(NAV).toContain("val motionOn = rememberMotionOn()");
+    expect(NAV).toContain("enterTransition = { motionNavEnter(motionOn) }");
+    expect(NAV).toContain("exitTransition = { motionNavExit(motionOn) }");
+    expect(NAV).toContain("popEnterTransition = { motionNavPopEnter(motionOn) }");
+    expect(NAV).toContain("popExitTransition = { motionNavPopExit(motionOn) }");
+  });
+
+  test("listes en stagger : notes, EDT, devoirs, accueil", () => {
+    for (const [f, marque] of [
+      ["GradesRows.kt", "PapEnter(staggerIndex = index)"],
+      ["GradesRows.kt", "PapEnter(staggerIndex = sectionIndex)"],
+      ["TimetableWeek.kt", "PapEnter(staggerIndex = index)"],
+      ["Assignments.kt", "PapEnter(staggerIndex = cardIndex)"],
+      ["IndexScreen.kt", "PapEnter(staggerIndex = 1)"],
+      ["IndexScreen.kt", "PapEnter(staggerIndex = 3)"],
+      ["GradesScreen.kt", "#263"],
+    ] as const) {
+      expect({ f, marque: pap(f).includes(marque) }).toEqual({ f, marque: true });
+    }
+    // L'EDT anime aussi le placement de ses cartes, comme les devoirs avant lui.
+    expect(code("TimetableWeek.kt")).toContain("animateItemPlacement(motionPlacementSpec(motionOn))");
+    expect(code("TimetableWeek.kt")).toContain("val motionOn = rememberMotionOn()");
+  });
+
+  test("presse partout : aucune carte cliquable sans `papPressable`", () => {
+    // Les briques partagées portent la presse — donc tous leurs appelants l'ont.
+    expect(code("PapComponents.kt")).toContain("modifier.papPressable(role = Role.Button, onClick = click)");
+    expect(code("PapComponents.kt")).toContain("Modifier.papPressable(role = Role.Button, onClick = onClick)");
+    expect(code("HomeCards.kt")).toContain(".papPressable(onClickLabel = label, role = Role.Button, onClick = onClick)");
+    expect(code("GradesHero.kt")).toContain(".papPressable(");
+    expect(code("Assignments.kt")).toContain(".papPressable(");
+    // Plus aucun `clickable` codé dans les fichiers du périmètre.
+    for (const f of ["PapComponents.kt", "HomeCards.kt", "GradesHero.kt", "Assignments.kt"]) {
+      expect({ f, clickable: code(f).includes("clickable(") }).toEqual({ f, clickable: false });
+    }
+    // La bascule « fait » gardait déjà sa presse + sa cible 48 dp.
+    expect(code("Assignments.kt")).toContain(".papPressable(role = Role.Checkbox, onClick = click)");
+    expect(code("Assignments.kt")).toContain(".heightIn(min = TouchTarget)");
+    expect(code("HomeCards.kt")).toContain(".defaultMinSize(minHeight = TouchTarget)");
+  });
+
+  test("pulsation gardée, squelette unifié, réduit coupé", () => {
+    expect(MOTION).toContain("const val CURRENT_PULSE_MS = 2_400");
+    expect(MOTION).toContain("const val CURRENT_PULSE_SCALE = 1.02f");
+    // Squelette 6 lignes par défaut, fixe quand le mouvement est coupé.
+    expect(pap("PapComponents.kt")).toContain("fun PapLoading(modifier: Modifier = Modifier, rows: Int = SKELETON_ROWS)");
+    expect(pap("PapComponents.kt")).toContain("private const val SKELETON_ROWS = 6");
+    expect(code("PapComponents.kt")).toContain("val motionOn = rememberMotionOn()");
+    expect(code("IndexScreen.kt")).not.toContain("PapLoadingBlock()");
+    // Aucune lib ajoutée : pas d'import shimmer/lottie dans le code.
+    expect(code("PapComponents.kt")).not.toMatch(/lottie|shimmer|reanimated/i);
+  });
+});

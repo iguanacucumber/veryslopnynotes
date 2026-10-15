@@ -7,7 +7,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -516,7 +516,8 @@ private fun PapTaskCard(
                         // `primary`. `secondary` tient 4.93:1.
                         color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier
-                            .clickable(
+                            // #263 : même presse que les cartes, cible inchangée.
+                            .papPressable(
                                 onClickLabel = if (expanded) "Réduire la consigne" else "Voir toute la consigne",
                                 role = Role.Button,
                                 onClick = { expanded = !expanded },
@@ -567,7 +568,8 @@ private fun PapTaskCard(
 @Composable
 private fun HomeworkHelpChip(onClick: () -> Unit) {
     Surface(
-        modifier = Modifier.clickable(onClickLabel = "Aide devoirs", role = Role.Button, onClick = onClick),
+        // #263 : même presse que les cartes, cible inchangée.
+        modifier = Modifier.papPressable(onClickLabel = "Aide devoirs", role = Role.Button, onClick = onClick),
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.surfaceVariant,
         border = BorderStroke(HAIRLINE, MaterialTheme.colorScheme.outline),
@@ -646,7 +648,8 @@ private fun AttachmentChips(attachments: List<AssignmentAttachment>, onOpen: (As
     ) {
         for (att in attachments) {
             Surface(
-                modifier = Modifier.clickable(onClickLabel = "Ouvrir la pièce jointe", role = Role.Button) { onOpen(att) },
+                // #263 : même presse que les cartes, cible inchangée.
+                modifier = Modifier.papPressable(onClickLabel = "Ouvrir la pièce jointe", role = Role.Button) { onOpen(att) },
                 shape = MaterialTheme.shapes.small,
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(HAIRLINE, MaterialTheme.colorScheme.outline),
@@ -836,7 +839,9 @@ fun AssignmentsScreen(
                                 // sa nouvelle position au lieu d'y téléporter — donc
                                 // marquer un devoir « En retard » se voit même si la
                                 // carte passe hors de l'écran.
-                                items(items, key = { "${section.id}-${it.id}" }) { a ->
+                                // #263 : apparition stagger 30 ms par carte.
+                                itemsIndexed(items, key = { _, a -> "${section.id}-${a.id}" }) { cardIndex, a ->
+                                    PapEnter(staggerIndex = cardIndex) {
                                     PapTaskCard(
                                         modifier = Modifier.animateItemPlacement(motionPlacementSpec(motionOn)),
                                         a = a,
@@ -847,6 +852,7 @@ fun AssignmentsScreen(
                                         onOpenAttachment = onOpenAttachment,
                                         onHelp = onHelp,
                                     )
+                                    }
                                 }
                             }
                         }

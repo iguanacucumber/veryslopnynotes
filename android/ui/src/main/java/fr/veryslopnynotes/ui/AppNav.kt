@@ -240,6 +240,9 @@ fun AppNav(
     // #145 : l'hôte des notices transitoires (succès, échec, annulation) — une
     // fois pour toute l'application ; `LocalPapNotice` le rend lisible partout.
     val noticeHost = rememberPapNoticeHost()
+    // #263 : la porte de lecture du mouvement pour les transitions d'écrans —
+    // lue UNE fois ici, les quatre transitions partagent les mêmes jetons.
+    val motionOn = rememberMotionOn()
     // #134 : jetons Papillon appliqués une fois à la racine (avant : le violet
     // Material par défaut, sans typo ni forme).
     PapillonTheme(darkTheme = isDarkTheme(theme, isSystemInDarkTheme())) {
@@ -267,6 +270,13 @@ fun AppNav(
             // connexion, pas un Accueil qui ne peut rien afficher.
             startDestination = if (sessions.hasSession()) ROUTE_INDEX else ROUTE_PAIRING,
             modifier = Modifier.padding(pad),
+            // #263 : fondu + glissé 300 ms en entrée / 150 ms en sortie, même
+            // courbe `cubicBezier(0.3, 0.3, 0, 1)` — 0 ms quand le téléphone a
+            // coupé les animations (`ValueAnimator.areAnimatorsEnabled()`).
+            enterTransition = { motionNavEnter(motionOn) },
+            exitTransition = { motionNavExit(motionOn) },
+            popEnterTransition = { motionNavPopEnter(motionOn) },
+            popExitTransition = { motionNavPopExit(motionOn) },
         ) {
             composable(ROUTE_INDEX, deepLinks = listOf(routeDeepLink(ROUTE_INDEX))) {
                 // #143 : l'accueil ouvre les écrans qu'il présente (widgets,

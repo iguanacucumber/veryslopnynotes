@@ -188,8 +188,9 @@ fun IndexScreen(
                 when {
                     // Tirail sur une page vide : le cache est relu à la fin, donc
                     // l'indicateur est l'information honnête (pas un écran vide qui
-                    // laisse croire à un échec).
-                    empty && refreshing -> PapLoadingBlock()
+                    // laisse croire à un échec). #263 : squelette 6 lignes unifié
+                    // (`PapLoading`), pas le disque seul.
+                    empty && refreshing -> PapLoading()
                     empty -> PapEmptyState(
                         icon = Icons.Filled.Info,
                         title = "Rien à afficher",
@@ -199,7 +200,10 @@ fun IndexScreen(
                 }
 
                 // --- Widget cours : la carte elle-même ouvre l'EDT -------------
+                // #263 : apparition stagger 30 ms (`PapEnter`, coupée quand le
+                // téléphone coupe les animations) — un widget par index.
                 if (lessons.isNotEmpty()) {
+                    PapEnter {
                     HomeWidgetCard(
                         icon = Icons.Filled.DateRange,
                         title = homeCourseTitle(lessons, nowMillis, zone),
@@ -217,6 +221,7 @@ fun IndexScreen(
                             }
                         }
                     }
+                    }
                 }
 
                 // --- Widget moyenne : le grand nombre, puis la dernière note ----
@@ -226,6 +231,7 @@ fun IndexScreen(
                 // dernière note qui prend la couleur de SA matière — et sa date,
                 // enfin affichée (#82 la triait sans la montrer).
                 if (average != null || grades.isNotEmpty()) {
+                    PapEnter(staggerIndex = 1) {
                     HomeWidgetCard(
                         icon = Icons.Filled.Star,
                         title = "Moyenne générale",
@@ -303,10 +309,12 @@ fun IndexScreen(
                             }
                         }
                     }
+                    }
                 }
 
                 // --- Widget devoirs : échéance en temps relatif ------------------
                 if (homework.isNotEmpty()) {
+                    PapEnter(staggerIndex = 2) {
                     HomeWidgetCard(
                         icon = Icons.Filled.CheckCircle,
                         title = "Devoirs",
@@ -350,15 +358,18 @@ fun IndexScreen(
                             }
                         }
                     }
+                    }
                 }
 
                 // Grille en dernier : 12 de la page + 4 ici = 16 vers les widgets.
+                PapEnter(staggerIndex = 3) {
                 HomeQuickActionsGrid(
                     actions = actions,
                     onOpen = onOpen,
                     badges = badges,
                     modifier = Modifier.padding(top = 4.dp),
                 )
+                }
             }
         }
     }
