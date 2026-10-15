@@ -1,6 +1,7 @@
 package fr.veryslopnynotes.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -231,10 +232,25 @@ fun GradesAverageHero(
             // `Box` de 124 dp plutôt que décalé d'un `offset` : un décalage
             // laisserait 16 dp vides en bas de la carte, donc une carte trop
             // haute de 16 dp.
+            // #262 : dégradé léger SOUS la sparkline — `GreenPale ->
+            // surfaceVariant` en vertical, peint sur le fond de la carte AVANT
+            // la courbe. En sombre le haut va vers le noir ([heroGradientTop]),
+            // jamais un pastel clair qui brûlerait. Le halo du point final et
+            // le remplissage d'aire de la courbe sont inchangés : le dégradé
+            // est le fond, pas la courbe. Aucun texte ne repose dessus, donc
+            // le contraste AA du corps est intact par construction.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(SPARK_HEIGHT - SPARK_OVERLAP),
+                    .height(SPARK_HEIGHT - SPARK_OVERLAP)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                heroGradientTop(isDarkSurface()),
+                                MaterialTheme.colorScheme.surfaceVariant,
+                            ),
+                        ),
+                    ),
             ) {
                 AverageSparkline(values = report?.history?.map { it.value } ?: emptyList())
             }

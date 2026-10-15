@@ -345,6 +345,15 @@ fun PapCourseCard(
     } else {
         colorFromHex(colorHex) ?: MaterialTheme.colorScheme.primary
     }
+    // #262 : voile vertical `subjectSurface -> surface` à 8 % max ([cardScrim],
+    // posé SUR le fond opaque de la carte : le haut rend le pastel exact, le
+    // bas ne glisse que de 8 % vers la surface — l'encre [ink] reste mesurée à
+    // ≥ 4.5:1 dans les deux thèmes (miroir `tests/unit/android-gradients.test.ts`).
+    // La colonne [spine] garde la couleur franche : le voile passe sous le
+    // texte, jamais sur l'accent. En sombre la surface est presque noire, donc
+    // le voile va vers le noir.
+    val surface = MaterialTheme.colorScheme.surface
+    val scrim = cardScrim(surface, COURSE_SCRIM_ALPHA)
     // La pulsation reste sur le `modifier` ENTRANT (cf. le test de #145 :
     // `modifier.papCurrentPulse(highlight == CourseHighlight.CURRENT)`), donc
     // elle couvre le bandeau ET la carte d'un cours annulé en cours.
@@ -375,6 +384,9 @@ fun PapCourseCard(
             Row(
                 modifier = Modifier
                     .height(IntrinsicSize.Min)
+                    // #262 : le voile est SOUS le padding — il couvre toute la
+                    // carte, pas seulement la colonne de texte.
+                    .background(scrim)
                     // #194 : le padding 14 est sur le CONTENEUR, pas sur la colonne
                     // de texte — donc la barre d'accent est ENCASTRÉE de 14 dp dans
                     // la carte, et non collée à son bord gauche.

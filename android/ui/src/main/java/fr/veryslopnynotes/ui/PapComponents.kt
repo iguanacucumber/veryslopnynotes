@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
@@ -315,6 +316,60 @@ fun PapCard(
 fun PapDivider(modifier: Modifier = Modifier) {
     HorizontalDivider(modifier = modifier, thickness = HAIRLINE, color = MaterialTheme.colorScheme.outlineVariant)
 }
+
+// --- Dégradés légers #262 ----------------------------------------------------
+//
+// Aplats partout sauf le remplissage d'aire de la sparkline : des voiles
+// verticaux, jamais un dégradé plein écran. Chaque voile est une composition
+// `Transparent -> surface à [alpha]` POSÉE SUR le fond opaque de la carte :
+// le haut rend la couleur exacte du fond, le bas ne glisse que de [alpha] vers
+// la surface — donc le contraste du texte ne bouge presque pas (mesuré dans
+// `tests/unit/android-gradients.test.ts`, pire cas ≥ 4.5:1 dans les deux
+// thèmes). En sombre la `surface` est presque noire : les voiles vont vers le
+// noir, jamais un pastel clair qui brûlerait.
+//
+// ponytail: `Brush.verticalGradient`, déjà dans le BOM via `ui` — zéro
+// dépendance, zéro asset. Upgrade: si un jour les voiles se règlent par thème,
+// c'est ici (les deux alphas) et nulle part ailleurs.
+
+/**
+ * Voile maximal d'une carte de cours (EDT) ou d'accueil : 8 % vers la
+ * `surface`. La colonne vertébrale (`spine`) reste la couleur franche —
+ * le voile ne passe que SOUS le texte, jamais sur l'accent.
+ */
+const val COURSE_SCRIM_ALPHA = 0.08f
+
+/**
+ * Voile maximal d'un en-tête de widget d'accueil : 4 % vers
+ * `surfaceVariant`, sur le fond `surface` de la carte.
+ */
+const val WIDGET_HEADER_SCRIM_ALPHA = 0.04f
+
+/**
+ * Pas du haut du dégradé du héro notes en thème SOMBRE : −70 % vers le noir.
+ * Le vert de marque y devient un vert presque noir (luminance ≈ 0.02, mesurée
+ * et non devinée) : visible sur la surface sombre sans jamais brûler.
+ */
+const val HERO_DARK_TINT = -0.70f
+
+/**
+ * Voile vertical d'une carte : transparent en haut, `surface` à [alpha] en
+ * bas, à poser en `background` SUR le fond opaque de la carte. [alpha] est
+ * ramené dans `0..1` : un appelant ne peut pas rendre le voile opaque.
+ */
+fun cardScrim(surface: Color, alpha: Float): Brush =
+    Brush.verticalGradient(
+        colors = listOf(Color.Transparent, surface.copy(alpha = alpha.coerceIn(0f, 1f))),
+    )
+
+/**
+ * Haut du dégradé sous la sparkline du héro notes : [PapillonGreenPale] en
+ * thème clair, vert de marque assombri à [HERO_DARK_TINT] en sombre — vers le
+ * noir, jamais un pastel clair qui brûlerait sur fond noir. Le bas est la
+ * `surfaceVariant` de la carte, lue par l'appelant.
+ */
+fun heroGradientTop(dark: Boolean): Color =
+    if (dark) tint(PapillonGreen, HERO_DARK_TINT) else PapillonGreenPale
 
 /**
  * Titre de section : icône + titre, tous deux en encre secondaire.
