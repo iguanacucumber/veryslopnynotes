@@ -276,4 +276,76 @@ describe("invariants", () => {
     });
     expect({ offenders }).toEqual({ offenders: [] });
   });
+
+  // #242 : characterization pins — resserrent des trous prouvés, sans changer
+  // la sémantique I1–I8. Chacun échoue sur une casse réelle qui passe les
+  // tests ci-dessus (voir issue). Ajouts seuls, aucun test existant modifié.
+  test("I8 closed (#242): envValue n'ouvre que PORT/HOST/TLS_*", () => {
+    const allowed = new Set(["PORT", "HOST", "TLS_CERT_FILE", "TLS_KEY_FILE"]);
+    const keys = new Set<string>();
+    for (const f of list(join(ROOT, "server"))) {
+      const src = codeOnly(readFileSync(f, "utf8"));
+      for (const m of src.matchAll(/envValue\(\s*env\s*,\s*"([^"]+)"\s*\)/g)) keys.add(m[1]!);
+    }
+    expect([...keys].sort()).toEqual([...allowed].sort());
+  });
+
+  test("I3 Kotlin (#242): core sans OkHttp/Room/SQLite plateforme", () => {
+    const extra = /okhttp3|HttpURLConnection|URL\s*\(\s*"https?|android\.net\.|androidx\.room|Room\.databaseBuilder|@Entity|@Dao|SQLiteOpenHelper|android\.database\.sqlite/i;
+    const files = list(join(ROOT, "android/core")).filter((f) => extra.test(codeOnly(readFileSync(f, "utf8"))));
+    expect({ files }).toEqual({ files: [] });
+  });
+
+  test("I7 pure jobs (#242): GradeDiff/ExamDetect/NotifyFormat/RevisionSheet sans LLM ni OkHttp", () => {
+    const CORE = join(ROOT, "android/core/src/main/java/fr/veryslopnynotes/core");
+    const pure = ["GradeDiff.kt", "ExamDetect.kt", "NotifyFormat.kt", "RevisionSheet.kt"].map((f) => join(CORE, f));
+    for (const f of pure) expect(existsSync(f)).toBe(true);
+    const offenders = pure.filter((f) => {
+      const c = codeOnly(readFileSync(f, "utf8"));
+      return (
+        /generate\w*\s*\(/.test(c) ||
+        /requestRevisionFiche\s*\(/.test(c) ||
+        /fetch\s*\(|XMLHttpRequest|WebSocket|okhttp3|HttpURLConnection|newCall\s*\(/.test(c)
+      );
+    });
+    expect({ offenders }).toEqual({ offenders: [] });
+    // Le test prouve qu'il mord : les points d'entrée LLM existent bien, mais
+    // uniquement dans la couche IA (hors jobs purs).
+    const ai = readFileSync(join(CORE, "HomeworkAi.kt"), "utf8");
+    expect(ai).toMatch(/fun generateHomework\s*\(/);
+  });
+
+  test("I2 surface (#242): hors pronote/, Client et types protocoles seuls", () => {
+    const allowedImports = new Set([
+      "Client",
+      "ClientOptions",
+      "ClientLike",
+      "PronoteClientLike",
+      "JVal",
+      "MFAError",
+      "QrCode",
+      "QRCodeDecryptError",
+      "QrLoginOptions",
+    ]);
+    const bad: string[] = [];
+    for (const mod of ["app", "core", "data", "ui"]) {
+      for (const f of list(join(ROOT, "android", mod))) {
+        if (!f.endsWith(".kt")) continue;
+        const src = codeOnly(readFileSync(f, "utf8"));
+        if (/\b(HttpSession|CookieJar|ClientBase)\b/.test(src)) bad.push(`${f.replace(ROOT, "")}: transport direct`);
+        for (const m of src.matchAll(/import fr\.veryslopnynotes\.pronote\.([A-Za-z]+)/g)) {
+          if (!allowedImports.has(m[1]!)) bad.push(`${f.replace(ROOT, "")}: import ${m[1]}`);
+        }
+      }
+    }
+    expect({ bad }).toEqual({ bad: [] });
+    // Un seul transport : `class Client(` + sa base `open class ClientBase(`.
+    // Un `class Client2(` ou `object XClient(` passerait l'ancien compteur.
+    const pronote = list(join(ROOT, "android", "pronote")).filter((f) => f.endsWith(".kt"));
+    const src = pronote.map((f) => codeOnly(readFileSync(f, "utf8"))).join("\n");
+    expect((src.match(/^class Client\(/gm) ?? []).length).toBe(1);
+    expect((src.match(/^open class ClientBase\(/gm) ?? []).length).toBe(1);
+    // `ClientInfo` = simple porteuse de données (pas de transport), tolérée.
+    expect(src).not.toMatch(/^(?:open )?class (?!Client\(|ClientBase\(|ClientInfo\()\w*Client\w*\(/m);
+  });
 });
