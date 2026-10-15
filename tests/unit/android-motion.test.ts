@@ -269,6 +269,11 @@ describe("#145 — valeurs mesurées du mouvement", () => {
     // Une seule définition de la durée, réutilisée par les quatre briques.
     expect(MOTION.match(/const val MOTION_ENTER_MS/g)?.length ?? 0).toBe(1);
     expect(kt).toContain("tween(motionMs(motionOn, MOTION_ENTER_MS), easing = MOTION_ENTER_EASING)");
+    // Une seule courbe (#256) : placement et hauteur réutilisent l'easing
+    // d'entrée, aucun second CubicBezierEasing dans le fichier.
+    expect(kt).toContain("fun motionPlacementSpec(motionOn: Boolean): FiniteAnimationSpec<IntOffset>");
+    expect(kt).toContain("fun motionHeightSpec(motionOn: Boolean): FiniteAnimationSpec<IntSize>");
+    expect((kt.match(/CubicBezierEasing\(/g) ?? []).length).toBe(1);
   });
 
   test("apparition : échelle 0.9 -> 1, ressort de presse amorti 0.8", () => {
