@@ -555,3 +555,21 @@ describe("briques d'interface (#136)", () => {
     expect(fiches).toContain("relativeTimeFr(state.fetchedAt)");
   });
 });
+
+describe("#256 — faits seuls, aucun asset copié", () => {
+  test("zéro image copiée : un seul dégradé (sparkline), une seule police (Figtree OFL)", () => {
+    const { readFileSync, readdirSync } = require("node:fs");
+    const { join } = require("node:path");
+    const UI = join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui");
+    const files = readdirSync(UI).filter((f: string) => f.endsWith(".kt"));
+    const withGradient = files.filter((f: string) => /Brush\.(vertical|horizontal|linear|radial)Gradient/.test(readFileSync(join(UI, f), "utf8")));
+    // Le seul dégradé autorisé est le remplissage du sparkline, pas un fond
+    // d'écran ni un header copié (la ref Android est plate).
+    expect(withGradient).toEqual(["GradesHero.kt"]);
+    const withDrawable = files.filter((f: string) => /R\.drawable\./.test(readFileSync(join(UI, f), "utf8")));
+    expect(withDrawable).toEqual([]);
+    const withFont = files.filter((f: string) => /R\.font\./.test(readFileSync(join(UI, f), "utf8")));
+    // Figtree OFL embarquée, pas SN Pro (Apple, non redistribuable).
+    expect(withFont).toEqual(["PapillonTheme.kt"]);
+  });
+});
