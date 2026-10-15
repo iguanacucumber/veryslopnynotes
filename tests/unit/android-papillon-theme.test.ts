@@ -157,6 +157,9 @@ const tsErrorInk = (error: Rgb, dark: boolean): Rgb => (dark ? tsTint(error, ERR
 const GREEN = hex8("#29947A");
 const GREEN_DEEP = hex8("#237E68");
 const GREEN_PALE = tsTint(GREEN, 0.94);
+// #261 : le conteneur vert du thème sombre (`secondaryContainer` sombre).
+const DARK_GREEN_CONTAINER = tsTint(GREEN, -0.35);
+const DARK_ON_GREEN_CONTAINER = tsTint(GREEN, 0.7);
 const LIME = hex8("#BFE677");
 const LIME_INK = hex8("#5A7821");
 const DANGER = hex8("#DC1400");
@@ -257,12 +260,15 @@ describe("unit android thème Papillon (#134)", () => {
       expect({ name, ratio: rounded(tsContrast(fg, bg)) >= 4.5 }).toEqual({ name, ratio: true });
     }
     // Thème SOMBRE : mêmes rôles, sur la surface #121212 et le fond #000000.
+    // #261 : `secondaryContainer` sombre = conteneur vert sombre (plus de
+    // GreenPale, qui brûlait sur noir) — 5.19:1 mesuré, pas 13.87:1 (c'était
+    // l'ancien aplat clair).
     const dark = [
       ["onSurface/surface", WHITE, DARK_SURFACE],
       ["onBackground/background", WHITE, DARK_BACKGROUND],
       ["onSurfaceVariant/surface", over(WHITE, DARK_SURFACE, SECONDARY_ALPHA), DARK_SURFACE],
       ["onSecondary/secondary", DARK_SURFACE, hex8("#48A98B")],
-      ["onSecondaryContainer/secondaryContainer", INK, GREEN_PALE],
+      ["onSecondaryContainer/secondaryContainer", tsTint(GREEN, 0.7), tsTint(GREEN, -0.35)],
       ["onPrimaryContainer/primaryContainer", tsTint(GREEN, 0.7), tsTint(GREEN, -0.35)],
       ["onError/error", WHITE, DANGER],
       ["outline/surface (bordure)", tsTint(INK, 0.45), DARK_SURFACE],
@@ -389,13 +395,13 @@ describe("unit android thème Papillon (#134)", () => {
   test("puce matière : l'encre est mesurée contre le fond réel de la puce", () => {
     // Au repos la puce est transparente sur le fond de l'écran (#FFFFFF en
     // clair, #000000 en sombre) ; sélectionnée elle prend le `secondaryContainer`
-    // du thème, qui reste un APLAT CLAIR même en sombre. Un seul pas ne peut pas
-    // passer les deux : `bestSubjectContentOn` mesure et choisit.
+    // du thème — vert pâle en clair, conteneur vert sombre en sombre (#261, plus
+    // d'aplat clair sur noir). Un seul pas ne peut pas passer les deux :
+    // `bestSubjectContentOn` mesure et choisit.
     const chips: Array<[string, Rgb]> = [
       ["clair/repos", SURFACE],
       ["clair/sélectionnée", GREEN_PALE],
       ["sombre/repos", DARK_BACKGROUND],
-      ["sombre/sélectionnée", GREEN_PALE],
     ];
     for (const [name, bg] of chips) {
       for (const h of PALETTE) {
@@ -403,6 +409,22 @@ describe("unit android thème Papillon (#134)", () => {
         expect({ name, h, ok: tsContrast(ink, bg) >= 4.5 }).toEqual({ name, h, ok: true });
       }
     }
+    // RÉGRESSION #261 : sélectionnée en sombre, le fond est le conteneur vert
+    // sombre — et AUCUN des deux pas matière n'y passe (2.89:1 au pire,
+    // `#7600CA`). L'encre d'une puce sélectionnée en sombre doit donc replier
+    // sur `onSecondaryContainer` (5.19:1 sur ce fond) quand la mesure échoue :
+    // suivi côté `Assignments.kt`, hors scope de cette issue.
+    let pireSombre = 99;
+    let pireH = "";
+    for (const h of PALETTE) {
+      const r = tsContrast(tsBestSubjectContentOn(h, DARK_GREEN_CONTAINER)!, DARK_GREEN_CONTAINER);
+      if (r < pireSombre) {
+        pireSombre = r;
+        pireH = h;
+      }
+    }
+    expect({ h: pireH, ratio: rounded(pireSombre) }).toEqual({ h: "#7600CA", ratio: 2.89 });
+    expect({ ink: rounded(tsContrast(DARK_ON_GREEN_CONTAINER, DARK_GREEN_CONTAINER)) >= 4.5 }).toEqual({ ink: true });
     // RÉGRESSION #179 : la couleur BRUTE (ce que faisait la puce avant) tombe à
     // 1.83:1 au pire sur le vert pâle et 2.62:1 sur le fond sombre — le défaut
     // constaté (le jaune de la palette, lui, fait 1.96:1 sur le blanc).
@@ -506,6 +528,13 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     expect(kt).toContain("lightColorScheme(");
     expect(kt).toContain("darkColorScheme(");
     expect(kt).toContain("secondaryContainer = PapillonGreenPale");
+    // #261 : en sombre, plus de GreenPale — `secondaryContainer` suit le
+    // conteneur vert sombre, posé UNE fois comme jeton.
+    expect(kt).toContain("private val PapillonDarkGreenContainer = tint(PapillonGreen, -.35f)");
+    expect(kt).toContain("private val PapillonDarkOnGreenContainer = tint(PapillonGreen, .70f)");
+    expect(kt).toContain("secondaryContainer = PapillonDarkGreenContainer");
+    expect(kt).toContain("onSecondaryContainer = PapillonDarkOnGreenContainer");
+    expect({ pale: kt.match(/secondaryContainer = PapillonGreenPale/g)?.length }).toEqual({ pale: 1 });
     expect(kt).toContain("typography = PapillonTypography");
     expect(kt).toContain("shapes = PapillonShapes");
     expect(kt).toContain("fun PapillonTheme(darkTheme: Boolean, content: @Composable () -> Unit)");
@@ -628,6 +657,9 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     expect(pill).toContain("tint(color, if (dark) SUBJECT_CONTENT_DARK_TINT else SUBJECT_CONTENT_LIGHT_TINT)");
     expect(pill).not.toContain("tint(color, .75f)");
     expect(pill).not.toContain("tint(color, -.45f)");
+    // #261 : la pastille (`PapSubjectAvatar`) reprend le pas `subjectSurface`,
+    // plus d'alpha ad hoc — un seul pas par thème pour carte, pastille et puce.
+    expect(pill).not.toContain("AVATAR_TINT_ALPHA");
     // La puce matière : le fond est POSÉ (donc connu), l'encre MESURÉE contre.
     const tasks = readCode(join(UI, "Assignments.kt"));
     expect(tasks).toContain("bestSubjectContentOn(");
@@ -693,7 +725,8 @@ describe("unit android contraste (#146) — encre de texte, clair ET sombre", ()
       ["errorInk/surface", tsErrorInk(DANGER, true), DARK_SURFACE],
       ["errorInk/surfaceVariant", tsErrorInk(DANGER, true), tsTint(DARK_SURFACE, 0.1)],
       ["onPrimaryContainer/primaryContainer", tsTint(GREEN, 0.7), tsTint(GREEN, -0.35)],
-      ["onSecondaryContainer/secondaryContainer", INK, GREEN_PALE],
+      // #261 : même conteneur vert sombre que `primaryContainer` — 5.19:1.
+      ["onSecondaryContainer/secondaryContainer", tsTint(GREEN, 0.7), tsTint(GREEN, -0.35)],
     ];
     for (const [name, fg, bg] of darkPairs) {
       expect({ name, ratio: rounded(tsContrast(fg, bg)) >= 4.5 }).toEqual({ name, ratio: true });
@@ -747,24 +780,14 @@ describe("unit android contraste (#146) — encre de texte, clair ET sombre", ()
         expect({ dark, ok: tsContrast(fg, bg) >= 4.5 }).toEqual({ dark, ok: true });
       }
     }
-    // `PapSubjectAvatar` est décorée à 31 % AU-DESSUS de la carte et n'y porte
-    // QU'UN glyphe : elle n'est donc pas dans la liste ci-dessus, et c'est
-    // VOLONTAIRE. Son fond se mesure à 3.86:1 au pire (`#C50066`) — sous AA, donc
-    // elle ne peut pas porter de texte, ce que #146 lui impose : l'emoji y est
-    // sorti de l'arbre de sémantique (`clearAndSetSemantics`) et le LIBELLÉ est
-    // toujours affiché à côté. C'est ce couple — glyphe + libellé écrit — qui
-    // rend la matière identifiable ; la pastille n'est qu'un rappel visuel. Le
-    // garde-fou correspondant est dans `android-accesibilite.test.ts`
+    // #261 : `PapSubjectAvatar` pose le MÊME pas que la carte (`subjectSurface`,
+    // même hex d'entrée) au lieu d'un alpha ad hoc — donc le couple AA de la
+    // carte s'y applique tel quel (mesuré ci-dessus). L'emoji y reste DÉCORATIF
+    // (`clearAndSetSemantics`) et le LIBELLÉ est toujours affiché à côté :
+    // c'est ce couple — glyphe + libellé écrit — qui rend la matière
+    // identifiable ; la pastille n'est qu'un rappel visuel. Le garde-fou
+    // correspondant est dans `android-accesibilite.test.ts`
     // (« la légende matière porte une pastille ET un libellé écrit »).
-    let worst = { h: "", ratio: 99 };
-    for (const h of PALETTE) {
-      // Le meilleur des deux côtés sur le fond à 31 % : c'est le plafond que
-      // `bestContentOn` atteint, donc la limite réelle de cette pastille.
-      const bg = tsTint(hex8(h), 0.31);
-      const best = Math.max(tsContrast(INK, bg), tsContrast(WHITE, bg));
-      if (best < worst.ratio) worst = { h, ratio: best };
-    }
-    expect({ h: worst.h, ratio: rounded(worst.ratio) }).toEqual({ h: "#C50066", ratio: 3.86 });
   });
 
   test("cours annulé : l'encre rouge du thème sur le rouge pâle, mesurée", () => {
