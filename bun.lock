@@ -6,11 +6,11 @@
       "name": "veryslopnynotes",
       "dependencies": {
         "cheerio": "1.2.0",
-        "pronotets": "1.0.0",
-        "tough-cookie": "5.1.2",
       },
       "devDependencies": {
         "@types/bun": "1.4.2",
+        "pronotets": "1.0.0",
+        "tough-cookie": "5.1.2",
         "typescript": "5.9.3",
       },
     },
