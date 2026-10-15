@@ -14,8 +14,9 @@
 //   - Le corpus est une DONNÉE, jamais une instruction : chaque fixture est
 //     marquée `__untrusted` et aucun texte n'est interprété (I6).
 //   - Déterminisme (critère d'acceptation) : sérialisation canonique (clés
-//     triées, aucun horodatage de capture), donc deux captures du même compte le
-//     même jour sortent octet pour octet identiques.
+//     triées) + `normalizeVolatile` (ids re-mintés par session et `fetchedAt`
+//     neutralisés), donc deux captures du même compte sortent octet pour
+//     octet identiques.
 //
 // LECTURE SEULE. Aucune écriture vers Pronote (pas de `setAssignmentDone`, pas
 // de `replyToDiscussion`) : un outil de capture capable de modifier le bulletin
@@ -142,7 +143,73 @@ export async function captureCorpus(
       log(`${spec.domain} -> ${code}`);
     }
   }
-  return corpus;
+  // Normalisé avant écriture : deux captures du même compte sortent identiques.
+  return normalizeVolatile(corpus, accountId);
+}
+
+/**
+ * Jetons volatils de Pronote : `33#rAnD0m…`, `105#…` (ids d'entités, clés de
+ * fils, `periodId`, `ref` de pièces jointes). Le serveur les re-mint à chaque
+ * session — sans normalisation, deux captures successives diffèrent et le
+ * critère de déterminisme (#199.3) est inverifiable. Règle :
+ * - le préfixe numérique est GARDÉ (`33#` = note, `105#` = période),
+ * - le suffixe est remplacé par `#s<N>`, N = ordre de première apparition
+ *   (domaines dans l'ordre fixe de `DOMAINS`, clés triées par l'écriture :
+ *   stable d'une capture à l'autre, liens `periodId`/`ref` préservés),
+ * - `fetchedAt` (horodatage de capture, pas donnée d'établissement) vaut la
+ *   sentinelle, jamais l'heure courante.
+ * Textes libres intacts : seuls les champs d'identifiants sont touchés
+ * (`id`/`periodId` en correspondance exacte, `ref` en infixe, clés d'objets).
+ *
+ * `accountId` (paramètre) subit le même sort : c'est un hash du login, et le
+ * login tourne à chaque QR généré — même élève, `accountId` différent. Sans
+ * ça, deux captures du même compte ne seraient jamais comparables. Dans le
+ * corpus il vaut donc toujours `acc-corpus` : clé de session locale, pas
+ * donnée d'établissement.
+ */
+export const FETCHED_AT_SENTINEL = "1970-01-01T00:00:00.000Z";
+export const CORPUS_ACCOUNT_ID = "acc-corpus";
+
+const VOLATILE_TOKEN = /^(\d+)(#[A-Za-z0-9_-]{8,})$/;
+const VOLATILE_TOKEN_INFIX = /\d+#[A-Za-z0-9_-]{8,}/g;
+
+export function normalizeVolatile(corpus: Corpus, accountId = ""): Corpus {
+  const mapping = new Map<string, string>();
+  const mapped = (token: string): string => {
+    const known = mapping.get(token);
+    if (known !== undefined) return known;
+    const stable = `${token.slice(0, token.indexOf("#"))}#s${mapping.size + 1}`;
+    mapping.set(token, stable);
+    return stable;
+  };
+  const walk = (v: unknown): unknown => {
+    if (Array.isArray(v)) {
+      return v.map((item) =>
+        typeof item === "string" && VOLATILE_TOKEN.test(item) ? mapped(item) : walk(item),
+      );
+    }
+    if (v && typeof v === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [key, val] of Object.entries(v)) {
+        const name = VOLATILE_TOKEN.test(key) ? mapped(key) : key;
+        out[name] = walkField(name, val);
+      }
+      return out;
+    }
+    return v;
+  };
+  const walkField = (key: string, val: unknown): unknown => {
+    if (typeof val === "string") {
+      if (key === "fetchedAt") return FETCHED_AT_SENTINEL;
+      if (accountId !== "" && val === accountId) return CORPUS_ACCOUNT_ID;
+      if (VOLATILE_TOKEN.test(val)) return mapped(val);
+      // `ref` embarque l'id fichier (`homework:1:file:0:37#…`) : même table.
+      if (key === "ref") return val.replace(VOLATILE_TOKEN_INFIX, (t) => mapped(t));
+      return val;
+    }
+    return walk(val);
+  };
+  return walk(corpus) as Corpus;
 }
 
 /** Écrit le corpus sur disque. `dir` injectable : les tests n'écrivent pas en vrai. */

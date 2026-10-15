@@ -10,7 +10,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DOMAINS, canonicalJson, captureCorpus, writeCorpus } from "../../agents/runtime/capture-pronote";
+import { DOMAINS, FETCHED_AT_SENTINEL, canonicalJson, captureCorpus, writeCorpus } from "../../agents/runtime/capture-pronote";
 import { untrusted, PronoteReadError } from "../../server/domain/ports";
 import type { PronoteClientReader } from "../../server/integrations/pronote-client-reader";
 
@@ -108,5 +108,73 @@ describe("capture du corpus Pronote (#199)", () => {
   test("le corpus n'est jamais committable : le chemin est gitignoré", () => {
     const ignore = readFileSync(join(import.meta.dir, "..", "..", ".gitignore"), "utf8");
     expect(ignore).toContain("tests/fixtures/pronote/");
+  });
+
+  test("volatil neutralisé : ids re-mintés + fetchedAt, liens préservés (#199.3)", async () => {
+    // Sorties en VRAIE forme lecteur, sels volatils façon serveur (re-mintés
+    // à chaque session) : la normalisation est ce qui rend les runs comparables.
+    const volatileReader = (account: string) => {
+      const salt = Math.random().toString(36).slice(2, 10);
+      const periodId = `105#${salt}PERIODE01`;
+      return {
+        ...(fakeReader(false) as unknown as Record<string, unknown>),
+        getPeriods: () =>
+          Promise.resolve({
+            items: untrusted([{ id: periodId, name: "Trimestre 1", start: "2026-09-01", end: "2026-12-20" }]),
+            nextCursor: null,
+          }),
+        getGrades: () =>
+          Promise.resolve({
+            items: untrusted([
+              {
+                id: `33#${salt}NOTE00001`,
+                accountId: account,
+                subject: "Maths",
+                value: 15,
+                scale: 20,
+                date: "2026-09-12",
+                periodId,
+                label: "Bien #12345678",
+              },
+            ]),
+            nextCursor: null,
+          }),
+        getCapabilities: () =>
+          Promise.resolve({ accountId: account, tabs: ["grades"], fetchedAt: new Date().toISOString() }),
+      } as unknown as PronoteClientReader;
+    };
+    const a = tempDir();
+    const b = tempDir();
+    // Comptes distincts (deux QR → deux logins → deux hashs) : même corpus.
+    writeCorpus(await captureCorpus(volatileReader("acc-premier-qr"), "acc-premier-qr"), a);
+    writeCorpus(await captureCorpus(volatileReader("acc-second-qr"), "acc-second-qr"), b);
+    const files = readdirSync(a).sort();
+    expect(files).toEqual(readdirSync(b).sort());
+    for (const file of files) {
+      expect(`${file}:${readFileSync(join(b, file), "utf8")}`).toBe(
+        `${file}:${readFileSync(join(a, file), "utf8")}`,
+      );
+    }
+    const grades = JSON.parse(readFileSync(join(a, "grades.json"), "utf8")) as {
+      items: { id: string; periodId?: string; label?: string; accountId?: string }[];
+    };
+    const periods = JSON.parse(readFileSync(join(a, "periods.json"), "utf8")) as {
+      items: { id: string }[];
+    };
+    expect(periods.items[0]?.id).toMatch(/^105#s\d+$/);
+    const pids = new Set(periods.items.map((p) => p.id));
+    expect(grades.items).not.toEqual([]);
+    for (const g of grades.items) {
+      expect(g.id).toMatch(/^33#s\d+$/);
+      if (g.periodId !== undefined) expect(pids.has(g.periodId)).toBe(true);
+      // Texte libre intact : la normalisation ne mange jamais une donnée.
+      if (g.label !== undefined) expect(g.label).toBe("Bien #12345678");
+    }
+    const caps = JSON.parse(readFileSync(join(a, "capabilities.json"), "utf8")) as {
+      items: { fetchedAt: string; accountId: string };
+    };
+    expect(caps.items.fetchedAt).toBe(FETCHED_AT_SENTINEL);
+    expect(caps.items.accountId).toBe("acc-corpus");
+    expect(grades.items[0]?.accountId).toBe("acc-corpus");
   });
 });
