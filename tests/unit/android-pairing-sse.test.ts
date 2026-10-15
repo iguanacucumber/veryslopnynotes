@@ -114,9 +114,14 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
       }
     }
     // Le sync périodique est planifié au démarrage (travail unique, contraintes
-    // + backoff dans le worker).
+    // + backoff dans le worker). #249 : hors chemin critique du premier
+    // frame (thread daemon, contexte applicatif) — même planification KEEP,
+    // jamais deux, best-effort.
     const main = read(join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/MainActivity.kt"));
-    expect(main).toContain("PeriodicSyncWorker.schedule(this)");
+    expect(main).toContain("PeriodicSyncWorker.schedule(applicationContext)");
+    expect(main).toContain("periodic-sync-schedule");
+    expect(main).toContain("isDaemon = true");
+    expect(main).not.toContain("PeriodicSyncWorker.schedule(this)");
     const worker = read(join(DATA, "PeriodicSyncWorker.kt"));
     expect(worker).toContain("enqueueUniquePeriodicWork");
     expect(worker).toContain("ExistingPeriodicWorkPolicy.KEEP");
