@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -89,9 +88,6 @@ private val HAIRLINE = 1.dp
 
 /** Espacement interne d'une carte. */
 private val CARD_PADDING = 16.dp
-
-/** Espacement interne d'un bandeau. */
-private val BANNER_PADDING = 12.dp
 
 /**
  * Opacité de l'icône d'un état vide.
@@ -172,9 +168,6 @@ private val LONG_DATE_FR: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM
 
 /** Phrase de repli quand le serveur n'a rien dit d'utile. */
 private const val GENERIC_ERROR = "Erreur réseau. Réessayer."
-
-/** Phrase de repli du bandeau périmé, sans horodatage. */
-private const val STALE_LABEL = "Données hors-ligne"
 
 /**
  * Texte d'une erreur : le VRAI message du serveur s'il en a donné un, sinon la
@@ -270,16 +263,6 @@ fun longDateFr(
     epochMillis: Long,
     zone: ZoneId = ZoneId.systemDefault(),
 ): String = LONG_DATE_FR.format(Instant.ofEpochMilli(epochMillis.coerceIn(MIN_EPOCH_MS, MAX_EPOCH_MS)).atZone(zone))
-
-/**
- * Texte du bandeau « périmé » : la phrase figée des huit écrans, PLUS
- * l'horodatage quand on le connaît.
- *
- * `fetchedAt = null` (aucune synchronisation mémorisée) = la phrase seule : pas
- * de date inventée. Sinon « Données hors-ligne · mis à jour il y a 4 min ».
- */
-fun staleBannerLabel(fetchedAt: Long?, now: Long = System.currentTimeMillis()): String =
-    if (fetchedAt == null) STALE_LABEL else "$STALE_LABEL · mis à jour ${relativeTimeFr(fetchedAt, now)}"
 
 // --- Briques ----------------------------------------------------------------
 
@@ -626,57 +609,6 @@ fun PapLoadingBlock(modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.primary,
             strokeWidth = 3.dp,
         )
-    }
-}
-
-/**
- * Bandeau « données périmées » : la phrase figée des huit écrans, PLUS une
- * couleur, PLUS « mis à jour il y a 4 min », PLUS une action « Actualiser ».
- *
- * `fetchedAt` vient de `UiState.Data.fetchedAt`, que tous les constructeurs
- * calculaient et qu'aucun écran ne lisait : l'utilisateur ne pouvait pas savoir
- * quand ses données dataient.
- *
- * Couleurs : le thème ne pose AUCUN rôle « avertissement », donc le bandeau
- * prend l'appariement `primaryContainer` / `onPrimaryContainer` — posé dans les
- * deux schemes, donc correct en mode sombre sans aucune couleur claire en dur.
- * Données périmées = information (« voici l'âge de ce que tu lis »), pas erreur :
- * le rouge de `error` serait une faute de ton.
- *
- * ponytail: upgrade = poser un rôle `warningContainer` dans `PapillonTheme.kt`
- * quand une référence Papillon le donne ; ici on n'invente pas de rôle.
- */
-@Composable
-fun PapStaleBanner(
-    fetchedAt: Long?,
-    onRefresh: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val container = MaterialTheme.colorScheme.primaryContainer
-    val content = MaterialTheme.colorScheme.onPrimaryContainer
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(container)
-            .padding(horizontal = BANNER_PADDING, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Icon(imageVector = Icons.Filled.Warning, contentDescription = null, tint = content, modifier = Modifier.size(20.dp))
-        Text(
-            text = staleBannerLabel(fetchedAt),
-            style = MaterialTheme.typography.bodySmall,
-            color = content,
-            modifier = Modifier.weight(1f),
-        )
-        TextButton(
-            onClick = onRefresh,
-            colors = ButtonDefaults.textButtonColors(contentColor = content),
-        ) {
-            Icon(imageVector = Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-            Text(text = "Actualiser", modifier = Modifier.padding(start = 4.dp))
-        }
     }
 }
 

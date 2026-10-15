@@ -235,10 +235,6 @@ fun GradesRoute(
         }
         GradesPeriodCaption(periods = periods, selectedId = periodId)
 
-        val data = state as? UiState.Data
-        if (data != null && data.isStale) {
-            PapStaleBanner(fetchedAt = data.fetchedAt, onRefresh = { refresh() })
-        }
         // Échec de la RELECTURE alors que le cache est là : les notes restent
         // affichées, la cause est dite en une ligne. Le gros bloc rouge avec son
         // « Réessayer » doublait l'action de la barre du haut.

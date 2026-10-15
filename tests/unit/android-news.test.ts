@@ -356,9 +356,9 @@ describe("unit android actus (#79)", () => {
     // #147 : les ids lus sont `rememberSaveable` (une rotation ne remet donc pas
     // la pastille « non lu » sur tout ce qui venait d'être marqué lu).
     expect(screen).toContain("var readIds by rememberSaveable");
-    // L'état vide Papillon et le bandeau horodaté.
+    // L'état vide Papillon, sans bandeau hors-ligne.
     expect(screen).toContain('title = "Aucune actualité."');
-    expect(screen).toContain("PapStaleBanner(fetchedAt = fetchedAt");
+    expect(screen).not.toContain("PapStaleBanner(");
     expect(screen).toContain("PapErrorState(message = error");
     expect(screen).toContain("PapLoading()");
     // L'ancienne concaténation category · author · « Lu » a disparu.

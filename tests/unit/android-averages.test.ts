@@ -780,10 +780,14 @@ describe("unit android onglet Notes (#139)", () => {
     expect(hero).toContain("averageLabel");
     expect(hero).toContain("originLabel");
     expect(hero).toContain("AverageSparkline");
-    // Briques #136 utilisées par l'écran.
-    for (const brique of ["PapLoading", "PapEmptyState", "PapErrorState", "PapStaleBanner"]) {
+    // Briques #136 utilisées par l'écran (bandeau hors-ligne retiré).
+    for (const brique of ["PapLoading", "PapEmptyState", "PapErrorState"]) {
       expect({ brique, used: screen.includes(brique) }).toEqual({ brique, used: true });
     }
+    expect({ brique: "PapStaleBanner", used: screen.includes("PapStaleBanner") }).toEqual({
+      brique: "PapStaleBanner",
+      used: false,
+    });
     // Champs du contrat affichés : chacun a sa ligne de lecture dans Averages.kt.
     const averages = readFileSync(join(UI, "Averages.kt"), "utf8");
     for (const champ of [

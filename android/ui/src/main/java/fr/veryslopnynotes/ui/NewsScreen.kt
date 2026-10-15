@@ -180,7 +180,6 @@ fun NewsScreen(
                 return@Column
             }
         }
-        if (isStale) PapStaleBanner(fetchedAt = fetchedAt, onRefresh = onRetry)
         // Relecture échouée alors que la liste est là : la cause passe en une
         // ligne, jamais en gros bloc rouge au milieu des cartes.
         if (error != null) {

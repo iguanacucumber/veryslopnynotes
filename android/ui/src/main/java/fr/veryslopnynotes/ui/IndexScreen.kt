@@ -148,21 +148,8 @@ fun IndexScreen(
         ROUTE_MESSAGES to messagesUnreadBadge(snapshot.discussions),
         ROUTE_ATTENDANCE to attendanceTotalBadge(snapshot.attendance),
     )
-    val hasBanner = snapshot.stale || refreshError != null
-
     HomePullToRefresh(refreshing = refreshing, onRefresh = { refresh() }) {
-        // Bandeau FIXE : hors du `verticalScroll`, il persiste pendant le
-        // défilement. Le contenu défilant porte le reste du padding.
         Column(modifier = Modifier.fillMaxSize()) {
-            // Périmé, OU dernière actualisation ratée : dans les deux cas ce qui
-            // est affiché vient du CACHE, et l'utilisateur doit l'apprendre. Le
-            // libellé du bandeau est celui de #136 (« Données hors-ligne · mis à
-            // jour il y a 4 min ») : les deux plans disent la même chose.
-            if (hasBanner) {
-                Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
-                    PapStaleBanner(fetchedAt = snapshot.fetchedAt, onRefresh = { refresh() })
-                }
-            }
             Column(
                 // #143 : le défilement était le défaut le plus visible. `fillMaxSize`
                 // + `verticalScroll` : une semaine de contenu se fait défiler au
@@ -170,7 +157,7 @@ fun IndexScreen(
                 modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(
                     start = 16.dp,
                     end = 16.dp,
-                    top = if (hasBanner) 12.dp else 16.dp,
+                    top = 16.dp,
                     bottom = 16.dp,
                 ),
                 // Ordre Papillon : salutation → prochain cours → moyenne →
