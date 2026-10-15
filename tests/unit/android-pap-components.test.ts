@@ -385,10 +385,11 @@ describe("briques d'interface (#136)", () => {
     // dialogue, et jamais une valeur écrite à la main.
     expect(kt).toContain("val shape = MaterialTheme.shapes.large");
     expect(kt).toContain("shape = MaterialTheme.shapes.extraLarge");
-    // Faits de forme (#256) : puce = small (12), avatar = large (20, pas un
-    // disque), compteur 99+ — mesurés, pas goûtés.
+    // Faits de forme (#256, #264) : puce = PILULE (`CircleShape`, plus `small`
+    // 12 — #264 uniformise les pills), avatar = large (20, pas un disque),
+    // compteur 99+ — mesurés, pas goûtés.
     expect(kt).toContain("fun PapPill(");
-    expect(kt).toContain(".clip(MaterialTheme.shapes.small)");
+    expect(kt).toContain(".clip(CircleShape)");
     expect(kt).toContain("fun PapSubjectAvatar(");
     expect(kt).toContain("private val AVATAR_SIZE = 44.dp");
     expect(kt).toContain("private const val AVATAR_TINT_ALPHA = 0.31f");
