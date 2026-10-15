@@ -385,10 +385,6 @@ fun AttendanceRoute(
     subjectPrefs: List<SubjectPrefs> = emptyList(),
     refreshTick: Int = 0,
 ) {
-    // UNE horloge pour toute la page : « il y a 4 jours » ne doit pas changer
-    // d'une ligne à l'autre. Relue à chaque nouveau payload (donc à chaque
-    // relecture), sinon un écran laissé ouvert vieillit ses propres libellés.
-    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     // #147 : la période filtrée et l'ouverture du sélecteur survivent à la
     // rotation — sinon les lignes affichées changeaient sous le doigt de
     // l'utilisateur sans qu'il l'ait demandé.
@@ -432,7 +428,6 @@ fun AttendanceRoute(
         heading = ATTENDANCE_HEADING,
         refreshTick = refreshTick,
     ) { payload, refresh ->
-        LaunchedEffect(payload) { nowMillis = System.currentTimeMillis() }
         val data = attendanceFrom(payload)
         val rows = absencesForPeriod(data, periodId)
         val sections = attendanceSections(rows)
@@ -490,7 +485,6 @@ fun AttendanceRoute(
             AttendanceSections(
                 sections = sections,
                 subjectPrefs = subjectPrefs,
-                nowMillis = nowMillis,
             )
         }
     }
@@ -510,7 +504,6 @@ fun PunishmentsRoute(
     baseUrl: String,
     refreshTick: Int = 0,
 ) {
-    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     CachedSchoolRoute(
         repo = repo,
         baseUrl = baseUrl,
@@ -518,7 +511,6 @@ fun PunishmentsRoute(
         heading = SANCTIONS_HEADING,
         refreshTick = refreshTick,
     ) { payload, refresh ->
-        LaunchedEffect(payload) { nowMillis = System.currentTimeMillis() }
         val rows = remember(payload) { punishmentsFrom(payload) }
         // Le titre de la liste est rendu AVEC et SANS sanction : c'est lui, et lui
         // seul, qui distingue cette route d'une autre dans un état sans donnée
@@ -537,7 +529,7 @@ fun PunishmentsRoute(
             )
         } else {
             for (row in rows) {
-                PunishmentCard(row = row, nowMillis = nowMillis)
+                PunishmentCard(row = row)
             }
         }
     }

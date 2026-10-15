@@ -390,16 +390,19 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     const settings = read(UI, "SettingsScreen.kt");
     const style = read(UI, "SubjectStyle.kt");
     // L'aperçu appelle les composants que #137/#138/#139 ont rendus colorés :
-    // une carte de cours, une pastille matière et une pastille de note. Sans
-    // cela, l'aperçu ne prouverait rien du rendu final.
-    expect(sheet).toContain("PapCourseCard(");
-    expect(sheet).toContain("PapSubjectAvatar(");
-    expect(sheet).toContain("PapPill(");
+    // UNE carte de note façon carrousel « Nouvelles notes » (pastille emoji
+    // teintée + pastille de note CONTOUR `GradePill`), comme la ref.
+    // `opti_custom.jpg`. Sans cela, l'aperçu ne prouverait rien du rendu final.
+    expect(sheet).toContain("GradePill(");
+    expect(sheet).not.toContain("PapCourseCard(");
+    expect(sheet).not.toContain("PapSubjectAvatar(");
+    expect(sheet).not.toContain("PapPill(");
     // Les couleurs de l'éditeur sortent du thème, jamais d'un hex posé ici.
     expect(sheet).not.toMatch(/#[0-9A-Fa-f]{6}/);
     expect(sheet).toContain("subjectContent(");
-    // Le pastel de la carte de cours n'est pas re-écrit dans la feuille : il vient
-    // de `PapCourseCard`, donc l'aperçu et l'EDT partagent la MÊME fonction.
+    // Le fond de la carte d'aperçu n'est pas re-écrit dans la feuille : il vient
+    // de `subjectCardTint`, donc l'aperçu et le carrousel partagent la MÊME
+    // fonction.
     expect(read(UI, "TimetableCourseCard.kt")).toContain("subjectSurface(colorHex)");
     expect(sheet).toContain("bestContentOn(");
     // Les conventions #138 sont réutilisées, pas ré-derivées.

@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -56,6 +58,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.Discussion
@@ -89,9 +92,12 @@ import java.time.ZoneId
 //
 // PAS DE RÉFÉRENCE CAPTURÉE : l'onglet Messagerie de Papillon n'est pas dans les
 // quatre onglets échantillonnés (accueil / cours / tâches / notes), donc l'écran
-// est dessiné dans le MÊME langage que le reste : cartes blanches à filet, rayon
-// 20, pastille d'accent, encre secondaire à 65 %, titres en gras, pastilles de
-// compteur.
+// est dessiné dans le MÊME langage que le reste : cartes teintées sans filet ni
+// ombre (élévation 0, repli `surfaceVariant` — le fil n'a pas de couleur matière,
+// on n'en invente pas), rayon 20, pastille d'accent, encre secondaire du thème,
+// titre en gras quand non lu, pastille de compteur UNIQUE (`PapPill` sur
+// `primary`, en-tête et cartes partagent la même forme), dates longues stables
+// au lieu d'un temps relatif d'horloge.
 //
 // I6 : sujet, participants, corps de message et libellé de pièce jointe sont des
 // DONNÉES de l'établissement affichées par `Text()` seul — aucun WebView, aucun
@@ -220,7 +226,7 @@ fun MessagesScreen(
                     )
                     else -> LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                         contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
                     ) {
                         items(visible, key = { it.id }) { d ->
@@ -242,12 +248,34 @@ fun MessagesScreen(
 }
 
 /**
- * Carte d'un fil : pastille d'initiale, sujet en gras, sous-titre (aperçu du
- * dernier message connu, sinon participants), et à droite le temps relatif puis la
- * PASTILLE de non-lus.
+ * Carte d'un fil : pastille d'initiale, sujet en gras QUAND NON LU, sous-titre
+ * (aperçu du dernier message connu, sinon participants), et à droite la date
+ * longue puis la PASTILLE de non-lus.
  *
- * La pastille est cliquable (marquer lu) et occupe sa propre zone : un tap dedans
+ * Fond `surfaceVariant`, SANS filet ni ombre (élévation 0) : le fil n'a pas de
+ * couleur matière à teinter et on n'en invente pas, donc il prend le repli
+ * neutre des cartes Devoirs/Notes — fondu dans l'écran au lieu de flotter
+ * dessus. Un filet de 1 dp sur un aplat uni se lirait comme un contour de
+ * découpe, et une ombre comme un relief que la référence ne pose pas.
+ *
+ * La pastille est une `PapPill` sur `primary`, la MÊME que le total d'en-tête :
+ * une seule forme, plus de bascule rond-pastille selon le chiffre. Son couple
+ * fond/encre est le pas teinté mesuré de `PapPill` (4.5:1 dans les deux
+ * thèmes, comme le choix mesuré de `bestContentOn`), jamais du blanc en dur.
+ * Elle est cliquable (marquer lu) et occupe sa propre zone : un tap dedans
  * n'ouvre pas le fil.
+ *
+ * La date est une date LONGUE (`longDateFr`), pas un temps relatif : « il y a
+ * 3 h » parle de l'horloge (une information de SYNCHRO), deux fils du même
+ * jour y sont indiscernables et le libellé bouge à chaque rafraîchissement —
+ * même raisonnement que les notes (#192). L'âge des données reste porté par
+ * le bandeau « périmé ».
+ *
+ * [nowMillis] est conservé pour la stabilité des appelants : la date longue
+ * n'en dépend plus.
+ *
+ * Densité : titre UNE ligne + points de suspension, sous-titre DEUX lignes
+ * maximum, pas de 12 dp (remplissage, gouttière, espacement de liste).
  */
 @Composable
 private fun ConversationCard(
@@ -261,8 +289,18 @@ private fun ConversationCard(
     val badge = unreadBadgeCount(d)
     val who = DiscussionRules.participantLabel(d.participants)
     val subtitle = preview.ifBlank { who }
-    PapCard(modifier = Modifier.fillMaxWidth(), onClick = onOpen) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    Card(
+        onClick = onOpen,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             // Initiale du SUJET : un fil n'a pas de photo, donc la pastille porte
             // une lettre (repli « ? » de `subjectInitial`, #138) plutôt qu'un
             // disque vide.
@@ -270,7 +308,11 @@ private fun ConversationCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = d.subject,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = if (badge > 0) {
+                        MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                    } else {
+                        MaterialTheme.typography.titleSmall
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -284,8 +326,13 @@ private fun ConversationCard(
                     )
                 }
             }
-            Column(horizontalAlignment = Alignment.End) {
-                val time = conversationTimeLabel(d, nowMillis, zone)
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                // Date longue, chaîne vide si la date est illisible (jamais un
+                // fragment d'ISO affiché comme une date).
+                val time = conversationMillis(d)?.let { longDateFr(it, zone) } ?: ""
                 if (time.isNotEmpty()) {
                     Text(
                         text = time,
@@ -317,7 +364,10 @@ private fun ConversationCard(
                             }
                             .padding(horizontal = 6.dp, vertical = 4.dp),
                     ) {
-                        PapBadge(count = badge)
+                        // `PapPill` borne déjà les grands compteurs (`maxLines =
+                        // 1` + points de suspension) : pas de plafond « 99+ »
+                        // dupliqué ici.
+                        PapPill(text = "$badge", color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -507,7 +557,11 @@ private fun MessageBubble(
     onOpenAttachment: (MessageAttachment) -> Unit,
 ) {
     val own = isOwnMessage(m)
-    val time = messageTimeLabel(m, nowMillis, zone)
+    // Date LONGUE (`longDateFr`), comme les cartes de fils : le temps relatif
+    // parle de l'horloge, pas du message (#192). La chronologie d'un même jour
+    // est portée par l'ordre des bulles. `nowMillis` reste au paramètre pour la
+    // stabilité des appelants.
+    val time = discussionMillis(m.sentAt)?.let { longDateFr(it, zone) } ?: ""
     // #146 : l'encre de l'AUTEUR était `primary` sur les DEUX fonds — 3.74:1 sur
     // la surface claire et 3.50:1 sur le `primaryContainer` : sous AA pour un
     // libellé de 13 sp, dans les deux thèmes. Elle passe par [bestContentOn] du

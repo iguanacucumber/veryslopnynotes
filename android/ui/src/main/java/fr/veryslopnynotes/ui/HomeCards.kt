@@ -7,11 +7,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
@@ -29,8 +34,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import fr.veryslopnynotes.data.SubjectPrefs
 import java.time.ZoneId
 
@@ -149,6 +156,11 @@ fun HomeMoreButton(onClick: () -> Unit, label: String = "Afficher plus") {
     }
 }
 
+/** Épaisseur de la barre d'accent d'une carte de cours : 6 dp, même patron que
+ *  la colonne de `TimetableCourseCard` (motif recopié, pas de code partagé :
+ *  deux cibles, deux fichiers). */
+private val HOME_COURSE_SPINE = 6.dp
+
 /**
  * Carte de cours compacte : matière, salle, et l'heure de DÉBUT **et** de FIN.
  *
@@ -158,6 +170,9 @@ fun HomeMoreButton(onClick: () -> Unit, label: String = "Afficher plus") {
  * Compteur à rebours (`countdown`) sous les horaires : `relativeTimeFr` du
  * module, donc « dans 12 min », « dans 3 h », « demain 08:00 » — jamais un ISO.
  * Vide = pas de compteur, pas une ligne vide.
+ *
+ * Barre d'accent 6 dp à gauche (couleur franche de la matière) sur fond
+ * pastel : le même patron que la carte EDT, titre 18 sp semibold.
  *
  * ponytail: c'est la carte de cours de l'accueil, PAS celle de l'EDT (#136/#137
  *   produit `PapCourseCard`). Deux cibles, deux fichiers : quand #137 est mergé,
@@ -179,16 +194,27 @@ fun HomeCourseCard(
     val hex = subjectColorHex(subjectPrefs, lesson.subject)
     val background = subjectSurface(hex) ?: MaterialTheme.colorScheme.surfaceVariant
     val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.onSurface
+    val spine = colorFromHex(hex) ?: MaterialTheme.colorScheme.primary
     PapCard(modifier = modifier, containerColor = background, border = null) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(HOME_ACTION_GAP),
         ) {
+            Box(
+                modifier = Modifier
+                    .width(HOME_COURSE_SPINE)
+                    .fillMaxHeight()
+                    .clip(CircleShape)
+                    .background(spine),
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = style.badge,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 18.sp,
+                    ),
                     color = ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -235,6 +261,7 @@ fun HomeQuickActionsGrid(
     actions: List<HomeQuickActionUi>,
     onOpen: (String) -> Unit,
     modifier: Modifier = Modifier,
+    badges: Map<String, Int> = emptyMap(),
 ) {
     if (actions.isEmpty()) return
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -248,6 +275,7 @@ fun HomeQuickActionsGrid(
                         action = action,
                         onClick = { onOpen(action.route) },
                         modifier = Modifier.weight(1f),
+                        badgeCount = badges[action.route] ?: 0,
                     )
                 }
                 if (row.size == 1) Box(modifier = Modifier.weight(1f))
@@ -273,6 +301,7 @@ fun HomeQuickActionCard(
     action: HomeQuickActionUi,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    badgeCount: Int = 0,
 ) {
     val pastel = subjectSurface(action.colorHex) ?: MaterialTheme.colorScheme.secondaryContainer
     val ink = subjectContent(action.colorHex) ?: MaterialTheme.colorScheme.onSurface
@@ -301,12 +330,21 @@ fun HomeQuickActionCard(
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = action.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = action.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    // Pastille de compteur, présentation seule : le statut texte
+                    // reste la source, `PapBadge` ne rend rien à 0.
+                    if (badgeCount > 0) PapBadge(count = badgeCount)
+                }
                 Text(
                     text = action.status,
                     style = MaterialTheme.typography.bodySmall,

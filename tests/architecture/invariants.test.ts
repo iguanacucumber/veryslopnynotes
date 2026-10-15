@@ -239,6 +239,14 @@ describe("invariants", () => {
       "RevisionAi",
       "Humanize",
       "OpenRouterHomework",
+      // Polish Papillon (dates longues #192) : l'affichage utilise `longDateFr`,
+      // mais la chaîne relative reste une logique pure rejouée par les miroirs
+      // (`android-discussions.test.ts`, `android-attendance.test.ts`). Pas des
+      // restes de refonte : supprimer ces fonctions supprimerait ce qu'elles
+      // vérifient (même statut que `lessonBadgeLabel` ci-dessus).
+      "conversationTimeLabel",
+      "messageTimeLabel",
+      "absenceDateSpan",
     ]);
     const morts: string[] = [];
     for (const f of files) {
