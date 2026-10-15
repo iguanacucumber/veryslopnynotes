@@ -405,6 +405,9 @@ describe("briques d'interface (#136)", () => {
     // L'essentiel de #136 : le message serveur ne doit plus être jeté, ni
     // affiché cru sous le pouce, ni disparaître dans un log.
     expect(kt).toContain("text = errorHeadline(message)");
+    // Icône 48 dp (#258) : même poids visuel que l'état vide, pas 40.
+    expect(kt).toContain("tint = MaterialTheme.colorScheme.error,");
+    expect(kt).toContain("modifier = Modifier.size(48.dp),");
     expect(kt).toContain('Text(if (expanded) "Masquer les détails" else "Détails")');
     expect(kt).toContain('Text("Réessayer")');
     // Le dépliant n'apparaît que s'il y a un détail à montrer.
