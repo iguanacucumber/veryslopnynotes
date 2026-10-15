@@ -915,3 +915,16 @@ describe("logique affichable de la messagerie (#142)", () => {
     expect({ ecranKindBrut }).toEqual({ ecranKindBrut: false });
   });
 });
+
+describe("messagerie recherche pastille (#258)", () => {
+  test("SearchField en pastille : rayon 300 de la référence, pas le 8 dp par défaut", () => {
+    const { readFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const screen = readFileSync(
+      join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui/MessagesScreen.kt"),
+      "utf8",
+    );
+    expect(screen).toContain("private fun SearchField(");
+    expect(screen).toContain("shape = CircleShape,");
+  });
+});
