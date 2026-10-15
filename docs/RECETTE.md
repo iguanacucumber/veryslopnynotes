@@ -45,11 +45,10 @@ de la référence). « Papillon » = l'application de référence.
 | route | écart | raison |
 |---|---|---|
 | **Accueil** | 4 accès rapides + grille 2×2 ; pas de widget « prochaine note » | l'accueil lit le CACHE, il ne requête pas (#14, #143). Sans cache, une carte dirait « 14,25 » alors que la dernière note peut dater de la semaine. Écart assumé : **donnée absente**, pas choix de design. |
-| **Accueil** | bandeau « Données hors-ligne » posé sur le `primaryContainer` (donc vert) avec un triangle d'avertissement | le vert est la couleur de marque de la référence ; le libellé et le triangle portent le sens. Un aplat d'avertissement serait un 5e jeton de couleur absent du thème. |
 | **Accueil** | la ligne d'état d'un accès rapide est tronquée à 34 caractères (`homeEllipsis`) | une carte de grille 2×2 ne peut pas faire taller ses voisines. Ellipse explicite, jamais une coupure nette. |
 | **Cours** | barre du haut « semaine du 05/10/2026 » au lieu du sélecteur de période + pastille de la référence | le sélecteur de période existe, mais il est posé DANS la barre chez nous aussi (`PapHeader`) ; la référence le fait sur une carte flottante au-dessus. Différence de placement assumée (#190). |
 | **Cours** | carte de cours : rayon 25, barre d'accent à bout arrondi, nom 18 sp gras | relevés sur `ui/components/Course.tsx` de la v8.5.5 (#194). Pas d'écart. |
-| **Notes** | bandeau hors-ligne + ligne « Hors-ligne, tranches indisponibles. » | deux faits distincts : les périodes sont lues en direct et ne sont pas mises en cache ; les notes viennent du cache périmé. Deux énoncés vrais, pas un doublon. |
+| **Notes** | ligne « Hors-ligne, tranches indisponibles. » quand la lecture des périodes échoue | les périodes sont lues en direct et ne sont pas mises en cache. Un énoncé vrai, pas un doublon. |
 | **Notes** | le grand nombre est collé au tracé de la courbe | mesuré sur la référence (le `Canvas` déborde sous le corps, `paddingTop: 0`). |
 | **Tâches** | « Semaine 41 » + « Devoirs de la semaine », puis la plage `05/10 – 11/10` | le numéro ISO est l'en-tête de la référence ; la plage est dans le navigateur. Deux informations, une seule fois chacune. |
 | **Profil** | écran à sections (Compte / Ressources / Réglages / Session) au lieu d'une liste continue | l'en-tête de la référence est un avatar ; les sections servent le survol (« Se déconnecter » doit être atteignable sans défiler, cf. #135). |
@@ -83,10 +82,9 @@ de la référence). « Papillon » = l'application de référence.
   « Hors-ligne, aucune donnée en cache. » ; Messages sans cache → « 0
   discussion » ; premier lancement (appareil non appairé) → l'assistant. Aucun
   écran muet.
-- **Hors ligne** (mode avion) : l'accueil garde son bandeau « Données
-  hors-ligne · mis à jour hier 15:54 », chaque écran sans cache dit
-  « Hors-ligne, aucune donnée en cache. ». Aucun écran n'affiche un vide
-  trompeur.
+- **Hors ligne** (mode avion) : l'accueil garde ses widgets en cache,
+  chaque écran sans cache dit « Hors-ligne, aucune donnée en cache. ».
+  Aucun écran n'affiche un vide trompeur.
 
 ## Comment rejouer
 

@@ -504,7 +504,6 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
                     // Le VRAI message d'échec : l'écran ne se débrouille pas d'un « réseau ».
                     error != null && days.isEmpty() -> PapErrorState(message = error, onRetry = { refresh() })
                     days.isNotEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (stale) PapStaleBanner(fetchedAt = fetchedAt, onRefresh = { refresh() })
                         // Relecture échouée alors que les menus sont là : la cause passe
                         // en une ligne, les cartes restent affichées.
                         val failure = error

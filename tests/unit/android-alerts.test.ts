@@ -170,7 +170,7 @@ describe("unit android alertes sécurité (#144)", () => {
     const screen = codeOnly(readFileSync(SCREEN, "utf8"));
     expect(screen).toContain("repo.cached(CachePolicy.SECURITY_ALERTS)");
     expect(screen).toContain("repo.refreshAsync(CachePolicy.SECURITY_ALERTS, baseUrl)");
-    expect(screen).toContain("PapStaleBanner(fetchedAt = ");
+    expect(screen).not.toContain("PapStaleBanner(");
     expect(screen).toContain("PapErrorState(");
     expect(screen).toContain("PapLoading()");
     expect(screen).toContain("PapEmptyState(");

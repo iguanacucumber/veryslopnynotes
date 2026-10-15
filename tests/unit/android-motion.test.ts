@@ -386,14 +386,19 @@ describe("#145 — une seule porte de notification, et zéro dépendance ajouté
     expect(devoirs).not.toMatch(/text = notice,/);
     expect(messagerie).not.toContain("NoticeRow");
     // Le squelette, l'état vide et l'état d'erreur restent : on n'a rien retiré
-    // d'autre que la rangée de message.
-    for (const brique of ["PapLoading", "PapEmptyState", "PapErrorState", "PapStaleBanner"]) {
+    // d'autre que la rangée de message et le bandeau hors-ligne.
+    for (const brique of ["PapLoading", "PapEmptyState", "PapErrorState"]) {
       expect({ brique, devoirs: devoirs.includes(brique) }).toEqual({ brique, devoirs: true });
       expect({ brique, messagerie: messagerie.includes(brique) }).toEqual({ brique, messagerie: true });
     }
-    // Le bandeau « périmé » s'ouvre au lieu d'apparaître d'un coup.
-    expect(devoirs).toContain("PapAppear(visible = isStale)");
-    expect(messagerie).toContain("PapAppear(visible = isStale)");
+    expect({ brique: "PapStaleBanner", devoirs: devoirs.includes("PapStaleBanner") }).toEqual({
+      brique: "PapStaleBanner",
+      devoirs: false,
+    });
+    expect({ brique: "PapStaleBanner", messagerie: messagerie.includes("PapStaleBanner") }).toEqual({
+      brique: "PapStaleBanner",
+      messagerie: false,
+    });
   });
 
   test("un échec propose « Réessayer », jamais un « Annuler » de suppression", () => {

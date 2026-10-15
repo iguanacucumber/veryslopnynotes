@@ -814,11 +814,15 @@ describe("unit android EDT par jour (#137)", () => {
     // de #137 : même exigence (« l'écran sait tirer pour actualiser »), autre
     // composant.
     expect(screen).toContain("HomePullToRefresh(");
-    // Les briques de #136, enfin adoptées par un écran.
-    for (const brique of ["PapLoading(", "PapEmptyState(", "PapErrorState(", "PapStaleBanner(", "PapCourseCard(", "PapLunchCard(", "PapPill("]) {
+    // Les briques de #136, enfin adoptées par un écran (bandeau hors-ligne retiré).
+    for (const brique of ["PapLoading(", "PapEmptyState(", "PapErrorState(", "PapCourseCard(", "PapLunchCard(", "PapPill("]) {
       const trouvee = screen.includes(brique) || card.includes(brique);
       expect({ brique, trouvee }).toEqual({ brique, trouvee: true });
     }
+    expect({ brique: "PapStaleBanner(", trouvee: screen.includes("PapStaleBanner(") }).toEqual({
+      brique: "PapStaleBanner(",
+      trouvee: false,
+    });
     // Le message RÉEL du serveur, plus la chaîne figée — et #147 l'affiche
     // AUSSI quand la semaine est là (bandeau d'erreur d'une ligne).
     expect(screen).toContain("PapErrorState(message = failed.message");

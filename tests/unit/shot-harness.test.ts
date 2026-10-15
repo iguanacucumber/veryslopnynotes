@@ -710,7 +710,7 @@ describe("shot.sh : le témoin d'écran (#160)", () => {
 
   test("accueil PLEIN : titre + fragment, les deux cités", () => {
     const h = harness();
-    screen(h, ["Accueil", "Données hors-ligne · mis à jour il y a 4 h", "Afficher plus ↗"]);
+    screen(h, ["Accueil", "Afficher plus ↗"]);
     const r = h.run(["index", "--wait", "0"]);
     expect(r.code).toBe(0);
     expect(r.out).toContain("shot : route vérifiée (« Accueil » + « Afficher plus »).");
@@ -730,7 +730,7 @@ describe("shot.sh : le témoin d'écran (#160)", () => {
     // une panne de navigation imaginée. Le message dit maintenant que l'écran
     // peut être bon, et où changer le marqueur.
     const h = harness();
-    screen(h, ["Accueil", "Données hors-ligne · mis à jour il y a 4 h", "Actualiser", "Actualités", "Cantine"]);
+    screen(h, ["Accueil", "Actualiser", "Actualités", "Cantine"]);
     const r = h.run(["index", "--wait", "0"]);
     expect(r.code).toBe(1);
     expect(r.out).toContain("route « index » NON PROUVÉE");
@@ -924,7 +924,7 @@ const VARIANTES: Record<string, Variante> = {
   // Le corps de cet écran ne rend QUE de la donnée : pas de fragment, son titre
   // de barre suffit. L'état vide doit rester lisible, c'est ce qui est rejoué.
   news: {
-    plein: ["Données hors-ligne (périmé)."],
+    plein: ["Marquer comme lu"],
     vide: ["Aucune actualité."],
   },
 // #178 : le témoin était dans la SEULE branche qui a des menus, donc l'état vide
@@ -1098,8 +1098,8 @@ describe("le témoin d'écran ne dépend pas de la donnée (#166)", () => {
   });
 
   test("aucun témoin n'est un libellé partagé par plusieurs écrans", () => {
-    // « Réessayer », « Actualiser », « Chargement… », « Données hors-ligne
-    // (périmé). », « Simuler erreur » sont rendus par plusieurs écrans : en
+    // « Réessayer », « Actualiser », « Chargement… », « Simuler erreur » sont
+    // rendus par plusieurs écrans : en
     // témoin, ils prouvent que l'app tourne, pas QUELLE page on regarde — et la
     // barre d'onglets fournit le titre de TOUTES les routes d'onglet, donc le
     // faux vert est à portée. « Réessayer » est celui qui a été envisagé pour
@@ -1108,7 +1108,6 @@ describe("le témoin d'écran ne dépend pas de la donnée (#166)", () => {
       "Réessayer",
       "Actualiser",
       "Chargement…",
-      "Données hors-ligne (périmé).",
       "Simuler erreur",
     ];
     for (const route of ROUTES) {
