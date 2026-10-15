@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MailOutline
@@ -127,7 +126,7 @@ fun HomeWidgetCard(
  */
 @Composable
 fun HomeMoreButton(onClick: () -> Unit, label: String = "Afficher plus") {
-    val shape = RoundedCornerShape(20.dp)
+    val shape = MaterialTheme.shapes.large
     val ink = MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = Modifier

@@ -268,6 +268,13 @@ describe("#145 — valeurs mesurées du mouvement", () => {
     expect(MOTION).toContain("const val MOTION_ENTER_SCALE = 0.9f");
     expect(MOTION).toContain("const val MOTION_PRESS_DAMPING = 0.8f");
     expect(MOTION).toContain(`const val MOTION_PRESS_STIFFNESS = ${MOTION_PRESS_STIFFNESS}f`);
+    // Faits de presse mesurés (#254, AnimatedPressable) : 30/200 ms, 0.95, 0.7.
+    expect(MOTION).toContain("const val MOTION_PRESS_SCALE = 0.95f");
+    expect(MOTION).toContain("const val MOTION_PRESS_ALPHA = 0.7f");
+    expect(MOTION).toContain("const val MOTION_PRESS_IN_MS = 30");
+    expect(MOTION).toContain("const val MOTION_PRESS_OUT_MS = 200");
+    expect(kt).toContain("MOTION_PRESS_ALPHA");
+    expect(kt).toContain('label = "papPressAlpha"');
     // Les trois briques lisent les mêmes jetons : aucune durée « en dur » ailleurs.
     expect(kt).toContain("initialScale = MOTION_ENTER_SCALE");
     expect(kt).toContain("spring(dampingRatio = motionDamping(motionOn), stiffness = MOTION_PRESS_STIFFNESS)");
