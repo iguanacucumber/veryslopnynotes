@@ -36,7 +36,9 @@ class ProfileRepository(
         Thread {
             val client = provider()
             if (client == null) {
-                post(cb, MeResult.Err("Hors-ligne, profil indisponible."))
+                // Sans session : mode anonyme, état vide propre — jamais d'écran
+                // d'erreur plein-écran pour l'absence de connexion (#260).
+                post(cb, MeResult.Ok(null))
                 return@Thread
             }
             try {
@@ -47,7 +49,7 @@ class ProfileRepository(
                     DeviceAuth.reject()
                     post(cb, MeResult.Err(DeviceAuth.REJECTED_MESSAGE))
                 } else {
-                    post(cb, MeResult.Err("Hors-ligne, profil indisponible."))
+                    post(cb, MeResult.Ok(null))
                 }
             }
         }.start()

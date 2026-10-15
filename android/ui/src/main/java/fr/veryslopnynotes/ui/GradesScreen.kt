@@ -116,9 +116,11 @@ fun GradesRoute(
     }
 
     fun refresh() {
-        // Serveur non configuré : aucun appel (I1), état erreur avec cache si dispo.
+        // Serveur non configuré : aucun appel (I1). Sans rien d'affiché, état
+        // vide propre — jamais d'écran d'erreur plein-écran (#260).
         if (baseUrl.isBlank()) {
-            state = UiState.Error("Serveur non configuré.", (state as? UiState.Data)?.payload)
+            state = (state as? UiState.Data)?.let { UiState.Error("Serveur non configuré.", it.payload) }
+                ?: UiState.Empty
             return
         }
         // Données déjà là = on les garde affichées pendant le reload (pas de
@@ -134,7 +136,8 @@ fun GradesRoute(
                 nowMillis = System.currentTimeMillis()
             }
         } catch (_: Exception) {
-            state = UiState.Error("Erreur inattendue.", (state as? UiState.Data)?.payload)
+            state = (state as? UiState.Data)?.let { UiState.Error("Erreur inattendue.", it.payload) }
+                ?: UiState.Empty
         }
     }
 
@@ -161,15 +164,17 @@ fun GradesRoute(
                     is RefreshOutcome.Failed -> {
                         // Période choisie mais liste absente = on garde la note
                         // affichée et on ne pretend pas qu'il n'y a qu'un
-                        // trimestre : le bandeau d'erreur le dit.
-                        periodsError = o.message
+                        // trimestre : le bandeau d'erreur le dit. L'absence de
+                        // connexion n'est pas un bandeau (#260) : sans tranches,
+                        // le sélecteur bascule sur les compteurs du payload.
+                        periodsError = if (isSilentOffline(o.message)) null else o.message
                     }
                 }
             }
         } catch (_: Exception) {
-            // Même vocabulaire que la couche data (« Hors-ligne, tranches
-            // indisponibles. ») : l'utilisateur lit la même notion partout.
-            periodsError = "Tranches indisponibles."
+            // Même vocabulaire que la couche data : l'utilisateur lit la même
+            // notion partout. L'absence de connexion reste silencieuse (#260).
+            periodsError = null
         }
     }
 

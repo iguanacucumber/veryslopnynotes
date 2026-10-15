@@ -564,9 +564,11 @@ fun TimetableRoute(
         mutableStateOf(uiStateFromCache(cached, cached != null && repo.isStale(CachePolicy.TIMETABLE, cached)))
     }
     fun refresh() {
-        // Serveur non configuré : aucun appel (I1), cache conservé.
+        // Serveur non configuré : aucun appel (I1), cache conservé. Sans rien
+        // d'affiché, état vide propre — jamais d'écran d'erreur (#260).
         if (baseUrl.isBlank()) {
-            state = UiState.Error("Serveur non configuré.", (state as? UiState.Data)?.payload)
+            state = (state as? UiState.Data)?.let { UiState.Error("Serveur non configuré.", it.payload) }
+                ?: UiState.Empty
             refreshing = false
             return
         }
@@ -586,7 +588,8 @@ fun TimetableRoute(
                 refreshing = false
             }
         } catch (_: Exception) {
-            state = UiState.Error("Erreur inattendue.", (state as? UiState.Data)?.payload)
+            state = (state as? UiState.Data)?.let { UiState.Error("Erreur inattendue.", it.payload) }
+                ?: UiState.Empty
             refreshing = false
         }
     }

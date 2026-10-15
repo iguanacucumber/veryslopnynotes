@@ -38,7 +38,9 @@ class DiscussionsRepository(
         Thread {
             val client = provider()
             if (client == null) {
-                post { cb(emptyList(), "Hors-ligne, messages indisponibles.") }
+                // Sans session : liste vide, état vide propre — pas d'écran
+                // d'erreur plein-écran pour l'absence de connexion (#260).
+                post { cb(emptyList(), null) }
                 return@Thread
             }
             try {
@@ -55,7 +57,7 @@ class DiscussionsRepository(
                     DeviceAuth.reject()
                     post { cb(emptyList(), DeviceAuth.REJECTED_MESSAGE) }
                 } else {
-                    post { cb(emptyList(), "Hors-ligne, messages indisponibles.") }
+                    post { cb(emptyList(), null) }
                 }
             }
         }.start()
@@ -66,7 +68,7 @@ class DiscussionsRepository(
         Thread {
             val client = provider()
             if (client == null) {
-                post { cb(emptyList(), "Hors-ligne, destinataires indisponibles.") }
+                post { cb(emptyList(), null) }
                 return@Thread
             }
             try {
@@ -77,7 +79,7 @@ class DiscussionsRepository(
                     DeviceAuth.reject()
                     post { cb(emptyList(), DeviceAuth.REJECTED_MESSAGE) }
                 } else {
-                    post { cb(emptyList(), "Hors-ligne, destinataires indisponibles.") }
+                    post { cb(emptyList(), null) }
                 }
             }
         }.start()
@@ -105,7 +107,7 @@ class DiscussionsRepository(
         Thread {
             val client = provider()
             if (client == null) {
-                post { cb(DiscussionWriteOutcome(false, "Hors-ligne, retour arrière.")) }
+                post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) }
                 return@Thread
             }
             val outcome = writeLocal("Création impossible.") {
@@ -132,7 +134,7 @@ class DiscussionsRepository(
         Thread {
             val client = provider()
             if (client == null) {
-                post { cb(DiscussionWriteOutcome(false, "Hors-ligne, retour arrière.")) }
+                post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) }
                 return@Thread
             }
             val outcome = writeLocal("Réponse impossible.") {
@@ -158,7 +160,7 @@ class DiscussionsRepository(
         Thread {
             val client = provider()
             if (client == null) {
-                post { cb(DiscussionWriteOutcome(false, "Hors-ligne, retour arrière.")) }
+                post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) }
                 return@Thread
             }
             val outcome = writeLocal("État de lecture refusé.") {
@@ -184,7 +186,7 @@ class DiscussionsRepository(
         Thread {
             val client = provider()
             if (client == null) {
-                post { cb(DiscussionWriteOutcome(false, "Hors-ligne, retour arrière.")) }
+                post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) }
                 return@Thread
             }
             val outcome = writeLocal("Suppression impossible.") {
@@ -210,7 +212,7 @@ class DiscussionsRepository(
             } else if (e.javaClass.simpleName == "DiscussionClosed") {
                 DiscussionWriteOutcome(false, "$failure (Fil fermé).")
             } else {
-                DiscussionWriteOutcome(false, "$failure (Hors-ligne).")
+                DiscussionWriteOutcome(false, "$failure (Sans connexion).")
             }
         }
     }

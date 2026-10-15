@@ -840,7 +840,7 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     const LOADING: TsUiState = { kind: "loading" };
     const EMPTY: TsUiState = { kind: "empty" };
     // Hors-ligne, aucune donnée en cache : le cas de la capture.
-    const FAILED: TsUiState = { kind: "error", message: "Hors-ligne, aucune donnée en cache.", cached: null };
+    const FAILED: TsUiState = { kind: "error", message: "Aucune donnée en cache.", cached: null };
     const payload = JSON.stringify({ grades: GRADES_RICH, averages: REPORT });
     const FRESH: TsUiState = { kind: "data", payload, isStale: false, fetchedAt: 1 };
     const STALE: TsUiState = { kind: "data", payload, isStale: true, fetchedAt: 1 };
@@ -1064,14 +1064,15 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     // La source de la phrase : le message d'échec de `/v1/periods` PORTE DÉJÀ le
     // nom de la ressource. L'écran le préfixait par « Tranches indisponibles : »,
     // d'où « Tranches indisponibles : Hors-ligne, tranches indisponibles. ».
-    expect(repo).toContain('RefreshOutcome.Failed("Hors-ligne, tranches indisponibles.", null)');
+    expect(repo).toContain('RefreshOutcome.Failed("Tranches indisponibles.", null)');
     expect(screen).not.toMatch(/"Tranches indisponibles\s*:/);
     // Le message est rendu tel quel, jamais concaténé à un libellé.
     expect(screen).toMatch(/text = periodError/);
     expect(screen).not.toMatch(/Text\(\s*"[^"]*:\s*\$\{?[a-zA-Z]/);
     // Même règle pour l'échec de relecture : une ligne, pas un préfixe.
     expect(screen).toMatch(/text = failed\.message/);
-    expect(screen).toMatch(/periodsError = "Tranches indisponibles\."/);
+    // #260 : l'absence de connexion est silencieuse (pas de bandeau).
+    expect(screen).toMatch(/isSilentOffline\(o\.message\)/);
   });
 });
 
