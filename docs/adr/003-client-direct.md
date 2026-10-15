@@ -10,7 +10,7 @@ Les règles fondatrices ont été écrites quand le serveur était le seul à pa
 Pronote :
 - `AGENTS.md` : « Réseau : Pronote = IP serveur uniquement, jamais téléphone. »
 - INVARIANTS I1 : « `android/` ne contient aucune URL/référence hôte Pronote. »
-- I2 : unique `PronoteHttpClient` côté serveur, seul accès réseau Pronote.
+- I2 : unique `PronoteHttpClient` côté serveur (supprimé depuis #234).
 
 Le port Kotlin change la donne : `android/pronote/` (zéro dépendance, transport
 plateforme) rejoue le protocole à parité compilée et rejouée (crypto #200,
@@ -24,10 +24,9 @@ composant à compromettre pour acheminer des secrets qui n'ont pas à voyager.
   repointé, scans #216). Aucun serveur intermédiaire ne voit la session : le QR
   et son PIN sont saisis dans l'app, la session vit et meurt dans le téléphone
   (purge au logout / changement d'hôte, inchangée).
-- **I2 remplacé** : un seul point d'accès réseau Pronote **par runtime** —
-  `HttpSession`/`Client` côté `android/pronote/`, unique `PronoteHttpClient`
-  côté serveur tant que le chemin legacy vit (scan inchangé jusqu'à la
-  suppression du serveur mort).
+- **I2 remplacé** : aucun accès Pronote depuis le serveur ; l'app a un seul
+  `HttpSession`/`Client` dans `android/pronote/`. Le script de capture #199
+  appelle `pronotets` hors processus serveur.
 - **I3/I5 étendus à `android/`** : `android/core/` suit la même pureté que
   `server/domain/` ; l'app assemble et valide les prompts localement. La clé
   reste chiffrée sur l'appareil et part directement à OpenRouter dans

@@ -43,17 +43,6 @@ function isHttpUrl(v: string): boolean {
   return /^https?:\/\//i.test(v);
 }
 
-// Import dynamique : false si Playwright absent (CI sans navigateur).
-// Specifier non-littéral volontaire : évite TS2307 sans ajouter la dép lourde.
-export async function isPlaywrightAvailable(): Promise<boolean> {
-  try {
-    await import("play" + "wright");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 // Extraction texte : script/style retirés, entités HTML DÉCODÉES (« &eacute; »,
 // « &nbsp; » laissés tels quels = extrait illisible et introuvable à la
 // recherche). Cheerio déjà dépendance, zéro ajoutée.
