@@ -105,14 +105,5 @@ class AccountStore(
         private const val SEP = ","
 
         fun isValidAccountId(id: String): Boolean = id.isNotBlank() && id.length <= MAX_ACCOUNT_ID
-
-        // ponytail: miroir de CACHEABLE_RESOURCES, pour les tests de purge par ressource.
-        fun cacheableResources(): List<String> = listOf(
-            CachePolicy.GRADES,
-            CachePolicy.ASSIGNMENTS,
-            CachePolicy.TIMETABLE,
-            CachePolicy.NEWS,
-            CachePolicy.MENUS,
-        )
     }
 }

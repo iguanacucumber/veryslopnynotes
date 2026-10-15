@@ -2,8 +2,6 @@ package fr.veryslopnynotes.data
 
 import android.os.Handler
 import android.os.Looper
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -29,10 +27,7 @@ data class SubjectPrefs(
         put("updatedAt", updatedAt)
     }.toString()
 
-    fun jsonBody(): okhttp3.RequestBody = toJson().toRequestBody(JSON_MEDIA_TYPE)
-
     companion object {
-        val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         const val MAX_SUBJECT_CHARS = 64
         const val MAX_EMOJI_CHARS = 8 // points de code
         const val MAX_LABEL_CHARS = 64
