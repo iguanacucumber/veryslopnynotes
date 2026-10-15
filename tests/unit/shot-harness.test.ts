@@ -472,6 +472,15 @@ function harness(): {
   copyFileSync(join(dir, "apk-content"), join(apkDir, "app-debug.apk"));
   writeFileSync(join(dir, "bin/adb"), FAKE_ADB);
   chmodSync(join(dir, "bin/adb"), 0o755);
+  // `sleep` factice : shot.sh dort 1 s après le force-stop (sur un VRAI
+  // téléphone, le temps que l'activité meure). Ici il n'y a rien à laisser
+  // redémarrer, et les ~60 exécutions du script coûtaient ~60 s de sommeil
+  // mort — 95 % du temps de `bun test tests/unit`. Le script recopié reste
+  // intact : seul l'EXÉCUTANT change, comme pour adb/gradlew juste au-dessus.
+  // Aucun test ne mesure un délai : le contrat vérifié est l'empreinte APK,
+  // la route atteinte et la capture, jamais la vitesse.
+  writeFileSync(join(dir, "bin/sleep"), "#!/bin/sh\nexit 0\n");
+  chmodSync(join(dir, "bin/sleep"), 0o755);
   writeFileSync(join(dir, "android/gradlew"), FAKE_GRADLEW);
   chmodSync(join(dir, "android/gradlew"), 0o755);
   const jdk = fakeJdk();
@@ -1025,6 +1034,9 @@ describe("le témoin d'écran ne dépend pas de la donnée (#166)", () => {
         // On lit la SORTIE, pas le code seul : une route sans fragment réussit
         // sur le titre, donc `code === 0` ne prouverait rien.
         const reussite = r.out.includes("route vérifiée");
+        // …et le MESSAGE du script, sinon un échec par charge système ne dit
+        // jamais lequel des `die` de shot.sh il a rencontré.
+        if (r.code !== 0) console.error(`shot.sh [${route}/${variante}] code ${r.code} :\n${r.out}`);
         // …et on vérifie que le critère ci-dessus COLLE au script.
         expect({ route, variante, script: reussite, critere: verifie(route, labels) }).toEqual({
           route,

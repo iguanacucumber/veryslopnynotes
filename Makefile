@@ -4,7 +4,8 @@
 # une seule implémentation, sinon une des trois finit par oublier la borne 17-21.
 ANDROID_ENV = . agents/runtime/android-env.sh
 
-check: lint typecheck unit architecture contracts check-kotlin android-compile
+check:
+	bun run agents/runtime/check.ts
 
 lint:
 	bun run agents/runtime/check-secrets.ts
@@ -12,17 +13,20 @@ lint:
 typecheck:
 	bunx tsc --noEmit
 
+# --parallel : les 37 fichiers sur les 16 cœurs, un isolat par fichier (6,6 s →
+# 4,1 s). Les étapes lourdes sont des SOUS-PROCESSUS (shot.sh, kotlinc, java)
+# : c'est eux qui coûtaient, pas le runner — d'où le shim `sleep` du harnais.
 unit:
-	bun test tests/unit
+	bun test tests/unit --parallel
 
 architecture: architecture-test
 
 architecture-test:
 	bun run agents/runtime/check-architecture.ts
-	bun test tests/architecture
+	bun test tests/architecture --parallel
 
 contracts:
-	bun test tests/contracts
+	bun test tests/contracts --parallel
 
 # android/**/*.kt : garde-fou structurel, sans SDK ni réseau. Le vrai
 # compilateur est `make android-compile` (ci-dessous, appelé par `make check`).
@@ -37,6 +41,12 @@ check-kotlin:
 # Outillage absent = SKIP bruyant, jamais un faux vert : `make check` dit alors
 # ce qu'il n'a pas fait. Les commandes APK (buildDebugApk/buildRelApk) échouent
 # au lieu de sauter : un APK demandé en silence n'en est pas un.
+#
+# --offline d'ABORD : versions figées + cache local = la configuration ne doit
+# rien au réseau (95 s perdus sinon ici : le JVM ne reçoit jamais la réponse de
+# dl.google.com, 3 × 28 s de SocketTimeout pendant que curl y répond en 0,9 s —
+# pb d'environnement JVM/réseau, cf. docs/HUMAN_INPUTS.md). Cache froid = échec
+# explicite puis repli EN LIGNE : jamais de blocage silencieux.
 android-compile:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
@@ -48,8 +58,13 @@ android-compile:
 	  echo "  compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
 	else \
 	  echo "android-compile : JDK $$jdk, SDK $$sdk"; \
-	  cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain \
-	    :core:compileDebugKotlin :data:compileDebugKotlin :ui:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin; \
+	  cd android && { \
+	    JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --offline --console=plain \
+	      :core:compileDebugKotlin :data:compileDebugKotlin :ui:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin || \
+	    { echo "android-compile : REPLI EN LIGNE (cache Gradle incomplet — hors-ligne refusé)."; \
+	      JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain \
+	        :core:compileDebugKotlin :data:compileDebugKotlin :ui:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin; }; \
+	  }; \
 	fi
 
 # Capture d'écran sur téléphone réel (#133) : `make shot ROUTE=grades`.
