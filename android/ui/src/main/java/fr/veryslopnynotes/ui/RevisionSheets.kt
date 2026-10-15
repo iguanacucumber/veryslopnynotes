@@ -38,7 +38,6 @@ import fr.veryslopnynotes.core.listRevisionSheets
 import fr.veryslopnynotes.core.loadRevisionSheet
 import java.io.File
 import java.io.FileOutputStream
-import org.json.JSONArray
 
 // Fiches révision #30 : liste des fiches assemblées sur l'appareil + export PDF
 // local (PdfDocument natif, #207).
@@ -104,23 +103,6 @@ sealed interface RevisionState {
     data class Ready(val sheets: List<RevisionSheetUi>, val fetchedAt: Long) : RevisionState
 
     data class Failed(val message: String) : RevisionState
-}
-
-// Bornes du parser de sources (#144) : supprimées par erreur avec le nettoyage
-// media-proxy #206, ce qui rendait l'écran non compilable (#212).
-private const val MAX_SHEET_SOURCES = 14
-private const val MAX_SOURCE_CHARS = 200
-
-private fun boundedSources(array: JSONArray?): List<String> {
-    if (array == null) return emptyList()
-    val out = mutableListOf<String>()
-    for (i in 0 until array.length()) {
-        if (out.size >= MAX_SHEET_SOURCES) break
-        if (array.isNull(i)) continue
-        val value = array.optString(i, "").trim().take(MAX_SOURCE_CHARS)
-        if (value.isNotEmpty() && !out.contains(value)) out.add(value)
-    }
-    return out
 }
 
 /**
