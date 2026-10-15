@@ -192,7 +192,7 @@ function mapPunishment(accountId: string, p: any, index: number, periodId?: stri
  * de session et les bornes de fenêtre illisibles remontent, comme getTimetable.
  * ponytail: solde non lu (Turboself/ARD hors Pronote, rien dans pronotets) =>
  * CanteenBalance reste absent de la réponse. Upgrade: source solde dédiée
- * derrière PronoteHttpClient (I2) une fois le service identifié.
+ * via le client Pronote local une fois le service identifié.
  */
 export async function getMenus(ctx: ReaderCtx, accountId: string, options?: PronoteTimetableOptions): Promise<PronotePage<CanteenMenu>> {
   const id = (accountId ?? "").trim();

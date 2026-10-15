@@ -13,8 +13,7 @@ export type CapabilityProbe = Readonly<Partial<Record<TabCapability, boolean>>>;
 /**
  * Réduit une observation à la liste contractuelle : ordre canonique
  * `TAB_CAPABILITIES`, sans doublon, uniquement les onglets observés actifs.
- * Observation vide = aucun onglet actif (l'app masque tout, elle ne casse rien :
- * les routes concernées renvoient déjà des listes vides).
+ * Observation vide = aucun onglet actif, sans déduire de capacité non observée.
  */
 export function capabilitiesFromProbe(accountId: string, probe: CapabilityProbe, at: string): Capabilities {
   const tabs: TabCapability[] = [];
@@ -29,26 +28,4 @@ export function capabilitiesFromProbe(accountId: string, probe: CapabilityProbe,
   // AUCUNE capacité — les appelsants gardent ainsi le droit de répondre
   // `capabilities: null` plutôt que d'inventer des onglets actifs.
   return isCapabilities(candidate) ? candidate : { accountId: candidate2.accountId, tabs: [], fetchedAt: candidate2.fetchedAt };
-}
-
-/**
- * Capacité d'un onglet. `null`/absent = capacités non déterminées : la
- * réponse n'affirme rien, donc faux côté serveur (l'app applique sa propre
- * règle sur capabilities nulles : rien n'est masqué).
- */
-export function hasCapability(caps: Capabilities | null | undefined, tab: TabCapability): boolean {
-  return caps?.tabs.includes(tab) === true;
-}
-
-/**
- * Onglets désactivés = tous les onglets connus moins ceux observés actifs.
- * Sert au masquage côté app et aux tests (un onglet absent est bien listé
- * comme désactivé, jamais oublié).
- * `null`/absent = capacités NON déterminées : on n'affirme alors rien, donc
- * AUCUN masquage n'est déduit (même règle que `hasCapability`).
- */
-export function disabledTabs(caps: Capabilities | null | undefined): TabCapability[] {
-  if (!caps) return [];
-  const enabled = new Set(caps.tabs);
-  return TAB_CAPABILITIES.filter((t) => !enabled.has(t));
 }
