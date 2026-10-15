@@ -51,12 +51,26 @@ interface SessionStore {
  * (`SessionStores`, `LlmKeys`) basculent sur le secours mémoire en le DISANT
  * (session perdue au redémarrage = ré-appairage, jamais un secret en clair).
  * ponytail: pas de DataStore ici (quelques paires clé/valeur suffisent).
+ *
+ * #249 : UNE seule MasterKey pour tout le process (session + clé LLM).
+ * Avant, chaque `encryptedPrefs(name)` reconstruisait sa MasterKey
+ * (Keystore IPC) : deux chargements Keystore au démarrage pour deux
+ * fichiers. Le schéma/alias est identique, donc le partage est sûr ;
+ * la construction reste paresseuse et le repli mémoire de #206 inchangé
+ * (l'exception remonte, les singletons basculent).
  */
+private val masterKeyLock = Any()
+
+@Volatile
+private var sharedMasterKey: MasterKey? = null
+
 internal fun encryptedPrefs(context: Context, name: String): SharedPreferences {
     val appCtx = context.applicationContext
-    val masterKey = MasterKey.Builder(appCtx)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
+    val masterKey = sharedMasterKey ?: synchronized(masterKeyLock) {
+        sharedMasterKey ?: MasterKey.Builder(appCtx)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build().also { sharedMasterKey = it }
+    }
     return EncryptedSharedPreferences.create(
         appCtx,
         name,

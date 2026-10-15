@@ -134,11 +134,13 @@ fun AppNav(
     // Adresse du scraper : `baseUrl` est lue UNE fois au démarrage (graine +
     // choix persisté) puis partagée en lecture seule par les routes.
     val serverStore = remember(ctx) { ServerStore(ctx) }
-    // 0.7.0 : clé LLM = UN store pour tout le process (réglages + écran devoirs),
-    // sinon les deux écrans raisonneraient sur deux états divergents. L'état
-    // d'affichage est relu après chaque écriture : le store est la vérité.
-    val llmKeys = remember(ctx) { LlmKeys.get(ctx) }
-    var llmKeyConfigured by remember(llmKeys) { mutableStateOf(llmKeys.isConfigured()) }
+    // #249 : clé LLM HORS du chemin critique du premier frame. Avant,
+    // `LlmKeys.get(ctx)` + `isConfigured()` tournaient ici (MasterKey +
+    // EncryptedSharedPreferences.create + déchiffrement Keystore) avant même
+    // le premier frame, alors que seuls Tâches et Réglages la consomment.
+    // Chaque route la crée en local via le singleton `LlmKeys` (même
+    // instance, pas d'état divergent — même contrat que la session).
+    // 0.7.0 : UN store pour tout le process, sinon deux états divergents.
     // Adresse du scraper de manuels (ServerConfig ne valide plus que ça, #209)
     // : graine de build + choix persisté. Les dépôts locaux l'ignorent (le
     // téléphone parle à l'établissement en direct) ; elle resservira à la
@@ -301,6 +303,8 @@ fun AppNav(
             composable(ROUTE_TASKS, deepLinks = listOf(routeDeepLink(ROUTE_TASKS))) {
                 // #75 : devoirs de la semaine (contenus + PJ lues en local),
                 // toggle Optimiste avec retour arrière, pull-refresh.
+                // #249 : clé LLM créée ici, pas à la racine (hors cold start).
+                val llmKeys = remember(ctx) { LlmKeys.get(ctx) }
                 AssignmentsRoute(
                     CachePolicy.ASSIGNMENTS,
                     repo,
@@ -346,6 +350,10 @@ fun AppNav(
                 PunishmentsRoute(repo, baseUrl)
             }
             composable(ROUTE_SETTINGS, deepLinks = listOf(routeDeepLink(ROUTE_SETTINGS))) {
+                // #249 : clé LLM créée ici, pas à la racine (hors cold start).
+                // Le singleton `LlmKeys` garantit la même instance que Tâches.
+                val llmKeys = remember(ctx) { LlmKeys.get(ctx) }
+                var llmKeyConfigured by remember(llmKeys) { mutableStateOf(llmKeys.isConfigured()) }
                 SettingsScreen( // #140 : plus de `onBack`, la barre porte la flèche
                     subjectPrefs = subjectPrefs,
                     onSavePrefs = { subject, color, emoji, label ->
