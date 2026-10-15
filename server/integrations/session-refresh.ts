@@ -23,7 +23,7 @@ export const SESSION_REFRESH_TTL_MS = 5 * 60 * 1000;
 export const SESSION_REFRESH_TIMEOUT_MS = 10_000;
 /** Backoff avant l'unique nouvel essai. */
 export const SESSION_REFRESH_RETRY_DELAY_MS = 200;
-/** Nombre total de tentatives (1 essai + 1 retry, comme PronoteHttpClient). */
+/** Nombre total de tentatives (un essai + un retry réseau). */
 export const SESSION_REFRESH_ATTEMPTS = 2;
 
 export type SessionRefreshErrorCode = "timeout" | "renew_failed";
@@ -140,9 +140,8 @@ export class SessionRefresher {
           this.logger(`session refresh -> error ${authCode(err)}`);
           throw err;
         }
-        // Timeout = renewal enlisée (réseau figé) : on ne retente pas, comme
-        // PronoteHttpClient qui ne retry pas un abort. Attendre 10 s de plus ne
-        // rendrait pas la session plus fraîche.
+        // Timeout = renouvellement bloqué : on ne retente pas. Attendre 10 s de
+        // plus ne rendrait pas la session plus fraîche.
         if (err instanceof SessionRefreshError && err.code === "timeout") {
           this.logger("session refresh -> error timeout");
           throw err;

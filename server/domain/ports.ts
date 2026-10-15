@@ -249,25 +249,3 @@ export function isPedagogicResource(v: unknown): v is PedagogicResource {
     isOpaqueMediaRef(r["ref"], PEDAGOGIC_REF_MAX_CHARS)
   );
 }
-
-export interface LLMProvider {
-  /**
-   * Génère texte/JSON depuis données déjà marquées. Sans outils, sans réseau.
-   * `apiKey` = credential de l'APP, fournie à chaque appel : le serveur n'en
-   * détient aucune (0.7.0). Absente = l'adaptateur refuse (jamais d'appel nu).
-   */
-  generate(prompt: { system: string; data: Untrusted<string>[] }, apiKey?: string): Promise<string>;
-}
-
-export interface ManualProvider {
-  readonly platform: string;
-}
-
-export interface PushProvider {
-  send(deviceTokenHash: string, payload: { title: string; body: string }): Promise<void>;
-}
-
-export interface StorageProvider {
-  get(key: string): Promise<Uint8Array | null>;
-  set(key: string, value: Uint8Array): Promise<void>;
-}

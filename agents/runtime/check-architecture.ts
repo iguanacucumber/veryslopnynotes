@@ -1,6 +1,6 @@
 // check-architecture.ts — garde-fous I1/I2/I3/I5 (+I4 secrets LLM). I6/I7 = tests/review, pas scannables en regex.
 // I1 android sans hôte Pronote — FP: .md ignorés, commentaires /* */ et // ignorés. ponytail: plafond regex, upgrade dependency-cruiser phase 1.
-// I2 unique PronoteHttpClient, seul accès réseau — FP: commentaires ignorés, fetch hors Pronote ignoré (exige hôte+réseau même ligne OU URL Pronote + réseau). ponytail: plafond regex, upgrade AST phase 1.
+// I2 serveur sans client Pronote ; le scanner interdit tout accès réseau Pronote côté serveur.
 // I3 domaine sans sqlite/HTTP : `server/domain/` résiduel (#199, capture) et `android/core/` (port #203, stdlib seule) — FP: block comments, javadoc *, imports multi-lignes ([^;]* couvre \n). ponytail: plafond regex, upgrade AST/dependency-cruiser.
 // I4 secrets dans l'IA refusés (`server/ai/` supprimé en #210, reste `android/core/`) — commentaires ignorés. ponytail: doublon volontaire avec check-secrets, upgrade gitleaks.
 // I5 LLM sans outils/réseau/secrets — FP: commentaires ignorés, tools: [] vide autorisé. ponytail: plafond regex sur android/core (`server/ai/` supprimé en #210), upgrade AST.
@@ -30,16 +30,6 @@ const androidCoreFiles = listFiles(join(ROOT, "android", "core"));
 const domainFiles = listFiles(join(ROOT, "server/domain"));
 const serverFiles = listFiles(join(ROOT, "server"));
 const allFiles = listFiles(ROOT);
-
-function grep(files: string[], re: RegExp): string[] {
-  return files.filter((f) => {
-    try {
-      return re.test(readFileSync(f, "utf8"));
-    } catch {
-      return false;
-    }
-  });
-}
 
 let fail: string[] = [];
 
@@ -72,9 +62,7 @@ const i1 = androidFiles.filter((f) => {
 });
 if (i1.length) fail.push(`I1: android référence Pronote: ${i1.join(", ")}`);
 
-// I2 : un seul PronoteHttpClient, seul à parler à Pronote
-const clients = grep(serverFiles, /class PronoteHttpClient/);
-if (clients.length > 1) fail.push(`I2: plusieurs PronoteHttpClient: ${clients.join(", ")}`);
+// I2 : aucun accès réseau Pronote dans le serveur (il ne sert que le scraper de manuels).
 // ponytail: ligne-même OU URL+réseau évite FP fetch hors Pronote. Upgrade: AST dataflow.
 const netRe = /fetch\(|axios|got\(|https?\.(get|request)|Bun\.serve|XMLHttpRequest|WebSocket/;
 const pronoteUrlRe = /https?:\/\/[^\s"']*(pronote)/i;
@@ -83,7 +71,6 @@ function hasDirectFetch(code: string): boolean {
   return pronoteUrlRe.test(code) && netRe.test(code);
 }
 const directFetch = serverFiles.filter((f) => {
-  if (f.includes("PronoteHttpClient")) return false;
   try {
     return hasDirectFetch(codeOnly(readFileSync(f, "utf8")));
   } catch {
