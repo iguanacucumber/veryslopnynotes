@@ -846,15 +846,32 @@ describe("logique affichable de la messagerie (#142)", () => {
     expect(screen).toContain("searchConversations(");
     expect(screen).toContain("unreadTotal(");
     expect(screen).toContain("searchRecipients(");
-    expect(screen).toContain("conversationTimeLabel(");
-    expect(screen).toContain("messageTimeLabel(");
+    // Polish Papillon : les dates de fils et de bulles sont des dates LONGUES
+    // stables (`longDateFr`, même raisonnement que les notes #192 — le temps
+    // relatif parle de l'horloge), sur l'instant parsé de la logique, jamais un
+    // fragment d'ISO. `conversationTimeLabel`/`messageTimeLabel` restent dans
+    // `MessagesLogic.kt` (logique pure, miroirs TS ci-dessus inchangés).
+    expect(screen).toContain("longDateFr(");
+    expect(screen).toContain("conversationMillis(");
+    expect(screen).toContain("discussionMillis(");
+    expect(screen).not.toContain("conversationTimeLabel(");
+    expect(screen).not.toContain("messageTimeLabel(");
 
-    // Pastille de non-lus, CLiquABLE (marquer lu) — plus la chaîne « non lu(s) ».
-    expect(screen).toContain("PapBadge(");
+    // Pastille de non-lus UNIFIÉE (`PapPill` sur `primary`, même forme que le
+    // total d'en-tête — plus de bascule rond-pastille de `Badge`), CLiquABLE
+    // (marquer lu) — plus la chaîne « non lu(s) ». Titre en gras quand non lu.
+    expect(screen).toContain('PapPill(text = "$badge"');
+    expect(screen).toContain("fontWeight = FontWeight.Bold");
+    expect(screen).not.toContain("PapBadge(");
     expect(screen).toContain('onClickLabel = "Marquer lu"');
+    expect(screen).toContain("stateDescription");
     expect(screen).not.toContain("unreadLabel(");
     expect(screen).not.toContain("dateLabel(");
     expect(screen).not.toContain("non lu(s)");
+    // Carte teintée sans filet ni ombre (repli `surfaceVariant`, élévation 0 —
+    // le fil n'a pas de couleur matière, on n'en invente pas).
+    expect(screen).toContain("containerColor = MaterialTheme.colorScheme.surfaceVariant");
+    expect(screen).toContain("CardDefaults.cardElevation(defaultElevation = 0.dp)");
 
     // Suppression CONFIRMÉE, et plus jamais en un bouton.
     expect(screen).toContain("ConfirmDialog(");

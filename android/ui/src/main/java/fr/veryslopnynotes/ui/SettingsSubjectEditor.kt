@@ -10,15 +10,21 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
@@ -46,13 +53,23 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import fr.veryslopnynotes.data.SubjectPrefs
+import java.time.Instant
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-// ÉDITEUR DE MATIÈRE EN FEUILLE #140 (parité Papillon).
+// ÉDITEUR DE MATIÈRE EN FEUILLE #140 (parité Papillon), restylé d'après
+// `ref-papillon/opti_custom.jpg` (relevé visuel, aucune copie d'asset).
 //
 // AVANT (`SettingsScreen.kt`), chaque matière avait un bloc TOUJOURS déployé :
 // champ libellé, champ emoji, huit pastilles et un bouton « Enregistrer ».
@@ -62,13 +79,16 @@ import java.time.ZoneId
 //
 // MAINTENANT : une LIGNE par matière, et la matière s'édite dans une FEUILLE
 // MODALE (comme chez papillon.bzh) qui porte :
-//   - un APERÇU VIVANT : la couleur et l'emoji choisis s'appliquent aux
-//     COMPOSANTS RÉELS — la carte de cours de l'EDT (`PapCourseCard`) et la
-//     pastille matière de la carte de devoir (`PapSubjectAvatar`) avec la
-//     pastille de note (`PapPill`). Ce que l'on règle est donc exactement ce
-//     qui apparaîtra sur les trois écrans, pas une approximation décrite ;
-//   - le nom, la COULEUR (roue de pastilles circulaires, anneau blanc, coche sur
-//     la sélection) et l'EMOJI (rangée de pastilles, sélection teintée) ;
+//   - un APERÇU : UNE carte de note façon carrousel « Nouvelles notes » (#139) —
+//     pastille emoji teintée + matière tronquée + date sur une ligne, titre
+//     d'évaluation sur deux lignes, pastille de note CONTOUR (`GradePill` avec
+//     une note partielle). Mêmes composants et mêmes mesures que le carrousel,
+//     donc l'aperçu ne peut pas mentir sur le rendu final : il ne fait que
+//     l'avancer. Dessin d'origine : la ref. n'est que relevée (positions,
+//     rayons), aucun asset ni style recopié ;
+//   - le nom (stade, « A » gras, affiché en majuscules), la COULEUR (pastilles
+//     à anneau blanc + ombre douce, coche sur la sélection) et l'EMOJI
+//     (disques surface + filet, sélection teintée) ;
 //   - la croix (annule) à gauche et la coche verte (valide) à droite.
 //
 // Fermer la feuille ANNULE : rien n'est écrit tant que la coche n'est pas
@@ -89,10 +109,19 @@ import java.time.ZoneId
  */
 private val SWATCH = TouchTarget
 
-/** Épaisseur de l'anneau blanc de la pastille sélectionnée. */
+/** Épaisseur de l'anneau blanc d'une pastille de couleur (sélectionnée). */
 private val SWATCH_RING = 3.dp
 
-/** Épaisseur du filet d'une pastille non sélectionnée. */
+/** Anneau blanc d'une pastille NON sélectionnée : la ref. les cercle toutes de
+ *  blanc, et l'ombre douce les détache de la feuille — le filet gris d'avant
+ *  (qui posait une bordure `outline` sur chaque pastille) disparaît. */
+private val SWATCH_RING_IDLE = 2.dp
+
+/** Ombre douce sous chaque pastille : c'est elle qui détache l'anneau blanc du
+ *  fond blanc de la feuille, comme sur la ref. */
+private val SWATCH_SHADOW = 4.dp
+
+/** Épaisseur du filet d'un disque d'emoji non sélectionné. */
 private val SWATCH_HAIRLINE = 1.dp
 
 /** Côte du glyphe dans une pastille. */
@@ -101,14 +130,78 @@ private val SWATCH_ICON = 20.dp
 /** Côte du bouton circulaire de la barre de feuille (cible tactile Material). */
 private val SHEET_BUTTON = 48.dp
 
-/** Côte du DISQUE du bouton circulaire (40 dp : la cible garde ses 48 dp). */
-private val SHEET_DISC = 40.dp
+/**
+ * Côte du DISQUE : 48 dp, soit toute la cible.
+ *
+ * Écart assumé : la ref. montre des disques d'environ 52 dp optiques, mais
+ * 52 > 48 déborderait de la cible tactile minimale ([TouchTarget], WCAG 2.5.8
+ * + Material) — le disque remplit donc la cible au lieu de la dépasser.
+ */
+private val SHEET_DISC = 48.dp
 
 /**
- * Note d'exemple de l'aperçu : ce n'est PAS une donnée du serveur, c'est le
- * gabarit « 15,5/20 » de l'app de référence, qui montre où la pastille se pose.
+ * Rayon haut de la feuille : 28 dp, le jeton `ExpandedShape` de Material3
+ * (donc le défaut du composant) et le rayon des cartes du carrousel
+ * (`shapes.extraLarge`) — la feuille et l'aperçu partagent la même courbe que
+ * la ref. Posé explicitement plutôt que subi par défaut.
  */
-private const val PREVIEW_GRADE = "15,5/20"
+private val SHEET_RADIUS = 28.dp
+
+/**
+ * Carte d'aperçu : les mesures du carrousel « Nouvelles notes » (`GradesRows.kt`,
+ * #139/#192) — largeur 200, blocs à 14/12, écart 8 — pour que l'aperçu et le
+ * carrousel partagent la MÊME carte, pas deux approximations.
+ */
+private val PREVIEW_CARD_WIDTH = 200.dp
+private val PREVIEW_CARD_PADDING_H = 14.dp
+private val PREVIEW_CARD_PADDING_V = 12.dp
+private val PREVIEW_CARD_GAP = 8.dp
+
+/** Pastille emoji de l'aperçu : 30 dp sur `shapes.medium`, comme `SubjectEmojiChip`. */
+private val PREVIEW_EMOJI_CHIP = 30.dp
+
+/** Teinte de la pastille emoji : 20 % d'alpha, comme `subjectEmojiChipColor` (privée,
+ *  donc re-dérivée ici depuis `subjectCardTint` au lieu d'être dupliquée en dur). */
+private const val PREVIEW_EMOJI_ALPHA = 0.2f
+
+/** Corps de l'emoji : 18/25, la surcharge inline du carrousel. */
+private val PREVIEW_EMOJI_SIZE = 18.sp
+private val PREVIEW_EMOJI_LINE = 25.sp
+
+/**
+ * Note d'exemple de l'aperçu : 12,6/20, PARTIELLE donc rendue en variante
+ * CONTOUR par `GradePill` (`isGradeFullMark` est faux : 12,6 < 20).
+ *
+ * Ce ne sont PAS des données du serveur, c'est le gabarit de l'app de
+ * référence, qui montre où la pastille se pose. Le libellé passe par
+ * `gradeValueLabel` (virgule française) : aucune chaîne « 12.60 » posée ici.
+ */
+private const val PREVIEW_GRADE_VALUE = 12.6
+private const val PREVIEW_GRADE_SCALE = 20.0
+
+/** Titre d'évaluation factice : deux lignes, comme la ref. (« Exemple d'une
+ *  note avec la matière »). Donnée factice assumée, jamais envoyée. */
+private const val PREVIEW_EVAL_TITLE = "Exemple d\u2019une note avec la mati\u00e8re"
+
+/** Date de l'aperçu : « 18 déc. », le motif court français (`d MMM`, la CLDR
+ *  pose le point : « déc. », « mai » reste sans point). */
+private val PREVIEW_DATE_FMT: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("d MMM", Locale.FRANCE)
+
+/**
+ * Affichage du champ nom en MAJUSCULES, sans toucher à la casse enregistrée :
+ * `OffsetMapping.Identity` (aucun caractère ajouté ni retiré, le curseur ne
+ * bouge pas), seule la couche de rendu passe en capitales.
+ *
+ * Écart assumé : la ref. ENREGISTRE « HISTOIRE & GEOGRAPH. » en capitales, mais
+ * la casse saisie est une donnée (convention #138 : `subjectDisplayFr`)
+ * qu'un champ ne doit pas réécrire — l'aperçu garde donc la casse de phrase
+ * pendant que le champ affiche des capitales, exactement comme la ref.
+ */
+private object UppercaseVisualTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText =
+        TransformedText(AnnotatedString(text.text.uppercase()), OffsetMapping.Identity)
+}
 
 /**
  * Brouillon d'édition : ce que l'utilisateur a TAPÉ, jamais ce qui est stocké.
@@ -220,6 +313,7 @@ fun SubjectEditorSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = SHEET_RADIUS, topEnd = SHEET_RADIUS),
     ) {
         Column(
             modifier = Modifier
@@ -244,14 +338,31 @@ fun SubjectEditorSheet(
                 },
             )
             SubjectPreview(subject = subject, prefs = prefs, draft = draft)
+            SheetLabel(text = "Nom de la matière", glyph = "A")
             OutlinedTextField(
                 value = draft.label,
                 onValueChange = { draft = draft.copy(label = it) },
                 label = { Text("Nom de la matière") },
+                // « A » gras : la ref. le pose dans le champ comme dans
+                // l'en-tête. Décoratif (le libellé du champ porte le sens).
+                leadingIcon = {
+                    Text(
+                        text = "A",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.clearAndSetSemantics { },
+                    )
+                },
+                // Stade + capitales d'affichage : la valeur enregistrée garde
+                // sa casse (cf. `UppercaseVisualTransformation`).
+                shape = CircleShape,
+                visualTransformation = UppercaseVisualTransformation,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            SheetLabel("Couleur")
+            SheetLabel(text = "Couleur", icon = Icons.Filled.Create)
             SubjectSwatchRow(
                 selected = draft.colorHex,
                 onSelect = { hex ->
@@ -262,7 +373,7 @@ fun SubjectEditorSheet(
                     )
                 },
             )
-            SheetLabel("Emoji")
+            SheetLabel(text = "Emoji", icon = Icons.Filled.Face)
             SubjectEmojiRow(
                 selected = draft.emoji,
                 onSelect = { emoji ->
@@ -312,8 +423,9 @@ private fun SheetHeader(title: String, onClose: () -> Unit, onConfirm: () -> Uni
 }
 
 /**
- * Bouton circulaire : disque de 40 dp dans la cible tactile de 48 dp, glyphe
- * teinté par le fond. `label` est le `contentDescription` du glyphe, donc c'est
+ * Bouton circulaire : disque de 48 dp dans la cible tactile de 48 dp (le
+ * disque remplit la cible, cf. `SHEET_DISC`), glyphe teinté par le fond.
+ * `label` est le `contentDescription` du glyphe, donc c'est
  * ce qu'un lecteur d'écran annonce (« Annuler », « Enregistrer ») — pas
  * « bouton ».
  */
@@ -343,105 +455,216 @@ private fun SheetDisc(
     }
 }
 
-/** Intitulé d'un bloc de la feuille (Couleur, Emoji) : même encre que
- *  `PapSectionHeader`, donc les trois niveaux de titre se ressemblent. */
+/** Intitulé d'un bloc de la feuille : glyphe + libellé, comme la ref.
+ *
+ *  Le glyphe est soit un « A » gras en toutes lettres (nom : la ref. pose la
+ *  lettre, pas une icône — aucun `Icons.Filled.*` ne dessine un « A »), soit
+ *  une icône du CORE déjà dans le graphe via material3 : `Face` pour l'emoji
+ *  (un smiley, sens littéral), `Create` (crayon) pour la couleur — il n'existe
+ *  PAS de palette dans `material-icons-core` 1.6.8 (vérifié dans le
+ *  `classes.jar` : ni `Palette`, ni `FormatColorFill`), donc le crayon dit
+ *  « personnaliser » sans ajouter `material-icons-extended`.
+ *
+ *  L'icône est décorative (le libellé porte le sens) ; le libellé porte
+ *  `heading()`, comme avant.
+ */
 @Composable
-private fun SheetLabel(text: String) {
-    // `heading()` : « Couleur » et « Emoji » sont les deux sections de la feuille.
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.semantics { heading() },
-    )
+private fun SheetLabel(text: String, icon: ImageVector? = null, glyph: String? = null) {
+    val tint = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        when {
+            glyph != null -> Text(
+                text = glyph,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = tint,
+                maxLines = 1,
+                modifier = Modifier.clearAndSetSemantics { },
+            )
+            icon != null -> Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(SWATCH_ICON),
+            )
+        }
+        // `heading()` : « Nom de la matière », « Couleur » et « Emoji » sont
+        // les trois sections de la feuille.
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.semantics { heading() },
+        )
+    }
 }
 
 /**
- * APERÇU VIVANT : les trois rendus que la couleur et l'emoji changent
- * réellement — carte de cours de l'EDT, carte de devoir, pastille de note.
+ * APERÇU : UNE carte de note façon carrousel « Nouvelles notes » (#139),
+ * liée au brouillon (couleur + emoji + libellé).
  *
- * Ce sont les MÊMES composants que les écrans (#137 / #138 / #139) :
- * `PapCourseCard` avec la couleur du brouillon, `PapSubjectAvatar` pour la
- * pastille matière et `PapPill` pour la note. L'aperçu ne peut donc pas mentir
- * sur le rendu final : il ne fait que l'avancer.
+ * UNE carte au lieu des deux empilées d'avant (carte de cours EDT + carte
+ * devoir) : la ref. ne montre qu'une carte de note, et c'est le carrousel —
+ * pas l'EDT — qui porte la pastille de note que la couleur habille. Mêmes
+ * mesures que `GradesRecentCarousel` (carte 200 dp, blocs 14/12, écart 8,
+ * pastille 30 dp à 20 % d'alpha, note en `displaySmall`) : l'aperçu et le
+ * carrousel partagent la MÊME carte.
+ *
+ * Écarts assumés avec la ref. (relevée, jamais copiée) :
+ *   - fond = la teinte translucide du carrousel (`subjectCardTint`, 8 %),
+ *     pas le blanc de la ref. : sur notre écran la carte flotte au-dessus de
+ *     la feuille, donc elle garde la teinte qui la rattache à la matière ;
+ *   - sans bordure ni ombre, comme le carrousel (sa bordure de 1 dp sur un
+ *     aplat translucide se lirait comme un contour de découpe) ;
+ *   - pas d'en-tête « Aperçu » : la carte centrée SEULE se lit comme un
+ *     exemple, et la feuille n'a que trois sections titrées (nom/couleur/emoji).
+ *
+ * Sans emoji choisi, l'aperçu montre l'initiale — exactement ce que faisait
+ * la carte de devoir (#161) plutôt qu'un disque vide. La date est celle du
+ * jour, en motif court français ; le titre est factice (cf.
+ * `PREVIEW_EVAL_TITLE`).
  */
 @Composable
 private fun SubjectPreview(subject: String, prefs: List<SubjectPrefs>, draft: SubjectDraft) {
     val hex = subjectPreviewHex(prefs, subject, draft.colorHex)
-    val color = colorFromHex(hex) ?: MaterialTheme.colorScheme.primary
-    val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.onSurface
+    // Repli `secondary` : la même encre que les lignes de note sans couleur
+    // (`subjectInk` dans `GradesRows.kt`), jamais du noir inventé.
+    val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.secondary
     // Le nom passe par la convention de #138 : libellé saisi, sinon nom de la
     // matière en casse de phrase (« ALLEMAND LV2 » → « Allemand LV2 »).
     val label = subjectDisplayFr(draft.label.ifBlank { subject })
-    // Sans emoji choisi, l'aperçu montre l'initiale — exactement ce que fait la
-    // carte de devoir (#161) plutôt qu'un disque vide.
-    val badge = draft.emoji.ifBlank { subjectInitial(subject) }
+    val badge = draft.emoji.trim().takeIf { it.isNotEmpty() } ?: subjectInitial(subject)
     val zone = remember { ZoneId.systemDefault() }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "Aperçu",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        PapCourseCard(
-            lesson = PREVIEW_LESSON,
-            label = "$badge $label",
-            colorHex = hex,
-            zone = zone,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        PapCard(
-            modifier = Modifier.fillMaxWidth(),
-            containerColor = MaterialTheme.colorScheme.surface,
+    // Figé par composition : la date ne doit pas changer à chaque recomposition.
+    val today = remember { System.currentTimeMillis() }
+    // Partielle (12,6 < 20) donc variante CONTOUR ; le libellé passe par
+    // `gradeValueLabel` (virgule française), jamais une chaîne posée ici.
+    val previewGrade = GradeUi(
+        id = "apercu",
+        subject = subject,
+        value = PREVIEW_GRADE_VALUE,
+        scale = PREVIEW_GRADE_SCALE,
+        coefficient = null,
+        millis = today,
+        classAverage = null,
+        classMin = null,
+        classMax = null,
+        periodId = null,
+        bonus = false,
+        optional = false,
+        label = null,
+        teacher = null,
+    )
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Card(
+            modifier = Modifier.width(PREVIEW_CARD_WIDTH),
+            shape = MaterialTheme.shapes.extraLarge,
+            colors = CardDefaults.cardColors(
+                containerColor = subjectCardTint(hex)
+                    ?: MaterialTheme.colorScheme.surfaceVariant,
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Column(
+                modifier = Modifier.padding(
+                    horizontal = PREVIEW_CARD_PADDING_H,
+                    vertical = PREVIEW_CARD_PADDING_V,
+                ),
+                verticalArrangement = Arrangement.spacedBy(PREVIEW_CARD_GAP),
             ) {
-                PapSubjectAvatar(emoji = badge, color = color)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(PREVIEW_CARD_GAP),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(PREVIEW_EMOJI_CHIP)
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(
+                                subjectCardTint(hex)?.copy(alpha = PREVIEW_EMOJI_ALPHA)
+                                    ?: MaterialTheme.colorScheme.surfaceVariant,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = badge,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = PREVIEW_EMOJI_SIZE,
+                                lineHeight = PREVIEW_EMOJI_LINE,
+                            ),
+                            // Décorative : le libellé de la matière est juste à
+                            // côté, en toutes lettres — même règle que
+                            // `SubjectEmojiChip`.
+                            modifier = Modifier.clearAndSetSemantics { },
+                        )
+                    }
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = ink,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = previewShortDate(today, zone),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                }
                 Text(
-                    text = label,
-                    style = MaterialTheme.typography.titleSmall,
+                    text = PREVIEW_EVAL_TITLE,
+                    // Titre du carrousel : 18 sp SEMIBOLD (même correction que
+                    // sur ses cartes, cf. `GradesRecentCarousel`).
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                    ),
                     color = ink,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
                 )
-                PapPill(text = PREVIEW_GRADE, color = color)
+                GradePill(
+                    grade = previewGrade,
+                    colorHex = hex,
+                    ink = ink,
+                    valueStyle = MaterialTheme.typography.displaySmall,
+                )
             }
         }
     }
 }
 
-/**
- * Cours factice de l'aperçu : SALLES, prof, statut et horaires VIDES, donc la
- * carte ne montre que la matière — un aperçu qui afficherait « Salle A12 »
- * inventerait une donnée de l'établissement.
- */
-private val PREVIEW_LESSON = TimetableLessonUi(
-    id = "apercu",
-    subject = "",
-    room = null,
-    teacher = null,
-    status = null,
-    startMillis = 0L,
-    endMillis = 0L,
-    originalStartMillis = null,
-    originalEndMillis = null,
-)
+/** Date courte de l'aperçu (« 18 déc. ») : le jour courant, jamais inventé. */
+private fun previewShortDate(millis: Long, zone: ZoneId): String = runCatching {
+    PREVIEW_DATE_FMT.format(Instant.ofEpochMilli(millis).atZone(zone))
+}.getOrElse { "" }
 
 /**
- * Roue de couleurs : pastilles CIRCULAIRES, anneau blanc sur la sélection et
- * coche dessus.
+ * Roue de couleurs : pastilles CIRCULAIRES, anneau blanc sur TOUTES et ombre
+ * douce, coche sur la sélection.
  *
  * L'anneau est BLANC (pas la couleur de marque) parce que la pastille porte
  * déjà une couleur de matière : c'est le seul liseré qui reste lisible sur les
- * vingt couleurs, claires comme foncées. La sélection se lit donc à l'anneau ET
- * à la coche, jamais à la seule teinte — une couleur ne peut pas être le seul
+ * vingt couleurs, claires comme foncées. La ref. cercle chaque pastille de
+ * blanc : la sélection se lit donc à l'ÉPAISSEUR de l'anneau (2 → 3 dp) ET à
+ * la coche, jamais à la seule teinte — une couleur ne peut pas être le seul
  * signal d'un choix.
+ *
+ * La coche est GARDÉE (pas abandonnée au profit de l'anneau seul) : l'anneau
+ * blanc sur fond blanc de feuille ne se lit que par l'ombre, donc un second
+ * signal non chromatique reste nécessaire — et son encre reste MESURÉE
+ * (`bestContentOn` : un blanc en dur sur une pastille jaune tomberait à 1.1:1).
  */
 @Composable
 private fun SubjectSwatchRow(selected: String, onSelect: (String) -> Unit) {
@@ -453,15 +676,15 @@ private fun SubjectSwatchRow(selected: String, onSelect: (String) -> Unit) {
             Box(
                 modifier = Modifier
                     .size(SWATCH)
-                    // Le clip PRÉCÈDE le fond : sans cela la couleur déborde du
-                    // cercle, et l'anneau de sélection se lit à l'envers.
-                    .clip(CircleShape)
+                    // L'ombre POSE la silhouette (et rogne au cercle) : sans
+                    // elle l'anneau blanc se noierait dans la feuille blanche.
+                    .shadow(SWATCH_SHADOW, CircleShape)
                     .background(color)
                     .then(
                         if (isSelected) {
                             Modifier.border(SWATCH_RING, Color.White, CircleShape)
                         } else {
-                            Modifier.border(SWATCH_HAIRLINE, MaterialTheme.colorScheme.outline, CircleShape)
+                            Modifier.border(SWATCH_RING_IDLE, Color.White, CircleShape)
                         },
                     )
                     // Nom + état annoncés : une pastille n'a pas de libellé, donc
@@ -495,9 +718,16 @@ private fun SubjectSwatchRow(selected: String, onSelect: (String) -> Unit) {
 }
 
 /**
- * Rangée d'emoji : boutons circulaires, la sélection sur un fond TEINTÉ (le
- * `secondaryContainer` vert pâle du thème) plutôt que sur une bordure — l'emoji
- * est en couleur, une bordure passerait par-dessus lui.
+ * Rangée d'emoji : disques SURFACE (blancs en thème clair) cerclés d'un filet,
+ * la sélection sur fond TEINTÉ — comme la ref.
+ *
+ * Sélection = `secondaryContainer` (le vert pâle du thème), PAS la teinte de
+ * la matière : la teinte suivrait le brouillon de couleur (un disque déjà
+ * coloré + un emoji en couleur = deux aplats qui se battent), demanderait un
+ * repli quand le brouillon est invalide, et varierait en sombre — le rôle du
+ * thème est stable dans les deux. Non sélectionné = `surface` (le disque blanc
+ * de la ref.) + filet `outlineVariant` (le rôle filet à 13 %, comme
+ * `PapDivider`), qui le détache de la feuille sans le griser.
  */
 @Composable
 private fun SubjectEmojiRow(selected: String, onSelect: (String) -> Unit) {
@@ -508,14 +738,22 @@ private fun SubjectEmojiRow(selected: String, onSelect: (String) -> Unit) {
                 modifier = Modifier
                     .size(SWATCH)
                     .clip(CircleShape)
-                    // Non sélectionné = surface variante (le disque gris de la
-                    // rangée), sélectionné = `secondaryContainer` TEINTÉ : deux
-                    // fonds du thème, aucun aplat posé ici.
                     .background(
                         if (isSelected) {
                             MaterialTheme.colorScheme.secondaryContainer
                         } else {
-                            MaterialTheme.colorScheme.surfaceVariant
+                            MaterialTheme.colorScheme.surface
+                        },
+                    )
+                    .then(
+                        if (isSelected) {
+                            Modifier
+                        } else {
+                            Modifier.border(
+                                SWATCH_HAIRLINE,
+                                MaterialTheme.colorScheme.outlineVariant,
+                                CircleShape,
+                            )
                         },
                     )
                     // #146 : ces pastilles n'etaient QUE des boites cliquables —

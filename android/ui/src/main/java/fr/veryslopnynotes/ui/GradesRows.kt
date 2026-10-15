@@ -1,5 +1,6 @@
 package fr.veryslopnynotes.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,9 +12,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -209,6 +210,45 @@ private fun subjectInk(hex: String?): Color =
 @Composable
 private fun subjectCardColor(hex: String?): Color =
     (hex?.let { subjectCardTint(it) }) ?: MaterialTheme.colorScheme.surfaceVariant
+
+/**
+ * Fond d'une pastille emoji matière : la teinte translucide du carrousel
+ * ([subjectCardTint], 8 %) remontée à 20 % d'alpha — à 8 % sur 30 dp la
+ * teinte ne se lit plus, à 20 % elle reste un aplat posé sur le fond.
+ * Repli `surfaceVariant` : même neutre que [subjectCardColor].
+ */
+@Composable
+private fun subjectEmojiChipColor(hex: String?): Color =
+    (hex?.let { subjectCardTint(it) }?.copy(alpha = 0.2f))
+        ?: MaterialTheme.colorScheme.surfaceVariant
+
+/**
+ * Pastille emoji matière (30 dp, `shapes.medium`) : l'emoji existant, à sa
+ * taille existante, posé sur [subjectEmojiChipColor].
+ *
+ * Décorative (`clearAndSetSemantics`) : le libellé de la matière est juste à
+ * côté, en toutes lettres — même règle que l'emoji nu qu'elle remplace.
+ */
+@Composable
+private fun SubjectEmojiChip(
+    emoji: String,
+    colorHex: String?,
+    textStyle: TextStyle,
+) {
+    Box(
+        modifier = Modifier
+            .size(30.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .background(subjectEmojiChipColor(colorHex)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = emoji,
+            style = textStyle,
+            modifier = Modifier.clearAndSetSemantics { },
+        )
+    }
+}
 
 /**
  * Champ de recherche : matière, libellé d'évaluation, enseignant. Le texte
@@ -415,12 +455,12 @@ private fun PapPeriodPill(
                 modifier = Modifier.semantics { contentDescription = "Période : $label" },
             )
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                imageVector = Icons.Filled.KeyboardArrowDown,
                 // `contentDescription = null` : le nom est déjà dans le texte
                 // de la pastille, l'annoncer en plus le ferait dire deux fois.
                 contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             )
         }
         PapPeriodMenu(
@@ -575,19 +615,17 @@ fun GradesRecentCarousel(
                         horizontalArrangement = Arrangement.spacedBy(RECENT_CARD_GAP),
                     ) {
                         if (!style.emoji.isNullOrEmpty()) {
-                            Text(
-                                text = style.emoji,
+                            SubjectEmojiChip(
+                                emoji = style.emoji,
+                                colorHex = style.colorHex,
                                 // 18/25 relevé sur la source, en surcharge
                                 // INLINE d'un `body1` — donc la famille de
                                 // `body1`, pas celle d'un titre. Aucun style du
                                 // thème ne porte ce couple, on l'écrit.
-                                style = MaterialTheme.typography.bodyLarge.copy(
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(
                                     fontSize = 18.sp,
                                     lineHeight = 25.sp,
                                 ),
-                                // Décoratif : le nom de la matière est juste à
-                                // côté, en toutes lettres.
-                                modifier = Modifier.clearAndSetSemantics { },
                             )
                         }
                         Text(
@@ -641,9 +679,10 @@ fun GradesRecentCarousel(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    // Bloc 3 : la note, alignée en bas.
-                    GradeValue(
+                    // Bloc 3 : la note en pastille, alignée en bas.
+                    GradePill(
                         grade = grade,
+                        colorHex = style.colorHex,
                         ink = ink,
                         valueStyle = MaterialTheme.typography.displaySmall,
                         modifier = Modifier.padding(horizontal = RECENT_CARD_PADDING_H),
@@ -707,13 +746,13 @@ fun GradesSubjectSections(
                     // toutes lettres. `#146` — sans ça, TalkBack annonçait le nom de
                     // l'emoji puis le libellé, donc deux fois la même information.
                     if (!style.emoji.isNullOrEmpty()) {
-                        Text(
-                            text = style.emoji,
+                        SubjectEmojiChip(
+                            emoji = style.emoji,
+                            colorHex = style.colorHex,
                             // `h4` de la référence : 21 sp. `headlineLarge` EST
                             // ce 21 dans notre échelle — `titleMedium` (17) le
                             // sous-dimensionnait d'un cran.
-                            style = MaterialTheme.typography.headlineLarge,
-                            modifier = Modifier.clearAndSetSemantics { },
+                            textStyle = MaterialTheme.typography.headlineLarge,
                         )
                     }
                     // Titre de section par matière : `heading()`, sinon une note
@@ -952,8 +991,9 @@ fun GradeRow(
                     )
                 }
             }
-            GradeValue(
+            GradePill(
                 grade = grade,
+                colorHex = style.colorHex,
                 ink = ink,
                 // `h4` de la référence = 21 sp ; `headlineMedium` est ce 21 dans
                 // notre échelle.
@@ -980,56 +1020,6 @@ private fun gradeRowShape(first: Boolean, last: Boolean): RoundedCornerShape =
         bottomStart = if (last) GRADE_ROW_CORNER.dp else GRADE_ROW_CORNER_INNER.dp,
         bottomEnd = if (last) GRADE_ROW_CORNER.dp else GRADE_ROW_CORNER_INNER.dp,
     )
-
-/**
- * La note : grand nombre dans la couleur de la matière, barème petit et gris.
- * Une note hors /20 affiche son BARÈME RÉEL (`/10`, `/15`) : jamais un « /20 »
- * inventé pour une évaluation notée sur une autre échelle.
- */
-/**
- * La note : le nombre dans la couleur de la matière, son barème en petit gris.
- *
- * Une note hors /20 affiche son BARÈME RÉEL (`/10`, `/15`) : jamais un « /20 »
- * inventé pour une évaluation notée sur une autre échelle.
- *
- * #192 : [valueStyle] est un paramètre parce que la note n'a pas la même taille
- * partout — `h3` (24) sur une carte du carrousel, `h4` (21) sur une ligne de
- * pile. Avant c'était `headlineMedium` (21) PARTOUT, donc la carte du carrousel
- * montrait une note plus petite que la ligne en dessous d'elle.
- *
- * [modifier] va sur la `Row` entière, pas sur le nombre : le bloc de la
- * référence porte le `paddingHorizontal` sur sa Rangée (valeur + dénominateur
- * ensemble), donc un padding appliqué au seul nombre décalerait le barème.
- */
-@Composable
-private fun GradeValue(
-    grade: GradeUi,
-    ink: Color,
-    valueStyle: TextStyle,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            text = gradeValueLabel(grade.value),
-            style = valueStyle,
-            color = ink,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = scaleSuffix(grade.scale),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(bottom = 2.dp),
-        )
-    }
-}
 
 /**
  * Nom de l'évaluation : le libellé publié par l'enseignant quand il existe,

@@ -135,6 +135,34 @@ private const val LUNCH_LABEL = "Pause méridienne"
  *  n'apprend rien à l'utilisateur. */
 private const val CLOCK_TICK_MS = 60_000L
 
+/**
+ * Peek des jours voisins dans le pager EDT (ref `ref-papillon/opti_edt.jpg`) :
+ * les day-cards voisines dépassent de ~20-30 dp à gauche/droite.
+ *
+ * - `TimetablePagerPeek = 24.dp` : `contentPadding` horizontal du
+ *   `HorizontalPager`. C'est lui qui fait le peek (~24 dp visibles) ET qui
+ *   donne aux première/dernière pages leur marge symétrique (le pager gère
+ *   les bords, aucun cas spécial).
+ * - `TimetablePagerSpacing = 12.dp` : `pageSpacing` entre deux jours.
+ *
+ * Rythme total, sans double-padding :
+ * - le `LazyColumn` de jour garde son `contentPadding` vertical seul (pas de
+ *   `start`/`end`, sinon le fond de l'en-tête collant ne couvre plus les
+ *   12 dp latéraux) et les cartes gardent `TimetablePagePadding = 12.dp`
+ *   (défini dans `TimetableCourseCard.kt`, `SafeHorizontalView base={12}`) ;
+ * - la `Column` d'écran ne porte plus que le padding VERTICAL (16 dp) : le
+ *   pager est plein-bord (`HomePullToRefresh` sans padding horizontal) pour
+ *   ne pas empiler `16 (écran) + 24 (pager) + 12 (page) = 52 dp` au bord ;
+ *   le chrome (bandeau semaine, bandeau périmé, ligne d'erreur, prochain
+ *   cours) reprend ses 16 dp horizontaux à son propre niveau, visuel inchangé.
+ * - totaux : en-tête à 24 dp du bord d'écran, gouttière horaire à
+ *   `24 + 12 = 36 dp`, carte à `36 + 60 + 12 = 108 dp` ; entre deux pages,
+ *   `12 (page) + 12 (spacing) + 12 (page) = 36 dp` de carte à gouttière
+ *   voisine — soit le même 36 dp qu'au bord : le rythme reste régulier.
+ */
+private val TimetablePagerPeek = 24.dp
+private val TimetablePagerSpacing = 12.dp
+
 /** Cours affiché. `status`/`room`/`teacher` nuls = établissement ne publie pas. */
 data class TimetableLessonUi(
     val id: String,
@@ -596,7 +624,7 @@ fun TimetableRoute(
     // au-delà du seuil et anime elle-même son propre retour au repos, donc l'écran
     // n'a plus deux états à synchroniser avec celui de l'indicateur.
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         TimetableWeekBar(
@@ -614,7 +642,11 @@ fun TimetableRoute(
             // `fetchedAt = 0` = cache resservi depuis un état d'erreur : pas
             // d'horodatage à afficher (le bandeau prend `null`), donc aucune
             // date inventée.
-            PapStaleBanner(fetchedAt = data.fetchedAt.takeIf { it > 0L }, onRefresh = { refresh() })
+            PapStaleBanner(
+                fetchedAt = data.fetchedAt.takeIf { it > 0L },
+                onRefresh = { refresh() },
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
         }
         // #147 : relecture ratée alors que la SEMAINE EST LÀ. AVANT, l'état
         // d'erreur n'était rendu que dans la branche « aucune journée » : le
@@ -627,6 +659,7 @@ fun TimetableRoute(
                 text = failed.message,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
         val next = week?.next
@@ -634,7 +667,7 @@ fun TimetableRoute(
         // #145 : la ligne du prochain cours APPARAÎT (échelle 0.9 -> 1 + opacité,
         // 300 ms mesurés) au lieu de se faire réécrire sous les yeux quand
         // l'heure change.
-        PapEnter {
+        PapEnter(modifier = Modifier.padding(horizontal = 16.dp)) {
             if (next != null) {
                 Text(
                     text = "Prochain cours · ${subjectStyle(subjectPrefs, next.subject).badge}" +
@@ -687,6 +720,14 @@ fun TimetableRoute(
                 else -> HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
+                    // Peek des jours voisins (ref `opti_edt.jpg`) : les pages
+                    // voisines dépassent de ~24 dp. `contentPadding` donne aussi
+                    // aux première/dernière pages leur marge symétrique, sans
+                    // cas spécial. `pageSpacing = 12.dp` + `TimetablePagePadding
+                    // = 12.dp` de chaque côté = 36 dp entre deux pages, comme au
+                    // bord (`24 + 12`) : le rythme reste régulier.
+                    contentPadding = PaddingValues(horizontal = TimetablePagerPeek),
+                    pageSpacing = TimetablePagerSpacing,
                 ) { page ->
                     TimetableDayPage(
                         day = days[page.coerceIn(0, days.lastIndex)],
@@ -725,7 +766,7 @@ private fun TimetableWeekBar(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         // 8 dp entre les contrôles du bandeau : quatre `IconButton` de 48 dp
         // collés à 4 dp se lisaient comme un seul bloc (le pas de 8 dp des
@@ -936,7 +977,10 @@ private fun TimetableCourseRow(
         PapLessonTimeGutter(lesson = lesson, zone = zone)
         PapCourseCard(
             lesson = lesson,
-            label = style.badge,
+            // Titre SANS emoji : la ref. n'en pose pas sur les cartes d'EDT
+            // (`style.badge` = « emoji nom » servirait ici un glyphe que rien
+            // ne nomme à côté — le statut « Prochain cours » garde `badge`).
+            label = style.label,
             colorHex = colorHex,
             zone = zone,
             highlight = highlight,

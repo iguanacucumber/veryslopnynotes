@@ -1067,3 +1067,56 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     expect(screen).toMatch(/periodsError = "Tranches indisponibles\."/);
   });
 });
+
+// --- Pastilles de note façon Papillon ----------------------------------------
+
+/** Miroir de `isGradeFullMark` (GradePills.kt) : pleine ssi la note atteint le barème. */
+const tsIsGradeFullMark = (value: number, scale: number): boolean =>
+  scale > 0 && !Number.isNaN(value) && !Number.isNaN(scale) && value >= scale;
+
+describe("unit android pastilles de note", () => {
+  test("pleine ssi la note atteint son barème", () => {
+    expect(tsIsGradeFullMark(11, 11)).toBe(true); // la ref : 11/11 pleine
+    expect(tsIsGradeFullMark(17, 30)).toBe(false); // la ref : 17/30 contour
+    expect(tsIsGradeFullMark(20, 20)).toBe(true);
+    // Arrondi flottant au-dessus d'un epsilon : un sans-faute reste un sans-faute.
+    expect(tsIsGradeFullMark(11.0000001, 11)).toBe(true);
+    // Bonus au-dessus du barème : pleine aussi.
+    expect(tsIsGradeFullMark(21, 20)).toBe(true);
+    expect(tsIsGradeFullMark(19.5, 20)).toBe(false);
+    // Barème illisible ou note illisible : jamais pleine, rien d'inventé.
+    expect(tsIsGradeFullMark(11, 0)).toBe(false);
+    expect(tsIsGradeFullMark(11, -5)).toBe(false);
+    expect(tsIsGradeFullMark(NaN, 20)).toBe(false);
+    expect(tsIsGradeFullMark(10, NaN)).toBe(false);
+  });
+
+  test("Kotlin : GradePill aux deux sites, sans GradeValue morte ni blanc en dur", () => {
+    const pills = readFileSync(join(UI, "GradePills.kt"), "utf8");
+    const rows = readFileSync(join(UI, "GradesRows.kt"), "utf8");
+    // La règle est pure et le composable existe, dans UN seul fichier neuf.
+    expect(pills).toContain("fun isGradeFullMark(value: Double, scale: Double)");
+    expect(pills).toContain("value >= scale");
+    expect(pills).toContain("fun GradePill(");
+    // Couronne sans asset binaire : l'étoile Material déjà importée ailleurs.
+    expect(pills).toContain("Icons.Filled.Star");
+    expect(pills).not.toContain("material-icons-extended");
+    // Contraste mesuré, jamais du blanc en dur (blanc sur jaune ≈ 1,1:1).
+    expect(pills).toContain("bestContentOn(");
+    expect(pills).not.toContain("Color.White");
+    // Contour façon PapPill : fond teinté + encre matière.
+    expect(pills).toContain("SUBJECT_SURFACE_TINT");
+    expect(pills).toContain("SUBJECT_SURFACE_DARK_TINT");
+    // Barème réel, libellé existant, ellipsis : le rendu d'avant, en pastille.
+    expect(pills).toContain("gradeValueLabel(");
+    expect(pills).toContain("scaleSuffix(");
+    expect(pills).toContain("TextOverflow.Ellipsis");
+    // Les deux sites portent la pastille, avec leurs tailles d'avant.
+    expect(rows.match(/GradePill\(/g)?.length).toBe(2);
+    expect(rows).toContain("valueStyle = MaterialTheme.typography.displaySmall");
+    expect(rows).toContain("valueStyle = MaterialTheme.typography.headlineMedium");
+    // I9 : l'ancien chemin est parti, pas de doublon mort.
+    expect(rows).not.toContain("fun GradeValue(");
+    expect(rows).not.toContain("GradeValue(");
+  });
+});
