@@ -94,15 +94,26 @@ val MOTION_ENTER_EASING: Easing = CubicBezierEasing(0.3f, 0.3f, 0f, 1f)
 /** Échelle de DÉPART d'un élément qui apparaît : 0.9 -> 1. */
 const val MOTION_ENTER_SCALE = 0.9f
 
-/** Amortissement du ressort de presse (mesuré), et sa raideur (« fast » Material). */
+/** Amortissement du ressort de presse (mesuré), et sa raideur (« fast » Material).
+ * Référence mesurée : ressort `mass 1, damping 20, stiffness 300` (`ui/utils/
+ * `Animation.ts`) ; presse `scaleTo 0.95 opacityTo 0.7` en `30 ms` / `200 ms`
+ * (`ui/components/AnimatedPressable.tsx`). L'échelle et l'opacité ci-dessous
+ * reprennent ces faits, le ressort Compose garde son mapping existant. */
 const val MOTION_PRESS_DAMPING = 0.8f
 const val MOTION_PRESS_STIFFNESS = 400f
 
 /**
- * Échelle PENDANT la presse : 4 %. Au-delà, l'élément semble changer de taille
- * et le tap devient une devinette.
+ * Échelle PENDANT la presse : 5 %. Fait mesuré de la référence (`scaleTo 0.95`),
+ * pas un goût : au-delà, l'élément semble changer de taille.
  */
-const val MOTION_PRESS_SCALE = 0.96f
+const val MOTION_PRESS_SCALE = 0.95f
+
+/** Opacité PENDANT la presse : fait mesuré (`opacityTo 0.7`). */
+const val MOTION_PRESS_ALPHA = 0.7f
+
+/** Durées de presse mesurées : `30 ms` à l'enfoncement, `200 ms` au relâchement. */
+const val MOTION_PRESS_IN_MS = 30
+const val MOTION_PRESS_OUT_MS = 200
 
 /** Durée d'un aller-retour de la pulsation « en cours ». */
 const val CURRENT_PULSE_MS = 2_400
@@ -238,9 +249,11 @@ fun PapEnter(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
 }
 
 /**
- * Ressort de presse : l'élément s'enfonce de [MOTION_PRESS_SCALE] et revient en
- * amorti ([MOTION_PRESS_DAMPING]). C'est le seul endroit du module qui décide de
- * la réaction au toucher d'un élément cliquable.
+ * Ressort de presse : l'élément s'enfonce de [MOTION_PRESS_SCALE] avec
+ * [MOTION_PRESS_ALPHA] et revient en amorti ([MOTION_PRESS_DAMPING]).
+ * Faits mesurés de la référence : `30 ms` / `200 ms`, `0.95`, `0.7`.
+ * C'est le seul endroit du module qui décide de la réaction au toucher
+ * d'un élément cliquable.
  *
  * `graphicsLayer` passe AVANT le `clickable` : l'échelle est un `drawScope`, donc
  * la zone de toucher reste celle de la mise en page — un élément pressé ne rétrécit
@@ -261,9 +274,15 @@ fun Modifier.papPressable(
         animationSpec = motionPressSpec(motionOn),
         label = "papPressScale",
     )
+    val pressAlpha by animateFloatAsState(
+        targetValue = if (pressed && enabled) MOTION_PRESS_ALPHA else 1f,
+        animationSpec = tween(motionMs(motionOn, if (pressed) MOTION_PRESS_IN_MS else MOTION_PRESS_OUT_MS)),
+        label = "papPressAlpha",
+    )
     return graphicsLayer {
         scaleX = scale
         scaleY = scale
+        alpha = pressAlpha
     }.clickable(
         // Surcharge à six arguments : c'est la seule qui prenne la source
         // d'interaction, donc `LocalIndication` remplace l'ondulation par défaut.
