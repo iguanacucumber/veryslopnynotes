@@ -570,9 +570,18 @@ describe("#256 — faits seuls, aucun asset copié", () => {
     const UI = join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui");
     const files = readdirSync(UI).filter((f: string) => f.endsWith(".kt"));
     const withGradient = files.filter((f: string) => /Brush\.(vertical|horizontal|linear|radial)Gradient/.test(readFileSync(join(UI, f), "utf8")));
-    // Le seul dégradé autorisé est le remplissage du sparkline, pas un fond
-    // d'écran ni un header copié (la ref Android est plate).
-    expect(withGradient).toEqual(["GradesHero.kt"]);
+    // #262 : les dégradés restent une allowlist — le remplissage du sparkline
+    // et le fond du héro (`GradesHero.kt`), PLUS les voiles partagés
+    // (`cardScrim`/`heroGradientTop` dans `PapComponents.kt`). Les cartes
+    // (EDT, accueil) et les en-têtes passent par `cardScrim`, jamais un
+    // `Brush.*Gradient` en direct : un fond d'écran ou un header copié reste
+    // interdit (la ref Android est plate).
+    expect(withGradient.sort()).toEqual(["GradesHero.kt", "PapComponents.kt"]);
+    for (const f of ["TimetableCourseCard.kt", "HomeCards.kt"]) {
+      const src = readFileSync(join(UI, f), "utf8");
+      expect({ f, raw: /Brush\.(vertical|horizontal|linear|radial)Gradient/.test(src) }).toEqual({ f, raw: false });
+      expect(src).toContain("cardScrim(");
+    }
     const withDrawable = files.filter((f: string) => /R\.drawable\./.test(readFileSync(join(UI, f), "utf8")));
     expect(withDrawable).toEqual([]);
     const withFont = files.filter((f: string) => /R\.font\./.test(readFileSync(join(UI, f), "utf8")));
