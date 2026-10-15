@@ -259,6 +259,13 @@ describe("#145 — valeurs mesurées du mouvement", () => {
   test("300 ms et cubicBezier(0.3, 0.3, 0, 1), écrits une seule fois", () => {
     expect(MOTION).toContain("const val MOTION_ENTER_MS = 300");
     expect(kt).toContain("val MOTION_ENTER_EASING: Easing = CubicBezierEasing(0.3f, 0.3f, 0f, 1f)");
+    // Faits de fondu/sortie (#256) : 200 ms in, 150 ms out, même courbe.
+    expect(MOTION).toContain("const val MOTION_EXIT_MS = 150");
+    expect(MOTION).toContain("const val MOTION_FADE_IN_MS = 200");
+    expect(kt).toContain("fun motionFadeInSpec(motionOn: Boolean): FiniteAnimationSpec<Float>");
+    expect(kt).toContain("fun motionExitSpec(motionOn: Boolean): FiniteAnimationSpec<Float>");
+    expect(kt).toContain("fadeIn(motionFadeInSpec(motionOn))");
+    expect(kt).toContain("fadeOut(motionExitSpec(motionOn))");
     // Une seule définition de la durée, réutilisée par les quatre briques.
     expect(MOTION.match(/const val MOTION_ENTER_MS/g)?.length ?? 0).toBe(1);
     expect(kt).toContain("tween(motionMs(motionOn, MOTION_ENTER_MS), easing = MOTION_ENTER_EASING)");
