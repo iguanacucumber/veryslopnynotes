@@ -385,6 +385,14 @@ describe("briques d'interface (#136)", () => {
     // dialogue, et jamais une valeur écrite à la main.
     expect(kt).toContain("val shape = MaterialTheme.shapes.large");
     expect(kt).toContain("shape = MaterialTheme.shapes.extraLarge");
+    // Faits de forme (#256) : puce = small (12), avatar = large (20, pas un
+    // disque), compteur 99+ — mesurés, pas goûtés.
+    expect(kt).toContain("fun PapPill(");
+    expect(kt).toContain(".clip(MaterialTheme.shapes.small)");
+    expect(kt).toContain("fun PapSubjectAvatar(");
+    expect(kt).toContain("private val AVATAR_SIZE = 44.dp");
+    expect(kt).toContain("private const val AVATAR_TINT_ALPHA = 0.31f");
+    expect(kt).toContain("private const val BADGE_MAX = 99");
     // Zéro hex, zéro `Color(` : toute couleur vient de PapillonTheme.kt.
     expect({ hex: /0x[0-9A-Fa-f]{6,}/.test(kt) }).toEqual({ hex: false });
     expect({ colorBrut: /\bColor\(/.test(kt) }).toEqual({ colorBrut: false });
@@ -414,6 +422,11 @@ describe("briques d'interface (#136)", () => {
     expect(kt).toContain("infiniteRepeatable(");
     expect(kt).toContain("RepeatMode.Reverse");
     expect(kt).toContain("CircularProgressIndicator(");
+    // Faits de pulsation (#256) : 900 ms, 0.30 <-> 0.65 — le squelette respire,
+    // il ne clignote pas.
+    expect(kt).toContain("private const val SKELETON_ALPHA_MIN = 0.30f");
+    expect(kt).toContain("private const val SKELETON_ALPHA_MAX = 0.65f");
+    expect(kt).toContain("private const val SKELETON_PERIOD_MS = 900");
     // Aucun « Chargement... » en dur : le mot n'existe plus, il est un décor.
     expect({ motFige: kt.includes('Text("Chargement...")') }).toEqual({ motFige: false });
     // Un seul squelette privé, donc un seul endroit à retoucher.
