@@ -964,6 +964,9 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     expect({ grandRayon: horsChamp.includes("MaterialTheme.shapes.large") }).toEqual({ grandRayon: false });
     expect({ formeVariable: rows.includes("private fun gradeRowShape(first: Boolean, last: Boolean)") })
       .toEqual({ formeVariable: true });
+    // Faits de liste (#256, List.tsx) : extrémités 20, milieu 8 — ni 24 ni 12.
+    expect(rows).toContain("private const val GRADE_ROW_CORNER = 20");
+    expect(rows).toContain("private const val GRADE_ROW_CORNER_INNER = 8");
     // Le PAS de `Modifier.padding(bottom = if (last) 0.dp else GRADE_ROW_GAP)` :
     // sans lui, la pile aurait 4 dp de bas sur son dernier rang.
     expect(rows).toContain(".padding(bottom = if (last) 0.dp else GRADE_ROW_GAP)");

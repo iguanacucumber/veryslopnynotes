@@ -385,6 +385,14 @@ describe("briques d'interface (#136)", () => {
     // dialogue, et jamais une valeur écrite à la main.
     expect(kt).toContain("val shape = MaterialTheme.shapes.large");
     expect(kt).toContain("shape = MaterialTheme.shapes.extraLarge");
+    // Faits de forme (#256) : puce = small (12), avatar = large (20, pas un
+    // disque), compteur 99+ — mesurés, pas goûtés.
+    expect(kt).toContain("fun PapPill(");
+    expect(kt).toContain(".clip(MaterialTheme.shapes.small)");
+    expect(kt).toContain("fun PapSubjectAvatar(");
+    expect(kt).toContain("private val AVATAR_SIZE = 44.dp");
+    expect(kt).toContain("private const val AVATAR_TINT_ALPHA = 0.31f");
+    expect(kt).toContain("private const val BADGE_MAX = 99");
     // Zéro hex, zéro `Color(` : toute couleur vient de PapillonTheme.kt.
     expect({ hex: /0x[0-9A-Fa-f]{6,}/.test(kt) }).toEqual({ hex: false });
     expect({ colorBrut: /\bColor\(/.test(kt) }).toEqual({ colorBrut: false });
@@ -414,6 +422,11 @@ describe("briques d'interface (#136)", () => {
     expect(kt).toContain("infiniteRepeatable(");
     expect(kt).toContain("RepeatMode.Reverse");
     expect(kt).toContain("CircularProgressIndicator(");
+    // Faits de pulsation (#256) : 900 ms, 0.30 <-> 0.65 — le squelette respire,
+    // il ne clignote pas.
+    expect(kt).toContain("private const val SKELETON_ALPHA_MIN = 0.30f");
+    expect(kt).toContain("private const val SKELETON_ALPHA_MAX = 0.65f");
+    expect(kt).toContain("private const val SKELETON_PERIOD_MS = 900");
     // Aucun « Chargement... » en dur : le mot n'existe plus, il est un décor.
     expect({ motFige: kt.includes('Text("Chargement...")') }).toEqual({ motFige: false });
     // Un seul squelette privé, donc un seul endroit à retoucher.
@@ -540,5 +553,23 @@ describe("briques d'interface (#136)", () => {
     expect({ fiches, PapEmptyState: fiches.includes("PapEmptyState(") }).toEqual({ fiches, PapEmptyState: true });
     expect({ fiches, PapStaleBanner: fiches.includes("PapStaleBanner(") }).toEqual({ fiches, PapStaleBanner: false });
     expect(fiches).toContain("relativeTimeFr(state.fetchedAt)");
+  });
+});
+
+describe("#256 — faits seuls, aucun asset copié", () => {
+  test("zéro image copiée : un seul dégradé (sparkline), une seule police (Figtree OFL)", () => {
+    const { readFileSync, readdirSync } = require("node:fs");
+    const { join } = require("node:path");
+    const UI = join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui");
+    const files = readdirSync(UI).filter((f: string) => f.endsWith(".kt"));
+    const withGradient = files.filter((f: string) => /Brush\.(vertical|horizontal|linear|radial)Gradient/.test(readFileSync(join(UI, f), "utf8")));
+    // Le seul dégradé autorisé est le remplissage du sparkline, pas un fond
+    // d'écran ni un header copié (la ref Android est plate).
+    expect(withGradient).toEqual(["GradesHero.kt"]);
+    const withDrawable = files.filter((f: string) => /R\.drawable\./.test(readFileSync(join(UI, f), "utf8")));
+    expect(withDrawable).toEqual([]);
+    const withFont = files.filter((f: string) => /R\.font\./.test(readFileSync(join(UI, f), "utf8")));
+    // Figtree OFL embarquée, pas SN Pro (Apple, non redistribuable).
+    expect(withFont).toEqual(["PapillonTheme.kt"]);
   });
 });

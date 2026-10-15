@@ -487,6 +487,9 @@ describe("unit android accueil (#143)", () => {
     expect(cards).toContain("onClick = onClick");
     expect(cards).toContain("HomeMoreButton(");
     expect(cards).toContain("Afficher plus ↗");
+    // Fait de forme (#256) : le bouton « Afficher plus » prend le rayon du
+    // thème (large = 20), pas un 20.dp écrit à la main.
+    expect(cards).toContain("val shape = MaterialTheme.shapes.large");
     // Couleurs : roles du theme ou palette matiere, jamais un hex en dur.
     expect(cards).not.toMatch(/Color\(0x/);
     // #137 : la couleur d'une matiere vient de `subjectColorHex` (prefs, puis
