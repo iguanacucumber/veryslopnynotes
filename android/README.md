@@ -125,7 +125,8 @@ debug est générée par Gradle, jamais dans le repo.
 
 ### Ce que `make check` compile vraiment
 
-`make check` finit par `make android-compile` : Gradle compile les quatre modules
+`make check` lance `make android-compile` **en même temps que ses autres étapes**
+(`agents/runtime/check.ts`) : Gradle compile les quatre modules
 (`:core :data :ui :app`). C'est le **seul** filet qui voit une résolution de
 symbole, un import manquant ou une surcharge ambiguë — les miroirs TypeScript et
 `check-kotlin.ts` ne les voient pas (piège réel : `MAX_LABEL_CHARS` non qualifié
