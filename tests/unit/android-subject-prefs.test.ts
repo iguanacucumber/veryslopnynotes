@@ -445,3 +445,17 @@ describe("miroir Kotlin prefs matière (#83)", () => {
     expect(settings).not.toContain("value = llmKeys.apiKey()");
   });
 });
+
+describe("réglages formes (#258)", () => {
+  test("champs en 16 dp, CTA Ajouter en 50 dp — comme l'appairage", () => {
+    const { readFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const screen = readFileSync(
+      join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui/SettingsScreen.kt"),
+      "utf8",
+    );
+    // Les deux champs (matière, clé LLM) : 16 dp.
+    expect((screen.match(/shape = MaterialTheme\.shapes\.medium,/g) ?? []).length).toBe(2);
+    expect(screen).toContain("modifier = Modifier.fillMaxWidth().height(50.dp),");
+  });
+});

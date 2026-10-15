@@ -291,7 +291,7 @@ describe("unit android vie scolaire (#77)", () => {
     // #135 : le bouton d'accès est dans l'écran Profil, sorti d'AppNav.kt.
     // #140 : ce n'est plus un `Button` pleine largeur mais une LIGNE de section.
     expect(readFileSync(join(UI, "ProfileScreen.kt"), "utf8")).toContain(
-      'PapListItem(title = "Vie scolaire", onClick = { goAttendance() })',
+      'PapListItem(title = "Vie scolaire", trailing = { NavChevron() }, onClick = { goAttendance() })',
     );
     // #135 : sanctions a reçu sa constante (c'était un littéral nu).
     expect(nav).toContain('const val ROUTE_SANCTIONS = "sanctions"');

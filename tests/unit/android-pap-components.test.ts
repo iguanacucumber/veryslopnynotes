@@ -405,6 +405,12 @@ describe("briques d'interface (#136)", () => {
     // L'essentiel de #136 : le message serveur ne doit plus être jeté, ni
     // affiché cru sous le pouce, ni disparaître dans un log.
     expect(kt).toContain("text = errorHeadline(message)");
+    // Icône 48 dp (#258) : même poids visuel que l'état vide, pas 40.
+    expect(kt).toContain("tint = MaterialTheme.colorScheme.error,");
+    expect(kt).toContain("modifier = Modifier.size(48.dp),");
+    // Bouton Réessayer 50 dp / 20 dp (#258, Button.tsx) : pas le 40 dp M3.
+    expect(kt).toContain("modifier = Modifier.padding(top = 8.dp).height(50.dp),");
+    expect(kt).toContain("contentPadding = PaddingValues(horizontal = 20.dp),");
     expect(kt).toContain('Text(if (expanded) "Masquer les détails" else "Détails")');
     expect(kt).toContain('Text("Réessayer")');
     // Le dépliant n'apparaît que s'il y a un détail à montrer.

@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -177,6 +179,9 @@ private fun SchoolStep(
             label = { Text("Adresse de l'établissement") },
             supportingText = { Text("Exemple : le lycée Louis Payen. Celle de ton espace élève, avec son port si besoin.") },
             singleLine = true,
+            // Champ 16 dp (#258) : le rayon du `TextInput` de référence — pas
+            // le 8 dp par défaut du champ Material.
+            shape = MaterialTheme.shapes.medium,
             modifier = Modifier.fillMaxWidth(),
         )
         // #145 : couleur d'erreur + ouverture mesurée.
@@ -200,7 +205,8 @@ private fun SchoolStep(
                     onNext(SetupStep.QR)
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
+            // Bouton 50 dp (#258) : la hauteur du bouton de référence.
+            modifier = Modifier.fillMaxWidth().height(50.dp),
         ) { Text("Continuer") }
     }
 }
@@ -247,13 +253,14 @@ private fun QrStep(
         // le message le dit ; le collage ci-dessous reste le repli.
         Button(
             onClick = scan,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(50.dp),
         ) { Text("Scanner le QR") }
         OutlinedTextField(
             value = form.qrRaw,
             onValueChange = { onChange(form.copy(qrRaw = it)) },
             label = { Text("Contenu du QR (login + jeton)") },
             supportingText = { Text("Colle le contenu affiché par l'application de ton établissement, ou scanne-le.") },
+            shape = MaterialTheme.shapes.medium,
             modifier = Modifier.fillMaxWidth(),
             singleLine = false,
             maxLines = 4,
@@ -274,6 +281,7 @@ private fun QrStep(
             // le collage et ce qui part dans `PairingInput` sont inchangés.
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            shape = MaterialTheme.shapes.medium,
             modifier = Modifier.fillMaxWidth(),
         )
         // #145 : les DEUX refus de cette étape (scan, puis appairage) partagent la
@@ -305,7 +313,7 @@ private fun QrStep(
             Button(
                 onClick = { onSubmit(input) },
                 enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(50.dp),
             ) { Text(if (busy) "Connexion…" else "Terminer") }
         } else {
             Text(

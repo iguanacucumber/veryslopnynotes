@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -184,6 +185,9 @@ fun SettingsScreen(
                 label = { Text("Matière à personnaliser") },
                 singleLine = true,
                 isError = nameError != null,
+                // Champ 16 dp (#258) : comme l'appairage, le rayon du TextInput
+                // de référence — pas le 8 dp par défaut.
+                shape = MaterialTheme.shapes.medium,
                 supportingText = {
                     Text(
                         text = nameError ?: "Le nom vient de l'établissement : vérifie son orthographe.",
@@ -209,7 +213,8 @@ fun SettingsScreen(
                     }
                 },
                 enabled = newSubject.isNotBlank() && nameError == null,
-                modifier = Modifier.fillMaxWidth(),
+                // Bouton 50 dp (#258) : la hauteur du bouton de référence.
+                modifier = Modifier.fillMaxWidth().height(50.dp),
             ) { Text("Ajouter la matière") }
             TextButton(onClick = { onRefreshPrefs() }, modifier = Modifier.fillMaxWidth()) {
                 Text("Synchroniser les préférences")
@@ -253,6 +258,7 @@ fun SettingsScreen(
                 onValueChange = { if (it.length <= Homework.MAX_API_KEY_CHARS) llmKey = it },
                 label = { Text("Clé du fournisseur LLM") },
                 singleLine = true,
+                shape = MaterialTheme.shapes.medium,
                 visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 trailingIcon = {

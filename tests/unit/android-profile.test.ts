@@ -615,3 +615,21 @@ describe("unit android profil (#82)", () => {
     expect(syntheticProfileClient().info?.profilePicture?.id ?? "").toBe("file-fake-1");
   });
 });
+describe("profil chevrons navigation (#258)", () => {
+  test("lignes de navigation chevronnées, actions et infos sans chevron", () => {
+    const { readFileSync } = require("node:fs");
+    const { join } = require("node:path");
+    const profile = readFileSync(
+      join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui/ProfileScreen.kt"),
+      "utf8",
+    );
+    // 9 lignes de navigation + la définition = 11 occurrences.
+    expect((profile.match(/NavChevron\(\)/g) ?? []).length).toBe(11);
+    expect(profile).toContain("private fun NavChevron()");
+    // « Se déconnecter » (action destructive) et « Comptes appairés » (info)
+    // restent sans chevron : elles ne vont nulle part.
+    const logoutIdx = profile.indexOf('title = "Se déconnecter"');
+    const logoutBlock = profile.slice(logoutIdx, profile.indexOf(")", logoutIdx));
+    expect(logoutBlock).not.toContain("NavChevron");
+  });
+});
