@@ -267,8 +267,7 @@ fun GradesAverageHero(
                             // de laisser lire le nombre puis la provenance à part.
                             modifier = Modifier.clearAndSetSemantics { contentDescription = spoken },
                         )
-                        // Barème de sortie du rapport : TOUJOURS /20
-                        // (`server/domain/averages.ts`). `body1` de la référence
+                        // Barème de sortie du rapport : TOUJOURS /20. `body1` de la référence
                         // (15 sp), pas notre `bodyMedium` (14) — la référence
                         // n'a pas de corps à 14 sous son `h1`.
                         Text(

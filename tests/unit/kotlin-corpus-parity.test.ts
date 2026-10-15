@@ -1,17 +1,15 @@
 // Parité TS <-> Kotlin sur le corpus RÉEL (#202).
 //
-// Le corpus (`tests/fixtures/pronote/`, gitignoré, #199) porte des formes que
+// Le corpus local (`tests/fixtures/pronote/`, gitignoré) porte des formes que
 // les fixtures scriptées n'ont pas : libellés d'établissement, unicode,
 // tableaux imbriqués. Ce test fait passer les MÊMES octets des deux côtés —
 // canonique TS (`agents/runtime/replay-corpus.ts`) contre `Json` du port
 // (`agents/runtime/kotlin-parity/CorpusParityMain.kt`) — et compare à
 // l'octet près. Une divergence casse au domaine + champ près.
 //
-// Limite assumée : le corpus stocke la SORTIE des readers, pas le fil brut —
-// ce test prouve la fidélité de lecture/écriture JSON sur données réelles,
-// pas les mappers (couverts par les 35 cas scriptés des deux autres fichiers
-// de parité). Le jour où la capture stockera le brut, ce même harnais
-// accueillera le replay mappers.
+// Limite assumée : le corpus stocke la SORTIE des anciens readers TS, pas le fil
+// brut — ce test prouve la fidélité JSON sur données réelles, pas les mappers
+// (couverts par les cas scriptés des deux autres fichiers de parité).
 //
 // Sans corpus OU sans `kotlinc`/`java` : SKIP BRUYANT, `make check` vert
 // sans avoir prouvé de parité (jamais un faux vert). Le harnais lui-même
@@ -27,19 +25,19 @@ import {
   replayDomain,
   replayDomains,
 } from "../../agents/runtime/replay-corpus";
-import { CORPUS_DIR, hasCorpus } from "./fixtures/pronote-corpus";
+import { CORPUS_DIR, CORPUS_DOMAINS, hasCorpus } from "./fixtures/pronote-corpus";
 import { ROOT, canonTs, parityToolchain, type ParityLink } from "./fixtures/kotlin-harness";
 
-const CAPTURE = hasCorpus(CORPUS_DIR);
+const HAS_CORPUS = hasCorpus(CORPUS_DIR);
 const TOOLCHAIN_SKIP = parityToolchain.skipReason !== null;
-const SKIP = !CAPTURE || TOOLCHAIN_SKIP;
+const SKIP = !HAS_CORPUS || TOOLCHAIN_SKIP;
 
-if (!CAPTURE) {
+if (!HAS_CORPUS) {
   console.warn(
     "\n" +
-      "  SKIP BRUYANT — corpus Pronote absent (#199).\n" +
+      "  SKIP BRUYANT — corpus Pronote local absent.\n" +
       "  La parité TS <-> Kotlin sur données réelles (#202) n'est PAS vérifiée sur cette machine.\n" +
-      "  Pour l'obtenir : bun run agents/runtime/capture-pronote.ts (compte réel, QR + PIN).\n",
+      "  Le corpus gitignoré doit être présent localement pour rejouer ce contrôle.\n",
   );
 } else if (TOOLCHAIN_SKIP) {
   console.warn(
@@ -129,10 +127,16 @@ describe("harnais de replay corpus (#202)", () => {
     expect(`${JSON.stringify(replayCorpus(a))}`).toBe(`${JSON.stringify(replayCorpus(b))}`);
   });
 
+  test("corpus rejouable seulement si chaque fixture est marquée", () => {
+    expect(hasCorpus(tempCorpus({ grades: { __untrusted: true, items: [] } }))).toBe(true);
+    expect(hasCorpus(tempCorpus({ grades: { items: [] } }))).toBe(false);
+    expect(hasCorpus(mkdtempSync(join(tmpdir(), "corpus-vide-")))).toBe(false);
+  });
+
   test("refus nets : répertoire absent, corpus vide, fixture non marquée", () => {
-    expect(() => replayCorpus(join(tmpdir(), "corpus-absent-xyz"))).toThrow("corpus absent");
+    expect(() => replayCorpus(join(tmpdir(), "corpus-absent-xyz"))).toThrow("corpus local absent");
     const empty = mkdtempSync(join(tmpdir(), "corpus-vide-"));
-    expect(() => replayCorpus(empty)).toThrow("corpus absent");
+    expect(() => replayCorpus(empty)).toThrow("corpus local absent");
     const bad = tempCorpus({ grades: { items: [] } });
     expect(() => replayDomain("grades", bad)).toThrow("__untrusted");
     expect(() => replayDomain("manquant", tempCorpus({ grades: { __untrusted: true } }))).toThrow("absent du corpus");
@@ -149,6 +153,10 @@ describe("harnais de replay corpus (#202)", () => {
 });
 
 describe("parité TS <-> Kotlin sur corpus réel (#202)", () => {
+  test.skipIf(!HAS_CORPUS)("corpus local contient tous les domaines attendus", () => {
+    expect(replayDomains(CORPUS_DIR)).toEqual([...CORPUS_DOMAINS].sort());
+  });
+
   test.skipIf(SKIP)("chaque domaine : octet-identique, divergence = domaine + champ", async () => {
     for (const domain of replayDomains(CORPUS_DIR)) {
       const ts = replayDomain(domain, CORPUS_DIR);

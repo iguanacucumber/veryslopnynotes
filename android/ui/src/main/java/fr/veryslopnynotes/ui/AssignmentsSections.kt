@@ -117,9 +117,8 @@ data class AssignmentCardText(val title: String, val body: String)
 /**
  * Répartit les deux textes de la carte SANS JAMAIS afficher deux fois la consigne.
  *
- * Pronote n'expose qu'UN champ descriptif, et le lecteur serveur en publie deux
- * fois le début : `title` = les 200 premiers caractères de `description`
- * (`pronote-client-reader.ts`, `mapAssignment`). La carte affichait donc les deux
+ * Pronote n'expose qu'UN champ descriptif ; l'ancien mapping publiait deux fois
+ * son début : `title` = les 200 premiers caractères de `description`. La carte affichait donc les deux
  * champs côte à côte — « Evaluation de compréhension orale et d'expression
  * écrite » puis « Evaluation de compréhension orale et d'expression écrite sur
  * le début de la séquence… » (#161).

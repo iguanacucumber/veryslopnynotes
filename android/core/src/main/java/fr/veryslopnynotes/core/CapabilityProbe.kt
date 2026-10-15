@@ -3,9 +3,7 @@ package fr.veryslopnynotes.core
 /**
  * Réduction sonde -> liste d'onglets (#87, port Kotlin #203).
  *
- * Port fidèle de `server/domain/capabilities.ts` (chemin conservé pour la
- * capture #199 ; parité différentielle supprimée en #210 — ce port est la
- * source de vérité). Un onglet absent de
+ * Port Kotlin (#203), testé par les miroirs Android. Un onglet absent de
  * l'établissement n'est pas une erreur, c'est une capacité `false` : on ne
  * DEVINE jamais un `true`, un onglet non observé est simplement absent de la
  * liste. Observation vide = aucun onglet actif (l'app masque tout, elle ne casse

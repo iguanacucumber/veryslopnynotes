@@ -56,7 +56,7 @@ export const syntheticTimetableEntries: TimetableEntry[] = [
 /** Payload /v1/timetable conforme au contrat (avec et sans champs #76). */
 export const syntheticTimetablePayload = { entries: syntheticTimetableEntries };
 
-// --- Formes brutes lues par PronoteClientReader (cours pronotets) ---
+// --- Formes brutes de cours utilisées par les tests du mapper Kotlin ---
 
 /** Faux cours : `start`/`end` en Date comme dans la lib. */
 export function syntheticRawLesson(options: {
