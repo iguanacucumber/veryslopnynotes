@@ -105,7 +105,7 @@ Project layout
 --------------
 
     ├─ android/          app native Kotlin + Compose; accès Pronote direct
-    ├─ server/           scraper de manuels facultatif + capture corpus legacy (#199)
+    ├─ server/           scraper de manuels facultatif
     ├─ shared/contracts/ routes scraper, OpenAPI et validateurs conservés pour les tests
     ├─ agents/           scans, capture et harnais de test locaux
     ├─ tests/            tests unitaires, contrats et architecture

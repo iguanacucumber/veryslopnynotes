@@ -9,8 +9,8 @@ faute de compte de test pour une mesure en conditions réelles. Cette décision
 précédait le port Kotlin et l'accès direct depuis le téléphone.
 
 Depuis #205, l'app ouvre la session Pronote et lit les données directement ; le
-serveur ne relaie plus ces requêtes. Le client TypeScript restant n'est utilisé
-que par l'outil local de capture du corpus #199, hors processus serveur.
+serveur ne relaie plus ces requêtes. Le client TypeScript et son outil de capture
+ont été retirés après la clôture de #199.
 
 Les anciens critères, routes et commandes de mesure de cette ADR sont archivés
 dans l'historique Git ; ils ne décrivent plus l'architecture courante.

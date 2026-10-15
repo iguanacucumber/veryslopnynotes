@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly, hasDirectFetch, httpRe, pronoteHost, sqliteRe } from "../../agents/runtime/source-guards";
-import { untrusted } from "../../server/domain/ports";
 
 const ROOT = join(import.meta.dir, "..", "..");
 
@@ -65,10 +64,8 @@ describe("invariants", () => {
     expect(pronoteHost.test(codeOnly('const url = "https://pronote.example.fr/";'))).toBe(true);
   });
 
-  test("I3: domaine sans sqlite ni framework HTTP (server résiduel + android/core)", () => {
-    // `server/domain/` résiduel (capture #199 : ports/capabilities/types)
-    // ET `android/core/` (stdlib + plateforme seules).
-    const files = [...list(join(ROOT, "server/domain")), ...list(join(ROOT, "android/core"))].filter((f) => {
+  test("I3: android/core sans sqlite ni framework HTTP", () => {
+    const files = list(join(ROOT, "android/core")).filter((f) => {
       const code = codeOnly(readFileSync(f, "utf8"));
       return sqliteRe.test(code) || httpRe.test(code);
     });
@@ -84,12 +81,10 @@ describe("invariants", () => {
     expect(sqliteRe.test(codeOnly('const a = 1; // sqlite'))).toBe(false);
   });
 
-  test("I2: aucun client Pronote serveur + un seul Client android", () => {
-    // Le processus serveur ne parle plus à Pronote. Le script local #199 utilise
-    // le Client pronotets via la couche de capture, pas un client HTTP parallèle.
+  test("I2: serveur sans accès Pronote + un seul Client android", () => {
     const server = list(join(ROOT, "server"));
-    const defs = server.filter((f) => /class PronoteHttpClient/.test(codeOnly(readFileSync(f, "utf8"))));
-    expect(defs).toEqual([]);
+    const directFetch = server.filter((f) => hasDirectFetch(codeOnly(readFileSync(f, "utf8"))));
+    expect(directFetch).toEqual([]);
     // Côté app, tout accès réseau Pronote passe par l'unique `Client` dans
     // `android/pronote/` (ADR-003) ; aucun autre module ne fait de réseau.
     const pronote = list(join(ROOT, "android", "pronote"));
@@ -167,13 +162,8 @@ describe("invariants", () => {
     expect(existsSync(join(ROOT, ".env.local"))).toBe(false);
   });
 
-  test("I6: pipeline Untrusted (ports TS résiduels + port Kotlin)", () => {
-    // #210 : `server/ai/` est supprimé avec le serveur ; le marquage vit dans
-    // `server/domain/ports.ts` (chemin de capture #199) et dans le port Kotlin
-    // (`android/core/Untrusted.kt`, rejoué par les miroirs devoirs).
-    const ports = codeOnly(readFileSync(join(ROOT, "server/domain/ports.ts"), "utf8"));
-    expect(ports).toContain("untrusted");
-    expect(untrusted("a").value).toBe("a");
+  test("I6: contenu externe marqué UNTRUSTED_DATA dans le port Kotlin", () => {
+    // Le marquage est exécuté sur l'appareil, près du prompt qui le consomme.
     const kt = readFileSync(
       join(ROOT, "android/core/src/main/java/fr/veryslopnynotes/core/Untrusted.kt"),
       "utf8",

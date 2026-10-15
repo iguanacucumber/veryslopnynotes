@@ -1,29 +1,44 @@
-// Chargement du corpus Pronote capturé (#199).
+// Chargement du corpus Pronote local (données personnelles, jamais commitées).
 //
-// Le corpus n'est PAS dans le dépôt : ce sont les réponses réelles d'un compte
-// d'élève (données personnelles, règle Public). Une machine sans capture n'a
-// donc rien à rejouer — mais elle ne doit surtout pas announce un vert de
-// parité : `hasCorpus()` + un avertissement bruyant, et les tests de parité
-// s'annoncent SKIP (cf. tests/unit/pronote-corpus.test.ts).
+// Le corpus gitignoré contient des réponses réelles d'un compte d'élève.
+// Machine sans corpus ne doit pas afficher un faux vert : `hasCorpus()` fait
+// signaler un SKIP par le test de parité.
 //
 // Contenu = DONNÉE externe (I6) : chaque fixture porte `__untrusted`, aucun
 // champ n'est interprété comme une instruction.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { CORPUS_DIR } from "../../../agents/runtime/capture-pronote";
+import { CORPUS_DIR } from "../../../agents/runtime/corpus-path";
 
 export { CORPUS_DIR };
 
-/** Un domaine absent = capture incomplète ou établissement qui n'a pas l'onglet. */
-export function loadDomain(domain: string, dir: string = CORPUS_DIR): unknown | null {
+export const CORPUS_DOMAINS = [
+  "grades",
+  "periods",
+  "providedAverages",
+  "assignments",
+  "timetable",
+  "resources",
+  "news",
+  "attendance",
+  "punishments",
+  "menus",
+  "discussions",
+  "discussionRecipients",
+  "userInfo",
+  "capabilities",
+  "discussionMessages",
+] as const;
+
+function loadDomain(domain: string, dir: string = CORPUS_DIR): unknown | null {
   const file = join(dir, `${domain}.json`);
   if (!existsSync(file)) return null;
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
 /** Tous les domaines présents sur la machine, triés (ordre de comparaison stable). */
-export function listDomains(dir: string = CORPUS_DIR): string[] {
+function listDomains(dir: string = CORPUS_DIR): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((f) => f.endsWith(".json"))
@@ -32,7 +47,7 @@ export function listDomains(dir: string = CORPUS_DIR): string[] {
 }
 
 /**
- * Le corpus est-il rejouable ? Volontairement STRCICT : la présence du
+ * Le corpus est-il rejouable ? Volontairement strict : la présence du
  * répertoire ne suffit pas, chaque domaine doit être lisible et marqué. Un
  * corpus à moitié écrit fait échouer le harnais de parité, pas son contrôle
  * d'amorçage.

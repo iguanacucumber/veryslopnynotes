@@ -23,9 +23,8 @@ import java.time.ZoneOffset
 
 // Passerelle locale (#205, ADR-003) : construit les payloads JSON que les
 // écrans savent déjà lire, depuis le client du téléphone au lieu du serveur.
-// Mêmes formes que les routes (`{"grades"}`, `{"entries"}`…), mêmes bornes
-// que `server/integrations/client-reader` (la RÉFÉRENCE du mapping) : les
-// parseurs UI et leurs tests ne changent pas, seule la SOURCE change.
+// Mêmes formes que les anciens payloads (`{"grades"}`, `{"entries"}`…), mêmes
+// bornes que les parseurs UI : seule la source des données est locale.
 //
 // Tout est PUR sauf l'appel au client (bloquant, jamais sur le thread UI —
 // c'est `SyncedRepository` qui file en tâche de fond). Une écriture ne part

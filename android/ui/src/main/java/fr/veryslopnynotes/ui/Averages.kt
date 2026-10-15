@@ -26,7 +26,7 @@ import java.util.Locale
 // ce fichier ne contient QUE de la logique pure, donc son miroir est
 // `tests/unit/android-averages.test.ts`.
 
-/** Barème de sortie du rapport : TOUJOURS /20 (`server/domain/averages.ts`). */
+/** Barème de sortie du rapport : TOUJOURS /20. */
 const val AVERAGE_SCALE = 20.0
 
 /** Algorithmes du contrat (`AVERAGE_ALGORITHMS`) : moy. des matières / pondérée / médiane. */

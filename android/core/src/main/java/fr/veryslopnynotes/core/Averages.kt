@@ -8,11 +8,9 @@ import java.util.Locale
 /**
  * Moyennes par matière, parité Papillon (#74, port Kotlin #203).
  *
- * Port fidèle de `server/domain/averages.ts` (chemin conservé pour la capture
- * #199 ; la parité différentielle `kotlin-domain-parity` est supprimée en #210
- * avec le serveur — ce port est la source de vérité, rejoué par les miroirs
- * `tests/unit/android-averages.test.ts`). Un écart aux miroirs est un défaut,
- * dans un sens comme dans l'autre — donc aucune « amélioration » d'algorithme ici.
+ * Port Kotlin (#203), source de vérité pour le calcul des moyennes et rejoué
+ * par `tests/unit/android-averages.test.ts`. Un écart au miroir est un défaut ;
+ * les algorithmes restent alignés sur Papillon.
  *
  * Pur : aucun réseau, aucun SQLite, aucun Android (I3). La moyenne est une DONNÉE
  * structurée, jamais le produit d'une sortie libre LLM (I7).

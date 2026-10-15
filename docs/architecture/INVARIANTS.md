@@ -5,7 +5,7 @@ Format : Invariant → test → commande → emplacement.
 ## Architecture actuelle
 
 - `android/` est l'appareil client ; seul `android/pronote/` parle à Pronote.
-- `server/` sert uniquement le scraper de manuels. Le client Pronote TypeScript restant sert à la capture du corpus #199, hors processus.
+- `server/` sert uniquement le scraper de manuels.
 - `shared/contracts/` décrit les deux routes du scraper et conserve des validateurs utilisés par les tests Android.
 
 ## I1 — Seuls `android/pronote/` et le scraper parlent réseau (ADR-003)
@@ -21,16 +21,16 @@ Format : Invariant → test → commande → emplacement.
 - Emplacement : `android/**/*` (tolérances : `android/pronote/**` + ligne `include(...)` de `settings.gradle.kts`). Réf : `docs/adr/003-client-direct.md`.
 
 ## I2 — Aucun accès Pronote côté serveur ; un seul client Android (ADR-003)
-- Invariant : le processus serveur n'envoie aucune requête à Pronote. Le script local de capture #199 utilise le client `pronotets` hors processus serveur. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android ne contacte Pronote (pinné par I1).
-- Test : `tests/architecture/invariants.test.ts` (aucun `PronoteHttpClient` serveur + un `Client` Android) + `agents/runtime/check-architecture.ts` (aucun accès réseau Pronote côté serveur).
+- Invariant : le serveur ne contacte jamais Pronote. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android ne contacte Pronote (pinné par I1).
+- Test : `tests/architecture/invariants.test.ts` (aucun accès réseau serveur + un `Client` Android) + `agents/runtime/check-architecture.ts`.
 - Commande : `make architecture-test`.
-- Emplacement : `agents/runtime/capture-pronote.ts` + `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
+- Emplacement : `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
 
-## I3 — Domaine sans SQLite ni HTTP
-- Invariant : `server/domain/` résiduel (capture #199 : ports, type ProvidedAverages et capabilities) ne dépend ni de SQLite ni du framework HTTP. `android/core/` suit la même règle : stdlib + plateforme seules, zéro dépendance.
-- Test : `tests/architecture/invariants.test.ts` (I3, serveur résiduel + `android/core/`).
+## I3 — Cœur Android sans SQLite ni HTTP
+- Invariant : `android/core/` dépend seulement de la stdlib Kotlin et de la plateforme, sans SQLite ni framework HTTP.
+- Test : `tests/architecture/invariants.test.ts` (I3, `android/core/`).
 - Commande : `make architecture-test`.
-- Emplacement : `server/domain/ports.ts` + `server/domain/capabilities.ts` + `android/core/`.
+- Emplacement : `android/core/`.
 
 ## I4 — Pas de secrets dans prompts LLM
 - Invariant : aucun secret/token/credential dans prompt LLM (`server/ai/` supprimé en #210, module porté dans `android/core/`, #204).
@@ -45,10 +45,10 @@ Format : Invariant → test → commande → emplacement.
 - Emplacement : `android/core/` (IA) + `android/data/` (store de clé, dépôt devoirs). Réf : `docs/adr/003-client-direct.md`.
 
 ## I6 — Contenu externe = UNTRUSTED_DATA
-- Invariant : tout contenu externe marqué `Untrusted` avant traitement IA, entre délimiteurs à nonce, déclaré données (`server/ai/` supprimé en #210 : le marquage vit dans `server/domain/ports.ts` pour la capture #199 et dans `android/core/Untrusted.kt` pour l'app).
+- Invariant : tout contenu externe marqué `Untrusted` avant traitement IA, entre délimiteurs à nonce, déclaré donnée (`server/ai/` supprimé en #210 ; le marquage vit dans `android/core/Untrusted.kt`).
 - Test : `tests/architecture/invariants.test.ts` (I6) + `tests/unit/android-homework.test.ts` (miroirs).
 - Commande : `make check`.
-- Emplacement : `server/domain/ports.ts` (`untrusted()`), `android/core/Untrusted.kt`.
+- Emplacement : `android/core/Untrusted.kt`.
 
 ## I7 — Pas d'effet bord via sortie libre LLM
 - Invariant : aucun effet métier déclenché par sortie libre LLM. `server/jobs/` supprimé en #210 (jobs portés en Kotlin natif, #207) ; les jobs device ne touchent ni LLM ni réseau. Notifications/détection DS sur données structurées Pronote, sinon confirmation app.
