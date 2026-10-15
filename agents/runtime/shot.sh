@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shot.sh — capture d'écran d'un écran de l'app, SANS taper au doigt (#133).
 #
-#   agents/runtime/shot.sh <route> [--package <pkg>] [--wait <secondes>] [--theme <t>] [--no-build]
+#   agents/runtime/shot.sh <route> [--wait <secondes>] [--theme <t>] [--no-build]
 #   make shot ROUTE=grades [SHOT_ARGS=--no-build]
 #   make shot ROUTE=grades SHOT_ARGS="--theme dark"   # #179 : capture en sombre
 #
@@ -41,7 +41,6 @@ SCHEME="veryslopnynotes"
 REMOTE_UI_XML="/sdcard/vsn-shot-ui.xml"
 
 ROUTE=""
-PKG="$APP_PKG"
 WAIT_SEC=3
 THEME=""
 SERIAL=""
@@ -55,14 +54,11 @@ die() {
 
 usage() {
     cat <<'USAGE'
-usage : shot.sh <route> [--package <pkg>] [--theme <t>] [--wait <secondes>] [--no-build]
+usage : shot.sh <route> [--theme <t>] [--wait <secondes>] [--no-build]
 
   <route>               route de l'app : index, calendar, grades, tasks,
                         profile, settings, news, canteen, attendance,
-                        messages, pairing, alerts, fiches, sanctions. Avec
-                        --package, simple nom de capture.
-  --package <pkg>       autre application (référence Papillon) : pas
-                        d'installation, simple lancement + capture.
+                        messages, pairing, alerts, fiches, sanctions.
   --theme <dark|light|system>
                         force le thème de l'APPAREIL avant la capture (#179) :
                         le pas d'encre de matière est sensible au thème, donc
@@ -156,7 +152,7 @@ build_apk() {
 # identique au local), donc l'égalité est une preuve, pas une estimation.
 installed_apk_sha256() {
     local path hash
-    path=$(a shell dumpsys package "$PKG" | sed -n 's/.*codePath=\(.*\)/\1/p' | head -1 | tr -d '\r')
+    path=$(a shell dumpsys package "$APP_PKG" | sed -n 's/.*codePath=\(.*\)/\1/p' | head -1 | tr -d '\r')
     [ -n "$path" ] || return 0
     hash=$(a shell sha256sum "$path/base.apk" 2>/dev/null | tr -d '\r' | awk 'NR==1 { print $1 }') || hash=""
     printf '%s' "$hash"
@@ -205,20 +201,10 @@ launch_app() {
     # activité déjà vivante le `onNewIntent` serait ignoré et la capture
     # montrerait l'écran précédent — le faux vert qu'on veut supprimer. L'arrêt
     # forcé ne touche à AUCUNE donnée de l'app : ni session appairée, ni cache.
-    a shell am force-stop "$PKG" >/dev/null 2>&1 || true
+    a shell am force-stop "$APP_PKG" >/dev/null 2>&1 || true
     sleep 1
-    if [ "$PKG" = "$APP_PKG" ]; then
-        out=$(a shell am start -W -a android.intent.action.VIEW \
-            -c android.intent.category.BROWSABLE -d "$SCHEME://$ROUTE" 2>&1 | tr -d '\r') || true
-    else
-        # Application tierce (référence Papillon) : aucune route à ouvrir, on
-        # lance son activité LAUNCHER résolue par le système lui-même.
-        local act
-        act=$(a shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$PKG" 2>/dev/null \
-            | tr -d '\r' | grep -E '^[a-zA-Z0-9_.]+/' | head -1) || true
-        [ -n "$act" ] || die "shot : $PKG n'a pas d'activité LAUNCHER résolue — application non lancée, rien capturé."
-        out=$(a shell am start -W -n "$act" 2>&1 | tr -d '\r') || true
-    fi
+    out=$(a shell am start -W -a android.intent.action.VIEW \
+        -c android.intent.category.BROWSABLE -d "$SCHEME://$ROUTE" 2>&1 | tr -d '\r') || true
     if printf '%s' "$out" | grep -q "Error"; then
         printf '%s\n' "$out" >&2
         die "shot : lancement refusé — écran non atteint, rien capturé."
@@ -602,8 +588,6 @@ main() {
     while [ $# -gt 0 ]; do
         arg="$1"
         case "$arg" in
-            --package) [ $# -ge 2 ] || die "--package sans valeur."; PKG="$2"; shift 2 ;;
-            --package=*) PKG="${arg#*=}"; shift ;;
             --theme) [ $# -ge 2 ] || die "--theme sans valeur."; THEME="$2"; shift 2 ;;
             --theme=*) THEME="${arg#*=}"; shift ;;
             --wait) [ $# -ge 2 ] || die "--wait sans valeur."; WAIT_SEC="$2"; shift 2 ;;
@@ -619,23 +603,16 @@ main() {
     [ -n "$ROUTE" ] || { usage >&2; die "route manquante (ex. : make shot ROUTE=grades)."; }
     # Route inconnue = échec AVANT toute écriture : sans témoin, une capture
     # ne prouve rien et l'app ouvrirait bêtement son écran de départ. Le message
-    # sort la liste, donc le nom exact se lit sans ouvrir le script. Pour une
-    # application tierce le premier argument n'est qu'un NOM DE CAPTURE.
-    if [ "$PKG" = "$APP_PKG" ] && ! route_known "$ROUTE"; then
+    # sort la liste, donc le nom exact se lit sans ouvrir le script.
+    if ! route_known "$ROUTE"; then
         usage >&2
         die "route inconnue : « $ROUTE ». Rien capturé."
     fi
 
     need_device
 
-    # Notre app : on garantit que l'appareil fait tourner CE code, puis on
-    # ouvre la route par deep link. Autre app : on ne touche à rien d'installé.
-    if [ "$PKG" = "$APP_PKG" ]; then
-        ensure_installed
-    else
-        a shell pm path "$PKG" >/dev/null 2>&1 \
-            || die "shot : $PKG n'est pas installé sur l'appareil — rien capturé."
-    fi
+    # Garantit que l'appareil fait tourner cet arbre de travail, puis ouvre la route.
+    ensure_installed
 
     # Avant le dossier de capture : un thème refusé ne doit pas laisser un
     # `shots/<date>/` vide, ni une capture du thème courant.
@@ -643,19 +620,10 @@ main() {
 
     local name
     name="$ROUTE.png"
-    [ "$PKG" = "$APP_PKG" ] || name="$ROUTE.$PKG.png"
     # Le thème entre dans le nom : sans lui, la capture sombre ÉCRASERAIT la
     # capture claire du même jour, et la comparaison des deux deviendrait
     # impossible (c'est exactement la comparaison que #179 demande).
     [ -z "$THEME" ] || name="${name%.png}.$THEME.png"
-    # Le nom de capture d'une app tierce est libre (aucune liste blanche de
-    # routes) : on n'accepte que des caractères de nom de fichier, sinon
-    # `../../` écrireait la capture ailleurs que dans shots/.
-    case "$name" in
-        *[!A-Za-z0-9._-]*)
-            name=$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '_')
-            printf 'shot : nom de capture simplifié en %s\n' "$name" ;;
-    esac
     local out_dir="$REPO_ROOT/shots/$(date -u +%F)"
     OUT_PNG="$out_dir/$name"
     mkdir -p "$out_dir"
@@ -686,9 +654,7 @@ main() {
 
     # `if` et non `&&` : en dernière instruction de main, un `&&` dont le test
     # est faux ferait sortir le script en 1 alors que la capture est bonne.
-    if [ "$PKG" = "$APP_PKG" ]; then
-        verify_route
-    fi
+    verify_route
 
     printf '%s\n' "$OUT_PNG"
 }

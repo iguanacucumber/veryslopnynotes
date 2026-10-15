@@ -276,7 +276,6 @@ describe("shot.sh (#133)", () => {
     for (const refusal of [
       "aucun appareil prêt", // pas d'appareil
       "route inconnue", // route fantôme
-      "n'est pas installé", // référence absente
       "capture NOIRE", // écran éteint
       "VERROUILLÉ", // code d'appareil
       "APPAIRAGE", // session absente
@@ -543,6 +542,17 @@ function harness(): {
 }
 
 describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
+  test("refuse l'ancien mode --package avant adb ou Gradle", () => {
+    const h = harness();
+    const r = h.run(["--package", "com.example.reference", "index"]);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("option inconnue : --package");
+    expect(r.gradle).toBe(0);
+    expect(r.installs).toEqual([]);
+    expect(existsSync(join(h.dir, "adb.log"))).toBe(false);
+    expect(existsSync(join(h.dir, "shots"))).toBe(false);
+  });
+
   test("premier passage : Gradle construit, l'APK est installé, la capture est vérifiée", () => {
     const h = harness();
     const r = h.run(["index", "--wait", "0"]);

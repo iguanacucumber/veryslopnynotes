@@ -26,6 +26,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const UI = join(ROOT, "android/ui/src/main/java/fr/veryslopnynotes/ui");
@@ -36,18 +37,6 @@ const NAV = readFileSync(join(UI, "AppNav.kt"), "utf8");
 const UI_GRADLE = readFileSync(join(ROOT, "android/ui/build.gradle.kts"), "utf8");
 const VERSIONS = readFileSync(join(ROOT, "android/gradle/libs.versions.toml"), "utf8");
 
-/** Sans les commentaires : une garde qui lit la source ne doit pas confondre un
- *  `//` qui NOMME une mauvaise pratique avec la pratique. */
-const codeOnly = (src: string): string =>
-  src
-    .replace(/\/\*[\s\S]*?\*\//g, "\n")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .map((l) => {
-      const idx = l.search(/(?<!:)\/\//);
-      return idx >= 0 ? l.slice(0, idx) : l;
-    })
-    .join("\n");
 const kt = codeOnly(MOTION);
 
 // --- Couleurs : le même modèle 0..1 que PapillonTheme.kt ---------------------

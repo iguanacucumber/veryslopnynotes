@@ -15,6 +15,7 @@ import {
   syntheticTimetablePayload,
   syntheticUserInfo,
 } from "./fixtures/profile";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const ANDROID = join(ROOT, "android");
@@ -36,9 +37,6 @@ function ktFiles(dir: string): string[] {
   return out;
 }
 /** Source sans les commentaires : un `// … .logout()` cité ne prouve rien. */
-const codeOnly = (src: string): string =>
-  src.replace(/\/\*[\s\S]*?\*\//g, "\n").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
-
 // --- miroir de ProfileRepository.parse (android/data/ProfileRepository.kt) ---
 type Child = { accountId: string; displayName: string; classLabel: string };
 type Profile = {

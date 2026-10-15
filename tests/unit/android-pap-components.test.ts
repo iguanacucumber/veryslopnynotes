@@ -30,6 +30,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const UI = join(ROOT, "android/ui/src/main/java/fr/veryslopnynotes/ui");
@@ -37,12 +38,6 @@ const src = readFileSync(join(UI, "PapComponents.kt"), "utf8");
 
 /** Sans les commentaires : une garde qui lit le texte du fichier doit éviter de
  *  confondre un `//` qui NOMME une mauvaise pratique avec la pratique. */
-const codeOnly = (s: string): string =>
-  s
-    .replace(/\/\*[\s\S]*?\*\//g, "\n")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .join("\n");
 const kt = codeOnly(src);
 
 // --- Miroir de relativeTimeFr -----------------------------------------------

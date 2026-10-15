@@ -24,6 +24,7 @@ import {
   syntheticMessagesOk,
   syntheticRecipientsOk,
 } from "./fixtures/discussions";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 // Miroir TS du Kotlin #80 (Discussion.kt, ServerConfig.kt, DiscussionsRepository.kt,
 // CachePolicy.kt, SyncedRepository.kt, MessagesScreen.kt, AppNav.kt) — le build
@@ -249,18 +250,6 @@ const K_FILES = {
   screen: join(ANDROID, "ui/src/main/java/fr/veryslopnynotes/ui/MessagesScreen.kt"),
   nav: join(ANDROID, "ui/src/main/java/fr/veryslopnynotes/ui/AppNav.kt"),
 };
-
-const codeOnly = (c: string): string =>
-  c
-    .replace(/\/\*[\s\S]*?\*\//g, "\n")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .map((l) => {
-      const idx = l.search(/(?<!:)\/\//);
-      return idx >= 0 ? l.slice(0, idx) : l;
-    })
-    .join("\n");
-
 const BASE_DISCUSSION: KtDiscussion = {
   id: "d-fake-1",
   subject: "Sortie pedagogique-UNREAL",

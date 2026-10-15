@@ -6,6 +6,7 @@
 // I5 LLM sans outils/réseau/secrets — FP: commentaires ignorés, tools: [] vide autorisé. ponytail: plafond regex sur android/core (`server/ai/` supprimé en #210), upgrade AST.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { codeOnly, hasDirectFetch, httpRe, pronoteHost, sqliteRe } from "./source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 
@@ -29,7 +30,6 @@ const androidFiles = listFiles(join(ROOT, "android"));
 const androidCoreFiles = listFiles(join(ROOT, "android", "core"));
 const domainFiles = listFiles(join(ROOT, "server/domain"));
 const serverFiles = listFiles(join(ROOT, "server"));
-const allFiles = listFiles(ROOT);
 
 let fail: string[] = [];
 
@@ -39,7 +39,6 @@ let fail: string[] = [];
 // `project(":pronote")`, ADR-003) — câblage sanctionné, pas un hôte. Le mot
 // reste interdit partout ailleurs ; `settings.gradle.kts` ne le porte que
 // dans sa déclaration de module. La prose (INVARIANTS, AGENTS.md) suit en #211.
-const pronoteHost = /pronote/i;
 const PRONOTE_DIR = join(ROOT, "android", "pronote") + "/";
 const i1 = androidFiles.filter((f) => {
   if (f.endsWith(".md")) return false; // docs légitimes ignorées
@@ -63,13 +62,6 @@ const i1 = androidFiles.filter((f) => {
 if (i1.length) fail.push(`I1: android référence Pronote: ${i1.join(", ")}`);
 
 // I2 : aucun accès réseau Pronote dans le serveur (il ne sert que le scraper de manuels).
-// ponytail: ligne-même OU URL+réseau évite FP fetch hors Pronote. Upgrade: AST dataflow.
-const netRe = /fetch\(|axios|got\(|https?\.(get|request)|Bun\.serve|XMLHttpRequest|WebSocket/;
-const pronoteUrlRe = /https?:\/\/[^\s"']*(pronote)/i;
-function hasDirectFetch(code: string): boolean {
-  if (code.split("\n").some((l) => pronoteHost.test(l) && netRe.test(l))) return true;
-  return pronoteUrlRe.test(code) && netRe.test(code);
-}
 const directFetch = serverFiles.filter((f) => {
   try {
     return hasDirectFetch(codeOnly(readFileSync(f, "utf8")));
@@ -83,40 +75,19 @@ if (directFetch.length) fail.push(`I2: accès réseau Pronote hors client: ${dir
 // #210 : `server/domain/` résiduel (capture #199) ET `android/core/` (port #203,
 // stdlib + plateforme seules, zéro dépendance).
 // ponytail: strip block //ligne avant match. Upgrade: vrai AST/dependency-cruiser phase 1.
-function codeOnly(content: string): string {
-  const noBlock = content
-    .replace(/\/\*[\s\S]*?\*\//g, "\n")
-    .replace(/<!--[\s\S]*?-->/g, "\n");
-  return noBlock
-    .split("\n")
-    .filter((l) => {
-      const t = l.trim();
-      return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("#") && !t.startsWith("<!--");
-    })
-    .map((l) => {
-      const idx = l.search(/(?<!:)\/\//);
-      return idx >= 0 ? l.slice(0, idx) : l;
-    })
-    .join("\n");
-}
 const i3 = [...domainFiles, ...androidCoreFiles].filter((f) => {
   try {
     const c = codeOnly(readFileSync(f, "utf8"));
-    return (
-      /import\s+[^;]*sqlite|from\s+['"][^'"]*sqlite|require\s*\([^)]*sqlite|bun:sqlite|better-sqlite3/i.test(c) ||
-      /from\s+['"]hono|from\s+['"]express|require\s*\([^)]*(hono|express|fastify)|Bun\.serve/.test(c)
-    );
+    return sqliteRe.test(c) || httpRe.test(c);
   } catch {
     return false;
   }
 });
 if (i3.length) fail.push(`I3: domaine dépend sqlite/HTTP: ${i3.join(", ")}`);
 
-// I5 + I4 : LLM sans outils/réseau/secrets (I6/I7 non scannables ici — voir miroirs unitaires Android + review)
-// Port #204 : le module IA vit dans `android/core/` (mêmes scans, mêmes
-// motifs), `server/ai/` ayant été supprimé en #210 ; `android/data/OpenRouterLlm.kt est EXCLU (c'est l'appel HTTP
-// fournisseur autorisé, piné par tests/unit/android-homework.test.ts, jamais scanné
-// comme du pur).
+// I5 + I4 : LLM sans outils/réseau/secrets (I6/I7 non scannables ici — voir miroirs unitaires Android + review).
+// Port #204 : l'IA vit dans `android/core/`; `server/ai/` a été supprimé en #210.
+// `android/data/OpenRouterLlm.kt` est hors scan : seul appel fournisseur autorisé, testé par android-homework.test.ts.
 const llmFiles = listFiles(join(ROOT, "server/ai"));
 const ANDROID_AI = ["Untrusted.kt", "LlmGuard.kt", "AiPrompts.kt", "HomeworkAi.kt", "RevisionAi.kt", "Humanize.kt"].map(
   (f) => join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core", f),
