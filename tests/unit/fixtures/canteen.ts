@@ -1,7 +1,6 @@
 // Fixtures 100 % synthétiques pour la cantine (#81). Plats, allergènes et
 // soldes inventés : aucune donnée d'établissement, aucun secret, aucune URL.
-// Menu " Pronote " ci-dessous = forme brute lue par PronoteClientReader
-// (page PageMenus), volontairement minimale pour tester le mapper défensif.
+// Menu ci-dessous = forme synthétique minimale pour tester le mapper défensif.
 import type { CanteenBalance, CanteenMenu } from "../../../shared/contracts/models";
 
 export const syntheticCanteenAccountId = "acc-fake-1";

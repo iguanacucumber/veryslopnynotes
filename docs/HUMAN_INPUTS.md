@@ -4,7 +4,7 @@
 - **Clé OpenRouter** : saisie dans les réglages de l'app, stockée chiffrée et envoyée directement à OpenRouter. Aucun modèle ni secret à configurer côté serveur.
 - **Scraper de manuels (facultatif)** : l'appelant fournit plateforme, identifiants du portail et URL de départ dans le corps de `POST /v1/manuals/scrape`. L'endpoint n'a pas d'authentification ; ne l'exposer qu'avec un proxy authentifié. Le cookie jar est local et gitignoré. Voir le risque SSRF dans [les invariants](architecture/INVARIANTS.md).
 - **Signature APK release** : keystore hors du dépôt (voir [`RELEASE.md`](RELEASE.md)).
-- **Corpus Pronote (#199)** : lancer `bun run agents/runtime/capture-pronote.ts` sur un compte de test et saisir localement l'URL, le jeton QR et le PIN. Les fichiers `tests/fixtures/pronote/*.json` sont gitignorés et ne doivent jamais être publiés. Sans corpus, les tests de parité le signalent en SKIP.
+- **Corpus Pronote** : le replay Kotlin utilise `tests/fixtures/pronote/` si ce répertoire gitignoré existe localement. Il contient des données personnelles : ne jamais le publier.
 - **Outillage Android** : si `make check` SKIPpe `android-compile`, fournir un JDK 17–21 et SDK Android 34 :
   le JDK 17-21 vit dans `~/.cache/jdk17` (tarball d'origine souvent encore dans
   `~/.cache/dl/jdk17.tar.gz` — extraire avec `--strip-components=1`), le SDK dans

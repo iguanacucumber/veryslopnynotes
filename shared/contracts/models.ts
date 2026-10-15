@@ -449,8 +449,7 @@ export interface NewsItem {
 
 /** Borné sans exigence de contenu : champ externe optionnel (chaîne vide tolérée). */
 function isOptionalBoundedString(v: unknown, max: number): v is string {
-  // Borné en points de code comme `isBoundedText` : une coupure ne doit jamais
-  // laisser un surrogate isolé (voir `pronote-client-reader.ts` `bounded`).
+  // Borné en points de code : une coupure ne doit jamais laisser un surrogate isolé.
   return typeof v === "string" && (v.length <= max ? true : [...v].length <= max);
 }
 

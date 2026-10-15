@@ -1,7 +1,7 @@
 // check-architecture.ts — garde-fous I1/I2/I3/I5 (+I4 secrets LLM). I6/I7 = tests/review, pas scannables en regex.
 // I1 android sans hôte Pronote — FP: .md ignorés, commentaires /* */ et // ignorés. ponytail: plafond regex, upgrade dependency-cruiser phase 1.
 // I2 serveur sans client Pronote ; le scanner interdit tout accès réseau Pronote côté serveur.
-// I3 domaine sans sqlite/HTTP : `server/domain/` résiduel (#199, capture) et `android/core/` (port #203, stdlib seule) — FP: block comments, javadoc *, imports multi-lignes ([^;]* couvre \n). ponytail: plafond regex, upgrade AST/dependency-cruiser.
+// I3 android/core sans sqlite/HTTP — FP: block comments, javadoc *, imports multi-lignes ([^;]* couvre \n). ponytail: plafond regex, upgrade AST/dependency-cruiser.
 // I4 secrets dans l'IA refusés (`server/ai/` supprimé en #210, reste `android/core/`) — commentaires ignorés. ponytail: doublon volontaire avec check-secrets, upgrade gitleaks.
 // I5 LLM sans outils/réseau/secrets — FP: commentaires ignorés, tools: [] vide autorisé. ponytail: plafond regex sur android/core (`server/ai/` supprimé en #210), upgrade AST.
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -28,7 +28,6 @@ function listFiles(dir: string, out: string[] = []): string[] {
 
 const androidFiles = listFiles(join(ROOT, "android"));
 const androidCoreFiles = listFiles(join(ROOT, "android", "core"));
-const domainFiles = listFiles(join(ROOT, "server/domain"));
 const serverFiles = listFiles(join(ROOT, "server"));
 
 let fail: string[] = [];
@@ -71,11 +70,9 @@ const directFetch = serverFiles.filter((f) => {
 });
 if (directFetch.length) fail.push(`I2: accès réseau Pronote hors client: ${directFetch.join(", ")}`);
 
-// I3 : domaine sans sqlite ni framework HTTP (imports/usage réel, pas commentaires).
-// #210 : `server/domain/` résiduel (capture #199) ET `android/core/` (port #203,
-// stdlib + plateforme seules, zéro dépendance).
+// I3 : android/core sans sqlite ni framework HTTP (imports/usage réel, pas commentaires).
 // ponytail: strip block //ligne avant match. Upgrade: vrai AST/dependency-cruiser phase 1.
-const i3 = [...domainFiles, ...androidCoreFiles].filter((f) => {
+const i3 = androidCoreFiles.filter((f) => {
   try {
     const c = codeOnly(readFileSync(f, "utf8"));
     return sqliteRe.test(c) || httpRe.test(c);
@@ -83,7 +80,7 @@ const i3 = [...domainFiles, ...androidCoreFiles].filter((f) => {
     return false;
   }
 });
-if (i3.length) fail.push(`I3: domaine dépend sqlite/HTTP: ${i3.join(", ")}`);
+if (i3.length) fail.push(`I3: android/core dépend sqlite/HTTP: ${i3.join(", ")}`);
 
 // I5 + I4 : LLM sans outils/réseau/secrets (I6/I7 non scannables ici — voir miroirs unitaires Android + review).
 // Port #204 : l'IA vit dans `android/core/`; `server/ai/` a été supprimé en #210.

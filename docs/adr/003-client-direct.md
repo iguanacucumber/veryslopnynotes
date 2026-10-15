@@ -10,7 +10,7 @@ Les règles fondatrices ont été écrites quand le serveur était le seul à pa
 Pronote :
 - `AGENTS.md` : « Réseau : Pronote = IP serveur uniquement, jamais téléphone. »
 - INVARIANTS I1 : « `android/` ne contient aucune URL/référence hôte Pronote. »
-- I2 : unique `PronoteHttpClient` côté serveur (supprimé depuis #234).
+- I2 : client HTTP Pronote unique côté serveur (ancienne architecture, retirée après #199).
 
 Le port Kotlin change la donne : `android/pronote/` (zéro dépendance, transport
 plateforme) rejoue le protocole à parité compilée et rejouée (crypto #200,
@@ -25,15 +25,13 @@ composant à compromettre pour acheminer des secrets qui n'ont pas à voyager.
   et son PIN sont saisis dans l'app, la session vit et meurt dans le téléphone
   (purge au logout / changement d'hôte, inchangée).
 - **I2 remplacé** : aucun accès Pronote depuis le serveur ; l'app a un seul
-  `HttpSession`/`Client` dans `android/pronote/`. Le script de capture #199
-  appelle `pronotets` hors processus serveur.
-- **I3/I5 étendus à `android/`** : `android/core/` suit la même pureté que
-  `server/domain/` ; l'app assemble et valide les prompts localement. La clé
-  reste chiffrée sur l'appareil et part directement à OpenRouter dans
+  `HttpSession`/`Client` dans `android/pronote/`.
+- **I3/I5 étendus à `android/`** : `android/core/` reste sans réseau ni stockage ;
+  l'app assemble et valide les prompts localement.
+  La clé reste chiffrée sur l'appareil et part directement à OpenRouter dans
   `Authorization` (I8).
-- **Transition terminée** : depuis #205, aucun nouveau code Pronote ne passe
-  par le serveur. Le client TypeScript restant sert uniquement à capturer le
-  corpus #199, hors processus.
+- **Transition terminée** : depuis #205, aucun code Pronote ne passe par le
+  serveur. L'outil de capture TypeScript a été retiré à la clôture de #199.
 
 ## Alternatives rejetées
 
@@ -60,13 +58,12 @@ composant à compromettre pour acheminer des secrets qui n'ont pas à voyager.
   (rien à moissonner côté backend) ; le chiffrement au repos côté app reste du
   ressort du store (voir I8).
 - **Dérive de parité TS↔Kotlin** : atténuée par les harnais
-  `kotlin-pronote-parity` et `kotlin-pronote-client-parity`, qui compilent et
-  rejouent le vrai code ; toute divergence = défaut bloquant.
+  `kotlin-pronote-parity`, `kotlin-pronote-client-parity` et le replay du corpus
+  local, qui compilent/rejouent le code Android ; toute divergence = défaut bloquant.
 
 ## Conséquences
 
-- INVARIANTS I1/I2/I3/I5 réécrits ; `AGENTS.md` (règle réseau), `README.md`
-  (démarrage sans serveur), `docs/HUMAN_INPUTS.md` (corpus, compte scraper)
-  alignés.
+- INVARIANTS I1/I2/I3/I5 réécrits ; `AGENTS.md`, `README.md` et
+  `docs/HUMAN_INPUTS.md` alignés.
 - Scans et invariants sont alignés sur l'accès direct : `make check` vérifie le
   client Android et les contraintes du scraper restant.
