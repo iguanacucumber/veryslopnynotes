@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Card
@@ -34,11 +36,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.ZoneId
+import java.util.Locale
 
 // CARTE DE COURS #137 — la pièce qui manquait à l'EDT.
 //
@@ -53,9 +55,12 @@ import java.time.ZoneId
 // Les couleurs ne sont pas des hex posés ici : le fond vient de
 // `subjectSurface` (le pastel de matière), l'encre de `subjectContent` (le pas
 // mesuré qui repasse 4.5:1 sur les 20 couleurs), la colonne de `colorFromHex`
-// (la couleur de matière elle-même), et l'annulé du rôle `error` passé par le
-// MÊME [tint] que tout le reste du thème. Aucune couleur en dur, donc le mode
-// sombre est correct sans une seconde feuille de style.
+// (la couleur de matière elle-même). Un cours annulé est GRIS — fond, colonne
+// et encre pris dans les rôles `surfaceVariant` / `outline` /
+// `onSurfaceVariant` — et le rouge du rôle `error` passé par le MÊME [tint]
+// que tout le reste du thème ne peint plus que le bandeau « Prof. absent ».
+// Aucune couleur en dur, donc le mode sombre est correct sans une seconde
+// feuille de style.
 //
 // ponytail: `Restaurant` (la fourchette et le couteau) est dans
 // `material-icons-extended`, et la liste des modules Gradle de `ui` est FIGÉE
@@ -197,17 +202,17 @@ private const val LUNCH_DURATION_ALPHA = 0.5f
 private val META_ICON = 20.dp
 
 /**
- * Séparateur entre la salle et le professeur : **2 × 20 dp, rayon 50, 50 %
- * d'opacité**, avec 8 dp de marge de chaque côté.
+ * Séparateur entre la salle et le professeur : **2 × 20 dp, rayon 50, pleine
+ * encre**, avec 8 dp de marge de chaque côté.
  *
  * #194 : c'était un `VerticalDivider` de 1 × 12 dp à 24 %. Un filet de 1 dp est
  * une HAIRLINE d'écran — à cette taille de texte il disparaît, alors qu'un trait
- * de 2 dp se lit. L'opacité passe de 0,24 à 0,5 : le trait est décoratif, donc
- * aucune règle de contraste ne lui s'applique, et 0,5 est ce que la source écrit.
+ * de 2 dp se lit. La référence peint le trait en pleine encre de la carte, pas
+ * en transparence : à 50 % il se lisait comme un défaut d'anti-crénelage entre
+ * deux mots déjà espacés de 8 dp.
  */
 private val META_DIVIDER_WIDTH = 2.dp
 private val META_DIVIDER_HEIGHT = 20.dp
-private const val META_DIVIDER_ALPHA = 0.5f
 
 /** Marge de chaque côté du séparateur de méta. */
 private val META_DIVIDER_MARGIN = 8.dp
@@ -215,27 +220,70 @@ private val META_DIVIDER_MARGIN = 8.dp
 /** Marge à droite de la gouttière d'heures : 2 dp (`paddingRight: 2`). */
 private val TIME_GUTTER_PADDING_END = 2.dp
 
-private const val CANCELLED_LABEL = "Annulé"
+/**
+ * Bandeau d'un cours annulé : la référence écrit « Prof. absent », pas
+ * « Annulé » — c'est l'information utile (le cours n'a pas lieu parce que le
+ * professeur est absent), portée par un bandeau rose qui coiffe la carte, pas
+ * par une pastille.
+ *
+ * Aucun test ne pinçait « Annulé » pour cette carte (`grep Annulé tests/` ne
+ * rend que des commentaires et d'autres écrans — pastille d'absence, libellé
+ * de cantine — jamais ce libellé), donc le renommage ne touche que ce fichier.
+ */
+private const val CANCELLED_LABEL = "Prof. absent"
 private const val CURRENT_LABEL = "En cours"
 private const val NEXT_LABEL = "Prochain"
 
 /**
- * Fond d'un cours annulé : le rouge de marqueclairci à 82 % — c'est le
- * « rouge pâle » de l'app de référence, et non un hex recopié — et le MÊME rouge
- * assombri à −60 % quand la surface est sombre.
+ * Ligne de durée (« 55 mins », « 1h 50 mins ») : l'encre de la carte à 65 %.
+ * La durée est une information SECONDAIRE — la salle et le professeur portent
+ * déjà la ligne de méta en pleine encre — donc elle se lit en retrait, comme
+ * la durée de la bande de pause (`LUNCH_DURATION_ALPHA` à 50 %).
+ */
+private const val DURATION_ALPHA = 0.65f
+
+/**
+ * Chevauchement du bandeau « Prof. absent » : la carte d'un cours annulé
+ * remonte de **10 dp** sous son bandeau (`offset(y = -CANCELLED_OVERLAP)`),
+ * donc le haut arrondi de la carte recouvre le bas du bandeau — le rose ne
+ * dépasse qu'en haut, à cheval sur le bord, comme sur la référence.
+ */
+private val CANCELLED_OVERLAP = 10.dp
+
+/**
+ * Marge verticale du bandeau « Prof. absent » : 8 dp en haut, 8 + 10 en bas —
+ * le bas porte [CANCELLED_OVERLAP] de plus pour que le texte survive au
+ * recouvrement de la carte.
+ */
+private val CANCELLED_BANNER_PADDING_V = 8.dp
+
+/** Écart entre l'icône et le texte du bandeau : 8 dp. */
+private val CANCELLED_BANNER_GAP = 8.dp
+
+/** Côte de l'icône du bandeau : 20 dp, comme les icônes de méta. */
+private val CANCELLED_BANNER_ICON = 20.dp
+
+/**
+ * Fond du BANDEAU « Prof. absent » : le rouge de marque clairci à 82 % — c'est
+ * le « rouge pâle » de l'app de référence, et non un hex recopié — et le MÊME
+ * rouge assombri à −60 % quand la surface est sombre. La CARTE d'un cours
+ * annulé, elle, est grise (`surfaceVariant`) : le rose ne peint plus que le
+ * bandeau qui la coiffe.
  *
- * Un aplat rouge pâle sur fond blanc mesure 1.5:1 avec le rouge du thème en
- * texte : c'est pour ça que l'encre d'un cours annulé n'est PAS `error` mais
- * [cancelledInk]. Cf. le miroir `tests/unit/android-timetable.test.ts`.
+ * Les deux pas sont FIGÉS par le miroir `tests/unit/android-timetable.test.ts`
+ * (« annulé : rouge pâle dérivé du thème ») : y toucher, c'est casser la mesure.
  */
 fun cancelledSurface(error: Color, dark: Boolean): Color = tint(error, if (dark) -.60f else .82f)
 
 /**
- * Encre d'un cours annulé : le rouge de la marque poussé dans la même direction
- * que l'encre d'une carte matière (`tint` à −45 %, le pas mesuré qui repasse
- * 4.5:1 sur toute la palette) en thème clair, éclairci à 72 % en thème sombre.
+ * Encre du BANDEAU « Prof. absent » : le rouge de la marque poussé dans la même
+ * direction que l'encre d'une carte matière (`tint` à −45 %, le pas mesuré qui
+ * repasse 4.5:1 sur toute la palette) en thème clair, éclairci à 72 % en thème
+ * sombre.
  *
- * Mesuré sur le fond [cancelledSurface] : 7.3:1 en clair, 8.9:1 en sombre.
+ * Mesuré sur le fond [cancelledSurface] : 7.3:1 en clair, 8.9:1 en sombre. Un
+ * aplat rouge pâle porte 1.5:1 avec le rouge du thème en texte : c'est pour ça
+ * que le bandeau n'est PAS peint en `error` brut. Mêmes pas, même miroir.
  */
 fun cancelledInk(error: Color, dark: Boolean): Color = tint(error, if (dark) .72f else -.45f)
 
@@ -249,13 +297,14 @@ fun isDarkSurface(): Boolean =
  * Carte d'un cours : gouttière de temps puis carte de matière.
  *
  * [label] est le libellé résolu par `SubjectStyle` (nom de matière ou libellé
- * perso, emoji compris), [colorHex] la couleur de matière (`#RRGGBB`, déjà
+ * perso, SANS emoji : la ref. n'en pose pas sur les cartes d'EDT), [colorHex] la couleur de matière (`#RRGGBB`, déjà
  * validée : venue des `SubjectPrefs` ou de la palette du thème). Les deux sont
  * calculées par l'écran — cette carte ne lit ni prefs ni dépôt.
  *
  * [highlight] encadre le cours en cours (2 dp) et signale le suivant (1 dp) :
- * c'est le seul état que la carte ajoute au statut du cours (annulé, déplacé),
- * qui se lit sur le texte.
+ * c'est le seul état que la carte ajoute au statut du cours. Le déplacement se
+ * lit sur le texte, l'annulation sur le bandeau « Prof. absent » et le gris de
+ * la carte — jamais barrée : la référence rend ces titres en gris uni.
  *
  * #145 : le cours EN COURS pulse en plus (échelle 1 -> 1.02, opacité qui descend
  * juste assez pour lire un battement). Le filet de 2 dp disait QUEL cours, jamais
@@ -276,152 +325,239 @@ fun PapCourseCard(
     val cancelled = lesson.isCancelled()
     // Repli `?: MaterialTheme…` : une couleur illisible ne doit pas laisser une
     // carte TRANSPARENTE (on ne verrait plus que le texte).
+    //
+    // Un cours annulé est GRIS : la référence peint la carte en aplats neutres
+    // (fond `surfaceVariant`, colonne `outline`, texte `onSurfaceVariant`) et
+    // réserve le rose au bandeau « Prof. absent » qui la coiffe. Le rouge
+    // [cancelledSurface] / [cancelledInk] ne peint donc plus la carte.
     val background = if (cancelled) {
-        cancelledSurface(error, dark)
+        MaterialTheme.colorScheme.surfaceVariant
     } else {
         subjectSurface(colorHex) ?: MaterialTheme.colorScheme.surfaceVariant
     }
     val ink = if (cancelled) {
-        cancelledInk(error, dark)
+        MaterialTheme.colorScheme.onSurfaceVariant
     } else {
         subjectContent(colorHex) ?: MaterialTheme.colorScheme.onSurface
     }
-    val spine = if (cancelled) error else colorFromHex(colorHex) ?: MaterialTheme.colorScheme.primary
-    Card(
+    val spine = if (cancelled) {
+        MaterialTheme.colorScheme.outline
+    } else {
+        colorFromHex(colorHex) ?: MaterialTheme.colorScheme.primary
+    }
+    // La pulsation reste sur le `modifier` ENTRANT (cf. le test de #145 :
+    // `modifier.papCurrentPulse(highlight == CourseHighlight.CURRENT)`), donc
+    // elle couvre le bandeau ET la carte d'un cours annulé en cours.
+    Column(
         modifier = modifier.papCurrentPulse(highlight == CourseHighlight.CURRENT),
-        shape = RoundedCornerShape(CARD_RADIUS),
-        colors = CardDefaults.cardColors(containerColor = background),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        border = when (highlight) {
-            CourseHighlight.CURRENT -> BorderStroke(CURRENT_BORDER, spine)
-            CourseHighlight.NEXT -> BorderStroke(HAIRLINE, spine)
-            CourseHighlight.NONE -> null
-        },
     ) {
-        // `IntrinsicSize.Min` : la barre d'accent doit porter TOUTE la hauteur
-        // de la carte, donc la Row se mesure à la hauteur de son plus haut enfant.
-        Row(
+        if (cancelled) {
+            CancelledBanner(error = error, dark = dark)
+        }
+        Card(
             modifier = Modifier
-                .height(IntrinsicSize.Min)
-                // #194 : le padding 14 est sur le CONTENEUR, pas sur la colonne
-                // de texte — donc la barre d'accent est ENCASTRÉE de 14 dp dans
-                // la carte, et non collée à son bord gauche.
-                //
-                // C'est le geste qui rend la barre lisible : collée au bord, elle
-                // se confond avec le filet de la carte ; encastrée, elle flotte,
-                // et son rayon 300 se voit. AVANT, notre barre était collée au bord
-                // et le texte n'avait de marge qu'à gauche (par le padding de la
-                // colonne) — donc rien à droite non plus.
-                .padding(horizontal = CARD_PADDING_H, vertical = CARD_PADDING_V),
-            // 10 dp entre la barre et le texte (`gap={10}`) : un écart à part,
-            // pas le padding. Avant c'était le padding horizontal de la colonne —
-            // donc il n'existait pas comme mesure, il était un effet de bord.
-            horizontalArrangement = Arrangement.spacedBy(SPINE_GAP),
+                .fillMaxWidth()
+                // Le bandeau chevauche le haut de la carte : la carte remonte
+                // de [CANCELLED_OVERLAP] sur le bas du bandeau, qui est composé
+                // AVANT — donc dessous.
+                .then(if (cancelled) Modifier.offset(y = -CANCELLED_OVERLAP) else Modifier),
+            shape = RoundedCornerShape(CARD_RADIUS),
+            colors = CardDefaults.cardColors(containerColor = background),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = when (highlight) {
+                CourseHighlight.CURRENT -> BorderStroke(CURRENT_BORDER, spine)
+                CourseHighlight.NEXT -> BorderStroke(HAIRLINE, spine)
+                CourseHighlight.NONE -> null
+            },
         ) {
-            // #194 : `borderRadius: 300` sur une barre de 6 dp, c'est une BOULE :
-            // les deux extrémités sont des demi-cercles de 3 dp. Un `Box` droit
-            // donnait deux angles vifs, visibles à cette échelle.
-            Box(
+            // `IntrinsicSize.Min` : la barre d'accent doit porter TOUTE la hauteur
+            // de la carte, donc la Row se mesure à la hauteur de son plus haut enfant.
+            Row(
                 modifier = Modifier
-                    .width(SPINE_WIDTH)
-                    .fillMaxHeight()
-                    .clip(CircleShape)
-                    .background(spine),
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                // `gap: 2` sur la colonne de contenu de la référence.
-                verticalArrangement = Arrangement.spacedBy(STACK_GAP),
+                    .height(IntrinsicSize.Min)
+                    // #194 : le padding 14 est sur le CONTENEUR, pas sur la colonne
+                    // de texte — donc la barre d'accent est ENCASTRÉE de 14 dp dans
+                    // la carte, et non collée à son bord gauche.
+                    //
+                    // C'est le geste qui rend la barre lisible : collée au bord, elle
+                    // se confond avec le filet de la carte ; encastrée, elle flotte,
+                    // et son rayon 300 se voit. AVANT, notre barre était collée au bord
+                    // et le texte n'avait de marge qu'à gauche (par le padding de la
+                    // colonne) — donc rien à droite non plus.
+                    .padding(horizontal = CARD_PADDING_H, vertical = CARD_PADDING_V),
+                // 10 dp entre la barre et le texte (`gap={10}`) : un écart à part,
+                // pas le padding. Avant c'était le padding horizontal de la colonne —
+                // donc il n'existait pas comme mesure, il était un effet de bord.
+                horizontalArrangement = Arrangement.spacedBy(SPINE_GAP),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                // #194 : `borderRadius: 300` sur une barre de 6 dp, c'est une BOULE :
+                // les deux extrémités sont des demi-cercles de 3 dp. Un `Box` droit
+                // donnait deux angles vifs, visibles à cette échelle.
+                Box(
+                    modifier = Modifier
+                        .width(SPINE_WIDTH)
+                        .fillMaxHeight()
+                        .clip(CircleShape)
+                        .background(spine),
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    // `gap: 2` sur la colonne de contenu de la référence.
+                    verticalArrangement = Arrangement.spacedBy(STACK_GAP),
                 ) {
-                    Text(
-                        text = label,
-                        // #194 : `h5` GRAS, interligne 24. C'était `titleMedium`
-                        // (17 sp, medium) — la taille d'un libellé d'action. La
-                        // référence pose `variant="h5" weight="bold"` avec
-                        // `lineHeight: 24` sur le bloc du nom.
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 24.sp,
-                        ),
-                        color = ink,
-                        // 2 lignes hors variante compacte (`numberOfLines={compact
-                        // ? 1 : 2}`). Une seule ligne tronquait un nom de matière
-                        // long AU MILIEU DU MOT.
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        textDecoration = if (cancelled) TextDecoration.LineThrough else null,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    when {
-                        cancelled -> PapPill(CANCELLED_LABEL, error)
-                        highlight == CourseHighlight.CURRENT -> PapPill(CURRENT_LABEL, spine)
-                        highlight == CourseHighlight.NEXT -> PapPill(NEXT_LABEL, spine)
-                    }
-                }
-                val room = lesson.room?.takeIf { it.isNotEmpty() }
-                val teacher = lesson.teacher?.takeIf { it.isNotEmpty() }
-                if (room != null || teacher != null) {
-                    // #194 : `marginTop: 1` sur la ligne salle/professeur, et 8 dp
-                    // de marge de chaque côté du séparateur — pas un `gap` de Row,
-                    // parce que la source met la marge SUR le trait.
                     Row(
-                        modifier = Modifier.padding(top = META_LINE_GAP),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(META_DIVIDER_MARGIN),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        if (room != null) {
-                            PapMetaChip(
-                                icon = Icons.Filled.Place,
-                                text = room,
-                                tint = ink,
-                                // `body1` semibold, `fontSize: 16`.
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontSize = 16.sp,
-                                    lineHeight = 20.sp,
-                                ),
-                            )
-                        }
-                        if (room != null && teacher != null) {
-                            Box(
-                                modifier = Modifier
-                                    .width(META_DIVIDER_WIDTH)
-                                    .height(META_DIVIDER_HEIGHT)
-                                    .clip(CircleShape)
-                                    .background(ink.copy(alpha = META_DIVIDER_ALPHA)),
-                            )
-                        }
-                        if (teacher != null) {
-                            PapMetaChip(
-                                icon = Icons.Filled.Person,
-                                text = teacher,
-                                tint = ink,
-                                // Même `body1` semibold, `fontSize: 15`, et une
-                                // seule ligne avec troncature à la fin
-                                // (`numberOfLines={1} ellipsizeMode="tail"`).
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontSize = 15.sp,
-                                    lineHeight = 20.sp,
-                                ),
-                            )
+                        Text(
+                            // Capitales d'AFFICHAGE : la donnée (`label`) garde
+                            // sa casse, et `Locale.FRANCE` garde les accents —
+                            // « Café » vaut « CAFÉ », pas « CAFE ».
+                            text = label.uppercase(Locale.FRANCE),
+                            // #194 : `h5` GRAS, interligne 24. C'était `titleMedium`
+                            // (17 sp, medium) — la taille d'un libellé d'action. La
+                            // référence pose `variant="h5" weight="bold"` avec
+                            // `lineHeight: 24` sur le bloc du nom.
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 24.sp,
+                            ),
+                            color = ink,
+                            // 2 lignes hors variante compacte (`numberOfLines={compact
+                            // ? 1 : 2}`). Une seule ligne tronquait un nom de matière
+                            // long AU MILIEU DU MOT.
+                            //
+                            // Jamais barrée : la référence rend les cours annulés
+                            // en gris uni, et le bandeau « Prof. absent » porte
+                            // déjà l'information.
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        // Pas de pastille pour un cours annulé : le bandeau
+                        // « Prof. absent » porte déjà l'information, et la
+                        // référence n'en rend aucune sur ces cartes.
+                        when {
+                            highlight == CourseHighlight.CURRENT -> PapPill(CURRENT_LABEL, spine)
+                            highlight == CourseHighlight.NEXT -> PapPill(NEXT_LABEL, spine)
                         }
                     }
-                }
-                val duration = lessonDurationLabel(lesson)
-                val moved = movedHintLabel(lesson, zone)
-                if (duration.isNotEmpty() || moved != null) {
-                    Text(
-                        text = listOfNotNull(duration, moved).joinToString(" · "),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = ink,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    val room = lesson.room?.takeIf { it.isNotEmpty() }
+                    val teacher = lesson.teacher?.takeIf { it.isNotEmpty() }
+                    if (room != null || teacher != null) {
+                        // #194 : `marginTop: 1` sur la ligne salle/professeur, et 8 dp
+                        // de marge de chaque côté du séparateur — pas un `gap` de Row,
+                        // parce que la source met la marge SUR le trait.
+                        Row(
+                            modifier = Modifier.padding(top = META_LINE_GAP),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(META_DIVIDER_MARGIN),
+                        ) {
+                            if (room != null) {
+                                PapMetaChip(
+                                    icon = Icons.Filled.Place,
+                                    text = room,
+                                    tint = ink,
+                                    // `body1` semibold, `fontSize: 16`.
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 16.sp,
+                                        lineHeight = 20.sp,
+                                    ),
+                                )
+                            }
+                            if (room != null && teacher != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(META_DIVIDER_WIDTH)
+                                        .height(META_DIVIDER_HEIGHT)
+                                        .clip(CircleShape)
+                                        .background(ink),
+                                )
+                            }
+                            if (teacher != null) {
+                                PapMetaChip(
+                                    icon = Icons.Filled.Person,
+                                    // Comme le nom de matière : capitales
+                                    // d'affichage, donnée intacte. La salle
+                                    // garde sa casse (« C11 - Info »).
+                                    text = teacher.uppercase(Locale.FRANCE),
+                                    tint = ink,
+                                    // Même `body1` semibold, `fontSize: 15`, et une
+                                    // seule ligne avec troncature à la fin
+                                    // (`numberOfLines={1} ellipsizeMode="tail"`).
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontSize = 15.sp,
+                                        lineHeight = 20.sp,
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                    val duration = lessonDurationLabel(lesson)
+                    val moved = movedHintLabel(lesson, zone)
+                    if (duration.isNotEmpty() || moved != null) {
+                        Text(
+                            text = listOfNotNull(duration, moved).joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = ink.copy(alpha = DURATION_ALPHA),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Bandeau « Prof. absent » : un strip rose pleine largeur aux coins hauts
+ * arrondis ([CARD_RADIUS]), peint du [cancelledSurface] du thème, avec une
+ * icône et un libellé en [cancelledInk].
+ *
+ * Le bandeau est composé AVANT la carte dans la `Column` de [PapCourseCard],
+ * et la carte remonte de [CANCELLED_OVERLAP] par-dessus son bas : le rose ne
+ * dépasse qu'en haut, à cheval sur le bord de la carte — la forme de la
+ * référence.
+ *
+ * L'icône est `Icons.Filled.Info` : il n'y a pas de fantôme dans
+ * `material-icons-core`, et la liste des modules Gradle de `ui` est FIGÉE (cf.
+ * l'en-tête du fichier : 10 000 icônes pour un glyphe, non) — donc pas
+ * d'`extended` pour un glyphe. Décorative (`contentDescription = null`) :
+ * c'est le texte « Prof. absent » qui porte le sens, et c'est lui que TalkBack
+ * annonce.
+ */
+@Composable
+private fun CancelledBanner(error: Color, dark: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(topStart = CARD_RADIUS, topEnd = CARD_RADIUS))
+            .background(cancelledSurface(error, dark))
+            .padding(
+                start = CARD_PADDING_H,
+                end = CARD_PADDING_H,
+                top = CANCELLED_BANNER_PADDING_V,
+                bottom = CANCELLED_BANNER_PADDING_V + CANCELLED_OVERLAP,
+            ),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(CANCELLED_BANNER_GAP),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Info,
+                contentDescription = null,
+                tint = cancelledInk(error, dark),
+                modifier = Modifier.size(CANCELLED_BANNER_ICON),
+            )
+            Text(
+                text = CANCELLED_LABEL,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = cancelledInk(error, dark),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -515,7 +651,15 @@ fun PapLessonTimeGutter(lesson: TimetableLessonUi, zone: ZoneId, modifier: Modif
             // déclare 32, qu'elle écrase ici (`lineHeight: 20`). On garde
             // l'écrasement : 32 laisserait un trou de 12 dp entre les deux lignes
             // de la gouttière. C'était `titleSmall` (14 sp).
-            style = MaterialTheme.typography.titleLarge.copy(lineHeight = TIME_START_LEADING),
+            //
+            // Le DÉBUT est gras et en encre pleine (`onSurface`), la FIN reste en
+            // encre secondaire : dans la gouttière, c'est le départ qu'on cherche
+            // d'un coup d'œil.
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontWeight = FontWeight.Bold,
+                lineHeight = TIME_START_LEADING,
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )

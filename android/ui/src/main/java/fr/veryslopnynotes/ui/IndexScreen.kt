@@ -26,14 +26,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SyncedRepository
 import kotlinx.coroutines.delay
+import org.json.JSONObject
+import java.time.Instant
 import java.time.ZoneId
 
 // ACCUEIL À WIDGETS #143 (Papillon).
@@ -123,8 +127,8 @@ fun IndexScreen(
         }
     }
 
-    val lessons = snapshot.timetable?.let { upcomingLessonsFrom(it, nowMillis) }.orEmpty()
-    val homework = snapshot.assignments?.let { pendingHomeworkFrom(it, nowMillis) }.orEmpty()
+    val lessons = snapshot.timetable?.let { upcomingLessonsFrom(it, nowMillis, limit = 1) }.orEmpty()
+    val homework = snapshot.assignments?.let { pendingHomeworkFrom(it, nowMillis, limit = 2) }.orEmpty()
     val grades = snapshot.grades?.let { latestGradesFrom(it, limit = 1) }.orEmpty()
     // #139 a livre le rapport de moyennes (`averagesFrom`) : l'accueil prend la
     // moyenne generale de la, sans relire le JSON des moyennes.
@@ -140,158 +144,152 @@ fun IndexScreen(
     val cachedActions = listOf(snapshot.news, snapshot.menus, snapshot.attendance, snapshot.discussions)
         .count { it != null }
 
+    val badges = mapOf(
+        ROUTE_MESSAGES to messagesUnreadBadge(snapshot.discussions),
+        ROUTE_ATTENDANCE to attendanceTotalBadge(snapshot.attendance),
+    )
+    val hasBanner = snapshot.stale || refreshError != null
+
     HomePullToRefresh(refreshing = refreshing, onRefresh = { refresh() }) {
-        Column(
-            // #143 : le défilement était le défaut le plus visible. `fillMaxSize`
-            // + `verticalScroll` : une semaine de contenu se fait défiler au
-            // lieu d'être tronquée.
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        // Bandeau FIXE : hors du `verticalScroll`, il persiste pendant le
+        // défilement. Le contenu défilant porte le reste du padding.
+        Column(modifier = Modifier.fillMaxSize()) {
             // Périmé, OU dernière actualisation ratée : dans les deux cas ce qui
             // est affiché vient du CACHE, et l'utilisateur doit l'apprendre. Le
             // libellé du bandeau est celui de #136 (« Données hors-ligne · mis à
             // jour il y a 4 min ») : les deux plans disent la même chose.
-            if (snapshot.stale || refreshError != null) {
-                PapStaleBanner(fetchedAt = snapshot.fetchedAt, onRefresh = { refresh() })
-            }
-            HomeQuickActionsGrid(actions = actions, onOpen = onOpen)
-            val empty = !homeHasContent(lessons, average, homework, cachedActions)
-            when {
-                // Tirail sur une page vide : le cache est relu à la fin, donc
-                // l'indicateur est l'information honnête (pas un écran vide qui
-                // laisse croire à un échec).
-                empty && refreshing -> PapLoadingBlock()
-                empty -> PapEmptyState(
-                    icon = Icons.Filled.Info,
-                    title = "Rien à afficher",
-                    description = refreshError
-                        ?: "Aucune donnée en cache. Appairez puis actualisez un onglet.",
-                )
-            }
-
-            // --- Widget cours : la carte elle-même ouvre l'EDT -------------
-            if (lessons.isNotEmpty()) {
-                HomeWidgetCard(
-                    icon = Icons.Filled.DateRange,
-                    title = homeCourseTitle(lessons, nowMillis, zone),
-                    onClick = { onOpen(ROUTE_CALENDAR) },
-                    onMore = { onOpen(ROUTE_CALENDAR) },
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        for (lesson in lessons) {
-                            HomeCourseCard(
-                                lesson = lesson,
-                                zone = zone,
-                                subjectPrefs = subjectPrefs,
-                                countdown = relativeTimeFr(lesson.startMillis, nowMillis),
-                            )
-                        }
-                    }
+            if (hasBanner) {
+                Box(modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp)) {
+                    PapStaleBanner(fetchedAt = snapshot.fetchedAt, onRefresh = { refresh() })
                 }
             }
+            Column(
+                // #143 : le défilement était le défaut le plus visible. `fillMaxSize`
+                // + `verticalScroll` : une semaine de contenu se fait défiler au
+                // lieu d'être tronquée.
+                modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = if (hasBanner) 12.dp else 16.dp,
+                    bottom = 16.dp,
+                ),
+                // Ordre Papillon : salutation → prochain cours → moyenne →
+                // devoirs → accès rapides en dernier.
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // Salutation horloge seule : « Bonjour » 6h–17h, « Bonsoir »
+                // sinon, + jour via `homeDayLabel`. Pas d'avatar/nom : le profil
+                // n'est pas cachable, l'horloge suffit hors-ligne.
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    val hour = runCatching { Instant.ofEpochMilli(nowMillis).atZone(zone).hour }.getOrDefault(12)
+                    Text(
+                        text = if (hour in 6..17) "Bonjour" else "Bonsoir",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(
+                        text = homeDayLabel(nowMillis, nowMillis, zone),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                val empty = !homeHasContent(lessons, average, homework, cachedActions)
+                when {
+                    // Tirail sur une page vide : le cache est relu à la fin, donc
+                    // l'indicateur est l'information honnête (pas un écran vide qui
+                    // laisse croire à un échec).
+                    empty && refreshing -> PapLoadingBlock()
+                    empty -> PapEmptyState(
+                        icon = Icons.Filled.Info,
+                        title = "Rien à afficher",
+                        description = refreshError
+                            ?: "Aucune donnée en cache. Appairez puis actualisez un onglet.",
+                    )
+                }
 
-            // --- Widget moyenne : le grand nombre, puis la dernière note ----
-            // La moyenne GÉNÉRALE n'appartient à aucune matière (le contrat ne
-            // publie qu'un `averages.general`), donc elle porte la couleur de
-            // marque, pas une couleur de matière inventée ; c'est la ligne de la
-            // dernière note qui prend la couleur de SA matière — et sa date,
-            // enfin affichée (#82 la triait sans la montrer).
-            if (average != null || grades.isNotEmpty()) {
-                HomeWidgetCard(
-                    icon = Icons.Filled.Star,
-                    title = "Moyenne",
-                    onClick = { onOpen(ROUTE_GRADES) },
-                    onMore = { onOpen(ROUTE_GRADES) },
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (average != null) {
-                            Row(verticalAlignment = Alignment.Bottom) {
-                                Text(
-                                    text = homeAverageNumberLabel(average.value),
-                                    style = MaterialTheme.typography.displaySmall,
-                                    // `secondary` et non `primary` : le vert de
-                                    // marque ne vaut que 3.74:1 sur la surface,
-                                    // `secondary` 4.93:1 — même teinte à l'œil.
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = "/20",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
-                                )
-                            }
-                            Text(
-                                text = if (average.provided) "Moyenne fournie" else "Moyenne estimée",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        for (grade in grades) {
-                            val style = subjectStyle(subjectPrefs, grade.subject)
-                            val hex = subjectColorHex(subjectPrefs, grade.subject)
-                            val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.primary
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                // `heading()` : la matiere d'une ligne est le
-                                // TITRE de cette ligne — le survol doit
-                                // pouvoir s'y poser.
-                                Text(
-                                    text = style.badge,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = ink,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f).semantics { heading() },
-                                )
-                                Text(
-                                    text = grade.note,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    text = relativeTimeFr(grade.dateMillis, nowMillis),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
+                // --- Widget cours : la carte elle-même ouvre l'EDT -------------
+                if (lessons.isNotEmpty()) {
+                    HomeWidgetCard(
+                        icon = Icons.Filled.DateRange,
+                        title = homeCourseTitle(lessons, nowMillis, zone),
+                        onClick = { onOpen(ROUTE_CALENDAR) },
+                        onMore = { onOpen(ROUTE_CALENDAR) },
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (lesson in lessons) {
+                                HomeCourseCard(
+                                    lesson = lesson,
+                                    zone = zone,
+                                    subjectPrefs = subjectPrefs,
+                                    countdown = relativeTimeFr(lesson.startMillis, nowMillis),
                                 )
                             }
                         }
                     }
                 }
-            }
 
-            // --- Widget devoirs : échéance en temps relatif ------------------
-            if (homework.isNotEmpty()) {
-                HomeWidgetCard(
-                    icon = Icons.Filled.CheckCircle,
-                    title = "Devoirs",
-                    onClick = { onOpen(ROUTE_TASKS) },
-                    onMore = { onOpen(ROUTE_TASKS) },
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        for (task in homework) {
-                            val style = subjectStyle(subjectPrefs, task.subject)
-                            val hex = subjectColorHex(subjectPrefs, task.subject)
-                            val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.primary
-                            Column(modifier = Modifier.fillMaxWidth()) {
+                // --- Widget moyenne : le grand nombre, puis la dernière note ----
+                // La moyenne GÉNÉRALE n'appartient à aucune matière (le contrat ne
+                // publie qu'un `averages.general`), donc elle porte la couleur de
+                // marque, pas une couleur de matière inventée ; c'est la ligne de la
+                // dernière note qui prend la couleur de SA matière — et sa date,
+                // enfin affichée (#82 la triait sans la montrer).
+                if (average != null || grades.isNotEmpty()) {
+                    HomeWidgetCard(
+                        icon = Icons.Filled.Star,
+                        title = "Moyenne générale",
+                        onClick = { onOpen(ROUTE_GRADES) },
+                        onMore = { onOpen(ROUTE_GRADES) },
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (average != null) {
+                                // Provenance fusionnée en sémantique (non pincée
+                                // dans tests/) : lue, pas affichée.
+                                val provenance =
+                                    if (average.provided) "Moyenne fournie" else "Moyenne estimée"
+                                Row(
+                                    verticalAlignment = Alignment.Bottom,
+                                    modifier = Modifier.semantics {
+                                        contentDescription =
+                                            "Moyenne générale ${homeAverageNumberLabel(average.value)}/20, $provenance"
+                                    },
+                                ) {
+                                    Text(
+                                        text = homeAverageNumberLabel(average.value),
+                                        style = MaterialTheme.typography.displaySmall,
+                                        // `secondary` et non `primary` : le vert de
+                                        // marque ne vaut que 3.74:1 sur la surface,
+                                        // `secondary` 4.93:1 — même teinte à l'œil.
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        text = "/20",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                                    )
+                                }
+                            }
+                            for (grade in grades) {
+                                val style = subjectStyle(subjectPrefs, grade.subject)
+                                val hex = subjectColorHex(subjectPrefs, grade.subject)
+                                val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.primary
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    // `heading()` : idem pour le widget devoirs.
+                                    // `heading()` : la matiere d'une ligne est le
+                                    // TITRE de cette ligne — le survol doit
+                                    // pouvoir s'y poser.
                                     Text(
                                         text = style.badge,
                                         style = MaterialTheme.typography.titleSmall,
@@ -300,25 +298,121 @@ fun IndexScreen(
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f).semantics { heading() },
                                     )
-                                    Box(modifier = Modifier.padding(top = 2.dp)) {
-                                        PapPill(
-                                            text = relativeTimeFr(task.dueMillis, nowMillis),
-                                            color = colorFromHex(hex) ?: MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
+                                    Text(
+                                        text = grade.note,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        // #192 : date en toutes lettres, pas de
+                                        // relatif d'horloge pour une note.
+                                        text = longDateFr(grade.dateMillis, zone),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                    )
                                 }
-                                Text(
-                                    text = task.title,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
                             }
                         }
                     }
                 }
+
+                // --- Widget devoirs : échéance en temps relatif ------------------
+                if (homework.isNotEmpty()) {
+                    HomeWidgetCard(
+                        icon = Icons.Filled.CheckCircle,
+                        title = "Devoirs",
+                        onClick = { onOpen(ROUTE_TASKS) },
+                        onMore = { onOpen(ROUTE_TASKS) },
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            for (task in homework) {
+                                val style = subjectStyle(subjectPrefs, task.subject)
+                                val hex = subjectColorHex(subjectPrefs, task.subject)
+                                val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.primary
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        // `heading()` : idem pour le widget devoirs.
+                                        Text(
+                                            text = style.badge,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = ink,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f).semantics { heading() },
+                                        )
+                                        Box(modifier = Modifier.padding(top = 2.dp)) {
+                                            PapPill(
+                                                text = relativeTimeFr(task.dueMillis, nowMillis),
+                                                color = colorFromHex(hex) ?: MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = task.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Grille en dernier : 12 de la page + 4 ici = 16 vers les widgets.
+                HomeQuickActionsGrid(
+                    actions = actions,
+                    onOpen = onOpen,
+                    badges = badges,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
         }
+    }
+}
+
+/**
+ * Non-lus Messages : somme des `unreadCount` connus, 0 sinon. Présentation
+ * seule : le statut texte reste la source, la pastille ne fait que le doubler.
+ */
+private fun messagesUnreadBadge(payload: String?): Int {
+    if (payload == null) return 0
+    return try {
+        val arr = JSONObject(payload).optJSONArray("discussions") ?: return 0
+        var unread = 0
+        for (i in 0 until arr.length()) {
+            val count = arr.optJSONObject(i)?.optDouble("unreadCount", Double.NaN) ?: Double.NaN
+            if (count.isNaN() || count < 0) return 0
+            unread += count.toInt()
+        }
+        unread
+    } catch (_: Exception) {
+        0
+    }
+}
+
+/**
+ * Vie scolaire : absences + retards du cache, 0 si rien. Présentation seule.
+ */
+private fun attendanceTotalBadge(payload: String?): Int {
+    if (payload == null) return 0
+    return try {
+        val arr = JSONObject(payload).optJSONArray("absences") ?: return 0
+        var total = 0
+        for (i in 0 until arr.length()) {
+            when (arr.optJSONObject(i)?.optString("kind", "")?.trim()) {
+                "absence", "late" -> total++
+            }
+        }
+        total
+    } catch (_: Exception) {
+        0
     }
 }
 

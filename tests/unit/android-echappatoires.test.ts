@@ -202,7 +202,9 @@ describe("échappatoires #147 : une seule implémentation des dates françaises"
       ["TimetableWeek.kt", "weekdayCapitalizedFr(date.dayOfWeek)"],
       ["TimetableWeek.kt", "dayLabelOf(date)"],
       ["HomeWidgets.kt", "dayLabelOf("],
-      ["CanteenMenus.kt", "dayLabelFr(date)"],
+      // Polish cantine : jour en TOUTES LETTRES (`longDateFr`, display-only) —
+      // AVANT « lundi 05/10 » via `dayLabelFr`. Délègue toujours, ne réécrit rien.
+      ["CanteenMenus.kt", "longDateFr("],
       ["AttendanceFormat.kt", "weekdayFr(day.dayOfWeek)"],
     ]) {
       const src = readFileSync(join(UI, file as string), "utf8");

@@ -897,7 +897,9 @@ describe("unit android EDT par jour (#137)", () => {
     for (const nom of [
       "CARD_RADIUS", "CARD_PADDING_H", "CARD_PADDING_V", "SPINE_GAP", "SPINE_WIDTH",
       "META_ICON", "META_ICON_GAP", "META_DIVIDER_WIDTH", "META_DIVIDER_HEIGHT",
-      "META_DIVIDER_ALPHA", "META_DIVIDER_MARGIN", "META_LINE_GAP", "STACK_GAP",
+      "META_DIVIDER_MARGIN", "META_LINE_GAP", "STACK_GAP",
+      "DURATION_ALPHA",
+      "CANCELLED_OVERLAP", "CANCELLED_BANNER_PADDING_V", "CANCELLED_BANNER_GAP", "CANCELLED_BANNER_ICON",
       "TIME_GUTTER_GAP", "TIME_GUTTER_PADDING_END", "TIME_START_LEADING", "TIME_END_LEADING",
       "LUNCH_PADDING_V", "LUNCH_ALPHA", "LUNCH_DURATION_ALPHA", "CUTLERY_SIZE",
       "TimetableCardGap", "TimetableRowGap", "TimetablePagePadding",
@@ -916,16 +918,23 @@ describe("unit android EDT par jour (#137)", () => {
     ] as const) {
       expect({ nom, mesure, trouve: card.includes(`${nom} = ${mesure}`) }).toEqual({ nom, mesure, trouve: true });
     }
-    // Ligne de méta : icônes de 20, écart de 5, séparateur 2 × 20 en boule à
-    // 50 %, marge de 8, et 1 dp entre le nom et la ligne.
+    // Ligne de méta : icônes de 20, écart de 5, séparateur 2 × 20 en boule en
+    // PLEINE encre (plus d'alpha : à 50 % il se lisait comme un défaut
+    // d'anti-crénelage), durée à 65 %, marge de 8, et 1 dp entre le nom et la
+    // ligne. Bandeau d'annulation : chevauchement de 10, marges de 8, écart
+    // de 8, icône de 20.
     for (const [nom, mesure] of [
       ["META_ICON", "20.dp"],
       ["META_ICON_GAP", "5.dp"],
       ["META_DIVIDER_WIDTH", "2.dp"],
       ["META_DIVIDER_HEIGHT", "20.dp"],
-      ["META_DIVIDER_ALPHA", "0.5f"],
       ["META_DIVIDER_MARGIN", "8.dp"],
       ["META_LINE_GAP", "1.dp"],
+      ["DURATION_ALPHA", "0.65f"],
+      ["CANCELLED_OVERLAP", "10.dp"],
+      ["CANCELLED_BANNER_PADDING_V", "8.dp"],
+      ["CANCELLED_BANNER_GAP", "8.dp"],
+      ["CANCELLED_BANNER_ICON", "20.dp"],
       ["LUNCH_PADDING_V", "8.dp"],
       ["LUNCH_ALPHA", "0.6f"],
       ["CUTLERY_SIZE", "24.dp"],
@@ -985,16 +994,62 @@ describe("unit android EDT par jour (#137)", () => {
     // d'action pour le texte le plus gros de la carte.
     expect(card).toContain(
       "style = MaterialTheme.typography.titleLarge.copy(\n" +
-      "                            fontWeight = FontWeight.Bold,\n" +
-      "                            lineHeight = 24.sp,\n" +
-      "                        )",
+      "                                fontWeight = FontWeight.Bold,\n" +
+      "                                lineHeight = 24.sp,\n" +
+      "                            )",
     );
     // Le nom du cours tient sur DEUX lignes hors variante compacte : à une, un
     // nom de matière long était coupé au milieu d'un mot. On lit le `maxLines`
     // du SEUL `Text` qui porte le libellé, pas le premier du fichier — sinon
     // l'assertion passerait sur une autre ligne.
-    const nomDuCours = card.slice(card.indexOf("text = label,"), card.indexOf("textDecoration"));
+    const nomDuCours = card.slice(
+      card.indexOf("label.uppercase(Locale.FRANCE)"),
+      card.indexOf("modifier = Modifier.weight(1f, fill = false)"),
+    );
     expect({ deuxLignes: nomDuCours.includes("maxLines = 2") }).toEqual({ deuxLignes: true });
+    // …et il est rendu en capitales d'affichage (donnée intacte, accents
+    // gardés par `Locale.FRANCE`), comme le professeur — la salle, elle, garde
+    // sa casse.
+    expect(card).toContain("text = label.uppercase(Locale.FRANCE),");
+    expect(card).toContain("text = teacher.uppercase(Locale.FRANCE),");
+    expect(card).toContain("import java.util.Locale");
+  });
+
+  test("carte de cours : durée en retrait, gouttière grasse, séparateur pleine encre, bandeau « Prof. absent »", () => {
+    const card = readFileSync(join(UI, "TimetableCourseCard.kt"), "utf8");
+    // Durée secondaire : l'encre de la carte à 65 %, pas pleine.
+    expect(card).toContain("color = ink.copy(alpha = DURATION_ALPHA),");
+    // Gouttière : le DÉBUT est gras et en encre pleine, la FIN reste en
+    // encre secondaire.
+    const gouttiere = card.slice(card.indexOf("fun PapLessonTimeGutter"), card.indexOf("fun PapMetaChip"));
+    expect({ gras: gouttiere.includes("fontWeight = FontWeight.Bold") }).toEqual({ gras: true });
+    expect({ pleine: gouttiere.includes("color = MaterialTheme.colorScheme.onSurface,") }).toEqual({ pleine: true });
+    expect({ seconde: gouttiere.includes("color = MaterialTheme.colorScheme.onSurfaceVariant,") }).toEqual({ seconde: true });
+    // Séparateur : pleine encre, plus aucun alpha ni `copy` dessus.
+    expect(card).toContain(".background(ink),");
+    expect(card).not.toContain("META_DIVIDER_ALPHA");
+    // Annulé : carte grise (rôles du thème, zéro rouge), bandeau rose qui
+    // chevauche le haut — libellé de la référence, pas « Annulé ».
+    expect(card).toContain('private const val CANCELLED_LABEL = "Prof. absent"');
+    expect(card).toContain("offset(y = -CANCELLED_OVERLAP)");
+    expect(card).toContain("Icons.Filled.Info");
+    expect(card).toContain("cancelledSurface(error, dark)");
+    expect(card).toContain("cancelledInk(error, dark)");
+    const fond = card.slice(card.indexOf("val background = if (cancelled)"), card.indexOf("val spine = if (cancelled)"));
+    expect({ gris: fond.includes("MaterialTheme.colorScheme.surfaceVariant") }).toEqual({ gris: true });
+    expect({ encreGrise: fond.includes("MaterialTheme.colorScheme.onSurfaceVariant") }).toEqual({ encreGrise: true });
+    expect(card).toContain("MaterialTheme.colorScheme.outline");
+    // …et jamais barrée : la référence rend ces titres en gris uni, le bandeau
+    // portant déjà l'information. Le jeton n'apparaît ni dans le code ni dans
+    // les commentaires (sinon l'assertion passerait pour le mauvais motif).
+    expect(card).not.toContain("LineThrough");
+    // ZÉRO couleur en dur, comme avant : que des rôles du thème.
+    for (const interdit of [/Color\(0x/, /#[0-9a-fA-F]{6}/]) {
+      expect({ interdit: String(interdit), trouve: card.replace(/\/\*[\s\S]*?\*\//g, "\n").split("\n").filter((l) => !l.trim().startsWith("//")).join("\n").match(interdit) }).toEqual({
+        interdit: String(interdit),
+        trouve: null,
+      });
+    }
   });
 
   test("#166 : plus aucun `PullToRefreshContainer` de material3 1.2.1 dans l'EDT", () => {

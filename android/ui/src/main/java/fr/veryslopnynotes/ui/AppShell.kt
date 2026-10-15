@@ -2,6 +2,8 @@ package fr.veryslopnynotes.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -15,6 +17,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -25,9 +29,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 
 // La COQUILLE : barre du haut et barre d'onglets. Le graphe de navigation et
 // l'état de la session restent dans `AppNav.kt`, qui appelle ces deux
@@ -409,33 +415,75 @@ private fun TabIconWithBadge(route: String, icon: @Composable () -> Unit) {
     if (badge == null) icon() else BadgedBox(badge = badge) { icon() }
 }
 
-/** Barre d'onglets de la route courante, ou RIEN si la route l'interdit. */
+/**
+ * Barre d'onglets de la route courante, ou RIEN si la route l'interdit.
+ *
+ * Pastille flottante façon Papillon : un `Surface` arrondi posé sur un `Box`
+ * paddé, pas un dock plein-bleed. La `NavigationBar` intérieure est
+ * transparente (ni fond ni élévation propres) : c'est la pastille qui porte
+ * la surface et l'ombre. L'indicateur de sélection reste la pastille M3
+ * (capsule arrondie par défaut) teintée `secondaryContainer` en clair ;
+ * en sombre ce même aplat pâle brûlerait sur fond noir, donc on prend le
+ * `primaryContainer` sombre déjà posé dans le thème. Quatre onglets
+ * seulement : un 5e "Actualités" serait routage + capacités, pas style.
+ */
 @Composable
 fun AppTabBar(route: String?, onSelect: (String) -> Unit) {
     if (!showsTabBar(route)) return
-    NavigationBar {
-        for (tab in TAB_ROUTES) {
-            NavigationBarItem(
-                selected = route == tab,
-                onClick = { onSelect(tab) },
-                label = { Text(tabLabel(tab)) },
-                icon = {
-                    TabIconWithBadge(tab) {
-                        Icon(
-                            // #135 : `ImageVector` teinté par le thème au lieu
-                            // du glyphe Unicode `"⌂"` / `"👤"`.
-                            imageVector = tabIcon(tab),
-                            // #146 : `null`, donc DÉCORATIF. Le libellé est déjà
-                            // rendu sous l'icône par le `label` de l'item, et
-                            // `NavigationBarItem` ne fusionne pas les deux nœuds :
-                            // avec un `contentDescription`, TalkBack annonçait
-                            // « Accueil … Accueil ». Le nom vient donc du SEUL
-                            // endroit qui le prononce, `tabLabel`.
-                            contentDescription = null,
-                        )
-                    }
-                },
-            )
+    val scheme = MaterialTheme.colorScheme
+    val dark = isDarkSurface()
+    val indicatorContainer = if (dark) scheme.primaryContainer else scheme.secondaryContainer
+    val indicatorInk = if (dark) scheme.onPrimaryContainer else scheme.onSecondaryContainer
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = scheme.surface,
+            // Pas de teinte tonale : `tonalElevation` M3 teinte la surface avec
+            // la couleur primaire (ici un vert), donc la barre flotterait en
+            // vert pâle au lieu du blanc/surface de la référence. Le relief
+            // vient de l'ombre seule.
+            tonalElevation = 0.dp,
+            shadowElevation = 6.dp,
+        ) {
+            NavigationBar(
+                containerColor = Color.Transparent,
+                tonalElevation = 0.dp,
+            ) {
+                for (tab in TAB_ROUTES) {
+                    NavigationBarItem(
+                        selected = route == tab,
+                        onClick = { onSelect(tab) },
+                        label = { Text(tabLabel(tab)) },
+                        icon = {
+                            TabIconWithBadge(tab) {
+                                Icon(
+                                    // #135 : `ImageVector` teinté par le thème au lieu
+                                    // du glyphe Unicode `"⌂"` / `"👤"`.
+                                    imageVector = tabIcon(tab),
+                                    // #146 : `null`, donc DÉCORATIF. Le libellé est déjà
+                                    // rendu sous l'icône par le `label` de l'item, et
+                                    // `NavigationBarItem` ne fusionne pas les deux nœuds :
+                                    // avec un `contentDescription`, TalkBack annonçait
+                                    // « Accueil … Accueil ». Le nom vient donc du SEUL
+                                    // endroit qui le prononce, `tabLabel`.
+                                    contentDescription = null,
+                                )
+                            }
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = indicatorInk,
+                            selectedTextColor = indicatorInk,
+                            indicatorColor = indicatorContainer,
+                            unselectedIconColor = scheme.onSurfaceVariant,
+                            unselectedTextColor = scheme.onSurfaceVariant,
+                        ),
+                    )
+                }
+            }
         }
     }
 }

@@ -7,7 +7,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -17,20 +16,19 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -62,7 +60,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -74,7 +71,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import fr.veryslopnynotes.core.Assignment
@@ -103,8 +99,9 @@ import java.time.ZoneId
 // (URL brute du proxy, non cliquable), et `refresh()` appelait le serveur SANS
 // query — donc aucune navigation par semaine n'existait.
 //
-// Le rendu d'un devoir fait est TRIPLE et jamais ambigu : pastille pleine dans la
-// couleur de la matière, pastille « ✓ Terminé », texte rayé et atténué.
+// Le rendu d'un devoir fait est DOUBLE et jamais ambigu : pastille pleine dans la
+// couleur de la matière, pastille faite, texte atténué SANS rayure (décision
+// EDT : le gris uni suffit, la pastille portant déjà l'information).
 //
 // #161 (retour sur capture) : la consigne s'affichait DEUX fois (le serveur
 // dérive `title` des 200 premiers caractères de `description`), la pastille de
@@ -135,14 +132,9 @@ import java.time.ZoneId
 // lus sur le client local puis servis à l'ouvreur par un FileProvider, aucune
 // adresse d'établissement dans l'app (I1), rien de journalisé.
 
-/** Épaisseur du filet des cartes et des puces. */
+/** Épaisseur du filet des puces (pièces jointes, aide, bascule à faire) : les
+ *  cartes de devoir n'en ont PLUS — voir `PapTaskCard`. */
 private val HAIRLINE = 1.dp
-
-/** Élévation d'une carte de devoir : 2 dp, l'ombre relevée sur papillon.bzh. */
-private val CARD_ELEVATION = 2.dp
-
-/** Côte de la pastille « à faire » (le cercle, pas son contenu). */
-private val DONE_DOT_SIZE = 26.dp
 
 /** Lignes de consigne avant repli : elle peut faire 2000 caractères
  *  (`Assignment.MAX_DESCRIPTION`), donc rendue en entier elle noyait l'écran. */
@@ -151,7 +143,8 @@ private const val DESCRIPTION_MAX_LINES = 3
 /** Au-delà, la consigne est dite « longue » et se déplie au tap. */
 private const val DESCRIPTION_EXPAND_CHARS = 160
 
-/** Atténuation du contenu d'un devoir fait (avec la rayure et la pastille pleine). */
+/** Atténuation du contenu d'un devoir fait (avec la pastille pleine, SANS
+ *  rayure : décision EDT, le gris uni suffit — voir `PapTaskCard`). */
 private const val DONE_ALPHA = 0.6f
 
 // Regroupement par jour de dueDate (ordre du contrat conservé) : le "badge
@@ -302,10 +295,12 @@ private fun AssignmentSectionHeader(
     }
 }
 
-/** « ‹  05/10 – 11/10  › » : la navigation RE-CHARGE le serveur (la plage part
- *  dans la query de l'API), elle ne filtre pas la liste en mémoire. */
+/** « ‹  Semaine 41 · 05/10 – 11/10  › » sur UNE SEULE ligne : le numéro ISO
+ *  seul ne date rien, la plage seule ne dit pas la semaine — les deux se lisent
+ *  donc au même endroit, dans le navigateur. La navigation RE-CHARGE le serveur
+ *  (la semaine part dans la query de l'API), elle ne filtre pas la liste en mémoire. */
 @Composable
-private fun WeekNavigator(weekRange: String, onShiftWeek: (Long) -> Unit) {
+private fun WeekNavigator(weekLabel: String, weekRange: String, onShiftWeek: (Long) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -314,7 +309,8 @@ private fun WeekNavigator(weekRange: String, onShiftWeek: (Long) -> Unit) {
             Icon(imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Semaine précédente")
         }
         Text(
-            text = weekRange,
+            // Plage vide (ISO illisible) : le numéro seul, jamais un « · » pendant.
+            text = if (weekRange.isEmpty()) weekLabel else "$weekLabel · $weekRange",
             style = MaterialTheme.typography.labelLarge,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center,
@@ -391,9 +387,10 @@ private fun SubjectFilterRow(
     }
 }
 
-/** Carte de devoir : l'anatomie de papillon.bzh — pastille matière + matière
- *  dans sa couleur, échéance en gris à droite, consigne BORNÉE, rangée du bas
- *  avec la bascule « fait » et la PUCE d'aide (plus un bouton, #161). */
+/** Carte de devoir : l'anatomie de papillon.bzh — fond TEINTÉ matière (le
+ *  modèle du carrousel Notes, sans bordure ni ombre), pastille matière +
+ *  matière dans sa couleur, échéance en gris à droite, consigne BORNÉE, rangée
+ *  du bas avec la bascule « fait » et la PUCE d'aide (plus un bouton, #161). */
 @Composable
 private fun PapTaskCard(
     a: Assignment,
@@ -418,25 +415,32 @@ private fun PapTaskCard(
     // est du corps de texte, pas un aplat.
     val tint = colorFromHex(hex) ?: MaterialTheme.colorScheme.primary
     val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.onSurface
+    // Fond TEINTÉ matière, comme le carrousel Notes (`subjectCardTint` : 8 % de
+    // la matière sur le fond d'écran, sinon `surfaceVariant`) — la carte se fond
+    // dans l'écran au lieu de flotter dessus. Ni bordure ni ombre, comme les
+    // cartes de la référence : un filet de 1 dp sur un aplat translucide se
+    // lirait comme un contour de découpe, et une ombre comme un relief que la
+    // référence ne pose pas.
+    val cardColor = subjectCardTint(hex) ?: MaterialTheme.colorScheme.surfaceVariant
     // #161 : la carte affiche UN SEUL texte. Le lecteur serveur dérive `title`
     // des 200 premiers caractères de `description` (Pronote n'expose qu'UN champ
     // descriptif), donc les deux champs affichés d'affilée donnaient la consigne
     // deux fois. `assignmentCardText` décide lequel des deux emplacements reçoit
     // le texte ; l'autre reste vide.
     val text = assignmentCardText(a)
-    // Rayure et atténuation du FAIT : même traitement pour le titre et pour la
-    // consigne, donc « fait » se lit pareil quelle que soit la place du texte.
+    // Atténuation du FAIT, le même traitement pour le titre et pour la
+    // consigne, donc « fait » se lit pareil quelle que soit la place du texte —
+    // et SANS rayure (décision EDT : titres en gris uni, la pastille faite
+    // portant déjà l'information ; cf. `TimetableWeek.kt`, zéro `LineThrough`).
     val dim = if (a.done) DONE_ALPHA else 1f
-    val strike = if (a.done) TextDecoration.LineThrough else null
     // #147 : la consigne dépliée survit à la rotation — la replier alors qu'on
     // la lisait est exactement le genre de perte que l'utilisateur ne pardonne
     // pas. La clé reste l'identifiant : deux devoirs ne partagent pas l'état.
     var expanded by rememberSaveable(a.id) { mutableStateOf(false) }
     Card(
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = CARD_ELEVATION),
-        border = BorderStroke(HAIRLINE, MaterialTheme.colorScheme.outline),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -464,7 +468,6 @@ private fun PapTaskCard(
                         Text(
                             text = text.title,
                             style = MaterialTheme.typography.bodyMedium,
-                            textDecoration = strike,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -483,7 +486,6 @@ private fun PapTaskCard(
                     text = text.body,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textDecoration = strike,
                     modifier = Modifier.alpha(dim),
                     maxLines = if (expanded) Int.MAX_VALUE else DESCRIPTION_MAX_LINES,
                     overflow = TextOverflow.Ellipsis,
@@ -543,7 +545,7 @@ private fun PapTaskCard(
                 // que la bascule « fait » — l'action qu'on vient chercher. La puce
                 // est discrète et collée à la bascule.
                 if (onHelp != null) HomeworkHelpChip { onHelp(a) }
-                DoneToggle(done = a.done, color = tint) { onToggle(a, !a.done) }
+                DoneToggle(done = a.done, tint = tint, tintBg = cardColor, ink = ink) { onToggle(a, !a.done) }
             }
         }
     }
@@ -579,74 +581,51 @@ private fun HomeworkHelpChip(onClick: () -> Unit) {
 }
 
 /**
- * Bascule « fait » : un CERCLE gris à cocher tant que le devoir reste à faire,
- * une PASTILLE pleine dans la couleur de la matière quand il est fait. Ce n'est
- * plus un bouton dont on inversait le libellé : la FORME porte l'état, donc le
- * retour de l'update optimiste est visible sans lire un mot.
+ * Bascule « fait » : la MÊME pastille dans les deux états — pleine dans la
+ * couleur de la matière quand le devoir est fait, en contour sur fond teinté
+ * quand il reste à faire. AVANT, la FORME portait l'état (cercle creux puis
+ * pastille pleine) : la carte changeait de forme au tap, et le cercle
+ * n'annonçait pas l'action. Ici seule la TEINTE change, donc le retour de
+ * l'update optimiste se lit sans réapprendre la carte.
  *
- * L'encre de la pastille est choisie par contraste mesuré (`bestContentOn`) : un
- * blanc en dur tomberait à 1.3:1 sur un jaune clair de la palette.
+ * L'encre de la pastille pleine est choisie par contraste mesuré
+ * (`bestContentOn`) : un blanc en dur tomberait à 1.3:1 sur un jaune clair de
+ * la palette. Celle de la pastille en contour est l'encre matière (`ink`),
+ * mesurée elle aussi (`subjectContent`, 4.5:1 dans les deux thèmes).
+ *
+ * Pas de hauteur minimale : comme la puce « Aide devoirs » de la même rangée,
+ * la pastille fait la hauteur de son libellé — une cible de 48 dp y
+ * réintroduirait le vide chassé en #166.
  */
 @Composable
-private fun DoneToggle(done: Boolean, color: Color?, onToggle: () -> Unit) {
+private fun DoneToggle(done: Boolean, tint: Color, tintBg: Color, ink: Color, onToggle: () -> Unit) {
     val haptics = LocalHapticFeedback.current
-    val tint = color ?: MaterialTheme.colorScheme.primary
     val click = {
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         onToggle()
     }
-    if (done) {
-        // `Role.Checkbox` : la pastille EST une case à cocher, donc un lecteur
-        // d'écran doit l'annoncer comme telle (et son état) au lieu d'un bouton.
-        Surface(
-            // #145 : ressort de presse (amortissement 0.8) — le geste le plus
-            // fait de l'écran, il se sent sous le doigt. #146 : l'état est nommé
-            // en français, donc il existe aussi sans la couleur.
-            modifier = Modifier
-                .papPressable(role = Role.Checkbox, onClick = click)
-                .semantics { stateDescription = "Devoir fait" },
-            shape = MaterialTheme.shapes.small,
-            color = tint,
-        ) {
-            Text(
-                text = "✓ Terminé",
-                style = MaterialTheme.typography.labelMedium,
-                color = bestContentOn(tint),
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            )
-        }
-    } else {
-        // #146 : le cercle VISIBLE fait 26 dp — la cible de toucher aussi. La
-        // boîte qui porte le geste fait [TouchTarget] (48 dp) et le cercle est
-        // centré dedans : l'image ne bouge pas d'un pixel, seule la zone d'appui
-        // grandit. Le ressort de #145 passe par la boîte entière, et comme un
-        // `graphicsLayer` met SES enfants à l'échelle, le cercle rétrécit bien au
-        // pressage. `stateDescription` nomme l'état en toutes lettres.
-        Box(
-            modifier = Modifier
-                .size(TouchTarget)
-                .papPressable(role = Role.Checkbox, onClick = click)
-                .semantics { stateDescription = "Devoir à faire" },
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(DONE_DOT_SIZE)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .border(HAIRLINE, MaterialTheme.colorScheme.outline, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Check,
-                    // Décorative : l'état est porté par [stateDescription] et la
-                    // forme (cercle creux = à faire, pastille pleine = fait).
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
+    // `Role.Checkbox` : la pastille EST une case à cocher, donc un lecteur
+    // d'écran doit l'annoncer comme telle (et son état) au lieu d'un bouton.
+    Surface(
+        // #145 : ressort de presse (amortissement 0.8) — le geste le plus
+        // fait de l'écran, il se sent sous le doigt. #146 : l'état est nommé
+        // en français, donc il existe aussi sans la couleur.
+        modifier = Modifier
+            // #146 : 48 dp de cible tactile — une pastille de ~28 dp ne se
+            // touche pas au doigt. La hauteur s'étire, le dessin reste compact.
+            .heightIn(min = TouchTarget)
+            .papPressable(role = Role.Checkbox, onClick = click)
+            .semantics { stateDescription = if (done) "Devoir fait" else "Devoir à faire" },
+        shape = MaterialTheme.shapes.small,
+        color = if (done) tint else tintBg,
+        border = if (done) null else BorderStroke(HAIRLINE, ink),
+    ) {
+        Text(
+            text = if (done) "✓ Terminé" else "Marquer fait",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (done) bestContentOn(tint) else ink,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+        )
     }
 }
 
@@ -743,37 +722,30 @@ fun AssignmentsScreen(
             .background(page)
             .padding(horizontal = 16.dp),
     ) {
-        // En-tête : « Semaine 41 » en gras + « Devoirs de la semaine » en gris, le
-        // couple de papillon.bzh ; l'Actualiser à droite. La PLAGE, elle, est dans
-        // le navigateur de semaine juste en dessous (une seule fois à l'écran), et
-        // le titre de l'onglet (« Tâches », barre du haut) n'est pas répété ici.
+        // En-tête : le titre fixe « Devoirs de la semaine » + l'Actualiser à
+        // droite. Le numéro ISO et la plage vivent dans le navigateur juste en
+        // dessous, sur UNE SEULE ligne (« Semaine 41 · 05/10 – 11/10 ») — avant,
+        // le numéro coiffait le titre et la plage le navigateur, donc la semaine
+        // se lisait en deux endroits. Le titre de l'onglet (« Tâches », barre du
+        // haut) n'est pas répété ici.
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = weekLabel,
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    // Titre de l'écran sous la barre du haut : `heading()` pour
-                    // que le survol commence ici.
-                    modifier = Modifier.semantics { heading() },
-                )
-                Text(
-                    text = "Devoirs de la semaine",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Text(
+                text = "Devoirs de la semaine",
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                // Titre de l'écran sous la barre du haut : `heading()` pour
+                // que le survol commence ici.
+                modifier = Modifier.weight(1f).semantics { heading() },
+            )
             IconButton(onClick = onRefresh) {
                 Icon(imageVector = Icons.Filled.Refresh, contentDescription = "Actualiser les devoirs")
             }
         }
-        WeekNavigator(weekRange = weekRange, onShiftWeek = onShiftWeek)
+        WeekNavigator(weekLabel = weekLabel, weekRange = weekRange, onShiftWeek = onShiftWeek)
         // #148 (recette des 14 écrans) : les deux contrôles de FILTRAGE ne
         // s'affichent que s'il y a des devoirs à filtrer. Avant, ils restaient
         // au-dessus de l'état d'erreur : « Rechercher un devoir » et les puces

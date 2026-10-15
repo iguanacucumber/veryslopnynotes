@@ -12,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -27,9 +29,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import fr.veryslopnynotes.core.dayLabelFr
 import fr.veryslopnynotes.core.enumFr
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.RefreshOutcome
@@ -60,6 +62,15 @@ import java.time.ZoneId
 //     titré, avant les plats ;
 //   - `CanteenBalance.updatedAt` était parsé puis jeté : le solde n'affichait ni
 //     son âge. Il est maintenant daté (« mis à jour il y a 4 min »).
+//
+// Polish Papillon : cartes de JOUR plates teintées `surfaceVariant` (fond,
+// élévation 0, sans filet — pattern `GradeRow` / devoirs) ; les repas DEDANS
+// ne sont plus des cartes emboîtées mais des blocs (titre 17 sp semibold +
+// pastille statut + allergènes + plats) ; titres 16-18 sp semibold, méta
+// `onSurfaceVariant`, jour en TOUTES LETTRES (`longDateFr`, display-only —
+// AVANT « lundi 05/10 » via `dayLabelFr`). Rythme 12 dp ; refresh/vide/erreur
+// inchangés. L'âge du SOLDE reste relatif (`relativeTimeFr`) : c'est une
+// synchronisation, pas un contenu.
 
 /** Opacité du fond du bloc allergènes (lime de marque). */
 private const val ALERGEN_BLOCK_ALPHA = 0.25f
@@ -198,15 +209,17 @@ fun canteenBalanceLine(
 }
 
 /**
- * "lundi 05/10" depuis l'ISO du contrat (2026-10-05T00:00:00.000Z).
+ * "5 octobre 2026" depuis l'ISO du contrat (2026-10-05T00:00:00.000Z).
  *
- * #147 : la quatrième copie du tableau des jours français ET la tranche ISO
- * des dix premiers caractères disparaissent au profit de `dayLabelFr`
- * (`core/DateFr.kt`).
- * Date illisible = libellé VIDE : une tranche brute ne vaut pas un titre de
- * carte.
+ * CHANGEMENT D'AFFICHAGE documenté : AVANT « lundi 05/10 » (`dayLabelFr`,
+ * #147) ; c'est désormais [longDateFr], comme la ligne de note #192 —
+ * display-only, le tri reste sur la clé ISO brute. Date illisible = libellé
+ * VIDE : une tranche brute ne vaut pas un titre de carte.
  */
-fun canteenDayLabel(date: String): String = dayLabelFr(date)
+fun canteenDayLabel(date: String, zone: ZoneId = ZoneId.systemDefault()): String {
+    val epoch = homeMillisOf(date) ?: return ""
+    return longDateFr(epoch, zone)
+}
 
 /**
  * Type de repas en français. Repli « Repas » : un repas HORS CONTRAT n'est pas
@@ -286,48 +299,59 @@ private fun CanteenAllergenBlock(allergens: List<String>) {
     }
 }
 
-/** Un repas : en-tête (type + statut), bloc allergènes, puis les plats. */
+/** Un repas : en-tête (type + statut), bloc allergènes, puis les plats.
+ *
+ * Bloc PLAIN, pas une carte : la carte est le JOUR (`CanteenDayCard`) — une
+ * carte dans une carte faisait un emboîtement que la référence ne pose pas.
+ */
 @Composable
 private fun CanteenMealCard(menu: CanteenMenuUi, modifier: Modifier = Modifier) {
     val statusColor = canteenStatusColor(menu.status)
-    PapCard(modifier = modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = canteenMealLabel(menu.meal),
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                val label = canteenStatusLabel(menu.status)
-                if (label != null && statusColor != null) {
-                    PapPill(text = label, color = statusColor)
-                }
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = canteenMealLabel(menu.meal),
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            val label = canteenStatusLabel(menu.status)
+            if (label != null && statusColor != null) {
+                PapPill(text = label, color = statusColor)
             }
-            CanteenAllergenBlock(menu.allergens)
-            // Donnée externe ci-dessous : texte affiché, jamais interprété (I6).
-            for (dish in menu.dishes) {
-                Text(
-                    text = "• $dish",
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+        }
+        CanteenAllergenBlock(menu.allergens)
+        // Donnée externe ci-dessous : texte affiché, jamais interprété (I6).
+        for (dish in menu.dishes) {
+            Text(
+                text = "• $dish",
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
 
-/** Carte de solde : montant + âge du relevé. */
+/** Carte de solde : montant + âge du relevé (plate, même pattern que le jour). */
 @Composable
 private fun CanteenBalanceCard(line: String, modifier: Modifier = Modifier) {
-    PapCard(modifier = modifier.fillMaxWidth()) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
         Row(
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -347,14 +371,28 @@ private fun CanteenBalanceCard(line: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** Carte d'un jour : en-tête « lundi 05/10 » puis un carte par repas. */
+/**
+ * Carte d'un jour : en-tête « 5 octobre 2026 » puis un bloc par repas.
+ *
+ * Carte PLATE teintée `surfaceVariant`, élévation 0, sans filet — pattern
+ * `GradeRow` (pas `PapCard`, 1 dp + filet). Titre 18 sp semibold, 12 dp
+ * dedans comme dehors.
+ */
 @Composable
-private fun CanteenDayCard(day: CanteenDayUi, modifier: Modifier = Modifier) {
-    PapCard(modifier = modifier.fillMaxWidth()) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun CanteenDayCard(day: CanteenDayUi, modifier: Modifier = Modifier, zone: ZoneId = ZoneId.systemDefault()) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(
-                text = canteenDayLabel(day.date),
-                style = MaterialTheme.typography.titleMedium,
+                text = canteenDayLabel(day.date, zone),
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.semantics { heading() },

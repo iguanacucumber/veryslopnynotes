@@ -188,16 +188,18 @@ describe("unit android accessibilité #146 — l'information ne repose pas sur l
     //
     // #192 : la carte du carrousel ne pose plus la PASTILLE arrondie de 44 dp
     // (`PapSubjectAvatar`) — la référence y rend un `<Typography>` d'emoji de
-    // 18/25 à côté du nom, sans fond, dans la MÊME ligne. Le glyphe est donc
-    // passé d'une `Box` teintée à un `Text` : ce qui change, c'est le DÉCOR, pas
-    // l'information. D'où deux assertions au lieu d'une — sinon le test ne
-    // porterait plus que le décor d'une brique qui n'est plus là.
+    // 18/25 à côté du nom, dans la MÊME ligne. Pastille 30 dp (`SubjectEmojiChip`)
+    // : l'emoji reste un `Text` décoratif, seul le fond change — ce qui change,
+    // c'est le DÉCOR, pas l'information. D'où deux assertions au lieu d'une.
     const rows = file("GradesRows.kt");
     // L'emoji reste DÉCORATIF (annoncé nul) : sans ça, TalkBack dirait deux fois
-    // la même chose, un nom d'emoji en prime.
+    // la même chose, un nom d'emoji en prime. Il vit dans `SubjectEmojiChip`
+    // (`text = emoji` + `clearAndSetSemantics`), nourri par `style.emoji` aux
+    // deux sites d'appel (carrousel + en-tête de section).
     // `file()` STRIPE LES COMMENTAIRES : les motifs ci-dessous ne peuvent donc
     // pas s'appuyer sur un mot d'explication, seulement sur la forme du code.
-    expect(rows).toMatch(/text = style\.emoji,[\s\S]{0,400}?clearAndSetSemantics \{ \}/);
+    expect(rows).toMatch(/text = emoji,[\s\S]{0,200}?clearAndSetSemantics \{ \}/);
+    expect(rows).toMatch(/emoji = style\.emoji/);
     // Le libellé écrit, en `body1` (15 sp) — donc à la taille d'un corps de
     // texte, pas d'un libellé d'onglet.
     expect(rows).toMatch(/text = style\.label,\s*style = MaterialTheme\.typography\.bodyLarge,/);
@@ -325,10 +327,10 @@ describe("unit android accessibilité #146 — cibles tactiles, débordements, g
     // AVANT : `SWATCH = 44.dp` (pastilles de couleur et d'emoji) et le cercle
     // « à faire » cliquable en 26 dp.
     expect(file("SettingsSubjectEditor.kt")).toContain("private val SWATCH = TouchTarget");
-    // La cible du cercle « à faire » : le geste est sur une boîte de 48 dp, le
-    // cercle visible (26 dp) est centré dedans.
+    // La cible du « à faire / fait » : pastille unique aux deux états, geste
+    // sur 48 dp de haut (`heightIn`, le dessin reste compact), case à cocher.
     const done = file("Assignments.kt");
-    expect(done).toMatch(/\.size\(TouchTarget\)\s*\n\s*\.papPressable\(/);
+    expect(done).toMatch(/\.heightIn\(min = TouchTarget\)\s*\n\s*\.papPressable\(/);
     expect(done).toContain(".papPressable(role = Role.Checkbox, onClick = click)");
     expect(file("HomeCards.kt")).toContain("defaultMinSize(minHeight = TouchTarget)");
     expect(file("GradesHero.kt")).toContain("heightIn(min = TouchTarget)");

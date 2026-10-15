@@ -686,7 +686,10 @@ describe("sections, filtres et semaine (#138)", () => {
     // AVANT #138 : le seul rendu du `done` était le libellé du bouton.
     expect(screen).not.toContain("Marquer non fait");
     expect(screen).toContain('"✓ Terminé"');
-    expect(screen).toContain("TextDecoration.LineThrough");
+    // Fait = atténuation + pastille pleine, SANS rayure (décision EDT : titres
+    // en gris uni, la pastille portant déjà l'information).
+    expect(screen).toContain("DONE_ALPHA");
+    expect(screen).not.toContain("TextDecoration.LineThrough");
     expect(screen).toContain("bestContentOn(tint)");
     expect(screen).toContain("LocalHapticFeedback");
     expect(screen).toContain("private fun PapTaskCard");
@@ -791,8 +794,9 @@ describe("carte de devoir (#161)", () => {
     // La consigne reste bornée et dépliable (elle peut faire 2000 caractères).
     expect(screen).toContain("DESCRIPTION_MAX_LINES = 3");
     expect(screen).toContain("if (text.body.length > DESCRIPTION_EXPAND_CHARS)");
-    // Le « fait » se lit sur le texte affiché, où qu'il soit (rayure + atténuation).
-    expect(screen).toContain("val strike = if (a.done) TextDecoration.LineThrough else null");
+    // Le « fait » se lit sur le texte affiché, où qu'il soit (atténuation +
+    // pastille pleine, sans rayure — même décision que l'EDT).
+    expect(screen).toContain("val dim = if (a.done) DONE_ALPHA else 1f");
   });
 
   test("pastille de matière : toujours un glyphe, et la brique partagée reste intacte", () => {
