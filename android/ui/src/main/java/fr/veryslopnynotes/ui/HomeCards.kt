@@ -91,14 +91,24 @@ fun HomeWidgetCard(
     // bordure du thème : c'est `surface`, pas `surfaceVariant` (gris).
     PapCard(modifier = modifier, onClick = onClick, containerColor = MaterialTheme.colorScheme.surface) {
         val more = onMore
-        // Un slot unique qui ne rend RIEN sans callback : `PapSectionHeader`
-        // invoque le slot s'il est présent, donc « absent » = rendu vide, et pas
-        // un bouton sans cible (l'équivalent de son `onClick` nul).
-        PapSectionHeader(
-            icon = icon,
-            title = title,
-            action = { if (more != null) HomeMoreButton(more) },
-        )
+        // #262 : voile `surface -> surfaceVariant` à 4 % max sur l'en-tête —
+        // jamais un dégradé plein écran. Posé SUR le fond `surface` de la
+        // carte ([cardScrim]) : 4 % ne peut pas faire passer l'encre
+        // secondaire sous AA (miroir `tests/unit/android-gradients.test.ts`).
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(cardScrim(MaterialTheme.colorScheme.surfaceVariant, WIDGET_HEADER_SCRIM_ALPHA)),
+        ) {
+            // Un slot unique qui ne rend RIEN sans callback : `PapSectionHeader`
+            // invoque le slot s'il est présent, donc « absent » = rendu vide, et pas
+            // un bouton sans cible (l'équivalent de son `onClick` nul).
+            PapSectionHeader(
+                icon = icon,
+                title = title,
+                action = { if (more != null) HomeMoreButton(more) },
+            )
+        }
         // `Column` et non `Box` : `content` est une lambda à receveur
         // `ColumnScope`, donc seul un `Column` peut l'invoquer ici.
         Column(modifier = Modifier.padding(top = 10.dp)) { content() }
@@ -196,7 +206,13 @@ fun HomeCourseCard(
     val spine = colorFromHex(hex) ?: MaterialTheme.colorScheme.primary
     PapCard(modifier = modifier, containerColor = background, border = null) {
         Row(
-            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            // #262 : même voile que la carte EDT (`subjectSurface -> surface`,
+            // 8 % max) — motif recopié, pas de code partagé : deux cibles, deux
+            // fichiers. La barre [spine] garde la couleur franche.
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .background(cardScrim(MaterialTheme.colorScheme.surface, COURSE_SCRIM_ALPHA)),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(HOME_ACTION_GAP),
         ) {
