@@ -11,20 +11,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { REVISION_TEMPLATE_VERSION, isRevisionSheet } from "../../shared/contracts/models";
 import type { RevisionSheet } from "../../shared/contracts/models";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const UI = join(ROOT, "android/ui/src/main/java/fr/veryslopnynotes/ui");
 const CORE = join(ROOT, "android/core/src/main/java/fr/veryslopnynotes/core");
 const SCREEN = join(UI, "RevisionSheets.kt");
 const NAV = join(UI, "AppNav.kt");
-
-/** Sans les commentaires (même raison que dans les autres miroirs). */
-const codeOnly = (c: string): string =>
-  c
-    .replace(/\/\*[\s\S]*?\*\//g, "\n")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .join("\n");
 
 // --- Miroir du mapping store -> UI (`RevisionSheet.toUi`, RevisionSheets.kt) ---
 // Mêmes règles que `isRevisionSheetValid` : fiche non conforme = ignorée,

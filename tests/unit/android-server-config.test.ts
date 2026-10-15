@@ -6,6 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const ANDROID = join(ROOT, "android");
@@ -17,19 +18,6 @@ const APP = join(ANDROID, "app/src/main/java/fr/veryslopnynotes/app");
 function read(p: string): string {
   return readFileSync(p, "utf8");
 }
-
-function codeOnly(content: string): string {
-  const noBlock = content.replace(/\/\*[\s\S]*?\*\//g, "\n");
-  return noBlock
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .map((l) => {
-      const idx = l.search(/(?<!:)\/\//);
-      return idx >= 0 ? l.slice(0, idx) : l;
-    })
-    .join("\n");
-}
-
 // ---------------------------------------------------------------------------
 // Miroir TS de ServerConfig.validateBaseUrl (core/ServerConfig.kt).
 // Messages identiques : c'est le contrat affiché à l'utilisateur.

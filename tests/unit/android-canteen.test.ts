@@ -7,6 +7,7 @@ import { isCanteenMenu } from "../../shared/contracts/models";
 import { syntheticCanteenPayload } from "./fixtures/canteen";
 import { dayLabelFr } from "./fixtures/date-fr";
 import { enumFr } from "./fixtures/enum-fr";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 // Miroir des helpers Kotlin (CanteenMenus.kt + CachePolicy/SyncedRepository) —
 // doivent rester en sync. org.json = SDK Android, aucune dépendance ajoutée
@@ -43,12 +44,6 @@ function tsRelative(epochMillis: number, now: number, timeZone: string = ZONE): 
 const UI = join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui");
 /** Sans les commentaires : une garde de source ne doit pas confondre un `//` qui
  *  NOMME un défaut avec le défaut lui-même. */
-const codeOnly = (c: string): string =>
-  c
-    .replace(/\/\*[\s\S]*?\*\//g, "\n")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .join("\n");
 const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/veryslopnynotes/data");
 const CORE = join(import.meta.dir, "..", "..", "android/core/src/main/java/fr/veryslopnynotes/core");
 

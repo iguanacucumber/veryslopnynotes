@@ -1,36 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { codeOnly, hasDirectFetch, httpRe, pronoteHost, sqliteRe } from "../../agents/runtime/source-guards";
 import { untrusted } from "../../server/domain/ports";
 
 const ROOT = join(import.meta.dir, "..", "..");
-
-// ponytail: miroir volontaire de check-architecture.ts (regex simples). Upgrade: importer helpers partagés ou AST.
-function codeOnly(content: string): string {
-  const noBlock = content.replace(/\/\*[\s\S]*?\*\//g, "\n").replace(/<!--[\s\S]*?-->/g, "\n");
-  return noBlock
-    .split("\n")
-    .filter((l) => {
-      const t = l.trim();
-      return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("#") && !t.startsWith("<!--");
-    })
-    .map((l) => {
-      const idx = l.search(/(?<!:)\/\//);
-      return idx >= 0 ? l.slice(0, idx) : l;
-    })
-    .join("\n");
-}
-
-const pronoteHost = /pronote/i;
-const netRe = /fetch\(|axios|got\(|https?\.(get|request)|Bun\.serve|XMLHttpRequest|WebSocket/;
-const pronoteUrlRe = /https?:\/\/[^\s"']*(pronote)/i;
-function hasDirectFetch(code: string): boolean {
-  if (code.split("\n").some((l) => pronoteHost.test(l) && netRe.test(l))) return true;
-  return pronoteUrlRe.test(code) && netRe.test(code);
-}
-const sqliteRe =
-  /import\s+[^;]*sqlite|from\s+['"][^'"]*sqlite|require\s*\([^)]*sqlite|bun:sqlite|better-sqlite3/i;
-const httpRe = /from\s+['"]hono|from\s+['"]express|require\s*\([^)]*(hono|express|fastify)|Bun\.serve/;
 
 function list(dir: string): string[] {
   const out: string[] = [];

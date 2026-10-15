@@ -6,6 +6,7 @@ import { isNewsResponse } from "../../shared/contracts/api";
 import { CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
 import { syntheticNewsInjectionItem, syntheticNewsItem, syntheticNewsOk } from "./fixtures/news";
 import { dayLabelFr } from "./fixtures/date-fr";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 // #144 : miroirs de la LOGIQUE PURE du rendu (NewsScreen.kt) — regroupement par
 // catégorie, libellé de catégorie, ligne auteur + date RELATIVE. `now`/`zone`
@@ -186,18 +187,6 @@ const K_FILES = {
   screen: join(ANDROID, "ui/src/main/java/fr/veryslopnynotes/ui/NewsScreen.kt"),
   nav: join(ANDROID, "ui/src/main/java/fr/veryslopnynotes/ui/AppNav.kt"),
 };
-
-const codeOnly = (c: string): string =>
-  c
-    .replace(/\/\*[\s\S]*?\*\//g, "\n")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .map((l) => {
-      const idx = l.search(/(?<!:)\/\//);
-      return idx >= 0 ? l.slice(0, idx) : l;
-    })
-    .join("\n");
-
 describe("unit android actus (#79)", () => {
   test("isValid : mêmes refus que le contrat (id/titre vides, bornes)", () => {
     const base: KtNewsItem = {

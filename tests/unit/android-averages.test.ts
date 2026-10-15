@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { AVERAGE_ALGORITHMS, CONTRACTS_VERSION, isAveragesReport } from "../../shared/contracts/models";
 import { isGradesResponse, isPeriodsResponse } from "../../shared/contracts/api";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 // Miroir des helpers Kotlin (Averages.kt) — doivent rester en sync.
 // org.json = SDK Android, aucune dépendance ajoutée (garde deps plus bas).
@@ -972,13 +973,6 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     const averages = readFileSync(join(UI, "Averages.kt"), "utf8");
     /** Sans les commentaires : une garde qui lit le texte ne doit pas confondre un
      *  `//` qui NOMME une mauvaise pratique avec la pratique. */
-    const codeOnly = (src: string): string =>
-      src
-        .replace(/\/\*[\s\S]*?\*\//g, "\n")
-        .split("\n")
-        .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-        .join("\n");
-
     // 1. La décision est PURE et vit dans le fichier de logique : elle se teste.
     expect(averages).toContain("fun gradesLayout(state: UiState, grades: List<GradeUi>, report: AveragesUi?)");
     expect(averages).toContain("data class GradesLayout(val content: Boolean, val data: Boolean)");

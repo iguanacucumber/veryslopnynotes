@@ -9,6 +9,7 @@ import {
   HOMEWORK_MAX_SOURCES,
   isHomeworkGenerateResponse,
 } from "../../shared/contracts/api";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 // Miroir des helpers Kotlin de l'assistant devoirs (0.7.0) — ils doivent rester
 // en sync : core/Homework.kt, data/HomeworkRepository.kt, ui/HomeworkHelp.kt.
@@ -20,19 +21,6 @@ const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/ve
 const CORE = join(import.meta.dir, "..", "..", "android/core/src/main/java/fr/veryslopnynotes/core");
 
 const src = (dir: string, file: string) => readFileSync(join(dir, file), "utf8");
-
-// Mêmes FP que le scan I1 : commentaires ignorés.
-function stripComments(content: string): string {
-  return content
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//"))
-    .map((l) => {
-      const idx = l.search(/(?<!:)\/\//);
-      return idx >= 0 ? l.slice(0, idx) : l;
-    })
-    .join("\n");
-}
 
 type Source = { label: string; text: string };
 type Lesson = { title: string; excerpt: string };
@@ -186,7 +174,7 @@ describe("android homework — le credential reste dans l'app", () => {
   test("la clé part en en-tête Bearer direct fournisseur, jamais en URL ni en log", () => {
     // #205 : plus de route serveur (`POST /v1/homework/generate` morte) — la
     // génération passe par `OpenRouterHomework` + `OpenRouterLlm` direct.
-    const hw = stripComments(src(DATA, "OpenRouterLlm.kt"));
+    const hw = codeOnly(src(DATA, "OpenRouterLlm.kt"));
     // Clé relue du store à CHAQUE appel, jamais mémorisée : pas de champ.
     expect(hw).toMatch(/val apiKey = keys\.apiKey\(\)/);
     expect(hw).not.toMatch(/private val apiKey|var apiKey/);
@@ -206,7 +194,7 @@ describe("android homework — le credential reste dans l'app", () => {
     expect(hw).not.toMatch(/DeviceAuth/);
     // HomeworkRepository ne garde que les contrats partagés (question,
     // sources, parse) : aucune génération, aucun HTTP.
-    const repo = stripComments(src(DATA, "HomeworkRepository.kt"));
+    const repo = codeOnly(src(DATA, "HomeworkRepository.kt"));
     expect(repo).not.toMatch(/buildPost|OkHttp|newCall|ServerConfig/);
     expect(repo).toMatch(/fun sourcesFor/);
     expect(repo).toMatch(/fun questionFor/);
@@ -214,12 +202,12 @@ describe("android homework — le credential reste dans l'app", () => {
   });
 
   test("clé chiffrée au repos, jamais en prefs simples", () => {
-    const store = stripComments(src(DATA, "LlmKeyStore.kt"));
+    const store = codeOnly(src(DATA, "LlmKeyStore.kt"));
     expect(store).toMatch(/encryptedPrefs\(context, PREFS\)/);
     // Un seul point de construction des prefs chiffrées (session + clé LLM).
     expect(store).not.toMatch(/getSharedPreferences/);
     expect(store).not.toMatch(/EncryptedSharedPreferences\.create/);
-    const sessions = stripComments(src(DATA, "SessionStore.kt"));
+    const sessions = codeOnly(src(DATA, "SessionStore.kt"));
     expect(sessions).toMatch(/internal fun encryptedPrefs\(context: Context, name: String\)/);
     // #206 : plus de repli en clair — un Keystore KO jette, il n'écrit pas.
     expect(sessions).not.toMatch(/MODE_PRIVATE/);
@@ -232,7 +220,7 @@ describe("android homework — le credential reste dans l'app", () => {
   });
 
   test("le logout n'efface PAS la clé : c'est celle de l'utilisateur, pas une session", () => {
-    const store = stripComments(src(DATA, "AccountStore.kt"));
+    const store = codeOnly(src(DATA, "AccountStore.kt"));
     expect(store).toMatch(/fun logout\(\)[\s\S]*sessions\.clear\(\)/);
     // Le secret de session part, la clé LLM reste (elle n'est pas reconstructible
     // par le serveur : un ré-appairage ne doit pas coûter une nouvelle saisie).
@@ -240,7 +228,7 @@ describe("android homework — le credential reste dans l'app", () => {
   });
 
   test("l'écran n'affiche ni fournisseur ni clé, et n'exécute rien", () => {
-    const help = stripComments(src(UI, "HomeworkHelp.kt"))
+    const help = codeOnly(src(UI, "HomeworkHelp.kt"))
       .split("\n")
       .filter((l) => !l.trim().startsWith("import "))
       .join("\n");
@@ -258,14 +246,14 @@ describe("android homework — le credential reste dans l'app", () => {
   });
 
   test("l'écran Tâches expose le déclencheur et le dialogue, câblés par AppNav", () => {
-    const assignments = stripComments(src(UI, "Assignments.kt"));
+    const assignments = codeOnly(src(UI, "Assignments.kt"));
     // #161 : le déclencheur n'est plus le `Button` vert pleine largeur de
     // `HomeworkHelp.kt`, c'est une PUCE posée dans l'écran (dialogue inchangé).
     expect(assignments).toMatch(/HomeworkHelpChip \{ onHelp\(a\) \}/);
     expect(assignments).toMatch(/HomeworkHelpDialog\(/);
     // Pas de repository injecté = pas de bouton (pas d'état vide, pas de 400).
     expect(assignments).toMatch(/if \(helpRepo == null\) null else/);
-    const nav = stripComments(src(UI, "AppNav.kt"));
+    const nav = codeOnly(src(UI, "AppNav.kt"));
     expect(nav).toMatch(/llmKeys = llmKeys/);
     expect(nav).toMatch(/onForgetLlmKey/);
   });
