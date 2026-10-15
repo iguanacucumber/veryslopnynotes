@@ -207,10 +207,10 @@ fun SecurityAlertsScreen(
             AlertsLayout.OFFLINE_EMPTY -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 PapEmptyState(
                     icon = Icons.Filled.Info,
-                    title = "Pas de vérification hors ligne",
+                    title = "Aucune vérification disponible",
                     description = "Le serveur n'a pas répondu et aucune alerte n'est en cache. " +
-                        "L'absence d'alerte ne peut donc pas être affirmée : réessayez une fois connecté.",
-                    action = { Button(onClick = onRefresh) { Text("Réessayer") } },
+                        "L'absence d'alerte ne peut donc pas être affirmée : actualisez une fois connecté.",
+                    action = { Button(onClick = onRefresh) { Text("Actualiser") } },
                 )
             }
             AlertsLayout.ALL_CLEAR -> AllClearCard()
@@ -358,12 +358,14 @@ fun SecurityAlertsRoute(
     var fetchedAt by remember { mutableStateOf(cached?.fetchedAt) }
     var stale by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(true) }
 
     fun refresh() {
         // Serveur non configuré : aucun appel (I1), pas de cache = pas d'all-clear.
+        // État vide neutre, jamais d'écran d'erreur plein-écran (#260).
         if (baseUrl.isBlank()) {
-            error = "Serveur non configuré."
+            loading = false
+            stale = true
             return
         }
         loading = true
@@ -404,15 +406,18 @@ fun SecurityAlertsRoute(
     LaunchedEffect(Unit) { refresh() }
 
     // Liste VIDE jamais consultée = chargement, PAS « bon signe » : c'est la
-    // correction même du défaut hors ligne.
+    // correction même du défaut hors ligne. Échec SANS alerte = vide neutre
+    // (OFFLINE_EMPTY), jamais d'écran d'erreur plein-écran pour l'absence de
+    // connexion (#260) ; l'erreur réelle reste un état ERROR.
     val failure = error
     val view: AlertsView = when {
-        failure != null && alerts.isEmpty() -> AlertsView.Failed(failure)
-        alerts.isEmpty() -> AlertsView.Loading
+        failure != null && alerts.isEmpty() && !isSilentOffline(failure) -> AlertsView.Failed(failure)
+        alerts.isEmpty() && loading -> AlertsView.Loading
+        alerts.isEmpty() -> AlertsView.Ready(emptyList(), stale = stale || failure != null, fetchedAt = fetchedAt)
         else -> AlertsView.Ready(alerts, stale = stale || failure != null, fetchedAt = fetchedAt)
     }
 
     HomePullToRefresh(refreshing = loading, onRefresh = { refresh() }) {
-        SecurityAlertsScreen(view = view, notice = error, onRefresh = { refresh() })
+        SecurityAlertsScreen(view = view, notice = error?.takeUnless { isSilentOffline(it) }, onRefresh = { refresh() })
     }
 }

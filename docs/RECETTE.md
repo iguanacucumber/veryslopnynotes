@@ -48,7 +48,7 @@ de la référence). « Papillon » = l'application de référence.
 | **Accueil** | la ligne d'état d'un accès rapide est tronquée à 34 caractères (`homeEllipsis`) | une carte de grille 2×2 ne peut pas faire taller ses voisines. Ellipse explicite, jamais une coupure nette. |
 | **Cours** | barre du haut « semaine du 05/10/2026 » au lieu du sélecteur de période + pastille de la référence | le sélecteur de période existe, mais il est posé DANS la barre chez nous aussi (`PapHeader`) ; la référence le fait sur une carte flottante au-dessus. Différence de placement assumée (#190). |
 | **Cours** | carte de cours : rayon 25, barre d'accent à bout arrondi, nom 18 sp gras | relevés sur `ui/components/Course.tsx` de la v8.5.5 (#194). Pas d'écart. |
-| **Notes** | ligne « Hors-ligne, tranches indisponibles. » quand la lecture des périodes échoue | les périodes sont lues en direct et ne sont pas mises en cache. Un énoncé vrai, pas un doublon. |
+| **Notes** | pas de ligne de tranches quand la lecture des périodes échoue sans connexion | les périodes sont lues en direct et ne sont pas mises en cache ; l'absence de connexion reste silencieuse, le sélecteur bascule sur les compteurs du payload (#260). Un énoncé vrai, pas un doublon. |
 | **Notes** | le grand nombre est collé au tracé de la courbe | mesuré sur la référence (le `Canvas` déborde sous le corps, `paddingTop: 0`). |
 | **Tâches** | « Semaine 41 » + « Devoirs de la semaine », puis la plage `05/10 – 11/10` | le numéro ISO est l'en-tête de la référence ; la plage est dans le navigateur. Deux informations, une seule fois chacune. |
 | **Profil** | écran à sections (Compte / Ressources / Réglages / Session) au lieu d'une liste continue | l'en-tête de la référence est un avatar ; les sections servent le survol (« Se déconnecter » doit être atteignable sans défiler, cf. #135). |
@@ -79,12 +79,14 @@ de la référence). « Papillon » = l'application de référence.
   rapides, libellé de champ `singleLine`) : une troncature annoncée n'est pas
   une coupure.
 - **Vide à froid / cache vide** : Notes sans cache → « Notes indisponibles. » +
-  « Hors-ligne, aucune donnée en cache. » ; Messages sans cache → « 0
+  état vide (« Aucune note en cache » + « Actualiser ») ; Messages sans cache → « 0
   discussion » ; premier lancement (appareil non appairé) → l'assistant. Aucun
-  écran muet.
+  écran muet, aucun écran d'erreur plein-écran pour l'absence de connexion (#260).
 - **Hors ligne** (mode avion) : l'accueil garde ses widgets en cache,
-  chaque écran sans cache dit « Hors-ligne, aucune donnée en cache. ».
-  Aucun écran n'affiche un vide trompeur.
+  chaque écran sans cache montre son état vide neutre + « Actualiser ».
+  Aucun écran n'affiche un vide trompeur — ni un « Hors-ligne, … » plein-écran.
+  Seule exception : les alertes distinguent « Aucune alerte de sécurité »
+  (vérifié frais) de « Aucune vérification disponible » (non vérifié).
 
 ## Comment rejouer
 

@@ -922,9 +922,11 @@ fun AssignmentsRoute(
     }
 
     fun refresh() {
-        // Serveur non configuré : aucun appel (I1).
+        // Serveur non configuré : aucun appel (I1). Sans rien d'affiché, état
+        // vide propre — jamais d'écran d'erreur plein-écran (#260).
         if (baseUrl.isBlank()) {
-            state = UiState.Error("Serveur non configuré.", (state as? UiState.Data)?.payload)
+            state = (state as? UiState.Data)?.let { UiState.Error("Serveur non configuré.", it.payload) }
+                ?: UiState.Empty
             return
         }
         state = when (val s = state) {
@@ -948,7 +950,8 @@ fun AssignmentsRoute(
                 repo.fetchAsync(resource, "weekStart=$week") { o -> accept(o) }
             }
         } catch (_: Exception) {
-            state = UiState.Error("Erreur inattendue.", (state as? UiState.Data)?.payload)
+            state = (state as? UiState.Data)?.let { UiState.Error("Erreur inattendue.", it.payload) }
+                ?: UiState.Empty
             pending = null
         }
     }
@@ -1007,7 +1010,7 @@ fun AssignmentsRoute(
         // pas un état de l'écran), et elle disparaît seule.
         toggleRepo.fetchAttachment(a.id, att.id) { data ->
             if (data == null) {
-                notices.show(PapNotice("Pièce jointe illisible hors-ligne.", NoticeKind.ERROR))
+                notices.show(PapNotice("Pièce jointe illisible sans connexion.", NoticeKind.ERROR))
                 return@fetchAttachment
             }
             val opened = try {

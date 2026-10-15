@@ -74,7 +74,7 @@ class SyncedRepository(
                     post(cb, RefreshOutcome.Updated(payload, clock()))
                 }
             } catch (e: NoLocalSession) {
-                post(cb, cachedOrFailed(resource, "Hors-ligne, aucune donnée en cache."))
+                post(cb, cachedOrFailed(resource, "Aucune donnée en cache."))
             } catch (e: Exception) {
                 if (isSessionFailure(e)) {
                     // Session locale morte : le cache ne masque PAS une session
@@ -83,7 +83,7 @@ class SyncedRepository(
                     DeviceAuth.reject()
                     post(cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
                 } else {
-                    post(cb, cachedOrFailed(resource, "Hors-ligne, aucune donnée en cache."))
+                    post(cb, cachedOrFailed(resource, "Aucune donnée en cache."))
                 }
             }
         }.start()
@@ -120,7 +120,7 @@ class SyncedRepository(
                 null
             }
             if (client == null) {
-                post(cb, RefreshOutcome.Failed("Relecture indisponible (hors-ligne).", null))
+                post(cb, RefreshOutcome.Failed("Relecture indisponible.", null))
                 return@Thread
             }
             try {
@@ -132,7 +132,7 @@ class SyncedRepository(
                     DeviceAuth.reject()
                     post(cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
                 } else {
-                    post(cb, RefreshOutcome.Failed("Relecture indisponible (hors-ligne).", null))
+                    post(cb, RefreshOutcome.Failed("Relecture indisponible.", null))
                 }
             }
         }.start()
@@ -157,7 +157,7 @@ class SyncedRepository(
                 null
             }
             if (client == null) {
-                post(cb, RefreshOutcome.Failed("Hors-ligne, tranches indisponibles.", null))
+                post(cb, RefreshOutcome.Failed("Tranches indisponibles.", null))
                 return@Thread
             }
             try {
@@ -167,7 +167,7 @@ class SyncedRepository(
                     DeviceAuth.reject()
                     post(cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
                 } else {
-                    post(cb, RefreshOutcome.Failed("Hors-ligne, tranches indisponibles.", null))
+                    post(cb, RefreshOutcome.Failed("Tranches indisponibles.", null))
                 }
             }
         }.start()

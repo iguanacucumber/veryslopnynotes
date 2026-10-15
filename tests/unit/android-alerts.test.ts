@@ -89,13 +89,13 @@ describe("unit android alertes sécurité (#144)", () => {
     expect(tsAlertsLayout({ kind: "ready", alerts: [GOOD], stale: false, fetchedAt: 1_000 })).toBe("LIST");
     expect(tsAlertsLayout({ kind: "ready", alerts: [GOOD], stale: true, fetchedAt: 1_000 })).toBe("LIST");
     // Échec = le VRAI message du serveur, jamais la chaîne figée.
-    expect(tsAlertsLayout({ kind: "failed", message: "Hors-ligne, aucune donnée en cache." })).toBe("ERROR");
+    expect(tsAlertsLayout({ kind: "failed", message: "Aucune donnée en cache." })).toBe("ERROR");
     // Le mot « Bon signe » n'existe que dans la carte d'état vide (le défaut #144
     // l'affichait hors ligne, y compris sans réseau).
     const screen = codeOnly(readFileSync(SCREEN, "utf8"));
     expect(screen).toContain('text = "Aucune alerte de sécurité"');
     expect(screen).toContain("AlertsLayout.ALL_CLEAR -> AllClearCard()");
-    expect(screen).toContain("Pas de vérification hors ligne");
+    expect(screen).toContain("Aucune vérification disponible");
   });
 
   test("kind, source et gravité : le champ RÉEL, jamais un texte figé", () => {
