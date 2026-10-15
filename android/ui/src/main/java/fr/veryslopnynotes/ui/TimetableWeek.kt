@@ -637,17 +637,6 @@ fun TimetableRoute(
             onPairing = onPairing,
             onAlerts = onAlerts,
         )
-        val data = state as? UiState.Data
-        if (data != null && data.isStale) {
-            // `fetchedAt = 0` = cache resservi depuis un état d'erreur : pas
-            // d'horodatage à afficher (le bandeau prend `null`), donc aucune
-            // date inventée.
-            PapStaleBanner(
-                fetchedAt = data.fetchedAt.takeIf { it > 0L },
-                onRefresh = { refresh() },
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-        }
         // #147 : relecture ratée alors que la SEMAINE EST LÀ. AVANT, l'état
         // d'erreur n'était rendu que dans la branche « aucune journée » : le
         // bandeau « hors ligne » disait l'âge des cours, jamais la cause de

@@ -444,8 +444,8 @@ describe("unit android accueil (#143)", () => {
     // défilement tronquait une semaine de contenu.
     expect(screen).toMatch(/fun IndexScreen\([\s\S]*verticalScroll\(rememberScrollState\(\)\)/);
     expect(screen).not.toMatch(/Modifier\.fillMaxSize\(\)\.padding/);
-    // Bandeau périmé avec le VRAI horodatage, état vide, tirail.
-    expect(screen).toContain("PapStaleBanner(fetchedAt = snapshot.fetchedAt");
+    // État vide, tirail. Le bandeau « Données hors-ligne » a été retiré.
+    expect(screen).not.toContain("PapStaleBanner(");
     expect(screen).toContain("PapEmptyState(");
     expect(screen).toContain("HomePullToRefresh(");
     // Chaque carte ouvre son écran, par la porte de navigation de #135 (une

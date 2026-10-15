@@ -8,11 +8,9 @@
 //     l'écran ;
 //   - `errorHeadline` : le VRAI message du serveur gagne, une chaîne vide ou
 //     blanche retombe sur la phrase de repli (le défaut de 8 écrans) ;
-//   - `staleBannerLabel` : la phrase figée PLUS l'horodatage, et la phrase
-//     seule quand l'horodatage est inconnu ;
 //   - les règles « ne rend rien » (pastille à zéro, ligne sans titre, puce vide,
 //     compteur nul, description vide, détail vide) ;
-//   - par lecture de la source : les 15 briques existent avec la signature
+//   - par lecture de la source : les 14 briques existent avec la signature
 //     attendue, ZÉRO hex en dur, ZÉRO dépendance ajoutée, et le détail
 //     technique de l'erreur derrière un dépliant au lieu d'être jeté.
 //
@@ -125,12 +123,6 @@ function tsLongDateFr(epochMillis: number, zone: string = ZONE): string {
 const GENERIC_ERROR = "Erreur réseau. Réessayer.";
 const tsErrorHeadline = (message: string | null | undefined): string =>
   (message ?? "").trim() || GENERIC_ERROR;
-
-/** Miroir de `staleBannerLabel(fetchedAt, now)`. */
-const tsStaleBannerLabel = (fetchedAt: number | null, now: number): string =>
-  fetchedAt === null
-    ? "Données hors-ligne"
-    : `Données hors-ligne · mis à jour ${tsRelativeTimeFr(fetchedAt, now)}`;
 
 /** Miroir des règles « ne rend rien » des briques. */
 const rendersBadge = (count: number) => count > 0;
@@ -341,22 +333,6 @@ describe("briques d'interface (#136)", () => {
     expect(kt).toMatch(/message\?\.trim\(\)\?\.takeIf \{ it\.isNotEmpty\(\) \} \?: GENERIC_ERROR/);
   });
 
-  test("staleBannerLabel : la phrase figée PLUS l'horodatage que personne n'affichait", () => {
-    // `UiState.Data.fetchedAt` était calculé par tous les constructeurs et lu
-    // par AUCUN écran : on ne pouvait pas savoir quand ses données dataient.
-    expect(tsStaleBannerLabel(NOW - 4 * MIN, NOW)).toBe("Données hors-ligne · mis à jour il y a 4 min");
-    expect(tsStaleBannerLabel(NOW - 3 * HOUR, NOW)).toBe("Données hors-ligne · mis à jour il y a 3 h");
-    expect(tsStaleBannerLabel(NOW - 6 * 86_400_000, NOW)).toBe("Données hors-ligne · mis à jour il y a 6 jours");
-    // Aucun horodatage = AUCUNE date inventée, la phrase seule.
-    expect(tsStaleBannerLabel(null, NOW)).toBe("Données hors-ligne");
-    // La phrase figée des huit écrans reste le point de départ, jamais seul.
-    expect(kt).toContain('private const val STALE_LABEL = "Données hors-ligne"');
-    expect(kt).toMatch(/fun staleBannerLabel\(fetchedAt: Long\?, now: Long = System\.currentTimeMillis\(\)\): String/);
-    // Guillemets SIMPLES : dans une chaine double, `${...}` n'est pas une
-    // interpolation, c'est du texte — l'assertion passerait à vide.
-    expect(kt).toContain('$STALE_LABEL · mis à jour ${relativeTimeFr(fetchedAt, now)}');
-  });
-
   test("règles « ne rend rien » : zéro, vide, blanche", () => {
     // Ces règles sont ce qui distingue une brique d'un aplat : une pastille à
     // zéro, une ligne sans titre ou une description vide ne doivent pas laisser
@@ -385,7 +361,7 @@ describe("briques d'interface (#136)", () => {
     expect(kt).toContain("if (!detail.isNullOrBlank())");
   });
 
-  test("les 15 briques existent, avec la signature que la vague suivante va appeler", () => {
+  test("les 14 briques existent, avec la signature que la vague suivante va appeler", () => {
     const attendues: Record<string, string> = {
       PapCard: "fun PapCard(",
       PapSectionHeader: "fun PapSectionHeader(",
@@ -395,7 +371,6 @@ describe("briques d'interface (#136)", () => {
       PapErrorState: "fun PapErrorState(",
       PapLoading: "fun PapLoading(",
       PapLoadingBlock: "fun PapLoadingBlock(",
-      PapStaleBanner: "fun PapStaleBanner(",
       PapPill: "fun PapPill(",
       PapSubjectAvatar: "fun PapSubjectAvatar(",
       PapBadge: "fun PapBadge(",
@@ -501,7 +476,7 @@ describe("briques d'interface (#136)", () => {
     // Honnêteté sur le périmètre : #136 livre les BRIQUES et ne touche aucun
     // écran, donc les `Text("Erreur réseau. Réessayer.")` et les
     // « Données hors-ligne (périmé). » étaient toujours là. Ils disparaissent
-    // quand un écran adopte `PapErrorState` / `PapStaleBanner`. Ce test
+    // quand un écran adopte `PapErrorState`. Ce test
     // échouera le jour où le suivant le fera — c'est le témoin, pas le but.
     // #137 (EDT), #138 (Tâches), #141 (vie scolaire), #142 (messagerie) puis
     // #144 (Actualités, Cantine, Alertes, Fiches) : les huit écrans qui jetaient
@@ -514,23 +489,22 @@ describe("briques d'interface (#136)", () => {
     const edt = readFileSync(join(UI, "TimetableWeek.kt"), "utf8");
     expect({ edt: edt.includes('"Erreur réseau. Réessayer."') }).toEqual({ edt: false });
     expect(edt).toContain("PapErrorState(message = failed.message");
-    expect(edt).toContain("PapStaleBanner(");
+    expect({ edt: edt.includes("PapStaleBanner(") }).toEqual({ edt: false });
     // #147 : relecture ratée alors que la SEMAINE EST AFFICHÉE. Avant, l'EDT ne
     // montrait l'erreur que dans la branche « aucun cours » : avec le cache en
-    // place, le bandeau « hors ligne » disait l'âge des cours et jamais la
-    // cause. Une ligne de message, comme les autres écrans en cache.
+    // place, seule une ligne de message dit la cause, comme les autres écrans.
     expect(edt).toContain("text = failed.message");
     const devoirs = readFileSync(join(UI, "Assignments.kt"), "utf8");
     expect({ devoirs: devoirs.includes('"Erreur réseau. Réessayer."') }).toEqual({ devoirs: false });
     expect(devoirs).toContain("PapErrorState(message = error");
-    expect(devoirs).toContain("PapStaleBanner(fetchedAt = fetchedAt");
+    expect({ devoirs: devoirs.includes("PapStaleBanner(") }).toEqual({ devoirs: false });
     expect(devoirs).toContain("PapLoading()");
     expect(devoirs).toContain("PapEmptyState(");
     // #141 : la vie scolaire (absences + retards, sanctions), même coquille.
     const vieScolaire = readFileSync(join(UI, "Attendance.kt"), "utf8");
     expect({ vieScolaire: vieScolaire.includes('"Erreur réseau. Réessayer."') }).toEqual({ vieScolaire: false });
     expect(vieScolaire).toContain("PapErrorState(message = error?.message");
-    expect(vieScolaire).toContain("PapStaleBanner(fetchedAt = data.fetchedAt");
+    expect({ vieScolaire: vieScolaire.includes("PapStaleBanner(") }).toEqual({ vieScolaire: false });
     expect(vieScolaire).toContain("PapLoading()");
     expect(vieScolaire).toContain("PapEmptyState(");
     // #142 : même migration pour la messagerie, et le message réel n'est pas
@@ -538,7 +512,7 @@ describe("briques d'interface (#136)", () => {
     const messagerie = readFileSync(join(UI, "MessagesScreen.kt"), "utf8");
     expect({ messagerie: messagerie.includes('"Erreur réseau. Réessayer."') }).toEqual({ messagerie: false });
     expect(messagerie).toContain("PapErrorState(message = error, onRetry = onRetry)");
-    expect(messagerie).toContain("PapStaleBanner(fetchedAt = fetchedAt");
+    expect({ messagerie: messagerie.includes("PapStaleBanner(") }).toEqual({ messagerie: false });
     expect(messagerie).toContain("PapLoading()");
     expect(messagerie).toContain("PapEmptyState(");
     // Tirail + recherche + confirmation de suppression : les trois gestes que
@@ -546,13 +520,12 @@ describe("briques d'interface (#136)", () => {
     expect(messagerie).toContain("HomePullToRefresh(");
     expect(messagerie).toContain("ConfirmDialog(");
     // #144 : les quatre écrans de la vague ne gardent plus la chaîne figée, et
-    // ils affichent bien le message réel, le squelette, l'état vide et le
-    // bandeau horodaté.
+    // ils affichent bien le message réel, le squelette et l'état vide.
     for (const f of ["CanteenMenus.kt", "NewsScreen.kt", "SecurityAlertsScreen.kt"]) {
       const src = readFileSync(join(UI, f), "utf8");
       expect({ f, figee: src.includes('"Erreur réseau. Réessayer."') }).toEqual({ f, figee: false });
       expect({ f, PapErrorState: src.includes("PapErrorState(") }).toEqual({ f, PapErrorState: true });
-      expect({ f, PapStaleBanner: src.includes("PapStaleBanner(") }).toEqual({ f, PapStaleBanner: true });
+      expect({ f, PapStaleBanner: src.includes("PapStaleBanner(") }).toEqual({ f, PapStaleBanner: false });
       expect({ f, PapLoading: src.includes("PapLoading(") }).toEqual({ f, PapLoading: true });
       expect({ f, PapEmptyState: src.includes("PapEmptyState(") }).toEqual({ f, PapEmptyState: true });
     }

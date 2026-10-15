@@ -729,14 +729,18 @@ describe("vie scolaire : rendu (#141)", () => {
     const rows = readFileSync(ROWS_KT, "utf8");
     const format = readFileSync(FORMAT_KT, "utf8");
 
-    // 1. Les quatre états, avec le VRAI message du serveur et un horodatage.
-    for (const brique of ["PapLoading()", "PapEmptyState(", "PapErrorState(", "PapStaleBanner("]) {
+    // 1. Les trois états restants, avec le VRAI message du serveur.
+    for (const brique of ["PapLoading()", "PapEmptyState(", "PapErrorState("]) {
       expect({ brique, present: screen.includes(brique) }).toEqual({ brique, present: true });
     }
+    expect({ brique: "PapStaleBanner(", present: screen.includes("PapStaleBanner(") }).toEqual({
+      brique: "PapStaleBanner(",
+      present: false,
+    });
     expect(screen).toContain("PapErrorState(message = error?.message, onRetry = { refresh() })");
     expect(screen).not.toContain("Erreur réseau. Réessayer.");
     expect(screen).not.toContain("Données hors-ligne (périmé).");
-    expect(screen).toContain("PapStaleBanner(fetchedAt = data.fetchedAt, onRefresh = { refresh() })");
+    expect(screen).not.toContain("PapStaleBanner(");
 
     // 2. La page se défile (avant #141 : aucune rangée défilante, donc les
     //    événements du bas de la liste étaient inatteignables).

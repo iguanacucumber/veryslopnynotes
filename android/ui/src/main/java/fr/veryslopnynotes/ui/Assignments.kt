@@ -769,12 +769,6 @@ fun AssignmentsScreen(
                 onSelect = onSubjectChange,
             )
         }
-        // #145 : le bandeau « périmé » s'OUVRE au lieu d'apparaître d'un coup, et
-        // le message d'écriture ne passe plus ici : c'est le snackbar racine, qui
-        // a une couleur de sévérité et une fermeture automatique.
-        PapAppear(visible = isStale) {
-            PapStaleBanner(fetchedAt = fetchedAt, onRefresh = onRefresh)
-        }
         // `weight(1f)` : AVANT #138, le `LazyColumn` n'était PAS pondéré et le
         // bouton « Actualiser » qui le suivait devenait hors d'atteinte dès que la
         // liste débordait. Ici la zone liste occupe toute la hauteur restante, et

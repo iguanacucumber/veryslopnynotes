@@ -205,10 +205,6 @@ fun SecurityAlertsScreen(
                 onRetry = onRefresh,
             )
             AlertsLayout.OFFLINE_EMPTY -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                val stale = view as? AlertsView.Ready
-                if (stale != null) {
-                    PapStaleBanner(fetchedAt = stale.fetchedAt, onRefresh = onRefresh)
-                }
                 PapEmptyState(
                     icon = Icons.Filled.Info,
                     title = "Pas de vérification hors ligne",
@@ -220,9 +216,6 @@ fun SecurityAlertsScreen(
             AlertsLayout.ALL_CLEAR -> AllClearCard()
             AlertsLayout.LIST -> {
                 val ready = view as? AlertsView.Ready
-                if (ready != null && ready.stale) {
-                    PapStaleBanner(fetchedAt = ready.fetchedAt, onRefresh = onRefresh)
-                }
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(ready?.alerts ?: emptyList(), key = { it.id }) { alert ->
                         SecurityAlertCard(alert)
@@ -347,8 +340,7 @@ fun SecurityAlertCard(alert: SecurityAlert, modifier: Modifier = Modifier) {
  * `error = "network"`, une chaîne que l'écran n'affichait jamais — hors ligne,
  * l'utilisateur lisait « Aucune alerte. Bon signe. », sans cache ni bandeau. Le
  * cache vient maintenant de la politique partagée (`CachePolicy.SECURITY_ALERTS`),
- * donc c'est le MÊME stockage que les notes ou l'EDT, et le bandeau « hors ligne »
- * porte son horodatage ([PapStaleBanner]).
+ * donc c'est le MÊME stockage que les notes ou l'EDT.
  */
 @Composable
 fun SecurityAlertsRoute(

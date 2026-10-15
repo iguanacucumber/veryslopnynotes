@@ -341,9 +341,6 @@ private fun CachedSchoolRoute(
             }
             return@Column
         }
-        if (data != null && data.isStale) {
-            PapStaleBanner(fetchedAt = data.fetchedAt, onRefresh = { refresh() })
-        }
         // Échec de la RELECTURE alors que le cache est là : les lignes restent
         // affichées, la cause est dite en une ligne (le gros bloc rouge, avec son
         // « Réessayer », doublerait l'action de l'en-tête).
