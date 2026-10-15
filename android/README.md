@@ -1,4 +1,4 @@
-# android/ — client natif from scratch (phase 4, issue #13)
+# android/ — client natif Kotlin + Compose
 
 Règle d'or réseau : le téléphone parle à l'établissement en direct
 (`android/pronote/`, ADR-003), jamais à un hôte tiers. Plus aucun client HTTP
@@ -10,32 +10,30 @@ device-only) ; le seul hôte choisi à l'exécution est le scraper de manuels
 Modules : `app/` (Activity + navigation), `core/` (config allowlist),
 `data/` (session + dépôts locaux), `ui/` (écrans Compose Material3).
 
-## Serveur : choisi à l'exécution, le build fournit le défaut
+## Serveur facultatif : scraper de manuels
 
-L'adresse est saisie à l'étape 1 de l'**assistant de connexion** (on ne peut pas
-se connecter sans connaitre son serveur) et persistée par `data/ServerStore`. La
-valeur `BuildConfig` ci-dessous n'est plus qu'une **graine** : elle sert quand
-rien n'est choisi.
+Le serveur n'est pas nécessaire pour Pronote ou l'assistant IA. Il ne sert qu'au
+scraper de manuels ; son adresse se configure dans l'app (`data/ServerStore`).
+L'adresse de build n'est qu'une valeur par défaut.
 
 ## Aide devoirs (clé du fournisseur)
 
 Réglages → « Assistant devoirs » : saisie de la clé, puis « Oublier » pour l'effacer.
-Elle est **chiffrée au repos** (`EncryptedSharedPreferences`), relue à chaque requête, jamais
-affichée ailleurs, jamais loggée, jamais mise en URL. Elle part dans le **corps** de
-`POST /v1/homework/generate` (`apiKey`), donc dans les logs du serveur non plus.
+Elle est **chiffrée au repos** (`EncryptedSharedPreferences`), jamais affichée ailleurs,
+loggée ou mise en URL. L'app l'envoie directement à OpenRouter dans l'en-tête HTTPS
+`Authorization` ; la requête ne passe pas par le serveur de manuels.
 
 Onglet Tâches → bouton « Aide devoirs » sur un devoir : les sources sont la consigne et
 l'extrait de cours de ce devoir, la réponse est un corrigé sourcé ou un refus motivé. Sans clé,
-l'assistant reste inactif (aucun appel). Le serveur ne détient aucune clé : c'est une
-credential d'app, comme le jeton de session.
+l'assistant reste inactif (aucun appel). Le serveur de manuels ne reçoit pas cette clé ; elle
+reste une credential stockée sur l'appareil.
 
 ## Assistant de connexion (2 étapes, device-only, #206)
 
 Lancement → **1. ton établissement** (son adresse élève, validée en local) →
 **2. le QR de l'application de l'établissement** (contenu `login`+`jeton` + son
 PIN, scanné ou collé). Le téléphone ouvre la session en direct
-(`Client.qrcodeLogin`, ADR-003) : aucun serveur intermédiaire, aucun
-`POST /v1/setup`. Le PIN déchiffre le QR sur place et n'est jamais persisté ;
+(`Client.qrcodeLogin`, ADR-003) : aucun serveur intermédiaire. Le PIN déchiffre le QR sur place et n'est jamais persisté ;
 seul le jeton tourné dort chiffré (`SessionStore`). Sans session persistée, le
 démarrage ouvre l'assistant au lieu de l'accueil ; après une session morte
 (jeton tourné, session refermée), c'est lui qui rouvre la session locale.
@@ -114,64 +112,13 @@ Le nom saisi doit rester couvert par le SAN du certificat
 (`localhost`, `veryslopnynotes.local`, `127.0.0.1`, `10.0.2.2`, IP LAN) :
 sinon l'erreur suivante est un `HostnameVerifier`, pas une erreur d'ancre.
 
-## Build debug (SDK requis, pas de réseau tiers)
+## Build
 
 ```sh
-make buildDebugApk            # equivalent : cd android && ./gradlew assembleDebug
+make buildDebugApk
+make buildRelApk
 ```
 
-Sortie : `android/app/build/outputs/apk/debug/app-debug.apk`. La clé de signature de
-debug est générée par Gradle, jamais dans le repo.
-
-### Ce que `make check` compile vraiment
-
-`make check` lance `make android-compile` **en même temps que ses autres étapes**
-(`agents/runtime/check.ts`) : Gradle compile les quatre modules
-(`:core :data :ui :app`). C'est le **seul** filet qui voit une résolution de
-symbole, un import manquant ou une surcharge ambiguë — les miroirs TypeScript et
-`check-kotlin.ts` ne les voient pas (piège réel : `MAX_LABEL_CHARS` non qualifié
-dans `core/Homework.kt`, invisible côté TS).
-
-Prérequis, une fois par machine :
-
-- **JDK 17 à 21** — Gradle 8.7 *refuse* un JDK supérieur (échec opaque). Un JDK 17
- 'Adoptium suffit ; `ANDROID_JDK_HOME` ou `~/.cache/jdk17` sontrovés automatiquement.
-- **SDK Android** (`platforms;android-34`, `build-tools;34.0.0`) : pointé par
-  `ANDROID_HOME` ou par `sdk.dir` de `android/local.properties` (gitignoré).
-
-```sh
-sdkmanager "platforms;android-34" "build-tools;34.0.0" platform-tools
-```
-
-Si l'un des deux manque, la cible **SKIP bruyamment** et le dit : « compile Kotlin
-NON vérifiée ». Un skip n'est jamais un faux vert — seul `check-kotlin`
-(structurel) a tourné, et il le précise.
-
-Versions figées (ADR-001) : Gradle 8.7, AGP 8.5.2, Kotlin 1.9.24,
-compileSdk/targetSdk 34, minSdk 26, Compose BOM 2024.06.00, OkHttp 4.12.0.
-Zéro dépendance ajoutée au-delà de la stack (Compose Material3 +
-navigation-compose + OkHttp + core-ktx/activity, licences Apache-2.0).
-
-## Release signée (issue #32, clé hors repo)
-
-Voir `docs/RELEASE.md` (procédure complète) :
-
-```sh
-make buildRelApk             # equivalent : cd android && ./gradlew assembleRelease
-```
-
-Sortie : `android/app/build/outputs/apk/release/` — signé **si** `STORE_FILE` (+ mots de
-passe/alias) est présent dans l'environnement, sinon `app-release-unsigned.apk`.
-
-Keystore généré une fois hors repo (`keytool -genkeypair ...`), config via
-`~/.gradle/gradle.properties` (`release.storeFile/storePassword/keyAlias/
-keyPassword`) ou env `STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD`.
-Jamais commité (`.gitignore` `*.keystore/*.jks`, APK `*.apk` ignoré).
-Vérifier : `jarsigner -verify`, `check-secrets` OK.
-
-## Renvoyé phases suivantes (hors scope #13)
-
-- #14 offline : cache Room + affichage sans réseau.
-- Persistance serveur (SQLite) : aujourd'hui un redémarrage fait refaire le setup.
-- Phase 10 : pinning cert (reste hors scope, release #32 faite).
-
+`make check` compile réellement Kotlin si JDK 17–21 et SDK Android 34 sont
+présents ; sinon il signale explicitement le skip. Prérequis, versions,
+signature et procédure de release : [`docs/RELEASE.md`](../docs/RELEASE.md).

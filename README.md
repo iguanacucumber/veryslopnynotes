@@ -1,64 +1,64 @@
-# veryslopnynotes
+<h1 align="center">veryslopnynotes</h1>
 
-Client Android + serveur self-hosted pour consulter son Pronote : notes et moyennes, devoirs, EDT,
-vie scolaire, actualités, cantine, messagerie, profil. Le **téléphone est le seul** à parler à
-Pronote (`android/pronote/` seul, [ADR-003](docs/adr/003-client-direct.md)) ; aucune session
-ne quitte l'appareil. Le serveur restant est un auxiliaire (aide devoirs IA, clé
-reçue par appel) qui ne voit jamais la session Pronote.
+<p align="center">
+  <a href="android/README.md">App Android</a> |
+  <a href="docs/RELEASE.md">Build & release</a> |
+  <a href="docs/architecture/INVARIANTS.md">Invariants</a> |
+  <a href="AGENTS.md">Contribuer</a>
+</p>
 
-Surcouche IA limitée et sourcée : assistant de devoirs et fiches de révision construits à partir
-de cours et manuels, avec contenu externe traité comme **donnée** et jamais comme instruction.
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Contracts](https://img.shields.io/badge/contracts-0.8.0-blue.svg)](shared/contracts/api.openapi.yaml)
+[![Bun](https://img.shields.io/badge/bun-1.4.2-f9f1de.svg)](https://bun.sh)
 
-> Projet non affilié à Pronote / Index Éducation. Aucun asset, logo ou écran d'un autre produit :
-> l'identité est propre (MIT). L'accès Pronote passe par la bibliothèque communautaire
-> [`pronotets`](https://www.npmjs.com/package/pronotets) et suppose un compte et une autorisation
-> de l'établissement — à toi de vérifier que cet usage est autorisé chez toi.
+veryslopnynotes est un projet qui vise à consulter son Pronote sans jamais confier sa session à un
+serveur, afin de :
 
-## État du projet
+- Tenir la session sur le téléphone seul ([ADR-003](docs/adr/003-client-direct.md))
+- Garder session Pronote et clé LLM hors du serveur
+- Traiter le contenu externe comme une donnée, jamais comme une instruction
+- Rester hors-ligne d'abord : cache par ressource, repli si le réseau tombe
 
-| Domaine | État |
-|---|---|
-| Contrats API/événements/cache (`shared/contracts/`) | Complet, versionné (`0.8.0`), miroir OpenAPI |
-| Serveur : lectures Pronote, API, SSE, cache, jobs | Complet (31 routes, 7 types d'événements) |
-| Client Android (Kotlin/Compose) | Complété sur les écrans principaux, offline-first, assistant de connexion en 3 étapes (serveur → établissement → QR scanné + PIN), SSE, aide devoirs |
-| Point d'entrée HTTP serveur (`make runServer`, Docker) | Câblé : setup (QR de l'app) → session Pronote → reader → snapshot → routes, ports d'écriture inclus. **Zéro credential serveur** |
-| Garde-fous sécurité (I1–I8) + tests | 796 tests verts dans `make check`, scan d'architecture et de secrets en CI locale |
-| Lecture « live » d'un établissement | Mesurée sur un compte réel : notes, devoirs, EDT, périodes, actus, menus, vie scolaire, profil, capacités. Onglets non couverts par l'établissement = **vide propre** |
+Voir [`android/README.md`](android/README.md) pour l'app et
+[`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) pour les règles de sécurité.
 
-## Fonctionnalités
+> Projet non affilié à Pronote / Index Éducation. Accès Pronote via la bibliothèque communautaire
+> [`pronotets`](https://www.npmjs.com/package/pronotets), avec un compte et une autorisation de
+> l'établissement — à toi de vérifier que cet usage est autorisé chez toi.
 
-- **Notes & moyennes** — 3 algorithmes (moyenne de matière, pondérée par coefficient, médiane),
-  moyenne lue dans le bulletin publié par l'établissement (`/20`, par période) sinon estimée,
-  influence de chaque note, courbe d'historique, périodes (trimestres/semestres).
-- **Devoirs** — description, contenus de cours, pièces jointes, filtre par semaine,
-  **toggle « fait » écrit dans Pronote** (action confirmée dans l'app, jamais déclenchée par l'IA).
-- **Aide devoirs (IA)** — bouton par devoir : corrigé sourcé ou refus motivé, sources = la
-  consigne et l'extrait de cours du devoir. La clé du fournisseur se saisit dans les réglages de
-  l'app (chiffrée) et part dans le corps de chaque demande : le serveur n'en détient aucune.
-- **Cours** (EDT) — vue semaine, professeur, salle, cours annulé/déplacé, badge « prochain cours »,
-  bornes de semaine explicites en UTC.
+Features
+--------
+
+- **Notes & moyennes** — 3 algorithmes (matière, pondérée par coefficient, médiane), moyenne du
+  bulletin publiée sinon estimée, influence par note, courbe d'historique, périodes.
+- **Devoirs** — consigne, contenus, pièces jointes, filtre par semaine, toggle « fait » écrit dans
+  Pronote (action confirmée, jamais déclenchée par l'IA).
+- **Aide devoirs (IA)** — corrigé sourcé ou refus motivé ; la clé chiffrée part directement de
+  l'app vers OpenRouter, sans transiter par le serveur.
+- **Cours (EDT)** — vue semaine, professeur, salle, annulés/déplacés, badge « prochain cours ».
 - **Vie scolaire** — absences, retards, sanctions, compteurs par période.
-- **Actualités, cantine, messagerie** — liste de fils, réponse, création, état lu, suppression.
-- **Profil & accueil** — nom, classe, période, photo **via proxy serveur**, multi-comptes parent,
-  déconnexion qui purge session et cache local, mode anonyme.
-- **Matières personnalisées** — couleur, emoji, libellé appliqué partout (notes, devoirs, cours),
-  thème clair/sombre.
-- **Capacités dynamiques** — les onglets inactifs dans ton établissement sont masqués, pas vides-cassés.
-- **Hors-ligne** — cache par ressource avec TTL et badge « périmé », repli cache si réseau KO.
-- **Assistant devoirs & fiches de révision** — réponses sourcées (cours + manuels), citations
-  vérifiées, export PDF, garde-fous anti-injection.
-- **Alertes sécurité** — liste des injections neutralisées, pour vérifier que le contenu externe
-  n'a jamais été exécuté.
+- **Actualités, cantine, messagerie** — fils, réponse, création, état lu, suppression.
+- **Profil & accueil** — multi-comptes parent, déconnexion qui purge session et cache, mode anonyme.
+- **Matières personnalisées** — couleur, emoji, libellé appliqué partout, thème clair/sombre.
+- **Capacités dynamiques** — onglets non publiés par l'établissement masqués, pas vides-cassés.
+- **Hors-ligne** — cache par ressource avec TTL et badge « périmé ».
+- **Fiches de révision** — réponses sourcées (cours + manuels), citations vérifiées, export PDF.
+- **Alertes sécurité** — injections neutralisées, pour vérifier que le contenu externe n'a jamais
+  été exécuté.
 
-## Démarrage rapide
+Détail app : [`android/README.md`](android/README.md). Le serveur optionnel sert uniquement au
+scraping de manuels : [`server/README.md`](server/README.md).
 
-Prérequis : [Bun](https://bun.sh) 1.4.2 (serveur) et, pour l'app, un SDK Android + un
-JDK 17-21 (Gradle 8.7 refuse un JDK plus récent).
+Installation
+------------
+
+Prérequis : [Bun](https://bun.sh) 1.4.2 ; pour l'app, JDK 17–21 et SDK Android 34
+([détails](docs/RELEASE.md)).
 
 ```bash
 bun install
 make check                     # secrets + typecheck + unit + arch + contracts + compile Kotlin
-make runServer                 # scraper manuels : HTTPS sur 0.0.0.0:8080 (voir PORT/HOST/TLS)
+make runServer                 # scraper de manuels facultatif, HTTPS sur :8080
 ```
 
 Client Android :
@@ -68,256 +68,67 @@ make buildDebugApk             # APK debug  -> android/app/build/outputs/apk/deb
 make buildRelApk               # APK release (signé si STORE_FILE est dans l'environnement)
 ```
 
-Les trois commandes Gradle (`buildDebugApk`, `buildRelApk`, `android-compile`) trouvent
-leur JDK et leur SDK toutes seules, et **échouent** si l'outillage manque : un APK
-demandé en silence n'en est pas un. Prérequis et installation : `android/README.md`.
+Les trois cibles Gradle trouvent leur JDK et leur SDK toutes seules et **échouent** si l'outillage
+manque : un APK demandé en silence n'en est pas un. Détails build/signature :
+[`android/README.md`](android/README.md) et [`docs/RELEASE.md`](docs/RELEASE.md).
 
-Sans serveur (cible #205, [ADR-003](docs/adr/003-client-direct.md)) : les lectures
-directes n'exigent aucun backend — le téléphone parle à l'établissement seul.
-`make runServer` ne sert alors que l'auxiliaire IA (aide devoirs, clé reçue par
-appel), qui ne voit jamais la session Pronote.
+L'app n'a pas besoin du serveur pour Pronote ni pour l'assistant IA. `make runServer` lance le
+scraper de manuels facultatif ; il ne relaie ni session Pronote ni clé OpenRouter.
 
-Hôte auxiliaire côté app : `android/local.properties` (non commité) ou env `SERVER_HOST`.
-Défaut émulateur `10.0.2.2:3000` ; hors émulateur, HTTPS obligatoire. Cet hôte
-n'est que l'adresse du scraper de manuels : l'assistant de connexion ne le
-demande plus. L'assistant ouvre la session sur le téléphone : adresse de
-l'établissement, puis **QR affiché par l'application Pronote + son PIN** — aucun
-serveur intermédiaire, le PIN déchiffre le QR sur place et n'est jamais persisté.
-Aucun identifiant n'est saisi nulle part. Détails : [`android/README.md`](android/README.md).
-Détails build/signature : [`android/README.md`](android/README.md) et [`docs/RELEASE.md`](docs/RELEASE.md).
+Configuration
+-------------
 
-## Configuration
+**Pas de `.env` ni de secrets de serveur.** Le QR et son PIN sont déchiffrés sur le téléphone ; la
+clé OpenRouter est chiffrée sur l'appareil et envoyée directement au fournisseur. Exception : le
+scraper reçoit les identifiants du portail de manuels dans le corps de sa requête. Son endpoint est
+sans authentification : ne pas l'exposer publiquement (voir [I8](docs/architecture/INVARIANTS.md)).
 
-**Il n'y a pas de `.env`.** Le serveur ne détient aucun credential : il n'y a rien
-à configurer, rien à commiter, rien à faire tourner. Tout ce qui s'authentifie
-vient de l'app, à la demande :
+Seules variables lues, aucune secrète : `PORT`, `HOST`, `TLS_CERT_FILE`, `TLS_KEY_FILE`.
+`make runServer` génère un certificat auto-signé hors du dépôt (`~/.cache/veryslopnynotes/tls`) ;
+fournissez les deux variables TLS pour un certificat émis (mkcert, Let's Encrypt).
 
-| Ce qui s'authentifie | Qui l'envoie | Comment |
-|---|---|---|
-| Compte de l'établissement | l'app | QR affiché par l'application Pronote + son PIN, déchiffrés sur place (`Client.qrcodeLogin`) — le jeton tourné dort chiffré sur le téléphone, jamais en réseau après l'appairage |
-| Clé LLM (assistant devoirs) | l'app | champ `apiKey` de `POST /v1/homework/generate` (bornée, jamais journalisée, `writeOnly`) |
+Apports humains (compte, URL d'établissement) : [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md).
 
-Seules ces variables restent lues, et ce ne sont pas des secrets :
-
-| Variable | Rôle |
-|---|---|
-| `PORT` | port d'écoute du serveur (`runServer` : 8080) |
-| `HOST` | hôte d'écoute (défaut `127.0.0.1`, loopback ; `runServer` : `0.0.0.0`) |
-| `TLS_CERT_FILE` | chemin du certificat PEM — avec `TLS_KEY_FILE`, le serveur sert en HTTPS |
-| `TLS_KEY_FILE` | chemin de la clé privée PEM (jamais dans le dépôt, jamais journalisée) |
-
-`make runServer` génère un certificat auto-signé **hors du dépôt**
-(`~/.cache/veryslopnynotes/tls`, réutilisé d'un run à l'autre, 600 sur la clé)
-plutôt que de refuser de démarrer : l'app Android interdit le clairtext hors
-émulateur
-([`network_security_config.xml`](android/app/src/main/res/xml/network_security_config.xml)).
-Fournissez `TLS_CERT_FILE` / `TLS_KEY_FILE` (mkcert, Let's Encrypt) pour un
-certificat émis : elles sont respectées telles quelles, le Makefile ne génère
-alors rien et `openssl` n'est pas requis.
-
-Limite assumée : ce certificat auto-signé n'est dans aucune chaîne de
-confiance. Le certificat de l'APK **debug** fait confiance aux certificats
-installés par l'utilisateur
-(`android/app/src/debug/res/xml/network_security_config.xml`, absent de la
-release), donc il faut l'installer sur l'appareil — procédure complète dans
-[`android/README.md`](android/README.md). Un APK release ne peut pas joindre un
-certificat auto-signé : fournissez-lui un certificat émis (`mkcert` + sa racine
-installée, ou un vrai nom).
-
-Port : `runServer` sert le 8080, alors que l'adresse par défaut de l'app reste
-`10.0.2.2:3000` (`android/core/.../ServerConfig.kt`) — saisir `https://10.0.2.2:8080`
-depuis l'émulateur, `https://<ip-lan>:8080` depuis un téléphone.
-
-Ce qui en découle, assumé : la clé de signature des `ref` média est tirée au sort à
-chaque démarrage (une ref ne survit pas à un redémarrage, l'app la régénère), le push
-n'est pas configuré (aucune clé VAPID ne peut venir du serveur) et le scraping de
-manuels est désactivé (le compte éditeur n'a plus d'où sortir).
-
-Persistence serveur et chiffrement au repos : **pas encore câblés**. Le snapshot est mémoire
-seule (`snapshot-store.ts`) — un redémarrage serveur repart vide et l'app refill au pull-refresh.
-Le serveur ne lit donc ni `MASTER_KEY` ni `DATABASE_URL` : ces deux variables réapparaîtront le jour
-du branchement SQLite, pas avant.
-
-Le compte et l'URL de ton établissement sont des **apports humains** :
-liste complète dans [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md).
-
-## Architecture
-
-```
-android/          client natif (Kotlin, Compose) : app, core, data, ui
-server/
-  api/            routes HTTP (Bun.serve, stdlib), validation is* des contrats
-  domain/         ports + logique pure (aucun import sqlite/HTTP)
-  integrations/   session Pronote, lectures, écritures confirmées
-  infrastructure/ stockage, push, médias, manuels, LLM
-  jobs/           sync, notifications, exams, fiches
-  ai/             prompts et garde-fous (aucun outil, aucun réseau, aucun secret)
-shared/contracts/ source de vérité : modèles, routes, événements, cache + OpenAPI
-agents/           outillage local (scan secrets, scan architecture, worktrees)
-tests/            unit, contracts, architecture, security, integration, e2e
-docs/             ADR, invariants, roadmap, sécurité, release
-```
-
-Flux de lecture (cible #205, ADR-003) : `app → android/pronote/ → HTTP`.
-Legacy (serveur mort en attente de suppression) : `app → (hôte serveur) → API → PronoteReader → pronotets → PronoteHttpClient → HTTP`.
-Le domaine ne connaît ni SQLite ni le framework HTTP ; chaque dépendance est un port.
-
-### Invariants (bloquants, un test chacun)
-
-| # | Invariant | Test |
-|---|---|---|
-| I1 | Seul `android/pronote/` parle Pronote, zéro mention hors module | `make architecture-test` |
-| I2 | Un seul point d'accès réseau Pronote par runtime (`Client` ; `PronoteHttpClient` legacy #199) | idem + scan de définitions |
-| I3 | `server/domain/` résiduel + `android/core/` sans SQLite ni framework HTTP | `tests/architecture` + `check-architecture` |
-| I4 | Aucun secret dans les prompts LLM | `tests/architecture` + scan |
-| I5 | LLM sans outils, sans réseau, sans secret ; clé en store chiffré côté app | idem + miroirs Android |
-| I6 | Contenu externe = donnée bornée, délimiteurs à nonce | `tests/architecture` + miroirs Android |
-| I7 | Aucun effet de bord depuis une sortie LLM libre (jobs device sans LLM, plus de `server/jobs/`) | `tests/architecture` + revue |
-
-Détails : [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md).
-
-## Règles d'or
-
-1. **Réseau** — toute requête Pronote part du téléphone (`android/pronote/` seul, ADR-003),
-   session jamais hors de l'appareil. L'hôte backend auxiliaire éventuel reste allowlist
-   à l'exécution. Médias via proxy, jamais de WebView distante.
-2. **IA** — tout contenu non écrit par l'utilisateur est une donnée, jamais une instruction.
-   Sortie LLM validée, sans outil ni effet de bord libre.
-3. **Dépôt public** — pas de secret, pas d'IP/domaine, pas d'URL d'établissement, pas de donnée
-   personnelle, pas de manuel ni de cours, pas de session Playwright. Fixtures synthétiques.
-
-Le détail est verifié par `make lint` (scan de secrets) et `make architecture-test` (scan d'architecture).
-
-## API
-
-Toutes les routes sont déclarées dans `shared/contracts/api.ts` (contrats `0.4.0`) et mirrorées dans
-`shared/contracts/api.openapi.yaml` (un test impose la synchronie). Les payloads sortent validés
-par des garde-fous `is*` : une réponse invalide vaut 500 typée, jamais une donnée douteuse.
-
-**Auth** : toute route exige l'en-tête `Authorization: Bearer <token d'appareil appairé>`, sauf
-`GET /v1/health`, `POST /v1/pairing/start` et `POST /v1/pairing/confirm`. Le token sort une seule
-fois, dans la réponse de `POST /v1/pairing/confirm` ; le serveur n'en conserve que `sha256(token)`
-et compare en temps constant. Jeton absent, inconnu, expiré ou révoqué = un seul 401, avant toute
-lecture. Une route ajoutée est donc fermée par défaut.
-
-| Domaine | Routes |
-|---|---|
-| Santé, appairage, setup (ouvertes sans jeton) | `GET /v1/health`, `POST /v1/pairing/start`, `POST /v1/pairing/confirm`, `POST /v1/setup` |
-| Notes | `GET /v1/grades` (notes + moyennes, `?algorithm=`, `?periodId=`), `GET /v1/periods` |
-| Devoirs | `GET /v1/assignments` (filtres de dates/semaine), `POST /v1/assignments/toggle` |
-| Cours (EDT) | `GET /v1/timetable` (`?weekStart=`, `?from=`, `?to=`) |
-| Vie scolaire | `GET /v1/attendance`, `GET /v1/punishments` |
-| Actualités, cantine | `GET /v1/news`, `GET /v1/menus` |
-| Profil & médias | `GET /v1/me`, `GET /v1/media` (réf opaque uniquement) |
-| Préférences matière | `GET /v1/subjects/prefs`, `PUT /v1/subjects/prefs` |
-| Messagerie | `GET|POST /v1/discussions`, `/messages`, `/recipients`, `/reply`, `/read-state`, `/delete` |
-| Sync & capacités | `GET /v1/capabilities`, `POST /v1/sync/refresh`, `GET /v1/events` (SSE) |
-| IA | `POST /v1/homework/generate`, `GET /v1/revision-sheets`, `GET /v1/revision-sheets/pdf` |
-| Sécurité | `GET /v1/security/alerts` |
-
-Événements SSE : `GradeCreated`, `AssignmentUpdated`, `TimetableUpdated`, `SyncCompleted`,
-`CacheInvalidated`, `SecurityAlert`, `NewsUpdated`. Ressources cachables : `grades`, `assignments`,
-`timetable`, `news`, `menus`, `attendance`, `punishments`, `capabilities`, `discussions`.
-
-## Tests et garde-fous
+Tests
+-----
 
 ```bash
 make check                  # tout : secrets, typecheck, unit, arch, contracts, compile Kotlin
 make unit / contracts / architecture-test
-make android-compile        # compile Gradle des 4 modules Android (JDK 17-21 + SDK requis)
-make build                  # image Docker + rappel APK
 ```
 
-486 tests verts dans `make check` (460 unit + 20 archi + 6 contracts ; 1 skip bruyant
-sans corpus #199), fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut.
-La CI locale est `make check` : un changement qui casse un invariant est bloquant, même si
-fonctionnellement il passe.
+Fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut. Un changement qui casse un
+invariant est bloquant, même s'il passe fonctionnellement. Sans JDK 17-21 / SDK Android, la
+compilation Kotlin est skipée en l'écrivant — jamais un faux vert.
 
-`make check` compile aussi le Kotlin (`make android-compile`) quand un **JDK 17-21** et un
-**SDK Android** sont là — sans eux la cible skip en l'écrivant (« compile Kotlin NON
-vérifiée »), jamais un faux vert. Prérequis et installation : `android/README.md`.
+Project layout
+--------------
 
-## Limitations connues
+    ├─ android/          app native Kotlin + Compose; accès Pronote direct
+    ├─ server/           scraper de manuels facultatif + capture corpus legacy (#199)
+    ├─ shared/contracts/ routes scraper, OpenAPI et validateurs conservés pour les tests
+    ├─ agents/           scans, capture et harnais de test locaux
+    ├─ tests/            tests unitaires, contrats et architecture
+    └─ docs/             décisions, invariants, recette et release
 
-- **Police** : l'app compose en **Figtree** (SIL OFL 1.1, sous-ensemble Latin
-  embarqué, 39,7 Ko), pas en SN Pro — la police de l'application de référence,
-  non redistribuable hors interface Apple. Figtree a été choisie parce que ses
-  largeurs d'avance sont les plus proches de celles de SN Pro parmi les polices
-  libres : 1,16 % d'écart moyen et 2,88 % au pire sur des chaînes d'interface
-  aux graisses 400/600/700, contre 2,12 % / 5,70 % pour Roboto. Le texte ne
-  sera donc jamais aligné au pixel près sur la référence.
-- **Rayons de matière** : l'application de référence tire l'encre matière à
-  −15 % vers le noir, ce qui mesure 2,28:1 au pire de sa palette — sous le
-  WCAG AA pour du texte. Nous gardons −45 % (4,87:1 au pire). Idem pour le gris
-  secondaire, composé à 53 % d'opacité chez la référence (3,32:1) contre 65 %
-  ici (4,76:1). Le contraste l'emporte sur la copie, par choix.
-- **Données de note que la référence ne rend pas** : son type `Grade` n'a ni
-  coefficient, ni bonus, ni facultatif, ni enseignant, ni moyenne de classe — donc
-  sa ligne de note n'affiche rien de tout cela. Nous l'avons au contrat et c'est
-  utile à une moyenne : la ligne garde ces deux lignes. Les retirer alignerait le
-  pixel en supprimant une feature.
-- **Onglet Cours : statut du cours en cours et suivant** : la référence
-  n'affiche **rien** de tout cela sur Android (son « prochain cours » vit dans un
-  accessory conditionné à iOS 26). Notre pastille « En cours », notre « Prochain »,
-  notre bordure et notre pulsation restent : c'est notre feature, et c'est
-  précisément ce que l'onglet sert.
-- **Onglet Cours : durée sur chaque carte** : la référence ne l'affiche que sous
-  un statut non annulé. Nous l'affichons toujours — c'est en plus, pas en moins.
-- **Onglet Cours : barre d'en-tête** : la référence y met un bouton calendrier à
-  gauche, le titre du **jour** au centre et un menu « Dots » à droite (mode de
-  vue + export iCal). Notre bandeau « semaine du … » avec ses deux flèches n'a
-  pas d'équivalent : c'est structurel, pas cosmétique, et pas fait.
-- **Recherche dans le corps, pas dans la barre** : la référence utilise la
-  SearchBar **native** d'expo-router, qui n'écrit ni hauteur, ni rayon, ni typo
-  (tout est fourni par la plateforme). Il n'y a donc aucun jeton à recopier, et la
-  poser dans notre barre serait une feature de plus.
-- **Titre « Nouvelles notes »** : la référence rend son carrousel sans titre. On le
-  garde, parce qu'il est le seul point d'entrée du carrousel dans le menu
-  « titres » de TalkBack. Le titre « Moyennes par matière », lui, a été retiré :
-  il ne nommait rien que les en-têtes de matière ne nomment déjà.
-- **Ombres de carte** : la référence pose `elevation: 1` sur ses rangées, valeur
-  qui n'a d'effet qu'iOS et n'y dessine rien. Sur les cartes de l'onglet Notes
-  nous ne posons donc **ni ombre ni bordure** : une ombre qui n'existe pas sur la
-  plateforme visée serait un écart, pas une fidélité.
-- Le serveur démarre TOUJOURS vide : lectures vides et écritures en 501 plutôt qu'un `200`
-  mensonger. La session et son QR vivent en mémoire, jamais sur disque — donc un redémarrage les
-  perd, et l'app doit refaire son setup.
-- `POST /v1/setup` est la seule route ouverte qui déclenche une **sortie réseau** : l'URL de
-  l'établissement est choisie par le client. Elle est filtrée (hôtes privés, loopback et
-  link-local refusés ; 20 échecs par fenêtre de 10 min). Résiduel : plus d'épinglage
-  d'établissement (il venait de l'URL d'ambiance, qui n'existe plus). Résiduel assumé : un **nom
-  DNS** pointant sur une IP privée passe le filtre littéral (rebinding). À fermer quand le serveur-exposed grandit : résolution DNS + épinglage de
-  l'IP résolue, ou liste blanche d'hôtes.
-- Connexion par le QR de l'établissement uniquement (`qrcodeLogin`) : aucun identifiant n'est
-  saisi, nulle part. Un établissement qui n'expose que son portail passe par son application.
-- Onglets Pronote réellement publiés par l'établissement : les capacités ne sont jamais devinées,
-  donc un onglet non observé vaut onglet absent et **est masqué**. Inversement, des capacités non
-  déterminées (`capabilities: null`, lecture en échec) ne masquent rien.
-- Le provider Pronote est en `no-go` conditionnel côté live ([`ADR-002`](docs/adr/002-pronote-provider.md)) :
-  les lectures sont validées sur library + fixtures, pas sur un établissement réel.
-- Non lus : solde de cantine Turboself/ARD, composition détaillée des plats, pièces jointes de
-  messages, sanctions récurrentes.
+Flux Pronote : `app → android/pronote/ → établissement`. Le serveur n'est pas dans ce flux.
+Invariants : [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md).
 
-## Roadmap
+Contributing
+------------
 
-Phases 1→10 : architecture et ADR, provider Pronote, cœur serveur, client Android, hors-ligne et
-SSE, notifications push, sécurité IA, fiches de révision, manuels, release.
-Détail et dépendances : [`docs/ROADMAP.md`](docs/ROADMAP.md) · checklist produit :
-[`docs/FEATURES.md`](docs/FEATURES.md).
-
-## Contribuer
-
-Le circuit de travail est **une issue = une branche = une PR** (`agent/<n>-<slug>`), jamais de
-commit direct sur `main`. Relecture du diff + `make check` avant merge. Invariant cassant =
-PR bloquante même si la fonctionnalité est correcte.
+Le circuit est **une issue = une branche = une PR** (`agent/<n>-<slug>`), zéro commit direct sur
+`main`. PR via MCP GitHub uniquement (`gh` CLI interdit), relecture du diff + `make check` avant
+merge. Invariant cassant = PR bloquante.
 
 - [`AGENTS.md`](AGENTS.md) — workflow, garde-fous, règles d'or
-- [`docs/CONVENTIONS_GIT.md`](docs/CONVENTIONS_GIT.md) — conventions de commits et branches
-- [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) — les invariants I1–I8
 - [`docs/adr/`](docs/adr/) — décisions d'architecture (stack, provider Pronote, client direct)
 
 Nouvelles dépendances : justifiées dans la PR, version épinglée, licence MIT-compatible.
 
-## Licence
+License
+-------
 
 MIT — voir [`LICENSE`](LICENSE). Identité et écrans propres, aucun asset tiers copié.
+
+<!-- vim: set tw=80: -->

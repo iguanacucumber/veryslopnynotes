@@ -2,6 +2,12 @@
 
 Format : Invariant → test → commande → emplacement.
 
+## Architecture actuelle
+
+- `android/` est l'appareil client ; seul `android/pronote/` parle à Pronote.
+- `server/` sert uniquement le scraper de manuels. Le client Pronote TypeScript restant sert à la capture du corpus #199, hors processus.
+- `shared/contracts/` décrit les deux routes du scraper et conserve des validateurs utilisés par les tests Android.
+
 ## I1 — Seuls `android/pronote/` et le scraper parlent réseau (ADR-003)
 - Invariant : hors `android/pronote/`, `android/` ne contient aucune URL/référence hôte Pronote. Le module du port (zéro dépendance) est le seul à parler Pronote en direct ; la déclaration du module dans `settings.gradle.kts` est l'unique mention tolérée hors module. Côté app, PLUS AUCUN client HTTP vers un serveur applicatif (`ApiClient` supprimé en #206 : appairage, lectures et médias sont device-only) ; côté process, seul le scraper Playwright parle réseau (portail éditeur, `server/infrastructure/http.ts`).
 - Hôte auxiliaire (le scraper) choisi à l'exécution : l'allowlist n'est plus une
@@ -32,8 +38,8 @@ Format : Invariant → test → commande → emplacement.
 - Commande : `make check` (architecture-test + lint).
 - Emplacement : `android/core/*Ai*.kt`, `android/core/AiPrompts.kt`.
 
-## I5 — LLM sans outils/réseau/secrets
-- Invariant : LLM sans outils, accès réseau, secrets. Sortie texte/JSON validé. Côté app, aucun prompt n'est assemblé : la clé vit dans le store chiffré et ne voyage qu'en corps `writeOnly` (voir I8).
+## I5 — LLM sans outils/secrets dans le prompt
+- Invariant : le prompt ne contient aucun secret ; sortie texte/JSON validée. L'app appelle OpenRouter directement en HTTPS et transmet la clé dans l'en-tête `Authorization`, jamais au serveur applicatif (voir I8).
 - Test : `tests/architecture/invariants.test.ts` + `check-architecture.ts` (scan `android/core/`) + `tests/unit/android-homework.test.ts` (miroirs).
 - Commande : `make check`.
 - Emplacement : `android/core/` (IA) + `android/data/` (store de clé, dépôt devoirs). Réf : `docs/adr/003-client-direct.md`.
@@ -50,22 +56,21 @@ Format : Invariant → test → commande → emplacement.
 - Commande : `make architecture-test`.
 - Emplacement : `android/core/GradeDiff.kt`, `ExamDetect.kt`, `NotifyFormat.kt`, `RevisionSheet.kt`.
 
-## I8 — Zéro credential côté serveur
+## I8 — Session Pronote et clé LLM restent hors serveur
 
-Le serveur ne lit **aucune** variable de credential et ne détient aucun secret :
-`PORT`/`HOST` (l'écoute) sont les seules variables lues, et uniquement dans
-`start()` (`server/infrastructure/http.ts`). `TLS_CERT_FILE`/`TLS_KEY_FILE`
-complètent la liste : ce sont des **chemins** vers un certificat local
-auto-signé, généré hors du dépôt (`agents/runtime/dev-tls.sh`, `~/.cache`) —
-jamais un secret d'authentification, jamais commité. Tout ce qui s'authentifie
-vient de l'app, par requête :
+Le serveur ne lit que `PORT`, `HOST` et les chemins TLS `TLS_CERT_FILE` /
+`TLS_KEY_FILE`. La session Pronote est ouverte et stockée sur le téléphone ; la
+clé OpenRouter reste chiffrée dans l'app et part directement au fournisseur dans
+un en-tête HTTPS `Authorization`. Aucun `.env*`, jeton de session ou clé LLM dans
+le dépôt, les variables serveur ou les logs.
 
-| Ce qui s'authentifie | Où il vit | Comment il voyage |
-|---|---|---|
-| Session Pronote | téléphone : `PronoteSession` (mémoire) + `SessionStore` (chiffré) | QR + PIN déchiffrés sur place (`Client.qrcodeLogin`), jeton tourné persisté chiffré, jamais en réseau après l'appairage |
-| Clé du fournisseur LLM | `LlmKeyStore` (chiffré) dans l'app | corps HTTPS direct vers OpenRouter (`OpenRouterHomework`), jamais en URL |
-| Secret d'appareil | SUPPRIMÉ en #206 avec `TokenStore` et le bearer serveur | — |
+**Exception de sécurité :** `POST /v1/manuals/scrape` est volontairement sans
+authentification. Il reçoit les identifiants du portail de manuels et une URL
+dans le corps de la requête, sans les journaliser ; Playwright réutilise un
+cookie jar local gitignoré (`playwright/.auth/manuals.json`). Toute personne
+pouvant joindre ce serveur peut piloter une navigation Playwright (risque SSRF)
+et consommer ce compte. Garder le serveur sur loopback/réseau de confiance ;
+pour l'exposer, placer un proxy authentifié devant lui.
 
-Interdit : `.env*` dans le repo, toute clé de secret dans une variable, un secret
-en query string (un corps non), un secret journalisé. Piné par
-`tests/architecture/invariants.test.ts` (I8) et `tests/unit/android-homework.test.ts`.
+Piné par `tests/architecture/invariants.test.ts` (I8),
+`tests/unit/android-homework.test.ts` et `tests/unit/scraper-only.test.ts`.

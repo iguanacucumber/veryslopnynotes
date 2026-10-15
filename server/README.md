@@ -5,6 +5,8 @@ Le serveur applicatif est mort (app device-only, ADR-003). Reste :
 - `infrastructure/http.ts` + `manuals.ts` + `manuals-scrape.ts` : le scraper
   manuels (#209) — plain HTTPS, sans auth, GET /v1/health +
   POST /v1/manuals/scrape. Seul process servi (`make runServer`, Dockerfile).
+  Endpoint sans auth = risque SSRF et d'épuisement du compte éditeur ; garder
+  en loopback/réseau de confiance ou placer un proxy authentifié devant.
 - `integrations/` (sauf lectures supprimées) + `domain/ports.ts` +
   `domain/averages.ts` + `domain/capabilities.ts` + `api/setup.ts`
   (`accountIdFrom` seul) : le client Pronote TS, dépendance de l'outil de
