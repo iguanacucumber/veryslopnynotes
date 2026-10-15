@@ -65,11 +65,6 @@ export function syntheticProfileClient(
   return { info, children: kids, periods };
 }
 
-/** Enfants (ParentClient.children = ClientInfo[]). */
-export function syntheticChild(id: string, name: string, className: string | null = null) {
-  return { id, name, className };
-}
-
 // --- payloads d'accueil (contrats notes / devoirs / EDT, caches existants) ---
 const H = (id: string, start: string, end: string, subject: string, room: string) => ({
   id,
