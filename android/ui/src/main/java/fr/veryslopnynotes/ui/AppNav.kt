@@ -4,6 +4,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -12,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavDeepLink
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -243,11 +245,19 @@ fun AppNav(
     // #263 : la porte de lecture du mouvement pour les transitions d'écrans —
     // lue UNE fois ici, les quatre transitions partagent les mêmes jetons.
     val motionOn = rememberMotionOn()
+    // #266 : le comportement de rétraction de la barre du haut, PARTAGÉ entre
+    // la barre et le `Scaffold`. `enterAlways` sans `nestedScroll` ne reçoit
+    // aucun événement de défilement : la barre restait figée alors que
+    // `AppTopBar` déclarait se rétracter. UN objet mémorisé, passé à la barre
+    // ET branché ci-dessous — deux instances verraient chacune la moitié des
+    // événements.
+    val topBarScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
     // #134 : jetons Papillon appliqués une fois à la racine (avant : le violet
     // Material par défaut, sans typo ni forme).
     PapillonTheme(darkTheme = isDarkTheme(theme, isSystemInDarkTheme())) {
     CompositionLocalProvider(LocalPapNotice provides noticeHost) {
     Scaffold(
+        modifier = Modifier.nestedScroll(topBarScroll.nestedScrollConnection),
         topBar = {
             AppTopBar(
                 currentRoute,
@@ -258,6 +268,7 @@ fun AppNav(
                 // Retour = d'où l'on vient ; si la pile est vide (deep link
                 // direct), on part vers la route mère de la route courante.
                 onBack = { back -> if (!nav.popBackStack()) nav.navigateTo(back) },
+                scrollBehavior = topBarScroll,
             )
         },
         bottomBar = { AppTabBar(currentRoute) { tab -> nav.openTab(tab) } },
