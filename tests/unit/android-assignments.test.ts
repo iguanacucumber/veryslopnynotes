@@ -10,6 +10,7 @@ import {
   isAssignment,
 } from "../../shared/contracts/models";
 import { dayLabelFr } from "./fixtures/date-fr";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 // Miroir des helpers Kotlin (Assignment.kt, AssignmentsRepository.kt,
 // Assignments.kt, AssignmentsSections.kt) — doivent rester en
@@ -57,16 +58,6 @@ type Item = {
 
 // Kotlin Regex("://|^//|data:|\\\\") -> source regex identique.
 const ABSOLUTE_REF = /:\/\/|^\/\/|data:|\\/;
-
-// Mêmes FP que le scan I1 : commentaires `//` et `/* */` ignorés.
-function stripComments(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//"))
-    .map((l) => l.slice(0, l.search(/(?<!:)\/\//) === -1 ? l.length : l.search(/(?<!:)\/\//)))
-    .join("\n");
-}
 
 // --- Résolution locale des PJ (AssignmentsRepository.fetchAttachment) ---
 // #206 : plus de `ServerConfig.mediaUrl` (proxy supprimé) — la `ref` reste une
@@ -541,7 +532,7 @@ describe("miroir Kotlin devoirs #75", () => {
     expect(screen).toContain("resync du cache");
     // I1 : aucune URL/hôte Pronote dans le CODE de l'écran (les commentaires
     // sont ignorés, comme dans agents/runtime/check-architecture.ts).
-    expect(stripComments(screen)).not.toMatch(/pronote|index-education/i);
+    expect(codeOnly(screen)).not.toMatch(/pronote|index-education/i);
     const config = readFileSync(join(CORE, "ServerConfig.kt"), "utf8");
     // #206 : ServerConfig ne connaît que le scraper — ni proxy média, ni
     // toggle serveur (le téléphone fait les deux en local).
@@ -723,7 +714,7 @@ describe("sections, filtres et semaine (#138)", () => {
     expect(screen).toContain("writeAttachmentFile(context, a.id, att, data.bytes)");
     expect(screen).toContain("context.startActivity(intent)");
     // L'URL du proxy ne doit JAMAIS être journalisée (elle finit dans les logs).
-    const code = stripComments(screen);
+    const code = codeOnly(screen);
     expect(code).not.toMatch(/Log\.[diewv]|println\(/);
     // Filtre matière en puces défilables + recherche.
     expect(screen).toContain("private fun SubjectFilterRow");
@@ -745,8 +736,8 @@ describe("sections, filtres et semaine (#138)", () => {
     }
     // Aucune couleur en dur : tout vient des jetons du thème.
     const sections = readFileSync(join(UI, "AssignmentsSections.kt"), "utf8");
-    expect(stripComments(sections)).not.toMatch(/Color\(|0x[0-9A-Fa-f]{6}/);
-    expect(stripComments(screen)).not.toMatch(/Color\(0x|#[0-9A-Fa-f]{6}\"/);
+    expect(codeOnly(sections)).not.toMatch(/Color\(|0x[0-9A-Fa-f]{6}/);
+    expect(codeOnly(screen)).not.toMatch(/Color\(0x|#[0-9A-Fa-f]{6}\"/);
   });
 });
 
@@ -793,7 +784,7 @@ describe("carte de devoir (#161)", () => {
   test("Kotlin : la carte ne branche plus `title` ET `description` sur deux Text", () => {
     const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
     expect(screen).toContain("assignmentCardText(a)");
-    const code = stripComments(screen);
+    const code = codeOnly(screen);
     // Le garde-fou du doublon : aucun des deux champs n'alimente plus un `Text`
     // tout seul — ils passent par la répartition (titre, corps).
     expect(code).not.toMatch(/text = a\.description/);
@@ -810,7 +801,7 @@ describe("carte de devoir (#161)", () => {
     const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
     // Emoji de prefs, sinon INITIALE de la matière — plus jamais `emoji = null`.
     expect(screen).toContain("style.emoji ?: subjectInitial(a.subject)");
-    expect(stripComments(screen)).not.toMatch(/PapSubjectAvatar\(emoji = style\.emoji,/);
+    expect(codeOnly(screen)).not.toMatch(/PapSubjectAvatar\(emoji = style\.emoji,/);
     expect(tsSubjectInitial("ALLEMAND LV2")).toBe("A");
     expect(tsSubjectInitial("Mathématiques")).toBe("M");
     expect(tsSubjectInitial("histoire-géographie")).toBe("H");
@@ -822,14 +813,14 @@ describe("carte de devoir (#161)", () => {
     // connaître les replis de l'écran Devoirs, la correction est à l'appel.
     const pap = readFileSync(join(UI, "PapComponents.kt"), "utf8");
     expect(pap).toContain("fun PapSubjectAvatar(");
-    expect(stripComments(pap)).not.toMatch(/subjectInitial|subjectDisplayFr|assignmentCardText/);
+    expect(codeOnly(pap)).not.toMatch(/subjectInitial|subjectDisplayFr|assignmentCardText/);
   });
 
   test("« Aide devoirs » : une puce discrète alignée sur la bascule, pas un bouton vert", () => {
     const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
     expect(screen).toContain("private fun HomeworkHelpChip");
     // Le `Button` pleine largeur de `HomeworkHelp.kt` n'est plus appelé par la carte…
-    expect(stripComments(screen)).not.toMatch(/HomeworkHelpButton/);
+    expect(codeOnly(screen)).not.toMatch(/HomeworkHelpButton/);
     // …et la puce est COLLÉE à la bascule « fait », qui redevient l'action visible.
     expect(screen).toMatch(/HomeworkHelpChip \{ onHelp\(a\) \}\n\s*DoneToggle/);
     // La puce reprend la langue visuelle des pièces jointes (pas de couleur en dur).
@@ -864,7 +855,7 @@ describe("carte de devoir (#161)", () => {
     // libellé `labelSmall` de ~16 dp : 32 dp de vide, 16 en-dessus et 16 en-
     // dessous, dont la moitié tombait entre la consigne et la rangée du bas.
     const screen = readFileSync(join(UI, "Assignments.kt"), "utf8");
-    const code = stripComments(screen);
+    const code = codeOnly(screen);
     // Le dépliage n'est plus un bouton…
     expect(code).not.toMatch(/TextButton\([\s\S]{0,200}Voir plus/);
     // …c'est un libellé cliquable, dans la couleur du thème. #146 : l'accent
@@ -896,7 +887,7 @@ describe("carte de devoir (#161)", () => {
   // contrôles au-dessus du vide »). Le même écran ne les montrait qu'avec une
   // liste — la règle est donc celle de #162, appliquée ici.
   test("#148 : les filtres ne s'affichent qu'avec des devoirs à filtrer", () => {
-    const code = stripComments(readFileSync(join(UI, "Assignments.kt"), "utf8"));
+    const code = codeOnly(readFileSync(join(UI, "Assignments.kt"), "utf8"));
     expect(code).toMatch(
       /if \(stateKey != "loading" && stateKey != "error" && stateKey != "empty"\) \{[\s\S]{0,600}Rechercher un devoir[\s\S]{0,400}SubjectFilterRow\(/,
     );

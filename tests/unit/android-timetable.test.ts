@@ -6,6 +6,7 @@ import { isTimetableEntry } from "../../shared/contracts/models";
 import { CACHE_TTL_MS } from "../../shared/contracts/cache";
 import { syntheticTimetableEntries, syntheticTimetablePayload } from "./fixtures/timetable";
 import { frDayNames, frMonths } from "./fixtures/date-fr";
+import { codeOnly } from "../../agents/runtime/source-guards";
 
 // Miroir des helpers Kotlin (TimetableWeek.kt + ServerConfig/CachePolicy/
 // SyncedRepository) — doivent rester en sync. org.json = SDK Android, aucune
@@ -997,7 +998,7 @@ describe("unit android EDT par jour (#137)", () => {
   });
 
   test("#166 : plus aucun `PullToRefreshContainer` de material3 1.2.1 dans l'EDT", () => {
-    const screen = kotlinCode(readFileSync(join(UI, "TimetableWeek.kt"), "utf8"));
+    const screen = codeOnly(readFileSync(join(UI, "TimetableWeek.kt"), "utf8"));
     // Le composable 1.2.1, son état, et la connexion de défilement qu'il
     // imposait : les trois ont disparu de l'écran.
     for (const interdit of [
@@ -1049,20 +1050,9 @@ describe("unit android EDT par jour (#137)", () => {
     // garde pas la sienne à côté de celle de l'EDT.
     const accueil = readFileSync(join(UI, "IndexScreen.kt"), "utf8");
     expect(accueil).toContain("HomePullToRefresh(");
-    expect(kotlinCode(accueil)).not.toContain("NestedScrollConnection");
+    expect(codeOnly(accueil)).not.toContain("NestedScrollConnection");
   });
 });
-
-/** Source Kotlin sans ses commentaires : les KDoc NOMMENT les bugs corrigés, donc
- *  une garde qui lit le texte brut confond le nom de la mauvaise pratique avec la
- *  pratique. Même règle que le `code` local du test de #137. */
-function kotlinCode(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, "\n")
-    .split("\n")
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .join("\n");
-}
 
 // Libellé de semaine (miroir de timetableWeekLabel Kotlin).
 function tsWeekLabel(day: string): string {
