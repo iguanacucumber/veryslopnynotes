@@ -208,12 +208,6 @@ export interface TimetableEntry {
   readonly originalEnd?: string; // ISO-8601
 }
 
-export interface Device {
-  readonly id: string;
-  /** Empreinte du token push, jamais le token brut (règle d'or dépôt public). */
-  readonly tokenHash: string;
-}
-
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -380,12 +374,6 @@ export function isTimetableEntry(v: unknown): v is TimetableEntry {
   return true;
 }
 
-export function isDevice(v: unknown): v is Device {
-  if (!isRecord(v)) return false;
-  if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["tokenHash"])) return false;
-  return true;
-}
-
 export function isRevisionSheet(v: unknown): v is RevisionSheet {
   if (!isRecord(v)) return false;
   if (!isNonEmptyString(v["id"]) || !isNonEmptyString(v["examId"])) return false;
@@ -396,11 +384,6 @@ export function isRevisionSheet(v: unknown): v is RevisionSheet {
   for (const s of v["sources"] as unknown[]) if (!isNonEmptyString(s)) return false;
   if (v["templateVersion"] !== REVISION_TEMPLATE_VERSION) return false;
   return true;
-}
-
-/** Empreinte token push = hex sha256 (64 chars). Partagé jobs/infra (issue #57). */
-export function isTokenHash(v: unknown): v is string {
-  return typeof v === "string" && /^[0-9a-f]{64}$/i.test(v);
 }
 
 // --- #83 préférences matière (parité Papillon) ---
@@ -846,18 +829,6 @@ export function isCapabilities(v: unknown): v is Capabilities {
   if (!isIsoDate(v["fetchedAt"])) return false;
   return true;
 }
-
-/**
- * Capacité d'un onglet : absent de la liste = `false` (jamais deviné `true`).
- * `null` = capacités NON déterminées : la réponse n'affirme alors rien, donc
- * l'appelant serveur ne doit pas en déduire un masquage (l'app, elle, garde
- * son affichage par défaut sur un `null` de `CapabilitiesResponse`).
- */
-export function isCapabilityEnabled(caps: Capabilities | null | undefined, tab: TabCapability): boolean {
-  return caps?.tabs.includes(tab) === true;
-}
-
-
 
 // --- #80 messagerie (parité Papillon, onglet Discussions) ---
 // TOUT texte de messagerie (élève, enseignant, administration) est une DONNÉE

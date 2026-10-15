@@ -20,17 +20,17 @@ Format : Invariant → test → commande → emplacement.
 - Commande : `make architecture-test`.
 - Emplacement : `android/**/*` (tolérances : `android/pronote/**` + ligne `include(...)` de `settings.gradle.kts`). Réf : `docs/adr/003-client-direct.md`.
 
-## I2 — Un seul point d'accès réseau Pronote par runtime (ADR-003)
-- Invariant : côté serveur il ne reste que le chemin legacy de l'outil de capture (#199) : toute requête Pronote y passe par l'unique `PronoteHttpClient`. Côté app, tout accès réseau Pronote passe par l'unique `Client` dans `android/pronote/` ; aucun autre module Android ne fait de réseau vers Pronote (pinné par I1).
-- Test : `tests/architecture/invariants.test.ts` (I2 : 1 définition serveur legacy + 1 `Client` android) + `agents/runtime/check-architecture.ts` (I2).
+## I2 — Aucun accès Pronote côté serveur ; un seul client Android (ADR-003)
+- Invariant : le processus serveur n'envoie aucune requête à Pronote. Le script local de capture #199 utilise le client `pronotets` hors processus serveur. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android ne contacte Pronote (pinné par I1).
+- Test : `tests/architecture/invariants.test.ts` (aucun `PronoteHttpClient` serveur + un `Client` Android) + `agents/runtime/check-architecture.ts` (aucun accès réseau Pronote côté serveur).
 - Commande : `make architecture-test`.
-- Emplacement : `server/integrations/PronoteHttpClient.ts` (legacy #199) + `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
+- Emplacement : `agents/runtime/capture-pronote.ts` + `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
 
 ## I3 — Domaine sans SQLite ni HTTP
-- Invariant : `server/domain/` résiduel (capture #199 : ports/averages/capabilities) ne dépend ni de SQLite ni du framework HTTP. `android/core/` (port #203) suit la même règle : stdlib + plateforme seules, zéro dépendance.
+- Invariant : `server/domain/` résiduel (capture #199 : ports, type ProvidedAverages et capabilities) ne dépend ni de SQLite ni du framework HTTP. `android/core/` suit la même règle : stdlib + plateforme seules, zéro dépendance.
 - Test : `tests/architecture/invariants.test.ts` (I3, serveur résiduel + `android/core/`).
 - Commande : `make architecture-test`.
-- Emplacement : `server/domain/ports.ts` + `android/core/`.
+- Emplacement : `server/domain/ports.ts` + `server/domain/capabilities.ts` + `android/core/`.
 
 ## I4 — Pas de secrets dans prompts LLM
 - Invariant : aucun secret/token/credential dans prompt LLM (`server/ai/` supprimé en #210, module porté dans `android/core/`, #204).
