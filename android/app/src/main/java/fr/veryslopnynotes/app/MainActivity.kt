@@ -24,10 +24,18 @@ class MainActivity : ComponentActivity() {
         // contenu ne passe dessous. ponytail: la fonction d'activity-compose
         // déjà présente (zéro dépendance ajoutée).
         enableEdgeToEdge()
-        // #208 : sync périodique de fond SANS serveur (notes/devoirs/EDT,
-        // 6 h, réseau connecté + batterie non faible). KEEP : une seule
-        // planification, jamais deux. Ni SSE, ni push, ni cron serveur.
-        PeriodicSyncWorker.schedule(this)
+        // #249 : la planification du sync de fond quitte le chemin critique
+        // du premier frame (WorkManager.getInstance + enqueue = IPC/DB).
+        // KEEP = une seule planification, jamais deux : l'ordre avec le
+        // premier frame n'a aucune importance, seul le créneau 6 h compte.
+        // Contexte applicatif (pas l'activité), thread daemon, best-effort :
+        // un échec ici ne doit jamais faire rater un démarrage.
+        Thread({
+            try {
+                PeriodicSyncWorker.schedule(applicationContext)
+            } catch (_: Exception) {
+            }
+        }, "periodic-sync-schedule").apply { isDaemon = true; start() }
         val baseUrlSeed = fr.veryslopnynotes.core.ServerConfig.baseUrl(
             BuildConfig.SERVER_SCHEME,
             BuildConfig.SERVER_HOST,
