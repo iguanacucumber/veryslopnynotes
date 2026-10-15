@@ -123,7 +123,8 @@ val PapillonSurfaceVariant = Color(0xFFF3F6F7L)
 
 /**
  * Vert très pâle : fond des conteneurs `primaryContainer` /
- * `secondaryContainer`. Dérivé du vert de marque par [tint] (94 % vers le
+ * `secondaryContainer` du thème CLAIR (le sombre prend le conteneur vert
+ * sombre, cf. [PapillonDarkGreenContainer]). Dérivé du vert de marque par [tint] (94 % vers le
  * blanc) plutôt que recopié : l'encre de marque y tient 4.61:1, donc c'est le
  * pas le plus clair qui garde AA.
  */
@@ -302,10 +303,10 @@ fun subjectContent(hex: String): Color? = subjectContent(hex, isDarkSurface())
 
 /**
  * Encre de matière lisible sur le fond RÉEL d'un composant : une puce sélectionnée
- * n'a pas le fond d'une puce au repos, et le `secondaryContainer` du thème sombre
- * reste un aplat clair. On garde donc le pas du thème qui passe le mieux,
- * mesuré — la même partis pris que [bestContentOn], appliquée aux deux pas du
- * thème au lieu du seul blanc.
+ * n'a pas le fond d'une puce au repos. #261 : le `secondaryContainer` sombre
+ * n'est plus un aplat clair mais le conteneur vert sombre — la mesure choisit
+ * donc le pas du thème qui passe le mieux, comme [bestContentOn] appliqué aux
+ * deux pas du thème au lieu du seul blanc.
  */
 fun bestSubjectContentOn(hex: String, background: Color): Color? =
     listOfNotNull(subjectContent(hex, false), subjectContent(hex, true))
@@ -482,6 +483,19 @@ private fun papillonText(
  */
 fun papillonColorScheme(dark: Boolean): ColorScheme = if (dark) PapillonDarkColors else PapillonLightColors
 
+/**
+ * Conteneur vert du thème SOMBRE (#261) : `primaryContainer` ET
+ * `secondaryContainer` sombres. Le `GreenPale` clair y brûlait sur fond noir
+ * (un aplat à 13.87:1 qui se voyait comme un trou blanc) ; ce pas (−35 %) est
+ * celui déjà posé pour `primaryContainer`, et son encre (+70 %) y tient
+ * 5.19:1 — mesuré, cf. `tests/unit/android-papillon-theme.test.ts`.
+ *
+ * ponytail: un jeton = une constante, pas deux fois la même expression —
+ * sinon les deux conteneurs dérivent l'un de l'autre en silence.
+ */
+private val PapillonDarkGreenContainer = tint(PapillonGreen, -.35f)
+private val PapillonDarkOnGreenContainer = tint(PapillonGreen, .70f)
+
 private val PapillonLightColors: ColorScheme = lightColorScheme(
     primary = PapillonGreen,
     // 3.74:1 : le blanc sur le vert de marque tient AA pour le texte de grande
@@ -514,16 +528,15 @@ private val PapillonLightColors: ColorScheme = lightColorScheme(
 private val PapillonDarkColors: ColorScheme = darkColorScheme(
     primary = PapillonGreen,
     onPrimary = Color.White,
-    primaryContainer = tint(PapillonGreen, -.35f),
-    onPrimaryContainer = tint(PapillonGreen, .70f),
+    primaryContainer = PapillonDarkGreenContainer,
+    onPrimaryContainer = PapillonDarkOnGreenContainer,
     secondary = PapillonGreenLight,
     // 2.87:1 sous du blanc : ici c'est l'encre sombre qui gagne (6.53:1).
     onSecondary = PapillonDarkSurface,
-    // Le pastille d'onglet selectionnee : M3 y met `secondaryContainer`. Le
-    // laisser au lavande Material gardait le dernier violet visible a l'ecran,
-    // alors que l'encre de marque y tient 13.87:1.
-    secondaryContainer = PapillonGreenPale,
-    onSecondaryContainer = PapillonInk,
+    // #261 : la pastille d'onglet sélectionnée (M3 y met `secondaryContainer`)
+    // suit `primaryContainer` — le `GreenPale` clair d'avant brûlait sur noir.
+    secondaryContainer = PapillonDarkGreenContainer,
+    onSecondaryContainer = PapillonDarkOnGreenContainer,
     tertiary = PapillonLime,
     onTertiary = PapillonLimeInk,
     background = PapillonDarkBackground,
