@@ -177,6 +177,7 @@ fun ProfileScreen(
             PapListItem(
                 title = "Appairage QR+PIN",
                 subtitle = "Connecte ou reconnecte l'appareil à l'établissement",
+                trailing = { NavChevron() },
                 onClick = goPairing,
             )
             // Un seul compte = rien à choisir, donc pas de ligne « changer ».
@@ -184,7 +185,7 @@ fun ProfileScreen(
                 PapListItem(
                     title = "Compte actif",
                     subtitle = active?.displayName.orEmpty(),
-                    trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },
+                    trailing = { NavChevron() },
                     onClick = { sheetOpen = true },
                 )
             }
@@ -200,28 +201,30 @@ fun ProfileScreen(
 
         // --- Ressources de l'établissement (capacités #87) ------------------
         ProfileSection("Ressources", Icons.AutoMirrored.Filled.List) {
-            PapListItem(title = "Fiches révision", onClick = { goFiches() })
-            PapListItem(title = "Messages", onClick = { goMessages() })
+            PapListItem(title = "Fiches révision", trailing = { NavChevron() }, onClick = { goFiches() })
+            PapListItem(title = "Messages", trailing = { NavChevron() }, onClick = { goMessages() })
             // #87 : une entrée dont l'onglet n'est pas actif chez l'etablissement
             // n'est pas proposee ; son ecran reste atteignable en cas de besoin et
             // affiche son etat vide propre.
             if (Capabilities.visible(capabilities, Capabilities.NEWS)) {
-                PapListItem(title = "Actualités", onClick = { goNews() })
+                PapListItem(title = "Actualités", trailing = { NavChevron() }, onClick = { goNews() })
             }
             if (Capabilities.visible(capabilities, Capabilities.MENUS)) {
-                PapListItem(title = "Cantine semaine", onClick = { goCanteen() })
+                PapListItem(title = "Cantine semaine", trailing = { NavChevron() }, onClick = { goCanteen() })
             }
             if (Capabilities.visible(capabilities, Capabilities.ATTENDANCE)) {
-                PapListItem(title = "Vie scolaire", onClick = { goAttendance() })
+                PapListItem(title = "Vie scolaire", trailing = { NavChevron() }, onClick = { goAttendance() })
             }
             PapListItem(
                 title = "Alertes sécurité",
                 subtitle = "Ce que l'app neutralise sur les pièces jointes",
+                trailing = { NavChevron() },
                 onClick = goAlerts,
             )
             PapListItem(
                 title = "Détecter les onglets",
                 subtitle = "Relit ce que l'établissement publie",
+                trailing = { NavChevron() },
                 onClick = { onRefreshCapabilities() },
             )
         }
@@ -230,6 +233,7 @@ fun ProfileScreen(
             PapListItem(
                 title = "Réglages",
                 subtitle = "Thème, matières, clé de l'assistant",
+                trailing = { NavChevron() },
                 onClick = goSettings,
             )
         }
@@ -375,6 +379,21 @@ private fun ProfileSection(
         PapSectionHeader(icon = icon, title = title)
         Column(modifier = Modifier.fillMaxWidth(), content = content)
     }
+}
+
+/**
+ * Chevron des lignes de NAVIGATION (#258) : comme les listes de la référence,
+ * une ligne qui ouvre une destination le dit. Décoratif (la ligne porte le
+ * rôle bouton), en encre secondaire. Les lignes d'ACTION (« Se déconnecter »)
+ * et d'INFO (« Comptes appairés ») n'en ont pas : elles ne vont nulle part.
+ */
+@Composable
+private fun NavChevron() {
+    Icon(
+        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 // Écran Profil câblé : lecture /v1/me (mémoire seule) + photo via proxy.
