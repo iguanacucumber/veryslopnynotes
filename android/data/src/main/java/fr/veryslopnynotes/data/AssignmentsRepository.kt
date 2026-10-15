@@ -42,7 +42,7 @@ class AssignmentsRepository(
         Thread {
             val client = provider()
             if (client == null) {
-                post { onDone(ToggleOutcome(null, "Hors-ligne, retour arrière.")) }
+                post { onDone(ToggleOutcome(null, "Connexion indisponible, retour arrière.")) }
                 return@Thread
             }
             try {
@@ -67,7 +67,7 @@ class AssignmentsRepository(
                     DeviceAuth.reject()
                     post { onDone(ToggleOutcome(null, DeviceAuth.REJECTED_MESSAGE)) }
                 } else {
-                    post { onDone(ToggleOutcome(null, "Hors-ligne, retour arrière.")) }
+                    post { onDone(ToggleOutcome(null, "Connexion indisponible, retour arrière.")) }
                 }
             }
         }.start()
