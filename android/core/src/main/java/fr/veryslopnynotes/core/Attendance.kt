@@ -17,7 +17,6 @@ val ABSENCE_KINDS = listOf(ABSENCE_KIND_ABSENCE, ABSENCE_KIND_LATE)
 
 const val ABSENCE_MOTIF_MAX_CHARS = 500
 const val ABSENCE_SUBJECT_MAX_CHARS = 64
-const val ATTENDANCE_NAME_MAX_CHARS = 100
 
 /** Absence OU retard (parité Papillon : un seul modèle, champ `kind`). */
 data class AbsenceRecord(
