@@ -6,9 +6,9 @@
          ailleurs HTTPS obligatoire. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- CAMERA arrive par le manifeste de zxing-android-embedded (l'AAR), qui la
-         déclare et la demande au runtime via son activité de scan. Le collage du
-         QR reste le repli, donc la caméra est marquée optionnelle : le merger
-         ajoute sinon `android.hardware.camera.any` en required, et l'app devient
+         déclare et la demande au runtime via son activité de scan. La caméra
+         est marquée optionnelle : le merger ajoute sinon
+         `android.hardware.camera.any` en required, et l'app devient
          ininstallable sur un appareil sans caméra. -->
     <uses-feature
         android:name="android.hardware.camera.any"
@@ -28,13 +28,14 @@
              fermeture (retour ou lecture), le téléphone relançait MainActivity
              depuis zéro — serveur, adresse d'établissement, QR et PIN saisis,
              tout perdu. L'activité vit dans la tâche de l'appelant, donc on
-             annule le drapeau ; le reste de ses attributs (thème, orientation)
-             est conservé. -->
+             annule le drapeau. La lib fige son aperçu en `sensorLandscape` par
+             défaut : on force `portrait`, comme l'écran qui affiche le QR. -->
         <activity
             android:name="com.journeyapps.barcodescanner.CaptureActivity"
             android:clearTaskOnLaunch="false"
+            android:screenOrientation="portrait"
             tools:node="merge"
-            tools:replace="android:clearTaskOnLaunch" />
+            tools:replace="android:clearTaskOnLaunch,android:screenOrientation" />
         <!-- #205 : pièces jointes lues sur le client local, servies au viewer
              externe (cache seul, jamais d'URL d'établissement). -->
         <provider

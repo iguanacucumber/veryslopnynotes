@@ -973,7 +973,7 @@ const VARIANTES: Record<string, Variante> = {
   // ce que la règle ci-dessous doit donc reproduire.
   pairing: {
     plein: ["Ton établissement", "Adresse de l'établissement", "Continuer", "Retour"],
-    vide: ["QR de l'application", "Scanner le QR", "Contenu du QR (login + jeton)", "Code PIN du QR", "Terminer", "Retour"],
+    vide: ["QR de l'application", "Scanner le QR", "Code PIN du QR", "Terminer", "Retour"],
   },
   // Titre de section rendu avant l'état.
   alerts: {

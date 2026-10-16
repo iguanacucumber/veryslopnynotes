@@ -32,7 +32,7 @@ reste une credential stockée sur l'appareil.
 
 Lancement → **1. ton établissement** (son adresse élève, validée en local) →
 **2. le QR de l'application de l'établissement** (contenu `login`+`jeton` + son
-PIN, scanné ou collé). Le téléphone ouvre la session en direct
+PIN, scanné avec la caméra). Le téléphone ouvre la session en direct
 (`Client.qrcodeLogin`, ADR-003) : aucun serveur intermédiaire. Le PIN déchiffre le QR sur place et n'est jamais persisté ;
 seul le jeton tourné dort chiffré (`SessionStore`). Sans session persistée, le
 démarrage ouvre l'assistant au lieu de l'accueil ; après une session morte
@@ -57,9 +57,9 @@ donc partout, **y compris sans Google Play Services** — ce que ne faisait pas 
 Google Code Scanner de #122, dont le module était téléchargé à la demande par un
 service absent (émulateur, téléphone sans GMS) et dont l'échec revenait en `null`
 sans rien afficher, donc un bouton qui semblait inerte. Annulation,
-permission refusée ou QR illisible → `null` **et une phrase qui dit quoi faire** ;
-le champ de collage reste le chemin de secours et la caméra est marquée
-optionnelle au manifeste.
+permission refusée ou QR illisible → `null` **et une phrase qui dit de
+rescanner** ; le scan est verrouillé en portrait (manifeste + `QrScanner.kt`),
+comme l'écran qui affiche le QR.
 
 L'allowlist est donc `core/ServerConfig.validateBaseUrl` (et `isAllowed` en
 préfixe strict), pas une constante de build : `https` obligatoire, `http` uni-
