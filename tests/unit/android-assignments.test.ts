@@ -898,4 +898,15 @@ describe("carte de devoir (#161)", () => {
     // rechercheActive change bien l'affichage des filtres avec l'état.
     expect(code).toMatch(/stateKey = when \{[\s\S]*?else -> "list"/);
   });
+
+  test("#277 : la page Tâches porte le fond des autres écrans, pas un gris posé", () => {
+    const code = codeOnly(readFileSync(join(UI, "Assignments.kt"), "utf8"));
+    // Même valeur que le `Scaffold` : `surfaceVariant` y posait un gris, en
+    // sombre au lieu de noir.
+    expect(code).toContain("val page = MaterialTheme.colorScheme.surface");
+    expect(code).not.toContain("val page = MaterialTheme.colorScheme.surfaceVariant");
+    // L'en-tête collant reste peint du MÊME fond, sinon les cartes
+    // transparaissent dessous au défilement.
+    expect(code).toContain("background = page");
+  });
 });
