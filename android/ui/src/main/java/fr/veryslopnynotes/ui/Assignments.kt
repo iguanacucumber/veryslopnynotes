@@ -42,7 +42,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -348,21 +347,27 @@ private fun SubjectFilterRow(
             val isSelected = selected == subject
             // #179 : la couleur de matière passe par l'encre du libellé (le fond
             // reste celui du thème), mais le fond n'est PAS le même selon l'état
-            // — transparent au repos, `secondaryContainer` une fois sélectionnée —
-            // et le `secondaryContainer` sombre reste un aplat clair. Les deux
-            // fonds sont donc posés ICI puis l'encre est MESURÉE contre celui qui
-            // s'applique, au lieu d'y mettre la couleur brute (1.96:1 sur le blanc,
-            // 2.62:1 sur le fond sombre).
+            // — transparent au repos, `secondaryContainer` une fois sélectionnée.
+            // #274 : en sombre ce conteneur est vert sombre et la mesure matière
+            // y tombe à 2,89:1 au pire — sous AA — donc l'encre passe par
+            // [legibleInkOn] : mesure matière si elle tient, sinon l'encre du
+            // rôle (jamais une couleur inventée).
             val resting = MaterialTheme.colorScheme.background
             val picked = MaterialTheme.colorScheme.secondaryContainer
             val chipColors = FilterChipDefaults.filterChipColors(
                 containerColor = Color.Transparent,
                 selectedContainerColor = picked,
             )
-            val ink = bestSubjectContentOn(
+            val background = if (isSelected) picked else resting
+            val ink = legibleInkOn(
                 subjectColorHex(prefs, subject),
-                if (isSelected) picked else resting,
-            ) ?: LocalContentColor.current
+                background,
+                fallback = if (isSelected) {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onBackground
+                },
+            )
             // #161 : la matière garde sa casse, mais sans crier — « ALLEMAND LV2 »
             // devient « Allemand LV2 ». `copy` réutilise `badge` (emoji + nom)
             // au lieu de le reconstruire ici.

@@ -132,9 +132,10 @@ const INK = hex8("#1F292E");
 const tsBestContentOn = (background: Rgb): Rgb =>
   tsContrast(background, INK) >= tsContrast(background, WHITE) ? INK : WHITE;
 // Miroir de `bestSubjectContentOn` (#179) : le fond d'une puce change avec son
-// état (transparent au repos, `secondaryContainer` une fois sélectionnée) alors
-// que le `secondaryContainer` sombre reste un aplat clair — on garde donc le pas
-// du thème qui passe le mieux, mesuré contre le fond RÉEL.
+// état (transparent au repos, `secondaryContainer` une fois sélectionnée) —
+// vert pâle en clair, conteneur vert sombre en sombre (#261, plus d'aplat clair
+// sur noir) — on garde donc le pas du thème qui passe le mieux, mesuré contre
+// le fond RÉEL.
 const tsBestSubjectContentOn = (hex: string, background: Rgb): Rgb | null => {
   let best: Rgb | null = null;
   let bestRatio = -1;
@@ -147,6 +148,13 @@ const tsBestSubjectContentOn = (hex: string, background: Rgb): Rgb | null => {
     }
   }
   return best;
+};
+// Miroir de `legibleInkOn` (#274) : la mesure matière si elle tient 4,5:1,
+// sinon le repli (une encre de rôle, jamais une couleur inventée).
+const LEGIBLE_CONTRAST = 4.5;
+const tsLegibleInkOn = (hex: string, background: Rgb, fallback: Rgb): Rgb => {
+  const measured = tsBestSubjectContentOn(hex, background);
+  return measured && tsContrast(measured, background) >= LEGIBLE_CONTRAST ? measured : fallback;
 };
 // Miroir de `errorInk` (#146) : en thème sombre, le rouge d'`error` est éclairci
 // de `ERROR_INK_TINT` vers le blanc — sinon 3.70:1 sur la surface `#121212`.
@@ -411,9 +419,9 @@ describe("unit android thème Papillon (#134)", () => {
     }
     // RÉGRESSION #261 : sélectionnée en sombre, le fond est le conteneur vert
     // sombre — et AUCUN des deux pas matière n'y passe (2.89:1 au pire,
-    // `#7600CA`). L'encre d'une puce sélectionnée en sombre doit donc replier
-    // sur `onSecondaryContainer` (5.19:1 sur ce fond) quand la mesure échoue :
-    // suivi côté `Assignments.kt`, hors scope de cette issue.
+    // `#7600CA`). #274 y répond : `legibleInkOn` garde la mesure quand elle
+    // tient et REPLIE sur l'encre du rôle sinon — 20 couleurs × 2 états × 2
+    // thèmes, jamais sous AA.
     let pireSombre = 99;
     let pireH = "";
     for (const h of PALETTE) {
@@ -425,6 +433,20 @@ describe("unit android thème Papillon (#134)", () => {
     }
     expect({ h: pireH, ratio: rounded(pireSombre) }).toEqual({ h: "#7600CA", ratio: 2.89 });
     expect({ ink: rounded(tsContrast(DARK_ON_GREEN_CONTAINER, DARK_GREEN_CONTAINER)) >= 4.5 }).toEqual({ ink: true });
+    // La puce Tâches : fond POSÉ par état, encre `legibleInkOn` avec le repli du
+    // rôle (`onSecondaryContainer` sélectionnée, `onBackground` au repos).
+    const chipCases: Array<[string, Rgb, Rgb]> = [
+      ["clair/repos", SURFACE, INK],
+      ["clair/sélectionnée", GREEN_PALE, GREEN_DEEP],
+      ["sombre/repos", DARK_BACKGROUND, WHITE],
+      ["sombre/sélectionnée", DARK_GREEN_CONTAINER, DARK_ON_GREEN_CONTAINER],
+    ];
+    for (const [name, bg, fallback] of chipCases) {
+      for (const h of PALETTE) {
+        const ink = tsLegibleInkOn(h, bg, fallback);
+        expect({ name, h, ok: tsContrast(ink, bg) >= LEGIBLE_CONTRAST }).toEqual({ name, h, ok: true });
+      }
+    }
     // RÉGRESSION #179 : la couleur BRUTE (ce que faisait la puce avant) tombe à
     // 1.83:1 au pire sur le vert pâle et 2.62:1 sur le fond sombre — le défaut
     // constaté (le jaune de la palette, lui, fait 1.96:1 sur le blanc).
@@ -499,9 +521,13 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
       "fun contrastRatio(a: Color, b: Color): Float",
       "fun bestContentOn(background: Color): Color",
       "fun bestSubjectContentOn(hex: String, background: Color): Color?",
+      // #274 : le seuil AA écrit UNE fois, et l'encre garantie (mesure, sinon
+      // repli de rôle) — testable sans Compose comme les autres helpers purs.
+      "fun legibleInkOn(hex: String, background: Color, fallback: Color): Color",
     ]) {
       expect({ fn, found: kt.includes(fn) }).toEqual({ fn, found: true });
     }
+    expect(kt).toContain("const val LEGIBLE_CONTRAST = 4.5f");
     // Les raccourcis `@Composable` : le mode se LIT dans le thème, donc une
     // encre de matière ne peut pas être choisie pour le mauvais thème.
     expect(kt).toContain("fun subjectSurface(hex: String): Color? = subjectSurface(hex, isDarkSurface())");
@@ -660,13 +686,15 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     // #261 : la pastille (`PapSubjectAvatar`) reprend le pas `subjectSurface`,
     // plus d'alpha ad hoc — un seul pas par thème pour carte, pastille et puce.
     expect(pill).not.toContain("AVATAR_TINT_ALPHA");
-    // La puce matière : le fond est POSÉ (donc connu), l'encre MESURÉE contre.
+    // La puce matière : le fond est POSÉ par état (même valeur lue par la puce
+    // et par la mesure), l'encre passe par `legibleInkOn` avec le repli du rôle.
     const tasks = readCode(join(UI, "Assignments.kt"));
-    expect(tasks).toContain("bestSubjectContentOn(");
-    // LE MÊME fond sert à la puce et à la mesure de l'encre (« picked ») : une
-    // mesure faite sur un fond différent de celui qui est rendu ne prouve rien.
+    expect(tasks).toContain("legibleInkOn(");
+    expect(tasks).toContain("val background = if (isSelected) picked else resting");
     expect(tasks).toContain("selectedContainerColor = picked");
-    expect(tasks).toContain("if (isSelected) picked else resting");
+    expect(tasks).toContain("MaterialTheme.colorScheme.onSecondaryContainer");
+    expect(tasks).toContain("MaterialTheme.colorScheme.onBackground");
+    expect(tasks).not.toContain("LocalContentColor");
     // La couleur BRUTE ne peut plus servir d'encre de texte : c'était 1.96:1.
     expect(tasks).not.toContain("colorFromHex(subjectColorHex(prefs, subject)) ?: LocalContentColor.current");
   });
