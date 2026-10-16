@@ -115,10 +115,11 @@ fun HomeWidgetCard(
 }
 
 /**
- * « Afficher plus ↗ » : pastille bordée, rayon 20, une seule ligne.
+ * « Afficher plus ↗ » : pastille bordée en PILULE, une seule ligne.
  *
- * Le rayon 20 est celui de la pastille matière du thème (`shapes.large`) ; la
- * bordure 1 dp vient de `outline`, comme sur les cartes. La flèche est un
+ * #273 : `CircleShape`, pas `shapes.large` (20) — une puce reste une puce
+ * quelle que soit sa hauteur (cf. `PapPill`, #264) ; la bordure 1 dp vient de
+ * `outline`, comme sur les cartes. La flèche est un
  * glyphe de TEXTE (donc teinté par la couleur du `Text`), pas une icône : le
  * core n'a pas d'`OpenInNew` sans `material-icons-extended`.
  *
@@ -135,7 +136,7 @@ fun HomeWidgetCard(
  */
 @Composable
 fun HomeMoreButton(onClick: () -> Unit, label: String = "Afficher plus") {
-    val shape = MaterialTheme.shapes.large
+    val shape = CircleShape
     val ink = MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         modifier = Modifier
