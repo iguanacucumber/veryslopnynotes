@@ -212,10 +212,10 @@ private fun SchoolStep(
 }
 
 /**
- * Étape 2 : le QR affiché par l'application Pronote. `login` + `jeton` sont
- * des blocs chiffrés dont la clé est le PIN : les deux sont donc nécessaires,
- * et le PIN est celui défini dans Pronote (pas un code à 6 chiffres imposé par
- * l'app). Le collage reste possible quand l'appareil n'a pas de caméra.
+ * Étape 2 : le QR affiché par l'application Pronote, scanné avec la caméra.
+ * `login` + `jeton` sont des blocs chiffrés dont la clé est le PIN : les deux
+ * sont donc nécessaires, et le PIN est celui défini dans Pronote (pas un code
+ * à 6 chiffres imposé par l'app).
  */
 @Composable
 private fun QrStep(
@@ -234,7 +234,7 @@ private fun QrStep(
             error = null
             onChange(form.copy(qrRaw = scanned))
         } else {
-            error = "Aucun QR lu (annulé, caméra refusée ou code illisible) : colle le contenu ci-dessous."
+            error = "Aucun QR lu (annulé, caméra refusée ou code illisible) : réessaie de le scanner."
         }
     }
     val input = PairingInput(
@@ -250,21 +250,11 @@ private fun QrStep(
         Text("QR de l'application")
         // #127 : scan direct, décodeur dans l'APK (permission CAMERA demandée
         // par l'activité de scan). `null` = rien de lu, on ne remplace rien et
-        // le message le dit ; le collage ci-dessous reste le repli.
+        // le message le dit.
         Button(
             onClick = scan,
             modifier = Modifier.fillMaxWidth().height(50.dp),
         ) { Text("Scanner le QR") }
-        OutlinedTextField(
-            value = form.qrRaw,
-            onValueChange = { onChange(form.copy(qrRaw = it)) },
-            label = { Text("Contenu du QR (login + jeton)") },
-            supportingText = { Text("Colle le contenu affiché par l'application de ton établissement, ou scanne-le.") },
-            shape = MaterialTheme.shapes.medium,
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = false,
-            maxLines = 4,
-        )
         OutlinedTextField(
             value = form.pin,
             onValueChange = { v -> if (v.length <= PIN_MAX_CHARS) onChange(form.copy(pin = v)) },
@@ -277,8 +267,8 @@ private fun QrStep(
             // hiérarchie de vues (ce que relit `uiautomator dump`, donc une
             // capture, donc un fichier) : `KeyboardType.NumberPassword` ne change
             // que le clavier, jamais ce qui est affiché ni ce qui est stocké
-            // dans l'arbre. La transformation porte sur l'AFFICHAGE : la saisie,
-            // le collage et ce qui part dans `PairingInput` sont inchangés.
+            // dans l'arbre. La transformation porte sur l'AFFICHAGE : la saisie
+            // et ce qui part dans `PairingInput` sont inchangés.
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             shape = MaterialTheme.shapes.medium,
@@ -318,7 +308,7 @@ private fun QrStep(
         } else {
             Text(
                 when {
-                    qr == null && form.pin.isNotBlank() -> "QR illisible : rescane-le ou colle-le en JSON."
+                    qr == null && form.pin.isNotBlank() -> "QR illisible : rescane-le."
                     qr != null -> "Code PIN du QR obligatoire : il déchiffre le contenu scanné."
                     else -> "Il faut le QR affiché par ton application + son PIN."
                 },

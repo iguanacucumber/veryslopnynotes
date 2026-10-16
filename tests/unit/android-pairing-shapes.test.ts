@@ -9,8 +9,8 @@ const pairing = () => readFileSync(join(UI, "PairingScreen.kt"), "utf8");
 describe("appairage formes (#258)", () => {
   test("champs en 16 dp (TextInput de référence), boutons en 50 dp (Button de référence)", () => {
     const src = pairing();
-    // Les trois champs (URL, QR, PIN) : 16 dp, pas le 8 dp par défaut.
-    expect((src.match(/shape = MaterialTheme\.shapes\.medium,/g) ?? []).length).toBe(3);
+    // Les deux champs (URL, PIN) : 16 dp, pas le 8 dp par défaut.
+    expect((src.match(/shape = MaterialTheme\.shapes\.medium,/g) ?? []).length).toBe(2);
     // Les trois boutons (Continuer, Scanner, Terminer) : 50 dp de haut.
     expect((src.match(/\.height\(50\.dp\)/g) ?? []).length).toBe(3);
   });
