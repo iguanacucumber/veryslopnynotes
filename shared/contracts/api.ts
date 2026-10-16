@@ -309,6 +309,28 @@ export function isManualsScrapeRequest(v: unknown): v is ManualsScrapeRequest {
   if (!isBoundedNonEmptyString(r["password"], MANUALS_SCRAPE_CREDENTIAL_MAX_CHARS)) return false;
   if (!isBoundedNonEmptyString(r["startUrl"], MANUALS_SCRAPE_URL_MAX_CHARS)) return false;
   if (!/^https?:\/\//i.test(r["startUrl"] as string)) return false;
+  // ponytail: meme garde que server, sans dep. Upgrade: allowlist si corpus fige.
+  try {
+    const u = new URL(r["startUrl"] as string);
+    const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    const blocked =
+      h === "localhost" ||
+      h === "0.0.0.0" ||
+      h === "::" ||
+      h === "::1" ||
+      h === "169.254.169.254" ||
+      h.startsWith("169.254.") ||
+      /^127\./.test(h) ||
+      h.startsWith("10.") ||
+      /^192\.168\./.test(h) ||
+      (() => {
+        const m = /^172\.(\d+)\./.exec(h);
+        return m !== null && Number(m[1]) >= 16 && Number(m[1]) <= 31;
+      })();
+    if (blocked) return false;
+  } catch {
+    return false;
+  }
   const authFile = r["authFile"];
   if (authFile !== undefined) {
     if (!isBoundedNonEmptyString(authFile, MANUALS_SCRAPE_AUTH_FILE_MAX_CHARS)) return false;

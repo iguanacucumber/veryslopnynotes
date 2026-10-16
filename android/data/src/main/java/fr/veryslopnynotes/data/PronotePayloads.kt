@@ -98,7 +98,10 @@ internal fun parisDay(dt: LocalDateTime): String = dt.atZone(PARIS).toLocalDate(
 
 /** Échec de session : l'app doit se ré-appairer, pas afficher un état vide. */
 internal fun isSessionFailure(e: Throwable): Boolean {
-    val msg = ((e.message ?: "") + " " + e.javaClass.simpleName)
+    val raw = (e.message ?: "")
+    // ponytail: G=25 rate-limit contient "authorization" mais n'est pas un logout.
+    if (raw.contains("Exceeded max authorization", ignoreCase = true)) return false
+    val msg = (raw + " " + e.javaClass.simpleName)
     return Regex("session|expir|login|auth|credential|unauthorized|\\b401\\b|mfa|\\.pin|jeton|confirmation", RegexOption.IGNORE_CASE)
         .containsMatchIn(msg)
 }

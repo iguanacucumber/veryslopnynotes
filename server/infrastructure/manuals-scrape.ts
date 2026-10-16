@@ -43,6 +43,34 @@ function isHttpUrl(v: string): boolean {
   return /^https?:\/\//i.test(v);
 }
 
+// ponytail: bloque loopback + RFC1918 + link-local + metadata, sans dep.
+// Upgrade: allowlist editeurs si corpus reel fige les hotes.
+function isBlockedHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
+  if (h === "localhost" || h === "0.0.0.0" || h === "::" || h === "::1") return true;
+  if (h === "169.254.169.254" || h.startsWith("169.254.")) return true;
+  if (/^127\./.test(h) || h.startsWith("10.") || /^192\.168\./.test(h)) return true;
+  const m172 = /^172\.(\d+)\./.exec(h);
+  if (m172 && Number(m172[1]) >= 16 && Number(m172[1]) <= 31) return true;
+  if (h === "2130706433" || h === "0x7f000001") return true;
+  return false;
+}
+
+function assertPublicStartUrl(startUrl: string): void {
+  let u: URL;
+  try {
+    u = new URL(startUrl);
+  } catch {
+    throw new ScrapeManualsError("startUrl http(s) requise (fournie par humain, jamais committée)");
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    throw new ScrapeManualsError("startUrl http(s) requise (fournie par humain, jamais committée)");
+  }
+  if (isBlockedHost(u.hostname)) {
+    throw new ScrapeManualsError("startUrl privee/interne refusee");
+  }
+}
+
 // Extraction texte : script/style retirés, entités HTML DÉCODÉES (« &eacute; »,
 // « &nbsp; » laissés tels quels = extrait illisible et introuvable à la
 // recherche). Cheerio déjà dépendance, zéro ajoutée.
@@ -65,8 +93,13 @@ function stripTags(html: string): string {
 export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOptions): Promise<ManualDoc[]> {
   if (!config) throw new ScrapeManualsError("manuels non configurés (aucun compte éditeur fourni par l'appelant)");
   if (!isHttpUrl(opts.startUrl)) throw new ScrapeManualsError("startUrl http(s) requise (fournie par humain, jamais committée)");
+  assertPublicStartUrl(opts.startUrl);
   const authFile = opts.authFile ?? DEFAULT_AUTH_FILE;
+  if (authFile.includes("..") || authFile.startsWith("/") || authFile.trim().length === 0) {
+    throw new ScrapeManualsError("authFile relatif sans .. requis");
+  }
   const log = opts.logger ?? (() => {});
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let pw: any;
   try {
@@ -74,20 +107,20 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
   } catch {
     throw new ScrapeManualsError("Playwright non installé — e2e manuals skippé (aucune dép ajoutée v1)");
   }
-  const browser = await pw.chromium.launch({ headless: opts.headless ?? true });
+  const browser = await pw.chromium.launch({ headless: opts.headless ?? true, timeout: timeoutMs });
+  let context: any = null;
   try {
-    const context = await browser.newContext({ ...(authFile ? { storageState: authFile } : {}) }).catch(
-      // Premier run : pas de fichier local, contexte frais pour login interactif.
-      async () => browser.newContext(),
-    );
+    context =
+      (await browser.newContext({ ...(authFile ? { storageState: authFile } : {}) }).catch(
+        // Premier run : pas de fichier local, contexte frais pour login interactif.
+        async () => browser.newContext(),
+      )) ?? null;
     const page = await context.newPage();
     log(`scrape ${config.platform} -> 1 page`);
     // Statut HTTP vérifié AVANT toute extraction : une page d'erreur (404/500)
     // ou un mur de connexion ne doit jamais devenir un ManualDoc (le corpus
     // citerait sinon « Page introuvable » comme source de corrigé).
-    const response = await page
-      .goto(opts.startUrl, { timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS })
-      .catch(() => null);
+    const response = await page.goto(opts.startUrl, { timeout: timeoutMs }).catch(() => null);
     const status = typeof response?.status === "function" ? response.status() : 0;
     const ok = typeof response?.ok === "function" ? response.ok() : status < 400;
     if (!response || !ok || status >= 400) {
@@ -98,11 +131,28 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     const title = (await page.title().catch(() => config.platform)) || config.platform;
     const html: string = await page.content().catch(() => "");
     const text = truncateManualText(stripTags(html), 4000);
-    await context.storageState({ path: authFile }).catch(() => {});
-    await context.close().catch(() => {});
+    await context.storageState({ path: authFile }).catch(() => {
+      log(`scrape ${config.platform} -> jar non persiste`);
+    });
+    await context.close().catch(() => {
+      log(`scrape ${config.platform} -> contexte non ferme`);
+    });
+    context = null;
     if (!text) return [];
-    return [{ id: `scrape-${Date.now()}`, platform: config.platform, title, subject: title, page: 1, excerpt: text }];
+    return [
+      {
+        id: `scrape-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
+        platform: config.platform,
+        title,
+        subject: title,
+        page: 1,
+        excerpt: text,
+      },
+    ];
   } finally {
+    if (context !== null) {
+      await context.close().catch(() => {});
+    }
     await browser.close().catch(() => {});
   }
 }

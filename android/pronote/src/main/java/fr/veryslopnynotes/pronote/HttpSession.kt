@@ -251,6 +251,23 @@ class HttpSession(
     /** `URLSearchParams.set` : UTF-8, espace → `+` (comme `URLEncoder`). */
     private fun urlEncode(s: String): String = URLEncoder.encode(s, "UTF-8")
 
+    // ponytail: plafond 10 Mo par chunks, evite OOM sur grosse reponse.
+    private fun cappedBytes(stream: java.io.InputStream, max: Int): ByteArray {
+        stream.use { s ->
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(8192)
+            var total = 0
+            while (true) {
+                val n = s.read(buf)
+                if (n < 0) break
+                total += n
+                if (total > max) throw java.io.IOException("Reponse trop volumineuse")
+                out.write(buf, 0, n)
+            }
+            return out.toByteArray()
+        }
+    }
+
     fun request(method: String, url: String, opts: RequestOpts = RequestOpts()): HttpResponse {
         val maxRedirects = opts.maxRedirects
         var currentMethod = method
@@ -268,16 +285,20 @@ class HttpSession(
         }
         for (redirect in 0..maxRedirects) {
             val conn = URL(currentUrl).openConnection() as HttpURLConnection
+            conn.connectTimeout = 15_000
+            conn.readTimeout = 15_000
             conn.instanceFollowRedirects = false
             conn.requestMethod = currentMethod
             for ((k, v) in headers) conn.setRequestProperty(k, v)
             val cookieHeader = jar.getCookieString(currentUrl)
             if (cookieHeader.isNotEmpty()) conn.setRequestProperty("Cookie", cookieHeader)
-            if (body != null && currentMethod != "GET" && currentMethod != "HEAD") {
-                conn.doOutput = true
-                conn.outputStream.use { it.write(body) }
-            }
-            val status = conn.responseCode
+            try {
+                if (body != null && currentMethod != "GET" && currentMethod != "HEAD") {
+                    conn.doOutput = true
+                    conn.outputStream.use { it.write(body) }
+                }
+            } catch (e: Exception) { try { conn.disconnect() } catch (_: Exception) {} ; throw e }
+            val status: Int = try { conn.responseCode } catch (e: Exception) { try { conn.disconnect() } catch (_: Exception) {} ; throw e }
             // En-têtes reçus : clé insensible à la casse (comme `Headers`).
             val received = LinkedHashMap<String, List<String>>()
             for ((k, values) in conn.headerFields) {
@@ -296,7 +317,18 @@ class HttpSession(
             val location = header("location").firstOrNull()
             val isRedirect = status in 300..399 && location != null
             if (isRedirect && redirect < maxRedirects) {
-                currentUrl = URL(URL(currentUrl), location).toString()
+                val nextUrl = URL(URL(currentUrl), location).toString()
+                // ponytail: meme-hote garde corps (parite 307), hote change = drop corps + content-type.
+                try {
+                    if (URL(nextUrl).host.lowercase(java.util.Locale.ROOT) != URL(currentUrl).host.lowercase(java.util.Locale.ROOT)) {
+                        body = null
+                        headers.remove("Content-Type")
+                    }
+                } catch (_: Exception) {
+                    body = null
+                    headers.remove("Content-Type")
+                }
+                currentUrl = nextUrl
                 // 303 (et 301/302 émises pour un POST) => GET, comme navigateurs.
                 if (status == 303 || ((status == 301 || status == 302) && currentMethod == "POST")) {
                     currentMethod = "GET"
@@ -305,9 +337,12 @@ class HttpSession(
                 conn.disconnect()
                 continue
             }
-            val stream = if (status >= 400) conn.errorStream else conn.inputStream
-            val bytes = stream?.readBytes() ?: ByteArray(0)
-            conn.disconnect()
+            val bytes: ByteArray = try {
+                val stream = if (status >= 400) conn.errorStream else conn.inputStream
+                if (stream == null) ByteArray(0) else cappedBytes(stream, 10_485_760)
+            } finally {
+                conn.disconnect()
+            }
             return HttpResponse(
                 status = status,
                 ok = status in 200..299,
