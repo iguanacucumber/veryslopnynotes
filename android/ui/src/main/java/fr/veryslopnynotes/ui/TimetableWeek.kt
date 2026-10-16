@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -822,7 +823,9 @@ private fun TimetableDayHeader(
     today: LocalDate,
     modifier: Modifier = Modifier,
 ) {
-    val pill = MaterialTheme.shapes.small
+    // #273 : PILULE (`CircleShape`), pas `shapes.small` (12) — une puce reste
+    // une puce quelle que soit sa hauteur (cf. `PapPill`, #264).
+    val pill = CircleShape
     val pillBg = MaterialTheme.colorScheme.primaryContainer
     val pillInk = MaterialTheme.colorScheme.onPrimaryContainer
     Column(
