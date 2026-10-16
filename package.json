@@ -10,10 +10,11 @@
     "lint": "bun run agents/runtime/check-secrets.ts"
   },
   "devDependencies": {
-    "typescript": "5.9.3",
     "@types/bun": "1.4.2",
+    "playwright": "1.64.1",
     "pronotets": "1.0.0",
-    "tough-cookie": "5.1.2"
+    "tough-cookie": "5.1.2",
+    "typescript": "5.9.3"
   },
   "dependencies": {
     "cheerio": "1.2.0"
