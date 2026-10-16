@@ -313,6 +313,31 @@ fun bestSubjectContentOn(hex: String, background: Color): Color? =
         .maxByOrNull { contrastRatio(it, background) }
 
 /**
+ * Seuil AA d'un corps de texte (WCAG 2.x 1.4.3) : le SEUL endroit du module où
+ * 4,5 est écrit — un appelant ne compare jamais un ratio à un littéral.
+ */
+const val LEGIBLE_CONTRAST = 4.5f
+
+/**
+ * Encre lisible GARANTIE sur [background] : la mesure matière si elle passe
+ * [LEGIBLE_CONTRAST], sinon [fallback].
+ *
+ * #274 : en sombre, une puce sélectionnée porte le conteneur vert sombre et la
+ * mesure matière y tombe à 2,89:1 au pire (`#7600CA`) — sous AA, donc on ne
+ * peut pas la rendre telle quelle. Le repli est une encre DE RÔLE (jamais une
+ * couleur inventée) : c'est à l'appelant de poser un [fallback] qui passe lui
+ * aussi sur [background] — le miroir le mesure des deux côtés.
+ */
+fun legibleInkOn(hex: String, background: Color, fallback: Color): Color {
+    val measured = bestSubjectContentOn(hex, background)
+    return if (measured != null && contrastRatio(measured, background) >= LEGIBLE_CONTRAST) {
+        measured
+    } else {
+        fallback
+    }
+}
+
+/**
  * Luminance relative WCAG 2.x d'une couleur (canaux non linéarisés).
  * Seuil 0.03928 : c'est la valeur de la spécification 2.x (la version 2.1
  * corrigée porte 0.04045 ; l'écart sur nos couleurs est nul au 1/1000).
