@@ -113,7 +113,7 @@ describe("assistant : le parcours est bien l'ordre annoncé", () => {
     expect(screen).toContain("val qr = parseSchoolQr(form.qrRaw)");
     // Le Pin est la clé de déchiffrement du QR : sans lui, le QR ne sert à rien.
     expect(screen).toContain("Code PIN du QR obligatoire : il déchiffre le contenu scanné.");
-    expect(screen).toContain("QR illisible : rescane-le ou colle-le en JSON.");
+    expect(screen).toContain("QR illisible : rescane-le.");
     expect(screen).toContain("val pret = qr != null && form.pin.isNotBlank()");
     // Le QR + le pin partent dans la MÊME session locale : c'est la seule méthode.
     expect(screen).toContain("qr = qr");
@@ -146,7 +146,7 @@ describe("assistant : le PIN est un secret affiché comme tel (#172)", () => {
     // `visualTransformation`, les chiffres sont lisibles par-dessus l'épaule ET
     // présents tels quels dans l'arbre de vues — ce que relit `uiautomator dump`,
     // donc une capture, donc un fichier. La transformation porte sur l'AFFICHAGE
-    // : la saisie, le collage et ce qui part dans la session sont inchangés.
+    // : la saisie et ce qui part dans la session sont inchangés.
     const champs = [
       ["PairingScreen.kt", screen],
       ["SettingsScreen.kt", settings],
@@ -317,7 +317,7 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
   test("caméra OPTIONNELLE : CAMERA vient de l'AAR, le merger n'en fait pas un filtre", () => {
     // L'AAR déclare CAMERA et la demande au runtime. Si `camera.any` restait
     // `required` (ajouté d'office par le merger), l'app serait ininstallable
-    // sur un appareil sans caméra — alors que le collage est le repli.
+    // sur un appareil sans caméra.
     expect(manifest).not.toContain("android.permission.CAMERA");
     expect(manifest).toContain('android:name="android.hardware.camera.any"');
     expect(manifest).toContain('android:required="false"');
@@ -331,13 +331,23 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
     // ET il dit quoi faire sinon.
     expect(screen).toContain("if (scanned != null)");
     expect(screen).toContain("Aucun QR lu (annulé, caméra refusée ou code illisible)");
-    // Et le champ de collage n'a pas disparu au profit du bouton.
+    // Le scan est la seule entrée : pas de champ manuel à côté du bouton.
     expect(screen).toContain('Text("Scanner le QR")');
-    expect(screen).toContain('label = { Text("Contenu du QR (login + jeton)") }');
+    expect(screen).not.toContain('Contenu du QR');
   });
 
-  test("un contenu scanné passe par le même parseur que le collage", () => {
-    // Deux entrées, une seule porte de sortie : pas de second parseur à diverger.
+  test("scan en portrait : la lib est en paysage par défaut", () => {
+    // zxing déclare `sensorLandscape` : sans forçage manifeste, le scan
+    // s'ouvre en paysage alors que le QR s'affiche en portrait.
+    expect(manifest).toContain('android:screenOrientation="portrait"');
+    expect(manifest).toContain("android:screenOrientation");
+    expect(scanner).toContain(".setOrientationLocked(true)");
+    expect(scanner).not.toContain(".setOrientationLocked(false)");
+  });
+
+  test("le QR scanné passe par le parseur", () => {
+    // Une seule entrée (le scan), une seule porte de sortie : pas de second
+    // parseur à diverger.
     expect(screen).toContain("val qr = parseSchoolQr(form.qrRaw)");
     expect(scanner).toContain("ScanOptions.QR_CODE");
   });
@@ -348,7 +358,7 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
     // à l'étape 1, saisie d'établissement comprise, saisie à perdu.
     expect(manifest).toContain('android:name="com.journeyapps.barcodescanner.CaptureActivity"');
     expect(manifest).toContain('android:clearTaskOnLaunch="false"');
-    expect(manifest).toContain('tools:replace="android:clearTaskOnLaunch"');
+    expect(manifest).toContain("android:clearTaskOnLaunch,android:screenOrientation");
   });
 
   test("chaque étape défile : en paysage, « Continuer » tombait hors écran", () => {

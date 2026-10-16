@@ -47,7 +47,6 @@ dependencies {
     // #127 : scan du QR affiché par l'application de l'établissement. Le
     // décodeur est dans l'APK et l'activité de scan demande elle-même la
     // permission CAMERA : aucune dépendance à Google Play Services, donc le
-    // bouton marche aussi sur l'émulateur et sur un téléphone sans GMS. Le
-    // champ de collage reste le repli.
+    // bouton marche aussi sur l'émulateur et sur un téléphone sans GMS.
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 }

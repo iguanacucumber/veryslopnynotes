@@ -13,12 +13,15 @@ import com.journeyapps.barcodescanner.ScanOptions
  * demande elle-même la permission CAMERA. Donc ça marche partout — téléphone sans
  * Google Play Services, émulateur — ce que ne faisait PAS le Google Code Scanner
  * de #122 : son module est téléchargé à la demande par un service absent, et son
- * échec revenait en `null` sans rien afficher, donc un bouton inerte. Le champ de
- * collage, lui, ne dépend d'aucune caméra et n'a jamais disparu.
+ * échec revenait en `null` sans rien afficher, donc un bouton inerte.
  *
  * `onResult(null)` = rien de lu : annulation, permission refusée, ou QR que le
  * décodeur n'a pas su lire. L'appelant ne remplace donc rien et affiche une
  * phrase actionnable, au lieu du silence.
+ *
+ * Le scan est en portrait, comme l'écran qui affiche le QR : le manifeste
+ * force `CaptureActivity` en `portrait` (la lib est en `sensorLandscape` par
+ * défaut) et l'orientation est verrouillée sur le portrait courant.
  *
  * #145 : un QR lu VIBRE (le geste a réussi, hors du champ de vision : l'écran
  * était face au mur pendant le scan). Un échec ne vibre PAS comme une réussite —
@@ -45,10 +48,8 @@ fun rememberQrScanner(onResult: (String?) -> Unit): () -> Unit {
                     .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
                     .setPrompt("QR de l'application de ton établissement")
                     .setBeepEnabled(false)
-                    // Le QR est dense : on le lit en portrait, comme l'écran qui
-                    // l'affiche. Verrouiller en paysage (défaut de la lib) le
-                    // ferait pivoter sous le nez de l'utilisateur.
-                    .setOrientationLocked(false),
+                    // Portrait verrouillé, comme l'écran qui affiche le QR.
+                    .setOrientationLocked(true),
             )
         }
     }
