@@ -22,6 +22,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -285,6 +286,12 @@ private val TOP_BARS: Map<String, TopBar> = mapOf(
  * l'établissement active les évaluations, la route Sanctions que s'il publie
  * `punishments`). La table est statique, c'est donc `AppNav` — qui lit les
  * capacités — qui décide.
+ *
+ * [scrollBehavior] est le comportement de rétraction AU DÉFILEMENT : il est
+ * créé ici par défaut (`enterAlways`, la barre revient dès qu'on remonte) mais
+ * `AppNav` en fournit UN partagé ET le branche sur le `Scaffold` via
+ * `Modifier.nestedScroll` — sans cette connexion, la barre ne reçoit aucun
+ * événement de défilement et ne se rétracte jamais.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -298,6 +305,7 @@ fun AppTopBar(
     // Un `PapHeaderSlot` vide par défaut, donc un appel qui oublie le mécanisme
     // compile et rend la table statique — le cas simple reste le cas simple.
     headerSlot: PapHeaderSlot? = null,
+    scrollBehavior: TopAppBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(),
 ) {
     val bar = route?.let { TOP_BARS[it] }
     // Titre publié par l'écran > titre de la table > nom de l'app. L'ordre est
@@ -309,7 +317,10 @@ fun AppTopBar(
         .orEmpty()
         .filterNot { it is TopAction.Go && it.route in hiddenDestinations }
     // La barre se rétracte quand on défile vers le bas et revient dès qu'on
-    // remonte : le défilement vient des écrans, pas l'inverse.
+    // remonte : le défilement vient des écrans, pas l'inverse. Le [scrollBehavior]
+    // est celui branché par `AppNav` sur le `Scaffold` (`nestedScroll`) : le
+    // défaut ci-dessus garde l'appel simple (previews, tests) sans changer
+    // l'espèce de la barre.
     TopAppBar(
         // Titre de la ROUTE (papillon.bzh), plus la marque : avant #135 c'était
         // « VerySlopyNyNotes » sur les 15 routes. `titleLarge` = 18 sp gras,
@@ -345,7 +356,7 @@ fun AppTopBar(
         },
         // Slot d'actions contextuelles, une seule source : `TOP_BAR_ACTIONS`.
         actions = { TopBarActions(actions = actions, onNavigate = onNavigate, onRefresh = onRefresh) },
-        scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(),
+        scrollBehavior = scrollBehavior,
     )
 }
 
