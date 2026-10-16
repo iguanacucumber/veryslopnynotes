@@ -302,6 +302,15 @@ describe("unit android EDT (#76)", () => {
     expect(nav).toContain("TimetableRoute(");
     // sans la parenthèse fermante : #133 ajoute `deepLinks` à la route.
     expect(nav).toContain("composable(ROUTE_CALENDAR");
+    // #273 : la pastille jour (`TimetableDayHeader`) est une PILULE
+    // (`CircleShape`), pas `shapes.small` — une puce reste une puce (cf.
+    // `PapPill`, #264).
+    const dayHeader = screen.slice(
+      screen.indexOf("private fun TimetableDayHeader"),
+      screen.indexOf("private fun TimetableDayPage"),
+    );
+    expect(dayHeader).toContain("val pill = CircleShape");
+    expect(dayHeader).not.toContain("MaterialTheme.shapes.small");
     // Cache : ressource timetable déjà existante (TTL 1 h), rien de neuf créé.
     const policy = readFileSync(join(DATA, "CachePolicy.kt"), "utf8");
     expect(policy).toContain('const val TIMETABLE = "timetable"');
