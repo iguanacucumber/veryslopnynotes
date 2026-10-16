@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VerySloppy Notes — Keynote</title>
+<style>
+:root{
+  --bg:#070b12; --panel:#0d1524; --panel2:#111c31;
+  --ink:#f2f6ff; --mut:#9fb0cc; --dim:#5d6f8f;
+  --acc:#34d399; --acc2:#22d3ee; --bad:#f87171; --warn:#fbbf24;
+  --r:22px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  overflow:hidden; -webkit-font-smoothing:antialiased;
+}
+/* fond : grille + orbes */
+.bg{position:fixed;inset:0;z-index:0;overflow:hidden}
+.bg::before{content:"";position:absolute;inset:0;
+  background-image:linear-gradient(rgba(52,211,153,.055) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(52,211,153,.055) 1px,transparent 1px);
+  background-size:72px 72px;
+  mask-image:radial-gradient(ellipse 90% 80% at 50% 45%,#000 30%,transparent 75%);
+}
+.orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.5;animation:drift 14s ease-in-out infinite alternate}
+.o1{width:44vw;height:44vw;left:-12vw;top:-14vw;background:radial-gradient(circle,rgba(52,211,153,.35),transparent 65%)}
+.o2{width:38vw;height:38vw;right:-10vw;bottom:-12vw;background:radial-gradient(circle,rgba(34,211,238,.30),transparent 65%);animation-delay:-6s}
+@keyframes drift{to{transform:translate(4vw,3vh) scale(1.12)}}
+/* cadre 16:9 */
+.stage{position:fixed;inset:0;z-index:1;display:flex;flex-direction:column;
+  padding:3.2vh 4.5vw 9vh;}
+.topbar{display:flex;align-items:center;gap:1vw;font-size:1.35vw;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--mut)}
+.topbar .dot{width:.7vw;height:.7vw;border-radius:50%;background:var(--acc);box-shadow:0 0 18px var(--acc)}
+.topbar .sp{flex:1}
+#clock{font-variant-numeric:tabular-nums;color:var(--ink);letter-spacing:.06em}
+/* scènes */
+.scene{position:absolute;inset:0;display:flex;gap:3vw;align-items:center;
+  padding:12vh 4.5vw 12vh;opacity:0;visibility:hidden;
+  transform:translateX(6vw) scale(.965);filter:blur(10px);
+  transition:opacity .8s ease,transform .9s cubic-bezier(.2,.7,.2,1),filter .8s ease,visibility 0s linear .9s;}
+.scene.active{opacity:1;visibility:visible;transform:none;filter:none;transition:opacity .8s ease,transform .9s cubic-bezier(.2,.7,.2,1),filter .8s ease;}
+.scene.leaving{opacity:0;transform:translateX(-6vw) scale(.97);filter:blur(10px);visibility:visible;}
+.kicker{display:inline-flex;align-items:center;gap:.6em;font-size:1.5vw;font-weight:700;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--acc);
+  border:1px solid rgba(52,211,153,.4);border-radius:999px;padding:.55em 1.1em;margin-bottom:2.2vh;
+  background:rgba(52,211,153,.08)}
+h1{font-size:5.6vw;line-height:1.02;font-weight:800;letter-spacing:-.02em}
+h2{font-size:4.2vw;line-height:1.05;font-weight:800;letter-spacing:-.02em}
+.grad{background:linear-gradient(92deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{font-size:2vw;line-height:1.45;color:var(--mut);margin-top:2.4vh;max-width:60ch}
+.sub b{color:var(--ink)}
+.col{flex:1.15;min-width:0}
+.col.side{flex:.85}
+/* stagger enfants */
+.scene.active .rv{opacity:0;animation:rise .8s cubic-bezier(.2,.7,.2,1) forwards}
+.scene.active .rv:nth-child(1){animation-delay:.10s}.scene.active .rv:nth-child(2){animation-delay:.22s}
+.scene.active .rv:nth-child(3){animation-delay:.34s}.scene.active .rv:nth-child(4){animation-delay:.46s}
+.scene.active .rv:nth-child(5){animation-delay:.58s}
+@keyframes rise{from{opacity:0;transform:translateY(3.2vh)}to{opacity:1;transform:none}}
+/* cartes */
+.card{background:linear-gradient(180deg,var(--panel2),var(--panel));
+  border:1px solid rgba(159,176,204,.16);border-radius:var(--r);padding:2.4vh 1.8vw;
+  box-shadow:0 24px 70px rgba(0,0,0,.45)}
+.card h3{font-size:1.7vw;margin-bottom:1vh}
+.card p{font-size:1.45vw;color:var(--mut);line-height:1.5}
+.row{display:flex;gap:1.4vw;margin-top:2.4vh;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:.5em;font-size:1.4vw;font-weight:600;white-space:nowrap;
+  border-radius:999px;padding:.5em 1em;border:1px solid rgba(159,176,204,.25);color:var(--ink);
+  background:rgba(255,255,255,.03)}
+.chip.ok{border-color:rgba(52,211,153,.55);color:var(--acc)}
+.chip.ko{border-color:rgba(248,113,113,.55);color:var(--bad)}
+.bigstat{font-size:4.6vw;font-weight:800;font-variant-numeric:tabular-nums}
+.bigstat small{font-size:1.5vw;color:var(--mut);font-weight:600}
+/* téléphones mock */
+.phones{display:flex;gap:2vw;justify-content:center;perspective:1200px}
+.phone{width:17vw;min-width:220px;aspect-ratio:9/18.6;border-radius:2.2vw;position:relative;
+  background:#0a0f1c;border:1px solid rgba(159,176,204,.3);
+  box-shadow:0 30px 80px rgba(0,0,0,.55),inset 0 0 0 6px #05080f;
+  padding:1.1vw .95vw;transform:rotateY(-8deg);
+  transition:transform .8s cubic-bezier(.2,.7,.2,1)}
+.scene.active .phone{transform:rotateY(0)}
+.scene.active .phone:nth-child(2){transform:translateY(-1.6vh)}
+.phone .notch{width:38%;height:1.5vh;background:#05080f;border-radius:99px;margin:0 auto 1vh}
+.pscreen{background:linear-gradient(180deg,#101b31,#0a1120);border-radius:1.2vw;height:calc(100% - 3vh);
+  padding:1vw .9vw;display:flex;flex-direction:column;gap:.9vh;overflow:hidden}
+.pill{font-size:.95vw;font-weight:700;color:var(--acc);letter-spacing:.12em;text-transform:uppercase}
+.prow{background:rgba(255,255,255,.05);border:1px solid rgba(159,176,204,.14);border-radius:.8vw;
+  padding:.7vh .7vw;font-size:1.02vw;line-height:1.35}
+.prow b{color:var(--ink)} .prow span{color:var(--mut)}
+.pgrade{display:flex;justify-content:space-between;align-items:center}
+.score{font-weight:800;color:var(--acc);font-size:1.25vw}
+.curve{height:5.5vh;border-radius:.8vw;background:
+  linear-gradient(180deg,rgba(52,211,153,.25),transparent),
+  repeating-linear-gradient(90deg,rgba(159,176,204,.12) 0 1px,transparent 1px 12%);
+  border:1px solid rgba(52,211,153,.3);position:relative;overflow:hidden}
+.curve::after{content:"";position:absolute;left:4%;right:4%;top:52%;height:2px;background:var(--acc);
+  box-shadow:0 0 12px var(--acc);border-radius:2px}
+.ai-answer{border-left:3px solid var(--acc);padding-left:.7vw;font-size:1vw;color:var(--ink);line-height:1.45}
+.ai-src{font-size:.85vw;color:var(--acc2)}
+/* schéma archi */
+.arch{width:100%}
+.arch svg{width:100%;height:auto;display:block}
+.flow{stroke-dasharray:10 8;animation:dash 1.2s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-18}}
+/* badges invariants */
+.inv{display:grid;grid-template-columns:1fr 1fr;gap:1.2vh 1.2vw;margin-top:2.2vh}
+.inv div{background:rgba(52,211,153,.07);border:1px solid rgba(52,211,153,.35);
+  border-radius:1vw;padding:1.1vh 1vw;font-size:1.35vw;line-height:1.35}
+.inv div b{color:var(--acc)}
+.inv div small{color:var(--mut);display:block;font-size:1.05vw}
+/* barre progression */
+.progress{position:fixed;left:0;right:0;bottom:0;z-index:5;padding:0 4.5vw 3.4vh}
+.track{height:.7vh;border-radius:99px;background:rgba(159,176,204,.18);overflow:hidden}
+#bar{height:100%;width:0%;border-radius:99px;background:linear-gradient(90deg,var(--acc),var(--acc2));
+  box-shadow:0 0 16px rgba(52,211,153,.7)}
+.dots{display:flex;gap:.7vw;margin-top:1.4vh}
+.dots i{flex:1;height:.45vh;border-radius:99px;background:rgba(159,176,204,.22)}
+.dots i.done{background:var(--acc)}
+/* boutons */
+.ctl{position:fixed;right:3vw;bottom:8.5vh;z-index:6;display:flex;gap:.7vw}
+.ctl button{font-size:1.1vw;font-weight:700;color:var(--ink);background:rgba(255,255,255,.06);
+  border:1px solid rgba(159,176,204,.3);border-radius:999px;padding:.6em 1.2em;cursor:pointer}
+.ctl button:hover{border-color:var(--acc)}
+.hint{position:fixed;left:4.5vw;bottom:8.5vh;z-index:6;font-size:1.05vw;color:var(--dim)}
+.export-badge{position:fixed;top:2.6vh;left:50%;transform:translateX(-50%);z-index:6;font-size:1vw;color:var(--dim);
+  border:1px solid rgba(159,176,204,.25);border-radius:99px;padding:.4em 1em;display:none;white-space:nowrap}
+body.exporting .export-badge{display:block}
+body.exporting .ctl,body.exporting .hint{display:none}
+@media (max-aspect-ratio:1/1){ h1{font-size:11vw} h2{font-size:8.4vw} .sub{font-size:4.4vw} }
+</style>
+</head>
+<body>
+<div class="bg"><div class="orb o1"></div><div class="orb o2"></div></div>
+<div class="export-badge">EXPORT 1920×1080 · 60 fps</div>
+
+<div class="stage">
+  <div class="topbar"><span class="dot"></span><span>VerySloppy Notes — keynote</span><span class="sp"></span><span id="clock">0:00 / 3:30</span></div>
+</div>
+
+<!-- 1 COUVERTURE 20s -->
+<section class="scene" data-dur="20">
+  <div class="col">
+    <div class="rv"><span class="kicker">Keynote · 3 min 30</span></div>
+    <h1 class="rv">VerySloppy<br><span class="grad">Notes</span></h1>
+    <p class="sub rv">Ton Pronote, <b>sans jamais confier ta session à un serveur</b>. La session vit et meurt <b>sur ton téléphone</b>.</p>
+    <div class="row rv"><span class="chip ok">● téléphone seul</span><span class="chip ok">● hors-ligne d'abord</span><span class="chip">● 100 % synthétique en démo</span></div>
+  </div>
+  <div class="col side"><div class="card rv"><h3>Au programme</h3><p>① Le problème des applis scolaires<br>② La solution : client direct<br>③ Le client : notes, devoirs, EDT<br>④ L'IA qui cite ses sources<br>⑤ La sécurité, prouvée par tests</p></div></div>
+</section>
+
+<!-- 2 PROBLÈME 25s -->
+<section class="scene" data-dur="25">
+  <div class="col">
+    <div class="rv"><span class="kicker">Le problème</span></div>
+    <h2 class="rv">Ta session scolaire<br><span class="grad">ne devrait pas voyager.</span></h2>
+    <p class="sub rv">Classique : ton mot de passe ou ton QR transite par <b>un serveur intermédiaire</b>. Un serveur à compromettre, des secrets qui voyagent, et un point de contrôle imposé à tout le monde.</p>
+    <div class="row rv"><span class="chip ko">✕ session exfiltrée</span><span class="chip ko">✕ serveur = cible</span><span class="chip ko">✕ ré-auth imposée</span></div>
+  </div>
+  <div class="col side"><div class="card rv"><div class="bigstat">1 <small>serveur au milieu = 1 risque en trop</small></div><p style="margin-top:1.4vh">Garder l'intermédiaire, c'était garder un composant à compromettre pour acheminer des secrets qui n'ont pas à voyager.</p></div></div>
+</section>
+
+<!-- 3 SOLUTION / ARCHI 30s -->
+<section class="scene" data-dur="30">
+  <div class="col">
+    <div class="rv"><span class="kicker">La solution · ADR-003</span></div>
+    <h2 class="rv">Pronote = <span class="grad">téléphone.</span><br>Point.</h2>
+    <p class="sub rv">Seul <b>un module dédié</b> parle à l'établissement, en direct. Le QR et son PIN sont <b>déchiffrés sur place</b>, jamais persistés. Déconnexion = <b>purge session + caches</b>.</p>
+    <div class="row rv"><span class="chip ok">→ établissement : direct</span><span class="chip ok">→ clé IA : directe</span><span class="chip">→ serveur : manuels seuls</span></div>
+  </div>
+  <div class="col side arch rv"><div class="card">
+    <svg viewBox="0 0 460 300" role="img" aria-label="Schéma architecture">
+      <rect x="14" y="96" width="120" height="108" rx="16" fill="#0d1524" stroke="#34d399" stroke-width="2.5"/>
+      <text x="74" y="130" fill="#f2f6ff" font-size="15" font-weight="800" text-anchor="middle">Téléphone</text>
+      <text x="74" y="150" fill="#9fb0cc" font-size="11.5" text-anchor="middle">session ici,</text>
+      <text x="74" y="165" fill="#9fb0cc" font-size="11.5" text-anchor="middle">nulle part ailleurs</text>
+      <text x="74" y="186" fill="#34d399" font-size="11.5" font-weight="700" text-anchor="middle">QR + PIN locaux</text>
+      <rect x="326" y="30" width="120" height="76" rx="16" fill="#0d1524" stroke="#9fb0cc" stroke-width="2"/>
+      <text x="386" y="58" fill="#f2f6ff" font-size="14" font-weight="800" text-anchor="middle">Établissement</text>
+      <text x="386" y="78" fill="#9fb0cc" font-size="11.5" text-anchor="middle">notes · devoirs · EDT</text>
+      <rect x="326" y="194" width="120" height="76" rx="16" fill="#0d1524" stroke="#22d3ee" stroke-width="2"/>
+      <text x="386" y="222" fill="#f2f6ff" font-size="14" font-weight="800" text-anchor="middle">OpenRouter</text>
+      <text x="386" y="242" fill="#9fb0cc" font-size="11.5" text-anchor="middle">clé chiffrée, directe</text>
+      <rect x="168" y="222" width="128" height="66" rx="14" fill="#0b1222" stroke="#5d6f8f" stroke-width="1.6" stroke-dasharray="6 5"/>
+      <text x="232" y="248" fill="#9fb0cc" font-size="12.5" text-anchor="middle">serveur</text>
+      <text x="232" y="266" fill="#5d6f8f" font-size="11" text-anchor="middle">manuels seuls</text>
+      <line class="flow" x1="134" y1="120" x2="322" y2="70" stroke="#34d399" stroke-width="3.5"/>
+      <line class="flow" x1="134" y1="168" x2="318" y2="224" stroke="#34d399" stroke-width="3.5"/>
+      <line x1="100" y1="204" x2="182" y2="248" stroke="#5d6f8f" stroke-width="2" stroke-dasharray="4 6" opacity=".7"/>
+      <circle cx="140" cy="225" r="30" fill="#070b12" stroke="#f87171" stroke-width="2"/>
+      <text x="140" y="222" fill="#f87171" font-size="15" font-weight="800" text-anchor="middle">✕</text>
+      <text x="140" y="238" fill="#f87171" font-size="10.5" font-weight="700" text-anchor="middle">jamais</text>
+    </svg>
+    <p style="margin-top:1vh">Le serveur ne voit ni session Pronote, ni clé IA. Il ne scrape que des manuels.</p>
+  </div></div>
+</section>
+
+<!-- 4 CLIENT 50s -->
+<section class="scene" data-dur="50">
+  <div class="col">
+    <div class="rv"><span class="kicker">Le client · beau et complet</span></div>
+    <h2 class="rv">Tout Pronote,<br><span class="grad">en mieux.</span></h2>
+    <p class="sub rv"><b>Notes &amp; moyennes</b> — 3 algorithmes, bulletin publié sinon estimé, influence par note, courbe d'historique. <b>Devoirs</b> — contenus, pièces jointes, bouton « fait » confirmé. <b>EDT</b> — semaine, salles, annulés, prochain cours. <b>Vie scolaire, cantine, messagerie, profil multi-comptes.</b></p>
+    <div class="row rv"><span class="chip ok">● 3 moyennes</span><span class="chip ok">● hors-ligne + badge périmé</span><span class="chip ok">● clair / sombre</span></div>
+  </div>
+  <div class="col side rv"><div class="phones">
+    <div class="phone"><div class="notch"></div><div class="pscreen">
+      <div class="pill">Devoirs · S24</div>
+      <div class="prow"><b>Maths — DM 7</b><br><span>Consigne + pièce jointe · fait ✓</span></div>
+      <div class="prow"><b>Physique — ex. 12 p.88</b><br><span>Aide devoirs disponible</span></div>
+      <div class="ai-answer">Corrigé sourcé, pas inventé.</div>
+    </div></div>
+    <div class="phone"><div class="notch"></div><div class="pscreen">
+      <div class="pill">Notes · T2</div>
+      <div class="prow pgrade"><b>Maths</b><span class="score">15,8</span></div>
+      <div class="prow pgrade"><b>Français</b><span class="score">13,2</span></div>
+      <div class="curve"></div>
+      <div class="prow"><b>Moyenne générale 14,6</b><br><span>bulletin publié ✓</span></div>
+    </div></div>
+  </div></div>
+</section>
+
+<!-- 5 IA 40s -->
+<section class="scene" data-dur="40">
+  <div class="col">
+    <div class="rv"><span class="kicker">L'IA · utile et honnête</span></div>
+    <h2 class="rv">Une IA qui <span class="grad">cite ses sources</span>, ou se tait.</h2>
+    <p class="sub rv"><b>Aide devoirs :</b> corrigé sourcé… ou <b>refus motivé</b> si les sources ne suffisent pas. <b>Fiches de révision :</b> réponses sourcées cours + manuels, citations vérifiées, <b>export PDF</b>. La clé reste <b>chiffrée sur l'appareil</b> et part <b>directement au fournisseur</b> — jamais au serveur.</p>
+    <div class="row rv"><span class="chip ok">● sources exigées</span><span class="chip ok">● citations vérifiées</span><span class="chip ko">✕ zéro secret au serveur</span></div>
+  </div>
+  <div class="col side"><div class="card rv">
+    <div class="pill">Aide devoirs · sans clé = inactif</div>
+    <div class="prow" style="margin-top:1vh"><span>Sources : consigne du devoir + extrait de cours. Tout le reste = donnée, jamais instruction.</span></div>
+    <div class="ai-answer" style="margin-top:1vh">« D'après ton cours (§2) et le manuel p.41 : … » <span class="ai-src">[cours §2] [manuel p.41]</span></div>
+    <div class="prow" style="margin-top:1vh"><b>Contenu externe = UNTRUSTED_DATA</b><br><span>marqué, entre délimiteurs : donnée, jamais instruction.</span></div>
+    <div class="prow" style="margin-top:1vh"><b>Alertes sécurité</b><br><span>injections neutralisées, vérifiables dans l'app.</span></div>
+  </div></div>
+</section>
+
+<!-- 6 INVARIANTS 30s -->
+<section class="scene" data-dur="30">
+  <div class="col">
+    <div class="rv"><span class="kicker">Sécurité · prouvée par tests</span></div>
+    <h2 class="rv">Huit règles.<br><span class="grad">Zéro exception.</span></h2>
+    <p class="sub rv">Chaque invariant a <b>son test automatique</b>. Une régression d'invariant = <b>PR bloquante</b>, même si tout semble marcher.</p>
+  </div>
+  <div class="col side rv"><div class="inv">
+    <div><b>I1 · réseau ciblé</b><small>seul le module dédié parle à l'établissement</small></div>
+    <div><b>I2 · serveur aveugle</b><small>zéro accès Pronote côté serveur</small></div>
+    <div><b>I4+I5 · clé hors prompt</b><small>directe au fournisseur, jamais loggée</small></div>
+    <div><b>I6 · données ≠ ordres</b><small>contenu externe marqué, entre délimiteurs</small></div>
+    <div><b>I7 · IA sans effets</b><small>aucune action métier via sortie libre</small></div>
+    <div><b>I8 · purge au logout</b><small>session + caches effacés</small></div>
+  </div></div>
+</section>
+
+<!-- 7 OUTRO 15s -->
+<section class="scene" data-dur="15">
+  <div class="col">
+    <div class="rv"><span class="kicker">Merci !</span></div>
+    <h1 class="rv">VerySloppy<br><span class="grad">Notes</span></h1>
+    <p class="sub rv">Projet non affilié à Pronote / Index Éducation · Licence MIT · écrans et identité propres.</p>
+    <div class="row rv"><span class="chip">docs/adr</span><span class="chip">docs/architecture/INVARIANTS</span><span class="chip">android · server · shared</span></div>
+  </div>
+  <div class="col side"><div class="card rv"><h3>Hors-ligne d'abord</h3><p>Cache par ressource avec TTL + badge « périmé ». Onglets non publiés masqués, jamais d'écrans cassés. Couleurs et emojis de matières, mode anonyme, multi-comptes parent.</p></div></div>
+</section>
+
+<div class="progress"><div class="track"><div id="bar"></div></div><div class="dots" id="dots"></div></div>
+<div class="hint">← → naviguer · espace pause · 🔊 bouton son</div>
+<div class="ctl"><button id="bBack">←</button><button id="bPlay">❚❚</button><button id="bFwd">→</button><button id="bSound">🔊</button></div>
+
+<script>
+(function(){
+"use strict";
+const scenes=[...document.querySelectorAll(".scene")];
+const TOTAL=scenes.reduce((a,s)=>a+parseFloat(s.dataset.dur||10),0);
+const qs=new URLSearchParams(location.search);
+const EXPORT=qs.get("export")==="1";
+if(EXPORT)document.body.classList.add("exporting");
+let t0=parseFloat(qs.get("t")||"0");
+let autoplay=qs.get("autoplay")!=="0";
+let playing=autoplay, T=t0, last=performance.now(), cur=-1, audioOn=false, AC=null;
+/* dots */
+const dots=document.getElementById("dots");
+scenes.forEach(()=>dots.appendChild(document.createElement("i")));
+const bar=document.getElementById("bar"), clock=document.getElementById("clock");
+function fmt(s){s=Math.max(0,Math.floor(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");}
+function layout(now){
+  const dt=(now-last)/1000; last=now;
+  if(playing){T+=dt; if(T>=TOTAL){T=TOTAL; playing=false; playBtn.textContent="▶";}}
+  let acc=0,idx=scenes.length-1;
+  for(let i=0;i<scenes.length;i++){const d=parseFloat(scenes[i].dataset.dur||10);
+    if(T<acc+d){idx=i;break;} acc+=d;}
+  if(idx!==cur){
+    scenes.forEach((s,i)=>{
+      if(i===idx){s.classList.remove("leaving");s.classList.add("active");}
+      else if(s.classList.contains("active")){s.classList.remove("active");s.classList.add("leaving");
+        setTimeout(()=>s.classList.remove("leaving"),950);}
+    });
+    cur=idx;
+    [...dots.children].forEach((d,i)=>d.classList.toggle("done",i<=idx));
+  }
+  bar.style.width=(100*T/TOTAL)+"%";
+  clock.textContent=fmt(T)+" / "+fmt(TOTAL);
+  requestAnimationFrame(layout);
+}
+/* contrôles */
+const playBtn=document.getElementById("bPlay");
+function bounds(d){T=Math.min(TOTAL,Math.max(0,T+d));}
+document.getElementById("bBack").onclick=()=>bounds(-10);
+document.getElementById("bFwd").onclick=()=>bounds(10);
+playBtn.onclick=()=>{playing=!playing;playBtn.textContent=playing?"❚❚":"▶";if(playing&&!audioOn)startAudio();};
+addEventListener("keydown",e=>{
+  if(e.key==="ArrowRight")bounds(10); else if(e.key==="ArrowLeft")bounds(-10);
+  else if(e.key===" "){e.preventDefault();playBtn.onclick();} else if(e.key==="Home")T=0;
+});
+/* ponytail: WebAudio natif, zéro dépendance. Nappe épique : accord + montée filtrée + pulsation. */
+let nodes=null;
+function startAudio(){
+  if(audioOn||EXPORT)return;
+  try{
+    AC=AC||new (window.AudioContext||window.webkitAudioContext)();
+    const g=AC.createGain(); g.gain.value=0.0; g.connect(AC.destination);
+    const f=AC.createBiquadFilter(); f.type="lowpass"; f.frequency.value=320; f.connect(g);
+    const oscs=[110,164.81,220,277.18].map((fr,i)=>{
+      const o=AC.createOscillator(); o.type=i<2?"sawtooth":"triangle"; o.frequency.value=fr;
+      const og=AC.createGain(); og.gain.value=i<2?0.05:0.09; o.connect(og); og.connect(f); o.start(); return o;});
+    const lfo=AC.createOscillator(); lfo.frequency.value=0.5;
+    const lg=AC.createGain(); lg.gain.value=0.03; lfo.connect(lg); lg.connect(g.gain); lfo.start();
+    g.gain.linearRampToValueAtTime(0.16,AC.currentTime+6);
+    f.frequency.linearRampToValueAtTime(2400,AC.currentTime+TOTAL);
+    nodes={g,oscs,lfo}; audioOn=true;
+    document.getElementById("bSound").textContent="🔊 on";
+  }catch(e){/* audio indisponible : keynote reste muet, pas d'échec */}
+}
+document.getElementById("bSound").onclick=()=>{
+  if(!audioOn){startAudio();return;}
+  try{const t=AC.currentTime;nodes.g.gain.cancelScheduledValues(t);
+    nodes.g.gain.linearRampToValueAtTime(0.0,t+0.6);}catch(e){}
+  audioOn=false;document.getElementById("bSound").textContent="🔇";
+};
+if(autoplay&&!EXPORT){const arm=()=>{startAudio();removeEventListener("pointerdown",arm);};addEventListener("pointerdown",arm);}
+requestAnimationFrame(layout);
+})();
+</script>
+</body>
+</html>
