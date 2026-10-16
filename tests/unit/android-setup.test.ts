@@ -361,6 +361,16 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
     expect(manifest).toContain("android:clearTaskOnLaunch,android:screenOrientation");
   });
 
+  test("icône papillon : le PNG service_pronote décliné en mipmaps, référencé", () => {
+    // Sans android:icon, l'app prend l'icône système par défaut. La source est
+    // assets/service_pronote.png, déclinée aux 5 densités.
+    expect(manifest).toContain('android:icon="@mipmap/ic_launcher"');
+    expect(manifest).toContain('android:roundIcon="@mipmap/ic_launcher"');
+    for (const d of ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]) {
+      expect(existsSync(join(ANDROID, `app/src/main/res/mipmap-${d}/ic_launcher.png`))).toBe(true);
+    }
+  });
+
   test("chaque étape défile : en paysage, « Continuer » tombait hors écran", () => {
     // Le téléphone en rotation verrouillée (paysage) : la colonne débordait, le
     // bouton était hors de l'écran et donc inatteignable. L'assistant était
