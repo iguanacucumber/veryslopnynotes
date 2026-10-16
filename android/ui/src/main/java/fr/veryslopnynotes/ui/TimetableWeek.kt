@@ -922,7 +922,11 @@ private fun TimetableDayPage(
                 TimetableDayHeader(
                     date = date,
                     today = today,
-                    modifier = Modifier.background(MaterialTheme.colorScheme.background),
+                    // #279 : peint du fond de SA page (`surface`, comme l'écran
+                    // Tâches) — un autre rôle y ferait un bandeau en sombre.
+                    // Toujours opaque plein-largeur : les cartes ne doivent pas
+                    // transparaître dessous au défilement (cf. #194 ci-dessus).
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surface),
                 )
             }
         }
