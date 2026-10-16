@@ -214,10 +214,9 @@ fun isBoundedSchoolUrl(value: String): Boolean {
 }
 
 /**
- * Contenu scanné/collé → payload du QR de l'établissement.
+ * Contenu scanné → payload du QR de l'établissement.
  * Deux formes acceptées : le JSON que produit l'application de l'établissement
- * (`{"login":…,"jeton":…}`) et la forme compacte `login|jeton[|url]`, qui permet
- * de recopier le QR à la main quand l'appareil n'a pas de caméra utilisable.
+ * (`{"login":…,"jeton":…}`) et la forme compacte `login|jeton[|url]`.
  * Renvoie `null` plutôt que de lever : l'appelant affiche « QR illisible ».
  */
 fun parseSchoolQr(raw: String): SchoolQr? {
