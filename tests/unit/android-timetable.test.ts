@@ -311,8 +311,8 @@ describe("unit android EDT (#76)", () => {
     );
     expect(dayHeader).toContain("val pill = CircleShape");
     expect(dayHeader).not.toContain("MaterialTheme.shapes.small");
-    // #279 : l'en-tête collant est peint du fond de SA page (`surface`, comme
-    // l'écran Tâches) — un autre rôle y faisait un bandeau plus noir que la
+    // #279 : l'en-tête collant est peint du fond de SA page (`surface`) —
+    // un autre rôle y faisait un bandeau plus noir que la
     // page en sombre (`background` = #000 sur `surface` = #121212). Le sticky
     // vit dans `TimetableDayPage`, pas dans la fonction d'en-tête.
     const dayPage = screen.slice(

@@ -899,12 +899,14 @@ describe("carte de devoir (#161)", () => {
     expect(code).toMatch(/stateKey = when \{[\s\S]*?else -> "list"/);
   });
 
-  test("#277 : la page Tâches porte le fond des autres écrans, pas un gris posé", () => {
+  test("#281 : la page Tâches porte le noir des autres écrans (#000000), pas #121212", () => {
     const code = codeOnly(readFileSync(join(UI, "Assignments.kt"), "utf8"));
-    // Même valeur que le `Scaffold` : `surfaceVariant` y posait un gris, en
-    // sombre au lieu de noir.
-    expect(code).toContain("val page = MaterialTheme.colorScheme.surface");
+    // Le `Scaffold` peint `background` (#000000 en sombre, comme Cours/Accueil
+    // mesuré sur shots/2026-10-16) : `surface` (#277) y posait #121212,
+    // `surfaceVariant` avant lui un gris.
+    expect(code).toContain("val page = MaterialTheme.colorScheme.background");
     expect(code).not.toContain("val page = MaterialTheme.colorScheme.surfaceVariant");
+    expect(code).not.toContain("val page = MaterialTheme.colorScheme.surface)");
     // L'en-tête collant reste peint du MÊME fond, sinon les cartes
     // transparaissent dessous au défilement.
     expect(code).toContain("background = page");
