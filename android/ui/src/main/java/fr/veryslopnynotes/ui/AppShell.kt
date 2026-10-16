@@ -432,19 +432,18 @@ private fun TabIconWithBadge(route: String, icon: @Composable () -> Unit) {
  * Pastille flottante façon Papillon : un `Surface` arrondi posé sur un `Box`
  * paddé, pas un dock plein-bleed. La `NavigationBar` intérieure est
  * transparente (ni fond ni élévation propres) : c'est la pastille qui porte
- * la surface et l'ombre. L'indicateur de sélection reste la pastille M3
- * (capsule arrondie par défaut) teintée `secondaryContainer` en clair ;
- * en sombre ce même aplat pâle brûlerait sur fond noir, donc on prend le
- * `primaryContainer` sombre déjà posé dans le thème. Quatre onglets
+ * la surface et l'ombre. L'indicateur de sélection est la pastille M3
+ * (capsule arrondie par défaut) teintée `secondaryContainer` : vert pâle en
+ * clair, conteneur vert sombre en sombre (un seul jeton depuis #261, 5,19:1
+ * dans les deux thèmes) — plus de branche par thème ici. Quatre onglets
  * seulement : un 5e "Actualités" serait routage + capacités, pas style.
  */
 @Composable
 fun AppTabBar(route: String?, onSelect: (String) -> Unit) {
     if (!showsTabBar(route)) return
     val scheme = MaterialTheme.colorScheme
-    val dark = isDarkSurface()
-    val indicatorContainer = if (dark) scheme.primaryContainer else scheme.secondaryContainer
-    val indicatorInk = if (dark) scheme.onPrimaryContainer else scheme.onSecondaryContainer
+    val indicatorContainer = scheme.secondaryContainer
+    val indicatorInk = scheme.onSecondaryContainer
     Box(
         modifier = Modifier
             .fillMaxWidth()
