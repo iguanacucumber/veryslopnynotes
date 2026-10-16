@@ -84,7 +84,7 @@ const out = join(DIST, preview ? "keynote-preview.mp4" : "keynote-1080p60.mp4");
 ffmpeg(
   "-i", src, "-i", bed,
   "-map", "0:v:0", "-map", "1:a:0",
-  "-c:v", "libx264", "-preset", "medium", "-crf", "19", "-r", "60", "-pix_fmt", "yuv420p",
+  "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-r", "60", "-pix_fmt", "yuv420p",
   "-c:a", "aac", "-b:a", "160k", "-shortest", out,
 );
 console.log("OK →", out, `(${DUR}s, ${W}x${H})`);
