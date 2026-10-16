@@ -713,7 +713,12 @@ fun AssignmentsScreen(
     onHelp: ((Assignment) -> Unit)? = null,
 ) {
     val hasFilter = !selectedSubject.isNullOrEmpty() || query.isNotBlank()
-    val page = MaterialTheme.colorScheme.surfaceVariant
+    // #277 : fond de page = `surface`, la même valeur que le `Scaffold` —
+    // donc le même fond que tous les autres écrans, en clair comme en sombre.
+    // `surfaceVariant` y posait un gris (#F3F6F7 / #2B2B2B : gris au lieu de
+    // noir en sombre). L'en-tête collant reste peint de ce même `page`, opaque
+    // et raccord ; les cartes translucides s'y composent comme le carrousel.
+    val page = MaterialTheme.colorScheme.surface
     // #145 : l'état affiché, comme VALEUR — c'est ce que le `Crossfade` compare.
     // Les quatre branches restent les mêmes qu'avant, mais l'échange se fait
     // maintenant en fondu au lieu d'être instantané.
