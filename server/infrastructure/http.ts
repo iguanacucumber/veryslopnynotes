@@ -83,13 +83,26 @@ export function createApp(deps: ScraperDeps = {}): App {
  * y bufferiser un corps arbitraire), validé par le contrat, credentials
  * transmis au scraper sans transiter par un log. Réponse = docs validés un par
  * un : une page d'erreur ne devient jamais un ManualDoc.
+ * ponytail: borne 30s + cap 2 concurrents, compteur seul en memoire.
+ * Upgrade: file persistante si multi-instances.
  */
+const SCRAPE_TIMEOUT_MS = 30_000;
+const MAX_CONCURRENT_SCRAPES = 2;
+let inFlightScrapes = 0;
+
+function timeoutError(ms: number): Error {
+  return new ScrapeManualsError(`scrape timeout ${ms}ms`);
+}
+
 async function handleScrape(
   req: Request,
   runScrape: NonNullable<ScraperDeps["scrape"]>,
   defaultJar: string,
   log: (message: string) => void,
 ): Promise<Response> {
+  if (inFlightScrapes >= MAX_CONCURRENT_SCRAPES) {
+    return error("busy", 503, "scraper occupe, reessayer plus tard", { "retry-after": "5" });
+  }
   let text: string;
   try {
     text = await req.text();
@@ -104,12 +117,31 @@ async function handleScrape(
     return error("bad_request", 400, "invalid JSON body");
   }
   if (!isManualsScrapeRequest(body)) return error("bad_request", 400, "invalid scrape request");
+  if (req.signal?.aborted) return error("school_unreachable", 502, "scrape impossible");
   let docs: ManualDoc[];
+  inFlightScrapes += 1;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    docs = await runScrape(
+    const scrapeP = runScrape(
       { platform: body.platform, username: body.username, password: body.password },
       { startUrl: body.startUrl, authFile: body.authFile ?? defaultJar, headless: body.headless },
     );
+    const timeoutP = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(timeoutError(SCRAPE_TIMEOUT_MS)), SCRAPE_TIMEOUT_MS);
+      req.signal?.addEventListener(
+        "abort",
+        () => {
+          if (timer) clearTimeout(timer);
+          reject(new ScrapeManualsError("client aborte"));
+        },
+        { once: true },
+      );
+    });
+    try {
+      docs = await Promise.race([scrapeP, timeoutP]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   } catch (err) {
     // Playwright absent = capability manquante (501 franc), pas un faux succès.
     if (err instanceof Error && /Playwright non install/i.test(err.message)) {
@@ -117,6 +149,8 @@ async function handleScrape(
     }
     if (err instanceof ScrapeManualsError) return error("school_unreachable", 502, "scrape impossible");
     return error("internal", 500, "unexpected failure");
+  } finally {
+    inFlightScrapes = Math.max(0, inFlightScrapes - 1);
   }
   // Compteurs seuls : ni credentials, ni URL d'appelant dans les logs.
   log(`scrape -> ${docs.length} doc(s)`);
@@ -188,17 +222,26 @@ export function start(
     port,
     hostname,
     maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
+    idleTimeout: 30,
     fetch: app.handler,
     ...(tls ? { tls } : {}),
-    error: () => Response.json({ error: { code: "internal", message: "internal error" } }, { status: 500 }),
+    error: () => Response.json({ error: { code: "bad_request", message: "invalid body" } }, { status: 413 }),
   });
   console.log(`[server] scraper manuels sur ${tls ? "https" : "http"}://${hostname}:${server.port}`);
   const shutdown = (signal: string) => {
     console.log(`[server] ${signal} -> arret`);
-    server.stop();
+    try {
+      server.stop(true);
+    } catch {
+      try {
+        server.stop();
+      } catch {
+        /* noop */
+      }
+    }
   };
-  process.once("SIGTERM", () => shutdown("SIGTERM"));
-  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
   return server;
 }
 

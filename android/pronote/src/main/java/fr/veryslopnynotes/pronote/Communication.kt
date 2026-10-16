@@ -222,6 +222,8 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
      * du compteur, compteur `+2`. Réponse : erreur `Erreur` typée, déchiffrement
      * (clé/IV bruts si `decryptionChange`), inflation si compressé.
      */
+    // ponytail: un seul post a la fois, compteur/AES/cookies non thread-safe.
+    @Synchronized
     fun post(functionName: String, data: Map<String, JVal>, decryptionChange: DecryptionChange? = null): JVal {
         val signature = data["Signature"] as? JVal.Obj
         if (signature != null) {
@@ -255,11 +257,12 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
         val pSite = "$rootSite/appelfonction/${attrJs(attributes, "a")}/${attrJs(attributes, "h")}/$rNumber"
         val response = session.post(pSite, RequestOpts(json = JVal.Obj(envelope)))
         requestNumber += 2
-        lastPing = System.currentTimeMillis() / 1000
         lastResponse = response
         if (!response.ok) {
             throw PronoteAPIError("Bad request (http status: ${response.status})")
         }
+        // ponytail: ping arme seulement sur succes, sinon session morte semble vivante.
+        lastPing = System.currentTimeMillis() / 1000
         // JSON invalide : `JsonError` BRUT, comme `SyntaxError` côté TS.
         val responseData = Json.parse(response.text) as? JVal.Obj
             ?: throw PronoteAPIError("Bad request (http status: ${response.status})")
@@ -308,6 +311,7 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
     }
 
     /** Changement de clé après une authentification réussie. */
+    @Synchronized
     fun afterAuth(data: JVal, authKey: ByteArray) {
         encryption.aesKey = authKey
         // (Le `if (!cookieJar)` du TS est un no-op commenté : rien à y porter.)
