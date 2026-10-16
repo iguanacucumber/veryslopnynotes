@@ -35,4 +35,19 @@ describe("keynote deck", () => {
     expect(html).not.toMatch(/index-education\.net|pronote\.example|9741050y/);
     expect(html).not.toMatch(/https?:\/\/[a-z0-9-]+\.[a-z]{2,}/i);
   });
+
+  test("voxel : vendor épinglé + fallback + heartbeat", () => {
+    const html = readFileSync(DECK, "utf8");
+    expect(html).toContain('<script src="vendor/three.min.js">');
+    expect(html).toContain("voxelFallback");
+    expect(html).toContain('id="ambient"');
+    expect(html).toContain("__voxelActive");
+    const vendor = join(ROOT, "keynote", "vendor", "three.min.js");
+    expect(existsSync(vendor)).toBe(true);
+    expect(readFileSync(vendor, "utf8").length).toBeGreaterThan(500_000);
+    const version = readFileSync(join(ROOT, "keynote", "vendor", "VERSION"), "utf8").trim();
+    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+    expect(version).toBe(pkg.devDependencies.three);
+    expect(existsSync(join(ROOT, "keynote", "motion-proof.mjs"))).toBe(true);
+  });
 });

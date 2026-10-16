@@ -11,6 +11,7 @@
         "@types/bun": "1.4.2",
         "playwright": "1.64.1",
         "pronotets": "1.0.0",
+        "three": "0.180.0",
         "tough-cookie": "5.1.2",
         "typescript": "5.9.3",
       },
@@ -64,6 +65,8 @@
     "pronotets": ["pronotets@1.0.0", "", { "dependencies": { "cheerio": "^1.0.0", "tough-cookie": "^5.0.0" } }, "sha512-VW7WPEFiRDgUkZ9CarpRlqFQWzzw9oBVL9TUvVgx89wiE/wDjSmUszRqzOErru/KgsWPQlKB8UB3gFw2M594mg=="],
 
     "safer-buffer": ["safer-buffer@2.1.2", "", {}, "sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg=="],
+
+    "three": ["three@0.180.0", "", {}, "sha512-o+qycAMZrh+TsE01GqWUxUIKR1AL0S8pq7zDkYOQw8GqfX8b8VoCKYUoHbhiX5j+7hr8XsuHDVU6+gkQJQKg9w=="],
 
     "tldts": ["tldts@6.1.86", "", { "dependencies": { "tldts-core": "^6.1.86" }, "bin": { "tldts": "bin/cli.js" } }, "sha512-WMi/OQ2axVTf/ykqCQgXiIct+mSQDFdH2fkwhPwgEwvJ1kSzZRiinb0zF2Xb8u4+OqPChmyI6MEu4EezNJz+FQ=="],
 
