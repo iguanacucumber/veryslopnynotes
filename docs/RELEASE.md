@@ -46,7 +46,7 @@ make build   # check-secrets + docker build (skip si daemon absent)
 - Vérifier : `bun run agents/runtime/check-secrets.ts` OK,
   `bun audit` propre (0 vulnérabilité), `bunx tsc --noEmit` OK.
 
-## APK release (clé hors repo, repli debug #297)
+## APK + AAB release (clé hors repo, repli debug #297)
 
 1. Générer keystore une fois, hors repo (jamais commité, `.gitignore`
    `*.keystore/*.jks`) :
@@ -63,15 +63,21 @@ make build   # check-secrets + docker build (skip si daemon absent)
    ou env `STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD`.
 3. Builder :
    ```sh
-   make buildRelApk   # equivalent : cd android && ./gradlew assembleRelease
+   make buildRelApk   # equivalent : cd android && ./gradlew assembleRelease bundleRelease
    ```
-   Avec clé : APK signé custom (store). Sans clé : APK signé debug
+   Produit deux artefacts signés :
+   - APK : `android/app/build/outputs/apk/release/app-release.apk` (sideload)
+   - AAB : `android/app/build/outputs/bundle/release/app-release.aab` (Play Store)
+
+   Avec clé : signature custom (store/upload key). Sans clé : repli debug
    (installable sideload, sans cert custom — ne pas publier comme mise à
-   jour d'un APK signé custom, signature différente).
+   jour d'un APK signé custom, signature différente ; pour Play, fournir une
+   vraie upload key, Play App Signing re-signant pour la distribution).
    `SERVER_HOST` via `local.properties` `server.host` ou env (défaut
    émulateur `10.0.2.2:3000`, HTTPS-only hors émulateur).
-4. Vérifier : `apksigner verify --print-certs`, aucune clé/secret dans l'APK,
-   `git status` propre (APK ignoré `*.apk`).
+4. Vérifier : `apksigner verify --print-certs` (APK), `jarsigner -verify`
+   (AAB), aucune clé/secret dans les artefacts,
+   `git status` propre (APK/AAB ignorés `*.apk`/`*.aab`).
 
 ## Check-list avant livrable
 
