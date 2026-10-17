@@ -46,7 +46,7 @@ make build   # check-secrets + docker build (skip si daemon absent)
 - Vérifier : `bun run agents/runtime/check-secrets.ts` OK,
   `bun audit` propre (0 vulnérabilité), `bunx tsc --noEmit` OK.
 
-## APK release (clé hors repo)
+## APK release (clé hors repo, repli debug #297)
 
 1. Générer keystore une fois, hors repo (jamais commité, `.gitignore`
    `*.keystore/*.jks`) :
@@ -65,10 +65,12 @@ make build   # check-secrets + docker build (skip si daemon absent)
    ```sh
    make buildRelApk   # equivalent : cd android && ./gradlew assembleRelease
    ```
-   Sans clé : build OK, APK non signé (à signer en local).
+   Avec clé : APK signé custom (store). Sans clé : APK signé debug
+   (installable sideload, sans cert custom — ne pas publier comme mise à
+   jour d'un APK signé custom, signature différente).
    `SERVER_HOST` via `local.properties` `server.host` ou env (défaut
    émulateur `10.0.2.2:3000`, HTTPS-only hors émulateur).
-4. Vérifier : `jarsigner -verify`, aucune clé/secret dans l'APK,
+4. Vérifier : `apksigner verify --print-certs`, aucune clé/secret dans l'APK,
    `git status` propre (APK ignoré `*.apk`).
 
 ## Check-list avant livrable
