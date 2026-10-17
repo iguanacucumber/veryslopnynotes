@@ -335,10 +335,10 @@ screen_texts() {
     printf '%s' "$xml" | tr '>' '\n' | sed -n 's/.*text="\([^"]*\)".*/\1/p' | sed '/^$/d'
 }
 
-# Étapes de l'assistant : certaines seulement selon l'avancement (le parcours
-# change selon le serveur saisi), donc on cherche plusieurs marqueurs.
+# Écran d'appairage : une SEULE page (#299) — le QR qui porte l'adresse + son
+# PIN. Titre et champ sont les deux libellés stables de l'écran.
 is_pairing() {
-    printf '%s' "$1" | grep -qiE 'adresse du serveur|code pin du qr|contenu du qr|ton établissement'
+    printf '%s' "$1" | grep -qiE "qr de l'application|code pin du qr"
 }
 
 # Verrouillage de l'appareil : la capture ne montre alors QUE le clavier du

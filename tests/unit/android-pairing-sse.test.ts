@@ -14,8 +14,9 @@ function read(p: string): string {
 }
 
 // Miroir TS de parseSchoolQr (PairingRepository.kt) : le QR de
-// l'établissement, JSON ou compact. Doit rester en sync avec le Kotlin.
-function tsParseSchoolQr(raw: string): { login: string; jeton: string; url: string | null } | null {
+// l'établissement, JSON ou compact — `url` OBLIGATOIRE (#299). Doit rester en
+// sync avec le Kotlin.
+function tsParseSchoolQr(raw: string): { login: string; jeton: string; url: string } | null {
   const text = raw.trim();
   if (text === "") return null;
   if (text.startsWith("{")) {
@@ -24,19 +25,27 @@ function tsParseSchoolQr(raw: string): { login: string; jeton: string; url: stri
       const login = String(o["login"] ?? "").trim();
       const jeton = String(o["jeton"] ?? "").trim();
       const url = String(o["url"] ?? "").trim();
-      if (login === "" || login.length > 1024 || jeton === "" || jeton.length > 1024) return null;
-      return { login, jeton, url: url === "" ? null : url };
+      if (!bounded(login) || !bounded(jeton) || !boundedUrl(url)) return null;
+      return { login, jeton, url };
     } catch {
       return null;
     }
   }
   const parts = text.split("|");
-  if (parts.length < 2) return null;
+  if (parts.length < 3) return null;
   const login = (parts[0] ?? "").trim();
   const jeton = (parts[1] ?? "").trim();
   const url = (parts[2] ?? "").trim();
-  if (login === "" || login.length > 1024 || jeton === "" || jeton.length > 1024) return null;
-  return { login, jeton, url: url === "" ? null : url };
+  if (!bounded(login) || !bounded(jeton) || !boundedUrl(url)) return null;
+  return { login, jeton, url };
+}
+
+function bounded(value: string): boolean {
+  return value !== "" && value.length <= 1024;
+}
+
+function boundedUrl(value: string): boolean {
+  return value !== "" && value.length <= 300;
 }
 describe("unit android pairing device-only (#206) + sync périodique (#208)", () => {
   test("fichiers app présents (diff minimal, zone autorisée)", () => {
@@ -69,9 +78,11 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     const compact = "a1b2|c3d4|https://etab.exemple/eleve";
     expect(tsParseSchoolQr(json)).toEqual({ login: "a1b2", jeton: "c3d4", url: "https://etab.exemple/eleve" });
     expect(tsParseSchoolQr(compact)).toEqual(tsParseSchoolQr(json));
-    // L'URL est facultative : c'est alors l'adresse saisie à l'étape 1 qui fait foi.
-    expect(tsParseSchoolQr('{"login":"a1b2","jeton":"c3d4"}')).toEqual({ login: "a1b2", jeton: "c3d4", url: null });
-    expect(tsParseSchoolQr("a1b2|c3d4")).toEqual({ login: "a1b2", jeton: "c3d4", url: null });
+    // #299 : l'URL est OBLIGATOIRE (elle vient du QR, plus de saisie) et bornée
+    // comme `SessionStore` (300) : sans elle, le QR est illisible.
+    expect(tsParseSchoolQr('{"login":"a1b2","jeton":"c3d4"}')).toBeNull();
+    expect(tsParseSchoolQr("a1b2|c3d4")).toBeNull();
+    expect(tsParseSchoolQr(`{"login":"a1b2","jeton":"c3d4","url":"${"u".repeat(301)}"}`)).toBeNull();
     for (const junk of ["", "   ", "pas-un-qr", "{", '{"login":"a1b2"}', '{"jeton":"c3d4"}', "|c3d4", "a1b2|"]) {
       expect({ junk, parsed: tsParseSchoolQr(junk) }).toEqual({ junk, parsed: null });
     }
@@ -80,6 +91,7 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     const kt = read(join(DATA, "PairingRepository.kt"));
     expect(kt).toContain("fun parseSchoolQr(raw: String): SchoolQr?");
     expect(kt).toContain("SCHOOL_QR_FIELD_MAX_CHARS = 1024");
+    expect(kt).toContain("boundedSchoolUrl(url)");
     // Le PIN est celui défini dans Pronote (arbitraire), pas un 6 chiffres :
     // non vide et borné, jamais un motif de code serveur.
     expect(kt).toContain("PIN_MAX_CHARS = 64");
@@ -140,17 +152,12 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
       join(UI, "PairingScreen.kt"),
       join(UI, "AppNav.kt"),
     ].map((f) => ({ f, code: codeOnly(read(f)) }));
-    // #213 : l'URL de NOTRE établissement est pré-remplie dans l'écran
-    // d'appairage (choix utilisateur explicite — c'est notre lycée, pas un
-    // hôte tiers). Exception nominative, pas une brèche : un AUTRE hôte en
-    // dur retombe sur `hit: true` et casse le test.
-    const allowedSchool = "https://0000000x.index-education.net/pronote";
     for (const { f, code } of allKt) {
       // Même tolérance que check-architecture.ts (I1 repointé #205 puis #206) :
       // `data`/`ui` manipulent les TYPES du client local (dépendance
       // `project(":pronote")`, ADR-003) — câblage sanctionné, pas un hôte.
+      // Plus aucune URL d'établissement en dur depuis #299 : elle vient du QR.
       const sanctionne = code
-        .replace(allowedSchool, "")
         .replace(/project\(":pronote"\)/g, "")
         .replace(/PronoteSession|PronoteClientProvider/g, "")
         .replace(/fr\.veryslopnynotes\.pronote/g, "");
@@ -210,9 +217,9 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     expect(codeOnly(repo)).not.toContain("data class StoredSession");
     expect(repo).toContain("pin=***)");
     expect(repo).toContain("login=***, jeton=***");
-    // Adresse mal formée (saisie ou QR sans URL) : refus local actionnable,
-    // pas un « établissement muet ».
-    expect(repo).toContain("Adresse de l'établissement invalide");
+    // URL mal formée dans le QR : refus local actionnable (rescan), pas un
+    // « établissement muet ».
+    expect(repo).toContain("QR sans adresse d'établissement valide");
     // Bloquant réseau, jamais de HTTP applicatif ici : ni OkHttp, ni URL.
     expect(codeOnly(repo)).not.toContain("OkHttpClient(");
     expect(codeOnly(repo)).not.toContain("newCall(");
