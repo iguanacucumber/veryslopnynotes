@@ -105,10 +105,11 @@ buildDebugApk:
 	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleDebug && \
 	echo "APK debug : android/app/build/outputs/apk/debug/app-debug.apk"
 
-# APK release : signé SI les credentials de signature sont dans l'environnement
-# (STORE_FILE + mots de passe/alias — JAMAIS dans le repo, voir docs/RELEASE.md),
-# non signé sinon. Gradle ne le dit pas toujours : le rappel ci-dessous est
-# obligatoire pour que personne ne croie avoir un APK publiable.
+# APK release : signé custom SI les credentials de signature sont dans
+# l'environnement (STORE_FILE + mots de passe/alias — JAMAIS dans le repo,
+# voir docs/RELEASE.md), signé debug sinon (#297 : APK public sideload
+# installable sans cert custom). Gradle ne le dit pas toujours : le rappel
+# ci-dessous est obligatoire pour que personne ne croie avoir un APK store.
 buildRelApk:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
@@ -117,7 +118,7 @@ buildRelApk:
 	  android_toolchain_hint; exit 1; \
 	fi; \
 	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleRelease && \
-	echo "APK release : android/app/build/outputs/apk/release/ (sigNE si STORE_FILE présent, sinon NON signé)"
+	echo "APK release : android/app/build/outputs/apk/release/ (signé custom si STORE_FILE présent, sinon signé debug #297)"
 
 # Scraper manuels (#209) : HTTPS sur 0.0.0.0:8080 (l'app Android refuse le
 # clairtext hors émulateur, cf. android/app/src/main/res/xml/network_security_config.xml).
@@ -142,4 +143,4 @@ papillonRef:
 build:
 	bun run agents/runtime/check-secrets.ts
 	docker build -t veryslopnynotes-server:local -f Dockerfile.server . || echo "skip docker (daemon absent)"
-	@if [ -d android/app ]; then echo "APK : make buildDebugApk / make buildRelApk (cle de signature hors repo)"; fi
+	@if [ -d android/app ]; then echo "APK : make buildDebugApk / make buildRelApk (custom hors repo, repli debug #297)"; fi

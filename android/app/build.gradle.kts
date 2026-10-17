@@ -57,11 +57,16 @@ android {
             // Release signée (issue #32) : clé TOUJOURS hors repo.
             // Vars : gradle.properties `release.storeFile/storePassword/keyAlias/
             // keyPassword` ou env STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD.
-            // Absentes = APK non signé (assembleRelease OK, à signer en local).
+            // Présentes = signature release custom. Absentes = repli debug
+            // (#297 : APK public sideload installable sans cert custom, aucun
+            // secret en repo — clé debug auto Gradle). Ne pas publier ce repli
+            // comme mise à jour d'un APK signé custom (signature différente).
             val storeFileProp = (project.findProperty("release.storeFile") as String?)
                 ?: System.getenv("STORE_FILE")
             if (!storeFileProp.isNullOrBlank()) {
                 signingConfig = signingConfigs.getByName("release")
+            } else {
+                signingConfig = signingConfigs.getByName("debug")
             }
         }
     }
