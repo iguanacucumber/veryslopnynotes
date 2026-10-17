@@ -386,8 +386,18 @@ class Client(
             // Comme `new URL()` : userinfo gardée, IPv6 entre crochets, ports par
             // défaut (:80/:443) omis, hash vidé. Les URL d'établissement réelles
             // sont simples ; c'est la fidélité des cas tordus qui est verrouillée ici.
-            val uri = java.net.URI(raw)
-            val segs = uri.path.split("/").toMutableList()
+            // ponytail: `.../pronote` -> `.../pronote/eleve.html` (prefill + saisie
+            // sans fichier sinon 404-fast -> school_unreachable). Full eleve.html intact.
+            // URLs malformees -> IllegalArgumentException (bad_request, pas school_unreachable).
+            val uri = try {
+                java.net.URI(raw.trim())
+            } catch (e: Exception) {
+                throw IllegalArgumentException("URL sans hote : $raw")
+            }
+            var normPath = uri.path ?: ""
+            val noTrail = if (normPath.endsWith("/") && normPath.length > 1) normPath.dropLast(1) else normPath
+            if (noTrail.endsWith("/pronote")) normPath = "$noTrail/eleve.html"
+            val segs = normPath.split("/").toMutableList()
             if (!segs.last().startsWith("mobile.")) segs[segs.size - 1] = "mobile." + segs.last()
             val userinfo = if (!uri.userInfo.isNullOrEmpty()) "${uri.userInfo}@" else ""
             var host = uri.host ?: throw IllegalArgumentException("URL sans hôte : $raw")
