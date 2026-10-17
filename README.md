@@ -65,7 +65,7 @@ Client Android :
 
 ```bash
 make buildDebugApk             # APK debug  -> android/app/build/outputs/apk/debug/
-make buildRelApk               # APK release (signé si STORE_FILE est dans l'environnement)
+make buildRelApk               # APK + AAB release (signés ; custom si STORE_FILE, sinon debug)
 ```
 
 Les trois cibles Gradle trouvent leur JDK et leur SDK toutes seules et **échouent** si l'outillage

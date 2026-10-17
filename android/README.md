@@ -120,7 +120,7 @@ sinon l'erreur suivante est un `HostnameVerifier`, pas une erreur d'ancre.
 
 ```sh
 make buildDebugApk
-make buildRelApk
+make buildRelApk   # APK + AAB release, signés (custom si STORE_FILE, sinon debug #297)
 ```
 
 `make check` compile réellement Kotlin si JDK 17–21 et SDK Android 34 sont
