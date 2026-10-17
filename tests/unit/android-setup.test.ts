@@ -1,9 +1,9 @@
-// Assistant de connexion Android (#120, repointé #206 : device-only) —
-// établissement -> QR. Kotlin n'a pas de src/test dans ce dépôt : on rejoue
-// donc la logique pure en TypeScript (tableau rejouable contre le vrai Kotlin)
-// et on vérifie par lecture de source ce que seul l'écran peut garantir :
-// l'ordre des étapes, le gate au lancement, et le fait que le PIN n'est écrit
-// nulle part.
+// Assistant de connexion Android (#120, repointé #206 : device-only, page
+// unique #299) — le QR de l'établissement + son PIN. Kotlin n'a pas de
+// src/test dans ce dépôt : on rejoue donc la logique pure en TypeScript
+// (tableau rejouable contre le vrai Kotlin) et on vérifie par lecture de source
+// ce que seul l'écran peut garantir : l'adresse vient du QR, le gate au
+// lancement, et le fait que le PIN n'est écrit nulle part.
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -12,14 +12,17 @@ const ROOT = join(import.meta.dir, "..", "..");
 const ANDROID = join(ROOT, "android");
 const DATA = join(ANDROID, "data/src/main/java/fr/veryslopnynotes/data");
 const UI = join(ANDROID, "ui/src/main/java/fr/veryslopnynotes/ui");
-const CORE = join(ANDROID, "core/src/main/java/fr/veryslopnynotes/core");
 
 function read(file: string): string {
   return readFileSync(file, "utf8");
 }
 
-/** Miroir de `parseSchoolQr` (PairingRepository.kt) — rejouable tel quel. */
-function tsParseSchoolQr(raw: string): { login: string; jeton: string; url: string | null } | null {
+/**
+ * Miroir de `parseSchoolQr` (PairingRepository.kt) — rejouable tel quel.
+ * L'`url` est OBLIGATOIRE (#299) : plus d'étape de saisie pour la fournir,
+ * donc un QR sans adresse est un QR illisible.
+ */
+function tsParseSchoolQr(raw: string): { login: string; jeton: string; url: string } | null {
   const text = raw.trim();
   if (text === "") return null;
   if (text.startsWith("{")) {
@@ -28,23 +31,28 @@ function tsParseSchoolQr(raw: string): { login: string; jeton: string; url: stri
       const login = String(o["login"] ?? "").trim();
       const jeton = String(o["jeton"] ?? "").trim();
       const url = String(o["url"] ?? "").trim();
-      if (!bounded(login) || !bounded(jeton)) return null;
-      return { login, jeton, url: url === "" ? null : url };
+      if (!bounded(login) || !bounded(jeton) || !boundedUrl(url)) return null;
+      return { login, jeton, url };
     } catch {
       return null;
     }
   }
   const parts = text.split("|");
-  if (parts.length < 2) return null;
+  if (parts.length < 3) return null;
   const login = (parts[0] ?? "").trim();
   const jeton = (parts[1] ?? "").trim();
   const url = (parts[2] ?? "").trim();
-  if (!bounded(login) || !bounded(jeton)) return null;
-  return { login, jeton, url: url === "" ? null : url };
+  if (!bounded(login) || !bounded(jeton) || !boundedUrl(url)) return null;
+  return { login, jeton, url };
 }
 
 function bounded(value: string): boolean {
   return value !== "" && value.length <= 1024;
+}
+
+/** Miroir de `boundedSchoolUrl` : 300 caractères, comme `SessionStore`. */
+function boundedUrl(value: string): boolean {
+  return value !== "" && value.length <= 300;
 }
 
 describe("QR de l'établissement : parsing (miroir exécutable)", () => {
@@ -53,9 +61,21 @@ describe("QR de l'établissement : parsing (miroir exécutable)", () => {
     const compact = "a1b2|c3d4|https://etab.exemple/eleve";
     expect(tsParseSchoolQr(json)).toEqual({ login: "a1b2", jeton: "c3d4", url: "https://etab.exemple/eleve" });
     expect(tsParseSchoolQr(compact)).toEqual(tsParseSchoolQr(json));
-    // L'URL est facultative : c'est alors celle saisie à l'étape 1 qui fait foi.
-    expect(tsParseSchoolQr('{"login":"a1b2","jeton":"c3d4"}')).toEqual({ login: "a1b2", jeton: "c3d4", url: null });
-    expect(tsParseSchoolQr("a1b2|c3d4")).toEqual({ login: "a1b2", jeton: "c3d4", url: null });
+  });
+
+  test("un QR sans URL est illisible (#299) : plus d'étape de saisie pour la fournir", () => {
+    // Le QR Pronote réel porte toujours `url` (cf. pronotepy) — un QR sans
+    // adresse est donc un QR que l'app ne sait pas utiliser, jamais un cas à
+    // rattraper par une saisie.
+    for (const sansUrl of [
+      '{"login":"a1b2","jeton":"c3d4"}',
+      '{"login":"a1b2","jeton":"c3d4","url":""}',
+      "a1b2|c3d4",
+      "a1b2|c3d4|",
+      `{"login":"a1b2","jeton":"c3d4","url":"https://etab.exemple/${"u".repeat(300)}"}`,
+    ]) {
+      expect({ sansUrl, parsed: tsParseSchoolQr(sansUrl) }).toEqual({ sansUrl, parsed: null });
+    }
   });
 
   test("un QR illisible vaut null (l'écran dit « rescane »), jamais une valeur inventée", () => {
@@ -70,46 +90,48 @@ describe("QR de l'établissement : parsing (miroir exécutable)", () => {
       '{"login":"a1b2","jeton":""}',
       "|c3d4",
       "a1b2|",
-      `{"login":"${"x".repeat(1025)}","jeton":"c3d4"}`,
+      `{"login":"${"x".repeat(1025)}","jeton":"c3d4","url":"https://etab.exemple/eleve"}`,
     ]) {
       expect({ junk, parsed: tsParseSchoolQr(junk) }).toEqual({ junk, parsed: null });
     }
   });
 });
 
-describe("assistant : le parcours est bien l'ordre annoncé", () => {
+describe("assistant : une seule page, l'adresse vient du QR (#299)", () => {
   const screen = read(join(UI, "PairingScreen.kt"));
   const state = read(join(UI, "PairingUiState.kt"));
+  const repo = read(join(DATA, "PairingRepository.kt"));
 
-  test("deux étapes nommées, dans l'ordre — plus d'étape serveur", () => {
-    expect(state).toContain("enum class SetupStep");
-    expect(state).toContain("SCHOOL,");
-    expect(state).toContain("QR,");
-    expect(state).not.toContain("SERVER");
-    expect(state).not.toContain("ACCOUNT");
-    for (const label of ["Étape 1/2", "Étape 2/2"]) {
-      expect(state).toContain(label);
-    }
-    expect(state).not.toContain("1/3");
-  });
-
-  test("étape 1 : l'adresse de l'établissement, validée en local, sans sonde réseau", () => {
-    // #206 : plus d'étape serveur, donc plus de sonde de joignabilité — le
-    // téléphone parlera à l'établissement à l'étape 2, avec le QR.
-    expect(screen).toContain("isBoundedSchoolUrl(form.schoolUrl)");
-    expect(screen).toContain("Adresse de l'établissement absente : elle est obligatoire.");
-    expect(screen).toContain("onNext(SetupStep.QR)");
-    expect(screen).not.toContain("probeHealthBlocking");
-    expect(screen).not.toContain("HealthResult");
-    expect(screen).not.toContain("onServerChange");
-    expect(screen).not.toContain("changeServer");
+  test("plus d'étape « établissement » : l'écran ne fait saisir aucun hôte", () => {
+    // L'ancienne étape 1 (adresse pré-remplie #213, validée en local) est
+    // supprimée : le QR porte `url`, donc il n'y a plus rien à taper.
+    expect(state).not.toContain("SetupStep");
+    expect(state).not.toContain("DEFAULT_SCHOOL_URL");
+    expect(state).not.toContain("schoolUrl");
+    expect(screen).not.toContain("isBoundedSchoolUrl");
+    expect(screen).not.toContain('label = { Text("Adresse de l\'établissement") }');
     // Aucun champ identifiant/mot de passe ne subsiste dans l'app.
     expect(state).not.toContain("val username");
     expect(state).not.toContain("val password");
     expect(state).not.toContain("hasCredentials");
+    // Et aucun reste de sonde réseau de l'étape serveur (retirée en #206).
+    expect(screen).not.toContain("probeHealthBlocking");
+    expect(screen).not.toContain("HealthResult");
+    expect(screen).not.toContain("changeServer");
   });
 
-  test("étape 2 : QR + PIN, la méthode UNIQUE — un des deux seul ne part pas", () => {
+  test("le dépôt ouvre la session avec l'URL du QR, jamais une saisie", () => {
+    expect(repo).toContain("val schoolUrl = qr.url");
+    expect(repo).toContain("QrCode(login = qr.login, jeton = qr.jeton, url = schoolUrl)");
+    // Un QR sans URL ne passe même pas le parseur (borné, comme `SessionStore`).
+    expect(repo).toContain("!boundedSchoolUrl(url)");
+    expect(repo).toContain("SCHOOL_URL_MAX_CHARS = 300");
+    // URL malformée : refus local actionnable (rescan), jamais un
+    // « établissement muet ».
+    expect(repo).toContain("QR sans adresse d'établissement valide");
+  });
+
+  test("QR + PIN, la méthode UNIQUE — un des deux seul ne part pas", () => {
     expect(screen).toContain("val qr = parseSchoolQr(form.qrRaw)");
     // Le Pin est la clé de déchiffrement du QR : sans lui, le QR ne sert à rien.
     expect(screen).toContain("Code PIN du QR obligatoire : il déchiffre le contenu scanné.");
@@ -196,26 +218,18 @@ describe("assistant : le PIN est un secret affiché comme tel (#172)", () => {
     // `toString()` est rédigé (pas de PIN en clair dans un rapport de crash).
     expect(state).toContain('val pin: String = ""');
     expect(state).toContain("qrRaw=***, pin=***");
+    // #299 : la saisie (QR + PIN) n'est dans AUCUN saver — plus de
+    // `SetupFormSaver`, donc plus rien de l'assistant dans `rememberSaveable`.
+    expect(state).not.toContain("SetupFormSaver");
   });
 
-  test("le parcours a un retour en arrière (miroir exécutable)", () => {
-    // L'escalier était à sens unique : 1 → 2 → 3. Le « Retour » du haut appelle
-    // `popBackStack`, qui ne peut rien faire au premier lancement (l'appairage est
-    // la route de départ) ni après une session morte (pile vidée) : l'étape 2
-    // n'avait aucun chemin de retour, donc une adresse mal saisie ne pouvait
-    // plus être corrigée. On rejoue le miroir ci-dessous, on lit l'écran pour le
-    // branchement.
-    const tsPrecedente = (step: "SCHOOL" | "QR"): string | null => (step === "SCHOOL" ? null : "SCHOOL");
-    // La seule étape depuis laquelle on peut reculer (la première n'en a pas).
-    expect({ un_cran: tsPrecedente("QR") }).toEqual({ un_cran: "SCHOOL" });
-    expect({ premier: tsPrecedente("SCHOOL") }).toEqual({ premier: null });
-    // L'écran : le bouton de retour choisit entre l'étape précédente et la sortie.
-    expect(state).toContain("fun previousStep(step: SetupStep): SetupStep?");
-    expect(screen).toContain("val previous = previousStep(step)");
-    expect(screen).toContain("if (previous != null) step = previous else onBack()");
-    expect(screen).toContain('Text(if (previous != null) "Étape précédente" else "Retour")');
-    // Et la sortie reste possible à la première étape (donc hors parcours).
-    expect(screen).toContain("else onBack()");
+  test("le retour quitte l'écran (plus d'étape à remonter)", () => {
+    // #299 : la page unique n'a plus de « Étape précédente » — le bouton du haut
+    // est le seul retour, et il sort de l'assistant.
+    expect(state).not.toContain("previousStep");
+    expect(screen).not.toContain("previousStep");
+    expect(screen).toMatch(/TextButton\(\s*onClick = onBack,/);
+    expect(screen).toContain('Text("Retour")');
   });
 });
 
@@ -355,7 +369,7 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
   test("annuler le scan NE DÉTRUIT PAS l'assistant (clearTaskOnLaunch de la lib)", () => {
     // Constaté sur l'appareil : zxing déclare son activité `clearTaskOnLaunch`,
     // donc ouvrir le scan DÉTRUISAIT MainActivity — au retour on se retrouvait
-    // à l'étape 1, saisie d'établissement comprise, saisie à perdu.
+    // à zéro, saisie perdue.
     expect(manifest).toContain('android:name="com.journeyapps.barcodescanner.CaptureActivity"');
     expect(manifest).toContain('android:clearTaskOnLaunch="false"');
     expect(manifest).toContain("android:clearTaskOnLaunch,android:screenOrientation");
@@ -371,11 +385,11 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
     }
   });
 
-  test("chaque étape défile : en paysage, « Continuer » tombait hors écran", () => {
+  test("la page défile : en paysage, l'action principale tombait hors écran", () => {
     // Le téléphone en rotation verrouillée (paysage) : la colonne débordait, le
     // bouton était hors de l'écran et donc inatteignable. L'assistant était
     // inutilisable — et le scanner, lui, s'ouvrait très bien.
-    expect(screen.split("verticalScroll(rememberScrollState())").length - 1).toBe(2);
+    expect(screen.split("verticalScroll(rememberScrollState())").length - 1).toBe(1);
   });
 
   // #148 (recette des 14 écrans) : la capture de la route `pairing` montrait
@@ -383,20 +397,19 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
   // l'un sous l'autre.
   //
   // 1. « Retour » était un `Button` REMPLI : deux boutons verts de même poids
-  //    sur l'écran (« Retour » et « Continuer »), donc plus aucune action
-  //    principale. Le retour est secondaire : `TextButton` le dit par son encre.
-  // 2. Le titre de l'étape était suivi d'un doublon : le même mot deux fois
-  //    dans la même colonne. Le titre d'étape est le `heading()` que le survol
+  //    sur l'écran, donc plus aucune action principale. Le retour est
+  //    secondaire : `TextButton` le dit par son encre, et l'image ne change pas.
+  // 2. Le titre de l'écran était suivi d'un doublon : le même mot deux fois
+  //    dans la même colonne. Le titre est le `heading()` que le survol
   //    annonce, il suffit.
-  test("#148 : retour secondaire, et pas de doublon dans l'étape 1", () => {
-    expect(screen).toMatch(/TextButton\(\s*onClick = \{ if \(previous != null\) step = previous else onBack\(\) \}/);
-    // « Continuer » reste un bouton rempli d'étape ; le retour de l'assistant
-    // n'en fait plus partie.
-    const boutonsRemplis = screen.match(/\n {8}Button\(/g) ?? [];
-    // QrStep porte ses boutons d'action, SchoolStep le sien ; le retour de
-    // l'assistant n'en fait plus partie.
-    expect(boutonsRemplis.length).toBeLessThanOrEqual(4);
-    // ...et le titre d'étape reste le repère du survol.
-    expect(screen).toContain('text = setupStepLabel(step)');
+  test("#148 : retour secondaire, et pas de doublon dans la page unique", () => {
+    expect(screen).toMatch(/TextButton\(\s*onClick = onBack,/);
+    // Deux boutons REMPLIS seulement : « Scanner le QR » et « Terminer » ; le
+    // retour de l'assistant n'en fait plus partie.
+    const boutonsRemplis = screen.match(/\n\s+Button\(/g) ?? [];
+    expect(boutonsRemplis.length).toBe(2);
+    // ...et le titre de la page reste le repère du survol.
+    expect(screen).toContain('text = "QR de l\'application"');
+    expect(screen).toContain("semantics { heading() }");
   });
 });

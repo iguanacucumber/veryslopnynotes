@@ -1,6 +1,6 @@
 # HUMAN_INPUTS.md — apports humains, sans valeurs secrètes
 
-- **Compte Pronote** : l'utilisateur scanne le QR de l'application Pronote et saisit son PIN dans l'app. La session ne quitte pas le téléphone.
+- **Compte Pronote** : l'utilisateur scanne le QR de l'application Pronote (il porte l'adresse de l'établissement) et saisit son PIN dans l'app. La session ne quitte pas le téléphone.
 - **Clé OpenRouter** : saisie dans les réglages de l'app, stockée chiffrée et envoyée directement à OpenRouter. Aucun modèle ni secret à configurer côté serveur.
 - **Scraper de manuels (facultatif)** : l'appelant fournit plateforme, identifiants du portail et URL de départ dans le corps de `POST /v1/manuals/scrape`. L'endpoint n'a pas d'authentification ; ne l'exposer qu'avec un proxy authentifié. Le cookie jar est local et gitignoré. Voir le risque SSRF dans [les invariants](architecture/INVARIANTS.md).
 - **Signature APK release** : keystore hors du dépôt (voir [`RELEASE.md`](RELEASE.md)).

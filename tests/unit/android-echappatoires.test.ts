@@ -214,16 +214,16 @@ describe("échappatoires #147 : une seule implémentation des dates françaises"
 });
 
 describe("échappatoires #147 : plus d'état de formulaire perdu à la rotation", () => {
-  test("les saisies sont SAUVEGARDÉES (brouillons, semaine, période, filtre, étape)", () => {
+  test("les saisies sont SAUVEGARDÉES (brouillons, semaine, période, filtre)", () => {
     // AVANT #147 : ZÉRO `rememberSaveable` dans le module. Tourner l'écran
     // effaçait le brouillon de réponse, la nouvelle discussion, l'adresse du
     // serveur, la semaine affichée, la période filtrée, la compétence ouverte,
     // la question posée à l'assistant.
+    //
+    // L'assistant d'appairage (#299) est la seule exception VOLONTAIRE : sa
+    // saisie (QR + PIN) est un credential, donc elle ne se recopie pas dans
+    // l'état d'activité — c'est le test suivant qui le verrouille.
     const attendu: Record<string, string[]> = {
-      "PairingScreen.kt": [
-        "var step by rememberSaveable",
-        "var form by rememberSaveable(stateSaver = SetupFormSaver)",
-      ],
       "MessagesScreen.kt": [
         "var query by rememberSaveable",
         "var subject by rememberSaveable",
@@ -271,10 +271,11 @@ describe("échappatoires #147 : plus d'état de formulaire perdu à la rotation"
     const settings = readFileSync(join(UI, "SettingsScreen.kt"), "utf8");
     expect(settings).toContain("var llmKey by remember { mutableStateOf(\"\") }");
     expect(settings).not.toContain("rememberSaveable { mutableStateOf(llmKey");
-    // Le QR et son PIN sont la preuve de détention : hors de l'état sauvegardé,
-    // comme la clé LLM. Seule l'adresse de l'établissement y entre.
+    // Le QR et son PIN sont la preuve de détention : plus aucun saver pour la
+    // saisie (#299 : `SetupFormSaver` supprimé avec l'étape d'adresse). Seule
+    // l'erreur du scan reste en `rememberSaveable`, dans l'écran.
     const setup = readFileSync(join(UI, "PairingUiState.kt"), "utf8");
-    expect(setup).toContain("save = { listOf(it.schoolUrl) }");
+    expect(setup).not.toContain("SetupFormSaver");
     expect(setup).not.toContain("it.qrRaw");
     expect(setup).not.toContain("it.pin");
     for (const dir of [CORE, UI]) {
