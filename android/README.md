@@ -28,21 +28,23 @@ l'extrait de cours de ce devoir, la réponse est un corrigé sourcé ou un refus
 l'assistant reste inactif (aucun appel). Le serveur de manuels ne reçoit pas cette clé ; elle
 reste une credential stockée sur l'appareil.
 
-## Assistant de connexion (2 étapes, device-only, #206)
+## Assistant de connexion (une page, device-only, #206/#299)
 
-Lancement → **1. ton établissement** (son adresse élève, validée en local) →
-**2. le QR de l'application de l'établissement** (contenu `login`+`jeton` + son
-PIN, scanné avec la caméra). Le téléphone ouvre la session en direct
-(`Client.qrcodeLogin`, ADR-003) : aucun serveur intermédiaire. Le PIN déchiffre le QR sur place et n'est jamais persisté ;
-seul le jeton tourné dort chiffré (`SessionStore`). Sans session persistée, le
-démarrage ouvre l'assistant au lieu de l'accueil ; après une session morte
-(jeton tourné, session refermée), c'est lui qui rouvre la session locale.
+Lancement → **le QR de l'application de l'établissement** (contenu
+`login`+`jeton`+`url` + son PIN, scanné avec la caméra). Le QR porte l'adresse
+de l'établissement : **rien n'est saisi à l'écran** (l'ancienne étape « adresse
+de l'établissement » est supprimée, #299), et le téléphone ouvre la session en
+direct (`Client.qrcodeLogin`, ADR-003) : aucun serveur intermédiaire. Le PIN
+déchiffre le QR sur place et n'est jamais persisté ; seul le jeton tourné dort
+chiffré (`SessionStore`). Sans session persistée, le démarrage ouvre l'assistant
+au lieu de l'accueil ; après une session morte (jeton tourné, session refermée),
+c'est lui qui rouvre la session locale.
 
-Chaque étape **défile** : en paysage (rotation verrouillée), la colonne
-débordait et « Continuer » tombait hors de l'écran. Ouvrir le scan ne détruit
-plus l'assistant non plus : zxing déclare son activité `clearTaskOnLaunch`, ce
-qui relançait `MainActivity` à zéro au retour du scan — l'appartenance
-`android:clearTaskOnLaunch="false"` + `tools:replace` dans
+La page **défile** : en paysage (rotation verrouillée), la colonne
+débordait et l'action principale tombait hors de l'écran. Ouvrir le scan ne
+détruit plus l'assistant non plus : zxing déclare son activité
+`clearTaskOnLaunch`, ce qui relançait `MainActivity` à zéro au retour du scan —
+l'appartenance `android:clearTaskOnLaunch="false"` + `tools:replace` dans
 `app/src/main/AndroidManifest.xml` annule ce drapeau (vérifié sur l'appareil).
 
 Aucun identifiant n'est saisi ni stocké sur le téléphone (le QR est la
@@ -50,7 +52,7 @@ seule preuve de détention). Le QR et son PIN ne quittent pas l'appareil : le
 PIN déchiffre `login`+`jeton` en mémoire, au moment de l'appairage, et n'est
 ni persisté, ni journalisé.
 
-Le QR de l'étape 2 se **scanne** (`ui/QrScanner.kt`, `zxing-android-embedded`
+Le QR se **scanne** (`ui/QrScanner.kt`, `zxing-android-embedded`
 4.3.0 : décodeur dans l'APK, permission CAMERA déclarée par l'AAR et demandée par
 l'activité de scan, ~20 lignes d'appel, pas d'aperçu à maintenir). Ça marche
 donc partout, **y compris sans Google Play Services** — ce que ne faisait pas le
@@ -59,7 +61,9 @@ service absent (émulateur, téléphone sans GMS) et dont l'échec revenait en `
 sans rien afficher, donc un bouton qui semblait inerte. Annulation,
 permission refusée ou QR illisible → `null` **et une phrase qui dit de
 rescanner** ; le scan est verrouillé en portrait (manifeste + `QrScanner.kt`),
-comme l'écran qui affiche le QR.
+comme l'écran qui affiche le QR. Un QR sans `url` est illisible pour l'app
+(plus de repli sur une saisie) : `parseSchoolQr` renvoie `null`, même phrase
+« rescane ».
 
 L'allowlist est donc `core/ServerConfig.validateBaseUrl` (et `isAllowed` en
 préfixe strict), pas une constante de build : `https` obligatoire, `http` uni-

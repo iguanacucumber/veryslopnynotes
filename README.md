@@ -87,7 +87,7 @@ Seules variables lues, aucune secrète : `PORT`, `HOST`, `TLS_CERT_FILE`, `TLS_K
 `make runServer` génère un certificat auto-signé hors du dépôt (`~/.cache/veryslopnynotes/tls`) ;
 fournissez les deux variables TLS pour un certificat émis (mkcert, Let's Encrypt).
 
-Apports humains (compte, URL d'établissement) : [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md).
+Apports humains (compte Pronote, clé OpenRouter, signature) : [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md).
 
 Tests
 -----

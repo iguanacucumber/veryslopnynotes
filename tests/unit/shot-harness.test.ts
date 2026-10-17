@@ -810,7 +810,7 @@ function ecran(h: { dir: string }, labels: string[]): void {
 
 /** Garde-fous de `verify_route` : les deux dérives nommées (cf. shot.sh). */
 const TEMOIN_PROFIL = "Détecter les onglets";
-const ARTEFACT_APPAIRAGE = /adresse du serveur|code pin du qr|contenu du qr|ton établissement/;
+const ARTEFACT_APPAIRAGE = /qr de l'application|code pin du qr/i;
 
 /**
  * Tout le module `ui` en un seul texte : un libellé de fixture doit être RÉEL,
@@ -968,11 +968,14 @@ const VARIANTES: Record<string, Variante> = {
     vide: ["Rechercher une discussion", "Aucune discussion.", "Actualiser"],
     erreur: ["Rechercher une discussion", "Erreur réseau. Réessayer.", "Réessayer"],
   },
-  // Le bouton « Retour » est rendu par TOUTES les étapes. Pas de barre d'onglets
-  // (`showsTabBar`), et ces libellés déclenchent le garde-fou d'appairage —
-  // ce que la règle ci-dessous doit donc reproduire.
+  // L'assistant est une PAGE UNIQUE (#299) : le QR (qui porte l'adresse de
+  // l'établissement) + son PIN. Aucune donnée n'y transite (device-only), donc
+  // les deux variantes rejouent la même page — le corps ne dépend d'aucune
+  // lecture ; le bouton « Retour » est rendu dans tous les cas. Pas de barre
+  // d'onglets (`showsTabBar`), et ces libellés déclenchent le garde-fou
+  // d'appairage — ce que la règle ci-dessous doit donc reproduire.
   pairing: {
-    plein: ["Ton établissement", "Adresse de l'établissement", "Continuer", "Retour"],
+    plein: ["QR de l'application", "Scanner le QR", "Code PIN du QR", "Terminer", "Retour"],
     vide: ["QR de l'application", "Scanner le QR", "Code PIN du QR", "Terminer", "Retour"],
   },
   // Titre de section rendu avant l'état.

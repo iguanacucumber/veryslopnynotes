@@ -13,15 +13,15 @@ import org.json.JSONObject
 // Payload du QR affiché par l'application Pronote (#120). `login` et
 // `jeton` sont des blocs chiffrés dont la clé est le PIN : il faut les deux
 // pour ouvrir la session, et le PIN est celui défini dans Pronote (pas un
-// code imposé par l'app). `url` n'est pas toujours présent dans le QR —
-// sinon c'est l'URL saisie à l'étape 1 qui fait foi.
+// code imposé par l'app). `url` est l'adresse de l'établissement portée par
+// le QR (#299) : c'est la SEULE source, il n'y a plus d'étape de saisie.
 //
 // `toString()` rédigé : `login`/`jeton` sont des chiffrés, mais ils n'ont
 // rien à faire dans un rapport de crash.
 data class SchoolQr(
     val login: String,
     val jeton: String,
-    val url: String? = null,
+    val url: String,
 ) {
     override fun toString(): String = "SchoolQr(login=***, jeton=***, url=$url)"
 }
@@ -34,11 +34,10 @@ data class SchoolQr(
  * `toString()` rédigé : le PIN en clair dans un rapport de crash, jamais.
  */
 data class PairingInput(
-    val schoolUrl: String,
     val qr: SchoolQr? = null,
     val pin: String = "",
 ) {
-    override fun toString(): String = "PairingInput(schoolUrl=$schoolUrl, qr=$qr, pin=***)"
+    override fun toString(): String = "PairingInput(qr=$qr, pin=***)"
 }
 
 /** Sortie de l'appairage local, avec un message prêt à afficher pour chaque refus. */
@@ -62,9 +61,10 @@ sealed interface RestoreResult {
 
 // Appairage 100 % sur l'appareil (#206, ADR-003) : le QR de l'établissement +
 // son PIN ouvrent la session Pronote DIRECTEMENT (`Client.qrcodeLogin`, le
-// port `android/pronote/`), sans serveur intermédiaire. Le PIN déchiffre
-// `login`/`jeton` sur le téléphone et n'en sort jamais — il n'est ni persisté
-// (voir `SessionStore`), ni journalisé, ni dans un message d'erreur.
+// port `android/pronote/`), sans serveur intermédiaire. C'est le QR qui porte
+// l'adresse de l'établissement (#299) : plus rien n'est saisi à l'écran. Le PIN
+// déchiffre `login`/`jeton` sur le téléphone et n'en sort jamais — il n'est ni
+// persisté (voir `SessionStore`), ni journalisé, ni dans un message d'erreur.
 //
 // Bloquant (réseau Pronote, jamais le thread UI : l'écran file en tâche de
 // fond). I1 : seul `android/pronote/` parle au serveur de l'établissement ;
@@ -81,8 +81,6 @@ class PairingRepository(
      * appairage, persisté avec la session (le re-pair en régénère un).
      */
     fun pairBlocking(input: PairingInput, deviceName: String = "", uuid: String = newUuid()): PairingResult {
-        val schoolUrl = input.schoolUrl.trim()
-        if (schoolUrl.isEmpty()) return PairingResult.Err("bad_request", "Adresse de l'établissement absente")
         // QR + PIN = la seule méthode : sans les deux, pas d'appel réseau (le
         // téléphone refuserait comme l'établissement, en plus lent).
         val qr = input.qr
@@ -93,18 +91,20 @@ class PairingRepository(
         if (pin.length > PIN_MAX_CHARS) {
             return PairingResult.Err("bad_request", "PIN refusé : vérifie le code défini dans ton compte établissement.")
         }
-        val qrUrl = qr.url?.trim().orEmpty().ifEmpty { schoolUrl }
+        // L'adresse vient du QR (#299) : `parseSchoolQr` refuse déjà un QR sans
+        // URL, donc elle est là et bornée. Le client la revalide.
+        val schoolUrl = qr.url
         val client = try {
             Client.qrcodeLogin(
-                QrCode(login = qr.login, jeton = qr.jeton, url = qrUrl),
+                QrCode(login = qr.login, jeton = qr.jeton, url = schoolUrl),
                 pin,
                 uuid,
                 QrLoginOptions(deviceName = deviceName.trim().ifEmpty { null }),
             )
         } catch (e: IllegalArgumentException) {
-            // URL sans hôte (saisie de l'étape 1 ou QR sans URL) : la faute est
-            // locale et corrigeable, pas un établissement muet.
-            return PairingResult.Err("bad_request", "Adresse de l'établissement invalide : vérifie l'adresse saisie à l'étape 1.")
+            // URL du QR illisible (URI malformée) : la faute est dans le code
+            // scanné, donc le seul geste utile est de le rescanner.
+            return PairingResult.Err("bad_request", "QR sans adresse d'établissement valide : rescane le code affiché par son application.")
         } catch (e: Exception) {
             return failure(e)
         }
@@ -207,17 +207,13 @@ private fun isLoginRefused(message: String): Boolean =
 private const val SCHOOL_QR_FIELD_MAX_CHARS = 1024
 private const val SCHOOL_URL_MAX_CHARS = 300
 
-/** URL d'établissement bornée avant usage (le client revalide de son côté). */
-fun isBoundedSchoolUrl(value: String): Boolean {
-    val text = value.trim()
-    return text.isNotEmpty() && text.length <= SCHOOL_URL_MAX_CHARS
-}
-
 /**
  * Contenu scanné → payload du QR de l'établissement.
  * Deux formes acceptées : le JSON que produit l'application de l'établissement
- * (`{"login":…,"jeton":…}`) et la forme compacte `login|jeton[|url]`.
- * Renvoie `null` plutôt que de lever : l'appelant affiche « QR illisible ».
+ * (`{"login":…,"jeton":…,"url":…}`) et la forme compacte `login|jeton|url`.
+ * L'`url` est OBLIGATOIRE (#299) : plus d'étape de saisie, donc un QR sans
+ * adresse est un QR que l'app ne sait pas utiliser — `null`, l'appelant
+ * affiche « QR illisible ». Renvoie `null` plutôt que de lever.
  */
 fun parseSchoolQr(raw: String): SchoolQr? {
     val text = raw.trim()
@@ -228,19 +224,24 @@ fun parseSchoolQr(raw: String): SchoolQr? {
             val login = o.optString("login", "").trim()
             val jeton = o.optString("jeton", "").trim()
             val url = o.optString("url", "").trim()
-            if (!bounded(login) || !bounded(jeton)) null else SchoolQr(login, jeton, url.ifEmpty { null })
+            if (!bounded(login) || !bounded(jeton) || !boundedSchoolUrl(url)) null
+            else SchoolQr(login, jeton, url)
         } catch (_: Exception) {
             null
         }
     }
     val parts = text.split('|')
-    if (parts.size < 2) return null
+    if (parts.size < 3) return null
     val login = parts[0].trim()
     val jeton = parts[1].trim()
-    val url = parts.getOrNull(2)?.trim().orEmpty()
-    if (!bounded(login) || !bounded(jeton)) return null
-    return SchoolQr(login, jeton, url.ifEmpty { null })
+    val url = parts[2].trim()
+    if (!bounded(login) || !bounded(jeton) || !boundedSchoolUrl(url)) return null
+    return SchoolQr(login, jeton, url)
 }
 
 private fun bounded(value: String): Boolean =
     value.isNotEmpty() && value.length <= SCHOOL_QR_FIELD_MAX_CHARS
+
+/** Adresse portée par le QR, bornée avant usage (le client revalide de son côté). */
+private fun boundedSchoolUrl(value: String): Boolean =
+    value.isNotEmpty() && value.length <= SCHOOL_URL_MAX_CHARS

@@ -504,11 +504,6 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
       if (f.includes("/android/pronote/")) continue;
       let code = codeOnly(read(f));
       if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
-      // #213 : l'adresse pré-remplie de l'appairage contient "pronote" (c'est
-      // une URL d'établissement réelle, choix utilisateur explicite). Retirée
-      // des DEUX balayages ci-dessous — exception nominative, un AUTRE hôte
-      // en dur retombe sur l'écart.
-      code = code.replace("https://9741050y.index-education.net/pronote", "");
       // #205 : `data` et `ui` dépendent du module local (`project(":pronote")`,
       // ADR-003) — la déclaration de dépendance est le câblage sanctionné, pas
       // un hôte : on la retire avant le balayage, comme l'`include` ci-dessus.
@@ -525,24 +520,20 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
       });
     }
     // Les SEULES chaînes ressemblant à une URL dans le code Kotlin de
-    // android/ : le gabarit affiché dans l'écran d'appairage, plus (#204)
-    // l'endpoint PUBLIC du fournisseur LLM (pas un hôte d'établissement ni
-    // de serveur : catégorie distincte, comme le modèle en constante de code ;
-    // jamais d'identifiant ni de secret dedans). Un hôte réel d'établissement
-    // passé en dur (ou dans un message) casserait cette liste.
+    // android/ : plus (#204) l'endpoint PUBLIC du fournisseur LLM (pas un hôte
+    // d'établissement ni de serveur : catégorie distincte, comme le modèle en
+    // constante de code ; jamais d'identifiant ni de secret dedans), plus le
+    // gabarit du message de refus de `ServerConfig` et les deux gardes de
+    // schéma du store de session (pas des hôtes). Un hôte réel d'établissement
+    // passé en dur (ou dans un message) casserait cette liste — l'adresse de
+    // l'établissement vient du QR (#299), jamais du code.
     // #206 : le gabarit "https://domaine[:port]" (label du champ serveur
-    // supprimé) a disparu ; restent le gabarit des messages de refus (avec son
-    // point), l'endpoint public du fournisseur LLM, et les deux gardes de
-    // schéma du store de session (pas des hôtes : juste "https://" / "http://").
+    // supprimé) a disparu.
     const allowed = new Set([
       "https://domaine[:port].",
       "https://openrouter.ai/api/v1/chat/completions",
       "https://",
       "http://",
-      // #213 : pré-remplissage de l'écran d'appairage avec l'adresse de NOTRE
-      // établissement (choix utilisateur explicite, aucun identifiant dedans).
-      // Exception nominative — un AUTRE hôte en dur retombe sur l'écart.
-      "https://9741050y.index-education.net/pronote",
     ]);
     const urls = new Set<string>();
     for (const f of files.filter((f) => /\.(kt|kts)$/.test(f))) {

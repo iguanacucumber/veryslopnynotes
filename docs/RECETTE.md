@@ -53,8 +53,7 @@ de la référence). « Papillon » = l'application de référence.
 | **Tâches** | « Semaine 41 » + « Devoirs de la semaine », puis la plage `05/10 – 11/10` | le numéro ISO est l'en-tête de la référence ; la plage est dans le navigateur. Deux informations, une seule fois chacune. |
 | **Profil** | écran à sections (Compte / Ressources / Réglages / Session) au lieu d'une liste continue | l'en-tête de la référence est un avatar ; les sections servent le survol (« Se déconnecter » doit être atteignable sans défiler, cf. #135). |
 | **Profil** | flèche de retour dans la barre, comme les 12 autres routes secondaires | standard : c'est l'appairage qui n'en a pas (ligne suivante). |
-| **Appairage** | retour sous forme de `TextButton` dans le corps, pas de flèche dans la barre | au premier lancement l'assistant est la route de départ : une flèche ne pourrait que sortir de l'app. Le retour sert à revenir du QR à l'établissement. |
-| **Appairage** | assistant en 2 étapes écrites | la référence fait le QR en une page ; ici l'étape établissement précède le QR et son PIN. |
+| **Appairage** | retour sous forme de `TextButton` dans le corps, pas de flèche dans la barre | au premier lancement l'assistant est la route de départ : une flèche ne pourrait que sortir de l'app. Le retour quitte l'écran — la page unique (#299) n'a plus d'étape à remonter. |
 | **Messages** | « 0 discussion » et la barre de recherche avant l'état d'erreur | le compteur et la recherche sont du chrome d'écran, pas des filtres de contenu ; les retirer au vide ferait perdre le point d'entrée « Nouvelle ». Écart assumé, contrairement à `Tâches` où les filtres ne filtrent RIENT (#148). |
 | **Cantine / Vie scolaire / Sanctions / Actualités / Fiches révision / Alertes sécurité** | ligne de titre fixe au-dessus de l'état (« Menus de la semaine », « Absences indisponibles. »…) | ces lignes ont été ajoutées en #172/#178 pour que la capture hors ligne PROUVE la route (le titre de la barre d'onglets se lit partout, « Réessayer » est partagé par sept écrans). Elles nomment ce que l'écran cherche, jamais la donnée. |
 
@@ -67,7 +66,6 @@ de la référence). « Papillon » = l'application de référence.
 | Alertes sécurité | « Hors-ligne, aucune donnée en cache. » affiché deux fois (ligne rouge + grand bloc d'erreur) | la ligne de cause ne se rend plus quand l'écran EST l'état d'erreur |
 | Tâches | « Rechercher un devoir » + puces matière au-dessus de « Hors-ligne, aucune donnée en cache. » — des contrôles qui ne filtrent rien, au-dessus d'un vide | les deux contrôles ne sortent qu'avec une liste |
 | Appairage | « Retour » en bouton VERT REMPLI, à côté de « Continuer » : deux actions principales, donc aucune | `TextButton` (l'encre dit « secondaire ») |
-| Appairage | ancien libellé du serveur répété dans l'étape initiale | le titre suffit ; l'étape actuelle porte sur l'établissement |
 
 ## États vérifiés
 
