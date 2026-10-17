@@ -9,11 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,14 +35,15 @@ import fr.veryslopnynotes.data.PairingInput
 import fr.veryslopnynotes.data.PairingRepository
 import fr.veryslopnynotes.data.PairingResult
 import fr.veryslopnynotes.data.SessionStores
-import fr.veryslopnynotes.data.isBoundedSchoolUrl
 import fr.veryslopnynotes.data.parseSchoolQr
 
-// Assistant de connexion (#120, repointé #206 : device-only) : l'adresse de
-// l'établissement PUIS le QR de l'application Pronote + son PIN. UN SEUL appel
-// ouvre la session, et il part du téléphone vers l'établissement — aucun
-// serveur intermédiaire (ADR-003). Le PIN déchiffre `login`/`jeton` sur place
-// et n'est jamais persisté : seul le jeton tourné dort chiffré (SessionStore).
+// Assistant de connexion (#120, repointé #206 : device-only, simplifié #299) :
+// UNE SEULE page, le QR de l'application Pronote + son PIN. Le QR porte
+// l'adresse de l'établissement (`url`) : plus rien à saisir, l'écran ne
+// demande que le PIN. UN SEUL appel ouvre la session, et il part du téléphone
+// vers l'établissement — aucun serveur intermédiaire (ADR-003). Le PIN
+// déchiffre `login`/`jeton` sur place et n'est jamais persisté : seul le jeton
+// tourné dort chiffré (SessionStore).
 //
 // L'écran est aussi la destination de la session morte (#113) : après un jeton
 // tourné ou une session refermée, c'est lui qui rouvre la session locale, pas
@@ -55,6 +56,10 @@ import fr.veryslopnynotes.data.parseSchoolQr
 // exactement comme les messages de succès, donc un refus se lisait comme une
 // validation. Ils apparaissent en plus avec l'ouverture mesurée, au lieu
 // d'apparaître d'un coup.
+//
+// #299 : l'étape 1 « adresse de l'établissement » est supprimée — elle faisait
+// saisir ce que le QR porte déjà (`url`, cf. `SchoolQr`). Un QR sans adresse
+// est donc illisible pour l'app, et le dit.
 @Composable
 fun PairingRoute(
     onBack: () -> Unit,
@@ -72,12 +77,12 @@ fun PairingRoute(
     // relisent au démarrage (restauration sans rescanner).
     val sessions = remember(context) { SessionStores.get(context) }
     val repo = remember(sessions) { PairingRepository(sessions) }
-    // #147 : tout l'état de l'assistant est en `rememberSaveable`. AVANT, ZÉRO
-    // `rememberSaveable` dans le module : tourner le téléphone en plein
-    // appairage effaçait l'adresse tapée, l'erreur affichée et l'ÉTAPE atteinte
-    // (retour au premier champ, QR à rescanner).
-    var step by rememberSaveable { mutableStateOf(SetupStep.SCHOOL) }
-    var form by rememberSaveable(stateSaver = SetupFormSaver) { mutableStateOf(SetupForm()) }
+    // #147 : l'erreur du scan est en `rememberSaveable` (elle survit à la
+    // rotation, sinon l'utilisateur rescane un QR pour apprendre la même
+    // chose) ; la SAISIE, elle, reste en `remember` simple : le QR et son PIN
+    // sont la preuve de détention, ils ne se recopient pas dans l'état
+    // d'activité. Le coût est un rescane après rotation — assumé.
+    var form by remember { mutableStateOf(SetupForm()) }
     val haptics = rememberPapHaptics()
 
     /** Envoi de l'appairage : réseau sur thread, retour sur le main. */
@@ -106,21 +111,20 @@ fun PairingRoute(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
-        // #172 : le retour remonte D'ABORD d'un cran dans le parcours. Hors
-        // première étape, `popBackStack` ne peut rien faire (au premier
-        // lancement l'assistant EST la route de départ ; après une session
-        // morte la pile a été vidée), donc l'étape 2 n'avait aucun chemin de retour.
+        // #172/#299 : le retour sort de l'assistant. Au premier lancement il est
+        // la route de départ (rien derrière : `popBackStack` ne fait rien, et
+        // c'est correct — il n'y a nulle part où revenir), après une session
+        // morte la pile a été vidée, et depuis le Profil il remonte au Profil.
         //
-        // #148 (recette des 14 écrans) : c'était un `Button` REMPLI, donc
-        // deux boutons verts de même poids sur l'écran — « Retour » et
-        // « Continuer » — et aucun n'était plus l'action principale. Le retour
-        // est une action SECONDAIRE : `TextButton` le dit par son encre, et
-        // l'image ne change pas.
-        val previous = previousStep(step)
+        // #148 (recette des 14 écrans) : c'était un `Button` REMPLI, donc deux
+        // boutons verts de même poids sur l'écran — « Retour » et l'action
+        // principale — et aucun n'était plus l'action principale. Le retour est
+        // une action SECONDAIRE : `TextButton` le dit par son encre, et l'image
+        // ne change pas.
         TextButton(
-            onClick = { if (previous != null) step = previous else onBack() },
+            onClick = onBack,
             modifier = Modifier.padding(start = 8.dp, end = 8.dp),
-        ) { Text(if (previous != null) "Étape précédente" else "Retour") }
+        ) { Text("Retour") }
         if (!notice.isNullOrEmpty()) {
             Text(
                 text = notice,
@@ -129,28 +133,11 @@ fun PairingRoute(
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
-        // `heading()` : l'étape en cours est le titre de l'assistant — c'est par
-        // elle qu'on sait quoi faire, donc c'est elle que le survol annonce.
-        Text(
-            text = setupStepLabel(step),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .semantics { heading() },
+        QrStep(
+            form = form,
+            onChange = { form = it },
+            onSubmit = submit,
         )
-        when (step) {
-            SetupStep.SCHOOL -> SchoolStep(
-                form = form,
-                onChange = { form = it },
-                onNext = { next -> step = next },
-            )
-            SetupStep.QR -> QrStep(
-                form = form,
-                onChange = { form = it },
-                onSubmit = submit,
-            )
-        }
     }
 }
 
@@ -158,64 +145,11 @@ fun PairingRoute(
 private fun deviceName(): String = Build.MODEL?.takeIf { it.isNotBlank() } ?: "appareil"
 
 /**
- * Étape 1 : l'adresse de l'établissement, et basta. L'app ne saisit PLUS
- * aucun identifiant — la seule preuve de détention est le QR de l'étape 2.
- */
-@Composable
-private fun SchoolStep(
-    form: SetupForm,
-    onChange: (SetupForm) -> Unit,
-    onNext: (SetupStep) -> Unit,
-) {
-    var error by rememberSaveable { mutableStateOf<String?>(null) }
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Text("Ton établissement")
-        OutlinedTextField(
-            value = form.schoolUrl,
-            onValueChange = { onChange(form.copy(schoolUrl = it)) },
-            label = { Text("Adresse de l'établissement") },
-            supportingText = { Text("Exemple : le lycée Louis Payen. Celle de ton espace élève, avec son port si besoin.") },
-            singleLine = true,
-            // Champ 16 dp (#258) : le rayon du `TextInput` de référence — pas
-            // le 8 dp par défaut du champ Material.
-            shape = MaterialTheme.shapes.medium,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        // #145 : couleur d'erreur + ouverture mesurée.
-        PapAppear(visible = error != null) {
-            // #146 : l'encre d'ERREUR du thème et trois lignes — le refus vient
-            // d'une saisie, donc de longueur connue mais pas forcément courte.
-            error?.let {
-                Text(
-                    text = it,
-                    color = errorTextColor(),
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        Button(
-            onClick = {
-                if (!isBoundedSchoolUrl(form.schoolUrl)) {
-                    error = "Adresse de l'établissement absente : elle est obligatoire."
-                } else {
-                    onNext(SetupStep.QR)
-                }
-            },
-            // Bouton 50 dp (#258) : la hauteur du bouton de référence.
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-        ) { Text("Continuer") }
-    }
-}
-
-/**
- * Étape 2 : le QR affiché par l'application Pronote, scanné avec la caméra.
- * `login` + `jeton` sont des blocs chiffrés dont la clé est le PIN : les deux
- * sont donc nécessaires, et le PIN est celui défini dans Pronote (pas un code
- * à 6 chiffres imposé par l'app).
+ * La page unique : le QR affiché par l'application Pronote, scanné avec la
+ * caméra, et son PIN. Le QR porte `login` + `jeton` (blocs chiffrés dont la clé
+ * est le PIN) ET l'adresse de l'établissement : les trois sont nécessaires, et
+ * le PIN est celui défini dans Pronote (pas un code à 6 chiffres imposé par
+ * l'app).
  */
 @Composable
 private fun QrStep(
@@ -238,7 +172,6 @@ private fun QrStep(
         }
     }
     val input = PairingInput(
-        schoolUrl = form.schoolUrl,
         qr = qr,
         pin = form.pin.trim(),
     )
@@ -247,12 +180,25 @@ private fun QrStep(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("QR de l'application")
+        // `heading()` : l'écran est le titre de l'assistant — c'est par lui
+        // qu'on sait quoi faire, donc c'est lui que le survol annonce.
+        Text(
+            text = "QR de l'application",
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .padding(vertical = 8.dp)
+                .semantics { heading() },
+        )
+        // #299 : l'adresse n'est plus saisie — elle vient du QR. Dit à l'écran,
+        // sinon l'utilisateur la cherche.
+        Text("L'adresse de ton établissement et ta connexion viennent de ce QR : scanne-le, puis saisis son PIN.")
         // #127 : scan direct, décodeur dans l'APK (permission CAMERA demandée
         // par l'activité de scan). `null` = rien de lu, on ne remplace rien et
         // le message le dit.
         Button(
             onClick = scan,
+            // Bouton 50 dp (#258) : la hauteur du bouton de référence.
             modifier = Modifier.fillMaxWidth().height(50.dp),
         ) { Text("Scanner le QR") }
         OutlinedTextField(
@@ -271,10 +217,12 @@ private fun QrStep(
             // et ce qui part dans `PairingInput` sont inchangés.
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            // Champ 16 dp (#258) : le rayon du `TextInput` de référence — pas
+            // le 8 dp par défaut du champ Material.
             shape = MaterialTheme.shapes.medium,
             modifier = Modifier.fillMaxWidth(),
         )
-        // #145 : les DEUX refus de cette étape (scan, puis appairage) partagent la
+        // #145 : les DEUX refus de cette page (scan, puis appairage) partagent la
         // couleur d'erreur et la même ouverture mesurée.
         PapAppear(visible = error != null || form.state is PairingState.Error) {
             error?.let {
