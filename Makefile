@@ -110,6 +110,8 @@ buildDebugApk:
 # voir docs/RELEASE.md), signé debug sinon (#297 : APK public sideload
 # installable sans cert custom). Gradle ne le dit pas toujours : le rappel
 # ci-dessous est obligatoire pour que personne ne croie avoir un APK store.
+# Produit AUSSI l'AAB Play Store (#301, même buildType release = mêmes
+# règles de signature) : un seul build, deux artefacts à distribuer.
 buildRelApk:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
@@ -117,8 +119,9 @@ buildRelApk:
 	  echo "buildRelApk : outillage absent (JDK=$${jdk:-aucun}, SDK=$${sdk:-aucun})."; \
 	  android_toolchain_hint; exit 1; \
 	fi; \
-	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleRelease && \
-	echo "APK release : android/app/build/outputs/apk/release/ (signé custom si STORE_FILE présent, sinon signé debug #297)"
+	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleRelease bundleRelease && \
+	echo "APK release : android/app/build/outputs/apk/release/ (signé custom si STORE_FILE présent, sinon signé debug #297)" && \
+	echo "AAB release : android/app/build/outputs/bundle/release/app-release.aab (Play : upload key custom recommandée)"
 
 # Scraper manuels (#209) : HTTPS sur 0.0.0.0:8080 (l'app Android refuse le
 # clairtext hors émulateur, cf. android/app/src/main/res/xml/network_security_config.xml).
