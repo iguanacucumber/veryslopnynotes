@@ -28,6 +28,11 @@ class SyncedRepository(
     private val main: Handler = Handler(Looper.getMainLooper()),
     private val provider: PronoteClientProvider = { PronoteSession.client },
 ) {
+    // File d'attente unique (#310) : UN appel client a la fois, dans l'ordre
+    // d'arrivee. Le client local est mutable (refresh() reassigne son etat) :
+    // deux lectures concurrentes = course et login en double.
+    private val queue = LocalRequestQueue<RefreshOutcome>()
+
     fun cached(resource: String): CachedEntry? = store.load(resource)
 
     fun isStale(resource: String, entry: CachedEntry, now: Long = clock()): Boolean =
@@ -38,8 +43,9 @@ class SyncedRepository(
         if (CachePolicy.isCacheable(resource)) store.clear(resource)
     }
 
-    // Lecture locale async (Thread de fond, pas de coroutines). Callback sur main
-    // thread. Le payload ecrit le cache (fenetre demandee, comme avant).
+    // Lecture locale async (file d'attente unique #310 : un seul fil daemon,
+    // ordre d'arrivee). Callback sur main thread. Le payload ecrit le cache
+    // (fenetre demandee, comme avant).
     // ponytail: une seule clé de cache par ressource : la requête de la fenêtre
     //   demandée écrase le payload précédent (semaine courante en pratique).
     //   Upgrade: clé de cache = ressource + fenêtre.
@@ -59,34 +65,43 @@ class SyncedRepository(
     }
 
     private fun readAsync(save: Boolean, resource: String, query: String, cb: (RefreshOutcome) -> Unit) {
-        Thread {
-            val outcome = try {
-                val payload = readLocal(resource, query)
-                if (save) {
-                    try {
-                        store.save(resource, payload, clock())
-                    } catch (_: Exception) {
-                        post(cb, RefreshOutcome.Failed("Cache illisible.", payload))
-                        return@Thread
-                    }
-                    post(cb, RefreshOutcome.Updated(payload, clock()))
-                } else {
-                    post(cb, RefreshOutcome.Updated(payload, clock()))
+        // Cle de dedoublonnage : ressource|query. Deux lectures identiques EN VOL
+        // = une seule execution du client, le MEME RefreshOutcome pour tous les
+        // callbacks (relayes un par un sur le main thread).
+        queue.submit(
+            "$resource|$query",
+            work = { readOutcome(save, resource, query) },
+            deliver = { o -> post(cb, o) },
+        )
+    }
+
+    /** Corps de lecture (jamais d'exception qui s'echappe : tout echec = outcome). */
+    private fun readOutcome(save: Boolean, resource: String, query: String): RefreshOutcome {
+        return try {
+            val payload = readLocal(resource, query)
+            if (save) {
+                try {
+                    store.save(resource, payload, clock())
+                } catch (_: Exception) {
+                    return RefreshOutcome.Failed("Cache illisible.", payload)
                 }
-            } catch (e: NoLocalSession) {
-                post(cb, cachedOrFailed(resource, "Aucune donnée en cache."))
-            } catch (e: Exception) {
-                if (isSessionFailure(e)) {
-                    // Session locale morte : le cache ne masque PAS une session
-                    // morte (des donnees perimees comme si tout allait bien) :
-                    // Failed nu, et le signal renvoie vers l'appairage (#113).
-                    DeviceAuth.reject()
-                    post(cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
-                } else {
-                    post(cb, cachedOrFailed(resource, "Aucune donnée en cache."))
-                }
+                RefreshOutcome.Updated(payload, clock())
+            } else {
+                RefreshOutcome.Updated(payload, clock())
             }
-        }.start()
+        } catch (e: NoLocalSession) {
+            cachedOrFailed(resource, "Aucune donnée en cache.")
+        } catch (e: Exception) {
+            if (isSessionFailure(e)) {
+                // Session locale morte : le cache ne masque PAS une session
+                // morte (des donnees perimees comme si tout allait bien) :
+                // Failed nu, et le signal renvoie vers l'appairage (#113).
+                DeviceAuth.reject()
+                RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null)
+            } else {
+                cachedOrFailed(resource, "Aucune donnée en cache.")
+            }
+        }
     }
 
     private fun cachedOrFailed(resource: String, message: String): RefreshOutcome {
@@ -113,29 +128,30 @@ class SyncedRepository(
             post(cb, RefreshOutcome.Failed("Serveur non configure.", null))
             return
         }
-        Thread {
-            val client = try {
-                provider()
-            } catch (_: Exception) {
-                null
+        // Relectures simultanees = UN seul ping (cle sans query : la requete ne
+        // depend d'aucun ecran) ; tous les callbacks recoivent le meme outcome.
+        queue.submit("sync|", work = { syncOutcome() }, deliver = { o -> post(cb, o) })
+    }
+
+    private fun syncOutcome(): RefreshOutcome {
+        val client = try {
+            provider()
+        } catch (_: Exception) {
+            null
+        }
+        if (client == null) return RefreshOutcome.Failed("Relecture indisponible.", null)
+        return try {
+            client.keepAlive().pingIfDue()
+            // Contenu local = invalidation, jamais interprete (I6/I7).
+            RefreshOutcome.Updated("{\"synced\":true}", clock())
+        } catch (e: Exception) {
+            if (isSessionFailure(e)) {
+                DeviceAuth.reject()
+                RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null)
+            } else {
+                RefreshOutcome.Failed("Relecture indisponible.", null)
             }
-            if (client == null) {
-                post(cb, RefreshOutcome.Failed("Relecture indisponible.", null))
-                return@Thread
-            }
-            try {
-                client.keepAlive().pingIfDue()
-                // Contenu local = invalidation, jamais interprete (I6/I7).
-                post(cb, RefreshOutcome.Updated("{\"synced\":true}", clock()))
-            } catch (e: Exception) {
-                if (isSessionFailure(e)) {
-                    DeviceAuth.reject()
-                    post(cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
-                } else {
-                    post(cb, RefreshOutcome.Failed("Relecture indisponible.", null))
-                }
-            }
-        }.start()
+        }
     }
 
     /**
@@ -150,27 +166,28 @@ class SyncedRepository(
             post(cb, RefreshOutcome.Failed("Serveur non configure.", null))
             return
         }
-        Thread {
-            val client = try {
-                provider()
-            } catch (_: Exception) {
-                null
+        // Dédoublonnage (#310) : deux écrans qui demandent les tranches en meme
+        // temps declenchent UNE lecture locale, pas deux.
+        queue.submit("periods|", work = { periodsOutcome() }, deliver = { o -> post(cb, o) })
+    }
+
+    private fun periodsOutcome(): RefreshOutcome {
+        val client = try {
+            provider()
+        } catch (_: Exception) {
+            null
+        }
+        if (client == null) return RefreshOutcome.Failed("Tranches indisponibles.", null)
+        return try {
+            RefreshOutcome.Updated(periodsPayload(client), clock())
+        } catch (e: Exception) {
+            if (isSessionFailure(e)) {
+                DeviceAuth.reject()
+                RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null)
+            } else {
+                RefreshOutcome.Failed("Tranches indisponibles.", null)
             }
-            if (client == null) {
-                post(cb, RefreshOutcome.Failed("Tranches indisponibles.", null))
-                return@Thread
-            }
-            try {
-                post(cb, RefreshOutcome.Updated(periodsPayload(client), clock()))
-            } catch (e: Exception) {
-                if (isSessionFailure(e)) {
-                    DeviceAuth.reject()
-                    post(cb, RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null))
-                } else {
-                    post(cb, RefreshOutcome.Failed("Tranches indisponibles.", null))
-                }
-            }
-        }.start()
+        }
     }
 
     /**
