@@ -27,9 +27,11 @@ describe("barre du haut façon Papillon (#325)", () => {
     expect(shell).not.toMatch(/Color\(0x/);
   });
 
-  test("marges latérales : 8 dp de chaque côté, titre racine à 20 dp", () => {
+  test("marges latérales : 8 dp de chaque côté, titre racine à 16 dp", () => {
     expect(shell).toContain("private val TopBarSideInset = 8.dp");
-    // Sans pastille, le titre ajoute son inset de 12 dp : 8 + 12 = 20 dp du bord.
+    // #331 : sans pastille, le titre ajoute son inset de 8 dp : 8 + 8 = 16 dp
+    // du bord, le même axe que le contenu des pages.
+    expect(shell).toContain("private val TopBarTitleInset = 8.dp");
     expect(shell).toContain("TopBarTitleInset + TopBarSideInset");
     // Les deux extrémités de la rangée portent la même marge.
     expect(shell).toContain(".padding(start = TopBarSideInset)");
@@ -43,7 +45,7 @@ describe("barre du haut façon Papillon (#325)", () => {
     expect(shell).toContain(
       "shape = RoundedCornerShape(bottomStart = TopBarCorner, bottomEnd = TopBarCorner)",
     );
-    expect(shell).toContain("shadowElevation = 2.dp");
+    expect(shell).toContain("shadowElevation = 1.dp");
     expect(shell).toContain("border = BorderStroke(1.dp, scheme.outlineVariant)");
   });
 
