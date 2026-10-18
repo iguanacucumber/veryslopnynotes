@@ -1,6 +1,8 @@
 package fr.veryslopnynotes.app
 
 import android.os.Bundle
+import android.content.Intent
+import android.webkit.WebView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -17,6 +19,9 @@ import fr.veryslopnynotes.data.PeriodicSyncWorker
 // d'adresse (local.properties server.host ou env SERVER_HOST), que
 // ServerStore/AppNav remplacent par l'adresse du scraper à l'exécution.
 class MainActivity : ComponentActivity() {
+    // Renseignée seulement quand BuildConfig.WEB_UI est vrai.
+    private var webShell: NativeWebShell? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // #135 : la fenêtre occupe tout l'écran.
@@ -58,7 +63,46 @@ class MainActivity : ComponentActivity() {
         // (`SyncedRepository`), donc ce chargement était mort depuis #144. La
         // session est relue du store chiffré à chaque démarrage (restauration
         // sans rescanner) : elle n'a rien à faire ici.
+        // #333 : interface React locale derrière un drapeau de build. Le défaut
+        // (WEB_UI=false) garde exactement le chemin Compose ci-dessous ; le
+        // deep link debug est converti en route hash.
+        if (BuildConfig.WEB_UI) {
+            WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
+            val shell = NativeWebShell(this)
+            webShell = shell
+            setContentView(shell.view)
+            shell.open(routePath(intent))
+            return
+        }
         setContent { AppNav(baseUrlSeed = baseUrlSeed) }
+    }
+
+    /**
+     * Deep link debug `veryslopnynotes://<route>` → route hash de l'UI web.
+     * Release : aucun intent-filter, donc rien n'arrive ici. Une route
+     * inconnue est ignorée (accueil).
+     */
+    private fun routePath(intent: Intent?): String? {
+        val data = intent?.data ?: return null
+        if (data.scheme != "veryslopnynotes") return null
+        val path = when (val host = data.host) {
+            null -> return null
+            "index" -> "/"
+            else -> "/$host"
+        }
+        return path.takeIf { it in WEB_ROUTES }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (BuildConfig.WEB_UI) routePath(intent)?.let { webShell?.navigate(it) }
+    }
+
+    override fun onDestroy() {
+        webShell?.destroy()
+        webShell = null
+        super.onDestroy()
     }
 
     /**
