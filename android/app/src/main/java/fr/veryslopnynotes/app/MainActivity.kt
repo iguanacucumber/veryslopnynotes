@@ -4,9 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.unit.dp
-import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -20,29 +17,8 @@ import fr.veryslopnynotes.data.PeriodicSyncWorker
 // d'adresse (local.properties server.host ou env SERVER_HOST), que
 // ServerStore/AppNav remplacent par l'adresse du scraper à l'exécution.
 class MainActivity : ComponentActivity() {
-    /**
-     * #303 : hauteur que la barre du haut reprend à la barre de statut — celle
-     * qu'elle occupe MÊME MASQUÉE (`getInsetsIgnoringVisibility` : une fois le
-     * plein écran posé, `systemBars` vaut zéro et la place libérée n'est plus
-     * mesurable).
-     *
-     * En dp pour le module `ui`, qui ne lit aucun inset de fenêtre : la valeur
-     * lui est passée. Remplie dès le premier passage d'insets de la fenêtre, à
-     * l'attache — donc le premier frame de Compose a déjà la bonne valeur.
-     */
-    private val reclaimedTop = mutableStateOf(0.dp)
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // #303 : la fenêtre passe ses insets une fois à l'attache, donc ce
-        // listener reçoit la hauteur de la barre de statut avant que le premier
-        // frame ne soit peint. Il ne fait que POSER la valeur (les insets
-        // ressortent tels quels : Compose continue de recevoir les mêmes).
-        ViewCompat.setOnApplyWindowInsetsListener(window.decorView) { _, insets ->
-            val px = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.statusBars()).top
-            reclaimedTop.value = (px / resources.displayMetrics.density).dp
-            insets
-        }
         // #135 : la fenêtre occupe tout l'écran.
         // Avant : la fenêtre s'arrêtait sous la barre système, donc la bande de
         // statut restait du fond de fenêtre — un bandeau gris au-dessus de la
@@ -82,7 +58,7 @@ class MainActivity : ComponentActivity() {
         // (`SyncedRepository`), donc ce chargement était mort depuis #144. La
         // session est relue du store chiffré à chaque démarrage (restauration
         // sans rescanner) : elle n'a rien à faire ici.
-        setContent { AppNav(baseUrlSeed = baseUrlSeed, reclaimedTop = reclaimedTop.value) }
+        setContent { AppNav(baseUrlSeed = baseUrlSeed) }
     }
 
     /**
