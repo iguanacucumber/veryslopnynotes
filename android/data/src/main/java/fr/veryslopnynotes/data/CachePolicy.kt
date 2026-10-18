@@ -72,4 +72,13 @@ object CachePolicy {
     // Frais si fetchedAt + TTL couvre now, périmé sinon (badge app).
     fun isStale(resource: String, fetchedAt: Long, now: Long): Boolean =
         now - fetchedAt > ttlFor(resource)
+
+    // #311 : faut-il relire le client local ? Règle PURE (comme isStale), donc
+    // testable sans téléphone : une entrée fraîche suffit à l'écran, sauf geste
+    // EXPLICITE de l'utilisateur (`force` : tirail, « Actualiser », changement de
+    // semaine/période/algorithme). Entrée absente ou périmée = on relit, comme
+    // avant — sans ça le badge « périmé » afficherait une donnée qu'on pourrait
+    // rafraîchir. La première entrée sur un écran n'est PAS un geste.
+    fun shouldFetch(entry: CachedEntry?, resource: String, now: Long, force: Boolean): Boolean =
+        force || entry == null || isStale(resource, entry.fetchedAt, now)
 }

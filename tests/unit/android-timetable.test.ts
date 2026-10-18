@@ -1101,7 +1101,9 @@ describe("unit android EDT par jour (#137)", () => {
     expect({ pagerApresLeTirail: fin > debut }).toEqual({ pagerApresLeTirail: true });
     expect(screen).toMatch(/HomePullToRefresh\([\s\S]{0,400}when \{/);
     // Et le geste déclenche bien la relecture, la brique faisant le reste.
-    expect(screen).toMatch(/HomePullToRefresh\(\s*refreshing = refreshing,\s*onRefresh = \{ refresh\(\) \}/);
+    // #311 : tirail = geste, donc `force = true` (un cache frais ne doit pas
+    // répondre à un tirail).
+    expect(screen).toMatch(/HomePullToRefresh\(\s*refreshing = refreshing,\s*onRefresh = \{ refresh\(force = true\) \}/);
   });
 
   test("#143 : la brique de tirail n' dessine rien tant que le geste n'a pas commencé", () => {

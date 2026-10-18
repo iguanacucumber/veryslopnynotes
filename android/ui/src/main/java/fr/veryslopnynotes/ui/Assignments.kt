@@ -937,7 +937,11 @@ fun AssignmentsRoute(
         }
     }
 
-    fun refresh() {
+    // #311 : `force` = geste explicite (tirail, « Actualiser », changement de
+    // semaine, resync après une bascule « fait »). La première entrée sur l'écran
+    // ne l'est pas : un cache frais de la semaine courante est servi sans relire
+    // le client local.
+    fun refresh(force: Boolean = false) {
         // Serveur non configuré : aucun appel (I1). Sans rien d'affiché, état
         // vide propre — jamais d'écran d'erreur plein-écran (#260).
         if (baseUrl.isBlank()) {
@@ -959,10 +963,13 @@ fun AssignmentsRoute(
         }
         try {
             if (week == weekStartIso(nowMillis, zone)) {
-                repo.refreshAsync(resource, baseUrl) { o -> accept(o) }
+                repo.refreshAsync(resource, baseUrl, force = force) { o -> accept(o) }
             } else {
                 // Semaine différente : lue sur le client local SANS écraser le
-                // cache de la semaine courante (repli : le cache courant).
+                // cache de la semaine courante (repli : le cache courant). Ce
+                // chemin n'est PAS soumis à la règle de fraîcheur : la semaine
+                // affichée n'est jamais celle que le cache contient, donc servir
+                // le cache mentirait sur la fenêtre.
                 repo.fetchAsync(resource, "weekStart=$week") { o -> accept(o) }
             }
         } catch (_: Exception) {
@@ -973,7 +980,13 @@ fun AssignmentsRoute(
     }
     // Changer de semaine RE-DÉCLENCHE le chargement réseau : garder la liste de la
     // semaine précédente sous le titre de la nouvelle serait un mensonge d'écran.
-    LaunchedEffect(week) { refresh() }
+    // #311 : le PREMIER passage n'est pas un geste (cache frais de la semaine
+    // courante = zéro appel) ; changer de semaine en est un.
+    var gesture by remember { mutableStateOf(false) }
+    LaunchedEffect(week) {
+        refresh(force = gesture)
+        gesture = true
+    }
 
     /**
      * Bascule « fait » : optimiste, puis Annuler (retour arrière) ou Réessayer
@@ -1006,7 +1019,9 @@ fun AssignmentsRoute(
                 )
                 // Succès : resync du cache (invalidation par événement), l'état
                 // optimiste reste affiché jusqu'à l'arrivée du payload à jour.
-                refresh()
+                // #311 : geste d'écriture, donc relecture forcée — un cache
+                // frais encore marqué « non fait » annulerait la bascule.
+                refresh(force = true)
             }
         }
     }
@@ -1067,8 +1082,8 @@ fun AssignmentsRoute(
         error = errorMessage,
         nowMillis = nowMillis,
         zone = zone,
-        onRefresh = { refresh() },
-        onRetry = { refresh() },
+        onRefresh = { refresh(force = true) },
+        onRetry = { refresh(force = true) },
         onQueryChange = { query = it },
         onSubjectChange = { selectedSubject = it },
         onShiftWeek = { weeks ->

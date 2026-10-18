@@ -564,7 +564,10 @@ fun TimetableRoute(
         }
         mutableStateOf(uiStateFromCache(cached, cached != null && repo.isStale(CachePolicy.TIMETABLE, cached)))
     }
-    fun refresh() {
+    // #311 : `force` = geste explicite (tirail, « Actualiser », changement de
+    // semaine). La première entrée sur l'écran ne l'est pas : un cache frais de la
+    // semaine courante est servi sans relire le client local.
+    fun refresh(force: Boolean = false) {
         // Serveur non configuré : aucun appel (I1), cache conservé. Sans rien
         // d'affiché, état vide propre — jamais d'écran d'erreur (#260).
         if (baseUrl.isBlank()) {
@@ -582,11 +585,22 @@ fun TimetableRoute(
             else -> UiState.Loading
         }
         refreshing = true
+        fun accept(o: RefreshOutcome) {
+            state = uiStateFromOutcome(o)
+            nowMillis = System.currentTimeMillis()
+            refreshing = false
+        }
         try {
-            repo.refreshAsync(CachePolicy.TIMETABLE, baseUrl, timetableWindowQuery(weekStart, zone)) { o ->
-                state = uiStateFromOutcome(o)
-                nowMillis = System.currentTimeMillis()
-                refreshing = false
+            val window = timetableWindowQuery(weekStart, zone)
+            // #311 : la semaine COURANTE est la seule que le cache contient (une
+            // clé par ressource) — une autre semaine est une FENÊTRE, lue sans
+            // écrire ce cache, comme les Devoirs. Et comme le cache ne connaît
+            // que la semaine courante, y répondre pour une autre semaine
+            // afficherait les cours d'une semaine sous le titre d'une autre.
+            if (weekStart == weekStartOf(nowMillis, zone)) {
+                repo.refreshAsync(CachePolicy.TIMETABLE, baseUrl, window, force = force) { o -> accept(o) }
+            } else {
+                repo.fetchAsync(CachePolicy.TIMETABLE, window) { o -> accept(o) }
             }
         } catch (_: Exception) {
             state = (state as? UiState.Data)?.let { UiState.Error("Erreur inattendue.", it.payload) }
@@ -598,7 +612,13 @@ fun TimetableRoute(
     // (le sync périodique de fond est passé à WorkManager : PeriodicSyncWorker,
     // #208). Une seule clé : un LaunchedEffect par clé d'écran, pas de double
     // appel au premier rendu.
-    LaunchedEffect(weekStart) { refresh() }
+    // #311 : le PREMIER passage n'est pas un geste (cache frais = zéro appel) ;
+    // changer de semaine en est un (nouvelle fenêtre), donc relecture forcée.
+    var gesture by remember { mutableStateOf(false) }
+    LaunchedEffect(weekStart) {
+        refresh(force = gesture)
+        gesture = true
+    }
     // L'horloge de l'écran (cf. CLOCK_TICK_MS) : sans elle la mise en avant du
     // cours en cours et le sous-titre « Aujourd'hui » vieilliraient.
     LaunchedEffect(Unit) {
@@ -636,7 +656,7 @@ fun TimetableRoute(
             zone = zone,
             onPrevious = { weekStart = shiftWeeks(weekStart, -1L, zone) },
             onNext = { weekStart = shiftWeeks(weekStart, 1L, zone) },
-            onRefresh = { refresh() },
+            onRefresh = { refresh(force = true) },
             onSettings = onSettings,
             onPairing = onPairing,
             onAlerts = onAlerts,
@@ -679,7 +699,7 @@ fun TimetableRoute(
         // qu'une seule implémentation du tirail dans l'application.
         HomePullToRefresh(
             refreshing = refreshing,
-            onRefresh = { refresh() },
+            onRefresh = { refresh(force = true) },
             modifier = Modifier.fillMaxSize(),
         ) {
             // #145 : changer de semaine faisait passer de « pager » à « squelette »
@@ -696,7 +716,7 @@ fun TimetableRoute(
                 // Contenu affiché : le pager prime. L'erreur est déjà dite en une
                 // ligne plus haut (#147) — un bandeau « Réessayer » au-dessus
                 // d'une semaine entière doublerait l'action du pull-to-refresh.
-                days.isEmpty() && failed != null -> PapErrorState(message = failed.message, onRetry = { refresh() })
+                days.isEmpty() && failed != null -> PapErrorState(message = failed.message, onRetry = { refresh(force = true) })
                 days.isEmpty() && state is UiState.Loading -> PapLoading()
                 days.isEmpty() -> PapEmptyState(
                     icon = Icons.Filled.DateRange,
@@ -707,7 +727,7 @@ fun TimetableRoute(
                         "Tirez vers le bas pour actualiser, ou changez de semaine."
                     },
                     action = {
-                        if (baseUrl.isNotBlank()) TextButton(onClick = { refresh() }) { Text("Actualiser") }
+                        if (baseUrl.isNotBlank()) TextButton(onClick = { refresh(force = true) }) { Text("Actualiser") }
                     },
                 )
                 else -> HorizontalPager(

@@ -439,7 +439,9 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
     // La relecture part au montage : l'écran commence donc en chargement plutôt
     // qu'en « aucun menu en cache » pendant une frame.
     var loading by remember { mutableStateOf(true) }
-    fun refresh() {
+    // #311 : `force` = geste explicite (tirail, « Actualiser », « Réessayer ») ;
+    // la première entrée sur l'écran se contente d'un cache frais.
+    fun refresh(force: Boolean = false) {
         // Serveur non configuré : pas d'appel (I1). Sans donnée, état vide
         // propre — jamais d'écran d'erreur plein-écran (#260).
         if (baseUrl.isBlank()) {
@@ -448,7 +450,7 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
         }
         loading = true
         try {
-            repo.refreshAsync(CachePolicy.MENUS, baseUrl) { o ->
+            repo.refreshAsync(CachePolicy.MENUS, baseUrl, force = force) { o ->
                 when (o) {
                     is RefreshOutcome.Updated -> {
                         payload = o.payload
@@ -492,7 +494,7 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        HomePullToRefresh(refreshing = loading, onRefresh = { refresh() }) {
+        HomePullToRefresh(refreshing = loading, onRefresh = { refresh(force = true) }) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // #178 : hors du `when`, donc présent même sans un seul menu —
                 // c'est ce qui rend la route prouvable dans ses trois états.
@@ -505,7 +507,7 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
                 )
                 when {
                     // Le VRAI message d'échec : l'écran ne se débrouille pas d'un « réseau ».
-                    error != null && days.isEmpty() -> PapErrorState(message = error, onRetry = { refresh() })
+                    error != null && days.isEmpty() -> PapErrorState(message = error, onRetry = { refresh(force = true) })
                     days.isNotEmpty() -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         // Relecture échouée alors que les menus sont là : la cause passe
                         // en une ligne, les cartes restent affichées.
@@ -528,13 +530,13 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
                         icon = Icons.AutoMirrored.Filled.List,
                         title = "Aucun menu en cache",
                         description = "Actualisez pour charger les menus de la semaine.",
-                        action = { Button(onClick = { refresh() }) { Text("Actualiser") } },
+                        action = { Button(onClick = { refresh(force = true) }) { Text("Actualiser") } },
                     )
                     else -> PapEmptyState(
                         icon = Icons.AutoMirrored.Filled.List,
                         title = "Aucun menu publié cette semaine",
                         description = "L'établissement n'a pas publié de menu sur cette période.",
-                        action = { Button(onClick = { refresh() }) { Text("Actualiser") } },
+                        action = { Button(onClick = { refresh(force = true) }) { Text("Actualiser") } },
                     )
                 }
             }
