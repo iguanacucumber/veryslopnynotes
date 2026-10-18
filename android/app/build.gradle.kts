@@ -53,7 +53,19 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // #313 : R8 sur la release (l'APK distribué, donc celui qui doit
+            // démarrer vite) — minification du code + rétrécissement des
+            // ressources. Les règles propres au module sont dans
+            // `android/app/proguard-rules.pro` (minimal : AGP agrège déjà les
+            // règles consommateur des AAR). `proguard-android-optimize.txt` et
+            // non `proguard-android.txt` : la release est l'artefact public, pas
+            // le variant de débogage.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             // Release signée (issue #32) : clé TOUJOURS hors repo.
             // Vars : gradle.properties `release.storeFile/storePassword/keyAlias/
             // keyPassword` ou env STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD.

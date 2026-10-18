@@ -138,20 +138,11 @@ fun AppNav(
 ) {
     val nav = rememberNavController()
     val ctx = LocalContext.current.applicationContext
-    // Adresse du scraper : `baseUrl` est lue UNE fois au démarrage (graine +
-    // choix persisté) puis partagée en lecture seule par les routes.
+    // Adresse du scraper (graine de build + choix persisté, revalidé par
+    // `ServerConfig`, #209) : lue UNE fois ici, partagée en lecture seule par
+    // les routes. Les dépôts locaux l'ignorent (le téléphone parle à
+    // l'établissement en direct) ; elle resservira au corpus via le scraper.
     val serverStore = remember(ctx) { ServerStore(ctx) }
-    // #249 : clé LLM HORS du chemin critique du premier frame. Avant,
-    // `LlmKeys.get(ctx)` + `isConfigured()` tournaient ici (MasterKey +
-    // EncryptedSharedPreferences.create + déchiffrement Keystore) avant même
-    // le premier frame, alors que seuls Tâches et Réglages la consomment.
-    // Chaque route la crée en local via le singleton `LlmKeys` (même
-    // instance, pas d'état divergent — même contrat que la session).
-    // 0.7.0 : UN store pour tout le process, sinon deux états divergents.
-    // Adresse du scraper de manuels (ServerConfig ne valide plus que ça, #209)
-    // : graine de build + choix persisté. Les dépôts locaux l'ignorent (le
-    // téléphone parle à l'établissement en direct) ; elle resservira à la
-    // récupération du corpus via le scraper.
     val baseUrl = remember(serverStore) { serverStore.baseUrl(baseUrlSeed) }
     // ponytail: fichier natif seul (pas de Room). Repli memoire si stockage KO.
     val cacheStore = remember(baseUrl) {
@@ -180,7 +171,6 @@ fun AppNav(
     // à une panne).
     var authNotice by rememberSaveable { mutableStateOf<String?>(null) }
     SessionGate(sessions = sessions, accounts = accounts, nav = nav, onNotice = { authNotice = it })
-    // #205 : dépôts locaux (client du téléphone + cache, ADR-003).
     val profileRepo = remember { ProfileRepository() }
     // #83 : prefs matière = fichier local (survit au restart, lisible hors
     // ligne). #205 : plus de réplication serveur, le fichier EST la vérité.
@@ -284,8 +274,13 @@ fun AppNav(
         NavHost(
             navController = nav,
             // #120 : premier lancement OU session morte = l'assistant de
-            // connexion, pas un Accueil qui ne peut rien afficher.
-            startDestination = if (sessions.hasSession()) ROUTE_INDEX else ROUTE_PAIRING,
+            // connexion, pas un Accueil qui ne peut rien afficher. #313 : la
+            // décision ne se prend plus ICI — sonder la session déchiffrait
+            // Keystore + EncryptedSharedPreferences sur le thread UI avant le
+            // premier frame. Le graphe démarre sur l'accueil, et `SessionGate`
+            // y ramène à l'appairage après la restauration (« pas de session »
+            // comme « session morte » de #113).
+            startDestination = ROUTE_INDEX,
             modifier = Modifier.padding(pad),
             // #263 : fondu + glissé 300 ms en entrée / 150 ms en sortie, même
             // courbe `cubicBezier(0.3, 0.3, 0, 1)` — 0 ms quand le téléphone a
