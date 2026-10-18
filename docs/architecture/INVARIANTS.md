@@ -33,7 +33,7 @@ Format : Invariant → test → commande → emplacement.
 - Emplacement : `web/**`, `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`.
 
 ## I2 — Aucun accès Pronote côté serveur ; un seul client Android (ADR-003)
-- Invariant : le serveur ne contacte jamais Pronote. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android ne contacte Pronote (pinné par I1).
+- Invariant : le serveur ne contacte jamais Pronote. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android (`app`, `core`, `data`) ne contacte Pronote (pinné par I1).
 - Test : `tests/architecture/invariants.test.ts` (aucun accès réseau serveur + un `Client` Android) + `agents/runtime/check-architecture.ts`.
 - Commande : `make architecture-test`.
 - Emplacement : `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
@@ -89,9 +89,10 @@ Piné par `tests/architecture/invariants.test.ts` (I8),
 
 ## I9 — Pas de code mort dans `android/`
 - Invariant : aucun `fun`/`class` de premier niveau sans appelant dans le code
-  Kotlin. Liste de tolérance = points d'entrée du port rejoués par les
-  miroirs (`lessonBadgeLabel`/`timetableDayLabel`, surface `pronote/`,
-  jobs, IA) : c'est la liste qui est gardée, pas du code oublié.
+  Kotlin. Liste de tolérance = points d'entrée du port encore rejoués par les
+  miroirs (`core/`, `data/`), surface `pronote/`, jobs et IA : c'est la liste
+  qui est gardée, pas du code oublié. Les noms qui n'existaient que pour
+  l'interface Compose ont disparu avec `android/ui/`.
 - Test : `tests/architecture/invariants.test.ts` (I9).
 - Commande : `make architecture-test`.
 - Emplacement : `android/**/*`.

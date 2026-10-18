@@ -69,10 +69,10 @@ make build   # check-secrets + docker build (skip si daemon absent)
    ```sh
    make buildRelApk   # equivalent : cd android && ./gradlew assembleRelease bundleRelease
    ```
-   L'interface React est construite avant Gradle (`bun run build:web`) et copiée
-   dans les assets de l'APK ; `WEB_UI=true` la sert dans la WebView, sinon
-   Compose reste le défaut pendant la migration. Le build web ne fait aucun
-   appel réseau et n'embarque aucun secret.
+   L'interface React est construite avant Gradle (`bun run build:web`, tâche
+   Gradle `preBuild`) et copiée dans les assets de l'APK ; `MainActivity`
+   l'affiche toujours dans la WebView locale (ADR-004). Le build web ne fait
+   aucun appel réseau et n'embarque aucun secret.
    Produit deux artefacts signés :
    - APK : `android/app/build/outputs/apk/release/app-release.apk` (sideload)
    - AAB : `android/app/build/outputs/bundle/release/app-release.aab` (Play Store)

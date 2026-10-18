@@ -60,9 +60,6 @@ import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SubjectPrefsRepository
 import fr.veryslopnynotes.data.SyncedRepository
 import fr.veryslopnynotes.data.parseSchoolQr
-import fr.veryslopnynotes.ui.ATTACHMENT_PROVIDER_AUTHORITY
-import fr.veryslopnynotes.ui.mimeOf
-import fr.veryslopnynotes.ui.writeAttachmentFile
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream

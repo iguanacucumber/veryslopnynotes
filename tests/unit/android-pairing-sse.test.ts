@@ -7,7 +7,7 @@ import { codeOnly } from "../../agents/runtime/source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const DATA = join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data");
-const UI = join(ROOT, "android/ui/src/main/java/fr/veryslopnynotes/ui");
+const APP = join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app");
 
 function read(p: string): string {
   return readFileSync(p, "utf8");
@@ -54,9 +54,6 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
       join(DATA, "SessionStore.kt"),
       join(DATA, "DeviceAuth.kt"),
       join(DATA, "PeriodicSyncWorker.kt"),
-      join(UI, "PairingUiState.kt"),
-      join(UI, "PairingScreen.kt"),
-      join(UI, "AppNav.kt"),
     ]) {
       expect(existsSync(f), `manquant: ${f}`).toBe(true);
     }
@@ -67,7 +64,6 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
       join(DATA, "TokenStore.kt"),
       join(DATA, "ApiClient.kt"),
       join(DATA, "SseClient.kt"),
-      join(UI, "SseStatusRow.kt"),
     ]) {
       expect(existsSync(f), `ressuscité: ${f}`).toBe(false);
     }
@@ -113,7 +109,7 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     // client, ni états, ni ligne d'état, ni libellé, ni câblage d'écran.
     const ktFiles = [
       ...readdirSync(DATA).map((f) => join(DATA, f)),
-      ...readdirSync(UI).map((f) => join(UI, f)),
+      ...readdirSync(APP).map((f) => join(APP, f)),
     ].filter((f) => f.endsWith(".kt"));
     for (const f of ktFiles) {
       const code = codeOnly(read(f));
@@ -129,7 +125,7 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     // + backoff dans le worker). #249 : hors chemin critique du premier
     // frame (thread daemon, contexte applicatif) — même planification KEEP,
     // jamais deux, best-effort.
-    const main = read(join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/MainActivity.kt"));
+    const main = read(join(APP, "MainActivity.kt"));
     expect(main).toContain("PeriodicSyncWorker.schedule(applicationContext)");
     expect(main).toContain("periodic-sync-schedule");
     expect(main).toContain("isDaemon = true");
@@ -148,9 +144,6 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
       join(DATA, "SessionStore.kt"),
       join(DATA, "DeviceAuth.kt"),
       join(DATA, "PeriodicSyncWorker.kt"),
-      join(UI, "PairingUiState.kt"),
-      join(UI, "PairingScreen.kt"),
-      join(UI, "AppNav.kt"),
     ].map((f) => ({ f, code: codeOnly(read(f)) }));
     for (const { f, code } of allKt) {
       // Même tolérance que check-architecture.ts (I1 repointé #205 puis #206) :
@@ -190,11 +183,6 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     // Le PIN ne dort nulle part : ni clé, ni écriture, ni lecture.
     expect(store).not.toContain("KEY_PIN");
     expect(codeOnly(store)).not.toContain("pin");
-    // L'écran ne manipule aucun secret : la session va droit au store.
-    const screen = read(join(UI, "PairingScreen.kt"));
-    expect(screen).toContain("PairingRepository(sessions)");
-    expect(screen).toContain("PairingRoute");
-    expect(codeOnly(screen)).not.toMatch(/Log\.[vdiew]\(|println\(/);
   });
 
   test("appairage local : QR+PIN ou refus bruyant, restauration sans rescanner", () => {
@@ -238,8 +226,10 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     const catalog = read(join(ROOT, "android/gradle/libs.versions.toml"));
     expect(catalog).toContain('work = "2.9.0"');
     expect(catalog).toContain("work-runtime-ktx");
-    const uiGradle = read(join(ROOT, "android/ui/build.gradle.kts"));
-    expect(uiGradle).toContain('implementation(project(":data"))');
-    expect(uiGradle).toContain('implementation(project(":core"))');
+    // Le frontend est la WebView locale : plus de module Compose.
+    expect(existsSync(join(ROOT, "android/ui"))).toBe(false);
+    const appGradle = read(join(ROOT, "android/app/build.gradle.kts"));
+    expect(appGradle).toContain("com.journeyapps:zxing-android-embedded:4.3.0");
+    expect(appGradle).not.toContain("compose");
   });
 });

@@ -9,16 +9,8 @@ plugins {
 // ici (voir README + INVARIANTS I1). Règle HTTPS-only sauf
 // http://10.0.2.2 / localhost (émulateur), identique à
 // core/ServerConfig.validateBaseUrl qui borne et normalise toute saisie.
-// Médias via proxy serveur, pas de WebView distante.
-//
-// Interface React locale (#333) : `-Pweb.ui=true` ou `WEB_UI=true` fait
-// dépendre `preBuild` du build Bun et active `BuildConfig.WEB_UI`. Défaut
-// false = Compose, donc CI hors ligne et APK actuels inchangés.
-val webUiEnabled = ((project.findProperty("web.ui") as String?)
-    ?: System.getenv("WEB_UI"))
-    ?.trim()?.lowercase()
-    ?.let { it == "true" || it == "1" || it == "yes" } ?: false
-
+// L'interface est l'app React locale (`web/`), embarquée dans les assets et
+// servie par la WebView (ADR-004) : plus de module Compose.
 android {
     namespace = "fr.veryslopnynotes.app"
     compileSdk = 34
@@ -39,8 +31,6 @@ android {
         val scheme = if (emulator) "http" else "https"
         buildConfigField("String", "SERVER_SCHEME", "\"$scheme\"")
         buildConfigField("String", "SERVER_HOST", "\"$host\"")
-        // Interrupteur d'interface : Compose reste le défaut.
-        buildConfigField("boolean", "WEB_UI", webUiEnabled.toString())
     }
 
     signingConfigs {
@@ -95,10 +85,6 @@ android {
     }
     buildFeatures {
         buildConfig = true
-        compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -109,9 +95,8 @@ android {
     }
 }
 
-// Build de l'UI React dans les assets de l'APK. Tâche enregistrée toujours
-// (config stable) mais rattachée à `preBuild` SEULEMENT si WEB_UI : sans le
-// drapeau, aucun appel à Bun, donc build hors ligne inchangé.
+// Build de l'UI React dans les assets de l'APK. Toujours branché sur
+// `preBuild` : l'APK ne peut pas être construit sans `web/index.html`.
 // Sortie : android/app/src/main/assets/web/ (gitignorée).
 val buildWebUi = tasks.register<Exec>("buildWebUi") {
     workingDir = rootProject.projectDir.parentFile
@@ -121,29 +106,17 @@ val buildWebUi = tasks.register<Exec>("buildWebUi") {
     inputs.file(rootProject.projectDir.parentFile.resolve("package.json"))
     outputs.dir(projectDir.resolve("src/main/assets/web"))
 }
-if (webUiEnabled) {
-    tasks.named("preBuild") { dependsOn(buildWebUi) }
-}
+tasks.named("preBuild") { dependsOn(buildWebUi) }
 
 dependencies {
     implementation(project(":core"))
     implementation(project(":data"))
-    implementation(project(":ui"))
-    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
-    implementation(composeBom)
-    androidTestImplementation(composeBom)
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-compose:1.9.2")
-    implementation("androidx.compose.material3:material3:1.2.1")
-    implementation("androidx.compose.ui:ui:1.6.8")
-    implementation("androidx.compose.ui:ui-tooling-preview:1.6.8")
-    implementation("androidx.navigation:navigation-compose:2.7.7")
-    // #333 : le pont natif lance le scan du QR (ScanContract). Même artefact
-    // déjà présent dans `:ui` (#127), même version épinglée : ce n'est pas une
-    // dépendance nouvelle, seulement l'accès depuis le module hôte.
+    // ComponentActivity + enableEdgeToEdge, sans Compose.
+    implementation("androidx.activity:activity-ktx:1.9.2")
+    // #333 : le pont natif lance le scan du QR (ScanContract).
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     // ponytail: un seul client HTTP (OkHttp allowlist serveur).
     // Upgrade: cache offline Room phase 4 (#14), SSE client #15.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    debugImplementation("androidx.compose.ui:ui-tooling:1.6.8")
 }

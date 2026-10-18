@@ -12,11 +12,11 @@ import {
 import { codeOnly } from "../../agents/runtime/source-guards";
 
 // Miroir des helpers Kotlin de l'assistant devoirs (0.7.0) — ils doivent rester
-// en sync : core/Homework.kt, data/HomeworkRepository.kt, ui/HomeworkHelp.kt.
+// en sync : core/Homework.kt, data/HomeworkRepository.kt. Le pont WebView
+// (`VsnBridge`) expose la même surface à l'UI React.
 // org.json = SDK Android, le build Gradle n'est pas exécuté par `make check` :
 // ces miroirs sont le seul filet sur la logique pure (bornes, citations, refus).
 
-const UI = join(import.meta.dir, "..", "..", "android/ui/src/main/java/fr/veryslopnynotes/ui");
 const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/veryslopnynotes/data");
 const CORE = join(import.meta.dir, "..", "..", "android/core/src/main/java/fr/veryslopnynotes/core");
 
@@ -225,36 +225,5 @@ describe("android homework — le credential reste dans l'app", () => {
     // Le secret de session part, la clé LLM reste (elle n'est pas reconstructible
     // par le serveur : un ré-appairage ne doit pas coûter une nouvelle saisie).
     expect(store).not.toMatch(/llmKeys|LlmKeys|LlmKeyStore/);
-  });
-
-  test("l'écran n'affiche ni fournisseur ni clé, et n'exécute rien", () => {
-    const help = codeOnly(src(UI, "HomeworkHelp.kt"))
-      .split("\n")
-      .filter((l) => !l.trim().startsWith("import "))
-      .join("\n");
-    // Contenu serveur = DONNÉE : Text() seul, jamais WebView/HTML (I6).
-    expect(help).not.toMatch(/WebView|AndroidView|Html/);
-    // Le nom du fournisseur n'est pas une donnée affichée : il ne vit que
-    // dans l'import du dépôt (`OpenRouterHomework`), jamais dans un Text().
-    expect(help).not.toMatch(/sk-or-v1/);
-    expect(help).not.toMatch(/Text\([^)]*openrouter/i);
-    // La clé n'est ni affichée ni journalisée par l'écran.
-    expect(help).not.toMatch(/apiKey/);
-    // Pas de source affichée = pas d'envoi possible (le serveur refuserait sans appel).
-    expect(help).toMatch(/Homework\.uniqueLabels\(sources\)/);
-    expect(help).toMatch(/SOURCES_REQUIRED_MESSAGE/);
-  });
-
-  test("l'écran Tâches expose le déclencheur et le dialogue, câblés par AppNav", () => {
-    const assignments = codeOnly(src(UI, "Assignments.kt"));
-    // #161 : le déclencheur n'est plus le `Button` vert pleine largeur de
-    // `HomeworkHelp.kt`, c'est une PUCE posée dans l'écran (dialogue inchangé).
-    expect(assignments).toMatch(/HomeworkHelpChip \{ onHelp\(a\) \}/);
-    expect(assignments).toMatch(/HomeworkHelpDialog\(/);
-    // Pas de repository injecté = pas de bouton (pas d'état vide, pas de 400).
-    expect(assignments).toMatch(/if \(helpRepo == null\) null else/);
-    const nav = codeOnly(src(UI, "AppNav.kt"));
-    expect(nav).toMatch(/llmKeys = llmKeys/);
-    expect(nav).toMatch(/onForgetLlmKey/);
   });
 });

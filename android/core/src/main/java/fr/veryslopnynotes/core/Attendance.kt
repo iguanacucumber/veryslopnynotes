@@ -33,23 +33,6 @@ data class AbsenceRecord(
     val justified: Boolean? = null,
 )
 
-/** Période scolaire servant de regroupement des compteurs. */
-data class Period(
-    val id: String,
-    val name: String,
-    val start: String,
-    val end: String,
-)
-
-/** Compteurs dérivés par période (jamais de valeur devinée). */
-data class AttendancePeriod(
-    val periodId: String,
-    val name: String? = null,
-    val absences: Int,
-    val late: Int,
-    val missingMinutes: Double,
-)
-
 /** Miroir de `isAbsenceRecord` : c'est lui qui décide si un record compte. */
 fun isAbsenceRecord(r: AbsenceRecord): Boolean {
     if (r.id.trim().isEmpty() || r.accountId.trim().isEmpty()) return false
@@ -71,34 +54,3 @@ fun isAbsenceRecord(r: AbsenceRecord): Boolean {
 /** Miroir de `isOptionalBoundedString` : borne en unités de code OU en points de code. */
 private fun boundedLike(value: String, max: Int): Boolean =
     value.length <= max || value.codePointCount(0, value.length) <= max
-
-/**
- * Compteurs par période : absences, retards et minutes manquées.
- * Un enregistrement non conforme ou sans période est ignoré des compteurs (il
- * reste dans la liste renvoyée par l'API, on n'invente pas de période).
- * Trié par `periodId` comme le `sort` explicite du TS (l'ordre d'insertion de la
- * Map d'accumulation n'est pas le même).
- */
-fun attendancePeriods(records: List<AbsenceRecord>, periods: List<Period> = emptyList()): List<AttendancePeriod> {
-    val names = periods.associate { it.id to it.name }
-    val acc = LinkedHashMap<String, AttendancePeriod>()
-    for (r in records) {
-        if (!isAbsenceRecord(r) || r.periodId == null) continue
-        val periodId = r.periodId
-        val cur = acc[periodId]
-            ?: AttendancePeriod(
-                periodId = periodId,
-                name = if (names.containsKey(periodId)) names[periodId] else null,
-                absences = 0,
-                late = 0,
-                missingMinutes = 0.0,
-            )
-        val minutes = cur.missingMinutes + (r.durationMinutes ?: 0.0)
-        acc[periodId] = if (r.kind == ABSENCE_KIND_LATE) {
-            cur.copy(late = cur.late + 1, missingMinutes = minutes)
-        } else {
-            cur.copy(absences = cur.absences + 1, missingMinutes = minutes)
-        }
-    }
-    return acc.values.sortedBy { it.periodId }
-}
