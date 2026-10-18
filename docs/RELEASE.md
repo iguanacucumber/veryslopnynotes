@@ -15,7 +15,8 @@ perso dans le livrable. Clé signature TOUJOURS hors repo.
 | undici-types (transitif) | 8.9.0 | `bun.lock` | MIT |
 | Gradle / AGP / Kotlin | 8.7 / 8.5.2 / 1.9.24 | wrapper + `build.gradle.kts` | Apache-2.0 |
 | compileSdk/targetSdk/minSdk | 34 / 34 / 26 | `android/app/build.gradle.kts` | — |
-| Compose BOM / OkHttp | 2024.06.00 / 4.12.0 | `android/app/build.gradle.kts` | Apache-2.0 |
+| activity-ktx / OkHttp | 1.9.2 / 4.12.0 | `android/app/build.gradle.kts` | Apache-2.0 |
+| zxing-android-embedded | 4.3.0 | `android/app/build.gradle.kts` | Apache-2.0 |
 | react / react-dom | 19.1.1 | `package.json` exact + `bun.lock` | MIT |
 | react-router-dom | 7.18.2 | `package.json` exact + `bun.lock` | MIT |
 | vite / @vitejs/plugin-react | 7.3.5 / 5.1.1 | `package.json` exact + `bun.lock` | MIT |
