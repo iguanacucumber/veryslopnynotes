@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -51,6 +52,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -379,8 +381,28 @@ fun AppTopBar(
         .orEmpty()
         .filterNot { it is TopAction.Go && it.route in hiddenDestinations }
     val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
     val state = scrollBehavior.state
     val contentHeightPx = with(density) { (TopBarContentHeight + reclaimedTop).toPx() }
+    // #305 : l'encoche est une zone interdite (le découpage est matériel : elle
+    // ne disparaît pas avec la barre de statut) et vaut zéro sur un écran sans
+    // découpage. Elle est posée en marges ÉGALES au-dessus et au-dessous du
+    // contenu : `windowInsetsPadding` centre le contenu ENTRE ses marges, donc
+    // des marges égales le centrent dans la barre ENTIÈRE (encoche comprise) au
+    // lieu de le tasser vers son bas. Le contenu ne passe pas sous l'encoche
+    // pour autant : la barre de statut est toujours au moins aussi haute que
+    // l'encoche qu'elle recouvre, et le contenu (rangée d'icônes de 48 dp, au
+    // plus les 64 dp de la barre de M3) est centré dans 64 dp + [reclaimedTop]
+    // — sa marge du haut y vaut au moins l'encoche. La gauche et la droite
+    // gardent l'encoche ENTIÈRE : en paysage elle est sur le côté, la moitié y
+    // laisserait le contenu dessous.
+    val cutout = WindowInsets.displayCutout.asPaddingValues(density)
+    val cutoutPadding = WindowInsets(
+        left = cutout.calculateLeftPadding(layoutDirection),
+        top = cutout.calculateTopPadding() / 2,
+        right = cutout.calculateRightPadding(layoutDirection),
+        bottom = cutout.calculateBottomPadding() / 2,
+    )
     // La barre se rétracte quand on défile vers le bas et revient dès qu'on
     // remonte : le défilement vient des écrans, pas l'inverse. Le [scrollBehavior]
     // est celui branché par `AppNav` sur le `Scaffold` (`nestedScroll`) : le
@@ -415,11 +437,8 @@ fun AppTopBar(
     ) {
         Row(
             modifier = Modifier
-                // `displayCutout` : l'encoche est une zone interdite quel que
-                // soit l'état des barres système (le découpage est matériel,
-                // il ne disparaît pas avec la barre de statut) et vaut zéro sur
-                // un écran sans découpage — donc rien à changer là-bas.
-                .windowInsetsPadding(WindowInsets.displayCutout)
+                // L'encoche en marges égales (cf. [cutoutPadding] plus haut).
+                .windowInsetsPadding(cutoutPadding)
                 .fillMaxWidth()
                 // Rogner DANS la hauteur de la barre : au défilement, le titre
                 // sort au lieu de déborder sur le contenu.
