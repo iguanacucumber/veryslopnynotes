@@ -23,7 +23,7 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dir, "..", "..");
 
 /** Ordre de départ : le plus long d'abord, pour que le dernier fini soit bref. */
-const DEFAULT_TARGETS = ["android-compile", "unit", "typecheck", "architecture", "contracts", "check-kotlin", "lint"];
+const DEFAULT_TARGETS = ["android-compile", "unit", "typecheck", "architecture", "contracts", "check-kotlin", "lint", "web"];
 // Surchargeable pour tester le harnais lui-même (même piège volontaire que
 // ANDROID_PROJECT_DIR dans android-env.sh) : `CHECK_TARGETS="lint nope"`.
 const override = process.env["CHECK_TARGETS"]?.split(" ").filter(Boolean) ?? [];

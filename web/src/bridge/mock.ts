@@ -230,7 +230,7 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       return ok({ count: settings.accountCount }) as Promise<T>;
     case "pairing.scanQr":
       return ok({
-        qr: { login: "demo", jeton: "demo", url: "https://demo.pronote.local" },
+        qr: { login: "demo", jeton: "demo", url: "https://demo.school.invalid" },
         cancelled: false,
       }) as Promise<T>;
     case "pairing.pair": {

@@ -1,4 +1,4 @@
-.PHONY: check lint typecheck unit architecture contracts check-kotlin android-compile runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
+.PHONY: check lint typecheck unit architecture contracts check-kotlin android-compile web web-typecheck web-build web-test web-smoke runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
 
 # Découverte JDK/SDK partagée par android-compile, buildDebugApk, buildRelApk :
 # une seule implémentation, sinon une des trois finit par oublier la borne 17-21.
@@ -12,6 +12,24 @@ lint:
 
 typecheck:
 	bunx tsc --noEmit
+
+# Frontend React : typecheck + build local + tests. Le build écrit dans
+# `android/app/src/main/assets/web/` (gitignoré) ; Gradle le refait quand
+# WEB_UI=true.
+web-typecheck:
+	bun run typecheck:web
+
+web-build:
+	bun run build:web
+
+web-test:
+	bun test tests/web tests/architecture/web.test.ts
+
+web: web-typecheck web-test web-build
+
+# Smoke navigateur du frontend (Chromium requis). Hors `make check`.
+web-smoke: web-build
+	bun run agents/runtime/web-smoke.ts
 
 # --parallel : les 37 fichiers sur les 16 cœurs, un isolat par fichier (6,6 s →
 # 4,1 s). Les étapes lourdes sont des SOUS-PROCESSUS (shot.sh, kotlinc, java)
