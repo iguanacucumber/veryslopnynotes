@@ -104,7 +104,9 @@ describe("coquille applicative (#135)", () => {
     // #146 : c'est le `label` de l'item qui le porte, et l'icône est décorative
     // (`contentDescription = null`) — la décrire en plus faisait annoncer
     // « Accueil … Accueil », `NavigationBarItem` ne fusionnant pas les deux nœuds.
-    expect(shell).toContain("label = { Text(tabLabel(tab)) }");
+    expect(shell).toContain("text = tabLabel(tab)");
+    // #331 : le libellé sélectionné est semibold, la fonction reste la même.
+    expect(shell).toContain("fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium");
     expect(shell).toContain("contentDescription = null,");
     expect(shell).not.toContain("contentDescription = tabLabel(tab)");
     // Zéro glyphe comme icône : plus aucun des glyphes d'origine, ni dans la

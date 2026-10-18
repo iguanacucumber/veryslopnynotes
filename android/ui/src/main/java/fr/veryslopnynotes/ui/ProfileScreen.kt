@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -130,7 +131,7 @@ fun ProfileScreen(
     var logoutAsk by rememberSaveable { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(PapPagePadding),
         verticalArrangement = Arrangement.spacedBy(BLOCK_GAP),
     ) {
         if (baseUrl.isBlank()) {
@@ -296,42 +297,47 @@ private fun ProfileHeader(
     activeLabel: String,
     onSwitch: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        ProfileAvatar(photo = photo, initials = initials)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (details.isNotEmpty()) {
+    // #331 : l'identité est le point focal du Profil, pas une ligne de texte
+    // grise au-dessus de listes. L'avatar passe sur `surface` pour se détacher
+    // de l'aplat vert du héros.
+    PapHeroCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            ProfileAvatar(photo = photo, initials = initials)
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = details,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    text = name,
+                    style = MaterialTheme.typography.displaySmall,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (details.isNotEmpty()) {
+                    Text(
+                        text = details,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = LocalContentColor.current,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-        }
-        if (switchable && activeLabel.isNotEmpty()) {
-            // Le chevron AFFIRME « cet en-tête est un sélecteur » : sans lui,
-            // l'en-tête n'aurait aucune raison d'être cliquable.
-            //
-            // #146 : c'était un `Icon(... .clickable(...))`, donc une cible de
-            // 24 dp — la moitié du minimum Material. L'`IconButton` garde la
-            // MÊME image (glyphe 24 dp par défaut) et la zone d'appui de 48 dp.
-            IconButton(onClick = onSwitch) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Changer de compte",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (switchable && activeLabel.isNotEmpty()) {
+                // Le chevron AFFIRME « cet en-tête est un sélecteur » : sans lui,
+                // l'en-tête n'aurait aucune raison d'être cliquable.
+                //
+                // #146 : c'était un `Icon(... .clickable(...))`, donc une cible de
+                // 24 dp — la moitié du minimum Material. L'`IconButton` garde la
+                // MÊME image (glyphe 24 dp par défaut) et la zone d'appui de 48 dp.
+                IconButton(onClick = onSwitch) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Changer de compte",
+                        tint = LocalContentColor.current,
+                    )
+                }
             }
         }
     }
@@ -358,13 +364,15 @@ private fun ProfileAvatar(photo: PhotoState, initials: String) {
             modifier = Modifier
                 .size(PROFILE_AVATAR)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                // #331 : l'avatar repose sur l'aplat de marque du héros ;
+                // passer le fond en `surface` le détache sans ajouter de bord.
+                .background(MaterialTheme.colorScheme.surface),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = initials,
                 style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = MaterialTheme.colorScheme.secondary,
                 maxLines = 1,
             )
         }

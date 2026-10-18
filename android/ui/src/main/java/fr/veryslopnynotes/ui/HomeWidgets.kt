@@ -428,10 +428,13 @@ fun homeQuickActions(
     nowMillis: Long,
     zone: ZoneId,
 ): List<HomeQuickActionUi> = listOf(
-    HomeQuickActionUi(ROUTE_NEWS, "Actualités", homeNewsStatus(news), homeTintHex(0)),
-    HomeQuickActionUi(ROUTE_CANTEEN, "Cantine", homeCanteenStatus(menus, nowMillis, zone), homeTintHex(1)),
-    HomeQuickActionUi(ROUTE_ATTENDANCE, "Vie scolaire", homeAttendanceStatus(attendance), homeTintHex(2)),
-    HomeQuickActionUi(ROUTE_MESSAGES, "Messages", homeMessagesStatus(discussions), homeTintHex(3)),
+    // #331 : quatre entrées VOISINES de la palette donnaient quatre pastilles
+    // rouges/orange. On prend quatre teintes distinctes (bleu, ambre, rouge,
+    // turquoise) — la palette reste la seule source, seul l'indice change.
+    HomeQuickActionUi(ROUTE_NEWS, "Actualités", homeNewsStatus(news), homeTintHex(12)),
+    HomeQuickActionUi(ROUTE_CANTEEN, "Cantine", homeCanteenStatus(menus, nowMillis, zone), homeTintHex(4)),
+    HomeQuickActionUi(ROUTE_ATTENDANCE, "Vie scolaire", homeAttendanceStatus(attendance), homeTintHex(0)),
+    HomeQuickActionUi(ROUTE_MESSAGES, "Messages", homeMessagesStatus(discussions), homeTintHex(8)),
 )
 
 /**

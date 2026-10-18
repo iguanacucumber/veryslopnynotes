@@ -173,6 +173,8 @@ const LIME_INK = hex8("#5A7821");
 const DANGER = hex8("#DC1400");
 const BORDER = hex8("#DCDCDC");
 const SURFACE = hex8("#FFFFFF");
+/** #331 : `background` clair = `tint(PapillonGreen, .96)`. */
+const PAGE = tsTint(GREEN, 0.96);
 const SURFACE_VARIANT = hex8("#F3F6F7");
 const SURFACE_CONTAINER = hex8("#F1F1F1");
 const DARK_SURFACE = hex8("#121212");
@@ -257,8 +259,11 @@ describe("unit android thème Papillon (#134)", () => {
     // Thème CLAIR : toute paire où du TEXTE repose sur sa surface doit passer AA.
     const light = [
       ["onSurface/surface", INK, SURFACE],
-      ["onBackground/background", INK, SURFACE],
+      // #331 : la page claire est teintée, pas blanche ; l'encre doit y passer.
+      ["onBackground/background", INK, PAGE],
       ["onSurfaceVariant/surface", over(INK, SURFACE, SECONDARY_ALPHA), SURFACE],
+      // La page teintée porte aussi du texte secondaire (accueil, profil).
+      ["onSurfaceVariant/background", over(INK, PAGE, SECONDARY_ALPHA), PAGE],
       ["onSecondary/secondary", WHITE, GREEN_DEEP],
       ["onSecondaryContainer/secondaryContainer", INK, GREEN_PALE],
       ["onPrimaryContainer/primaryContainer", GREEN_DEEP, GREEN_PALE],
@@ -373,7 +378,7 @@ describe("unit android thème Papillon (#134)", () => {
     const surfaces: Array<[string, Rgb, Rgb]> = [
       ["surface", SURFACE, DARK_SURFACE],
       ["surfaceVariant", SURFACE_VARIANT, tsTint(DARK_SURFACE, 0.1)],
-      ["background (rangée de puces)", SURFACE, DARK_BACKGROUND],
+      ["background (rangée de puces)", PAGE, DARK_BACKGROUND],
     ];
     for (const [name, light, dark] of surfaces) {
       for (const h of PALETTE) {
@@ -472,6 +477,12 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     ]) {
       expect({ hex, found: kt.includes(hex) }).toEqual({ hex, found: true });
     }
+    // #331 : page teintée + paire de héros. Le fond ne doit pas redevenir le
+    // blanc de `surface`, et le héros clair doit prendre l'encre blanche.
+    expect(kt).toContain("val PapillonPage = tint(PapillonGreen, .96f)");
+    expect(kt).toContain("background = PapillonPage");
+    expect(kt).toContain("fun papHeroContainer(): Color");
+    expect(kt).toContain("fun papHeroInk(): Color");
     // #188 : les CINQ rayons, relevés sur la source de la référence (v8.5.5).
     // AVANT : 8 / 12 / 18 / 20 / 25 — le 18 et le 25 n'existent pas chez
     // Papillon, dont la carte de moyenne est à 24.
@@ -485,9 +496,9 @@ describe("unit android thème Papillon — Kotlin (#134)", () => {
     // 18 sp sur Android dans la référence elle-même (17 sur iOS) : on garde
     // Android. `body1` est SEMIBOLD sur Android, medium sur iOS.
     for (const style of [
-      "displayLarge = papillonText(34, 41, FontWeight.Bold)",
-      "displayMedium = papillonText(28, 34, FontWeight.Bold)",
-      "displaySmall = papillonText(24, 29, FontWeight.Bold)",
+      "displayLarge = papillonText(34, 41, FontWeight.Bold, tabular = true)",
+      "displayMedium = papillonText(28, 34, FontWeight.Bold, tabular = true)",
+      "displaySmall = papillonText(24, 29, FontWeight.Bold, tabular = true)",
       "headlineLarge = papillonText(21, 27, FontWeight.Bold)",
       "headlineMedium = papillonText(19, 25, FontWeight.Bold)",
       "headlineSmall = papillonText(18, 23, FontWeight.Bold)",
@@ -860,5 +871,25 @@ describe("unit android contraste (#146) — encre de texte, clair ET sombre", ()
     // se voie.
     expect({ frozen: rounded(tsContrast(GREEN_PALE, SURFACE)) }).toEqual({ frozen: 1.07 });
     expect({ ink: rounded(tsContrast(GREEN_DEEP, GREEN_PALE)) >= 4.5 }).toEqual({ ink: true });
+  });
+
+  test("pastille matière sombre : la teinte reste, l'encre passe AA", () => {
+    // #331 : une PETITE pastille utilise 18 % de la couleur brute sur la surface
+    // sombre, pas le pas −60 % qui écrasait les quatre accès d'accueil en brun.
+    const alpha = 0.18;
+    const src = readFileSync(join(UI, "PapillonTheme.kt"), "utf8");
+    expect(src).toContain("const val SUBJECT_BADGE_DARK_ALPHA = 0.18f");
+    let worst = 99;
+    for (const h of PALETTE) {
+      const bg = over(hex8(h), DARK_SURFACE, alpha);
+      const ink = tsSubjectContent(h, true)!;
+      const ratio = tsContrast(ink, bg);
+      expect({ h, ok: ratio >= 4.5 }).toEqual({ h, ok: true });
+      // La nuance survit : la pastille composée n'est pas grise.
+      expect({ h, hue: Math.max(bg.r, bg.g, bg.b) - Math.min(bg.r, bg.g, bg.b) > 0.02 })
+        .toEqual({ h, hue: true });
+      worst = Math.min(worst, ratio);
+    }
+    expect(worst).toBeGreaterThanOrEqual(4.5);
   });
 });

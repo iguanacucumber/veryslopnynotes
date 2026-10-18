@@ -29,10 +29,12 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -93,16 +95,26 @@ private val HAIRLINE = 1.dp
 private val CARD_PADDING = 16.dp
 
 /**
+ * Marge de page, en dp.
+ *
+ * #331 : onze écrans écrivaient `padding(16.dp)` chacun de leur côté, et deux
+ * écrivaient 12. Une seule valeur partagée rend le rythme des pages vérifiable
+ * d'un coup d'œil — ce n'est pas une hiérarchie de jetons, juste le pas de page.
+ */
+val PapPagePadding = 16.dp
+
+/** Écart entre deux blocs d'une page (sections, cartes, héros). */
+val PapSectionGap = 16.dp
+
+/**
  * Opacité de l'icône d'un état vide.
  *
- * 50 %, le parti pris de papillon.bzh : l'icône d'un état vide est un glyphe
- * DÉCORATIF (`contentDescription = null`, c'est le titre qui porte le sens),
- * donc aucune règle de contraste ne s'y applique. Ce n'est pas un jeton de
- * couleur : l'appliquer SUR l'encre du thème (`onSurfaceVariant`) est
- * exactement ce que fait Papillon, où l'icône d'état vide est le gris le plus
- * pâle de l'écran.
+ * L'icône est un glyphe DÉCORATIF (`contentDescription = null`, c'est le titre
+ * qui porte le sens), donc aucune règle de contraste ne s'y applique. 90 % :
+ * sur la pastille `surfaceVariant` ajoutée en #331, 50 % devenait un fantôme
+ * gris ; l'icône reste douce, mais elle se lit comme un pictogramme.
  */
-private const val EMPTY_ICON_ALPHA = 0.5f
+private const val EMPTY_ICON_ALPHA = 0.9f
 
 /** Bornes d'opacité du squelette : la boîte respire entre les deux. */
 private const val SKELETON_ALPHA_MIN = 0.30f
@@ -312,6 +324,43 @@ fun PapCard(
     }
 }
 
+/**
+ * Carte HÉROS : un aplat de rôle, 24 dp de rayon, aucun filet, 20 dp d'air.
+ *
+ * #331 : les écrans racines n'avaient aucun point focal — le même `PapCard`
+ * blanc servait au widget de cours, à la moyenne et aux accès rapides. Un héros
+ * porte une information de tête (salutation, identité, prochain cours, résumé)
+ * et se distingue par la COULEUR DE RÔLE, pas par une ombre de plus. Le contenu
+ * reçoit [contentColor] via `LocalContentColor`, donc un enfant n'a pas à
+ * répéter la couleur de la carte.
+ *
+ * Ce n'est pas une carte générique de plus : quatre écrans l'utilisent, et une
+ * carte ordinaire reste `PapCard`.
+ */
+@Composable
+fun PapHeroCard(
+    modifier: Modifier = Modifier,
+    containerColor: Color = papHeroContainer(),
+    contentColor: Color = papHeroInk(),
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = containerColor,
+            contentColor = contentColor,
+        ),
+        // Zéro ombre : l'aplat de rôle EST le relief. Une ombre de plus ferait
+        // flotter le héros au-dessus du contenu comme une carte cliquable.
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        CompositionLocalProvider(LocalContentColor provides contentColor) {
+            Column(modifier = Modifier.padding(20.dp), content = content)
+        }
+    }
+}
+
 /** Filet 1 dp. La couleur est le rôle `outlineVariant` du thème, c'est-à-dire
  *  exactement l'opacité 13 % demandée, en clair comme en sombre. */
 @Composable
@@ -495,12 +544,20 @@ fun PapEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(48.dp).alpha(EMPTY_ICON_ALPHA),
-        )
+        Box(
+            modifier = Modifier
+                .size(64.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(28.dp).alpha(EMPTY_ICON_ALPHA),
+            )
+        }
         // Titre de l'état vide = le seul titre de l'écran : il porte `heading()`
         // pour qu'un lecteur d'écran sache où il est sans lire la description.
         Text(

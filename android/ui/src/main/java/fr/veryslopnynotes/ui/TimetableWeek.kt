@@ -692,15 +692,13 @@ fun TimetableRoute(
         // #145 : la ligne du prochain cours APPARAÎT (échelle 0.9 -> 1 + opacité,
         // 300 ms mesurés) au lieu de se faire réécrire sous les yeux quand
         // l'heure change.
-        PapEnter(modifier = Modifier.padding(horizontal = 16.dp)) {
-            if (next != null) {
-                Text(
-                    text = "Prochain cours · ${subjectStyle(subjectPrefs, next.subject).badge}" +
-                        " · ${lessonTimeLabel(next.startMillis, zone)}",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+        if (next != null) {
+            PapEnter(modifier = Modifier.padding(horizontal = 16.dp)) {
+                NextLessonBanner(
+                    lesson = next,
+                    zone = zone,
+                    nowMillis = nowMillis,
+                    subjectPrefs = subjectPrefs,
                 )
             }
         }
@@ -830,6 +828,71 @@ private fun TimetableWeekBar(
                 DropdownMenuItem(
                     text = { Text("Alertes sécurité", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     onClick = { menuOpen = false; onAlerts() },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Bandeau du PROCHAIN cours : le point focal de l'onglet Cours.
+ *
+ * #331 : la ligne « Prochain cours · Maths · 10:05 » était un `titleSmall` gris
+ * au même niveau que le reste, alors que c'est l'information la plus utile de
+ * l'écran. Le bandeau prend la couleur de la matière (fond pastel, encre
+ * mesurée) et ajoute le compte à rebours déjà calculé pour l'accueil. Aucune
+ * donnée nouvelle : `nextLessonOf` et `relativeTimeFr` existaient.
+ */
+@Composable
+private fun NextLessonBanner(
+    lesson: TimetableLessonUi,
+    zone: ZoneId,
+    nowMillis: Long,
+    subjectPrefs: List<SubjectPrefs>,
+    modifier: Modifier = Modifier,
+) {
+    val style = subjectStyle(subjectPrefs, lesson.subject)
+    val hex = subjectColorHex(subjectPrefs, lesson.subject)
+    val background = subjectSurface(hex) ?: MaterialTheme.colorScheme.primaryContainer
+    val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.onPrimaryContainer
+    PapHeroCard(
+        modifier = modifier,
+        containerColor = background,
+        contentColor = ink,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Prochain cours",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = style.badge,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = ink,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = lessonTimeLabel(lesson.startMillis, zone),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = ink,
+                    maxLines = 1,
+                )
+                Text(
+                    text = relativeTimeFr(lesson.startMillis, nowMillis),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ink,
+                    maxLines = 1,
                 )
             }
         }
