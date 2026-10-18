@@ -2,8 +2,11 @@ package fr.veryslopnynotes.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -356,6 +359,13 @@ fun AppTopBar(
         },
         // Slot d'actions contextuelles, une seule source : `TOP_BAR_ACTIONS`.
         actions = { TopBarActions(actions = actions, onNavigate = onNavigate, onRefresh = onRefresh) },
+        // #303 : la barre de statut est MASQUÉE (plein écran immersif), donc la
+        // part haute de `TopAppBarDefaults.windowInsets` (systemBars) tombe à
+        // zéro et le titre glissait sous l'encoche : `enableEdgeToEdge` pose
+        // `SHORT_EDGES`, donc la fenêtre se peint SOUS le découpage en portrait.
+        // `displayCutout` est la zone interdite quel que soit l'état des barres
+        // et vaut zéro sur un écran sans découpage — donc rien à changer là-bas.
+        windowInsets = TopAppBarDefaults.windowInsets.union(WindowInsets.displayCutout),
         scrollBehavior = scrollBehavior,
     )
 }
