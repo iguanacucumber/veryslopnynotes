@@ -68,15 +68,20 @@ export function isNative(): boolean {
 
 /** Appel unique vers Kotlin. En navigateur (`bun run dev:web`), le pont
  *  factice répond avec des données de démonstration. */
-export function call<T>(method: BridgeMethod, params: unknown = {}): Promise<T> {
+export function call<T>(method: BridgeMethod, params: unknown = {}, timeoutMs = 30_000): Promise<T> {
   if (!isNative()) return mockCall<T>(method, params);
   installCallbacks();
   const requestId = `r${++sequence}`;
   return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      pending.delete(requestId);
-      reject(new BridgeCallError("unavailable", "le téléphone n'a pas répondu"));
-    }, 30_000);
+    // 0 = pas de timeout : le scan QR reste ouvert tant que l'utilisateur
+    // cadre le code, et le résultat natif doit encore être accepté au retour.
+    const timer =
+      timeoutMs > 0
+        ? window.setTimeout(() => {
+            pending.delete(requestId);
+            reject(new BridgeCallError("unavailable", "le téléphone n'a pas répondu"));
+          }, timeoutMs)
+        : 0;
     pending.set(requestId, {
       resolve: (value) => resolve(value as T),
       reject,
@@ -101,7 +106,7 @@ export const bridge = {
   restore: () => call<SessionStatus>("session.restore"),
   logout: () => call<{ ok: true }>("session.logout"),
   accounts: () => call<{ count: number }>("session.accounts"),
-  scanQr: () => call<{ qr: PairParams["qr"] | null; cancelled: boolean }>("pairing.scanQr"),
+  scanQr: () => call<{ qr: PairParams["qr"] | null; cancelled: boolean }>("pairing.scanQr", {}, 0),
   pair: (params: PairParams) => call<PairResult>("pairing.pair", params),
   cancelPairing: () => call<{ ok: true }>("pairing.cancel"),
   cached: (key: ResourceParams["key"]) => call<ResourceResult>("resources.cached", { key }),
