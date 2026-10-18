@@ -75,6 +75,9 @@ import java.time.ZoneId
 /** Opacité du fond du bloc allergènes (lime de marque). */
 private const val ALERGEN_BLOCK_ALPHA = 0.25f
 
+/** Une minute : la finesse de l'âge du solde, donc la granularité de la clé de mémoïsation (#312). */
+private const val MINUTE_MS = 60_000L
+
 private const val MAX_DISHES = 20
 private const val MAX_DISH_CHARS = 120
 private const val MAX_ALLERGENS = 14
@@ -485,7 +488,18 @@ fun CanteenRoute(repo: SyncedRepository, baseUrl: String) {
     // à câbler ici.
     LaunchedEffect(Unit) { refresh() }
 
-    val week = payload?.let { canteenWeekFrom(it) }
+    // #312 : le parse des menus est mémoïsé par payload, au lieu d'être rejoué à
+    // chaque recomposition (un geste de tirail en recompose un par frame). La clé
+    // porte AUSSI la minute courante et la zone, parce que le parse lit l'horloge
+    // et le fuseau : l'âge du solde (« mis à jour il y a 4 min ») est une
+    // information de synchronisation, et la minute est exactement la finesse de
+    // ce libellé — donc au plus un re-parse par minute, et le solde ne se fige
+    // pas.
+    val zone = remember { ZoneId.systemDefault() }
+    val nowMillis = System.currentTimeMillis()
+    val week = remember(payload, nowMillis / MINUTE_MS, zone) {
+        payload?.let { canteenWeekFrom(it, nowMillis, zone) }
+    }
     val days = week?.days ?: emptyList()
 
     // La colonne paddée englobe TOUS les états : sans elle, le squelette était

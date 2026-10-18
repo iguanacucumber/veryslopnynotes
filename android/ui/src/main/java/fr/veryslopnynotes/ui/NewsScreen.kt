@@ -375,7 +375,11 @@ fun NewsRoute(
 
     // Un item déjà lu côté établissement le reste ; « lu » posé par l'utilisateur
     // s'ajoute par-dessus (jamais l'inverse : on ne dé-marque pas).
-    val shown = news.map { item -> if (item.id in readIds) item.copy(read = true) else item }
+    // #312 : la liste recopiée n'est plus reconstruite à chaque recomposition —
+    // `news` (déjà analysé) et les identifiants lus sont les seules entrées.
+    val shown = remember(news, readIds) {
+        news.map { item -> if (item.id in readIds) item.copy(read = true) else item }
+    }
 
     HomePullToRefresh(refreshing = loading, onRefresh = { refresh(force = true) }) {
         NewsScreen(
