@@ -76,7 +76,7 @@ describe("messagerie — lecture défensive", () => {
       JSON.stringify({ items: [{ id: "x", participants: ["Mme Y"], lastMessageAt: "2026-10-18T09:00:00Z" }] }),
     );
     expect(fallback).toHaveLength(1);
-    expect(fallback[0]?.subject).toBe("Discussion");
+    expect(fallback[0]?.subject).toBe("Mme Y");
     expect(fallback[0]?.unreadCount).toBe(UNKNOWN_UNREAD);
   });
 
