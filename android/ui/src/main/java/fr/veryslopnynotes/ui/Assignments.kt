@@ -1026,12 +1026,27 @@ fun AssignmentsRoute(
         }
     }
 
+    // #312 : le parse du payload est mémoïsé par payload. Il se rejouait à
+    // CHAQUE recomposition — une frappe dans la recherche, un filtre matière ou
+    // un tic d'horloge suffisaient. Les étages suivants ne lisent plus que la
+    // liste déjà analysée.
     val payload = (state as? UiState.Data)?.payload ?: (state as? UiState.Error)?.cached
-    val list = assignmentsFromPayload(payload)
-    val optimistic = pending?.let { (id, done) -> list.map { if (it.id == id) it.copy(done = done) else it } } ?: list
-    val visible = filterAssignments(optimistic, selectedSubject, query)
-    val sections = assignmentSections(visible, nowMillis, zone)
+    val list = remember(payload) { assignmentsFromPayload(payload) }
+    val optimistic = remember(list, pending) {
+        pending?.let { (id, done) -> list.map { if (it.id == id) it.copy(done = done) else it } } ?: list
+    }
+    val visible = remember(optimistic, selectedSubject, query) {
+        filterAssignments(optimistic, selectedSubject, query)
+    }
+    // Le regroupement, lui, dépend de l'HEURE (en retard / aujourd'hui / …) :
+    // recalcul léger sur la liste analysée, comme avant — mais retenu tant que
+    // ses trois entrées ne bougent pas.
+    val sections = remember(visible, nowMillis, zone) {
+        assignmentSections(visible, nowMillis, zone)
+    }
     val errorMessage = (state as? UiState.Error)?.message
+    // Second lecteur du MÊME payload pour le filtre matière : lui aussi mémoïsé.
+    val subjects = remember(payload) { payload?.let { subjectsFromPayload(it) } ?: emptyList() }
 
     fun openAttachment(a: Assignment, att: AssignmentAttachment) {
         // Jamais d'adresse d'établissement : la `ref` opaque est résolue sur
@@ -1071,7 +1086,7 @@ fun AssignmentsRoute(
         weekLabel = weekLabelFr(week),
         weekRange = weekRangeFr(week),
         sections = sections,
-        subjects = payload?.let { subjectsFromPayload(it) } ?: emptyList(),
+        subjects = subjects,
         subjectPrefs = subjectPrefs,
         selectedSubject = selectedSubject,
         query = query,

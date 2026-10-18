@@ -130,27 +130,63 @@ fun IndexScreen(
         }
     }
 
-    val lessons = snapshot.timetable?.let { upcomingLessonsFrom(it, nowMillis, limit = 1) }.orEmpty()
-    val homework = snapshot.assignments?.let { pendingHomeworkFrom(it, nowMillis, limit = 2) }.orEmpty()
-    val grades = snapshot.grades?.let { latestGradesFrom(it, limit = 1) }.orEmpty()
+    // #312 : AUCUN parse JSON ne se rejoue à chaque recomposition. Chaque dérivé
+    // est mémoïsé par SON payload (le tic d'une minute, la bascule `refreshing`,
+    // un geste de tirail recomposent tous cette page). Les deux widgets d'horloge
+    // passent par les deux étages de `HomeWidgets.kt` : l'analyse est retenue par
+    // payload, le filtre d'heure — seul morceau qui dépend vraiment de `nowMillis`
+    // — est rejoué sur la liste déjà analysée.
+    val lessons = remember(snapshot.timetable) {
+        snapshot.timetable?.let { upcomingLessons(it) }.orEmpty()
+    }
+    val visibleLessons = remember(lessons, nowMillis) {
+        upcomingLessonsFrom(lessons, nowMillis, limit = 1)
+    }
+    val homework = remember(snapshot.assignments) {
+        snapshot.assignments?.let { pendingHomework(it) }.orEmpty()
+    }
+    val visibleHomework = remember(homework, nowMillis) {
+        pendingHomeworkFrom(homework, nowMillis, limit = 2)
+    }
+    val grades = remember(snapshot.grades) { snapshot.grades?.let { latestGradesFrom(it, limit = 1) }.orEmpty() }
     // #139 a livre le rapport de moyennes (`averagesFrom`) : l'accueil prend la
     // moyenne generale de la, sans relire le JSON des moyennes.
-    val average = generalAverageOf(snapshot.grades?.let { averagesFrom(it) })
-    val actions = homeQuickActions(
+    val report = remember(snapshot.grades) { snapshot.grades?.let { averagesFrom(it) } }
+    val average = generalAverageOf(report)
+    // Les quatre accès rapides : la clé porte tout ce que `homeQuickActions` lit.
+    // La ligne « Cantine » est la SEULE à dépendre de l'horloge, et seulement du
+    // JOUR local (`dayOffsetOf` compare des dates, pas des instants) : la clé
+    // prend donc le jour, pas `nowMillis` — un tic d'une minute ne rejoue plus
+    // les quatre parses, et le libellé bascule quand même à minuit.
+    val actions = remember(
         snapshot.news,
         snapshot.menus,
         snapshot.attendance,
         snapshot.discussions,
-        nowMillis,
+        dayKey(nowMillis, zone),
         zone,
-    )
-    val cachedActions = listOf(snapshot.news, snapshot.menus, snapshot.attendance, snapshot.discussions)
-        .count { it != null }
+    ) {
+        homeQuickActions(
+            snapshot.news,
+            snapshot.menus,
+            snapshot.attendance,
+            snapshot.discussions,
+            nowMillis,
+            zone,
+        )
+    }
+    val cachedActions = remember(snapshot.news, snapshot.menus, snapshot.attendance, snapshot.discussions) {
+        listOf(snapshot.news, snapshot.menus, snapshot.attendance, snapshot.discussions).count { it != null }
+    }
 
-    val badges = mapOf(
-        ROUTE_MESSAGES to messagesUnreadBadge(snapshot.discussions),
-        ROUTE_ATTENDANCE to attendanceTotalBadge(snapshot.attendance),
-    )
+    // La carte `mapOf` et les deux compteurs qu'elle porte ne se recréent que si
+    // leur payload a bougé, plus à chaque recomposition.
+    val badges = remember(snapshot.discussions, snapshot.attendance) {
+        mapOf(
+            ROUTE_MESSAGES to messagesUnreadBadge(snapshot.discussions),
+            ROUTE_ATTENDANCE to attendanceTotalBadge(snapshot.attendance),
+        )
+    }
     HomePullToRefresh(refreshing = refreshing, onRefresh = { refresh() }) {
         Column(modifier = Modifier.fillMaxSize()) {
             Column(
@@ -187,7 +223,7 @@ fun IndexScreen(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                val empty = !homeHasContent(lessons, average, homework, cachedActions)
+                val empty = !homeHasContent(visibleLessons, average, visibleHomework, cachedActions)
                 when {
                     // Tirail sur une page vide : le cache est relu à la fin, donc
                     // l'indicateur est l'information honnête (pas un écran vide qui
@@ -205,16 +241,16 @@ fun IndexScreen(
                 // --- Widget cours : la carte elle-même ouvre l'EDT -------------
                 // #263 : apparition stagger 30 ms (`PapEnter`, coupée quand le
                 // téléphone coupe les animations) — un widget par index.
-                if (lessons.isNotEmpty()) {
+                if (visibleLessons.isNotEmpty()) {
                     PapEnter {
                     HomeWidgetCard(
                         icon = Icons.Filled.DateRange,
-                        title = homeCourseTitle(lessons, nowMillis, zone),
+                        title = homeCourseTitle(visibleLessons, nowMillis, zone),
                         onClick = { onOpen(ROUTE_CALENDAR) },
                         onMore = { onOpen(ROUTE_CALENDAR) },
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            for (lesson in lessons) {
+                            for (lesson in visibleLessons) {
                                 HomeCourseCard(
                                     lesson = lesson,
                                     zone = zone,
@@ -316,7 +352,7 @@ fun IndexScreen(
                 }
 
                 // --- Widget devoirs : échéance en temps relatif ------------------
-                if (homework.isNotEmpty()) {
+                if (visibleHomework.isNotEmpty()) {
                     PapEnter(staggerIndex = 2) {
                     HomeWidgetCard(
                         icon = Icons.Filled.CheckCircle,
@@ -325,7 +361,7 @@ fun IndexScreen(
                         onMore = { onOpen(ROUTE_TASKS) },
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            for (task in homework) {
+                            for (task in visibleHomework) {
                                 val style = subjectStyle(subjectPrefs, task.subject)
                                 val hex = subjectColorHex(subjectPrefs, task.subject)
                                 val ink = subjectContent(hex) ?: MaterialTheme.colorScheme.primary

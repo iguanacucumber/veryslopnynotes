@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -281,8 +282,12 @@ fun HomeQuickActionsGrid(
     badges: Map<String, Int> = emptyMap(),
 ) {
     if (actions.isEmpty()) return
+    // #312 : les rangées de la grille ne sont plus recoupées à chaque
+    // recomposition (la page d'accueil recompose à chaque tic d'horloge et à
+    // chaque geste de tirail) : les quatre accès changent rarement.
+    val rows = remember(actions) { actions.chunked(2) }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        for (row in actions.chunked(2)) {
+        for (row in rows) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
