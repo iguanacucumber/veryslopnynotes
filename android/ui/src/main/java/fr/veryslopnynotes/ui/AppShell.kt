@@ -13,10 +13,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
@@ -52,11 +53,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 
@@ -298,8 +297,13 @@ private val TOP_BARS: Map<String, TopBar> = mapOf(
 
 /**
  * Hauteur de contenu de la barre du haut : celle de M3
- * (`TopAppBarSmallTokens.ContainerHeight`, 64 dp) — plus l'espace repris à la
- * barre de statut masquée (#303, cf. [AppTopBar]).
+ * (`TopAppBarSmallTokens.ContainerHeight`, 64 dp).
+ *
+ * #323 : c'est la SEULE hauteur, plus « 64 dp + la barre de statut » (#305).
+ * Le contenu d'une barre de 64 dp est centré à 32 dp du bord, exactement la
+ * ligne du poinçon de l'appareil (mesuré : centre de la caméra à 32,7 dp) —
+ * la barre est plus courte et son titre retombe sur l'encoche au lieu de
+ * flotter dessous.
  *
  * ponytail: une constante de fichier, pas un paramètre : c'est la hauteur de M3
  * et l'app n'a qu'une barre du haut. Le jour où une seconde existe, elle passe
@@ -338,14 +342,12 @@ private val TopBarTitleInset = 12.dp
  * événement de défilement et ne se rétracte jamais.
  *
  * #303 : la barre occupe la place de la barre de statut qu'elle a fait
- * disparaître. Son contenu est CENTRÉ dans 64 dp + [reclaimedTop], sous
- * l'encoche, au lieu d'être posé en haut de la zone libérée. La hauteur de
- * `TopAppBar` de M3 est figée à 64 dp (aucun paramètre pour la régler), donc la
- * rangée est montée ici, avec la même structure que la sienne : mêmes marges,
+ * disparaître. #323 : elle garde la hauteur de M3 (64 dp) et n'y ajoute RIEN :
+ * centré dans ces 64 dp, le contenu tombe sur la ligne du poinçon. La hauteur
+ * de `TopAppBar` de M3 est figée à 64 dp (aucun paramètre pour la régler), donc
+ * la rangée est montée ici, avec la même structure que la sienne : mêmes marges,
  * mêmes couleurs (`TopAppBarDefaults.topAppBarColors()`), même rétraction au
- * défilement (1 px de défilement = 1 px de barre) et même repli au geste —
- * mais la limite de repli suit la hauteur RÉELLE, sinon la rétraction
- * s'arrêterait à -64 dp et laisserait `reclaimedTop` de barre à l'écran.
+ * défilement (1 px de défilement = 1 px de barre) et même repli au geste.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -360,10 +362,6 @@ fun AppTopBar(
     // compile et rend la table statique — le cas simple reste le cas simple.
     headerSlot: PapHeaderSlot? = null,
     scrollBehavior: TopAppBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(),
-    // #303 : hauteur reprise à la barre de statut — MÊME MASQUÉE, donc mesurée
-    // par l'activité (module `app`, qui a androidx.core) et passée jusqu'ici.
-    // 0 dp = hauteur M3 : barres système visibles, previews, tests.
-    reclaimedTop: Dp = 0.dp,
 ) {
     val bar = route?.let { TOP_BARS[it] }
     // Titre publié par l'écran > titre de la table > nom de l'app. L'ordre est
@@ -381,28 +379,15 @@ fun AppTopBar(
         .orEmpty()
         .filterNot { it is TopAction.Go && it.route in hiddenDestinations }
     val density = LocalDensity.current
-    val layoutDirection = LocalLayoutDirection.current
     val state = scrollBehavior.state
-    val contentHeightPx = with(density) { (TopBarContentHeight + reclaimedTop).toPx() }
-    // #305 : l'encoche est une zone interdite (le découpage est matériel : elle
-    // ne disparaît pas avec la barre de statut) et vaut zéro sur un écran sans
-    // découpage. Elle est posée en marges ÉGALES au-dessus et au-dessous du
-    // contenu : `windowInsetsPadding` centre le contenu ENTRE ses marges, donc
-    // des marges égales le centrent dans la barre ENTIÈRE (encoche comprise) au
-    // lieu de le tasser vers son bas. Le contenu ne passe pas sous l'encoche
-    // pour autant : la barre de statut est toujours au moins aussi haute que
-    // l'encoche qu'elle recouvre, et le contenu (rangée d'icônes de 48 dp, au
-    // plus les 64 dp de la barre de M3) est centré dans 64 dp + [reclaimedTop]
-    // — sa marge du haut y vaut au moins l'encoche. La gauche et la droite
-    // gardent l'encoche ENTIÈRE : en paysage elle est sur le côté, la moitié y
-    // laisserait le contenu dessous.
-    val cutout = WindowInsets.displayCutout.asPaddingValues(density)
-    val cutoutPadding = WindowInsets(
-        left = cutout.calculateLeftPadding(layoutDirection),
-        top = cutout.calculateTopPadding() / 2,
-        right = cutout.calculateRightPadding(layoutDirection),
-        bottom = cutout.calculateBottomPadding() / 2,
-    )
+    val contentHeightPx = with(density) { TopBarContentHeight.toPx() }
+    // #323 : l'encoche ne protège que les CÔTÉS. Une découpe haute (poinçon) est
+    // au CENTRE de la barre, là où il n'y a rien — titre à gauche, actions à
+    // droite — et son inset vaut la barre de statut entière (57 dp mesurés) :
+    // le consommer en hauteur ne protégeait rien, il poussait juste le contenu
+    // sous l'encoche et rallongeait la barre (#305/#307). En paysage la découpe
+    // est sur un bord, donc la marge horizontale reste.
+    val cutout = WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)
     // La barre se rétracte quand on défile vers le bas et revient dès qu'on
     // remonte : le défilement vient des écrans, pas l'inverse. Le [scrollBehavior]
     // est celui branché par `AppNav` sur le `Scaffold` (`nestedScroll`) : le
@@ -437,8 +422,8 @@ fun AppTopBar(
     ) {
         Row(
             modifier = Modifier
-                // L'encoche en marges égales (cf. [cutoutPadding] plus haut).
-                .windowInsetsPadding(cutoutPadding)
+                // L'encoche ne mord que sur les côtés (cf. [cutout] plus haut).
+                .windowInsetsPadding(cutout)
                 .fillMaxWidth()
                 // Rogner DANS la hauteur de la barre : au défilement, le titre
                 // sort au lieu de déborder sur le contenu.
