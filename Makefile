@@ -1,4 +1,4 @@
-.PHONY: check lint typecheck unit architecture contracts check-kotlin android-compile runServer buildDebugApk buildRelApk build shot papillonRef
+.PHONY: check lint typecheck unit architecture contracts check-kotlin android-compile runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
 
 # Découverte JDK/SDK partagée par android-compile, buildDebugApk, buildRelApk :
 # une seule implémentation, sinon une des trois finit par oublier la borne 17-21.
@@ -104,6 +104,30 @@ buildDebugApk:
 	fi; \
 	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleDebug && \
 	echo "APK debug : android/app/build/outputs/apk/debug/app-debug.apk"
+
+# Mise à jour du téléphone de dev : construit l'APK debug (même cible que
+# buildDebugApk, donc même découverte JDK/SDK) puis l'installe avec `adb install
+# -r` : les données de l'app — session appairée comprise — sont CONSERVÉES.
+# Un seul appareil prêt, sinon `ANDROID_SERIAL=<série>` lève l'ambiguïté.
+# Jamais de désinstallation : une signature différente échoue bruyamment plutôt
+# que d'effacer la session (même règle que shot.sh).
+updateApkToPhone: buildDebugApk
+	@command -v adb >/dev/null 2>&1 || { \
+	  echo "updateApkToPhone : « adb » absent du PATH — APK construit, rien installé."; \
+	  exit 1; \
+	}
+	@serial="$${ANDROID_SERIAL:-}"; \
+	if [ -z "$$serial" ]; then \
+	  ready=$$(adb devices | sed -n 's/^\([^\t]*\)\tdevice$$/\1/p'); \
+	  n=$$(printf '%s\n' "$$ready" | grep -c . || true); \
+	  if [ "$$n" -ne 1 ]; then \
+	    echo "updateApkToPhone : $$n appareil(s) prêt(s) — brancher un seul téléphone ou poser ANDROID_SERIAL=<série>. Rien installé."; \
+	    exit 1; \
+	  fi; \
+	  serial=$$ready; \
+	fi; \
+	echo "updateApkToPhone : installation sur $$serial (données conservées)…"; \
+	adb -s "$$serial" install -r android/app/build/outputs/apk/debug/app-debug.apk
 
 # APK release : signé custom SI les credentials de signature sont dans
 # l'environnement (STORE_FILE + mots de passe/alias — JAMAIS dans le repo,
