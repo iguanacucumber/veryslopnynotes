@@ -5,7 +5,9 @@ import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateDecay
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -19,7 +21,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -49,6 +54,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -312,6 +319,26 @@ private val TOP_BARS: Map<String, TopBar> = mapOf(
 private val TopBarContentHeight = 64.dp
 
 /**
+ * Hauteur VISUELLE des pastilles de la barre (retour, sélecteur de période,
+ * actions) : 40 dp, la hauteur d'un bouton M3. La cible tactile, elle, reste
+ * [TouchTarget] (48 dp) — la pastille est centrée dedans, donc la barre ne
+ * grandit pas et le doigt ne vise pas un cercle de 40.
+ */
+private val TopBarChipHeight = 40.dp
+
+/** Côté de la cible tactile d'une pastille (cf. [TopBarChipHeight]). */
+private val TopBarChipHit = TouchTarget
+
+/** Côté du glyphe dans une pastille : 20 dp, pas les 24 dp d'un bouton plein. */
+private val TopBarIconSize = 20.dp
+
+/**
+ * Inset vertical de la pastille d'actions dans sa cible de 48 dp :
+ * `(48 - 40) / 2`. Le fond reste une pilule de 40 dp, la zone cliquable de 48.
+ */
+private val TopBarChipInset = (TopBarChipHit - TopBarChipHeight) / 2
+
+/**
  * Marges horizontales de M3, aux mêmes valeurs que lui : 4 dp autour des icônes
  * (`TopAppBarHorizontalPadding`) et 12 dp de décalage du titre quand rien ne le
  * précède (`TopAppBarTitleInset` = 16 dp - 4 dp) — soit un titre à 16 dp du bord
@@ -374,6 +401,11 @@ fun AppTopBar(
     // ils se croiseront.
     val back = bar?.back
     val leading = published?.leading
+    // #325 : quand un `leading` est publié, il EST le titre (la période sur
+    // Notes). Afficher les deux répétait « Trimestre 1 » à 40 px d'écart et ne
+    // laissait plus de place aux actions sur 360 dp. La flèche, elle, reste
+    // prioritaire : un écran secondaire garde son titre ET son retour.
+    val leadingReplacesTitle = back == null && leading != null
     val actions = route
         ?.let { TOP_BAR_ACTIONS[it] }
         .orEmpty()
@@ -396,14 +428,28 @@ fun AppTopBar(
     SideEffect {
         if (state.heightOffsetLimit != -contentHeightPx) state.heightOffsetLimit = -contentHeightPx
     }
-    // Couleur de fond : celle de M3 — surface, puis conteneur « défilé » dès que
-    // du contenu passe derrière la barre. `TopAppBarColors.containerColor(fraction)`
+    // Couleur de fond : surface, puis conteneur « défilé » thémé dès que du
+    // contenu passe derrière la barre. `TopAppBarColors.containerColor(fraction)`
     // est INTERNE à material3 1.2.1, donc l'interpolation est écrite ici, sur
     // ses deux couleurs publiques.
-    val colors = TopAppBarDefaults.topAppBarColors()
+    //
+    // Le jeton « défilé » est POSÉ : sans lui, `topAppBarColors()` prend le
+    // `surfaceContainer` par défaut de Material — un gris lavande qui n'existe
+    // nulle part dans la palette Papillon.
+    val scheme = MaterialTheme.colorScheme
+    val colors = TopAppBarDefaults.topAppBarColors(
+        containerColor = scheme.surface,
+        scrolledContainerColor = scheme.surfaceContainerLow,
+    )
     val overlapped = state.overlappedFraction > 0.01f
     val containerColor by animateColorAsState(
         targetValue = lerp(colors.containerColor, colors.scrolledContainerColor, if (overlapped) 1f else 0f),
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+    )
+    // Filet de séparation : il n'apparaît que quand du contenu est passé
+    // DERRIÈRE la barre. Avant, la barre flottait sans limite visible.
+    val hairline by animateFloatAsState(
+        targetValue = if (overlapped) 1f else 0f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
     )
     Surface(
@@ -420,70 +466,107 @@ fun AppTopBar(
             ),
         color = containerColor,
     ) {
-        Row(
-            modifier = Modifier
-                // L'encoche ne mord que sur les côtés (cf. [cutout] plus haut).
-                .windowInsetsPadding(cutout)
-                .fillMaxWidth()
-                // Rogner DANS la hauteur de la barre : au défilement, le titre
-                // sort au lieu de déborder sur le contenu.
-                .clipToBounds()
-                // La hauteur de contenu SUIT le repli : la barre libère sa
-                // place au lieu de la recouvrir, et le `Scaffold` en fait
-                // autant pour l'écran en dessous.
-                .height(with(density) { (contentHeightPx + state.heightOffset).coerceAtLeast(0f).toDp() }),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (back != null) {
-                Box(Modifier.padding(start = TopBarIconInset)) {
-                    CompositionLocalProvider(LocalContentColor provides colors.navigationIconContentColor) {
+        Box(Modifier.fillMaxWidth().clipToBounds()) {
+            Row(
+                modifier = Modifier
+                    // L'encoche ne mord que sur les côtés (cf. [cutout] plus haut).
+                    .windowInsetsPadding(cutout)
+                    .fillMaxWidth()
+                    // Rogner DANS la hauteur de la barre : au défilement, le titre
+                    // sort au lieu de déborder sur le contenu.
+                    .clipToBounds()
+                    // La hauteur de contenu SUIT le repli : la barre libère sa
+                    // place au lieu de la recouvrir, et le `Scaffold` en fait
+                    // autant pour l'écran en dessous.
+                    .height(with(density) { (contentHeightPx + state.heightOffset).coerceAtLeast(0f).toDp() }),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (back != null) {
+                    Box(Modifier.padding(start = TopBarIconInset)) {
                         IconButton(onClick = { onBack(back) }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                            // Pastille circulaire de 40 dp DANS une cible de 48 :
+                            // même géométrie que les autres chips de la barre.
+                            Surface(
+                                modifier = Modifier.size(TopBarChipHeight),
+                                shape = CircleShape,
+                                color = scheme.surfaceVariant,
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowBack,
+                                        contentDescription = "Retour",
+                                        modifier = Modifier.size(TopBarIconSize),
+                                        tint = scheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else if (leading != null) {
+                    Box(
+                        modifier = Modifier
+                            .padding(start = TopBarIconInset)
+                            // Le slot prend la place laissée par le titre sans
+                            // jamais pousser les actions hors de l'écran : il
+                            // s'arrête à la largeur restante, le texte ellipsé.
+                            .weight(1f, fill = false)
+                            // Sur Notes, la pastille de période REMPLACE le titre :
+                            // c'est elle, le titre de l'écran, donc elle porte le
+                            // point d'entrée de la navigation par titres.
+                            .semantics { heading() },
+                    ) {
+                        CompositionLocalProvider(LocalContentColor provides colors.navigationIconContentColor) {
+                            leading()
                         }
                     }
                 }
-            } else if (leading != null) {
-                Box(Modifier.padding(start = TopBarIconInset)) {
-                    CompositionLocalProvider(LocalContentColor provides colors.navigationIconContentColor) {
-                        leading()
+                // Titre de la ROUTE (papillon.bzh), plus la marque : avant #135
+                // c'était « VerySlopyNyNotes » sur les 15 routes. `titleLarge` =
+                // 18 sp gras, l'échelle de #134 — le texte le plus visible de
+                // l'écran.
+                if (!leadingReplacesTitle) {
+                    CompositionLocalProvider(LocalContentColor provides colors.titleContentColor) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(
+                                    start = if (back != null || leading != null) TopBarIconInset else TopBarTitleInset + TopBarIconInset,
+                                    end = TopBarIconInset,
+                                ),
+                        ) {
+                            // `heading()` : le titre de la barre est le TITRE DE
+                            // L'ÉCRAN. TalkBack le propose dans son menu « titres » et
+                            // s'y positionne au double toucher — sans ça, les quinze
+                            // routes n'avaient aucun point d'entrée dans la navigation
+                            // par titres.
+                            Text(
+                                // #190 : le nom de la période sur Notes, le titre de la
+                                // table partout ailleurs.
+                                text = published?.title ?: bar?.title ?: APP_NAME,
+                                style = MaterialTheme.typography.titleLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.semantics { heading() },
+                            )
+                        }
+                    }
+                }
+                // Slot d'actions contextuelles, une seule source : `TOP_BAR_ACTIONS`.
+                CompositionLocalProvider(LocalContentColor provides colors.actionIconContentColor) {
+                    Box(Modifier.padding(end = TopBarIconInset)) {
+                        TopBarActions(actions = actions, onNavigate = onNavigate, onRefresh = onRefresh)
                     }
                 }
             }
-            // Titre de la ROUTE (papillon.bzh), plus la marque : avant #135
-            // c'était « VerySlopyNyNotes » sur les 15 routes. `titleLarge` =
-            // 18 sp gras, l'échelle de #134 — le texte le plus visible de
-            // l'écran.
-            CompositionLocalProvider(LocalContentColor provides colors.titleContentColor) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(
-                            start = if (back != null || leading != null) TopBarIconInset else TopBarTitleInset + TopBarIconInset,
-                            end = TopBarIconInset,
-                        ),
-                ) {
-                    // `heading()` : le titre de la barre est le TITRE DE
-                    // L'ÉCRAN. TalkBack le propose dans son menu « titres » et
-                    // s'y positionne au double toucher — sans ça, les quinze
-                    // routes n'avaient aucun point d'entrée dans la navigation
-                    // par titres.
-                    Text(
-                        // #190 : le nom de la période sur Notes, le titre de la
-                        // table partout ailleurs.
-                        text = published?.title ?: bar?.title ?: APP_NAME,
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.semantics { heading() },
-                    )
-                }
-            }
-            // Slot d'actions contextuelles, une seule source : `TOP_BAR_ACTIONS`.
-            CompositionLocalProvider(LocalContentColor provides colors.actionIconContentColor) {
-                Box(Modifier.padding(end = TopBarIconInset)) {
-                    TopBarActions(actions = actions, onNavigate = onNavigate, onRefresh = onRefresh)
-                }
-            }
+            // Filet bas : 1 dp, alpha animé, jamais cliquable.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .alpha(hairline)
+                    .background(scheme.outlineVariant),
+            )
         }
     }
 }
@@ -529,6 +612,11 @@ private suspend fun settleTopBar(scrollBehavior: TopAppBarScrollBehavior, veloci
  * Cinq icônes de 48 dp ne laisseraient plus de place au titre sur un écran de
  * 360 dp, et « Appairage QR+PIN » n'a pas d'icône dans `material-icons-core` ;
  * le menu garde des libellés écrits, donc rien à deviner.
+ *
+ * #325 : les deux actions vivent dans UNE pilule (fond `surfaceVariant`, 40 dp
+ * de haut, cible de 48), séparées par un filet — la barre n'aligne plus des
+ * icônes nues. Une route sans destination (Profil) n'a qu'une icône, pas un
+ * menu vide.
  */
 @Composable
 private fun TopBarActions(
@@ -539,31 +627,73 @@ private fun TopBarActions(
     if (actions.isEmpty()) return
     var menuOpen by remember { mutableStateOf(false) }
     val destinations = actions.filterIsInstance<TopAction.Go>()
-    if (actions.any { it is TopAction.Refresh }) {
-        IconButton(onClick = onRefresh) {
-            Icon(Icons.Filled.Refresh, contentDescription = "Actualiser")
-        }
-    }
-    if (destinations.isEmpty()) return
-    Box {
-        IconButton(onClick = { menuOpen = true }) {
-            Icon(Icons.Filled.MoreVert, contentDescription = "Plus d'actions")
-        }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            for (destination in destinations) {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = destination.label,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                    onClick = {
-                        menuOpen = false
-                        onNavigate(destination.route)
-                    },
+    val hasRefresh = actions.any { it is TopAction.Refresh }
+    if (!hasRefresh && destinations.isEmpty()) return
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier.height(TopBarChipHit),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Fond de la pilule, 40 dp : il est PEINT sous les cibles de 48 dp, donc
+        // le doigt vise grand sans que la barre prenne 8 dp de plus.
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .padding(vertical = TopBarChipInset)
+                .clip(CircleShape)
+                .background(scheme.surfaceVariant),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (hasRefresh) {
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.size(TopBarChipHit),
+                ) {
+                    Icon(
+                        Icons.Filled.Refresh,
+                        contentDescription = "Actualiser",
+                        modifier = Modifier.size(TopBarIconSize),
+                    )
+                }
+            }
+            if (hasRefresh && destinations.isNotEmpty()) {
+                Box(
+                    Modifier
+                        .width(1.dp)
+                        .height(TopBarIconSize)
+                        .background(scheme.outlineVariant),
                 )
+            }
+            if (destinations.isNotEmpty()) {
+                Box {
+                    IconButton(
+                        onClick = { menuOpen = true },
+                        modifier = Modifier.size(TopBarChipHit),
+                    ) {
+                        Icon(
+                            Icons.Filled.MoreVert,
+                            contentDescription = "Plus d'actions",
+                            modifier = Modifier.size(TopBarIconSize),
+                        )
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        for (destination in destinations) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = destination.label,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    onNavigate(destination.route)
+                                },
+                            )
+                        }
+                    }
+                }
             }
         }
     }
