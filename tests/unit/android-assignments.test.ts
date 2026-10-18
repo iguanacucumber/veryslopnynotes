@@ -908,6 +908,23 @@ describe("carte de devoir (#161)", () => {
     expect(code).toMatch(/stateKey = when \{[\s\S]*?else -> "list"/);
   });
 
+  test("#331 : résumé des sections et carte de tête", () => {
+    const sections = codeOnly(readFileSync(join(UI, "AssignmentsSections.kt"), "utf8"));
+    expect(sections).toContain("data class AssignmentSummaryUi");
+    expect(sections).toContain("fun assignmentSummary(sections: List<AssignmentSectionUi>)");
+    // Les quatre sections sont lues par leur constante, jamais par leur libellé.
+    for (const id of ["SECTION_OVERDUE", "SECTION_TODAY", "SECTION_UPCOMING", "SECTION_DONE"]) {
+      expect({ id, found: sections.includes(`count(${id})`) }).toEqual({ id, found: true });
+    }
+    // Une liste vide ne divise pas par zéro.
+    expect(sections).toContain("if (total == 0) 0f else done.toFloat() / total");
+    const code = codeOnly(readFileSync(join(UI, "Assignments.kt"), "utf8"));
+    expect(code).toContain("AssignmentSummaryCard(summary = assignmentSummary(sections))");
+    // La carte n'apparaît que s'il y a des devoirs : un « 0 à faire » au-dessus
+    // de l'état vide dirait deux fois la même chose.
+    expect(code).toMatch(/if \(sections\.isNotEmpty\(\)\) \{\s*AssignmentSummaryCard/);
+  });
+
   test("#281 : la page Tâches porte le noir des autres écrans (#000000), pas #121212", () => {
     const code = codeOnly(readFileSync(join(UI, "Assignments.kt"), "utf8"));
     // Le `Scaffold` peint `background` (#000000 en sombre, comme Cours/Accueil

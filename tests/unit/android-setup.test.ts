@@ -238,7 +238,9 @@ describe("assistant : le PIN est un secret affiché comme tel (#172)", () => {
     expect(state).not.toContain("previousStep");
     expect(screen).not.toContain("previousStep");
     expect(screen).toMatch(/TextButton\(\s*onClick = onBack,/);
-    expect(screen).toContain('Text("Retour")');
+    expect(screen).toContain('Text("Retour"');
+    // #331 : le retour porte désormais son chevron, dans la même cible.
+    expect(screen).toContain("Icons.AutoMirrored.Filled.ArrowBack");
   });
 });
 
@@ -417,8 +419,8 @@ describe("scan du QR (#127) : décodeur dans l'APK, plus de Google Play Services
     // retour de l'assistant n'en fait plus partie.
     const boutonsRemplis = screen.match(/\n\s+Button\(/g) ?? [];
     expect(boutonsRemplis.length).toBe(2);
-    // ...et le titre de la page reste le repère du survol.
-    expect(screen).toContain('text = "QR de l\'application"');
+    // ...et le titre du héros reste le repère du survol (#331).
+    expect(screen).toContain('text = "Connecte ton établissement"');
     expect(screen).toContain("semantics { heading() }");
   });
 });

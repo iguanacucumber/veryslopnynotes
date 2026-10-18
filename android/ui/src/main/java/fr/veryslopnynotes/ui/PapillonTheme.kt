@@ -115,8 +115,19 @@ val PapillonInk = Color(0xFF1F292EL)
 /** Bordure de champ / séparateur. */
 val PapillonBorder = Color(0xFFDCDCDCL)
 
-/** Surface claire. */
+/** Surface claire : les cartes. */
 val PapillonSurface = Color(0xFFFFFFFFL)
+
+/**
+ * Fond de page clair : un papier très légèrement teinté du vert de marque.
+ *
+ * #331 : avant, `background` ET `surface` valaient le même blanc — une carte
+ * blanche sur une page blanche ne se voyait que par son filet. Le fond teint
+ * (96 % vers le blanc) laisse les cartes blanches exister sans contour lourd,
+ * et reste assez pâle pour ne pas devenir une seconde couleur de marque.
+ * Valeur : `tint(PapillonGreen, .96)` = #F6FBFA, soit 1.07:1 sous le blanc.
+ */
+val PapillonPage = tint(PapillonGreen, .96f)
 
 /** Surface variante (cartes, champs). */
 val PapillonSurfaceVariant = Color(0xFFF3F6F7L)
@@ -265,6 +276,26 @@ fun subjectContent(hex: String, dark: Boolean): Color? =
     tint(hex, if (dark) SUBJECT_CONTENT_DARK_TINT else SUBJECT_CONTENT_LIGHT_TINT)
 
 /**
+ * Opacité d'une pastille matière en thème SOMBRE quand la teinte doit rester
+ * identifiable. Une petite pastille (36–44 dp) n'a pas besoin du fond opaque
+ * d'une carte : 18 % de la couleur posée sur la surface suffit, et les quatre
+ * teintes d'accueil cessent d'être quatre bruns.
+ */
+const val SUBJECT_BADGE_DARK_ALPHA = 0.18f
+
+/**
+ * Fond d'une PETITE pastille matière.
+ *
+ * #331 : en clair, on garde le pastel mesuré ([subjectSurface], 75 % vers le
+ * blanc). En sombre, [subjectSurface] tire la couleur 60 % vers le noir, ce qui
+ * écrase les rouges et les oranges en une même boue ; une alpha de la teinte
+ * brute, composée sur la surface, garde la nuance. Ce n'est PAS le fond d'une
+ * carte (celui-ci reste opaque et mesuré), seulement d'un glyphe de 24–44 dp.
+ */
+fun subjectBadgeSurface(hex: String, dark: Boolean): Color? =
+    if (dark) papillonColor(hex)?.copy(alpha = SUBJECT_BADGE_DARK_ALPHA) else subjectSurface(hex, false)
+
+/**
  * Opacité du fond d'une carte matière dans le CARROUSEL de l'onglet Notes :
  * `21/255`, soit le `'15'` que la référence concatène à la couleur de la matière
  * (`ui/new/CompactGrade.tsx`, branche Android).
@@ -297,6 +328,9 @@ fun subjectCardTint(hex: String): Color? =
  *  encre de matière ne peut pas être choisie pour le mauvais thème. */
 @Composable
 fun subjectSurface(hex: String): Color? = subjectSurface(hex, isDarkSurface())
+
+@Composable
+fun subjectBadgeSurface(hex: String): Color? = subjectBadgeSurface(hex, isDarkSurface())
 
 @Composable
 fun subjectContent(hex: String): Color? = subjectContent(hex, isDarkSurface())
@@ -391,6 +425,24 @@ fun errorInk(error: Color, dark: Boolean): Color = if (dark) tint(error, ERROR_I
 @Composable
 fun errorTextColor(): Color = errorInk(MaterialTheme.colorScheme.error, isDarkSurface())
 
+/**
+ * Aplat d'un héros de marque (#331).
+ *
+ * En clair, le vert profond (`secondary`, 4.93:1 sous du blanc) — le pastel
+ * `primaryContainer` ne se détachait pas assez de la page teintée. En sombre,
+ * le conteneur vert sombre déjà prévu pour les surfaces de marque, avec son
+ * encre claire (5.19:1). Le couple est choisi ENSEMBLE pour qu'un appelant ne
+ * puisse pas prendre l'aplat de l'un et l'encre de l'autre.
+ */
+@Composable
+fun papHeroContainer(): Color =
+    if (isDarkSurface()) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondary
+
+/** Encre du héros de marque, appariée à [papHeroContainer]. */
+@Composable
+fun papHeroInk(): Color =
+    if (isDarkSurface()) MaterialTheme.colorScheme.onPrimaryContainer else Color.White
+
 // --- Formes ----------------------------------------------------------------
 
 /**
@@ -454,10 +506,11 @@ private val CAPTION_TRACKING = 0.1.sp
  * différence de plateforme, on garde sa valeur Android.
  */
 val PapillonTypography = Typography(
-    // h1 / h2 / h3, gras, interligne 120 %.
-    displayLarge = papillonText(34, 41, FontWeight.Bold),
-    displayMedium = papillonText(28, 34, FontWeight.Bold),
-    displaySmall = papillonText(24, 29, FontWeight.Bold),
+    // h1 / h2 / h3, gras, interligne 120 %. Chiffres TABULAIRES : une moyenne
+    // qui passe de 9,87 à 14,02 ne doit pas déplacer les chiffres autour d'elle.
+    displayLarge = papillonText(34, 41, FontWeight.Bold, tabular = true),
+    displayMedium = papillonText(28, 34, FontWeight.Bold, tabular = true),
+    displaySmall = papillonText(24, 29, FontWeight.Bold, tabular = true),
     // h4 / h5, gras, interligne 130 %.
     headlineLarge = papillonText(21, 27, FontWeight.Bold),
     headlineMedium = papillonText(19, 25, FontWeight.Bold),
@@ -485,12 +538,17 @@ private fun papillonText(
     lineHeight: Int,
     weight: FontWeight = FontWeight.Normal,
     tracking: TextUnit = TextUnit.Unspecified,
+    tabular: Boolean = false,
 ): TextStyle = TextStyle(
     fontFamily = PapillonFont,
     fontSize = size.sp,
     lineHeight = lineHeight.sp,
     fontWeight = weight,
     letterSpacing = tracking,
+    // `tnum` : les chiffres gardent la même largeur, donc une moyenne animée
+    // ne fait pas danser le « /20 » qui la suit. Figtree porte la fonction ;
+    // si une police de repli ne l'a pas, le moteur l'ignore proprement.
+    fontFeatureSettings = if (tabular) "tnum" else null,
 )
 
 // --- Schemes ---------------------------------------------------------------
@@ -536,7 +594,9 @@ private val PapillonLightColors: ColorScheme = lightColorScheme(
     onSecondaryContainer = PapillonGreenDeep,
     tertiary = PapillonLime,
     onTertiary = PapillonLimeInk,
-    background = PapillonSurface,
+    // #331 : la page est un papier teinté, la carte reste blanche — sans quoi
+    // une carte blanche sur fond blanc ne se lit que par son filet.
+    background = PapillonPage,
     onBackground = PapillonInk,
     surface = PapillonSurface,
     onSurface = PapillonInk,

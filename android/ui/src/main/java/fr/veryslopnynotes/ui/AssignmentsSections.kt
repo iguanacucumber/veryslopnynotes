@@ -58,6 +58,38 @@ data class AssignmentSectionUi(
     val count: Int get() = days.sumOf { it.second.size }
 }
 
+/**
+ * Résumé chiffré de la semaine, pour la carte de tête de l'onglet Tâches.
+ *
+ * #331 : les sections savaient déjà combien de devoirs sont en retard, du jour,
+ * à venir et terminés ; l'écran ne le disait qu'en lisant chaque titre de
+ * section. Ces quatre compteurs sont la seule donnée de la carte — aucun taux
+ * inventé.
+ */
+data class AssignmentSummaryUi(
+    val overdue: Int,
+    val today: Int,
+    val upcoming: Int,
+    val done: Int,
+) {
+    val total: Int get() = overdue + today + upcoming + done
+    val toDo: Int get() = overdue + today + upcoming
+
+    /** Part terminée, bornée : une liste vide ne divise pas par zéro. */
+    val doneFraction: Float get() = if (total == 0) 0f else done.toFloat() / total
+}
+
+/** Compteurs de [assignmentSummary]. Une section absente vaut zéro. */
+fun assignmentSummary(sections: List<AssignmentSectionUi>): AssignmentSummaryUi {
+    fun count(id: String): Int = sections.firstOrNull { it.id == id }?.count ?: 0
+    return AssignmentSummaryUi(
+        overdue = count(SECTION_OVERDUE),
+        today = count(SECTION_TODAY),
+        upcoming = count(SECTION_UPCOMING),
+        done = count(SECTION_DONE),
+    )
+}
+
 /** Section d'un devoir. La comparaison se fait au JOUR local : « aujourd'hui à
  *  08:00 » appartient à « Aujourd'hui », pas à « En retard » (sinon un devoir de
  *  ce matin qui traîne depuis 6 h ressemblerait à un devoir de la semaine
