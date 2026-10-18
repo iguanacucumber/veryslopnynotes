@@ -1,0 +1,444 @@
+/* Emploi du temps — semaine, bandeau prochain cours, cartes de cours. */
+
+.tt {
+  gap: 14px;
+}
+
+/* --- Barre de semaine ----------------------------------------------------- */
+
+.card.tt-toolbar {
+  padding: 10px 12px;
+  border-radius: var(--radius-lg);
+}
+
+.tt-toolbar__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 4px;
+}
+
+.tt-toolbar__week {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 19px;
+  font-weight: 700;
+}
+
+.tt-toolbar__nav {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.tt-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  transition: background var(--duration) var(--ease);
+}
+
+.tt-nav:hover,
+.tt-nav:active {
+  background: var(--surface-variant);
+}
+
+.tt-current {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--brand-deep);
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-current:disabled {
+  color: var(--muted);
+  opacity: 0.55;
+  cursor: default;
+}
+
+.tt-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+/* --- Bandeau prochain cours ----------------------------------------------- */
+
+.tt-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  animation: tt-rise 360ms var(--ease) both;
+}
+
+.tt-banner__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tt-banner__label {
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.tt-banner__subject {
+  font-size: 20px;
+  line-height: 25px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-banner__meta {
+  font-size: 12px;
+  line-height: 17px;
+  opacity: 0.82;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-banner__when {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-banner__when strong {
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.tt-banner__when span {
+  font-size: 11px;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+/* --- Bande de semaine ----------------------------------------------------- */
+
+.tt-week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.tt-day-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 7px 2px 5px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--surface-variant);
+  color: var(--ink);
+  min-width: 0;
+}
+
+.tt-day-chip--today {
+  background: var(--brand-pale);
+  border-color: var(--brand-light);
+  color: var(--brand-deep);
+}
+
+.tt-day-chip--empty {
+  opacity: 0.62;
+}
+
+.tt-day-chip__day {
+  font-size: 10px;
+  line-height: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tt-day-chip--today .tt-day-chip__day {
+  color: var(--brand-deep);
+}
+
+.tt-day-chip__date {
+  font-size: 15px;
+  line-height: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-day-chip__count {
+  font-size: 9px;
+  line-height: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* --- Jour ----------------------------------------------------------------- */
+
+.tt-day {
+  animation: tt-rise 380ms var(--ease) both;
+}
+
+.tt-day__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 2px 8px;
+  min-width: 0;
+}
+
+.tt-day__title {
+  margin: 0;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 700;
+}
+
+.tt-day__pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--surface-variant);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tt-day__pill--today {
+  background: var(--brand-pale);
+  color: var(--brand-deep);
+}
+
+.tt-day__subtitle {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tt-day__lessons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* --- Cours ---------------------------------------------------------------- */
+
+.tt-lesson {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.tt-time {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  padding-top: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-time strong {
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 700;
+}
+
+.tt-time span {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+
+.tt-card {
+  position: relative;
+  min-width: 0;
+  padding: 11px 13px 11px 18px;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  overflow: hidden;
+  transition: border-color var(--duration) var(--ease), transform var(--duration) var(--ease);
+}
+
+.tt-lesson--current .tt-card {
+  border-width: 2px;
+}
+
+.tt-lesson--next .tt-card {
+  border-width: 1px;
+}
+
+.tt-lesson--current .tt-card {
+  animation: tt-pulse 2.4s var(--ease) infinite;
+}
+
+.tt-card__spine {
+  position: absolute;
+  left: 6px;
+  top: 10px;
+  bottom: 10px;
+  width: 5px;
+  border-radius: 999px;
+}
+
+.tt-card__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.tt-card__subject {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 15px;
+  line-height: 21px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.tt-pill {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tt-card__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 17px;
+  opacity: 0.88;
+}
+
+.tt-card__dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.6;
+}
+
+.tt-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 15px;
+  opacity: 0.7;
+}
+
+.tt-cancelled {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger-ink);
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 700;
+}
+
+.tt-lesson--cancelled .tt-card__subject {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  opacity: 0.8;
+}
+
+.tt-footnote {
+  margin: 0 2px 4px;
+  text-align: center;
+}
+
+/* --- Animations ----------------------------------------------------------- */
+
+@keyframes tt-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tt-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.006);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tt-banner,
+  .tt-day,
+  .tt-lesson--current .tt-card {
+    animation: none;
+  }
+}
+
+@media (min-width: 700px) {
+  .tt-lesson {
+    grid-template-columns: 58px minmax(0, 1fr);
+    gap: 12px;
+  }
+}
