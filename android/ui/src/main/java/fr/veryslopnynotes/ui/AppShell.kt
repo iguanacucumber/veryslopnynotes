@@ -5,8 +5,8 @@ import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateDecay
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -54,7 +55,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -339,6 +339,20 @@ private val TopBarIconSize = 20.dp
 private val TopBarChipInset = (TopBarChipHit - TopBarChipHeight) / 2
 
 /**
+ * Marge latérale de la CARTE de barre du haut, en plus de [TopBarSideInset] :
+ * la barre devient un bandeau flottant, largement détaché des bords.
+ */
+private val TopBarOuterInset = 8.dp
+
+/**
+ * Rayon des coins BAS de la carte : le jeton `extraLarge` du thème (24 dp).
+ *
+ * Les coins HAUT restent droits : la barre touche le bord supérieur de la
+ * fenêtre, et un coin arrondi y laisserait voir le contenu derrière l'écran.
+ */
+private val TopBarCorner = 24.dp
+
+/**
  * Marge latérale des pastilles : 8 dp, le double des 4 dp de M3
  * (`TopAppBarHorizontalPadding`). Relevé sur les captures #325 : à 4 dp la
  * pastille de retour et le menu collaient au bord. Le titre d'une route racine
@@ -447,15 +461,12 @@ fun AppTopBar(
         targetValue = lerp(colors.containerColor, colors.scrolledContainerColor, if (overlapped) 1f else 0f),
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
     )
-    // Filet de séparation : il n'apparaît que quand du contenu est passé
-    // DERRIÈRE la barre. Avant, la barre flottait sans limite visible.
-    val hairline by animateFloatAsState(
-        targetValue = if (overlapped) 1f else 0f,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-    )
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            // La carte flotte : 8 dp de chaque côté, en plus des marges
+            // internes des pastilles. La barre perd son air de bandeau plein.
+            .padding(horizontal = TopBarOuterInset)
             // Replier la barre au GESTE, comme M3 : même déplacement que le
             // défilement, au doigt. `settleAppBar` est interne, donc son
             // enchaînement est réécrit dans [settleTopBar], à l'identique.
@@ -466,6 +477,14 @@ fun AppTopBar(
                 onDragStopped = { velocity -> settleTopBar(scrollBehavior, velocity) },
             ),
         color = containerColor,
+        // Coins BAS seulement : le haut touche le bord de la fenêtre.
+        shape = RoundedCornerShape(bottomStart = TopBarCorner, bottomEnd = TopBarCorner),
+        // Relief léger de carte flottante, sans teinte tonale (Papillon n'en a
+        // pas) : le filet et l'ombre suffisent à séparer la barre du contenu.
+        shadowElevation = 2.dp,
+        // Le filet rend la courbure LISIBLE : sans lui, carte blanche sur fond
+        // blanc, les coins bas arrondis disparaissent.
+        border = BorderStroke(1.dp, scheme.outlineVariant),
     ) {
         Box(Modifier.fillMaxWidth().clipToBounds()) {
             Row(
@@ -559,15 +578,6 @@ fun AppTopBar(
                     }
                 }
             }
-            // Filet bas : 1 dp, alpha animé, jamais cliquable.
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .alpha(hairline)
-                    .background(scheme.outlineVariant),
-            )
         }
     }
 }

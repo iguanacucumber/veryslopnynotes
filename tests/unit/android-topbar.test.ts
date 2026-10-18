@@ -36,6 +36,17 @@ describe("barre du haut façon Papillon (#325)", () => {
     expect(shell).toContain(".padding(end = TopBarSideInset)");
   });
 
+  test("carte flottante : marge extérieure et coins bas arrondis", () => {
+    expect(shell).toContain("private val TopBarOuterInset = 8.dp");
+    expect(shell).toContain("private val TopBarCorner = 24.dp");
+    expect(shell).toContain(".padding(horizontal = TopBarOuterInset)");
+    expect(shell).toContain(
+      "shape = RoundedCornerShape(bottomStart = TopBarCorner, bottomEnd = TopBarCorner)",
+    );
+    expect(shell).toContain("shadowElevation = 2.dp");
+    expect(shell).toContain("border = BorderStroke(1.dp, scheme.outlineVariant)");
+  });
+
   test("actions : une seule pilule, séparateur, et pas de menu vide", () => {
     expect(shell).toContain("val hasRefresh = actions.any { it is TopAction.Refresh }");
     // Un groupe sans relecture ni destination ne peint rien.
@@ -63,12 +74,12 @@ describe("barre du haut façon Papillon (#325)", () => {
     expect(rows).toContain("containerColor = MaterialTheme.colorScheme.surfaceVariant");
   });
 
-  test("fond défilé thémé et filet de séparation animé", () => {
+  test("fond défilé thémé", () => {
     // Le défaut M3 est `surfaceContainer`, non posé par Papillon : en clair il
     // virait au lavande. La barre choisit donc explicitement son jeton.
     expect(shell).toContain("scrolledContainerColor = scheme.surfaceContainerLow");
-    expect(shell).toContain("val hairline by animateFloatAsState(");
-    expect(shell).toContain(".alpha(hairline)");
-    expect(shell).toContain(".background(scheme.outlineVariant)");
+    // Plus de filet animé plein-largeur : il coupait les coins arrondis. C'est
+    // la bordure de la carte qui sépare la barre du contenu.
+    expect(shell).not.toContain("hairline");
   });
 });
