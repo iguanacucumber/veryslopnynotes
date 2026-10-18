@@ -1033,7 +1033,10 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     // mort ne doit pas pouvoir se câbler.
     expect(shell).toContain("private val TOP_BAR_ACTIONS: Map<String, List<TopAction>>");
     expect(shell).toMatch(/fun AppTopBar\(\s*\n\s*route: String\?,\s*\n\s*onBack: \(String\) -> Unit,\s*\n\s*onNavigate: \(String\) -> Unit,\s*\n\s*onRefresh: \(\) -> Unit,/);
-    expect(shell).toContain("actions = { TopBarActions(actions = actions, onNavigate = onNavigate, onRefresh = onRefresh) }");
+    // #303 : la porte des actions est la rangée de la barre (plus de
+    // `TopAppBar` de M3) ; l'appel garde ses paramètres nommés, donc un câblage
+    // inversé (`onNavigate` sur la relecture) reste impossible à écrire.
+    expect(shell).toContain("TopBarActions(actions = actions, onNavigate = onNavigate, onRefresh = onRefresh)");
     // #172 : la destination Sanctions reste conditionnelle aux capacités,
     // maintenant qu'elle est une action de la barre de la Vie scolaire
     // (`TOP_BAR_ACTIONS`) au lieu d'un bouton dans le corps. #184 : il ne reste

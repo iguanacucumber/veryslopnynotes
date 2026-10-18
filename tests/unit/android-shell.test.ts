@@ -198,7 +198,12 @@ describe("coquille applicative (#135)", () => {
     // `codeOnly` d'abord : sans ça, le commentaire qui explique l'ordre
     // (« la flèche reste prioritaire… ») compte dans l'écart de caractères et
     // le motif casse sur un commentaire plus long, pas sur le code.
-    expect(codeOnly(shell)).toMatch(/navigationIcon = \{[^]*?if \(back != null\) \{[^]*?\} else \{\s*published\?\.leading\?\.invoke\(\)/);
+    // #303 : la priorité se lit dans la rangée de la barre (plus de `TopAppBar`
+    // de M3, cf. son `why`) : la branche de la flèche AVANT celle du `leading`.
+    expect(codeOnly(shell)).toMatch(
+      /if \(back != null\) \{[\s\S]*?IconButton\(onClick = \{ onBack\(back\) \}\)/,
+    );
+    expect(codeOnly(shell)).toMatch(/if \(back != null\) \{[\s\S]*?\} else if \(leading != null\) \{/);
     // Le câblage : `AppNav` crée UNE case pour toute l'app, la passe à la barre
     // ET à l'écran. Deux cases = l'en-tête publié ne serait jamais lu.
     expect(nav).toContain("val headerSlot = remember { PapHeaderSlot() }");
