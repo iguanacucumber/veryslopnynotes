@@ -46,11 +46,35 @@ class SyncedRepository(
     // Lecture locale async (file d'attente unique #310 : un seul fil daemon,
     // ordre d'arrivee). Callback sur main thread. Le payload ecrit le cache
     // (fenetre demandee, comme avant).
+    //
+    // #311 : une entree de cache FRAICHE est servie telle quelle, sans lire le
+    // client local (`force = false`, la premiere entree sur un ecran). La salve
+    // de POST n'est donc plus refaite a chaque passage d'onglet ; `force = true`
+    // est reserve aux GESTES explicites (tirail, « Actualiser », changement de
+    // fenetre/periode/algorithme). Le cache est annonce avec SON age
+    // (`fetchedAt`) : jamais un `Updated` daté de maintenant, qui ferait passer
+    // une donnee ancienne pour fraiche (le badge « perime » reste juste).
+    //
     // ponytail: une seule clé de cache par ressource : la requête de la fenêtre
     //   demandée écrase le payload précédent (semaine courante en pratique).
     //   Upgrade: clé de cache = ressource + fenêtre.
-    fun refreshAsync(resource: String, baseUrl: String, query: String = "", cb: (RefreshOutcome) -> Unit) {
+    fun refreshAsync(
+        resource: String,
+        baseUrl: String,
+        query: String = "",
+        force: Boolean = false,
+        cb: (RefreshOutcome) -> Unit,
+    ) {
         require(CachePolicy.isCacheable(resource)) { "ressource non cachable: $resource" }
+        val entry = try {
+            store.load(resource)
+        } catch (_: Exception) {
+            null
+        }
+        if (entry != null && !CachePolicy.shouldFetch(entry, resource, clock(), force)) {
+            post(cb, RefreshOutcome.Updated(entry.payload, entry.fetchedAt))
+            return
+        }
         readAsync(save = true, resource = resource, query = query, cb = cb)
     }
 

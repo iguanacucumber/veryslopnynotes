@@ -289,7 +289,10 @@ private fun CachedSchoolRoute(
         }
         mutableStateOf(uiStateFromCache(c, c != null && repo.isStale(resource, c)))
     }
-    fun refresh() {
+    // #311 : `force` = geste explicite (« Actualiser », « Réessayer », relecture
+    // de la barre). La première entrée sur l'écran ne l'est pas : un cache frais
+    // est servi sans relire le client local.
+    fun refresh(force: Boolean = false) {
         // Serveur non configuré : pas d'appel (I1). Sans rien d'affiché, état
         // vide propre — jamais d'écran d'erreur plein-écran (#260).
         if (baseUrl.isBlank()) {
@@ -304,7 +307,7 @@ private fun CachedSchoolRoute(
             else -> UiState.Loading
         }
         try {
-            repo.refreshAsync(resource, baseUrl) { o -> state = uiStateFromOutcome(o) }
+            repo.refreshAsync(resource, baseUrl, force = force) { o -> state = uiStateFromOutcome(o) }
         } catch (_: Exception) {
             state = (state as? UiState.Data)?.let { UiState.Error("Erreur inattendue.", it.payload) }
                 ?: UiState.Empty
@@ -312,7 +315,13 @@ private fun CachedSchoolRoute(
     }
     // Cache affiché d'abord, relecture ensuite (offline-first #14). Le compteur
     // de la barre du haut rejoue le même effet (#162).
-    LaunchedEffect(resource, refreshTick) { refresh() }
+    // #311 : le PREMIER passage n'est pas un geste (cache frais = zéro appel) ;
+    // une relecture demandée par la barre en est un.
+    var gesture by remember { mutableStateOf(false) }
+    LaunchedEffect(resource, refreshTick) {
+        refresh(force = gesture)
+        gesture = true
+    }
 
     val data = state as? UiState.Data
     // `state` est une propriété déléguée : elle n'est pas smart-castable dans le
@@ -337,9 +346,9 @@ private fun CachedSchoolRoute(
                     icon = Icons.Filled.Info,
                     title = "Aucune donnée en cache",
                     description = "Actualisez pour lire les données de l'établissement.",
-                    action = { Button(onClick = { refresh() }) { Text("Actualiser") } },
+                    action = { Button(onClick = { refresh(force = true) }) { Text("Actualiser") } },
                 )
-                is UiState.Error -> PapErrorState(message = error?.message, onRetry = { refresh() })
+                is UiState.Error -> PapErrorState(message = error?.message, onRetry = { refresh(force = true) })
                 is UiState.Data -> Unit
             }
             return@Column
@@ -356,7 +365,7 @@ private fun CachedSchoolRoute(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        body(payload) { refresh() }
+        body(payload) { refresh(force = true) }
     }
 }
 

@@ -360,7 +360,9 @@ fun SecurityAlertsRoute(
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(true) }
 
-    fun refresh() {
+    // #311 : `force` = geste explicite (tirail, « Actualiser ») ; la première
+    // entrée sur l'écran se contente d'un cache frais.
+    fun refresh(force: Boolean = false) {
         // Serveur non configuré : aucun appel (I1), pas de cache = pas d'all-clear.
         // État vide neutre, jamais d'écran d'erreur plein-écran (#260).
         if (baseUrl.isBlank()) {
@@ -370,7 +372,7 @@ fun SecurityAlertsRoute(
         }
         loading = true
         try {
-            repo.refreshAsync(CachePolicy.SECURITY_ALERTS, baseUrl) { o ->
+            repo.refreshAsync(CachePolicy.SECURITY_ALERTS, baseUrl, force = force) { o ->
                 when (o) {
                     is RefreshOutcome.Updated -> {
                         alerts = alertsFromPayload(o.payload)
@@ -417,7 +419,7 @@ fun SecurityAlertsRoute(
         else -> AlertsView.Ready(alerts, stale = stale || failure != null, fetchedAt = fetchedAt)
     }
 
-    HomePullToRefresh(refreshing = loading, onRefresh = { refresh() }) {
-        SecurityAlertsScreen(view = view, notice = error?.takeUnless { isSilentOffline(it) }, onRefresh = { refresh() })
+    HomePullToRefresh(refreshing = loading, onRefresh = { refresh(force = true) }) {
+        SecurityAlertsScreen(view = view, notice = error?.takeUnless { isSilentOffline(it) }, onRefresh = { refresh(force = true) })
     }
 }

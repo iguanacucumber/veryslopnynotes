@@ -115,7 +115,10 @@ fun GradesRoute(
         mutableStateOf(if (cached == null) UiState.Empty else uiStateFromCache(cached, repo.isStale(resource, cached)))
     }
 
-    fun refresh() {
+    // #311 : `force` = geste explicite de l'utilisateur (tirail, « Actualiser »,
+    // changement de période/algorithme). La première entrée sur l'écran ne l'est
+    // pas : un cache frais est servi sans relire le client local.
+    fun refresh(force: Boolean = false) {
         // Serveur non configuré : aucun appel (I1). Sans rien d'affiché, état
         // vide propre — jamais d'écran d'erreur plein-écran (#260).
         if (baseUrl.isBlank()) {
@@ -131,7 +134,7 @@ fun GradesRoute(
             else -> UiState.Loading
         }
         try {
-            repo.refreshAsync(resource, baseUrl, gradesQuery(algorithm, periodId)) { o ->
+            repo.refreshAsync(resource, baseUrl, gradesQuery(algorithm, periodId), force = force) { o ->
                 state = uiStateFromOutcome(o)
                 nowMillis = System.currentTimeMillis()
             }
@@ -182,7 +185,14 @@ fun GradesRoute(
     // changer de période rejoue la requête, changer d'algorithme aussi, l'action
     // « Actualiser » de la barre du haut aussi (son compteur, #162), sans doublon
     // au premier rendu (comme la navigation de semaine de `TimetableRoute`).
-    LaunchedEffect(resource, algorithm, periodId, refreshTick) { refresh() }
+    // #311 : le PREMIER passage n'est pas un geste (cache frais = zéro appel) ;
+    // tout ce qui rejoue l'effet après lui en est un (période, algorithme,
+    // « Actualiser »), donc une relecture forcée.
+    var gesture by remember { mutableStateOf(false) }
+    LaunchedEffect(resource, algorithm, periodId, refreshTick) {
+        refresh(force = gesture)
+        gesture = true
+    }
     LaunchedEffect(baseUrl) { loadPeriods() }
 
     val payload = (state as? UiState.Data)?.payload ?: (state as? UiState.Error)?.cached
@@ -202,7 +212,7 @@ fun GradesRoute(
         // Un écran SANS rien à montrer est UN état : un message, une action, et
         // RIEN en dessous. Pas de champ de recherche, pas de puces, pas de
         // titre de section : c'était l'état d'erreur au milieu de la page.
-        GradesBlankState(state = state, query = query, onRefresh = { refresh() })
+        GradesBlankState(state = state, query = query, onRefresh = { refresh(force = true) })
         return
     }
 
@@ -274,7 +284,7 @@ fun GradesRoute(
         // note, moyennes présentes) reçoit un message, pas un titre au-dessus
         // du vide.
         if (filtered.isEmpty()) {
-            GradesNothingToShow(query = query, onRefresh = { refresh() })
+            GradesNothingToShow(query = query, onRefresh = { refresh(force = true) })
         } else {
             if (recent.isNotEmpty()) {
                 // ECART ECRIT — UN TITRE QUE LA REFERENCE N'A PAS, GARDÉ POUR

@@ -957,7 +957,9 @@ fun MessagesRoute(
     // publie que l'horodatage, donc la liste n'invente aucun texte.
     var previews by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
-    fun refresh() {
+    // #311 : `force` = geste explicite (tirail, « Actualiser », relecture après
+    // une écriture) ; la première entrée sur l'écran se contente d'un cache frais.
+    fun refresh(force: Boolean = false) {
         // Serveur non configuré : aucun appel (I1). Sans fils, état vide
         // propre — jamais d'écran d'erreur plein-écran (#260).
         if (baseUrl.isBlank()) {
@@ -966,7 +968,7 @@ fun MessagesRoute(
         }
         loading = true
         try {
-            repo.refreshAsync(CachePolicy.DISCUSSIONS, baseUrl) { o ->
+            repo.refreshAsync(CachePolicy.DISCUSSIONS, baseUrl, force = force) { o ->
                 when (o) {
                     is RefreshOutcome.Updated -> {
                         payload = discussionsFromPayload(o.payload)
@@ -1079,7 +1081,9 @@ fun MessagesRoute(
                     }
                     if (outcome.ok) {
                         creating = false
-                        refresh()
+                        // Écriture confirmée : relecture FORCÉE (le cache frais
+                        // ne contient pas encore la nouvelle discussion).
+                        refresh(force = true)
                     }
                 }
             },
@@ -1114,7 +1118,9 @@ fun MessagesRoute(
                                 val last = list.lastOrNull()
                                 if (last != null) previews = previews + (current.id to messagePreview(last.body))
                             }
-                            refresh()
+                            // Écriture confirmée (réponse envoyée) : geste, donc
+                            // relecture forcée de la liste.
+                            refresh(force = true)
                         }
                     }
                 }
@@ -1127,7 +1133,7 @@ fun MessagesRoute(
                             writeOutcome(again, "") {}
                         }
                     }
-                    if (outcome.ok) refresh()
+                    if (outcome.ok) refresh(force = true)
                 }
             },
             // #142 : la suppression passe par `ConfirmDialog`, ouvert depuis le
@@ -1143,7 +1149,7 @@ fun MessagesRoute(
                         writeOutcome(outcome, "« $subject » supprimée.") { del() }
                         if (outcome.ok) {
                             back()
-                            refresh()
+                            refresh(force = true)
                         }
                     }
                 }
@@ -1172,8 +1178,8 @@ fun MessagesRoute(
             fetchedAt = fetchedAt,
             error = error,
             previews = previews,
-            onRefresh = { refresh() },
-            onRetry = { refresh() },
+            onRefresh = { refresh(force = true) },
+            onRetry = { refresh(force = true) },
             onOpen = { openDiscussion(it) },
             // La pastille est l'action : marquer lu / non lu sans passer par le fil.
             onToggleRead = { d ->
@@ -1183,7 +1189,7 @@ fun MessagesRoute(
                             writeOutcome(again, "") {}
                         }
                     }
-                    if (outcome.ok) refresh()
+                    if (outcome.ok) refresh(force = true)
                 }
             },
             onNew = { loadRecipients() },

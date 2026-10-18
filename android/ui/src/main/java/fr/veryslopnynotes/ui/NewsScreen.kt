@@ -328,7 +328,9 @@ fun NewsRoute(
     // sur tout ce que l'utilisateur venait de marquer lu, sans qu'il l'ait
     // redemandé. Ce sont des IDENTIFIANTS, aucun texte de l'établissement.
     var readIds by rememberSaveable { mutableStateOf(emptySet<String>()) }
-    fun refresh() {
+    // #311 : `force` = geste explicite (tirail, « Réessayer ») ; la première
+    // entrée sur l'écran se contente d'un cache frais.
+    fun refresh(force: Boolean = false) {
         if (baseUrl.isBlank()) {
             // Serveur non configuré : aucun appel (I1). Sans donnée, état vide
             // propre — jamais d'écran d'erreur plein-écran (#260).
@@ -337,7 +339,7 @@ fun NewsRoute(
         }
         loading = true
         try {
-            repo.refreshAsync(CachePolicy.NEWS, baseUrl) { o ->
+            repo.refreshAsync(CachePolicy.NEWS, baseUrl, force = force) { o ->
                 when (o) {
                     is RefreshOutcome.Updated -> {
                         news = newsFromPayload(o.payload)
@@ -375,14 +377,14 @@ fun NewsRoute(
     // s'ajoute par-dessus (jamais l'inverse : on ne dé-marque pas).
     val shown = news.map { item -> if (item.id in readIds) item.copy(read = true) else item }
 
-    HomePullToRefresh(refreshing = loading, onRefresh = { refresh() }) {
+    HomePullToRefresh(refreshing = loading, onRefresh = { refresh(force = true) }) {
         NewsScreen(
             news = shown,
             isLoading = loading,
             isStale = stale,
             fetchedAt = fetchedAt,
             error = error,
-            onRetry = { refresh() },
+            onRetry = { refresh(force = true) },
             onMarkRead = { item -> readIds = readIds + item.id },
         )
     }

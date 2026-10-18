@@ -200,13 +200,17 @@ fun AppNav(
      * cachee, offline-first) puis ping de session local (aucun effet
      * metier : I7), suivie d'une nouvelle lecture de la liste. Un
      * echec laisse l'etat courant.
+     *
+     * #311 : la seconde relecture suit un GESTE (« Relire ») et un ping
+     * reellement envoye : elle est forcee, sinon un cache de 24 h encore frais
+     * repondrait au geste. La premiere lecture, elle, peut venir du cache.
      */
     fun detectCapabilities() {
         if (baseUrl.isBlank()) return
         // #87 : null = rien à appliquer, l'état précédent est conservé.
-        fun reload() {
+        fun reload(force: Boolean = false) {
             try {
-                repo.refreshAsync(CachePolicy.CAPABILITIES, baseUrl) { o ->
+                repo.refreshAsync(CachePolicy.CAPABILITIES, baseUrl, force = force) { o ->
                     Capabilities.parse(capabilitiesPayload(o))?.let { capabilities = it }
                 }
             } catch (_: Exception) {
@@ -214,7 +218,7 @@ fun AppNav(
         }
         reload()
         try {
-            repo.requestSyncRefresh(baseUrl, accountId) { _ -> reload() }
+            repo.requestSyncRefresh(baseUrl, accountId) { _ -> reload(force = true) }
         } catch (_: Exception) {
         }
     }

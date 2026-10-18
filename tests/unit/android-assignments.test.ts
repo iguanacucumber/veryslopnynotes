@@ -673,9 +673,14 @@ describe("sections, filtres et semaine (#138)", () => {
     // La fenêtre part dans la QUERY lue par le client local (`fetchAsync` :
     // la semaine non courante n'écrase pas le cache de la courante).
     expect(screen).toContain('repo.fetchAsync(resource, "weekStart=$week")');
-    expect(screen).toContain("repo.refreshAsync(resource, baseUrl)");
-    // Changer de semaine RELANCE le chargement (pas de filtre en mémoire).
-    expect(screen).toContain("LaunchedEffect(week) { refresh() }");
+    // #311 : le chemin semaine courante passe `force` (geste) à la règle de
+    // fraîcheur ; le chemin `fetchAsync` ci-dessus n'y est PAS soumis.
+    expect(screen).toContain("repo.refreshAsync(resource, baseUrl, force = force)");
+    // Changer de semaine RELANCE le chargement (pas de filtre en mémoire), et
+    // c'est un GESTE (#311) : premier passage = cache frais accepté, changement
+    // de semaine = relecture forcée.
+    expect(screen).toContain("LaunchedEffect(week) {");
+    expect(screen).toContain("refresh(force = gesture)");
     expect(screen).toContain("week = shiftWeekIso(week, weeks)");
     // Le sélecteur de semaine ne peut pas écrire une query libre.
     expect(screen).not.toMatch(/"\?from=|"\?weekStart=/);
