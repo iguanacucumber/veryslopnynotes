@@ -5,17 +5,20 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -444,7 +447,19 @@ private fun PapPeriodPill(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        TextButton(onClick = { open = true }) {
+        // #325 : même pastille que le reste de la barre — fond `surfaceVariant`,
+        // rayon pilule, encre `onSurfaceVariant`. Avant, un `TextButton` nu se
+        // confondait avec le titre. La cible tactile reste 48 dp (bouton M3),
+        // la hauteur visuelle 40 dp.
+        TextButton(
+            onClick = { open = true },
+            shape = CircleShape,
+            colors = ButtonDefaults.textButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
+            contentPadding = PaddingValues(start = 14.dp, end = 10.dp),
+        ) {
             Text(
                 text = label,
                 maxLines = 1,
