@@ -1,0 +1,146 @@
+// #310 : file d'attente unique du client local — VRAI Kotlin compilé.
+//
+// `LocalRequestQueue` (android/data, logique pure : `java.util.concurrent` seul,
+// aucun import Android) est compilée par le harnais puis pilotée par
+// `LocalQueueParityMain` : ce n'est pas un miroir TS, c'est le code de
+// production exécuté. Les deux assertions du critère #310 portent dessus :
+//   1. au plus 1 exécution concurrente (fil unique, ordre d'arrivée) ;
+//   2. deux requêtes identiques en vol = 1 seul appel client, 2 callbacks servis.
+// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
+// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+
+const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
+const QUEUE = join(DATA, "LocalRequestQueue.kt");
+const REPO = join(DATA, "SyncedRepository.kt");
+// JSON du pilote : le `Json` embarqué du port (pur, aucun import Android).
+const JSON_LIB = join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote", "Json.kt");
+const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "LocalQueueParityMain.kt");
+
+const skip = parityToolchain.skipReason !== null;
+
+let link: ParityLink | null = null;
+if (!skip) {
+  const jar = await parityToolchain.ensureJar("kotlin-local-queue", [QUEUE, JSON_LIB, DRIVER]);
+  link = await parityToolchain.openLink(jar);
+}
+
+interface QueueStats {
+  workCalls: number;
+  maxConcurrent: number;
+  executed: string[];
+  callbacks: string[];
+  thread: string;
+  daemon: boolean;
+}
+
+async function ask(op: unknown): Promise<string> {
+  return link!.ask(op);
+}
+
+async function newQueue(): Promise<number> {
+  return (JSON.parse(await ask({ op: "queueNew" })) as { qid: number }).qid;
+}
+
+/** Libère les travaux gated : ils s'exécutent alors (un par un). */
+async function release(qid: number): Promise<void> {
+  await ask({ op: "queueRelease", qid });
+}
+
+async function waitCallbacks(qid: number, callbacks: number, timeoutMs = 8000): Promise<{ served: number; timedOut: boolean }> {
+  return JSON.parse(await ask({ op: "queueWait", qid, callbacks, timeoutMs })) as { served: number; timedOut: boolean };
+}
+
+async function stats(qid: number): Promise<QueueStats> {
+  return JSON.parse(await ask({ op: "queueStats", qid })) as QueueStats;
+}
+
+describe("file d'attente unique du client local (#310)", () => {
+  test("câblage : le dépôt passe par la file, plus de Thread par lecture", () => {
+    const repo = readFileSync(REPO, "utf8");
+    // UNE file par dépôt, typée sur la sémantique existante (RefreshOutcome
+    // inchangé) ; les trois lectures (readAsync, sync, periods) y passent.
+    expect(repo).toContain("LocalRequestQueue<RefreshOutcome>");
+    expect(repo.match(/queue\.submit\(/g)?.length).toBe(3);
+    // Clé de dédoublonnage `ressource|query`.
+    expect(repo).toContain('"$resource|$query"');
+    // Callbacks relayés par le Handler main existant, un par un (post), et plus
+    // aucun Thread par lecture.
+    expect(repo).toContain("deliver = { o -> post(cb, o) }");
+    expect(repo).not.toContain("Thread {");
+    expect(repo).not.toContain("Thread(");
+    // La logique pure ne connaît ni Android ni le reste du paquet data : elle
+    // compile seule dans le harnais de parité JVM.
+    const queue = readFileSync(QUEUE, "utf8");
+    expect(queue).not.toContain("import android.");
+    expect(queue).not.toContain("android.os");
+  });
+
+  test.skipIf(skip)("fil unique : 3 lectures distinctes = 0 chevauchement, ordre d'arrivée", async () => {
+    const qid = await newQueue();
+    const keys = ["grades|x", "timetable|y", "news|"];
+    // Soumises en rafale pendant que le client est « occupé » (gated) : elles
+    // attendent toutes dans la file, puis s'exécutent dans l'ordre d'arrivée.
+    for (const key of keys) await ask({ op: "queueSubmit", qid, key, workMs: 30 });
+    await release(qid);
+    expect(await waitCallbacks(qid, keys.length)).toEqual({ served: 3, timedOut: false });
+    const s = await stats(qid);
+    expect(s.workCalls).toBe(3);
+    // L'assertion « au plus 1 appel client concurrent » : 3 lectures en vol,
+    // jamais deux à la fois (une implémentation parallèle verrait 3).
+    expect(s.maxConcurrent).toBe(1);
+    expect(s.executed).toEqual(keys);
+    // Le fil est bien le fil daemon unique de la file.
+    expect(s.thread).toBe("local-request-queue");
+    expect(s.daemon).toBe(true);
+  });
+
+  test.skipIf(skip)("deux requêtes identiques en vol = 1 appel client, 2 callbacks servis", async () => {
+    const qid = await newQueue();
+    const key = "grades|algorithm=1&periodId=T1";
+    await ask({ op: "queueSubmit", qid, key, workMs: 30 });
+    await ask({ op: "queueSubmit", qid, key, workMs: 30 });
+    await release(qid);
+    expect(await waitCallbacks(qid, 2)).toEqual({ served: 2, timedOut: false });
+    const s = await stats(qid);
+    // UN seul appel client pour deux soumissions identiques…
+    expect(s.workCalls).toBe(1);
+    expect(s.executed).toEqual([key]);
+    expect(s.maxConcurrent).toBe(1);
+    // …et les DEUX callbacks, servis avec le MÊME résultat (exécution #1 : un
+    // rejeu aurait produit `#2` dans le second callback).
+    expect(s.callbacks).toEqual([`${key}#1`, `${key}#1`]);
+  });
+
+  test.skipIf(skip)("dédoublonnage seulement EN VOL : un appel identique après coup re-démarre", async () => {
+    const qid = await newQueue();
+    const key = "news|";
+    // Pas de blocage : chaque volée se termine immédiatement.
+    await release(qid);
+    await ask({ op: "queueSubmit", qid, key, workMs: 0 });
+    expect(await waitCallbacks(qid, 1)).toEqual({ served: 1, timedOut: false });
+    // La clé est libérée par la fin de l'exécution : la même requête repart.
+    await ask({ op: "queueSubmit", qid, key, workMs: 0 });
+    expect(await waitCallbacks(qid, 2)).toEqual({ served: 2, timedOut: false });
+    const s = await stats(qid);
+    expect(s.workCalls).toBe(2);
+    expect(s.callbacks).toEqual([`${key}#1`, `${key}#2`]);
+    expect(s.maxConcurrent).toBe(1);
+  });
+
+  test.skipIf(skip)("clés différentes = pas de dédoublonnage (requêtes distinctes re-postées)", async () => {
+    const qid = await newQueue();
+    // Même ressource, query différente : ce sont deux lectures distinctes.
+    const keys = ["timetable|weekStart=2026-10-12", "timetable|weekStart=2026-10-19"];
+    for (const key of keys) await ask({ op: "queueSubmit", qid, key, workMs: 5 });
+    await release(qid);
+    expect(await waitCallbacks(qid, 2)).toEqual({ served: 2, timedOut: false });
+    const s = await stats(qid);
+    expect(s.workCalls).toBe(2);
+    expect(s.executed).toEqual(keys);
+    expect(s.callbacks).toEqual([`${keys[0]}#1`, `${keys[1]}#1`]);
+  });
+});
