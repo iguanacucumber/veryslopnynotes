@@ -1,12 +1,5 @@
-import { Page, Card } from "../ui/components";
+import TimetableScreen from "../features/timetable/TimetableScreen";
 
 export default function CalendarRoute() {
-  return (
-    <Page>
-      <Card>
-        <h2 className="t-headline">Cours</h2>
-        <p className="muted">Écran en cours de portage React.</p>
-      </Card>
-    </Page>
-  );
+  return <TimetableScreen />;
 }
