@@ -102,6 +102,9 @@ fun IndexScreen(
      * Affiche. Un échec NE REMPLACE PAS la page : le cache est relu tel quel et
      * le bandeau continue d'annoncer son âge — c'est le repli de #14, pas un
      * écran d'erreur au-dessus de données encore bonnes.
+     *
+     * #311 : c'est un GESTE, donc `force = true` — sans ça un cache frais
+     * répondrait au tirail et le geste ne relirait rien.
      */
     fun refresh() {
         if (baseUrl.isBlank() || refreshing) return
@@ -118,7 +121,7 @@ fun IndexScreen(
         }
         for (resource in HOME_WIDGET_RESOURCES) {
             try {
-                repo.refreshAsync(resource, baseUrl) { outcome ->
+                repo.refreshAsync(resource, baseUrl, force = true) { outcome ->
                     done((outcome as? RefreshOutcome.Failed)?.message)
                 }
             } catch (_: Exception) {

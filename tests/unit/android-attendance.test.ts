@@ -737,7 +737,9 @@ describe("vie scolaire : rendu (#141)", () => {
       brique: "PapStaleBanner(",
       present: false,
     });
-    expect(screen).toContain("PapErrorState(message = error?.message, onRetry = { refresh() })");
+    // #311 : « Réessayer » est un geste, donc une relecture forcée (un cache
+    // frais ne doit pas répondre à un bouton qui promet de relire).
+    expect(screen).toContain("PapErrorState(message = error?.message, onRetry = { refresh(force = true) })");
     expect(screen).not.toContain("Erreur réseau. Réessayer.");
     expect(screen).not.toContain("Données hors-ligne (périmé).");
     expect(screen).not.toContain("PapStaleBanner(");

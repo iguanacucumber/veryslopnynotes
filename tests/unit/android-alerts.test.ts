@@ -169,7 +169,9 @@ describe("unit android alertes sécurité (#144)", () => {
     // L'écran consomme le cache partagé (comme les 8 autres), pas un état local.
     const screen = codeOnly(readFileSync(SCREEN, "utf8"));
     expect(screen).toContain("repo.cached(CachePolicy.SECURITY_ALERTS)");
-    expect(screen).toContain("repo.refreshAsync(CachePolicy.SECURITY_ALERTS, baseUrl)");
+    // #311 : la relecture passe `force` ; les gestes (tirail, « Actualiser »)
+    // forcent, la première entrée sur l'écran se contente d'un cache frais.
+    expect(screen).toContain("repo.refreshAsync(CachePolicy.SECURITY_ALERTS, baseUrl, force = force)");
     expect(screen).not.toContain("PapStaleBanner(");
     expect(screen).toContain("PapErrorState(");
     expect(screen).toContain("PapLoading()");
