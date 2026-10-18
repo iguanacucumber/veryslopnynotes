@@ -13,11 +13,12 @@
 //   - `WindowCompat` et non `systemUiVisibility` : minSdk 26, et l'API
 //     dépréciée ne règle pas la révélation transitoire ;
 //   - l'encoche : barre de statut masquée + `SHORT_EDGES` (posé par
-//     `enableEdgeToEdge`) = la fenêtre se peint SOUS le découpage, donc la
-//     barre du haut doit consommer `displayCutout` ou son titre passe dessous ;
-//   - l'ESPACE LIBÉRÉ : masquer la barre de statut libère sa hauteur, que la
-//     barre du haut reprend (elle mesure la place, la garde et y recentre son
-//     titre) au lieu de la laisser en bande vide.
+//     `enableEdgeToEdge`) = la fenêtre se peint SOUS le découpage. Les CÔTÉS
+//     sont consommés (découpe en paysage) ; le haut ne l'est pas : une découpe
+//     haute est au centre de la barre, où il n'y a rien ;
+//   - la HAUTEUR : la barre garde les 64 dp de M3. Son contenu est donc centré
+//     à 32 dp du bord, la ligne du poinçon (#323) — pas de bande vide au-dessus
+//     et pas de barre rallongée sous l'encoche (#305).
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -59,14 +60,13 @@ describe("unit android plein écran immersif (#303)", () => {
     expect({ deprecated: activity.includes("systemUiVisibility") }).toEqual({ deprecated: false });
   });
 
-  test("la barre du haut reste sous l'encoche (displayCutout consommé)", () => {
-    // La coquille ne monte plus la `TopAppBar` de M3 (cf. #303 plus bas), donc
-    // c'est SA rangée qui consomme le découpage — sur toute la barre, pas
-    // seulement sous le titre. La marge vient de `displayCutout`, donc elle est
-    // mesurée à l'exécution et pas devinée (#305 la répartit moitié au-dessus,
-    // moitié au-dessous : cf. le test de centrage).
-    expect(shell).toContain("WindowInsets.displayCutout.asPaddingValues(density)");
-    expect(shell).toContain(".windowInsetsPadding(cutoutPadding)");
+  test("la barre du haut ne passe pas sous une encoche latérale (côtés consommés)", () => {
+    // #323 : la coquille ne monte plus la `TopAppBar` de M3 (cf. #303 plus bas),
+    // donc c'est SA rangée qui consomme le découpage. Seuls les CÔTÉS sont
+    // consommés : une découpe haute (poinçon) est au centre de la barre, où il
+    // n'y a rien, et son inset vaut la barre de statut entière.
+    expect(shell).toContain("WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal)");
+    expect(shell).toContain(".windowInsetsPadding(cutout)");
   });
 
   test("les barres de l'app ne sont PAS touchées (titre et onglets conservés)", () => {
@@ -80,20 +80,33 @@ describe("unit android plein écran immersif (#303)", () => {
   });
 });
 
-// #303 (suite) : la barre du haut reprend l'espace que la barre de statut
-// occupait — 64 dp de contenu M3 + la hauteur mesurée, titre recentré dessous.
-// Le masquage seul laissait une bande plus haute que son contenu : la barre
-// grandissait sans que son titre en profite.
-describe("unit barre du haut rehaussée (#303)", () => {
-  test("hauteur de contenu = 64 dp M3 + l'espace repris", () => {
+// #323 : la barre du haut garde la hauteur de M3 (64 dp) et n'y ajoute RIEN.
+// #305 l'avait rallongée de la barre de statut masquée, ce qui la faisait
+// déborder sous le poinçon ; centré dans 64 dp, le contenu tombe sur la ligne
+// de la caméra (mesuré sur l'appareil : centre du poinçon à 32,7 dp).
+describe("unit barre du haut à hauteur M3 (#323)", () => {
+  test("hauteur de contenu = 64 dp M3, sans espace repris", () => {
     expect(shell).toContain("private val TopBarContentHeight = 64.dp");
-    expect(shell).toContain("(TopBarContentHeight + reclaimedTop).toPx()");
-    expect(shell).toMatch(/reclaimedTop: Dp = 0\.dp,/);
+    expect(shell).toContain("with(density) { TopBarContentHeight.toPx() }");
+    // Plus aucune hauteur empruntée à la barre de statut, dans aucun module.
+    for (const [name, src] of [
+      ["shell", shell],
+      ["nav", read(join(UI, "AppNav.kt"))],
+      ["activity", activity],
+    ] as const) {
+      expect({ name, reclaimed: src.includes("reclaimedTop") }).toEqual({ name, reclaimed: false });
+    }
   });
 
-  test("la limite de repli suit la hauteur RÉELLE, pas les 64 dp de M3", () => {
-    // Sans ça la rétraction s'arrêterait à -64 dp et laisserait l'espace repris
-    // en bande de barre au défilement.
+  test("aucune marge verticale d'encoche : le contenu est centré dans les 64 dp", () => {
+    // Une marge haute (même la moitié de l'inset) poussait le titre sous le
+    // poinçon et rallongeait la barre — c'est ce que #305/#307 avaient fait.
+    expect(shell).toContain("only(WindowInsetsSides.Horizontal)");
+    expect({ vertical: shell.includes("calculateTopPadding") }).toEqual({ vertical: false });
+    expect({ vertical: shell.includes("calculateBottomPadding") }).toEqual({ vertical: false });
+  });
+
+  test("la limite de repli suit la hauteur RÉELLE de la barre", () => {
     expect(shell).toMatch(
       /state\.heightOffsetLimit != -contentHeightPx[\s\S]{0,120}state\.heightOffsetLimit = -contentHeightPx/,
     );
@@ -106,40 +119,9 @@ describe("unit barre du haut rehaussée (#303)", () => {
     expect(shell).toContain("state = rememberDraggableState { delta -> state.heightOffset += delta }");
   });
 
-  test("l'espace repris est MESURÉ, pas inventé", () => {
-    // `getInsetsIgnoringVisibility` : la hauteur de la barre de statut MÊME
-    // MASQUÉE, la seule valeur qui reste vraie en plein écran.
-    expect(activity).toContain(
-      "insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.statusBars()).top",
-    );
-    expect(activity).toContain("reclaimedTop.value = (");
-    expect(activity).toContain("AppNav(baseUrlSeed = baseUrlSeed, reclaimedTop = reclaimedTop.value)");
-  });
-
-  test("la hauteur traverse la coquille jusqu'à la barre", () => {
-    const nav = read(join(UI, "AppNav.kt"));
-    expect(nav).toMatch(/reclaimedTop: Dp = 0\.dp,/);
-    expect(nav).toContain("reclaimedTop = reclaimedTop,");
-  });
-
   test("le module ui ne lit aucun inset de fenêtre hors découpage", () => {
-    // La hauteur vient de l'activité (module `app`, qui a androidx.core) : `ui`
-    // n'a pas à connaître les insets de fenêtre.
+    // Les insets de fenêtre (barre de statut) ne concernent pas `ui` : elle ne
+    // lit que le découpage, dont les côtés sont consommés.
     expect({ core: shell.includes("WindowInsetsCompat") }).toEqual({ core: false });
-  });
-
-  // #305 : sans ça le contenu était centré dans la SEULE zone sous l'encoche et
-  // tombait aux deux tiers de la barre (mesuré sur l'appareil : titre à 118 dp
-  // sur 179 dp, au lieu des ~90 dp d'avant #303 et de la référence).
-  test("le contenu est centré dans la barre ENTIÈRE, encoche comprise", () => {
-    // Encoche posée en marges ÉGALES haut/bas : `windowInsetsPadding` centre le
-    // contenu entre ses marges, donc des marges égales le centrent dans toute
-    // la barre.
-    expect(shell).toMatch(/top = cutout\.calculateTopPadding\(\) \/ 2,/);
-    expect(shell).toMatch(/bottom = cutout\.calculateBottomPadding\(\) \/ 2,/);
-    // Gauche et droite : l'encoche ENTIÈRE — en paysage elle est sur le côté,
-    // la moitié y laisserait le contenu dessous.
-    expect(shell).toMatch(/left = cutout\.calculateLeftPadding\(layoutDirection\),/);
-    expect(shell).toMatch(/right = cutout\.calculateRightPadding\(layoutDirection\),/);
   });
 });
