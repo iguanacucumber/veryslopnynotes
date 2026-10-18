@@ -170,6 +170,9 @@ function defaultBehavior(htmlAttrs: string): StubBehavior {
 interface Stub {
   base: string;
   requests: RecordedReq[];
+  /** Port distant vu par le serveur, un par requête (`null` si indisponible) —
+   *  c'est la preuve du keep-alive : un seul port pour N requêtes (#309). */
+  remotePorts: (number | null)[];
   gets: number;
   behavior: StubBehavior;
   close(): void;
@@ -179,11 +182,13 @@ function startStub(htmlAttrs: string): Stub {
   const stub = { gets: 0 } as Stub;
   stub.behavior = defaultBehavior(htmlAttrs);
   stub.requests = [];
+  stub.remotePorts = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
-    fetch(req) {
+    fetch(req, srv) {
       const url = new URL(req.url);
+      stub.remotePorts.push(srv.requestIP(req)?.port ?? null);
       if (req.method === "GET" && url.pathname.endsWith("/eleve.html")) {
         stub.gets++;
         const headers: Record<string, string | undefined> = {};
@@ -549,6 +554,28 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
           `${c.method} ${c.url} -> ${canonTs(tsGot)}`,
         );
       }
+    } finally {
+      stub.close();
+    }
+  });
+
+  test.skipIf(skip)("http : N requêtes séquentielles gardent le même socket (keep-alive, #309)", async () => {
+    const stub = startStub(`h: '1', a: 'b'`);
+    try {
+      const ktSid = (JSON.parse(await ask({ op: "httpNew" })) as { sid: number }).sid;
+      const N = 3;
+      const seq = await ask({ op: "httpSeq", sid: ktSid, url: `${stub.base}/final`, n: N });
+      expect(JSON.parse(seq)).toEqual({ statuses: Array.from({ length: N }, () => 200) });
+      // Le port distant vu par le serveur est la seule preuve externe de la
+      // réutilisation du socket. Contrôle de l'observation (mesuré) : le même
+      // pilote lancé avec `-Dhttp.keepAlive=false` donne N ports, donc
+      // l'assertion n'est pas vide. Réserve : sur la JVM, un `disconnect()`
+      // après un corps entièrement consommé est DÉJÀ sans effet sur ce cache
+      // (`KeepAliveCache`) — c'est Android/OkHttp qui ferme le socket pour de
+      // bon, d'où #309 ; le harnais prouve la propriété, pas l'appel retiré.
+      expect(stub.remotePorts.length).toBe(N);
+      for (const port of stub.remotePorts) expect(port).toBeGreaterThan(0);
+      expect(new Set(stub.remotePorts).size).toBe(1);
     } finally {
       stub.close();
     }

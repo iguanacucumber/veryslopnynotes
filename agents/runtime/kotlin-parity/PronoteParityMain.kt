@@ -180,6 +180,16 @@ private class Driver {
                     "text" to JVal.Str(res.text),
                 )
             }
+            "httpSeq" -> {
+                // N requêtes séquentielles sur la MÊME session (#309) : le
+                // serveur factice doit voir UN SEUL port distant si le socket
+                // retourne au cache keep-alive. Renvoie les statuts (sanity).
+                val session = sessions[(op.num("sid") ?: 0.0).toInt()] ?: throw IllegalArgumentException("pilote: sid inconnu")
+                val url = op.str("url") ?: ""
+                val n = (op.num("n") ?: 0.0).toInt()
+                val statuses = (1..n).map { session.get(url).status }
+                ok("statuses" to JVal.Arr(statuses.map { JVal.Num(it.toDouble()) }))
+            }
             // --- Communication ---------------------------------------------------
             "commNew" -> {
                 val cid = alloc()
