@@ -1,0 +1,175 @@
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
+import { bridge } from "../bridge/client";
+import { BridgeCallError, type ResourceKey } from "../bridge/types";
+
+type Theme = "SYSTEM" | "LIGHT" | "DARK";
+type NoticeKind = "info" | "error";
+
+interface AppContextValue {
+  theme: Theme;
+  dark: boolean;
+  setTheme: (theme: Theme) => void;
+  refreshTick: number;
+  refresh: () => void;
+  notify: (message: string, kind?: NoticeKind) => void;
+  authLost: boolean;
+}
+
+const AppContext = createContext<AppContextValue | null>(null);
+
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [theme, setThemeState] = useState<Theme>(() => {
+    const stored = localStorage.getItem("vsn:theme");
+    return stored === "LIGHT" || stored === "DARK" || stored === "SYSTEM" ? stored : "SYSTEM";
+  });
+  const [systemDark, setSystemDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [authLost, setAuthLost] = useState(false);
+  const noticeTimer = useRef<number | undefined>(undefined);
+  const [notice, setNotice] = useState<{ message: string; kind: NoticeKind } | null>(null);
+
+  const dark = theme === "DARK" || (theme === "SYSTEM" && systemDark);
+
+  useEffect(() => {
+    document.documentElement.dataset["theme"] = dark ? "dark" : "light";
+  }, [dark]);
+
+  useEffect(() => {
+    const mq = matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    const onAuth = () => setAuthLost(true);
+    window.addEventListener("vsn:auth", onAuth);
+    return () => window.removeEventListener("vsn:auth", onAuth);
+  }, []);
+
+  const notify = useCallback((message: string, kind: NoticeKind = "info") => {
+    setNotice({ message, kind });
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 4200);
+  }, []);
+
+  const setTheme = useCallback((next: Theme) => {
+    setThemeState(next);
+    localStorage.setItem("vsn:theme", next);
+    void bridge.setTheme(next).catch(() => undefined);
+  }, []);
+
+  const refresh = useCallback(() => setRefreshTick((n) => n + 1), []);
+
+  const value = useMemo<AppContextValue>(
+    () => ({ theme, dark, setTheme, refreshTick, refresh, notify, authLost }),
+    [theme, dark, setTheme, refreshTick, refresh, notify, authLost],
+  );
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+}
+
+export function useApp(): AppContextValue {
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error("AppProvider absent");
+  return ctx;
+}
+
+export interface ResourceState {
+  payload: string | null;
+  fetchedAt: number;
+  stale: boolean;
+  error: string | null;
+  loading: boolean;
+  refresh: () => void;
+}
+
+/** Lecture offline-first : cache d'abord, puis réseau natif. Le cache est
+ *  affiché sans spinner ; un échec garde le cache et expose `error`. */
+export function useResource(key: ResourceKey, query = ""): ResourceState {
+  const { refreshTick } = useApp();
+  const [state, setState] = useState<Omit<ResourceState, "refresh">>({
+    payload: null,
+    fetchedAt: 0,
+    stale: false,
+    error: null,
+    loading: true,
+  });
+  const [manual, setManual] = useState(0);
+  const alive = useRef(true);
+
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      setState((s) => (s.payload ? s : { ...s, loading: true }));
+      try {
+        const cached = await bridge.cached(key);
+        if (!cancelled && cached.payload) {
+          setState({ payload: cached.payload, fetchedAt: cached.fetchedAt, stale: true, error: null, loading: false });
+        }
+      } catch {
+        // cache indisponible : on tente le natif
+      }
+      try {
+        const result = await bridge.load({ key, query, force: manual > 0 || refreshTick > 0 });
+        if (cancelled) return;
+        setState({
+          payload: result.payload,
+          fetchedAt: result.fetchedAt,
+          stale: result.stale,
+          error: result.error,
+          loading: false,
+        });
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof BridgeCallError && e.code === "auth_required") {
+          window.dispatchEvent(new Event("vsn:auth"));
+        }
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error: e instanceof Error ? e.message : "lecture indisponible",
+        }));
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [key, query, manual, refreshTick]);
+
+  const refresh = useCallback(() => setManual((n) => n + 1), []);
+  return { ...state, refresh };
+}
+
+/** Appel ponctuel (action utilisateur, appairage, réglages). */
+export function useAsync<T>() {
+  const [state, setState] = useState<{ data: T | null; error: string | null; loading: boolean }>({
+    data: null,
+    error: null,
+    loading: false,
+  });
+  const run = useCallback(async (fn: () => Promise<T>): Promise<T | null> => {
+    setState((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const data = await fn();
+      setState({ data, error: null, loading: false });
+      return data;
+    } catch (e) {
+      if (e instanceof BridgeCallError && e.code === "auth_required") {
+        window.dispatchEvent(new Event("vsn:auth"));
+      }
+      setState({ data: null, error: e instanceof Error ? e.message : "action impossible", loading: false });
+      return null;
+    }
+  }, []);
+  return { ...state, run };
+}

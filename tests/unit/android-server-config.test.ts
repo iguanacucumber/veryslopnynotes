@@ -4,7 +4,7 @@
 // Point de sécurité central : la saisie est libre, donc la validation EST
 // l'allowlist — `ServerConfig.validateBaseUrl` + `isAllowed`.
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 
@@ -12,7 +12,6 @@ const ROOT = join(import.meta.dir, "..", "..");
 const ANDROID = join(ROOT, "android");
 const CORE = join(ANDROID, "core/src/main/java/fr/veryslopnynotes/core");
 const DATA = join(ANDROID, "data/src/main/java/fr/veryslopnynotes/data");
-const UI = join(ANDROID, "ui/src/main/java/fr/veryslopnynotes/ui");
 const APP = join(ANDROID, "app/src/main/java/fr/veryslopnynotes/app");
 
 function read(p: string): string {
@@ -365,51 +364,33 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
   });
 
   test("adresse du scraper : état + store, déconnexion purge par logout()", () => {
-    const nav = read(join(UI, "AppNav.kt"));
-    const navCode = codeOnly(nav);
-    // L'adresse du scraper est un ÉTAT, la graine du build n'est qu'un défaut.
-    expect(nav).toContain("baseUrlSeed: String = \"\"");
-    expect(nav).toContain("val serverStore = remember(ctx) { ServerStore(ctx) }");
-    expect(nav).toContain("val baseUrl = remember(serverStore) { serverStore.baseUrl(baseUrlSeed) }");
-    // #206 : plus de changement de serveur dans l'appairage (device-only,
-    // aucune route serveur à repointer) — donc plus de changeServer nulle part.
-    expect(nav).not.toContain("changeServer");
-    expect(nav).not.toContain("onServerChange");
-    expect(read(join(UI, "PairingScreen.kt"))).not.toContain("fun changeServer(");
+    // Depuis le cutover WebView, le pont natif porte la graine et l'état ;
+    // l'écran React n'a plus aucune saisie d'adresse serveur.
+    const bridge = read(join(APP, "VsnBridge.kt"));
+    const bridgeCode = codeOnly(bridge);
+    expect(bridge).toContain("private val baseUrlSeed: String = fr.veryslopnynotes.core.ServerConfig.baseUrl(");
+    expect(bridge).toContain("private val serverStore = ServerStore(ctx)");
+    expect(bridge).toContain("private fun currentBaseUrl(): String = serverStore.baseUrl(baseUrlSeed)");
+    expect(bridge).toContain("serverStore.save(host)");
     // Aucune purge parallèle : tout passe par AccountStore.logout().
-    expect(navCode).not.toContain("clearAll(");
-    expect(navCode).not.toContain("sessions.clear(");
-    expect(navCode).not.toContain("SessionTokens(");
+    expect(bridgeCode).not.toContain("clearAll(");
+    expect(bridgeCode).not.toContain("sessions.clear(");
+    expect(bridgeCode).not.toContain("SessionTokens(");
     // Le chemin de purge est bien celui du AccountStore existant.
     expect(accounts_has_logout()).toBe(true);
-    // Les repositories suivent le cache partagé ; la route alertes lit ce
-    // `repo` (#144, cache hors-ligne). #172 : le paramètre `loadAlerts` est
-    // SUPPRIMÉ (mort depuis #144, seul `MainActivity` le passait) — un point
-    // d'injection qui n'injecte plus rien ne doit pas rester en place.
-    expect({ loadAlerts: nav.includes("loadAlerts:") }).toEqual({ loadAlerts: false });
-    expect(nav).toContain("SecurityAlertsRoute(repo = repo, baseUrl = baseUrl)");
-    // La route appairage ne reçoit plus d'adresse serveur (device-only).
-    const pairingRoute = nav.slice(nav.indexOf("composable(ROUTE_PAIRING"), nav.indexOf("composable(ROUTE_ALERTS"));
-    expect(pairingRoute).toContain("PairingRoute(");
-    expect(pairingRoute).not.toContain("baseUrl");
-    expect(pairingRoute).not.toContain("Serveur non configuré.");
-    // Et le garde-fou de session morte (#113) reste câblé : la réparation
-    // vit dans `SessionGate` (extrait d'AppNav en #206, #135), l'état ici.
-    expect(nav).toContain("SessionGate(sessions = sessions, accounts = accounts, nav = nav, onNotice = { authNotice = it })");
-    const gate = read(join(UI, "SessionGate.kt"));
-    expect(gate).toContain("DeviceAuth.setOnRejected");
-    expect(gate).toContain("accounts.logout()");
-    expect(gate).toContain("onNotice(DeviceAuth.REJECTED_MESSAGE)");
+    // Aucune référence à l'ancien changement de serveur dans l'app.
+    expect(bridgeCode).not.toContain("changeServer");
+    expect(bridgeCode).not.toContain("onServerChange");
   });
 
   test("grain de build : plus de valeur figée côté app, et pas de cleartext ajouté", () => {
-    const activity = read(join(APP, "MainActivity.kt"));
-    expect(activity).toContain("val baseUrlSeed = fr.veryslopnynotes.core.ServerConfig.baseUrl(");
-    expect(activity).toContain("BuildConfig.SERVER_SCHEME");
-    expect(activity).toContain("BuildConfig.SERVER_HOST");
-    expect(activity).toContain("baseUrlSeed = baseUrlSeed");
+    const bridge = read(join(APP, "VsnBridge.kt"));
+    expect(bridge).toContain("private val baseUrlSeed: String = fr.veryslopnynotes.core.ServerConfig.baseUrl(");
+    expect(bridge).toContain("BuildConfig.SERVER_SCHEME");
+    expect(bridge).toContain("BuildConfig.SERVER_HOST");
+    expect(bridge).toContain("currentBaseUrl()");
     // Aucun hôte en dur côté app : la seule adresse connue est la graine.
-    expect(codeOnly(activity)).not.toMatch(/https?:\/\//);
+    expect(codeOnly(bridge)).not.toMatch(/https?:\/\//);
     // Le buildConfigField reste, mais il n'est plus qu'un défaut.
     const gradle = read(join(ANDROID, "app/build.gradle.kts"));
     expect(gradle).toContain('buildConfigField("String", "SERVER_SCHEME"');
@@ -480,17 +461,10 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     ]) {
       expect({ mort, present: config.includes(mort) }).toEqual({ mort, present: false });
     }
-    // L'écran d'appairage ne connaît plus aucune adresse serveur : ni champ,
-    // ni sonde, ni callback — juste l'établissement puis le QR.
-    const screen = read(join(UI, "PairingScreen.kt"));
-    expect(screen).not.toContain("ServerField(");
-    expect(screen).not.toContain("serverDraft");
-    expect(screen).not.toContain("serverHint");
-    expect(screen).not.toContain("probeHealthBlocking");
-    expect(screen).not.toContain("ServerConfig.");
-    const state = read(join(UI, "PairingUiState.kt"));
-    expect(state).not.toContain("serverHint");
-    expect(state).not.toContain("ServerConfig.");
+    // L'interface n'est plus Compose : plus de module ui à scanner, et le pont
+    // n'expose aucune adresse d'établissement à modifier.
+    expect(existsSync(join(ANDROID, "ui"))).toBe(false);
+    expect(codeOnly(read(join(APP, "VsnBridge.kt")))).not.toContain("changeServer");
   });
 
   test("I1 : aucun hôte en dur dans android/, aucun hôte Pronote", () => {

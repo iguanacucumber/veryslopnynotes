@@ -9,7 +9,8 @@ plugins {
 // ici (voir README + INVARIANTS I1). Règle HTTPS-only sauf
 // http://10.0.2.2 / localhost (émulateur), identique à
 // core/ServerConfig.validateBaseUrl qui borne et normalise toute saisie.
-// Médias via proxy serveur, pas de WebView distante.
+// L'interface est l'app React locale (`web/`), embarquée dans les assets et
+// servie par la WebView (ADR-004) : plus de module Compose.
 android {
     namespace = "fr.veryslopnynotes.app"
     compileSdk = 34
@@ -84,10 +85,6 @@ android {
     }
     buildFeatures {
         buildConfig = true
-        compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -98,21 +95,28 @@ android {
     }
 }
 
+// Build de l'UI React dans les assets de l'APK. Toujours branché sur
+// `preBuild` : l'APK ne peut pas être construit sans `web/index.html`.
+// Sortie : android/app/src/main/assets/web/ (gitignorée).
+val buildWebUi = tasks.register<Exec>("buildWebUi") {
+    workingDir = rootProject.projectDir.parentFile
+    commandLine("bun", "run", "build:web")
+    inputs.dir(rootProject.projectDir.parentFile.resolve("web/src"))
+    inputs.file(rootProject.projectDir.parentFile.resolve("web/vite.config.ts"))
+    inputs.file(rootProject.projectDir.parentFile.resolve("package.json"))
+    outputs.dir(projectDir.resolve("src/main/assets/web"))
+}
+tasks.named("preBuild") { dependsOn(buildWebUi) }
+
 dependencies {
     implementation(project(":core"))
     implementation(project(":data"))
-    implementation(project(":ui"))
-    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
-    implementation(composeBom)
-    androidTestImplementation(composeBom)
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-compose:1.9.2")
-    implementation("androidx.compose.material3:material3:1.2.1")
-    implementation("androidx.compose.ui:ui:1.6.8")
-    implementation("androidx.compose.ui:ui-tooling-preview:1.6.8")
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    // ComponentActivity + enableEdgeToEdge, sans Compose.
+    implementation("androidx.activity:activity-ktx:1.9.2")
+    // #333 : le pont natif lance le scan du QR (ScanContract).
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     // ponytail: un seul client HTTP (OkHttp allowlist serveur).
     // Upgrade: cache offline Room phase 4 (#14), SSE client #15.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    debugImplementation("androidx.compose.ui:ui-tooling:1.6.8")
 }
