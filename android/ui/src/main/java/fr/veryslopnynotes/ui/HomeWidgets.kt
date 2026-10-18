@@ -135,14 +135,25 @@ data class HomeGradeUi(val subject: String, val note: String, val dateMillis: Lo
 /** Statut du contrat, tel que publié. Un cours annulé n'est pas le prochain. */
 private const val HOME_STATUS_CANCELLED = "cancelled"
 
+// #312 : les deux widgets d'horloge de l'accueil sont coupés en DEUX ÉTAGES.
+// AVANT, le parse JSON ET le filtre d'heure vivaient dans le même appel : la
+// composition devait donc relire tout le payload dès que `nowMillis` changeait
+// (tic d'une minute, geste de tirail, bascule d'état de la page). Maintenant :
+//   - l'ÉTAGE 1 lit le payload, sans horloge ni borne — c'est LUI que
+//     `remember(payload)` retient (voir `IndexScreen.kt`) ;
+//   - l'ÉTAGE 2 ne fait que filtrer et borner la liste DÉJÀ analysée : c'est le
+//     seul morceau rejoué au tic, et il ne retouche pas le JSON.
+// Les règles sont inchangées, à la lettre : mêmes entrées écartées (illisibles,
+// annulées, fin avant début), même tri, même borne.
+
 /**
- * Cours encore en cours ou à venir, triés par DÉBUT croissant.
+ * Cours lisibles du payload, triés par DÉBUT croissant (étage 1 de #312).
  *
  * On écarte ce qui est illisible (pas de matière, dates absentes ou non
  * analysables, fin avant début) et les cours annulés : annoncer « Prochain
  * cours : Français » pour un cours annulé est un fait faux.
  */
-fun upcomingLessonsFrom(payload: String, nowMillis: Long, limit: Int = 3): List<HomeLessonUi> {
+fun upcomingLessons(payload: String): List<HomeLessonUi> {
     return try {
         val entries: JSONArray = JSONObject(payload).optJSONArray("entries") ?: JSONArray()
         val out = mutableListOf<HomeLessonUi>()
@@ -153,18 +164,33 @@ fun upcomingLessonsFrom(payload: String, nowMillis: Long, limit: Int = 3): List<
             val end = homeMillisOf(o.optString("end", ""))
             if (subject.isEmpty() || start == null || end == null) continue
             if (end < start) continue
-            if (end <= nowMillis) continue
             if (o.optString("status", "").trim() == HOME_STATUS_CANCELLED) continue
             out.add(HomeLessonUi(subject, o.optString("room", "").trim(), start, end))
         }
-        out.sortedBy { it.startMillis }.take(if (limit > 0) limit else HOME_MAX_ITEMS)
+        out.sortedBy { it.startMillis }
     } catch (_: Exception) {
         emptyList()
     }
 }
 
-/** Devoirs à rendre (non faits), du plus proche au plus lointain. */
-fun pendingHomeworkFrom(payload: String, nowMillis: Long, limit: Int = 3): List<HomeHomeworkUi> {
+/**
+ * Cours encore en cours ou à venir, bornés (étage 2 de #312) : le filtre
+ * d'HORLOGE, rejouable seul sur une liste déjà analysée.
+ */
+fun upcomingLessonsFrom(
+    lessons: List<HomeLessonUi>,
+    nowMillis: Long,
+    limit: Int = 3,
+): List<HomeLessonUi> = lessons
+    .filter { it.endMillis > nowMillis }
+    .take(if (limit > 0) limit else HOME_MAX_ITEMS)
+
+/** Analyse + horloge d'un coup : le raccourci des appelants hors composition. */
+fun upcomingLessonsFrom(payload: String, nowMillis: Long, limit: Int = 3): List<HomeLessonUi> =
+    upcomingLessonsFrom(upcomingLessons(payload), nowMillis, limit)
+
+/** Devoirs lisibles et non faits, du plus proche au plus lointain (étage 1 de #312). */
+fun pendingHomework(payload: String): List<HomeHomeworkUi> {
     return try {
         val arr: JSONArray = JSONObject(payload).optJSONArray("assignments") ?: JSONArray()
         val out = mutableListOf<HomeHomeworkUi>()
@@ -175,14 +201,26 @@ fun pendingHomeworkFrom(payload: String, nowMillis: Long, limit: Int = 3): List<
             val due = homeMillisOf(o.optString("dueDate", ""))
             if (subject.isEmpty() || title.isEmpty() || due == null) continue
             if (o.optBoolean("done", false)) continue
-            if (due <= nowMillis) continue
             out.add(HomeHomeworkUi(subject, title, due))
         }
-        out.sortedBy { it.dueMillis }.take(if (limit > 0) limit else HOME_MAX_ITEMS)
+        out.sortedBy { it.dueMillis }
     } catch (_: Exception) {
         emptyList()
     }
 }
+
+/** Devoirs à rendre (échéance non passée), bornés (étage 2 de #312). */
+fun pendingHomeworkFrom(
+    homework: List<HomeHomeworkUi>,
+    nowMillis: Long,
+    limit: Int = 3,
+): List<HomeHomeworkUi> = homework
+    .filter { it.dueMillis > nowMillis }
+    .take(if (limit > 0) limit else HOME_MAX_ITEMS)
+
+/** Analyse + horloge d'un coup : le raccourci des appelants hors composition. */
+fun pendingHomeworkFrom(payload: String, nowMillis: Long, limit: Int = 3): List<HomeHomeworkUi> =
+    pendingHomeworkFrom(pendingHomework(payload), nowMillis, limit)
 
 /**
  * Dernières notes, de la plus récente à la plus ancienne.

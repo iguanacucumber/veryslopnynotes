@@ -160,8 +160,11 @@ fun MessagesScreen(
     // #147 : la recherche est une SAISIE d'écran, elle survit à la rotation — on
     // ne retape pas « maths » parce que le téléphone a tourné.
     var query by rememberSaveable { mutableStateOf("") }
-    val visible = searchConversations(discussions, query)
-    val unread = unreadTotal(discussions)
+    // #312 : recherche et total sont des FILTRES sur une liste déjà analysée —
+    // les rejouer à chaque recomposition recréait deux listes (et un parcours
+    // complet) pour rien. Les clés sont exactement ce qu'ils lisent.
+    val visible = remember(discussions, query) { searchConversations(discussions, query) }
+    val unread = remember(discussions) { unreadTotal(discussions) }
     // #145 : l'état affiché comme VALEUR — le `Crossfade` compare des valeurs, pas
     // des branches de `when`. Les quatre cas restent ceux d'avant ; ce qui change,
     // c'est que l'on passe de l'un à l'autre en fondu au lieu de faire disparaître
