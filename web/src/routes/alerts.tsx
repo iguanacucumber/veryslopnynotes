@@ -98,7 +98,7 @@ export default function AlertsRoute() {
         <EmptyState
           icon={<IconShield />}
           title="Aucune vérification disponible"
-          body="Le serveur n’a pas répondu et aucune alerte n’est en cache. L’absence d’alerte ne peut donc pas être affirmée : actualisez une fois connecté."
+          body="La dernière lecture n’a pas répondu et aucune alerte n’est en cache. L’absence d’alerte ne peut donc pas être affirmée : actualisez une fois connecté."
           action={
             <button type="button" className="btn btn--ghost btn--small" onClick={resource.refresh}>
               Actualiser
@@ -121,7 +121,7 @@ export default function AlertsRoute() {
                 Aucune alerte de sécurité
               </h2>
               <p className="t-body-m muted" style={{ margin: 0 }}>
-                Bon signe : le serveur n’a signalé aucun contenu hostile.
+                Bon signe : aucun contenu hostile n’a été signalé.
               </p>
             </div>
           </div>
