@@ -1,12 +1,19 @@
-import { Page, Card } from "../ui/components";
+import { useMemo } from "react";
+import { useResource } from "../ui/AppContext";
+import { SanctionsScreen } from "../features/attendance/SchoolLifeScreens";
+import { parsePunishments } from "../features/attendance/model";
 
 export default function SanctionsRoute() {
+  const punishments = useResource("punishments");
+  const rows = useMemo(() => parsePunishments(punishments.payload), [punishments.payload]);
+
   return (
-    <Page>
-      <Card>
-        <h2 className="t-headline">Sanctions</h2>
-        <p className="muted">Écran en cours de portage React.</p>
-      </Card>
-    </Page>
+    <SanctionsScreen
+      rows={rows}
+      loading={punishments.loading}
+      error={punishments.error}
+      stale={punishments.stale}
+      onRefresh={punishments.refresh}
+    />
   );
 }

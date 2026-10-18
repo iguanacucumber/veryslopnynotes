@@ -1,0 +1,354 @@
+// Logique affichable de la vie scolaire (miroir web de Attendance.kt,
+// AttendanceFormat.kt et AttendanceRows.kt). Pure : aucun React, aucun réseau.
+//
+// Payloads du pont : `{"absences":[],"periods":[]}` et `{"punishments":[]}`.
+// Le pont factice publie `{"items":[]}` : les deux formes sont lues.
+import { cleanText } from "../../lib/format";
+
+export const MAX_MOTIF_CHARS = 500;
+export const MAX_SUBJECT_CHARS = 64;
+export const MAX_NAME_CHARS = 100;
+export const ABSENCE_KINDS = ["absence", "late"] as const;
+
+export interface Absence {
+  id: string;
+  kind: string;
+  date: string;
+  dateEnd: string | null;
+  subject: string | null;
+  motif: string | null;
+  minutes: number | null;
+  justified: boolean | null;
+  periodId: string | null;
+}
+
+export interface PeriodCount {
+  periodId: string;
+  name: string;
+  absences: number;
+  late: number;
+  minutes: number;
+}
+
+export interface AttendanceData {
+  absences: Absence[];
+  periods: PeriodCount[];
+}
+
+export interface Punishment {
+  id: string;
+  date: string;
+  type: string;
+  motif: string;
+  gravity: string | null;
+  durationMinutes: number | null;
+}
+
+export interface AttendanceStatus {
+  clean: boolean;
+  eventCount: number;
+  absenceCount: number;
+  lateCount: number;
+  totalMinutes: number;
+  justifiedCount: number;
+  unjustifiedCount: number;
+  unverifiedCount: number;
+  unjustifiedMinutes: number;
+  title: string;
+  detail: string;
+}
+
+export interface AttendanceSection {
+  kind: string;
+  title: string;
+  rows: Absence[];
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+export function bound(value: unknown, max: number): string {
+  const raw = cleanText(value);
+  if (!raw) return "";
+  const points = Array.from(raw);
+  return points.length <= max ? raw : points.slice(0, max).join("");
+}
+
+function optBounded(obj: Record<string, unknown>, key: string, max: number): string | null {
+  return bound(obj[key], max) || null;
+}
+
+function optMinutes(obj: Record<string, unknown>): number | null {
+  const v = obj["durationMinutes"];
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return null;
+  return Math.trunc(v);
+}
+
+function optInt(obj: Record<string, unknown>, key: string): number {
+  const v = obj[key];
+  if (typeof v !== "number" || !Number.isFinite(v) || v < 0) return 0;
+  return Math.trunc(v);
+}
+
+/** Instant d'une date ISO du contrat, ou null. Instant complet et date seule. */
+export function parseInstant(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  // Date seule = minuit LOCAL, comme le parseur natif (`LocalDate`).
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (dateOnly) {
+    const year = Number(dateOnly[1]);
+    const month = Number(dateOnly[2]) - 1;
+    const day = Number(dateOnly[3]);
+    const local = new Date(year, month, day);
+    if (local.getFullYear() !== year || local.getMonth() !== month || local.getDate() !== day) return null;
+    return local.getTime();
+  }
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function arrayOf(root: Record<string, unknown>, canonicalKey: string): unknown[] {
+  const canonical = root[canonicalKey];
+  if (Array.isArray(canonical)) return canonical;
+  const items = root["items"];
+  return Array.isArray(items) ? items : [];
+}
+
+function payloadRoot(payload: string | null): Record<string, unknown> | null {
+  if (!payload) return null;
+  try {
+    return record(JSON.parse(payload) as unknown);
+  } catch {
+    return null;
+  }
+}
+
+export function parseAttendance(payload: string | null): AttendanceData {
+  const root = payloadRoot(payload);
+  if (!root) return { absences: [], periods: [] };
+  const absences: Absence[] = [];
+  for (const raw of arrayOf(root, "absences")) {
+    const obj = record(raw);
+    if (!obj) continue;
+    const id = bound(obj["id"], 64);
+    const rawKind = bound(obj["kind"], 16);
+    // « delay » est la forme du pont factice ; le contrat dit « late ».
+    const kind = rawKind === "delay" ? "late" : rawKind;
+    const date = bound(obj["date"], 40);
+    if (!id || !(ABSENCE_KINDS as readonly string[]).includes(kind)) continue;
+    if (date.length < 10 || parseInstant(date) === null) continue;
+    const dateEnd = optBounded(obj, "dateEnd", 40);
+    // Plage inversée = bruit, pas un événement.
+    const start = parseInstant(date);
+    const end = dateEnd ? parseInstant(dateEnd) : null;
+    if (start !== null && end !== null && end < start) continue;
+    absences.push({
+      id,
+      kind,
+      date,
+      dateEnd,
+      subject: optBounded(obj, "subject", MAX_SUBJECT_CHARS),
+      motif: optBounded(obj, "motif", MAX_MOTIF_CHARS),
+      minutes: optMinutes(obj),
+      justified: typeof obj["justified"] === "boolean" ? obj["justified"] : null,
+      periodId: optBounded(obj, "periodId", 64),
+    });
+  }
+  absences.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
+  const periods: PeriodCount[] = [];
+  for (const raw of arrayOf(root, "periods")) {
+    const obj = record(raw);
+    if (!obj) continue;
+    const periodId = bound(obj["periodId"], 64);
+    if (!periodId) continue;
+    periods.push({
+      periodId,
+      name: optBounded(obj, "name", MAX_NAME_CHARS) ?? periodId,
+      absences: optInt(obj, "absences"),
+      late: optInt(obj, "late"),
+      minutes: optInt(obj, "missingMinutes"),
+    });
+  }
+  periods.sort((a, b) => a.periodId.localeCompare(b.periodId));
+  return { absences, periods };
+}
+
+function gravityValue(value: unknown): string | null {
+  let n: number | null = null;
+  if (typeof value === "number" && Number.isFinite(value)) n = value;
+  else if (typeof value === "string") {
+    const parsed = Number.parseFloat(value.trim().replace(",", "."));
+    if (Number.isFinite(parsed)) n = parsed;
+  }
+  if (n === null || n < 0) return null;
+  return Number.isInteger(n) ? String(n) : String(n);
+}
+
+export function parsePunishments(payload: string | null): Punishment[] {
+  const root = payloadRoot(payload);
+  if (!root) return [];
+  const out: Punishment[] = [];
+  for (const raw of arrayOf(root, "punishments")) {
+    const obj = record(raw);
+    if (!obj) continue;
+    const date = bound(obj["date"], 40);
+    const type = bound(obj["type"], 100);
+    const motif = bound(obj["motif"], MAX_MOTIF_CHARS);
+    if (date.length < 10 || parseInstant(date) === null || !type || !motif) continue;
+    out.push({
+      id: bound(obj["id"], 64),
+      date,
+      type,
+      motif,
+      gravity: gravityValue(obj["gravity"]),
+      durationMinutes: optMinutes(obj),
+    });
+  }
+  out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return out;
+}
+
+/** Capacités du payload `capabilities` : `{capabilities:{tabs}}` (contrat),
+ *  `{items:{tabs}}` (pont factice) ou `{tabs}`. */
+export function parseCapabilities(payload: string | null): string[] {
+  const root = payloadRoot(payload);
+  if (!root) return [];
+  const candidates = [root["tabs"], record(root["capabilities"])?.["tabs"], record(root["items"])?.["tabs"]];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate.filter((v): v is string => typeof v === "string" && v.trim() !== "").map((v) => v.trim());
+    }
+  }
+  return [];
+}
+
+export function absencesForPeriod(data: AttendanceData, periodId: string | null): Absence[] {
+  return periodId === null ? data.absences : data.absences.filter((a) => a.periodId === periodId);
+}
+
+const LONG_DATE = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+const TIME = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+export function formatLongDate(value: string | number | null | undefined): string {
+  const ms = typeof value === "number" ? value : parseInstant(value);
+  if (ms === null || !Number.isFinite(ms)) return "";
+  try {
+    return LONG_DATE.format(new Date(ms));
+  } catch {
+    return "";
+  }
+}
+
+export function formatTime(value: string | number): string {
+  const ms = typeof value === "number" ? value : parseInstant(value);
+  if (ms === null || !Number.isFinite(ms)) return "";
+  try {
+    return TIME.format(new Date(ms));
+  } catch {
+    return "";
+  }
+}
+
+function hasTime(iso: string): boolean {
+  return iso.includes("T") || iso.includes(" ");
+}
+
+/** Étendue d'un événement : une date, ou début → fin sur plusieurs jours.
+ *  Même jour avec heures : « 12 octobre 2026 · 08:00 – 12:00 ». */
+export function formatDateSpan(row: Absence): string {
+  const start = parseInstant(row.date);
+  if (start === null) return "";
+  const head = formatLongDate(start);
+  const end = row.dateEnd ? parseInstant(row.dateEnd) : null;
+  if (end === null) return head;
+  const startDay = new Date(start).toDateString();
+  const endDay = new Date(end).toDateString();
+  if (startDay === endDay) {
+    if (!hasTime(row.date) || !row.dateEnd || !hasTime(row.dateEnd)) return head;
+    return `${head} · ${formatTime(start)} – ${formatTime(end)}`;
+  }
+  return `${head} → ${formatLongDate(end)}`;
+}
+
+export function durationLongFr(minutes: number): string {
+  const safe = Number.isFinite(minutes) && minutes > 0 ? Math.trunc(minutes) : 0;
+  if (safe < 60) return `${safe} min`;
+  const rest = safe % 60;
+  const hours = Math.floor(safe / 60);
+  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+}
+
+export function absenceKindLabel(kind: string): string {
+  if (kind === "absence") return "Absence";
+  if (kind === "late") return "Retard";
+  return "Événement";
+}
+
+export function absenceTitle(row: Absence): string {
+  return row.motif?.trim() || row.subject?.trim() || absenceKindLabel(row.kind);
+}
+
+/** Aucune pastille inventée quand l'établissement n'affirme rien. */
+export function justifiedLabel(justified: boolean | null): string {
+  if (justified === true) return "justifiée";
+  if (justified === false) return "non justifiée";
+  return "";
+}
+
+export function isUnjustified(row: Absence): boolean {
+  return row.justified === false;
+}
+
+export function attendanceStatus(rows: Absence[]): AttendanceStatus {
+  const unjustified = rows.filter(isUnjustified);
+  const total = rows.reduce((sum, r) => sum + (r.minutes !== null && r.minutes > 0 ? r.minutes : 0), 0);
+  const pending = unjustified.reduce((sum, r) => sum + (r.minutes !== null && r.minutes > 0 ? r.minutes : 0), 0);
+  const clean = unjustified.length === 0;
+  return {
+    clean,
+    eventCount: rows.length,
+    absenceCount: rows.filter((r) => r.kind === "absence").length,
+    lateCount: rows.filter((r) => r.kind === "late").length,
+    totalMinutes: total,
+    justifiedCount: rows.filter((r) => r.justified === true).length,
+    unjustifiedCount: unjustified.length,
+    unverifiedCount: rows.filter((r) => r.justified === null).length,
+    unjustifiedMinutes: pending,
+    title: clean ? "Aucune heure injustifiée" : "Des heures injustifiées",
+    detail: clean
+      ? "Toutes les absences et tous les retards publiés sont justifiés."
+      : `${durationLongFr(pending)} sur ${durationLongFr(total)} manquées · ${unjustified.length} ${
+          unjustified.length <= 1 ? "événement" : "événements"
+        } sans justificatif`,
+  };
+}
+
+/** Sections fixes : absences puis retards ; une section vide n'est pas rendue. */
+export function attendanceSections(rows: Absence[]): AttendanceSection[] {
+  const out: AttendanceSection[] = [];
+  for (const kind of ["absence", "late"] as const) {
+    const group = rows.filter((r) => r.kind === kind);
+    if (group.length > 0) out.push({ kind, title: `${absenceKindLabel(kind)}s`, rows: group });
+  }
+  return out;
+}
+
+function frNumber(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return String(value).replace(".", ",");
+}
+
+/** Gravité publiée : échelle libre de l'établissement, donc un NIVEAU et
+ *  jamais une unité inventée. `null`/illisible = aucune étiquette. */
+export function gravityLabel(gravity: string | null): string | null {
+  if (!gravity) return null;
+  const value = Number.parseFloat(gravity.replace(",", "."));
+  if (!Number.isFinite(value) || value < 0) return null;
+  return `Niveau ${frNumber(value)}`;
+}
