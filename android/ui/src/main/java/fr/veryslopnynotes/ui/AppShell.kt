@@ -1,12 +1,23 @@
 package fr.veryslopnynotes.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.AnimationState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateDecay
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
@@ -17,27 +28,35 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
 
 // La COQUILLE : barre du haut et barre d'onglets. Le graphe de navigation et
 // l'état de la session restent dans `AppNav.kt`, qui appelle ces deux
@@ -276,6 +295,26 @@ private val TOP_BARS: Map<String, TopBar> = mapOf(
 )
 
 /**
+ * Hauteur de contenu de la barre du haut : celle de M3
+ * (`TopAppBarSmallTokens.ContainerHeight`, 64 dp) — plus l'espace repris à la
+ * barre de statut masquée (#303, cf. [AppTopBar]).
+ *
+ * ponytail: une constante de fichier, pas un paramètre : c'est la hauteur de M3
+ * et l'app n'a qu'une barre du haut. Le jour où une seconde existe, elle passe
+ * en paramètre.
+ */
+private val TopBarContentHeight = 64.dp
+
+/**
+ * Marges horizontales de M3, aux mêmes valeurs que lui : 4 dp autour des icônes
+ * (`TopAppBarHorizontalPadding`) et 12 dp de décalage du titre quand rien ne le
+ * précède (`TopAppBarTitleInset` = 16 dp - 4 dp) — soit un titre à 16 dp du bord
+ * sur les routes racines, la valeur des captures de #135.
+ */
+private val TopBarIconInset = 4.dp
+private val TopBarTitleInset = 12.dp
+
+/**
  * Barre du haut de la route courante. [onBack] reçoit la route de repli, jamais
  * la route courante : c'est `AppNav` qui décide entre revenir en arrière
  * (`popBackStack`, donc d'où l'on vient) et naviguer quand la pile est vide.
@@ -295,6 +334,16 @@ private val TOP_BARS: Map<String, TopBar> = mapOf(
  * `AppNav` en fournit UN partagé ET le branche sur le `Scaffold` via
  * `Modifier.nestedScroll` — sans cette connexion, la barre ne reçoit aucun
  * événement de défilement et ne se rétracte jamais.
+ *
+ * #303 : la barre occupe la place de la barre de statut qu'elle a fait
+ * disparaître. Son contenu est CENTRÉ dans 64 dp + [reclaimedTop], sous
+ * l'encoche, au lieu d'être posé en haut de la zone libérée. La hauteur de
+ * `TopAppBar` de M3 est figée à 64 dp (aucun paramètre pour la régler), donc la
+ * rangée est montée ici, avec la même structure que la sienne : mêmes marges,
+ * mêmes couleurs (`TopAppBarDefaults.topAppBarColors()`), même rétraction au
+ * défilement (1 px de défilement = 1 px de barre) et même repli au geste —
+ * mais la limite de repli suit la hauteur RÉELLE, sinon la rétraction
+ * s'arrêterait à -64 dp et laisserait `reclaimedTop` de barre à l'écran.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -309,65 +358,164 @@ fun AppTopBar(
     // compile et rend la table statique — le cas simple reste le cas simple.
     headerSlot: PapHeaderSlot? = null,
     scrollBehavior: TopAppBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(),
+    // #303 : hauteur reprise à la barre de statut — MÊME MASQUÉE, donc mesurée
+    // par l'activité (module `app`, qui a androidx.core) et passée jusqu'ici.
+    // 0 dp = hauteur M3 : barres système visibles, previews, tests.
+    reclaimedTop: Dp = 0.dp,
 ) {
     val bar = route?.let { TOP_BARS[it] }
     // Titre publié par l'écran > titre de la table > nom de l'app. L'ordre est
     // ce qu'il est : un écran qui sait dire quelle période est chargée doit
     // être cru sur parole.
     val published = route?.let { headerSlot?.of(it) }
+    // La flèche reste PRIORITAIRE sur un `leading` publié : sans elle, un écran
+    // secondaire n'aurait plus de retour. Les deux ne se croisent donc pas sur
+    // Notes (route racine, pas de flèche) — l'ordre est écrit parce qu'un jour
+    // ils se croiseront.
+    val back = bar?.back
+    val leading = published?.leading
     val actions = route
         ?.let { TOP_BAR_ACTIONS[it] }
         .orEmpty()
         .filterNot { it is TopAction.Go && it.route in hiddenDestinations }
+    val density = LocalDensity.current
+    val state = scrollBehavior.state
+    val contentHeightPx = with(density) { (TopBarContentHeight + reclaimedTop).toPx() }
     // La barre se rétracte quand on défile vers le bas et revient dès qu'on
     // remonte : le défilement vient des écrans, pas l'inverse. Le [scrollBehavior]
     // est celui branché par `AppNav` sur le `Scaffold` (`nestedScroll`) : le
     // défaut ci-dessus garde l'appel simple (previews, tests) sans changer
     // l'espèce de la barre.
-    TopAppBar(
-        // Titre de la ROUTE (papillon.bzh), plus la marque : avant #135 c'était
-        // « VerySlopyNyNotes » sur les 15 routes. `titleLarge` = 18 sp gras,
-        // l'échelle de #134 — le texte le plus visible de l'écran.
-        title = {
-            // `heading()` : le titre de la barre est le TITRE DE L'ÉCRAN. TalkBack
-            // le propose dans son menu « titres » et s'y positionne au double
-            // toucher — sans ça, les quinze routes n'avaient aucun point d'entrée
-            // dans la navigation par titres.
-            Text(
-                // #190 : le nom de la période sur Notes, le titre de la table
-                // partout ailleurs.
-                text = published?.title ?: bar?.title ?: APP_NAME,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.semantics { heading() },
-            )
-        },
-        navigationIcon = {
-            val back = bar?.back
-            if (back != null) {
-                // La flèche reste PRIORITAIRE sur un `leading` publié : sans
-                // elle, un écran secondaire n'aurait plus de retour. Les deux
-                // ne se croisent donc pas sur Notes (route racine, pas de
-                // flèche) — l'ordre est écrit parce qu'un jour ils se croiseront.
-                IconButton(onClick = { onBack(back) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
-                }
-            } else {
-                published?.leading?.invoke()
-            }
-        },
-        // Slot d'actions contextuelles, une seule source : `TOP_BAR_ACTIONS`.
-        actions = { TopBarActions(actions = actions, onNavigate = onNavigate, onRefresh = onRefresh) },
-        // #303 : la barre de statut est MASQUÉE (plein écran immersif), donc la
-        // part haute de `TopAppBarDefaults.windowInsets` (systemBars) tombe à
-        // zéro et le titre glissait sous l'encoche : `enableEdgeToEdge` pose
-        // `SHORT_EDGES`, donc la fenêtre se peint SOUS le découpage en portrait.
-        // `displayCutout` est la zone interdite quel que soit l'état des barres
-        // et vaut zéro sur un écran sans découpage — donc rien à changer là-bas.
-        windowInsets = TopAppBarDefaults.windowInsets.union(WindowInsets.displayCutout),
-        scrollBehavior = scrollBehavior,
+    SideEffect {
+        if (state.heightOffsetLimit != -contentHeightPx) state.heightOffsetLimit = -contentHeightPx
+    }
+    // Couleur de fond : celle de M3 — surface, puis conteneur « défilé » dès que
+    // du contenu passe derrière la barre. `TopAppBarColors.containerColor(fraction)`
+    // est INTERNE à material3 1.2.1, donc l'interpolation est écrite ici, sur
+    // ses deux couleurs publiques.
+    val colors = TopAppBarDefaults.topAppBarColors()
+    val overlapped = state.overlappedFraction > 0.01f
+    val containerColor by animateColorAsState(
+        targetValue = lerp(colors.containerColor, colors.scrolledContainerColor, if (overlapped) 1f else 0f),
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
     )
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            // Replier la barre au GESTE, comme M3 : même déplacement que le
+            // défilement, au doigt. `settleAppBar` est interne, donc son
+            // enchaînement est réécrit dans [settleTopBar], à l'identique.
+            .draggable(
+                orientation = Orientation.Vertical,
+                enabled = !scrollBehavior.isPinned,
+                state = rememberDraggableState { delta -> state.heightOffset += delta },
+                onDragStopped = { velocity -> settleTopBar(scrollBehavior, velocity) },
+            ),
+        color = containerColor,
+    ) {
+        Row(
+            modifier = Modifier
+                // `displayCutout` : l'encoche est une zone interdite quel que
+                // soit l'état des barres système (le découpage est matériel,
+                // il ne disparaît pas avec la barre de statut) et vaut zéro sur
+                // un écran sans découpage — donc rien à changer là-bas.
+                .windowInsetsPadding(WindowInsets.displayCutout)
+                .fillMaxWidth()
+                // Rogner DANS la hauteur de la barre : au défilement, le titre
+                // sort au lieu de déborder sur le contenu.
+                .clipToBounds()
+                // La hauteur de contenu SUIT le repli : la barre libère sa
+                // place au lieu de la recouvrir, et le `Scaffold` en fait
+                // autant pour l'écran en dessous.
+                .height(with(density) { (contentHeightPx + state.heightOffset).coerceAtLeast(0f).toDp() }),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (back != null) {
+                Box(Modifier.padding(start = TopBarIconInset)) {
+                    CompositionLocalProvider(LocalContentColor provides colors.navigationIconContentColor) {
+                        IconButton(onClick = { onBack(back) }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour")
+                        }
+                    }
+                }
+            } else if (leading != null) {
+                Box(Modifier.padding(start = TopBarIconInset)) {
+                    CompositionLocalProvider(LocalContentColor provides colors.navigationIconContentColor) {
+                        leading()
+                    }
+                }
+            }
+            // Titre de la ROUTE (papillon.bzh), plus la marque : avant #135
+            // c'était « VerySlopyNyNotes » sur les 15 routes. `titleLarge` =
+            // 18 sp gras, l'échelle de #134 — le texte le plus visible de
+            // l'écran.
+            CompositionLocalProvider(LocalContentColor provides colors.titleContentColor) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(
+                            start = if (back != null || leading != null) TopBarIconInset else TopBarTitleInset + TopBarIconInset,
+                            end = TopBarIconInset,
+                        ),
+                ) {
+                    // `heading()` : le titre de la barre est le TITRE DE
+                    // L'ÉCRAN. TalkBack le propose dans son menu « titres » et
+                    // s'y positionne au double toucher — sans ça, les quinze
+                    // routes n'avaient aucun point d'entrée dans la navigation
+                    // par titres.
+                    Text(
+                        // #190 : le nom de la période sur Notes, le titre de la
+                        // table partout ailleurs.
+                        text = published?.title ?: bar?.title ?: APP_NAME,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                }
+            }
+            // Slot d'actions contextuelles, une seule source : `TOP_BAR_ACTIONS`.
+            CompositionLocalProvider(LocalContentColor provides colors.actionIconContentColor) {
+                Box(Modifier.padding(end = TopBarIconInset)) {
+                    TopBarActions(actions = actions, onNavigate = onNavigate, onRefresh = onRefresh)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Pose la barre après un repli au GESTE : décélération du lancer, puis bord le
+ * plus proche.
+ *
+ * Réécrit l'enchaînement de `settleAppBar` de M3 (interne à material3 1.2.1) :
+ * même fling, même cible (`collapsedFraction`), même arrêt si la barre touche
+ * un bord avant la fin de la décélération.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+private suspend fun settleTopBar(scrollBehavior: TopAppBarScrollBehavior, velocity: Float) {
+    val state = scrollBehavior.state
+    val fling = scrollBehavior.flingAnimationSpec
+    val snap = scrollBehavior.snapAnimationSpec
+    if (fling != null && abs(velocity) > 1f) {
+        var last = 0f
+        AnimationState(initialValue = 0f, initialVelocity = velocity).animateDecay(fling) {
+            val delta = value - last
+            val before = state.heightOffset
+            state.heightOffset = before + delta
+            last = value
+            // Bord atteint : `heightOffset` est borné, donc le déplacement réel
+            // ne suit plus la décélération et il n'y a plus rien à pousser.
+            if (abs(delta - (state.heightOffset - before)) > 0.5f) cancelAnimation()
+        }
+    }
+    if (snap != null && state.heightOffset < 0f && state.heightOffset > state.heightOffsetLimit) {
+        animate(
+            initialValue = state.heightOffset,
+            targetValue = if (state.collapsedFraction < 0.5f) 0f else state.heightOffsetLimit,
+            animationSpec = snap,
+        ) { value, _ -> state.heightOffset = value }
+    }
 }
 
 /**

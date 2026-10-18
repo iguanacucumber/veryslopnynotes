@@ -15,6 +15,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDeepLink
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -130,6 +132,9 @@ fun AppNav(
     // l'affichent, et l'écriture reste une action utilisateur confirmée (I7).
     accountId: String = "",
     // #172 : `loadAlerts` retiré — mort depuis #144 (l'écran Alertes lit le cache).
+    // #303 : hauteur reprise à la barre de statut (MÊME MASQUÉE) — mesurée par
+    // l'activité, car `ui` ne lit aucun inset de fenêtre. 0 dp = barres visibles.
+    reclaimedTop: Dp = 0.dp,
 ) {
     val nav = rememberNavController()
     val ctx = LocalContext.current.applicationContext
@@ -269,6 +274,7 @@ fun AppNav(
                 // direct), on part vers la route mère de la route courante.
                 onBack = { back -> if (!nav.popBackStack()) nav.navigateTo(back) },
                 scrollBehavior = topBarScroll,
+                reclaimedTop = reclaimedTop,
             )
         },
         bottomBar = { AppTabBar(currentRoute) { tab -> nav.openTab(tab) } },
