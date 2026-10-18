@@ -136,7 +136,7 @@ export function parseDiscussions(payload: string | null): Discussion[] {
     out.push({
       id,
       // Le producteur natif remplit déjà « Discussion » quand le sujet est vide.
-      subject: text(obj["subject"], MAX_SUBJECT) || "Discussion",
+      subject: text(obj["subject"], MAX_SUBJECT) || participants.slice(0, 2).join(", ") || "Discussion",
       participants: participants.slice(0, MAX_PARTICIPANTS),
       unreadCount: unread,
       lastMessageAt,
