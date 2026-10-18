@@ -321,7 +321,7 @@ function AssignmentCard({
 
   return (
     <Card as="article">
-      <div className="row" style={{ alignItems: "flex-start", gap: 8 }}>
+      <div className="row" style={{ alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
         <span
           aria-hidden="true"
           style={{
@@ -342,12 +342,12 @@ function AssignmentCard({
         <div className="grow" style={{ opacity: dim }}>
           <strong style={{ display: "block" }}>{subjectDisplayFr(assignment.subject)}</strong>
           {text.title ? <span>{text.title}</span> : null}
+          {dueLabel(assignment.dueDate) ? (
+            <span className="tiny muted" style={{ display: "block", marginTop: 2 }}>
+              {dueLabel(assignment.dueDate)}
+            </span>
+          ) : null}
         </div>
-        {dueLabel(assignment.dueDate) ? (
-          <span className="tiny muted" style={{ textAlign: "right", flex: "0 0 auto" }}>
-            {dueLabel(assignment.dueDate)}
-          </span>
-        ) : null}
       </div>
 
       {text.body ? (
