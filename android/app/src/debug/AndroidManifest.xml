@@ -9,7 +9,7 @@
       `adb shell input tap` aux coordonnées n'est pas déterministe (les
       positions bougent avec la taille d'écran, la barre système, le thème).
       `veryslopnynotes://<route>` ouvre l'écran visé directement — d'où
-      `navDeepLink` dans chaque `composable(...)` du module ui.
+      `routePath`/`WEB_ROUTES` dans `MainActivity.kt` et `WebApp.kt`.
 
       `android:launchMode="singleTask"` : MainActivity est `standard` par défaut,
       donc une URL de second lancement créerait une NOUVELLE instance au-dessus
@@ -32,8 +32,8 @@
                      une URL de route inexistante doit faire ÉCHOUER `am start`
                      bruyamment, pas ouvrir l'app sur son écran de départ — le
                      silence est précisément ce que la capture ne doit pas
-                     accepter. Liste à tenir à jour avec les `navDeepLink` de
-                     AppNav.kt ; un oubli casse la capture, il ne la ment pas. -->
+                     accepter. Liste à tenir à jour avec les `WEB_ROUTES` de
+                     `WebApp.kt` ; un oubli casse la capture, il ne la ment pas. -->
                 <data android:scheme="veryslopnynotes" />
                 <data android:host="index" />
                 <data android:host="calendar" />

@@ -324,15 +324,28 @@ blank_verdict() {
   bun/node absents). Capture NON contrôlée, donc refusée — installez ImageMagick."
 }
 
-# Libellés réellement à l'écran : `uiautomator dump` voit l'arbre de sémantique
-# Compose, donc les `Text(...)` de nos écrans. Vide = dump impossible (écran
-# éteint, autre instrumentation active) — on le dit, on ne devine pas.
+# Libellés réellement à l'écran : `uiautomator dump` voit l'arbre d'accessibilité
+# de la WebView. Le PREMIER dump après un démarrage ne contient souvent que le
+# nœud `WebView` (arbre Chromium pas encore peuplé) : on retente quelques fois
+# avant de conclure à un échec. Vide après les essais = écran éteint ou
+# instrumentation active — on le dit, on ne devine pas.
 screen_texts() {
-    a shell uiautomator dump "$REMOTE_UI_XML" >/dev/null 2>&1 || return 0
-    local xml
-    xml=$(a shell cat "$REMOTE_UI_XML" 2>/dev/null | tr -d '\r') || xml=""
-    a shell rm -f "$REMOTE_UI_XML" >/dev/null 2>&1 || true
-    printf '%s' "$xml" | tr '>' '\n' | sed -n 's/.*text="\([^"]*\)".*/\1/p' | sed '/^$/d'
+    local attempt xml texts
+    for attempt in 1 2 3 4 5 6; do
+        a shell uiautomator dump "$REMOTE_UI_XML" >/dev/null 2>&1 || {
+            sleep 1
+            continue
+        }
+        xml=$(a shell cat "$REMOTE_UI_XML" 2>/dev/null | tr -d '\r') || xml=""
+        a shell rm -f "$REMOTE_UI_XML" >/dev/null 2>&1 || true
+        texts=$(printf '%s' "$xml" | tr '>' '\n' | sed -n 's/.*text="\([^"]*\)".*/\1/p' | sed '/^$/d')
+        if [ -n "$texts" ]; then
+            printf '%s\n' "$texts"
+            return 0
+        fi
+        sleep 1
+    done
+    return 0
 }
 
 # Écran d'appairage : une SEULE page (#299) — le QR qui porte l'adresse + son
@@ -356,9 +369,9 @@ is_locked() {
 # #160 — LE TEXTE À L'ÉCRAN, ÉCRIT UN SEUL ENDROIT.
 #
 # `verify_route` cherche deux choses dans le dump uiautomator : le TITRE de la
-# barre du haut — le libellé du contrat de navigation, table `TOP_BARS` de
-# `AppShell.kt` (#135), donc stable quand une refonte remplace le CORPS d'un
-# écran — puis un FRAGMENT propre à cet écran.
+# barre du haut — le libellé du contrat de navigation, table `ROUTE_META` de
+# `web/src/ui/AppShell.tsx`, donc stable quand une refonte remplace le CORPS
+# d'un écran — puis un FRAGMENT propre à cet écran.
 #
 # Pourquoi le fragment est partout : le titre seul ne prouve pas grand-chose.
 # Sur les cinq routes d'ONGLET, c'est le libellé de l'onglet (« Accueil »,
@@ -431,20 +444,20 @@ is_locked() {
 # titre — il reste dans la table parce que `TOP_BARS` le garde pour l'état sans
 # période, et les deux tables doivent dire la même chose.
 ROUTE_WITNESSES='
-index|Accueil|Afficher plus;Rien à afficher
-calendar|Cours|semaine du
-grades|Notes|Nouvelles notes;Aucune note en cache;Aucune note sur cette période;Aucune note trouvée;Notes indisponibles.
-tasks|Tâches|Devoirs de la semaine
-profile|Profil|Détecter les onglets
-settings|Réglages|Assistant devoirs
-news|Actualités|
-canteen|Cantine|Menus de la semaine;Aucun menu en cache;Aucun menu publié cette semaine
-attendance|Vie scolaire|Heures manquées;Aucune absence ni retard;Absences indisponibles.
-sanctions|Sanctions|Sanctions déclarées;Sanctions indisponibles.
-messages|Messages|Rechercher une discussion
-pairing|Appairage|Retour
-alerts|Alertes sécurité|Injections neutralisées
-fiches|Fiches révision|
+index|Accueil|DEVOIRS;Accès rapides;Bonsoir;Bonjour;Bonne nuit
+calendar|Cours|Semaine du;PROCHAIN COURS;Aucun cours
+grades|Notes|Matières;Aucune note sur cette période;Aucune moyenne sur cette période
+tasks|Tâches|Devoirs;Aucun devoir
+profile|Profil|Se déconnecter;Compte;Ressources
+settings|Réglages|Apparence;Serveur;Sécurité
+news|Actualités|Dernières actualités en cache;Autres actualités;Aucune actualité;Aucune donnée en cache
+canteen|Cantine|Menus de la semaine;Aucun menu publié cette semaine
+attendance|Vie scolaire|Absences et retards;Heures manquées;Aucune absence ni retard;Aucune donnée en cache
+sanctions|Sanctions|Sanctions déclarées;Aucune sanction publiée
+messages|Messagerie|Rechercher une discussion;discussion;Aucune discussion
+pairing|Connecte ton établissement|Retour;Code PIN du QR
+alerts|Alertes|Contenus hostiles;Aucune alerte de sécurité
+fiches|Fiches de révision|Fiches disponibles;Aucune fiche
 '
 
 # Ligne de la table d'une route. Vide = route inconnue (donc absente des 14).
@@ -577,7 +590,7 @@ EOF
     fi
     printf "  L'écran est peut-être CORRECT : son texte a été refait.\n" >&2
     printf "  Marqueur : agents/runtime/shot.sh:%s (table ROUTE_WITNESSES) ;\n" "$(witness_line "$ROUTE")" >&2
-    printf "  le titre se change dans AppShell.kt (TOP_BARS), le fragment dans l'écran.\n" >&2
+    printf "  le titre se change dans web/src/ui/AppShell.tsx (ROUTE_META), le fragment dans l'écran.\n" >&2
     printf '  Libellés vus : %s\n' "$(printf '%s' "$texts" | head -8 | tr '\n' ' ')" >&2
     printf '  Capture conservée (preuve) : %s\n' "$OUT_PNG" >&2
     exit 1

@@ -57,10 +57,3 @@ object UserProfileRules {
         return true
     }
 }
-
-/** Initiales pour l'avatar de repli (photo absente = pas d'image cassée). */
-fun profileInitials(profile: UserProfile): String {
-    val words = profile.displayName.trim().split(" ", "-", "_").filter { it.isNotEmpty() }
-    val letters = words.take(2).map { it.first().uppercaseChar() }
-    return if (letters.isEmpty()) "?" else letters.joinToString("")
-}

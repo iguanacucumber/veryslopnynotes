@@ -39,6 +39,8 @@ tests/fixtures/pronote/
 node_modules/
 dist/
 build/
+# UI web compilée : produite par `bun run build:web` (Gradle la reconstruit).
+android/app/src/main/assets/web/
 coverage/
 *.apk
 *.aab

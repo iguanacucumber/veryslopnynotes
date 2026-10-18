@@ -1,0 +1,375 @@
+import { useParisTz } from "./setup";
+
+import { describe, expect, test } from "bun:test";
+import { isoDay, startOfWeek } from "../../web/src/lib/format";
+import {
+  MAX_ITEMS,
+  alertCountLabel,
+  clockLabel,
+  countdownFr,
+  courseCountdown,
+  dueLabel,
+  durationLabel,
+  formatAverage,
+  formatGrade,
+  generalAverage,
+  latestGrades,
+  movedHint,
+  parseAlerts,
+  parseAssignments,
+  parseCapabilities,
+  parseGrades,
+  parseTimetable,
+  pendingAssignments,
+  subjectAverage,
+  tabVisible,
+  timeRange,
+  upcomingLessons,
+  type Grade,
+} from "../../web/src/features/home/parse";
+import {
+  currentLesson,
+  groupDays,
+  highlightOf,
+  lessonsInWeek,
+  nextLesson,
+  shortDay,
+  weekLabel,
+  weekQuery,
+  weekStartFrom,
+} from "../../web/src/features/timetable/week";
+
+useParisTz();
+
+// Dates construites en LOCAL : les tests ne dépendent pas du fuseau de la CI.
+const local = (day: number, hour = 8, minute = 0): string =>
+  new Date(2026, 9, day, hour, minute).toISOString();
+
+function grade(partial: Partial<Grade> & Pick<Grade, "subject" | "value" | "scale">): Grade {
+  return {
+    id: partial.id ?? `${partial.subject}-${partial.value}`,
+    subject: partial.subject,
+    value: partial.value,
+    scale: partial.scale,
+    coefficient: partial.coefficient ?? null,
+    date: partial.date ?? new Date(2026, 9, 12, 8).getTime(),
+    dateIso: partial.dateIso ?? local(12, 8),
+    bonus: partial.bonus ?? false,
+    optional: partial.optional ?? false,
+  };
+}
+
+describe("parseTimetable", () => {
+  const payload = JSON.stringify({
+    entries: [
+      {
+        id: "a",
+        subject: "MATHEMATIQUES",
+        start: local(19, 8),
+        end: local(19, 9),
+        room: "B14",
+        teacher: "Mme X",
+      },
+      { id: "b", subject: "", start: local(19, 9), end: local(19, 10) },
+      { id: "c", subject: "NSI", start: local(19, 10), end: local(19, 9) },
+      { id: "d", subject: "HG", start: "pas une date", end: local(19, 11) },
+      {
+        id: "e",
+        subject: "ANGLAIS",
+        start: local(19, 11),
+        end: local(19, 12),
+        status: "cancelled",
+      },
+      {
+        id: "f",
+        subject: "PHILOSOPHIE",
+        start: local(19, 14),
+        end: local(19, 16),
+        status: "inconnu",
+      },
+    ],
+  });
+
+  test("garde les cours lisibles et écarte les lignes incomplètes", () => {
+    const lessons = parseTimetable(payload);
+    expect(lessons.map((lesson) => lesson.id)).toEqual(["a", "e", "f"]);
+    expect(lessons[0]?.room).toBe("B14");
+    expect(lessons[0]?.teacher).toBe("Mme X");
+    expect(lessons[1]?.status).toBe("cancelled");
+    expect(lessons[2]?.status).toBeNull();
+  });
+
+  test("les cours annulés ne sont jamais « à venir »", () => {
+    const lessons = parseTimetable(payload);
+    const upcoming = upcomingLessons(lessons, new Date(2026, 9, 19, 7).getTime(), 10);
+    expect(upcoming.map((lesson) => lesson.id)).toEqual(["a", "f"]);
+  });
+
+  test("accepte l'enveloppe `items` du pont factice", () => {
+    const wrapped = JSON.stringify({
+      __untrusted: true,
+      items: [{ id: "w", subject: "NSI", start: local(20, 8), end: local(20, 10) }],
+    });
+    expect(parseTimetable(wrapped)).toHaveLength(1);
+  });
+
+  test("borne la liste et nettoie les caractères de contrôle", () => {
+    const entries = Array.from({ length: MAX_ITEMS + 5 }, (_, index) => ({
+      id: `i-${index}`,
+      subject: "<script>\u0000alert</script>",
+      start: local(19, 8, index % 60),
+      end: local(19, 9, index % 60),
+    }));
+    const lessons = parseTimetable(JSON.stringify({ entries }));
+    expect(lessons).toHaveLength(MAX_ITEMS);
+    expect(lessons[0]?.subject).not.toContain("\u0000");
+    // Le HTML reste une DONNÉE : React l'échappe, on ne le filtre pas en texte.
+    expect(lessons[0]?.subject).toContain("<script>");
+  });
+
+  test("payload absent ou illisible = aucun cours", () => {
+    expect(parseTimetable(null)).toEqual([]);
+    expect(parseTimetable("{")).toEqual([]);
+    expect(parseTimetable(JSON.stringify({ entries: "nope" }))).toEqual([]);
+  });
+
+  test("un cours déplacé garde son statut et son horaire d'origine", () => {
+    const moved = parseTimetable(
+      JSON.stringify({
+        entries: [
+          {
+            id: "m",
+            subject: "MATHS",
+            start: local(21, 13),
+            end: local(21, 15),
+            status: "moved",
+            originalStart: local(21, 8),
+          },
+        ],
+      }),
+    )[0];
+    expect(moved?.status).toBe("moved");
+    expect(moved ? movedHint(moved) : "").toBe("départ 08:00");
+  });
+
+  test("affiche début et fin, et une durée française", () => {
+    const lesson = parseTimetable(payload)[0];
+    expect(lesson).toBeDefined();
+    if (!lesson) return;
+    const range = timeRange(lesson);
+    expect(range).toContain(clockLabel(lesson.start));
+    expect(range).toContain(clockLabel(lesson.end));
+    expect(durationLabel(lesson.end - lesson.start)).toBe("1h");
+  });
+});
+
+describe("devoirs", () => {
+  const now = new Date(2026, 9, 19, 12).getTime();
+  const payload = JSON.stringify({
+    assignments: [
+      { id: "1", subject: "MATHS", title: "Exercices 12 à 18", dueDate: local(20, 20), done: false },
+      { id: "2", subject: "NSI", title: "TP base de données", dueDate: local(21, 20), done: true },
+      { id: "3", subject: "HG", title: "Sans échéance", dueDate: "demain" },
+      { id: "4", subject: "ANGLAIS", title: "Déjà passé", dueDate: local(18, 20), done: false },
+    ],
+  });
+
+  test("écarte les échéances illisibles, garde les faits", () => {
+    const tasks = parseAssignments(payload);
+    expect(tasks.map((task) => task.id)).toEqual(["4", "1", "2"]);
+  });
+
+  test("ne retient que les devoirs non faits et à venir", () => {
+    const pending = pendingAssignments(parseAssignments(payload), now, 5);
+    expect(pending.map((task) => task.id)).toEqual(["1"]);
+    expect(dueLabel(pending[0]!.due, now)).toBe("demain 20:00");
+  });
+});
+
+describe("notes et moyennes", () => {
+  test("la moyenne fournie par l'établissement gagne", () => {
+    const payload = JSON.stringify({
+      averages: { general: { value: 13.75, origin: "provided", subjectCount: 3 } },
+      grades: [
+        { id: "1", subject: "MATHS", value: 10, scale: 20, date: local(12, 8) },
+      ],
+    });
+    const report = generalAverage(payload);
+    expect(report.value).toBe(13.75);
+    expect(report.provided).toBe(true);
+  });
+
+  test("calcule la moyenne des matières quand elle n'est pas fournie", () => {
+    const grades: Grade[] = [
+      grade({ subject: "MATHS", value: 10, scale: 20 }),
+      grade({ subject: "MATHS", value: 20, scale: 20, id: "m2" }),
+      grade({ subject: "NSI", value: 5, scale: 10 }),
+      grade({ subject: "HG", value: 1, scale: 20, coefficient: 0 }),
+      grade({ subject: "ANGLAIS", value: 10, scale: 20 }),
+      grade({ subject: "ANGLAIS", value: 20, scale: 20, optional: true }),
+      grade({ subject: "PHILO", value: 16, scale: 20, bonus: true }),
+    ];
+    const report = generalAverage(null, grades);
+    // maths 15, NSI 10, anglais 15 (facultative retenue), philo 20 (bonus).
+    expect(report.value).toBeCloseTo(15, 5);
+    expect(report.provided).toBe(false);
+    expect(report.subjectCount).toBe(4);
+  });
+
+  test("une facultative qui baisse la moyenne est ignorée", () => {
+    expect(
+      subjectAverage([
+        grade({ subject: "MATHS", value: 15, scale: 20 }),
+        grade({ subject: "MATHS", value: 5, scale: 20, optional: true }),
+      ]),
+    ).toBe(15);
+  });
+
+  test("sans note exploitable, aucune moyenne (jamais 0 inventé)", () => {
+    expect(generalAverage(null, [grade({ subject: "MATHS", value: 8, scale: 20, coefficient: 0 })]).value).toBeNull();
+    expect(generalAverage(null, [grade({ subject: "MATHS", value: 8, scale: 20, coefficient: -2 })]).value).toBeNull();
+  });
+
+  test("formate les nombres à la française, sans zéros inutiles", () => {
+    expect(formatAverage(14)).toBe("14");
+    expect(formatAverage(14.3)).toBe("14,3");
+    expect(formatAverage(14.35)).toBe("14,35");
+    expect(formatGrade(15.5, 20)).toBe("15,5/20");
+    expect(formatGrade(5, 10)).toBe("10/20");
+  });
+
+  test("les dernières notes sont triées par date et bornées", () => {
+    const grades = parseGrades(
+      JSON.stringify({
+        grades: [
+          { id: "a", subject: "MATHS", value: 12, scale: 20, date: local(10, 8) },
+          { id: "b", subject: "NSI", value: 18, scale: 20, date: local(14, 8) },
+          { id: "c", subject: "HG", value: 15.5, scale: 20, date: local(12, 8) },
+        ],
+      }),
+    );
+    const latest = latestGrades(grades, 2);
+    expect(latest.map((item) => item.id)).toEqual(["b", "c"]);
+    expect(latest[1]?.label).toBe("15,5/20");
+  });
+});
+
+describe("alertes et capacités", () => {
+  test("compte les alertes du contrat et du pont factice", () => {
+    expect(
+      parseAlerts(
+        JSON.stringify({
+          alerts: [
+            { id: "a", kind: "instruction", excerpt: "extrait", source: "news" },
+            { id: "b", kind: "instruction", excerpt: "extrait", source: "canteen" },
+            "ligne invalide",
+          ],
+        }),
+      ),
+    ).toHaveLength(2);
+    expect(parseAlerts(JSON.stringify({ items: [{ id: "x" }] }))).toHaveLength(1);
+    expect(alertCountLabel(0)).toBe("Aucune alerte");
+    expect(alertCountLabel(1)).toBe("1 alerte");
+    expect(alertCountLabel(3)).toBe("3 alertes");
+  });
+
+  test("capacités connues = onglets servis ; absent/inconnu = tout visible", () => {
+    const tabs = parseCapabilities(
+      JSON.stringify({ capabilities: { tabs: ["grades", "news", "news", ""] } }),
+    );
+    expect(tabs).toEqual(["grades", "news"]);
+    expect(tabVisible(tabs, "grades")).toBe(true);
+    expect(tabVisible(tabs, "timetable")).toBe(false);
+    expect(parseCapabilities(JSON.stringify({ items: { tabs: ["menus"] } }))).toEqual(["menus"]);
+    expect(parseCapabilities(JSON.stringify({ capabilities: {} }))).toBeNull();
+    expect(parseCapabilities(null)).toBeNull();
+    expect(tabVisible(null, "timetable")).toBe(true);
+  });
+});
+
+describe("semaine de l'EDT", () => {
+  const base = new Date(2026, 9, 21, 12); // mercredi 21 octobre 2026
+  const weekStart = weekStartFrom(0, base);
+  const payload = JSON.stringify({
+    entries: [
+      { id: "lun", subject: "MATHS", start: local(19, 8), end: local(19, 9) },
+      { id: "ven", subject: "NSI", start: local(23, 10), end: local(23, 11) },
+      { id: "suiv", subject: "HG", start: local(26, 8), end: local(26, 9) },
+    ],
+  });
+  const lessons = parseTimetable(payload);
+
+  test("le lundi est calculé par date, pas par 168 heures", () => {
+    expect(isoDay(weekStart)).toBe("2026-10-19");
+    expect(isoDay(weekStartFrom(1, base))).toBe("2026-10-26");
+    expect(weekQuery(weekStart)).toBe("weekStart=2026-10-19");
+    expect(weekLabel(weekStart)).toContain("19");
+    expect(weekLabel(weekStart)).toContain("25");
+    expect(weekLabel(weekStart)).toContain("octobre");
+  });
+
+  test("filtre et groupe les cours par jour local", () => {
+    const week = lessonsInWeek(lessons, weekStart);
+    expect(week.map((lesson) => lesson.id)).toEqual(["lun", "ven"]);
+    const groups = groupDays(week, weekStart);
+    expect(groups).toHaveLength(7);
+    expect(groups[0]?.key).toBe("2026-10-19");
+    expect(groups[0]?.lessons.map((lesson) => lesson.id)).toEqual(["lun"]);
+    expect(groups[4]?.lessons.map((lesson) => lesson.id)).toEqual(["ven"]);
+    expect(groups[1]?.lessons).toEqual([]);
+    expect(shortDay(new Date(2026, 9, 19))).toBe("lun.");
+  });
+
+  test("distingue cours en cours, prochain et mise en avant", () => {
+    const week = lessonsInWeek(lessons, weekStart);
+    const at830 = new Date(2026, 9, 19, 8, 30).getTime();
+    const current = currentLesson(week, at830);
+    const next = nextLesson(week, at830);
+    expect(current?.id).toBe("lun");
+    expect(next?.id).toBe("ven");
+    expect(highlightOf(week[0]!, current, next)).toBe("current");
+    expect(highlightOf(week[1]!, current, next)).toBe("next");
+    expect(highlightOf(lessons[2]!, current, next)).toBeNull();
+    expect(currentLesson(week, new Date(2026, 9, 19, 7).getTime())).toBeNull();
+    expect(nextLesson(week, new Date(2026, 9, 23, 23).getTime())).toBeNull();
+  });
+});
+
+describe("libellés de temps", () => {
+  const now = new Date(2026, 9, 19, 8).getTime();
+
+  test("compte à rebours", () => {
+    expect(countdownFr(now + 12 * 60_000, now)).toBe("dans 12 min");
+    expect(countdownFr(now + 2 * 3_600_000, now)).toBe("dans 2 h");
+    expect(countdownFr(new Date(2026, 9, 20, 8).getTime(), now)).toBe("demain 08:00");
+    expect(countdownFr(now, now)).toBe("");
+  });
+
+  test("cours en cours et horloge", () => {
+    const lesson = parseTimetable(
+      JSON.stringify({ entries: [{ id: "x", subject: "MATHS", start: local(19, 8), end: local(19, 9) }] }),
+    )[0]!;
+    expect(courseCountdown(lesson, new Date(2026, 9, 19, 8, 30).getTime())).toBe("en cours");
+    expect(clockLabel(new Date(2026, 9, 19, 8, 5).getTime())).toBe("08:05");
+  });
+
+  test("durées", () => {
+    expect(durationLabel(60_000)).toBe("1 min");
+    expect(durationLabel(55 * 60_000)).toBe("55 mins");
+    expect(durationLabel(110 * 60_000)).toBe("1h 50 mins");
+    expect(durationLabel(2 * 3_600_000)).toBe("2h");
+    expect(durationLabel(0)).toBe("");
+  });
+
+  test("échéance passée", () => {
+    expect(dueLabel(new Date(2026, 9, 18, 20).getTime(), now)).toBe("en retard");
+  });
+});
+
+describe("helpers de semaine exportés", () => {
+  test("startOfWeek est réutilisé, donc lundi 00:00 local", () => {
+    const monday = startOfWeek(new Date(2026, 9, 21, 12));
+    expect(isoDay(monday)).toBe("2026-10-19");
+    expect(monday.getHours()).toBe(0);
+  });
+});

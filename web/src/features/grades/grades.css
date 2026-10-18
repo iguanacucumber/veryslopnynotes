@@ -1,0 +1,344 @@
+/* Onglet Notes — styles propres à la route. Tout passe par les jetons de
+   tokens.css (aucune couleur en dur), donc les deux thèmes suivent. */
+
+.grades {
+  gap: 14px;
+}
+
+.grades-toolbar {
+  gap: 10px;
+}
+
+.grades-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.grades-field select {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.grades-caption {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.grades-algorithms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.grades-chip {
+  min-height: var(--tap);
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
+}
+
+.grades-chip--active {
+  background: var(--brand-pale);
+  border-color: var(--brand-light);
+  color: var(--brand-deep);
+}
+
+.grades-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.grades-error-line {
+  margin: 0;
+  color: var(--danger-ink);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* --- Héro ---------------------------------------------------------------- */
+
+.grades-hero {
+  padding: 18px 18px 14px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--brand-pale), var(--surface) 70%);
+  overflow: hidden;
+}
+
+.grades-hero__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.grades-hero__title {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+}
+
+.grades-tag {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-container);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.grades-hero__figure {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.grades-hero__value {
+  color: var(--brand-deep);
+  font-size: 44px;
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.grades-hero__scale {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.grades-hero__empty {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 21px;
+  font-weight: 600;
+}
+
+.grades-hero__origin {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.grades-hero__note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.grades-chart {
+  display: block;
+  width: 100%;
+  height: 88px;
+  margin: 8px 0 0;
+  color: var(--brand-deep);
+  overflow: visible;
+}
+
+.grades-chart__area {
+  fill: currentColor;
+  opacity: 0.1;
+}
+
+.grades-chart__line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.grades-chart__halo {
+  fill: currentColor;
+  opacity: 0.18;
+}
+
+.grades-chart__dot {
+  fill: currentColor;
+}
+
+/* --- Sections par matière ------------------------------------------------- */
+
+.grades-subject {
+  padding: 0;
+  overflow: hidden;
+}
+
+.grades-subject__summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.grades-subject__summary::-webkit-details-marker {
+  display: none;
+}
+
+.grades-subject[open] > .grades-subject__summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.grades-dot {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.grades-subject__name {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.grades-subject__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 21px;
+  font-weight: 700;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.grades-subject__average {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+  font-size: 18px;
+  line-height: 23px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.grades-subject__scale {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.grades-subject__none {
+  flex: 0 0 auto;
+}
+
+.grades-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform var(--duration) var(--ease);
+}
+
+.grades-subject[open] .grades-chevron {
+  transform: rotate(90deg);
+}
+
+.grades-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grades-grade {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.grades-grade:first-child {
+  border-top: 0;
+}
+
+.grades-grade__body {
+  min-width: 0;
+}
+
+.grades-grade__title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.grades-grade__meta {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 17px;
+  overflow-wrap: anywhere;
+}
+
+.grades-grade__influence {
+  margin: 3px 0 0;
+  color: var(--brand-deep);
+  font-size: 12px;
+  line-height: 17px;
+  font-weight: 600;
+}
+
+.grades-grade__influence--down {
+  color: var(--danger-ink);
+}
+
+.grades-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  min-height: 40px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 19px;
+  line-height: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (max-width: 380px) {
+  .grades-hero__value {
+    font-size: 40px;
+  }
+
+  .grades-subject__title {
+    font-size: 15px;
+  }
+}

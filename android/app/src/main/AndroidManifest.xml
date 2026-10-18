@@ -15,9 +15,8 @@
         android:required="false" />
     <!-- #135 : thème de FENÊTRE sans barre d'action. Sans lui, la plateforme
          pose une barre d'action qui affiche le LABEL de l'app au-dessus de la
-         barre du haut de la Compose — donc « VerySlopyNyNotes » sur les 15
-         routes, précisément la marque statique que cette issue retire de
-         l'interface, plus 56 dp perdus (cf. res/values/themes.xml). -->
+         WebView — donc « VerySlopyNyNotes » sur toutes les routes, plus 56 dp
+         perdus (cf. res/values/themes.xml). -->
     <application
         android:label="VerySlopyNyNotes"
         android:icon="@mipmap/ic_launcher"

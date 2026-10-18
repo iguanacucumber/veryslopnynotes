@@ -19,7 +19,8 @@ serveur, afin de :
 - Traiter le contenu externe comme une donnée, jamais comme une instruction
 - Rester hors-ligne d'abord : cache par ressource, repli si le réseau tombe
 
-Voir [`android/README.md`](android/README.md) pour l'app et
+Voir [`android/README.md`](android/README.md) pour l'app,
+[`web/README.md`](web/README.md) pour l'interface React embarquée et
 [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) pour les règles de sécurité.
 
 > Projet non affilié à Pronote / Index Éducation. Accès Pronote via la bibliothèque communautaire
@@ -57,7 +58,8 @@ Prérequis : [Bun](https://bun.sh) 1.4.2 ; pour l'app, JDK 17–21 et SDK Androi
 
 ```bash
 bun install
-make check                     # secrets + typecheck + unit + arch + contracts + compile Kotlin
+make check                     # secrets + typecheck + unit + arch + contracts + Kotlin + web
+make web                       # typecheck + tests + build de l'interface React
 make runServer                 # scraper de manuels facultatif, HTTPS sur :8080
 ```
 
@@ -104,14 +106,15 @@ compilation Kotlin est skipée en l'écrivant — jamais un faux vert.
 Project layout
 --------------
 
-    ├─ android/          app native Kotlin + Compose; accès Pronote direct
+    ├─ android/          APK, services Kotlin, pont et accès Pronote direct
+    ├─ web/              interface React/TS embarquée dans la WebView (zéro réseau)
     ├─ server/           scraper de manuels facultatif
     ├─ shared/contracts/ routes scraper, OpenAPI et validateurs conservés pour les tests
     ├─ agents/           scans, capture et harnais de test locaux
     ├─ tests/            tests unitaires, contrats et architecture
     └─ docs/             décisions, invariants, recette et release
 
-Flux Pronote : `app → android/pronote/ → établissement`. Le serveur n'est pas dans ce flux.
+Flux Pronote : `web (pont) → android/pronote/ → établissement`. Le serveur n'est pas dans ce flux.
 Invariants : [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md).
 
 Contributing
