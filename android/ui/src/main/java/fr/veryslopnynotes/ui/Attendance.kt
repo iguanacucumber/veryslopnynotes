@@ -437,10 +437,14 @@ fun AttendanceRoute(
         heading = ATTENDANCE_HEADING,
         refreshTick = refreshTick,
     ) { payload, refresh ->
-        val data = attendanceFrom(payload)
-        val rows = absencesForPeriod(data, periodId)
-        val sections = attendanceSections(rows)
-        val status = attendanceStatus(rows)
+        // #312 : un parse par payload, plus un parse par recomposition (la
+        // coquille de cache recompose cet écran à chaque changement d'état).
+        val data = remember(payload) { attendanceFrom(payload) }
+        // Les tranches et leurs libellés ne se recalculent que si le modèle ou
+        // la période choisie bouge, plus à chaque recomposition de la coquille.
+        val rows = remember(data, periodId) { absencesForPeriod(data, periodId) }
+        val sections = remember(rows) { attendanceSections(rows) }
+        val status = remember(rows) { attendanceStatus(rows) }
         // `/v1/periods` pour la liste complète, les compteurs du payload pour les
         // chiffres ; sans tranches, la coquille des compteurs suffit.
         val tranches = remember(periods, data.periods) { attendancePeriods(periods, data.periods) }

@@ -48,6 +48,7 @@ import fr.veryslopnynotes.core.enumFr
 import fr.veryslopnynotes.core.monthFr
 import fr.veryslopnynotes.core.weekdayCapitalizedFr
 import fr.veryslopnynotes.data.CachePolicy
+import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SyncedRepository
 import kotlinx.coroutines.delay
@@ -179,10 +180,16 @@ data class TimetableLessonUi(
 
 data class TimetableDayUi(val day: String, val lessons: List<TimetableLessonUi>)
 
+/**
+ * Le MODÈLE d'une semaine (#312) : les jours et les cours, rien d'autre.
+ *
+ * `next` en est sorti : c'est le seul champ qui dépendait de l'HORLOGE, et tant
+ * qu'il vivait ici le parse entier devait être rejoué à chaque tic d'une minute
+ * (`CLOCK_TICK_MS`). Il se recalcule à part, sur `lessons`, par [nextLessonOf].
+ */
 data class TimetableWeekUi(
     val days: List<TimetableDayUi>,
     val lessons: List<TimetableLessonUi>,
-    val next: TimetableLessonUi?,
 )
 
 /** Une pause déduite entre deux cours (jamais dans le payload). */
@@ -279,11 +286,10 @@ private fun lessonFrom(obj: JSONObject): TimetableLessonUi? {
     )
 }
 
-/** Payload /v1/timetable -> semaine groupée par jour LOCAL + prochain cours. */
+/** Payload /v1/timetable -> semaine groupée par jour LOCAL (#312 : sans horloge). */
 fun timetableWeekFrom(
     payload: String,
     zone: ZoneId = ZoneId.systemDefault(),
-    nowMillis: Long = System.currentTimeMillis(),
 ): TimetableWeekUi = try {
     val root = JSONObject(payload)
     val entries = root.optJSONArray("entries") ?: JSONArray()
@@ -304,11 +310,10 @@ fun timetableWeekFrom(
     TimetableWeekUi(
         days = days,
         lessons = lessons.sortedBy { it.startMillis },
-        next = nextLessonOf(lessons, nowMillis),
     )
 } catch (_: Exception) {
     // Cache ancien, JSON invalide, texte libre : semaine vide, aucun crash.
-    TimetableWeekUi(emptyList(), emptyList(), null)
+    TimetableWeekUi(emptyList(), emptyList())
 }
 
 /** Jour local "2026-10-05" (jamais le jour UTC : c'est le bug d'offset). */
@@ -629,7 +634,12 @@ fun TimetableRoute(
     }
 
     val payload = (state as? UiState.Data)?.payload ?: (state as? UiState.Error)?.cached
-    val week = payload?.let { timetableWeekFrom(it, zone, nowMillis) }
+    // #312 : le MODÈLE (jours + cours triés) ne dépend que du payload et de la
+    // zone — `remember(payload, zone)` l'analyse UNE fois, au lieu de rejouer
+    // tout le JSON de la semaine à chaque tic d'horloge d'une minute. Les
+    // drapeaux d'horloge (« prochain cours », cours en cours) se recalculent en
+    // dessous sur la liste DÉJÀ analysée : un filtre, pas un parse.
+    val week = remember(payload, zone) { payload?.let { timetableWeekFrom(it, zone) } }
     val days = week?.days ?: emptyList()
     val today = remember(nowMillis, zone) {
         runCatching { Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate() }.getOrNull()
@@ -675,7 +685,9 @@ fun TimetableRoute(
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
-        val next = week?.next
+        // #312 : les deux drapeaux d'HORLOGE du modèle, recalculés sur la liste
+        // déjà analysée — `next` ne fait plus partie du parse mémoïsé.
+        val next = week?.let { nextLessonOf(it.lessons, nowMillis) }
         val currentStartMillis = week?.let { currentLessonOf(it.lessons, nowMillis)?.startMillis }
         // #145 : la ligne du prochain cours APPARAÎT (échelle 0.9 -> 1 + opacité,
         // 300 ms mesurés) au lieu de se faire réécrire sous les yeux quand

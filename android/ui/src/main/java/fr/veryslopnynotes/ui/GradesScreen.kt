@@ -195,15 +195,27 @@ fun GradesRoute(
     }
     LaunchedEffect(baseUrl) { loadPeriods() }
 
+    // #312 : le payload est la SEULE entrée des deux parses ci-dessous, donc
+    // `remember(payload)` les rejoue une fois par payload — et plus une fois par
+    // frappe dans la recherche (chaque caractère recomposait l'écran et
+    // re-parsait tout le JSON des notes) ni une fois par tic d'horloge.
     val payload = (state as? UiState.Data)?.payload ?: (state as? UiState.Error)?.cached
-    val report = payload?.let { averagesFrom(it) }
-    val grades = gradesForPeriod(gradesFrom(payload), periodId)
-    val filtered = grades.filter { gradeMatches(it, query) }
+    val report = remember(payload) { payload?.let { averagesFrom(it) } }
+    val allGrades = remember(payload) { gradesFrom(payload) }
+    // Aucun des étages suivants ne relit le JSON : chacun part d'une liste déjà
+    // analysée, avec dans sa clé ce qu'il lit vraiment — la période choisie pour
+    // la tranche, la recherche pour le filtre, et `query` aussi pour les groupes
+    // (le filtre qu'ils appliquent dépend de « recherche vide OU pas »).
+    val grades = remember(allGrades, periodId) { gradesForPeriod(allGrades, periodId) }
+    val filtered = remember(grades, query) { grades.filter { gradeMatches(it, query) } }
     // Recherche active : une matière dont TOUTES les notes ont été filtrées ne
     // garde pas son en-tête (une section vide est du bruit, pas une info).
-    val groups = gradeGroups(filtered, report?.subjects ?: emptyList())
-        .filter { query.isEmpty() || it.grades.isNotEmpty() }
-    val recent = recentGrades(filtered)
+    val subjects = report?.subjects
+    val groups = remember(filtered, subjects, query) {
+        gradeGroups(filtered, subjects ?: emptyList())
+            .filter { query.isEmpty() || it.grades.isNotEmpty() }
+    }
+    val recent = remember(filtered) { recentGrades(filtered) }
     // La décision « contenu, ou état unique » est PURE (`gradesLayout`), donc
     // elle se teste sans téléphone : c'est elle qui porte les critères de #162.
     val layout = gradesLayout(state, grades, report)
