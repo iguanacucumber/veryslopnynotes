@@ -86,10 +86,7 @@ export function RevisionSheetsScreen() {
 
   return (
     <Page>
-      <div className="row row--between">
-        <h2 className="t-headline" style={{ margin: 0 }}>
-          Fiches de révision
-        </h2>
+      <div className="row" style={{ justifyContent: "flex-end" }}>
         <button type="button" className="btn btn--ghost btn--small" onClick={() => void load()}>
           Actualiser
         </button>
