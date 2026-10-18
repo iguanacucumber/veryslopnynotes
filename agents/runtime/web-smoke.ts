@@ -1,11 +1,29 @@
-// Smoke Playwright du frontend : sert le build local et vérifie les routes
-// principales dans Chromium. Hors `make check` (un navigateur n'est pas requis
-// pour vérifier le code) ; `make web-smoke` le lance explicitement.
+// Smoke Playwright du frontend : sert le build local et vérifie toutes les
+// routes dans Chromium. Hors `make check` (un navigateur n'est pas requis pour
+// vérifier le code) ; `make web-smoke` le lance explicitement.
 import { chromium } from "playwright";
+import { mkdirSync } from "node:fs";
 
 const ROOT = new URL("../..", import.meta.url).pathname;
 const PORT = 4173;
 const URL_BASE = `http://127.0.0.1:${PORT}/`;
+const SHOTS = "/tmp/opencode/web-shots";
+const ROUTES = [
+  ["index", "/"],
+  ["calendar", "/calendar"],
+  ["grades", "/grades"],
+  ["tasks", "/tasks"],
+  ["profile", "/profile"],
+  ["settings", "/settings"],
+  ["messages", "/messages"],
+  ["attendance", "/attendance"],
+  ["sanctions", "/sanctions"],
+  ["news", "/news"],
+  ["canteen", "/canteen"],
+  ["alerts", "/alerts"],
+  ["fiches", "/fiches"],
+  ["pairing", "/pairing"],
+] as const;
 
 const preview = Bun.spawn(["bunx", "vite", "preview", "--config", "web/vite.config.ts", "--host", "127.0.0.1", "--port", String(PORT), "--strictPort"], {
   cwd: ROOT,
@@ -28,6 +46,7 @@ async function waitForServer(): Promise<void> {
 
 let code = 0;
 try {
+  mkdirSync(SHOTS, { recursive: true });
   await waitForServer();
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
@@ -37,19 +56,24 @@ try {
   });
   page.on("pageerror", (err) => errors.push(err.message));
 
-  await page.goto(`${URL_BASE}#/`, { waitUntil: "networkidle" });
-  await page.getByRole("heading", { name: "Accueil", level: 1 }).waitFor();
-  await page.getByRole("link", { name: "Cours" }).click();
-  await page.getByRole("heading", { name: "Cours", level: 1 }).waitFor();
-  await page.getByRole("link", { name: "Notes" }).click();
-  await page.getByRole("heading", { name: "Notes", level: 1 }).waitFor();
-  await page.screenshot({ path: "/tmp/opencode/web-smoke.png", fullPage: true });
+  for (const [name, route] of ROUTES) {
+    await page.goto(`${URL_BASE}#${route}`, { waitUntil: "networkidle" });
+    await page.locator("h1, h2, strong").first().waitFor();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    );
+    if (overflow) {
+      console.error(`web-smoke : débordement horizontal sur ${route}`);
+      code = 1;
+    }
+    await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
+  }
 
   if (errors.length) {
     console.error("erreurs console :", errors);
     code = 1;
-  } else {
-    console.log("web-smoke : OK (3 routes, 0 erreur console)");
+  } else if (code === 0) {
+    console.log(`web-smoke : OK (${ROUTES.length} routes, 0 erreur console, pas de débordement)`);
   }
   await browser.close();
 } catch (e) {
