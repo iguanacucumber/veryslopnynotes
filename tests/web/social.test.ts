@@ -1,3 +1,5 @@
+import { useParisTz } from "./setup";
+
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -36,6 +38,8 @@ import {
   parseCapabilities,
   parsePunishments,
 } from "../../web/src/features/attendance/model";
+
+useParisTz();
 
 const WEB = join(import.meta.dir, "..", "..", "web", "src");
 const read = (relative: string): string => readFileSync(join(WEB, relative), "utf8");

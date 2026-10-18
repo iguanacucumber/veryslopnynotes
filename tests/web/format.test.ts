@@ -1,3 +1,5 @@
+import { useParisTz } from "./setup";
+
 import { describe, expect, test } from "bun:test";
 import {
   addDays,
@@ -13,6 +15,8 @@ import {
   subjectColor,
   tint,
 } from "../../web/src/lib/format";
+
+useParisTz();
 
 describe("format web", () => {
   test("bornes et nettoyage des payloads", () => {

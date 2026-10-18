@@ -1,13 +1,16 @@
 // Menus de la cantine : payload -> jours + repas d'affichage.
 // Aucun HTML : les plats et allergènes sont des chaînes bornées, rendues en
 // texte. Les jetons du contrat sont traduits, jamais affichés bruts.
-import { cleanText } from "../../lib/format";
+import { cleanText, isoDay, parseDate } from "../../lib/format";
 
 export const CANTEEN_MAX_DAYS = 14;
+export const CANTEEN_MAX_MEALS_PER_DAY = 3;
 export const CANTEEN_MAX_DISHES = 20;
 export const CANTEEN_MAX_DISH_CHARS = 120;
 export const CANTEEN_MAX_ALLERGENS = 14;
 export const CANTEEN_MAX_ALLERGEN_CHARS = 40;
+/** Entrées brutes lues au plus : un payload géant ne fait pas tourner le parseur. */
+export const CANTEEN_MAX_SCAN = 500;
 
 const MEALS = new Set(["breakfast", "lunch", "dinner"]);
 const MEAL_LABELS: Record<string, string> = {
@@ -15,17 +18,12 @@ const MEAL_LABELS: Record<string, string> = {
   lunch: "Déjeuner",
   dinner: "Dîner",
 };
-const STATUS_LABELS: Record<string, string> = {
-  served: "Servi",
-  planned: "Prévu",
-};
 
 export interface CanteenMenu {
   date: string;
   meal: string;
   dishes: string[];
   allergens: string[];
-  status: string | null;
 }
 
 export interface CanteenDay {
@@ -35,7 +33,6 @@ export interface CanteenDay {
 
 export interface CanteenWeek {
   days: CanteenDay[];
-  balance: { amount: string; updatedAt: string } | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -74,57 +71,55 @@ function menuArray(root: Record<string, unknown> | null): unknown[] {
   return [];
 }
 
-const moneyFormat = new Intl.NumberFormat("fr-FR", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-function parseBalance(value: unknown): CanteenWeek["balance"] {
-  if (!isRecord(value) || value["balance"] == null) return null;
-  const raw = value["balance"];
-  const amount =
-    typeof raw === "number" && Number.isFinite(raw)
-      ? raw
-      : typeof raw === "string"
-        ? Number.parseFloat(raw.replace(",", "."))
-        : Number.NaN;
-  if (!Number.isFinite(amount)) return null;
-  const currency = text(value["currency"], 8) || "€";
-  return {
-    amount: `${moneyFormat.format(amount)} ${currency} (solde)`,
-    updatedAt: text(value["updatedAt"], 64),
-  };
+/** Jour normalisé en ISO local, `null` si la date est illisible : une date
+ *  brute n'est jamais utilisée comme clé de regroupement. */
+function dayKey(value: unknown): string | null {
+  const raw = text(value, 40);
+  if (!raw) return null;
+  const date = parseDate(raw);
+  return date ? isoDay(date) : null;
 }
 
 /** Lit les menus du contrat (`menus`) ou l'enveloppe factice (`items`).
- *  Repas inconnu ou sans plat = ligne ignorée : aucun menu inventé. */
+ *  Repas inconnu, date illisible ou sans plat = ligne ignorée : aucun menu
+ *  inventé. Le solde et le statut ne sont pas publiés par le producteur natif,
+ *  donc l'écran ne les affiche pas. */
 export function parseCanteenPayload(payload: string | null): CanteenWeek {
   const root = parseRoot(payload);
   const byDate = new Map<string, CanteenMenu[]>();
-  for (const raw of menuArray(root)) {
+  const seen = new Set<string>();
+  const rawMenus = menuArray(root);
+  const scan = Math.min(rawMenus.length, CANTEEN_MAX_SCAN);
+
+  for (let index = 0; index < scan; index++) {
+    const raw = rawMenus[index];
     if (!isRecord(raw)) continue;
-    const date = text(raw["date"], 40);
+    const date = dayKey(raw["date"]);
     const meal = text(raw["meal"], 20);
     if (!date || !MEALS.has(meal)) continue;
-    if (!byDate.has(date) && byDate.size >= CANTEEN_MAX_DAYS) continue;
+    const bucket = byDate.get(date);
+    if (!bucket && byDate.size >= CANTEEN_MAX_DAYS) continue;
+    // Un même jour+repas n'existe qu'une fois ; trois repas maximum par jour.
+    const key = `${date}|${meal}`;
+    if (seen.has(key)) continue;
+    if (bucket && bucket.length >= CANTEEN_MAX_MEALS_PER_DAY) continue;
     const dishes = boundedStrings(raw["dishes"], CANTEEN_MAX_DISHES, CANTEEN_MAX_DISH_CHARS);
     if (dishes.length === 0) continue;
-    const status = text(raw["status"], 32) || null;
+    seen.add(key);
     const menu: CanteenMenu = {
       date,
       meal,
       dishes,
       allergens: boundedStrings(raw["allergens"], CANTEEN_MAX_ALLERGENS, CANTEEN_MAX_ALLERGEN_CHARS),
-      status,
     };
-    const bucket = byDate.get(date);
     if (bucket) bucket.push(menu);
     else byDate.set(date, [menu]);
   }
+
   const days = [...byDate.entries()]
     .sort(([a], [b]) => (a === b ? 0 : a < b ? -1 : 1))
     .map(([date, meals]) => ({ date, meals }));
-  return { days, balance: parseBalance(root?.["balance"]) };
+  return { days };
 }
 
 const dayFormat = new Intl.DateTimeFormat("fr-FR", {
@@ -133,24 +128,14 @@ const dayFormat = new Intl.DateTimeFormat("fr-FR", {
   year: "numeric",
 });
 
-/** Date longue française ; vide si la donnée n'est pas datable. */
+/** Date longue française ; vide si la donnée n'est pas datable. Une date seule
+ *  est lue à midi local pour ne pas glisser d'un jour. */
 export function canteenDayLabel(date: string): string {
-  const parsed = new Date(date);
-  return Number.isNaN(parsed.getTime()) ? "" : dayFormat.format(parsed);
+  const raw = /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T12:00:00` : date;
+  const parsed = parseDate(raw);
+  return parsed ? dayFormat.format(parsed) : "";
 }
 
 export function canteenMealLabel(meal: string): string {
   return MEAL_LABELS[meal] ?? "Repas";
-}
-
-/** « Servi », « Prévu », « Statut inconnu » (jamais le jeton brut) ; `null` si
- *  l'établissement ne publie pas de statut. */
-export function canteenStatusLabel(status: string | null): string | null {
-  if (!status) return null;
-  return STATUS_LABELS[status] ?? "Statut inconnu";
-}
-
-/** Une pastille n'est peinte que pour un statut connu du contrat. */
-export function canteenStatusKnown(status: string | null): boolean {
-  return status === "served" || status === "planned";
 }

@@ -72,6 +72,31 @@ try {
       console.error(`web-smoke : débordement horizontal sur ${route}`);
       code = 1;
     }
+    if (route === "/canteen") {
+      const cards = await page.locator("main article.card").count();
+      const text = await page.locator("main").innerText();
+      if (cards < 1 || !text.includes("Déjeuner") || !text.includes("Allergènes")) {
+        console.error("web-smoke : la cantine ne rend pas les menus factices");
+        code = 1;
+      }
+    }
+    if (route === "/alerts") {
+      const cards = await page.locator("main article.card").count();
+      const text = await page.locator("main").innerText();
+      const html = await page.content();
+      // L'extrait hostile doit rester du TEXTE : échappé dans le HTML et
+      // aucun nœud <img>/<a> fabriqué par son contenu.
+      const injected = (await page.locator("main img").count()) > 0 ||
+        (await page.locator("main a").count()) > 0;
+      if (cards < 1 || !text.includes("<img src=x onerror=alert(1)>") || !html.includes("&lt;img")) {
+        console.error("web-smoke : l'alerte factice n'affiche pas l'extrait hostile en texte");
+        code = 1;
+      }
+      if (injected) {
+        console.error("web-smoke : l'extrait d'alerte a créé un élément HTML");
+        code = 1;
+      }
+    }
     await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
   }
 

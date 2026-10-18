@@ -13,6 +13,12 @@ export interface RevisionSheet {
   body: string;
 }
 
+export const SHEETS_MAX_ITEMS = 200;
+export const SHEETS_MAX_SCAN = 200;
+export const SHEET_MAX_SOURCES = 20;
+export const SHEET_MAX_BODY = 20_000;
+const SHEET_MAX_SOURCE_CHARS = 400;
+
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -31,13 +37,15 @@ export function parseRevisionSheet(raw: unknown): RevisionSheet | null {
   if (!o) return null;
   const id = text(o["id"], 200);
   const title = text(o["title"], 400);
-  const body = text(o["body"], 40_000);
+  const body = text(o["body"], SHEET_MAX_BODY);
   if (!id || !title || !body) return null;
   const rawSources = Array.isArray(o["sources"]) ? o["sources"] : [];
-  const sources = rawSources
-    .filter((source): source is string => typeof source === "string")
-    .map((source) => text(source, 400))
-    .filter(Boolean);
+  const sources: string[] = [];
+  for (const source of rawSources.slice(0, SHEET_MAX_SOURCES)) {
+    if (typeof source !== "string") continue;
+    const value = text(source, SHEET_MAX_SOURCE_CHARS);
+    if (value && !sources.includes(value)) sources.push(value);
+  }
   return {
     id,
     title,
@@ -48,25 +56,34 @@ export function parseRevisionSheet(raw: unknown): RevisionSheet | null {
   };
 }
 
-export function parseRevisionSheets(raw: unknown): RevisionSheet[] {
-  let list: unknown[] = [];
-  if (Array.isArray(raw)) {
-    list = raw;
-  } else {
-    const o = record(raw);
-    if (o) {
-      for (const key of ["sheets", "items"]) {
-        if (Array.isArray(o[key])) {
-          list = o[key] as unknown[];
-          break;
-        }
-      }
+function listOf(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  // Le pont peut sérialiser l'enveloppe en JSON : `"{"sheets":[]}"`.
+  if (typeof raw === "string") {
+    try {
+      return listOf(JSON.parse(raw) as unknown);
+    } catch {
+      return [];
     }
   }
+  const o = record(raw);
+  if (!o) return [];
+  for (const key of ["sheets", "items"]) {
+    if (Array.isArray(o[key])) return o[key] as unknown[];
+  }
+  return [];
+}
+
+export function parseRevisionSheets(raw: unknown): RevisionSheet[] {
+  const list = listOf(raw);
   const sheets: RevisionSheet[] = [];
-  for (const item of list) {
-    const sheet = parseRevisionSheet(item);
-    if (sheet) sheets.push(sheet);
+  const seen = new Set<string>();
+  const scan = Math.min(list.length, SHEETS_MAX_SCAN);
+  for (let index = 0; index < scan && sheets.length < SHEETS_MAX_ITEMS; index++) {
+    const sheet = parseRevisionSheet(list[index]);
+    if (!sheet || seen.has(sheet.id)) continue;
+    seen.add(sheet.id);
+    sheets.push(sheet);
   }
   return sheets.sort((a, b) => {
     const left = parseDate(a.date)?.getTime() ?? 0;

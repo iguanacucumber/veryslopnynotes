@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useResource } from "../ui/AppContext";
 import { Card, Divider, EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../ui/components";
 import { IconCheck, IconShield } from "../ui/icons";
@@ -16,6 +16,7 @@ import {
 
 function AlertCard({ alert }: { alert: SecurityAlert }) {
   const [expanded, setExpanded] = useState(false);
+  const excerptId = useId();
   const excerpt = sanitizeExcerpt(alert.excerpt);
   const collapsible = excerpt.length > EXCERPT_COLLAPSED;
   const shown = expanded || !collapsible ? excerpt : excerptPreview(excerpt);
@@ -33,11 +34,11 @@ function AlertCard({ alert }: { alert: SecurityAlert }) {
         {danger ? "Gravité : élevée" : "Gravité : information"}
       </p>
 
-      <h3 className="tiny muted" style={{ margin: 0 }}>
+      <p className="tiny muted" style={{ margin: 0 }}>
         Donnée suspecte (non exécutée)
-      </h3>
+      </p>
       <Divider />
-      <p className="t-body-m" style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+      <p id={excerptId} className="t-body-m" style={{ margin: 0, whiteSpace: "pre-wrap" }}>
         {shown}
       </p>
       {collapsible ? (
@@ -45,6 +46,7 @@ function AlertCard({ alert }: { alert: SecurityAlert }) {
           type="button"
           className="btn btn--ghost btn--small"
           aria-expanded={expanded}
+          aria-controls={excerptId}
           aria-label={expanded ? "Réduire l’extrait de l’alerte" : "Afficher l’extrait complet de l’alerte"}
           onClick={() => setExpanded((value) => !value)}
         >

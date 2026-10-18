@@ -1,3 +1,5 @@
+import { useParisTz } from "./setup";
+
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -31,6 +33,8 @@ import {
   scanErrorMessage,
   validateScannedQr,
 } from "../../web/src/features/pairing/model";
+
+useParisTz();
 
 const USER = {
   accountId: "acc-fake-1",

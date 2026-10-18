@@ -1,7 +1,7 @@
 // Logique pure de l'écran Tâches, portée de `AssignmentsSections.kt` et
 // `AssignmentsRepository.kt`. Aucun React, aucun réseau : les parsers et les
 // regroupements sont testables avec un `now` injecté.
-import { addDays, frDate, frTime, isoDay, parseDate, startOfWeek } from "../../lib/format";
+import { addDays, frDate, frTime, isoDay, startOfWeek } from "../../lib/format";
 
 export interface AssignmentAttachment {
   id: string;
@@ -35,7 +35,7 @@ export interface AssignmentsPayload {
   weekEnd: string | null;
 }
 
-export type AssignmentSectionId = "overdue" | "today" | "week" | "later" | "done";
+export type AssignmentSectionId = "overdue" | "today" | "week" | "later" | "undated" | "done";
 
 export interface AssignmentSection {
   id: AssignmentSectionId;
@@ -43,6 +43,9 @@ export interface AssignmentSection {
   items: Assignment[];
 }
 
+export const ASSIGNMENTS_MAX_ITEMS = 500;
+/** Entrées brutes lues au plus : un payload géant ne fait pas tourner le parseur. */
+export const ASSIGNMENTS_MAX_SCAN = 500;
 const MAX_DESCRIPTION = 2000;
 const MAX_ATTACHMENTS = 10;
 const MAX_LABEL = 200;
@@ -51,8 +54,9 @@ const MAX_LESSON_TITLE = 200;
 const MAX_LESSON_EXCERPT = 500;
 
 // Une `ref` est une clé interne, jamais une URL : même règle que
-// `AssignmentAttachment.isValid` (I1).
-const ABSOLUTE_REF = /:\/\/|^\/\/|data:|\\/;
+// `AssignmentAttachment.isValid` (I1). Seul le schéma `homework:` est accepté ;
+// tout autre schéma, chemin absolu ou URL est rejeté.
+const HOMEWORK_REF = /^homework:[A-Za-z0-9._:-]+$/;
 
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
@@ -168,19 +172,20 @@ function parseAttachment(raw: unknown): AssignmentAttachment | null {
     ref: text(o["ref"], MAX_REF),
   };
   if (!attachment.id || !attachment.label || !attachment.ref) return null;
-  if (ABSOLUTE_REF.test(attachment.ref)) return null;
+  if (!HOMEWORK_REF.test(attachment.ref)) return null;
   return attachment;
 }
 
 function parseLesson(raw: unknown): AssignmentLessonContent | null {
   const o = record(raw);
   if (!o) return null;
+  // Les textes sont tronqués, jamais rejetés : une fiche de cours bavarde ne
+  // doit pas faire disparaître le devoir entier.
   const lesson: AssignmentLessonContent = {
     title: text(o["title"], MAX_LESSON_TITLE),
     excerpt: text(o["excerpt"], MAX_LESSON_EXCERPT),
   };
-  if (!lesson.title || lesson.title.length > MAX_LESSON_TITLE) return null;
-  if (lesson.excerpt.length > MAX_LESSON_EXCERPT) return null;
+  if (!lesson.title) return null;
   return lesson;
 }
 
@@ -196,9 +201,8 @@ export function parseAssignment(raw: unknown): Assignment | null {
   if (description.length > MAX_DESCRIPTION) return null;
 
   const attachmentsRaw = Array.isArray(o["attachments"]) ? o["attachments"] : [];
-  if (attachmentsRaw.length > MAX_ATTACHMENTS) return null;
   const attachments: AssignmentAttachment[] = [];
-  for (const rawAttachment of attachmentsRaw) {
+  for (const rawAttachment of attachmentsRaw.slice(0, MAX_ATTACHMENTS)) {
     const attachment = parseAttachment(rawAttachment);
     if (!attachment) return null;
     attachments.push(attachment);
@@ -261,9 +265,13 @@ export function parseAssignmentsPayload(payload: string | null | undefined): Ass
   }
 
   const items: Assignment[] = [];
-  for (const raw of rawItems) {
-    const assignment = parseAssignment(raw);
-    if (assignment) items.push(assignment);
+  const seen = new Set<string>();
+  const scan = Math.min(rawItems.length, ASSIGNMENTS_MAX_SCAN);
+  for (let index = 0; index < scan && items.length < ASSIGNMENTS_MAX_ITEMS; index++) {
+    const assignment = parseAssignment(rawItems[index]);
+    if (!assignment || seen.has(assignment.id)) continue;
+    seen.add(assignment.id);
+    items.push(assignment);
   }
 
   const weekStart = bound(root, ["weekStart", "weekFrom", "from", "start"]);
@@ -282,14 +290,16 @@ const SECTION_TITLES: Array<[AssignmentSectionId, string]> = [
   ["today", "Aujourd'hui"],
   ["week", "Cette semaine"],
   ["later", "Plus tard"],
+  ["undated", "Sans échéance"],
   ["done", "Terminés"],
 ];
 
-/** Le FAIT prime sur la date ; une dueDate illisible n'est jamais « en retard ». */
+/** Le FAIT prime sur la date ; une dueDate illisible n'est jamais « en retard ».
+ *  Elle a sa propre section : un devoir sans échéance reste visible. */
 export function assignmentSectionOf(assignment: Assignment, now: Date): AssignmentSectionId {
   if (assignment.done) return "done";
   const date = assignmentDate(assignment.dueDate);
-  if (!date) return "later";
+  if (!date) return "undated";
   const today = isoDay(now);
   const day = isoDay(date);
   if (day < today) return "overdue";
@@ -305,15 +315,45 @@ function byDate(a: Assignment, b: Assignment): number {
 }
 
 /** Sections non vides, dans l'ordre d'affichage, triées par échéance. Les
- *  devoirs sans date lisible sont écartés du regroupement (comme le Kotlin). */
+ *  devoirs sans date lisible restent visibles dans « Sans échéance ». */
 export function assignmentSections(items: Assignment[], now: Date): AssignmentSection[] {
-  const dated = items.filter((item) => assignmentDate(item.dueDate) !== null);
   const sections: AssignmentSection[] = [];
   for (const [id, title] of SECTION_TITLES) {
-    const sectionItems = dated.filter((item) => assignmentSectionOf(item, now) === id).sort(byDate);
+    const sectionItems = items.filter((item) => assignmentSectionOf(item, now) === id).sort(byDate);
     if (sectionItems.length > 0) sections.push({ id, title, items: sectionItems });
   }
   return sections;
+}
+
+/** Devoirs dont l'échéance tombe dans la semaine commençant à `weekStart`.
+ *  La fenêtre est celle du producteur natif : lundi 00:00 UTC → dimanche
+ *  23:59:59 UTC (`weekWindowUtc`). Une date seule est lue en UTC, comme le
+ *  contrat qui ne publie que des instants complets. Sert à ignorer un payload
+ *  en cache qui appartient à une autre semaine (`useResource` met en cache par
+ *  ressource, pas par requête). */
+export function assignmentsInWeek(items: Assignment[], weekStart: string): Assignment[] {
+  if (!DATE_ONLY.test(weekStart)) return [];
+  const [year, month, day] = weekStart.split("-").map((part) => Number.parseInt(part, 10));
+  if (!year || !month || !day) return [];
+  const start = Date.UTC(year, month - 1, day);
+  const end = start + 7 * 86_400_000;
+  return items.filter((item) => {
+    const value = item.dueDate.trim();
+    // Sans échéance lisible : la carte vit dans « Sans échéance », jamais
+    // rattachée de force à une semaine.
+    if (!value) return true;
+    let millis: number;
+    if (DATE_ONLY.test(value)) {
+      const [y, m, d] = value.split("-").map((part) => Number.parseInt(part, 10));
+      if (!y || !m || !d) return true;
+      millis = Date.UTC(y, m - 1, d);
+    } else {
+      const date = assignmentDate(value);
+      if (!date) return true;
+      millis = date.getTime();
+    }
+    return millis >= start && millis < end;
+  });
 }
 
 // --- Texte ------------------------------------------------------------------
@@ -354,14 +394,4 @@ export function subjectDisplayFr(name: string): string {
 export function subjectInitial(subject: string): string {
   const first = subject.trim().match(/[\p{L}\p{N}]/u)?.[0];
   return first ? first.toLocaleUpperCase("fr-FR") : "?";
-}
-
-/** Repli de compatibilité pour un payload de test qui n'a pas de bornes. */
-export function hasWeekBounds(payload: AssignmentsPayload): boolean {
-  return Boolean(payload.weekStart || payload.weekEnd);
-}
-
-/** Date lisible d'une fiche ou d'une échéance, vide si l'ISO est illisible. */
-export function safeFrDate(value: string): string {
-  return parseDate(value) ? frDate(value) : "";
 }
