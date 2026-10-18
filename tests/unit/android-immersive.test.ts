@@ -62,8 +62,11 @@ describe("unit android plein écran immersif (#303)", () => {
   test("la barre du haut reste sous l'encoche (displayCutout consommé)", () => {
     // La coquille ne monte plus la `TopAppBar` de M3 (cf. #303 plus bas), donc
     // c'est SA rangée qui consomme le découpage — sur toute la barre, pas
-    // seulement sous le titre.
-    expect(shell).toContain(".windowInsetsPadding(WindowInsets.displayCutout)");
+    // seulement sous le titre. La marge vient de `displayCutout`, donc elle est
+    // mesurée à l'exécution et pas devinée (#305 la répartit moitié au-dessus,
+    // moitié au-dessous : cf. le test de centrage).
+    expect(shell).toContain("WindowInsets.displayCutout.asPaddingValues(density)");
+    expect(shell).toContain(".windowInsetsPadding(cutoutPadding)");
   });
 
   test("les barres de l'app ne sont PAS touchées (titre et onglets conservés)", () => {
@@ -123,5 +126,20 @@ describe("unit barre du haut rehaussée (#303)", () => {
     // La hauteur vient de l'activité (module `app`, qui a androidx.core) : `ui`
     // n'a pas à connaître les insets de fenêtre.
     expect({ core: shell.includes("WindowInsetsCompat") }).toEqual({ core: false });
+  });
+
+  // #305 : sans ça le contenu était centré dans la SEULE zone sous l'encoche et
+  // tombait aux deux tiers de la barre (mesuré sur l'appareil : titre à 118 dp
+  // sur 179 dp, au lieu des ~90 dp d'avant #303 et de la référence).
+  test("le contenu est centré dans la barre ENTIÈRE, encoche comprise", () => {
+    // Encoche posée en marges ÉGALES haut/bas : `windowInsetsPadding` centre le
+    // contenu entre ses marges, donc des marges égales le centrent dans toute
+    // la barre.
+    expect(shell).toMatch(/top = cutout\.calculateTopPadding\(\) \/ 2,/);
+    expect(shell).toMatch(/bottom = cutout\.calculateBottomPadding\(\) \/ 2,/);
+    // Gauche et droite : l'encoche ENTIÈRE — en paysage elle est sur le côté,
+    // la moitié y laisserait le contenu dessous.
+    expect(shell).toMatch(/left = cutout\.calculateLeftPadding\(layoutDirection\),/);
+    expect(shell).toMatch(/right = cutout\.calculateRightPadding\(layoutDirection\),/);
   });
 });
