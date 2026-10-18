@@ -337,11 +337,20 @@ class HttpSession(
                 conn.disconnect()
                 continue
             }
+            // Chemin de SUCCÈS : pas de `disconnect()` — le corps est lu jusqu'au
+            // bout puis fermé (`cappedBytes`), donc le socket retourne au cache
+            // keep-alive de `HttpURLConnection` et le POST suivant du refresh
+            // réutilise la MÊME connexion au lieu de repayer un handshake TCP+TLS
+            // (#309). Fermer ici à chaque réponse vidait ce cache.
             val bytes: ByteArray = try {
                 val stream = if (status >= 400) conn.errorStream else conn.inputStream
                 if (stream == null) ByteArray(0) else cappedBytes(stream, 10_485_760)
-            } finally {
-                conn.disconnect()
+            } catch (e: Exception) {
+                // Lecture interrompue (plafond 10 Mo, socket mort) : le socket
+                // n'est PAS réutilisable, on le ferme comme sur les autres
+                // chemins d'erreur.
+                try { conn.disconnect() } catch (_: Exception) {}
+                throw e
             }
             return HttpResponse(
                 status = status,
