@@ -120,6 +120,7 @@ sinon l'erreur suivante est un `HostnameVerifier`, pas une erreur d'ancre.
 
 ```sh
 make buildDebugApk
+make updateApkToPhone   # construit l'APK debug et l'installe (données conservées)
 make buildRelApk   # APK + AAB release, signés (custom si STORE_FILE, sinon debug #297)
 ```
 
