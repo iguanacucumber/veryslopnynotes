@@ -231,7 +231,7 @@ fun weekStartIso(millis: Long, zone: ZoneId): String {
  * navigation ne doit jamais fabriquer une fenêtre ni bloquer l'écran.
  */
 fun shiftWeekIso(iso: String, weeks: Long): String =
-    runCatching { LocalDate.parse(iso).minusWeeks(weeks).toString() }.getOrDefault(iso)
+    runCatching { LocalDate.parse(iso).plusWeeks(weeks).toString() }.getOrDefault(iso)
 
 /** « Semaine 41 » — numéro ISO, comme l'en-tête de Papillon. Le numéro seul ne
  *  suffit pas à dater : la plage ci-dessous l'accompagne toujours. */

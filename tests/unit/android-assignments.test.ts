@@ -659,6 +659,10 @@ describe("sections, filtres et semaine (#138)", () => {
     expect(tsShiftWeekIso("2026-10-05", -1)).toBe("2026-09-28");
     // Fenêtre illisible : la navigation ne fabrique pas de date.
     expect(tsShiftWeekIso("pas une date", 1)).toBe("pas une date");
+    // Les flèches doivent aller dans le sens du miroir : « suivante » = +1.
+    const sections = readFileSync(join(UI, "AssignmentsSections.kt"), "utf8");
+    expect(sections).toContain("LocalDate.parse(iso).plusWeeks(weeks)");
+    expect(sections).not.toContain("minusWeeks(weeks)");
     expect(tsWeekLabelFr("2026-09-28")).toBe("Semaine 40");
     expect(tsWeekLabelFr("2026-10-05")).toBe("Semaine 41");
     expect(tsWeekLabelFr("2026-01-01")).toBe("Semaine 1");
