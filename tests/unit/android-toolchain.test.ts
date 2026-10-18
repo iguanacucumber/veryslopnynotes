@@ -94,6 +94,20 @@ describe("android-env.sh", () => {
     expect(hint).toMatch(/build-tools;34\.0\.0/);
   });
 
+  test("updateApkToPhone installe l'APK debug sans effacer les données", () => {
+    const makefile = readFileSync(join(import.meta.dir, "..", "..", "Makefile"), "utf8");
+    // Le build est le MÊME que buildDebugApk (une seule découverte JDK/SDK)…
+    expect(makefile).toContain("updateApkToPhone: buildDebugApk");
+    // …et l'installation remplace l'APK sans toucher aux données de l'app.
+    expect(makefile).toContain(
+      'adb -s "$$serial" install -r android/app/build/outputs/apk/debug/app-debug.apk',
+    );
+    expect(makefile).toContain("ANDROID_SERIAL");
+    // Un `uninstall` effacerait la session appairée : jamais.
+    const recipe = makefile.slice(makefile.indexOf("updateApkToPhone:"), makefile.indexOf("\n\n", makefile.indexOf("updateApkToPhone:")));
+    expect(recipe).not.toMatch(/adb.*uninstall/);
+  });
+
   test("les cibles Gradle partagent la découverte, sans la réécrire", () => {
     const makefile = readFileSync(join(import.meta.dir, "..", "..", "Makefile"), "utf8");
     // `shot` (#133) construit l'APK debug pour la capture : même découverte.
