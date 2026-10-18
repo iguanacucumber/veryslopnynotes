@@ -3,13 +3,24 @@ package fr.veryslopnynotes.ui
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -23,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
@@ -124,7 +136,15 @@ fun PairingRoute(
         TextButton(
             onClick = onBack,
             modifier = Modifier.padding(start = 8.dp, end = 8.dp),
-        ) { Text("Retour") }
+            contentPadding = PaddingValues(horizontal = 8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text("Retour", modifier = Modifier.padding(start = 6.dp))
+        }
         if (!notice.isNullOrEmpty()) {
             Text(
                 text = notice,
@@ -177,22 +197,62 @@ private fun QrStep(
     )
     val busy = form.state == PairingState.Submitting
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = PapPagePadding),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        // `heading()` : l'écran est le titre de l'assistant — c'est par lui
-        // qu'on sait quoi faire, donc c'est lui que le survol annonce.
-        Text(
-            text = "QR de l'application",
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .padding(vertical = 8.dp)
-                .semantics { heading() },
-        )
-        // #299 : l'adresse n'est plus saisie — elle vient du QR. Dit à l'écran,
-        // sinon l'utilisateur la cherche.
-        Text("L'adresse de ton établissement et ta connexion viennent de ce QR : scanne-le, puis saisis son PIN.")
+        // #331 : la première page de l'app est un héros, pas un titre de 14 sp
+        // suivi d'un paragraphe. Le texte de confiance remplace la description
+        // technique : la session ne quitte pas l'appareil.
+        PapHeroCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Connecte ton établissement",
+                        style = MaterialTheme.typography.headlineSmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    Text(
+                        text = "Scanne le QR de l'application de ton établissement, puis saisis son PIN. " +
+                            "Ta session reste sur ce téléphone.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(
+                            LocalContentColor.current.copy(alpha = 0.14f),
+                            CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Search,
+                        contentDescription = null,
+                        tint = LocalContentColor.current,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            PairingStepChip(
+                label = "1 · Scanner",
+                done = qr != null,
+            )
+            PairingStepChip(
+                label = "2 · PIN",
+                done = qr != null && form.pin.isNotBlank(),
+            )
+        }
         // #127 : scan direct, décodeur dans l'APK (permission CAMERA demandée
         // par l'activité de scan). `null` = rien de lu, on ne remplace rien et
         // le message le dit.
@@ -265,6 +325,40 @@ private fun QrStep(
         // #208 : plus de diagnostic SSE — sans serveur il n'y a plus de flux
         // serveur→app, donc plus d'état de connexion à replier ici. Le sync
         // de fond est passé à WorkManager (PeriodicSyncWorker).
+    }
+}
+
+/**
+ * Étape de l'assistant : « 1 · Scanner », « 2 · PIN ».
+ *
+ * Fait = conteneur vert pâle + encre vert profond (le couple `secondaryContainer`
+ * du thème, 4.61:1 en clair) ; à faire = surface variante. Aucun état n'est
+ * inventé : [done] vient du QR lu et du PIN saisi.
+ */
+@Composable
+private fun PairingStepChip(label: String, done: Boolean) {
+    val container = if (done) {
+        MaterialTheme.colorScheme.secondaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val ink = if (done) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Box(
+        modifier = Modifier
+            .background(container, CircleShape)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

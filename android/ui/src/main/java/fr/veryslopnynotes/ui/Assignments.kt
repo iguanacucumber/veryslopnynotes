@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,6 +26,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -59,6 +63,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -290,6 +295,67 @@ private fun AssignmentSectionHeader(
                     tint = accent,
                 )
             }
+        }
+    }
+}
+
+/**
+ * Carte de tête de l'onglet Tâches : ce qui reste, ce qui est fait, ce qui est
+ * en retard. Les nombres viennent de [assignmentSummary] — aucune estimation.
+ */
+@Composable
+private fun AssignmentSummaryCard(
+    summary: AssignmentSummaryUi,
+    modifier: Modifier = Modifier,
+) {
+    PapCard(
+        modifier = modifier.fillMaxWidth(),
+        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        border = null,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (summary.toDo == 0) "Tout est fait" else {
+                        "${summary.toDo} devoir${if (summary.toDo > 1) "s" else ""} à faire"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${summary.done} terminé${if (summary.done > 1) "s" else ""} sur ${summary.total}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (summary.overdue > 0) {
+                PapPill(
+                    text = "${summary.overdue} en retard",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(summary.doneFraction)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.primary),
+            )
         }
     }
 }
@@ -759,6 +825,13 @@ fun AssignmentsScreen(
             }
         }
         WeekNavigator(weekLabel = weekLabel, weekRange = weekRange, onShiftWeek = onShiftWeek)
+        // #331 : le résumé des sections donne un point focal à l'écran et
+        // remplace quatre allers-retours vers les titres de section. Il ne
+        // s'affiche que quand il y a des devoirs : un « 0 à faire » au-dessus
+        // de l'état vide serait une seconde fois le même message.
+        if (sections.isNotEmpty()) {
+            AssignmentSummaryCard(summary = assignmentSummary(sections))
+        }
         // #148 (recette des 14 écrans) : les deux contrôles de FILTRAGE ne
         // s'affichent que s'il y a des devoirs à filtrer. Avant, ils restaient
         // au-dessus de l'état d'erreur : « Rechercher un devoir » et les puces

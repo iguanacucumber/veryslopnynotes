@@ -1,5 +1,6 @@
 package fr.veryslopnynotes.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -32,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,7 +78,7 @@ import fr.veryslopnynotes.data.SubjectPrefs
 // sort jamais de l'app — pas de log, pas d'URL, pas de message d'erreur.
 
 /** Écart entre deux sections. */
-private val BLOCK_GAP = 20.dp
+private val BLOCK_GAP = PapSectionGap
 
 /** Écart entre deux lignes d'une même section. */
 private val ROW_GAP = 4.dp
@@ -124,7 +126,7 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(PapPagePadding),
         verticalArrangement = Arrangement.spacedBy(BLOCK_GAP),
     ) {
         // --- Apparence : un segment, pas trois puces -----------------------
@@ -334,6 +336,16 @@ private fun SettingsSection(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(ROW_GAP)) {
         PapSectionHeader(icon = icon, title = title)
-        Column(modifier = Modifier.fillMaxWidth(), content = content)
+        // #331 : un groupe de réglages se lit comme un bloc, pas comme une
+        // suite de lignes qui flottent sur la page. Le fond est le jeton de
+        // surface variante ; le rayon est celui des cartes.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.large)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            content = content,
+        )
     }
 }

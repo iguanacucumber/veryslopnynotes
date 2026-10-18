@@ -5,6 +5,7 @@ import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateDecay
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -58,10 +59,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
@@ -360,7 +363,14 @@ private val TopBarCorner = 24.dp
  * secondaire, il est à 8 dp de la pastille de retour.
  */
 private val TopBarSideInset = 8.dp
-private val TopBarTitleInset = 12.dp
+
+/**
+ * Marge du titre d'une route RACINE, en plus de [TopBarSideInset] : 8 dp, donc
+ * 16 dp du bord — le même axe que le contenu des pages (#331). Les 12 dp
+ * d'avant plaçaient le titre à 20 dp alors que la première carte commençait à
+ * 16 : deux colonnes visuelles pour un même écran.
+ */
+private val TopBarTitleInset = 8.dp
 
 /**
  * Barre du haut de la route courante. [onBack] reçoit la route de repli, jamais
@@ -481,7 +491,9 @@ fun AppTopBar(
         shape = RoundedCornerShape(bottomStart = TopBarCorner, bottomEnd = TopBarCorner),
         // Relief léger de carte flottante, sans teinte tonale (Papillon n'en a
         // pas) : le filet et l'ombre suffisent à séparer la barre du contenu.
-        shadowElevation = 2.dp,
+        // #331 : 2 dp d'ombre sur une page teintée faisaient deux reliefs
+        // concurrents ; 1 dp suffit, le filet porte la séparation.
+        shadowElevation = 1.dp,
         // Le filet rend la courbure LISIBLE : sans lui, carte blanche sur fond
         // blanc, les coins bas arrondis disparaissent.
         border = BorderStroke(1.dp, scheme.outlineVariant),
@@ -760,17 +772,41 @@ fun AppTabBar(route: String?, onSelect: (String) -> Unit) {
             // vert pâle au lieu du blanc/surface de la référence. Le relief
             // vient de l'ombre seule.
             tonalElevation = 0.dp,
-            shadowElevation = 6.dp,
+            // #331 : 6 dp sur une page teintée faisait une dalle plus lourde
+            // que la barre du haut ; 3 dp sépare sans concurrencer le contenu.
+            shadowElevation = 3.dp,
         ) {
             NavigationBar(
                 containerColor = Color.Transparent,
                 tonalElevation = 0.dp,
             ) {
+                val haptics = rememberPapHaptics()
                 for (tab in TAB_ROUTES) {
+                    val selected = route == tab
+                    // Le glyphe sélectionné respire de 8 % : la pastille M3 dit
+                    // déjà « sélectionné », ce ressort le dit dans le geste.
+                    val iconScale by animateFloatAsState(
+                        targetValue = if (selected) 1.08f else 1f,
+                        animationSpec = spring(
+                            dampingRatio = MOTION_PRESS_DAMPING,
+                            stiffness = MOTION_PRESS_STIFFNESS,
+                        ),
+                        label = "tabIconScale",
+                    )
                     NavigationBarItem(
-                        selected = route == tab,
-                        onClick = { onSelect(tab) },
-                        label = { Text(tabLabel(tab)) },
+                        selected = selected,
+                        onClick = {
+                            haptics.select()
+                            onSelect(tab)
+                        },
+                        label = {
+                            Text(
+                                text = tabLabel(tab),
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
                         icon = {
                             TabIconWithBadge(tab) {
                                 Icon(
@@ -784,6 +820,10 @@ fun AppTabBar(route: String?, onSelect: (String) -> Unit) {
                                     // « Accueil … Accueil ». Le nom vient donc du SEUL
                                     // endroit qui le prononce, `tabLabel`.
                                     contentDescription = null,
+                                    modifier = Modifier.graphicsLayer {
+                                        scaleX = iconScale
+                                        scaleY = iconScale
+                                    },
                                 )
                             }
                         },

@@ -17,12 +17,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +35,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -61,14 +65,76 @@ import java.time.ZoneId
 // Upgrade: quand le BOM bougera, une ligne d'import par icône — pas de
 // collection à rejouer.
 
-/** Côte de la pastille d'un accès rapide. */
-private val HOME_ACTION_ICON = 36.dp
+/** Côte de la pastille d'un accès rapide (#331 : 36 → 44 dp, la taille d'un avatar). */
+private val HOME_ACTION_ICON = 44.dp
 
-/** Côte du glyphe dans la pastille : 36 − 2 × 6 de marge, comme sur les onglets. */
+/** Côte du glyphe dans la pastille : 24 dp, avec 10 dp de marge de chaque côté. */
 private val HOME_ACTION_GLYPH = 24.dp
 
 /** Espace entre la pastille d'un accès rapide et son titre. */
 private val HOME_ACTION_GAP = 10.dp
+
+/**
+ * Héros d'accueil : la salutation et le jour, sur l'aplat de marque.
+ *
+ * #331 : la salutation était un `headlineSmall` de 18 sp posé dans le flux,
+ * donc le premier écran de l'app commençait par un texte de la taille d'un
+ * titre de carte. Le héros donne à l'accueil son point focal sans inventer de
+ * donnée — il ne porte que ce que l'horloge et le cache savaient déjà.
+ *
+ * Le glyphe est le logotype d'onglet de l'app, à 45 % : décoratif, il ne
+ * remplace pas le titre (`contentDescription = null`).
+ */
+@Composable
+fun HomeHeroCard(
+    greeting: String,
+    dayLabel: String,
+    modifier: Modifier = Modifier,
+) {
+    PapHeroCard(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = greeting,
+                    style = MaterialTheme.typography.displayMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    // Le héros est le titre de la page pour un lecteur d'écran :
+                    // le `heading()` vit sur le TEXTE, pas sur la carte qui
+                    // contient aussi le glyphe décoratif.
+                    modifier = Modifier.semantics { heading() },
+                )
+                Text(
+                    text = dayLabel,
+                    // Pas d'alpha : 14 sp sur le vert du héros dépassent AA de
+                    // peu, et le réduire pour « faire secondaire » repasserait
+                    // dessous. La taille porte déjà la hiérarchie.
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(LocalContentColor.current.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = PapillonTabAccueil,
+                    contentDescription = null,
+                    tint = LocalContentColor.current.copy(alpha = 0.45f),
+                    modifier = Modifier.size(34.dp),
+                )
+            }
+        }
+    }
+}
 
 /**
  * Carte widget : en-tête (icône + titre en encre secondaire, le parti pris
@@ -287,18 +353,23 @@ fun HomeQuickActionsGrid(
     // chaque geste de tirail) : les quatre accès changent rarement.
     val rows = remember(actions) { actions.chunked(2) }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        var index = 0
         for (row in rows) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 for (action in row) {
-                    HomeQuickActionCard(
-                        action = action,
-                        onClick = { onOpen(action.route) },
-                        modifier = Modifier.weight(1f),
-                        badgeCount = badges[action.route] ?: 0,
-                    )
+                    // #331 : une tuile entre en 30 ms après la précédente —
+                    // la grille se pose au lieu d'apparaître d'un bloc.
+                    PapEnter(modifier = Modifier.weight(1f), staggerIndex = index) {
+                        HomeQuickActionCard(
+                            action = action,
+                            onClick = { onOpen(action.route) },
+                            badgeCount = badges[action.route] ?: 0,
+                        )
+                    }
+                    index += 1
                 }
                 if (row.size == 1) Box(modifier = Modifier.weight(1f))
             }
@@ -325,7 +396,9 @@ fun HomeQuickActionCard(
     modifier: Modifier = Modifier,
     badgeCount: Int = 0,
 ) {
-    val pastel = subjectSurface(action.colorHex) ?: MaterialTheme.colorScheme.secondaryContainer
+    // #331 : la petite pastille garde sa teinte en sombre (alpha de la couleur
+    // brute) au lieu du pas −60 % qui rendait les quatre accès bruns.
+    val pastel = subjectBadgeSurface(action.colorHex) ?: MaterialTheme.colorScheme.secondaryContainer
     val ink = subjectContent(action.colorHex) ?: MaterialTheme.colorScheme.onSurface
     PapCard(
         modifier = modifier,
@@ -375,6 +448,14 @@ fun HomeQuickActionCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            // La tuile ouvre un écran : le chevron est décoratif (la carte porte
+            // déjà `Role.Button`), mais il rend la destination visible.
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }

@@ -461,10 +461,12 @@ describe("unit android accueil (#143)", () => {
     expect(cards).toContain("onOpen(action.route)");
     expect(screen).not.toContain("NavController");
     expect(screen).toContain("onOpen: (String) -> Unit");
-    // Les trois boutons « Ouvrir … » pleine largeur ont disparu : plus aucun
-    // `Button` dans l'écran (les citations du KDoc ne comptent pas).
-    expect(screen).not.toContain("material3.Button");
-    expect(screen).not.toContain("Button(");
+    // Les trois boutons « Ouvrir … » pleine largeur ont disparu. #331 ajoute
+    // UNE exception : l'action de l'état vide (Actualiser / Appairer), qui est
+    // une impasse sans elle. Aucun bouton pleine largeur ne revient.
+    expect(screen).toContain("Button(onClick = { refresh() })");
+    expect(screen).toContain("Button(onClick = { onOpen(ROUTE_PAIRING) })");
+    expect(screen).not.toContain("Button(modifier = Modifier.fillMaxWidth())");
     // Les temps passent par le helper partagé du module, jamais par un ISO.
     expect(screen).toContain("relativeTimeFr(");
     expect(screen).not.toContain("nowIso");
