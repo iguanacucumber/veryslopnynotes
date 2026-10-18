@@ -231,14 +231,14 @@ shell() {
       printf '%s\\n' "$*" >> "$HARNESS/uimode.log" ;;
     cat)
       # #160 : le dump ne porte QUE les libellés du témoin de l'accueil (le
-      # titre de barre du haut « Accueil » + « Afficher plus » d'une carte
-      # widget). Un fichier \`texts\` présent le remplace ligne par ligne : c'est
-      # ainsi qu'on rejoue un écran dont le texte a changé.
+      # titre de barre du haut « Accueil » + « DEVOIRS » d'une carte widget).
+      # Un fichier \`texts\` présent le remplace ligne par ligne : c'est ainsi
+      # qu'on rejoue un écran dont le texte a changé.
       if [ -f "$H/texts" ]; then
         while IFS= read -r t; do printf '<node text="%s"/>' "$t"; done < "$H/texts"
         printf '\\n'
       else
-        printf '<node text="Accueil"/><node text="Afficher plus \\342\\206\\227"/>\\n'
+        printf '<node text="Accueil"/><node text="DEVOIRS"/>\\n'
       fi ;;
     *) : ;;
   esac
@@ -396,7 +396,7 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
     // qu'on vient de construire, donc on installe — puis on relit sur l'appareil.
     expect(r.installs).toEqual([sha256("APK v1\n")]);
     expect(h.installedSha()).toBe(sha256("APK v1\n"));
-    expect(r.out).toContain("shot : route vérifiée (« Accueil » + « Afficher plus »).");
+    expect(r.out).toContain("shot : route vérifiée (« Accueil » + « DEVOIRS »).");
     // Le fichier existe et n'est pas vide. Son OCTET exact dépend de la machine
     // (PNG si ImageMagick est là, tampon brut sinon) : blank_verdict, lui, vient
     // de décider que l'image est rendue — c'est ce verdict qui compte.
