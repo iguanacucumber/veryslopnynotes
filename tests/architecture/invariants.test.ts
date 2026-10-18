@@ -23,7 +23,7 @@ function list(dir: string): string[] {
 
 describe("invariants", () => {
   // I1 repointé #200 puis #205 : seul `android/pronote/` parle Pronote en
-  // direct ; depuis #205, `data`/`ui` manipulent les TYPES du client local
+  // direct ; depuis #205, `data`/`app` manipulent les TYPES du client local
   // (dépendance `project(":pronote")`, ADR-003) — câblage sanctionné, pas un
   // hôte. Le mot reste interdit partout ailleurs dans `android/` ; la
   // déclaration du module dans `settings.gradle.kts` est l'unique mention
@@ -49,7 +49,7 @@ describe("invariants", () => {
 
   test("I1: le module direct est déclaré une fois, et il existe", () => {
     const settings = readFileSync(join(ROOT, "android", "settings.gradle.kts"), "utf8");
-    expect(settings).toContain('include(":app", ":core", ":data", ":ui", ":pronote")');
+    expect(settings).toContain('include(":app", ":core", ":data", ":pronote")');
     expect(list(join(ROOT, "android", "pronote")).filter((f) => f.endsWith(".kt")).length).toBeGreaterThan(0);
   });
 
@@ -174,30 +174,22 @@ describe("invariants", () => {
   //
   // Le défaut qu'il traque, sans exception tolérée : un `fun`/`class` de premier
   // niveau dont le nom n'apparaît nulle part ailleurs dans le code Kotlin. C'est
-  // ce que laisse une refonte quand elle remplace un composant (`HomeworkHelpButton`
-  // mort depuis #161) ou un paramètre (`AppNav.loadAlerts`, mort depuis #144) :
+  // ce que laisse une refonte quand elle remplace un composant ou un paramètre :
   // le code compile, il est lu, il est relu à chaque revue, et il n'arrive
-  // JAMAIS à l'écran.
+  // JAMAIS à l'écran. Le cutover WebView (#333) a fait tomber les helpers qui
+  // n'existaient que pour Compose (`enumFr`, `dayLabelFr`, écrans…) : ils sont
+  // supprimés avec `android/ui/`, pas ajoutés à la liste.
   //
-  // Trois noms sont tolérés, et chacun est un MIROIR TS testé ailleurs :
-  // `lessonBadgeLabel`/`timetableDayLabel` rejoués par `android-timetable.test.ts`,
-  // `parseQrPayload` par `android-pairing-sse.test.ts`. Supprimer ces trois
-  // fonctions supprimerait ce qu'elles vérifient : c'est la LISTE qui est
-  // gardée, pas le code.
-  //
-  // Quatre noms de plus, et chacun est le POINT D'ENTRÉE du port Kotlin (#203),
-  // rejoué par les miroirs `tests/unit/android-*.test.ts` (la parité
-  // différentielle `kotlin-domain-parity` est supprimée en #210 avec le
-  // serveur) : leurs appelants applicatifs arrivent avec #205 (repositories
-  // locaux). Ce ne sont pas des restes de refonte, c'est du code vivant sans
-  // appelant remarqué — la liste les garde jusqu'au branchement.
+  // `parseQrPayload` est toléré parce qu'il est un MIROIR TS testé par
+  // `android-pairing-sse.test.ts` : supprimer la fonction supprimerait ce que le
+  // miroir vérifie. Les noms restants sont les points d'entrée du port Kotlin
+  // encore rejoués par les miroirs `tests/unit/android-*.test.ts` (jobs, IA,
+  // moyennes) : la liste les garde jusqu'à leur branchement applicatif.
   test("I9: android sans code mort (aucun fun/class jamais appele)", () => {
     const files = list(join(ROOT, "android")).filter((f) => f.endsWith(".kt"));
     const code = files.map((f) => codeOnly(readFileSync(f, "utf8"))).join("\n");
     const tolere = new Set([
       "MainActivity",
-      "lessonBadgeLabel",
-      "timetableDayLabel",
       "parseQrPayload",
       // Port Kotlin #203 : points d'entrée rejoués par les miroirs, branchés en #205.
       "subjectAverage",
@@ -241,9 +233,6 @@ describe("invariants", () => {
       // (`android-discussions.test.ts`, `android-attendance.test.ts`). Pas des
       // restes de refonte : supprimer ces fonctions supprimerait ce qu'elles
       // vérifient (même statut que `lessonBadgeLabel` ci-dessus).
-      "conversationTimeLabel",
-      "messageTimeLabel",
-      "absenceDateSpan",
     ]);
     const morts: string[] = [];
     for (const f of files) {
@@ -333,7 +322,7 @@ describe("invariants", () => {
       "QrLoginOptions",
     ]);
     const bad: string[] = [];
-    for (const mod of ["app", "core", "data", "ui"]) {
+    for (const mod of ["app", "core", "data"]) {
       for (const f of list(join(ROOT, "android", mod))) {
         if (!f.endsWith(".kt")) continue;
         const src = codeOnly(readFileSync(f, "utf8"));

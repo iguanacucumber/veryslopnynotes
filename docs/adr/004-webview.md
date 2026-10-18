@@ -27,8 +27,9 @@ violerait ADR-003 et I8.
 - Le pont ne reçoit/renvoie **jamais** le jeton de session ni la clé LLM. Il
   expose des lectures/écritures sémantiques ; le Kotlin garde la session, le
   Keystore, le cache et les appels Pronote/OpenRouter.
-- `WEB_UI` (propriété Gradle/env) garde Compose par défaut pendant la
-  migration. Le cutover supprime `android/ui/` et les dépendances Compose.
+- Le cutover est fait : `android/ui/` et les dépendances Compose sont
+  supprimés. Tout build APK dépend de `bun run build:web` (tâche Gradle
+  `preBuild`), et `MainActivity` monte toujours `NativeWebShell`.
 - L'app web tourne aussi dans Chromium avec un pont factice
   (`web/src/bridge/mock.ts`) pour Playwright et le développement.
 

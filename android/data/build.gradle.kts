@@ -29,7 +29,7 @@ dependencies {
     // ponytail: OkHttp seul client HTTP (allowlist serveur).
     // #212 : `api` et non `implementation` — le constructeur public
     // OpenRouterLlm(..., client: OkHttpClient) expose le type à l'appelant
-    // (ui/Assignments.kt), qui doit le voir sur sa classe de chemin.
+    // (app/VsnBridge.kt), qui doit le voir sur sa classe de chemin.
     api("com.squareup.okhttp3:okhttp:4.12.0")
     // #15 : stockage token sécurisé (EncryptedSharedPreferences, Apache-2.0).
     // Version épinglée, licence MIT-compatible, justifiée en PR.

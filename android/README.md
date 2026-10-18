@@ -1,4 +1,4 @@
-# android/ — client natif Kotlin + Compose
+# android/ — client natif Kotlin + frontend React en WebView
 
 Règle d'or réseau : le téléphone parle à l'établissement en direct
 (`android/pronote/`, ADR-003), jamais à un hôte tiers. Plus aucun client HTTP
@@ -7,8 +7,11 @@ device-only) ; le seul hôte choisi à l'exécution est le scraper de manuels
 (allowlist `core/ServerConfig`, jamais en dur), pas de WebView distante. Voir
 `docs/architecture/INVARIANTS.md` (I1) et `core/ServerConfig`.
 
-Modules : `app/` (Activity + navigation), `core/` (config allowlist),
-`data/` (session + dépôts locaux), `ui/` (écrans Compose Material3).
+Modules : `app/` (Activity, WebView + pont natif), `core/` (config allowlist +
+logique pure), `data/` (session + dépôts locaux), `pronote/` (client direct).
+L'interface est l'app React de `web/`, construite par Vite dans
+`app/src/main/assets/web/` et servie par la WebView (ADR-004). Aucun module
+Compose : `android/ui/` est supprimé.
 
 ## Serveur facultatif : scraper de manuels
 
@@ -52,15 +55,16 @@ seule preuve de détention). Le QR et son PIN ne quittent pas l'appareil : le
 PIN déchiffre `login`+`jeton` en mémoire, au moment de l'appairage, et n'est
 ni persisté, ni journalisé.
 
-Le QR se **scanne** (`ui/QrScanner.kt`, `zxing-android-embedded`
-4.3.0 : décodeur dans l'APK, permission CAMERA déclarée par l'AAR et demandée par
-l'activité de scan, ~20 lignes d'appel, pas d'aperçu à maintenir). Ça marche
+Le QR se **scanne** (`app/VsnBridge.kt` via `ScanContract`,
+`zxing-android-embedded` 4.3.0 : décodeur dans l'APK, permission CAMERA déclarée
+par l'AAR et demandée par l'activité de scan, ~20 lignes d'appel, pas d'aperçu à
+maintenir). Ça marche
 donc partout, **y compris sans Google Play Services** — ce que ne faisait pas le
 Google Code Scanner de #122, dont le module était téléchargé à la demande par un
 service absent (émulateur, téléphone sans GMS) et dont l'échec revenait en `null`
 sans rien afficher, donc un bouton qui semblait inerte. Annulation,
 permission refusée ou QR illisible → `null` **et une phrase qui dit de
-rescanner** ; le scan est verrouillé en portrait (manifeste + `QrScanner.kt`),
+rescanner** ; le scan est verrouillé en portrait (manifeste + activité de scan),
 comme l'écran qui affiche le QR. Un QR sans `url` est illisible pour l'app
 (plus de repli sur une saisie) : `parseSchoolQr` renvoie `null`, même phrase
 « rescane ».
@@ -118,7 +122,13 @@ sinon l'erreur suivante est un `HostnameVerifier`, pas une erreur d'ancre.
 
 ## Build
 
+L'interface est construite par Bun/Vite **avant** Gradle : `preBuild` dépend de
+la tâche `buildWebUi` (`bun run build:web`), qui écrit dans
+`app/src/main/assets/web/` (gitignoré). Un build APK sans `bun` échoue donc
+bruyamment plutôt que d'embarquer une UI absente.
+
 ```sh
+bun run build:web   # optionnel : build seul de l'interface
 make buildDebugApk
 make updateApkToPhone   # construit l'APK debug et l'installe (données conservées)
 make buildRelApk   # APK + AAB release, signés (custom si STORE_FILE, sinon debug #297)

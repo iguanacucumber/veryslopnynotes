@@ -24,8 +24,8 @@ import java.net.URLDecoder
 // requête hors de cette origine est refusée, et le pont natif est le seul
 // accès aux données (`VsnBridge`). CSP de `index.html` : `connect-src 'none'`.
 //
-// `NativeWebShell` n'est instanciée que si `BuildConfig.WEB_UI` est vrai ;
-// Compose reste le chemin par défaut.
+// `NativeWebShell` est l'unique interface de l'activité (ADR-004) : plus de
+// chemin Compose.
 
 /** Origine servie par `shouldInterceptRequest` ; jamais résolue par le réseau. */
 const val WEB_ASSET_HOST = "appassets.androidplatform.net"

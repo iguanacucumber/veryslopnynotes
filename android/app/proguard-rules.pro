@@ -12,11 +12,9 @@
 #   « intentionally empty » (la bibliothèque est sûre à rétrécir).
 # - Composants déclarés au manifest (MainActivity) : AGP génère le keep depuis
 #   le manifest fusionné.
-# - Compose, navigation, OkHttp : références statiques, aucune réflexion sur un
+# - OkHttp, zxing, WorkManager : références statiques, aucune réflexion sur un
 #   nom de classe (aucun `Class.forName`/`getIdentifier` dans android/), donc
-#   rien à garder par leur nom.
-#
-# Si un `-keep` devient nécessaire, l'ajouter ICI avec la raison mesurée (build
+#   rien à garder par leur nom.# Si un `-keep` devient nécessaire, l'ajouter ICI avec la raison mesurée (build
 # ou smoke test qui échoue) — jamais « au cas où ».
 #
 # Règle exigée par le BUILD (R8 refuse de compiler sans elle) : le chiffrement

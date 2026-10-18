@@ -14,8 +14,8 @@ typecheck:
 	bunx tsc --noEmit
 
 # Frontend React : typecheck + build local + tests. Le build écrit dans
-# `android/app/src/main/assets/web/` (gitignoré) ; Gradle le refait quand
-# WEB_UI=true.
+# `android/app/src/main/assets/web/` (gitignoré) ; Gradle le refait à chaque
+# `preBuild` (c'est l'interface de l'APK, ADR-004).
 web-typecheck:
 	bun run typecheck:web
 
@@ -78,10 +78,10 @@ android-compile:
 	  echo "android-compile : JDK $$jdk, SDK $$sdk"; \
 	  cd android && { \
 	    JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --offline --console=plain \
-	      :core:compileDebugKotlin :data:compileDebugKotlin :ui:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin || \
+	      :core:compileDebugKotlin :data:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin || \
 	    { echo "android-compile : REPLI EN LIGNE (cache Gradle incomplet — hors-ligne refusé)."; \
 	      JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain \
-	        :core:compileDebugKotlin :data:compileDebugKotlin :ui:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin; }; \
+	        :core:compileDebugKotlin :data:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin; }; \
 	  }; \
 	fi
 
@@ -113,6 +113,7 @@ shot:
 	JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" agents/runtime/shot.sh $(ROUTE) $(SHOT_ARGS)
 
 # APK debug : clé de signature de debug (hors repo, générée par Gradle).
+# `preBuild` lance `bun run build:web` : l'APK embarque toujours web/ à jour.
 buildDebugApk:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
