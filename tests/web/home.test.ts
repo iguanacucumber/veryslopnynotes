@@ -1,3 +1,5 @@
+import { useParisTz } from "./setup";
+
 import { describe, expect, test } from "bun:test";
 import { isoDay, startOfWeek } from "../../web/src/lib/format";
 import {
@@ -36,6 +38,8 @@ import {
   weekQuery,
   weekStartFrom,
 } from "../../web/src/features/timetable/week";
+
+useParisTz();
 
 // Dates construites en LOCAL : les tests ne dépendent pas du fuseau de la CI.
 const local = (day: number, hour = 8, minute = 0): string =>

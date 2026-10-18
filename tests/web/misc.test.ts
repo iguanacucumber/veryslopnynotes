@@ -1,11 +1,13 @@
+import { useParisTz } from "./setup";
+
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { newsDateLabel, newsGroups, parseNewsPayload } from "../../web/src/features/news/news";
 import {
+  CANTEEN_MAX_DAYS,
   canteenDayLabel,
   canteenMealLabel,
-  canteenStatusLabel,
   parseCanteenPayload,
 } from "../../web/src/features/canteen/canteen";
 import {
@@ -17,6 +19,8 @@ import {
   parseAlertsPayload,
   sanitizeExcerpt,
 } from "../../web/src/features/alerts/alerts";
+
+useParisTz();
 
 const ROOT = join(import.meta.dir, "..", "..");
 
@@ -105,11 +109,37 @@ describe("web cantine", () => {
         ],
       }),
     );
-    expect(week.days.map((d) => d.date)).toEqual([
-      "2026-10-05T00:00:00.000Z",
-      "2026-10-06T00:00:00.000Z",
-    ]);
+    expect(week.days.map((d) => d.date)).toEqual(["2026-10-05", "2026-10-06"]);
     expect(week.days[0]?.meals.map((m) => m.meal)).toEqual(["breakfast"]);
+  });
+
+  test("ignore une date illisible au lieu de la garder comme clé", () => {
+    const week = parseCanteenPayload(
+      JSON.stringify({
+        menus: [
+          menu({ date: "pas une date" }),
+          menu({ date: "2026-10-05T12:00:00.000Z", dishes: ["Pâtes"] }),
+        ],
+      }),
+    );
+    expect(week.days.map((day) => day.date)).toEqual(["2026-10-05"]);
+  });
+
+  test("déduplique date+repas et borne 5000 entrées", () => {
+    const menus = Array.from({ length: 5000 }, (_, index) => ({
+      id: `m${index}`,
+      date: `2026-10-${String(5 + (index % 2)).padStart(2, "0")}T12:00:00.000Z`,
+      meal: index % 3 === 0 ? "breakfast" : index % 3 === 1 ? "lunch" : "dinner",
+      dishes: ["Plat unique"],
+      allergens: ["gluten"],
+    }));
+    const week = parseCanteenPayload(JSON.stringify({ menus }));
+    expect(week.days.length).toBeLessThanOrEqual(CANTEEN_MAX_DAYS);
+    for (const day of week.days) {
+      expect(day.meals.length).toBeLessThanOrEqual(3);
+      const keys = day.meals.map((meal) => `${meal.date}|${meal.meal}`);
+      expect(new Set(keys).size).toBe(keys.length);
+    }
   });
 
   test("lit l’enveloppe factice et rend l’état vide sans erreur", () => {
@@ -141,19 +171,9 @@ describe("web cantine", () => {
   test("libellés français, jamais le jeton brut", () => {
     expect(canteenMealLabel("lunch")).toBe("Déjeuner");
     expect(canteenMealLabel("brunch")).toBe("Repas");
-    expect(canteenStatusLabel("served")).toBe("Servi");
-    expect(canteenStatusLabel("mystere")).toBe("Statut inconnu");
-    expect(canteenStatusLabel(null)).toBeNull();
     expect(canteenDayLabel("2026-10-05T12:00:00.000Z")).toContain("octobre 2026");
+    expect(canteenDayLabel("2026-10-05")).toContain("octobre 2026");
     expect(canteenDayLabel("pas une date")).toBe("");
-  });
-
-  test("solde borné, absent si non publié", () => {
-    const withBalance = parseCanteenPayload(
-      JSON.stringify({ menus: [], balance: { balance: 12.5, currency: "€" } }),
-    );
-    expect(withBalance.balance?.amount).toBe("12,50 € (solde)");
-    expect(parseCanteenPayload(JSON.stringify({ menus: [] })).balance).toBeNull();
   });
 });
 

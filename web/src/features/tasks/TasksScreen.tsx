@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../../bridge/client";
 import { useApp, useResource } from "../../ui/AppContext";
 import { Card, EmptyState, ErrorBox, Loading, Page, Section, StaleBadge } from "../../ui/components";
@@ -7,8 +7,8 @@ import { subjectColor } from "../../lib/format";
 import {
   assignmentCardText,
   assignmentSections,
+  assignmentsInWeek,
   dueLabel,
-  hasWeekBounds,
   parseAssignmentsPayload,
   shiftWeek,
   subjectDisplayFr,
@@ -16,6 +16,7 @@ import {
   weekEndOf,
   weekLabelFr,
   weekRangeFr,
+  weekStartOf,
   type Assignment,
   type AssignmentAttachment,
 } from "./assignments";
@@ -30,22 +31,75 @@ type HelpState = {
 
 type LlmState = { configured: boolean | null; error: string | null };
 
+/** La semaine est TOUJOURS bornée localement : sans elle, un payload sans
+ *  `weekStart` rendrait la navigation impossible et l'écran piégerait
+ *  l'utilisateur sur une semaine qu'il ne peut plus quitter. */
 export function TasksScreen() {
+  const [week, setWeek] = useState(() => weekStartOf(new Date()));
+  const currentWeek = weekStartOf(new Date());
+  const end = weekEndOf(week);
+  const range = weekRangeFr(week, end);
+
+  return (
+    <Page>
+      <Card className="card--flat">
+        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Semaine précédente"
+            onClick={() => setWeek((value) => shiftWeek(value, -1))}
+          >
+            <IconChevronLeft />
+          </button>
+          <span className="t-caption">
+            {weekLabelFr(week)}
+            {range ? ` · ${range}` : ""}
+          </span>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Semaine suivante"
+            onClick={() => setWeek((value) => shiftWeek(value, 1))}
+          >
+            <IconChevronRight />
+          </button>
+        </div>
+        {week !== currentWeek ? (
+          <div className="row" style={{ justifyContent: "center", marginTop: 6 }}>
+            <button type="button" className="btn btn--ghost btn--small" onClick={() => setWeek(currentWeek)}>
+              Revenir à la semaine en cours
+            </button>
+          </div>
+        ) : null}
+      </Card>
+
+      <TasksWeek key={week} week={week} />
+    </Page>
+  );
+}
+
+function TasksWeek({ week }: { week: string }) {
   const { notify, refreshTick } = useApp();
-  const [week, setWeek] = useState("");
-  const query = week ? `weekStart=${week}` : "";
+  const query = `weekStart=${week}`;
   const resource = useResource("assignments", query);
   const parsed = useMemo(() => parseAssignmentsPayload(resource.payload), [resource.payload]);
-  const [items, setItems] = useState<Assignment[]>(parsed.items);
+  // Un payload en cache peut appartenir à une autre semaine : on ne garde que
+  // les échéances de la semaine affichée.
+  const visible = useMemo(() => assignmentsInWeek(parsed.items, week), [parsed.items, week]);
+  const mismatched = parsed.items.length > 0 && visible.length === 0;
+  const [items, setItems] = useState<Assignment[]>(visible);
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [doneOpen, setDoneOpen] = useState(false);
   const [help, setHelp] = useState<HelpState | null>(null);
   const [llm, setLlm] = useState<LlmState>({ configured: null, error: null });
+  const helpSeq = useRef(0);
+  const toggleSeq = useRef(new Map<string, number>());
 
   // Le payload fait foi : un rafraîchissement remplace l'état optimiste.
   useEffect(() => {
-    setItems(parsed.items);
-  }, [parsed]);
+    setItems(visible);
+  }, [visible]);
 
   useEffect(() => {
     let alive = true;
@@ -69,28 +123,30 @@ export function TasksScreen() {
   }, [refreshTick]);
 
   const sections = useMemo(() => assignmentSections(items, new Date()), [items]);
-  const bounds = hasWeekBounds(parsed);
-  const displayStart = week || parsed.weekStart;
-  const displayEnd = displayStart ? weekEndOf(displayStart) : parsed.weekEnd;
 
   async function toggle(assignment: Assignment, next: boolean) {
     if (pending[assignment.id]) return;
+    const seq = (toggleSeq.current.get(assignment.id) ?? 0) + 1;
+    toggleSeq.current.set(assignment.id, seq);
     setPending((state) => ({ ...state, [assignment.id]: true }));
     setItems((list) => list.map((item) => (item.id === assignment.id ? { ...item, done: next } : item)));
     try {
       const result = await bridge.toggleAssignment(assignment.id, next);
       if (!result.ok) throw new Error(result.error || "Le devoir n'a pas pu être mis à jour.");
     } catch (e) {
+      if (toggleSeq.current.get(assignment.id) !== seq) return;
       setItems((list) =>
         list.map((item) => (item.id === assignment.id ? { ...item, done: assignment.done } : item)),
       );
       notify(e instanceof Error ? e.message : "Bascule impossible, retour arrière.", "error");
     } finally {
-      setPending((state) => {
-        const nextState = { ...state };
-        delete nextState[assignment.id];
-        return nextState;
-      });
+      if (toggleSeq.current.get(assignment.id) === seq) {
+        setPending((state) => {
+          const nextState = { ...state };
+          delete nextState[assignment.id];
+          return nextState;
+        });
+      }
     }
   }
 
@@ -104,9 +160,11 @@ export function TasksScreen() {
   }
 
   async function askHelp(assignment: Assignment) {
+    const seq = ++helpSeq.current;
     setHelp({ id: assignment.id, loading: true, answer: null, refusal: null, error: null });
     try {
       const result = await bridge.askHomework(assignment.id);
+      if (seq !== helpSeq.current) return;
       if (result.refused) {
         setHelp({
           id: assignment.id,
@@ -135,6 +193,7 @@ export function TasksScreen() {
         });
       }
     } catch (e) {
+      if (seq !== helpSeq.current) return;
       setHelp({
         id: assignment.id,
         loading: false,
@@ -152,7 +211,7 @@ export function TasksScreen() {
       ? "Vérification de l'assistant…"
       : "Clé LLM absente : renseigne-la dans Réglages pour activer l'assistant.");
 
-  if (resource.loading && items.length === 0) {
+  if ((resource.loading || mismatched) && items.length === 0) {
     return (
       <Page>
         <Loading label="Chargement des devoirs…" />
@@ -185,35 +244,6 @@ export function TasksScreen() {
           </button>
         </div>
       </div>
-
-      {bounds && displayStart ? (
-        <Card className="card--flat">
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="Semaine précédente"
-              onClick={() => setWeek(shiftWeek(displayStart, -1))}
-            >
-              <IconChevronLeft />
-            </button>
-            <span className="t-caption">
-              {weekLabelFr(displayStart)}
-              {weekRangeFr(displayStart, displayEnd ? displayEnd : null)
-                ? ` · ${weekRangeFr(displayStart, displayEnd ? displayEnd : null)}`
-                : ""}
-            </span>
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="Semaine suivante"
-              onClick={() => setWeek(shiftWeek(displayStart, 1))}
-            >
-              <IconChevronRight />
-            </button>
-          </div>
-        </Card>
-      ) : null}
 
       {resource.error ? <ErrorBox message={resource.error} /> : null}
 
@@ -341,7 +371,11 @@ function AssignmentCard({
         </span>
         <div className="grow" style={{ opacity: dim }}>
           <strong style={{ display: "block" }}>{subjectDisplayFr(assignment.subject)}</strong>
-          {text.title ? <span>{text.title}</span> : null}
+          {text.title ? (
+            <h3 className="t-title" style={{ margin: 0, fontSize: 16 }}>
+              {text.title}
+            </h3>
+          ) : null}
           {dueLabel(assignment.dueDate) ? (
             <span className="tiny muted" style={{ display: "block", marginTop: 2 }}>
               {dueLabel(assignment.dueDate)}
@@ -399,8 +433,7 @@ function AssignmentCard({
         </button>
         <button
           type="button"
-          role="checkbox"
-          aria-checked={assignment.done}
+          aria-pressed={assignment.done}
           aria-label={`${assignment.done ? "Marquer à faire" : "Marquer fait"} : ${assignment.title}`}
           className={assignment.done ? "chip chip--active" : "chip"}
           disabled={busy}
@@ -415,8 +448,7 @@ function AssignmentCard({
         <div
           role="region"
           aria-label={`Aide devoirs — ${assignment.subject}`}
-          aria-live="polite"
-          style={{
+          aria-live="polite"          style={{
             marginTop: 10,
             padding: 12,
             borderRadius: "var(--radius-sm)",
@@ -432,7 +464,7 @@ function AssignmentCard({
               Fermer
             </button>
           </div>
-          {help.loading ? <span role="status">L’assistant rédige…</span> : null}
+          {help.loading ? <span>L’assistant rédige…</span> : null}
           {help.answer ? (
             <p className="t-body-m" style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
               {help.answer}

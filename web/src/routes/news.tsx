@@ -10,6 +10,7 @@ import {
   parseNewsPayload,
   type NewsItem,
 } from "../features/news/news";
+import { loadNewsReadIds, markNewsRead } from "../features/news/readState";
 
 function NewsCard({
   item,
@@ -18,7 +19,7 @@ function NewsCard({
 }: {
   item: NewsItem;
   read: boolean;
-  onMarkRead: (id: string) => void;
+  onMarkRead: (id: string, title: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const collapsible = item.body.length > NEWS_BODY_PREVIEW;
@@ -59,7 +60,7 @@ function NewsCard({
           type="button"
           className="btn btn--ghost btn--small"
           aria-label={`Marquer l’actualité « ${item.title} » comme lue`}
-          onClick={() => onMarkRead(item.id)}
+          onClick={() => onMarkRead(item.id, item.title)}
         >
           Marquer comme lue
         </button>
@@ -72,14 +73,19 @@ export default function NewsRoute() {
   const resource = useResource("news");
   const items = useMemo(() => parseNewsPayload(resource.payload), [resource.payload]);
   const groups = useMemo(() => newsGroups(items), [items]);
-  const [readIds, setReadIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [readIds, setReadIds] = useState<ReadonlySet<string>>(() => loadNewsReadIds());
+  const [announcement, setAnnouncement] = useState("");
 
-  const markRead = (id: string) => {
-    setReadIds((previous) => new Set(previous).add(id));
+  const markRead = (id: string, title: string) => {
+    setReadIds(markNewsRead(id));
+    setAnnouncement(`Actualité « ${title} » marquée comme lue.`);
   };
 
   return (
     <Page>
+      <p className="sr-only" role="status">
+        {announcement}
+      </p>
       {resource.stale ? (
         <div className="row row--between">
           <span className="tiny muted">Dernières actualités en cache.</span>

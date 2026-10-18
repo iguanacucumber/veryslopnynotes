@@ -1,9 +1,15 @@
+import { useParisTz } from "./setup";
+
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
+  ASSIGNMENTS_MAX_ITEMS,
   assignmentCardText,
   assignmentDate,
   assignmentDayKey,
   assignmentSections,
+  assignmentsInWeek,
   dueLabel,
   foldFr,
   parseAssignment,
@@ -14,12 +20,18 @@ import {
   weekEndOf,
   weekLabelFr,
   weekRangeFr,
+  weekStartOf,
 } from "../../web/src/features/tasks/assignments";
 import {
   parseRevisionSheet,
   parseRevisionSheets,
   revisionDateLabel,
+  SHEET_MAX_BODY,
+  SHEET_MAX_SOURCES,
+  SHEETS_MAX_ITEMS,
 } from "../../web/src/features/revisions/sheets";
+
+useParisTz();
 
 const NOW = new Date(2026, 9, 21, 12, 0, 0); // mercredi 21 octobre 2026, midi local
 
@@ -59,10 +71,29 @@ describe("web tâches — parsing défensif", () => {
     expect(parseAssignment({ ...VALID, attachments: [{ id: "x", label: "x", ref: "https://pronote/x" }] })).toBeNull();
     expect(parseAssignment({ ...VALID, attachments: [{ id: "x", label: "x", ref: "data:application/pdf;base64,AA" }] })).toBeNull();
     expect(parseAssignment({ ...VALID, attachments: [{ id: "x", label: "x", ref: "homework\\0" }] })).toBeNull();
+    expect(parseAssignment({ ...VALID, attachments: [{ id: "x", label: "x", ref: "file:///tmp/x" }] })).toBeNull();
+    expect(parseAssignment({ ...VALID, attachments: [{ id: "x", label: "x", ref: "/tmp/x" }] })).toBeNull();
+    expect(parseAssignment({ ...VALID, attachments: [{ id: "x", label: "x", ref: "homework:../x" }] })).toBeNull();
     expect(parseAssignment({ ...VALID, attachments: [], description: "x".repeat(2001) })).toBeNull();
     expect(
       parseAssignment({ ...VALID, lessonContent: { title: "", excerpt: "cours" } }),
     ).toBeNull();
+  });
+
+  test("borne les pièces jointes et les textes de cours", () => {
+    const attachments = Array.from({ length: 12 }, (_, index) => ({
+      id: `att${index}`,
+      label: `fichier-${index}.pdf`,
+      ref: `homework:1:file:0:att${index}`,
+    }));
+    const parsed = parseAssignment({
+      ...VALID,
+      attachments,
+      lessonContent: { title: "t".repeat(300), excerpt: "e".repeat(6000) },
+    });
+    expect(parsed?.attachments).toHaveLength(10);
+    expect(parsed?.lessonContent?.title).toHaveLength(200);
+    expect(parsed?.lessonContent?.excerpt).toHaveLength(500);
   });
 
   test("nettoie les caractères de contrôle et garde le texte comme donnée", () => {
@@ -79,6 +110,18 @@ describe("web tâches — parsing défensif", () => {
     const ranged = parseAssignmentsPayload(payload([], { from: "2026-10-19", to: "2026-10-25" }));
     expect(ranged.weekStart).toBe("2026-10-19");
     expect(ranged.weekEnd).toBe("2026-10-25");
+  });
+
+  test("borne le scan, l'acceptation et déduplique par id", () => {
+    const many = Array.from({ length: 5000 }, (_, index) => ({ ...VALID, id: `a${index}` }));
+    const parsed = parseAssignmentsPayload(payload(many));
+    expect(parsed.items).toHaveLength(ASSIGNMENTS_MAX_ITEMS);
+    expect(new Set(parsed.items.map((item) => item.id)).size).toBe(ASSIGNMENTS_MAX_ITEMS);
+
+    const duplicates = parseAssignmentsPayload(
+      payload([{ ...VALID, id: "same" }, { ...VALID, id: "same" }, { ...VALID, id: "other" }]),
+    );
+    expect(duplicates.items.map((item) => item.id)).toEqual(["same", "other"]);
   });
 });
 
@@ -130,7 +173,7 @@ describe("web tâches — sections", () => {
     ]);
   });
 
-  test("le fait prime sur la date et une date illisible ne fabrique ni retard ni jour", () => {
+  test("le fait prime sur la date et une date illisible reste visible sans échéance", () => {
     const items = parseAssignmentsPayload(
       payload([
         { ...VALID, id: "future-done", dueDate: "2026-12-01T18:00:00.000Z", done: true },
@@ -138,8 +181,9 @@ describe("web tâches — sections", () => {
       ]),
     ).items;
     const sections = assignmentSections(items, NOW);
-    expect(sections.map((section) => section.id)).toEqual(["done"]);
-    expect(sections[0]?.items[0]?.id).toBe("future-done");
+    expect(sections.map((section) => section.id)).toEqual(["undated", "done"]);
+    expect(sections[0]?.items[0]?.id).toBe("undated");
+    expect(sections[1]?.items[0]?.id).toBe("future-done");
   });
 
   test("trie chaque section par échéance", () => {
@@ -150,6 +194,41 @@ describe("web tâches — sections", () => {
       ]),
     ).items;
     expect(assignmentSections(items, NOW)[0]?.items.map((item) => item.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("web tâches — navigation de semaine", () => {
+  test("la semaine courante démarre un lundi et aller/retour revient au même jour", () => {
+    const start = weekStartOf(NOW);
+    expect(start).toBe("2026-10-19");
+    expect(shiftWeek(start, 1)).toBe("2026-10-26");
+    expect(shiftWeek(shiftWeek(start, 1), -1)).toBe(start);
+  });
+
+  test("un payload d'une autre semaine ne fuit pas sous le nouvel en-tête", () => {
+    const items = parseAssignmentsPayload(
+      payload([
+        { ...VALID, id: "previous", dueDate: "2026-10-14" },
+        { ...VALID, id: "current", dueDate: "2026-10-21" },
+        { ...VALID, id: "next", dueDate: "2026-10-27" },
+        { ...VALID, id: "undated", dueDate: "illisible" },
+      ]),
+    ).items;
+    expect(assignmentsInWeek(items, "2026-10-19").map((item) => item.id)).toEqual(["current", "undated"]);
+    expect(assignmentsInWeek(items, "2026-10-12").map((item) => item.id)).toEqual(["previous", "undated"]);
+    expect(assignmentsInWeek(items, "2026-10-26").map((item) => item.id)).toEqual(["next", "undated"]);
+    expect(assignmentsInWeek(items, "illisible")).toEqual([]);
+  });
+
+  test("la navigation est rendue même sans weekStart dans le payload", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "features", "tasks", "TasksScreen.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("weekStartOf(new Date())");
+    expect(source).toContain('aria-label="Semaine précédente"');
+    expect(source).toContain('aria-label="Semaine suivante"');
+    expect(source).not.toContain("bounds && displayStart");
   });
 });
 
@@ -210,5 +289,44 @@ describe("web fiches — parsing défensif", () => {
     expect(revisionDateLabel(sheet!)).toContain("17 octobre");
     expect(parseRevisionSheet({ ...SHEET, body: "" })).toBeNull();
     expect(parseRevisionSheet(null)).toBeNull();
+  });
+
+  test("accepte une enveloppe JSON sérialisée", () => {
+    expect(parseRevisionSheets(JSON.stringify({ sheets: [SHEET] }))).toHaveLength(1);
+    expect(parseRevisionSheets(JSON.stringify([SHEET]))).toHaveLength(1);
+    expect(parseRevisionSheets("{")).toEqual([]);
+  });
+
+  test("la fiche ouverte est rendue dans sa carte, avec aria-expanded/controls", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "features", "revisions", "RevisionSheets.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("aria-expanded={opened}");
+    expect(source).toContain("aria-controls={bodyId}");
+    expect(source).toContain("<SheetBody sheet={selected.sheet} />");
+    // Disclosure inline : le corps est rendu DANS la carte de la fiche, après
+    // son déclencheur, jamais dans une carte séparée au-dessus de la liste.
+    expect(source.indexOf("<SheetBody")).toBeGreaterThan(source.indexOf("aria-controls={bodyId}"));
+    expect(source).toContain("closeRef.current?.focus()");
+    expect(source).toContain("triggers.current.get(id)?.focus()");
+  });
+
+  test("borne le scan, les sources et le corps, déduplique par id", () => {
+    const many = Array.from({ length: 5000 }, (_, index) => ({ ...SHEET, id: `rev${index}` }));
+    const parsed = parseRevisionSheets(many);
+    expect(parsed).toHaveLength(SHEETS_MAX_ITEMS);
+    expect(new Set(parsed.map((sheet) => sheet.id)).size).toBe(SHEETS_MAX_ITEMS);
+
+    expect(parseRevisionSheets([SHEET, SHEET, { ...SHEET, id: "other" }])).toHaveLength(2);
+
+    const sources = Array.from({ length: 25 }, (_, index) => `src${index}`);
+    const capped = parseRevisionSheet({
+      ...SHEET,
+      sources,
+      body: "b".repeat(30_000),
+    });
+    expect(capped?.sources).toHaveLength(SHEET_MAX_SOURCES);
+    expect(capped?.body).toHaveLength(SHEET_MAX_BODY);
   });
 });

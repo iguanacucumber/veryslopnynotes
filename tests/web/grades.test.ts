@@ -1,3 +1,5 @@
+import { useParisTz } from "./setup";
+
 import { describe, expect, test } from "bun:test";
 import {
   computeAverages,
@@ -18,6 +20,8 @@ import {
   subjectAlgorithmAverage,
   type Grade,
 } from "../../web/src/features/grades/model";
+
+useParisTz();
 
 let seq = 0;
 
