@@ -16,6 +16,10 @@ perso dans le livrable. Clé signature TOUJOURS hors repo.
 | Gradle / AGP / Kotlin | 8.7 / 8.5.2 / 1.9.24 | wrapper + `build.gradle.kts` | Apache-2.0 |
 | compileSdk/targetSdk/minSdk | 34 / 34 / 26 | `android/app/build.gradle.kts` | — |
 | Compose BOM / OkHttp | 2024.06.00 / 4.12.0 | `android/app/build.gradle.kts` | Apache-2.0 |
+| react / react-dom | 19.1.1 | `package.json` exact + `bun.lock` | MIT |
+| react-router-dom | 7.18.2 | `package.json` exact + `bun.lock` | MIT |
+| vite / @vitejs/plugin-react | 7.3.5 / 5.1.1 | `package.json` exact + `bun.lock` | MIT |
+| esbuild (transitif) | 0.27.2 | `bun.lock` | MIT |
 
 Toutes compatibles MIT (MIT + Apache-2.0). Nouvelle dép = justifiée,
 épinglée, licence MIT-compatible (ADR-001).
@@ -65,6 +69,10 @@ make build   # check-secrets + docker build (skip si daemon absent)
    ```sh
    make buildRelApk   # equivalent : cd android && ./gradlew assembleRelease bundleRelease
    ```
+   L'interface React est construite avant Gradle (`bun run build:web`) et copiée
+   dans les assets de l'APK ; `WEB_UI=true` la sert dans la WebView, sinon
+   Compose reste le défaut pendant la migration. Le build web ne fait aucun
+   appel réseau et n'embarque aucun secret.
    Produit deux artefacts signés :
    - APK : `android/app/build/outputs/apk/release/app-release.apk` (sideload)
    - AAB : `android/app/build/outputs/bundle/release/app-release.aab` (Play Store)
@@ -82,6 +90,7 @@ make build   # check-secrets + docker build (skip si daemon absent)
 ## Check-list avant livrable
 
 - [ ] `make build` OK (ou `check-secrets` + `tsc` si daemon absent).
+- [ ] `make web` OK (typecheck + tests + build local).
 - [ ] `bun audit` : 0 vulnérabilité.
 - [ ] `git status` : aucun `.env*`, `*.keystore`, `*.apk`, donnée perso.
 - [ ] `bun run agents/runtime/check-secrets.ts` : OK.
