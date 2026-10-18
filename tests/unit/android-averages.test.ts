@@ -985,7 +985,8 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     expect(averages).toContain("data class GradesLayout(val content: Boolean, val data: Boolean)");
     expect(screen).toContain("gradesLayout(state, grades, report)");
     // L'écran appelle l'état unique et S'ARRÊTE : rien de contrôles dessous.
-    expect(screen).toMatch(/if \(!layout\.content \|\| !layout\.data\) \{[\s\S]{0,600}?GradesBlankState\(state = state, query = query, onRefresh = \{ refresh\(\) \}\)\n\s*return\n\s*\}/);
+    // #311 : le bouton « Actualiser » de cet état est un geste, donc forcé.
+    expect(screen).toMatch(/if \(!layout\.content \|\| !layout\.data\) \{[\s\S]{0,600}?GradesBlankState\(state = state, query = query, onRefresh = \{ refresh\(force = true\) \}\)\n\s*return\n\s*\}/);
     // Les puces d'algorithme, le titre de section et le carrousel sont APRÈS le
     // retour : avec zéro donnée ils ne sont jamais rendus.
     const guard = screen.indexOf("if (!layout.content || !layout.data) {");
@@ -1047,7 +1048,9 @@ describe("unit android onglet Notes, états et navigation (#162)", () => {
     expect(nav).toContain("if (!Capabilities.visible(capabilities, Capabilities.PUNISHMENTS)) add(ROUTE_SANCTIONS)");
     // La relecture passe par un compteur vu par les deux routes qui l'ont.
     expect(nav).toContain("onRefresh = { readTick++ }");
-    expect(screen).toMatch(/LaunchedEffect\(resource, algorithm, periodId, refreshTick\) \{ refresh\(\) \}/);
+    // #311 : le compteur de relecture rejoue l'effet, et ce rejeu est un GESTE
+    // (`refresh(force = gesture)`) — la première entrée seule ne force pas.
+    expect(screen).toMatch(/LaunchedEffect\(resource, algorithm, periodId, refreshTick\) \{[\s\S]{0,80}?refresh\(force = gesture\)/);
     expect(screen).toContain("refreshTick: Int = 0");
     expect(nav).toContain("refreshTick = readTick");
     // Plus de paramètre de navigation dans les deux écrans qui l'ont perdu.

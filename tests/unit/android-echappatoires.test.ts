@@ -330,7 +330,7 @@ describe("échappatoires #147 : aucun écran ne jette le message du serveur", ()
       "Attendance.kt": "text = error.message",
       "Assignments.kt": "val errorMessage = (state as? UiState.Error)?.message",
       "NewsScreen.kt": "PapErrorState(message = error, onRetry = onRetry)",
-      "CanteenMenus.kt": "PapErrorState(message = error, onRetry = { refresh() })",
+      "CanteenMenus.kt": "PapErrorState(message = error, onRetry = { refresh(force = true) })",
       "MessagesScreen.kt": "PapErrorState(message = error, onRetry = onRetry)",
       "SecurityAlertsScreen.kt": "notice = error",
       "ProfileScreen.kt": "PapErrorState(message = error, onRetry = { refresh() })",
