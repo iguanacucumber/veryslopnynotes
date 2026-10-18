@@ -339,12 +339,13 @@ private val TopBarIconSize = 20.dp
 private val TopBarChipInset = (TopBarChipHit - TopBarChipHeight) / 2
 
 /**
- * Marges horizontales de M3, aux mêmes valeurs que lui : 4 dp autour des icônes
- * (`TopAppBarHorizontalPadding`) et 12 dp de décalage du titre quand rien ne le
- * précède (`TopAppBarTitleInset` = 16 dp - 4 dp) — soit un titre à 16 dp du bord
- * sur les routes racines, la valeur des captures de #135.
+ * Marge latérale des pastilles : 8 dp, le double des 4 dp de M3
+ * (`TopAppBarHorizontalPadding`). Relevé sur les captures #325 : à 4 dp la
+ * pastille de retour et le menu collaient au bord. Le titre d'une route racine
+ * garde en plus [TopBarTitleInset] (12 dp), soit 20 dp du bord ; sur une route
+ * secondaire, il est à 8 dp de la pastille de retour.
  */
-private val TopBarIconInset = 4.dp
+private val TopBarSideInset = 8.dp
 private val TopBarTitleInset = 12.dp
 
 /**
@@ -482,7 +483,7 @@ fun AppTopBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (back != null) {
-                    Box(Modifier.padding(start = TopBarIconInset)) {
+                    Box(Modifier.padding(start = TopBarSideInset)) {
                         IconButton(onClick = { onBack(back) }) {
                             // Pastille circulaire de 40 dp DANS une cible de 48 :
                             // même géométrie que les autres chips de la barre.
@@ -505,7 +506,7 @@ fun AppTopBar(
                 } else if (leading != null) {
                     Box(
                         modifier = Modifier
-                            .padding(start = TopBarIconInset)
+                            .padding(start = TopBarSideInset)
                             // Le slot prend la place laissée par le titre sans
                             // jamais pousser les actions hors de l'écran : il
                             // s'arrête à la largeur restante, le texte ellipsé.
@@ -530,8 +531,8 @@ fun AppTopBar(
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(
-                                    start = if (back != null || leading != null) TopBarIconInset else TopBarTitleInset + TopBarIconInset,
-                                    end = TopBarIconInset,
+                                    start = if (back != null || leading != null) TopBarSideInset else TopBarTitleInset + TopBarSideInset,
+                                    end = TopBarSideInset,
                                 ),
                         ) {
                             // `heading()` : le titre de la barre est le TITRE DE
@@ -553,7 +554,7 @@ fun AppTopBar(
                 }
                 // Slot d'actions contextuelles, une seule source : `TOP_BAR_ACTIONS`.
                 CompositionLocalProvider(LocalContentColor provides colors.actionIconContentColor) {
-                    Box(Modifier.padding(end = TopBarIconInset)) {
+                    Box(Modifier.padding(end = TopBarSideInset)) {
                         TopBarActions(actions = actions, onNavigate = onNavigate, onRefresh = onRefresh)
                     }
                 }

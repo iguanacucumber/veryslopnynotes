@@ -27,6 +27,15 @@ describe("barre du haut façon Papillon (#325)", () => {
     expect(shell).not.toMatch(/Color\(0x/);
   });
 
+  test("marges latérales : 8 dp de chaque côté, titre racine à 20 dp", () => {
+    expect(shell).toContain("private val TopBarSideInset = 8.dp");
+    // Sans pastille, le titre ajoute son inset de 12 dp : 8 + 12 = 20 dp du bord.
+    expect(shell).toContain("TopBarTitleInset + TopBarSideInset");
+    // Les deux extrémités de la rangée portent la même marge.
+    expect(shell).toContain(".padding(start = TopBarSideInset)");
+    expect(shell).toContain(".padding(end = TopBarSideInset)");
+  });
+
   test("actions : une seule pilule, séparateur, et pas de menu vide", () => {
     expect(shell).toContain("val hasRefresh = actions.any { it is TopAction.Refresh }");
     // Un groupe sans relecture ni destination ne peint rien.
