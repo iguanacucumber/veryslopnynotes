@@ -59,6 +59,12 @@ try {
   for (const [name, route] of ROUTES) {
     await page.goto(`${URL_BASE}#${route}`, { waitUntil: "networkidle" });
     await page.locator("h1, h2, strong").first().waitFor();
+    // Les écrans chargent via le pont factice : attendre la fin des spinners
+    // avant de capturer, sinon la preuve montre un état transitoire.
+    await page
+      .waitForFunction(() => !document.querySelector(".spinner"), null, { timeout: 5000 })
+      .catch(() => undefined);
+    await page.waitForTimeout(120);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth + 1,
     );
