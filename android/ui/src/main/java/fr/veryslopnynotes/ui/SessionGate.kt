@@ -21,7 +21,9 @@ import fr.veryslopnynotes.data.SessionStore
 //    rescanner (l'app lit le téléphone, sinon ses caches). Session morte =
 //    store vidé (cap sur l'appairage, sans purger les caches : l'utilisateur
 //    n'a rien demandé) ; réseau KO = on garde tout (la session n'est pas
-//    morte, juste injoignable).
+//    morte, juste injoignable). #313 : AUCUNE session (premier lancement) y
+//    mène aussi, sans notice — le graphe ne lit plus la session pour choisir
+//    sa destination de départ.
 // 2. session morte en cours d'usage — le signal unique des dépôts locaux se
 //    répare par le chemin EXISTANT `accounts.logout()` (session effacée +
 //    caches purgés, aucune purge parallèle) puis ramène à l'appairage.
@@ -46,9 +48,17 @@ fun SessionGate(
             } catch (_: Exception) {
                 RestoreResult.Offline
             }
-            if (outcome is RestoreResult.Dead) {
+            // #313 : le graphe démarre sur l'accueil sans lire la session dans
+            // la composition. Ce portier reste donc la SEULE autorité sur la
+            // destination : « pas de session » (premier lancement) comme
+            // « session morte » (jeton tourné, session refermée) ramènent à
+            // l'appairage. Seule la session morte porte la notice factuelle de
+            // #147 — l'absence de session est un premier lancement, pas une
+            // panne : la notice y serait trompeuse.
+            val notice = (outcome as? RestoreResult.Dead)?.message
+            if (outcome is RestoreResult.Dead || outcome is RestoreResult.NoSession) {
                 main.post {
-                    onNotice(outcome.message)
+                    onNotice(notice)
                     if (nav.currentDestination?.route != ROUTE_PAIRING) {
                         nav.navigate(ROUTE_PAIRING) {
                             popUpTo(nav.graph.findStartDestination().id) { inclusive = true }

@@ -151,9 +151,18 @@ describe("assistant : une seule page, l'adresse vient du QR (#299)", () => {
 
   test("gate au lancement : sans session persistée, on n'ouvre pas l'accueil", () => {
     const nav = read(join(UI, "AppNav.kt"));
-    expect(nav).toContain("startDestination = if (sessions.hasSession()) ROUTE_INDEX else ROUTE_PAIRING");
+    // #313 : le graphe démarre sur l'accueil ; la session n'est PLUS lue dans la
+    // composition (Keystore + EncryptedSharedPreferences se déchiffraient sur le
+    // thread UI avant le premier frame). Seul `SessionGate` décide, après la
+    // restauration, de ramener à l'appairage.
+    expect(nav).toContain("startDestination = ROUTE_INDEX,");
+    expect(nav).not.toContain("hasSession()");
     // Le plancher est la session chiffrée, pas une liste.
     expect(read(join(DATA, "SessionStore.kt"))).toContain("fun hasSession(): Boolean = load() != null");
+    // Le portier couvre les DEUX cas « pas de session utilisable » : session
+    // morte (#113, avec la notice factuelle) et premier lancement (sans notice).
+    const gate = read(join(UI, "SessionGate.kt"));
+    expect(gate).toContain("outcome is RestoreResult.NoSession");
   });
 });
 
