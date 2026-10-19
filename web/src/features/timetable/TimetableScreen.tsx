@@ -15,7 +15,6 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconPin,
-  IconRefresh,
   IconUser,
   IconWarning,
 } from "../../ui/icons";
@@ -204,14 +203,6 @@ function WeekView({
       <Card className="tt-toolbar">
         <div className="tt-toolbar__top">
           <strong className="tt-toolbar__week">{weekLabel(weekStart)}</strong>
-          <button
-            type="button"
-            className="tt-nav"
-            aria-label="Actualiser l’emploi du temps"
-            onClick={resource.refresh}
-          >
-            <IconRefresh />
-          </button>
         </div>
         <div className="tt-toolbar__nav">
           <button

@@ -46,6 +46,7 @@ export default function PairingScreen() {
   const [pairError, setPairError] = useState("");
 
   useEffect(() => {
+    document.title = "Appairage · VerySlopyNyNotes";
     return () => {
       // Quitter l'écran pendant un scan ne doit pas laisser la caméra ouverte.
       void bridge.cancelPairing().catch(() => undefined);

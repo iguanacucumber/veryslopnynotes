@@ -2,6 +2,7 @@ import { useParisTz } from "./setup";
 
 import { describe, expect, test } from "bun:test";
 import {
+  algorithmHint,
   computeAverages,
   formatMark,
   gradeContextLabel,
@@ -294,6 +295,12 @@ describe("mise en forme", () => {
     expect(influenceLabel(0.42)).toBe("+0,42 sur la moyenne");
     expect(influenceLabel(-0.3)).toBe("−0,30 sur la moyenne");
     expect(influenceLabel(0)).toBe("Sans effet sur la moyenne");
+  });
+
+  test("chaque algorithme a une explication courte et distincte", () => {
+    const hints = [algorithmHint("subject"), algorithmHint("weighted"), algorithmHint("median")];
+    expect(hints.every((hint) => hint.length > 10)).toBe(true);
+    expect(new Set(hints).size).toBe(3);
   });
 
   test("contexte de note borné à ce qui est publié", () => {
