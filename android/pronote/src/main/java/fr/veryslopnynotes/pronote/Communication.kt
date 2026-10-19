@@ -167,17 +167,48 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
     var lastResponse: HttpResponse? = null
 
     init {
-        // `getRootAddress` : tout sauf le dernier segment / le dernier segment.
-        val idx = site.lastIndexOf('/')
-        rootSite = if (idx < 0) site else site.substring(0, idx)
-        htmlPage = if (idx < 0) site else site.substring(idx + 1)
+        // `getRootAddress` : l'AUTORITÉ d'abord, puis le dernier segment.
+        val (root, page) = getRootAddress(site)
+        rootSite = root
+        htmlPage = page
         session = HttpSession(if (mobile) PRONOTE_HEADERS_MOBILE else PRONOTE_HEADERS, cookieJar ?: CookieJar())
     }
 
     companion object {
+        /**
+         * Découpe l'adresse d'établissement : l'AUTORITÉ (`scheme://host[:port]`)
+         * D'ABORD, puis le dernier segment du chemin (la requête et le fragment
+         * restent avec ce segment).
+         *
+         * Couper au dernier `/` sans regarder l'AUTORITÉ coupait le schéma
+         * lui-même : un site SANS chemin (`https://host`) donnait `https:/`,
+         * et le POST partait alors sur `https://appelfonction/...` — un autre
+         * hôte — donc l'établissement devenait INUTILISABLE (UnknownHost
+         * Exception : toutes les requêtes échouaient, #429). La référence TS
+         * coupe de la même façon (son `rootSite` vaut `https:/`) et vise, elle,
+         * la page demandée : l'autorité entière.
+         */
         fun getRootAddress(addr: String): Pair<String, String> {
-            val idx = addr.lastIndexOf('/')
-            return if (idx < 0) Pair(addr, addr) else Pair(addr.substring(0, idx), addr.substring(idx + 1))
+            val scheme = addr.indexOf("://")
+            val authorityStart = if (scheme >= 0) scheme + 3 else 0
+            // L'AUTORITÉ s'arrête au premier `/`, `?` ou `#` après le schéma.
+            val authority = addr.substring(authorityStart)
+            val authorityLen = authority.indexOfFirst { it == '/' || it == '?' || it == '#' }
+                .let { if (it < 0) authority.length else it }
+            val authorityEnd = authorityStart + authorityLen
+            // Le CHEMIN s'arrête à la requête (`?`) ou au fragment (`#`).
+            val afterAuthority = addr.substring(authorityEnd)
+            val queryAt = afterAuthority.indexOfFirst { it == '?' || it == '#' }
+            val pathEnd = if (queryAt < 0) addr.length else authorityEnd + queryAt
+            val path = addr.substring(authorityEnd, pathEnd)
+            val lastSlash = path.lastIndexOf('/')
+            return if (lastSlash < 0) {
+                // Site SANS chemin : la racine est l'autorité, la page est vide.
+                Pair(addr.substring(0, authorityEnd), addr.substring(authorityEnd))
+            } else {
+                val cut = authorityEnd + lastSlash
+                Pair(addr.substring(0, cut), addr.substring(cut + 1))
+            }
         }
     }
 
