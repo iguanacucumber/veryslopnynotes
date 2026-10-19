@@ -135,6 +135,12 @@ interface StubScript {
   nextEnvelope?: unknown;
   /** Session MORTE : chaque POST répond l'erreur « session expirée » (#408). */
   deadSession?: boolean;
+  /**
+   * Session morte JUSQU'AU prochain handshake (#405) : l'établissement a fermé
+   * la session, le refresh (nouveau handshake) la rouvre. Tout post échoue
+   * tant qu'aucun handshake n'a eu lieu depuis l'armement.
+   */
+  deadUntilHandshake?: boolean;
 }
 
 interface Stub {
@@ -269,6 +275,13 @@ function startStub(): Stub {
           // expirée » — le rejeu après `refresh` échoue donc aussi (c'est le
           // cas réel : l'établissement a fermé la session).
           if (s.deadSession) {
+            return Response.json({ Erreur: { G: 10, Titre: "session expirée" } });
+          }
+          // Session morte JUSQU'AU nouveau handshake (#405) : `gets` compte les
+          // handshakes (le GET de la page) — le refresh en fait UN de plus, et
+          // la session redevient vivante. C'est le cas réel : l'établissement
+          // ferme la session, la re-poignée de main la rouvre.
+          if (s.deadUntilHandshake && stub.gets < 2) {
             return Response.json({ Erreur: { G: 10, Titre: "session expirée" } });
           }
           // Aiguillages à un coup (erreurs HTTP / enveloppes d'erreur).
@@ -1156,6 +1169,73 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
       const ktBad = portError(await ask({ op: "clientPost", cid: ktCid, function: "TestEcho", onglet: 7, data: { data: { a: 1 } } }, true));
       expect(tsBad?.name).toBe("SyntaxError");
       expect(ktBad.name).toBe("JsonError");
+    } finally {
+      tsa.close();
+      kta.close();
+    }
+  });
+
+  // #405 : le rafraîchissement est ATOMIQUE.
+  //
+  // `ClientBase._refreshing` était un `var Boolean` nu : le job de fond
+  // (`PeriodicSyncWorker`) et la lecture de l'interface tombant en erreur en
+  // MÊME temps, les deux lisaient `false` et déclenchaient DEUX
+  // rafraîchissements — deux `Communication` (deux cookies, deux compteurs de
+  // requêtes), le champ finissant sur celle qui avait fini la dernière, les
+  // requêtes entrelacées (clé AES mélangée) : le serveur répondait `G=25`
+  // « Exceeded max authorization requests » ou la session restait à moitié
+  // initialisée.
+  //
+  // La référence TS est MONO-THREAD (`await` : la session est rafraîchie
+  // avant le retour), donc la parité à prouver est COMPORTEMENTALE : le port
+  // fait les MÊMES requêtes, dans le MÊME ordre, et UN SEUL rafraîchissement.
+  test.skipIf(skip)("refresh concurrent : UN SEUL refresh, les deux fils réussissent (#405)", async () => {
+    const tsa = startStub();
+    const kta = startStub();
+    try {
+      const tsClient = await tsLogin(tsa);
+      const ktCid = await ktLogin(kta);
+
+      // Session fermée par l'établissement : elle rouvre au handshake suivant
+      // (le refresh). La référence TS poste DEUX fois (la première déclenche
+      // le refresh, la seconde passe sur la session neuve) ; le port poste
+      // les MÊMES deux requêtes, mais CONCURRENTEMENT.
+      tsa.script.deadUntilHandshake = true;
+      kta.script.deadUntilHandshake = true;
+
+      const ts1 = await tsClient.post("TestEcho", 7, { data: { a: 1 } });
+      const ts2 = await tsClient.post("TestEcho", 7, { data: { a: 1 } });
+      const ktRes = JSON.parse(await ask({
+        op: "clientConcurrentPost",
+        cid: ktCid,
+        function: "TestEcho",
+        onglet: 7,
+        threads: 2,
+        data: { data: { a: 1 } },
+      })) as { results: string[]; payloads: string[] };
+
+      // Les DEUX fils réussissent : le perdant de la course ATTEND le
+      // rafraîchissement et rejoue sa requête sur la session neuve (au lieu
+      // de remonter l'erreur à l'appelant).
+      expect(ktRes.results).toEqual(["ok", "ok"]);
+
+      // UN SEUL rafraîchissement : deux handshakes en tout (login + refresh),
+      // pas trois — deux refreshs = deux `Communication` = le bug.
+      expect(kta.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(2);
+      expect(tsa.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(2);
+      // Une seule nouvelle `Communication` : une seule re-poignée de main.
+      expect(kta.gets).toBe(2);
+      expect(tsa.gets).toBe(2);
+
+      // PARITÉ : le FIL de requêtes est celui de la référence — mêmes
+      // fonctions, dans le même ordre (handshake, login, refresh, rejeu).
+      const fil = (stub: Stub): string[] => stub.posts.map((p) => p.id);
+      expect(fil(kta)).toEqual(fil(tsa));
+      // Et les RÉPONSES sont identiques des deux côtés.
+      for (const payload of ktRes.payloads) {
+        expect(canonTs(JSON.parse(payload))).toBe(tsCanon(ts1));
+      }
+      expect(tsCanon(ts2)).toBe(tsCanon(ts1));
     } finally {
       tsa.close();
       kta.close();
