@@ -246,3 +246,22 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Emplacement : `android/data/CacheScope.kt`, `android/data/PairingRepository.kt`,
   `android/data/AccountStore.kt`, `android/data/PeriodicSyncWorker.kt`,
   `android/app/VsnBridge.kt`.
+
+## I16 — Toute écriture dans `filesDir/offline/` respecte la purge de déconnexion
+- Invariant : `filesDir/offline/` ne contient QUE de la donnée de compte, donc
+  la purge de déconnexion l'efface EN TOUT (#404). Le cache n'est pas le seul
+  à y écrire : les fiches de révision (`revisions/`) et les préférences
+  matière (`subject_prefs.json`) y écrivent aussi — sous la MÊME garde
+  d'époque que le cache (#364), donc une écriture EN VOL (une fiche générée
+  pendant la déconnexion, une préférence enregistrée) est ABANDONNÉE : elle ne
+  ressuscite pas le dossier purgé et n'y laisse pas le contenu scolaire ni les
+  préférences du compte déconnecté. L'époque est capturée au DÉBUT de
+  l'opération (une fiche passe par un appel LLM de plusieurs secondes) ; hors
+  déconnexion, les écritures se font normalement.
+- Test : `tests/unit/kotlin-offline-artifacts.test.ts` (Kotlin EXÉCUTÉ : une
+  écriture de fiche ou de préférences pendant un logout ne laisse AUCUN
+  fichier ; hors déconnexion, les deux s'écrivent ; une écriture qui précède la
+  purge est effacée par elle ; + le câblage du pont et des stores).
+- Commande : `make check`.
+- Emplacement : `android/data/OfflineArtifacts.kt`, `android/data/SubjectPrefs.kt`,
+  `android/core/RevisionSheet.kt`, `android/app/VsnBridge.kt`.
