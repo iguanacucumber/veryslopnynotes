@@ -9,6 +9,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import fr.veryslopnynotes.pronote.Client
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -25,10 +26,20 @@ import java.util.concurrent.TimeUnit
 // TTL court reste l'affaire du premier plan), backoff exponentiel 10 min sur
 // échec, travail unique (KEEP : jamais deux planifications).
 //
-// Session : pas de client local (jamais appairé) = succès sans rien faire
-// (relancer en boucle ne servirait à rien) ; session locale morte = signal
-// d'appairage + succès (un retry ne ressusciterait pas la session, et un
-// échec permanent userait la batterie). Autre échec = retry (backoff).
+// #406 : la session vit en RAM (`PronoteSession`) et le job démarre un process
+// NEUF (pas d'interface) : la session n'y est donc pas. Le worker la
+// RESTAURE avant toute lecture, par le MÊME chemin que le pont
+// (`PairingRepository.restoreBlocking`). Sans session lisible, le job
+// RÉESSAIE (`Result.retry()`) : un `Result.success()` déclarait un succès qui
+// n'avait rien fait, donc le sync de fond devenait un no-op sans réessai.
+// ponytail: « jamais appairé » retente aussi (backoff WorkManager) — le job
+// n'a pas d'autre signal, et le store vide ne se distingue pas d'une
+// restauration impossible sans regarder le store. Upgrade: distinguer « store
+// vide » (succès) de « session non restaurable » (réessai) si le bruit des
+// retries gêne.
+// La session locale MORTE (jeton tourné) pendant la LECTURE reste un succès
+// (signal d'appairage ; un retry ne ressusciterait pas la session, et un échec
+// permanent userait la batterie) ; autre échec = retry (backoff).
 // #364 : les écritures portent la meme garde que les ecrans (epoch de session)
 // : une deconnexion survenue pendant la lecture annule l'ecriture, le cache
 // purge ne ressuscite pas. Le store est une AUTRE instance que celle de l'app,
@@ -41,7 +52,17 @@ class PeriodicSyncWorker(
     params: WorkerParameters,
 ) : Worker(context, params) {
     override fun doWork(): Result {
-        val client = PronoteSession.client ?: return Result.success()
+        // Restauration AVANT toute lecture : sans session, le job réessaie.
+        return when (val outcome = syncJobOutcome(restoreClient())) {
+            is SyncJobOutcome.Retry -> Result.retry()
+            is SyncJobOutcome.Refresh -> refresh(outcome.session)
+        }
+    }
+
+    /**
+     * Lecture des trois ressources + réécriture du cache (session disponible).
+     */
+    private fun refresh(client: Client): Result {
         val store = FileCacheStore(File(applicationContext.filesDir, "offline"))
         // #364 : epoque capturee AVANT les lectures locales (le client peut
         // mettre des secondes) : une deconnexion pendant la lecture annule
@@ -69,6 +90,21 @@ class PeriodicSyncWorker(
                 Result.retry()
             }
         }
+    }
+
+    /**
+     * Session locale du process, restaurée si elle n'y est pas (#406).
+     *
+     * Même chemin que le pont (`PairingRepository.restoreBlocking`) : store
+     * chiffré -> `Client.tokenLogin` -> `PronoteSession`. `null` = aucune
+     * session lisible (jamais appairé, jeton mort, réseau KO) : le job
+     * réessaiera au lieu de déclarer un succès sans rien avoir fait.
+     */
+    private fun restoreClient(): Client? {
+        PronoteSession.client?.let { return it }
+        val sessions = SessionStores.get(applicationContext)
+        val restored = PairingRepository(sessions).restoreBlocking()
+        return if (restored is RestoreResult.Restored) PronoteSession.client else null
     }
 
     /**
