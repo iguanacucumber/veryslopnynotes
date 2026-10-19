@@ -72,15 +72,21 @@ object RevisionAi {
     }
 
     // Remplissage seul : appel modele JSON valide. Choix push = jobs (structure).
+    // La cle de l'APP est RELAYEE a l'adaptateur telle quelle (elle n'entre
+    // jamais dans le prompt, elle n'est jamais journalisee) : sans elle,
+    // l'adaptateur refuse l'appel — c'etait le defaut de #428, ou la cle
+    // n'etait pas transmise et le point d'entree public ne pouvait produire
+    // AUCUNE fiche.
     fun requestRevisionFiche(
         provider: LlmProvider,
         exam: RevisionExam,
         chunks: List<RevisionChunk>,
+        apiKey: String?,
         nonce: String? = null,
     ): String {
         val docs = buildRevisionDocs(exam, chunks)
         val data: List<Untrusted<String>> = docs.map { markExternal(it) }
-        val parsed = generateGuardedJson(provider, SYSTEM_REVISION_JSON, data, nonce)
+        val parsed = generateGuardedJson(provider, SYSTEM_REVISION_JSON, data, nonce, apiKey)
         return parseRevisionAnswer(parsed)
     }
 }
