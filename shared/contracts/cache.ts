@@ -62,6 +62,11 @@ export function isCacheableResource(v: unknown): v is CacheableResource {
  * `fetchedAt` dans le futur (dérive d'horloge appareil) = staleness
  * indéterminable, donc « périmé » : on ne garde jamais une entrée fraîche sur
  * une horloge qui recule.
+ *
+ * #372 : règle PARTAGÉE avec `CachePolicy.isStale` (android/data) — même
+ * verdict des deux côtés, borne du TTL incluse des deux côtés. Le test de
+ * parité (`tests/unit/kotlin-cache-policy.test.ts`) rejoue les MÊMES cas sur
+ * le vrai Kotlin compilé.
  */
 export function cacheStatus(resource: CacheableResource, fetchedAt: number, now: number): CacheStatus {
   const elapsed = now - fetchedAt;
