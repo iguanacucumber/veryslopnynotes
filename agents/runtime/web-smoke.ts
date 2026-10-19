@@ -183,6 +183,101 @@ try {
     await flow.close();
   }
 
+  // Parcours de déconnexion : le profil invalide la session, l'app renvoie
+  // vers l'appairage et n'affiche PLUS l'accueil d'un compte déconnecté
+  // (« aucune donnée en cache » pour toujours). Le « Retour » de l'écran
+  // d'appairage ne doit pas rouvrir un compte déconnecté (#360).
+  {
+    const flow = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+    const pageErrors: string[] = [];
+    flow.on("pageerror", (err) => pageErrors.push(err.message));
+    await flow.addInitScript(() => {
+      const g = globalThis as unknown as {
+        VSN?: { call: (requestId: string, method: string, paramsJson?: string) => void };
+        __vsnResolve?: (requestId: string, resultJson: string) => void;
+        __vsnReject?: (requestId: string, errorJson: string) => void;
+      };
+      let loggedOut = false;
+      g.VSN = {
+        call(requestId: string, method: string, paramsJson?: string) {
+          const resolve = (value: unknown) =>
+            setTimeout(() => g.__vsnResolve?.(requestId, JSON.stringify(value)), 10);
+          const reject = (delay: number) =>
+            setTimeout(
+              () => g.__vsnReject?.(requestId, JSON.stringify({ code: "auth_required", message: "session expirée" })),
+              delay,
+            );
+          let key = "";
+          try {
+            key = String((JSON.parse(paramsJson ?? "{}") as { key?: string }).key ?? "");
+          } catch {
+            key = "";
+          }
+          switch (method) {
+            case "session.restore":
+            case "session.status":
+              return resolve({ state: loggedOut ? "no_session" : "restored" });
+            case "session.logout":
+              // Le natif invalide la session ET purge les caches.
+              loggedOut = true;
+              return resolve({ ok: true });
+            case "resources.cached":
+              return resolve({ payload: null, fetchedAt: 0, stale: false, error: null });
+            case "resources.load": {
+              if (!loggedOut) return resolve({ payload: null, fetchedAt: 0, stale: false, error: null });
+              if (key === "capabilities") {
+                // 401 tardif : il arrive APRÈS la déconnexion, ce n'est donc
+                // pas une « session expirée » à annoncer (#360).
+                return reject(1200);
+              }
+              // Échec ordinaire : plus de session, plus de cache. Le natif ne
+              // répond pas 401 (le compte n'existe plus) — l'accueil d'un
+              // compte déconnecté ne doit pas rester accessible (#360).
+              return resolve({ payload: null, fetchedAt: 0, stale: false, error: "Aucune donnée en cache." });
+            }
+            default:
+              return resolve({ ok: true });
+          }
+        },
+      };
+    });
+    await flow.goto(URL_BASE, { waitUntil: "networkidle" });
+    // On entre par l'app (comme l'utilisateur) : le « Retour » de
+    // l'appairage doit rester dans l'app, pas sortir vers une page vide.
+    await flow.getByRole("button", { name: "Profil" }).click();
+    await flow.waitForURL(/#\/profile$/, { timeout: 5000 }).catch(() => undefined);
+    await flow.getByRole("button", { name: "Se déconnecter" }).first().click();
+    await flow.getByRole("dialog").getByRole("button", { name: "Se déconnecter" }).click();
+    await flow.waitForURL(/#\/pairing$/, { timeout: 5000 }).catch(() => undefined);
+    if (!flow.url().endsWith("#/pairing")) {
+      console.error(`web-smoke : la déconnexion ne mène pas à l'appairage (${flow.url()})`);
+      code = 1;
+    }
+    // Le « Retour » de l'appairage ne doit pas rouvrir l'accueil d'un compte
+    // déconnecté : le garde-fou renvoie vers l'appairage.
+    await flow.getByRole("button", { name: "Retour" }).click();
+    await flow.waitForTimeout(600);
+    const tabs = await flow.locator(".tabbar .tab").count();
+    if (!flow.url().endsWith("#/pairing") || tabs > 0) {
+      console.error(`web-smoke : l'accueil d'un compte déconnecté reste accessible (${flow.url()}, ${tabs} onglets)`);
+      code = 1;
+    }
+    // Le 401 tardif ne doit pas être annoncé « session expirée » : c'est
+    // l'utilisateur qui a déconnecté le compte (#360).
+    await flow.waitForTimeout(2000);
+    const text = await flow.locator("body").innerText();
+    if (text.includes("Session expirée")) {
+      console.error("web-smoke : une déconnexion annoncée comme « session expirée »");
+      code = 1;
+    }
+    if (pageErrors.length) {
+      console.error("erreurs console (deconnexion) :", pageErrors);
+      code = 1;
+    }
+    await flow.screenshot({ path: `${SHOTS}/deconnexion.png`, fullPage: true });
+    await flow.close();
+  }
+
   if (errors.length) {
     console.error("erreurs console :", errors);
     code = 1;

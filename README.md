@@ -118,7 +118,9 @@ de la requête, pour scraper une page de manuel.
   fournisseur dans l'en-tête HTTPS `Authorization`.
 - Le **profil** reste en mémoire ; les caches ne contiennent que les données
   nécessaires au fonctionnement hors-ligne.
-- Une **déconnexion** invalide la session et purge tous les caches locaux.
+- Une **déconnexion** invalide la session, purge tous les caches locaux et
+  renvoie vers l'appairage : l'accueil d'un compte déconnecté n'est plus
+  accessible.
 
 ## Démarrage rapide
 
@@ -194,7 +196,7 @@ session Pronote ni clé OpenRouter.
 | `make architecture-test` | Scans d'architecture + invariants. |
 | `make check-kotlin` | Garde-fou structurel Kotlin, sans SDK ni réseau. |
 | `make android-compile` | Vraie compilation Kotlin (le seul contrôle des symboles et surcharges). Sans JDK/SDK, elle ÉCHOUE (`ALLOW_SKIP_ANDROID=1` assume le saut, hors merge). |
-| `make web-smoke` | Test navigateur du frontend (Chromium requis), hors `make check` : les 14 routes, plus les deux parcours d'appairage (téléphone neuf, session expirée). |
+| `make web-smoke` | Test navigateur du frontend (Chromium requis), hors `make check` : les 14 routes, les deux parcours d'appairage (téléphone neuf, session expirée) et le parcours de déconnexion. |
 | `make buildDebugApk` / `make buildRelApk` | APK debug / APK + AAB release. |
 | `make updateApkToPhone` | APK debug puis `adb install -r` (données conservées). |
 | `make shot ROUTE=grades` | Capture vérifiée sur téléphone réel (`SHOT_ARGS="--theme dark"` pour le thème). |
