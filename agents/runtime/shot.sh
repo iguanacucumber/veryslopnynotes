@@ -329,6 +329,10 @@ blank_verdict() {
 # nœud `WebView` (arbre Chromium pas encore peuplé) : on retente quelques fois
 # avant de conclure à un échec. Vide après les essais = écran éteint ou
 # instrumentation active — on le dit, on ne devine pas.
+#
+# #418 : un arbre ILLISIBLE est un ÉCHEC, pas un succès muet. La fonction
+# sort en ERREUR (code ≠ 0) : un dump qu'on n'a pas lu ne prouve AUCUNE
+# route, donc il ne doit jamais pouvoir passer pour une capture vérifiée.
 screen_texts() {
     local attempt xml texts
     for attempt in 1 2 3 4 5 6; do
@@ -345,7 +349,9 @@ screen_texts() {
         fi
         sleep 1
     done
-    return 0
+    printf "shot : ÉCHEC — arborescence d'interface ILLISIBLE (6 tentatives de « uiautomator dump » sans texte).\n" >&2
+    printf "  L'écran n'a pas pu être lu (écran éteint, instrumentation active, uiautomator cassé).\n" >&2
+    return 1
 }
 
 # Écran d'appairage : une SEULE page (#299) — le QR qui porte l'adresse + son
@@ -510,11 +516,15 @@ trap cleanup EXIT
 # routes d'onglets.
 verify_route() {
     local texts title fragments fragment title_seen candidate
-    texts=$(screen_texts)
-    if [ -z "$texts" ]; then
-        printf 'shot : AVERTISSEMENT — arborescence illisible (uiautomator a échoué) :\n' >&2
-        printf "  route %s NON VÉRIFIÉE. Vérifiez la capture à l'œil.\n" "$ROUTE" >&2
-        return 0
+    local dump=0
+    # `|| dump=$?` : la lecture ratée ne doit pas tuer le script SANS un mot
+    # (set -e) — c'est ici qu'elle est nommée, puis rendue fatale.
+    texts=$(screen_texts) || dump=$?
+    if [ "$dump" -ne 0 ] || [ -z "$texts" ]; then
+        printf 'shot : ÉCHEC — arborescence illisible (uiautomator a échoué) :\n' >&2
+        printf "  route %s NON VÉRIFIÉE. Aucun témoin n'a pu être lu : la capture ne PROUVE rien.\n" "$ROUTE" >&2
+        printf '  Capture conservée (preuve partielle) : %s\n' "$OUT_PNG" >&2
+        exit 1
     fi
     if is_locked "$texts"; then
         printf "shot : téléphone VERROUILLÉ — la capture montre l'écran de déverrouillage,\n" >&2

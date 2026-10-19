@@ -19,25 +19,56 @@
 // ponytail: lecture mot à mot, pas de parser Kotlin ni de résolution de types ; un class-like
 //    sans corps (`class A : B`) est invisible. Upgrade: ktlint (le compilateur, lui, est déjàbranché : `make android-compile`).
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 
 const ROOT = join(import.meta.dir, "..", "..");
 // ponytail: chemin en argument pour le test (fixture temporaire), défaut android/.
 const TARGET = process.argv[2] ? resolve(process.argv[2]) : join(ROOT, "android");
 
+/** Répertoires NON parcourus : outillage, caches, sorties de build. */
+const SKIP_DIRS = new Set([".git", "node_modules", "build", "dist", ".gradle"]);
+
+/** Artefact GÉNÉRÉ : le bundle Vite écrit par `web-build` dans
+ *  `android/app/src/main/assets/web/` (gitignoré, réécrit à chaque build). */
+const GENERATED_SUFFIX = ["src", "main", "assets"];
+
+/** Le chemin finit-il par `src`, `main`, `assets` ? */
+function isGenerated(path: string): boolean {
+  const parts = path.split(sep);
+  return GENERATED_SUFFIX.every((seg, i) => parts[parts.length - GENERATED_SUFFIX.length + i] === seg);
+}
+
+/** Fichiers Kotlin du parcours.
+ *
+ *  #418 : le parcours ne descend plus dans les ARTEFACTS GÉNÉRÉS et ne se
+ *  tait plus sur une entrée illisible. Avant, le `catch` global avalait tout
+ *  le NIVEAU courant : le bundle Vite (réécrit pendant le build, dossier qui
+ *  disparaît) suffisait à faire abandonner `android/app/src/main/` — donc les
+ *  .kt du module `app` n'étaient pas scannés, et le script annonçait
+ *  « check-kotlin OK ». Une entrée disparue est maintenant IGNORÉE (elle ne
+ *  porte pas de .kt de toute façon) et le parcours continue. */
 function listFiles(dir: string, out: string[] = []): string[] {
+  let entries: string[];
   try {
-    for (const e of readdirSync(dir)) {
-      const p = join(dir, e);
+    entries = readdirSync(dir).sort();
+  } catch {
+    return out; // répertoire absent en bootstrap : rien à parcourir
+  }
+  for (const e of entries) {
+    const p = join(dir, e);
+    try {
       const st = statSync(p);
       if (st.isDirectory()) {
-        if ([".git", "node_modules", "build", "dist", ".gradle"].includes(e)) continue;
+        if (SKIP_DIRS.has(e)) continue;
+        if (isGenerated(p)) continue;
         listFiles(p, out);
       } else if (/\.(kt|kts)$/.test(e)) {
         out.push(p);
       }
+    } catch {
+      continue; // entrée disparue ou illisible : on continue le répertoire
     }
-  } catch { /* dir absent en bootstrap */ }
+  }
   return out;
 }
 

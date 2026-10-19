@@ -197,7 +197,8 @@ function fakeJdk(): string {
 /** Faux adb : journal + appareil unique + ce que shot.sh demande, rien d'autre. */
 const FAKE_ADB = `#!/bin/sh
 # \`installed-sha\` = ce que l'appareil croit faire tourner (vide au départ).
-# Basculeurs : NO_SHA = appareil sans sha256sum, REFUSAL = installation rejetée.
+# Basculeurs : NO_SHA = appareil sans sha256sum, REFUSAL = installation rejetée,
+# UI_DUMP_FAIL = \`uiautomator dump\` illisible (arbre d'interface non lu).
 set -u
 H="\${HARNESS:?}"
 printf '%s\\n' "adb $*" >> "$H/adb.log"
@@ -222,7 +223,10 @@ shell() {
       [ -n "$sha" ] || { printf 'sha256sum: not found\\n' >&2; exit 127; }
       printf '%s  %s\\n' "$sha" "\${2:-base.apk}" ;;
     wm) printf 'Physical size: 8x8\\n' ;;
-    uiautomator) printf 'UI hierchary dumped to: %s\\n' "\${2:-/sdcard/ui.xml}" ;;
+    uiautomator)
+      # #418 : dump ILLISIBLE = la capture ne peut pas être vérifiée.
+      [ "\${UI_DUMP_FAIL:-0}" = 1 ] && { printf 'ERROR: could not get idle state.\\n' >&2; exit 1; }
+      printf 'UI hierchary dumped to: %s\\n' "\${2:-/sdcard/ui.xml}" ;;
     # #179 : la bascule de thème passe par là ; un refus doit faire échouer la
     # capture, donc on peut aussi le simuler (THEME_REFUSAL=1).
     cmd)
@@ -510,6 +514,47 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
     expect(r.out).toContain("installation refusée");
     expect(r.out).toContain("QR à rescaner");
     expect(r.out).not.toContain("route vérifiée");
+  });
+
+  // #418 : un arbre d'interface ILLISIBLE est un ÉCHEC. Avant, `screen_texts`
+  // sortait en 0 après six échecs de `uiautomator dump`, `verify_route`
+  // prévenait « route NON VÉRIFIÉE » et rendait la MAIN en 0 : le script
+  // annonçait le chemin du PNG comme une capture réussie, alors qu'aucun
+  // témoin n'avait été lu. Le contrat du fichier est « échec BRUYANT, jamais
+  // de succès silencieux ».
+  test("arbre d'interface illisible : ÉCHEC bruyant, jamais de succès silencieux", () => {
+    const h = harness();
+    const r = h.run(["index", "--wait", "0"], { UI_DUMP_FAIL: "1" });
+    // Le code de sortie EST l'échec : c'est lui que la CI et le make regardent.
+    expect(r.code).not.toBe(0);
+    // Le motif est nommé, et la route est dite NON VÉRIFIÉE.
+    expect(r.out).toContain("ILLISIBLE");
+    expect(r.out).toContain("NON VÉRIFIÉE");
+    // Et surtout : aucune réussite maquillée.
+    expect(r.out).not.toContain("route vérifiée");
+    expect(r.out).not.toContain("AVERTISSEMENT");
+    // La capture reste sur le disque (preuve partielle), mais le script ne la
+    // présente PAS comme la preuve de la route.
+    expect(h.captured().length).toBeGreaterThan(0);
+  });
+
+  test("le script ne masque plus l'échec de lecture dans le source", () => {
+    // Le défaut exact : `return 0` en fin de `screen_texts` (six échecs de
+    // dump = succès) et `return 0` en fin de `verify_route` (arborescence
+    // illisible = avertissement). Les deux sont des succès silencieux.
+    const corps = SHOT.slice(SHOT.indexOf("screen_texts()"));
+    const lecture = corps.slice(0, corps.indexOf("\n}\n"));
+    // La DERNIÈRE ligne de `screen_texts` est un échec, pas un succès.
+    expect(lecture.trimEnd().split("\n").at(-1)!.trim()).toBe("return 1");
+    // Après la branche « illisible », `verify_route` SORT en erreur avant
+    // tout `return 0` (le `return 0` de la route vérifiée est plus loin).
+    const verify = corps.slice(corps.indexOf("verify_route()"));
+    const apres = verify.slice(verify.toLowerCase().indexOf("illisible"));
+    const sortie = apres.indexOf("exit 1");
+    const retour = apres.indexOf("return 0");
+    expect({ sortieAvantRetour: sortie >= 0 && (retour === -1 || sortie < retour) }).toEqual({
+      sortieAvantRetour: true,
+    });
   });
 
   test("pas de comparaison de mtimes : Gradle est l'autorité, l'empreinte la preuve", () => {
