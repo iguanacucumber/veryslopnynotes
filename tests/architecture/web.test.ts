@@ -162,4 +162,25 @@ describe("contrat du pont natif", () => {
     expect(constants.get("AWAIT_LLM_MS")).toBe(NATIVE_WAIT_MS.llm);
     expect(kotlinCeiling(kotlin)).toBe(MAX_NATIVE_WAIT_MS);
   });
+
+  test("l'appairage n'envoie jamais le message brut au JS (#396)", () => {
+    // Un message d'exception peut nommer l'hôte de l'établissement (adresse
+    // interne, port) : il ne franchit pas la frontière native/JS (I10). Le
+    // pont ne transmet que le CODE et rend une phrase choisie par lui.
+    const kotlin = readFileSync(BRIDGE, "utf8");
+    const debut = kotlin.indexOf("private fun pair(");
+    expect(debut).toBeGreaterThan(-1);
+    const corps = kotlin.slice(debut, kotlin.indexOf("private fun cancelPairing(", debut));
+    expect(corps).toContain("pairingFailureMessage(result.code)");
+    expect(corps).not.toContain("result.message");
+
+    // La table du pont ne nomme ni hôte, ni IP, ni port.
+    const table = readFileSync(
+      join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/PairingMessages.kt"),
+      "utf8",
+    );
+    expect(table).not.toMatch(/(?:\d{1,3}\.){3}\d{1,3}/);
+    expect(table).not.toContain("://");
+    expect(table).not.toMatch(/:\d{2,5}\b/);
+  });
 });

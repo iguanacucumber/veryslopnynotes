@@ -405,7 +405,10 @@ class VsnBridge(
             is PairingResult.Err -> JSONObject()
                 .put("ok", false)
                 .put("code", result.code)
-                .put("message", result.message)
+                // Jamais le message de la couche `data` : il peut nommer l'hôte
+                // de l'établissement (adresse interne, port) (#396). Le pont
+                // choisit la phrase : bornée, sans hôte ni IP.
+                .put("message", pairingFailureMessage(result.code))
         }
     }
 
