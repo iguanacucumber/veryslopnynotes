@@ -87,6 +87,13 @@ a {
   letter-spacing: -0.01em;
 }
 
+/* Cible de focus programmatique : le titre n'est pas un contrôle, l'anneau
+   de focus y serait du bruit visuel. */
+.topbar__title:focus,
+.topbar__title:focus-visible {
+  outline: none;
+}
+
 .topbar__actions {
   display: flex;
   align-items: center;
@@ -407,9 +414,15 @@ button.card:active {
 }
 
 .btn--small {
-  min-height: 38px;
+  min-height: 44px;
   padding: 0 14px;
   font-size: 13px;
+}
+
+/* Une puce cliquable reste une cible tactile : même hauteur que les boutons
+   compacts. Les puces purement décoratives gardent leur taille. */
+button.chip {
+  min-height: 44px;
 }
 
 .field {

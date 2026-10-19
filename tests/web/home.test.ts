@@ -8,6 +8,7 @@ import {
   clockLabel,
   countdownFr,
   courseCountdown,
+  courseWidgetTitle,
   dueLabel,
   durationLabel,
   formatAverage,
@@ -111,6 +112,14 @@ describe("parseTimetable", () => {
       items: [{ id: "w", subject: "NSI", start: local(20, 8), end: local(20, 10) }],
     });
     expect(parseTimetable(wrapped)).toHaveLength(1);
+  });
+
+  test("titre du widget cours : jour courant, demain, date", () => {
+    const lesson = parseTimetable(payload)[0]!;
+    const now = new Date(2026, 9, 19, 9).getTime();
+    expect(courseWidgetTitle(lesson, now)).toBe("Aujourd’hui");
+    expect(courseWidgetTitle({ ...lesson, start: new Date(2026, 9, 20, 8).getTime() }, now)).toBe("Demain");
+    expect(courseWidgetTitle({ ...lesson, start: new Date(2026, 9, 22, 8).getTime() }, now)).toContain("22");
   });
 
   test("borne la liste et nettoie les caractères de contrôle", () => {

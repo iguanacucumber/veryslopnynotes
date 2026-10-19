@@ -512,11 +512,11 @@ export function dayLabel(target: number, now: number): string {
   return `${frDay(date)} ${dd}/${mm}`;
 }
 
-/** Titre du widget cours : « Prochain cours », « Demain », sinon la date. */
+/** Titre du widget cours : « Aujourd’hui », « Demain », sinon la date. */
 export function courseWidgetTitle(first: Lesson | undefined, now: number): string {
   if (!first) return "";
   const offset = dayOffset(first.start, now);
-  if (offset === 0) return "Prochain cours";
+  if (offset === 0) return "Aujourd’hui";
   if (offset === 1) return "Demain";
   return dayLabel(first.start, now);
 }

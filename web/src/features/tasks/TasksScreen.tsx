@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../../bridge/client";
 import { useApp, useResource } from "../../ui/AppContext";
+import { useViewNavigate } from "../../ui/viewTransition";
 import {
   Card,
   EmptyState,
@@ -92,13 +93,15 @@ export function TasksScreen() {
 
 function TasksWeek({ week }: { week: string }) {
   const { notify, refreshTick } = useApp();
+  const navigate = useViewNavigate();
+  const currentWeek = weekStartOf(new Date());
   const query = `weekStart=${week}`;
   const resource = useResource("assignments", query);
   const parsed = useMemo(() => parseAssignmentsPayload(resource.payload), [resource.payload]);
   // Un payload en cache peut appartenir à une autre semaine : on ne garde que
-  // les échéances de la semaine affichée.
+  // les échéances de la semaine affichée. Une semaine sans devoir est un état
+  // vide, pas un chargement sans fin.
   const visible = useMemo(() => assignmentsInWeek(parsed.items, week), [parsed.items, week]);
-  const mismatched = parsed.items.length > 0 && visible.length === 0;
   const [items, setItems] = useState<Assignment[]>(visible);
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [doneOpen, setDoneOpen] = useState(false);
@@ -222,7 +225,7 @@ function TasksWeek({ week }: { week: string }) {
       ? "Vérification de l'assistant…"
       : "Clé LLM absente : renseigne-la dans Réglages pour activer l'assistant.");
 
-  if ((resource.loading || mismatched) && items.length === 0) {
+  if (resource.loading && items.length === 0) {
     return (
       <Page>
         <Loading label="Chargement des devoirs…" />
@@ -246,15 +249,12 @@ function TasksWeek({ week }: { week: string }) {
     <Page>
       <div className="tasks-head">
         <div>
-          <span className="tasks-head__eyebrow">Semaine en cours</span>
+          <span className="tasks-head__eyebrow">
+            {week === currentWeek ? "Semaine en cours" : "Semaine sélectionnée"}
+          </span>
           <h2 className="tasks-head__title">Devoirs</h2>
         </div>
-        <div className="row" style={{ gap: 6 }}>
-          {resource.stale ? <StaleBadge /> : null}
-          <button type="button" className="btn btn--ghost btn--small" onClick={resource.refresh}>
-            Actualiser
-          </button>
-        </div>
+        {resource.stale ? <StaleBadge /> : null}
       </div>
 
       {resource.error ? <ErrorBox message={resource.error} /> : null}
@@ -269,6 +269,13 @@ function TasksWeek({ week }: { week: string }) {
             <p className="t-body-m muted" style={{ margin: "2px 0 0" }} id="tasks-assistant-reason">
               {assistantReason}
             </p>
+            <button
+              type="button"
+              className="btn btn--ghost btn--small tasks-assistant__action"
+              onClick={() => navigate("/settings")}
+            >
+              Ouvrir les réglages
+            </button>
           </div>
         </Card>
       ) : null}

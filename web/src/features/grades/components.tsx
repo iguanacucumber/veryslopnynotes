@@ -4,6 +4,7 @@ import { frDateShort, subjectColor, tint } from "../../lib/format";
 import { SubjectAvatar } from "../../ui/components";
 import {
   algorithmChipLabel,
+  algorithmHint,
   algorithmLabel,
   ALGORITHMS,
   averageLabel,
@@ -236,6 +237,9 @@ export function GradesToolbar({
           </button>
         ))}
       </div>
+      <p className="grades-caption" aria-live="polite">
+        {algorithmHint(algorithm)}
+      </p>
     </div>
   );
 }

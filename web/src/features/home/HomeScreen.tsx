@@ -21,7 +21,6 @@ import {
   IconFood,
   IconGrades,
   IconMessage,
-  IconRefresh,
   IconSettings,
   IconShield,
   IconTasks,
@@ -367,14 +366,6 @@ export default function HomeScreen() {
             <h2 className="home-hero__greeting">{greeting}</h2>
             <p className="home-hero__day">{frDate(new Date(now).toISOString())}</p>
           </div>
-          <button
-            type="button"
-            className="home-hero__refresh"
-            onClick={refreshAll}
-            aria-label="Actualiser l’accueil"
-          >
-            <IconRefresh size={18} />
-          </button>
         </div>
         <div className="home-hero__stats">
           <div className="home-hero__stat">
@@ -385,11 +376,11 @@ export default function HomeScreen() {
             </strong>
           </div>
           <div className="home-hero__stat">
-            <span>Cours</span>
+            <span>À venir</span>
             <strong>{upcoming.length}</strong>
           </div>
           <div className="home-hero__stat">
-            <span>Devoirs</span>
+            <span>À faire</span>
             <strong>{tasks.length}</strong>
           </div>
         </div>

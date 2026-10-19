@@ -164,7 +164,15 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
       try {
         const cached = await bridge.cached(key);
         if (!cancelled && cached.payload) {
-          setState({ payload: cached.payload, fetchedAt: cached.fetchedAt, stale: true, error: null, loading: false });
+          // Le cache frais ne doit pas faire clignoter « hors-ligne » : le
+          // natif dit déjà s'il est périmé (`stale`), on ne le devine pas.
+          setState({
+            payload: cached.payload,
+            fetchedAt: cached.fetchedAt,
+            stale: cached.stale,
+            error: null,
+            loading: false,
+          });
         }
       } catch {
         // cache indisponible : on tente le natif

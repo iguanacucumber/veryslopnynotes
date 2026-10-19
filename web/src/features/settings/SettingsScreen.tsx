@@ -247,56 +247,6 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
-      <Section title="Serveur">
-        <Card className="card--flat">
-          <label className="tiny muted" htmlFor="server-host" style={{ display: "block" }}>
-            Adresse du serveur
-          </label>
-          <input
-            id="server-host"
-            className="field"
-            value={host}
-            maxLength={300}
-            inputMode="url"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            disabled={loading}
-            aria-invalid={hostError !== ""}
-            aria-describedby="server-help"
-            placeholder="https://serveur.exemple"
-            onChange={(event) => {
-              setHost(event.target.value);
-              setHostSaved("");
-              if (hostError) setHostError("");
-            }}
-          />
-          <p id="server-help" className="tiny muted" style={{ margin: "6px 0 0" }}>
-            Domaine seul ou adresse complète. HTTP n'est accepté que pour l'émulateur et la boucle locale.
-          </p>
-          {hostError ? (
-            <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "6px 0 0" }}>
-              {hostError}
-            </p>
-          ) : null}
-          {hostSaved ? (
-            <p className="tiny" role="status" style={{ color: "var(--brand-deep)", margin: "6px 0 0" }}>
-              {hostSaved}
-            </p>
-          ) : null}
-          <div className="row" style={{ justifyContent: "flex-end", marginTop: 10 }}>
-            <button
-              type="button"
-              className="btn btn--small"
-              disabled={loading || savingHost || host.trim() === ""}
-              onClick={() => void saveHost()}
-            >
-              {savingHost ? "Enregistrement…" : "Enregistrer l'adresse"}
-            </button>
-          </div>
-        </Card>
-      </Section>
-
       <Section title="Matières">
         <Card className="card--flat">
           {prefsError ? (
@@ -496,6 +446,60 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
+      <Section title="Avancé">
+        <Card className="card--flat">
+          <strong style={{ display: "block" }}>Scraper de manuels (facultatif)</strong>
+          <p className="tiny muted" style={{ margin: "2px 0 0" }}>
+            Sert uniquement à récupérer les manuels. L’établissement et l’assistant fonctionnent sans ce serveur.
+          </p>
+          <label className="tiny muted" htmlFor="server-host" style={{ display: "block", marginTop: 12 }}>
+            Adresse du serveur
+          </label>
+          <input
+            id="server-host"
+            className="field"
+            value={host}
+            maxLength={300}
+            inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            disabled={loading}
+            aria-invalid={hostError !== ""}
+            aria-describedby="server-help"
+            placeholder="https://serveur.exemple"
+            onChange={(event) => {
+              setHost(event.target.value);
+              setHostSaved("");
+              if (hostError) setHostError("");
+            }}
+          />
+          <p id="server-help" className="tiny muted" style={{ margin: "6px 0 0" }}>
+            Domaine seul ou adresse complète. HTTP n'est accepté que pour l'émulateur et la boucle locale.
+          </p>
+          {hostError ? (
+            <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "6px 0 0" }}>
+              {hostError}
+            </p>
+          ) : null}
+          {hostSaved ? (
+            <p className="tiny" role="status" style={{ color: "var(--brand-deep)", margin: "6px 0 0" }}>
+              {hostSaved}
+            </p>
+          ) : null}
+          <div className="row" style={{ justifyContent: "flex-end", marginTop: 10 }}>
+            <button
+              type="button"
+              className="btn btn--small"
+              disabled={loading || savingHost || host.trim() === ""}
+              onClick={() => void saveHost()}
+            >
+              {savingHost ? "Enregistrement…" : "Enregistrer l'adresse"}
+            </button>
+          </div>
+        </Card>
+      </Section>
+
       <Section title="Compte">
         <Card className="card--flat">
           <div className="row">
@@ -508,8 +512,8 @@ export default function SettingsScreen() {
             </div>
           </div>
           <p className="tiny muted" style={{ margin: "10px 0 0" }}>
-            L'appairage, la déconnexion et le changement de compte sont dans l'onglet Profil. La clé de l'assistant ne
-            sort jamais de l'appareil.
+            L'appairage, la déconnexion et le changement de compte se font depuis le Profil. La clé de l'assistant
+            ne sort jamais de l'appareil.
           </p>
         </Card>
       </Section>
