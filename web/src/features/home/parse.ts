@@ -17,6 +17,7 @@ import {
   frDay,
   frRange,
 } from "../../lib/format";
+import { subjectKey } from "../../lib/subject";
 
 /** Borne dure d'une liste lue dans un payload (anti-JSON géant). */
 export const MAX_ITEMS = 400;
@@ -262,15 +263,6 @@ export function providedGeneralAverage(payload: string | null): number | null {
   const general = averages ? asObject(averages["general"]) : null;
   const value = general ? numberOrNull(general["value"]) : null;
   return value !== null && value >= 0 ? value : null;
-}
-
-/** Clé de regroupement : sans accents, minuscules, sans bords (comme le Kotlin). */
-export function subjectKey(subject: string): string {
-  return subject
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
 }
 
 interface Sum {
