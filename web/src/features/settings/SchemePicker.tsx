@@ -1,0 +1,55 @@
+import { paletteOf, SCHEMES } from "../../lib/schemes";
+import { useApp } from "../../ui/AppContext";
+import { IconCheck } from "../../ui/icons";
+
+/**
+ * Sélecteur de palette (#335). L'aperçu n'est pas une vignette figée : il
+ * vient de la même table que les variables CSS, donc il montre exactement ce
+ * que l'écran affichera (variante claire ou sombre selon le mode en cours).
+ */
+export function SchemePicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  const { dark } = useApp();
+  return (
+    <div className="scheme-grid" role="radiogroup" aria-label="Palette de couleurs">
+      {SCHEMES.map((scheme) => {
+        const palette = paletteOf(scheme.id, dark);
+        const active = scheme.id === value;
+        return (
+          <button
+            key={scheme.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            className={`scheme-card${active ? " scheme-card--active" : ""}`}
+            onClick={() => onChange(scheme.id)}
+          >
+            <span
+              className="scheme-card__preview"
+              aria-hidden="true"
+              style={{ background: palette.page, boxShadow: `inset 0 0 0 1px ${palette.surfaceContainer}` }}
+            >
+              <span
+                className="scheme-card__sheet"
+                style={{ background: palette.surface, boxShadow: `0 1px 4px ${palette.surfaceContainer}` }}
+              >
+                <span className="scheme-card__dot" style={{ background: palette.brand }} />
+                <span className="scheme-card__rows">
+                  <span className="scheme-card__row" style={{ background: palette.ink }} />
+                  <span className="scheme-card__row scheme-card__row--thin" style={{ background: palette.ink }} />
+                </span>
+              </span>
+            </span>
+            <span className="scheme-card__text">
+              <span className="scheme-card__label">{scheme.label}</span>
+              {active ? (
+                <span className="scheme-card__check" aria-hidden="true">
+                  <IconCheck size={14} />
+                </span>
+              ) : null}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}

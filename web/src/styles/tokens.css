@@ -6,19 +6,28 @@
   font-display: swap;
 }
 
+/* Palette par défaut (id `slop`) : miroir de `lib/schemes.ts`, posée ici pour
+   que l'écran tienne même si le JS échoue. Le choix de palette (#335) écrase
+   ces variables à l'exécution, jamais ce fichier. */
 :root {
   color-scheme: light;
   --brand: #29947a;
   --brand-light: #48a98b;
-  --brand-deep: #237e68;
-  --brand-pale: #e9f6f2;
-  --lime: #bfe677;
-  --lime-ink: #5a7821;
+  --brand-deep: #1c6653;
+  --brand-pale: #edf8f5;
+  --brand-solid: #1c6653;
+  --on-brand: #ffffff;
+  --on-brand-soft: rgba(255, 255, 255, 0.88);
+  --on-brand-veil: rgba(255, 255, 255, 0.13);
+  --on-brand-hover: rgba(255, 255, 255, 0.26);
+  --on-brand-line: rgba(255, 255, 255, 0.34);
   --danger: #dc1400;
-  --danger-ink: #dc1400;
+  --danger-solid: #c11200;
+  --on-danger: #ffffff;
+  --danger-ink: #c11200;
   --ink: #1f292e;
-  --muted: rgba(31, 41, 46, 0.65);
-  --border: #dcdcdc;
+  --muted: rgba(31, 41, 46, 0.72);
+  --border: rgba(31, 41, 46, 0.16);
   --surface: #ffffff;
   --page: #f6fbfa;
   --surface-variant: #f3f6f7;
@@ -45,14 +54,20 @@
   --brand: #48a98b;
   --brand-light: #6cc4a8;
   --brand-deep: #a7e3d2;
-  --brand-pale: #12251f;
-  --lime: #bfe677;
-  --lime-ink: #d7f3a3;
+  --brand-pale: #14332b;
+  --brand-solid: #6cc4a8;
+  --on-brand: #08201a;
+  --on-brand-soft: rgba(8, 32, 26, 0.88);
+  --on-brand-veil: rgba(8, 32, 26, 0.14);
+  --on-brand-hover: rgba(8, 32, 26, 0.26);
+  --on-brand-line: rgba(8, 32, 26, 0.34);
   --danger: #f4b9b3;
+  --danger-solid: #e0776f;
+  --on-danger: #240806;
   --danger-ink: #f4b9b3;
   --ink: #f2f5f4;
-  --muted: rgba(242, 245, 244, 0.65);
-  --border: #333333;
+  --muted: rgba(242, 245, 244, 0.72);
+  --border: rgba(242, 245, 244, 0.16);
   --surface: #121212;
   --page: #000000;
   --surface-variant: #1b1b1b;
