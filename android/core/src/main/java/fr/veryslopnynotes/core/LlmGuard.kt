@@ -6,7 +6,53 @@ package fr.veryslopnynotes.core
 // check-architecture). Stdlib + java.util uniquement, sans dependance.
 // Les appels provider sont BLOQUANTS (pas de coroutines sans dependance,
 // meme doctrine que le module pronote) : jamais sur le thread UI.
-const val MAX_OUTPUT_CHARS = 8000
+//
+// --- Le plafond de sortie I5 (#411) : UN SEUL endroit, des bornes LIEES ---
+//
+// Le fournisseur compte en TOKENS, la garde compte en CARACTERES. Les deux
+// plafonds doivent tenir ensemble : sinon une reponse VALIDE est payée au
+// fournisseur puis jetee par la garde (« sortie LLM trop longue (I5) »), et
+// l'eleve lit « Echec de l'assistant. ».
+//
+// AVANT (#411) : `MAX_OUTPUT_TOKENS = 4000` justifie par « ~2 caracteres/token »
+// — une hypothèse FAUSSE pour le francais et le JSON (~3-4 caracteres/token).
+// Le fournisseur produisait donc ~12-16 k caracteres pour une garde a 8 000 :
+// une reponse VALIDE de 9 000 caracteres (finish_reason=stop) etait jetee.
+//
+// MAINTENANT : le budget de tokens est DEDUIT du plafond de caracteres, avec
+// la borne HAUTE de densite (4 caracteres/token : texte dense, anglais, code,
+// longs identifiants). Le budget du fournisseur ne peut donc pas produire une
+// sortie plus longue que la garde — et la garde nomme la LIMITE REELLE quand
+// elle refuse.
+
+/**
+ * Plafond de caracteres d'une sortie LLM (garde I5) : 12 000 caracteres.
+ *
+ * Assez pour ce que le fournisseur peut produire (3 000 tokens, cf.
+ * [MAX_OUTPUT_TOKENS]) : la garde ne jette plus une reponse valide.
+ */
+const val MAX_OUTPUT_CHARS = 12000
+
+/**
+ * Densite de reference d'un token : 4 caracteres par token.
+ *
+ * Le francais est plus dense en tokens (~3 caracteres/token) ; 4 est la
+ * borne HAUTE plausible (anglais dense, code, longs identifiants). On
+ * retient cette borne : le budget de tokens deduit ne peut alors pas
+ * produire une sortie plus longue que la garde.
+ */
+const val CHARS_PER_TOKEN = 4
+
+/**
+ * Budget de tokens du fournisseur : DEDUIT du plafond de caracteres
+ * (arrondi en bas : jamais plus de tokens que le budget de la garde).
+ *
+ * 3 000 tokens x 4 caracteres/token = 12 000 caracteres : la sortie que le
+ * fournisseur produit tient dans la garde, et le cout par appel reste borne.
+ * Le module `data` IMPORTE cette constante (jamais de copie) : les deux
+ * plafonds ne peuvent pas deriver l'un de l'autre.
+ */
+const val MAX_OUTPUT_TOKENS = MAX_OUTPUT_CHARS / CHARS_PER_TOKEN
 
 // ---------------------------------------------------------------------------
 // I4 — la garde cherche des FORMES de secret, pas des mots.
@@ -453,10 +499,28 @@ fun assertNoSecretsInPrompt(safe: SafePrompt, data: List<Untrusted<String>> = em
     throw SecretDetectedException(kind)
 }
 
+/**
+ * Sortie (ou champ de sortie) plus long que sa borne.
+ *
+ * Le message porte la LIMITE REELLE : le repli « reponse hors format » (I5)
+ * serait un diagnostic FAUX — la sortie est bien formee, elle est juste trop
+ * longue. `maxChars` permet a l'appelant d'afficher la limite.
+ */
+class OutputTooLongException(val maxChars: Int) :
+    AiError("sortie LLM trop longue (max $maxChars caractères) (I5)") {
+    /**
+     * Phrase affichee a l'eleve : la limite REELLE, en francais et bornee.
+     * Meme discipline que [secretRefusalMessage] : une phrase, jamais un
+     * diagnostic libre.
+     */
+    val userMessage: String =
+        "Réponse du modèle trop longue (max $maxChars caractères) : réessaie avec moins de matière."
+}
+
 // Sortie texte : non-vide, bornee, sans secret. Retourne l'original (espaces gardes).
 fun validateTextOutput(out: String): String {
     if (out.trim().isEmpty()) throw AiError("sortie LLM vide (I5)")
-    if (out.length > MAX_OUTPUT_CHARS) throw AiError("sortie LLM trop longue (I5)")
+    if (out.length > MAX_OUTPUT_CHARS) throw OutputTooLongException(MAX_OUTPUT_CHARS)
     val kind = detectSecret(out) ?: return out
     throw SecretDetectedException(kind)
 }
