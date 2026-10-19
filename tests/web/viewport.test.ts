@@ -13,7 +13,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { viewportMetrics } from "../../web/src/lib/viewport";
+import { applyViewport, keepFocusVisible, viewportMetrics } from "../../web/src/lib/viewport";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
@@ -27,6 +27,21 @@ function block(source: string, selector: string): string {
   const start = source.indexOf(`${selector} {`);
   if (start < 0) return "";
   return source.slice(start, source.indexOf("}", start));
+}
+
+/**
+ * Faux élément focalisé : on compte les appels à `scrollIntoView` sans DOM
+ * (bun:test n'en fournit pas).
+ */
+function fakeField(isInput: boolean): { element: Element; scrolls: () => number } {
+  let scrolls = 0;
+  const element = {
+    matches: (selector: string) => isInput && selector.includes("input"),
+    scrollIntoView: () => {
+      scrolls += 1;
+    },
+  } as unknown as Element;
+  return { element, scrolls: () => scrolls };
 }
 
 describe("viewport utile et clavier (#399)", () => {
@@ -61,5 +76,35 @@ describe("viewport utile et clavier (#399)", () => {
     expect(viewport).toContain("--keyboard-bottom");
     expect(viewport).toContain("scrollIntoView");
     expect(main).toContain("watchViewport");
+  });
+
+  test("la hauteur utile est publiée en variable CSS", () => {
+    const written: Record<string, string> = {};
+    const root = {
+      style: {
+        setProperty: (name: string, value: string) => {
+          written[name] = value;
+        },
+      },
+    } as unknown as HTMLElement;
+    applyViewport(root, { height: 500, keyboard: 300 });
+    // La coquille prend sa hauteur dans `--app-height`…
+    expect(written["--app-height"]).toBe("500px");
+    // …et les éléments fixes du bas remontent de la hauteur du clavier.
+    expect(written["--keyboard-bottom"]).toBe("300px");
+  });
+
+  test("le champ focalisé est ramené dans le cadre, les autres éléments sont laissés", () => {
+    // Un champ de saisie focalisé : il revient dans le cadre (le clavier
+    // s'ouvre APRÈS le focus, donc le renderer a fait défiler trop tôt).
+    const input = fakeField(true);
+    keepFocusVisible({ activeElement: input.element } as unknown as Document);
+    expect(input.scrolls()).toBe(1);
+    // Un élément qui n'est pas un champ : rien à déplacer.
+    const other = fakeField(false);
+    keepFocusVisible({ activeElement: other.element } as unknown as Document);
+    expect(other.scrolls()).toBe(0);
+    // Rien de focalisé : pas d'appel.
+    keepFocusVisible({ activeElement: null } as unknown as Document);
   });
 });
