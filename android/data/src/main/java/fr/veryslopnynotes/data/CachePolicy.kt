@@ -70,8 +70,19 @@ object CachePolicy {
     }
 
     // Frais si fetchedAt + TTL couvre now, périmé sinon (badge app).
-    fun isStale(resource: String, fetchedAt: Long, now: Long): Boolean =
-        now - fetchedAt > ttlFor(resource)
+    //
+    // #372 : une entrée datée dans le FUTUR (dérive d'horloge d'appareil, NTP
+    // qui recule) est PÉRIMÉE. La soustraction seule la disait fraîche
+    // (`now - fetchedAt` négatif) — donc le badge « périmé » disparaissait et
+    // `shouldFetch` ne relisait plus jamais le client local : les données
+    // servies agingaient sans fin (capabilities : TTL 24 h → jusqu'à 48 h de
+    // données périmées vendues comme fraîches). Règle PARTAGÉE avec le contrat
+    // TS (`cacheStatus`, shared/contracts/cache.ts) : les deux implémentations
+    // rendent le même verdict, borne du TTL incluse des deux côtés.
+    fun isStale(resource: String, fetchedAt: Long, now: Long): Boolean {
+        if (fetchedAt > now) return true
+        return now - fetchedAt > ttlFor(resource)
+    }
 
     // #311 : faut-il relire le client local ? Règle PURE (comme isStale), donc
     // testable sans téléphone : une entrée fraîche suffit à l'écran, sauf geste
