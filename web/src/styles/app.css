@@ -93,9 +93,12 @@ a {
   outline-offset: 2px;
 }
 
+/* La coquille occupe la hauteur UTILE (celle qu'on peut lire) : elle est
+   publiée par le JS d'après le viewport visuel, donc elle rétrécit quand le
+   clavier s'ouvre. Une hauteur de viewport figée la laisserait dépasser sous
+   le clavier (#399). */
 .shell {
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: var(--app-height);
   display: flex;
   flex-direction: column;
   padding-top: calc(8px + var(--safe-top));
@@ -182,7 +185,7 @@ a {
   width: 100%;
   max-width: 760px;
   margin: 0 auto;
-  padding: 16px 16px 108px;
+  padding: 16px 16px calc(108px + var(--keyboard-bottom));
 }
 
 .main--flush {
@@ -190,11 +193,13 @@ a {
   padding-right: 0;
 }
 
+/* Barre d'onglets : FIXE, donc elle remonte de la hauteur du clavier — elle
+   reste au-dessus du clavier, jamais dessous (#399). */
 .tabbar {
   position: fixed;
   left: 10px;
   right: 10px;
-  bottom: calc(10px + var(--safe-bottom));
+  bottom: calc(10px + var(--safe-bottom) + var(--keyboard-bottom));
   z-index: 30;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -544,11 +549,13 @@ button.chip {
   background: var(--muted);
 }
 
+/* Bandeau de message : fixe au-dessus de la barre d'onglets, donc lui aussi
+   au-dessus du clavier (#399). */
 .notice {
   position: fixed;
   left: 16px;
   right: 16px;
-  bottom: calc(84px + var(--safe-bottom));
+  bottom: calc(84px + var(--safe-bottom) + var(--keyboard-bottom));
   z-index: 50;
   padding: 12px 16px;
   border-radius: var(--radius-sm);

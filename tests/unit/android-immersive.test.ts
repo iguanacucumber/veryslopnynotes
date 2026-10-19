@@ -51,7 +51,11 @@ describe("unit android plein écran immersif (#303)", () => {
   });
 
   test("la WebView est le contenu unique, sans navigation Compose", () => {
-    expect(activity).toContain("setContentView(shell.view)");
+    // #399 : la WebView vit dans un CONTENEUR (padding bas = inset du
+    // clavier), mais c'est toujours ELLE qui est le contenu : aucune
+    // navigation Compose, un seul écran.
+    expect(activity).toContain("setContentView(container)");
+    expect(activity).toMatch(/addView\(\s*shell\.view/);
     expect(activity).not.toContain("setContent {");
     expect(activity).not.toContain("AppNav");
   });

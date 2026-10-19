@@ -2,12 +2,17 @@ package fr.veryslopnynotes.app
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
 import android.webkit.WebView
+import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updatePadding
 import fr.veryslopnynotes.data.PeriodicSyncWorker
 
 // Hôte natif de l'interface React (ADR-004) : `NativeWebShell` sert les assets
@@ -40,8 +45,45 @@ class MainActivity : ComponentActivity() {
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         val shell = NativeWebShell(this)
         webShell = shell
-        setContentView(shell.view)
+        // #399 : la WebView vit dans un CONTENEUR, pas directement dans la
+        // fenêtre. Le conteneur reçoit l'inset du clavier (padding bas) :
+        // c'est donc la zone VISIBLE de la WebView qui s'arrête au-dessus du
+        // clavier, et non la fenêtre entière.
+        val container = FrameLayout(this).apply {
+            addView(
+                shell.view,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+        }
+        setContentView(container)
+        applyImeInsets(container)
         shell.open(routePath(intent))
+    }
+
+    /**
+     * #399 : le clavier logiciel ne masque plus un champ de saisie.
+     *
+     * L'activité est edge-to-edge (#135) et immersive (#303) : la fenêtre ne
+     * se redimensionne PAS quand le clavier s'ouvre. L'inset IME est donc
+     * appliqué en PADDING BAS du conteneur de la WebView : la zone visible
+     * s'arrête au-dessus du clavier, la page web voit un viewport réduit (le
+     * champ focalisé revient dans le cadre) et la barre d'onglets remonte
+     * avec lui.
+     *
+     * `Type.ime()` et non `systemBars()` : ce sont les barres qui changent de
+     * taille ici, et l'inset clavier vaut 0 quand le clavier est fermé — le
+     * padding retombe à 0 tout seul.
+     */
+    private fun applyImeInsets(container: View) {
+        ViewCompat.setOnApplyWindowInsetsListener(container) { view, insets ->
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            view.updatePadding(bottom = ime.bottom)
+            insets
+        }
+        ViewCompat.requestApplyInsets(container)
     }
 
     /**
