@@ -44,6 +44,7 @@ import fr.veryslopnynotes.data.DeviceAuth
 import fr.veryslopnynotes.data.DiscussionsRepository
 import fr.veryslopnynotes.data.DiscussionWriteOutcome
 import fr.veryslopnynotes.data.FileCacheStore
+import fr.veryslopnynotes.data.FileRevisionStore
 import fr.veryslopnynotes.data.FileSubjectPrefsStore
 import fr.veryslopnynotes.data.InMemoryCacheStore
 import fr.veryslopnynotes.data.InMemorySubjectPrefsStore
@@ -61,9 +62,11 @@ import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.RestoreResult
 import fr.veryslopnynotes.data.SchoolQr
 import fr.veryslopnynotes.data.ServerStore
+import fr.veryslopnynotes.data.SessionEpoch
 import fr.veryslopnynotes.data.SessionStores
 import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SubjectPrefsRepository
+import fr.veryslopnynotes.data.SubjectPrefsWrite
 import fr.veryslopnynotes.data.SyncedRepository
 import fr.veryslopnynotes.data.parseSchoolQr
 import org.json.JSONArray
@@ -133,7 +136,7 @@ class VsnBridge(
         },
     )
     private val revisions: RevisionKv? = try {
-        FileRevisionKv(File(File(ctx.filesDir, "offline"), "revisions"))
+        FileRevisionStore(File(File(ctx.filesDir, "offline"), "revisions"))
     } catch (_: Exception) {
         null
     }
@@ -225,6 +228,12 @@ class VsnBridge(
         }
         if (executor.isShutdown) return
         inFlight.add(requestId)
+        // #404 : l'époque de session est capturée À L'ARRIVÉE de l'appel, pas
+        // à son exécution : la file a deux fils, donc une écriture demandée
+        // AVANT la purge de déconnexion peut être exécutée APRÈS. Capturée
+        // ici, elle perd la course d'époque et son écriture est abandonnée —
+        // le répertoire purgé ne ressuscite pas.
+        val epoch = SessionEpoch.current()
         executor.execute {
             try {
                 if (cancelled.contains(requestId)) return@execute
@@ -240,7 +249,7 @@ class VsnBridge(
                         throw BridgeFailure("bad_request", "Paramètres illisibles.")
                     }
                     // null = réponse différée (scan QR).
-                    handle(requestId, method, params)?.let { resolve(requestId, it) }
+                    handle(requestId, method, params, epoch)?.let { resolve(requestId, it) }
                 }
                 // Jamais le message brut : il peut nommer un hôte ou un compte.
                 if (failure != null) reject(requestId, failure.code, failure.message)
@@ -274,7 +283,7 @@ class VsnBridge(
         executor.shutdownNow()
     }
 
-    private fun handle(requestId: String, method: String, p: JSONObject): JSONObject? {
+    private fun handle(requestId: String, method: String, p: JSONObject, epoch: Long): JSONObject? {
         // `bridge.cancel` n'arrive jamais ici : il est intercepté dans `call()`
         // (signal immédiat, hors file d'exécution).
         return when (method) {
@@ -310,7 +319,7 @@ class VsnBridge(
             "settings.get" -> settings()
             "settings.saveServer" -> saveServer(p)
             "settings.subjectPrefs" -> subjectPrefs()
-            "settings.saveSubject" -> saveSubject(p)
+            "settings.saveSubject" -> saveSubject(p, epoch)
             "llm.status" -> JSONObject().put("configured", llmKeys.isConfigured())
             "llm.saveKey" -> saveLlmKey(p)
             "llm.forgetKey" -> {
@@ -318,7 +327,7 @@ class VsnBridge(
                 JSONObject().put("ok", true)
             }
             "llm.askHomework" -> askHomework(p)
-            "llm.generateRevision" -> generateRevision(p)
+            "llm.generateRevision" -> generateRevision(p, epoch)
             "revision.list" -> revisionList()
             "revision.load" -> revisionLoad(p)
             "revision.exportPdf" -> revisionExportPdf(p)
@@ -735,13 +744,18 @@ class VsnBridge(
     private fun subjectPrefs(): JSONObject = JSONObject()
         .put("prefs", JSONArray().apply { putAllPrefs(prefsRepo.prefs()) })
 
-    private fun saveSubject(p: JSONObject): JSONObject {
+    private fun saveSubject(p: JSONObject, epoch: Long): JSONObject {
         val subject = bounded(p.string("subject"), SubjectPrefs.MAX_SUBJECT_CHARS)
         if (subject.isEmpty()) throw BridgeFailure("bad_request", "Matière vide.")
         val color = p.string("color").takeIf { it.isNotEmpty() }
         val emoji = p.string("emoji").takeIf { it.isNotEmpty() }
         val label = p.string("label").takeIf { it.isNotEmpty() }
-        prefsRepo.upsert(subject, color, emoji, label)
+        // #404 : l'écriture passe par la garde d'époque. Refusée = la session
+        // a changé (déconnexion) depuis l'arrivée de l'appel : rien n'est
+        // écrit, le répertoire purgé ne ressuscite pas.
+        if (prefsRepo.upsert(subject, color, emoji, label, epoch) == SubjectPrefsWrite.REFUSED) {
+            throw BridgeFailure("bad_request", "Session modifiée : matière non enregistrée.")
+        }
         return JSONObject().put("ok", true).put("prefs", JSONArray().apply { putAllPrefs(prefsRepo.prefs()) })
     }
 
@@ -813,7 +827,7 @@ class VsnBridge(
      * sort de l'appareil ailleurs que dans ce prompt OpenRouter déclaré comme
      * donnée (I6).
      */
-    private fun generateRevision(p: JSONObject): JSONObject {
+    private fun generateRevision(p: JSONObject, epoch: Long): JSONObject {
         val id = bounded(p.string("assignmentId"), 128)
         val store = revisions ?: throw BridgeFailure("unavailable", "Stockage des fiches indisponible.")
         val assignment = loadAssignments(id, "").firstOrNull { it.id == id }
@@ -854,7 +868,21 @@ class VsnBridge(
                 confidence = "needs_confirm",
                 matched = exam.matched,
             )
-            saveRevisionSheet(store, assembleRevisionSheet(candidate, fiche, chunks.map { it.source }))
+            // #404 : l'écriture de la fiche passe par la garde d'époque (la
+            // fiche est générée par le modèle : l'appel dure plusieurs
+            // secondes, une déconnexion peut survenir entre-temps). Refusée =
+            // la session a changé : rien n'est écrit, le répertoire purgé ne
+            // ressuscite pas (le contenu scolaire du compte déconnecté ne
+            // reste pas sur le disque).
+            val saved = saveRevisionSheet(
+                store,
+                assembleRevisionSheet(candidate, fiche, chunks.map { it.source }),
+                epoch,
+            )
+            if (!saved) {
+                return JSONObject().put("ok", false)
+                    .put("message", "Session modifiée : fiche non enregistrée.")
+            }
             JSONObject().put("ok", true)
         } catch (e: SecretDetectedException) {
             // #409 : un SECRET dans le cours (forme detectee par la garde I4).
@@ -1158,29 +1186,6 @@ class VsnBridge(
 
     private fun JSONObject.string(key: String): String =
         if (isNull(key)) "" else optString(key, "")
-
-    /** Store de fiches en fichiers, même assainissement que l'écran Compose. */
-    private class FileRevisionKv(dir: File) : RevisionKv {
-        private val dir = dir
-
-        private fun fileFor(key: String): File {
-            val safe = key.map {
-                if (it.isLetterOrDigit() || it == '-' || it == '_' || it == '.') it else '_'
-            }.joinToString("").take(120).ifEmpty { "_" }
-            return File(dir, "$safe.bin")
-        }
-
-        override fun get(key: String): ByteArray? = try {
-            fileFor(key).takeIf { it.isFile }?.readBytes()
-        } catch (_: Exception) {
-            null
-        }
-
-        override fun set(key: String, value: ByteArray) {
-            dir.mkdirs()
-            fileFor(key).writeBytes(value)
-        }
-    }
 
     companion object {
         private const val MAX_METHOD_CHARS = 64
