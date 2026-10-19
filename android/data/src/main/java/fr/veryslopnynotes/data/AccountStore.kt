@@ -84,6 +84,13 @@ class AccountStore(
      * notes/devoirs/EDT sont des données du compte déconnecté). `sessions.clear()`
      * efface le jeton persisté : après cette ligne, plus aucune lecture ne peut
      * rouvrir la session. Le profil, lu en mémoire, est abandonné par l'appelant.
+     *
+     * #364 : l'invalidation de l'epoch de session ET la purge sont dans la MÊME
+     * section critique. Une lecture DÉJÀ en vol (elle a capturé l'ancienne
+     * epoch avant la déconnexion) ne peut plus réécrire le cache après la purge :
+     * elle perd la course d'époque et abandonne son payload. Sans ça, la purge
+     * était annulée et le cache « frais » du compte déconnecté resservait au
+     * compte appairé suivant.
      */
     fun logout() {
         sessions.clear()
@@ -92,7 +99,7 @@ class AccountStore(
         PronoteSession.clear()
         // Purge totale : la liste de ressources dérive des contrats, une liste
         // codée en dur laisserait fuiter la donnee d'une ressource ajoutée plus tard.
-        cacheStore.clearAll()
+        SessionEpoch.invalidate { cacheStore.clearAll() }
         prefs.edit().clear().apply()
     }
 
