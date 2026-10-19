@@ -6,6 +6,7 @@
 // Toute chaîne du payload est une DONNÉE (jamais du HTML, jamais une
 // instruction) et elle est nettoyée/bornée avant de sortir d'ici.
 import { asNumber, cleanText, parseDate } from "../../lib/format";
+import { subjectKey } from "../../lib/subject";
 
 export type Algorithm = "subject" | "weighted" | "median";
 
@@ -331,14 +332,6 @@ function subjectAverageInner(grades: readonly Grade[], loop: boolean): number {
   return ratioTo20(sum);
 }
 
-export function subjectKey(subject: string): string {
-  return subject
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-}
-
 function groupBySubject(grades: readonly Grade[]): Array<[string, Grade[]]> {
   const groups = new Map<string, Grade[]>();
   for (const grade of grades) {
@@ -417,8 +410,18 @@ export function gradesForPeriod(grades: readonly Grade[], periodId: string | nul
   return grades.every((grade) => !grade.periodId) ? [...grades] : [];
 }
 
-function round2(value: number): number {
-  const rounded = Math.sign(value) * (Math.round(Math.abs(value) * 100) / 100);
+/**
+ * Deux décimales, comme le natif : `BigDecimal(value).setScale(2, HALF_UP)`
+ * (`core/Averages.kt`, `twoDecimals`) est exactement `Number(value.toFixed(2))`
+ * — arrondi au 1/100, moitié AU LOIN de zéro, symétrique (`-0.125` -> `-0.13`).
+ *
+ * L'arrondi binaire (`Math.round(v * 100) / 100`) dérive : `2.675 * 100` vaut
+ * `267.49999999999997` en IEEE-754, le web affichait donc `2.68` là où le
+ * natif affichait `2.67`.
+ */
+export function twoDecimals(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  const rounded = Number(value.toFixed(2));
   return Object.is(rounded, -0) ? 0 : rounded;
 }
 
@@ -445,7 +448,7 @@ function buildInfluences(algorithm: Algorithm, grades: readonly Grade[]): Influe
   for (const grade of recentByDate(grades)) {
     const rest = grades.filter((g) => g.id !== grade.id);
     const without = averageWith(algorithm, rest) ?? 0;
-    out.push({ gradeId: grade.id, subject: grade.subject, impact: round2(general - without) });
+    out.push({ gradeId: grade.id, subject: grade.subject, impact: twoDecimals(general - without) });
   }
   return out;
 }
@@ -503,36 +506,54 @@ export function gradesQuery(algorithm: Algorithm, periodId: string | null): stri
   return parts.join("&");
 }
 
-/** Minuscules, sans accents : la recherche « maths » trouve « Mathématiques ». */
-export function foldForSearch(value: string): string {
-  return subjectKey(value);
-}
-
-/** Groupes par matière, moyenne décroissante puis nom (miroir natif). */
+/**
+ * Groupes par matière : UNE carte par matière, comme le rapport natif.
+ *
+ * Le regroupement se fait par clé NORMALISÉE (`subjectKey`) : « Mathématiques »
+ * et « MATHEMATIQUES » sont une seule matière, et la moyenne se cherche dans
+ * le rapport par cette même clé. Sinon le web montrait deux cartes — dont une
+ * « Pas de moyenne » — en désaccord avec la moyenne générale affichée plus
+ * haut (le rapport natif, lui, n'en publie qu'une).
+ *
+ * La graphie affichée est celle du rapport (donc la première graphie rencontrée
+ * par le natif) ; à défaut, celle de la première note du groupe.
+ */
 export function gradeGroups(grades: readonly Grade[], subjects: readonly SubjectAverage[]): GradeGroup[] {
-  const byName = new Map<string, Grade[]>();
+  const byKey = new Map<string, { subject: string; grades: Grade[] }>();
   for (const grade of grades) {
-    const bucket = byName.get(grade.subject);
-    if (bucket) bucket.push(grade);
-    else byName.set(grade.subject, [grade]);
+    const key = subjectKey(grade.subject);
+    const bucket = byKey.get(key);
+    if (bucket) bucket.grades.push(grade);
+    else byKey.set(key, { subject: grade.subject, grades: [grade] });
   }
-  const averages = new Map(subjects.map((subject) => [subject.subject, subject]));
-  const names: string[] = [];
-  for (const name of averages.keys()) names.push(name);
-  for (const name of byName.keys()) if (!averages.has(name)) names.push(name);
-  return names
-    .map((name) => {
-      const average = averages.get(name);
+  // Le rapport est indexé par la MÊME clé : une entrée par matière normalisée.
+  const averages = new Map<string, SubjectAverage>();
+  for (const subject of subjects) {
+    const key = subjectKey(subject.subject);
+    if (!averages.has(key)) averages.set(key, subject);
+  }
+  const keys: string[] = [];
+  for (const key of byKey.keys()) keys.push(key);
+  for (const key of averages.keys()) if (!byKey.has(key)) keys.push(key);
+  return keys
+    .map((key) => {
+      const bucket = byKey.get(key);
+      const average = averages.get(key);
       return {
-        subject: name,
+        subject: average?.subject ?? bucket?.subject ?? key,
         average: average?.value ?? null,
         provided: average?.provided ?? false,
-        grades: [...(byName.get(name) ?? [])].sort((a, b) => (b.millis ?? 0) - (a.millis ?? 0)),
+        grades: [...(bucket?.grades ?? [])].sort((a, b) => (b.millis ?? 0) - (a.millis ?? 0)),
       };
     })
     .sort((a, b) => {
-      const diff = (b.average ?? Number.NEGATIVE_INFINITY) - (a.average ?? Number.NEGATIVE_INFINITY);
-      return diff !== 0 ? diff : a.subject.localeCompare(b.subject, "fr");
+      // Moyenne décroissante, puis nom. Sans moyenne, la valeur vaut -Infinity :
+      // la différence de deux -Infinity est NaN, et le tri par nom ne
+      // s'exécuterait jamais — comparer les valeurs avant de soustraire.
+      const left = a.average ?? Number.NEGATIVE_INFINITY;
+      const right = b.average ?? Number.NEGATIVE_INFINITY;
+      if (left !== right) return right - left;
+      return a.subject.localeCompare(b.subject, "fr");
     });
 }
 
