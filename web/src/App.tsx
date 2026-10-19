@@ -4,6 +4,7 @@ import { bridge } from "./bridge/client";
 import type { SessionStatus } from "./bridge/types";
 import { AppProvider, useApp } from "./ui/AppContext";
 import { Shell } from "./ui/AppShell";
+import { mustPair } from "./lib/session";
 import IndexRoute from "./routes/index";
 import CalendarRoute from "./routes/calendar";
 import GradesRoute from "./routes/grades";
@@ -23,7 +24,7 @@ function Gate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionStatus | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const { authLost } = useApp();
+  const { authLost, sessionOpen } = useApp();
 
   useEffect(() => {
     let alive = true;
@@ -40,13 +41,16 @@ function Gate({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Un appairage réussi ouvre la session : le statut lu au démarrage
+  // (« pas de session ») est périmé. Sans cette information, le garde-fou
+  // ci-dessous renverrait l'utilisateur vers /pairing alors que la session
+  // native est ouverte — il faudrait redémarrer l'app pour sortir (#357).
   useEffect(() => {
-    if (!session) return;
-    const needsPairing = session.state === "no_session" || session.state === "dead";
-    if ((needsPairing || authLost) && location.pathname !== "/pairing") {
+    if (location.pathname === "/pairing") return;
+    if (mustPair({ status: session, open: sessionOpen, expired: authLost })) {
       navigate("/pairing", { replace: true });
     }
-  }, [session, authLost, location.pathname, navigate]);
+  }, [session, sessionOpen, authLost, location.pathname, navigate]);
 
   return <>{children}</>;
 }

@@ -18,6 +18,14 @@ interface AppContextValue {
   refresh: () => void;
   notify: (message: string, kind?: NoticeKind) => void;
   authLost: boolean;
+  /**
+   * Une session est ouverte (appairage réussi). Le statut lu au démarrage
+   * est alors périmé : sans ce drapeau, l'app renverrait vers l'écran
+   * d'appairage alors que la session native est ouverte (#357).
+   */
+  sessionOpen: boolean;
+  /** Ouvre la session (appairage réussi) : annule aussi « session expirée ». */
+  openSession: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -31,6 +39,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [scheme, setSchemeState] = useState<string>(() => parseScheme(localStorage.getItem("vsn:scheme")));
   const [refreshTick, setRefreshTick] = useState(0);
   const [authLost, setAuthLost] = useState(false);
+  const [sessionOpen, setSessionOpen] = useState(false);
   const noticeTimer = useRef<number | undefined>(undefined);
   const leaveTimer = useRef<number | undefined>(undefined);
   const [notice, setNotice] = useState<{ message: string; kind: NoticeKind; leaving: boolean } | null>(null);
@@ -62,6 +71,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const onAuth = () => setAuthLost(true);
     window.addEventListener("vsn:auth", onAuth);
     return () => window.removeEventListener("vsn:auth", onAuth);
+  }, []);
+
+  // Une session rouverte (appairage) annule l'état « session expirée » : il
+  // n'est levé que sur 401, jamais reposté. Sans cette remise à zéro, le
+  // garde-fou renverrait vers /pairing pour toujours (#357).
+  const openSession = useCallback(() => {
+    setSessionOpen(true);
+    setAuthLost(false);
   }, []);
 
   // Notice : entrée, temps de lecture, sortie animée (#336). La sortie est un
@@ -101,8 +118,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(() => setRefreshTick((n) => n + 1), []);
 
   const value = useMemo<AppContextValue>(
-    () => ({ theme, dark, setTheme, scheme, setScheme, refreshTick, refresh, notify, authLost }),
-    [theme, dark, setTheme, scheme, setScheme, refreshTick, refresh, notify, authLost],
+    () => ({
+      theme,
+      dark,
+      setTheme,
+      scheme,
+      setScheme,
+      refreshTick,
+      refresh,
+      notify,
+      authLost,
+      sessionOpen,
+      openSession,
+    }),
+    [theme, dark, setTheme, scheme, setScheme, refreshTick, refresh, notify, authLost, sessionOpen, openSession],
   );
 
   return (

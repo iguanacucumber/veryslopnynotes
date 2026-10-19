@@ -37,7 +37,7 @@ function StepChip({ label, done }: { label: string; done: boolean }) {
 
 export default function PairingScreen() {
   const navigate = useNavigate();
-  const { refresh, notify } = useApp();
+  const { refresh, notify, openSession } = useApp();
   const [qr, setQr] = useState<SchoolQr | null>(null);
   const [pin, setPin] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -108,6 +108,10 @@ export default function PairingScreen() {
         setQr(null);
         setPin("");
         notify("Appareil appairé.");
+        // La session native est ouverte : le web doit le savoir avant de
+        // quitter cet écran, sinon le garde-fou « pas de session » (lu au
+        // démarrage) nous renverrait ici — redémarrage obligatoire (#357).
+        openSession();
         refresh();
         navigate("/", { replace: true });
         return;
