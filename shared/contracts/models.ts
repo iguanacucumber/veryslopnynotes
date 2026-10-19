@@ -745,6 +745,18 @@ export const USER_PHOTO_REF_MAX_CHARS = 200;
 export const USER_PERIOD_ID_MAX_CHARS = 64;
 export const USER_MAX_KIDS = 8; // enfants listés (compte parent)
 
+/**
+ * Borne du libellé de PÉRIODE (#420). Elle est plus large que le nom : un
+ * établissement peut écrire « Trimestre 1 — année scolaire 2026-2027 ».
+ *
+ * C'est la borne UNIQUE : le contrat la publie, le noyau Kotlin la valide
+ * (`UserProfileRules.MAX_PERIOD_NAME`, miroir) et le web la relit
+ * (`web/src/features/profile/model.ts` l'importe d'ici). Le natif publiait
+ * déjà jusqu'à 100 caractères : une borne plus petite côté web faisait
+ * disparaître le profil entier (donnée tronquée = profil illisible).
+ */
+export const USER_PERIOD_NAME_MAX_CHARS = 100;
+
 /** Préfixe des réf photo : `photo:<idFichier>`. */
 export const PHOTO_REF_PREFIX = "photo:";
 
@@ -803,7 +815,7 @@ export function isUserInfo(v: unknown): v is UserInfo {
   if (v["lastName"] !== undefined && !isBoundedString(v["lastName"], USER_NAME_MAX_CHARS)) return false;
   if (v["classLabel"] !== undefined && !isBoundedString(v["classLabel"], USER_CLASS_MAX_CHARS)) return false;
   if (v["periodId"] !== undefined && !isBoundedString(v["periodId"], USER_PERIOD_ID_MAX_CHARS)) return false;
-  if (v["periodName"] !== undefined && !isBoundedString(v["periodName"], USER_NAME_MAX_CHARS)) return false;
+  if (v["periodName"] !== undefined && !isBoundedString(v["periodName"], USER_PERIOD_NAME_MAX_CHARS)) return false;
   // Photo : une URL dans photoRef = contrat invalide (l'app ne doit jamais voir
   // une adresse Pronote, I1 + règle d'or média).
   if (v["photoRef"] !== undefined && !isOpaquePhotoRef(v["photoRef"])) return false;
