@@ -140,6 +140,12 @@ export class BridgeCallError extends Error {
 export interface SessionStatus {
   state: "restored" | "no_session" | "dead" | "offline";
   message?: string;
+  /**
+   * Le stockage CHIFFRÉ (Keystore) a-t-il répondu ? `unavailable` = dégradé :
+   * la session et la clé de l'assistant ne sont PAS conservées sur l'appareil
+   * (repli mémoire), et l'interface doit le dire (#401).
+   */
+  storage?: "available" | "unavailable";
 }
 
 export interface SettingsSnapshot {

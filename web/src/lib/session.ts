@@ -11,6 +11,27 @@
 
 import type { SessionStatus } from "../bridge/types";
 
+/**
+ * Message affiché quand le stockage CHIFFRÉ est indisponible (#401).
+ *
+ * Le native publie l'ÉTAT (`storage`), pas la phrase : la copie vit ici,
+ * dans l'interface. Le repli mémoire reste la règle côté natif (jamais un
+ * secret en clair) — ce que l'utilisateur perd, c'est la CONSERVATION.
+ */
+export const STORAGE_UNAVAILABLE_MESSAGE =
+  "Stockage chiffré indisponible : tes identifiants ne sont pas conservés sur cet appareil. Déverrouille ton téléphone et réessaie.";
+
+/**
+ * Le stockage chiffré est-il indisponible (Keystore mort) ?
+ *
+ * Le natif le publie avec le statut de la session. Sans ce signal, l'app
+ * croyait en silence ne pas être appairée et la clé de l'assistant
+ * disparaissait sans explication (#401).
+ */
+export function storageUnavailable(status: SessionStatus | null): boolean {
+  return status?.storage === "unavailable";
+}
+
 export interface SessionView {
   /** Statut renvoyé par le natif (`null` = il n'a pas encore répondu). */
   status: SessionStatus | null;

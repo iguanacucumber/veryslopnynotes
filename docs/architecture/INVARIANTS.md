@@ -304,3 +304,23 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Commande : `make check`.
 - Emplacement : `android/pronote/src/main/java/fr/veryslopnynotes/pronote/Client.kt`,
   `android/pronote/src/main/java/fr/veryslopnynotes/pronote/RefreshGate.kt`.
+
+## I18 — L'échec du Keystore est un ÉTAT, pas un silence
+- Invariant : un Keystore indisponible (écran de verrouillage changé, appareil
+  verrouillé depuis le démarrage) fait basculer les stores sur le repli
+  MÉMOIRE — jamais un secret en clair — mais ce repli est **SIGNALÉ** :
+  l'état `UNAVAILABLE` est marqué (`SecureStorage`), publié par le pont
+  (`session.status` / `session.restore`, champ `storage`) et AFFICHÉ par
+  l'interface (écran d'appairage, réglages). Sans cela, l'app croyait en
+  silence ne pas être appairée et la clé de l'assistant disparaissait sans
+  explication. Les stores ne journalisent JAMAIS (ils tiennent le jeton et la
+  clé) : le journal est dans le pont, borné, sans secret ni chemin.
+- Test : `tests/unit/kotlin-store-health.test.ts` (Kotlin EXÉCUTÉ : la décision
+  « Keystore KO → `UNAVAILABLE` », l'état qui RESTE dégradé, les deux `catch`
+  qui marquent l'échec, le journal borné et sans secret) +
+  `tests/web/session.test.ts` (l'état est lu, propagé à l'interface et
+  affiché).
+- Commande : `make check`.
+- Emplacement : `android/data/StoreHealth.kt`, `android/data/SessionStore.kt`,
+  `android/data/LlmKeyStore.kt`, `android/app/VsnBridge.kt`,
+  `web/src/lib/session.ts`, `web/src/ui/AppContext.tsx`.
