@@ -16,3 +16,8 @@ Garde-fous côté serveur (#362) : la navigation ne va que vers un hôte public
 redirections est vérifiée avant le navigateur et l'URL finale après ; le
 chemin du cookie jar n'est plus fourni par l'appelant (seulement son nom, dans
 `playwright/.auth/`).
+
+Le navigateur n'est pas téléchargé par `bun install` (le paquet `playwright`
+n'a aucun script d'installation) : hors Docker, lancer `bunx playwright install
+chromium` une fois, sinon le scrape répond 501 « scraper sans navigateur ».
+Dans l'image Docker, Chromium est installé au build (`Dockerfile.server`).
