@@ -59,6 +59,15 @@ data class SecurityAlert(
         // d'override suivi d'un nom de consigne, ou une formule d'override
         // autonome). C'est ce qui sépare « la consigne système d'un serveur »
         // (légitime) de « ignore la consigne système » (injection).
+        //
+        // LIMITES assumées (le filtre est une heuristique, pas un contrôle) :
+        //  - une PARAPHRASE (« écarte ce que tu as reçu »), une autre langue
+        //    ou un autre encodage passe inaperçu ;
+        //  - la forme élidée « ignore l'instruction… » n'est PAS retenue, pour
+        //    ne pas signaler les notes de cours légitimes qui la contiennent
+        //    (« le processeur ignore l'instruction MOV ») ;
+        //  - à l'inverse, une note de cours qui PARLE d'override peut être
+        //    signalée à tort (« le routeur ignore les consignes de filtrage »).
 
         /** Caractères invisibles : zero-width, BOM, tiret conditionnel. */
         private val INVISIBLE_RE = Regex("[\u00AD\u180E\u200B\u200C\u200D\u2060\uFEFF]")
@@ -77,20 +86,18 @@ data class SecurityAlert(
          */
         private val INJECTION_PATTERNS: List<Regex> = listOf(
             // FR — « ignore(ez) les consignes|instructions »
-            Regex("""ignore\w*\s+(?:toutes?\s+)?(?:(?:les?|la|ces?|tes?|ta|vos?)\s+)?(?:consignes?|instructions?)"""),
+            Regex("""ignore\w*\s+(?:toutes?\s+)?(?:(?:les?|la|ces?|tes?|ta|vos?|cette)\s+)?(?:consignes?|instructions?)"""),
+            // FR — « ignorez tout ce qui précède » (forme canonique)
+            Regex("""ignore\w*\s+tout\s+ce\s+qui\s+precede"""),
             // FR — « oublie(ez) tout » / « oublie les instructions »
-            Regex("""oublie\w*\s+(?:tout\b|(?:(?:toutes?\s+les\s+|les\s+|la\s+|ce\s+|ces\s+)?(?:consignes?|instructions?)))"""),
+            Regex("""oublie\w*\s+(?:tout\b|(?:(?:toutes?\s+les\s+|les\s+|la\s+|ce\s+|ces\s+|cette\s+)?(?:consignes?|instructions?)))"""),
             // FR — « nouvelle instruction » (formule d'override)
             Regex("""nouvelle\s+instruction"""),
-            // EN — « ignore (all) (previous) instructions »
-            Regex("""ignore\s+(?:(?:all|any|the|my|your|these|those)\s+)*(?:(?:previous|prior|earlier|above|preceding|foregoing|former)\s+)*(?:instructions?|directives?|rules?|guidelines?)"""),
+            // EN — « ignore|disregard|forget (all) (previous) instructions »
+            Regex("""(?:ignore|disregard|forget)\s+(?:(?:all|any|the|my|your|these|those|of|about)\s+)*(?:(?:previous|prior|earlier|above|preceding|foregoing|former)\s+)*(?:instructions?|directives?|rules?|guidelines?|everything|above)"""),
             // EN — « ignore the prompt » : l'article est EXIGÉ, « prompt
             // engineering » n'est pas une consigne.
-            Regex("""ignore\s+(?:(?:all|any|the|my|your|these|those)\s+)*(?:(?:previous|prior|earlier|above|preceding|foregoing|former)\s+)*(?:the|this|that|system)\s+prompts?\b"""),
-            // EN — « disregard the above »
-            Regex("""disregard\s+(?:(?:all|any|the|these|those|of)\s+)*(?:above|previous|preceding|prior|earlier|foregoing|former|everything)\b"""),
-            // EN — « forget everything » / « forget all previous instructions »
-            Regex("""forget\s+(?:everything|all\s+(?:the\s+)?(?:(?:previous|prior|earlier|above)\s+)*instructions?|previous\s+instructions?|about\s+everything)"""),
+            Regex("""(?:ignore|disregard|forget)\s+(?:(?:all|any|the|my|your|these|those|of|about)\s+)*(?:(?:previous|prior|earlier|above|preceding|foregoing|former)\s+)*(?:the|this|that|system)\s+prompts?\b"""),
         )
 
         /** Candidats base64 : une charge encodée reste une injection. */
