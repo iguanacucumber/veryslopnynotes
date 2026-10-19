@@ -16,6 +16,7 @@ import {
   frDateShort,
   frDay,
   frRange,
+  parseInstant,
 } from "../../lib/format";
 import { subjectKey } from "../../lib/subject";
 
@@ -68,7 +69,9 @@ function rowsOf(root: Obj, key: string, max = MAX_ITEMS): unknown[] {
   return rows ? rows.slice(0, max) : [];
 }
 
-/** ISO-8601 (ou date seule) -> millis ; illisible = null, jamais `NaN`. */
+/** ISO-8601 (ou date seule) -> millis ; illisible = null, jamais `NaN`. Une
+ *  date seule est minuit local (analyseur partagé) : elle ne glisse pas d'un
+ *  jour à l'ouest de Greenwich. */
 export function millisOf(value: unknown): number | null {
   if (typeof value !== "string") return null;
   const text = value.trim();
@@ -80,8 +83,7 @@ export function millisOf(value: unknown): number | null {
   ) {
     return null;
   }
-  const ms = Date.parse(text);
-  return Number.isFinite(ms) ? ms : null;
+  return parseInstant(text);
 }
 
 function numberOrNull(value: unknown): number | null {

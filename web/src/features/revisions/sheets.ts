@@ -94,5 +94,5 @@ export function parseRevisionSheets(raw: unknown): RevisionSheet[] {
 
 /** « lundi 18 octobre » ; vide si la date manque ou est illisible. */
 export function revisionDateLabel(sheet: RevisionSheet): string {
-  return parseDate(sheet.date) ? frDate(sheet.date) : "";
+  return frDate(sheet.date);
 }
