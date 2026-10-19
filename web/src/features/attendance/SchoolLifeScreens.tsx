@@ -93,7 +93,7 @@ export function AttendanceScreen({
       ) : (
         <>
           <Card
-            className="card--flat"
+            className={`school-summary${status.clean ? " school-summary--clean" : " school-summary--alert"}`}
             as="article"
           >
             <div className="row" style={{ alignItems: "flex-start" }}>

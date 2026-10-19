@@ -1,6 +1,7 @@
-import { useMemo, type ComponentType, type ReactElement } from "react";
+import { useMemo, type ComponentType, type CSSProperties, type ReactElement } from "react";
 import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { frDate, relativeFr, subjectColor, tint } from "../../lib/format";
+import { subjectEmoji } from "../../lib/subjectVisual";
 import { useApp, useResource } from "../../ui/AppContext";
 import {
   Card,
@@ -10,6 +11,7 @@ import {
   Page,
   Section,
   StaleBadge,
+  SubjectAvatar,
 } from "../../ui/components";
 import {
   IconBell,
@@ -119,24 +121,31 @@ function AverageWidget({
             average.provided ? "fournie par l’établissement" : "estimée"
           }`}
         >
-          <div className="home-average__line">
-            <span className="home-average__number">{formatAverage(value)}</span>
-            <span className="home-average__scale">/20</span>
+          <div
+            className="home-average__ring"
+            aria-hidden="true"
+            style={{ "--ring-turn": `${fraction * 360}deg` } as CSSProperties}
+          >
+            <div className="home-average__ring-core">
+              <strong>{formatAverage(value)}</strong>
+            </div>
           </div>
-          <div className="home-average__track" aria-hidden="true">
-            <div className="home-average__fill" style={{ width: `${fraction * 100}%` }} />
+          <div className="home-average__copy">
+            <span className="home-average__eyebrow">Sur 20</span>
+            <p className="home-average__origin">
+              {average.provided ? "Fournie par l’établissement" : "Estimée sur la période"}
+            </p>
+            {average.subjectCount > 0 ? (
+              <span className="home-average__count">{average.subjectCount} matières suivies</span>
+            ) : null}
           </div>
-          <p className="home-average__origin">
-            {average.provided ? "Moyenne fournie par l’établissement" : "Moyenne estimée"}
-            {average.subjectCount > 0 ? ` · ${average.subjectCount} matières` : ""}
-          </p>
         </div>
       ) : null}
       {latest.map((grade) => {
         const palette = paletteFor(grade.subject, dark);
         return (
           <div className="home-grade" key={grade.id}>
-            <span className="home-grade__dot" style={{ background: palette.base }} aria-hidden="true" />
+            <SubjectAvatar subject={grade.subject} size={32} dark={dark} />
             <span className="home-grade__subject" style={{ color: palette.ink }}>
               {grade.subject}
             </span>
@@ -167,13 +176,17 @@ function CourseWidget({
         {lessons.map((lesson) => {
           const palette = paletteFor(lesson.subject, dark);
           const countdown = courseCountdown(lesson, now);
+          const live = lesson.start <= now && now < lesson.end;
           return (
             <div
-              className="home-course"
+              className={`home-course${live ? " home-course--live" : ""}`}
               key={lesson.id}
               style={{ background: palette.background, color: palette.ink }}
             >
               <span className="home-course__spine" style={{ background: palette.base }} aria-hidden="true" />
+              <span className="home-course__emoji" aria-hidden="true">
+                {subjectEmoji(lesson.subject)}
+              </span>
               <div className="grow">
                 <strong className="home-course__subject">{lesson.subject}</strong>
                 {lesson.room ? <span className="home-course__room">{lesson.room}</span> : null}
@@ -209,14 +222,16 @@ function TasksWidget({
           const palette = paletteFor(task.subject, dark);
           return (
             <div className="home-task" key={task.id}>
-              <span className="home-task__dot" style={{ background: palette.base }} aria-hidden="true" />
+              <SubjectAvatar subject={task.subject} size={34} dark={dark} />
               <div className="grow">
                 <div className="home-task__subject" style={{ color: palette.ink }}>
                   {task.subject}
                 </div>
                 <div className="home-task__title">{task.title}</div>
               </div>
-              <span className="home-task__due">{dueLabel(task.due, now)}</span>
+              <span className={`home-task__due ${dueTone(task.due, now)}`}>
+                {dueLabel(task.due, now)}
+              </span>
             </div>
           );
         })}
@@ -341,8 +356,14 @@ export default function HomeScreen() {
   return (
     <Page className="home">
       <Card className="home-hero">
+        <span className="home-hero__orb home-hero__orb--one" aria-hidden="true" />
+        <span className="home-hero__orb home-hero__orb--two" aria-hidden="true" />
+        <span className="home-hero__glyph" aria-hidden="true">
+          <IconCalendar size={88} />
+        </span>
         <div className="home-hero__body">
           <div className="grow">
+            <span className="home-hero__eyebrow">Aujourd’hui</span>
             <h2 className="home-hero__greeting">{greeting}</h2>
             <p className="home-hero__day">{frDate(new Date(now).toISOString())}</p>
           </div>
@@ -353,12 +374,25 @@ export default function HomeScreen() {
             aria-label="Actualiser l’accueil"
           >
             <IconRefresh size={18} />
-            <span>Actualiser</span>
           </button>
         </div>
-        <span className="home-hero__glyph" aria-hidden="true">
-          <IconCalendar size={72} />
-        </span>
+        <div className="home-hero__stats">
+          <div className="home-hero__stat">
+            <span>Moyenne</span>
+            <strong>
+              {average.value !== null ? formatAverage(average.value) : "—"}
+              {average.value !== null ? <small>/20</small> : null}
+            </strong>
+          </div>
+          <div className="home-hero__stat">
+            <span>Cours</span>
+            <strong>{upcoming.length}</strong>
+          </div>
+          <div className="home-hero__stat">
+            <span>Devoirs</span>
+            <strong>{tasks.length}</strong>
+          </div>
+        </div>
       </Card>
 
       {hasData && (stale || error) ? (
@@ -439,6 +473,15 @@ export default function HomeScreen() {
       {scheduleHint(upcoming[0], now)}
     </Page>
   );
+}
+
+/** Teinte d'échéance : rouge sous 24 h, accent sous 72 h, neutre ensuite. */
+function dueTone(due: number, now: number): string {
+  if (!due) return "";
+  const hours = (due - now) / 3_600_000;
+  if (hours <= 24) return "home-task__due--soon";
+  if (hours <= 72) return "home-task__due--near";
+  return "";
 }
 
 /** Petite ligne d'information quand un cours est en cours (sans widget dédié). */

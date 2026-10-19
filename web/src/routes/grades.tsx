@@ -10,7 +10,12 @@ import {
   parsePeriods,
   type Algorithm,
 } from "../features/grades/model";
-import { GradesHero, GradesSubjectSections, GradesToolbar } from "../features/grades/components";
+import {
+  GradesHero,
+  GradesSubjectSections,
+  GradesToolbar,
+  LatestGrades,
+} from "../features/grades/components";
 import "../features/grades/grades.css";
 
 /**
@@ -104,6 +109,8 @@ export default function GradesRoute() {
       />
 
       {data.report ? <GradesHero report={data.report} /> : null}
+
+      {groups.length > 0 ? <LatestGrades groups={groups} dark={dark} /> : null}
 
       {groups.length > 0 && data.report ? (
         <GradesSubjectSections groups={groups} report={data.report} dark={dark} />

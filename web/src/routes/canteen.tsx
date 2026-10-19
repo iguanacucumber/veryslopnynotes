@@ -12,36 +12,22 @@ import {
 function MealBlock({ menu }: { menu: CanteenMenu }) {
   return (
     <div className="stack" style={{ gap: 8 }}>
-      <div className="row row--between">
-        <h4 className="t-title" style={{ margin: 0, fontSize: 16 }}>
-          {canteenMealLabel(menu.meal)}
-        </h4>
-      </div>
+      <h4 className="canteen-meal__label">{canteenMealLabel(menu.meal)}</h4>
 
       {menu.allergens.length > 0 ? (
-        <div
-          role="group"
-          aria-label="Allergènes"
-          style={{ background: "var(--brand-pale)", borderRadius: 8, padding: "8px 10px" }}
-        >
-          <p className="tiny muted" style={{ margin: "0 0 4px", fontWeight: 700 }}>
-            Allergènes
-          </p>
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {menu.allergens.map((allergen) => (
-              <li key={allergen} className="t-body-m">
-                {allergen}
-              </li>
-            ))}
-          </ul>
+        <div className="canteen-allergens" role="group" aria-label="Allergènes">
+          <span className="canteen-allergens__label">Allergènes</span>
+          {menu.allergens.map((allergen) => (
+            <span className="canteen-allergen" key={allergen}>
+              {allergen}
+            </span>
+          ))}
         </div>
       ) : null}
 
-      <ul style={{ margin: 0, paddingLeft: 18 }}>
+      <ul className="canteen-dishes">
         {menu.dishes.map((dish) => (
-          <li key={dish} className="t-body-m">
-            {dish}
-          </li>
+          <li key={dish}>{dish}</li>
         ))}
       </ul>
     </div>
@@ -98,10 +84,15 @@ export default function CanteenRoute() {
       {days.map((day) => {
         const label = canteenDayLabel(day.date);
         return (
-          <Card key={day.date} as="article" className="stack">
-            <h3 className="t-title" style={{ margin: 0 }}>
-              {label || "Jour non précisé"}
-            </h3>
+          <Card key={day.date} as="article" className="stack canteen-day">
+            <div className="canteen-day__head">
+              <span className="canteen-day__icon" aria-hidden="true">
+                <IconFood size={18} />
+              </span>
+              <h3 className="t-title" style={{ margin: 0 }}>
+                {label || "Jour non précisé"}
+              </h3>
+            </div>
             {day.meals.map((menu) => (
               <MealBlock key={`${menu.date}-${menu.meal}`} menu={menu} />
             ))}

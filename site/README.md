@@ -3,9 +3,8 @@
 Landing hero **vanilla, zéro dépendance** : `index.html` + `style.css` + `hero.js`.
 Aucun appel réseau, aucune fonte distante, 100 % hors-ligne et données fictives.
 
-> Choix d'emplacement : `keynote/` est un deck vidéo minuté (export mp4 1080p60),
-> pas une page web scrollable. Le hero vit donc dans un nouveau dossier `site/`.
-> `android/` et `server/` sont intouchés.
+> Choix d'emplacement : le hero vit dans un dossier `site/` dédié, séparé de
+> l'application embarquée. `android/` et `server/` sont intouchés.
 
 ## Ouvrir
 
