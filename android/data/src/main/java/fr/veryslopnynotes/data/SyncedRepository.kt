@@ -265,7 +265,7 @@ class SyncedRepository(
             CachePolicy.CAPABILITIES -> capabilitiesPayload(client)
             CachePolicy.DISCUSSIONS -> discussionsPayload(client)
             // Alertes : balayage des contenus DEJA en cache (aucun reseau :
-            // marche hors ligne, frais = « verifie, rien trouve »).
+            // marche hors ligne, frais = « heuristique, rien trouve »).
             CachePolicy.SECURITY_ALERTS -> alertsPayload(scanTexts())
             else -> throw IllegalArgumentException("ressource non cachable: $resource")
         }
