@@ -574,6 +574,13 @@ export function algorithmChipLabel(algorithm: Algorithm): string {
   return "Matières";
 }
 
+/** Une phrase pour expliquer le calcul choisi, sans jargon. */
+export function algorithmHint(algorithm: Algorithm): string {
+  if (algorithm === "weighted") return "Chaque note pèse selon son coefficient.";
+  if (algorithm === "median") return "La note médiane de chaque matière, peu sensible aux extrêmes.";
+  return "Moyenne simple des moyennes de matières.";
+}
+
 /** « par l'établissement » / « estimée au 12/10/2026 ». */
 export function originLabel(provided: boolean, estimatedAt: string | null): string {
   if (provided) return "par l'établissement";
