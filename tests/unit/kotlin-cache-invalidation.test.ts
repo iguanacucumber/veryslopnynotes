@@ -22,23 +22,13 @@ import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harnes
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const WEB = join(ROOT, "web", "src");
-const PRONOTE = join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "CacheInvalidationMain.kt");
-
-const SOURCES = [
-  join(DATA, "CachePolicy.kt"),
-  join(DATA, "OfflineCache.kt"),
-  join(DATA, "WeekWindow.kt"),
-  join(PRONOTE, "Json.kt"),
-  DRIVER,
-];
 
 const skip = parityToolchain.skipReason !== null;
 
 let link: ParityLink | null = null;
 if (!skip) {
-  const jar = await parityToolchain.ensureJar("kotlin-cache-invalidation", SOURCES);
-  link = await parityToolchain.openLink(jar);
+  link = await parityToolchain.openParityLink(DRIVER);
 }
 
 async function ask(op: unknown): Promise<string> {

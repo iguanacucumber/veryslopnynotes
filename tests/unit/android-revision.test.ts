@@ -19,27 +19,13 @@ import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harnes
 
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
 const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
-const JSON_LIB = join(
-  ROOT,
-  "android",
-  "pronote",
-  "src",
-  "main",
-  "java",
-  "fr",
-  "veryslopnynotes",
-  "pronote",
-  "Json.kt",
-);
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "RevisionAiMain.kt");
-const SOURCES = ["Untrusted.kt", "LlmGuard.kt", "AiPrompts.kt", "RevisionAi.kt"].map((f) => join(CORE, f));
 
 const skip = parityToolchain.skipReason !== null;
 
 let link: ParityLink | null = null;
 if (!skip) {
-  const jar = await parityToolchain.ensureJar("kotlin-revision", [...SOURCES, JSON_LIB, DRIVER]);
-  link = await parityToolchain.openLink(jar);
+  link = await parityToolchain.openParityLink(DRIVER);
 }
 
 async function ask(op: unknown): Promise<string> {

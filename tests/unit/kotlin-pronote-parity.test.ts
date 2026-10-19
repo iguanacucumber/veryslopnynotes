@@ -26,18 +26,13 @@ import { md5, sha256HexUpper } from "../../node_modules/pronotets/dist/crypto.js
 import { HttpSession } from "../../node_modules/pronotets/dist/http.js";
 import { ROOT, canonTs, parityToolchain, type ParityLink } from "./fixtures/kotlin-harness";
 
-const PRONOTE = join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote");
-const SOURCES = ["Json.kt", "Bytes.kt", "Errors.kt", "Crypto.kt", "HttpSession.kt", "Communication.kt"].map((f) =>
-  join(PRONOTE, f),
-);
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "PronoteParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
 
 let link: ParityLink | null = null;
 if (!skip) {
-  const jar = await parityToolchain.ensureJar("kotlin-pronote-parity", [...SOURCES, DRIVER]);
-  link = await parityToolchain.openLink(jar);
+  link = await parityToolchain.openParityLink(DRIVER);
 }
 
 async function ask(op: unknown, allowError = false): Promise<string> {

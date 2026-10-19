@@ -18,19 +18,14 @@ import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
-const POLICY = join(DATA, "CachePolicy.kt");
-const STORE = join(DATA, "OfflineCache.kt");
 const REPO = join(DATA, "SyncedRepository.kt");
-// JSON du pilote : le `Json` embarqué du port (pur, aucun import Android).
-const JSON_LIB = join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote", "Json.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "CacheQueryParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
 
 let link: ParityLink | null = null;
 if (!skip) {
-  const jar = await parityToolchain.ensureJar("kotlin-cache-query", [POLICY, STORE, JSON_LIB, DRIVER]);
-  link = await parityToolchain.openLink(jar);
+  link = await parityToolchain.openParityLink(DRIVER);
 }
 
 interface Entry {
