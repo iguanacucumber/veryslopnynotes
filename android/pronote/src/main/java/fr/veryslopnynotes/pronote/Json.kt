@@ -1,5 +1,9 @@
 package fr.veryslopnynotes.pronote
 
+import java.math.BigDecimal
+import java.math.MathContext
+import java.math.RoundingMode
+
 /**
  * JSON minimal du protocole (#200).
  *
@@ -13,8 +17,9 @@ package fr.veryslopnynotes.pronote
  * - clés dupliquées : la DERNIÈRE gagne (ordre d'insertion conservé sinon) ;
  * - `stringify` : ordre d'insertion, échappées courtes (`\n`, `\"`, `\\`…),
  *   `\u00XX` pour les autres contrôles, paires de substitution non-BMP brutes ;
- * - nombres : entier si entier (`20`, pas `20.0`), décimal le plus court sinon,
- *   exponentiel au-delà de `1e21` et sous `1e-6`, `NaN`/`Infini` → `null`.
+ * - nombres : entier si entier (`20`, pas `20.0`), la plus courte décimale
+ *   qui relit le double sinon (`0.30000000000000004`), exponentiel au-delà
+ *   de `1e21` et sous `1e-6`, `NaN`/`Infini` → `null`.
  * - `parse` : profondeur d'imbrication bornée (`MAX_DEPTH`) — une entrée trop
  *   profonde échoue par un `JsonError` RATRAPABLE, jamais par le
  *   `StackOverflowError` (une `Error` : crash dur) du parseur non borné.
@@ -304,46 +309,67 @@ object Json {
 }
 
 /**
- * Rendu d'un `Double` à la `JSON.stringify` : entier si entier (`20`, pas
- * `20.0`), décimal le plus court sinon (`0.30000000000000004`), exponentiel
- * au-delà de `1e21` et sous `1e-6` (`1e+21`, pas `1.0E21`). `NaN`/`Infini` →
- * `null`. Prouvé par la parité (`num`, extrêmes inclus).
+ * Rendu d'un `Double` à la `JSON.stringify` : la plus courte décimale qui
+ * relit le même double, puis les règles d'écriture d'ECMAScript
+ * (`Number::toString`) — entier si entier (`20`, pas `20.0`), plat de `1e-6`
+ * à `1e21`, exponentiel au-delà et en dessous (`1e+21`, `1e-7`).
+ * `NaN`/`Infini` → `null`. Prouvé par la parité (`num`, extrêmes inclus).
+ *
+ * #410 : le rendu ne doit PAS dépendre de la machine. Les chiffres
+ * significatifs sont donc cherchés par `BigDecimal` (exact) et non par
+ * `Double.toString`, qui n'est PAS le même partout : JDK 17 écrivait
+ * `1.23456789012345677E18` là où JS (et JDK 19+) écrivent
+ * `1.2345678901234568E18`, et Android (ART) a encore l'ancien algorithme.
+ * Un `toLong()` saturant (`1e19` → `9223372036854775807`) donnerait en plus
+ * le MÊME nombre pour `1e19` et `5e19` : deux moyennes de classe
+ * différentes, une seule empreinte de note.
+ *
+ * COPIE de `core/GradeDiff.kt` (`jsNum`) : `pronote` et `core` sont deux
+ * modules Gradle SANS dépendance entre eux (`core` = stdlib seule, I3) — la
+ * duplication est structurelle, et les deux rendus doivent rester identiques.
  */
 internal fun jsNumber(d: Double): String {
     if (d.isNaN() || d.isInfinite()) return "null"
-    if (d == kotlin.math.floor(d) && kotlin.math.abs(d) < 1e21) return d.toLong().toString()
-    val java = d.toString()
-    val ePos = java.indexOf('E')
-    if (ePos < 0) return java
-    var digits = java.substring(0, ePos).replace("-", "").replace(".", "")
-    val exp = java.substring(ePos + 1).toInt()
+    if (d == 0.0) return "0" // `-0` → `0` (comme `JSON.stringify`)
     val negative = d < 0
-    val ad = kotlin.math.abs(d)
-    if (ad >= 1e21 || ad < 1e-6) {
-        digits = digits.trimEnd('0')
-        if (digits.isEmpty()) digits = "0"
-        val mantissa = if (digits.length == 1) digits else "${digits[0]}.${digits.substring(1)}"
-        return (if (negative) "-" else "") + mantissa + "e" + (if (exp < 0) "-" else "+") + kotlin.math.abs(exp)
+    val a = kotlin.math.abs(d)
+    // Entier exact : pour |x| ≤ 2^53, la seule décimale qui relit le double
+    // est l'entier lui-même (l'intervalle de relecture vaut ±0,5) — le rendu
+    // est donc l'entier, sans passer par `BigDecimal`.
+    if (a <= 9007199254740992.0 && a == kotlin.math.floor(a)) {
+        return (if (negative) "-" else "") + a.toLong().toString()
     }
-    // Entre 1e-6 et 1e-3 : `Double.toString` écrit `1.0E-4`, JS `0.0001`.
-    val point = 1 + exp
-    val body = digits.trimStart('0')
-    if (body.isEmpty()) return "0"
-    val out = StringBuilder()
-    if (negative) out.append('-')
-    if (point <= 0) {
-        out.append("0.")
-        repeat(-point) { out.append('0') }
-        out.append(body)
-    } else if (point >= body.length) {
-        out.append(body)
-        repeat(point - body.length) { out.append('0') }
-    } else {
-        out.append(body.substring(0, point))
-        out.append('.')
-        out.append(body.substring(point))
+    // Sinon : la plus courte suite de chiffres significatifs qui relit le
+    // même double. 17 chiffres suffisent toujours (le round-trip le plus court
+    // en tient 17 au plus) ; on s'arrête au PREMIER qui relit juste.
+    val exact = BigDecimal(a)
+    var rounded = exact.round(MathContext(17, RoundingMode.HALF_EVEN))
+    for (k in 1..16) {
+        val r = exact.round(MathContext(k, RoundingMode.HALF_EVEN))
+        if (r.toDouble() == a) {
+            rounded = r
+            break
+        }
     }
-    var s = out.toString()
-    if (s.contains('.')) s = s.trimEnd('0').trimEnd('.')
-    return s
+    // Les zéros de fin ne sont pas significatifs : ils portent l'exposant.
+    var digits = rounded.unscaledValue().toString()
+    val scale = rounded.scale()
+    var trailing = 0
+    while (digits.length > 1 && digits.endsWith("0")) {
+        digits = digits.dropLast(1)
+        trailing++
+    }
+    val k = digits.length
+    val n = k + trailing - scale // valeur = chiffres × 10^(n − k)
+    val body = when {
+        k <= n && n <= 21 -> digits + "0".repeat(n - k)
+        n in 1..21 -> digits.substring(0, n) + "." + digits.substring(n)
+        n in -5..0 -> "0." + "0".repeat(-n) + digits
+        else -> {
+            val mantissa = if (k == 1) digits else digits[0] + "." + digits.substring(1)
+            val e = n - 1
+            mantissa + "e" + (if (e >= 0) "+" else "-") + kotlin.math.abs(e)
+        }
+    }
+    return (if (negative) "-" else "") + body
 }
