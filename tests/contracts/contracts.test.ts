@@ -48,6 +48,25 @@ describe("contracts", () => {
     }
   });
 
+  // #422 : le contrat doit décrire les réponses que le scraper rend
+  // vraiment : 503 « scraper occupé » (plafond de concurrence) et 504 pour
+  // le délai dépassé (le code exact — un 502 ferait croire à une panne du
+  // portail).
+  test("openapi : le scrape déclare 503 (scraper occupé) et 504 (délai)", () => {
+    const raw = readFileSync(OPENAPI, "utf8");
+    const healthAt = raw.indexOf("/v1/health:");
+    const scrapeAt = raw.indexOf("/v1/manuals/scrape:");
+    expect(healthAt).toBeGreaterThan(-1);
+    expect(scrapeAt).toBeGreaterThan(healthAt);
+    const scrape = raw.slice(scrapeAt);
+    expect(scrape).toContain("'503':");
+    expect(scrape).toContain("'504':");
+    // Ces codes sont ceux du SCRAPE : la sonde ne les porte pas.
+    const health = raw.slice(healthAt, scrapeAt);
+    expect(health).not.toContain("'503':");
+    expect(health).not.toContain("'504':");
+  });
+
   test("sonde : valide OK, invalides rejetés", () => {
     expect(isHealthResponse({ status: "ok", version: CONTRACTS_VERSION })).toBe(true);
     expect(isHealthResponse({ status: "ko", version: CONTRACTS_VERSION })).toBe(false);

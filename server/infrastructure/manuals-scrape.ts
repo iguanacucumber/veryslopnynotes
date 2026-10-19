@@ -23,6 +23,11 @@
 //  Il reste la fenêtre TOCTOU : le navigateur résout de son côté, au moment
 //  de la connexion (cf. ssrf.ts) — un nom rebindé entre la vérification et la
 //  connexion peut donc encore partir vers une IP interne.
+// #422 : le HTML RÉCUPÉRÉ est borné (plafond de caractères AVANT le reparse
+//  cheerio) et la lecture a un DÉLAI : `page.content()` lit TOUTE la page en
+//  mémoire (50 Mo => des centaines de Mo au reparse, x2 scrapes simultanés)
+//  et n'a aucun délai natif (une page qui ne finit pas de streamer survit au
+//  délai HTTP et garde le Chromium vivant).
 import { dirname, join, resolve } from "node:path";
 import { load } from "cheerio";
 import { MANUALS_SCRAPE_AUTH_FILE_RE } from "../../shared/contracts/api";
@@ -38,10 +43,10 @@ export interface ManualsConfig {
 }
 
 /** Motif de refus typé : le serveur l'expose à l'appelant (jamais l'URL). */
-export type ScrapeRefusal = "private_host" | "unresolved_host" | "generic";
+export type ScrapeRefusal = "private_host" | "unresolved_host" | "timeout" | "generic";
 
 export class ScrapeManualsError extends Error {
-  /** Motif du refus : `private_host` = garde SSRF (403), `generic` = 502. */
+  /** Motif du refus : `private_host` = garde SSRF (403), `timeout` = 504, `generic` = 502. */
   readonly reason: ScrapeRefusal;
   constructor(message: string, reason: ScrapeRefusal = "generic") {
     super(message);
@@ -75,12 +80,30 @@ export interface ScrapeOptions {
    * alors que la requête a déjà rendu son verdict.
    */
   readonly signal?: AbortSignal;
+  /**
+   * Délai de LECTURE du HTML (défaut 10 s) : `page.content()` n'a pas de
+   * délai à lui — une page qui ne finit pas de streamer bloquerait le scrape
+   * et garderait le Chromium vivant au-delà du délai HTTP.
+   */
+  readonly contentTimeoutMs?: number;
 }
 
 /** Répertoire des jars, côté serveur (gitignoré). */
 export const AUTH_DIR = "playwright/.auth";
 export const DEFAULT_AUTH_FILE = join(AUTH_DIR, "manuals.json");
 const DEFAULT_TIMEOUT_MS = 30_000;
+/**
+ * Plafond du HTML RÉCUPÉRÉ (caractères), appliqué AVANT le reparse cheerio
+ * (#422) : le coût du parse est linéaire (plusieurs fois la taille du HTML),
+ * donc une page de 50 Mo épuisait la mémoire du serveur — multiplié par le
+ * plafond de concurrence (2), des centaines de Mo pour un extrait de 4 000
+ * caractères.
+ * ponytail: 1 Mo de HTML suffit largement à une page de manuel (l'extrait
+ * final est tronqué à 4 000 caractères).
+ */
+export const MAX_HTML_CHARS = 1_000_000;
+/** Délai de lecture du HTML : `page.content()` n'en a pas (#422). */
+export const CONTENT_TIMEOUT_MS = 10_000;
 
 /**
  * Résout le jar de session. `requested` = NOM de fichier (contrat) : le
@@ -208,6 +231,8 @@ export async function assertPublicRedirectChain(
 // « &nbsp; » laissés tels quels = extrait illisible et introuvable à la
 // recherche). Cheerio déjà dépendance, zéro ajoutée.
 // Espace ajouté après chaque élément : sinon deux paragraphes se collent.
+// L'entrée est DÉJÀ bornée (readHtml) : le parse est linéaire, donc c'est
+// l'appelant qui borne, pas cette fonction.
 function stripTags(html: string): string {
   const $ = load(html);
   $("script,style").remove();
@@ -218,6 +243,58 @@ function stripTags(html: string): string {
     .text()
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Page Playwright : seule la lecture du HTML nous intéresse ici. */
+interface HtmlPage {
+  content: () => Promise<string>;
+}
+
+/**
+ * Lecture du HTML BORNÉE (#422) : `page.content()` lit TOUTE la page en
+ * mémoire et n'a aucun délai.
+ *  - délai propre : la course tranche et le refus porte le motif `timeout`
+ *    (=> 504 côté HTTP) ; sans lui, une page qui ne finit pas de streamer
+ *    survit au délai HTTP et garde le Chromium vivant ;
+ *  - plafond de caractères AVANT le reparse cheerio : le coût du parse est
+ *    linéaire, donc on borne la chaîne qu'il va reparcourir.
+ * La course peut être perdue (délai) : la rejection tardive de la lecture ne
+ * doit pas devenir une rejection non geree.
+ */
+async function readHtml(page: HtmlPage, timeoutMs: number, log: (message: string) => void): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const contentP: Promise<string> = (async () => {
+    try {
+      return await page.content();
+    } catch {
+      // Navigateur (ou page) mort pendant la lecture : un échec de scrape,
+      // pas une panne du serveur (502 « scrape impossible », jamais 500).
+      // Message FIXE : le message de Playwright peut contenir l'URL, et les
+      // logs du serveur ne doivent rien laisser filtrer (cf. I8).
+      throw new ScrapeManualsError("lecture du HTML impossible");
+    }
+  })();
+  contentP.catch(() => {});
+  try {
+    const html = await Promise.race([
+      contentP,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new ScrapeManualsError("lecture du HTML trop longue (delai depasse)", "timeout")),
+          timeoutMs,
+        );
+      }),
+    ]);
+    if (typeof html !== "string") return "";
+    if (html.length <= MAX_HTML_CHARS) return html;
+    // Plafond atteint : on tronque (le reste de la page est perdu, mais le
+    // serveur ne réexplore pas 50 Mo de HTML pour un extrait de 4 000
+    // caractères). Compteur seul dans le log : ni URL, ni credential.
+    log(`scrape -> html plafonne (${MAX_HTML_CHARS} caracteres maximum)`);
+    return html.slice(0, MAX_HTML_CHARS);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // Scrape générique v1 : une page -> un ManualDoc (titre + texte).
@@ -328,7 +405,11 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     // ferait entrer le corps du service interne dans l'extrait.
     await assertPublicUrl(typeof page.url === "function" ? page.url() : opts.startUrl, "cible finale", resolve);
     const title = (await page.title().catch(() => config.platform)) || config.platform;
-    const html: string = await page.content().catch(() => "");
+    // #422 : HTML borné (plafond de caractères) et lecture à DÉLAI : sans
+    // ça, `page.content()` lisait toute la page en mémoire (reparse cheerio
+    // = plusieurs fois sa taille) et une page qui ne finit pas de streamer
+    // bloquait le scrape au-delà du délai HTTP.
+    const html = await readHtml(page, opts.contentTimeoutMs ?? CONTENT_TIMEOUT_MS, log);
     const text = truncateManualText(stripTags(html), 4000);
     await context.storageState({ path: authFile }).catch(() => {
       log(`scrape ${config.platform} -> jar non persiste`);

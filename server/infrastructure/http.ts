@@ -82,7 +82,8 @@ export interface App {
  * un : une page d'erreur ne devient jamais un ManualDoc.
  * Plafond de concurrence : 2 scrapes en vol, le reste = 503 (l'endpoint est
  * public par conception, cf. I8 — un tiers ne doit pas pouvoir empiler des
- * Chromium, ~300 Mo chacun).
+ * Chromium, ~300 Mo chacun). Délai dépassé = 504 (le code exact), pas 502 :
+ * le portail n'est pas en cause, c'est le temps qui manque.
  * ponytail: borne 30s + cap 2 concurrents, compteur seul en memoire.
  * Upgrade: file persistante si multi-instances.
  */
@@ -130,7 +131,9 @@ export function createApp(deps: ScraperDeps = {}): App {
 }
 
 function timeoutError(ms: number): Error {
-  return new ScrapeManualsError(`scrape timeout ${ms}ms`);
+  // Motif `timeout` : le délai dépassé est un 504 (le code exact), pas un
+  // 502 « scrape impossible » qui ferait croire à une panne du portail.
+  return new ScrapeManualsError(`scrape timeout ${ms}ms`, "timeout");
 }
 
 async function handleScrape(
@@ -234,6 +237,9 @@ async function handleScrape(
         // Nom d'hôte introuvable : le scraping n'est pas en cause, le DNS
         // l'est — le code le dit (jamais un « scrape impossible » trompeur).
         if (err.reason === "unresolved_host") return error("unresolved_host", 502, "nom d'hote introuvable");
+        // #422 : délai dépassé = 504 (le code exact), pas 502. Le délai HTTP
+        // ET le délai de lecture du HTML (page.content()) finissent ici.
+        if (err.reason === "timeout") return error("timeout", 504, "delai de scrape depasse");
         return error("school_unreachable", 502, "scrape impossible");
       }
       // Client parti : le 500 serait un faux diagnostic.
