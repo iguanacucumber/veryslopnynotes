@@ -47,8 +47,10 @@ private class Driver {
             val fetchedAt = (op.num("fetchedAt") ?: 0.0).toLong()
             val now = (op.num("now") ?: 0.0).toLong()
             val force = op.bool("force") ?: false
-            val entry = if (op.bool("entry") ?: false) CachedEntry("payload", fetchedAt) else null
-            ok("fetch" to JVal.Bool(CachePolicy.shouldFetch(entry, resource, now, force)))
+            // #365 : la requête fait partie de l'identité de l'entrée.
+            val query = op.str("query") ?: ""
+            val entry = if (op.bool("entry") ?: false) CachedEntry("payload", fetchedAt, query) else null
+            ok("fetch" to JVal.Bool(CachePolicy.shouldFetch(entry, resource, query, now, force)))
         }
         "ttl" -> {
             val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
