@@ -92,7 +92,13 @@ data class Discussion(
     val subject: String,
     val participants: List<String>,
     val unreadCount: Int,
+    /** Date du dernier message : "" = inconnue (jamais devinée). */
     val lastMessageAt: String,
+    /**
+     * Fraîcheur du fil : "" = INCONNUE (#427). Un fil sans fraîcheur est
+     * un fil qui EXISTE : il est affiché et se trie sur l'ordre d'arrivée,
+     * pas sur une date inventée (« maintenant » le faisait remonter en tête).
+     */
     val updatedAt: String,
 ) {
     fun isValid(): Boolean =
@@ -100,6 +106,5 @@ data class Discussion(
             subject.isNotBlank() && subject.length <= DiscussionRules.MAX_SUBJECT &&
             participants.size <= DiscussionRules.MAX_PARTICIPANTS &&
             participants.all { it.isNotBlank() && it.length <= DiscussionRules.MAX_NAME } &&
-            (unreadCount == DiscussionRules.UNKNOWN_UNREAD || unreadCount in 0..DiscussionRules.MAX_UNREAD) &&
-            updatedAt.isNotBlank()
+            (unreadCount == DiscussionRules.UNKNOWN_UNREAD || unreadCount in 0..DiscussionRules.MAX_UNREAD)
 }
