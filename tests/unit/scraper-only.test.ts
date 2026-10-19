@@ -266,6 +266,7 @@ describe("scraper-only (#209)", () => {
   // scraper sans auth (I8) en clair.
   test("sans TLS : le repli en clair est BRUYANT (#421)", () => {
     const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const log = spyOn(console, "log").mockImplementation(() => {});
     const server = start({ PORT: "0", HOST: "127.0.0.1" });
     try {
       expect(warn).toHaveBeenCalled();
@@ -277,6 +278,7 @@ describe("scraper-only (#209)", () => {
     } finally {
       server.stop(true);
       warn.mockRestore();
+      log.mockRestore();
     }
   });
 });

@@ -157,7 +157,7 @@ describe("make runServer (#421)", () => {
     writeFileSync(cert, "certificat factice\n");
     writeFileSync(key, "cle factice\n");
 
-    const p = Bun.spawnSync(["make", "--no-print-directory", "runServer"], {
+    const p = Bun.spawnSync([Bun.which("make") ?? "make", "--no-print-directory", "runServer"], {
       cwd: ROOT,
       env: {
         PATH: bin,
