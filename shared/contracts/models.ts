@@ -40,7 +40,13 @@
 // Compétences absent de `tabs` => elle le masque (et sa route lui renvoie un 404
 // qu'elle sait traiter), et une app 0.8.0 contre un serveur 0.7.0 n'affiche
 // qu'un onglet en plus absent des capacités, jamais un écran cassé.
-export const CONTRACTS_VERSION = "0.8.0" as const;
+// 0.9.0 (#366) : la `ref` d'une pièce jointe de DEVOIR est désormais bornée
+// au schéma `homework:<devoir>:<piece>:<id>` (même forme que l'app et le
+// parseur web) au lieu de la seule garde « pas une URL ». Cassant : un devoir
+// dont la `ref` n'est pas au schéma est refusé par le contrat (il l'était
+// déjà par l'app et par le web, qui perdaient le devoir entier). `isIsoDate`
+// sort en export (garde de date partagée, réalignée sur le port Kotlin).
+export const CONTRACTS_VERSION = "0.9.0" as const;
 
 /** Version gabarit fiches révision (issue #30, phase 10). Stockée par fiche. */
 export const REVISION_TEMPLATE_VERSION = "fiche-v1" as const;
@@ -216,7 +222,12 @@ function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
-function isIsoDate(v: unknown): v is string {
+/**
+ * Date ISO lisible : `Date.parse` TS fait foi (#366 — le port Kotlin aligne
+ * son parseur sur cette sémantique : horodaté avec décalage, horodaté SANS
+ * décalage = heure locale, date seule = minuit UTC).
+ */
+export function isIsoDate(v: unknown): v is string {
   return typeof v === "string" && !Number.isNaN(Date.parse(v));
 }
 
@@ -328,6 +339,33 @@ export function isAttachmentRef(v: unknown): v is AttachmentRef {
   return true;
 }
 
+/**
+ * Schéma d'une `ref` de DEVOIR : clé interne `homework:<devoir>:<piece>:<id>`.
+ *
+ * Même forme que l'app (`core/Assignment.kt`) et que le parseur web
+ * (`web/src/features/tasks/assignments.ts`) : une `ref` hors schéma fait
+ * PERDRE le devoir entier côté web (titre, consigne, échéance), pas seulement
+ * sa pièce jointe. Le schéma exclut déjà les URL, les `data:` et les
+ * caractères de contrôle.
+ */
+export const HOMEWORK_REF_RE = /^homework:[A-Za-z0-9._:-]+$/;
+
+/** `ref` de devoir : non vide, bornée, schéma `homework:`. */
+export function isHomeworkMediaRef(v: unknown, max: number): boolean {
+  if (!isNonEmptyString(v)) return false;
+  if ((v as string).length > max) return false;
+  return HOMEWORK_REF_RE.test(v as string);
+}
+
+/** Pièce jointe de DEVOIR : `ref` au schéma `homework:` (miroir Kotlin). */
+export function isHomeworkAttachmentRef(v: unknown): v is AttachmentRef {
+  if (!isRecord(v)) return false;
+  if (!isNonEmptyString(v["id"])) return false;
+  if (!isBoundedString(v["label"], ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS)) return false;
+  if (!isHomeworkMediaRef(v["ref"], ASSIGNMENT_REF_MAX_CHARS)) return false;
+  return true;
+}
+
 export function isAssignmentLessonContent(v: unknown): v is AssignmentLessonContent {
   if (!isRecord(v)) return false;
   if (!isBoundedString(v["title"], ASSIGNMENT_LESSON_TITLE_MAX_CHARS)) return false;
@@ -347,7 +385,7 @@ export function isAssignment(v: unknown): v is Assignment {
   const att = v["attachments"];
   if (att !== undefined) {
     if (!Array.isArray(att) || att.length > ASSIGNMENT_MAX_ATTACHMENTS) return false;
-    if (!att.every(isAttachmentRef)) return false;
+    if (!att.every(isHomeworkAttachmentRef)) return false;
   }
   if (v["periodId"] !== undefined && !isNonEmptyString(v["periodId"])) return false;
   if (v["weekId"] !== undefined && !isNonEmptyString(v["weekId"])) return false;

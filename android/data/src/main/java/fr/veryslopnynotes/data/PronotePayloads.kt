@@ -2,6 +2,7 @@ package fr.veryslopnynotes.data
 
 import fr.veryslopnynotes.core.ALGORITHM_SUBJECT
 import fr.veryslopnynotes.core.AVERAGE_ALGORITHMS
+import fr.veryslopnynotes.core.AssignmentAttachment
 import fr.veryslopnynotes.core.AveragesReport
 import fr.veryslopnynotes.core.Capabilities
 import fr.veryslopnynotes.core.CapabilityProbe
@@ -314,10 +315,13 @@ internal fun assignmentJson(
         val label = boundedCp(f.name, 200)
         val fileId = boundedCp(f.id, 200)
         if (label.isEmpty() || fileId.isEmpty()) return@forEachIndexed
+        // La `ref` est ASSAINIE (identifiant Pronote exotique) : une `ref` hors
+        // schéma ferait disparaître le devoir ENTIER côté web (#366).
+        val ref = AssignmentAttachment.homeworkRef(index, di, fileId) ?: return@forEachIndexed
         atts.put(JSONObject().apply {
             put("id", fileId)
             put("label", label)
-            put("ref", "homework:$index:file:$di:$fileId")
+            put("ref", ref)
         })
         kept += 1
     }

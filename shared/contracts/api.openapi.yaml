@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: veryslopnynotes scraper
-  version: 0.8.0
+  version: 0.9.0
   description: >-
     Contrats du scraper manuels (#209, #210). Source de vérité : phase 1,
     issue #4. Miroir de shared/contracts/*.ts. Le serveur applicatif est mort
