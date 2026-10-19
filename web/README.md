@@ -30,9 +30,10 @@ téléphone ni session Pronote.
 
 - `src/App.tsx` : routes (HashRouter), porte de session.
 - `src/ui/AppShell.tsx` : barre du haut, onglets, titres/retours.
-- `src/ui/AppContext.tsx` : thème, rafraîchissement global, notices, ressources.
+- `src/ui/AppContext.tsx` : thème, palette, rafraîchissement global, notices, ressources.
 - `src/ui/components.tsx` : cartes, états vides, erreurs, avatar.
-- `src/styles/tokens.css` : jetons portés de `PapillonTheme.kt`.
+- `src/styles/tokens.css` : jetons de la palette par défaut (repli si le JS échoue).
+- `src/lib/schemes.ts` : les 20 palettes (claire + sombre), posées en variables CSS sur `<html>`.
 - `src/routes/*.tsx` : un écran par route.
 - `src/features/*` : logique/parsers par écran.
 
@@ -48,3 +49,6 @@ schéma par écran.
 - JS initial < 250 Ko gzip.
 - Pas de bibliothèque de composants : CSS + composants maison.
 - `prefers-reduced-motion` coupe les transitions.
+- Couleurs : tout passe par les variables de `src/styles/tokens.css`, posées par
+  `src/lib/schemes.ts` (20 palettes × clair/sombre). Aucune couleur en dur dans
+  un écran : une palette retirée retombe sur la palette par défaut.

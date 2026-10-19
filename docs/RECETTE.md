@@ -94,6 +94,19 @@ adb shell settings put system font_scale 1.3        # très grande police
 adb shell cmd connectivity airplane-mode enable    # hors ligne
 ```
 
+## Palettes (#335)
+
+Réglages → Apparence : 20 palettes, chacune avec sa variante claire et sombre ;
+le mode (Système/Clair/Sombre) choisit la variante. Le choix vit dans la
+WebView (`localStorage`), il n'est pas envoyé au natif.
+
+- Contrôle statique : `bun test tests/web/schemes.test.ts` (contraste ≥ 4.5:1
+  encre/accent/erreur/boutons pleins, ≥ 3:1 pour le texte secondaire, pas de
+  dérive avec le repli `tokens.css`).
+- Contrôle visuel : régler le thème sur chaque mode et rejouer `index`,
+  `grades`, `settings`, `pairing` — aucun texte illisible, aucune surface qui
+  garde la couleur d'une autre palette.
+
 `make check` (dont `android-compile`) passe, et c'est le seul filet qui
 compile réellement le Kotlin : les miroirs TS et `check-kotlin` ne voient pas
 une résolution de symbole ni une surcharge ambiguë.
