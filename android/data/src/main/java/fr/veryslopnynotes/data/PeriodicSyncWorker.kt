@@ -29,6 +29,10 @@ import java.util.concurrent.TimeUnit
 // (relancer en boucle ne servirait à rien) ; session locale morte = signal
 // d'appairage + succès (un retry ne ressusciterait pas la session, et un
 // échec permanent userait la batterie). Autre échec = retry (backoff).
+// #364 : les écritures portent la meme garde que les ecrans (epoch de session)
+// : une deconnexion survenue pendant la lecture annule l'ecriture, le cache
+// purge ne ressuscite pas. Le store est une AUTRE instance que celle de l'app,
+// mais le verrou est partage par repertoire : les deux ne s'entrelacent pas.
 // ponytail: Worker bloquant (pas de CoroutineWorker : le module n'a pas de
 // coroutines, tout le reste est en Thread). Upgrade: une entrée de cache
 // par requête quand SyncedRepository en aura une.
@@ -39,13 +43,23 @@ class PeriodicSyncWorker(
     override fun doWork(): Result {
         val client = PronoteSession.client ?: return Result.success()
         val store = FileCacheStore(File(applicationContext.filesDir, "offline"))
+        // #364 : epoque capturee AVANT les lectures locales (le client peut
+        // mettre des secondes) : une deconnexion pendant la lecture annule
+        // l'ecriture du cache.
+        val epoch = SessionEpoch.current()
         return try {
             val now = System.currentTimeMillis()
             // Requête vide = la vue par défaut (fenêtre courante, aucun
             // algorithme) : c'est ce que demandent l'accueil et l'EDT (#365).
-            store.save(CachePolicy.GRADES, gradesPayload(client, emptyMap()), now, "")
-            store.save(CachePolicy.ASSIGNMENTS, assignmentsPayload(client, emptyMap()), now, "")
-            store.save(CachePolicy.TIMETABLE, timetablePayload(client, emptyMap()), now, "")
+            if (!saveIfCurrent(epoch, store, CachePolicy.GRADES, gradesPayload(client, emptyMap()), now, "")) {
+                return Result.success()
+            }
+            if (!saveIfCurrent(epoch, store, CachePolicy.ASSIGNMENTS, assignmentsPayload(client, emptyMap()), now, "")) {
+                return Result.success()
+            }
+            if (!saveIfCurrent(epoch, store, CachePolicy.TIMETABLE, timetablePayload(client, emptyMap()), now, "")) {
+                return Result.success()
+            }
             Result.success()
         } catch (e: Exception) {
             if (isSessionFailure(e)) {
@@ -55,6 +69,26 @@ class PeriodicSyncWorker(
                 Result.retry()
             }
         }
+    }
+
+    /**
+     * Ecriture gardee par l'epoch : `false` = la session a change (deconnexion
+     * pendant la lecture), rien n'a ete ecrit et le travail n'a plus rien a
+     * faire. Une erreur d'ecriture, elle, remonte (retry comme avant).
+     *
+     * #365 : la requete est ecrite avec l'entree (requete vide = vue par
+     * defaut), sinon l'ecriture serait invisible pour la relecture.
+     */
+    private fun saveIfCurrent(
+        epoch: Long,
+        store: CacheStore,
+        resource: String,
+        payload: String,
+        now: Long,
+        query: String,
+    ): Boolean {
+        val written = SessionEpoch.writeIfCurrent(epoch) { store.save(resource, payload, now, query) }
+        return written != null
     }
 
     companion object {
