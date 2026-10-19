@@ -21,6 +21,12 @@ redirections est vérifiée avant le navigateur et l'URL finale après ; le
 chemin du cookie jar n'est plus fourni par l'appelant (seulement son nom, dans
 `playwright/.auth/`).
 
+Le nom de l'hôte est aussi RÉSOLU (#419) : un nom public qui pointe vers une
+IP interne (rebinding DNS) est refusé avant la navigation, avec un motif
+explicite (`403 private_host`) — jamais un échec muet. Un nom introuvable est
+refusé de même (`502 unresolved_host`). Il reste la fenêtre TOCTOU : le
+navigateur résout de son côté, au moment de la connexion.
+
 Le navigateur n'est pas téléchargé par `bun install` (le paquet `playwright`
 n'a aucun script d'installation) : hors Docker, lancer `bunx playwright install
 chromium` une fois, sinon le scrape répond 501 « scraper sans navigateur ».
