@@ -148,9 +148,10 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
   const revision = codeOnly(readFileSync(join(CORE, "RevisionAi.kt"), "utf8"));
 
   test("la sortie passe toujours par la garde I5 (parse + schema)", () => {
-    // La validation n'est ni contournee ni affaiblie : meme chaine qu'avant.
-    expect(bridge).toMatch(/parseRevisionAnswer\(parseJsonOutput\(/);
+    // La validation n'est ni contournee ni affaiblie : elle vit dans le CORE,
+    // que le pont appelle (#428) — le pont ne re-parse plus de son côté.
     expect(revision).toMatch(/parseRevisionAnswer\(parsed\)/);
+    expect(revision).toMatch(/generateGuardedJson\(provider, SYSTEM_REVISION_JSON/);
   });
 
   test("l'echec est remonte avec sa cause, plus « Fiche non générée. »", () => {
