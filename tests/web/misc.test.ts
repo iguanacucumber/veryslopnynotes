@@ -11,6 +11,9 @@ import {
   parseCanteenPayload,
 } from "../../web/src/features/canteen/canteen";
 import {
+  ALERTS_CLEAR_NOTE,
+  ALERTS_FLAGGED_NOTE,
+  ALERTS_HEURISTIC_NOTE,
   alertKindLabel,
   alertSeverity,
   alertSourceLabel,
@@ -237,6 +240,24 @@ describe("web alertes de sécurité", () => {
     expect(alertsLayout({ count: 0, loading: false, stale: true, error: null, hasPayload: true })).toBe("offline-empty");
     expect(alertsLayout({ count: 0, loading: false, stale: true, error: "réseau", hasPayload: true })).toBe("offline-empty");
     expect(alertsLayout({ count: 0, loading: false, stale: false, error: null, hasPayload: true })).toBe("all-clear");
+  });
+
+  // #415 : le filtre de l'appareil est une HEURISTIQUE. L'interface ne doit
+  // jamais laisser croire qu'un contenu a été « vérifié » : ni dans les
+  // libellés, ni dans le texte affiché quand rien n'est signalé.
+  test("l’interface qualifie le filtre d’heuristique, jamais de « vérifié »", () => {
+    expect(ALERTS_HEURISTIC_NOTE).toContain("heuristique");
+    expect(ALERTS_FLAGGED_NOTE).toContain("heuristique");
+    expect(ALERTS_CLEAR_NOTE).toContain("Aucun contenu hostile détecté");
+    for (const note of [ALERTS_HEURISTIC_NOTE, ALERTS_CLEAR_NOTE, ALERTS_FLAGGED_NOTE]) {
+      expect(note.toLowerCase()).not.toContain("vérifi");
+    }
+    // Les notes sont réellement affichées par la route (le libellé seul ne
+    // prouverait rien).
+    const route = readFileSync(join(ROOT, "web/src/routes/alerts.tsx"), "utf8");
+    expect(route).toContain("ALERTS_HEURISTIC_NOTE");
+    expect(route).toContain("ALERTS_FLAGGED_NOTE");
+    expect(route).toContain("ALERTS_CLEAR_NOTE");
   });
 });
 

@@ -8,6 +8,15 @@ export const ALERT_KIND_INJECTION = "injection_neutralized";
 export const EXCERPT_MAX = 500;
 export const EXCERPT_COLLAPSED = 140;
 
+// Le filtre de l'appareil est une HEURISTIQUE (#415) : il reconnaît des
+// formulations d'injection courantes, il ne vérifie rien. L'interface le dit
+// partout — jamais « vérifié », jamais « aucun contenu hostile » sans
+// réserve.
+export const ALERTS_HEURISTIC_NOTE =
+  "Filtre heuristique : il repère des formulations d’injection courantes, pas toutes. Un contenu hostile peut donc passer inaperçu, et une note légitime peut être signalée à tort.";
+export const ALERTS_CLEAR_NOTE = "Aucun contenu hostile détecté par le filtre.";
+export const ALERTS_FLAGGED_NOTE = "Signalé par un filtre heuristique : un faux positif reste possible.";
+
 export interface SecurityAlert {
   id: string;
   kind: string;
