@@ -28,7 +28,9 @@ Format : Invariant → test → commande → emplacement.
   jeton de session ni clé LLM n'est exposé au JS ; le pont natif n'expose que
   des méthodes allowlistées, jamais un proxy d'URL.
 - Test : `tests/architecture/web.test.ts` (réseau, CSP, HTML injecté, hôte
-  Pronote, secrets persistés).
+  Pronote, secrets persistés, message d'appairage borné) +
+  `tests/unit/android-pairing-message.test.ts` (table de messages du pont,
+  Kotlin exécuté).
 - Commande : `make web` (ou `make architecture-test`).
 - Emplacement : `web/**`, `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`.
 
