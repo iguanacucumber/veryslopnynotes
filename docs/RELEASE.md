@@ -50,6 +50,11 @@ make build   # check-secrets + docker build (skip si daemon absent)
 - Base `oven/bun:1.4.3` exacte. Digest : `docker pull oven/bun:1.4.3`,
   figer `FROM oven/bun:1.4.3@sha256:<digest>` (daemon absent en local).
 - Install strict `bun install --frozen-lockfile` (aucun fallback).
+- Chromium installé AU BUILD : `bunx playwright install --with-deps chromium`
+  (le paquet `playwright` n'a aucun script d'installation : sans cette ligne,
+  `chromium.launch()` échoue et le scrape répond 501 « scraper sans
+  navigateur »). `playwright` est une devDependency : ne pas passer
+  `--production` à l'install.
 - Contexte minimal (`server/`, `shared/` + manifests) ; `.dockerignore`
   exclut `.env*`, clés (`*.pem/*.key/*.keystore/*.jks`), `secrets/`,
   données (`data/`, `*.db`), `android/`, `tests/`, `agents/`, `docs/`.

@@ -10,6 +10,20 @@ WORKDIR /app
 # Lock commité : install strict, aucun fallback (dérive interdite).
 COPY package.json bun.lock tsconfig.json ./
 RUN bun install --frozen-lockfile
+# Chromium pour le scraper (#374) : le paquet `playwright` n'a AUCUN script
+# d'installation (package.json sans bloc `scripts`) => `bun install` ne
+# télécharge PAS le navigateur. Sans la ligne ci-dessous, `chromium.launch()`
+# échoue (« Executable doesn't exist ») et TOUTE requête de scrape répond 500
+# : l'image ne ferait plus son seul travail (seule /v1/health répondrait).
+# Téléchargement AU BUILD, jamais au runtime (déterministe, hors ligne au
+# runtime) : `playwright install` + les libs système via `--with-deps` (base
+# Debian de oven/bun:1.4.3 => apt-get dispo, exécution en root au build).
+# `playwright` est une devDependency : ne jamais passer `--production` ici, le
+# scraper en a besoin à l'exécution. Chemin des navigateurs fixé ET partagé
+# entre le build et le runtime (ENV ci-dessous) : le runtime doit retrouver
+# exactement le binaire téléchargé ici.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN bunx playwright install --with-deps chromium
 # Contexte minimal : ni agents/ (outillage local), ni tests, ni docs.
 # Secrets/clés/.env* exclus via .dockerignore (jamais COPY).
 COPY server ./server
