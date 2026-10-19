@@ -173,8 +173,8 @@ class SyncedRepository(
     /**
      * #87 : relecture manuelle : aucun effet metier, donc pas de confirmation
      * supplementaire (I7 : ce chemin ne declenche aucun LLM). Localement =
-     * ping de session (`keepAlive`) : vivante = l'appelant recharge ses
-     * ressources, morte = signal d'appairage.
+     * ping de session FORCE (`keepAlive().ping()`, #408) : vivante = l'appelant
+     * recharge ses ressources, morte = signal d'appairage.
      */
     fun requestSyncRefresh(baseUrl: String, accountId: String = "", cb: (RefreshOutcome) -> Unit) {
         if (baseUrl.isBlank()) {
@@ -194,7 +194,11 @@ class SyncedRepository(
         }
         if (client == null) return RefreshOutcome.Failed("Relecture indisponible.", null)
         return try {
-            client.keepAlive().pingIfDue()
+            // Ping MANUEL : un aller-retour FORCE (#408). `pingIfDue` ne
+            // partait jamais ici (la lecture venait de rafraichir `lastPing`) :
+            // une session morte passait pour vivante, et ni `DeviceAuth.reject()`
+            // ni l'invite a re-appairer ne partaient.
+            client.keepAlive().ping()
             // Contenu local = invalidation, jamais interprete (I6/I7).
             RefreshOutcome.Updated("{\"synced\":true}", clock())
         } catch (e: Exception) {
