@@ -30,9 +30,11 @@ Format : Invariant → test → commande → emplacement.
 - Test : `tests/architecture/web.test.ts` (réseau, CSP, HTML injecté, hôte
   Pronote, secrets persistés, message d'appairage borné) +
   `tests/unit/android-pairing-message.test.ts` (table de messages du pont,
-  Kotlin exécuté).
+  Kotlin exécuté) + `tests/unit/android-homework-message.test.ts` (message de
+  refus du devoir : le motif libre du modèle ne sort pas, Kotlin exécuté).
 - Commande : `make web` (ou `make architecture-test`).
-- Emplacement : `web/**`, `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`.
+- Emplacement : `web/**`, `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`,
+  `android/app/src/main/java/fr/veryslopnynotes/app/HomeworkMessages.kt`.
 
 ## I2 — Aucun accès Pronote côté serveur ; un seul client Android (ADR-003)
 - Invariant : le serveur ne contacte jamais Pronote. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android (`app`, `core`, `data`) ne contacte Pronote (pinné par I1).
