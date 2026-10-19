@@ -261,6 +261,43 @@
   gap: 10px;
 }
 
+/* Repère « maintenant » (#337) : aligné sur la colonne des cartes, il coupe la
+   journée au bon endroit et porte la seule information qui vieillit. */
+.tt-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 2px 62px;
+  animation: tt-rise 360ms var(--ease) both;
+}
+
+.tt-now::before,
+.tt-now::after {
+  content: "";
+  flex: 1;
+  min-width: 12px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--brand);
+  opacity: 0.45;
+}
+
+.tt-now__label {
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-deep);
+  white-space: nowrap;
+}
+
+@media (min-width: 700px) {
+  .tt-now {
+    margin-left: 70px;
+  }
+}
+
 /* --- Cours ---------------------------------------------------------------- */
 
 .tt-lesson {

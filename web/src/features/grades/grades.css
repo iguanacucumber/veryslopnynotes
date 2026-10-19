@@ -167,6 +167,16 @@
   animation: chart-fade 600ms var(--ease) 180ms both;
 }
 
+/* Ligne de moyenne de la période : repère de lecture de la tendance, en
+   pointillés pour ne pas se confondre avec la courbe. */
+.grades-chart__grid {
+  stroke: currentColor;
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+  opacity: 0.3;
+  animation: chart-fade 600ms var(--ease) both;
+}
+
 .grades-chart__line {
   fill: none;
   stroke: currentColor;

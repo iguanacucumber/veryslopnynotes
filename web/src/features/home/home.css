@@ -13,7 +13,9 @@
   border-radius: var(--radius-xl);
   padding: 20px;
   background: var(--brand-solid);
-  background-image: radial-gradient(120% 140% at 88% -10%, var(--on-brand-veil), transparent 62%);
+  background-image:
+    radial-gradient(120% 140% at 88% -10%, var(--on-brand-veil), transparent 62%),
+    radial-gradient(120% 120% at 6% 118%, var(--on-brand-veil), transparent 58%);
   color: var(--on-brand);
   box-shadow: var(--shadow);
 }
@@ -93,9 +95,9 @@
 
 .home-hero__glyph {
   position: absolute;
-  right: -6px;
-  bottom: -14px;
-  color: var(--on-brand-veil);
+  right: -8px;
+  bottom: -16px;
+  color: var(--on-brand-hover);
   transform: rotate(-8deg);
   pointer-events: none;
 }
@@ -132,8 +134,8 @@
   height: 32px;
   flex: 0 0 auto;
   border-radius: 11px;
-  background: var(--surface-variant);
-  color: var(--muted);
+  background: var(--brand-pale);
+  color: var(--brand-deep);
 }
 
 .home-widget__title {
@@ -160,6 +162,16 @@
   color: var(--brand-deep);
   font-size: 12px;
   font-weight: 700;
+  transition: background var(--duration) var(--ease), transform var(--duration) var(--ease);
+}
+
+.home-widget__more:hover,
+.home-widget__more:active {
+  background: var(--brand-pale);
+}
+
+.home-widget__more:active {
+  transform: scale(0.96);
 }
 
 .home-widget__more:hover {
