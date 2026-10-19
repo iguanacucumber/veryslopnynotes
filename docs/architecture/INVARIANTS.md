@@ -64,7 +64,8 @@ Format : Invariant → test → commande → emplacement.
 
 ## I5 — LLM sans outils/secrets dans le prompt
 - Invariant : le prompt ne contient aucun secret ; sortie texte/JSON validée (une sortie MAL FORMÉE est refusée, jamais réinterprétée — voir I14). L'app appelle OpenRouter directement en HTTPS et transmet la clé dans l'en-tête `Authorization`, jamais au serveur applicatif (voir I8).
-- Test : `tests/architecture/invariants.test.ts` + `check-architecture.ts` (scan `android/core/`) + `tests/unit/android-homework.test.ts` (miroirs) + `tests/unit/android-revision.test.ts` (Kotlin compilé : consigne JSON de la fiche + garde I5).
+- **Les deux plafonds de sortie TENIR ENSEMBLE (#411)** : le fournisseur compte en tokens, la garde en caractères. Le budget de tokens est **déduit** du plafond de caractères de la garde (`MAX_OUTPUT_CHARS` 12 000 ÷ `CHARS_PER_TOKEN` 4 = 3 000 tokens, une seule constante dans `core`, importée par `data` — jamais recopiée) : le fournisseur ne peut pas produire une sortie que la garde jetterait. Avant, un budget de 4 000 tokens (justifié par un faux « ~2 caractères/token », alors que le français et le JSON sont à ~3-4) produisait ~12-16 k caractères pour une garde à 8 000 : une réponse **valide** de 9 000 caractères était payée au fournisseur puis jetée (« sortie LLM trop longue (I5) » → « Échec de l'assistant. »). Le corrigé maximal (`Homework.MAX_ANSWER_CHARS` 8 000) reste **atteignable** : il laisse la place de l'enveloppe JSON dans le plafond de sortie. Un refus de longueur nomme la **limite réelle**, jamais « hors format ».
+- Test : `tests/architecture/invariants.test.ts` + `check-architecture.ts` (scan `android/core/`) + `tests/unit/android-homework.test.ts` (miroirs) + `tests/unit/android-revision.test.ts` (Kotlin compilé : consigne JSON de la fiche + garde I5) + `tests/unit/kotlin-llm-budget.test.ts` (Kotlin **exécuté** : la relation tokens/caractères, une réponse de 9 000 caractères acceptée, le refus qui nomme la limite, la chaîne complète fournisseur → garde → schéma).
 - Commande : `make check`.
 - Emplacement : `android/core/` (IA) + `android/data/` (store de clé, dépôt devoirs). Réf : `docs/adr/003-client-direct.md`.
 
@@ -215,7 +216,7 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   citation écrite par le modèle ne peut ni remplacer l'attribution ni
   introduire une source absente du corpus (citations validées comme le chemin
   devoirs, `HomeworkAi.parseHomeworkResponse`). Une troncature — au-delà de
-  la garde I5 (8 000 caractères) ou du filet de sécurité du rendu — est
+  la garde I5 (12 000 caractères) ou du filet de sécurité du rendu — est
   SIGNALÉE (« suite tronquée »), jamais silencieuse.
 - Test : `tests/unit/kotlin-revision-sheet.test.ts` (Kotlin compilé : corps
   entier + bloc « Sources : » pour une fiche de 6 000 caractères, corps à

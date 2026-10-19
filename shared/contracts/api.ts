@@ -78,6 +78,13 @@ export const HOMEWORK_MAX_SOURCE_LABEL_CHARS = 200;
  * fournisseur, et n'est ni journalisée nipersistée. Bornée comme un credential.
  */
 export const HOMEWORK_MAX_API_KEY_CHARS = 512;
+/**
+ * Longueur maximale du corrigé. Miroir de `Homework.MAX_ANSWER_CHARS`
+ * (`android/core/.../Homework.kt`), où elle est DÉRIVÉE du plafond de sortie
+ * I5 (moins l'enveloppe JSON) : les deux bornes ne peuvent pas dériver
+ * l'une de l'autre (#411 — le test `kotlin-llm-budget.test.ts` les compare).
+ */
+export const HOMEWORK_MAX_ANSWER_CHARS = 8000;
 
 export interface HomeworkOkResponse {
   readonly status: "ok";
@@ -147,7 +154,7 @@ export function isHomeworkGenerateResponse(v: unknown): v is HomeworkGenerateRes
   const r = v as Record<string, unknown>;
   if (r["status"] === "ok") {
     return (
-      isBoundedNonEmptyString(r["answer"], 8000) &&
+      isBoundedNonEmptyString(r["answer"], HOMEWORK_MAX_ANSWER_CHARS) &&
       Array.isArray(r["steps"]) &&
       (r["steps"] as unknown[]).every((s) => typeof s === "string") &&
       Array.isArray(r["sources"]) &&

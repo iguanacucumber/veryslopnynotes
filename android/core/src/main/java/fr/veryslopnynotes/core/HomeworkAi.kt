@@ -54,8 +54,14 @@ object HomeworkAi {
         val status = jsonStrOf(obj, "status") ?: throw AiError("réponse devoirs invalide (schéma)")
         if (status == "ok") {
             val answer = jsonStrOf(obj, "answer")
-            if (answer == null || answer.trim().isEmpty() || answer.length > Homework.MAX_ANSWER_CHARS) {
+            if (answer == null || answer.trim().isEmpty()) {
                 throw AiError("réponse devoirs invalide (schéma)")
+            }
+            // #411 : un corrige trop long n'est pas un « schema » invalide :
+            // la reponse est bien formee, elle depasse sa borne. Le refus
+            // nomme la LIMITE REELLE (sinon l'eleve lit « hors format »).
+            if (answer.length > Homework.MAX_ANSWER_CHARS) {
+                throw OutputTooLongException(Homework.MAX_ANSWER_CHARS)
             }
             val stepsRaw = obj.fields["steps"] as? JsonValue.Arr
                 ?: throw AiError("réponse devoirs invalide (schéma)")

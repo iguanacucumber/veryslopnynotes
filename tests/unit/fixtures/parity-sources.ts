@@ -62,6 +62,14 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "CapabilityProbe.kt"),
   join(CORE, "ExamDetect.kt"),
   join(CORE, "GradeDiff.kt"),
+  // `core/Homework.kt` + `core/HomeworkAi.kt` : le contrat du corrige et son
+  // schema. Ils sont ici depuis #411 : la CHAINE COMPLETE (JSON du
+  // fournisseur → `parseJsonOutput` → `parseHomeworkResponse`) est rejouee
+  // sur du code execute, pour prouver que le corrige maximal reste
+  // productible et accepte (le plafond de sortie I5 et le plafond de
+  // caracteres du corrige doivent tenir ensemble).
+  join(CORE, "Homework.kt"),
+  join(CORE, "HomeworkAi.kt"),
   join(CORE, "Humanize.kt"),
   join(CORE, "IsoDates.kt"),
   join(CORE, "LlmGuard.kt"),
