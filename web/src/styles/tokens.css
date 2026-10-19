@@ -49,8 +49,12 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   /* #399 : la hauteur utile est PUBLIÉE par le JS (viewport visuel), pas
      figée par une unité de viewport : le clavier réduit la zone visible.
-     La valeur ci-dessous n'est que le PREMIER instant, avant la mesure. */
-  --app-height: 100dvh;
+     La valeur ci-dessous n'est que le PREMIER instant, avant la mesure —
+     d'où une unité universelle : l'unité de viewport DYNAMIQUE n'existe pas
+     sur les WebView d'Android 8-9 restés à un Chromium antérieur à Chrome
+     108, et une valeur invalide y ferait tomber le `min-height` de la
+     coquille entière. */
+  --app-height: 100vh;
   /* Hauteur du clavier (0 quand il est fermé) : les éléments fixes du bas
      remontent d'autant. */
   --keyboard-bottom: 0px;

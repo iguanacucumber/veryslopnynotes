@@ -60,6 +60,7 @@ describe("viewport utile et clavier (#399)", () => {
     // La coquille (le conteneur de toute la page) prend sa hauteur dans la
     // variable publiée par le JS, jamais dans une hauteur de viewport figée.
     expect(css).not.toMatch(/dvh/);
+    expect(tokens).not.toMatch(/dvh/);
     expect(block(css, ".shell")).toMatch(/min-height:\s*var\(--app-height\)/);
     expect(tokens).toMatch(/--app-height:/);
   });
