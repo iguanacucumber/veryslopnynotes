@@ -16,6 +16,7 @@ import {
   originLabel,
   periodLabel,
   scaleSuffix,
+  sparklineAverageY,
   sparklineDescription,
   sparklinePoints,
   type Algorithm,
@@ -43,6 +44,7 @@ function subjectTint(hex: string, dark: boolean): { background: string; ink: str
  */
 export function Sparkline({ values }: { values: Array<number | null> }) {
   const points = sparklinePoints(values, CHART_WIDTH, CHART_HEIGHT);
+  const averageY = sparklineAverageY(values, CHART_HEIGHT);
   const description = sparklineDescription(values);
   if (points.length === 0) return null;
   const line = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
@@ -59,6 +61,16 @@ export function Sparkline({ values }: { values: Array<number | null> }) {
       role="img"
       aria-label={description}
     >
+      {averageY !== null && points.length > 1 ? (
+        <line
+          className="grades-chart__grid"
+          x1={0}
+          y1={averageY.toFixed(1)}
+          x2={CHART_WIDTH}
+          y2={averageY.toFixed(1)}
+          vectorEffect="non-scaling-stroke"
+        />
+      ) : null}
       {points.length > 1 ? <path className="grades-chart__area" d={area} /> : null}
       {points.length > 1 ? (
         <path

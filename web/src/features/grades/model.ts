@@ -673,6 +673,23 @@ export function sparklinePoints(
   }));
 }
 
+/**
+ * Ordonnée de la moyenne de l'historique, dans la même échelle que
+ * `sparklinePoints` : la ligne pointillée de la courbe dit si la tendance finit
+ * au-dessus ou au-dessous de la moyenne de la période.
+ * `null` quand la ligne n'apprendrait rien (moins de deux points, série plate).
+ */
+export function sparklineAverageY(values: readonly (number | null)[], height: number): number | null {
+  const known = knownValues(values);
+  if (known.length < 2 || !(height > 0)) return null;
+  const min = Math.min(...known);
+  const max = Math.max(...known);
+  const span = max - min;
+  if (span <= 0) return null;
+  const average = known.reduce((sum, value) => sum + value, 0) / known.length;
+  return height * (1 - (average - min) / span);
+}
+
 export function historyNote(values: readonly (number | null)[]): string {
   const size = knownValues(values).length;
   if (size === 0) return "Pas d'historique de moyenne sur cette période.";

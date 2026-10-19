@@ -38,7 +38,7 @@ a {
 }
 
 :focus-visible {
-  outline: 3px solid var(--brand-light);
+  outline: 2px solid var(--brand-deep);
   outline-offset: 2px;
 }
 
@@ -142,7 +142,7 @@ a {
   padding: 6px;
   border-radius: var(--radius-xl);
   background: color-mix(in srgb, var(--surface) 92%, transparent);
-  box-shadow: 0 8px 28px rgba(31, 41, 46, 0.16);
+  box-shadow: var(--shadow-float);
   backdrop-filter: blur(16px);
   view-transition-name: tabbar;
 }
@@ -241,6 +241,13 @@ button.card:active {
   background: var(--brand-solid);
   border: 0;
   color: var(--on-brand);
+}
+
+/* Carte d'erreur : le bord porte le signal, le fond reste une teinte discrète
+   (le rouge plein est réservé aux notices et aux boutons destructifs). */
+.card--danger {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
 }
 
 .stack {
@@ -375,19 +382,28 @@ button.card:active {
 
 .field:focus {
   border-color: var(--brand);
-  outline: 2px solid var(--brand-pale);
+  outline: 2px solid var(--brand);
+  outline-offset: 0;
 }
 
 .stale {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 9px;
+  padding: 3px 9px 3px 8px;
   border-radius: 999px;
   background: var(--surface-container);
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
+}
+
+.stale::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--muted);
 }
 
 .notice {
@@ -423,13 +439,30 @@ button.card:active {
 }
 
 .empty {
-  padding: 40px 20px;
+  padding: 32px 22px;
   text-align: center;
   color: var(--muted);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+}
+
+/* L'illustration d'un état vide respire : elle est posée dans un disque doux,
+   ce qui évite l'icône « flottante » au milieu du vide. */
+.empty__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: var(--brand-pale);
+  color: var(--brand-deep);
+}
+
+.empty strong {
+  color: var(--ink);
 }
 
 .spinner {
