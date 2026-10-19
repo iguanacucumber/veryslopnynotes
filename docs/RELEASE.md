@@ -36,9 +36,10 @@ Builds require JDK 17–21 and Android SDK 37 (`platforms;android-37.0`,
 `android/local.properties`; JDK detection accepts `ANDROID_JDK_HOME`.
 
 `make check` runs `android-compile` in parallel with other checks. If JDK or SDK
-is missing, it reports an explicit skip; APK build targets fail instead. The
-check compiles Kotlin modules with Gradle and is the only check that resolves
-Kotlin symbols and overloads.
+is missing, it fails: the Kotlin compile is the only check that resolves
+symbols and overloads, so skipping it silently would be a false green. Set
+`ALLOW_SKIP_ANDROID=1` to assume that skip explicitly (outside merges); APK
+build targets fail instead.
 
 ## Serveur (Docker)
 
