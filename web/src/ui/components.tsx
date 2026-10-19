@@ -60,7 +60,11 @@ export function EmptyState({
 }) {
   return (
     <div className="empty">
-      {icon}
+      {icon ? (
+        <span className="empty__icon" aria-hidden="true">
+          {icon}
+        </span>
+      ) : null}
       <strong className="t-title">{title}</strong>
       {body ? <span className="t-body-m">{body}</span> : null}
       {action}
@@ -83,7 +87,7 @@ export function StaleBadge({ label = "hors-ligne" }: { label?: string }) {
 
 export function ErrorBox({ message, children }: { message: string; children?: ReactNode }) {
   return (
-    <div className="card" role="alert" style={{ borderColor: "var(--danger)" }}>
+    <div className="card card--danger" role="alert">
       <div className="row" style={{ alignItems: "flex-start" }}>
         <span style={{ color: "var(--danger-ink)" }}>
           <IconWarning />

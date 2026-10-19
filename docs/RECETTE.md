@@ -115,6 +115,16 @@ WebView (`localStorage`), il n'est pas envoyé au natif.
   puis Régler le système sur « supprimer les animations » et vérifier que rien
   ne bouge plus — la navigation reste immédiate.
 
+## Visuel (#337)
+
+- Contrôle statique : `bun test tests/web/grades.test.ts` (ligne de moyenne de
+  la courbe dans l'échelle du tracé) et `bun run check`.
+- Contrôle visuel, clair **et** sombre : accueil (héros, icônes de widgets),
+  notes (courbe + ligne de moyenne), emploi du temps (repère « maintenant »
+  posé avant le cours en cours), sanctions (état vide), réglages (anneau de
+  focus au clavier). Vérifier qu'aucune surface n'emprunte la couleur d'une
+  autre palette et que la barre d'onglets garde une ombre visible.
+
 `make check` (dont `android-compile`) passe, et c'est le seul filet qui
 compile réellement le Kotlin : les miroirs TS et `check-kotlin` ne voient pas
 une résolution de symbole ni une surcharge ambiguë.

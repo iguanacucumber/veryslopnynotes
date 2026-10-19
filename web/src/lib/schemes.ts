@@ -865,5 +865,8 @@ export function cssVarsOf(p: Palette, dark: boolean): Record<string, string> {
     "--danger-ink": p.dangerInk,
     "--shadow": dark ? "0 10px 30px rgba(0, 0, 0, 0.55)" : `0 10px 30px ${rgba(p.ink, 0.08)}`,
     "--shadow-soft": dark ? "0 2px 10px rgba(0, 0, 0, 0.4)" : `0 2px 10px ${rgba(p.ink, 0.05)}`,
+    // Ombre des surfaces flottantes (barre d'onglets) : dérivée de l'encre en
+    // clair, noire en sombre — une ombre d'encre claire ne se voit pas.
+    "--shadow-float": dark ? "0 8px 28px rgba(0, 0, 0, 0.6)" : `0 8px 28px ${rgba(p.ink, 0.16)}`,
   };
 }
