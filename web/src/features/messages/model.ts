@@ -32,8 +32,14 @@ export interface Discussion {
   subject: string;
   participants: string[];
   unreadCount: number;
-  lastMessageAt: string;
-  updatedAt: string;
+  /** Date du dernier message : null = inconnue (jamais devinée). */
+  lastMessageAt: string | null;
+  /**
+   * Fraîcheur du fil : null = INCONNUE (#427). Le producteur natif OMET le
+   * champ quand il n'a pas pu dater le fil : une date « maintenant » ferait
+   * remonter les plus anciens fils en tête de la liste.
+   */
+  updatedAt: string | null;
 }
 
 export interface DiscussionMessage {
@@ -117,7 +123,8 @@ export function parseDiscussions(payload: string | null): Discussion[] {
       typeof unreadRaw === "number" && Number.isInteger(unreadRaw) && unreadRaw >= 0 && unreadRaw <= MAX_UNREAD
         ? unreadRaw
         : UNKNOWN_UNREAD;
-    const lastMessageAt = text(obj["lastMessageAt"], 40);
+    const lastMessageAt = text(obj["lastMessageAt"], 40) || null;
+    const updatedAt = text(obj["updatedAt"], 40);
     out.push({
       id,
       // Le producteur natif remplit déjà « Discussion » quand le sujet est vide.
@@ -125,7 +132,10 @@ export function parseDiscussions(payload: string | null): Discussion[] {
       participants: participants.slice(0, MAX_PARTICIPANTS),
       unreadCount: unread,
       lastMessageAt,
-      updatedAt: text(obj["updatedAt"], 40) || lastMessageAt,
+      // Fraîcheur INCONNUE = null (jamais « maintenant », jamais une date
+      // devinée) : le champ est absent du payload quand le natif n'a pas pu
+      // dater le fil. Repli sur le dernier message quand il est connu.
+      updatedAt: updatedAt || lastMessageAt,
     });
   }
   return out;
@@ -196,16 +206,32 @@ export function parseRecipients(payload: string | null): DiscussionRecipient[] {
   return out;
 }
 
-/** Millis du fil pour le tri : `lastMessageAt`, sinon `updatedAt`. */
+/** Millis du fil pour le tri : `lastMessageAt`, sinon `updatedAt` ; null quand
+ *  la fraîcheur est INCONNUE (jamais une date devinée). */
 export function discussionMillis(d: Discussion): number | null {
   return parseInstant(d.lastMessageAt) ?? parseInstant(d.updatedAt);
 }
 
-/** Tri du plus récent au plus ancien, égalité tranchée par `id`. */
+/**
+ * Tri du plus récent au plus ancien.
+ *
+ * Règle (#427) : un fil DATED est plus frais qu'un fil de fraîcheur INCONNUE
+ * (il passe devant) ; deux fils de fraîcheur inconnue gardent l'ORDRE
+ * D'ARRIVÉE — le comparateur renvoie 0 et le tri est stable, donc
+ * l'établissement garde la main sur l'ordre qu'il a publié. (Trier ces fils
+ * par `id` les mélangerait ; les dater de « maintenant » les ferait remonter
+ * en tête, ce qui est pire encore.)
+ *
+ * Deux fils datés à la MÊME instant restent départagés par `id` (ordre
+ * déterministe, indépendant de l'ordre d'arrivée).
+ */
 export function sortDiscussions(list: Discussion[]): Discussion[] {
   return [...list].sort((a, b) => {
-    const am = discussionMillis(a) ?? Number.MIN_SAFE_INTEGER;
-    const bm = discussionMillis(b) ?? Number.MIN_SAFE_INTEGER;
+    const am = discussionMillis(a);
+    const bm = discussionMillis(b);
+    if (am === null && bm === null) return 0; // ordre d'arrivée conservé
+    if (am === null) return 1; // un fil daté est plus frais qu'un fil inconnu
+    if (bm === null) return -1;
     if (am !== bm) return bm - am;
     return a.id.localeCompare(b.id);
   });

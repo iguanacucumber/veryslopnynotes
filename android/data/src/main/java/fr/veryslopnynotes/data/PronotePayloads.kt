@@ -621,6 +621,19 @@ private const val DISCUSSION_ENRICH_LIMIT = 12
 private fun unreadOf(raw: Double): Int? =
     if (raw.isFinite() && raw >= 0 && raw <= 999 && raw == kotlin.math.floor(raw)) raw.toInt() else null
 
+// #427 : la fraîcheur d'un fil est IGNORÉE, jamais inventée.
+//
+// Seuls les `DISCUSSION_ENRICH_LIMIT` premiers fils sont enrichis (chaque
+// appel réseau coûte) : au-delà, la date du dernier message est INCONNUE.
+// L'INVENTER (« maintenant ») faisait remonter les plus anciens fils en tête
+// de la liste et mentait sur leur fraîcheur. Le champ `updatedAt` est donc
+// OMIS tant qu'aucune date RÉELLE n'est connue : le client trie alors sur
+// l'ordre d'arrivée.
+//
+// `nowIso` reste le paramètre par défaut de la fonction (signature stable,
+// comme `capabilitiesPayload`) mais ne date plus aucun fil : d'où le
+// `@Suppress` (paramètre conservé, plus référencé).
+@Suppress("UNUSED_PARAMETER")
 internal fun discussionsPayload(client: Client, nowIso: String = parisNowIso()): String {
     val arr = JSONArray()
     val raws = client.discussions()
@@ -629,7 +642,8 @@ internal fun discussionsPayload(client: Client, nowIso: String = parisNowIso()):
         if (id.isEmpty()) return@forEachIndexed
         var participants: List<String> = emptyList()
         var lastMessageAt: String? = null
-        var updatedAt = nowIso
+        // NULLE = fraîcheur inconnue : le champ sera omis du JSON.
+        var updatedAt: String? = null
         if (i < DISCUSSION_ENRICH_LIMIT) {
             try {
                 participants = d.participants().mapNotNullTo(LinkedHashSet()) {
@@ -654,7 +668,8 @@ internal fun discussionsPayload(client: Client, nowIso: String = parisNowIso()):
             put("id", id)
             put("subject", boundedCp(d.subject, 200).ifEmpty { "Discussion" })
             put("participants", JSONArray(participants))
-            put("updatedAt", updatedAt)
+            // Champ OMIS quand la fraîcheur est inconnue (jamais « maintenant »).
+            putIf("updatedAt", updatedAt)
             unreadOf(d.unread)?.let { put("unreadCount", it) }
             lastMessageAt?.let { put("lastMessageAt", it) }
         })
