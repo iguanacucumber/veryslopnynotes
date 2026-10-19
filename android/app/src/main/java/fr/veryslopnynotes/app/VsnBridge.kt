@@ -80,6 +80,10 @@ import java.util.concurrent.TimeUnit
  * Le JS n'a ni fetch ni proxy : chaque méthode est allowlistée (miroir exact
  * de `web/src/bridge/types.ts`) et lue sur les dépôts existants.
  *
+ * L'abandon d'un appel passe par la méthode allowlistée `bridge.cancel` :
+ * pas de seconde interface exposée au JS (I10), et l'annulation reste
+ * best-effort (le JS a déjà lâché la promesse).
+ *
  * Secrets : la session Pronote (SessionStore) et la clé LLM (LlmKeys) ne
  * sortent JAMAIS d'ici. Aucun paramètre n'est journalisé (QR, PIN, corps).
  * Toute exception devient `{code,message}` borné, jamais un message brut.
@@ -94,6 +98,9 @@ class VsnBridge(
         Thread(runnable, "vsn-bridge").apply { isDaemon = true }
     }
     private val cancelled: MutableSet<String> =
+        Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    /** Appels acceptés et pas encore terminés : un abandon ne vise que ceux-là. */
+    private val inFlight: MutableSet<String> =
         Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
     // Mêmes objets que `AppNav` : une seule session chiffrée, un seul cache.
@@ -189,10 +196,18 @@ class VsnBridge(
             return
         }
         cancelled.remove(requestId)
+        // Annulation : traitée ICI, jamais dans la file. C'est un signal
+        // d'arrêt : il ne doit pas attendre le tour des appels en cours.
+        if (method == CANCEL_METHOD) {
+            cancelRequest(paramsJson)
+            resolve(requestId, JSONObject().put("ok", true))
+            return
+        }
         if (executor.isShutdown) return
+        inFlight.add(requestId)
         executor.execute {
-            if (cancelled.contains(requestId)) return@execute
             try {
+                if (cancelled.contains(requestId)) return@execute
                 val params = if (paramsJson.isBlank()) JSONObject() else JSONObject(paramsJson)
                 // null = réponse différée (scan QR).
                 handle(requestId, method, params)?.let { resolve(requestId, it) }
@@ -204,15 +219,25 @@ class VsnBridge(
                 // Jamais le message brut : il peut nommer un hôte ou un compte.
                 reject(requestId, "unknown", "Erreur native.")
             } finally {
+                inFlight.remove(requestId)
                 cancelled.remove(requestId)
             }
         }
     }
 
-    /** Annulation best-effort (le JS a déjà abandonné la promesse). */
-    @JavascriptInterface
-    fun cancel(requestId: String) {
-        if (validId(requestId)) cancelled.add(requestId)
+    /**
+     * Abandon JS (le JS a déjà lâché la promesse) : l'appel cible est marqué,
+     * sa réponse native sera ignorée. Seuls les appels EN COURS sont visés
+     * (un appel déjà terminé n'a plus rien à abandonner) : le jeu `cancelled`
+     * ne grossit donc jamais.
+     */
+    private fun cancelRequest(paramsJson: String) {
+        val target = try {
+            JSONObject(paramsJson).optString("requestId", "")
+        } catch (_: Exception) {
+            ""
+        }
+        if (validId(target) && inFlight.contains(target)) cancelled.add(target)
     }
 
     /** Fin de vie de la WebView : aucun fil ne survit à la rotation. */
@@ -221,6 +246,8 @@ class VsnBridge(
     }
 
     private fun handle(requestId: String, method: String, p: JSONObject): JSONObject? {
+        // `bridge.cancel` n'arrive jamais ici : il est intercepté dans `call()`
+        // (signal immédiat, hors file d'exécution).
         return when (method) {
             "app.ready" -> JSONObject().put("ok", true)
             "app.theme" -> JSONObject().put("theme", theme())
@@ -718,7 +745,7 @@ class VsnBridge(
             ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
         val sources = fr.veryslopnynotes.data.HomeworkRepository.sourcesFor(assignment)
         val question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment)
-        val result = await<fr.veryslopnynotes.data.HomeworkResult>(45_000) { cb ->
+        val result = await<fr.veryslopnynotes.data.HomeworkResult>(AWAIT_LLM_MS) { cb ->
             OpenRouterHomework(OpenRouterLlm(), llmKeys).generate(question, sources, cb)
         } ?: return JSONObject().put("ok", false).put("message", "L'assistant n'a pas répondu.")
         val outcome = result.outcome
@@ -983,7 +1010,7 @@ class VsnBridge(
     }
 
     /** Attend un callback de dépôt (toujours livré sur le thread principal). */
-    private fun <T> await(timeoutMs: Long = 20_000, start: ((T) -> Unit) -> Unit): T? {
+    private fun <T> await(timeoutMs: Long = AWAIT_DEFAULT_MS, start: ((T) -> Unit) -> Unit): T? {
         val latch = CountDownLatch(1)
         val holder = arrayOfNulls<Any?>(1)
         try {
@@ -1084,6 +1111,23 @@ class VsnBridge(
         private const val THEME_PREFS = "settings"
         private const val THEME_KEY = "theme"
 
+        /** Méthode d'abandon d'un appel (allowlistée, comme toute autre). */
+        private const val CANCEL_METHOD = "bridge.cancel"
+
+        /** Attente par défaut d'un dépôt (`await`). */
+        const val AWAIT_DEFAULT_MS = 20_000L
+
+        /** Attente de l'appel LLM : le plus long du pont. */
+        const val AWAIT_LLM_MS = 45_000L
+
+        /**
+         * Plafond d'attente natif : le chemin le plus long (chargement des
+         * devoirs 20 s + appel LLM 45 s). Le JS doit attendre PLUS que ce
+         * plafond, sinon il abandonne avant la réponse native et la perd
+         * définitivement (#371). Miroir : `web/src/bridge/types.ts`.
+         */
+        const val MAX_NATIVE_WAIT_MS = AWAIT_DEFAULT_MS + AWAIT_LLM_MS
+
         /** Miroir exact de `web/src/bridge/types.ts`. Aucun autre nom n'entre. */
         private val METHODS = setOf(
             "app.ready", "app.theme", "app.setTheme", "app.back",
@@ -1099,6 +1143,7 @@ class VsnBridge(
             "llm.generateRevision",
             "revision.list", "revision.load", "revision.exportPdf",
             "profile.me", "profile.photo",
+            "bridge.cancel",
         )
     }
 }

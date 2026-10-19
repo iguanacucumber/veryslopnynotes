@@ -2,9 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly, pronoteHost } from "../../agents/runtime/source-guards";
+import {
+  BRIDGE_METHODS,
+  MAX_NATIVE_WAIT_MS,
+  NATIVE_WAIT_MS,
+} from "../../web/src/bridge/types";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const WEB = join(ROOT, "web");
+const BRIDGE = join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt");
 
 function list(dir: string): string[] {
   const out: string[] = [];
@@ -18,6 +24,39 @@ function list(dir: string): string[] {
   };
   walk(dir);
   return out;
+}
+
+/** Méthodes que le pont Kotlin expose au JS (`@JavascriptInterface`). */
+function kotlinExposed(source: string): string[] {
+  return [...source.matchAll(/@JavascriptInterface\s+fun\s+(\w+)\s*\(/g)].map((m) => m[1]!);
+}
+
+/** Allowlist `METHODS` du pont Kotlin (les noms que `call` accepte). */
+function kotlinMethods(source: string): string[] {
+  const block = /METHODS\s*=\s*setOf\(([\s\S]*?)\n\s*\)/.exec(source)?.[1] ?? "";
+  return [...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
+}
+
+/** Constantes `const val` numériques du pont Kotlin (en ms). */
+function kotlinConstants(source: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const m of source.matchAll(/(?:private\s+)?const\s+val\s+(\w+)\s*=\s*([\d_]+)L?/g)) {
+    out.set(m[1]!, Number(m[2]!.replace(/_/g, "")));
+  }
+  return out;
+}
+
+/** Plafond d'attente natif, lu dans le source Kotlin (somme des plafonds). */
+function kotlinCeiling(source: string): number {
+  const constants = kotlinConstants(source);
+  const expr = /const\s+val\s+MAX_NATIVE_WAIT_MS\s*=\s*([^\n]+)/.exec(source)?.[1] ?? "";
+  let total = 0;
+  for (const term of expr.split("+").map((t) => t.trim()).filter(Boolean)) {
+    if (/^\d+$/.test(term)) total += Number(term);
+    else if (constants.has(term)) total += constants.get(term)!;
+    else throw new Error(`plafond natif illisible : ${term}`);
+  }
+  return total;
 }
 
 describe("web invariants", () => {
@@ -89,5 +128,38 @@ describe("web invariants", () => {
     expect(profile).toContain("closeSession");
     const app = readFileSync(join(WEB, "src/App.tsx"), "utf8");
     expect(app).toContain("sessionClosed");
+  });
+});
+
+describe("contrat du pont natif", () => {
+  test("le pont n'expose qu'une seule interface au JS", () => {
+    // I10 / ADR-004 : UNE SEULE interface (`call`). Un second
+    // `@JavascriptInterface` (l'ancien `cancel`) rendait une méthode
+    // appelable par n'importe quel JS de la WebView, hors allowlist.
+    const kotlin = readFileSync(BRIDGE, "utf8");
+    expect(kotlinExposed(kotlin)).toEqual(["call"]);
+    const client = readFileSync(join(WEB, "src/bridge/client.ts"), "utf8");
+    const surface = /interface VsnNative \{([\s\S]*?)\n\}/.exec(client)?.[1] ?? "";
+    expect([...surface.matchAll(/^\s*(\w+)\s*\(/gm)].map((m) => m[1]!)).toEqual(["call"]);
+  });
+
+  test("les méthodes du pont Kotlin sont exactement l'union TS", () => {
+    // Parité 1:1 : une méthode présente d'un seul côté est un trou (le JS
+    // l'appellera et le natif refusera, ou l'inverse : une méthode
+    // appelable hors contrat).
+    const kotlin = readFileSync(BRIDGE, "utf8");
+    const allowlist = kotlinMethods(kotlin);
+    expect(new Set(allowlist)).toEqual(new Set(BRIDGE_METHODS));
+    expect(allowlist.length).toBe(BRIDGE_METHODS.length);
+    // L'allowlist couvre l'union : rien ne reste hors contrat.
+    for (const method of BRIDGE_METHODS) expect(allowlist).toContain(method);
+  });
+
+  test("le plafond d'attente natif est le même des deux côtés", () => {
+    const kotlin = readFileSync(BRIDGE, "utf8");
+    const constants = kotlinConstants(kotlin);
+    expect(constants.get("AWAIT_DEFAULT_MS")).toBe(NATIVE_WAIT_MS.default);
+    expect(constants.get("AWAIT_LLM_MS")).toBe(NATIVE_WAIT_MS.llm);
+    expect(kotlinCeiling(kotlin)).toBe(MAX_NATIVE_WAIT_MS);
   });
 });
