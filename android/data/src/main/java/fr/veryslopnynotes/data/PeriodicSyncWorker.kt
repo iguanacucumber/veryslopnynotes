@@ -30,8 +30,8 @@ import java.util.concurrent.TimeUnit
 // d'appairage + succès (un retry ne ressusciterait pas la session, et un
 // échec permanent userait la batterie). Autre échec = retry (backoff).
 // ponytail: Worker bloquant (pas de CoroutineWorker : le module n'a pas de
-// coroutines, tout le reste est en Thread). Upgrade: clé de cache par
-// fenêtre quand SyncedRepository en aura une.
+// coroutines, tout le reste est en Thread). Upgrade: une entrée de cache
+// par requête quand SyncedRepository en aura une.
 class PeriodicSyncWorker(
     context: Context,
     params: WorkerParameters,
@@ -41,9 +41,11 @@ class PeriodicSyncWorker(
         val store = FileCacheStore(File(applicationContext.filesDir, "offline"))
         return try {
             val now = System.currentTimeMillis()
-            store.save(CachePolicy.GRADES, gradesPayload(client, emptyMap()), now)
-            store.save(CachePolicy.ASSIGNMENTS, assignmentsPayload(client, emptyMap()), now)
-            store.save(CachePolicy.TIMETABLE, timetablePayload(client, emptyMap()), now)
+            // Requête vide = la vue par défaut (fenêtre courante, aucun
+            // algorithme) : c'est ce que demandent l'accueil et l'EDT (#365).
+            store.save(CachePolicy.GRADES, gradesPayload(client, emptyMap()), now, "")
+            store.save(CachePolicy.ASSIGNMENTS, assignmentsPayload(client, emptyMap()), now, "")
+            store.save(CachePolicy.TIMETABLE, timetablePayload(client, emptyMap()), now, "")
             Result.success()
         } catch (e: Exception) {
             if (isSessionFailure(e)) {

@@ -90,6 +90,24 @@ object CachePolicy {
     // semaine/période/algorithme). Entrée absente ou périmée = on relit, comme
     // avant — sans ça le badge « périmé » afficherait une donnée qu'on pourrait
     // rafraîchir. La première entrée sur un écran n'est PAS un geste.
-    fun shouldFetch(entry: CachedEntry?, resource: String, now: Long, force: Boolean): Boolean =
-        force || entry == null || isStale(resource, entry.fetchedAt, now)
+    //
+    // #365 : la réponse dépend de la REQUÊTE (semaine, période, algorithme).
+    // L'entrée de cache porte la requête qui l'a produite : une entrée d'une
+    // autre requête est une entrée ABSENTE (⇒ relecture), jamais un cache-hit.
+    // Sans ça, « semaine suivante » servait le payload de la semaine précédente
+    // (écran vide) et « trimestre 2 » les moyennes du trimestre précédent.
+    fun shouldFetch(entry: CachedEntry?, resource: String, query: String, now: Long, force: Boolean): Boolean =
+        force || entry == null ||
+            normalizeQuery(entry.query) != normalizeQuery(query) ||
+            isStale(resource, entry.fetchedAt, now)
+
+    /**
+     * Requête normalisée : c'est l'IDENTITÉ de la réponse (#365). Les fins de
+     * ligne deviennent des espaces (une entrée de cache = une ligne de requête,
+     * cf. `FileCacheStore`) et les bords sont coupés. La longueur est bornée par
+     * la passerelle (200 caractères), pas ici : tronquer une requête fusionnerait
+     * deux requêtes différentes.
+     */
+    fun normalizeQuery(query: String): String =
+        query.trim().replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
 }
