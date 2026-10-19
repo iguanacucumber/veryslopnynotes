@@ -25,10 +25,10 @@
 # `build/outputs/mapping/release/missing_rules.txt`).
 -dontwarn com.google.errorprone.annotations.**
 
-# #333 : pont WebView. La plateforme appelle `call`/`cancel` par réflexion
-# (nom exposé au JS) ; sans cette règle, R8 renomme ou supprime les méthodes et
-# l'UI web ne joint plus le natif. Seules les méthodes ANNOTÉES sont gardées,
-# le reste de `VsnBridge` reste rétrécissable.
+# #333 : pont WebView. La plateforme appelle `call` par réflexion (nom exposé
+# au JS) ; sans cette règle, R8 renomme ou supprime la méthode et l'UI web ne
+# joint plus le natif. Seules les méthodes ANNOTÉES sont gardées, le reste de
+# `VsnBridge` reste rétrécissable.
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }

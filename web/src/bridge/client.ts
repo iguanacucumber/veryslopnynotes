@@ -1,5 +1,7 @@
 import {
+  BRIDGE_TIMEOUTS,
   BridgeCallError,
+  DEFAULT_TIMEOUT_MS,
   type BridgeError,
   type BridgeMethod,
   type SessionStatus,
@@ -12,6 +14,7 @@ import {
 } from "./types";
 import { mockCall } from "./mock";
 
+/** Surface exposée au JS : UNE seule méthode (miroir de `VsnBridge`). */
 interface VsnNative {
   call(requestId: string, method: string, paramsJson: string): void;
 }
@@ -66,21 +69,45 @@ export function isNative(): boolean {
   return typeof window.VSN?.call === "function";
 }
 
+/**
+ * Abandon : le natif est prévenu que l'appel est lâché, sa réponse tardive
+ * sera ignorée. Signal best-effort et SANS promesse : une promesse oubliée
+ * deviendrait un rejet non géré si le pont ne répondait jamais.
+ */
+function abort(requestId: string): void {
+  try {
+    window.VSN!.call(`c${++sequence}`, "bridge.cancel", JSON.stringify({ requestId }));
+  } catch {
+    // Pont mort : il n'y a plus de réponse à attendre.
+  }
+}
+
+/** Nombre d'appels en attente — sonde de test (fuite mémoire). */
+export function pendingCount(): number {
+  return pending.size;
+}
+
 /** Appel unique vers Kotlin. En navigateur (`bun run dev:web`), le pont
  *  factice répond avec des données de démonstration. */
-export function call<T>(method: BridgeMethod, params: unknown = {}, timeoutMs = 30_000): Promise<T> {
+export function call<T>(method: BridgeMethod, params: unknown = {}, timeoutMs?: number): Promise<T> {
   if (!isNative()) return mockCall<T>(method, params);
   installCallbacks();
   const requestId = `r${++sequence}`;
+  // Le JS attend TOUJOURS plus longtemps que le plafond natif de la méthode
+  // (#371) : sinon il abandonne avant la réponse native et la perd.
+  const budget = timeoutMs ?? BRIDGE_TIMEOUTS[method] ?? DEFAULT_TIMEOUT_MS;
   return new Promise<T>((resolve, reject) => {
     // 0 = pas de timeout : le scan QR reste ouvert tant que l'utilisateur
     // cadre le code, et le résultat natif doit encore être accepté au retour.
     const timer =
-      timeoutMs > 0
+      budget > 0
         ? window.setTimeout(() => {
+            // Abandon propre : l'entrée `pending` est libérée (la réponse
+            // tardive sera ignorée) et le natif est prévenu.
             pending.delete(requestId);
+            abort(requestId);
             reject(new BridgeCallError("unavailable", "le téléphone n'a pas répondu"));
-          }, timeoutMs)
+          }, budget)
         : 0;
     pending.set(requestId, {
       resolve: (value) => resolve(value as T),
