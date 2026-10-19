@@ -9,7 +9,10 @@ L'app parle directement à Pronote et à OpenRouter ; ce serveur ne participe pa
 Le scraper est sans authentification et accepte identifiants éditeur dans le
 corps de requête. Risque SSRF et d'épuisement du compte : garder sur réseau de
 confiance ou placer un proxy authentifié devant. `make runServer` et Docker
-lancent ce seul service.
+lancent ce seul service. `make runServer` écoute par défaut sur la boucle
+locale (`HOST=0.0.0.0` pour l'exposer, sur un réseau de confiance), et sa
+préparation TLS est obligatoire : un échec arrête le lancement, jamais de
+repli en clair.
 
 Garde-fous côté serveur (#362) : la navigation ne va que vers un hôte public
 (IP privée refusée, forme IPv4-mapped IPv6 comprise), la chaîne de

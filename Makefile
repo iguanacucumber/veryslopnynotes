@@ -199,23 +199,31 @@ buildRelApk:
 	echo "APK release : android/app/build/outputs/apk/release/ (signé custom si STORE_FILE présent, sinon signé debug #297)" && \
 	echo "AAB release : android/app/build/outputs/bundle/release/app-release.aab (Play : upload key custom recommandée)"
 
-# Scraper manuels (#209) : HTTPS sur 0.0.0.0:8080 (l'app Android refuse le
-# clairtext hors émulateur, cf. android/app/src/main/res/xml/network_security_config.xml).
+# Scraper manuels (#209) : HTTPS (l'app Android refuse le clairtext hors
+# émulateur, cf. android/app/src/main/res/xml/network_security_config.xml).
 # SANS auth (décision utilisateur du 2026-10-11, risque accepté documenté dans
 # server/infrastructure/http.ts) : le process ne sert QUE GET /v1/health +
 # POST /v1/manuals/scrape. Credentials portail injectés par l'appelant dans le
 # corps, jamais en env ni commités. Le certificat auto-signé est généré HORS du
 # dépôt et seulement s'il manque (agents/runtime/dev-tls.sh) ; TLS_CERT_FILE /
 # TLS_KEY_FILE fournies par ailleurs (mkcert, Let's Encrypt) sont respectées
-# telles quelles, PORT/HOST restent surchargeables.
+# telles quelles.
+#
+# `&&` ET NON `;` (#421) : un point-virgule laissait l'exécution CONTINUER
+# quand la préparation TLS échouait (script déplacé, `dev_tls` en échec) —
+# donc le serveur démarrait SANS TLS_CERT_FILE/TLS_KEY_FILE, c'est-à-dire en
+# HTTP (server/infrastructure/http.ts retombe sur HTTP si les variables TLS
+# manquent). Un service sans auth (I8) affiché comme un « succès » en clair :
+# le pire des deux mondes. Ici, un échec de préparation ARRÊTE le lancement.
 #
 # PORT/HOST : surchargeables DEPUIS L'ENVIRONNEMENT (`PORT=9090 make
-# runServer`), pas une recette en dur — le commentaire d'au-dessus le
-# promettait, la recette ne le faisait pas (#418). Les valeurs par défaut
-# (8080 / 0.0.0.0) restent les mêmes.
+# runServer`), pas une recette en dur (#418). HOST par défaut sur la boucle
+# locale (#421) : le scraper est sans auth (I8), donc pas d'écoute sur toutes
+# les interfaces sans demande explicite. Pour joindre le scraper depuis un
+# téléphone : `make runServer HOST=0.0.0.0` (réseau de confiance).
 runServer:
-	@. agents/runtime/dev-tls.sh; dev_tls; \
-	PORT="$${PORT:-8080}" HOST="$${HOST:-0.0.0.0}" bun run server/infrastructure/http.ts
+	@. agents/runtime/dev-tls.sh && dev_tls && \
+	PORT="$${PORT:-8080}" HOST="$${HOST:-127.0.0.1}" bun run server/infrastructure/http.ts
 
 # Frames de RÉFÉRENCE Papillon (`make papillonRef`) : les démonstrations
 # publiques de l'application de référence, rechargées depuis papillon.bzh.
