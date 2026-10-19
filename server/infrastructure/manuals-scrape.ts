@@ -20,6 +20,9 @@
 //  (server/infrastructure/ssrf.ts) et chaque adresse obtenue est testée
 //  contre les plages privées : un nom public qui pointe vers une IP interne
 //  (rebinding) est refusé AVANT la navigation, avec un motif explicite.
+//  Il reste la fenêtre TOCTOU : le navigateur résout de son côté, au moment
+//  de la connexion (cf. ssrf.ts) — un nom rebindé entre la vérification et la
+//  connexion peut donc encore partir vers une IP interne.
 import { dirname, join, resolve } from "node:path";
 import { load } from "cheerio";
 import { MANUALS_SCRAPE_AUTH_FILE_RE } from "../../shared/contracts/api";
@@ -35,7 +38,7 @@ export interface ManualsConfig {
 }
 
 /** Motif de refus typé : le serveur l'expose à l'appelant (jamais l'URL). */
-export type ScrapeRefusal = "private_host" | "generic";
+export type ScrapeRefusal = "private_host" | "unresolved_host" | "generic";
 
 export class ScrapeManualsError extends Error {
   /** Motif du refus : `private_host` = garde SSRF (403), `generic` = 502. */
@@ -126,7 +129,7 @@ async function assertPublicHost(hostname: string, label: string, resolve: HostRe
     throw new ScrapeManualsError(`${label} : hote prive refuse`, "private_host");
   }
   if (verdict === "unresolved") {
-    throw new ScrapeManualsError(`${label} : hote introuvable (resolution DNS)`);
+    throw new ScrapeManualsError(`${label} : hote introuvable (resolution DNS)`, "unresolved_host");
   }
 }
 

@@ -17,7 +17,10 @@
 // jamais journalisés — seuls compteurs et codes d'erreur sortent dans les
 // logs. Seul le cookie jar Playwright vit sur disque (gitignoré, réutilisé
 // entre runs) : son CHEMIN n'est plus choisi par l'appelant, seulement son
-// NOM (#362) — le serveur impose le répertoire du jar.
+// NOM (#362) — le serveur impose le répertoire du jar. La navigation est
+// gardée : hôte public obligatoire, nom d'hôte RÉSOLU avant la navigation
+// (#419 — un nom public qui pointe vers une IP interne est refusé, 403
+// explicite), redirections et URL finale re-vérifiées.
 // I8 inchangé : `PORT`/`HOST` + chemins TLS = seules variables lues,
 // uniquement dans `start()`.
 import { readFileSync } from "node:fs";
@@ -30,6 +33,7 @@ import {
 } from "../../shared/contracts/api";
 import type { ManualDoc } from "./manuals";
 import { DEFAULT_AUTH_FILE, ScrapeManualsError, scrapeManuals } from "./manuals-scrape";
+import type { HostResolver } from "./ssrf";
 
 const DEFAULT_PORT = 3000;
 
@@ -48,6 +52,7 @@ export interface ScraperDeps {
       readonly defaultAuthFile?: string;
       readonly headless?: boolean;
       readonly signal?: AbortSignal;
+      readonly resolveHost?: HostResolver;
     },
   ) => Promise<ManualDoc[]>;
   /**
@@ -57,6 +62,11 @@ export interface ScraperDeps {
   readonly authFile?: string;
   /** Délai d'attente du scrape (défaut 30 s) ; injectable pour les tests. */
   readonly timeoutMs?: number;
+  /**
+   * Résolution DNS de l'hôte (garde SSRF, #419). Défaut = résolveur du
+   * système ; les tests injectent un faux résolveur (aucun réseau).
+   */
+  readonly resolveHost?: HostResolver;
 }
 
 export interface App {
@@ -103,7 +113,7 @@ export function createApp(deps: ScraperDeps = {}): App {
           return req.method === "HEAD" ? new Response(null, { status: res.status, headers: res.headers }) : res;
         }
         if (path === MANUALS_SCRAPE_PATH && req.method === "POST") {
-          return await handleScrape(req, runScrape, defaultJar, log, state, timeoutMs);
+          return await handleScrape(req, runScrape, defaultJar, log, state, timeoutMs, deps.resolveHost);
         }
         if (path === "/v1/health" || path === MANUALS_SCRAPE_PATH) {
           return error("method_not_allowed", 405, `${req.method} not allowed on ${path}`, {
@@ -130,6 +140,7 @@ async function handleScrape(
   log: (message: string) => void,
   state: ScrapeState,
   timeoutMs: number,
+  resolveHost?: HostResolver,
 ): Promise<Response> {
   // Plafond AVANT tout `await` : incrémenter après une lecture de corps
   // laissait une fenêtre où N requêtes passaient toutes le contrôle (#363).
@@ -171,6 +182,10 @@ async function handleScrape(
           authFile: body.authFile,
           defaultAuthFile: defaultJar,
           headless: body.headless,
+          // #419 : la garde SSRF résout le nom d'hôte avant la navigation.
+          // Le résolveur est celui du serveur (jamais celui de l'appelant) ;
+          // les tests injectent un faux résolveur.
+          resolveHost,
           // #363 : le délai dépassé ou le client parti tuent le navigateur.
           signal: controller.signal,
         },
@@ -216,6 +231,9 @@ async function handleScrape(
         // #419 : le refus de la garde SSRF est EXPLICITE (hôte privé), pas un
         // 502 muet qui laisserait croire à une panne du portail.
         if (err.reason === "private_host") return error("private_host", 403, "hote prive refuse");
+        // Nom d'hôte introuvable : le scraping n'est pas en cause, le DNS
+        // l'est — le code le dit (jamais un « scrape impossible » trompeur).
+        if (err.reason === "unresolved_host") return error("unresolved_host", 502, "nom d'hote introuvable");
         return error("school_unreachable", 502, "scrape impossible");
       }
       // Client parti : le 500 serait un faux diagnostic.

@@ -15,8 +15,8 @@
 // (issue #419) : le nom est résolu et chaque adresse obtenue est testée
 // contre les plages privées.
 // ponytail: analyse lexicale pure, zéro dépendance, zéro résolution DNS.
-// Upgrade: (déjà fait côté serveur) résolution DNS + re-test à chaque
-// redirection (cf. `assertPublicUrl` côté serveur).
+// Upgrade: (fait côté serveur, #419) résolution DNS + re-test à chaque
+// redirection — cf. `server/infrastructure/ssrf.ts` et `assertPublicUrl`.
 
 /** Partie d'adresse IPv4 : décimal, hexadécimal (0x…) ou octal (0177…). */
 function ipv4Part(part: string): number | null {

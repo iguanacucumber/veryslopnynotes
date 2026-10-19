@@ -12,8 +12,16 @@
 //
 // ponytail: `dns.lookup` (résolveur du système, comme Chromium) + un
 // resolveur INJECTABLE (les tests ne touchent jamais le réseau).
-// Upgrade: épingler l'adresse résolue (connecter l'IP, garder l'en-tête
-// Host) pour fermer la fenêtre TOCTOU entre la vérification et la connexion.
+//
+// Fenêtre TOCTOU RÉSIDUELLE : la résolution est vérifiée ICI, mais le
+// navigateur (et le `fetch` de la chaîne de redirections) résout de son côté,
+// au moment de la connexion. Un enregistrement DNS qui change entre les deux
+// peut donc faire partir la connexion vers une IP interne alors que la
+// vérification a vu une IP publique. La fenêtre est réelle, elle est courte,
+// et elle n'est pas fermable sans épingler l'adresse.
+// Upgrade: épingler l'adresse résolue (connecter l'IP en gardant l'en-tête
+// Host, ou des `--host-resolver-rules` pour Chromium) pour fermer cette
+// fenêtre.
 import { lookup } from "node:dns/promises";
 import { isBlockedHost, isIpLiteral } from "../../shared/contracts/net";
 
