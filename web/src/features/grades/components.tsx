@@ -60,7 +60,14 @@ export function Sparkline({ values }: { values: Array<number | null> }) {
       aria-label={description}
     >
       {points.length > 1 ? <path className="grades-chart__area" d={area} /> : null}
-      {points.length > 1 ? <path className="grades-chart__line" d={path} vectorEffect="non-scaling-stroke" /> : null}
+      {points.length > 1 ? (
+        <path
+          className="grades-chart__line"
+          d={path}
+          pathLength={1}
+          vectorEffect="non-scaling-stroke"
+        />
+      ) : null}
       <circle className="grades-chart__halo" cx={last.x} cy={last.y} r={8} vectorEffect="non-scaling-stroke" />
       <circle className="grades-chart__dot" cx={last.x} cy={last.y} r={3.5} vectorEffect="non-scaling-stroke" />
     </svg>
