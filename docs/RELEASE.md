@@ -8,7 +8,7 @@ perso dans le livrable. Clé signature TOUJOURS hors repo.
 | Composant | Version | Source | Licence |
 |---|---|---|---|
 | bun (runtime) | 1.4.2 | `Dockerfile.server` `oven/bun:1.4.2`, ADR-001 | MIT (runtime, ISC-compatible) |
-| typescript | 5.9.3 | `package.json` exact + `bun.lock` | Apache-2.0 |
+| typescript | 7.0.2 | `package.json` exact + `bun.lock` | Apache-2.0 |
 | @types/bun | 1.4.2 | `package.json` exact + `bun.lock` | MIT |
 | bun-types (transitif) | 1.4.2 | `bun.lock` | MIT |
 | @types/node (transitif) | 26.6.4 | `bun.lock` | MIT |
