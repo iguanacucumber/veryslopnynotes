@@ -3,7 +3,7 @@
 // de `ServerConfig.validateBaseUrl` et `SubjectPrefs` (Kotlin) : aucune règle
 // réseau ici, seulement ce qui peut être dit à l'utilisateur avant l'écriture.
 
-import type { SubjectPref } from "../../bridge/types";
+import type { SubjectPref, SubjectSaveResult } from "../../bridge/types";
 
 export type Theme = "SYSTEM" | "LIGHT" | "DARK";
 
@@ -232,6 +232,22 @@ export function sanitizeSubjectPrefs(value: unknown): SubjectPref[] {
     });
   }
   return out;
+}
+
+/** Repli quand le natif refuse sans dire pourquoi. */
+export const SUBJECT_REFUSED_MESSAGE = "Matière refusée : corrige la couleur, l'emoji ou le libellé.";
+
+/**
+ * Refus du natif (`ok:false`) : la phrase à afficher, ou `null` si la matière
+ * a été enregistrée (#395).
+ *
+ * Le pont ne répond `ok:true` que s'il a vraiment écrit : un `ok:false` doit
+ * donc être MONTRÉ, jamais avalé en « Matière enregistrée. ».
+ */
+export function subjectSaveRefusal(response: SubjectSaveResult): string | null {
+  if (response.ok) return null;
+  const message = response.message?.trim();
+  return message && message.length > 0 ? message : SUBJECT_REFUSED_MESSAGE;
 }
 
 export const SUBJECT_PALETTE: ReadonlyArray<string> = [

@@ -21,9 +21,11 @@ import {
   parseTheme,
   sanitizeSubjectPrefs,
   subjectNameError,
+  subjectSaveRefusal,
   subjectSwatchColors,
   themeLabel,
   validateServerHost,
+  SUBJECT_REFUSED_MESSAGE,
 } from "../../web/src/features/settings/model";
 import {
   normalizePin,
@@ -216,6 +218,20 @@ describe("réglages : validation de l'adresse et des matières", () => {
     expect(buildSubjectPref("x".repeat(65), { color: "", emoji: "", label: "" })).toBeNull();
     expect(subjectSwatchColors("#AABBCC")).toContain("#AABBCC");
     expect(subjectSwatchColors("#123456")).toContain("#123456");
+  });
+
+  // #395 : le natif refuse une matière hors contrat et ne dit PAS « ok ».
+  // L'interface doit montrer le refus, jamais « Matière enregistrée. ».
+  test("enregistrement d'une matière : un refus est montré, pas avalé", () => {
+    expect(subjectSaveRefusal({ ok: true })).toBeNull();
+    expect(subjectSaveRefusal({ ok: true, prefs: [] })).toBeNull();
+    expect(subjectSaveRefusal({ ok: false, message: "Couleur invalide : attends #RRGGBB." })).toBe(
+      "Couleur invalide : attends #RRGGBB.",
+    );
+    // Sans message (ou message vide), un repli clair — jamais « enregistré ».
+    expect(subjectSaveRefusal({ ok: false })).toBe(SUBJECT_REFUSED_MESSAGE);
+    expect(subjectSaveRefusal({ ok: false, message: "   " })).toBe(SUBJECT_REFUSED_MESSAGE);
+    expect(SUBJECT_REFUSED_MESSAGE).toContain("Matière refusée");
   });
 
   test("liste du bridge : formes invalides ignorées, jamais rendues", () => {

@@ -64,6 +64,8 @@ import fr.veryslopnynotes.data.SchoolQr
 import fr.veryslopnynotes.data.ServerStore
 import fr.veryslopnynotes.data.SessionEpoch
 import fr.veryslopnynotes.data.SessionStores
+import fr.veryslopnynotes.data.SubjectPrefInput
+import fr.veryslopnynotes.data.SubjectPrefRules
 import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.SubjectPrefsRepository
 import fr.veryslopnynotes.data.SubjectPrefsWrite
@@ -745,16 +747,35 @@ class VsnBridge(
         .put("prefs", JSONArray().apply { putAllPrefs(prefsRepo.prefs()) })
 
     private fun saveSubject(p: JSONObject, epoch: Long): JSONObject {
-        val subject = bounded(p.string("subject"), SubjectPrefs.MAX_SUBJECT_CHARS)
-        if (subject.isEmpty()) throw BridgeFailure("bad_request", "Matière vide.")
-        val color = p.string("color").takeIf { it.isNotEmpty() }
-        val emoji = p.string("emoji").takeIf { it.isNotEmpty() }
-        val label = p.string("label").takeIf { it.isNotEmpty() }
+        // #395 : lecture BORNÉE et validée par la MÊME règle que le dépôt
+        // (`SubjectPrefRules`). Avant, le pont ne validait que le NOM : la
+        // couleur, l'emoji et le libellé arrivaient bruts (jusqu'à 256 Ko),
+        // le dépôt abandonnait l'écriture, et le pont répondait quand même
+        // `ok` — l'interface affichait « enregistré » sans rien écrire.
+        val input = SubjectPrefRules.read(
+            subject = p.string("subject"),
+            color = p.string("color"),
+            emoji = p.string("emoji"),
+            label = p.string("label"),
+        )
+        val valid = when (input) {
+            // Refus HONNÊTE : rien n'est écrit, la phrase dit pourquoi.
+            is SubjectPrefInput.Invalid -> return JSONObject()
+                .put("ok", false)
+                .put("message", subjectPrefIssueMessage(input.field))
+            is SubjectPrefInput.Valid -> input
+        }
         // #404 : l'écriture passe par la garde d'époque. Refusée = la session
         // a changé (déconnexion) depuis l'arrivée de l'appel : rien n'est
         // écrit, le répertoire purgé ne ressuscite pas.
-        if (prefsRepo.upsert(subject, color, emoji, label, epoch) == SubjectPrefsWrite.REFUSED) {
-            throw BridgeFailure("bad_request", "Session modifiée : matière non enregistrée.")
+        when (prefsRepo.upsert(valid.subject, valid.color, valid.emoji, valid.label, epoch)) {
+            SubjectPrefsWrite.WRITTEN -> Unit
+            // Le dépôt a refusé la matière (règle divergente ? garde-fou) :
+            // JAMAIS « ok » — l'interface ne doit pas mentir sur l'écriture.
+            SubjectPrefsWrite.INVALID -> return JSONObject()
+                .put("ok", false)
+                .put("message", "Matière refusée : corrige la couleur, l'emoji ou le libellé.")
+            SubjectPrefsWrite.REFUSED -> throw BridgeFailure("bad_request", "Session modifiée : matière non enregistrée.")
         }
         return JSONObject().put("ok", true).put("prefs", JSONArray().apply { putAllPrefs(prefsRepo.prefs()) })
     }

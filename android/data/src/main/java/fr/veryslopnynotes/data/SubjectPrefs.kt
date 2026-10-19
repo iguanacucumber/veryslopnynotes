@@ -28,23 +28,19 @@ data class SubjectPrefs(
     }.toString()
 
     companion object {
-        const val MAX_SUBJECT_CHARS = 64
-        const val MAX_EMOJI_CHARS = 8 // points de code
-        const val MAX_LABEL_CHARS = 64
         const val MAX_COUNT = 64
 
-        private val COLOR_RE = Regex("^#[0-9a-fA-F]{6}$")
-
+        /**
+         * Contrat d'une matière.
+         *
+         * #395 : les règles vivent dans [SubjectPrefRules] — la source UNIQUE,
+         * partagée avec le pont (`app/VsnBridge.kt`), qui les EXÉCUTE. Le
+         * dépôt ne peut donc plus valider moins (ou plus) que le pont :
+         * avant, le pont ignorait la couleur, l'emoji et le libellé, le
+         * dépôt abandonnait l'écriture, et l'interface mentait.
+         */
         fun isValid(p: SubjectPrefs): Boolean =
-            p.subject.trim().isNotEmpty() && p.subject.length <= MAX_SUBJECT_CHARS &&
-                (p.color == null || COLOR_RE.matches(p.color)) &&
-                (
-                    p.emoji == null || (
-                        p.emoji.trim().isNotEmpty() &&
-                            p.emoji.codePointCount(0, p.emoji.length) <= MAX_EMOJI_CHARS
-                        )
-                    ) &&
-                (p.label == null || (p.label.trim().isNotEmpty() && p.label.length <= MAX_LABEL_CHARS)) &&
+            SubjectPrefRules.invalidField(p.subject, p.color, p.emoji, p.label) == null &&
                 p.updatedAt.trim().isNotEmpty()
 
         // Absent/malformé = prefs ignorée (jamais de valeur inventée).

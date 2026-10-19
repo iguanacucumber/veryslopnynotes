@@ -11,6 +11,7 @@ import {
   type ResourceParams,
   type ResourceResult,
   type SubjectPref,
+  type SubjectSaveResult,
 } from "./types";
 
 /** Surface exposée au JS : UNE seule méthode (miroir de `VsnBridge`). */
@@ -175,7 +176,7 @@ export const bridge = {
   settings: () => call<SettingsSnapshot>("settings.get"),
   saveServer: (host: string) => call<{ ok: boolean; message?: string }>("settings.saveServer", { host }),
   subjectPrefs: () => call<{ prefs: SubjectPref[] }>("settings.subjectPrefs"),
-  saveSubject: (pref: SubjectPref) => call<{ ok: true; prefs: SubjectPref[] }>("settings.saveSubject", pref),
+  saveSubject: (pref: SubjectPref) => call<SubjectSaveResult>("settings.saveSubject", pref),
   llmStatus: () => call<{ configured: boolean }>("llm.status"),
   saveLlmKey: (key: string) => call<{ ok: boolean; message?: string }>("llm.saveKey", { key }),
   forgetLlmKey: () => call<{ ok: true }>("llm.forgetKey"),
