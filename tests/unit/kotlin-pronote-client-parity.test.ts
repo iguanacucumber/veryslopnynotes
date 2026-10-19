@@ -16,18 +16,13 @@ import { Client } from "pronotets";
 
 import { ROOT, canonTs, parityToolchain, type ParityLink } from "./fixtures/kotlin-harness";
 
-const PRONOTE = join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote");
-const SOURCES = ["Json.kt", "Bytes.kt", "Errors.kt", "Crypto.kt", "HttpSession.kt", "Communication.kt", "Resolver.kt", "ClientLike.kt", "DataClasses.kt", "Client.kt"].map((f) =>
-  join(PRONOTE, f),
-);
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "ClientParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
 
 let link: ParityLink | null = null;
 if (!skip) {
-  const jar = await parityToolchain.ensureJar("kotlin-pronote-client-parity", [...SOURCES, DRIVER]);
-  link = await parityToolchain.openLink(jar);
+  link = await parityToolchain.openParityLink(DRIVER);
 }
 
 async function ask(op: unknown, allowError = false): Promise<string> {

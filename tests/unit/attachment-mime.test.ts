@@ -39,26 +39,13 @@ const MIME_SRC = join(
   "app",
   "AttachmentMime.kt",
 );
-const JSON_LIB = join(
-  ROOT,
-  "android",
-  "pronote",
-  "src",
-  "main",
-  "java",
-  "fr",
-  "veryslopnynotes",
-  "pronote",
-  "Json.kt",
-);
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "AttachmentMimeMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
 
 let link: ParityLink | null = null;
 if (!skip) {
-  const jar = await parityToolchain.ensureJar("kotlin-attachment-mime", [MIME_SRC, JSON_LIB, DRIVER]);
-  link = await parityToolchain.openLink(jar);
+  link = await parityToolchain.openParityLink(DRIVER);
 }
 
 interface MimeResult {

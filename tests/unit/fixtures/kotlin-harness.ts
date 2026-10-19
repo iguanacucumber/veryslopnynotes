@@ -9,10 +9,18 @@
 // BRUYANT (jamais un faux vert, même philosophie que `make android-compile`).
 // En revanche un ÉCHEC DE COMPILATION est un défaut : `ensureJar` lève (le code
 // commité doit compiler).
+//
+// UN JAR POUR TOUT LE PORT (#444). Les 17 tests de parité visent le MÊME jar
+// (cf. `parity-sources.ts`) : avant, chacun compilait son propre programme
+// Kotlin, donc 15 `kotlinc` — 15 JVM neuves, ~400 s de CPU — pour un seul
+// port. Le jar porte 17 `main()` : le pilote est lancé par sa CLASSE
+// (`openLink(jar, { mainClass })`), pas par `java -jar`.
 import { afterAll } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { ensureSingleJar } from "./jar-lock";
+import { mainClassOf, PARITY_SOURCES } from "./parity-sources";
 
 export const ROOT = join(import.meta.dir, "..", "..", "..");
 
@@ -30,7 +38,12 @@ export interface ParityLink {
 export interface ParityToolchain {
   readonly skipReason: string | null;
   ensureJar(cacheName: string, sources: string[]): Promise<string>;
-  openLink(jar: string, opts?: { timezone?: string }): Promise<ParityLink>;
+  openLink(jar: string, opts?: { timezone?: string; mainClass?: string }): Promise<ParityLink>;
+  /**
+   * Compile le port de parité (UNE compilation pour tous les tests) et ouvre
+   * le pilote `driverPath`. Raccourci des 17 tests : une ligne.
+   */
+  openParityLink(driverPath: string, opts?: { timezone?: string }): Promise<ParityLink>;
 }
 
 function toolchain(): ParityToolchain {
@@ -58,27 +71,69 @@ function toolchain(): ParityToolchain {
     return h.digest("hex").slice(0, 16);
   }
 
+  /** Compile les sources dans `jar`.
+   *
+   * Écriture dans un fichier TEMPORAIRE, renommé en place à la fin : une
+   * compilation interrompue ne laisse pas un jar TRONQUÉ que le run suivant
+   * réutiliserait comme s'il était valide. C'est critique maintenant que les
+   * 17 tests partagent le même jar.
+   */
+  function compileJar(sources: string[], jar: string): void {
+    // Le nom temporaire DOIT finir en `.jar` : `kotlinc -d X` n'écrit un JAR
+    // que si X se termine par `.jar` — sinon il écrit un RÉPERTOIRE de
+    // classes, que `java` refuse ensuite.
+    const tmp = `${jar.replace(/\.jar$/, "")}.${process.pid}.partial.jar`;
+    const compiled = Bun.spawnSync({
+      cmd: [kotlinc as string, ...sources, "-include-runtime", "-d", tmp],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (compiled.exitCode !== 0) {
+      try {
+        unlinkSync(tmp);
+      } catch {
+        // déjà absent
+      }
+      throw new Error(
+        `le port Kotlin ne compile pas (défaut, pas un skip) :\n${compiled.stderr}\n${compiled.stdout}` +
+          `\n(le port de parité est compilé D'UN SEUL BLOC : le défaut ci-dessus peut être dans n'importe ` +
+          `quel fichier du port, pas seulement dans celui du test qui échoue)`,
+      );
+    }
+    renameSync(tmp, jar);
+  }
+
+  /**
+   * Compile les sources dans `jar` — UNE SEULE FOIS, même quand plusieurs
+   * workers la demandent en même temps.
+   *
+   * `bun test --parallel` lance un worker par fichier, et les 17 tests de
+   * parité visent le MÊME jar : sans verrou, chaque worker compilerait le
+   * port POUR SON COMPTE (17 JVM de compilation d'un coup, sur 16 cœurs).
+   * Le verrou règle ça : le premier compile, les autres ATTENDENT son jar
+   * (cf. `jar-lock.ts`).
+   */
   async function ensureJar(cacheName: string, sources: string[]): Promise<string> {
     const dir = join(ROOT, "node_modules", ".cache", cacheName, fileDigest(sources));
     const jar = join(dir, "parity.jar");
     if (existsSync(jar)) return jar;
     mkdirSync(dir, { recursive: true });
-    const compiled = Bun.spawnSync({
-      cmd: [kotlinc as string, ...sources, "-include-runtime", "-d", jar],
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    if (compiled.exitCode !== 0) {
-      throw new Error(`le port Kotlin ne compile pas (défaut, pas un skip) :\n${compiled.stderr}\n${compiled.stdout}`);
-    }
-    return jar;
+    return ensureSingleJar(jar, () => compileJar(sources, jar));
   }
 
-  async function openLink(jar: string, opts?: { timezone?: string }): Promise<ParityLink> {
+  async function openLink(
+    jar: string,
+    opts?: { timezone?: string; mainClass?: string },
+  ): Promise<ParityLink> {
     // Même fuseau des deux côtés : `bun test` fige UTC, la JVM prend le
     // système — sans ça les `LocalDateTime` muraux divergent d'autant d'heures.
     const timezone = opts?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const proc = Bun.spawn([java as string, "-Dfile.encoding=UTF-8", `-Duser.timezone=${timezone}`, "-jar", jar], {
+    // Le jar de parité porte 17 `main()` : `java -jar` ne peut pas choisir.
+    // Avec une classe, on la lance par son nom (`-cp` + classe).
+    const args = ["-Dfile.encoding=UTF-8", `-Duser.timezone=${timezone}`];
+    if (opts?.mainClass) args.push("-cp", jar, opts.mainClass);
+    else args.push("-jar", jar);
+    const proc = Bun.spawn([java as string, ...args], {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
@@ -140,7 +195,22 @@ function toolchain(): ParityToolchain {
     };
   }
 
-  return { skipReason, ensureJar, openLink };
+  /**
+   * Compile le port de parité (UNE compilation pour tous les tests) et ouvre
+   * le pilote `driverPath`.
+   *
+   * Le jar est partagé : les 17 tests de parité visent le même, donc le
+   * verrou de `ensureJar` fait compiler UNE fois (et les autres attendent).
+   */
+  async function openParityLink(
+    driverPath: string,
+    opts?: { timezone?: string },
+  ): Promise<ParityLink> {
+    const jar = await ensureJar("kotlin-parity", PARITY_SOURCES);
+    return openLink(jar, { ...opts, mainClass: mainClassOf(driverPath) });
+  }
+
+  return { skipReason, ensureJar, openLink, openParityLink };
 }
 
 export const parityToolchain: ParityToolchain = toolchain();

@@ -20,16 +20,13 @@ import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harnes
 const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const MESSAGES = join(APP, "PairingMessages.kt");
 const REPO = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data", "PairingRepository.kt");
-// JSON du pilote : le `Json` embarqué du port (pur, aucun import Android).
-const JSON_LIB = join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote", "Json.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "PairingMessagesParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
 
 let link: ParityLink | null = null;
 if (!skip) {
-  const jar = await parityToolchain.ensureJar("kotlin-pairing-messages", [MESSAGES, JSON_LIB, DRIVER]);
-  link = await parityToolchain.openLink(jar);
+  link = await parityToolchain.openParityLink(DRIVER);
 }
 
 /** Phrase rendue par le VRAI Kotlin pour un code d'échec. */

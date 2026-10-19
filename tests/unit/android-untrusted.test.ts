@@ -15,8 +15,6 @@ import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harnes
 
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
 const UNTRUSTED = join(CORE, "Untrusted.kt");
-const AI_PROMPTS = join(CORE, "AiPrompts.kt");
-const LLM_GUARD = join(CORE, "LlmGuard.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "UntrustedParityMain.kt");
 
 // Nonce de test : 32 caractères [A-Za-z0-9_-], le format exigé par le port.
@@ -26,13 +24,7 @@ const skip = parityToolchain.skipReason !== null;
 
 let link: ParityLink | null = null;
 if (!skip) {
-  const jar = await parityToolchain.ensureJar("kotlin-untrusted", [
-    UNTRUSTED,
-    AI_PROMPTS,
-    LLM_GUARD,
-    DRIVER,
-  ]);
-  link = await parityToolchain.openLink(jar);
+  link = await parityToolchain.openParityLink(DRIVER);
 }
 
 interface PortResult {
