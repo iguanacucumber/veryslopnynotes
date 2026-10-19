@@ -1,6 +1,11 @@
 // Modèle du profil (#82/#140) : lecture défensive du payload `profile.me`,
 // comptes basculables et initiales. Aucun état, aucun accès au pont : les
 // règles restent testables sans React ni WebView.
+//
+// La borne du libellé de période vient du CONTRAT PARTAGÉ (#420) : le web ne
+// peut pas la réinventer, sinon il tronque ce que le natif publie.
+
+import { USER_PERIOD_NAME_MAX_CHARS } from "../../../../shared/contracts/models";
 
 export interface ChildAccount {
   accountId: string;
@@ -88,7 +93,7 @@ export function parseProfilePayload(payload: string | null | undefined): Profile
   if (!validAccountId(profile.accountId)) return null;
   if (profile.displayName === "" || profile.displayName.length > MAX_NAME) return null;
   if (profile.firstName.length > MAX_NAME || profile.lastName.length > MAX_NAME) return null;
-  if (profile.classLabel.length > MAX_NAME || profile.periodName.length > MAX_NAME) return null;
+  if (profile.classLabel.length > MAX_NAME || profile.periodName.length > USER_PERIOD_NAME_MAX_CHARS) return null;
   if (profile.photoRef !== "" && !isValidPhotoRef(profile.photoRef)) return null;
   return profile;
 }
