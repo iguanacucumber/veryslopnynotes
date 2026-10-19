@@ -316,8 +316,10 @@ export function isManualsScrapeRequest(v: unknown): v is ManualsScrapeRequest {
   if (!/^https?:\/\//i.test(r["startUrl"] as string)) return false;
   // Garde SSRF partagée avec le serveur (shared/contracts/net.ts) : IPv4
   // littéral/entier/hex, IPv4-mapped IPv6, loopback, RFC1918, link-local,
-  // métadonnées, ULA IPv6. Un nom DNS public passe (rebinding = risque
-  // assumé, documenté dans l'issue #362).
+  // métadonnées, ULA IPv6. Cette garde est LITTÉRALE (validateur synchrone) :
+  // un nom DNS public passe ICI, mais le SERVEUR le résout avant la
+  // navigation et refuse le nom dont une adresse est privée
+  // (server/infrastructure/ssrf.ts, issue #419).
   if (!isPublicHttpUrl(r["startUrl"] as string)) return false;
   const authFile = r["authFile"];
   if (authFile !== undefined) {

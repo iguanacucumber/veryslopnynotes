@@ -16,12 +16,17 @@
 //     re-vérifiée après navigation, sous-ressources privées coupées.
 //  2. `authFile` n'est plus un chemin piloté par l'appelant : c'est un NOM de
 //     jar, placé par le serveur sous SON répertoire (playwright/.auth/).
+// #419 : la garde ne s'arrête plus au NOM — le nom est RÉSOLU
+//  (server/infrastructure/ssrf.ts) et chaque adresse obtenue est testée
+//  contre les plages privées : un nom public qui pointe vers une IP interne
+//  (rebinding) est refusé AVANT la navigation, avec un motif explicite.
 import { dirname, join, resolve } from "node:path";
 import { load } from "cheerio";
 import { MANUALS_SCRAPE_AUTH_FILE_RE } from "../../shared/contracts/api";
-import { isBlockedHost, isPublicHttpUrl } from "../../shared/contracts/net";
 import { truncateManualText } from "./manuals";
 import type { ManualDoc } from "./manuals";
+import { checkPublicHost, systemResolver } from "./ssrf";
+import type { HostResolver } from "./ssrf";
 
 export interface ManualsConfig {
   readonly platform: string;
@@ -29,10 +34,16 @@ export interface ManualsConfig {
   readonly password: string;
 }
 
+/** Motif de refus typé : le serveur l'expose à l'appelant (jamais l'URL). */
+export type ScrapeRefusal = "private_host" | "generic";
+
 export class ScrapeManualsError extends Error {
-  constructor(message: string) {
+  /** Motif du refus : `private_host` = garde SSRF (403), `generic` = 502. */
+  readonly reason: ScrapeRefusal;
+  constructor(message: string, reason: ScrapeRefusal = "generic") {
     super(message);
     this.name = "ScrapeManualsError";
+    this.reason = reason;
   }
 }
 
@@ -50,6 +61,11 @@ export interface ScrapeOptions {
   readonly headless?: boolean;
   readonly timeoutMs?: number;
   readonly logger?: (message: string) => void;
+  /**
+   * Résolution DNS de l'hôte (injectable : les tests ne touchent pas le
+   * réseau). Défaut = résolveur du système.
+   */
+  readonly resolveHost?: HostResolver;
   /**
    * Annulation (délai HTTP dépassé, client parti) : le navigateur doit
    * RÉELLEMENT mourir, sinon le Chromium continue en arrière-plan (~300 Mo)
@@ -84,10 +100,43 @@ export function resolveAuthFile(requested?: string, fallback: string = DEFAULT_A
 }
 
 /**
- * URL http(s) PUBLIQUE exigée. Le message ne contient jamais l'URL : les
- * logs du serveur ne doivent rien laisser filtrer (cf. I8).
+ * Hôte d'une URL http(s) (null si l'URL est illisible). Utilisé par le route
+ * handler, qui voit des URL de requêtes (sous-ressources comprises).
  */
-function assertPublicUrl(raw: string, label: string): void {
+function hostOf(raw: string): string | null {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.hostname;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Hôte public APRÈS résolution DNS (#419). Un nom qui résout vers une IP
+ * privée/interne est refusé (motif explicite : `private_host`), un nom
+ * introuvable aussi (jamais un silence : le navigateur n'atteindrait rien).
+ * Le message ne contient ni l'URL ni l'adresse obtenue : les logs du serveur
+ * ne doivent rien laisser filtrer (cf. I8).
+ */
+async function assertPublicHost(hostname: string, label: string, resolve: HostResolver): Promise<void> {
+  const verdict = await checkPublicHost(hostname, resolve);
+  if (verdict === "private") {
+    throw new ScrapeManualsError(`${label} : hote prive refuse`, "private_host");
+  }
+  if (verdict === "unresolved") {
+    throw new ScrapeManualsError(`${label} : hote introuvable (resolution DNS)`);
+  }
+}
+
+/**
+ * URL http(s) PUBLIQUE exigée : protocole, hôte littéral non privé, et nom
+ * RÉSOLU (#419) — un nom public qui pointe vers une IP interne est refusé.
+ * Le message ne contient jamais l'URL : les logs du serveur ne doivent rien
+ * laisser filtrer (cf. I8).
+ */
+async function assertPublicUrl(raw: string, label: string, resolve: HostResolver): Promise<void> {
   let u: URL;
   try {
     u = new URL(raw);
@@ -97,9 +146,7 @@ function assertPublicUrl(raw: string, label: string): void {
   if (u.protocol !== "http:" && u.protocol !== "https:") {
     throw new ScrapeManualsError(`${label} http(s) requise (jamais journalisee)`);
   }
-  if (isBlockedHost(u.hostname)) {
-    throw new ScrapeManualsError(`${label} privee/interne refusee`);
-  }
+  await assertPublicHost(u.hostname, label, resolve);
 }
 
 /** Budget de la vérification de redirection, et nombre de sauts suivis. */
@@ -117,17 +164,23 @@ const MAX_REDIRECT_HOPS = 3;
  * requête part quand même). On suit donc la chaîne à la main (au plus
  * MAX_REDIRECT_HOPS sauts) et on refuse dès qu'un maillon est privé.
  *
+ * #419 : chaque maillon est aussi RÉSOLU (nom -> adresses) avant le `fetch` :
+ * une redirection vers un nom public qui pointe vers l'IP interne est
+ * refusée elle aussi.
+ *
  * ponytail: lecture seule, sans cookie ni JS : le navigateur peut voir une
  * chaîne différente — d'où la re-vérification de l'URL finale après
  * navigation (le filet qui protège le contenu).
  */
-export async function assertPublicRedirectChain(startUrl: string, timeoutMs = REDIRECT_CHECK_TIMEOUT_MS): Promise<void> {
+export async function assertPublicRedirectChain(
+  startUrl: string,
+  timeoutMs = REDIRECT_CHECK_TIMEOUT_MS,
+  resolve: HostResolver = systemResolver,
+): Promise<void> {
   const signal = AbortSignal.timeout(timeoutMs);
   let current = startUrl;
   for (let hop = 0; hop < MAX_REDIRECT_HOPS; hop += 1) {
-    if (!isPublicHttpUrl(current)) {
-      throw new ScrapeManualsError("redirection vers une cible privee/interne refusee");
-    }
+    await assertPublicUrl(current, "redirection", resolve);
     let res: Response;
     try {
       res = await fetch(current, { redirect: "manual", signal });
@@ -143,9 +196,7 @@ export async function assertPublicRedirectChain(startUrl: string, timeoutMs = RE
     } catch {
       return;
     }
-    if (!isPublicHttpUrl(target)) {
-      throw new ScrapeManualsError("redirection vers une cible privee/interne refusee");
-    }
+    await assertPublicUrl(target, "redirection", resolve);
     current = target;
   }
 }
@@ -171,11 +222,21 @@ function stripTags(html: string): string {
 // Ne logue jamais username/password, seulement plateforme + compteurs.
 export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOptions): Promise<ManualDoc[]> {
   if (!config) throw new ScrapeManualsError("manuels non configurés (aucun compte éditeur fourni par l'appelant)");
-  assertPublicUrl(opts.startUrl, "startUrl");
+  // Annulation AVANT toute résolution DNS : un client parti ne doit pas
+  // déclencher de requête réseau.
+  if (opts.signal?.aborted) throw new ScrapeManualsError("scrape annulé");
+  const resolve = opts.resolveHost ?? systemResolver;
+  // Le nom de l'hôte est RÉSOLU (#419) : un nom public qui pointe vers une
+  // IP interne est refusé ici, AVANT la navigation.
+  await assertPublicUrl(opts.startUrl, "startUrl", resolve);
   // La chaîne de redirections est vérifiée AVANT le navigateur : Chromium
   // suit un 302 sans repasser par le route handler, la cible interne serait
   // donc atteinte (requête à l'aveugle) si on attendait la navigation.
-  await assertPublicRedirectChain(opts.startUrl, Math.min(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, REDIRECT_CHECK_TIMEOUT_MS));
+  await assertPublicRedirectChain(
+    opts.startUrl,
+    Math.min(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, REDIRECT_CHECK_TIMEOUT_MS),
+    resolve,
+  );
   // Le jar est résolu AVANT le navigateur : un authFile hors périmètre est
   // refusé sans rien écrire, sans lancer Playwright.
   const authFile = resolveAuthFile(opts.authFile, opts.defaultAuthFile ?? DEFAULT_AUTH_FILE);
@@ -218,6 +279,8 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     // répond 302 vers http://169.254.169.254/… est donc atteinte si on ne
     // coupe pas la navigation : la requête vers la cible privée est
     // INTERROMPUE (abort) avant d'atteindre le réseau interne.
+    // #419 : le nom est RÉSOLU ici aussi — un nom public qui pointe vers une
+    // IP interne est coupé AVANT que la requête parte (rebinding).
     let blockedTarget = false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await page.route("**/*", async (route: any) => {
@@ -225,13 +288,20 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
       const request = typeof route?.request === "function" ? route.request() : null;
       const target = typeof request?.url === "function" ? request.url() : "";
       const kind = typeof request?.resourceType === "function" ? request.resourceType() : "document";
-      if (/^https?:\/\//i.test(target) && !isPublicHttpUrl(target)) {
-        // Navigation (document) bloquée = scrape refusé ; sous-ressource
-        // bloquée = simple accusé de réception (une image d'un réseau privé
-        // ne doit pas faire échouer le scrape).
-        if (kind === "document") blockedTarget = true;
-        await route.abort().catch(() => {});
-        return;
+      if (/^https?:\/\//i.test(target)) {
+        const host = hostOf(target);
+        // Nom illisible ou privé (littéral OU nom qui résout vers une IP
+        // privée) : la requête est coupée.
+        const verdict = host === null ? "private" : await checkPublicHost(host, resolve);
+        if (verdict !== "public") {
+          // Navigation (document) bloquée = scrape refusé ; sous-ressource
+          // bloquée = simple accusé de réception (une image d'un réseau privé
+          // ne doit pas faire échouer le scrape). Un nom INTROUVABLE n'est pas
+          // un hôte privé : la navigation échoue, sans motif SSRF.
+          if (kind === "document" && verdict === "private") blockedTarget = true;
+          await route.abort().catch(() => {});
+          return;
+        }
       }
       await route.continue().catch(() => {});
     });
@@ -241,7 +311,7 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     // citerait sinon « Page introuvable » comme source de corrigé).
     const response = await page.goto(opts.startUrl, { timeout: timeoutMs }).catch(() => null);
     if (blockedTarget) {
-      throw new ScrapeManualsError("cible privee/interne refusee (redirection)");
+      throw new ScrapeManualsError("cible privee/interne refusee (redirection)", "private_host");
     }
     const status = typeof response?.status === "function" ? response.status() : 0;
     const ok = typeof response?.ok === "function" ? response.ok() : status < 400;
@@ -253,7 +323,7 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     // URL FINALE (redirections suivies) : re-vérifiée AVANT toute extraction.
     // Sans cette re-vérification, une redirection vers une cible interne
     // ferait entrer le corps du service interne dans l'extrait.
-    assertPublicUrl(typeof page.url === "function" ? page.url() : opts.startUrl, "cible finale");
+    await assertPublicUrl(typeof page.url === "function" ? page.url() : opts.startUrl, "cible finale", resolve);
     const title = (await page.title().catch(() => config.platform)) || config.platform;
     const html: string = await page.content().catch(() => "");
     const text = truncateManualText(stripTags(html), 4000);
