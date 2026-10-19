@@ -47,7 +47,7 @@ private fun view(store: InMemoryCacheStore, resource: String, now: Long): JVal.O
     return ok(
         "served" to JVal.Bool(entry != null),
         "stale" to JVal.Bool(entry != null && CachePolicy.isStale(resource, entry.fetchedAt, now)),
-        "shouldFetch" to JVal.Bool(CachePolicy.shouldFetch(entry, resource, now, false)),
+        "shouldFetch" to JVal.Bool(CachePolicy.shouldFetch(entry, resource, "", now, false)),
     )
 }
 
@@ -60,7 +60,7 @@ private class Driver {
             val now = (op.num("now") ?: 1_700_000_000_000.0).toLong()
             val fails = (op.num("fails") ?: 0.0) != 0.0
             val store = InMemoryCacheStore()
-            store.save(resource, "{\"assignments\":[]}", now)
+            store.save(resource, "{\"assignments\":[]}", now, "")
             val before = view(store, resource, now)
             var error: String? = null
             try {
@@ -75,7 +75,7 @@ private class Driver {
             val other = op.str("other")
             var otherView: JVal.Obj? = null
             if (other != null) {
-                store.save(other, "{\"discussions\":[]}", now)
+                store.save(other, "{\"discussions\":[]}", now, "")
                 otherView = view(store, other, now)
             }
             ok(
