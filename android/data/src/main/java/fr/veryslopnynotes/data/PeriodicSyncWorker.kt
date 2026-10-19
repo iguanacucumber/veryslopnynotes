@@ -99,6 +99,11 @@ class PeriodicSyncWorker(
      * chiffré -> `Client.tokenLogin` -> `PronoteSession`. `null` = aucune
      * session lisible (jamais appairé, jeton mort, réseau KO) : le job
      * réessaiera au lieu de déclarer un succès sans rien avoir fait.
+     *
+     * La session DÉJÀ en RAM est réutilisée telle quelle (l'app tourne) : le
+     * job ne refait pas de `tokenLogin`. Et quand il restaure vraiment, il
+     * passe par le verrou partagé de `PairingRepository` : le pont et le job
+     * n'ouvrent jamais deux sessions en parallèle (erreur 25).
      */
     private fun restoreClient(): Client? {
         PronoteSession.client?.let { return it }

@@ -16,6 +16,7 @@ const ROOT = join(import.meta.dir, "..", "..");
 const DATA = join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data");
 const APP = join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app");
 const WORKER = join(DATA, "PeriodicSyncWorker.kt");
+const PAIRING = join(DATA, "PairingRepository.kt");
 const BRIDGE = join(APP, "VsnBridge.kt");
 
 /** Corps de `doWork()` (jusqu'à la fonction suivante). */
@@ -59,5 +60,16 @@ describe("session du job de fond (#406)", () => {
     expect(bridge).toContain("SessionStores.get(ctx)");
     expect(bridge).toContain("PairingRepository(sessions)");
     expect(bridge).toContain("restoreBlocking()");
+  });
+
+  test("une SEULE restauration à la fois dans le process (pas d'erreur 25)", () => {
+    const pairing = readFileSync(PAIRING, "utf8");
+    // Le pont ET le job de fond restaurent la session : en parallèle, deux
+    // `tokenLogin` sur le même compte → « Exceeded max authorization
+    // requests » → l'établissement LIMITE le compte.
+    expect(pairing).toContain("synchronized(restoreLock)");
+    // Un verrou de COMPAGNON (partagé par toutes les instances), pas un
+    // verrou d'instance : le worker et le pont n'ont pas le même dépôt.
+    expect(pairing).toMatch(/companion object \{[\s\S]*private val restoreLock = Any\(\)/);
   });
 });
