@@ -26,6 +26,7 @@ import org.json.JSONObject
 data class DiscussionWriteOutcome(val ok: Boolean, val error: String?)
 
 class DiscussionsRepository(
+    private val cache: CacheStore,
     private val provider: PronoteClientProvider = { PronoteSession.client },
     private val main: Handler = Handler(Looper.getMainLooper()),
 ) {
@@ -201,7 +202,11 @@ class DiscussionsRepository(
     /** Écriture locale : succès = pas d'exception ; fil fermé/session = message. */
     private fun writeLocal(failure: String, block: () -> Unit): DiscussionWriteOutcome {
         return try {
-            block()
+            // #369 : écriture CONFIRMÉE -> l'entrée de cache de la messagerie ne
+            // ressert plus l'état d'avant (fil supprimé qui réapparaît, fil
+            // créé absent, compteur de non-lus figé). Une écriture refusée
+            // (exception) ne purge rien.
+            writeAndInvalidate(cache, CachePolicy.DISCUSSIONS) { block() }
             DiscussionWriteOutcome(true, null)
         } catch (e: Exception) {
             if (isSessionFailure(e)) {

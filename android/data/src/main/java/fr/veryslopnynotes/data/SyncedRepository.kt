@@ -39,8 +39,9 @@ class SyncedRepository(
         CachePolicy.isStale(resource, entry.fetchedAt, now)
 
     // Invalidation active : purge ressource, UI retombe sur Empty.
+    // Même règle que l'écriture confirmée (`CachePolicy.invalidateAfterWrite`).
     fun invalidate(resource: String) {
-        if (CachePolicy.isCacheable(resource)) store.clear(resource)
+        CachePolicy.invalidateAfterWrite(store, resource)
     }
 
     // Lecture locale async (file d'attente unique #310 : un seul fil daemon,
