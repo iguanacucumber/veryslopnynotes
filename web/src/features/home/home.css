@@ -202,6 +202,12 @@
   border-radius: inherit;
   background: linear-gradient(90deg, var(--brand), var(--brand-light));
   transition: width 420ms var(--ease);
+  /* La barre se remplit au montage (#336), puis suit les mises à jour. */
+  animation: fill-in 700ms var(--ease) both;
+}
+
+@keyframes fill-in {
+  from { width: 0; }
 }
 
 .home-average__origin {

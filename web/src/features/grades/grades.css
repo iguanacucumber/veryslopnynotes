@@ -164,6 +164,7 @@
 .grades-chart__area {
   fill: currentColor;
   opacity: 0.1;
+  animation: chart-fade 600ms var(--ease) 180ms both;
 }
 
 .grades-chart__line {
@@ -172,15 +173,37 @@
   stroke-width: 2.5;
   stroke-linecap: round;
   stroke-linejoin: round;
+  /* `pathLength={1}` côté SVG : le tracé se dessine sans mesurer la courbe. */
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: chart-draw 900ms var(--ease) 120ms forwards;
 }
 
 .grades-chart__halo {
   fill: currentColor;
   opacity: 0.18;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: chart-pop 320ms var(--ease) 760ms both;
 }
 
 .grades-chart__dot {
   fill: currentColor;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: chart-pop 260ms var(--ease) 820ms both;
+}
+
+@keyframes chart-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes chart-fade {
+  from { opacity: 0; }
+}
+
+@keyframes chart-pop {
+  from { opacity: 0; transform: scale(0.2); }
 }
 
 /* --- Sections par matière ------------------------------------------------- */
