@@ -65,6 +65,11 @@ class InMemoryCacheStore : CacheStore {
  * store (jamais l'inverse) — c'est ce que font `writeIfCurrent` et `invalidate`,
  * qui appellent le store sous le verrou d'époque. Aucun chemin ne prend le
  * verrou du store puis celui de l'époque : pas d'interblocage possible.
+ *
+ * #404 : la garde ne couvre pas QUE le cache. Toute écriture dans
+ * `filesDir/offline/` passe par elle (les fiches de révision et les
+ * préférences matière : cf. [OfflineArtifacts]), donc une écriture en vol ne
+ * ressuscite pas le dossier purgé par une déconnexion.
  */
 object SessionEpoch {
     private val lock = Any()
@@ -159,6 +164,9 @@ class FileCacheStore(private val dir: File) : CacheStore {
             try {
                 // #206 : récursif — le sous-dossier des fiches de révision
                 // (`revisions/`, données du compte comme le reste) part avec.
+                // #404 : les préférences matière (`subject_prefs.json`) aussi :
+                // tout ce qui est écrit dans le dossier `offline/` est de la
+                // donnée du compte, donc la purge l'efface en bloc.
                 dir.listFiles()?.forEach { it.deleteRecursively() }
             } catch (_: Exception) {
                 // ponytail: purge best-effort, comme clear().
