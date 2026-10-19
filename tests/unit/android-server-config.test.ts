@@ -522,10 +522,15 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
 // la purge des caches partirait vers des lectures fantômes).
 function accounts_has_logout(): boolean {
   const accounts = read(join(DATA, "AccountStore.kt"));
+  // #407 : la purge est déléguée à `CacheScope.purge` (UN seul endroit, avec l'appairage
+  // d'un autre compte et la session morte) — l'ORDRE ne bouge pas : session
+  // persistée, session mémoire, PUIS caches.
+  const purge = accounts.indexOf("CacheScope.purge(cacheStore)");
   return (
     accounts.includes("fun logout()") &&
     accounts.indexOf("sessions.clear()") < accounts.indexOf("PronoteSession.clear()") &&
-    accounts.indexOf("PronoteSession.clear()") < accounts.indexOf("cacheStore.clearAll()")
+    accounts.indexOf("PronoteSession.clear()") < purge &&
+    purge > -1
   );
 }
 

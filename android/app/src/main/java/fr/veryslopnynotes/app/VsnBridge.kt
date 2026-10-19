@@ -123,7 +123,7 @@ class VsnBridge(
     private val profileRepo = ProfileRepository()
     private val accounts = AccountStore(ctx, cacheStore, sessions)
     private val llmKeys = LlmKeys.get(ctx)
-    private val pairing = PairingRepository(sessions)
+    private val pairing = PairingRepository(sessions, cacheStore)
     private val prefsRepo = SubjectPrefsRepository(
         try {
             FileSubjectPrefsStore(File(ctx.filesDir, "offline/subject_prefs.json"))
