@@ -57,10 +57,10 @@ Format : Invariant → test → commande → emplacement.
 - Emplacement : `android/core/`.
 
 ## I4 — Pas de secrets dans prompts LLM
-- Invariant : aucun secret/token/credential dans prompt LLM (`server/ai/` supprimé en #210, module porté dans `android/core/`, #204).
-- Test : `tests/architecture/invariants.test.ts` (I4, module IA Kotlin) + `agents/runtime/check-secrets.ts`.
+- Invariant : aucun secret/token/credential dans prompt LLM (`server/ai/` supprimé en #210, module porté dans `android/core/`, #204). La garde porte sur des **FORMES** de secret (#409), pas sur des mots : préfixe de clé connu, en-tête d'autorisation, JWT, affectation d'une variable sensible, cookie de session, bloc de clé privée, chaîne à forte entropie. Un cours qui *mentionne* « BEGIN PRIVATE KEY » n'est pas un secret ; un vrai JWT, lui, est refusé. Le refus dit **pourquoi** (le type) et ne recopie **jamais** le secret : la cause remonte jusqu'à l'élève (`SecretDetectedException` + `secretRefusalMessage`), au lieu du « Échec de l'assistant. » avalé.
+- Test : `tests/architecture/invariants.test.ts` (I4, module IA Kotlin) + `agents/runtime/check-secrets.ts` + `tests/unit/kotlin-llm-guard.test.ts` (Kotlin **exécuté** : `assertNoSecretsInPrompt` / `validateTextOutput` — cours légitime accepté, JWT et `Bearer …` refusés, message de refus sans le secret) + `tests/unit/android-llm-catalogue.test.ts` (le refus de secret n'est plus avalé en « hors format »).
 - Commande : `make check` (architecture-test + lint).
-- Emplacement : `android/core/*Ai*.kt`, `android/core/AiPrompts.kt`.
+- Emplacement : `android/core/*Ai*.kt`, `android/core/AiPrompts.kt`, `android/core/LlmGuard.kt` (garde I4), `android/data/OpenRouterLlm.kt` + `android/app/VsnBridge.kt` (remontée de la cause).
 
 ## I5 — LLM sans outils/secrets dans le prompt
 - Invariant : le prompt ne contient aucun secret ; sortie texte/JSON validée (une sortie MAL FORMÉE est refusée, jamais réinterprétée — voir I14). L'app appelle OpenRouter directement en HTTPS et transmet la clé dans l'en-tête `Authorization`, jamais au serveur applicatif (voir I8).

@@ -8,9 +8,11 @@ import fr.veryslopnynotes.core.HomeworkSource
 import fr.veryslopnynotes.core.LlmProvider
 import fr.veryslopnynotes.core.SafePrompt
 import fr.veryslopnynotes.core.SafePromptProvider
+import fr.veryslopnynotes.core.SecretDetectedException
 import fr.veryslopnynotes.core.Untrusted
 import fr.veryslopnynotes.core.assertNoSecretsInPrompt
 import fr.veryslopnynotes.core.buildSafePrompt
+import fr.veryslopnynotes.core.secretRefusalMessage
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -204,6 +206,13 @@ class OpenRouterHomework(
                 HomeworkResult(outcome, null)
             } catch (e: LlmError) {
                 HomeworkResult(null, e.userMessage)
+            } catch (e: SecretDetectedException) {
+                // #409 : un SECRET a ete detecte dans le contenu envoye au
+                // modele. On dit POURQUOI (le type du secret), jamais le
+                // secret : l'eleve doit pouvoir corriger son devoir. Avant,
+                // l'AiError avalait la cause et l'UI n'affichait que
+                // « Echec de l'assistant. ».
+                HomeworkResult(null, secretRefusalMessage(e.kind))
             } catch (_: AiError) {
                 // Le modèle A RÉPONDU, mais hors format (JSON invalide, citation
                 // inventée) : cause distincte de l'appel qui n'a pas abouti.
