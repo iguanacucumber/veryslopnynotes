@@ -420,6 +420,14 @@ private class ClientDriver {
                     (op.fields["data"] as? JVal.Obj)?.fields,
                 )
             }
+            // Ping de session : `ifDue` respecte le seuil (110 s), `manual` le
+            // force (#408 — la relecture manuelle doit partir pour de vrai).
+            "clientPing" -> {
+                val c = client(op.num("cid"))
+                val ka = c.keepAlive()
+                if (op.str("mode") == "manual") ka.ping() else ka.pingIfDue()
+                ok("ok" to JVal.Bool(true))
+            }
             "exportCreds" -> {
                 val e = client(op.num("cid")).exportCredentials()
                 ok(

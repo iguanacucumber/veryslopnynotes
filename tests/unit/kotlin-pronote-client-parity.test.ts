@@ -133,6 +133,8 @@ interface StubScript {
   nextRaw?: string;
   /** Prochain POST → cette enveloppe JSON (erreurs `Erreur`, en clair). */
   nextEnvelope?: unknown;
+  /** Session MORTE : chaque POST répond l'erreur « session expirée » (#408). */
+  deadSession?: boolean;
 }
 
 interface Stub {
@@ -263,6 +265,12 @@ function startStub(): Stub {
             }
           }
           stub.posts.push({ id: envelope.id, inner, raw: body });
+          // Session MORTE (#408) : CHAQUE POST répond l'erreur « session
+          // expirée » — le rejeu après `refresh` échoue donc aussi (c'est le
+          // cas réel : l'établissement a fermé la session).
+          if (s.deadSession) {
+            return Response.json({ Erreur: { G: 10, Titre: "session expirée" } });
+          }
           // Aiguillages à un coup (erreurs HTTP / enveloppes d'erreur).
           if (s.nextPostStatus) {
             const st = s.nextPostStatus;
@@ -1148,6 +1156,68 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
       const ktBad = portError(await ask({ op: "clientPost", cid: ktCid, function: "TestEcho", onglet: 7, data: { data: { a: 1 } } }, true));
       expect(tsBad?.name).toBe("SyntaxError");
       expect(ktBad.name).toBe("JsonError");
+    } finally {
+      tsa.close();
+      kta.close();
+    }
+  });
+
+  // #408 : la RELECTURE MANUELLE doit forcer un aller-retour.
+  //
+  // `Communication.post` rafraîchit `lastPing` à chaque POST réussi : juste
+  // après une lecture, le seuil de 110 s n'est PAS atteint, donc
+  // `pingIfDue()` ne partait JAMAIS — la relecture rendait `Updated` sans
+  // rien vérifier de la session (une session morte passait pour vivante : ni
+  // `DeviceAuth.reject()`, ni invite à ré-appairer).
+  //
+  // Le ping MANUEL (`KeepAlive.ping()`) force la requête. C'est une
+  // EXTENSION du port (la référence n'a que le ping périodique), mais la
+  // requête émise est CELLE de la référence — `post("Navigation", 7, { onglet:
+  // 7, ongletPrec: 7 })` — et le fil est comparé des deux côtés.
+  test.skipIf(skip)("keepAlive : le ping manuel force l'aller-retour (après une lecture) — #408", async () => {
+    const tsa = startStub();
+    const kta = startStub();
+    try {
+      const tsClient = await tsLogin(tsa);
+      const ktCid = await ktLogin(kta);
+
+      // Une LECTURE (les notes) : son POST rafraîchit `lastPing`.
+      await ask({ op: "clientPost", cid: ktCid, function: "DernieresNotes", onglet: 198 });
+      const ktAvant = kta.posts.length;
+      expect(ktAvant).toBeGreaterThan(0);
+
+      // Le ping « si dû » : AUCUNE requête (le bug #408 — la relecture ne
+      // vérifiait rien de la session).
+      await ask({ op: "clientPing", cid: ktCid, mode: "ifDue" });
+      expect(kta.posts.length).toBe(ktAvant);
+
+      // Le ping MANUEL : UN aller-retour — et UN SEUL.
+      await ask({ op: "clientPing", cid: ktCid, mode: "manual" });
+      expect(kta.posts.length).toBe(ktAvant + 1);
+      const ktPing = kta.posts[ktAvant]!;
+      expect(ktPing.id).toBe("Navigation");
+
+      // PARITÉ : la requête est CELLE de la référence (même fonction, même
+      // onglet, mêmes données) — le ping manuel n'est pas un protocole
+      // différent, et le fil est OCTET-pour-octet le même des deux côtés.
+      await tsClient.post("Navigation", 7, { onglet: 7, ongletPrec: 7 });
+      const tsPing = tsa.posts[tsa.posts.length - 1]!;
+      expect(tsPing.id).toBe("Navigation");
+      expect(canonTs(ktPing.inner)).toBe(canonTs(tsPing.inner));
+      expect(canonTs(ktPing.inner)).toBe(
+        canonTs({ Signature: { onglet: 7 }, data: { onglet: 7, ongletPrec: 7 } }),
+      );
+
+      // Session MORTE : le ping manuel remonte l'ERREUR de session (elle
+      // n'est pas avalée) — c'est ce que la couche data traduit en
+      // ré-appairage (`isSessionFailure` → `DeviceAuth.reject()`).
+      kta.script.deadSession = true;
+      tsa.script.deadSession = true;
+      const ktErr = portError(await ask({ op: "clientPing", cid: ktCid, mode: "manual" }, true));
+      const tsErr = await tsErrorOfAsync(() => tsClient.post("Navigation", 7, { onglet: 7, ongletPrec: 7 }));
+      expect(ktErr.name).toBe(tsErr?.name ?? "(aucune erreur)");
+      expect(ktErr.message).toMatch(/session/i);
+      expect(tsErr?.message ?? "").toMatch(/session/i);
     } finally {
       tsa.close();
       kta.close();

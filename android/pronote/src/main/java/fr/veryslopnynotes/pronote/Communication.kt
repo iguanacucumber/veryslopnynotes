@@ -388,9 +388,9 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
 /**
  * Maintient la session en vie : un ping quand ~110 s d'inactivité, comme
  * `_KeepAlive` (le `post("Navigation", …)` est fourni par le client #201 :
- * ici `shouldPing`/`ping`, zéro dépendance, thread démon).
+ * ici `shouldPing`/`pingRequest`, zéro dépendance, thread démon).
  */
-class KeepAlive(private val shouldPing: () -> Boolean, private val ping: () -> Unit) {
+class KeepAlive(private val shouldPing: () -> Boolean, private val pingRequest: () -> Unit) {
     @Volatile
     private var flag = false
     private var thread: Thread? = null
@@ -401,7 +401,20 @@ class KeepAlive(private val shouldPing: () -> Boolean, private val ping: () -> U
      * repli). Le thread de garde, lui, ne lève jamais (voir `start`).
      */
     fun pingIfDue() {
-        if (shouldPing()) ping()
+        if (shouldPing()) pingRequest()
+    }
+
+    /**
+     * Ping MANUEL : un aller-retour FORCÉ, sans seuil (#408).
+     *
+     * `pingIfDue` ne part JAMAIS après une lecture : le POST vient de
+     * rafraîchir `lastPing`, donc le seuil de 110 s n'est pas atteint. Une
+     * relecture manuelle ne vérifiait donc RIEN de la session — une session
+     * morte passait pour vivante. Ici la requête part TOUJOURS : la session
+     * morte remonte son erreur, et l'appelant peut la traduire (ré-appairage).
+     */
+    fun ping() {
+        pingRequest()
     }
 
     fun start() {
@@ -416,7 +429,7 @@ class KeepAlive(private val shouldPing: () -> Boolean, private val ping: () -> U
                 if (!flag) return@Thread
                 if (shouldPing()) {
                     try {
-                        ping()
+                        pingRequest()
                     } catch (_: Exception) {
                         // Un ping raté n'arrête pas la garde (comme `setInterval`).
                     }
