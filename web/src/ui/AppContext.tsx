@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from "react";
 import { bridge } from "../bridge/client";
 import { BridgeCallError, type ResourceKey } from "../bridge/types";
+import { forceReload, type LoadSignature } from "../lib/refresh";
 import { cssVarsOf, paletteOf, parseScheme } from "../lib/schemes";
 
 type Theme = "SYSTEM" | "LIGHT" | "DARK";
@@ -215,6 +216,12 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
   });
   const [manual, setManual] = useState(0);
   const alive = useRef(true);
+  // #365 : le geste est un DELTA. On retient la signature du dernier
+  // chargement : forcer = le geste ou la requête a changé DEPUIS. Un compteur
+  // jamais remis à zéro forcerait à chaque ouverture d'écran (le compteur
+  // `manual`/`refreshTick` est monotone), et une requête nouvelle ne forcerait
+  // jamais.
+  const lastLoad = useRef<LoadSignature | null>(null);
 
   useEffect(() => {
     alive.current = true;
@@ -225,6 +232,10 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
 
   useEffect(() => {
     let cancelled = false;
+    // Signature consommée par ce chargement : le prochain comparera à celle-ci.
+    const signature: LoadSignature = { query, manual, tick: refreshTick };
+    const force = forceReload(lastLoad.current, signature);
+    lastLoad.current = signature;
     const run = async () => {
       setState((s) => (s.payload ? s : { ...s, loading: true }));
       try {
@@ -244,7 +255,7 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
         // cache indisponible : on tente le natif
       }
       try {
-        const result = await bridge.load({ key, query, force: manual > 0 || refreshTick > 0 });
+        const result = await bridge.load({ key, query, force });
         if (cancelled) return;
         setState({
           payload: result.payload,

@@ -55,9 +55,10 @@ class SyncedRepository(
     // (`fetchedAt`) : jamais un `Updated` daté de maintenant, qui ferait passer
     // une donnee ancienne pour fraiche (le badge « perime » reste juste).
     //
-    // ponytail: une seule clé de cache par ressource : la requête de la fenêtre
-    //   demandée écrase le payload précédent (semaine courante en pratique).
-    //   Upgrade: clé de cache = ressource + fenêtre.
+    // ponytail: une seule clé de cache par ressource : l'entrée porte la
+    //   requête qui l'a produite, donc une autre requête = une autre réponse
+    //   (⇒ relecture, pas un cache-hit qui servirait la semaine précédente).
+    //   Upgrade: une entrée PAR requête (clé de cache = ressource + requête).
     fun refreshAsync(
         resource: String,
         baseUrl: String,
@@ -71,7 +72,9 @@ class SyncedRepository(
         } catch (_: Exception) {
             null
         }
-        if (entry != null && !CachePolicy.shouldFetch(entry, resource, clock(), force)) {
+        // #365 : l'entrée ne sert que si elle vient de la MÊME requête ; sinon
+        // elle est ABSENTE (semaine / période / algorithme différents).
+        if (entry != null && !CachePolicy.shouldFetch(entry, resource, query, clock(), force)) {
             post(cb, RefreshOutcome.Updated(entry.payload, entry.fetchedAt))
             return
         }
@@ -82,6 +85,10 @@ class SyncedRepository(
      * Lecture locale SANS ecriture cache (semaines non courantes : l'ecran
      * Devoirs/EDT affiche une autre semaine sans ecraser la courante, comme
      * l'ancien GET fenetre qui ne persistait pas).
+     *
+     * #365 : coherente avec le reste — le repli cache ne sert qu'une entrée de
+     * la MEME requete, et rien n'est ecrit (l'entree de l'autre semaine reste
+     * celle qui a produit son payload).
      */
     fun fetchAsync(resource: String, query: String = "", cb: (RefreshOutcome) -> Unit) {
         require(CachePolicy.isCacheable(resource)) { "ressource non cachable: $resource" }
@@ -105,7 +112,8 @@ class SyncedRepository(
             val payload = readLocal(resource, query)
             if (save) {
                 try {
-                    store.save(resource, payload, clock())
+                    // #365 : l'entrée retient la requête qui l'a produite.
+                    store.save(resource, payload, clock(), query)
                 } catch (_: Exception) {
                     return RefreshOutcome.Failed("Cache illisible.", payload)
                 }
@@ -114,7 +122,7 @@ class SyncedRepository(
                 RefreshOutcome.Updated(payload, clock())
             }
         } catch (e: NoLocalSession) {
-            cachedOrFailed(resource, "Aucune donnée en cache.")
+            cachedOrFailed(resource, query, "Aucune donnée en cache.")
         } catch (e: Exception) {
             if (isSessionFailure(e)) {
                 // Session locale morte : le cache ne masque PAS une session
@@ -123,19 +131,22 @@ class SyncedRepository(
                 DeviceAuth.reject()
                 RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null)
             } else {
-                cachedOrFailed(resource, "Aucune donnée en cache.")
+                cachedOrFailed(resource, query, "Aucune donnée en cache.")
             }
         }
     }
 
-    private fun cachedOrFailed(resource: String, message: String): RefreshOutcome {
+    // Repli cache : seule une entrée de la MÊME requête est servie (#365) —
+    // celle d'une autre semaine afficherait un écran vide sans le dire.
+    private fun cachedOrFailed(resource: String, query: String, message: String): RefreshOutcome {
         val c = try {
             store.load(resource)
         } catch (_: Exception) {
             null
         }
-        return if (c != null) {
-            RefreshOutcome.OfflineFallback(c.payload, c.fetchedAt, isStale(resource, c))
+        val same = c?.takeIf { CachePolicy.normalizeQuery(it.query) == CachePolicy.normalizeQuery(query) }
+        return if (same != null) {
+            RefreshOutcome.OfflineFallback(same.payload, same.fetchedAt, isStale(resource, same))
         } else {
             RefreshOutcome.Failed(message, null)
         }
