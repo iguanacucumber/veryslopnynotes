@@ -3,6 +3,9 @@ import { useResource } from "../ui/AppContext";
 import { Card, Divider, EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../ui/components";
 import { IconCheck, IconShield } from "../ui/icons";
 import {
+  ALERTS_CLEAR_NOTE,
+  ALERTS_FLAGGED_NOTE,
+  ALERTS_HEURISTIC_NOTE,
   EXCERPT_COLLAPSED,
   alertKindLabel,
   alertSeverity,
@@ -56,6 +59,9 @@ function AlertCard({ alert }: { alert: SecurityAlert }) {
       <p className="tiny muted" role="note" style={{ margin: 0 }}>
         Contenu neutralisé : texte brut, jamais interprété, jamais cliquable.
       </p>
+      <p className="tiny muted" role="note" style={{ margin: 0 }}>
+        {ALERTS_FLAGGED_NOTE}
+      </p>
     </Card>
   );
 }
@@ -76,6 +82,9 @@ export default function AlertsRoute() {
       <p className="tiny muted" style={{ margin: 0 }}>
         Contenus hostiles détectés puis neutralisés. Ils sont affichés comme texte brut, sans lien et
         sans exécution : une alerte est une donnée, jamais une instruction.
+      </p>
+      <p className="tiny muted" role="note" style={{ margin: 0 }}>
+        {ALERTS_HEURISTIC_NOTE}
       </p>
 
       {resource.error && layout !== "error" ? (
@@ -120,10 +129,13 @@ export default function AlertsRoute() {
             </span>
             <div className="stack" style={{ gap: 4 }}>
               <h2 className="t-title" style={{ margin: 0 }}>
-                Aucune alerte de sécurité
+                Aucun contenu hostile détecté
               </h2>
               <p className="t-body-m muted" style={{ margin: 0 }}>
-                Bon signe : aucun contenu hostile n’a été signalé.
+                {ALERTS_CLEAR_NOTE}
+              </p>
+              <p className="tiny muted" style={{ margin: 0 }}>
+                {ALERTS_HEURISTIC_NOTE}
               </p>
             </div>
           </div>
