@@ -24,10 +24,12 @@ import fr.veryslopnynotes.pronote.Communication
 import fr.veryslopnynotes.pronote.CookieJar
 import fr.veryslopnynotes.pronote.DecryptionChange
 import fr.veryslopnynotes.pronote.Encryption
+import fr.veryslopnynotes.pronote.ExpiredObject
 import fr.veryslopnynotes.pronote.HttpSession
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
 import fr.veryslopnynotes.pronote.KeepAlive
+import fr.veryslopnynotes.pronote.PronoteAPIError
 import fr.veryslopnynotes.pronote.enBytes
 import fr.veryslopnynotes.pronote.enleverAlea
 import fr.veryslopnynotes.pronote.hexToBytes
@@ -156,6 +158,23 @@ private class Driver {
             // --- Fonctions pures ----------------------------------------------
             "enleverAlea" -> ok("value" to JVal.Str(enleverAlea(op.str("text") ?: "")))
             "hexToBytes" -> ok("hex" to JVal.Str((op.str("hex") ?: "").hexToBytes().toHexLower()))
+            // Hiérarchie d'erreur : le contrat documenté est
+            // `catch (e: PronoteAPIError)` — il doit attraper `ExpiredObject`
+            // (comme la référence, où `ExpiredObject extends PronoteAPIError`).
+            "errorHierarchy" -> {
+                val e = ExpiredObject("objet d'une session précédente")
+                val caught = try {
+                    throw e
+                } catch (err: PronoteAPIError) {
+                    err.javaClass.simpleName
+                } catch (err: Exception) {
+                    "NON-CATCHÉ-PAR-PronoteAPIError"
+                }
+                ok(
+                    "name" to JVal.Str(e.javaClass.simpleName),
+                    "caughtAs" to JVal.Str(caught),
+                )
+            }
             "enBytes" -> ok("hex" to JVal.Str(enBytes(op.str("text") ?: "").toHexLower()))
             "prepareOnglets" -> ok(
                 "value" to JVal.Arr(prepareOnglets(op.fields["value"]).map { JVal.Num(it) }),
