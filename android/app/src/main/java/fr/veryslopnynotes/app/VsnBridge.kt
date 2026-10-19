@@ -15,7 +15,6 @@ import com.journeyapps.barcodescanner.ScanOptions
 import fr.veryslopnynotes.core.AiError
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.AssignmentAttachment
-import fr.veryslopnynotes.core.AiError
 import fr.veryslopnynotes.core.Capabilities
 import fr.veryslopnynotes.core.ChildAccount
 import fr.veryslopnynotes.core.DiscussionRecipient
@@ -48,7 +47,6 @@ import fr.veryslopnynotes.data.InMemoryCacheStore
 import fr.veryslopnynotes.data.InMemorySubjectPrefsStore
 import fr.veryslopnynotes.data.LlmError
 import fr.veryslopnynotes.data.LlmKeys
-import fr.veryslopnynotes.data.LlmError
 import fr.veryslopnynotes.data.MeResult
 import fr.veryslopnynotes.data.OpenRouterHomework
 import fr.veryslopnynotes.data.OpenRouterLlm
