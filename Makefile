@@ -7,14 +7,14 @@ ANDROID_ENV = . agents/runtime/android-env.sh
 check:
 	bun run agents/runtime/check.ts
 
-# Boucle interne : tout sauf le build Vite et la compilation Gradle (~4,4 s).
-# Ce n'est PAS le gate de merge — `make check` reste le seul contrôle complet
-# (android-compile voit les symboles Kotlin, web-build voit la config Vite).
+# Boucle interne : tout sauf la compilation Gradle (~2,1 s à chaud). Le build
+# Vite est inclus ; ce n'est PAS le gate de merge — `make check` ajoute
+# android-compile, le seul contrôle des symboles Kotlin.
 check-fast:
-	CHECK_TARGETS="lint typecheck unit architecture contracts check-kotlin web-typecheck web-test" bun run agents/runtime/check.ts
+	CHECK_TARGETS="lint typecheck unit architecture contracts check-kotlin web-typecheck web-test web-build" bun run agents/runtime/check.ts
 
 # TDD : relance les tests au moindre changement. `make watch T=tests/unit/foo.test.ts`
-# cible un fichier ; par défaut unitaires + web (4,4 s). Pas de `bun test --changed` :
+# cible un fichier ; par défaut unitaires + web (~2,1 s). Pas de `bun test --changed` :
 # les scans d'architecture lisent les sources, pas les imports, donc ils seraient ratés.
 watch:
 	bun test --watch $(if $(T),$(T),tests/unit tests/web)
@@ -23,7 +23,7 @@ lint:
 	bun run agents/runtime/check-secrets.ts
 
 typecheck:
-	bunx tsc --noEmit
+	bun run typecheck
 
 # Frontend React : typecheck + build local + tests. Le build écrit dans
 # `android/app/src/main/assets/web/` (gitignoré) ; Gradle le refait à chaque
@@ -77,6 +77,10 @@ check-kotlin:
 # dl.google.com, 3 × 28 s de SocketTimeout pendant que curl y répond en 0,9 s —
 # pb d'environnement JVM/réseau, cf. docs/HUMAN_INPUTS.md). Cache froid = échec
 # explicite puis repli EN LIGNE : jamais de blocage silencieux.
+#
+# -x buildWebUi : `:app:compileDebugKotlin` tire `preBuild`, donc Gradle lançait
+# un Vite complet. `make check` exécute déjà `web-build` en parallèle : deux Vite
+# concurrents sur le même outDir (emptyOutDir) pouvaient se marcher dessus.
 android-compile:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
@@ -89,10 +93,10 @@ android-compile:
 	else \
 	  echo "android-compile : JDK $$jdk, SDK $$sdk"; \
 	  cd android && { \
-	    JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --offline --console=plain \
+	    JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --offline --console=plain -x buildWebUi \
 	      :core:compileDebugKotlin :data:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin || \
 	    { echo "android-compile : REPLI EN LIGNE (cache Gradle incomplet — hors-ligne refusé)."; \
-	      JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain \
+	      JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain -x buildWebUi \
 	        :core:compileDebugKotlin :data:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin; }; \
 	  }; \
 	fi

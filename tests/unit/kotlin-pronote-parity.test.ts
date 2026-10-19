@@ -14,7 +14,7 @@
 // - `deflate` : Java et zlib produisent deux flux valides différents — le
 //   contenu inflaté est comparé, pas le flux ;
 // - `lastPing` : horloge murale, exclu.
-import { describe, expect, test } from "bun:test";
+import { describe, expect, jest, test } from "bun:test";
 import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 import { join } from "node:path";
@@ -862,29 +862,42 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
     }
   });
 
-  test.skipIf(skip)("keepAlive : ping après 110 s d'inactivité, silence sinon", async () => {
-    // Les deux jambes (TS et Kotlin) tournent EN MÊME TEMPS : le pilote ne
-    // traite qu'une opération à la fois, mais une seule `ask` par phase suffit.
-    // Même sémantique qu'avant (2,5 s « périmé » puis 1,2 s « frais »), durée
-    // = 2,5 + 1,2 s au lieu de la somme des quatre attentes = 7,4 s → 3,7 s.
-    const ktStaleP = ask({ op: "keepAlive", staleSec: 200, runMs: 2500 });
-    let tsPings = 0;
-    const tsStale = new KeepAlive({ communication: { lastPing: Math.floor(Date.now() / 1000) - 200 }, post: async () => { tsPings++; } } as never);
-    tsStale.start();
-    await new Promise((r) => setTimeout(r, 2500));
-    tsStale.stop();
+  test.skipIf(skip)("keepAlive : ping si dû, silence sinon (seuil 110 s)", async () => {
+    // Kotlin : vrai thread de garde, un tick réel de 1 s + marge (1,2 s).
+    // TS : horloge factice, aucun temps réel, mêmes 1 s d'intervalle.
+    // Le seuil « frais » passe par `keepAliveTick` : pas besoin d'un second thread.
+    const ktStaleP = ask({ op: "keepAlive", staleSec: 200, runMs: 1200 });
+
+    jest.useFakeTimers();
+    try {
+      let tsPings = 0;
+      const tsStale = new KeepAlive({ communication: { lastPing: Math.floor(Date.now() / 1000) - 200 }, post: async () => { tsPings++; } } as never);
+      tsStale.start();
+      jest.advanceTimersByTime(1000);
+      await Promise.resolve();
+      tsStale.stop();
+      expect(tsPings).toBeGreaterThanOrEqual(1);
+    } finally {
+      jest.useRealTimers();
+    }
+
     const ktStale = JSON.parse(await ktStaleP) as { pings: number };
-    expect(tsPings).toBeGreaterThanOrEqual(1);
     expect(ktStale.pings).toBeGreaterThanOrEqual(1);
 
-    const ktFreshP = ask({ op: "keepAlive", staleSec: 0, runMs: 1200 });
-    let tsFreshPings = 0;
-    const tsFresh = new KeepAlive({ communication: { lastPing: Math.floor(Date.now() / 1000) }, post: async () => { tsFreshPings++; } } as never);
-    tsFresh.start();
-    await new Promise((r) => setTimeout(r, 1200));
-    tsFresh.stop();
-    const ktFresh = JSON.parse(await ktFreshP) as { pings: number };
-    expect(tsFreshPings).toBe(0);
+    // 60 s simulées < 110 s : aucune des deux implémentations ne doit pinger.
+    const ktFresh = JSON.parse(await ask({ op: "keepAliveTick", staleSec: 0 })) as { pings: number };
+    jest.useFakeTimers();
+    try {
+      let tsFreshPings = 0;
+      const tsFresh = new KeepAlive({ communication: { lastPing: Math.floor(Date.now() / 1000) }, post: async () => { tsFreshPings++; } } as never);
+      tsFresh.start();
+      jest.advanceTimersByTime(60_000);
+      await Promise.resolve();
+      tsFresh.stop();
+      expect(tsFreshPings).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
     expect(ktFresh.pings).toBe(0);
   }, 30000);
 });

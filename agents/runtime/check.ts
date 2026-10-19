@@ -1,9 +1,9 @@
-// check.ts — `make check` : les 7 étapes tournent EN MÊME TEMPS, une sortie par étape.
+// check.ts — `make check` : les 10 étapes tournent EN MÊME TEMPS, une sortie par étape.
 //
 // Avant : 7 cibles en séquence = 168 s (unit 70 s + Gradle 95 s + 2 s de tsc).
 // Chaque étape est indépendante (lint / typecheck / tests / architecture /
-// contrats / garde-fou Kotlin / compilation Gradle) : la seule limite est le
-// cœur, et il y en a 16.
+// contrats / garde-fou Kotlin / compilation Gradle / typecheck web / tests web /
+// build Vite) : la seule limite est le cœur, et il y en a 16.
 //
 // SOURCE UNIQUE : chaque étape est une cible du Makefile, invoquée `make -s`,
 // donc une recette écrite une fois, jamais dupliquée ici (sinon `make unit`
@@ -22,8 +22,21 @@ import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..", "..");
 
-/** Ordre de départ : le plus long d'abord, pour que le dernier fini soit bref. */
-const DEFAULT_TARGETS = ["android-compile", "unit", "typecheck", "architecture", "contracts", "check-kotlin", "lint", "web"];
+/** Ordre de départ : le plus long d'abord, pour que le dernier fini soit bref.
+ *  `web` était une cible unique qui sérialisait typecheck + tests + build
+ *  (5,2 s à elle seule) : ses trois composants sont maintenant des étapes. */
+const DEFAULT_TARGETS = [
+  "android-compile",
+  "unit",
+  "typecheck",
+  "architecture",
+  "contracts",
+  "check-kotlin",
+  "lint",
+  "web-typecheck",
+  "web-test",
+  "web-build",
+];
 // Surchargeable pour tester le harnais lui-même (même piège volontaire que
 // ANDROID_PROJECT_DIR dans android-env.sh) : `CHECK_TARGETS="lint nope"`.
 const override = process.env["CHECK_TARGETS"]?.split(" ").filter(Boolean) ?? [];
