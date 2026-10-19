@@ -7,7 +7,7 @@ import {
   isManualsScrapeRequest,
   isManualsScrapeResponse,
 } from "../../shared/contracts/api";
-import { CONTRACTS_VERSION } from "../../shared/contracts/models";
+import { CONTRACTS_VERSION, isAssignment, isHomeworkAttachmentRef } from "../../shared/contracts/models";
 
 const CONTRACTS_DIR = join(import.meta.dir, "..", "..", "shared/contracts");
 const OPENAPI = join(CONTRACTS_DIR, "api.openapi.yaml");
@@ -76,5 +76,34 @@ describe("contracts", () => {
     expect(isManualsScrapeResponse({ docs: [doc] })).toBe(true);
     expect(isManualsScrapeResponse({ docs: [] })).toBe(true);
     expect(isManualsScrapeResponse({ docs: [{ ...doc, page: 0 }] })).toBe(false);
+  });
+
+  // #366 : la `ref` d'une pièce jointe de devoir suit le schéma `homework:`,
+  // MÊME forme que l'app (`core/Assignment.kt`) et le parseur web.
+  test("`ref` de devoir : schéma `homework:` (miroir de l'app et du web)", () => {
+    const att = (ref: string) => ({ id: "att1", label: "sujet.pdf", ref });
+    expect(isHomeworkAttachmentRef(att("homework:0:file:0:att1"))).toBe(true);
+    expect(isHomeworkAttachmentRef(att("homework:12:file:3:12-34"))).toBe(true);
+    for (const ref of [
+      "homework:0:file:0:12 34", // espace (identifiant Pronote exotique)
+      "homework:0:file:0:a\u0001b", // caractère de contrôle
+      "DATA:application/pdf;base64,AA", // casse haute
+      "https://pronote/x", // URL
+      "homework:", // schéma sans identifiant
+      "autre:1:2", // autre schéma
+    ]) {
+      expect(isHomeworkAttachmentRef(att(ref))).toBe(false);
+    }
+    // Un devoir dont la `ref` n'est pas au schéma est refusé par le contrat.
+    const devoir = {
+      id: "a1",
+      accountId: "e1",
+      subject: "Maths",
+      title: "TP",
+      dueDate: "2026-10-23T18:00:00.000Z",
+      done: false,
+    };
+    expect(isAssignment({ ...devoir, attachments: [att("homework:0:file:0:att1")] })).toBe(true);
+    expect(isAssignment({ ...devoir, attachments: [att("12 34")] })).toBe(false);
   });
 });
