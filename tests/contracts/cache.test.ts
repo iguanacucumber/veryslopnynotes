@@ -110,8 +110,8 @@ describe("fraîcheur du contrat : horloge en avance (#372)", () => {
   });
 
   test("la relecture suit la même règle (entrée future = on relit)", () => {
-    expect(shouldFetch({ payload: "g", fetchedAt: now + 1000 }, "grades", now, false)).toBe(true);
-    expect(shouldFetch({ payload: "g", fetchedAt: now - 1000 }, "grades", now, false)).toBe(false);
+    expect(shouldFetch({ payload: "g", fetchedAt: now + 1000, query: "" }, "grades", "", now, false)).toBe(true);
+    expect(shouldFetch({ payload: "g", fetchedAt: now - 1000, query: "" }, "grades", "", now, false)).toBe(false);
   });
 
   test("borne du TTL : frais dessus, périmé au-delà", () => {
