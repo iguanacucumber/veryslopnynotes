@@ -31,7 +31,6 @@ import {
   absenceTitle,
   durationLongFr,
   formatDateSpan,
-  gravityLabel,
   isUnjustified,
   justifiedLabel,
   parseAttendance,
@@ -279,13 +278,22 @@ describe("vie scolaire — absences, retards, sanctions", () => {
     expect(status.unjustifiedCount).toBe(1);
     expect(status.unverifiedCount).toBe(1);
     expect(status.unjustifiedMinutes).toBe(20);
-    expect(status.clean).toBe(false);
+    expect(status.state).toBe("unjustified");
     expect(status.detail).toContain("20 min sur 4 h 20 min");
     expect(isUnjustified(rows.find((r) => r.id === "a3")!)).toBe(false);
 
-    const clean = attendanceStatus(rows.filter((r) => r.justified !== false));
-    expect(clean.clean).toBe(true);
+    // Une justification NON affirmée reste inconnue : l'écran ne peut pas
+    // dire « toutes justifiées » (le natif ne publie `justified: false`).
+    const unknown = attendanceStatus(rows.filter((r) => r.justified !== false));
+    expect(unknown.state).toBe("unverified");
+    expect(unknown.title).toBe("Des heures non vérifiées");
+    expect(unknown.detail).not.toContain("justifiées");
+    expect(unknown.pendingCount).toBe(1);
+
+    const clean = attendanceStatus(rows.filter((r) => r.justified === true));
+    expect(clean.state).toBe("clean");
     expect(clean.title).toBe("Aucune heure injustifiée");
+    expect(clean.detail).toContain("sont justifiés");
   });
 
   test("sections fixes : absences puis retards, vides omises", () => {
@@ -344,18 +352,23 @@ describe("vie scolaire — absences, retards, sanctions", () => {
     expect(formatDateSpan({ ...rows[0]!, date: "illisible" })).toBe("");
   });
 
-  test("sanctions : date, motif, gravité étiquetée, durée", () => {
+  test("sanctions : date, motif, durée (jamais un niveau de gravité)", () => {
     const rows = parsePunishments(
       JSON.stringify({
         punishments: [
-          { id: "p1", date: "2026-10-02T10:00:00Z", type: "Avertissement", motif: "Bavardage", gravity: 1 },
+          {
+            id: "p1",
+            date: "2026-10-02T10:00:00Z",
+            type: "Avertissement",
+            motif: "Bavardage",
+            durationMinutes: 120,
+          },
           {
             id: "p2",
             date: "2026-10-05",
             type: "Exclusion",
             motif: "Perturbation",
-            gravity: 1.5,
-            durationMinutes: 120,
+            durationMinutes: 90,
           },
           { id: "p3", date: "pas une date", type: "X", motif: "Y" },
           { id: "p4", date: "2026-10-01", type: "", motif: "Y" },
@@ -363,12 +376,8 @@ describe("vie scolaire — absences, retards, sanctions", () => {
       }),
     );
     expect(rows.map((p) => p.id)).toEqual(["p2", "p1"]);
-    expect(rows[0]?.durationMinutes).toBe(120);
-    expect(gravityLabel(rows[0]?.gravity ?? null)).toBe("Niveau 1,5");
-    expect(gravityLabel(rows[1]?.gravity ?? null)).toBe("Niveau 1");
-    expect(gravityLabel("2")).toBe("Niveau 2");
-    expect(gravityLabel("-1")).toBeNull();
-    expect(gravityLabel(null)).toBeNull();
+    expect(rows[0]?.durationMinutes).toBe(90);
+    expect(rows[1]?.durationMinutes).toBe(120);
     expect(parsePunishments(null)).toEqual([]);
     expect(parsePunishments(JSON.stringify({ items: [] }))).toEqual([]);
   });
