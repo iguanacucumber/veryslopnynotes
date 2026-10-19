@@ -14,9 +14,10 @@ package fr.veryslopnynotes.data
  *
  * Pur (aucun import Android, aucun type du port) : le test unitaire compile ce
  * fichier et l'EXÉCUTE (`tests/unit/kotlin-sync-worker.test.ts`).
- * ponytail: un seul cas « pas de session » -> un seul objet, pas une machine à
- * états. Upgrade: distinguer « jamais appairé » (rien à synchroniser) de
- * « session non restaurable » (réseau KO) si le bruit des retries gêne.
+ * ponytail: deux issues, pas une machine à états. Le type PORTE la session :
+ * le worker la reçoit sans `!!` (pas de client nullable qui traîne).
+ * Upgrade: distinguer « jamais appairé » (rien à synchroniser) de « session
+ * non restaurable » (réseau KO) si le bruit des retries gêne.
  */
 sealed interface SyncJobOutcome<out T> {
     /** Session disponible : le job lit les ressources et réécrit le cache. */

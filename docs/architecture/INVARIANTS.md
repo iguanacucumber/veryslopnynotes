@@ -129,3 +129,21 @@ Piné par `tests/architecture/invariants.test.ts` (I8),
 - Commande : `make lint` (scan) et `make architecture-test` (m invariants).
 - Emplacement : `.agents/**/*`, motifs dans `agents/runtime/secret-patterns.ts`.
 
+## I12 — Le job de fond restore la session AVANT de lire
+- Invariant : le job WorkManager restore la session par le MÊME chemin que le
+  pont (`PairingRepository.restoreBlocking` : store chiffré -> `Client.tokenLogin`
+  -> `PronoteSession`) AVANT toute lecture, et renvoie `Result.retry()` — jamais
+  `Result.success()` — quand aucune session n'est lisible (un succès sans rien
+  faire = un sync de fond no-op, sans réessai). Une restauration n'est jamais
+  simultanée avec une autre dans le process (deux `tokenLogin` sur le même compte
+  = erreur 25 « Exceeded max authorization requests », l'établissement limite
+  le compte).
+- Test : `tests/architecture/sync-session.test.ts` (ordre restauration -> lecture,
+  réessai sans session, verrou de restauration partagé) +
+  `tests/unit/kotlin-sync-worker.test.ts` (Kotlin réel : la décision
+  réessai/lecture).
+- Commande : `make check`.
+- Emplacement : `android/data/src/main/java/fr/veryslopnynotes/data/PeriodicSyncWorker.kt`,
+  `android/data/src/main/java/fr/veryslopnynotes/data/SyncJobOutcome.kt`,
+  `android/data/src/main/java/fr/veryslopnynotes/data/PairingRepository.kt`.
+
