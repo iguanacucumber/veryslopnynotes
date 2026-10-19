@@ -31,8 +31,6 @@ import fr.veryslopnynotes.core.UserProfile
 import fr.veryslopnynotes.core.assembleRevisionSheet
 import fr.veryslopnynotes.core.listRevisionSheets
 import fr.veryslopnynotes.core.loadRevisionSheet
-import fr.veryslopnynotes.core.parseJsonOutput
-import fr.veryslopnynotes.core.parseRevisionAnswer
 import fr.veryslopnynotes.core.revisionFailureMessage
 import fr.veryslopnynotes.core.saveRevisionSheet
 import fr.veryslopnynotes.data.AccountStore
@@ -770,10 +768,11 @@ class VsnBridge(
     }
 
     /**
-     * Fiche de révision locale : même pipeline validé que Compose
-     * (`RevisionAi` + `assembleRevisionSheet`), clé lue à l'appel, sortie
-     * contrôlée par core (I4/I5). Aucune donnée du devoir ne sort de l'appareil
-     * ailleurs que dans ce prompt OpenRouter déclaré comme donnée (I6).
+     * Fiche de révision locale : même pipeline validé que le reste de l'app
+     * (`RevisionAi.requestRevisionFiche` + `assembleRevisionSheet`), clé lue à
+     * l'appel, sortie contrôlée par core (I4/I5). Aucune donnée du devoir ne
+     * sort de l'appareil ailleurs que dans ce prompt OpenRouter déclaré comme
+     * donnée (I6).
      */
     private fun generateRevision(p: JSONObject): JSONObject {
         val id = bounded(p.string("assignmentId"), 128)
@@ -804,8 +803,10 @@ class VsnBridge(
             matched = assignment.title.ifBlank { "devoir" },
         )
         return try {
-            val prompt = RevisionAi.revisionPromptFor(exam, chunks)
-            val fiche = parseRevisionAnswer(parseJsonOutput(OpenRouterLlm().generateSafe(prompt, apiKey)))
+            // #428 : le point d'entree PUBLIC du core (prompt + schema + cle
+            // relayee). Le pont ne forge plus son propre appel fournisseur :
+            // un seul endroit decide du prompt et du schema.
+            val fiche = RevisionAi.requestRevisionFiche(OpenRouterLlm(), exam, chunks, apiKey)
             val candidate = ExamCandidate(
                 source = "assignment",
                 id = assignment.id,

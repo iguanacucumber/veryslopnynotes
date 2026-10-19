@@ -13,6 +13,7 @@
 package fr.veryslopnynotes.revision
 
 import fr.veryslopnynotes.core.AiError
+import fr.veryslopnynotes.core.LlmProvider
 import fr.veryslopnynotes.core.RevisionAi
 import fr.veryslopnynotes.core.RevisionChunk
 import fr.veryslopnynotes.core.RevisionExam
@@ -69,6 +70,46 @@ private class Driver {
                 ok("ok" to JVal.Bool(true), "fiche" to JVal.Str(fiche))
             } catch (e: AiError) {
                 ok("ok" to JVal.Bool(false), "error" to JVal.Str(e.message ?: "inconnu"))
+            }
+        }
+        // Le point d'entree PUBLIC de la fiche (#428) : la cle de l'app doit
+        // etre RELAYEE au fournisseur. Le faux provider imite OpenRouterLlm :
+        // sans cle, il refuse l'appel (c'est le bug observe — la cle n'etait
+        // pas transmise, donc l'adaptateur reel levait « clé LLM absente »
+        // avant tout appel HTTP). `calls` prouve que le fournisseur a vu
+        // l'appel, `apiKey` ce qu'il a recu.
+        "fiche" -> {
+            val key = op.str("key")
+            val body = op.str("body") ?: "{\"fiche\":\"Rappel : derivé de x^2 = 2x.\"}"
+            var seenKey: String? = null
+            var calls = 0
+            val provider = LlmProvider { _, _, apiKey ->
+                calls += 1
+                seenKey = apiKey
+                if (apiKey.isNullOrBlank()) throw IllegalStateException("clé LLM absente")
+                body
+            }
+            try {
+                val fiche = RevisionAi.requestRevisionFiche(
+                    provider,
+                    exam(),
+                    chunks(),
+                    apiKey = key,
+                    nonce = NONCE,
+                )
+                ok(
+                    "ok" to JVal.Bool(true),
+                    "fiche" to JVal.Str(fiche),
+                    "apiKey" to (seenKey?.let { JVal.Str(it) } ?: JVal.Null),
+                    "calls" to JVal.Num(calls.toDouble()),
+                )
+            } catch (e: Exception) {
+                ok(
+                    "ok" to JVal.Bool(false),
+                    "error" to JVal.Str(e.message ?: "inconnu"),
+                    "apiKey" to (seenKey?.let { JVal.Str(it) } ?: JVal.Null),
+                    "calls" to JVal.Num(calls.toDouble()),
+                )
             }
         }
         // Message utilisateur d'un echec : francais, borne, sans secret.

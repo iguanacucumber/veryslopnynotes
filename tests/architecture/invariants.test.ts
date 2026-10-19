@@ -309,6 +309,34 @@ describe("invariants", () => {
     expect(ai).toMatch(/fun generateHomework\s*\(/);
   });
 
+  // #428 : UN SEUL endroit decide du prompt et du schema de la fiche. Le pont
+  // appelle le point d'entree PUBLIC du core ; il ne forge plus son propre
+  // appel fournisseur (la cle n'y etait pas transmise : l'appel echouait
+  // toujours, avant meme le reseau).
+  test("I5: la fiche de revision passe par le point d'entree public du core", () => {
+    const bridge = codeOnly(
+      readFileSync(
+        join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
+        "utf8",
+      ),
+    );
+    // Le point d'entree canonique…
+    expect(bridge).toMatch(/RevisionAi\.requestRevisionFiche\(/);
+    // …avec la cle de l'app relayee…
+    expect(bridge).toMatch(/requestRevisionFiche\([^\n]*apiKey/);
+    // …et plus AUCUN appel fournisseur a la main pour la fiche.
+    expect(bridge).not.toMatch(/generateSafe\(/);
+    expect(bridge).not.toMatch(/revisionPromptFor\(/);
+    // Le prompt et le schema sont decideds par le core, pas par le pont.
+    const core = codeOnly(
+      readFileSync(
+        join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core", "RevisionAi.kt"),
+        "utf8",
+      ),
+    );
+    expect(core).toMatch(/generateGuardedJson\(provider, SYSTEM_REVISION_JSON/);
+  });
+
   test("I2 surface (#242): hors pronote/, Client et types protocoles seuls", () => {
     const allowedImports = new Set([
       "Client",
