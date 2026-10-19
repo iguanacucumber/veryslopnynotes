@@ -18,6 +18,7 @@ import { describe, expect, jest, test } from "bun:test";
 import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
 import { join } from "node:path";
+import { createServer, type AddressInfo, type Socket } from "node:net";
 import { CookieJar } from "tough-cookie";
 import { Communication, Encryption, KeepAlive } from "pronotets";
 import { enBytes, enleverAlea, prepareOnglets } from "../../node_modules/pronotets/dist/communication.js";
@@ -189,7 +190,9 @@ function startStub(htmlAttrs: string): Stub {
     fetch(req, srv) {
       const url = new URL(req.url);
       stub.remotePorts.push(srv.requestIP(req)?.port ?? null);
-      if (req.method === "GET" && url.pathname.endsWith("/eleve.html")) {
+      // La racine sert aussi de page PRONOTE : un site d'établissement SANS
+      // chemin (`https://host`) vise la racine, pas une page à nommer (#429).
+      if (req.method === "GET" && (url.pathname.endsWith("/eleve.html") || url.pathname === "/")) {
         stub.gets++;
         const headers: Record<string, string | undefined> = {};
         for (const [k, v] of req.headers) headers[k] = v;
@@ -312,6 +315,64 @@ function startStub(htmlAttrs: string): Stub {
 function behaviorKeys(stub: Stub, postKeyHex: string, postIvHex: string): void {
   stub.behavior.postKeyHex = postKeyHex;
   stub.behavior.postIvHex = postIvHex;
+}
+
+/**
+ * Serveur TCP BRUT : la seule façon de voir le socket se fermer (`Bun.serve`
+ * n'expose pas les connexions). Il répond 302 + une `Location` illisible.
+ *
+ * La réponse porte un CORPS : le client ne lit pas le corps d'une redirection,
+ * donc son `disconnect()` ferme VRAIMENT le socket (un corps déjà lu retourne
+ * au cache keep-alive de la JVM, et le serveur ne verrait aucun FIN). Le FIN
+ * vu par le serveur est donc la preuve externe que la connexion n'a pas fuité.
+ */
+interface RawServer {
+  port: number;
+  /** Résolu quand le client referme le socket. */
+  closed: Promise<void>;
+  close(): void;
+}
+
+function startRawServer(location: string): Promise<RawServer> {
+  return new Promise((resolve) => {
+    const sockets = new Set<Socket>();
+    let signalClosed: () => void = () => {};
+    const closed = new Promise<void>((res) => {
+      signalClosed = res;
+    });
+    const server = createServer((sock) => {
+      sockets.add(sock);
+      sock.on("data", () => {
+        sock.write(
+          `HTTP/1.1 302 Found\r\nLocation: ${location}\r\nContent-Length: 5\r\nConnection: keep-alive\r\n\r\nhello`,
+        );
+      });
+      sock.on("end", () => signalClosed());
+      sock.on("close", () => {
+        sockets.delete(sock);
+        signalClosed();
+      });
+      sock.on("error", () => {});
+    });
+    server.listen(0, "127.0.0.1", () => {
+      resolve({
+        port: (server.address() as AddressInfo).port,
+        closed,
+        close() {
+          for (const s of sockets) s.destroy();
+          server.close();
+        },
+      });
+    });
+  });
+}
+
+/** `closed` si le client a refermé le socket, `timeout` sinon. */
+async function closedOrTimeout(raw: RawServer, ms: number): Promise<string> {
+  return Promise.race([
+    raw.closed.then(() => "closed"),
+    new Promise<string>((res) => setTimeout(() => res("timeout"), ms)),
+  ]);
 }
 
 /** Normalise l'aléa documenté : `Uuid` du handshake (temp fixé ou RSA). */
@@ -900,4 +961,82 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
     }
     expect(ktFresh.pings).toBe(0);
   }, 30000);
+
+  // #429 : une redirection illisible ne doit ni fuir la connexion ni renvoyer
+  // une exception brute à l'appelant.
+  test.skipIf(skip)("http : une `Location` malformée → erreur RÉSEAU mappée, socket refermé (#429)", async () => {
+    // `Location`s que la JVM refuse (espace dans l'hôte, protocole inconnu,
+    // autorité cassée) : la redirection est ILLISIBLE, pas « à suivre ».
+    const locations = ["http://ho st/x", "xyz://hote/x", "http://[casse"];
+    for (const location of locations) {
+      // La référence TS refuse aussi (TypeError) : le port n'invente pas un
+      // comportement que la référence n'a pas. Serveur à part : le client TS
+      // garde sa connexion en keep-alive, il ne doit pas bruiter l'observation.
+      const rawTs = await startRawServer(location);
+      try {
+        const tsErr = await tsErrorOfAsync(() => new HttpSession().get(`http://127.0.0.1:${rawTs.port}/r302`));
+        expect(`${location} -> ${tsErr?.name ?? "aucune erreur"}`).toBe(`${location} -> TypeError`);
+      } finally {
+        rawTs.close();
+      }
+
+      const raw = await startRawServer(location);
+      try {
+        const ktSid = (JSON.parse(await ask({ op: "httpNew" })) as { sid: number }).sid;
+        const ktErr = portError(
+          await ask({ op: "httpReq", sid: ktSid, method: "GET", url: `http://127.0.0.1:${raw.port}/r302` }, true),
+        );
+        // L'erreur est une PANNE RÉSEAU mappée (« network » pour l'app), pas
+        // une `MalformedURLException` brute qui remontait au caller.
+        expect(`${location} -> ${ktErr.name}`).toBe(`${location} -> IOException`);
+        expect(ktErr.message).toMatch(/redirection/i);
+        // Et surtout : le socket est refermé (le serveur voit le FIN). Sinon
+        // chaque redirection malformée laissait une connexion ouverte et le
+        // pool de sockets se remplissait.
+        expect(`${location} -> ${await closedOrTimeout(raw, 5000)}`).toBe(`${location} -> closed`);
+      } finally {
+        raw.close();
+      }
+    }
+  }, 30000);
+
+  // #429 : un site d'établissement SANS chemin (`https://host`) doit viser la
+  // MÊME page que la référence — l'ancien découpage coupait l'AUTORITÉ en
+  // `https:/` et le POST partait sur un autre hôte (`UnknownHostException`).
+  test.skipIf(skip)("communication : site AVEC ou SANS chemin — la page visée est celle de la référence (#429)", async () => {
+    const stub = startStub(`h: '1', a: 'b'`);
+    try {
+      for (const site of [`${stub.base}/pronote/eleve.html`, stub.base]) {
+        // La référence TS : `rootSite` = tout sauf le dernier segment,
+        // `htmlPage` = le dernier segment. On compare la PAGE VISÉE (origine +
+        // chemin), pas les chaînes internes : le port coupe l'AUTORITÉ, la
+        // référence la coupe en deux — les deux visent la même page.
+        const tsComm = new Communication(site, undefined, false);
+        const tsTarget = new URL(`${tsComm.rootSite}/${tsComm.htmlPage}`);
+        const cid = (JSON.parse(await ask({ op: "commNew", site })) as { cid: number }).cid;
+        const ktRoot = JSON.parse(await ask({ op: "commRoot", cid })) as { rootSite: string; htmlPage: string };
+        const ktTarget = new URL(`${ktRoot.rootSite}/${ktRoot.htmlPage}`);
+        expect(`${site} -> ${ktTarget.origin}${ktTarget.pathname}`).toBe(`${site} -> ${tsTarget.origin}${tsTarget.pathname}`);
+      }
+    } finally {
+      stub.close();
+    }
+  });
+
+  test.skipIf(skip)("communication : un site SANS chemin atteint le bon hôte (le POST partait sur un autre hôte)", async () => {
+    const stub = startStub(`h: '1', a: 'b'`);
+    try {
+      // La référence TS ne peut PAS aller au bout de ce fil : son `rootSite`
+      // vaut `http:/`, donc son POST part sur `http://appelfonction/...`. Le
+      // port, lui, vise l'hôte de l'établissement — le comportement attendu.
+      const cid = (JSON.parse(await ask({ op: "commNew", site: stub.base })) as { cid: number }).cid;
+      await ask({ op: "commInit", cid, identifier: null });
+      // La page a été demandée à la racine du stub (hôte correct)…
+      expect(stub.requests[0]?.path).toBe("/");
+      // …et le POST d'API part sur le MÊME hôte.
+      expect(stub.requests[1]?.path).toMatch(/^\/appelfonction\//);
+    } finally {
+      stub.close();
+    }
+  });
 });
