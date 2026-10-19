@@ -7,7 +7,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createApp } from "../../server/infrastructure/http";
+import { createApp, start } from "../../server/infrastructure/http";
 import {
   API_ROUTES,
   isManualsScrapeRequest,
@@ -258,5 +258,25 @@ describe("scraper-only (#209)", () => {
     const app = createApp({ scrape: fakeScrape().scrape });
     expect((await app.handler(new Request("http://127.0.0.1/v1/health"))).status).toBe(200);
     expect((await app.handler(post("/v1/manuals/scrape", scrapeBody()))).status).toBe(200);
+  });
+
+  // #421 : le repli en clair ne doit pas être SILENCIEUX. Le serveur accepte
+  // de tourner en http (bornes aux tests et à Docker), mais il doit le DIRE
+  // fort : sans ça, un opérateur croit démarrer en HTTPS et expose un
+  // scraper sans auth (I8) en clair.
+  test("sans TLS : le repli en clair est BRUYANT (#421)", () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    const server = start({ PORT: "0", HOST: "127.0.0.1" });
+    try {
+      expect(warn).toHaveBeenCalled();
+      const message = warn.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(message).toContain("CLAIR");
+      expect(message).toContain("TLS_CERT_FILE");
+      // Le rappel n'expose aucun secret : seulement des NOMS de variables.
+      expect(message).not.toMatch(/PRIVATE KEY|sk-or-v1/);
+    } finally {
+      server.stop(true);
+      warn.mockRestore();
+    }
   });
 });
