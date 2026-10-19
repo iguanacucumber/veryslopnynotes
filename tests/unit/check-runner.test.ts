@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
-// agents/runtime/check.ts — le pilote de `make check` : 7 étapes lancées en
+// agents/runtime/check.ts — le pilote de `make check` : 10 étapes lancées en
 // même temps, une sortie par étape, un code de sortie global.
 //
 // Deux chemins à prouver, parce qu'un pilote qui rend toujours vert ne sert à

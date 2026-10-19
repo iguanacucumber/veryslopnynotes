@@ -5,7 +5,7 @@
 2. Build — une issue = une branche `agent/<n>-<slug>` via `./agents/launch.sh <n> <slug>` (fetch `origin/main`, dépendances, claim) ou `--in-place` sur un checkout propre. Zéro commit direct sur `main`, aucun force-push sur la branche d'autrui (PR via MCP GitHub uniquement, `gh` CLI interdit).
 3. Review — `make watch` pendant le code, puis relire le diff + `bun run check`. Répéter build↔review jusqu'à bon (`check` pass, rien de douteux). Si sensible, relire une 2e fois en adversarial : `android/pronote/`, `web/src/bridge/`, CSP/WebView, crypto/secrets/auth, appairage, fixtures, lockfiles, `Makefile`, `AGENTS.md`, scripts de capture.
 4. Merge auto — `./agents/ship.sh <n> "<titre>"` (fetch + rebase + check complet + push + corps de PR), puis en UN bloc : `tools.github.create_pull_request`, `tools.github.merge_pull_request` (`merge_method: "merge"`), fermer l'issue via `tools.github.issue_write` (`method: "update"`, `state: "closed"`, `state_reason: "completed"`). Aucune validation humaine, jamais d'attente. Enfin `git fetch --prune`, puis supprimer worktree et branche.
-- `make check-fast` (~4,4 s) pour l'itération, jamais avant PR : il saute le build Vite et `android-compile`.
+- `make check-fast` (~2,1 s à chaud) pour l'itération, jamais avant PR : il saute `android-compile` seulement (le build Vite est inclus).
 - Parallèle : push = claim. `launch.sh` refuse si `origin/agent/<n>-<slug>` existe déjà.
 
 ## Garde-fous
