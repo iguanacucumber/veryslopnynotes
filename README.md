@@ -193,7 +193,7 @@ session Pronote ni clé OpenRouter.
 | `make architecture-test` | Scans d'architecture + invariants. |
 | `make check-kotlin` | Garde-fou structurel Kotlin, sans SDK ni réseau. |
 | `make android-compile` | Vraie compilation Kotlin (le seul contrôle des symboles et surcharges). |
-| `make web-smoke` | Test navigateur du frontend (Chromium requis), hors `make check`. |
+| `make web-smoke` | Test navigateur du frontend (Chromium requis), hors `make check` : les 14 routes, plus les deux parcours d'appairage (téléphone neuf, session expirée). |
 | `make buildDebugApk` / `make buildRelApk` | APK debug / APK + AAB release. |
 | `make updateApkToPhone` | APK debug puis `adb install -r` (données conservées). |
 | `make shot ROUTE=grades` | Capture vérifiée sur téléphone réel (`SHOT_ARGS="--theme dark"` pour le thème). |
