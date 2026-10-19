@@ -28,12 +28,14 @@ import fr.veryslopnynotes.core.RevisionKv
 import fr.veryslopnynotes.core.RevisionPdf
 import fr.veryslopnynotes.core.RevisionSheet
 import fr.veryslopnynotes.core.RevisionAi
+import fr.veryslopnynotes.core.SecretDetectedException
 import fr.veryslopnynotes.core.UserProfile
 import fr.veryslopnynotes.core.assembleRevisionSheet
 import fr.veryslopnynotes.core.listRevisionSheets
 import fr.veryslopnynotes.core.loadRevisionSheet
 import fr.veryslopnynotes.core.revisionFailureMessage
 import fr.veryslopnynotes.core.saveRevisionSheet
+import fr.veryslopnynotes.core.secretRefusalMessage
 import fr.veryslopnynotes.data.AccountStore
 import fr.veryslopnynotes.data.AssignmentsRepository
 import fr.veryslopnynotes.data.CachePolicy
@@ -853,6 +855,12 @@ class VsnBridge(
             )
             saveRevisionSheet(store, assembleRevisionSheet(candidate, fiche, chunks.map { it.source }))
             JSONObject().put("ok", true)
+        } catch (e: SecretDetectedException) {
+            // #409 : un SECRET dans le cours (forme detectee par la garde I4).
+            // On dit POURQUOI (le type), jamais le secret. Cette branche passe
+            // AVANT le repli generique, sinon un secret serait affiche comme
+            // une sortie hors format.
+            JSONObject().put("ok", false).put("message", secretRefusalMessage(e.kind))
         } catch (e: LlmError) {
             // Cause identifiée (clé, crédits, modèle, quota, réseau) : message
             // précis, distinct du repli « fiche non générée » (#359).

@@ -11,7 +11,10 @@ import java.util.UUID
 // Le marquage est ici un TYPE (Untrusted<T>) et non un drapeau runtime : un
 // contenu non marque ne compile pas la ou une donnee delimitee est exigee.
 // C'est plus fort que le drapeau __untrusted cote TS, pour la meme semantique.
-class AiError(message: String) : Exception(message)
+// `open` : la garde I4 leve une sous-classe (`SecretDetectedException`,
+// `core/LlmGuard.kt`) qui porte le TYPE du secret refuse — le refus dit
+// POURQUOI, jamais le secret (#409).
+open class AiError(message: String) : Exception(message)
 
 data class Untrusted<out T>(val value: T)
 
