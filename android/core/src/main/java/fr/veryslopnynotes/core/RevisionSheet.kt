@@ -67,10 +67,19 @@ data class RevisionNotifyResult(
     val devices: Int,
 )
 
-/** Stockage kv minimal (miroir du provider de stockage, autres lanes actives dessus). */
+/**
+ * Stockage kv minimal (miroir du provider de stockage, autres lanes actives dessus).
+ *
+ * #404 : l'écriture porte l'ÉPOQUE de session capturée au DÉBUT de
+ * l'opération (une fiche passe par un appel LLM de plusieurs secondes). Le
+ * store REFUSE l'écriture si la session a changé depuis (déconnexion,
+ * changement de compte) : une fiche générée pendant une déconnexion n'est
+ * donc PAS écrite, et le répertoire purgé ne ressuscite pas.
+ */
 interface RevisionKv {
     fun get(key: String): ByteArray?
-    fun set(key: String, value: ByteArray)
+    /** false = écriture abandonnée (la session a changé depuis [epoch]). */
+    fun set(key: String, value: ByteArray, epoch: Long): Boolean
 }
 
 private const val SHEET_PREFIX = "revision:sheet:"
@@ -425,19 +434,30 @@ private fun allKnownIds(store: RevisionKv): List<String> {
     return (index + journal).toSet().sorted()
 }
 
-fun saveRevisionSheet(store: RevisionKv, sheet: RevisionSheet) {
+/**
+ * Enregistre la fiche, puis l'index et le journal qui la listent.
+ *
+ * [epoch] = époque de session capturée au DÉBUT de l'opération (#404) : si
+ * la session a changé depuis (déconnexion), l'écriture est REFUSÉE et
+ * `false` est renvoyé — rien n'est écrit, donc le répertoire purgé ne
+ * ressuscite pas.
+ */
+fun saveRevisionSheet(store: RevisionKv, sheet: RevisionSheet, epoch: Long): Boolean {
     if (!isRevisionSheetValid(sheet)) throw IllegalArgumentException("fiche invalide (contrat)")
-    store.set(sheetKey(sheet.id), revisionSheetJson(sheet).toByteArray(Charsets.UTF_8))
+    if (!store.set(sheetKey(sheet.id), revisionSheetJson(sheet).toByteArray(Charsets.UTF_8), epoch)) {
+        return false
+    }
     val ids = allKnownIds(store).toMutableList()
     if (!ids.contains(sheet.id)) {
         ids.add(sheet.id)
         ids.sort()
         val encoded = revisionIndexJson(ids).toByteArray(Charsets.UTF_8)
-        store.set(INDEX_KEY, encoded)
+        store.set(INDEX_KEY, encoded, epoch)
         // Le journal est la source de vérité qui ne rétrécit jamais : même si
         // l'index est corrompu au prochain tour, l'id reste listable.
-        store.set(INDEX_JOURNAL_KEY, encoded)
+        store.set(INDEX_JOURNAL_KEY, encoded, epoch)
     }
+    return true
 }
 
 fun loadRevisionSheet(store: RevisionKv, id: String): RevisionSheet? {

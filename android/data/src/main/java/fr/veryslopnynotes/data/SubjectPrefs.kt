@@ -113,7 +113,15 @@ private fun isoMillis(iso: String): Long = try {
 // (stdlib java.io seule, pas de Room/DataStore). Repli mémoire si disque KO.
 interface SubjectPrefsLocalStore {
     fun load(): List<SubjectPrefs>
-    fun save(prefs: List<SubjectPrefs>)
+    /**
+     * Enregistre les préférences.
+     *
+     * #404 : [epoch] = époque de session capturée au DÉBUT de l'opération.
+     * L'écriture est REFUSÉE si la session a changé depuis (déconnexion) :
+     * `false` est renvoyé et le fichier n'est pas écrit — le répertoire purgé
+     * ne ressuscite pas.
+     */
+    fun save(prefs: List<SubjectPrefs>, epoch: Long): Boolean
 }
 
 class FileSubjectPrefsStore(private val file: File) : SubjectPrefsLocalStore {
@@ -126,10 +134,15 @@ class FileSubjectPrefsStore(private val file: File) : SubjectPrefsLocalStore {
     }
 
     @Synchronized
-    override fun save(prefs: List<SubjectPrefs>) {
-        file.parentFile?.let { if (!it.exists()) it.mkdirs() }
-        file.writeText(subjectPrefsListToJson(prefs.take(SubjectPrefs.MAX_COUNT)))
-    }
+    override fun save(prefs: List<SubjectPrefs>, epoch: Long): Boolean =
+        // #404 : l'écriture passe par la garde d'époque (comme le cache) : une
+        // écriture commencée avant la purge de déconnexion est abandonnée, et
+        // le dossier purgé n'est pas ressuscité.
+        OfflineArtifacts.writeText(
+            file,
+            subjectPrefsListToJson(prefs.take(SubjectPrefs.MAX_COUNT)),
+            epoch,
+        )
 }
 
 class InMemorySubjectPrefsStore : SubjectPrefsLocalStore {
@@ -139,9 +152,30 @@ class InMemorySubjectPrefsStore : SubjectPrefsLocalStore {
     override fun load(): List<SubjectPrefs> = prefs
 
     @Synchronized
-    override fun save(prefs: List<SubjectPrefs>) {
-        this.prefs = prefs.take(SubjectPrefs.MAX_COUNT)
-    }
+    override fun save(prefs: List<SubjectPrefs>, epoch: Long): Boolean =
+        // Même garde que le store disque : le refus est le même partout (#404).
+        SessionEpoch.writeIfCurrent(epoch) {
+            this.prefs = prefs.take(SubjectPrefs.MAX_COUNT)
+            true
+        } ?: false
+}
+
+/**
+ * Issue d'un enregistrement de préférences.
+ *
+ * `INVALID` et `REFUSED` ne se ressemblent pas : une préférence hors
+ * contrat n'est pas un refus de session (rien n'a changé), un refus vient de
+ * la garde d'époque (#404).
+ */
+enum class SubjectPrefsWrite {
+    /** Enregistrée sur le disque. */
+    WRITTEN,
+
+    /** Préférence hors contrat : rien n'est écrit (garde [SubjectPrefs.isValid]). */
+    INVALID,
+
+    /** La session a changé depuis l'époque capturée : rien n'est écrit (#404). */
+    REFUSED,
 }
 
 // Offline-first : l'affichage lit le FICHIER local (survit au restart, lisible
@@ -159,7 +193,17 @@ class SubjectPrefsRepository(
 
     // Édition : écriture locale immédiate (offline).
     // updatedAt horodaté par l'appareil.
-    fun upsert(subject: String, color: String?, emoji: String?, label: String?) {
+    //
+    // #404 : [epoch] = époque de session capturée au DÉBUT de l'opération
+    // (l'appelant) : l'écriture est ABANDONNÉE si la session a changé depuis
+    // (déconnexion) — rien n'est écrit, le dossier purgé ne ressuscite pas.
+    fun upsert(
+        subject: String,
+        color: String?,
+        emoji: String?,
+        label: String?,
+        epoch: Long,
+    ): SubjectPrefsWrite {
         val p = SubjectPrefs(
             subject = subject.trim(),
             color = color?.trim()?.takeIf { it.isNotEmpty() },
@@ -167,8 +211,9 @@ class SubjectPrefsRepository(
             label = label?.trim()?.takeIf { it.isNotEmpty() },
             updatedAt = Instant.now().toString(),
         )
-        if (!SubjectPrefs.isValid(p)) return
-        write(mergeSubjectPrefs(prefs(), listOf(p)))
+        if (!SubjectPrefs.isValid(p)) return SubjectPrefsWrite.INVALID
+        if (!write(mergeSubjectPrefs(prefs(), listOf(p)), epoch)) return SubjectPrefsWrite.REFUSED
+        return SubjectPrefsWrite.WRITTEN
     }
 
     // Refresh : la liste locale fait foi (aucun distant à fusionner).
@@ -176,11 +221,13 @@ class SubjectPrefsRepository(
         post(onDone, prefs())
     }
 
-    private fun write(prefs: List<SubjectPrefs>) {
-        try {
-            local.save(prefs)
+    /** false = l'écriture a été refusée (la session a changé depuis [epoch]). */
+    private fun write(prefs: List<SubjectPrefs>, epoch: Long): Boolean {
+        return try {
+            local.save(prefs, epoch)
         } catch (_: Exception) {
             // ponytail: prefs = préférences, pas de donnée critique (perdues, pas crash).
+            false
         }
     }
 

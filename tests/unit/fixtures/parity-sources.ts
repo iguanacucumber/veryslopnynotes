@@ -83,6 +83,7 @@ export const PRODUCTION_SOURCES: string[] = [
   join(DATA, "CachePolicy.kt"),
   join(DATA, "CacheScope.kt"),
   join(DATA, "LocalRequestQueue.kt"),
+  join(DATA, "OfflineArtifacts.kt"),
   join(DATA, "OfflineCache.kt"),
   join(DATA, "SyncJobOutcome.kt"),
   join(DATA, "WeekWindow.kt"),
