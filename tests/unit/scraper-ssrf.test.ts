@@ -1,16 +1,20 @@
 // #362 : garde SSRF + `authFile` non piloté par l'appelant.
+// #419 : la garde résout le NOM (DNS) — un nom public qui pointe vers une IP
+//        privée est refusé avant la navigation.
 //
 // Fakes 100 % synthétiques : le module `playwright` est MOCKÉ (aucun
-// navigateur, aucun réseau) et le jar est vérifié dans un répertoire
-// temporaire. Le faux navigateur simule une REDIRECTION : la cible finale
-// est celle que `page.url()` renvoie, et le route handler voit (ou non) le
-// 302 — les deux cas sont testés.
+// navigateur, aucun réseau), la résolution DNS est INJECTÉE (aucune requête
+// DNS réelle) et le jar est vérifié dans un répertoire temporaire. Le faux
+// navigateur simule une REDIRECTION : la cible finale est celle que
+// `page.url()` renvoie, et le route handler voit (ou non) le 302 — les deux
+// cas sont testés.
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isManualsScrapeRequest } from "../../shared/contracts/api";
 import { isBlockedHost, isPublicHttpUrl } from "../../shared/contracts/net";
+import { createApp } from "../../server/infrastructure/http";
 import {
   DEFAULT_AUTH_FILE,
   ScrapeManualsError,
@@ -18,9 +22,30 @@ import {
   resolveAuthFile,
   scrapeManuals,
 } from "../../server/infrastructure/manuals-scrape";
+import { checkPublicHost } from "../../server/infrastructure/ssrf";
+import type { HostResolver } from "../../server/infrastructure/ssrf";
 
 const CONFIG = { platform: "editeur-fake", username: "u", password: "p" };
 const PUBLIC_URL = "https://manuels.example.invalid/6e";
+
+/** IP publique factice (aucune adresse réelle n'est contactée). */
+const PUBLIC_IP = "93.184.216.34";
+
+/**
+ * Résolveur FACTICE : table hôte -> adresses. Aucune résolution DNS réelle,
+ * aucun réseau : le test de la garde DNS (#419) reste hermétique. Un hôte
+ * absent de la table = ENOTFOUND (comme le résolveur du système).
+ */
+function fakeResolver(table: Record<string, readonly string[]>): HostResolver {
+  return async (host: string) => {
+    const found = table[host];
+    if (!found) throw new Error(`ENOTFOUND ${host}`);
+    return found;
+  };
+}
+
+/** Résolveur par défaut des tests : le seul hôte public du test résout. */
+const PUBLIC_RESOLVER = fakeResolver({ "manuels.example.invalid": [PUBLIC_IP] });
 
 interface FakeOptions {
   /** URL FINALE de la navigation (après redirections). */
@@ -208,7 +233,9 @@ describe("redirection : l'URL finale est re-vérifiée (#362)", () => {
     stubFetch(() =>
       new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data/" } }),
     );
-    await expect(scrapeManuals(CONFIG, { startUrl: PUBLIC_URL })).rejects.toThrow(ScrapeManualsError);
+    await expect(
+      scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER }),
+    ).rejects.toThrow(ScrapeManualsError);
     expect(state.launched).toBe(0); // le navigateur n'est même pas lancé
     expect(state.contentCalls).toBe(0);
   });
@@ -219,17 +246,21 @@ describe("redirection : l'URL finale est re-vérifiée (#362)", () => {
       seen.push(url);
       return new Response(null, { status: 302, headers: { location: "https://manuels.example.invalid/6e/maths" } });
     });
-    await assertPublicRedirectChain(PUBLIC_URL);
+    await assertPublicRedirectChain(PUBLIC_URL, undefined, PUBLIC_RESOLVER);
     expect(seen[0]).toBe(PUBLIC_URL);
     // La cible privée d'un 302 est refusée par la fonction de garde.
     stubFetch(() => new Response(null, { status: 302, headers: { location: "http://[::ffff:127.0.0.1]:9/x" } }));
-    await expect(assertPublicRedirectChain(PUBLIC_URL)).rejects.toThrow(ScrapeManualsError);
+    await expect(assertPublicRedirectChain(PUBLIC_URL, undefined, PUBLIC_RESOLVER)).rejects.toThrow(
+      ScrapeManualsError,
+    );
   });
 
   test("redirection interceptée : requête vers la cible privée coupée, aucun extrait", async () => {
     resetState();
     fake = { finalUrl: "http://[::ffff:127.0.0.1]:9/secret", routeSeesRedirect: true };
-    await expect(scrapeManuals(CONFIG, { startUrl: PUBLIC_URL })).rejects.toThrow(ScrapeManualsError);
+    await expect(
+      scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER }),
+    ).rejects.toThrow(ScrapeManualsError);
     expect(state.aborted).toContain("http://[::ffff:127.0.0.1]:9/secret");
     expect(state.contentCalls).toBe(0);
     expect(state.storageStatePaths).toEqual([]);
@@ -238,7 +269,9 @@ describe("redirection : l'URL finale est re-vérifiée (#362)", () => {
   test("redirection qui échappe au route handler : l'URL finale est refusée quand même", async () => {
     resetState();
     fake = { finalUrl: "http://169.254.169.254/latest/meta-data/", routeSeesRedirect: false };
-    await expect(scrapeManuals(CONFIG, { startUrl: PUBLIC_URL })).rejects.toThrow(ScrapeManualsError);
+    await expect(
+      scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER }),
+    ).rejects.toThrow(ScrapeManualsError);
     expect(state.aborted).toEqual([]);
     expect(state.contentCalls).toBe(0);
     expect(state.storageStatePaths).toEqual([]);
@@ -247,12 +280,107 @@ describe("redirection : l'URL finale est re-vérifiée (#362)", () => {
   test("URL publique : scrape normal, jar écrit sous le répertoire du serveur", async () => {
     resetState();
     fake = { finalUrl: PUBLIC_URL, routeSeesRedirect: true };
-    const docs = await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL });
+    const docs = await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
     expect(docs).toHaveLength(1);
     expect(docs[0]?.excerpt).toContain("SECRET-INTERNAL-SERVICE");
     expect(state.contentCalls).toBe(1);
     expect(state.routePattern).toBe("**/*");
     expect(state.storageStatePaths).toEqual([DEFAULT_AUTH_FILE]);
+  });
+});
+
+describe("garde SSRF : le NOM est résolu (#419)", () => {
+  test("un nom public qui résout vers 127.0.0.1 est REFUSÉ (rebinding)", async () => {
+    resetState();
+    const resolve = fakeResolver({ "interne.example.invalid": ["127.0.0.1"] });
+    await expect(
+      scrapeManuals(CONFIG, { startUrl: "https://interne.example.invalid/secret", resolveHost: resolve }),
+    ).rejects.toThrow(ScrapeManualsError);
+    // Le refus arrive AVANT le navigateur : aucune requête vers l'interne,
+    // aucun extrait.
+    expect(state.launched).toBe(0);
+    expect(state.contentCalls).toBe(0);
+  });
+
+  test("une seule adresse privée suffit à refuser le nom (10.0.0.5)", async () => {
+    resetState();
+    const resolve = fakeResolver({ "interne.example.invalid": [PUBLIC_IP, "10.0.0.5"] });
+    await expect(
+      scrapeManuals(CONFIG, { startUrl: "https://interne.example.invalid/secret", resolveHost: resolve }),
+    ).rejects.toThrow(ScrapeManualsError);
+    expect(state.launched).toBe(0);
+  });
+
+  test("un nom public qui résout vers une IP publique est ACCEPTÉ", async () => {
+    resetState();
+    fake = { finalUrl: PUBLIC_URL, routeSeesRedirect: true };
+    const docs = await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    expect(docs).toHaveLength(1);
+    expect(state.launched).toBe(1);
+  });
+
+  test("un nom introuvable est refusé EXPLICITEMENT (jamais un silence)", async () => {
+    resetState();
+    const resolve = fakeResolver({}); // tout est ENOTFOUND
+    await expect(
+      scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: resolve }),
+    ).rejects.toThrow(ScrapeManualsError);
+    expect(state.launched).toBe(0);
+  });
+
+  test("le verdict de la garde : privé / public / introuvable", async () => {
+    expect(
+      await checkPublicHost("interne.example.invalid", fakeResolver({ "interne.example.invalid": ["127.0.0.1"] })),
+    ).toBe("private");
+    expect(
+      await checkPublicHost("public.example.invalid", fakeResolver({ "public.example.invalid": [PUBLIC_IP] })),
+    ).toBe("public");
+    expect(await checkPublicHost("inconnu.example.invalid", fakeResolver({}))).toBe("unresolved");
+    // Un littéral privé reste refusé SANS résolution (garde littérale #362).
+    expect(await checkPublicHost("127.0.0.1", fakeResolver({}))).toBe("private");
+    expect(await checkPublicHost("169.254.169.254", fakeResolver({}))).toBe("private");
+  });
+
+  test("un littéral public ne déclenche AUCUNE résolution (v4 et v6)", async () => {
+    const resolve = async (): Promise<readonly string[]> => {
+      throw new Error("resolution DNS inattendue");
+    };
+    expect(await checkPublicHost("8.8.8.8", resolve)).toBe("public");
+    expect(await checkPublicHost("[2606:4700::1111]", resolve)).toBe("public");
+  });
+
+  test("redirection vers un nom privé : refusée AVANT le navigateur", async () => {
+    resetState();
+    stubFetch(() =>
+      new Response(null, { status: 302, headers: { location: "https://interne.example.invalid/secret" } }),
+    );
+    const resolve = fakeResolver({
+      "manuels.example.invalid": [PUBLIC_IP],
+      "interne.example.invalid": ["127.0.0.1"],
+    });
+    await expect(assertPublicRedirectChain(PUBLIC_URL, undefined, resolve)).rejects.toThrow(ScrapeManualsError);
+    expect(state.launched).toBe(0);
+  });
+
+  test("le refus SSRF est EXPLICITE côté HTTP (403 private_host)", async () => {
+    const app = createApp({
+      scrape: async () => {
+        throw new ScrapeManualsError("startUrl : hote prive refuse", "private_host");
+      },
+    });
+    const res = await app.handler(
+      new Request("http://127.0.0.1/v1/manuals/scrape", {
+        method: "POST",
+        body: JSON.stringify({
+          platform: "editeur-fake",
+          username: "u",
+          password: "p",
+          startUrl: PUBLIC_URL,
+        }),
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect((await res.json()) as unknown).toMatchObject({ error: { code: "private_host" } });
   });
 });
 
@@ -264,7 +392,7 @@ describe("authFile : plus piloté par l'appelant (#362)", () => {
     writeFileSync(victim, "ORIGINAL");
     try {
       await expect(
-        scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, authFile: victim }),
+        scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, authFile: victim, resolveHost: PUBLIC_RESOLVER }),
       ).rejects.toThrow(ScrapeManualsError);
       // Le fichier est intact, le navigateur n'est même pas lancé, aucun jar
       // n'est écrit : le refus arrive AVANT toute écriture.

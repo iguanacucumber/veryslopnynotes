@@ -212,7 +212,12 @@ async function handleScrape(
       if (isMissingBrowserError(err)) {
         return error("not_implemented", 501, "scraper sans navigateur");
       }
-      if (err instanceof ScrapeManualsError) return error("school_unreachable", 502, "scrape impossible");
+      if (err instanceof ScrapeManualsError) {
+        // #419 : le refus de la garde SSRF est EXPLICITE (hôte privé), pas un
+        // 502 muet qui laisserait croire à une panne du portail.
+        if (err.reason === "private_host") return error("private_host", 403, "hote prive refuse");
+        return error("school_unreachable", 502, "scrape impossible");
+      }
       // Client parti : le 500 serait un faux diagnostic.
       if (req.signal?.aborted) return error("school_unreachable", 502, "scrape impossible");
       return error("internal", 500, "unexpected failure");
