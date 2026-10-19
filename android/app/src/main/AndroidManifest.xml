@@ -61,9 +61,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- #399 : `adjustResize` — la fenêtre se réduit pour le clavier.
+             Déclaration EXPLICITE du contrat clavier (sur les versions
+             récentes, edge-to-edge, la fenêtre ne se redimensionne plus :
+             c'est l'inset IME appliqué au conteneur de la WebView qui retire
+             le clavier de la zone visible, cf. `MainActivity.kt`). -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
