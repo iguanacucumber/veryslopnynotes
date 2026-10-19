@@ -18,8 +18,6 @@ import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.ZoneOffset
 
 // Passerelle locale (#205, ADR-003) : construit les payloads JSON que les
 // écrans savent déjà lire, depuis le client du téléphone au lieu du serveur.
@@ -33,8 +31,6 @@ import java.time.ZoneOffset
 // Fuseau : l'établissement vit en Europe/Paris (comme `APP_TIME_ZONE` côté
 // serveur) ; les instants sortent en ISO avec offset, que les parseurs UI
 // (`OffsetDateTime.parse`) lisent comme l'UTC d'avant.
-private val PARIS: ZoneId = ZoneId.of("Europe/Paris")
-
 internal fun LocalDateTime.parisIso(): String = atZone(PARIS).toOffsetDateTime().toString()
 
 internal fun parisNowIso(): String = Instant.now().atZone(PARIS).toOffsetDateTime().toString()
@@ -73,16 +69,6 @@ internal fun parseQuery(query: String): Map<String, String> {
         out[part.substring(0, cut).trim()] = part.substring(cut + 1).trim().take(200)
     }
     return out
-}
-
-/** `weekStart=AAAA-MM-JJ` -> lundi 00:00 UTC + 7 jours (miroir `timetableWindow`). */
-internal fun weekWindowUtc(query: Map<String, String>): Pair<Long, Long>? {
-    val raw = query["weekStart"] ?: return null
-    if (!Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(raw)) return null
-    val day = runCatching { LocalDate.parse(raw) }.getOrNull() ?: return null
-    val monday = day.minusDays(((day.dayOfWeek.value + 6) % 7).toLong())
-    val from = monday.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-    return from to (from + 7 * 86_400_000L - 1)
 }
 
 /** Lundi 00:00 local de la semaine courante (défaut cantine, miroir `getMenus`). */
@@ -355,20 +341,13 @@ internal fun assignmentJson(
 
 /**
  * Fenêtre demandée (`weekStart` lundi→dimanche, comme le routeur) ou repli
- * -7/+21 jours (miroir `getAssignments`).
+ * -7/+21 jours (miroir `getAssignments`). La MÊME fenêtre sert à la recherche
+ * du toggle et des pièces jointes (`assignmentWindow`) : un devoir affiché
+ * doit rester trouvable (#369).
  */
 internal fun assignmentsPayload(client: Client, query: Map<String, String>, now: LocalDateTime = LocalDateTime.now()): String {
     val win = weekWindowUtc(query)
-    val from = if (win != null) {
-        Instant.ofEpochMilli(win.first).atZone(PARIS).toLocalDateTime()
-    } else {
-        now.minusDays(7)
-    }
-    val to = if (win != null) {
-        Instant.ofEpochMilli(win.second).atZone(PARIS).toLocalDateTime()
-    } else {
-        now.plusDays(21)
-    }
+    val (from, to) = assignmentWindow(query["weekStart"], now)
     val raws = client.homework(from, to)
     val wanted = raws.mapNotNullTo(LinkedHashSet()) {
         lessonKeyOf(it.subject.name, parisDay(it.date))

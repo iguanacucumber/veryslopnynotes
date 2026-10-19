@@ -7,7 +7,6 @@ import fr.veryslopnynotes.core.AssignmentAttachment
 import fr.veryslopnynotes.core.AssignmentLessonContent
 import org.json.JSONArray
 import org.json.JSONObject
-import java.time.LocalDateTime
 
 // Dépôt devoirs #75 : parse du payload local + écriture "fait" sur le client.
 // org.json = SDK Android (aucune dépendance ajoutée). Un devoir non conforme au
@@ -23,13 +22,21 @@ data class AttachmentData(val name: String, val bytes: ByteArray)
 
 // ponytail: refresh + toggle dans un seul dépôt (pas de ViewModel avant #82).
 class AssignmentsRepository(
+    private val cache: CacheStore,
     private val provider: PronoteClientProvider = { PronoteSession.client },
     private val main: Handler = Handler(Looper.getMainLooper()),
 ) {
 
     // Toggle Optimiste : l'UI bascule l'affichage d'abord, puis revert si échec.
-    // Fenêtre miroir du serveur (-7/+21 j) : le devoir basculé s'y trouve.
-    fun toggle(baseUrl: String, assignmentId: String, done: Boolean, onDone: (ToggleOutcome) -> Unit) {
+    // Fenêtre = la semaine AFFICHÉE (`weekStart` de l'écran) : la même que le
+    // payload affiché, sinon le devoir est visible mais « introuvable » (#369).
+    fun toggle(
+        baseUrl: String,
+        assignmentId: String,
+        done: Boolean,
+        weekStart: String,
+        onDone: (ToggleOutcome) -> Unit,
+    ) {
         if (baseUrl.isBlank()) {
             onDone(ToggleOutcome(null, "Serveur non configuré."))
             return
@@ -46,20 +53,24 @@ class AssignmentsRepository(
                 return@Thread
             }
             try {
-                val now = LocalDateTime.now()
-                val found = client.homework(now.minusDays(7), now.plusDays(21))
+                val (from, to) = assignmentWindow(weekStart)
+                val found = client.homework(from, to)
                     .firstOrNull { it.id == target }
                 if (found == null) {
                     post { onDone(ToggleOutcome(null, "Toggle refusé (devoir introuvable).")) }
                     return@Thread
                 }
-                found.setDone(done)
+                // #369 : écriture CONFIRMÉE -> l'entrée de cache des devoirs ne
+                // ressert plus l'état d'avant (la case se décochait au retour).
+                // `setDone` lève si l'écriture échoue : rien n'est purgé alors.
+                writeAndInvalidate(cache, CachePolicy.ASSIGNMENTS) { found.setDone(done) }
                 val payload = JSONObject().put("assignment", assignmentJson(found, 0, null)).toString()
                 val updated = parseToggle(payload)?.copy(done = done)
                 if (updated == null) {
                     post { onDone(ToggleOutcome(null, "Réponse illisible.")) }
                 } else {
-                    // Cache local invalidé : le payload complet sera rechargé au pull-refresh.
+                    // Le cache local est invalidé : le payload complet sera
+                    // rechargé au pull-refresh.
                     post { onDone(ToggleOutcome(updated, null)) }
                 }
             } catch (e: Exception) {
@@ -77,13 +88,21 @@ class AssignmentsRepository(
      * Octets d'une PJ pour l'ouvreur externe (FileProvider côté UI) : la `ref`
      * opaque `homework:<i>:file:<di>:<fileId>` est résolue sur le client local,
      * jamais une URL d'établissement dans l'app (I1).
+     *
+     * La fenêtre est celle de la semaine AFFICHÉE (comme le toggle) : une PJ
+     * d'un devoir affiché s'ouvre (#369).
      */
-    fun fetchAttachment(homeworkId: String, attachmentId: String, onDone: (AttachmentData?) -> Unit) {
+    fun fetchAttachment(
+        homeworkId: String,
+        attachmentId: String,
+        weekStart: String,
+        onDone: (AttachmentData?) -> Unit,
+    ) {
         Thread {
             val data = try {
                 val client = provider() ?: return@Thread post { onDone(null) }
-                val now = LocalDateTime.now()
-                val hw = client.homework(now.minusDays(7), now.plusDays(21))
+                val (from, to) = assignmentWindow(weekStart)
+                val hw = client.homework(from, to)
                     .firstOrNull { it.id == homeworkId } ?: return@Thread post { onDone(null) }
                 val file = try {
                     hw.files()

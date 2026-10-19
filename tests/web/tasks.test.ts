@@ -22,6 +22,7 @@ import {
   weekRangeFr,
   weekStartOf,
 } from "../../web/src/features/tasks/assignments";
+import { bridge } from "../../web/src/bridge/client";
 import {
   parseRevisionSheet,
   parseRevisionSheets,
@@ -203,6 +204,40 @@ describe("web tâches — navigation de semaine", () => {
     expect(start).toBe("2026-10-19");
     expect(shiftWeek(start, 1)).toBe("2026-10-26");
     expect(shiftWeek(shiftWeek(start, 1), -1)).toBe(start);
+  });
+
+  test("le pont envoie la semaine affichée au natif (fenêtre de recherche)", async () => {
+    // #369 : sans la semaine affichée, le natif cherche le devoir dans une
+    // fenêtre fixe (-7/+21 j) : un devoir de la semaine +4 est « introuvable ».
+    const sent: Array<{ method: string; params: Record<string, unknown> }> = [];
+    const g = globalThis as unknown as {
+      window?: unknown;
+      VSN?: unknown;
+      __vsnResolve?: (id: string, result: string) => void;
+    };
+    g.window = globalThis;
+    g.VSN = {
+      call: (requestId: string, method: string, paramsJson: string) => {
+        sent.push({ method, params: JSON.parse(paramsJson) as Record<string, unknown> });
+        g.__vsnResolve?.(requestId, '{"ok":true}');
+      },
+    };
+    try {
+      await bridge.toggleAssignment("a1", true, "2026-11-16");
+      await bridge.openAttachment("a1", "att1", "2026-11-16");
+      await bridge.askHomework("a1", "2026-11-16");
+    } finally {
+      delete g.window;
+      delete g.VSN;
+    }
+    expect(sent).toEqual([
+      { method: "assignments.toggle", params: { id: "a1", done: true, weekStart: "2026-11-16" } },
+      {
+        method: "assignments.attachment",
+        params: { homeworkId: "a1", attachmentId: "att1", weekStart: "2026-11-16" },
+      },
+      { method: "llm.askHomework", params: { assignmentId: "a1", weekStart: "2026-11-16" } },
+    ]);
   });
 
   test("un payload d'une autre semaine ne fuit pas sous le nouvel en-tête", () => {

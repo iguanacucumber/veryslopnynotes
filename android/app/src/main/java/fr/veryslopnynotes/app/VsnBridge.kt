@@ -116,8 +116,8 @@ class VsnBridge(
     }
     private val sessions = SessionStores.get(ctx)
     private val repo = SyncedRepository(cacheStore)
-    private val assignments = AssignmentsRepository()
-    private val discussions = DiscussionsRepository()
+    private val assignments = AssignmentsRepository(cacheStore)
+    private val discussions = DiscussionsRepository(cacheStore)
     private val profileRepo = ProfileRepository()
     private val accounts = AccountStore(ctx, cacheStore, sessions)
     private val llmKeys = LlmKeys.get(ctx)
@@ -521,8 +521,12 @@ class VsnBridge(
         val id = bounded(p.string("id"), 128)
         if (id.isEmpty()) throw BridgeFailure("bad_request", "Devoir introuvable.")
         val done = p.optBoolean("done", false)
+        // #369 : la semaine AFFICHÉE (le `weekStart` de l'écran) : la fenêtre
+        // de recherche suit le payload affiché, sinon le devoir est visible
+        // mais « introuvable ».
+        val week = bounded(p.string("weekStart"), 10)
         val outcome = await<fr.veryslopnynotes.data.ToggleOutcome> { cb ->
-            assignments.toggle(currentBaseUrl(), id, done, cb)
+            assignments.toggle(currentBaseUrl(), id, done, week, cb)
         } ?: throw BridgeFailure("unavailable", "Bascule indisponible.")
         sessionOrThrow(outcome.error)
         return JSONObject()
@@ -536,8 +540,10 @@ class VsnBridge(
         if (homeworkId.isEmpty() || attachmentId.isEmpty()) {
             throw BridgeFailure("bad_request", "Pièce jointe introuvable.")
         }
+        // Même semaine affichée que le toggle (#369).
+        val week = bounded(p.string("weekStart"), 10)
         val data = await<fr.veryslopnynotes.data.AttachmentData?> { cb ->
-            assignments.fetchAttachment(homeworkId, attachmentId, cb)
+            assignments.fetchAttachment(homeworkId, attachmentId, week, cb)
         } ?: return JSONObject().put("ok", false).put("error", "Pièce jointe indisponible.")
         return try {
             val file = writeAttachmentFile(
@@ -741,7 +747,10 @@ class VsnBridge(
     private fun askHomework(p: JSONObject): JSONObject {
         val id = bounded(p.string("assignmentId"), 128)
         if (id.isEmpty()) throw BridgeFailure("bad_request", "Devoir introuvable.")
-        val assignment = loadAssignments().firstOrNull { it.id == id }
+        // #369 : la semaine AFFICHÉE : le devoir demandé peut venir d'une
+        // semaine non courante (le cache ne porte que la dernière lue).
+        val week = bounded(p.string("weekStart"), 10)
+        val assignment = loadAssignments(id, week).firstOrNull { it.id == id }
             ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
         val sources = fr.veryslopnynotes.data.HomeworkRepository.sourcesFor(assignment)
         val question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment)
@@ -769,7 +778,7 @@ class VsnBridge(
     private fun generateRevision(p: JSONObject): JSONObject {
         val id = bounded(p.string("assignmentId"), 128)
         val store = revisions ?: throw BridgeFailure("unavailable", "Stockage des fiches indisponible.")
-        val assignment = loadAssignments().firstOrNull { it.id == id }
+        val assignment = loadAssignments(id, "").firstOrNull { it.id == id }
             ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
         val apiKey = llmKeys.apiKey()?.trim()
             ?: return JSONObject().put("ok", false)
@@ -844,13 +853,19 @@ class VsnBridge(
         return out
     }
 
-    private fun loadAssignments(): List<Assignment> {
+    /**
+     * Devoirs pour l'assistant : le cache d'abord (il porte la dernière
+     * semaine lue), puis une lecture LOCALE de la fenêtre AFFICHÉE si le cache
+     * ne porte pas le devoir demandé (#369 : semaine non courante, ou cache
+     * purgé par une écriture). `fetchAsync` n'écrase pas le cache.
+     */
+    private fun loadAssignments(wantedId: String, weekStart: String): List<Assignment> {
         val cached = repo.cached(CachePolicy.ASSIGNMENTS)?.payload
-        if (cached != null) {
-            runCatching { AssignmentsRepository.parse(cached) }.getOrNull()?.let { if (it.isNotEmpty()) return it }
-        }
+        val fromCache = cached?.let { runCatching { AssignmentsRepository.parse(it) }.getOrNull() } ?: emptyList()
+        if (fromCache.any { it.id == wantedId }) return fromCache
+        val query = if (weekStart.isNotEmpty()) "weekStart=$weekStart" else ""
         val outcome = await<RefreshOutcome> { cb ->
-            repo.refreshAsync(CachePolicy.ASSIGNMENTS, currentBaseUrl(), force = false, cb = cb)
+            repo.fetchAsync(CachePolicy.ASSIGNMENTS, query, cb)
         }
         val payload = when (outcome) {
             is RefreshOutcome.Updated -> outcome.payload
