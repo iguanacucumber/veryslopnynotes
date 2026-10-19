@@ -9,6 +9,10 @@ package fr.veryslopnynotes.pronote
  * - `PronoteAPIError` : refus du serveur (`Erreur.G`, message `Titre`) ou HTTP
  *   non-OK — `pronoteErrorCode`/`pronoteErrorMsg` portent le détail brut ;
  * - `ExpiredObject` : `G == 22`, l'objet vient d'une session précédente.
+ *
+ * HÉRITAGE : `ExpiredObject` est un `PronoteAPIError` (comme la référence) —
+ * un `catch (e: PronoteAPIError)`, le contrat documenté, attrape donc le cas
+ * « objet d'une session précédente » au lieu de le laisser filer.
  */
 open class CryptoError(message: String) : PronoteAPIError(message)
 
@@ -18,7 +22,7 @@ open class PronoteAPIError(
     val pronoteErrorMsg: String? = null,
 ) : Exception(message)
 
-class ExpiredObject(message: String) : Exception(message)
+class ExpiredObject(message: String) : PronoteAPIError(message)
 
 /**
  * Erreurs de lecture du JSON PRONOTE (#201, miroir de `exceptions.js`).

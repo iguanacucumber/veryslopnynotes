@@ -491,6 +491,19 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
     }
   });
 
+  // #417 : `ExpiredObject` hérite de `PronoteAPIError` (comme la référence) —
+  // sinon le `catch (e: PronoteAPIError)` documenté ignore le cas « objet d'une
+  // session précédente » (l'exception filait tel quel).
+  test.skipIf(skip)("erreurs : `ExpiredObject` est un `PronoteAPIError` (contrat du catch)", async () => {
+    const { ExpiredObject, PronoteAPIError } = await import("../../node_modules/pronotets/dist/exceptions.js");
+    const tsErr = new ExpiredObject("objet d'une session précédente");
+    expect(tsErr.name).toBe("ExpiredObject");
+    expect(tsErr instanceof PronoteAPIError).toBe(true);
+    const kt = JSON.parse(await ask({ op: "errorHierarchy" })) as { name: string; caughtAs: string };
+    expect(kt.name).toBe("ExpiredObject");
+    expect(kt.caughtAs).toBe("ExpiredObject");
+  });
+
   test.skipIf(skip)("nombres : le rendu Kotlin est IDENTIQUE à `JSON.stringify` (#410)", async () => {
     // Le texte, pas un nombre JSON : `-0` ne survit pas à `JSON.stringify`
     // (`JSON.stringify(-0)` vaut `"0"`). Chaque case est lue des DEUX côtés
