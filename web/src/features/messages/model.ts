@@ -8,6 +8,7 @@
 // troisième schéma inventé. Tout texte reste une DONNÉE (React l'échappe) —
 // aucun HTML n'est construit ni interprété.
 import { cleanText } from "../../lib/format";
+import { subjectKey } from "../../lib/subject";
 
 export const MAX_ID = 64;
 export const MAX_NAME = 100;
@@ -226,12 +227,9 @@ export function sortDiscussions(list: Discussion[]): Discussion[] {
   });
 }
 
+/** Minuscules, sans accents : même normalisation que la clé des matières. */
 export function foldForSearch(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
+  return subjectKey(value);
 }
 
 export function discussionMatches(d: Discussion, query: string): boolean {
