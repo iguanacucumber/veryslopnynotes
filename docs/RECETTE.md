@@ -107,6 +107,14 @@ WebView (`localStorage`), il n'est pas envoyé au natif.
   `grades`, `settings`, `pairing` — aucun texte illisible, aucune surface qui
   garde la couleur d'une autre palette.
 
+## Mouvement (#336)
+
+- Contrôle statique : `bun test tests/web/motion.test.ts` (décision d'animer,
+  repli sans API, garde unique de mouvement réduit, propriétés animées).
+- Contrôle visuel : toucher un onglet (l'indicateur glisse, la page se fond),
+  puis Régler le système sur « supprimer les animations » et vérifier que rien
+  ne bouge plus — la navigation reste immédiate.
+
 `make check` (dont `android-compile`) passe, et c'est le seul filet qui
 compile réellement le Kotlin : les miroirs TS et `check-kotlin` ne voient pas
 une résolution de symbole ni une surcharge ambiguë.

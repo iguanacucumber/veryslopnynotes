@@ -64,6 +64,7 @@ a {
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   box-shadow: var(--shadow-soft);
   backdrop-filter: blur(14px);
+  view-transition-name: topbar;
 }
 
 @supports not (background: color-mix(in srgb, white, black)) {
@@ -95,12 +96,21 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease), transform var(--duration) var(--ease);
 }
 
 .icon-btn:hover,
 .icon-btn:active {
   background: var(--surface-variant);
+}
+
+.icon-btn:active {
+  transform: scale(0.92);
+}
+
+/* Retour au toucher : l'icône tourne une fois au rafraîchissement (#336). */
+.icon-btn--spin svg {
+  animation: spin 650ms var(--ease);
 }
 
 .icon-btn--accent {
@@ -134,6 +144,46 @@ a {
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   box-shadow: 0 8px 28px rgba(31, 41, 46, 0.16);
   backdrop-filter: blur(16px);
+  view-transition-name: tabbar;
+}
+
+/* Indicateur glissant de l'onglet actif (#336) : une seule pastille pour les
+   quatre onglets, qui glisse au lieu de clignoter d'un onglet à l'autre. */
+.tabbar__pill {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 6px;
+  width: calc((100% - 24px) / 4);
+  border-radius: 18px;
+  background: var(--brand-pale);
+  transform: translateX(calc(var(--tab-index, 0) * (100% + 4px)));
+  transition: transform 300ms var(--ease);
+}
+
+/* Les instantanés de la barre du haut et de la barre d'onglets restent figés
+   pendant la transition de route : seule la page change. */
+::view-transition-old(topbar),
+::view-transition-new(topbar),
+::view-transition-old(tabbar),
+::view-transition-new(tabbar) {
+  animation: none;
+}
+
+::view-transition-old(root) {
+  animation: route-out 140ms var(--ease) both;
+}
+
+::view-transition-new(root) {
+  animation: route-in 260ms var(--ease) both;
+}
+
+@keyframes route-out {
+  to { opacity: 0; transform: translateY(-6px); }
+}
+
+@keyframes route-in {
+  from { opacity: 0; transform: translateY(10px); }
 }
 
 @supports not (background: color-mix(in srgb, white, black)) {
@@ -141,6 +191,8 @@ a {
 }
 
 .tab {
+  position: relative;
+  z-index: 1;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -153,12 +205,16 @@ a {
   gap: 2px;
   font-size: 11px;
   font-weight: 600;
-  transition: color var(--duration) var(--ease), background var(--duration) var(--ease);
+  transition: color var(--duration) var(--ease), background var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
+}
+
+.tab:active {
+  transform: scale(0.94);
 }
 
 .tab[aria-current="page"] {
   color: var(--brand-deep);
-  background: var(--brand-pale);
 }
 
 .card {
@@ -167,6 +223,14 @@ a {
   border-radius: var(--radius-md);
   padding: 16px;
   box-shadow: var(--shadow-soft);
+}
+
+button.card {
+  transition: transform var(--duration) var(--ease), border-color var(--duration) var(--ease);
+}
+
+button.card:active {
+  transform: scale(0.985);
 }
 
 .card--flat {
@@ -233,6 +297,12 @@ a {
   color: var(--ink);
   font-size: 13px;
   font-weight: 600;
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
+}
+
+.chip:active {
+  transform: scale(0.95);
 }
 
 .chip--active {
@@ -334,6 +404,10 @@ a {
   animation: rise var(--duration) var(--ease);
 }
 
+.notice--leaving {
+  animation: sink 200ms var(--ease) forwards;
+}
+
 .notice--error {
   background: var(--danger-solid);
   color: var(--on-danger);
@@ -342,6 +416,10 @@ a {
 @keyframes rise {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sink {
+  to { opacity: 0; transform: translateY(8px); }
 }
 
 .empty {
@@ -382,6 +460,26 @@ a {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* Entrée en cascade des listes (#336) : plafonnée à 10 crans, en opacité et
+   translation seulement. Les éléments montés ensuite ne rejouent rien. */
+.list > * {
+  animation: rise-in 280ms var(--ease) both;
+}
+
+.list > :nth-child(2) { animation-delay: 30ms; }
+.list > :nth-child(3) { animation-delay: 60ms; }
+.list > :nth-child(4) { animation-delay: 90ms; }
+.list > :nth-child(5) { animation-delay: 120ms; }
+.list > :nth-child(6) { animation-delay: 150ms; }
+.list > :nth-child(7) { animation-delay: 180ms; }
+.list > :nth-child(8) { animation-delay: 210ms; }
+.list > :nth-child(9) { animation-delay: 240ms; }
+.list > :nth-child(10) { animation-delay: 270ms; }
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
 }
 
 .divider {

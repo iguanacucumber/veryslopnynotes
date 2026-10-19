@@ -32,7 +32,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [refreshTick, setRefreshTick] = useState(0);
   const [authLost, setAuthLost] = useState(false);
   const noticeTimer = useRef<number | undefined>(undefined);
-  const [notice, setNotice] = useState<{ message: string; kind: NoticeKind } | null>(null);
+  const leaveTimer = useRef<number | undefined>(undefined);
+  const [notice, setNotice] = useState<{ message: string; kind: NoticeKind; leaving: boolean } | null>(null);
 
   const dark = theme === "DARK" || (theme === "SYSTEM" && systemDark);
   const palette = paletteOf(scheme, dark);
@@ -63,11 +64,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("vsn:auth", onAuth);
   }, []);
 
+  // Notice : entrée, temps de lecture, sortie animée (#336). La sortie est un
+  // état à part pour que la disparition soit animée au lieu d'un retrait sec.
   const notify = useCallback((message: string, kind: NoticeKind = "info") => {
-    setNotice({ message, kind });
     window.clearTimeout(noticeTimer.current);
-    noticeTimer.current = window.setTimeout(() => setNotice(null), 4200);
+    window.clearTimeout(leaveTimer.current);
+    setNotice({ message, kind, leaving: false });
+    noticeTimer.current = window.setTimeout(() => {
+      setNotice((current) => (current ? { ...current, leaving: true } : current));
+      leaveTimer.current = window.setTimeout(() => setNotice(null), 200);
+    }, 4200);
   }, []);
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(noticeTimer.current);
+      window.clearTimeout(leaveTimer.current);
+    },
+    [],
+  );
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
@@ -90,7 +105,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [theme, dark, setTheme, scheme, setScheme, refreshTick, refresh, notify, authLost],
   );
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return (
+    <AppContext.Provider value={value}>
+      {children}
+      {notice ? (
+        <div
+          className={`notice${notice.kind === "error" ? " notice--error" : ""}${notice.leaving ? " notice--leaving" : ""}`}
+          role={notice.kind === "error" ? "alert" : "status"}
+          aria-live={notice.kind === "error" ? "assertive" : "polite"}
+        >
+          {notice.message}
+        </div>
+      ) : null}
+    </AppContext.Provider>
+  );
 }
 
 export function useApp(): AppContextValue {

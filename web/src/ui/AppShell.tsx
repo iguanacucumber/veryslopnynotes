@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "./AppContext";
 import { IconBack, IconBell, IconCalendar, IconGrades, IconHome, IconRefresh, IconTasks, IconUser } from "./icons";
+import { useViewNavigate } from "./viewTransition";
 
 interface RouteMeta {
   title: string;
@@ -35,8 +37,11 @@ const TABS = [
 export function Shell() {
   const location = useLocation();
   const navigate = useNavigate();
+  const go = useViewNavigate();
   const { refresh, notify, authLost } = useApp();
+  const [spinning, setSpinning] = useState(false);
   const meta = ROUTE_META[location.pathname] ?? { title: "VerySlopyNyNotes" };
+  const activeTab = TABS.findIndex((tab) => tab.to === location.pathname);
 
   useEffect(() => {
     if (authLost && location.pathname !== "/pairing") {
@@ -54,8 +59,8 @@ export function Shell() {
             className="icon-btn"
             aria-label="Retour"
             onClick={() => {
-              if (window.history.length > 1) navigate(-1);
-              else navigate(meta.back!);
+              if (window.history.length > 1) go(-1);
+              else go(meta.back!);
             }}
           >
             <IconBack />
@@ -65,17 +70,26 @@ export function Shell() {
           {meta.title}
         </h1>
         <div className="topbar__actions">
-          <button type="button" className="icon-btn" aria-label="Actualiser" onClick={refresh}>
+          <button
+            type="button"
+            className={`icon-btn${spinning ? " icon-btn--spin" : ""}`}
+            aria-label="Actualiser"
+            onClick={() => {
+              refresh();
+              setSpinning(true);
+              window.setTimeout(() => setSpinning(false), 650);
+            }}
+          >
             <IconRefresh />
           </button>
-          <button type="button" className="icon-btn" aria-label="Alertes" onClick={() => navigate("/alerts")}>
+          <button type="button" className="icon-btn" aria-label="Alertes" onClick={() => go("/alerts")}>
             <IconBell />
           </button>
           <button
             type="button"
             className="icon-btn icon-btn--accent"
             aria-label="Profil"
-            onClick={() => navigate("/profile")}
+            onClick={() => go("/profile")}
           >
             <IconUser />
           </button>
@@ -87,8 +101,25 @@ export function Shell() {
       </main>
 
       <nav className="tabbar" aria-label="Navigation principale">
+        {activeTab >= 0 ? (
+          <span
+            className="tabbar__pill"
+            aria-hidden="true"
+            style={{ "--tab-index": activeTab } as CSSProperties}
+          />
+        ) : null}
         {TABS.map(({ to, label, Icon }) => (
-          <NavLink key={to} to={to} end={to === "/"} className="tab">
+          <NavLink
+            key={to}
+            to={to}
+            end={to === "/"}
+            className="tab"
+            onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              event.preventDefault();
+              go(to);
+            }}
+          >
             <Icon size={22} />
             <span>{label}</span>
           </NavLink>

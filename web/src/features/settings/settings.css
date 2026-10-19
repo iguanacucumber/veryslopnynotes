@@ -1,5 +1,10 @@
 /* Réglages — sélecteur de palette (#335). */
 
+/* L'éditeur de matière s'ouvre : il monte au lieu d'apparaître d'un coup. */
+.subject-editor {
+  animation: rise-in 220ms var(--ease) both;
+}
+
 .scheme-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

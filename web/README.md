@@ -49,6 +49,9 @@ schéma par écran.
 - JS initial < 250 Ko gzip.
 - Pas de bibliothèque de composants : CSS + composants maison.
 - `prefers-reduced-motion` coupe les transitions.
+- Mouvement (#336) : transitions de route par View Transition native
+  (`src/ui/viewTransition.ts`, repli en navigation simple si l'API manque), et
+  animations CSS en `transform`/`opacité` uniquement (testé).
 - Couleurs : tout passe par les variables de `src/styles/tokens.css`, posées par
   `src/lib/schemes.ts` (20 palettes × clair/sombre). Aucune couleur en dur dans
   un écran : une palette retirée retombe sur la palette par défaut.

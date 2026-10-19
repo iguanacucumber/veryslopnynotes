@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { bridge } from "../../bridge/client";
 import { BridgeCallError } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";

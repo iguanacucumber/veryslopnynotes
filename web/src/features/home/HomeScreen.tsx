@@ -1,5 +1,5 @@
 import { useMemo, type ComponentType, type ReactElement } from "react";
-import { useNavigate } from "react-router-dom";
+import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { frDate, relativeFr, subjectColor, tint } from "../../lib/format";
 import { useApp, useResource } from "../../ui/AppContext";
 import {
