@@ -100,6 +100,89 @@ try {
     await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
   }
 
+  // Deux parcours d'appairage, joués avec un pont natif factice : téléphone
+  // neuf (aucune session) et session expirée (401 sur les ressources). Dans
+  // les deux cas l'app doit atteindre le menu principal (barre d'onglets) sans
+  // redémarrage — sinon le garde-fou « pas de session », lu au démarrage,
+  // renvoie vers /pairing et l'utilisateur y reste prisonnier (#357).
+  for (const scenario of [
+    { name: "appairage-neuf", expired: false },
+    { name: "appairage-expire", expired: true },
+  ]) {
+    const flow = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+    const pageErrors: string[] = [];
+    flow.on("pageerror", (err) => pageErrors.push(err.message));
+    await flow.addInitScript((expired: boolean) => {
+      const g = globalThis as unknown as {
+        VSN?: { call: (requestId: string, method: string) => void };
+        __vsnResolve?: (requestId: string, resultJson: string) => void;
+        __vsnReject?: (requestId: string, errorJson: string) => void;
+      };
+      let paired = false;
+      g.VSN = {
+        call(requestId: string, method: string) {
+          const resolve = (value: unknown) =>
+            setTimeout(() => g.__vsnResolve?.(requestId, JSON.stringify(value)), 10);
+          const reject = () =>
+            setTimeout(
+              () => g.__vsnReject?.(requestId, JSON.stringify({ code: "auth_required", message: "session expirée" })),
+              10,
+            );
+          switch (method) {
+            case "session.restore":
+            case "session.status":
+              // Téléphone neuf : pas de session. Session expirée : le natif
+              // en a une, mais elle ne vaut plus rien (401 sur les ressources).
+              return resolve({ state: expired ? "restored" : paired ? "restored" : "no_session" });
+            case "pairing.scanQr":
+              return resolve({
+                qr: { login: "demo", jeton: "demo", url: "https://demo.school.invalid" },
+                cancelled: false,
+              });
+            case "pairing.pair":
+              paired = true;
+              return resolve({ ok: true });
+            case "resources.cached":
+              return resolve({ payload: null, fetchedAt: 0, stale: false, error: null });
+            case "resources.load":
+              return expired && !paired ? reject() : resolve({ payload: null, fetchedAt: 0, stale: false, error: null });
+            default:
+              return resolve({ ok: true });
+          }
+        },
+      };
+    }, scenario.expired);
+    await flow.goto(`${URL_BASE}#/`, { waitUntil: "networkidle" });
+    await flow.waitForURL(/#\/pairing$/, { timeout: 5000 }).catch(() => undefined);
+    if (!flow.url().endsWith("#/pairing")) {
+      console.error(`web-smoke : ${scenario.name} n'atterrit pas sur l'appairage (${flow.url()})`);
+      code = 1;
+    }
+    await flow.getByRole("button", { name: "Scanner le QR" }).click();
+    // Le scan lit le QR PUIS vide le PIN : on attend le QR avant de saisir.
+    await flow.getByRole("button", { name: "Rescanner le QR" }).waitFor({ timeout: 5000 });
+    await flow.locator("#pairing-pin").fill("1234");
+    await flow.getByRole("button", { name: "Terminer" }).click();
+    await flow.waitForURL(/#\/$/, { timeout: 5000 }).catch(() => undefined);
+    // Le garde-fou « pas de session » renverrait vers /pairing quelques
+    // millisecondes plus tard : on attend que l'app se stabilise avant de
+    // conclure, sinon on photographie le passage éclair vers l'accueil.
+    await flow.waitForTimeout(800);
+    const tabs = await flow.locator(".tabbar .tab").count();
+    if (!flow.url().endsWith("#/") || tabs < 4) {
+      console.error(
+        `web-smoke : ${scenario.name} ne mène pas au menu principal (${flow.url()}, ${tabs} onglets)`,
+      );
+      code = 1;
+    }
+    if (pageErrors.length) {
+      console.error(`erreurs console (${scenario.name}) :`, pageErrors);
+      code = 1;
+    }
+    await flow.screenshot({ path: `${SHOTS}/${scenario.name}.png`, fullPage: true });
+    await flow.close();
+  }
+
   if (errors.length) {
     console.error("erreurs console :", errors);
     code = 1;
