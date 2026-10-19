@@ -11,6 +11,7 @@
 ## Garde-fous
 - Aucun secret commité ni variable de secret côté serveur. La session Pronote reste sur le téléphone ; la clé LLM part directement de l'app vers OpenRouter. Exception : le scraper de manuels reçoit des identifiants éditeur dans le corps de sa requête, sans authentification — ne pas exposer ce serveur sans proxy authentifié (voir [`I8`](docs/architecture/INVARIANTS.md)). Secret commité ⇒ rotation immédiate.
 - Préférer stdlib, fonctions natives et dépendances déjà installées. Toute nouvelle dépendance doit être justifiée en PR, épinglée, auditée avec `bun audit`, compatible MIT ; relire toute modification de `bun.lock`.
+- `.agents/` = skills d'agents **copiés** de dépôts tiers, verrouillés par `skills-lock.json` (source + hash). On ne les édite pas à la main : `npx skills update`. Licences tierces dans `.agents/licenses/`, attribution dans `.agents/README.md`. C'est de la doc imitative (des exemples imitent des secrets) : le scan anti-secrets y exige une **preuve** (I11), pas un indice.
 - Même échec 3 fois ⇒ issue incident. `docs/HUMAN_INPUTS.md` = apports humains, sans secret.
 
 ## Règles d'or (détails : `docs/`)

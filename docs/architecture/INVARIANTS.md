@@ -115,3 +115,15 @@ Piné par `tests/architecture/invariants.test.ts` (I8),
 - Test : `tests/architecture/invariants.test.ts` (I9).
 - Commande : `make architecture-test`.
 - Emplacement : `android/**/*`.
+
+## I11 — Contenu vendorisé `.agents/` : docs, pas de passoire
+- Invariant : `.agents/` (skills d'agents copiés depuis des dépôts tiers,
+  verrouillés par `skills-lock.json`) n'est jamais un vecteur de fuite : un
+  VRAI secret y échoue au scan anti-secrets, seuls les exemples de
+  documentation passent. Le jeu de motifs strict du dépôt s'applique partout
+  ailleurs. Aucun secret, domaine, IP ni donnée perso dans ce dossier.
+- Test : `tests/architecture/secret-scan.test.ts` (carve-out étroit) +
+  `make lint` (scan réel du dépôt, `.agents/` inclus une fois tracké).
+- Commande : `make lint` (scan) et `make architecture-test` (m invariants).
+- Emplacement : `.agents/**/*`, motifs dans `agents/runtime/secret-patterns.ts`.
+
