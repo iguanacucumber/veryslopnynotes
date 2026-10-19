@@ -63,7 +63,7 @@ function runRecipe(cwd: string, env: Record<string, string>): Run {
 function fakeBin(tmp: string): { bin: string; marker: string } {
   const bin = join(tmp, "bin");
   mkdirSync(bin, { recursive: true });
-  for (const tool of ["cat", "mkdir", "chmod", "sed", "head", "ip", "ls"]) {
+  for (const tool of ["cat", "mkdir", "chmod", "sed", "head", "ip", "ls", "make"]) {
     for (const dir of ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]) {
       const src = join(dir, tool);
       if (!existsSync(src)) continue;
@@ -77,7 +77,14 @@ function fakeBin(tmp: string): { bin: string; marker: string } {
   }
   const marker = join(tmp, "launched");
   const bun = join(bin, "bun");
-  writeFileSync(bun, `#!/bin/sh\necho launched > "${marker}"\n`);
+  // Le marqueur porte ce que le serveur aurait recus : les valeurs doivent
+  // arriver telles quelles, sans substitution par l'auto-signe.
+  writeFileSync(
+    bun,
+    `#!/bin/sh
+printf 'launched PORT=%s HOST=%s CERT=%s KEY=%s\n' "$PORT" "$HOST" "$TLS_CERT_FILE" "$TLS_KEY_FILE" > "${marker}"
+`,
+  );
   chmodSync(bun, 0o755);
   return { bin, marker };
 }
@@ -93,10 +100,10 @@ describe("make runServer (#421)", () => {
 
   test("PORT/HOST restent surchargeables et HOST ne se bind pas sur toutes les interfaces", () => {
     const recipe = recipeOf("runServer");
-    expect(recipe).toMatch(/PORT=\$\$\{PORT:-/);
-    expect(recipe).toMatch(/HOST=\$\$\{HOST:-/);
+    expect(recipe).toMatch(/PORT="\$\$\{PORT:-/);
+    expect(recipe).toMatch(/HOST="\$\$\{HOST:-/);
     // I8 : le scraper est sans auth, donc pas d'ecoute universelle par defaut.
-    expect(recipe).toMatch(/HOST=\$\$\{HOST:-127\.0\.0\.1\}/);
+    expect(recipe).toMatch(/HOST="\$\$\{HOST:-127\.0\.0\.1\}"/);
     expect(recipe).not.toContain("0.0.0.0");
   });
 
@@ -137,5 +144,39 @@ describe("make runServer (#421)", () => {
     const run = runRecipe(tmp, { PATH: bin, HOME: tmp, DEV_TLS_DIR: join(tmp, "tls") });
     expect(run.code).not.toBe(0);
     expect(existsSync(marker)).toBe(false);
+  });
+
+  test("de bout en bout : PORT/HOST surcharges et couple TLS fourni arrivent au serveur", () => {
+    // La vraie cible `make runServer`, avec un faux `bun` qui note ce qu'il
+    // recoit. Preuve que la chaine `&&` laisse passer les valeurs ET que le
+    // couple fourni est servi TEL QUEL (pas d'auto-signe, pas d'openssl).
+    const tmp = mkdtempSync(join(tmpdir(), "runsrv-e2e-"));
+    const { bin, marker } = fakeBin(tmp);
+    const cert = join(tmp, "mon-cert.pem");
+    const key = join(tmp, "ma-cle.pem");
+    writeFileSync(cert, "certificat factice\n");
+    writeFileSync(key, "cle factice\n");
+
+    const p = Bun.spawnSync(["make", "--no-print-directory", "runServer"], {
+      cwd: ROOT,
+      env: {
+        PATH: bin,
+        HOME: tmp,
+        DEV_TLS_DIR: join(tmp, "tls"),
+        PORT: "9090",
+        HOST: "0.0.0.0",
+        TLS_CERT_FILE: cert,
+        TLS_KEY_FILE: key,
+      },
+    });
+    expect(p.exitCode).toBe(0);
+    const note = readFileSync(marker, "utf8");
+    expect(note).toContain("PORT=9090");
+    expect(note).toContain("HOST=0.0.0.0");
+    // Le couple fourni est celui qui part vers le serveur.
+    expect(note).toContain(`CERT=${cert}`);
+    expect(note).toContain(`KEY=${key}`);
+    // Et rien n'a ete genere (le cache TLS n'existe pas).
+    expect(existsSync(join(tmp, "tls"))).toBe(false);
   });
 });

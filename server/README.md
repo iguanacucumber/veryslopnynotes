@@ -12,7 +12,8 @@ confiance ou placer un proxy authentifié devant. `make runServer` et Docker
 lancent ce seul service. `make runServer` écoute par défaut sur la boucle
 locale (`HOST=0.0.0.0` pour l'exposer, sur un réseau de confiance), et sa
 préparation TLS est obligatoire : un échec arrête le lancement, jamais de
-repli en clair.
+repli en clair. Sans `TLS_CERT_FILE`/`TLS_KEY_FILE` (Docker), le serveur sert
+en clair et le dit bruyamment (`[server] ATTENTION : service en CLAIR`).
 
 Garde-fous côté serveur (#362) : la navigation ne va que vers un hôte public
 (IP privée refusée, forme IPv4-mapped IPv6 comprise), la chaîne de

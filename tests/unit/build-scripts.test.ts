@@ -120,9 +120,12 @@ describe("runServer : PORT et HOST sont surchargeables (#418)", () => {
   test("la recette ne fige plus les valeurs en dur", () => {
     const r = recette();
     expect(r).toContain('PORT="$${PORT:-8080}"');
-    expect(r).toContain('HOST="$${HOST:-0.0.0.0}"');
-    // L'ancien masque : `PORT=8080 HOST=0.0.0.0` en dur.
+    // #421 : le défaut HOST est la boucle locale (le scraper est sans auth,
+    // I8) — plus l'écoute universelle d'avant.
+    expect(r).toContain('HOST="$${HOST:-127.0.0.1}"');
+    // Les anciens masques : `PORT=8080 HOST=0.0.0.0` en dur.
     expect(r).not.toContain("PORT=8080 HOST=0.0.0.0");
+    expect(r).not.toContain("HOST=0.0.0.0");
   });
 
   test("l'environnement surcharge les valeurs par défaut", () => {
@@ -137,7 +140,10 @@ describe("runServer : PORT et HOST sont surchargeables (#418)", () => {
       );
       return new TextDecoder().decode(p.stdout);
     };
-    expect(resoudre({ PORT: undefined, HOST: undefined })).toBe("8080 0.0.0.0");
+    // Défaut = boucle locale (#421, I8) ; la surcharge reste possible.
+    expect(resoudre({ PORT: undefined, HOST: undefined })).toBe("8080 127.0.0.1");
     expect(resoudre({ PORT: "9090", HOST: "127.0.0.1" })).toBe("9090 127.0.0.1");
+    // Exposer reste une DÉCISION explicite (réseau de confiance).
+    expect(resoudre({ PORT: undefined, HOST: "0.0.0.0" })).toBe("8080 0.0.0.0");
   });
 });
