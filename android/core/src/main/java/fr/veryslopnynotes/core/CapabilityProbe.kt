@@ -28,7 +28,7 @@ object CapabilityProbe {
         val fetchedAt = at.trim()
         // `isCapabilities` exige une date lisible (`Date.parse`) : une chaîne non
         // datée n'affirme AUCUNE capacité. `isoMillis` ne couvre que l'ISO (avec ou
-        // sans fuseau, avec ou sans heure) — c'est tout ce que le mapper produit,
+        // sans décalage, avec ou sans heure) — c'est tout ce que le mapper produit,
         // donc tout ce sur quoi la parité est exigible.
         if (id.isEmpty() || id.length > Capabilities.MAX_ACCOUNT_ID ||
             fetchedAt.isEmpty() || isoMillis(fetchedAt) == null ||

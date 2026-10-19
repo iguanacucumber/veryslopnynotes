@@ -2,7 +2,7 @@
 // Enveloppe versionnée {v, type, at, data}. Détection nouvelle note / DS
 // sur données structurées uniquement (I7), jamais sur sortie libre LLM.
 
-import { CONTRACTS_VERSION, isAssignment, isGrade, isNewsItem, isTimetableEntry } from "./models";
+import { CONTRACTS_VERSION, isAssignment, isGrade, isIsoDate, isNewsItem, isTimetableEntry } from "./models";
 import type { Assignment, Grade, NewsItem, TimetableEntry } from "./models";
 import { isCacheableResource } from "./cache";
 import type { CacheableResource } from "./cache";
@@ -71,10 +71,6 @@ export function isSecurityAlertData(v: unknown): v is SecurityAlertData {
   const source = (d["source"] as string).trim();
   if (source.length === 0 || source.length > 64) return false;
   return true;
-}
-
-function isIsoDate(v: unknown): v is string {
-  return typeof v === "string" && !Number.isNaN(Date.parse(v));
 }
 
 function isNonNegativeInt(v: unknown): v is number {
