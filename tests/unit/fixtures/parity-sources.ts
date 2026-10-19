@@ -46,6 +46,7 @@ export const PRODUCTION_SOURCES: string[] = [
   join(PRONOTE, "Errors.kt"),
   join(PRONOTE, "HttpSession.kt"),
   join(PRONOTE, "Json.kt"),
+  join(PRONOTE, "RefreshGate.kt"),
   join(PRONOTE, "Resolver.kt"),
   // `core` — les règles métier pures (dates, notes, IA, garde-fous).
   //

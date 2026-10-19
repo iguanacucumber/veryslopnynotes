@@ -428,6 +428,41 @@ private class ClientDriver {
                 if (op.str("mode") == "manual") ka.ping() else ka.pingIfDue()
                 ok("ok" to JVal.Bool(true))
             }
+            // Requêtes CONCURRENTES sur le MÊME client (#405) : le job de fond
+            // et la lecture de l'interface tombent en erreur en même temps.
+            // Le port doit sérialiser (un SEUL refresh, une seule
+            // `Communication` vivante) et ne surfacer AUCUNE erreur : le
+            // perdant attend le refresh et rejoue sur la session neuve.
+            "clientConcurrentPost" -> {
+                val c = client(op.num("cid"))
+                val function = op.reqStr("function")
+                val onglet = op.num("onglet")
+                val data = (op.fields["data"] as? JVal.Obj)?.fields
+                val n = (op.num("threads") ?: 2.0).toInt().coerceIn(1, 8)
+                // La barrière : les N fils partent EN MÊME temps (sans elle,
+                // le second fil ne testerait jamais la course).
+                val barrier = java.util.concurrent.CyclicBarrier(n)
+                val results = arrayOfNulls<String>(n)
+                val payloads = arrayOfNulls<String>(n)
+                val threads = (0 until n).map { i ->
+                    Thread {
+                        results[i] = try {
+                            barrier.await(30, java.util.concurrent.TimeUnit.SECONDS)
+                            val resp = c.post(function, onglet, data)
+                            payloads[i] = Json.stringify(resp)
+                            "ok"
+                        } catch (e: Exception) {
+                            e.javaClass.simpleName
+                        }
+                    }
+                }
+                threads.forEach { it.start() }
+                threads.forEach { it.join(60_000) }
+                ok(
+                    "results" to JVal.Arr(results.map { JVal.Str(it ?: "timeout") }),
+                    "payloads" to JVal.Arr(payloads.map { JVal.Str(it ?: "") }),
+                )
+            }
             "exportCreds" -> {
                 val e = client(op.num("cid")).exportCredentials()
                 ok(

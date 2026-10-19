@@ -265,3 +265,30 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Commande : `make check`.
 - Emplacement : `android/data/OfflineArtifacts.kt`, `android/data/SubjectPrefs.kt`,
   `android/core/RevisionSheet.kt`, `android/app/VsnBridge.kt`.
+
+## I17 — Le rafraîchissement de session est atomique
+- Invariant : le client PRONOTE ne fait JAMAIS deux rafraîchissements en même
+  temps, et les champs partagés (`communication`, attributs, clé AES) ne sont
+  jamais permutés pendant qu'une requête est en vol. `Client.post` et
+  `Client.refresh` partagent le moniteur du client ; la porte `RefreshGate`
+  (un CAS) n'admet qu'UN rafraîchissement à la fois et est relâchée même
+  quand le rafraîchissement ÉCHOUE (le `finally`). Avant #405, `_refreshing`
+  était un `var Boolean` nu : le job de fond et la lecture de l'interface
+  lisaient `false` en même temps et déclenchaient deux `refresh()` — donc deux
+  `Communication` (deux cookies, deux compteurs de requêtes), le champ
+  finissant sur celle qui avait fini la dernière et les requêtes
+  entrelacées (clé AES mélangée) : le serveur répondait `G=25` (« Exceeded
+  max authorization requests ») ou la session restait à moitié initialisée.
+  Le perdant de la course ATTEND le rafraîchissement et rejoue sa requête sur
+  la session neuve (aucune erreur ne remonte à l'appelant).
+- Test : `tests/unit/kotlin-refresh-gate.test.ts` (Kotlin EXÉCUTÉ : N threads
+  lâchés en même temps → un seul gagnant ; la porte se rend après un échec) +
+  `tests/unit/kotlin-pronote-client-parity.test.ts` (Kotlin EXÉCUTÉ contre le
+  stub PRONOTE : deux requêtes concurrentes → un seul handshake de refresh,
+  les deux fils réussissent, fil de requêtes identique à la référence TS) +
+  `tests/architecture/pronote-refresh.test.ts` (garde de source : plus de
+  drapeau non atomique, `post`/`refresh` synchronisés, porte relâchée dans
+  le `finally`).
+- Commande : `make check`.
+- Emplacement : `android/pronote/src/main/java/fr/veryslopnynotes/pronote/Client.kt`,
+  `android/pronote/src/main/java/fr/veryslopnynotes/pronote/RefreshGate.kt`.

@@ -69,9 +69,20 @@ open class ClientBase(
     var clientIdentifier: String? = opts.clientIdentifier
     val deviceName: String? = opts.deviceName
 
+    /**
+     * État de session PUBLIÉ (#405) : `refresh()` remplace ces champs d'un
+     * bloc. Le verrou de session (`post`/`refresh` partagent le moniteur)
+     * sérialise le remplacement — aucune requête en vol ne voit un état à
+     * moitié changé — et le `volatile` publie la nouvelle référence aux
+     * lecteurs HORS verrou (ping de garde, pièces jointes, cache d'info).
+     */
+    @Volatile
     override lateinit var communication: Communication
+    @Volatile
     var encryption = Encryption()
+    @Volatile
     override var attributes: Map<String, String> = emptyMap()
+    @Volatile
     override var funcOptions: JVal = JVal.Obj(LinkedHashMap())
     var parametresUtilisateur: JVal = JVal.Obj(LinkedHashMap())
     lateinit var info: ClientInfo
@@ -81,7 +92,15 @@ open class ClientBase(
     var logged_in: Boolean = false
     var lastConnection: LocalDateTime? = null
     var periods_: List<Period>? = null
-    private var _refreshing: Boolean = false
+
+    /**
+     * Porte de rafraîchissement (#405) : UN refresh à la fois (CAS). Elle
+     * remplace le `var _refreshing` d'avant, qui n'était ni `@Volatile` ni
+     * atomique : deux threads lisaient `false` en même temps et
+     * déclenchaient DEUX rafraîchissements (deux `Communication` — donc deux
+     * cookies et deux compteurs de requêtes — et le serveur répondait `G=25`).
+     */
+    private val refreshGate = RefreshGate()
     private var _expired: Boolean = false
 
     init {
@@ -276,7 +295,15 @@ open class ClientBase(
         },
     )
 
-    /** Re-poignée de main + re-login (sauf ENT injecté, rejoué lui aussi). */
+    /**
+     * Re-poignée de main + re-login (sauf ENT injecté, rejoué lui aussi).
+     *
+     * VERRU DE SESSION (#405) : `refresh` et `post` partagent le même
+     * moniteur (`@Synchronized`). Le remplacement de `communication`,
+     * `attributes` et de la clé AES n'attrape donc JAMAIS une requête en
+     * vol, et deux rafraîchissements ne peuvent pas se chevaucher.
+     */
+    @Synchronized
     fun refresh() {
         val cookieJar = ent?.invoke(username, password, mapOf("pronote_url" to pronoteUrl))
         communication = Communication(pronoteUrl, cookieJar, loginMode != "normal")
@@ -297,7 +324,19 @@ open class ClientBase(
      * Enveloppe `{Signature, data}` (`Signature` omise si onglet nul/zéro/NaN,
      * `data` omise si nulle) + rejeu unique après `refresh` sur `PronoteAPIError`
      * (`ExpiredObject` et le reste remontent tels quels).
+     *
+     * VERRU DE SESSION (#405) : `post` et `refresh` partagent le moniteur.
+     * Le job de fond (`PeriodicSyncWorker`) et la lecture de l'interface
+     * tombant en erreur en MÊME temps, ils déclenchaient deux
+     * rafraîchissements concurrents : deux `Communication` (deux cookies, deux
+     * compteurs de requêtes), le champ finissant sur celle qui avait fini la
+     * dernière, et les requêtes entrelacées (clé AES mélangée) — le serveur
+     * répondait alors `G=25` « Exceeded max authorization requests » ou la
+     * session restait à moitié initialisée. Ici le perdant de la course
+     * ATTEND le rafraîchissement (au lieu de doubler la connexion) et rejoue
+     * sa requête sur la session neuve.
      */
+    @Synchronized
     override fun post(functionName: String, onglet: Double?, data: Map<String, JVal>?): JVal {
         val postData = LinkedHashMap<String, JVal>()
         if (onglet != null && onglet != 0.0 && !onglet.isNaN()) {
@@ -309,12 +348,13 @@ open class ClientBase(
         } catch (e: ExpiredObject) {
             throw e
         } catch (e: PronoteAPIError) {
-            if (_refreshing) throw e
-            _refreshing = true
+            // Un rafraîchissement est DÉJÀ en cours (le login du refresh
+            // échoue) : on ne le double pas — l'erreur remonte, comme avant.
+            if (!refreshGate.tryEnter()) throw e
             try {
                 refresh()
             } finally {
-                _refreshing = false
+                refreshGate.leave()
             }
             return communication.post(functionName, postData)
         }
