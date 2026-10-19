@@ -16,8 +16,10 @@
 // l'appelant dans le corps (writeOnly) : jamais en env, jamais commités,
 // jamais journalisés — seuls compteurs et codes d'erreur sortent dans les
 // logs. Seul le cookie jar Playwright vit sur disque (gitignoré, réutilisé
-// entre runs). I8 inchangé : `PORT`/`HOST` + chemins TLS = seules variables
-// lues, uniquement dans `start()`.
+// entre runs) : son CHEMIN n'est plus choisi par l'appelant, seulement son
+// NOM (#362) — le serveur impose le répertoire du jar.
+// I8 inchangé : `PORT`/`HOST` + chemins TLS = seules variables lues,
+// uniquement dans `start()`.
 import { readFileSync } from "node:fs";
 import { CONTRACTS_VERSION } from "../../shared/contracts/models";
 import {
@@ -38,9 +40,17 @@ export interface ScraperDeps {
    */
   readonly scrape?: (
     config: { readonly platform: string; readonly username: string; readonly password: string },
-    opts: { readonly startUrl: string; readonly authFile?: string; readonly headless?: boolean },
+    opts: {
+      readonly startUrl: string;
+      readonly authFile?: string;
+      readonly defaultAuthFile?: string;
+      readonly headless?: boolean;
+    },
   ) => Promise<ManualDoc[]>;
-  /** Jar cookies par défaut quand le corps n'en donne pas (gitignoré). */
+  /**
+   * Jar de session par DÉFAUT, choisi par le serveur (jamais par l'appelant de
+   * l'API) : chemin libre, sous la responsabilité de l'exploitant.
+   */
   readonly authFile?: string;
 }
 
@@ -124,7 +134,15 @@ async function handleScrape(
   try {
     const scrapeP = runScrape(
       { platform: body.platform, username: body.username, password: body.password },
-      { startUrl: body.startUrl, authFile: body.authFile ?? defaultJar, headless: body.headless },
+      {
+        startUrl: body.startUrl,
+        // #362 : le corps ne fournit plus un CHEMIN de jar, seulement un NOM.
+        // Le serveur impose son répertoire (playwright/.auth/) : l'appelant
+        // ne peut plus écrire de fichier n'importe où.
+        authFile: body.authFile,
+        defaultAuthFile: defaultJar,
+        headless: body.headless,
+      },
     );
     const timeoutP = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(timeoutError(SCRAPE_TIMEOUT_MS)), SCRAPE_TIMEOUT_MS);
