@@ -27,6 +27,14 @@ data class ChildAccount(
 
 object UserProfileRules {
     const val MAX_NAME = 64
+
+    /**
+     * Borne du libellé de PÉRIODE (#420) : plus large que le nom, car un
+     * établissement peut écrire « Trimestre 1 — année scolaire 2026-2027 ».
+     * Miroir de `USER_PERIOD_NAME_MAX_CHARS` (contrat TS) : la parité est
+     * prouvée par `tests/unit/kotlin-profile-parity.test.ts`.
+     */
+    const val MAX_PERIOD_NAME = 100
     const val MAX_PHOTO_REF = 200
     const val MAX_KIDS = 8
     const val MAX_ACCOUNT_ID = 64
@@ -46,7 +54,7 @@ object UserProfileRules {
         if (profile.firstName.length > MAX_NAME) return false
         if (profile.lastName.length > MAX_NAME) return false
         if (profile.classLabel.length > MAX_NAME) return false
-        if (profile.periodName.length > MAX_NAME) return false
+        if (profile.periodName.length > MAX_PERIOD_NAME) return false
         // photoRef présent = réf valide, jamais une adresse (I1).
         if (profile.photoRef.isNotEmpty() && !isValidPhotoRef(profile.photoRef)) return false
         if (profile.kids.size > MAX_KIDS) return false

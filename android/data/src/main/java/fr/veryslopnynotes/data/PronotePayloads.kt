@@ -10,6 +10,7 @@ import fr.veryslopnynotes.core.ComputeAveragesOptions
 import fr.veryslopnynotes.core.Grade
 import fr.veryslopnynotes.core.ProvidedAverages
 import fr.veryslopnynotes.core.SecurityAlert
+import fr.veryslopnynotes.core.UserProfileRules
 import fr.veryslopnynotes.core.computeAverages
 import fr.veryslopnynotes.core.subjectKey
 import fr.veryslopnynotes.pronote.Client
@@ -753,7 +754,9 @@ internal fun mePayload(client: Client, now: LocalDateTime = LocalDateTime.now())
         putIf("classLabel", boundedCp(info.className, 64).ifEmpty { null })
         current?.let {
             put("periodId", it.id.take(64))
-            put("periodName", boundedCp(it.name, 100))
+            // La borne du libellé est celle du noyau (miroir du contrat) :
+            // le publié ne peut pas dépasser ce que le validateur accepte.
+            put("periodName", boundedCp(it.name, UserProfileRules.MAX_PERIOD_NAME))
         }
         putIf("photoRef", photoRef)
         put("hasKids", false)
