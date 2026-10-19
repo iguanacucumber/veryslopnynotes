@@ -92,9 +92,15 @@ encore piloter une navigation Playwright (risque SSRF résiduel) et consommer ce
 compte. Garder le serveur sur loopback/réseau de confiance ; pour l'exposer,
 placer un proxy authentifié devant lui.
 
+**Plafond de concurrence :** l'endpoint étant public, il borne les navigateurs
+vivants : 2 scrapes simultanés (les autres = 503) et 30 s de délai — délai
+auquel le Chromium est réellement fermé, pas seulement la promesse rejetée
+(empilement de Chromium = épuisement mémoire, cf. #363).
+
 Piné par `tests/architecture/invariants.test.ts` (I8),
-`tests/unit/android-homework.test.ts` et `tests/unit/scraper-only.test.ts` ;
-garde SSRF et jar : `tests/unit/scraper-ssrf.test.ts`.
+`tests/unit/android-homework.test.ts`, `tests/unit/scraper-only.test.ts` et
+`tests/unit/scraper-concurrency.test.ts` ; garde SSRF et jar :
+`tests/unit/scraper-ssrf.test.ts`.
 
 ## I9 — Pas de code mort dans `android/`
 - Invariant : aucun `fun`/`class` de premier niveau sans appelant dans le code

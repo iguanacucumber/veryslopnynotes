@@ -50,6 +50,12 @@ export interface ScrapeOptions {
   readonly headless?: boolean;
   readonly timeoutMs?: number;
   readonly logger?: (message: string) => void;
+  /**
+   * Annulation (délai HTTP dépassé, client parti) : le navigateur doit
+   * RÉELLEMENT mourir, sinon le Chromium continue en arrière-plan (~300 Mo)
+   * alors que la requête a déjà rendu son verdict.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /** Répertoire des jars, côté serveur (gitignoré). */
@@ -175,6 +181,8 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
   const authFile = resolveAuthFile(opts.authFile, opts.defaultAuthFile ?? DEFAULT_AUTH_FILE);
   const log = opts.logger ?? (() => {});
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const signal = opts.signal;
+  if (signal?.aborted) throw new ScrapeManualsError("scrape annulé");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let pw: any;
   try {
@@ -183,6 +191,21 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     throw new ScrapeManualsError("Playwright non installé — e2e manuals skippé (aucune dép ajoutée v1)");
   }
   const browser = await pw.chromium.launch({ headless: opts.headless ?? true, timeout: timeoutMs });
+  // Annulation RÉELLE : le navigateur est un processus externe, pas une
+  // promesse — sans cette fermeture, un délai dépassé laissait tourner un
+  // Chromium orphelin (épuisement mémoire, cf. #363).
+  const abortBrowser = () => {
+    try {
+      void browser.close().catch(() => {});
+    } catch {
+      /* noop */
+    }
+  };
+  if (signal?.aborted) {
+    await browser.close().catch(() => {});
+    throw new ScrapeManualsError("scrape annulé");
+  }
+  signal?.addEventListener("abort", abortBrowser, { once: true });
   let context: any = null;
   try {
     context =
@@ -253,6 +276,7 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
       },
     ];
   } finally {
+    signal?.removeEventListener("abort", abortBrowser);
     if (context !== null) {
       await context.close().catch(() => {});
     }

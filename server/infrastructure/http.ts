@@ -37,6 +37,8 @@ export interface ScraperDeps {
   /**
    * Fonction de scrape injectée. Défaut = vrai `scrapeManuals` (Playwright) ;
    * tests = fake pur, aucun navigateur, aucun réseau.
+   * `signal` = annulation : le scraper doit tuer le navigateur quand le
+   * signal passe à `aborted` (délai dépassé ou client parti).
    */
   readonly scrape?: (
     config: { readonly platform: string; readonly username: string; readonly password: string },
@@ -45,6 +47,7 @@ export interface ScraperDeps {
       readonly authFile?: string;
       readonly defaultAuthFile?: string;
       readonly headless?: boolean;
+      readonly signal?: AbortSignal;
     },
   ) => Promise<ManualDoc[]>;
   /**
@@ -52,16 +55,43 @@ export interface ScraperDeps {
    * l'API) : chemin libre, sous la responsabilité de l'exploitant.
    */
   readonly authFile?: string;
+  /** Délai d'attente du scrape (défaut 30 s) ; injectable pour les tests. */
+  readonly timeoutMs?: number;
 }
 
 export interface App {
   readonly handler: (req: Request) => Promise<Response>;
+  /** Scrapes en vol (plafond de concurrence) : observabilité, tests. */
+  readonly inFlightScrapes: () => number;
+}
+
+/**
+ * POST /v1/manuals/scrape : corps borné AVANT parse (route ouverte : ne jamais
+ * y bufferiser un corps arbitraire), validé par le contrat, credentials
+ * transmis au scraper sans transiter par un log. Réponse = docs validés un par
+ * un : une page d'erreur ne devient jamais un ManualDoc.
+ * Plafond de concurrence : 2 scrapes en vol, le reste = 503 (l'endpoint est
+ * public par conception, cf. I8 — un tiers ne doit pas pouvoir empiler des
+ * Chromium, ~300 Mo chacun).
+ * ponytail: borne 30s + cap 2 concurrents, compteur seul en memoire.
+ * Upgrade: file persistante si multi-instances.
+ */
+const SCRAPE_TIMEOUT_MS = 30_000;
+const MAX_CONCURRENT_SCRAPES = 2;
+
+/** Compteur de scrapes en vol, par application (jamais global). */
+interface ScrapeState {
+  inFlight: number;
 }
 
 export function createApp(deps: ScraperDeps = {}): App {
   const log = (message: string) => console.log(`[server] ${message}`);
   const runScrape = deps.scrape ?? scrapeManuals;
   const defaultJar = deps.authFile ?? DEFAULT_AUTH_FILE;
+  const timeoutMs = deps.timeoutMs ?? SCRAPE_TIMEOUT_MS;
+  // Compteur PAR APP : un test qui laisse un scrape en vol n'empoisonne pas
+  // les suivants (le serveur réel n'a qu'une instance).
+  const state: ScrapeState = { inFlight: 0 };
 
   return {
     handler: async (req: Request): Promise<Response> => {
@@ -73,7 +103,7 @@ export function createApp(deps: ScraperDeps = {}): App {
           return req.method === "HEAD" ? new Response(null, { status: res.status, headers: res.headers }) : res;
         }
         if (path === MANUALS_SCRAPE_PATH && req.method === "POST") {
-          return await handleScrape(req, runScrape, defaultJar, log);
+          return await handleScrape(req, runScrape, defaultJar, log, state, timeoutMs);
         }
         if (path === "/v1/health" || path === MANUALS_SCRAPE_PATH) {
           return error("method_not_allowed", 405, `${req.method} not allowed on ${path}`, {
@@ -85,20 +115,9 @@ export function createApp(deps: ScraperDeps = {}): App {
         return error("internal", 500, "unexpected failure");
       }
     },
+    inFlightScrapes: () => state.inFlight,
   };
 }
-
-/**
- * POST /v1/manuals/scrape : corps borné AVANT parse (route ouverte : ne jamais
- * y bufferiser un corps arbitraire), validé par le contrat, credentials
- * transmis au scraper sans transiter par un log. Réponse = docs validés un par
- * un : une page d'erreur ne devient jamais un ManualDoc.
- * ponytail: borne 30s + cap 2 concurrents, compteur seul en memoire.
- * Upgrade: file persistante si multi-instances.
- */
-const SCRAPE_TIMEOUT_MS = 30_000;
-const MAX_CONCURRENT_SCRAPES = 2;
-let inFlightScrapes = 0;
 
 function timeoutError(ms: number): Error {
   return new ScrapeManualsError(`scrape timeout ${ms}ms`);
@@ -109,72 +128,104 @@ async function handleScrape(
   runScrape: NonNullable<ScraperDeps["scrape"]>,
   defaultJar: string,
   log: (message: string) => void,
+  state: ScrapeState,
+  timeoutMs: number,
 ): Promise<Response> {
-  if (inFlightScrapes >= MAX_CONCURRENT_SCRAPES) {
+  // Plafond AVANT tout `await` : incrémenter après une lecture de corps
+  // laissait une fenêtre où N requêtes passaient toutes le contrôle (#363).
+  if (state.inFlight >= MAX_CONCURRENT_SCRAPES) {
     return error("busy", 503, "scraper occupe, reessayer plus tard", { "retry-after": "5" });
   }
-  let text: string;
+  state.inFlight += 1;
+  // Annulation : le délai dépassé ou le client parti doivent TUER le
+  // navigateur, pas seulement rejeter la promesse (Chromium fantôme).
+  const controller = new AbortController();
+  let done = false;
   try {
-    text = await req.text();
-  } catch {
-    return error("bad_request", 400, "invalid JSON body");
-  }
-  if (text.length > MANUALS_SCRAPE_MAX_BODY_CHARS) return error("bad_request", 400, "invalid body");
-  let body: unknown;
-  try {
-    body = JSON.parse(text);
-  } catch {
-    return error("bad_request", 400, "invalid JSON body");
-  }
-  if (!isManualsScrapeRequest(body)) return error("bad_request", 400, "invalid scrape request");
-  if (req.signal?.aborted) return error("school_unreachable", 502, "scrape impossible");
-  let docs: ManualDoc[];
-  inFlightScrapes += 1;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const scrapeP = runScrape(
-      { platform: body.platform, username: body.username, password: body.password },
-      {
-        startUrl: body.startUrl,
-        // #362 : le corps ne fournit plus un CHEMIN de jar, seulement un NOM.
-        // Le serveur impose son répertoire (playwright/.auth/) : l'appelant
-        // ne peut plus écrire de fichier n'importe où.
-        authFile: body.authFile,
-        defaultAuthFile: defaultJar,
-        headless: body.headless,
-      },
-    );
-    const timeoutP = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(timeoutError(SCRAPE_TIMEOUT_MS)), SCRAPE_TIMEOUT_MS);
-      req.signal?.addEventListener(
-        "abort",
-        () => {
-          if (timer) clearTimeout(timer);
-          reject(new ScrapeManualsError("client aborte"));
-        },
-        { once: true },
-      );
-    });
+    let text: string;
     try {
-      docs = await Promise.race([scrapeP, timeoutP]);
-    } finally {
-      if (timer) clearTimeout(timer);
+      text = await req.text();
+    } catch {
+      return error("bad_request", 400, "invalid JSON body");
     }
-  } catch (err) {
-    // Playwright absent = capability manquante (501 franc), pas un faux succès.
-    if (err instanceof Error && /Playwright non install/i.test(err.message)) {
-      return error("not_implemented", 501, "scraper sans navigateur");
+    if (text.length > MANUALS_SCRAPE_MAX_BODY_CHARS) return error("bad_request", 400, "invalid body");
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return error("bad_request", 400, "invalid JSON body");
     }
-    if (err instanceof ScrapeManualsError) return error("school_unreachable", 502, "scrape impossible");
-    return error("internal", 500, "unexpected failure");
+    if (!isManualsScrapeRequest(body)) return error("bad_request", 400, "invalid scrape request");
+    if (req.signal?.aborted) return error("school_unreachable", 502, "scrape impossible");
+    let docs: ManualDoc[];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onClientAbort: (() => void) | undefined;
+    try {
+      const scrapeP = runScrape(
+        { platform: body.platform, username: body.username, password: body.password },
+        {
+          startUrl: body.startUrl,
+          // #362 : le corps ne fournit plus un CHEMIN de jar, seulement un NOM.
+          // Le serveur impose son répertoire : l'appelant ne peut plus écrire
+          // de fichier n'importe où.
+          authFile: body.authFile,
+          defaultAuthFile: defaultJar,
+          headless: body.headless,
+          // #363 : le délai dépassé ou le client parti tuent le navigateur.
+          signal: controller.signal,
+        },
+      );
+      // La course peut être perdue (délai, abandon) : la rejection tardive du
+      // scrape ne doit pas devenir une rejection non geree.
+      scrapeP.catch(() => {});
+      const timeoutP = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          // Rejetter PUIS annuler : la course tranche sur le délai, pas sur
+          // l'erreur du navigateur fermé.
+          reject(timeoutError(timeoutMs));
+          controller.abort();
+        }, timeoutMs);
+      });
+      const abortP = new Promise<never>((_, reject) => {
+        if (!req.signal) return;
+        onClientAbort = () => {
+          reject(new ScrapeManualsError("client aborte"));
+          controller.abort();
+        };
+        if (req.signal.aborted) {
+          onClientAbort();
+          return;
+        }
+        req.signal.addEventListener("abort", onClientAbort, { once: true });
+      });
+      try {
+        docs = await Promise.race([scrapeP, timeoutP, abortP]);
+        done = true;
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (onClientAbort) req.signal?.removeEventListener("abort", onClientAbort);
+      }
+    } catch (err) {
+      // Playwright absent = capability manquante (501 franc), pas un faux succès.
+      if (err instanceof Error && /Playwright non install/i.test(err.message)) {
+        return error("not_implemented", 501, "scraper sans navigateur");
+      }
+      if (err instanceof ScrapeManualsError) return error("school_unreachable", 502, "scrape impossible");
+      // Client parti : le 500 serait un faux diagnostic.
+      if (req.signal?.aborted) return error("school_unreachable", 502, "scrape impossible");
+      return error("internal", 500, "unexpected failure");
+    }
+    // Compteurs seuls : ni credentials, ni URL d'appelant dans les logs.
+    log(`scrape -> ${docs.length} doc(s)`);
+    const payload = { docs };
+    if (!Array.isArray(docs) || !docs.every(isManualsScrapeDoc)) return error("internal", 500, "invalid payload");
+    return Response.json(payload);
   } finally {
-    inFlightScrapes = Math.max(0, inFlightScrapes - 1);
+    state.inFlight = Math.max(0, state.inFlight - 1);
+    // Scrape non terminé (erreur, exception) : on annule pour ne pas laisser
+    // un Chromium orphelin en arrière-plan.
+    if (!done) controller.abort();
   }
-  // Compteurs seuls : ni credentials, ni URL d'appelant dans les logs.
-  log(`scrape -> ${docs.length} doc(s)`);
-  const payload = { docs };
-  if (!Array.isArray(docs) || !docs.every(isManualsScrapeDoc)) return error("internal", 500, "invalid payload");
-  return Response.json(payload);
 }
 
 function error(code: string, status: number, message: string, extraHeaders?: Record<string, string>): Response {
