@@ -8,7 +8,18 @@
 // Contenu retourné = brut à marquer Untrusted (markManualsUntrusted) avant IA.
 // ponytail: squelette extraction texte générique, pas de sélecteurs par éditeur.
 // Upgrade: sélecteurs par plateforme + pagination + PDF-detect si corpus réel.
+//
+// #362 : deux garde-fous ajoutés, tous deux testés (tests/unit/scraper-ssrf.test.ts).
+//  1. SSRF, trois couches : hôte analysé APRÈS normalisation WHATWG (IPv4-mapped
+//     IPv6, entiers, hex), chaîne de redirections vérifiée AVANT le navigateur
+//     (Chromium suit un 302 sans repasser par le route handler), URL FINALE
+//     re-vérifiée après navigation, sous-ressources privées coupées.
+//  2. `authFile` n'est plus un chemin piloté par l'appelant : c'est un NOM de
+//     jar, placé par le serveur sous SON répertoire (playwright/.auth/).
+import { dirname, join, resolve } from "node:path";
 import { load } from "cheerio";
+import { MANUALS_SCRAPE_AUTH_FILE_RE } from "../../shared/contracts/api";
+import { isBlockedHost, isPublicHttpUrl } from "../../shared/contracts/net";
 import { truncateManualText } from "./manuals";
 import type { ManualDoc } from "./manuals";
 
@@ -28,46 +39,108 @@ export class ScrapeManualsError extends Error {
 export interface ScrapeOptions {
   /** URL de départ fournie par l'humain (jamais committée). */
   readonly startUrl: string;
-  /** Fichier local réutilisé entre runs (gitignoré). */
+  /**
+   * NOM du jar de session demandé (jamais un chemin) : le serveur impose son
+   * répertoire. Absent = jar serveur par défaut.
+   */
   readonly authFile?: string;
+  /** Jar par défaut du serveur (chemin choisi par l'exploitant). */
+  readonly defaultAuthFile?: string;
   /** false = première connexion interactive visible. */
   readonly headless?: boolean;
   readonly timeoutMs?: number;
   readonly logger?: (message: string) => void;
 }
 
-export const DEFAULT_AUTH_FILE = "playwright/.auth/manuals.json";
+/** Répertoire des jars, côté serveur (gitignoré). */
+export const AUTH_DIR = "playwright/.auth";
+export const DEFAULT_AUTH_FILE = join(AUTH_DIR, "manuals.json");
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-function isHttpUrl(v: string): boolean {
-  return /^https?:\/\//i.test(v);
+/**
+ * Résout le jar de session. `requested` = NOM de fichier (contrat) : le
+ * chemin final est IMPOSÉ par le serveur (répertoire + nom), donc l'appelant
+ * ne peut plus écrire où il veut. Un chemin (séparateur, « .. », absolu) est
+ * refusé explicitement, jamais réécrit en silence.
+ * ponytail: un seul niveau (pas d'arborescence) : un jar = un fichier.
+ */
+export function resolveAuthFile(requested?: string, fallback: string = DEFAULT_AUTH_FILE): string {
+  if (requested === undefined) return fallback;
+  const name = requested.trim();
+  if (name === "" || name.includes("..") || !MANUALS_SCRAPE_AUTH_FILE_RE.test(name)) {
+    throw new ScrapeManualsError("authFile invalide (nom de jar attendu, chemin refuse)");
+  }
+  const resolved = join(AUTH_DIR, name);
+  if (resolve(dirname(resolved)) !== resolve(AUTH_DIR)) {
+    throw new ScrapeManualsError("authFile hors du repertoire serveur");
+  }
+  return resolved;
 }
 
-// ponytail: bloque loopback + RFC1918 + link-local + metadata, sans dep.
-// Upgrade: allowlist editeurs si corpus reel fige les hotes.
-function isBlockedHost(host: string): boolean {
-  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
-  if (h === "localhost" || h === "0.0.0.0" || h === "::" || h === "::1") return true;
-  if (h === "169.254.169.254" || h.startsWith("169.254.")) return true;
-  if (/^127\./.test(h) || h.startsWith("10.") || /^192\.168\./.test(h)) return true;
-  const m172 = /^172\.(\d+)\./.exec(h);
-  if (m172 && Number(m172[1]) >= 16 && Number(m172[1]) <= 31) return true;
-  if (h === "2130706433" || h === "0x7f000001") return true;
-  return false;
-}
-
-function assertPublicStartUrl(startUrl: string): void {
+/**
+ * URL http(s) PUBLIQUE exigée. Le message ne contient jamais l'URL : les
+ * logs du serveur ne doivent rien laisser filtrer (cf. I8).
+ */
+function assertPublicUrl(raw: string, label: string): void {
   let u: URL;
   try {
-    u = new URL(startUrl);
+    u = new URL(raw);
   } catch {
-    throw new ScrapeManualsError("startUrl http(s) requise (fournie par humain, jamais committée)");
+    throw new ScrapeManualsError(`${label} http(s) requise (jamais journalisee)`);
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") {
-    throw new ScrapeManualsError("startUrl http(s) requise (fournie par humain, jamais committée)");
+    throw new ScrapeManualsError(`${label} http(s) requise (jamais journalisee)`);
   }
   if (isBlockedHost(u.hostname)) {
-    throw new ScrapeManualsError("startUrl privee/interne refusee");
+    throw new ScrapeManualsError(`${label} privee/interne refusee`);
+  }
+}
+
+/** Budget de la vérification de redirection, et nombre de sauts suivis. */
+const REDIRECT_CHECK_TIMEOUT_MS = 5_000;
+const MAX_REDIRECT_HOPS = 3;
+
+/**
+ * Vérifie la chaîne de redirections AVANT de lancer le navigateur.
+ *
+ * Pourquoi : Chromium suit les redirections SANS repasser par le route
+ * handler de Playwright (mesuré sur Playwright 1.64 : le handler voit la
+ * requête initiale, jamais la cible du 302). Sans cette vérification, une
+ * URL publique en 302 vers http://169.254.169.254/… atteint quand même le
+ * service interne (SSRF « à l'aveugle » : le contenu ne fuit plus, la
+ * requête part quand même). On suit donc la chaîne à la main (au plus
+ * MAX_REDIRECT_HOPS sauts) et on refuse dès qu'un maillon est privé.
+ *
+ * ponytail: lecture seule, sans cookie ni JS : le navigateur peut voir une
+ * chaîne différente — d'où la re-vérification de l'URL finale après
+ * navigation (le filet qui protège le contenu).
+ */
+export async function assertPublicRedirectChain(startUrl: string, timeoutMs = REDIRECT_CHECK_TIMEOUT_MS): Promise<void> {
+  const signal = AbortSignal.timeout(timeoutMs);
+  let current = startUrl;
+  for (let hop = 0; hop < MAX_REDIRECT_HOPS; hop += 1) {
+    if (!isPublicHttpUrl(current)) {
+      throw new ScrapeManualsError("redirection vers une cible privee/interne refusee");
+    }
+    let res: Response;
+    try {
+      res = await fetch(current, { redirect: "manual", signal });
+    } catch {
+      return; // DNS/réseau indisponible : le navigateur tranchera
+    }
+    if (res.status < 300 || res.status >= 400) return; // pas de redirection
+    const location = res.headers.get("location");
+    if (!location) return;
+    let target: string;
+    try {
+      target = new URL(location, current).toString();
+    } catch {
+      return;
+    }
+    if (!isPublicHttpUrl(target)) {
+      throw new ScrapeManualsError("redirection vers une cible privee/interne refusee");
+    }
+    current = target;
   }
 }
 
@@ -92,12 +165,14 @@ function stripTags(html: string): string {
 // Ne logue jamais username/password, seulement plateforme + compteurs.
 export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOptions): Promise<ManualDoc[]> {
   if (!config) throw new ScrapeManualsError("manuels non configurés (aucun compte éditeur fourni par l'appelant)");
-  if (!isHttpUrl(opts.startUrl)) throw new ScrapeManualsError("startUrl http(s) requise (fournie par humain, jamais committée)");
-  assertPublicStartUrl(opts.startUrl);
-  const authFile = opts.authFile ?? DEFAULT_AUTH_FILE;
-  if (authFile.includes("..") || authFile.startsWith("/") || authFile.trim().length === 0) {
-    throw new ScrapeManualsError("authFile relatif sans .. requis");
-  }
+  assertPublicUrl(opts.startUrl, "startUrl");
+  // La chaîne de redirections est vérifiée AVANT le navigateur : Chromium
+  // suit un 302 sans repasser par le route handler, la cible interne serait
+  // donc atteinte (requête à l'aveugle) si on attendait la navigation.
+  await assertPublicRedirectChain(opts.startUrl, Math.min(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, REDIRECT_CHECK_TIMEOUT_MS));
+  // Le jar est résolu AVANT le navigateur : un authFile hors périmètre est
+  // refusé sans rien écrire, sans lancer Playwright.
+  const authFile = resolveAuthFile(opts.authFile, opts.defaultAuthFile ?? DEFAULT_AUTH_FILE);
   const log = opts.logger ?? (() => {});
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -116,11 +191,35 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
         async () => browser.newContext(),
       )) ?? null;
     const page = await context.newPage();
+    // #362 : le navigateur suit les redirections. Une URL publique qui
+    // répond 302 vers http://169.254.169.254/… est donc atteinte si on ne
+    // coupe pas la navigation : la requête vers la cible privée est
+    // INTERROMPUE (abort) avant d'atteindre le réseau interne.
+    let blockedTarget = false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await page.route("**/*", async (route: any) => {
+      // API Playwright : `route.request()` est une MÉTHODE.
+      const request = typeof route?.request === "function" ? route.request() : null;
+      const target = typeof request?.url === "function" ? request.url() : "";
+      const kind = typeof request?.resourceType === "function" ? request.resourceType() : "document";
+      if (/^https?:\/\//i.test(target) && !isPublicHttpUrl(target)) {
+        // Navigation (document) bloquée = scrape refusé ; sous-ressource
+        // bloquée = simple accusé de réception (une image d'un réseau privé
+        // ne doit pas faire échouer le scrape).
+        if (kind === "document") blockedTarget = true;
+        await route.abort().catch(() => {});
+        return;
+      }
+      await route.continue().catch(() => {});
+    });
     log(`scrape ${config.platform} -> 1 page`);
     // Statut HTTP vérifié AVANT toute extraction : une page d'erreur (404/500)
     // ou un mur de connexion ne doit jamais devenir un ManualDoc (le corpus
     // citerait sinon « Page introuvable » comme source de corrigé).
     const response = await page.goto(opts.startUrl, { timeout: timeoutMs }).catch(() => null);
+    if (blockedTarget) {
+      throw new ScrapeManualsError("cible privee/interne refusee (redirection)");
+    }
     const status = typeof response?.status === "function" ? response.status() : 0;
     const ok = typeof response?.ok === "function" ? response.ok() : status < 400;
     if (!response || !ok || status >= 400) {
@@ -128,6 +227,10 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
         `réponse HTTP ${status || "inconnue"} sur ${config.platform} — page non ingérée`,
       );
     }
+    // URL FINALE (redirections suivies) : re-vérifiée AVANT toute extraction.
+    // Sans cette re-vérification, une redirection vers une cible interne
+    // ferait entrer le corps du service interne dans l'extrait.
+    assertPublicUrl(typeof page.url === "function" ? page.url() : opts.startUrl, "cible finale");
     const title = (await page.title().catch(() => config.platform)) || config.platform;
     const html: string = await page.content().catch(() => "");
     const text = truncateManualText(stripTags(html), 4000);

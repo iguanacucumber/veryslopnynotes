@@ -201,13 +201,26 @@ describe("scraper-only (#209)", () => {
   test("contrat : gardes requête/réponse", async () => {
     expect(isManualsScrapeRequest(scrapeBody())).toBe(true);
     expect(isManualsScrapeRequest({ ...scrapeBody(), headless: false })).toBe(true);
-    expect(isManualsScrapeRequest({ ...scrapeBody(), authFile: "playwright/.auth/x.json" })).toBe(true);
+    // #362 : `authFile` = NOM de jar, plus un chemin.
+    expect(isManualsScrapeRequest({ ...scrapeBody(), authFile: "manuel.json" })).toBe(true);
+    expect(isManualsScrapeRequest({ ...scrapeBody(), authFile: "playwright/.auth/x.json" })).toBe(false);
     expect(isManualsScrapeRequest({ ...scrapeBody(), password: "" })).toBe(false);
     expect(isManualsScrapeRequest(null)).toBe(false);
     expect(isManualsScrapeResponse({ docs: [FAKE_DOC] })).toBe(true);
     expect(isManualsScrapeResponse({ docs: [] })).toBe(true);
     expect(isManualsScrapeResponse({ docs: [{ ...FAKE_DOC, page: 0 }] })).toBe(false);
     expect(isManualsScrapeResponse({ docs: "non" })).toBe(false);
+  });
+
+  test("#362 : le corps ne fournit qu'un NOM de jar, le serveur impose son chemin", async () => {
+    const fake = fakeScrape();
+    const app = createApp({ scrape: fake.scrape, authFile: "/srv/jars/serveur.json" });
+    await app.handler(post("/v1/manuals/scrape", scrapeBody({ authFile: "manuel.json" })));
+    expect(fake.calls[0]?.opts).toMatchObject({ authFile: "manuel.json" });
+    // Sans nom demandé : le jar du serveur, jamais un chemin venu du corps.
+    await app.handler(post("/v1/manuals/scrape", scrapeBody()));
+    expect(fake.calls[1]?.opts).toMatchObject({ authFile: undefined });
+    expect(fake.calls[1]?.opts).toMatchObject({ defaultAuthFile: "/srv/jars/serveur.json" });
   });
 
   test("I8 : aucun credential lu dans l'environnement (PORT/HOST/TLS seuls, dans start)", async () => {

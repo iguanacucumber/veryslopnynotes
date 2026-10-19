@@ -11,6 +11,7 @@
 
 import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, Discussion, Grade, Message, NewsItem, Period, Punishment, Recipient, SubjectPrefs, TimetableEntry } from "./models";
 import { isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isDiscussion, isGrade, isMessage, isNewsItem, isPeriod, isPunishment, isRecipient, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT } from "./models";
+import { isPublicHttpUrl } from "./net";
 
 
 export interface ApiRoute {
@@ -262,14 +263,18 @@ export function isDiscussionRecipientsResponse(v: unknown): v is DiscussionRecip
 // un POST non authentifié de taille arbitraire est entièrement bufferisé.
 // `password`/`username`/`startUrl` sont writeOnly : jamais journalisés, jamais
 // persistés, jamais renvoyés (seul le cookie jar Playwright vit sur disque,
-// hors dépôt). `authFile` = chemin du jar réutilisé entre runs : relatif sans
-// `..` uniquement (jamais d'écriture absolue pilotée par l'appelant).
+// hors dépôt). `authFile` n'est plus un CHEMIN (#362) : c'est le NOM du jar
+// de session, que le serveur place sous SON répertoire (`playwright/.auth/`).
+// Un chemin venant de l'appelant = écriture de fichier arbitraire (constaté :
+// `shared/contracts/api.ts` écrasé par le jar de cookies) : refusé.
 export const MANUALS_SCRAPE_PATH = "/v1/manuals/scrape";
 export const MANUALS_SCRAPE_MAX_BODY_CHARS = 8192;
 export const MANUALS_SCRAPE_PLATFORM_MAX_CHARS = 100;
 export const MANUALS_SCRAPE_CREDENTIAL_MAX_CHARS = 512;
 export const MANUALS_SCRAPE_URL_MAX_CHARS = 2000;
-export const MANUALS_SCRAPE_AUTH_FILE_MAX_CHARS = 300;
+/** Nom de jar : nom de fichier simple, extension .json, jamais un chemin. */
+export const MANUALS_SCRAPE_AUTH_FILE_MAX_CHARS = 64;
+export const MANUALS_SCRAPE_AUTH_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,58}\.json$/;
 
 export interface ManualsScrapeRequest {
   readonly platform: string;
@@ -278,7 +283,7 @@ export interface ManualsScrapeRequest {
   readonly password: string;
   /** URL de départ fournie par l'humain (jamais committée). */
   readonly startUrl: string;
-  /** Jar cookies réutilisé entre runs (défaut = jar du serveur). */
+  /** Nom du jar de session (défaut = jar du serveur), jamais un chemin. */
   readonly authFile?: string;
   /** false = première connexion interactive visible. */
   readonly headless?: boolean;
@@ -309,33 +314,17 @@ export function isManualsScrapeRequest(v: unknown): v is ManualsScrapeRequest {
   if (!isBoundedNonEmptyString(r["password"], MANUALS_SCRAPE_CREDENTIAL_MAX_CHARS)) return false;
   if (!isBoundedNonEmptyString(r["startUrl"], MANUALS_SCRAPE_URL_MAX_CHARS)) return false;
   if (!/^https?:\/\//i.test(r["startUrl"] as string)) return false;
-  // ponytail: meme garde que server, sans dep. Upgrade: allowlist si corpus fige.
-  try {
-    const u = new URL(r["startUrl"] as string);
-    const h = u.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-    const blocked =
-      h === "localhost" ||
-      h === "0.0.0.0" ||
-      h === "::" ||
-      h === "::1" ||
-      h === "169.254.169.254" ||
-      h.startsWith("169.254.") ||
-      /^127\./.test(h) ||
-      h.startsWith("10.") ||
-      /^192\.168\./.test(h) ||
-      (() => {
-        const m = /^172\.(\d+)\./.exec(h);
-        return m !== null && Number(m[1]) >= 16 && Number(m[1]) <= 31;
-      })();
-    if (blocked) return false;
-  } catch {
-    return false;
-  }
+  // Garde SSRF partagée avec le serveur (shared/contracts/net.ts) : IPv4
+  // littéral/entier/hex, IPv4-mapped IPv6, loopback, RFC1918, link-local,
+  // métadonnées, ULA IPv6. Un nom DNS public passe (rebinding = risque
+  // assumé, documenté dans l'issue #362).
+  if (!isPublicHttpUrl(r["startUrl"] as string)) return false;
   const authFile = r["authFile"];
   if (authFile !== undefined) {
     if (!isBoundedNonEmptyString(authFile, MANUALS_SCRAPE_AUTH_FILE_MAX_CHARS)) return false;
     const p = (authFile as string).trim();
-    if (p.startsWith("/") || p.includes("..")) return false;
+    // Un NOM de jar, jamais un chemin : ni séparateur, ni « .. ».
+    if (!MANUALS_SCRAPE_AUTH_FILE_RE.test(p) || p.includes("..")) return false;
   }
   const headless = r["headless"];
   return headless === undefined || typeof headless === "boolean";

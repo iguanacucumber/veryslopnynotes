@@ -82,7 +82,7 @@ components:
         username: { type: string, maxLength: 512, writeOnly: true }
         password: { type: string, maxLength: 512, writeOnly: true }
         startUrl: { type: string, maxLength: 2000 }
-        authFile: { type: string, maxLength: 300, description: Jar cookies relatif sans `..` (defaut = jar du serveur). }
+        authFile: { type: string, maxLength: 64, description: Nom du jar de session (fichier .json) place par le serveur dans `playwright/.auth/`. Jamais un chemin : tout chemin est refuse (#362). }
         headless: { type: boolean }
     ManualsScrapeResponse:
       type: object
