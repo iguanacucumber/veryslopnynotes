@@ -85,7 +85,7 @@ android-compile:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
 	if [ -z "$$jdk" ]; then \
-	  echo "android-compile SKIP : aucun JDK 17-21 (Gradle 8.7 refuse > 21)."; \
+	  echo "android-compile SKIP : aucun JDK 17-21."; \
 	  echo "  compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
 	elif [ -z "$$sdk" ]; then \
 	  echo "android-compile SKIP : SDK Android absent (ANDROID_HOME ou android/local.properties)."; \

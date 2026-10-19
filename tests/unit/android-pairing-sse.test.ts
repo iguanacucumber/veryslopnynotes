@@ -215,7 +215,7 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
 
   test("deps : deux ajoutées, épinglées (security-crypto, work-runtime)", () => {
     const dataGradle = read(join(ROOT, "android/data/build.gradle.kts"));
-    expect(dataGradle).toContain("com.squareup.okhttp3:okhttp:4.12.0");
+    expect(dataGradle).toContain("com.squareup.okhttp3:okhttp:5.5.0");
     expect(dataGradle).toContain("androidx.security:security-crypto:1.1.0");
     // #208 : sync périodique sans serveur = WorkManager, version épinglée au
     // catalogue, sans client SSE.
@@ -224,7 +224,7 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     expect(dataGradle).not.toContain("mlkit");
     expect(dataGradle).not.toContain("zxing");
     const catalog = read(join(ROOT, "android/gradle/libs.versions.toml"));
-    expect(catalog).toContain('work = "2.9.0"');
+    expect(catalog).toContain('work = "2.12.0"');
     expect(catalog).toContain("work-runtime-ktx");
     // Le frontend est la WebView locale : plus de module Compose.
     expect(existsSync(join(ROOT, "android/ui"))).toBe(false);

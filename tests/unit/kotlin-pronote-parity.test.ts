@@ -500,22 +500,22 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
     const tsJar = new CookieJar();
     const ktSid = (JSON.parse(await ask({ op: "cookieNew" })) as { sid: number }).sid;
     const script: Array<["set", string, string] | ["get", string]> = [
-      ["set", "a=1; Path=/", "http://127.0.0.1/"],
-      ["get", "http://127.0.0.1/"],
-      ["set", "b=2; Path=/sub; Max-Age=10000", "http://127.0.0.1/sub/"],
-      ["get", "http://127.0.0.1/sub/page"],
-      ["get", "http://127.0.0.1/other"],
-      ["set", "a=9; Path=/", "http://127.0.0.1/"],
-      ["get", "http://127.0.0.1/"],
-      ["set", "dead=x; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT", "http://127.0.0.1/"],
-      ["get", "http://127.0.0.1/"],
-      ["set", "sec=s; Path=/; Secure", "http://127.0.0.1/"],
-      ["get", "http://127.0.0.1/"],
+      ["set", "a=1; Path=/", "http://example.com/"],
+      ["get", "http://example.com/"],
+      ["set", "b=2; Path=/sub; Max-Age=10000", "http://example.com/sub/"],
+      ["get", "http://example.com/sub/page"],
+      ["get", "http://example.com/other"],
+      ["set", "a=9; Path=/", "http://example.com/"],
+      ["get", "http://example.com/"],
+      ["set", "dead=x; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT", "http://example.com/"],
+      ["get", "http://example.com/"],
+      ["set", "sec=s; Path=/; Secure", "http://example.com/"],
+      ["get", "http://example.com/"],
       // `Domain=` IP-littéral : tough-cookie refuse (« public suffix »), le port
       // accepte si l'hôte correspond (CookieJar, KDoc). Aucun serveur réel
       // n'émet ça (cookies hôte-seul ou domaines publics) : pas de cas ici.
-      ["set", "gone=1; Path=/; Max-Age=0", "http://127.0.0.1/"],
-      ["get", "http://127.0.0.1/"],
+      ["set", "gone=1; Path=/; Max-Age=0", "http://example.com/"],
+      ["get", "http://example.com/"],
     ];
     for (const step of script) {
       if (step[0] === "set") {

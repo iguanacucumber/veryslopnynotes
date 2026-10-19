@@ -42,7 +42,7 @@ function detect(env: Record<string, string>): { jdk: string; sdk: string; exit: 
 }
 
 describe("android-env.sh", () => {
-  test("JDK : accepte 17-21, refuse 25 (Gradle 8.7 le refuse) et le JDK absent", () => {
+  test("JDK : accepte 17-21, refuse 25 (hors plage testée) et le JDK absent", () => {
     const jdk17 = fakeJdk(17);
     const jdk21 = fakeJdk(21);
     const jdk25 = fakeJdk(25);
@@ -84,14 +84,14 @@ describe("android-env.sh", () => {
     expect(new TextDecoder().decode(proc.stdout)).toBe("");
   });
 
-  test("le hint d'installation cite les deux prérequis (JDK borné + SDK 34)", () => {
+  test("le hint d'installation cite les deux prérequis (JDK borné + SDK 37)", () => {
     const proc = Bun.spawnSync(["sh", "-c", `. ${SCRIPT}; android_toolchain_hint`], {
       env: { PATH: process.env["PATH"] ?? "" },
     });
     const hint = new TextDecoder().decode(proc.stdout);
     expect(hint).toMatch(/17-21/);
-    expect(hint).toMatch(/platforms;android-34/);
-    expect(hint).toMatch(/build-tools;34\.0\.0/);
+    expect(hint).toMatch(/platforms;android-37\.0/);
+    expect(hint).toMatch(/build-tools;36\.0\.0/);
   });
 
   test("updateApkToPhone installe l'APK debug sans effacer les données", () => {

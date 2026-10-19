@@ -134,6 +134,6 @@ make updateApkToPhone   # construit l'APK debug et l'installe (données conserv�
 make buildRelApk   # APK + AAB release, signés (custom si STORE_FILE, sinon debug #297)
 ```
 
-`make check` compile réellement Kotlin si JDK 17–21 et SDK Android 34 sont
+`make check` compile réellement Kotlin si JDK 17–21 et SDK Android 37 sont
 présents ; sinon il signale explicitement le skip. Prérequis, versions,
 signature et procédure de release : [`docs/RELEASE.md`](../docs/RELEASE.md).

@@ -14,7 +14,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
   <a href="shared/contracts/api.openapi.yaml"><img alt="Contracts 0.8.0" src="https://img.shields.io/badge/contracts-0.8.0-blue.svg"></a>
-  <a href="https://bun.sh"><img alt="Bun 1.4.2" src="https://img.shields.io/badge/bun-1.4.2-f9f1de.svg"></a>
+  <a href="https://bun.sh"><img alt="Bun 1.4.3" src="https://img.shields.io/badge/bun-1.4.3-f9f1de.svg"></a>
   <img alt="Android 8.0+" src="https://img.shields.io/badge/android-8.0%2B-3ddc84.svg">
 </p>
 
@@ -124,9 +124,9 @@ de la requête, pour scraper une page de manuel.
 
 ### Prérequis
 
-- [Bun](https://bun.sh) **1.4.2**
-- Pour l'APK : **JDK 17–21** et **SDK Android 34**
-  (`platforms;android-34`, `build-tools;34.0.0`, `platform-tools`)
+- [Bun](https://bun.sh) **1.4.3**
+- Pour l'APK : **JDK 17–21** et **SDK Android 37**
+  (`platforms;android-37.0`, `build-tools;36.0.0`, `platform-tools`)
 - Un téléphone **Android 8.0+** (API 26)
 
 Les commandes Gradle trouvent le JDK et le SDK toutes seules, et **échouent**

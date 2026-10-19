@@ -7,28 +7,32 @@ perso dans le livrable. Clé signature TOUJOURS hors repo.
 
 | Composant | Version | Source | Licence |
 |---|---|---|---|
-| bun (runtime) | 1.4.2 | `Dockerfile.server` `oven/bun:1.4.2`, ADR-001 | MIT (runtime, ISC-compatible) |
+| bun (runtime) | 1.4.3 | `Dockerfile.server` `oven/bun:1.4.3`, ADR-001 | MIT (runtime, ISC-compatible) |
 | typescript | 7.0.2 | `package.json` exact + `bun.lock` | Apache-2.0 |
-| @types/bun | 1.4.2 | `package.json` exact + `bun.lock` | MIT |
-| bun-types (transitif) | 1.4.2 | `bun.lock` | MIT |
+| @types/bun | 1.4.3 | `package.json` exact + `bun.lock` | MIT |
+| bun-types (transitif) | 1.4.3 | `bun.lock` | MIT |
 | @types/node (transitif) | 26.6.4 | `bun.lock` | MIT |
 | undici-types (transitif) | 8.9.0 | `bun.lock` | MIT |
-| Gradle / AGP / Kotlin | 8.7 / 8.5.2 / 1.9.24 | wrapper + `build.gradle.kts` | Apache-2.0 |
-| compileSdk/targetSdk/minSdk | 34 / 34 / 26 | `android/app/build.gradle.kts` | — |
-| activity-ktx / OkHttp | 1.9.2 / 4.12.0 | `android/app/build.gradle.kts` | Apache-2.0 |
+| Gradle / AGP / Kotlin | 9.8.1 / 9.4.1 / 2.4.21 | wrapper + `build.gradle.kts` | Apache-2.0 |
+| compileSdk/targetSdk/minSdk | 37 / 37 / 26 | `android/app/build.gradle.kts` | — |
+| activity-ktx / OkHttp | 1.13.0 / 5.5.0 | `android/app/build.gradle.kts` | Apache-2.0 |
 | zxing-android-embedded | 4.3.0 | `android/app/build.gradle.kts` | Apache-2.0 |
-| react / react-dom | 19.1.1 | `package.json` exact + `bun.lock` | MIT |
-| react-router-dom | 7.18.2 | `package.json` exact + `bun.lock` | MIT |
-| vite / @vitejs/plugin-react | 7.3.5 / 5.1.1 | `package.json` exact + `bun.lock` | MIT |
-| esbuild (transitif) | 0.27.2 | `bun.lock` | MIT |
+| react / react-dom | 19.3.1 | `package.json` exact + `bun.lock` | MIT |
+| react-router-dom | 7.18.4 | `package.json` exact + `bun.lock` | MIT |
+| vite / @vitejs/plugin-react | 8.3.4 / 6.1.2 | `package.json` exact + `bun.lock` | MIT |
+| rolldown (transitif) | 1.2.14 | `bun.lock` | MIT |
+| lightningcss (transitif) | 1.33.0 | `bun.lock` | MPL-2.0 (build uniquement, non distribué) |
+| tough-cookie | 6.0.2 | `package.json` exact + `bun.lock` | BSD-3-Clause |
 
-Toutes compatibles MIT (MIT + Apache-2.0). Nouvelle dép = justifiée,
-épinglée, licence MIT-compatible (ADR-001).
+Les dépendances applicatives sont compatibles MIT (MIT, Apache-2.0,
+BSD-3-Clause). Vite 8 tire `lightningcss` (MPL-2.0) uniquement comme outil de
+build : il n'est pas embarqué dans l'APK, la licence de l'application reste
+MIT. Nouvelle dép = justifiée, épinglée, licence MIT-compatible (ADR-001).
 
 ## Android toolchain
 
-Builds require JDK 17–21 and Android SDK 34 (`platforms;android-34`,
-`build-tools;34.0.0`, `platform-tools`). Set `ANDROID_HOME` or `sdk.dir` in
+Builds require JDK 17–21 and Android SDK 37 (`platforms;android-37.0`,
+`build-tools;36.0.0`, `platform-tools`). Set `ANDROID_HOME` or `sdk.dir` in
 `android/local.properties`; JDK detection accepts `ANDROID_JDK_HOME`.
 
 `make check` runs `android-compile` in parallel with other checks. If JDK or SDK
@@ -42,8 +46,8 @@ Kotlin symbols and overloads.
 make build   # check-secrets + docker build (skip si daemon absent)
 ```
 
-- Base `oven/bun:1.4.2` exacte. Digest : `docker pull oven/bun:1.4.2`,
-  figer `FROM oven/bun:1.4.2@sha256:<digest>` (daemon absent en local).
+- Base `oven/bun:1.4.3` exacte. Digest : `docker pull oven/bun:1.4.3`,
+  figer `FROM oven/bun:1.4.3@sha256:<digest>` (daemon absent en local).
 - Install strict `bun install --frozen-lockfile` (aucun fallback).
 - Contexte minimal (`server/`, `shared/` + manifests) ; `.dockerignore`
   exclut `.env*`, clés (`*.pem/*.key/*.keystore/*.jks`), `secrets/`,
