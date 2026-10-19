@@ -208,9 +208,14 @@ buildRelApk:
 # dépôt et seulement s'il manque (agents/runtime/dev-tls.sh) ; TLS_CERT_FILE /
 # TLS_KEY_FILE fournies par ailleurs (mkcert, Let's Encrypt) sont respectées
 # telles quelles, PORT/HOST restent surchargeables.
+#
+# PORT/HOST : surchargeables DEPUIS L'ENVIRONNEMENT (`PORT=9090 make
+# runServer`), pas une recette en dur — le commentaire d'au-dessus le
+# promettait, la recette ne le faisait pas (#418). Les valeurs par défaut
+# (8080 / 0.0.0.0) restent les mêmes.
 runServer:
 	@. agents/runtime/dev-tls.sh; dev_tls; \
-	PORT=8080 HOST=0.0.0.0 bun run server/infrastructure/http.ts
+	PORT="$${PORT:-8080}" HOST="$${HOST:-0.0.0.0}" bun run server/infrastructure/http.ts
 
 # Frames de RÉFÉRENCE Papillon (`make papillonRef`) : les démonstrations
 # publiques de l'application de référence, rechargées depuis papillon.bzh.
@@ -219,7 +224,21 @@ runServer:
 papillonRef:
 	agents/runtime/papillon-ref.sh
 
+# Image serveur (#209) + scan de secrets. Le build Docker ne se MASQUE plus
+# (#418) : le daemon absent est un SKIP BRUYANT (poste sans Docker), mais un
+# build EN ÉCHEC est un ÉCHEC de la cible — avant, le `|| echo` avalait
+# TOUTE erreur (Dockerfile cassé, lockfile manquant, OOM) et l'image `:local`
+# d'un build précédent était réutilisée puis testée comme neuve.
 build:
 	bun run agents/runtime/check-secrets.ts
-	docker build -t veryslopnynotes-server:local -f Dockerfile.server . || echo "skip docker (daemon absent)"
+	@if ! command -v docker >/dev/null 2>&1; then \
+	  echo "build : « docker » absent du PATH — image serveur NON construite (SKIP explicite)."; \
+	elif ! docker info >/dev/null 2>&1; then \
+	  echo "build : daemon Docker ABSENT ou inaccessible — image serveur NON construite (SKIP explicite)."; \
+	else \
+	  docker build -t veryslopnynotes-server:local -f Dockerfile.server . || { \
+	    echo "build : build Docker EN ÉCHEC — l'image veryslopnynotes-server:local"; \
+	    echo "  n'a PAS été reconstruite : l'image d'un build précédent ne compte pas."; \
+	    exit 1; }; \
+	fi
 	@if [ -d android/app ]; then echo "APK : make buildDebugApk / make buildRelApk (custom hors repo, repli debug #297)"; fi

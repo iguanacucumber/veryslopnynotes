@@ -3,9 +3,9 @@
 // script sur des fichiers .kt générés dans un tmpdir : pas de doublon.commité dans
 // l'arbre (un .kt cassé dans android/ ou tests/ ferait hurler tout le monde).
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const SCRIPT = join(ROOT, "agents/runtime/check-kotlin.ts");
@@ -72,7 +72,9 @@ function run(files: Record<string, string>): { code: number; out: string } {
   const dir = mkdtempSync(join(tmpdir(), "check-kotlin-"));
   try {
     for (const [name, content] of Object.entries(files)) {
-      writeFileSync(join(dir, name), content);
+      const path = join(dir, name);
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, content);
     }
     const p = Bun.spawnSync(["bun", "run", SCRIPT, dir], { cwd: ROOT, stderr: "pipe" });
     return { code: p.exitCode, out: p.stderr.toString() + p.stdout.toString() };
@@ -164,5 +166,37 @@ describe("check-kotlin", () => {
       "",
     ].join("\n");
     expect(run({ "NestedOk.kt": src }).code).toBe(0);
+  });
+
+  // #418 : le bundle Vite est écrit dans `android/app/src/main/assets/web/`
+  // PENDANT le build (`check.ts` lance les étapes en parallèle) et le dossier
+  // disparaît sous les pieds du parcours. Le parcours ne descend donc plus
+  // dans les artefacts GÉNÉRÉS, et une entrée illisible n'abandonne plus le
+  // reste du répertoire (avant : le `catch` global perdait `main/java/` en
+  // entier, et le script annonçait « OK » sans avoir scanné les .kt de l'app).
+  test("un .kt sous les artefacts GÉNÉRÉS (src/main/assets) n'est jamais scanné", () => {
+    const { code, out } = run({
+      "app/src/main/assets/web/Genere.kt": DUP, // artefact : jamais scanné
+      "app/src/main/java/Ok.kt": SANE, // source : scannée, sans doublon
+    });
+    expect({ code, out }).toEqual({ code: 0, out: expect.stringContaining("check-kotlin OK") });
+  });
+
+  test("une entrée disparue n'abandonne pas le reste du répertoire", () => {
+    // `assets` est un lien mort : il imite le bundle Vite qui disparaît
+    // pendant le build. Le .kt voisin DOIT être scanné (et signalé).
+    const dir = mkdtempSync(join(tmpdir(), "check-kotlin-418-"));
+    try {
+      mkdirSync(join(dir, "app/src/main/java"), { recursive: true });
+      symlinkSync(join(dir, "cible-inexistante"), join(dir, "app/src/main/assets"));
+      writeFileSync(join(dir, "app/src/main/java/Broken.kt"), DUP);
+      const p = Bun.spawnSync(["bun", "run", SCRIPT, dir], { cwd: ROOT, stderr: "pipe" });
+      const out = p.stderr.toString() + p.stdout.toString();
+      // Avant : le `catch` global abandonnait `main/` → 0 fichier scanné → OK.
+      expect(p.exitCode).toBe(1);
+      expect(out).toContain("check-kotlin FAIL");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

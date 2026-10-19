@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { listFiles } from "../../agents/runtime/check-architecture";
 
 // #361 : les payloads Pronote sont écrits EN CLAIR dans `filesDir/offline/`
 // (notes, absences, sanctions, messages). Sans protection, la sauvegarde
@@ -50,18 +51,12 @@ function coversFiles(domains: Set<string>): boolean {
   return domains.has("file") || domains.has("root");
 }
 
-/** Fichiers Kotlin du module Android (scan de l'infrastructure de sauvegarde). */
-function kotlinFiles(dir: string, out: string[] = []): string[] {
-  try {
-    for (const e of readdirSync(dir)) {
-      const p = join(dir, e);
-      if (statSync(p).isDirectory()) kotlinFiles(p, out);
-      else if (p.endsWith(".kt")) out.push(p);
-    }
-  } catch {
-    /* module absent */
-  }
-  return out;
+/** Fichiers Kotlin du module Android (scan de l'infrastructure de sauvegarde).
+ *  #418 : parcours ROBUSTE partagé (`listFiles`) — le parcours maison avalait
+ *  tout le répertoire sur une entrée illisible (faux vert) et descendait dans
+ *  les artefacts générés, qui disparaissent pendant le build. */
+function kotlinFiles(dir: string): string[] {
+  return listFiles(dir).filter((f) => f.endsWith(".kt"));
 }
 
 describe("sauvegarde automatique des données scolaires (#361)", () => {
