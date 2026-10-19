@@ -73,6 +73,7 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "UserProfile.kt"),
   // `data` — cache, file d'attente locale, issue de synchronisation.
   join(DATA, "CachePolicy.kt"),
+  join(DATA, "CacheScope.kt"),
   join(DATA, "LocalRequestQueue.kt"),
   join(DATA, "OfflineCache.kt"),
   join(DATA, "SyncJobOutcome.kt"),

@@ -224,3 +224,24 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Emplacement : `android/core/src/main/java/fr/veryslopnynotes/core/RevisionSheet.kt`,
   `android/core/src/main/java/fr/veryslopnynotes/core/RevisionPdf.kt`.
 
+## I16 — Le cache ne sert jamais les données d'un autre compte
+- Invariant : le cache est la DONNÉE D'UN COMPTE. Les clés de cache sont
+  globales (`cache_grades.txt`, sans compte) et les TTL vont jusqu'à 24 h
+  (capacités) : le cache est donc PURGÉ quand le compte change (appairage d'un
+  autre compte) et quand la session est déclarée MORTE (jeton tourné). Purge et
+  invalidation d'époque sont dans la MÊME section critique (#364) : une lecture
+  en vol abandonne son payload, donc un cache purgé ne ressuscite pas. Une
+  identité de compte INCONNUE purge aussi (fail-closed) ; l'identité vient de
+  la session PERSISTÉE (endpoint + login), jamais de `AccountStore.current()`
+  (qui vaut `null` tant que #397 est ouvert). Le login ne sort jamais (ni log,
+  ni rapport de crash).
+- Test : `tests/unit/kotlin-cache-scope.test.ts` (Kotlin EXÉCUTÉ : appairage
+  d'un autre compte → le cache du précédent n'est plus servi ; appairage du
+  MÊME compte → le cache est conservé ; session morte → purge ; lecture en vol
+  → écriture refusée ; + le câblage `PairingRepository` / pont / job de fond) +
+  `tests/unit/kotlin-cache-epoch.test.ts` (la purge reste sous la garde
+  d'époque).
+- Commande : `make check`.
+- Emplacement : `android/data/CacheScope.kt`, `android/data/PairingRepository.kt`,
+  `android/data/AccountStore.kt`, `android/data/PeriodicSyncWorker.kt`,
+  `android/app/VsnBridge.kt`.

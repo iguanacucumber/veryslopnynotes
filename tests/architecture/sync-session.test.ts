@@ -55,10 +55,12 @@ describe("session du job de fond (#406)", () => {
     const bridge = readFileSync(BRIDGE, "utf8");
     // Le worker : le MÊME chemin que le pont, pas une session lue sur le vif.
     expect(worker).toContain("val sessions = SessionStores.get(applicationContext)");
-    expect(worker).toContain("PairingRepository(sessions).restoreBlocking()");
+    // (#407 : le dépôt reçoit aussi le store de cache — il purge le cache si
+    // la session est morte, dans le process NEUF du job comme dans l'app.)
+    expect(worker).toMatch(/PairingRepository\(sessions.*\)\.restoreBlocking\(\)/);
     // Le pont : la référence du chemin (store chiffré -> `restoreBlocking`).
     expect(bridge).toContain("SessionStores.get(ctx)");
-    expect(bridge).toContain("PairingRepository(sessions)");
+    expect(bridge).toMatch(/PairingRepository\(sessions.*\)/);
     expect(bridge).toContain("restoreBlocking()");
   });
 

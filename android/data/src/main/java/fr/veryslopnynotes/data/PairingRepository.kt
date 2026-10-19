@@ -71,8 +71,14 @@ sealed interface RestoreResult {
 // ce dépôt ne fait que lui passer le QR et ranger la session qui en sort.
 // ponytail: pas de sérialisation locale du credential — le jeton va droit
 // dans le SessionStore chiffré, comme l'ancien bearer allait dans le TokenStore.
+//
+// #407 : le dépôt porte le STORE DE CACHE : le cache est la donnée d'UN
+// compte, donc un appairage d'un AUTRE compte (ou une session MORTE) purge
+// le cache — sinon les écrans Notes/EDT/Cantine/Capacités servent le payload
+// du compte précédent, hors ligne, jusqu'à 24 h (TTL des capacités).
 class PairingRepository(
     private val sessions: SessionStore,
+    private val cacheStore: CacheStore,
     private val provider: PronoteClientProvider = { PronoteSession.client },
 ) {
     /**
@@ -114,6 +120,25 @@ class PairingRepository(
             // Déstructuré, pas nommé : le champ du port s'appelle `pronoteUrl`
             // (I1 : ce mot ne figure dans aucun identifiant hors `android/pronote/`).
             val (endpoint, username, password, clientId, rebuiltUuid) = client.exportCredentials()
+            // #407 : le compte vient de changer ? Alors le cache du compte
+            // précédent part : il ne doit JAMAIS être servi au nouveau compte.
+            // L'identité vient de la session PERSISTÉE (toujours présente,
+            // contrairement à `AccountStore.current()`) et de celle qu'on
+            // appaire maintenant.
+            // La purge est AVANT `sessions.save` : si le process meurt entre
+            // les deux, la session restaurée est l'ANCIENNE (dont le cache
+            // vient d'être purgé), jamais le nouveau compte avec le cache de
+            // l'ancien.
+            val previous = try {
+                sessions.load()?.let { AccountIdentity.of(it.endpointUrl, it.username) }
+            } catch (_: Exception) {
+                null
+            }
+            CacheScope.onAccountPaired(
+                cacheStore,
+                previous,
+                AccountIdentity.of(endpoint, username),
+            )
             sessions.save(
                 StoredSession(
                     endpointUrl = endpoint,
@@ -134,8 +159,8 @@ class PairingRepository(
     /**
      * Restauration au démarrage : le jeton persisté rouvre la session SANS
      * rescanner (`Client.tokenLogin`). Session morte = store vidé (un jeton
-     * mort ne ressuscitera pas) ; réseau KO = store gardé (la session n'est
-     * pas morte, l'app lit ses caches).
+     * mort ne ressuscitera pas) ET cache purgé (#407) ; réseau KO = store gardé
+     * (la session n'est pas morte, l'app lit ses caches).
      *
      * #406 : UN SEUL `tokenLogin` à la fois dans le process. Depuis #406, le
      * job de fond restaure la session lui aussi (process neuf, sans
@@ -171,6 +196,11 @@ class PairingRepository(
                     sessions.clear()
                 } catch (_: Exception) {
                 }
+                // #407 : la session est MORTE (jeton tourné) : le cache part
+                // avec elle. Sans cette purge, l'appairage suivant — un AUTRE
+                // compte — servirait le payload du compte mort, hors ligne,
+                // jusqu'à 24 h (TTL des capacités).
+                CacheScope.onSessionDead(cacheStore)
                 RestoreResult.Dead(DeviceAuth.REJECTED_MESSAGE)
             }
         }
