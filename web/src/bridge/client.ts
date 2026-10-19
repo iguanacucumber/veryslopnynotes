@@ -12,7 +12,6 @@ import {
   type ResourceResult,
   type SubjectPref,
 } from "./types";
-import { mockCall } from "./mock";
 
 /** Surface exposée au JS : UNE seule méthode (miroir de `VsnBridge`). */
 interface VsnNative {
@@ -70,6 +69,24 @@ export function isNative(): boolean {
 }
 
 /**
+ * Pont factice : DÉVELOPPEMENT SEULEMENT (#423).
+ *
+ * `import.meta.env.DEV` vaut `false` dans un build de production : la
+ * branche est morte, le module factice n'entre pas dans le graphe du build
+ * (donc pas dans le bundle livré à l'APK) et l'appel échoue BRUYAMMENT.
+ * Avant, un pont absent servait une école fictive complète (faux profil,
+ * fausses notes) et `session.restore` répondait « restored » : l'écran
+ * d'appairage n'apparaissait jamais.
+ */
+async function devCall<T>(method: string, params: unknown): Promise<T> {
+  if (import.meta.env.DEV) {
+    const { mockCall } = await import("./mock");
+    return mockCall<T>(method, params);
+  }
+  throw new BridgeCallError("unavailable", "pont natif indisponible");
+}
+
+/**
  * Abandon : le natif est prévenu que l'appel est lâché, sa réponse tardive
  * sera ignorée. Signal best-effort et SANS promesse : une promesse oubliée
  * deviendrait un rejet non géré si le pont ne répondait jamais.
@@ -87,10 +104,11 @@ export function pendingCount(): number {
   return pending.size;
 }
 
-/** Appel unique vers Kotlin. En navigateur (`bun run dev:web`), le pont
- *  factice répond avec des données de démonstration. */
+/** Appel unique vers Kotlin. En développement (`bun run dev:web`), le pont
+ *  factice répond avec des données de démonstration ; en production, il
+ *  n'existe pas : un pont absent est un ÉCHEC, jamais des données fictives. */
 export function call<T>(method: BridgeMethod, params: unknown = {}, timeoutMs?: number): Promise<T> {
-  if (!isNative()) return mockCall<T>(method, params);
+  if (!isNative()) return devCall<T>(method, params);
   installCallbacks();
   const requestId = `r${++sequence}`;
   // Le JS attend TOUJOURS plus longtemps que le plafond natif de la méthode

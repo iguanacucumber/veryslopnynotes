@@ -24,7 +24,9 @@ bun run build:web   # écrit dans android/app/src/main/assets/web/
 ```
 
 Le pont factice imite les payloads réels : les écrans se développent sans
-téléphone ni session Pronote.
+téléphone ni session Pronote. Il est **développement seul** (#423) : le build de
+production ne l'embarque pas, et un pont natif absent y est un échec bruyant
+(aucune école fictive servie en silence).
 
 ## Structure
 
