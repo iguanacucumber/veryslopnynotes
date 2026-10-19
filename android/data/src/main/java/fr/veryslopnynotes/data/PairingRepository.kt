@@ -136,15 +136,24 @@ class PairingRepository(
      * rescanner (`Client.tokenLogin`). Session morte = store vidé (un jeton
      * mort ne ressuscitera pas) ; réseau KO = store gardé (la session n'est
      * pas morte, l'app lit ses caches).
+     *
+     * #406 : UN SEUL `tokenLogin` à la fois dans le process. Depuis #406, le
+     * job de fond restaure la session lui aussi (process neuf, sans
+     * interface) : si le pont et le job restaurent EN PARALLÈLE, deux
+     * authentifications partent sur le même compte → « Exceeded max
+     * authorization requests » (erreur 25) → l'établissement LIMITE le
+     * compte. Le verrou est donc partagé : le second appelant attend, puis
+     * trouve la session déjà en RAM (`PronoteSession.client`) et ne refait
+     * pas de réseau.
      */
-    fun restoreBlocking(): RestoreResult {
+    fun restoreBlocking(): RestoreResult = synchronized(restoreLock) {
         val stored = try {
             sessions.load()
         } catch (_: Exception) {
             null
-        } ?: return RestoreResult.NoSession
-        if (provider() != null) return RestoreResult.Restored
-        return try {
+        } ?: return@synchronized RestoreResult.NoSession
+        if (provider() != null) return@synchronized RestoreResult.Restored
+        try {
             val client = Client.tokenLogin(
                 stored.endpointUrl,
                 stored.username,
@@ -195,6 +204,13 @@ class PairingRepository(
     companion object {
         /** Miroir de SETUP_PIN_MAX_CHARS (shared/contracts/api.ts). */
         const val PIN_MAX_CHARS = 64
+
+        /**
+         * Verrou de restauration PARTAGÉ par tout le process (#406) : le pont
+         * et le job de fond ne doivent jamais ouvrir deux sessions en
+         * parallèle (erreur 25 côté établissement).
+         */
+        private val restoreLock = Any()
 
         fun newUuid(): String = UUID.randomUUID().toString()
     }
