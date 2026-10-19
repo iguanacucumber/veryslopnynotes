@@ -2,12 +2,11 @@
 
 ## Workflow (solo, sans rôles)
 1. Plan — découper en petit pas, critères d'acceptation écrits avant code.
-2. Build — une issue = une branche `agent/<n>-<slug>`. Zéro commit direct sur `main`, aucun force-push sur la branche d'autrui (PR via MCP GitHub uniquement, `gh` CLI interdit).
-3. Review — relire le diff + `bun run check`. Répéter build↔review jusqu'à bon (`check` pass, rien de douteux). Si sensible, relire une 2e fois en adversarial : `android/pronote/`, `web/src/bridge/`, CSP/WebView, crypto/secrets/auth, appairage, fixtures, lockfiles, `Makefile`, `AGENTS.md`, scripts de capture.
-4. Merge auto — dès bon : `git push`, `tools.github.create_pull_request`, `tools.github.merge_pull_request` (`merge_method: "merge"`), fermer l'issue via `tools.github.issue_write` (`method: "update"`, `state: "closed"`, `state_reason: "completed"`). Aucune validation humaine, jamais d'attente.
-- Avant PR : `git fetch origin main && git rebase origin/main`, puis `bun run check`.
-- Worktree (`agents/launch.sh <n> <slug>`) optionnel — sinon travail en place OK.
-- Parallèle : push = claim. Avant : `git fetch origin && git branch -r | grep '/<n>-'`. Pris = autre issue.
+2. Build — une issue = une branche `agent/<n>-<slug>` via `./agents/launch.sh <n> <slug>` (fetch `origin/main`, dépendances, claim) ou `--in-place` sur un checkout propre. Zéro commit direct sur `main`, aucun force-push sur la branche d'autrui (PR via MCP GitHub uniquement, `gh` CLI interdit).
+3. Review — `make watch` pendant le code, puis relire le diff + `bun run check`. Répéter build↔review jusqu'à bon (`check` pass, rien de douteux). Si sensible, relire une 2e fois en adversarial : `android/pronote/`, `web/src/bridge/`, CSP/WebView, crypto/secrets/auth, appairage, fixtures, lockfiles, `Makefile`, `AGENTS.md`, scripts de capture.
+4. Merge auto — `./agents/ship.sh <n> "<titre>"` (fetch + rebase + check complet + push + corps de PR), puis en UN bloc : `tools.github.create_pull_request`, `tools.github.merge_pull_request` (`merge_method: "merge"`), fermer l'issue via `tools.github.issue_write` (`method: "update"`, `state: "closed"`, `state_reason: "completed"`). Aucune validation humaine, jamais d'attente. Enfin `git fetch --prune`, puis supprimer worktree et branche.
+- `make check-fast` (~4,4 s) pour l'itération, jamais avant PR : il saute le build Vite et `android-compile`.
+- Parallèle : push = claim. `launch.sh` refuse si `origin/agent/<n>-<slug>` existe déjà.
 
 ## Garde-fous
 - Aucun secret commité ni variable de secret côté serveur. La session Pronote reste sur le téléphone ; la clé LLM part directement de l'app vers OpenRouter. Exception : le scraper de manuels reçoit des identifiants éditeur dans le corps de sa requête, sans authentification — ne pas exposer ce serveur sans proxy authentifié (voir [`I8`](docs/architecture/INVARIANTS.md)). Secret commité ⇒ rotation immédiate.
