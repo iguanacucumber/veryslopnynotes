@@ -14,6 +14,7 @@ import {
   accountCountText,
   sanitizeSubjectPrefs,
   subjectNameError,
+  subjectSaveRefusal,
   themeLabel,
   validateServerHost,
 } from "./model";
@@ -164,6 +165,14 @@ export default function SettingsScreen() {
     setSavingSubject(true);
     try {
       const response = await bridge.saveSubject(next);
+      // #395 : le natif peut REFUSER la matière (couleur, emoji ou libellé
+      // hors contrat) : rien n'est alors écrit. On montre le refus, on ne
+      // dit JAMAIS « Matière enregistrée. ».
+      const refusal = subjectSaveRefusal(response);
+      if (refusal) {
+        setEditorError(refusal);
+        return;
+      }
       const updated = Array.isArray(response.prefs)
         ? sanitizeSubjectPrefs(response.prefs)
         : [...prefs.filter((pref) => pref.subject !== next.subject), next];
@@ -189,6 +198,11 @@ export default function SettingsScreen() {
     setAdding(true);
     try {
       const response = await bridge.saveSubject({ subject, color: null, emoji: null, label: null });
+      const refusal = subjectSaveRefusal(response);
+      if (refusal) {
+        setAddError(refusal);
+        return;
+      }
       const updated = Array.isArray(response.prefs)
         ? sanitizeSubjectPrefs(response.prefs)
         : [...prefs.filter((pref) => pref.subject !== subject), { subject, color: null, emoji: null, label: null }];
