@@ -174,9 +174,9 @@ a {
 }
 
 .card--brand {
-  background: linear-gradient(135deg, var(--brand-deep), var(--brand) 55%, var(--brand-light));
+  background: var(--brand-solid);
   border: 0;
-  color: #fff;
+  color: var(--on-brand);
 }
 
 .stack {
@@ -242,9 +242,9 @@ a {
 }
 
 .chip--danger {
-  background: var(--danger-ink);
-  border-color: var(--danger-ink);
-  color: #fff;
+  background: var(--danger-solid);
+  border-color: var(--danger-solid);
+  color: var(--on-danger);
 }
 
 .btn {
@@ -252,8 +252,8 @@ a {
   padding: 0 18px;
   border-radius: 999px;
   border: 0;
-  background: var(--brand-deep);
-  color: #fff;
+  background: var(--brand-solid);
+  color: var(--on-brand);
   font-weight: 700;
   display: inline-flex;
   align-items: center;
@@ -278,8 +278,8 @@ a {
 }
 
 .btn--danger {
-  background: var(--danger);
-  color: #fff;
+  background: var(--danger-solid);
+  color: var(--on-danger);
 }
 
 .btn--small {
@@ -335,8 +335,8 @@ a {
 }
 
 .notice--error {
-  background: var(--danger);
-  color: #fff;
+  background: var(--danger-solid);
+  color: var(--on-danger);
 }
 
 @keyframes rise {

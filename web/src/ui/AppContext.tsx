@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from "react";
 import { bridge } from "../bridge/client";
 import { BridgeCallError, type ResourceKey } from "../bridge/types";
+import { cssVarsOf, paletteOf, parseScheme } from "../lib/schemes";
 
 type Theme = "SYSTEM" | "LIGHT" | "DARK";
 type NoticeKind = "info" | "error";
@@ -10,6 +11,9 @@ interface AppContextValue {
   theme: Theme;
   dark: boolean;
   setTheme: (theme: Theme) => void;
+  /** Palette (#335) : id de `lib/schemes.ts`, variante donnée par `dark`. */
+  scheme: string;
+  setScheme: (scheme: string) => void;
   refreshTick: number;
   refresh: () => void;
   notify: (message: string, kind?: NoticeKind) => void;
@@ -24,16 +28,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return stored === "LIGHT" || stored === "DARK" || stored === "SYSTEM" ? stored : "SYSTEM";
   });
   const [systemDark, setSystemDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
+  const [scheme, setSchemeState] = useState<string>(() => parseScheme(localStorage.getItem("vsn:scheme")));
   const [refreshTick, setRefreshTick] = useState(0);
   const [authLost, setAuthLost] = useState(false);
   const noticeTimer = useRef<number | undefined>(undefined);
   const [notice, setNotice] = useState<{ message: string; kind: NoticeKind } | null>(null);
 
   const dark = theme === "DARK" || (theme === "SYSTEM" && systemDark);
+  const palette = paletteOf(scheme, dark);
 
   useEffect(() => {
     document.documentElement.dataset["theme"] = dark ? "dark" : "light";
   }, [dark]);
+
+  // La palette est posée en variables CSS sur `<html>` : un seul point
+  // d'écriture, aucun re-rendu des écrans (elles lisent `var(--…)`).
+  useEffect(() => {
+    const root = document.documentElement;
+    for (const [name, value] of Object.entries(cssVarsOf(palette, dark))) {
+      root.style.setProperty(name, value);
+    }
+  }, [palette, dark]);
 
   useEffect(() => {
     const mq = matchMedia("(prefers-color-scheme: dark)");
@@ -60,11 +75,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void bridge.setTheme(next).catch(() => undefined);
   }, []);
 
+  // Le choix de palette reste local à la WebView (#335) : c'est une couleur,
+  // pas une donnée de session, et le natif n'a pas à la connaître.
+  const setScheme = useCallback((next: string) => {
+    const id = parseScheme(next);
+    setSchemeState(id);
+    localStorage.setItem("vsn:scheme", id);
+  }, []);
+
   const refresh = useCallback(() => setRefreshTick((n) => n + 1), []);
 
   const value = useMemo<AppContextValue>(
-    () => ({ theme, dark, setTheme, refreshTick, refresh, notify, authLost }),
-    [theme, dark, setTheme, refreshTick, refresh, notify, authLost],
+    () => ({ theme, dark, setTheme, scheme, setScheme, refreshTick, refresh, notify, authLost }),
+    [theme, dark, setTheme, scheme, setScheme, refreshTick, refresh, notify, authLost],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

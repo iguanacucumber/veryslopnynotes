@@ -12,9 +12,10 @@
   border: 0;
   border-radius: var(--radius-xl);
   padding: 20px;
-  background: linear-gradient(135deg, #174f43 0%, #237e68 55%, #29947a 100%);
-  color: #fff;
-  box-shadow: 0 12px 32px rgba(23, 79, 67, 0.28);
+  background: var(--brand-solid);
+  background-image: radial-gradient(120% 140% at 88% -10%, var(--on-brand-veil), transparent 62%);
+  color: var(--on-brand);
+  box-shadow: var(--shadow);
 }
 
 .home-hero::before,
@@ -22,7 +23,7 @@
   content: "";
   position: absolute;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.11);
+  background: var(--on-brand-veil);
   pointer-events: none;
 }
 
@@ -38,7 +39,6 @@
   height: 110px;
   bottom: -70px;
   right: 76px;
-  background: rgba(255, 255, 255, 0.07);
 }
 
 .home-hero__body {
@@ -62,7 +62,7 @@
   font-size: 14px;
   line-height: 20px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--on-brand-soft);
 }
 
 .home-hero__refresh {
@@ -74,9 +74,9 @@
   min-height: 40px;
   padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.34);
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
+  border: 1px solid var(--on-brand-line);
+  background: var(--on-brand-veil);
+  color: var(--on-brand);
   font-size: 13px;
   font-weight: 700;
   transition: background var(--duration) var(--ease), transform var(--duration) var(--ease);
@@ -84,7 +84,7 @@
 
 .home-hero__refresh:hover,
 .home-hero__refresh:active {
-  background: rgba(255, 255, 255, 0.24);
+  background: var(--on-brand-hover);
 }
 
 .home-hero__refresh:active {
@@ -95,7 +95,7 @@
   position: absolute;
   right: -6px;
   bottom: -14px;
-  color: rgba(255, 255, 255, 0.16);
+  color: var(--on-brand-veil);
   transform: rotate(-8deg);
   pointer-events: none;
 }
@@ -451,8 +451,8 @@
   height: 24px;
   padding: 0 6px;
   border-radius: 999px;
-  background: var(--danger);
-  color: #fff;
+  background: var(--danger-solid);
+  color: var(--on-danger);
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
