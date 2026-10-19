@@ -208,3 +208,19 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   `android/core/Capabilities.kt`, `android/core/CapabilitiesJson.kt`,
   `android/data/PronotePayloads.kt`, `web/src/features/attendance/model.ts`.
 
+## I15 — L'export PDF d'une fiche garde le corps entier et ses sources
+- Invariant : l'export PDF d'une fiche de révision rend le corps ENTIER
+  (`RevisionPdf` pagine) et la liste CANONIQUE des sources (`sheet.sources`),
+  jamais un bloc « Sources : » recopié du texte libre du modèle : une
+  citation écrite par le modèle ne peut ni remplacer l'attribution ni
+  introduire une source absente du corpus (citations validées comme le chemin
+  devoirs, `HomeworkAi.parseHomeworkResponse`). Une troncature — au-delà de
+  la garde I5 (8 000 caractères) ou du filet de sécurité du rendu — est
+  SIGNALÉE (« suite tronquée »), jamais silencieuse.
+- Test : `tests/unit/kotlin-revision-sheet.test.ts` (Kotlin compilé : corps
+  entier + bloc « Sources : » pour une fiche de 6 000 caractères, corps à
+  « Sources : » qui ne remplace pas la liste canonique, troncature signalée).
+- Commande : `make check`.
+- Emplacement : `android/core/src/main/java/fr/veryslopnynotes/core/RevisionSheet.kt`,
+  `android/core/src/main/java/fr/veryslopnynotes/core/RevisionPdf.kt`.
+
