@@ -48,6 +48,7 @@ async function ask(op: unknown): Promise<string> {
 
 type Prompt = { system: string; body: string; nonce: string };
 type Parse = { ok: boolean; fiche?: string; error?: string };
+type Fiche = { ok: boolean; fiche?: string; error?: string; apiKey?: string | null; calls?: number };
 
 describe("fiche de revision — le prompt demande le JSON attendu (#367)", () => {
   test.skipIf(skip)("la consigne systeme exige un JSON {\"fiche\"}", async () => {
@@ -108,15 +109,49 @@ describe("fiche de revision — le prompt demande le JSON attendu (#367)", () =>
   });
 });
 
+describe("fiche de revision — le point d'entree public relaie la cle (#428)", () => {
+  // Avant #428, `requestRevisionFiche` OUBLIAIT la clé : l'appel partait
+  // sans, et `OpenRouterLlm` levait « clé LLM absente » AVANT tout appel
+  // HTTP. Le point d'entrée documenté ne pouvait donc jamais produire de fiche.
+  test.skipIf(skip)("avec une cle, le fournisseur est appele et la fiche est rendue", async () => {
+    const res = JSON.parse(await ask({ op: "fiche", key: "cle-de-test-1234" })) as Fiche;
+    expect(res.ok).toBe(true);
+    // La fiche PARSEE : le core garde la main sur le schema {"fiche"}.
+    expect(res.fiche).toBe("Rappel : derivé de x^2 = 2x.");
+    // La cle ATTEINT le fournisseur : c'est elle qui manquait.
+    expect(res.apiKey).toBe("cle-de-test-1234");
+    expect(res.calls).toBe(1);
+  });
+
+  test.skipIf(skip)("sans cle, l'appel est refuse net (aucune fiche en promenade)", async () => {
+    const res = JSON.parse(await ask({ op: "fiche" })) as Fiche;
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("clé");
+    // Le fournisseur a bien ete appele, SANS cle : le core n'invente pas de
+    // credential de repli (I8 : l'appareil n'en possede aucun).
+    expect(res.apiKey).toBeNull();
+    expect(res.calls).toBe(1);
+  });
+
+  test.skipIf(skip)("une sortie hors schema reste refusee (garde I5)", async () => {
+    const res = JSON.parse(
+      await ask({ op: "fiche", key: "cle-de-test-1234", body: "Voici ta fiche en texte simple." }),
+    ) as Fiche;
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain("I5");
+  });
+});
+
 describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
   const bridge = codeOnly(readFileSync(join(APP, "VsnBridge.kt"), "utf8"));
   const prompts = codeOnly(readFileSync(join(CORE, "AiPrompts.kt"), "utf8"));
   const revision = codeOnly(readFileSync(join(CORE, "RevisionAi.kt"), "utf8"));
 
   test("la sortie passe toujours par la garde I5 (parse + schema)", () => {
-    // La validation n'est ni contournee ni affaiblie : meme chaine qu'avant.
-    expect(bridge).toMatch(/parseRevisionAnswer\(parseJsonOutput\(/);
+    // La validation n'est ni contournee ni affaiblie : elle vit dans le CORE,
+    // que le pont appelle (#428) — le pont ne re-parse plus de son côté.
     expect(revision).toMatch(/parseRevisionAnswer\(parsed\)/);
+    expect(revision).toMatch(/generateGuardedJson\(provider, SYSTEM_REVISION_JSON/);
   });
 
   test("l'echec est remonte avec sa cause, plus « Fiche non générée. »", () => {
