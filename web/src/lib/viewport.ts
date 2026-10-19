@@ -48,10 +48,13 @@ export function applyViewport(root: HTMLElement, metrics: ViewportMetrics): void
  * Le renderer fait défiler le champ AU FOCUS, donc avant l'ouverture du
  * clavier : quand la zone visible rétrécit, le champ se retrouve sous le
  * clavier. `nearest` : on ne le déplace que s'il est sorti du cadre.
+ *
+ * Pas de `instanceof HTMLElement` : le test suffit (`matches`) et la
+ * fonction reste vérifiable sans DOM.
  */
 export function keepFocusVisible(doc: Document): void {
   const active = doc.activeElement;
-  if (!(active instanceof HTMLElement)) return;
+  if (!active) return;
   if (!active.matches("input, textarea, select")) return;
   active.scrollIntoView({ block: "nearest" });
 }

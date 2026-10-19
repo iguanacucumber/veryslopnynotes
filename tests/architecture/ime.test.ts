@@ -19,7 +19,9 @@ const ACTIVITY = join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/Ma
 
 /** Attributs `android:` de l'élément `<activity>` de MainActivity. */
 function mainActivityAttrs(xml: string): Map<string, string> {
-  const tag = /<activity\s+android:name="\.MainActivity"([^>]*)>/.exec(xml)?.[1] ?? "";
+  // L'ordre des attributs est libre : on cherche la BALISE qui porte le nom,
+  // pas une suite d'attributs figée.
+  const tag = /<activity\b[^>]*android:name="\.MainActivity"[^>]*>/.exec(xml)?.[0] ?? "";
   const attrs = new Map<string, string>();
   for (const m of tag.matchAll(/android:([A-Za-z]+)="([^"]*)"/g)) attrs.set(m[1]!, m[2]!);
   return attrs;
