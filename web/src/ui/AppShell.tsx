@@ -38,7 +38,7 @@ export function Shell() {
   const location = useLocation();
   const navigate = useNavigate();
   const go = useViewNavigate();
-  const { refresh, notify, authLost } = useApp();
+  const { refresh, notify, authLost, sessionClosed } = useApp();
   const [spinning, setSpinning] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const meta = ROUTE_META[location.pathname] ?? { title: "VerySlopyNyNotes" };
@@ -52,11 +52,15 @@ export function Shell() {
   }, [location.pathname, meta.title]);
 
   useEffect(() => {
-    if (authLost && location.pathname !== "/pairing") {
-      notify("Session expirée : rescanne le QR de l’établissement.", "error");
+    // Une session fermée par l'utilisateur n'est pas une session expirée :
+    // le bandeau « session expirée » mentirait. Le garde-fou de `App.tsx`
+    // renvoie vers /pairing, là où il faut ré-appairer (#360).
+    if (!authLost || sessionClosed) return;
+    if (location.pathname !== "/pairing") {
+      notify("Session expirée : rescanne le QR de l'établissement.", "error");
       navigate("/pairing", { replace: true });
     }
-  }, [authLost, location.pathname, navigate, notify]);
+  }, [authLost, sessionClosed, location.pathname, navigate, notify]);
 
   return (
     <div className="shell">

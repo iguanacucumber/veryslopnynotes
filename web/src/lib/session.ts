@@ -3,6 +3,11 @@
 // session ouverte dans l'app (appairage réussi) le rend périmé — sans cela,
 // l'app renverrait vers /pairing alors que la session native est ouverte et
 // il faudrait redémarrer l'application pour sortir (#357).
+//
+// Symétrique : une déconnexion ferme la session côté interface. Le statut lu
+// au démarrage disait alors « session vivante » : sans ce drapeau, l'accueil
+// d'un compte déconnecté afficherait « aucune donnée en cache » pour
+// toujours (#360).
 
 import type { SessionStatus } from "../bridge/types";
 
@@ -13,9 +18,16 @@ export interface SessionView {
   open: boolean;
   /** Le natif a répondu 401 (session expirée). */
   expired: boolean;
+  /** L'utilisateur a déconnecté le compte (déconnexion). */
+  closed: boolean;
 }
 
 export function mustPair(view: SessionView): boolean {
+  // Session fermée par l'utilisateur : le natif a invalidé la session ET
+  // purgé les caches, il n'y a donc plus rien à afficher. Le statut lu au
+  // démarrage est périmé (« session vivante ») : sans ce drapeau, l'accueil
+  // d'un compte déconnecté afficherait « aucune donnée en cache » (#360).
+  if (view.closed) return true;
   // Une session ouverte prime sur tout : le statut lu au démarrage est
   // périmé, et « session expirée » a été levé par la session précédente.
   if (view.open) return false;
@@ -24,4 +36,20 @@ export function mustPair(view: SessionView): boolean {
   if (view.expired) return true;
   const state = view.status.state;
   return state === "no_session" || state === "dead";
+}
+
+/**
+ * Déconnexion : le natif invalide la session et purge les caches, puis
+ * l'interface se ferme. La fermeture n'a lieu qu'après un logout RÉUSSI : un
+ * logout en échec laisse la session ouverte, sinon l'app enverrait vers
+ * l'appairage alors que le compte est encore connecté (#360).
+ */
+export async function logoutSession(deps: {
+  /** Invalidation native de la session (caches purgés). */
+  logout: () => Promise<unknown>;
+  /** Fermeture de la session côté interface. */
+  closeSession: () => void;
+}): Promise<void> {
+  await deps.logout();
+  deps.closeSession();
 }

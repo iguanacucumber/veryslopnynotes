@@ -24,8 +24,17 @@ interface AppContextValue {
    * d'appairage alors que la session native est ouverte (#357).
    */
   sessionOpen: boolean;
+  /**
+   * La session a été fermée (déconnexion) : le natif a invalidé la session
+   * et purgé les caches. Sans ce drapeau, l'app afficherait l'accueil d'un
+   * compte déconnecté (« aucune donnée en cache ») au lieu de renvoyer vers
+   * l'appairage (#360).
+   */
+  sessionClosed: boolean;
   /** Ouvre la session (appairage réussi) : annule aussi « session expirée ». */
   openSession: () => void;
+  /** Ferme la session (déconnexion) : annule aussi « session expirée ». */
+  closeSession: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -40,6 +49,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [refreshTick, setRefreshTick] = useState(0);
   const [authLost, setAuthLost] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
+  const [sessionClosed, setSessionClosed] = useState(false);
   const noticeTimer = useRef<number | undefined>(undefined);
   const leaveTimer = useRef<number | undefined>(undefined);
   const [notice, setNotice] = useState<{ message: string; kind: NoticeKind; leaving: boolean } | null>(null);
@@ -78,6 +88,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // garde-fou renverrait vers /pairing pour toujours (#357).
   const openSession = useCallback(() => {
     setSessionOpen(true);
+    setSessionClosed(false);
+    setAuthLost(false);
+  }, []);
+
+  // Déconnexion : la session est fermée pour de vrai côté natif (session
+  // invalidée, caches purgés). L'interface doit le savoir : le statut lu au
+  // démarrage disait « session vivante », sinon l'accueil afficherait
+  // « aucune donnée en cache » pour un compte déconnecté (#360).
+  const closeSession = useCallback(() => {
+    setSessionOpen(false);
+    setSessionClosed(true);
     setAuthLost(false);
   }, []);
 
@@ -129,9 +150,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notify,
       authLost,
       sessionOpen,
+      sessionClosed,
       openSession,
+      closeSession,
     }),
-    [theme, dark, setTheme, scheme, setScheme, refreshTick, refresh, notify, authLost, sessionOpen, openSession],
+    [
+      theme,
+      dark,
+      setTheme,
+      scheme,
+      setScheme,
+      refreshTick,
+      refresh,
+      notify,
+      authLost,
+      sessionOpen,
+      sessionClosed,
+      openSession,
+      closeSession,
+    ],
   );
 
   return (

@@ -24,7 +24,7 @@ function Gate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionStatus | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const { authLost, sessionOpen } = useApp();
+  const { authLost, sessionOpen, sessionClosed } = useApp();
 
   useEffect(() => {
     let alive = true;
@@ -45,12 +45,14 @@ function Gate({ children }: { children: ReactNode }) {
   // (« pas de session ») est périmé. Sans cette information, le garde-fou
   // ci-dessous renverrait l'utilisateur vers /pairing alors que la session
   // native est ouverte — il faudrait redémarrer l'app pour sortir (#357).
+  // Symétriquement, une déconnexion ferme la session : le statut lu au
+  // démarrage (« session vivante ») est périmé, il faut ré-appairer (#360).
   useEffect(() => {
     if (location.pathname === "/pairing") return;
-    if (mustPair({ status: session, open: sessionOpen, expired: authLost })) {
+    if (mustPair({ status: session, open: sessionOpen, expired: authLost, closed: sessionClosed })) {
       navigate("/pairing", { replace: true });
     }
-  }, [session, sessionOpen, authLost, location.pathname, navigate]);
+  }, [session, sessionOpen, authLost, sessionClosed, location.pathname, navigate]);
 
   return <>{children}</>;
 }
