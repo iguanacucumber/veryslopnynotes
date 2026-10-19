@@ -119,6 +119,7 @@
   height: 190px;
   top: -104px;
   right: -48px;
+  animation: home-orb-one 16s var(--ease) infinite alternate;
 }
 
 .home-hero__orb--two {
@@ -126,6 +127,27 @@
   height: 120px;
   bottom: -74px;
   right: 72px;
+  animation: home-orb-two 22s var(--ease) infinite alternate;
+}
+
+/* Les orbes flottent lentement, en phases opposées : le fond du héros
+   respire sans jamais occuper le texte. */
+@keyframes home-orb-one {
+  from {
+    transform: translate3d(-10px, 8px, 0);
+  }
+  to {
+    transform: translate3d(12px, -10px, 0);
+  }
+}
+
+@keyframes home-orb-two {
+  from {
+    transform: translate3d(8px, -6px, 0);
+  }
+  to {
+    transform: translate3d(-9px, 9px, 0);
+  }
 }
 
 .home-hero__glyph {

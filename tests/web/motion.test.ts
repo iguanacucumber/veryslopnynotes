@@ -92,6 +92,26 @@ describe("web mouvement", () => {
     expect(css.match(/@media \(prefers-reduced-motion: reduce\)/g)).toHaveLength(1);
   });
 
+  test("fond : les halos dérivent derrière le contenu et ne captent aucun geste", () => {
+    const css = readFileSync(join(ROOT, "web/src/styles/app.css"), "utf8");
+    // La couche de fond est fixe, transparente aux gestes, et sous le contenu.
+    expect(css).toMatch(/body::before,\s*body::after\s*\{[^}]*position:\s*fixed/);
+    expect(css).toMatch(/body::before,\s*body::after\s*\{[^}]*pointer-events:\s*none/);
+    expect(css).toMatch(/#root\s*\{[^}]*position:\s*relative[^}]*z-index:\s*1/);
+    // La dérive des halos est un `transform` : composée, sans repaint d'écran.
+    expect(css).toMatch(/@keyframes page-drift-a\s*\{[^}]*transform/);
+    expect(css).toMatch(/@keyframes page-drift-b\s*\{[^}]*transform/);
+  });
+
+  test("cartes héros : le reflet qui glisse passe sous le texte", () => {
+    const css = readFileSync(join(ROOT, "web/src/styles/app.css"), "utf8");
+    // La carte est son propre contexte d'empilement, le reflet est en
+    // `z-index: -1` : il reste entre le fond de la carte et son contenu.
+    expect(css).toMatch(/\.card--brand,\s*\.card\.home-hero\s*\{[^}]*z-index:\s*0/);
+    expect(css).toMatch(/\.card--brand::before,\s*\.card\.home-hero::before\s*\{[^}]*z-index:\s*-1/);
+    expect(css).toMatch(/@keyframes hero-sheen\s*\{[^}]*transform/);
+  });
+
   test("politique : les animations restent sur transform/opacité", () => {
     // Propriétés tolérées dans un `@keyframes` : composition seulement.
     const allowed = new Set(["opacity", "transform", "width", "stroke-dashoffset", "background-position"]);
