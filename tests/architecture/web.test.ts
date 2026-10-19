@@ -78,4 +78,16 @@ describe("web invariants", () => {
     expect(app).toContain("sessionOpen");
     expect(app).toContain("mustPair(");
   });
+
+  test("une déconnexion ferme la session côté web", () => {
+    // Le natif invalide la session et purge les caches ; sans cette fermeture
+    // côté interface, le garde-fou laisse l'accueil d'un compte déconnecté
+    // afficher « aucune donnée en cache » pour toujours (#360).
+    const ctx = readFileSync(join(WEB, "src/ui/AppContext.tsx"), "utf8");
+    expect(ctx).toContain("setSessionClosed(true)");
+    const profile = readFileSync(join(WEB, "src/features/profile/ProfileScreen.tsx"), "utf8");
+    expect(profile).toContain("closeSession");
+    const app = readFileSync(join(WEB, "src/App.tsx"), "utf8");
+    expect(app).toContain("sessionClosed");
+  });
 });
