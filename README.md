@@ -185,6 +185,8 @@ session Pronote ni clé OpenRouter.
 | Commande | Rôle |
 |---|---|
 | `make check` | Secrets, typecheck, tests unitaires, architecture, contrats, garde-fou Kotlin, compilation Kotlin réelle et frontend — en parallèle. |
+| `make check-fast` | Boucle interne (~4,4 s) sans build Vite ni Gradle ; jamais le gate de merge. |
+| `make watch` | Relance les tests unitaires + web à chaque changement (`T=tests/unit/foo.test.ts` pour cibler). |
 | `make web` | Typecheck + tests + build de l'interface React. |
 | `make unit` | Tests unitaires (`tests/unit`). |
 | `make contracts` | Tests des contrats partagés. |
@@ -275,6 +277,12 @@ Le circuit du dépôt est **une issue = une branche = une PR**
 (`agent/<n>-<slug>`), sans commit direct sur `main`. PR via MCP GitHub
 uniquement (`gh` CLI interdit), relecture du diff et `make check` avant merge.
 Un invariant cassé rend la PR bloquante.
+
+```bash
+./agents/launch.sh 343 faster-flow   # worktree depuis origin/main, deps, claim
+make watch                            # boucle TDD
+./agents/ship.sh 343 "agents: ..."   # rebase + check + push + corps de PR
+```
 
 - [`AGENTS.md`](AGENTS.md) — workflow, garde-fous, règles d'or.
 - [`docs/adr/`](docs/adr/) — contexte des choix d'architecture.

@@ -1,4 +1,4 @@
-.PHONY: check lint typecheck unit architecture contracts check-kotlin android-compile web web-typecheck web-build web-test web-smoke runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
+.PHONY: check check-fast watch lint typecheck unit architecture contracts check-kotlin android-compile web web-typecheck web-build web-test web-smoke runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
 
 # Découverte JDK/SDK partagée par android-compile, buildDebugApk, buildRelApk :
 # une seule implémentation, sinon une des trois finit par oublier la borne 17-21.
@@ -6,6 +6,18 @@ ANDROID_ENV = . agents/runtime/android-env.sh
 
 check:
 	bun run agents/runtime/check.ts
+
+# Boucle interne : tout sauf le build Vite et la compilation Gradle (~4,4 s).
+# Ce n'est PAS le gate de merge — `make check` reste le seul contrôle complet
+# (android-compile voit les symboles Kotlin, web-build voit la config Vite).
+check-fast:
+	CHECK_TARGETS="lint typecheck unit architecture contracts check-kotlin web-typecheck web-test" bun run agents/runtime/check.ts
+
+# TDD : relance les tests au moindre changement. `make watch T=tests/unit/foo.test.ts`
+# cible un fichier ; par défaut unitaires + web (4,4 s). Pas de `bun test --changed` :
+# les scans d'architecture lisent les sources, pas les imports, donc ils seraient ratés.
+watch:
+	bun test --watch $(if $(T),$(T),tests/unit tests/web)
 
 lint:
 	bun run agents/runtime/check-secrets.ts
