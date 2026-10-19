@@ -81,6 +81,28 @@ describe("web tâches — parsing défensif", () => {
     ).toBeNull();
   });
 
+  test("la `ref` est validée BRUTE : hors schéma, le devoir ENTIER disparaît", () => {
+    // Même verdict que le contrat TS et que le Kotlin (`core/Assignment.kt`) :
+    // une `ref` avec un espace (identifiant Pronote exotique), un caractère de
+    // contrôle ou une URL fait perdre le devoir entier.
+    for (const ref of [
+      "homework:0:file:0:12 34",
+      "homework:0:file:0:a\u0001b",
+      "DATA:application/pdf;base64,AA",
+      "homework:../x",
+      "x".repeat(201),
+    ]) {
+      expect(parseAssignment({ ...VALID, attachments: [{ id: "x", label: "x", ref }] })).toBeNull();
+    }
+    // Une `ref` au schéma est conservée telle quelle (elle a été assainie en amont).
+    const parsed = parseAssignment({
+      ...VALID,
+      attachments: [{ id: "12 34", label: "sujet.pdf", ref: "homework:0:file:0:12_34" }],
+    });
+    expect(parsed?.attachments[0]?.ref).toBe("homework:0:file:0:12_34");
+    expect(parsed?.attachments[0]?.id).toBe("12 34");
+  });
+
   test("borne les pièces jointes et les textes de cours", () => {
     const attachments = Array.from({ length: 12 }, (_, index) => ({
       id: `att${index}`,

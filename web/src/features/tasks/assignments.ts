@@ -166,14 +166,15 @@ export function weekRangeFr(startIso: string, endIso?: string | null): string {
 function parseAttachment(raw: unknown): AssignmentAttachment | null {
   const o = record(raw);
   if (!o) return null;
-  const attachment: AssignmentAttachment = {
-    id: text(o["id"], MAX_REF),
-    label: text(o["label"], MAX_LABEL),
-    ref: text(o["ref"], MAX_REF),
-  };
-  if (!attachment.id || !attachment.label || !attachment.ref) return null;
-  if (!HOMEWORK_REF.test(attachment.ref)) return null;
-  return attachment;
+  const id = text(o["id"], MAX_REF);
+  const label = text(o["label"], MAX_LABEL);
+  // La `ref` est validée BRUTE (avant tout nettoyage) : hors schéma, elle fait
+  // PERDRE le devoir entier. Même verdict que le contrat TS et que le Kotlin
+  // (`core/Assignment.kt`) : un caractère de contrôle ou une URL sont refusés.
+  const ref = o["ref"];
+  if (typeof ref !== "string" || ref.length > MAX_REF || !HOMEWORK_REF.test(ref)) return null;
+  if (!id || !label) return null;
+  return { id, label, ref };
 }
 
 function parseLesson(raw: unknown): AssignmentLessonContent | null {

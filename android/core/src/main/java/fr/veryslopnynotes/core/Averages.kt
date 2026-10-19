@@ -2,7 +2,6 @@ package fr.veryslopnynotes.core
 
 import java.text.Collator
 import java.text.Normalizer
-import java.time.OffsetDateTime
 import java.util.Locale
 
 /**
@@ -117,25 +116,6 @@ fun subjectKey(subject: String): String =
         .replace(Regex("[\\u0300-\\u036f]"), "")
         .lowercase(Locale.ROOT)
         .trim()
-
-/**
- * ISO-8601 -> millis. Illisible = `null`.
- * ponytail: horodaté (`OffsetDateTime`) puis date seule (`LocalDate` à minuit UTC,
- * ce que `Date.parse` TS accepte aussi) ; pas de format exotique.
- */
-internal fun isoMillis(value: String?): Long? {
-    if (value.isNullOrBlank()) return null
-    val text = value.trim()
-    return try {
-        OffsetDateTime.parse(text).toInstant().toEpochMilli()
-    } catch (_: Exception) {
-        try {
-            java.time.LocalDate.parse(text).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
-        } catch (_: Exception) {
-            null
-        }
-    }
-}
 
 /**
  * `Number(value.toFixed(2))` côté TS : arrondi au 1/100, moitié AU LOIN de zéro

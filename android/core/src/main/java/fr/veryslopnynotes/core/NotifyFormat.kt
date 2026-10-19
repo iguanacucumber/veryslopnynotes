@@ -1,8 +1,6 @@
 package fr.veryslopnynotes.core
 
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.OffsetDateTime
+import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -37,40 +35,18 @@ private const val ISO_DAY_CHARS = 10
  * Jour civil d'un instant ISO, « AAAA-MM-JJ », vu par l'élève (fuseau
  * Europe/Paris ; ex-miroir du helper contrat TS, supprimé en #210) : instant
  * illisible = dix premiers caractères, jamais d'exception.
+ *
+ * Lecture par le parseur UNIQUE du noyau (`isoMillis`, #366) : l'affichage et
+ * le calcul ne peuvent pas dater la même valeur différemment.
  */
 fun localDay(iso: String): String {
-    val instant = try {
-        OffsetDateTime.parse(iso).toInstant()
-    } catch (_: Exception) {
-        try {
-            LocalDateTime.parse(iso).atZone(ZoneId.systemDefault()).toInstant()
-        } catch (_: Exception) {
-            // Instant illisible : la référence renvoie la tranche (`iso.slice`)
-            // — repli contrat rejoué en parité, jamais une date affichée.
-            return iso.take(ISO_DAY_CHARS)
-        }
+    val millis = isoMillis(iso)
+    if (millis == null) {
+        // Instant illisible : la référence renvoie la tranche (`iso.slice`)
+        // — repli contrat rejoué en parité, jamais une date affichée.
+        return iso.take(ISO_DAY_CHARS)
     }
-    return instant.atZone(PARIS_ZONE).format(ISO_DAY_FORMAT)
-}
-
-/** ISO lisible (horodaté, mural ou date seule) : ce que `Date.parse` TS accepte. */
-internal fun isIsoDateLike(value: String): Boolean {
-    return try {
-        OffsetDateTime.parse(value)
-        true
-    } catch (_: Exception) {
-        try {
-            LocalDateTime.parse(value)
-            true
-        } catch (_: Exception) {
-            try {
-                LocalDate.parse(value)
-                true
-            } catch (_: Exception) {
-                false
-            }
-        }
-    }
+    return Instant.ofEpochMilli(millis).atZone(PARIS_ZONE).format(ISO_DAY_FORMAT)
 }
 
 private const val ELLIPSIS = "…"
