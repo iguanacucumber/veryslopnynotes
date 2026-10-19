@@ -49,7 +49,24 @@ object Homework {
     const val MAX_SOURCE_CHARS = 2000
     const val MAX_LABEL_CHARS = 200
     const val MAX_API_KEY_CHARS = 512
-    const val MAX_ANSWER_CHARS = 8000
+
+    /**
+     * Budget de l'enveloppe JSON autour du corrige (cles, echappements,
+     * etapes, sources) : le corrige ne peut pas occuper TOUTE la sortie.
+     *
+     * Avant #411, `MAX_ANSWER_CHARS` valait 8 000 comme le plafond de sortie
+     * (8 000) : la reponse JSON du fournisseur (corrige + enveloppe) ne
+     * pouvait donc JAMAIS tenir dans la garde — la borne etait inatteignable
+     * par construction, et le corrige maximal etait mort-né.
+     */
+    const val JSON_ENVELOPE_RESERVE_CHARS = 4000
+
+    /**
+     * Le corrige : le plafond I5 [MAX_OUTPUT_CHARS] moins l'enveloppe JSON
+     * (8 000 caracteres). Derive, jamais recopie : la garde et le contrat
+     * restent coherents quand le plafond de sortie bouge.
+     */
+    const val MAX_ANSWER_CHARS = MAX_OUTPUT_CHARS - JSON_ENVELOPE_RESERVE_CHARS
     const val REFUSAL_SOURCES_INSUFFICIENT = "sources_insuffisantes"
 
     /** Le refus déterministe du serveur quand aucune source n'est fournie. */

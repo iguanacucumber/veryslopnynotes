@@ -6,6 +6,12 @@ import fr.veryslopnynotes.core.HomeworkAi
 import fr.veryslopnynotes.core.HomeworkOutcome
 import fr.veryslopnynotes.core.HomeworkSource
 import fr.veryslopnynotes.core.LlmProvider
+// Budget de tokens du fournisseur : IMPORTE du core (#411), jamais recopie
+// ici. Il est DEDUIT du plafond de caracteres de la garde I5
+// (MAX_OUTPUT_CHARS / CHARS_PER_TOKEN) : le fournisseur ne peut donc pas
+// produire une sortie que la garde jetterait pour cause de longueur.
+import fr.veryslopnynotes.core.MAX_OUTPUT_TOKENS
+import fr.veryslopnynotes.core.OutputTooLongException
 import fr.veryslopnynotes.core.SafePrompt
 import fr.veryslopnynotes.core.SafePromptProvider
 import fr.veryslopnynotes.core.SecretDetectedException
@@ -151,11 +157,6 @@ class OpenRouterLlm(
         const val DEFAULT_TIMEOUT_MS = 20_000L
         const val MAX_TIMEOUT_MS = 120_000L
 
-        // Plafond aligne sur la garde I5 (MAX_OUTPUT_CHARS) : ~2 caracteres/token
-        // borne basse pour du francais, donc la sortie ne peut pas depasser ce que
-        // validateTextOutput accepte, et le cout par appel est fini.
-        const val MAX_OUTPUT_TOKENS = 4000
-
         // Longueur plausible d'une cle de fournisseur : borne l'appel comme le reste.
         const val MIN_API_KEY_CHARS = 8
 
@@ -213,6 +214,11 @@ class OpenRouterHomework(
                 // l'AiError avalait la cause et l'UI n'affichait que
                 // « Echec de l'assistant. ».
                 HomeworkResult(null, secretRefusalMessage(e.kind))
+            } catch (e: OutputTooLongException) {
+                // #411 : la sortie depasse la garde I5. « Hors format » serait
+                // un diagnostic FAUX (la reponse est bien formee, juste trop
+                // longue) : on nomme la LIMITE REELLE.
+                HomeworkResult(null, e.userMessage)
             } catch (_: AiError) {
                 // Le modèle A RÉPONDU, mais hors format (JSON invalide, citation
                 // inventée) : cause distincte de l'appel qui n'a pas abouti.
