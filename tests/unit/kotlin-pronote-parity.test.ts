@@ -456,6 +456,44 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
     }
   });
 
+  test.skipIf(skip)("nombres : le rendu Kotlin est IDENTIQUE à `JSON.stringify` (#410)", async () => {
+    // Le texte, pas un nombre JSON : `-0` ne survit pas à `JSON.stringify`
+    // (`JSON.stringify(-0)` vaut `"0"`). Chaque case est lue des DEUX côtés
+    // (`Number(raw)` côté TS, `toDouble()` côté Kotlin) : même double, donc
+    // même rendu attendu.
+    const cases = [
+      "0", "-0", "20", "0.5", "0.1", "0.30000000000000004",
+      "1e-4", "1e-6", "1e-7", "1.5e-7", "1e21", "1e19", "1e20", "-1e19",
+      // Les grands entiers : `toLong()` saturait (1e19 → 9223372036854775807).
+      "1.2345678901234568E18", "9007199254740992", "9007199254740993",
+      "123456789012345680", "9223372036854775808", "5e19", "1.7976931348623157E308",
+      "5e-324", "1e-321",
+      // À mi-chemin des deux décimales (JS prend le chiffre PAIR) et 17
+      // chiffres significatifs : le rendu ne doit pas dépendre de la JVM.
+      "106366337364200.625", "1.0000000000000002",
+    ];
+    for (const raw of cases) {
+      const expected = JSON.stringify(Number(raw));
+      const kt = (JSON.parse(await ask({ op: "jsNumber", value: raw })) as { text: string }).text;
+      expect(`pronote ${raw} -> ${kt}`).toBe(`pronote ${raw} -> ${expected}`);
+      const ktCore = (JSON.parse(await ask({ op: "jsNum", value: raw })) as { text: string }).text;
+      expect(`core ${raw} -> ${ktCore}`).toBe(`core ${raw} -> ${expected}`);
+    }
+  });
+
+  test.skipIf(skip)("empreinte de note : deux moyennes de classe différentes → deux empreintes (#410)", async () => {
+    const print = async (average: string): Promise<string> =>
+      (JSON.parse(await ask({ op: "gradePrint", classAverage: average })) as { print: string }).print;
+    const a = await print("1e19");
+    const b = await print("5e19");
+    // Avant : `toLong()` saturait les deux moyennes à la même valeur → une
+    // seule empreinte → la correction d'un professeur n'était JAMAIS vue.
+    expect(a).not.toBe(b);
+    // La moyenne entre par son rendu JSON EXACT, pas saturé.
+    expect(a).toContain("10000000000000000000");
+    expect(b).toContain("50000000000000000000");
+  });
+
   test.skipIf(skip)("crypto : MD5 et SHA-256 sur vecteurs (vide, ASCII, unicode, long)", async () => {
     for (const hex of ["", "00", "ff", "00112233445566778899aabbccddeeff"]) {
       const data = Buffer.from(hex, "hex");
