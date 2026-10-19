@@ -115,6 +115,34 @@ describe("messagerie — lecture défensive", () => {
     expect(discussionMillis(list[2]!)).toBeNull();
   });
 
+  // #427 : le producteur natif n'enrichit que les 12 premiers fils ; les
+  // suivants ARRIVENT SANS date. Un fil de fraîcheur inconnue n'est pas daté
+  // « maintenant » (les plus anciens remonteraient en tête) : il est daté
+  // « inconnu » et se trie sur l'ordre d'arrivée.
+  test("fraîcheur inconnue : un fil non daté garde l’ordre d’arrivée (#427)", () => {
+    const payload = JSON.stringify({
+      discussions: [
+        { id: "z-ancien", subject: "Fil ancien non enrichi" },
+        { id: "a-ancien", subject: "Autre fil ancien non enrichi" },
+        { id: "recent", subject: "Fil daté", lastMessageAt: "2026-10-10T09:00:00.000Z" },
+      ],
+    });
+    const list = parseDiscussions(payload);
+    const ancien = list.find((d) => d.id === "z-ancien")!;
+    // La fraîcheur inconnue n'est PAS une date : ni « maintenant », ni une
+    // chaîne vide qui ferait croire à une date.
+    expect(ancien.updatedAt).toBeNull();
+    expect(ancien.lastMessageAt).toBeNull();
+    expect(discussionMillis(ancien)).toBeNull();
+    // L'interface n'affiche donc aucune date pour ce fil.
+    expect(conversationDateLabel(ancien)).toBe("");
+    // Un fil DATED passe devant ; deux fils inconnus gardent l'ordre du
+    // payload (PAS l'ordre alphabétique des `id`).
+    expect(sortDiscussions(list).map((d) => d.id)).toEqual(["recent", "z-ancien", "a-ancien"]);
+    // La recherche suit le même tri.
+    expect(searchDiscussions(list, "fil").map((d) => d.id)).toEqual(["recent", "z-ancien", "a-ancien"]);
+  });
+
   test("non-lus : compteur inconnu = aucun badge, jamais « 0 »", () => {
     const list = parseDiscussions(discussionPayload);
     const b = list.find((d) => d.id === "b")!;
