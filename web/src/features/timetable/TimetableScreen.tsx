@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { frDateShort, frDay, isSameDay, relativeFr, subjectColor, tint, isoDay } from "../../lib/format";
 import { useApp, useResource } from "../../ui/AppContext";
 import { Card, EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../../ui/components";
@@ -331,12 +331,16 @@ function WeekView({
           </header>
           <div className="tt-day__lessons">
             {group.lessons.map((lesson) => (
-              <LessonRow
-                key={lesson.id}
-                lesson={lesson}
-                highlight={highlightOf(lesson, current, next)}
-                dark={dark}
-              />
+              <Fragment key={lesson.id}>
+                {/* Repère « maintenant » (#337) : posé juste avant le cours en
+                    cours, il date la journée sans deviner l'heure exacte. */}
+                {current && lesson.id === current.id ? (
+                  <div className="tt-now" role="separator" aria-label={`Maintenant, ${clockLabel(now)}`}>
+                    <span className="tt-now__label">maintenant</span>
+                  </div>
+                ) : null}
+                <LessonRow lesson={lesson} highlight={highlightOf(lesson, current, next)} dark={dark} />
+              </Fragment>
             ))}
           </div>
         </section>

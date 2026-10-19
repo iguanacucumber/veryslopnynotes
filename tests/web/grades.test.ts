@@ -15,6 +15,7 @@ import {
   parseGradesPayload,
   parsePeriods,
   scaleSuffix,
+  sparklineAverageY,
   sparklineDescription,
   sparklinePoints,
   subjectAlgorithmAverage,
@@ -341,5 +342,19 @@ describe("sparkline", () => {
     expect(historyNote([12])).toContain("Une seule moyenne");
     expect(historyNote([12, 14])).toBe("");
     expect(sparklineDescription([12, 14])).toBe("Évolution de la moyenne : de 12 à 14.");
+  });
+
+  test("ligne de moyenne : même échelle que la courbe, rien si elle n'apprend rien", () => {
+    // 10 → 20 : la moyenne 15 tombe à mi-hauteur du cadre.
+    expect(sparklineAverageY([10, 20], 88)).toBe(44);
+    // 10 → 14 → 18 : moyenne 14, encore à mi-hauteur (l'échelle est min..max).
+    expect(sparklineAverageY([10, 14, 18], 88)).toBe(44);
+    // 10 → 18 → 20 : moyenne 16, donc sous le milieu du cadre.
+    expect(sparklineAverageY([10, 18, 20], 88)).toBeCloseTo(35.2, 5);
+    // Séries inexploitables : une seule valeur, série plate, hauteur nulle.
+    expect(sparklineAverageY([12], 88)).toBeNull();
+    expect(sparklineAverageY([12, 12, 12], 88)).toBeNull();
+    expect(sparklineAverageY([10, 20], 0)).toBeNull();
+    expect(sparklineAverageY([null, null], 88)).toBeNull();
   });
 });
