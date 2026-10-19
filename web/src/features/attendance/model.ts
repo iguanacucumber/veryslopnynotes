@@ -196,18 +196,35 @@ export function parsePunishments(payload: string | null): Punishment[] {
   return out;
 }
 
-/** Capacités du payload `capabilities` : `{capabilities:{tabs}}` (contrat),
- *  `{items:{tabs}}` (pont factice) ou `{tabs}`. */
-export function parseCapabilities(payload: string | null): string[] {
+/**
+ * Capacités du payload `capabilities` : `{capabilities:{tabs}}` (contrat),
+ * `{items:{tabs}}` (pont factice) ou `{tabs}`.
+ *
+ * `null` = INCONNU (payload absent, illisible, ou contrat invalide publié
+ * comme `capabilities: null`) : rien n'est affirmé, donc RIEN n'est masqué.
+ * `[]` = liste AFFIRMÉE (contrat valide qui n'expose aucun onglet) : elle dit
+ * le contraire de `null`, qui dit « je ne sais pas » (#413). Confondre les
+ * deux, c'est blackpointer la navigation sur une panne.
+ */
+export function parseCapabilities(payload: string | null): string[] | null {
   const root = payloadRoot(payload);
-  if (!root) return [];
+  if (!root) return null;
   const candidates = [root["tabs"], record(root["capabilities"])?.["tabs"], record(root["items"])?.["tabs"]];
   for (const candidate of candidates) {
     if (Array.isArray(candidate)) {
       return candidate.filter((v): v is string => typeof v === "string" && v.trim() !== "").map((v) => v.trim());
     }
   }
-  return [];
+  return null;
+}
+
+/**
+ * La sanction est visible si les capacités sont INCONNUES (`null` : rien
+ * n'est affirmé, donc rien n'est masqué) ou si l'onglet EST affirmé. Seule
+ * une liste AFFIRMÉE qui n'a pas l'onglet le masque (#413).
+ */
+export function sanctionsVisible(capabilities: string[] | null): boolean {
+  return capabilities === null || capabilities.includes("punishments");
 }
 
 export function absencesForPeriod(data: AttendanceData, periodId: string | null): Absence[] {

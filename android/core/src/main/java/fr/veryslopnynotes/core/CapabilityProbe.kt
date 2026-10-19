@@ -6,12 +6,12 @@ package fr.veryslopnynotes.core
  * Port Kotlin (#203), testé par les miroirs Android. Un onglet absent de
  * l'établissement n'est pas une erreur, c'est une capacité `false` : on ne
  * DEVINE jamais un `true`, un onglet non observé est simplement absent de la
- * liste. Observation vide = aucun onglet actif (l'app masque tout, elle ne casse
- * rien).
+ * liste. Une observation VIDE (aucun onglet actif) est un contrat AFFIRMÉ :
+ * l'app masque tout, elle ne casse rien.
  *
- * Fichier SANS dépendance Android (`Capabilities.parse`, lui, lit du JSON via
- * `org.json` et reste dans `Capabilities.kt`) : le harnais de parité compile ce
- * fichier avec `kotlinc` seul, sans SDK.
+ * Fichier SANS dépendance Android (la lecture JSON du contrat vit dans
+ * `CapabilitiesJson.kt` : `org.json` est une API Android) : le harnais de
+ * parité compile ce fichier avec `kotlinc` seul, sans SDK.
  *
  * Pur : aucun réseau, aucun SQLite (I3).
  */
@@ -19,10 +19,13 @@ object CapabilityProbe {
     /**
      * Réduit une observation (onglet -> actif ?) à la liste contractuelle : ordre
      * canonique `TABS`, sans doublon, uniquement les onglets observés actifs.
-     * Contrat invalide (accountId vide, date illisible) → AUCUNE capacité
-     * affirmée (liste vide), jamais une liste inventée.
+     * Contrat INVALIDE (compte vide/trop long, date illisible, trop d'onglets)
+     * → `null` : AUCUNE capacité affirmée (« rien n'est affirmé »), jamais une
+     * liste inventée. Surtout PAS une liste d'onglets VIDE : elle signifierait
+     * « tous les onglets désactivés » et blackouterait la navigation au lieu
+     * d'échouer en ouvert (#413).
      */
-    fun fromProbe(accountId: String, probe: Map<String, Boolean>, at: String): Capabilities {
+    fun fromProbe(accountId: String, probe: Map<String, Boolean>, at: String): Capabilities? {
         val id = accountId.trim()
         val tabs = Capabilities.TABS.filter { probe[it] == true }
         val fetchedAt = at.trim()
@@ -34,7 +37,7 @@ object CapabilityProbe {
             fetchedAt.isEmpty() || isoMillis(fetchedAt) == null ||
             tabs.size > Capabilities.MAX_TABS
         ) {
-            return Capabilities(accountId = id, tabs = emptyList(), fetchedAt = fetchedAt)
+            return null
         }
         return Capabilities(accountId = id, tabs = tabs, fetchedAt = fetchedAt)
     }

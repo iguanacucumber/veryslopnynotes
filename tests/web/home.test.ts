@@ -294,6 +294,23 @@ describe("alertes et capacités", () => {
     expect(parseCapabilities(null)).toBeNull();
     expect(tabVisible(null, "timetable")).toBe(true);
   });
+
+  // #413 : un contrat de capabilities INVALIDE est publié par le natif comme
+  // `capabilities: null` (« rien n'est affirmé »). Le web doit le lire comme
+  // l'INCONNU : tous les onglets restent accessibles. Le confondre avec une
+  // liste VIDE (qui dit « tous les onglets désactivés ») blackouterait
+  // l'accueil sur une panne.
+  test("contrat invalide (publié `capabilities: null`) = inconnu, navigation intacte", () => {
+    const inconnu = parseCapabilities(JSON.stringify({ capabilities: null }));
+    expect(inconnu).toBeNull();
+    for (const tab of ["grades", "homework", "timetable", "news", "menus"]) {
+      expect(tabVisible(inconnu, tab)).toBe(true);
+    }
+    // La liste VIDE, elle, reste une affirmation : tout est désactivé.
+    const vide = parseCapabilities(JSON.stringify({ capabilities: { tabs: [] } }));
+    expect(vide).toEqual([]);
+    expect(tabVisible(vide, "grades")).toBe(false);
+  });
 });
 
 describe("semaine de l'EDT", () => {

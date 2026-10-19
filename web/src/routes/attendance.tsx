@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useResource } from "../ui/AppContext";
 import { AttendanceScreen } from "../features/attendance/SchoolLifeScreens";
-import { parseAttendance, parseCapabilities } from "../features/attendance/model";
+import { parseAttendance, parseCapabilities, sanctionsVisible } from "../features/attendance/model";
 
 export default function AttendanceRoute() {
   const attendance = useResource("attendance");
@@ -18,7 +18,10 @@ export default function AttendanceRoute() {
       error={attendance.error}
       stale={attendance.stale}
       onlyPending={onlyPending}
-      canSeeSanctions={tabs.includes("punishments")}
+      // Capacités INCONNUES (`null`) : rien n'est affirmé, donc la sanction
+      // reste visible. Seule une liste AFFIRMÉE qui n'a pas l'onglet la masque
+      // (#413 : une liste vide pour « inconnu » blackouterait l'écran).
+      canSeeSanctions={sanctionsVisible(tabs)}
       onOnlyPendingChange={setOnlyPending}
       onRefresh={attendance.refresh}
     />
