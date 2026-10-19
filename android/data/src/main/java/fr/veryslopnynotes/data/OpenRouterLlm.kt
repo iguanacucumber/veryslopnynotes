@@ -1,5 +1,6 @@
 package fr.veryslopnynotes.data
 
+import fr.veryslopnynotes.core.AiError
 import fr.veryslopnynotes.core.Homework
 import fr.veryslopnynotes.core.HomeworkAi
 import fr.veryslopnynotes.core.HomeworkOutcome
@@ -29,7 +30,32 @@ import java.util.concurrent.TimeUnit
 // Appels BLOQUANTS (pas de coroutines sans dependance) : jamais sur le thread
 // UI — OpenRouterHomework file l'aller-retour en tache de fond.
 // ponytail: OkHttp deja dependance du module, aucune ajoutee. Upgrade: retry/backoff si quotas.
-class LlmError(message: String, val status: Int? = null) : Exception(message)
+
+// Erreur LLM : le message est DEJA affichable (borné, français, sans clé ni
+// URL). `status` = code HTTP du fournisseur quand la cause est HTTP
+// (null = réseau ou garde locale).
+class LlmError(message: String, val status: Int? = null) : Exception(message) {
+    // Message pour l'UI : borné, jamais le corps de réponse brut du fournisseur.
+    val userMessage: String = message.take(MAX_ERROR_CHARS)
+
+    companion object {
+        // Longueur max affichée : au-delà on tronque (jamais de vidage de corps).
+        const val MAX_ERROR_CHARS = 120
+
+        // Une CAUSE par message : 401 clé refusée, 402 crédits, 404 modèle absent
+        // du catalogue, 429 quota, sinon HTTP générique. Jamais la clé, jamais
+        // l'URL : le message part tel quel à l'UI.
+        fun forStatus(status: Int): LlmError = LlmError(messageForStatus(status), status)
+
+        fun messageForStatus(status: Int): String = when (status) {
+            401 -> "Clé LLM refusée (401) : vérifie-la dans Réglages."
+            402 -> "Crédits LLM insuffisants (402) : recharges ton compte."
+            404 -> "Modèle LLM introuvable (404) : le catalogue du fournisseur a changé."
+            429 -> "Quota LLM dépassé (429) : réessaie dans quelques minutes."
+            else -> "Erreur du fournisseur LLM (HTTP $status) : réessaie dans un instant."
+        }
+    }
+}
 
 class OpenRouterLlm(
     private val model: String = LLM_DEFAULT_MODEL,
@@ -50,7 +76,7 @@ class OpenRouterLlm(
         .build()
 
     init {
-        if (model.isBlank()) throw LlmError("llm config incomplète")
+        if (model.isBlank()) throw LlmError("Configuration LLM incomplète.")
     }
 
     override fun generate(system: String, data: List<Untrusted<String>>, apiKey: String?): String {
@@ -62,7 +88,7 @@ class OpenRouterLlm(
     // appel — l'appareil ne possede aucun credential de repli.
     override fun generateSafe(safe: SafePrompt, apiKey: String?): String {
         val key = (apiKey ?: "").trim()
-        if (key.length < MIN_API_KEY_CHARS) throw LlmError("clé LLM absente")
+        if (key.length < MIN_API_KEY_CHARS) throw LlmError("Clé LLM absente ou trop courte : renseigne-la dans Réglages.")
         assertNoSecretsInPrompt(safe)
         val payload = JSONObject()
             .put("model", model)
@@ -84,32 +110,39 @@ class OpenRouterLlm(
         // Rien d'autre ne la touche : ni log, ni erreur, ni URL.
         val bodyText = try {
             http.newCall(request).execute().use { res ->
-                if (!res.isSuccessful) throw LlmError("llm http " + res.code, res.code)
+                // Un code HTTP par cause (clé, crédits, modèle, quota) : le
+                // message est affichable tel quel, sans corps de réponse.
+                if (!res.isSuccessful) throw LlmError.forStatus(res.code)
                 res.body?.string().orEmpty()
             }
         } catch (e: LlmError) {
             throw e
         } catch (_: Exception) {
-            throw LlmError("llm network error")
+            throw LlmError("Erreur réseau LLM : réessaie dans un instant.")
         }
         val choice = try {
             JSONObject(bodyText).optJSONArray("choices")?.optJSONObject(0)
         } catch (_: Exception) {
-            throw LlmError("llm réponse JSON invalide")
-        } ?: throw LlmError("llm réponse JSON invalide")
+            throw LlmError("Réponse LLM illisible (JSON invalide).")
+        } ?: throw LlmError("Réponse LLM illisible (JSON invalide).")
         // finish_reason "length" = budget tokens atteint => sortie INCOMPLETE : jamais
         // renvoyee comme une reponse complete (I5).
         if (choice.optString("finish_reason", "") == "length") {
-            throw LlmError("llm sortie tronquée (finish_reason=length)")
+            throw LlmError("Réponse LLM tronquée (limite de longueur atteinte).")
         }
         val content = choice.optJSONObject("message")?.optString("content", "")
-        if (content.isNullOrBlank()) throw LlmError("llm sortie vide")
+        if (content.isNullOrBlank()) throw LlmError("Réponse LLM vide.")
         return content
     }
 
     companion object {
         // Modele par defaut : choix de code, PAS un credential (donc pas d'env).
-        const val LLM_DEFAULT_MODEL = "stealth/space-bunny-alpha"
+        // #359 : l'ancien identifiant n'existait PAS au catalogue public — chaque
+        // appel partait en 404. Choix : la variante gratuite (`:free`) d'un
+        // modèle dense Google Gemma 4 31B — present au catalogue, francais
+        // correct, 256k de contexte, cout nul pour l'eleve (le meme modele
+        // payant coute ~0,2 $ / M tokens).
+        const val LLM_DEFAULT_MODEL = "google/gemma-4-31b-it:free"
 
         // URL publique du fournisseur, pas une donnee perso/etablissement.
         const val OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -163,16 +196,29 @@ class OpenRouterHomework(
         // Fond : OkHttp reste bloquant, donc hors thread UI. Le provider direct
         // implemente SafePromptProvider : le SafePrompt valide ici est celui envoye.
         Thread {
-            val outcome: HomeworkOutcome? = try {
-                HomeworkAi.generateHomework(llm, question, sources, apiKey)
+            // #359 : plus de `catch (_: Exception) { null }` — l'erreur REMONTE,
+            // avec sa cause (clé, crédits, modèle, quota, réseau). Avant, tout
+            // devenait « Échec de l'assistant. », impossible à diagnostiquer.
+            val result: HomeworkResult = try {
+                val outcome: HomeworkOutcome = HomeworkAi.generateHomework(llm, question, sources, apiKey)
+                HomeworkResult(outcome, null)
+            } catch (e: LlmError) {
+                HomeworkResult(null, e.userMessage)
+            } catch (_: AiError) {
+                // Le modèle A RÉPONDU, mais hors format (JSON invalide, citation
+                // inventée) : cause distincte de l'appel qui n'a pas abouti.
+                HomeworkResult(null, INVALID_ANSWER_MESSAGE)
             } catch (_: Exception) {
-                null
+                HomeworkResult(null, GENERIC_ERROR_MESSAGE)
             }
-            if (outcome == null) {
-                onDone(HomeworkResult(null, "Échec de l'assistant."))
-            } else {
-                onDone(HomeworkResult(outcome, null))
-            }
+            onDone(result)
         }.start()
+    }
+
+    companion object {
+        // Repli quand la cause n'est pas identifiée.
+        const val GENERIC_ERROR_MESSAGE = "Échec de l'assistant."
+        // Le modèle a répondu, mais sa réponse n'est pas exploitable.
+        const val INVALID_ANSWER_MESSAGE = "Réponse de l'assistant hors format : réessaie."
     }
 }
