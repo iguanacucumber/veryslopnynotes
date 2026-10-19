@@ -47,6 +47,13 @@
   --duration: 220ms;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* #399 : la hauteur utile est PUBLIÉE par le JS (viewport visuel), pas
+     figée par une unité de viewport : le clavier réduit la zone visible.
+     La valeur ci-dessous n'est que le PREMIER instant, avant la mesure. */
+  --app-height: 100dvh;
+  /* Hauteur du clavier (0 quand il est fermé) : les éléments fixes du bas
+     remontent d'autant. */
+  --keyboard-bottom: 0px;
   --surface-raised: color-mix(in srgb, var(--surface) 92%, var(--brand) 8%);
   --surface-glass: color-mix(in srgb, var(--surface) 82%, transparent);
   --border-soft: color-mix(in srgb, var(--border) 70%, transparent);
