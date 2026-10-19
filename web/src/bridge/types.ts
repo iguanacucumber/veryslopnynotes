@@ -156,6 +156,20 @@ export interface SubjectPref {
   label: string | null;
 }
 
+/**
+ * Réponse du pont à l'enregistrement d'une matière (#395).
+ *
+ * `ok:false` = matière REFUSÉE : rien n'a été écrit, et `message` dit
+ * pourquoi (couleur, emoji ou libellé hors contrat). Le pont ne répond
+ * JAMAIS `ok:true` sans avoir écrit — l'interface ne doit pas annoncer une
+ * sauvegarde qui n'a pas eu lieu.
+ */
+export interface SubjectSaveResult {
+  ok: boolean;
+  prefs?: SubjectPref[];
+  message?: string;
+}
+
 export interface PairParams {
   qr: { login: string; jeton: string; url: string };
   pin: string;

@@ -93,7 +93,9 @@ describe("écritures hors CacheStore et purge de déconnexion (#404)", () => {
     expect(iCapture).toBeLessThan(iDispatch);
     // Les deux écritures recoivent l'époque.
     expect(bridge).toContain("saveSubject(p, epoch)");
-    expect(bridge).toContain("prefsRepo.upsert(subject, color, emoji, label, epoch)");
+    // #395 : les valeurs envoyées au dépôt sont les valeurs VALIDÉES (le pont
+    // les lit par `SubjectPrefRules`), pas la saisie brute.
+    expect(bridge).toMatch(/prefsRepo\.upsert\([^)]*epoch\)/);
     expect(bridge).toContain("generateRevision(p, epoch)");
     // Plus aucune écriture nue hors garde.
     expect(bridge).not.toContain("FileRevisionKv");

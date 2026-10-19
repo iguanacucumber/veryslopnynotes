@@ -29,6 +29,12 @@ Format : Invariant → test → commande → emplacement.
   des méthodes allowlistées, jamais un proxy d'URL. Le pont ne laisse JAMAIS
   une promesse sans réponse : tout échec natif — un `Error` compris, pas
   seulement une `Exception` — devient un rejet borné `{code,message}` (#394).
+  **Toute ENTRÉE du pont est BORNÉE, et le pont ne répond JAMAIS « ok » sans
+  avoir écrit** (#395) : les préférences matière sont lues par les règles
+  partagées (`data/SubjectPrefRules.kt` — la source UNIQUE, que le dépôt
+  applique aussi), donc une couleur, un emoji ou un libellé hors contrat sont
+  REFUSÉS avec une phrase bornée, au lieu d'un « enregistré » suivi d'une
+  écriture abandonnée.
 - Test : `tests/architecture/web.test.ts` (réseau, CSP, HTML injecté, hôte
   Pronote, secrets persistés, message d'appairage borné) +
   `tests/unit/android-pairing-message.test.ts` (table de messages du pont,
@@ -36,13 +42,19 @@ Format : Invariant → test → commande → emplacement.
   refus du devoir : le motif libre du modèle ne sort pas, Kotlin exécuté) +
   `tests/unit/android-bridge-error.test.ts` (un `Error` natif devient un rejet,
   pas une promesse pendante : Kotlin exécuté) +
+  `tests/unit/android-subject-pref.test.ts` (matière hors contrat : refus
+  `ok:false` AVANT toute écriture, entrées bornées, règles du dépôt et du
+  pont partagées : Kotlin exécuté) +
   `tests/architecture/invariants.test.ts` (les blocs `catch` qui RÉPONDENT
   capturent `Throwable`) + `tests/web/bridge.test.ts` (un rejet natif règle
-  toujours la promesse, message non vide).
+  toujours la promesse, message non vide) + `tests/web/profile.test.ts` (un
+  refus du natif est affiché, jamais avalé en « Matière enregistrée. »).
 - Commande : `make web` (ou `make architecture-test`).
 - Emplacement : `web/**`, `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`,
   `android/app/src/main/java/fr/veryslopnynotes/app/HomeworkMessages.kt`,
-  `android/app/src/main/java/fr/veryslopnynotes/app/BridgeErrors.kt`.
+  `android/app/src/main/java/fr/veryslopnynotes/app/BridgeErrors.kt`,
+  `android/app/src/main/java/fr/veryslopnynotes/app/SubjectPrefMessages.kt`,
+  `android/data/src/main/java/fr/veryslopnynotes/data/SubjectPrefRules.kt`.
 
 ## I2 — Aucun accès Pronote côté serveur ; un seul client Android (ADR-003)
 - Invariant : le serveur ne contacte jamais Pronote. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android (`app`, `core`, `data`) ne contacte Pronote (pinné par I1).
