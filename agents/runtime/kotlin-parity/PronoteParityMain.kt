@@ -196,6 +196,15 @@ private class Driver {
                 comms[cid] = Communication(op.str("site") ?: "", null, op.bool("mobile") == true)
                 ok("cid" to JVal.Num(cid.toDouble()))
             }
+            "commRoot" -> {
+                // Découpe du site (autorité puis dernier segment) : la parité
+                // compare la page visée, pas les chaînes internes (#429).
+                val comm = comms[(op.num("cid") ?: 0.0).toInt()] ?: throw IllegalArgumentException("pilote: cid inconnu")
+                ok(
+                    "rootSite" to JVal.Str(comm.rootSite),
+                    "htmlPage" to JVal.Str(comm.htmlPage),
+                )
+            }
             "commSeed" -> {
                 // Fixe l'aléa de handshake (test uniquement : rend le fil
                 // octet-comparable ; le réel reste aléatoire).

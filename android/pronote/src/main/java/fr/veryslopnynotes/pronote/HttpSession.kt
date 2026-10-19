@@ -268,6 +268,21 @@ class HttpSession(
         }
     }
 
+    /**
+     * `Location` d'une redirection → URL absolue.
+     *
+     * Une `Location` ILLISIBLE (protocole inconnu, espace dans l'hôte,
+     * autorité cassée) est une PANNE RÉSEAU : elle devient une `IOException`
+     * — donc « réseau » pour l'app — et non une `MalformedURLException`
+     * brute qui remontait au caller sans mapper (#429).
+     */
+    private fun resolveRedirect(currentUrl: String, location: String): String =
+        try {
+            URL(URL(currentUrl), location).toString()
+        } catch (e: Exception) {
+            throw java.io.IOException("Redirection invalide", e)
+        }
+
     fun request(method: String, url: String, opts: RequestOpts = RequestOpts()): HttpResponse {
         val maxRedirects = opts.maxRedirects
         var currentMethod = method
@@ -297,69 +312,71 @@ class HttpSession(
                     conn.doOutput = true
                     conn.outputStream.use { it.write(body) }
                 }
-            } catch (e: Exception) { try { conn.disconnect() } catch (_: Exception) {} ; throw e }
-            val status: Int = try { conn.responseCode } catch (e: Exception) { try { conn.disconnect() } catch (_: Exception) {} ; throw e }
-            // En-têtes reçus : clé insensible à la casse (comme `Headers`).
-            val received = LinkedHashMap<String, List<String>>()
-            for ((k, values) in conn.headerFields) {
-                if (k == null || values == null) continue
-                received.merge(k, values) { a, b -> a + b }
-            }
-            fun header(name: String): List<String> =
-                received.entries.filter { it.key.equals(name, ignoreCase = true) }.flatMap { it.value }
-            for (sc in header("set-cookie")) {
-                try {
-                    jar.setCookie(sc, currentUrl)
-                } catch (_: Exception) {
-                    // Cookie malformé : ignoré (comme `requests`).
+                val status = conn.responseCode
+                // En-têtes reçus : clé insensible à la casse (comme `Headers`).
+                val received = LinkedHashMap<String, List<String>>()
+                for ((k, values) in conn.headerFields) {
+                    if (k == null || values == null) continue
+                    received.merge(k, values) { a, b -> a + b }
                 }
-            }
-            val location = header("location").firstOrNull()
-            val isRedirect = status in 300..399 && location != null
-            if (isRedirect && redirect < maxRedirects) {
-                val nextUrl = URL(URL(currentUrl), location).toString()
-                // ponytail: meme-hote garde corps (parite 307), hote change = drop corps + content-type.
-                try {
-                    if (URL(nextUrl).host.lowercase(java.util.Locale.ROOT) != URL(currentUrl).host.lowercase(java.util.Locale.ROOT)) {
+                fun header(name: String): List<String> =
+                    received.entries.filter { it.key.equals(name, ignoreCase = true) }.flatMap { it.value }
+                for (sc in header("set-cookie")) {
+                    try {
+                        jar.setCookie(sc, currentUrl)
+                    } catch (_: Exception) {
+                        // Cookie malformé : ignoré (comme `requests`).
+                    }
+                }
+                val location = header("location").firstOrNull()
+                val isRedirect = status in 300..399 && location != null
+                if (isRedirect && redirect < maxRedirects) {
+                    // `Location` ILLISIBLE : erreur réseau mappée, PAS une
+                    // `MalformedURLException` brute (#429).
+                    val nextUrl = resolveRedirect(currentUrl, location)
+                    // ponytail: meme-hote garde corps (parite 307), hote change = drop corps + content-type.
+                    try {
+                        if (URL(nextUrl).host.lowercase(java.util.Locale.ROOT) != URL(currentUrl).host.lowercase(java.util.Locale.ROOT)) {
+                            body = null
+                            headers.remove("Content-Type")
+                        }
+                    } catch (_: Exception) {
                         body = null
                         headers.remove("Content-Type")
                     }
-                } catch (_: Exception) {
-                    body = null
-                    headers.remove("Content-Type")
+                    currentUrl = nextUrl
+                    // 303 (et 301/302 émises pour un POST) => GET, comme navigateurs.
+                    if (status == 303 || ((status == 301 || status == 302) && currentMethod == "POST")) {
+                        currentMethod = "GET"
+                        body = null
+                    }
+                    conn.disconnect()
+                    continue
                 }
-                currentUrl = nextUrl
-                // 303 (et 301/302 émises pour un POST) => GET, comme navigateurs.
-                if (status == 303 || ((status == 301 || status == 302) && currentMethod == "POST")) {
-                    currentMethod = "GET"
-                    body = null
-                }
-                conn.disconnect()
-                continue
-            }
-            // Chemin de SUCCÈS : pas de `disconnect()` — le corps est lu jusqu'au
-            // bout puis fermé (`cappedBytes`), donc le socket retourne au cache
-            // keep-alive de `HttpURLConnection` et le POST suivant du refresh
-            // réutilise la MÊME connexion au lieu de repayer un handshake TCP+TLS
-            // (#309). Fermer ici à chaque réponse vidait ce cache.
-            val bytes: ByteArray = try {
+                // Chemin de SUCCÈS : pas de `disconnect()` — le corps est lu jusqu'au
+                // bout puis fermé (`cappedBytes`), donc le socket retourne au cache
+                // keep-alive de `HttpURLConnection` et le POST suivant du refresh
+                // réutilise la MÊME connexion au lieu de repayer un handshake TCP+TLS
+                // (#309). Fermer ici à chaque réponse vidait ce cache.
                 val stream = if (status >= 400) conn.errorStream else conn.inputStream
-                if (stream == null) ByteArray(0) else cappedBytes(stream, 10_485_760)
+                val bytes: ByteArray = if (stream == null) ByteArray(0) else cappedBytes(stream, 10_485_760)
+                return HttpResponse(
+                    status = status,
+                    ok = status in 200..299,
+                    url = currentUrl,
+                    headers = received,
+                    text = bytes.toString(Charsets.UTF_8),
+                    content = bytes,
+                )
             } catch (e: Exception) {
-                // Lecture interrompue (plafond 10 Mo, socket mort) : le socket
-                // n'est PAS réutilisable, on le ferme comme sur les autres
-                // chemins d'erreur.
+                // TOUTE sortie en erreur de l'itération referme le socket : une
+                // `Location` illisible, un corps coupé (plafond 10 Mo, socket
+                // mort) ou une écriture refusée ne doivent JAMAIS laisser la
+                // connexion ouverte — le pool de sockets se remplissait à chaque
+                // redirection malformée (#429).
                 try { conn.disconnect() } catch (_: Exception) {}
                 throw e
             }
-            return HttpResponse(
-                status = status,
-                ok = status in 200..299,
-                url = currentUrl,
-                headers = received,
-                text = bytes.toString(Charsets.UTF_8),
-                content = bytes,
-            )
         }
         // Inatteignable (la boucle retourne toujours), comme côté TS.
         throw IllegalStateException("Too many redirects")
