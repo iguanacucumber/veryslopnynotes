@@ -206,8 +206,10 @@ async function handleScrape(
         if (onClientAbort) req.signal?.removeEventListener("abort", onClientAbort);
       }
     } catch (err) {
-      // Playwright absent = capability manquante (501 franc), pas un faux succès.
-      if (err instanceof Error && /Playwright non install/i.test(err.message)) {
+      // Navigateur absent = capability manquante (501 franc), pas un faux succès
+      // ni un 500 « unexpected failure » : motifs multiples, message Playwright
+      // réel compris (exécutable absent, install-deps, invite à installer).
+      if (isMissingBrowserError(err)) {
         return error("not_implemented", 501, "scraper sans navigateur");
       }
       if (err instanceof ScrapeManualsError) return error("school_unreachable", 502, "scrape impossible");
