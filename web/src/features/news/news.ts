@@ -1,7 +1,7 @@
 // Actualités de l'établissement : payload -> modèle d'affichage.
 // Le contenu est une DONNÉE, jamais du HTML : ces fonctions ne produisent que
 // des chaînes, et la route les rend dans des nœuds texte React.
-import { cleanText } from "../../lib/format";
+import { cleanText, frDateLong } from "../../lib/format";
 
 export const NEWS_MAX_ITEMS = 100;
 export const NEWS_MAX_TITLE = 200;
@@ -78,16 +78,9 @@ export function newsCategoryLabel(category: string): string {
   return category.trim() || NEWS_CATEGORY_OTHER;
 }
 
-const monthFormat = new Intl.DateTimeFormat("fr-FR", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
-
 /** Date longue en français (« 16 octobre 2026 »), vide si illisible. */
 export function newsDateLabel(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : monthFormat.format(date);
+  return frDateLong(value);
 }
 
 export function newsByline(item: NewsItem): string {

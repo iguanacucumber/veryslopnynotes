@@ -1,7 +1,7 @@
 // Menus de la cantine : payload -> jours + repas d'affichage.
 // Aucun HTML : les plats et allergènes sont des chaînes bornées, rendues en
 // texte. Les jetons du contrat sont traduits, jamais affichés bruts.
-import { cleanText, isoDay, parseDate } from "../../lib/format";
+import { cleanText, frDateLong, isoDay, parseDate } from "../../lib/format";
 
 export const CANTEEN_MAX_DAYS = 14;
 export const CANTEEN_MAX_MEALS_PER_DAY = 3;
@@ -122,18 +122,10 @@ export function parseCanteenPayload(payload: string | null): CanteenWeek {
   return { days };
 }
 
-const dayFormat = new Intl.DateTimeFormat("fr-FR", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
-
 /** Date longue française ; vide si la donnée n'est pas datable. Une date seule
- *  est lue à midi local pour ne pas glisser d'un jour. */
+ *  est lue à minuit local (analyseur partagé) pour ne pas glisser d'un jour. */
 export function canteenDayLabel(date: string): string {
-  const raw = /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${date}T12:00:00` : date;
-  const parsed = parseDate(raw);
-  return parsed ? dayFormat.format(parsed) : "";
+  return frDateLong(date);
 }
 
 export function canteenMealLabel(meal: string): string {
