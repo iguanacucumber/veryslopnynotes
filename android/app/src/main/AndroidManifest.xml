@@ -17,13 +17,26 @@
          pose une barre d'action qui affiche le LABEL de l'app au-dessus de la
          WebView — donc « VerySlopyNyNotes » sur toutes les routes, plus 56 dp
          perdus (cf. res/values/themes.xml). -->
+    <!-- #361 : AUCUNE sauvegarde automatique. Les payloads Pronote sont écrits
+         EN CLAIR dans `filesDir/offline/` (notes, absences, sanctions,
+         messages) : sans cette protection, la sauvegarde Drive les emporte et
+         les restaure sur un autre appareil — `AccountStore.logout()` ne peut pas
+         retirer cette copie.
+         `allowBackup="false"` coupe la sauvegarde cloud sur TOUTES les versions.
+         Sur API 31+, il ne coupe PAS le transfert appareil-à-appareil (le
+         fabricant peut l'ignorer) : `dataExtractionRules` ferme cette porte.
+         Le cache (`cacheDir/`, seul dossier partagé via le FileProvider) n'est
+         jamais sauvegardé par la plateforme — aucune règle, aucune fuite. -->
     <application
         android:label="VerySlopyNyNotes"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:theme="@style/Theme.Veryslopynotes"
         android:networkSecurityConfig="@xml/network_security_config"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        tools:targetApi="31">
         <!-- #130 : zxing déclare son activité de scan `clearTaskOnLaunch="true"`,
              donc le simple fait d'ouvrir le scan DÉTRUITAIT l'assistant : à la
              fermeture (retour ou lecture), le téléphone relançait MainActivity

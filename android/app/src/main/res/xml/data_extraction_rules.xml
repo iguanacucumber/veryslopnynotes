@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #361 : rien ne sort de l'appareil.
+     `android:allowBackup="false"` coupe déjà la sauvegarde cloud (Drive), mais
+     sur API 31+ il ne coupe PAS le transfert appareil-à-appareil : sans ces
+     règles, les payloads Pronote en clair (`filesDir/offline/`) suivent vers
+     l'autre téléphone. Les deux sections excluent donc TOUS les domaines :
+     aucune donnée n'est sauvée, ni dans le cloud, ni lors d'un transfert. -->
+<data-extraction-rules>
+    <!-- Sauvegarde cloud (Drive). -->
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+        <exclude domain="device_root" path="." />
+        <exclude domain="device_file" path="." />
+        <exclude domain="device_database" path="." />
+        <exclude domain="device_sharedpref" path="." />
+    </cloud-backup>
+    <!-- Transfert appareil-à-appareil (API 31+) : c'est lui que
+         `allowBackup="false"` ne ferme pas. -->
+    <device-transfer>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+        <exclude domain="device_root" path="." />
+        <exclude domain="device_file" path="." />
+        <exclude domain="device_database" path="." />
+        <exclude domain="device_sharedpref" path="." />
+    </device-transfer>
+</data-extraction-rules>
