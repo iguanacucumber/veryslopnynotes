@@ -944,7 +944,12 @@ export interface Discussion {
   /** Messages non lus ; absent = l'établissement ne le publie pas (jamais 0 deviné). */
   readonly unreadCount?: number;
   readonly lastMessageAt?: string; // ISO-8601
-  readonly updatedAt: string; // ISO-8601
+  /**
+   * Fraîcheur du fil. ABSENTE = fraîcheur INCONNUE (l'établissement ne
+   * l'a pas publiée) : jamais une date devinée, jamais « maintenant »
+   * (#427). Un fil sans fraîcheur se trie sur l'ordre d'arrivée.
+   */
+  readonly updatedAt?: string; // ISO-8601
 }
 
 export function isRecipient(v: unknown): v is Recipient {
@@ -993,6 +998,7 @@ export function isDiscussion(v: unknown): v is Discussion {
     return false;
   }
   if (v["lastMessageAt"] !== undefined && !isIsoDate(v["lastMessageAt"])) return false;
-  if (!isIsoDate(v["updatedAt"])) return false;
+  // Fraîcheur INCONNUE = champ absent (jamais « maintenant », #427).
+  if (v["updatedAt"] !== undefined && !isIsoDate(v["updatedAt"])) return false;
   return true;
 }
