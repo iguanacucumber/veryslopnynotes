@@ -1,4 +1,7 @@
 import type { ReactNode } from "react";
+import { subjectColor, tint } from "../lib/format";
+import { subjectEmoji } from "../lib/subjectVisual";
+import { useApp } from "./AppContext";
 import { IconWarning } from "./icons";
 
 export function Page({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -104,13 +107,47 @@ export function ErrorBox({ message, children }: { message: string; children?: Re
   );
 }
 
+/** Pastille de matière : emoji local sur un fond teinté par la matière. */
+export function SubjectAvatar({
+  subject,
+  size = 40,
+  dark = false,
+  className = "",
+}: {
+  subject: string;
+  size?: number;
+  dark?: boolean;
+  className?: string;
+}) {
+  const color = subjectColor(subject);
+  return (
+    <span
+      className={`subject-avatar ${className}`.trim()}
+      aria-hidden="true"
+      data-subject-avatar=""
+      style={{
+        width: size,
+        height: size,
+        borderRadius: Math.max(10, Math.round(size * 0.32)),
+        background: tint(color, dark ? -0.68 : 0.86),
+        color: tint(color, dark ? 0.55 : -0.5),
+        fontSize: Math.round(size * 0.46),
+      }}
+    >
+      {subjectEmoji(subject)}
+    </span>
+  );
+}
+
 export function Avatar({ name, size = 40, src }: { name: string; size?: number; src?: string | null }) {
+  const { dark } = useApp();
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
+  const color = subjectColor(name);
   return (
     <span
       aria-hidden="true"
@@ -121,8 +158,8 @@ export function Avatar({ name, size = 40, src }: { name: string; size?: number; 
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        background: src ? "transparent" : "var(--brand-pale)",
-        color: "var(--brand-deep)",
+        background: src ? "transparent" : tint(color, dark ? -0.68 : 0.86),
+        color: src ? undefined : tint(color, dark ? 0.55 : -0.5),
         fontWeight: 700,
         fontSize: size * 0.34,
         overflow: "hidden",

@@ -246,7 +246,6 @@ Variables et apports humains : [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md).
 ├─ agents/           vérifications, captures et harnais de test locaux
 ├─ tests/            tests unitaires, contrats et architecture
 ├─ site/             page de présentation animée (vanilla, hors ligne)
-├─ keynote/          deck vidéo de présentation et export MP4
 └─ docs/             ADR, invariants, recette, release, apports humains
 ```
 

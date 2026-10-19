@@ -1,6 +1,7 @@
 import { useId } from "react";
 import { IconChevronRight } from "../../ui/icons";
 import { frDateShort, subjectColor, tint } from "../../lib/format";
+import { SubjectAvatar } from "../../ui/components";
 import {
   algorithmChipLabel,
   algorithmLabel,
@@ -27,7 +28,33 @@ import {
 } from "./model";
 
 const CHART_WIDTH = 320;
-const CHART_HEIGHT = 88;
+const CHART_HEIGHT = 96;
+
+interface ChartPoint {
+  x: number;
+  y: number;
+}
+
+/** Courbe de Catmull-Rom convertie en Bézier cubiques : pas de cassure. */
+function smoothPath(points: ChartPoint[]): string {
+  if (points.length === 0) return "";
+  const first = points[0]!;
+  if (points.length === 1) return `M ${first.x.toFixed(1)} ${first.y.toFixed(1)}`;
+  let path = `M ${first.x.toFixed(1)} ${first.y.toFixed(1)}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const p0 = points[index - 1] ?? points[index]!;
+    const p1 = points[index]!;
+    const p2 = points[index + 1]!;
+    const p3 = points[index + 2] ?? p2;
+    const tension = 0.18;
+    const c1x = p1.x + (p2.x - p0.x) * tension;
+    const c1y = p1.y + (p2.y - p0.y) * tension;
+    const c2x = p2.x - (p3.x - p1.x) * tension;
+    const c2y = p2.y - (p3.y - p1.y) * tension;
+    path += ` C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return path;
+}
 
 /** Pastille de couleur de matière (fond teinté, encre foncée/éclaircie). */
 function subjectTint(hex: string, dark: boolean): { background: string; ink: string } {
@@ -51,7 +78,7 @@ export function Sparkline({ values }: { values: Array<number | null> }) {
   const first = points[0];
   const last = points[points.length - 1];
   if (!first || !last) return null;
-  const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+  const path = smoothPath(points);
   const area = `${path} L ${last.x.toFixed(1)} ${CHART_HEIGHT} L ${first.x.toFixed(1)} ${CHART_HEIGHT} Z`;
   return (
     <svg
@@ -113,6 +140,46 @@ export function GradesHero({ report }: { report: AveragesReport }) {
       <p className="grades-hero__origin">{originLabel(report.provided, lastHistory)}</p>
       <Sparkline values={report.history.map((point) => point.value)} />
       {note ? <p className="grades-hero__note">{note}</p> : null}
+    </section>
+  );
+}
+
+/** Dernières notes : cartes horizontales, comme les « nouvelles notes » de Papillon. */
+export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boolean }) {
+  const latest = groups
+    .flatMap((group) => group.grades)
+    .slice()
+    .sort((a, b) => (b.millis ?? 0) - (a.millis ?? 0))
+    .slice(0, 6);
+  if (latest.length === 0) return null;
+  return (
+    <section className="grades-latest" aria-label="Dernières notes">
+      <h2 className="grades-latest__title">Dernières notes</h2>
+      <div className="h-scroll grades-latest__track">
+        {latest.map((grade) => {
+          const color = subjectColor(grade.subject);
+          const palette = subjectTint(color, dark);
+          return (
+            <article className="grades-latest__card" key={grade.id}>
+              <div className="grades-latest__head">
+                <SubjectAvatar subject={grade.subject} size={28} dark={dark} />
+                <span className="grades-latest__subject">{grade.subject}</span>
+              </div>
+              <p className="grades-latest__label">{gradeLabel(grade)}</p>
+              <div className="grades-latest__foot">
+                <span className="grades-latest__date">{frDateShort(grade.date)}</span>
+                <span
+                  className="grades-pill grades-pill--small"
+                  style={{ background: palette.background, color: palette.ink }}
+                >
+                  {gradeValueLabel(grade.value)}
+                  {scaleSuffix(grade.scale)}
+                </span>
+              </div>
+            </article>
+          );
+        })}
+      </div>
     </section>
   );
 }
@@ -219,9 +286,18 @@ function SubjectSection({
   return (
     <details className="card grades-subject">
       <summary className="grades-subject__summary">
-        <span className="grades-dot" style={{ background: color }} aria-hidden="true" />
+        <SubjectAvatar subject={group.subject} size={40} dark={dark} />
         <span className="grades-subject__name">
           <span className="grades-subject__title">{group.subject}</span>
+          <span className="grades-subject__meter" aria-hidden="true">
+            <span
+              className="grades-subject__meter-fill"
+              style={{
+                width: `${group.average === null ? 0 : Math.max(0, Math.min(1, group.average / 20)) * 100}%`,
+                background: color,
+              }}
+            />
+          </span>
           <span className="grades-caption">
             {group.grades.length} note{group.grades.length > 1 ? "s" : ""}
             {group.provided ? " · établissement" : ""}

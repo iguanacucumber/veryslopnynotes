@@ -27,7 +27,7 @@ function NewsCard({
   const byline = newsByline(item);
 
   return (
-    <Card as="article" className="stack">
+    <Card as="article" className={`stack news-card${read ? "" : " news-card--unread"}`}>
       <div className="row" style={{ alignItems: "flex-start" }}>
         <h3 className="t-title grow" style={{ margin: 0 }}>
           {item.title}

@@ -99,7 +99,7 @@ export function ConversationListScreen({
           {discussions.map((discussion) => {
             const unread = Math.max(discussion.unreadCount, 0);
             return (
-              <Card key={discussion.id} as="article" className="card--flat">
+              <Card key={discussion.id} as="article" className="card--flat messages-card">
                 <div className="row" style={{ alignItems: "stretch", gap: 8 }}>
                   <button
                     type="button"

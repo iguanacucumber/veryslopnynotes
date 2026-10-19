@@ -1,12 +1,22 @@
 import { Fragment, useMemo, useState } from "react";
 import { frDateShort, frDay, isSameDay, relativeFr, subjectColor, tint, isoDay } from "../../lib/format";
 import { useApp, useResource } from "../../ui/AppContext";
-import { Card, EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../../ui/components";
+import {
+  Card,
+  EmptyState,
+  ErrorBox,
+  Loading,
+  Page,
+  StaleBadge,
+  SubjectAvatar,
+} from "../../ui/components";
 import {
   IconCalendar,
   IconChevronLeft,
   IconChevronRight,
+  IconPin,
   IconRefresh,
+  IconUser,
   IconWarning,
 } from "../../ui/icons";
 import {
@@ -103,6 +113,12 @@ function LessonRow({
           </div>
         ) : null}
         <div className="tt-card__head">
+          <SubjectAvatar
+            subject={lesson.subject}
+            size={32}
+            dark={dark}
+            className={cancelled ? "tt-card__avatar--cancelled" : ""}
+          />
           <h3 className="tt-card__subject">{lesson.subject}</h3>
           {highlight === "current" ? <span className="tt-pill">En cours</span> : null}
           {highlight === "next" ? <span className="tt-pill">Prochain</span> : null}
@@ -110,11 +126,18 @@ function LessonRow({
         </div>
         {lesson.room || lesson.teacher ? (
           <div className="tt-card__meta">
-            {lesson.room ? <span>{lesson.room}</span> : null}
-            {lesson.room && lesson.teacher ? (
-              <span className="tt-card__dot" aria-hidden="true" />
+            {lesson.room ? (
+              <span className="tt-card__meta-item">
+                <IconPin size={13} />
+                {lesson.room}
+              </span>
             ) : null}
-            {lesson.teacher ? <span>{lesson.teacher}</span> : null}
+            {lesson.teacher ? (
+              <span className="tt-card__meta-item">
+                <IconUser size={13} />
+                {lesson.teacher}
+              </span>
+            ) : null}
           </div>
         ) : null}
         <div className="tt-card__foot">
@@ -277,6 +300,7 @@ function WeekView({
           }}
           aria-label={current ? "Cours en cours" : "Prochain cours"}
         >
+          <SubjectAvatar subject={focus.subject} size={46} dark={dark} />
           <div className="tt-banner__body">
             <span className="tt-banner__label">{current ? "En cours" : "Prochain cours"}</span>
             <strong className="tt-banner__subject">{focus.subject}</strong>

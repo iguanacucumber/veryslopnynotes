@@ -10,7 +10,12 @@ body,
 }
 
 body {
-  background: var(--page);
+  background-color: var(--page);
+  background-image:
+    radial-gradient(110% 58% at 100% -8%, var(--page-glow-a), transparent 62%),
+    radial-gradient(90% 46% at -12% 6%, var(--page-glow-b), transparent 58%),
+    radial-gradient(80% 42% at 50% 112%, var(--page-glow-b), transparent 62%);
+  background-attachment: fixed;
   color: var(--ink);
   font-family: "Figtree", system-ui, sans-serif;
   font-size: 14px;
@@ -47,23 +52,24 @@ a {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding-top: var(--safe-top);
+  padding-top: calc(8px + var(--safe-top));
 }
 
 .topbar {
   position: sticky;
-  top: 0;
+  top: calc(8px + var(--safe-top));
   z-index: 20;
-  margin: 6px 8px 0;
-  min-height: 58px;
+  margin: 0 10px;
+  min-height: 60px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px 6px 14px;
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(14px);
+  padding: 6px 6px 6px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface-glass);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(18px) saturate(1.2);
   view-transition-name: topbar;
 }
 
@@ -77,13 +83,14 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 17px;
+  font-size: 16px;
+  letter-spacing: -0.01em;
 }
 
 .topbar__actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
 }
 
 .icon-btn {
@@ -122,7 +129,7 @@ a {
   width: 100%;
   max-width: 760px;
   margin: 0 auto;
-  padding: 14px 16px 96px;
+  padding: 16px 16px 108px;
 }
 
 .main--flush {
@@ -132,18 +139,19 @@ a {
 
 .tabbar {
   position: fixed;
-  left: 8px;
-  right: 8px;
-  bottom: calc(8px + var(--safe-bottom));
+  left: 10px;
+  right: 10px;
+  bottom: calc(10px + var(--safe-bottom));
   z-index: 30;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 6px;
-  border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  box-shadow: var(--shadow-float);
-  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-2xl);
+  background: var(--surface-glass);
+  box-shadow: var(--shadow-card-hover);
+  backdrop-filter: blur(20px) saturate(1.25);
   view-transition-name: tabbar;
 }
 
@@ -155,10 +163,11 @@ a {
   bottom: 6px;
   left: 6px;
   width: calc((100% - 24px) / 4);
-  border-radius: 18px;
-  background: var(--brand-pale);
+  border-radius: 24px;
+  background: var(--brand-solid);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--brand) 30%, transparent);
   transform: translateX(calc(var(--tab-index, 0) * (100% + 4px)));
-  transition: transform 300ms var(--ease);
+  transition: transform 300ms var(--ease-out);
 }
 
 /* Les instantanés de la barre du haut et de la barre d'onglets restent figés
@@ -196,8 +205,8 @@ a {
   border: 0;
   background: transparent;
   color: var(--muted);
-  min-height: 52px;
-  border-radius: 18px;
+  min-height: 54px;
+  border-radius: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -209,24 +218,39 @@ a {
     transform var(--duration) var(--ease);
 }
 
+.tab svg {
+  transition: transform var(--duration) var(--ease-out);
+}
+
+.tab[aria-current="page"] svg {
+  transform: translateY(-1px) scale(1.08);
+}
+
 .tab:active {
   transform: scale(0.94);
 }
 
 .tab[aria-current="page"] {
-  color: var(--brand-deep);
+  color: var(--on-brand);
 }
 
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface) 96%, var(--brand) 4%), var(--surface));
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
   padding: 16px;
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-card);
 }
 
 button.card {
-  transition: transform var(--duration) var(--ease), border-color var(--duration) var(--ease);
+  transition: transform var(--duration) var(--ease-out), border-color var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease);
+}
+
+button.card:hover {
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-card-hover);
 }
 
 button.card:active {
@@ -238,9 +262,19 @@ button.card:active {
 }
 
 .card--brand {
-  background: var(--brand-solid);
+  background: var(--hero-bg);
   border: 0;
-  color: var(--on-brand);
+  color: var(--hero-ink);
+}
+
+.subject-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  line-height: 1;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 12%, transparent);
+  user-select: none;
 }
 
 /* Carte d'erreur : le bord porte le signal, le fond reste une teinte discrète
@@ -286,20 +320,26 @@ button.card:active {
 
 .section-title {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: 18px 2px 8px;
+  margin: 20px 2px 10px;
+}
+
+.section-title h2 {
+  font-size: 19px;
+  line-height: 24px;
+  letter-spacing: -0.01em;
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
-  padding: 4px 10px;
+  min-height: 34px;
+  padding: 4px 12px;
   border-radius: 999px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   background: var(--surface);
   color: var(--ink);
   font-size: 13px;
@@ -313,9 +353,9 @@ button.card:active {
 }
 
 .chip--active {
-  background: var(--brand-pale);
-  border-color: var(--brand-light);
-  color: var(--brand-deep);
+  background: var(--brand-solid);
+  border-color: var(--brand-solid);
+  color: var(--on-brand);
 }
 
 .chip--danger {
@@ -329,14 +369,20 @@ button.card:active {
   padding: 0 18px;
   border-radius: 999px;
   border: 0;
-  background: var(--brand-solid);
+  background: linear-gradient(135deg, var(--brand-solid), color-mix(in srgb, var(--brand-solid) 82%, var(--brand)));
   color: var(--on-brand);
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: transform var(--duration) var(--ease), filter var(--duration) var(--ease);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--brand) 22%, transparent);
+  transition: transform var(--duration) var(--ease-out), filter var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease);
+}
+
+.btn:hover {
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--brand) 30%, transparent);
 }
 
 .btn:active {
@@ -349,9 +395,10 @@ button.card:active {
 }
 
 .btn--ghost {
-  background: transparent;
+  background: var(--surface);
   color: var(--brand-deep);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
+  box-shadow: none;
 }
 
 .btn--danger {
@@ -369,10 +416,11 @@ button.card:active {
   width: 100%;
   min-height: var(--tap);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   background: var(--surface);
   padding: 10px 14px;
   color: var(--ink);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent);
 }
 
 .field--area {
@@ -495,6 +543,24 @@ button.card:active {
   gap: 10px;
 }
 
+.h-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  margin: 0 -2px;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+
+.h-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.h-scroll > * {
+  scroll-snap-align: start;
+}
+
 /* Entrée en cascade des listes (#336) : plafonnée à 10 crans, en opacité et
    translation seulement. Les éléments montés ensuite ne rejouent rien. */
 .list > * {
@@ -538,4 +604,142 @@ button.card:active {
     padding-left: 24px;
     padding-right: 24px;
   }
+}
+
+/* --- Actualités ----------------------------------------------------------- */
+
+.news-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.news-card--unread {
+  border-left: 4px solid var(--brand);
+  padding-left: 18px;
+}
+
+.news-card--unread h3 {
+  color: var(--brand-deep);
+}
+
+/* --- Cantine -------------------------------------------------------------- */
+
+.canteen-day__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.canteen-day__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  background: var(--brand-pale);
+  color: var(--brand-deep);
+}
+
+.canteen-meal__label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 700;
+}
+
+.canteen-allergens {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.canteen-allergens__label {
+  color: var(--danger-ink);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+}
+
+.canteen-allergen {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  color: var(--danger-ink);
+  font-size: 11px;
+  line-height: 17px;
+  font-weight: 700;
+}
+
+.canteen-dishes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.canteen-dishes li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.canteen-dishes li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--brand);
+}
+
+/* --- Vie scolaire --------------------------------------------------------- */
+
+.school-summary {
+  position: relative;
+  overflow: hidden;
+  border-left-width: 4px;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--surface) 92%, var(--brand) 8%), var(--surface));
+}
+
+.school-summary--alert {
+  border-left-color: var(--danger);
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--danger) 7%, var(--surface)), var(--surface));
+}
+
+.school-summary--clean {
+  border-left-color: var(--brand);
+}
+
+/* --- Fiches de révision --------------------------------------------------- */
+
+.revision-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* --- Messages ------------------------------------------------------------- */
+
+.messages-card {
+  transition: border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
+}
+
+.messages-card:hover {
+  border-color: var(--border-brand);
+  box-shadow: var(--shadow-card);
 }
