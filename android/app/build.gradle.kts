@@ -100,6 +100,11 @@ val buildWebUi = tasks.register<Exec>("buildWebUi") {
     inputs.dir(rootProject.projectDir.parentFile.resolve("web/src"))
     inputs.file(rootProject.projectDir.parentFile.resolve("web/vite.config.ts"))
     inputs.file(rootProject.projectDir.parentFile.resolve("package.json"))
+    // #426 : le lockfile décide des versions RÉSOLUES. Une mise à jour
+    // transitive change `bun.lock` SANS toucher `package.json` : sans cette
+    // entrée, Gradle disait UP-TO-DATE et l'APK embarquait un bundle
+    // périmé, différent de celui que `make check` avait construit.
+    inputs.file(rootProject.projectDir.parentFile.resolve("bun.lock"))
     outputs.dir(projectDir.resolve("src/main/assets/web"))
 }
 tasks.named("preBuild") { dependsOn(buildWebUi) }
