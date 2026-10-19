@@ -264,6 +264,17 @@ private class Driver {
                 ka.stop()
                 ok("pings" to JVal.Num(pings.toDouble()))
             }
+            // Variante sans thread : teste le seuil pur (`pingIfDue`) sans
+            // attendre le tick de 1 s. Le thread reste couvert par `keepAlive`.
+            "keepAliveTick" -> {
+                val lastPing = System.currentTimeMillis() / 1000 - ((op.num("staleSec") ?: 0.0).toLong())
+                var pings = 0
+                KeepAlive(
+                    shouldPing = { System.currentTimeMillis() / 1000 - lastPing >= 110 },
+                    ping = { pings++ },
+                ).pingIfDue()
+                ok("pings" to JVal.Num(pings.toDouble()))
+            }
             else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")
         }
     }

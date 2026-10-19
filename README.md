@@ -185,7 +185,7 @@ session Pronote ni clé OpenRouter.
 | Commande | Rôle |
 |---|---|
 | `make check` | Secrets, typecheck, tests unitaires, architecture, contrats, garde-fou Kotlin, compilation Kotlin réelle et frontend — en parallèle. |
-| `make check-fast` | Boucle interne (~4,4 s) sans build Vite ni Gradle ; jamais le gate de merge. |
+| `make check-fast` | Boucle interne (~2,1 s à chaud) sans Gradle ; le build Vite est inclus, jamais le gate de merge. |
 | `make watch` | Relance les tests unitaires + web à chaque changement (`T=tests/unit/foo.test.ts` pour cibler). |
 | `make web` | Typecheck + tests + build de l'interface React. |
 | `make unit` | Tests unitaires (`tests/unit`). |
