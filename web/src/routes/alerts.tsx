@@ -93,7 +93,7 @@ export default function AlertsRoute() {
         </p>
       ) : null}
 
-      {resource.stale && layout !== "offline-empty" ? <StaleBadge label="vérification en cache" /> : null}
+      {resource.stale && layout !== "offline-empty" ? <StaleBadge label="analyse en cache" /> : null}
 
       {layout === "loading" ? <Loading label="Chargement des alertes…" /> : null}
 
@@ -108,7 +108,7 @@ export default function AlertsRoute() {
       {layout === "offline-empty" ? (
         <EmptyState
           icon={<IconShield />}
-          title="Aucune vérification disponible"
+          title="Aucune analyse disponible"
           body="La dernière lecture n’a pas répondu et aucune alerte n’est en cache. L’absence d’alerte ne peut donc pas être affirmée : actualisez une fois connecté."
           action={
             <button type="button" className="btn btn--ghost btn--small" onClick={resource.refresh}>
@@ -129,7 +129,7 @@ export default function AlertsRoute() {
             </span>
             <div className="stack" style={{ gap: 4 }}>
               <h2 className="t-title" style={{ margin: 0 }}>
-                Aucun contenu hostile détecté
+                Aucune alerte de sécurité
               </h2>
               <p className="t-body-m muted" style={{ margin: 0 }}>
                 {ALERTS_CLEAR_NOTE}
