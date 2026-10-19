@@ -47,6 +47,19 @@ function fakeResolver(table: Record<string, readonly string[]>): HostResolver {
 /** Résolveur par défaut des tests : le seul hôte public du test résout. */
 const PUBLIC_RESOLVER = fakeResolver({ "manuels.example.invalid": [PUBLIC_IP] });
 
+/**
+ * Motif de refus du scrape (le message seul ne dit pas tout : deux refus
+ * SSRF portent des messages différents pour la même cause).
+ */
+async function refusal(promise: Promise<unknown>): Promise<ScrapeManualsError> {
+  try {
+    await promise;
+  } catch (err) {
+    return err as ScrapeManualsError;
+  }
+  throw new Error("le scrape aurait dû être refusé");
+}
+
 interface FakeOptions {
   /** URL FINALE de la navigation (après redirections). */
   finalUrl: string;
@@ -293,9 +306,11 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
   test("un nom public qui résout vers 127.0.0.1 est REFUSÉ (rebinding)", async () => {
     resetState();
     const resolve = fakeResolver({ "interne.example.invalid": ["127.0.0.1"] });
-    await expect(
+    const err = await refusal(
       scrapeManuals(CONFIG, { startUrl: "https://interne.example.invalid/secret", resolveHost: resolve }),
-    ).rejects.toThrow(ScrapeManualsError);
+    );
+    expect(err.reason).toBe("private_host");
+    expect(err.message).toMatch(/hote prive/);
     // Le refus arrive AVANT le navigateur : aucune requête vers l'interne,
     // aucun extrait.
     expect(state.launched).toBe(0);
@@ -322,9 +337,9 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
   test("un nom introuvable est refusé EXPLICITEMENT (jamais un silence)", async () => {
     resetState();
     const resolve = fakeResolver({}); // tout est ENOTFOUND
-    await expect(
-      scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: resolve }),
-    ).rejects.toThrow(ScrapeManualsError);
+    const err = await refusal(scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: resolve }));
+    expect(err.reason).toBe("unresolved_host");
+    expect(err.message).toMatch(/hote introuvable/);
     expect(state.launched).toBe(0);
   });
 
@@ -362,12 +377,65 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
     expect(state.launched).toBe(0);
   });
 
-  test("le refus SSRF est EXPLICITE côté HTTP (403 private_host)", async () => {
-    const app = createApp({
-      scrape: async () => {
-        throw new ScrapeManualsError("startUrl : hote prive refuse", "private_host");
-      },
+  test("le route handler résout le nom : une navigation rebindée est COUPÉE", async () => {
+    resetState();
+    fake = { finalUrl: "https://interne.example.invalid/secret", routeSeesRedirect: true };
+    const resolve = fakeResolver({
+      "manuels.example.invalid": [PUBLIC_IP],
+      "interne.example.invalid": ["127.0.0.1"],
     });
+    // La requête vers le nom privé est coupée AVANT le réseau, et le scrape
+    // est refusé (document bloqué) : aucun extrait.
+    const err = await refusal(scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: resolve }));
+    expect(err.reason).toBe("private_host");
+    expect(state.aborted).toContain("https://interne.example.invalid/secret");
+    expect(state.continued).not.toContain("https://interne.example.invalid/secret");
+    expect(state.contentCalls).toBe(0);
+  });
+
+  test("l'URL FINALE (après navigation) est résolue : un nom privé est refusé", async () => {
+    resetState();
+    // La redirection échappe au route handler (Chromium ne le rappelle pas) :
+    // seule la re-vérification de l'URL FINALE rattrape le nom rebindé.
+    fake = { finalUrl: "https://interne.example.invalid/secret", routeSeesRedirect: false };
+    const resolve = fakeResolver({
+      "manuels.example.invalid": [PUBLIC_IP],
+      "interne.example.invalid": ["127.0.0.1"],
+    });
+    const err = await refusal(scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: resolve }));
+    expect(err.reason).toBe("private_host");
+    expect(state.contentCalls).toBe(0);
+    expect(state.storageStatePaths).toEqual([]);
+  });
+
+  test("le refus SSRF est EXPLICITE côté HTTP (403 private_host), navigateur jamais lancé", async () => {
+    resetState();
+    // Bout en bout : le VRAI scraper (Playwright mocké) + un faux résolveur.
+    const app = createApp({
+      scrape: scrapeManuals,
+      resolveHost: fakeResolver({ "interne.example.invalid": ["127.0.0.1"] }),
+    });
+    const res = await app.handler(
+      new Request("http://127.0.0.1/v1/manuals/scrape", {
+        method: "POST",
+        body: JSON.stringify({
+          platform: "editeur-fake",
+          username: "u",
+          password: "p",
+          startUrl: "https://interne.example.invalid/secret",
+        }),
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect((await res.json()) as unknown).toMatchObject({ error: { code: "private_host" } });
+    // Le refus arrive avant le navigateur : aucune requête vers l'interne.
+    expect(state.launched).toBe(0);
+    expect(state.contentCalls).toBe(0);
+  });
+
+  test("un nom introuvable est EXPLICITE côté HTTP (502 unresolved_host)", async () => {
+    resetState();
+    const app = createApp({ scrape: scrapeManuals, resolveHost: fakeResolver({}) });
     const res = await app.handler(
       new Request("http://127.0.0.1/v1/manuals/scrape", {
         method: "POST",
@@ -379,8 +447,10 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
         }),
       }),
     );
-    expect(res.status).toBe(403);
-    expect((await res.json()) as unknown).toMatchObject({ error: { code: "private_host" } });
+    // Jamais un « scrape impossible » trompeur : c'est le DNS qui ne répond pas.
+    expect(res.status).toBe(502);
+    expect((await res.json()) as unknown).toMatchObject({ error: { code: "unresolved_host" } });
+    expect(state.launched).toBe(0);
   });
 });
 
