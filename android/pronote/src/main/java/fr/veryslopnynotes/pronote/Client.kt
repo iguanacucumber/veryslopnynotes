@@ -394,18 +394,79 @@ class Client(
             } catch (e: Exception) {
                 throw IllegalArgumentException("URL sans hote : $raw")
             }
+            // `new URL()` met le schéma en minuscules ; `URI` le garde tel quel.
+            val scheme = uri.scheme?.lowercase() ?: throw IllegalArgumentException("URL sans hôte : $raw")
+            val authority = uri.rawAuthority ?: throw IllegalArgumentException("URL sans hôte : $raw")
+            // `URI.getHost()` vaut NULL dès que l'autorité n'est pas « serveur »
+            // (underscore, IDN, espace) : l'autorité BRUTE est découpée à la main,
+            // comme le fait `new URL()` côté TS (qui accepte ces formes).
+            val at = authority.lastIndexOf('@')
+            val userinfo = if (at >= 0) "${authority.substring(0, at)}@" else ""
+            val hostPort = if (at >= 0) authority.substring(at + 1) else authority
+            val (rawHost, port) = hostPortOf(hostPort, raw)
+            if (rawHost.isEmpty()) throw IllegalArgumentException("URL sans hôte : $raw")
+            val host = hostOf(rawHost, raw)
             var normPath = uri.path ?: ""
+            // `new URL()` : le chemin d'une URL absolue vaut toujours "/" au moins.
+            if (normPath.isEmpty()) normPath = "/"
             val noTrail = if (normPath.endsWith("/") && normPath.length > 1) normPath.dropLast(1) else normPath
             if (noTrail.endsWith("/pronote")) normPath = "$noTrail/eleve.html"
             val segs = normPath.split("/").toMutableList()
             if (!segs.last().startsWith("mobile.")) segs[segs.size - 1] = "mobile." + segs.last()
-            val userinfo = if (!uri.userInfo.isNullOrEmpty()) "${uri.userInfo}@" else ""
-            var host = uri.host ?: throw IllegalArgumentException("URL sans hôte : $raw")
-            if (":" in host && !host.startsWith("[")) host = "[$host]"
-            val defaultPort = (uri.scheme == "https" && uri.port == 443) || (uri.scheme == "http" && uri.port == 80)
-            val portPart = if (uri.port == -1 || defaultPort) "" else ":${uri.port}"
-            return "${uri.scheme}://$userinfo$host$portPart${segs.joinToString("/")}" +
+            val defaultPort = (scheme == "https" && port == 443) || (scheme == "http" && port == 80)
+            val portPart = if (port == -1 || defaultPort) "" else ":$port"
+            return "$scheme://$userinfo$host$portPart${segs.joinToString("/")}" +
                 "?fd=1&bydlg=A6ABB224-12DD-4E31-AD3E-8A39A1C2C335&login=true"
+        }
+
+        /**
+         * Hôte + port de l'autorité brute : `hote`, `hote:port` ou `[v6]:port`.
+         * Les crochets IPv6 sont conservés (l'URL finale les reprend tels quels).
+         * Port = -1 quand l'autorité n'en porte pas (`hote:` = port par défaut,
+         * comme `new URL()`).
+         */
+        private fun hostPortOf(hostPort: String, raw: String): Pair<String, Int> {
+            if (hostPort.startsWith("[")) {
+                val close = hostPort.indexOf(']')
+                if (close < 0) throw IllegalArgumentException("URL sans hôte : $raw")
+                val rest = hostPort.substring(close + 1)
+                val port = when {
+                    rest.isEmpty() -> -1
+                    rest.startsWith(":") -> portOf(rest.substring(1), raw)
+                    else -> throw IllegalArgumentException("URL sans hôte : $raw")
+                }
+                return Pair(hostPort.substring(0, close + 1), port)
+            }
+            val colon = hostPort.lastIndexOf(':')
+            if (colon < 0) return Pair(hostPort, -1)
+            val host = hostPort.substring(0, colon)
+            // Un hôte ne porte pas de ':' : `hote:port:port` n'est pas une URL.
+            if (":" in host) throw IllegalArgumentException("URL sans hôte : $raw")
+            return Pair(host, portOf(hostPort.substring(colon + 1), raw))
+        }
+
+        /** Port : vide = port par défaut ; hors 0..65535 = URL invalide (`new URL()`). */
+        private fun portOf(port: String, raw: String): Int {
+            if (port.isEmpty()) return -1
+            val value = port.toIntOrNull() ?: throw IllegalArgumentException("URL sans hôte : $raw")
+            if (value < 0 || value > 65535) throw IllegalArgumentException("URL sans hôte : $raw")
+            return value
+        }
+
+        /**
+         * Hôte final : minuscules, puis punycode pour un IDN —
+         * `new URL("https://école.example")` donne `xn--cole-9oa.example`.
+         * ponytail: `IDN` est IDNA2003, le TS est UTS46 : `ß` -> `fass.de` ici,
+         * `xn--fa-hia.de` côté TS. Lettre allemande, pas d'établissement français.
+         */
+        private fun hostOf(host: String, raw: String): String {
+            val lower = host.lowercase()
+            if (lower.all { it.code < 128 }) return lower
+            return try {
+                java.net.IDN.toASCII(lower)
+            } catch (e: IllegalArgumentException) {
+                throw IllegalArgumentException("URL sans hôte : $raw")
+            }
         }
 
         fun tokenLogin(pronoteUrl: String, username: String, password: String, uuid: String, opts: ClientOptions = ClientOptions()): Client {

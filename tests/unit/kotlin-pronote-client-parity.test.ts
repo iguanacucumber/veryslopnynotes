@@ -873,6 +873,58 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
     }
   });
 
+  test.skipIf(skip)("QR : URL réécrite — hôte underscore, IDN, port, chemin vide (parité TS)", async () => {
+    // Référence TS : la transformation de `new URL()` faite par `qrcodeLogin`.
+    const tsRewrite = (raw: string): string => {
+      const url = new URL(raw);
+      const parts = url.pathname.split("/");
+      if (!parts[parts.length - 1].startsWith("mobile.")) parts[parts.length - 1] = "mobile." + parts[parts.length - 1];
+      url.pathname = parts.join("/");
+      url.search = "?fd=1&bydlg=A6ABB224-12DD-4E31-AD3E-8A39A1C2C335&login=true";
+      url.hash = "";
+      return url.toString();
+    };
+    // Hôtes « non serveur » : `URI.getHost()` y vaut NULL, le port Kotlin les
+    // REFUSAIT tous (appairage impossible sur ces établissements, #402).
+    const urls = [
+      "https://lycee_jean_moulin.example/pronote/eleve.html",
+      "https://ecole_avec_accents.example/pronote/eleve.html",
+      "https://école.example/pronote/eleve.html",
+      "https://LYCee_EXAMPLE.example/pronote/eleve.html",
+      "https://ecole.example:8443/pronote/eleve.html",
+      "https://ecole.example:443/pronote/eleve.html",
+      "https://ecole.example",
+      "https://ecole.example/",
+      "https://eleve@ecole.example/pronote/eleve.html",
+      "https://ecole.example/pronote/eleve.html#ancre",
+      "https://[::1]:/pronote/eleve.html",
+    ];
+    for (const raw of urls) {
+      const kt = JSON.parse(await ask({ op: "rewriteQrUrl", url: raw })) as { url: string };
+      expect(`rewriteQrUrl ${raw} -> ${kt.url}`).toBe(`rewriteQrUrl ${raw} -> ${tsRewrite(raw)}`);
+      // L'hôte est repris tel quel par l'appelant : jamais de « double slash ».
+      expect(kt.url.replace(/^https?:\/\//, "")).not.toContain("//");
+    }
+    // Cas d'école : l'hôte underscore est celui attendu, pas un refus.
+    const kt = JSON.parse(await ask({ op: "rewriteQrUrl", url: "https://lycee_jean_moulin.example/pronote/eleve.html" })) as { url: string };
+    expect(kt.url).toBe(
+      "https://lycee_jean_moulin.example/pronote/mobile.eleve.html" +
+        "?fd=1&bydlg=A6ABB224-12DD-4E31-AD3E-8A39A1C2C335&login=true",
+    );
+    // IDN : punycode, comme `new URL()`.
+    const idn = JSON.parse(await ask({ op: "rewriteQrUrl", url: "https://école.example/pronote/eleve.html" })) as { url: string };
+    expect(idn.url).toBe(tsRewrite("https://école.example/pronote/eleve.html"));
+    // Hôte IDN : l'URL reste utilisable telle quelle (ASCII, un seul `/`).
+    expect(idn.url.startsWith("https://xn--cole-9oa.example/pronote/mobile.eleve.html?")).toBe(true);
+    // Refus : autorité sans hôte ou port illisible (le TS jette un TypeError,
+    // le port un IllegalArgumentException — même refus des deux côtés).
+    for (const raw of ["https://:8443/x", "https://ecole.example:abc/x", "https://ecole.example:8443:90/x", "https://ecole.example:99999/x"]) {
+      const bad = portError(await ask({ op: "rewriteQrUrl", url: raw }, true));
+      expect(`rewriteQrUrl ${raw} -> ${bad.name}`).toBe(`rewriteQrUrl ${raw} -> IllegalArgumentException`);
+      expect(() => new URL(raw)).toThrow();
+    }
+  });
+
   test.skipIf(skip)("auth : sécurisation active => second tour `token`", async () => {
     const tsa = startStub();
     const kta = startStub();
