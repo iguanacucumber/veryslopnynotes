@@ -16,6 +16,7 @@ import fr.veryslopnynotes.core.AiError
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.AssignmentAttachment
 import fr.veryslopnynotes.core.Capabilities
+import fr.veryslopnynotes.core.CapabilitiesJson
 import fr.veryslopnynotes.core.ChildAccount
 import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.ExamCandidate
@@ -512,7 +513,7 @@ class VsnBridge(
             else -> null
         }
         // Capacités inconnues = rien n'est affirmé : liste complète.
-        val tabs = Capabilities.parse(payload)?.tabs ?: Capabilities.TABS
+        val tabs = CapabilitiesJson.parse(payload)?.tabs ?: Capabilities.TABS
         return JSONObject().put("tabs", JSONArray(tabs))
     }
 

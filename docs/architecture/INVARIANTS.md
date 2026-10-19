@@ -55,7 +55,7 @@ Format : Invariant → test → commande → emplacement.
 - Emplacement : `android/core/*Ai*.kt`, `android/core/AiPrompts.kt`.
 
 ## I5 — LLM sans outils/secrets dans le prompt
-- Invariant : le prompt ne contient aucun secret ; sortie texte/JSON validée. L'app appelle OpenRouter directement en HTTPS et transmet la clé dans l'en-tête `Authorization`, jamais au serveur applicatif (voir I8).
+- Invariant : le prompt ne contient aucun secret ; sortie texte/JSON validée (une sortie MAL FORMÉE est refusée, jamais réinterprétée — voir I14). L'app appelle OpenRouter directement en HTTPS et transmet la clé dans l'en-tête `Authorization`, jamais au serveur applicatif (voir I8).
 - Test : `tests/architecture/invariants.test.ts` + `check-architecture.ts` (scan `android/core/`) + `tests/unit/android-homework.test.ts` (miroirs) + `tests/unit/android-revision.test.ts` (Kotlin compilé : consigne JSON de la fiche + garde I5).
 - Commande : `make check`.
 - Emplacement : `android/core/` (IA) + `android/data/` (store de clé, dépôt devoirs). Réf : `docs/adr/003-client-direct.md`.
@@ -179,4 +179,24 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Commande : `make architecture-test` (ou `make check`).
 - Emplacement : `web/src/bridge/client.ts`, `web/src/bridge/mock.ts`,
   `web/vite.config.ts`.
+
+## I14 — « Invalide » n'est jamais « vide » (fail-closed / fail-open)
+- Invariant : une sortie mal formée est REFUSÉE, jamais réinterprétée en valeur
+  vide. Un champ `sources` qui n'est pas une liste ne veut pas dire « aucune
+  source » : le corrigé est refusé (fail-closed sur la validation), sinon le
+  texte sort comme un corrigé validé, sans sources. Symétriquement, un contrat
+  de capabilities INVALIDE vaut « rien n'est affirmé » (`null`), JAMAIS une
+  liste d'onglets vide : une liste vide AFFIRME « tous les onglets
+  désactivés » et blackoute la navigation sur une panne (fail-open attendu :
+  les onglets restent accessibles). Les deux notions restent distinctes :
+  `sources` ABSENT ou `[]` = corpus vide (autorisé) ; `capabilities: null` =
+  inconnu ; `capabilities: {tabs: []}` = contrat affirmé qui désactive tout.
+- Test : `tests/unit/kotlin-core-validation-parity.test.ts` (Kotlin EXÉCUTÉ :
+  `sources: "abc"` refusé, contrat invalide → `null` et aucun onglet masqué) +
+  `tests/web/home.test.ts` et `tests/web/social.test.ts` (web : `capabilities:
+  null` = inconnu, la sanction reste visible).
+- Commande : `make check`.
+- Emplacement : `android/core/Humanize.kt`, `android/core/CapabilityProbe.kt`,
+  `android/core/Capabilities.kt`, `android/core/CapabilitiesJson.kt`,
+  `android/data/PronotePayloads.kt`, `web/src/features/attendance/model.ts`.
 
