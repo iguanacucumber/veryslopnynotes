@@ -25,21 +25,13 @@ import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harnes
 
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
 const SECURITY_ALERT = join(CORE, "SecurityAlert.kt");
-const UNTRUSTED = join(CORE, "Untrusted.kt");
-const LLM_GUARD = join(CORE, "LlmGuard.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "SecurityAlertParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
 
 let link: ParityLink | null = null;
 if (!skip) {
-  const jar = await parityToolchain.ensureJar("kotlin-security-alert", [
-    SECURITY_ALERT,
-    UNTRUSTED,
-    LLM_GUARD,
-    DRIVER,
-  ]);
-  link = await parityToolchain.openLink(jar);
+  link = await parityToolchain.openParityLink(DRIVER);
 }
 
 interface PortAlert {

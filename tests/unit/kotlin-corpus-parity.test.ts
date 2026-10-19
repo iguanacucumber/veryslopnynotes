@@ -50,11 +50,9 @@ if (!HAS_CORPUS) {
 
 let link: ParityLink | null = null;
 if (!SKIP) {
-  const jar = await parityToolchain.ensureJar("kotlin-corpus-parity", [
-    join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote", "Json.kt"),
+  link = await parityToolchain.openParityLink(
     join(ROOT, "agents", "runtime", "kotlin-parity", "CorpusParityMain.kt"),
-  ]);
-  link = await parityToolchain.openLink(jar);
+  );
 }
 
 async function ask(op: unknown, allowError = false): Promise<string> {

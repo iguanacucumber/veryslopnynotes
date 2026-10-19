@@ -18,18 +18,14 @@ import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
-const OUTCOME = join(DATA, "SyncJobOutcome.kt");
 const WORKER = join(DATA, "PeriodicSyncWorker.kt");
-// JSON du pilote : le `Json` embarqué du port (pur, aucun import Android).
-const JSON_LIB = join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote", "Json.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "SyncJobMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
 
 let link: ParityLink | null = null;
 if (!skip) {
-  const jar = await parityToolchain.ensureJar("kotlin-sync-worker", [OUTCOME, JSON_LIB, DRIVER]);
-  link = await parityToolchain.openLink(jar);
+  link = await parityToolchain.openParityLink(DRIVER);
 }
 
 async function ask(op: unknown): Promise<any> {

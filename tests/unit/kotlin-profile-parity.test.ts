@@ -23,19 +23,13 @@ import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harnes
 
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
-const JSON_LIB = join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote", "Json.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "ProfileParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
 
 let link: ParityLink | null = null;
 if (!skip) {
-  const jar = await parityToolchain.ensureJar("kotlin-profile-parity", [
-    join(CORE, "UserProfile.kt"),
-    JSON_LIB,
-    DRIVER,
-  ]);
-  link = await parityToolchain.openLink(jar);
+  link = await parityToolchain.openParityLink(DRIVER);
 }
 
 async function ask(op: unknown): Promise<string> {
