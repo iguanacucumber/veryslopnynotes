@@ -449,4 +449,81 @@ describe("invariants", () => {
       .map((f) => f.replace(ROOT, ""));
     expect(menages).toEqual([]);
   });
+
+  // #394 : le pont ne laisse JAMAIS une promesse sans réponse. Un `Error`
+  // (et non une `Exception`) doit donc être capturé PARTOUT où le pont
+  // répond : sinon le fil du worker meurt SANS `resolve` ni `reject`, la
+  // promesse JS pend (pour `pairing.scanQr`, dont le délai JS est 0 : pour
+  // TOUJOURS) et l'interface bloque sur un chargement infini, sans message.
+  test("#394: les réponses du pont capturent Throwable, pas seulement Exception", () => {
+    const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
+    const bridge = codeOnly(readFileSync(join(APP, "VsnBridge.kt"), "utf8"));
+    const errors = codeOnly(readFileSync(join(APP, "BridgeErrors.kt"), "utf8"));
+
+    // 1. Le filet : la traduction pure attrape TOUT, `Error` compris.
+    expect(errors).toMatch(/fun\s+bridgeCallOutcome/);
+    expect(errors).toMatch(/catch\s*\(\s*\w+\s*:\s*Throwable\s*\)/);
+
+    // 2. Le pont passe par ce filet : plus de `catch (Exception)` qui
+    //    laisserait un `Error` s'échapper du fil du worker.
+    expect(bridge).toContain("bridgeCallOutcome");
+
+    // 3. Tout `catch` du pont qui RÉPOND attrape `Throwable`. Les autres
+    //    (`catch (Exception)` d'un repli local : cache en mémoire, photo
+    //    absente…) sont des dégradations, pas des réponses : un `Error` y
+    //    est repris plus haut, par le filet.
+    const repondants = catchBlocks(bridge).filter((b) => /reject\(|resolve\(/.test(b.body));
+    expect(repondants.length).toBeGreaterThan(0); // la règle n'est pas vide
+    for (const bloc of repondants) {
+      expect({ type: bloc.type }).toEqual({ type: "Throwable" });
+    }
+
+    // 4. La LIVRAISON de la réponse ne peut pas échouer non plus.
+    for (const signature of [
+      "private fun reject(",
+      "private fun postJs(",
+      "private fun cancelRequest(",
+    ]) {
+      expect(corps(bridge, signature)).toMatch(/catch\s*\(\s*_\s*:\s*Throwable\s*\)/);
+    }
+  });
 });
+
+/** Un bloc `catch` du Kotlin : le type attrapé et son corps (accolades). */
+function catchBlocks(src: string): { type: string; body: string }[] {
+  const out: { type: string; body: string }[] = [];
+  const re = /catch\s*\(\s*(?:_\s*:\s*|\w+\s*:\s*)([\w.]+)\s*\)/g;
+  for (const m of src.matchAll(re)) {
+    const suite = src.slice(m.index + m[0].length);
+    const debut = suite.indexOf("{");
+    let profondeur = 0;
+    let fin = suite.length;
+    for (let i = debut; i < suite.length; i++) {
+      if (suite[i] === "{") profondeur++;
+      else if (suite[i] === "}") {
+        profondeur--;
+        if (profondeur === 0) {
+          fin = i + 1;
+          break;
+        }
+      }
+    }
+    out.push({ type: m[1]!, body: suite.slice(debut, fin) });
+  }
+  return out;
+}
+
+/** Le corps d'une fonction Kotlin, jusqu'à l'accolade qui la ferme. */
+function corps(src: string, signature: string): string {
+  const debut = src.indexOf(signature);
+  if (debut === -1) return "";
+  let profondeur = 0;
+  for (let i = src.indexOf("{", debut); i < src.length; i++) {
+    if (src[i] === "{") profondeur++;
+    else if (src[i] === "}") {
+      profondeur--;
+      if (profondeur === 0) return src.slice(debut, i + 1);
+    }
+  }
+  return "";
+}

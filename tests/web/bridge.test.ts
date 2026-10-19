@@ -121,6 +121,56 @@ describe("pont : abandon", () => {
   });
 });
 
+// #394 : un rejet natif doit TOUJOURS régler la promesse. C'est le filet
+// côté JS : même si le natif répond mal (ou pas du tout), la requête ne doit
+// pas rester en attente — l'UI doit pouvoir afficher un message.
+describe("pont : un rejet natif règle la promesse", () => {
+  /** Le pont factice répond par un rejet. */
+  function rejetNatif(code: string, message: string): void {
+    const g = globalThis as unknown as {
+      __vsnReject?: (requestId: string, errorJson: string) => void;
+    };
+    g.__vsnReject?.(nativeCalls[0]!.requestId, JSON.stringify({ code, message }));
+  }
+
+  test("un rejet natif rejette la promesse et libère l'entrée pending", async () => {
+    stubNative();
+    const promise = call("resources.load", { key: "grades" });
+    expect(pendingCount()).toBe(1);
+    rejetNatif("unknown", "Erreur native.");
+    await expect(promise).rejects.toThrow("Erreur native.");
+    expect(pendingCount()).toBe(0);
+  });
+
+  test("les codes que l'UI traite portent un message NON VIDE", async () => {
+    // `unavailable` et `unknown` sont les deux chemins d'erreur du pont : le
+    // message doit être affichable (l'UI n'affiche pas un diagnostic vide).
+    for (const code of ["unavailable", "unknown"]) {
+      stubNative();
+      const promise = call("resources.load", { key: "grades" });
+      rejetNatif(code, code === "unavailable" ? "Mémoire insuffisante sur l'appareil." : "Erreur native.");
+      const erreur = (await promise.catch((e: unknown) => e)) as { code: string; message: string };
+      expect(erreur.code).toBe(code);
+      expect(erreur.message.trim()).not.toBe("");
+    }
+  });
+
+  test("un rejet natif illisible retombe sur un message non vide", async () => {
+    // Un rejet que le natif n'a pas pu construire ne doit pas laisser
+    // l'interface sans message.
+    stubNative();
+    const promise = call("resources.load", { key: "grades" });
+    const g = globalThis as unknown as {
+      __vsnReject?: (requestId: string, errorJson: string) => void;
+    };
+    g.__vsnReject?.(nativeCalls[0]!.requestId, "{pas du json");
+    const erreur = (await promise.catch((e: unknown) => e)) as { code: string; message: string };
+    expect(erreur.code).toBe("unknown");
+    expect(erreur.message.trim()).not.toBe("");
+    expect(pendingCount()).toBe(0);
+  });
+});
+
 // #423 : le pont factice est un artefact de DÉVELOPPEMENT. En production il
 // n'est pas embarqué : un pont absent doit échouer bruyamment, jamais servir
 // une école fictive (faux profil, fausses notes, session « restored »).

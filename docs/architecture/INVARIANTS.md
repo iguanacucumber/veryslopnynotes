@@ -26,15 +26,23 @@ Format : Invariant → test → commande → emplacement.
 - Invariant : `web/` ne contient ni `fetch`, XHR, WebSocket, EventSource, ni
   URL distante. La CSP de `web/index.html` impose `connect-src 'none'`. Aucun
   jeton de session ni clé LLM n'est exposé au JS ; le pont natif n'expose que
-  des méthodes allowlistées, jamais un proxy d'URL.
+  des méthodes allowlistées, jamais un proxy d'URL. Le pont ne laisse JAMAIS
+  une promesse sans réponse : tout échec natif — un `Error` compris, pas
+  seulement une `Exception` — devient un rejet borné `{code,message}` (#394).
 - Test : `tests/architecture/web.test.ts` (réseau, CSP, HTML injecté, hôte
   Pronote, secrets persistés, message d'appairage borné) +
   `tests/unit/android-pairing-message.test.ts` (table de messages du pont,
   Kotlin exécuté) + `tests/unit/android-homework-message.test.ts` (message de
-  refus du devoir : le motif libre du modèle ne sort pas, Kotlin exécuté).
+  refus du devoir : le motif libre du modèle ne sort pas, Kotlin exécuté) +
+  `tests/unit/android-bridge-error.test.ts` (un `Error` natif devient un rejet,
+  pas une promesse pendante : Kotlin exécuté) +
+  `tests/architecture/invariants.test.ts` (les blocs `catch` qui RÉPONDENT
+  capturent `Throwable`) + `tests/web/bridge.test.ts` (un rejet natif règle
+  toujours la promesse, message non vide).
 - Commande : `make web` (ou `make architecture-test`).
 - Emplacement : `web/**`, `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`,
-  `android/app/src/main/java/fr/veryslopnynotes/app/HomeworkMessages.kt`.
+  `android/app/src/main/java/fr/veryslopnynotes/app/HomeworkMessages.kt`,
+  `android/app/src/main/java/fr/veryslopnynotes/app/BridgeErrors.kt`.
 
 ## I2 — Aucun accès Pronote côté serveur ; un seul client Android (ADR-003)
 - Invariant : le serveur ne contacte jamais Pronote. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android (`app`, `core`, `data`) ne contacte Pronote (pinné par I1).
