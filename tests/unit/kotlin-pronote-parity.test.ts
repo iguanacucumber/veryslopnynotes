@@ -473,6 +473,24 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
     }
   });
 
+  // #417 : hex STRICT — `Character.digit` acceptait les chiffres Unicode non ASCII
+  // (`０１`, `٠١`) : le port décodait `0x01` là où la référence n'y voit rien.
+  test.skipIf(skip)("octets : hex strict (les chiffres Unicode non ASCII sont refusés)", async () => {
+    for (const hex of ["", "00", "ff", "00112233445566778899aabbccddeeff", "DEADBEEF"]) {
+      const kt = await ask({ op: "hexToBytes", hex });
+      expect(`${hex} -> ${kt}`).toBe(`${hex} -> ${JSON.stringify({ hex: Buffer.from(hex, "hex").toString("hex") })}`);
+    }
+    // U+FF10/U+FF11 (chiffres « pleine largeur ») et U+0660/U+0661 (chiffres
+    // arabo-indiens) : ni l'un ni l'autre n'est un hexadécimal ASCII.
+    for (const hex of ["０１", "٠١", "0z", "zz", "0", "0x"]) {
+      const ktErr = portError(await ask({ op: "hexToBytes", hex }, true));
+      expect(`${hex} -> ${ktErr.name}`).toBe(`${hex} -> IllegalArgumentException`);
+      // La référence s'arrête au premier octet invalide : elle NE décode PAS
+      // `０١` en 0x01 non plus (les deux refusent, aucun n'invente l'octet).
+      expect(Buffer.from(hex, "hex").toString("hex")).not.toBe("01");
+    }
+  });
+
   test.skipIf(skip)("nombres : le rendu Kotlin est IDENTIQUE à `JSON.stringify` (#410)", async () => {
     // Le texte, pas un nombre JSON : `-0` ne survit pas à `JSON.stringify`
     // (`JSON.stringify(-0)` vaut `"0"`). Chaque case est lue des DEUX côtés
