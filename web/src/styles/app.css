@@ -9,13 +9,14 @@ body,
   margin: 0;
 }
 
+/* Le contenu reste au-dessus des halos de fond. */
+#root {
+  position: relative;
+  z-index: 1;
+}
+
 body {
   background-color: var(--page);
-  background-image:
-    radial-gradient(110% 58% at 100% -8%, var(--page-glow-a), transparent 62%),
-    radial-gradient(90% 46% at -12% 6%, var(--page-glow-b), transparent 58%),
-    radial-gradient(80% 42% at 50% 112%, var(--page-glow-b), transparent 62%);
-  background-attachment: fixed;
   color: var(--ink);
   font-family: "Figtree", system-ui, sans-serif;
   font-size: 14px;
@@ -23,6 +24,51 @@ body {
   font-weight: 500;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+}
+
+/* Halos de page : deux couches fixes qui dérivent lentement derrière le
+   contenu. `transform` seule → le mouvement est composé (GPU), sans repaint
+   de l'écran ; `pointer-events: none` → la couche ne capte aucun geste.
+   Le décor au repos (mouvement réduit) reste l'image d'aujourd'hui : la
+   dérive part d'un décalage nul, la couche ne bouge que pendant l'animation. */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-repeat: no-repeat;
+}
+
+body::before {
+  background-image:
+    radial-gradient(110% 58% at 100% -8%, var(--page-glow-a), transparent 62%),
+    radial-gradient(80% 42% at 50% 112%, var(--page-glow-b), transparent 62%);
+  animation: page-drift-a 36s var(--ease) infinite alternate;
+}
+
+body::after {
+  background-image: radial-gradient(90% 46% at -12% 6%, var(--page-glow-b), transparent 58%);
+  animation: page-drift-b 48s var(--ease) infinite alternate;
+}
+
+@keyframes page-drift-a {
+  from {
+    transform: translate3d(2%, -1.5%, 0) scale(1.05);
+  }
+  to {
+    transform: translate3d(-4%, 2.5%, 0) scale(1.14);
+  }
+}
+
+@keyframes page-drift-b {
+  from {
+    transform: translate3d(-2%, 1.5%, 0) scale(1.05);
+  }
+  to {
+    transform: translate3d(3.5%, -2%, 0) scale(1.13);
+  }
 }
 
 button,
@@ -272,6 +318,37 @@ button.card:active {
   background: var(--hero-bg);
   border: 0;
   color: var(--hero-ink);
+}
+
+/* Cartes héros : le fond dérive, le texte reste posé dessus. Le reflet est
+   un `::before` en `z-index: -1` : il passe sous le texte de la carte, et la
+   carte devient son propre contexte d'empilement (`z-index: 0`) pour que le
+   reflet reste entre le fond de la carte et son contenu. */
+.card--brand,
+.card.home-hero {
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.card--brand::before,
+.card.home-hero::before {
+  content: "";
+  position: absolute;
+  inset: -30% -14%;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(34% 42% at 50% 50%, var(--hero-veil), transparent 72%);
+  animation: hero-sheen 24s var(--ease) infinite alternate;
+}
+
+@keyframes hero-sheen {
+  from {
+    transform: translate3d(-16%, 9%, 0);
+  }
+  to {
+    transform: translate3d(18%, -9%, 0);
+  }
 }
 
 .subject-avatar {
