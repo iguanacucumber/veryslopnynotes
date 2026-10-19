@@ -9,10 +9,11 @@ import {
   durationLongFr,
   formatDateSpan,
   formatLongDate,
-  gravityLabel,
   isUnjustified,
   justifiedLabel,
+  needsJustification,
   type Absence,
+  type AttendanceState,
   type Punishment,
 } from "./model";
 
@@ -31,6 +32,14 @@ function plural(count: number, one: string, many: string): string {
   return `${count} ${count > 1 ? many : one}`;
 }
 
+/** Couleur de la carte d'état : vert si tout est justifié, rouge si des
+ *  heures sont injustifiées, neutre si la justification n'est pas publiée. */
+function statusColor(state: AttendanceState): string {
+  if (state === "clean") return "var(--brand-deep)";
+  if (state === "unjustified") return "var(--danger-ink)";
+  return "var(--muted)";
+}
+
 export function AttendanceScreen({
   rows,
   loading,
@@ -43,9 +52,11 @@ export function AttendanceScreen({
 }: AttendanceProps) {
   const filterId = useId();
   const status = attendanceStatus(rows);
-  const shown = onlyPending ? rows.filter(isUnjustified) : rows;
+  // « À justifier » = ce dont la justification n'est pas affirmée : inconnue
+  // (le natif ne publie `justified` que pour les événements justifiés) ou
+  // refusée. Un événement sans information n'est pas un événement justifié.
+  const shown = onlyPending ? rows.filter(needsJustification) : rows;
   const sections = attendanceSections(shown);
-  const unjustifiedCount = status.unjustifiedCount;
 
   if (loading && rows.length === 0) return <Loading label="Chargement de la vie scolaire…" />;
 
@@ -93,12 +104,12 @@ export function AttendanceScreen({
       ) : (
         <>
           <Card
-            className={`school-summary${status.clean ? " school-summary--clean" : " school-summary--alert"}`}
+            className={`school-summary school-summary--${status.state}`}
             as="article"
           >
             <div className="row" style={{ alignItems: "flex-start" }}>
-              <span style={{ color: status.clean ? "var(--brand-deep)" : "var(--danger-ink)" }}>
-                {status.clean ? <IconCheck size={26} /> : <IconWarning size={26} />}
+              <span style={{ color: statusColor(status.state) }}>
+                {status.state === "clean" ? <IconCheck size={26} /> : <IconWarning size={26} />}
               </span>
               <div className="grow">
                 <h3 className="t-body" style={{ margin: 0 }}>
@@ -114,7 +125,7 @@ export function AttendanceScreen({
                 </p>
                 <p className="tiny muted" style={{ margin: "2px 0 0" }}>
                   {plural(status.justifiedCount, "justifié", "justifiés")} ·{" "}
-                  {plural(unjustifiedCount, "à justifier", "à justifier")}
+                  {plural(status.pendingCount, "à justifier", "à justifier")}
                 </p>
               </div>
             </div>
@@ -144,7 +155,7 @@ export function AttendanceScreen({
               aria-pressed={onlyPending}
               onClick={() => onOnlyPendingChange(true)}
             >
-              À justifier ({unjustifiedCount})
+              À justifier ({status.pendingCount})
             </button>
           </div>
 
@@ -169,7 +180,7 @@ export function AttendanceScreen({
             <EmptyState
               icon={<IconCheck size={30} />}
               title="Aucun événement à justifier"
-              body="Toutes les absences et tous les retards publiés sont justifiés."
+              body="Aucune absence ni retard n’attend de justificatif sur cette période."
               action={
                 <button
                   type="button"
@@ -286,7 +297,6 @@ export function SanctionsScreen({ rows, loading, error, stale, onRefresh }: Sanc
       ) : (
         <div className="list">
           {rows.map((row, index) => {
-            const gravity = gravityLabel(row.gravity);
             const date = formatLongDate(row.date);
             return (
               <Card key={row.id || `punition-${index}`} as="article" className="card--flat">
@@ -298,18 +308,13 @@ export function SanctionsScreen({ rows, loading, error, stale, onRefresh }: Sanc
                     {date}
                   </p>
                 ) : null}
-                <div className="row row--wrap" style={{ marginTop: 8, gap: 8 }}>
-                  {gravity ? (
-                    <span className="chip chip--danger" aria-label={`Gravité publiée : ${gravity}`}>
-                      {gravity}
-                    </span>
-                  ) : null}
-                  {row.durationMinutes !== null ? (
+                {row.durationMinutes !== null ? (
+                  <div className="row row--wrap" style={{ marginTop: 8, gap: 8 }}>
                     <span className="chip" aria-label={`Durée : ${durationLongFr(row.durationMinutes)}`}>
                       Durée : {durationLongFr(row.durationMinutes)}
                     </span>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
                 <p className="t-body-m" style={{ margin: "8px 0 0", whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                   {row.motif}
                 </p>

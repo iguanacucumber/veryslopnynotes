@@ -601,7 +601,12 @@ internal fun punishmentsPayload(client: Client): String {
                 put("date", s.given.parisIso())
                 put("motif", motif)
                 put("type", boundedCp(s.nature, 100).ifEmpty { "Sanction" })
-                s.duration?.takeIf { it.isFinite() && it >= 0 }?.let { put("gravity", it) }
+                // La durée de la sanction, en MINUTES (`duree` Pronote, même
+                // unité que le retard : `Delay.minutes` lit le même champ).
+                // Le champ s'appelle `durationMinutes` et plus `gravity` : la
+                // durée d'une retenue n'est pas un « niveau » de gravité, et
+                // le web affichait « Niveau 120 » pour deux heures de retenue.
+                s.duration?.takeIf { it.isFinite() && it > 0 }?.let { put("durationMinutes", it) }
                 putIf("periodId", pid?.take(64))
             })
         }

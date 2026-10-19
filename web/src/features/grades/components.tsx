@@ -303,7 +303,7 @@ function SubjectSection({
             />
           </span>
           <span className="grades-caption">
-            {group.grades.length} note{group.grades.length > 1 ? "s" : ""}
+            {group.gradeCount} note{group.gradeCount > 1 ? "s" : ""}
             {group.provided ? " · établissement" : ""}
           </span>
         </span>

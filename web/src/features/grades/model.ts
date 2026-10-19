@@ -69,6 +69,9 @@ export interface GradeGroup {
   subject: string;
   average: number | null;
   provided: boolean;
+  /** Notes RETENUES par la moyenne (coefficient 0 exclu) : le rapport natif
+   *  fait foi, sinon le même compte local (notes exploitables). */
+  gradeCount: number;
   grades: Grade[];
 }
 
@@ -539,11 +542,16 @@ export function gradeGroups(grades: readonly Grade[], subjects: readonly Subject
     .map((key) => {
       const bucket = byKey.get(key);
       const average = averages.get(key);
+      const grades = [...(bucket?.grades ?? [])].sort((a, b) => (b.millis ?? 0) - (a.millis ?? 0));
       return {
         subject: average?.subject ?? bucket?.subject ?? key,
         average: average?.value ?? null,
         provided: average?.provided ?? false,
-        grades: [...(bucket?.grades ?? [])].sort((a, b) => (b.millis ?? 0) - (a.millis ?? 0)),
+        // Le rapport natif compte les notes RETENUES (coefficient 0 exclu) :
+        // afficher `grades.length` montrait « 3 notes » pour une moyenne
+        // calculée sur 2 notes. Sans rapport, le même compte local.
+        gradeCount: average?.gradeCount ?? grades.filter(isUsable).length,
+        grades,
       };
     })
     .sort((a, b) => {

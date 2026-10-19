@@ -40,12 +40,17 @@ export interface Punishment {
   date: string;
   type: string;
   motif: string;
-  gravity: string | null;
+  /** Durée de la sanction en minutes, telle que publiée par le natif. */
   durationMinutes: number | null;
 }
 
+/** État de l'assiduité : `clean` = tout est justifié, `unjustified` = des
+ *  heures sans justificatif, `unverified` = l'établissement ne publie pas la
+ *  justification (inconnue, jamais « justifiée » déduite). */
+export type AttendanceState = "clean" | "unjustified" | "unverified";
+
 export interface AttendanceStatus {
-  clean: boolean;
+  state: AttendanceState;
   eventCount: number;
   absenceCount: number;
   lateCount: number;
@@ -54,6 +59,10 @@ export interface AttendanceStatus {
   unjustifiedCount: number;
   unverifiedCount: number;
   unjustifiedMinutes: number;
+  /** Heures manquées dont la justification n'est PAS publiée. */
+  unverifiedMinutes: number;
+  /** Événements dont la justification reste à obtenir (inconnue ou refusée). */
+  pendingCount: number;
   title: string;
   detail: string;
 }
@@ -164,17 +173,6 @@ export function parseAttendance(payload: string | null): AttendanceData {
   return { absences, periods };
 }
 
-function gravityValue(value: unknown): string | null {
-  let n: number | null = null;
-  if (typeof value === "number" && Number.isFinite(value)) n = value;
-  else if (typeof value === "string") {
-    const parsed = Number.parseFloat(value.trim().replace(",", "."));
-    if (Number.isFinite(parsed)) n = parsed;
-  }
-  if (n === null || n < 0) return null;
-  return Number.isInteger(n) ? String(n) : String(n);
-}
-
 export function parsePunishments(payload: string | null): Punishment[] {
   const root = payloadRoot(payload);
   if (!root) return [];
@@ -191,7 +189,6 @@ export function parsePunishments(payload: string | null): Punishment[] {
       date,
       type,
       motif,
-      gravity: gravityValue(obj["gravity"]),
       durationMinutes: optMinutes(obj),
     });
   }
@@ -286,31 +283,79 @@ export function justifiedLabel(justified: boolean | null): string {
   return "";
 }
 
+/** Justification REFUSÉE par l'établissement (rare : le natif ne publie
+ *  `false` que si Pronote l'affirme). */
 export function isUnjustified(row: Absence): boolean {
   return row.justified === false;
 }
 
+/** Justification INCONNUE : le natif ne publie `justified` que si
+ *  l'établissement l'affirme — son absence ne veut pas dire « justifiée ». */
+export function isUnverified(row: Absence): boolean {
+  return row.justified === null;
+}
+
+/** Événement dont la justification reste à obtenir : inconnue ou refusée. */
+export function needsJustification(row: Absence): boolean {
+  return row.justified !== true;
+}
+
+function minutesOf(rows: Absence[]): number {
+  return rows.reduce((sum, r) => sum + (r.minutes !== null && r.minutes > 0 ? r.minutes : 0), 0);
+}
+
+/**
+ * État de l'assiduité, sans jamais nier ce que l'établissement ne publie pas.
+ *
+ * Le natif ne publie `justified` que pour les événements JUSTIFIÉS : une
+ * absence de ce champ est une information INCONNUE, pas une absence de
+ * sanction. L'écran affiche donc les heures non vérifiées au lieu
+ * d'affirmer que tout est justifié.
+ */
 export function attendanceStatus(rows: Absence[]): AttendanceStatus {
   const unjustified = rows.filter(isUnjustified);
-  const total = rows.reduce((sum, r) => sum + (r.minutes !== null && r.minutes > 0 ? r.minutes : 0), 0);
-  const pending = unjustified.reduce((sum, r) => sum + (r.minutes !== null && r.minutes > 0 ? r.minutes : 0), 0);
-  const clean = unjustified.length === 0;
+  const unverified = rows.filter(isUnverified);
+  const total = minutesOf(rows);
+  const pending = minutesOf(unjustified);
+  const unknown = minutesOf(unverified);
+  const state: AttendanceState =
+    unjustified.length > 0 ? "unjustified" : unverified.length > 0 ? "unverified" : "clean";
+  const events = unjustified.length;
+  const unjustifiedText = `${durationLongFr(pending)} sur ${durationLongFr(total)} manquées · ${events} ${
+    events <= 1 ? "événement" : "événements"
+  } sans justificatif`;
+  const unverifiedText = `${durationLongFr(unknown)} sur ${durationLongFr(
+    total,
+  )} manquées · justification non publiée par l'établissement`;
   return {
-    clean,
+    state,
     eventCount: rows.length,
     absenceCount: rows.filter((r) => r.kind === "absence").length,
     lateCount: rows.filter((r) => r.kind === "late").length,
     totalMinutes: total,
     justifiedCount: rows.filter((r) => r.justified === true).length,
     unjustifiedCount: unjustified.length,
-    unverifiedCount: rows.filter((r) => r.justified === null).length,
+    unverifiedCount: unverified.length,
     unjustifiedMinutes: pending,
-    title: clean ? "Aucune heure injustifiée" : "Des heures injustifiées",
-    detail: clean
-      ? "Toutes les absences et tous les retards publiés sont justifiés."
-      : `${durationLongFr(pending)} sur ${durationLongFr(total)} manquées · ${unjustified.length} ${
-          unjustified.length <= 1 ? "événement" : "événements"
-        } sans justificatif`,
+    unverifiedMinutes: unknown,
+    pendingCount: unjustified.length + unverified.length,
+    title:
+      state === "unjustified"
+        ? "Des heures injustifiées"
+        : state === "unverified"
+          ? "Des heures non vérifiées"
+          : "Aucune heure injustifiée",
+    detail:
+      state === "clean"
+        ? "Toutes les absences et tous les retards publiés sont justifiés."
+        : state === "unjustified"
+          ? // Les heures sans information de justification sont dites à part :
+            // sinon « 20 min sur 4 h manquées » laisserait croire que le reste
+            // est justifié.
+            unverified.length > 0
+            ? `${unjustifiedText} · ${unverified.length} sans information de justification`
+            : unjustifiedText
+          : unverifiedText,
   };
 }
 
@@ -322,18 +367,4 @@ export function attendanceSections(rows: Absence[]): AttendanceSection[] {
     if (group.length > 0) out.push({ kind, title: `${absenceKindLabel(kind)}s`, rows: group });
   }
   return out;
-}
-
-function frNumber(value: number): string {
-  if (Number.isInteger(value)) return String(value);
-  return String(value).replace(".", ",");
-}
-
-/** Gravité publiée : échelle libre de l'établissement, donc un NIVEAU et
- *  jamais une unité inventée. `null`/illisible = aucune étiquette. */
-export function gravityLabel(gravity: string | null): string | null {
-  if (!gravity) return null;
-  const value = Number.parseFloat(gravity.replace(",", "."));
-  if (!Number.isFinite(value) || value < 0) return null;
-  return `Niveau ${frNumber(value)}`;
 }

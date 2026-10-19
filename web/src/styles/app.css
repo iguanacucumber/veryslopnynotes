@@ -812,10 +812,17 @@ button.chip {
     linear-gradient(150deg, color-mix(in srgb, var(--surface) 92%, var(--brand) 8%), var(--surface));
 }
 
-.school-summary--alert {
+.school-summary--unjustified {
   border-left-color: var(--danger);
   background:
     linear-gradient(150deg, color-mix(in srgb, var(--danger) 7%, var(--surface)), var(--surface));
+}
+
+/* Justification non publiée : ni vert (tout est justifié), ni rouge (faux). */
+.school-summary--unverified {
+  border-left-color: var(--muted);
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--ink) 6%, var(--surface)), var(--surface));
 }
 
 .school-summary--clean {
