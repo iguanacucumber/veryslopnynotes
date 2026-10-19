@@ -838,6 +838,17 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
     }
   });
 
+  // #417 : `Number()` d'un TABLEAU = `Number(join)` côté JS. Le port rendait
+  // `NaN` pour TOUT tableau : `"nbNonLus": []` → 0, `"duree": [30]` → 30.
+  test.skipIf(skip)("nombres : `Number()` des TABLEAUX comme en JS ([] = 0, [30] = 30, [1,2] = NaN)", async () => {
+    const { num } = await import("../../node_modules/pronotets/dist/resolver.js");
+    const cases: unknown[] = [[], [30], [null], [1, 2], [true], [[]], [[1], [2]], [{}], [" "], ["1"], ["1,2"]];
+    for (const value of cases) {
+      const kt = JSON.parse(await ask({ op: "numOf", value })) as { value: number | null };
+      expect(`num ${JSON.stringify(value)} -> ${canonTs(kt)}`).toBe(`num ${JSON.stringify(value)} -> ${canonTs({ value: num(value) })}`);
+    }
+  });
+
   test.skipIf(skip)("auth : QR heureux, rotation du jeton, état identique", async () => {
     const tsa = startStub();
     const kta = startStub();
