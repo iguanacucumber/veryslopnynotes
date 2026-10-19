@@ -1,11 +1,11 @@
 # Dépendances Gradle versionnées (issue #13, ADR-001).
 # Catalogue seul : versions figées, licences MIT-compatibles.
 [versions]
-agp = "8.5.2"
-kotlin = "1.9.24"
-core-ktx = "1.13.1"
-activity-ktx = "1.9.2"
-okhttp = "4.12.0"
+agp = "9.4.1"
+kotlin = "2.4.21"
+core-ktx = "1.19.1"
+activity-ktx = "1.13.0"
+okhttp = "5.5.0"
 # #127 : scan du QR de l'établissement. Décodeur DANS l'APK, permission CAMERA
 # demandée par l'activité de scan : ça marche sans Google Play Services (donc
 # sur l'émulateur et sur un téléphone sans GMS), ce que ne faisait pas le module
@@ -15,10 +15,10 @@ zxing-android-embedded = "4.3.0"
 # #208 : sync périodique de fond SANS serveur (ni SSE, ni push, ni cron).
 # Seule solution de sync périodique sans serveur : WorkManager (contraintes
 # réseau connecté + batterie non faible, backoff exponentiel). Version
-# contemporaine du catalogue (AGP 8.5.2 / Kotlin 1.9.24), la plus adoptée de
-# la série 2.x. Apache-2.0 (compatible MIT). Manifest : aucun composant
-# exporté (le provider androidx.startup est interne, non exporté).
-work = "2.9.0"
+# contemporaine du catalogue (AGP 9.4.1 / Kotlin 2.4.21). Apache-2.0
+# (compatible MIT). Manifest : aucun composant exporté (le provider
+# androidx.startup est interne, non exporté).
+work = "2.12.0"
 
 [libraries]
 core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }

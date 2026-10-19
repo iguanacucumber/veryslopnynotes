@@ -1,6 +1,5 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
 }
 
 // Graine serveur : défaut de l'app quand l'utilisateur n'a pas choisi
@@ -13,12 +12,12 @@ plugins {
 // servie par la WebView (ADR-004) : plus de module Compose.
 android {
     namespace = "fr.veryslopnynotes.app"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "fr.veryslopnynotes.app"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
 
@@ -90,9 +89,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
 }
 
 // Build de l'UI React dans les assets de l'APK. Toujours branché sur
@@ -111,12 +107,12 @@ tasks.named("preBuild") { dependsOn(buildWebUi) }
 dependencies {
     implementation(project(":core"))
     implementation(project(":data"))
-    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.core:core-ktx:1.19.1")
     // ComponentActivity + enableEdgeToEdge, sans Compose.
-    implementation("androidx.activity:activity-ktx:1.9.2")
+    implementation("androidx.activity:activity-ktx:1.13.0")
     // #333 : le pont natif lance le scan du QR (ScanContract).
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     // ponytail: un seul client HTTP (OkHttp allowlist serveur).
     // Upgrade: cache offline Room phase 4 (#14), SSE client #15.
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.0")
 }
