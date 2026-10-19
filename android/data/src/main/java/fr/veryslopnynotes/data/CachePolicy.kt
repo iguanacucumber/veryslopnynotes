@@ -84,6 +84,19 @@ object CachePolicy {
         return now - fetchedAt > ttlFor(resource)
     }
 
+    /**
+     * #369 : une écriture CONFIRMÉE invalide l'entrée de cache de la ressource
+     * — le cache ne doit plus resservir l'état d'avant (devoir « fait » qui se
+     * décoche au retour, fil supprimé qui réapparaît, compteur figé). Le TTL
+     * ne change pas : c'est l'entrée qui part, pas la politique.
+     *
+     * La source de vérité est le natif : l'invalidation suit l'écriture, pas
+     * l'écran qui l'a demandée (une seule fois, jamais des deux côtés).
+     */
+    fun invalidateAfterWrite(store: CacheStore, resource: String) {
+        if (isCacheable(resource)) store.clear(resource)
+    }
+
     // #311 : faut-il relire le client local ? Règle PURE (comme isStale), donc
     // testable sans téléphone : une entrée fraîche suffit à l'écran, sauf geste
     // EXPLICITE de l'utilisateur (`force` : tirail, « Actualiser », changement de
@@ -110,4 +123,19 @@ object CachePolicy {
      */
     fun normalizeQuery(query: String): String =
         query.trim().replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+}
+
+/**
+ * #369 : exécute une écriture locale puis invalide le cache de la ressource.
+ *
+ * L'écriture CONFIRMÉE fait partir l'entrée de cache (le cache ne ressert
+ * plus l'état d'avant : devoir « fait » qui se décoche, fil supprimé qui
+ * réapparaît). Une écriture qui ÉCHOUE ne purge rien : rien n'a été écrit.
+ *
+ * La source de vérité est le natif : l'invalidation suit l'écriture, pas
+ * l'écran qui l'a demandée (une seule fois, jamais des deux côtés).
+ */
+internal fun writeAndInvalidate(store: CacheStore, resource: String, block: () -> Unit) {
+    block()
+    CachePolicy.invalidateAfterWrite(store, resource)
 }
