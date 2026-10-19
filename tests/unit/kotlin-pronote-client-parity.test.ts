@@ -1233,6 +1233,44 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
     }
   });
 
+  // #417 : le contenu du cours court-circuite comme la référence — `listeContenus`
+  // n'est lu QUE pour le cours demandé. Avant, une entrée SANS `listeContenus`
+  // (un cours d'un autre jour) jetait et PERDAIT tout le bloc « Contenu de cours ».
+  test.skipIf(skip)("cours : contenu court-circuité (entrée sans `listeContenus`)", async () => {
+    const tsa = startStub();
+    const kta = startStub();
+    try {
+      richScript(tsa.script);
+      richScript(kta.script);
+      const contenu = {
+        cours: { V: { N: "t2-l-1" } },
+        listeContenus: {
+          V: [
+            { L: "Fractions", descriptif: { V: "<p>Exercices</p>" }, categorie: { V: { L: "Cours" } }, ListePieceJointe: { V: [] } },
+          ],
+        },
+      };
+      // PAS de `listeContenus` — et ce n'est PAS le cours demandé.
+      const sansListe = { cours: { V: { N: "t2-l-2" } } };
+      for (const s of [tsa.script, kta.script]) s.lessonContent = [sansListe, contenu];
+      const tsClient = await tsLogin(tsa);
+      const ktCid = await ktLogin(kta);
+      const from = new Date(2026, 8, 20);
+      const to = new Date(2026, 8, 27);
+      const tsLessons = await tsClient.lessons(from, to);
+      const tsContent = await (tsLessons[0] as { content(): Promise<unknown> }).content();
+      const ktContent = JSON.parse(
+        await ask({ op: "lessonContent", cid: ktCid, lessonId: "t2-l-1", from: "2026-09-20T00:00:00.000Z", to: "2026-09-27T00:00:00.000Z" }),
+      );
+      expect(canonTs(ktContent)).toBe(tsCanon(tsContent));
+      // Le contenu est bien celui du cours demandé (pas `null`, pas une erreur).
+      expect((ktContent as { title: string }).title).toBe("Fractions");
+    } finally {
+      tsa.close();
+      kta.close();
+    }
+  });
+
   test.skipIf(skip)("devoirs : fenêtre, bascule fait, URL magique + octets", async () => {
     const tsa = startStub();
     const kta = startStub();
