@@ -332,6 +332,9 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       return ok({ payload: JSON.stringify({ user: (fixtures.profile as { items: unknown }).items }) }) as Promise<T>;
     case "profile.photo":
       return ok({ dataUrl: null }) as Promise<T>;
+    case "bridge.cancel":
+      // Abandon : le pont factice n'a rien à faire, l'appel est déjà lâché.
+      return ok({ ok: true }) as Promise<T>;
     default:
       return Promise.reject(new Error(`méthode factice inconnue: ${method}`));
   }
