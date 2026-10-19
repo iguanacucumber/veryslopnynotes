@@ -85,7 +85,8 @@ import java.util.concurrent.TimeUnit
  *
  * Secrets : la session Pronote (SessionStore) et la clé LLM (LlmKeys) ne
  * sortent JAMAIS d'ici. Aucun paramètre n'est journalisé (QR, PIN, corps).
- * Toute exception devient `{code,message}` borné, jamais un message brut.
+ * Tout échec — jusqu'à l'`Error` — devient `{code,message}` borné, jamais un
+ * message brut : le pont ne laisse JAMAIS une promesse sans réponse (#394).
  */
 class VsnBridge(
     private val activity: ComponentActivity,
@@ -158,33 +159,50 @@ class VsnBridge(
             pendingScanId = null
             pending
         } ?: return@registerForActivityResult
-        val raw = result.contents
-        if (raw.isNullOrBlank()) {
-            resolve(id, JSONObject().put("qr", JSONObject.NULL).put("cancelled", true))
-            return@registerForActivityResult
-        }
-        val qr = parseSchoolQr(raw)
-        if (qr == null) {
-            reject(id, "bad_request", "QR illisible : rescanez le code de l'établissement.")
-        } else {
-            resolve(
-                id,
-                JSONObject()
-                    .put("cancelled", false)
-                    .put(
-                        "qr",
-                        JSONObject()
-                            .put("login", qr.login)
-                            .put("jeton", qr.jeton)
-                            .put("url", qr.url),
-                    ),
-            )
+        // #394 : le scan n'a PAS de délai JS (0 s) : une exception ici
+        // laisserait la promesse PENDANTE pour toujours. Toute cause — un
+        // `Error` compris — devient donc un rejet.
+        try {
+            val raw = result.contents
+            if (raw.isNullOrBlank()) {
+                resolve(id, JSONObject().put("qr", JSONObject.NULL).put("cancelled", true))
+                return@registerForActivityResult
+            }
+            val qr = parseSchoolQr(raw)
+            if (qr == null) {
+                reject(id, "bad_request", "QR illisible : rescanez le code de l'établissement.")
+            } else {
+                resolve(
+                    id,
+                    JSONObject()
+                        .put("cancelled", false)
+                        .put(
+                            "qr",
+                            JSONObject()
+                                .put("login", qr.login)
+                                .put("jeton", qr.jeton)
+                                .put("url", qr.url),
+                        ),
+                )
+            }
+        } catch (_: Throwable) {
+            reject(id, "unknown", "Erreur native.")
         }
     }
 
     /** Appel unique depuis le JS. Retour immédiat : le travail part en fond. */
     @JavascriptInterface
     fun call(requestId: String, method: String, paramsJson: String) {
+        try {
+            runCall(requestId, method, paramsJson)
+        } catch (_: Throwable) {
+            // #394 : une exception ici laisserait la promesse JS PENDANTE
+            // (le pont n'a pas répondu du tout). Tout devient un rejet.
+            reject(requestId, "unknown", "Erreur native.")
+        }
+    }
+
+    private fun runCall(requestId: String, method: String, paramsJson: String) {
         if (!validId(requestId)) return
         if (method.length > MAX_METHOD_CHARS || method !in METHODS) {
             reject(requestId, "bad_request", "Méthode inconnue.")
@@ -207,16 +225,22 @@ class VsnBridge(
         executor.execute {
             try {
                 if (cancelled.contains(requestId)) return@execute
-                val params = if (paramsJson.isBlank()) JSONObject() else JSONObject(paramsJson)
-                // null = réponse différée (scan QR).
-                handle(requestId, method, params)?.let { resolve(requestId, it) }
-            } catch (e: BridgeFailure) {
-                reject(requestId, e.code, e.message ?: "Requête invalide.")
-            } catch (_: org.json.JSONException) {
-                reject(requestId, "bad_request", "Paramètres illisibles.")
-            } catch (_: Exception) {
+                // #394 : TOUT échec natif — un `Error` compris — devient un
+                // REJET. Sans ce filet, l'`Error` tuait le fil du worker
+                // SANS `resolve` ni `reject` : la promesse JS pendait (pour
+                // `pairing.scanQr`, dont le délai JS est 0, elle pendait
+                // POUR TOUJOURS : chargement infini, sans message).
+                val failure = bridgeCallOutcome {
+                    val params = try {
+                        if (paramsJson.isBlank()) JSONObject() else JSONObject(paramsJson)
+                    } catch (_: org.json.JSONException) {
+                        throw BridgeFailure("bad_request", "Paramètres illisibles.")
+                    }
+                    // null = réponse différée (scan QR).
+                    handle(requestId, method, params)?.let { resolve(requestId, it) }
+                }
                 // Jamais le message brut : il peut nommer un hôte ou un compte.
-                reject(requestId, "unknown", "Erreur native.")
+                if (failure != null) reject(requestId, failure.code, failure.message)
             } finally {
                 inFlight.remove(requestId)
                 cancelled.remove(requestId)
@@ -233,7 +257,10 @@ class VsnBridge(
     private fun cancelRequest(paramsJson: String) {
         val target = try {
             JSONObject(paramsJson).optString("requestId", "")
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
+            // org.json RÉCURSE : des `[` imbriqués font déborder la pile
+            // (`StackOverflowError`, un `Error` : `Exception` ne le prendrait
+            // pas). Un abandon malformé n'est qu'un abandon raté.
             ""
         }
         if (validId(target) && inFlight.contains(target)) cancelled.add(target)
@@ -373,7 +400,9 @@ class VsnBridge(
                         setOrientationLocked(true)
                     },
                 )
-            } catch (_: Exception) {
+            } catch (_: Throwable) {
+                // Même un `Error` : le scan n'a PAS de délai JS, une exception
+                // qui s'échapperait laisserait la promesse PENDANTE (#394).
                 synchronized(scanLock) { pendingScanId = null }
                 reject(requestId, "unavailable", "Scan indisponible sur cet appareil.")
             }
@@ -1062,24 +1091,37 @@ class VsnBridge(
         )
     }
 
+    /**
+     * Réponse d'échec : elle ne doit JAMAIS échouer.
+     *
+     * C'est le DERNIER filet du pont : si le rejet lui-même plante (mémoire
+     * épuisée), on l'avale plutôt que de laisser l'exception remonter — un
+     * `Error` ici tuerait le fil du worker SANS réponse et la promesse JS
+     * pendrait (#394). Le délai JS reste le filet de sécurité.
+     */
     private fun reject(requestId: String, code: String, message: String) {
-        if (cancelled.remove(requestId)) return
-        // Borné : aucune exception brute, aucun hôte, aucun secret.
-        val error = JSONObject()
-            .put("code", code)
-            .put("message", message.replace('\n', ' ').take(200))
-        postJs(
-            "window.__vsnReject(${JSONObject.quote(requestId)}, " +
-                "${JSONObject.quote(error.toString())})",
-        )
+        try {
+            if (cancelled.remove(requestId)) return
+            // Borné : aucune exception brute, aucun hôte, aucun secret.
+            val error = JSONObject()
+                .put("code", code)
+                .put("message", message.replace('\n', ' ').take(200))
+            postJs(
+                "window.__vsnReject(${JSONObject.quote(requestId)}, " +
+                    "${JSONObject.quote(error.toString())})",
+            )
+        } catch (_: Throwable) {
+            // Le rejet n'a pas pu partir : la promesse expirera côté JS.
+        }
     }
 
     private fun postJs(script: String) {
         main.post {
             try {
                 webView.evaluateJavascript(script, null)
-            } catch (_: Exception) {
-                // WebView détruite : la promesse JS expirera d'elle-même.
+            } catch (_: Throwable) {
+                // WebView détruite (ou `Error` inattendu) : la promesse JS
+                // expirera d'elle-même.
             }
         }
     }
@@ -1102,8 +1144,6 @@ class VsnBridge(
 
     private fun JSONObject.string(key: String): String =
         if (isNull(key)) "" else optString(key, "")
-
-    private class BridgeFailure(val code: String, message: String) : Exception(message)
 
     /** Store de fiches en fichiers, même assainissement que l'écran Compose. */
     private class FileRevisionKv(dir: File) : RevisionKv {
