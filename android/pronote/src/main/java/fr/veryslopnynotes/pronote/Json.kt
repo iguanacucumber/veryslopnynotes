@@ -15,6 +15,9 @@ package fr.veryslopnynotes.pronote
  *   `\u00XX` pour les autres contrôles, paires de substitution non-BMP brutes ;
  * - nombres : entier si entier (`20`, pas `20.0`), décimal le plus court sinon,
  *   exponentiel au-delà de `1e21` et sous `1e-6`, `NaN`/`Infini` → `null`.
+ * - `parse` : profondeur d'imbrication bornée (`MAX_DEPTH`) — une entrée trop
+ *   profonde échoue par un `JsonError` RATRAPABLE, jamais par le
+ *   `StackOverflowError` (une `Error` : crash dur) du parseur non borné.
  * Le harnais le prouve par écho contre `JSON.parse`/`JSON.stringify`.
  */
 sealed interface JVal {
@@ -31,6 +34,22 @@ sealed interface JVal {
 class JsonError(message: String) : Exception(message)
 
 object Json {
+    /**
+     * Profondeur d'imbrication maximale acceptée par `parse` (conteneurs
+     * imbriqués : objets ET tableaux).
+     *
+     * Le parseur est RÉCURSIF : sans borne, une réponse serveur malformée
+     * (`[[[[…]]]]`) épuise la pile et lève `StackOverflowError` — une `Error`,
+     * donc NON attrapable par les `catch (e: Exception)` des dépôts, de
+     * `PeriodicSyncWorker` et du pilote de parité : crash dur de l'app au
+     * lieu d'un échec de lecture. `JSON.parse` de V8, lui, lève un `RangeError`
+     * attrapable. Au-delà de la borne, on refuse donc par un `JsonError`.
+     *
+     * 512 niveaux couvrent largement les enveloppes PRONOTE (3-4) et restent
+     * très en dessous de la limite de pile.
+     */
+    const val MAX_DEPTH = 512
+
     fun parse(text: String): JVal = Parser(text).parse()
 
     fun stringify(value: JVal): String = buildString { appendValue(value) }
@@ -110,6 +129,9 @@ object Json {
     private class Parser(private val text: String) {
         private var pos = 0
 
+        /** Conteneurs ouverts à cet instant (objets + tableaux). */
+        private var depth = 0
+
         fun parse(): JVal {
             skipWs()
             val v = parseValue()
@@ -127,9 +149,20 @@ object Json {
         private fun parseValue(): JVal {
             skipWs()
             if (pos >= text.length) fail("fin inattendue")
-            return when (text[pos]) {
-                '{' -> parseObj()
-                '[' -> parseArr()
+            val c = text[pos]
+            if (c == '{' || c == '[') {
+                // Un conteneur de plus. Au-delà de la borne : `JsonError`
+                // (rattrapable), jamais le `StackOverflowError` du parseur non
+                // borné (crash dur : une `Error` n'est pas une `Exception`).
+                if (depth >= MAX_DEPTH) fail("profondeur excessive")
+                depth++
+                try {
+                    return if (c == '{') parseObj() else parseArr()
+                } finally {
+                    depth--
+                }
+            }
+            return when (c) {
                 '"' -> JVal.Str(parseStr())
                 't' -> {
                     expect("true")
@@ -144,7 +177,7 @@ object Json {
                     JVal.Null
                 }
                 '-', in '0'..'9' -> parseNum()
-                else -> fail("caractère '${text[pos]}'")
+                else -> fail("caractère '$c'")
             }
         }
 
