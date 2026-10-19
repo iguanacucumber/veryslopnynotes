@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "check": "make check",
-    "typecheck": "tsc --noEmit",
-    "typecheck:web": "tsc -p web/tsconfig.json --noEmit",
+    "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc-root.tsbuildinfo",
+    "typecheck:web": "tsc -p web/tsconfig.json --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc-web.tsbuildinfo",
     "build:web": "vite build --config web/vite.config.ts",
     "dev:web": "vite --config web/vite.config.ts",
     "test": "bun test",
