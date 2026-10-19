@@ -1543,6 +1543,46 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
     }
   });
 
+  // #417 : le chemin ENT doit survivre à une page SANS `e`/`f` — la référence
+  // traite l'attribut absent comme `undefined` (`String(undefined)`), le port
+  // jetait un `KotlinNullPointerException` et le login s'arrêtait.
+  test.skipIf(skip)("ENT : page sans `e`/`f` → le login aboutit (comme la référence)", async () => {
+    const tsa = startStub();
+    const kta = startStub();
+    try {
+      // Pas de `e`/`f` dans la page : le mot de passe ENT vaut `undefined`
+      // (JS : `String(undefined)`) — le stub attend exactement ce mot de passe.
+      for (const stub of [tsa, kta]) {
+        stub.htmlExtra = "";
+        stub.password = "undefined";
+        stub.script.securisation = 0;
+      }
+      const entTs = async () => {
+        const { CookieJar } = await import("tough-cookie");
+        return new CookieJar();
+      };
+      const { Client: C } = await import("pronotets");
+      const tsClient = await C.login(`${tsa.base}/pronote/eleve.html`, "nimporte", "entpass", { ent: entTs as never });
+      const ktCid = Number(
+        JSON.parse(await ask({ op: "clientLogin", site: `${kta.base}/pronote/eleve.html`, username: "nimporte", password: "entpass", ent: true })).cid,
+      );
+      // `identifiant` ABSENT des deux côtés (la page n'a pas `e`).
+      const tsIdent = tsa.posts.find((p) => p.id === "Identification");
+      const ktIdent = kta.posts.find((p) => p.id === "Identification");
+      expect((ktIdent?.inner as { data: Record<string, unknown> }).data).toEqual(
+        (tsIdent?.inner as { data: Record<string, unknown> }).data,
+      );
+      expect(((tsIdent?.inner as { data: Record<string, unknown> }).data as Record<string, unknown>).pourENT).toBe(true);
+      expect((ktIdent?.inner as { data: Record<string, unknown> }).data.identifiant).toBeUndefined();
+      // Le login aboutit des deux côtés (état identique).
+      const ktState = JSON.parse(await ask({ op: "clientState", cid: ktCid }));
+      expect(canonTs(ktState)).toBe(canonTs(tsStateOf(tsClient)));
+    } finally {
+      tsa.close();
+      kta.close();
+    }
+  });
+
   test.skipIf(skip)("robustesse : enveloppes tordues jettent des deux côtés", async () => {
     const tsa = startStub();
     const kta = startStub();
