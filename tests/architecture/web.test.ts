@@ -64,4 +64,18 @@ describe("web invariants", () => {
       .map((file) => file.replace(ROOT, ""));
     expect(hits).toEqual([]);
   });
+
+  test("un appairage réussi ouvre la session côté web", () => {
+    // Le statut lu au démarrage est périmé après un appairage : sans ce
+    // câblage, le garde-fou renvoie vers /pairing et le menu principal
+    // reste inaccessible sans redémarrer l'application (#357).
+    const ctx = readFileSync(join(WEB, "src/ui/AppContext.tsx"), "utf8");
+    expect(ctx).toContain("setSessionOpen(true)");
+    expect(ctx).toContain("setAuthLost(false)");
+    const pairing = readFileSync(join(WEB, "src/features/pairing/PairingScreen.tsx"), "utf8");
+    expect(pairing).toContain("openSession()");
+    const app = readFileSync(join(WEB, "src/App.tsx"), "utf8");
+    expect(app).toContain("sessionOpen");
+    expect(app).toContain("mustPair(");
+  });
 });
