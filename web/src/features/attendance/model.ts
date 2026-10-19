@@ -3,7 +3,7 @@
 //
 // Payloads du pont : `{"absences":[],"periods":[]}` et `{"punishments":[]}`.
 // Le pont factice publie `{"items":[]}` : les deux formes sont lues.
-import { cleanText } from "../../lib/format";
+import { cleanText, parseInstant } from "../../lib/format";
 
 export const MAX_MOTIF_CHARS = 500;
 export const MAX_SUBJECT_CHARS = 64;
@@ -93,24 +93,9 @@ function optInt(obj: Record<string, unknown>, key: string): number {
   return Math.trunc(v);
 }
 
-/** Instant d'une date ISO du contrat, ou null. Instant complet et date seule. */
-export function parseInstant(value: string | null | undefined): number | null {
-  if (!value) return null;
-  const raw = value.trim();
-  if (!raw) return null;
-  // Date seule = minuit LOCAL, comme le parseur natif (`LocalDate`).
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
-  if (dateOnly) {
-    const year = Number(dateOnly[1]);
-    const month = Number(dateOnly[2]) - 1;
-    const day = Number(dateOnly[3]);
-    const local = new Date(year, month, day);
-    if (local.getFullYear() !== year || local.getMonth() !== month || local.getDate() !== day) return null;
-    return local.getTime();
-  }
-  const ms = Date.parse(raw);
-  return Number.isFinite(ms) ? ms : null;
-}
+/** Instant d'une date ISO du contrat, ou null. Instant complet et date seule
+ *  (minuit local) : l'analyseur est partagé avec le reste du web. */
+export { parseInstant };
 
 function arrayOf(root: Record<string, unknown>, canonicalKey: string): unknown[] {
   const canonical = root[canonicalKey];

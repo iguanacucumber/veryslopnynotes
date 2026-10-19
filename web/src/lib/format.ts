@@ -4,11 +4,40 @@ const FR_MONTHS = [
   "janvier", "février", "mars", "avril", "mai", "juin",
   "juillet", "août", "septembre", "octobre", "novembre", "décembre",
 ];
+/** Abréviations françaises (usage typographique) : les mois courts ne
+ *  s'abrègent pas (« mars », « mai », « juin », « août »). */
+const FR_MONTHS_SHORT = [
+  "janv.", "févr.", "mars", "avr.", "mai", "juin",
+  "juil.", "août", "sept.", "oct.", "nov.", "déc.",
+];
+
+/** Une date seule (`YYYY-MM-DD`) est un jour civil : minuit LOCAL. */
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Instant (ms) d'un ISO du contrat, ou null s'il est illisible. Les deux
+ *  formes sont admises : instant complet et date seule. Une date SEULE est
+ *  minuit LOCAL (comme le parseur natif), sinon elle glisserait d'un jour
+ *  dans les fuseaux à l'ouest de Greenwich. */
+export function parseInstant(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  const dateOnly = DATE_ONLY.exec(raw);
+  if (dateOnly) {
+    const year = Number(dateOnly[1]);
+    const month = Number(dateOnly[2]) - 1;
+    const day = Number(dateOnly[3]);
+    const local = new Date(year, month, day);
+    if (local.getFullYear() !== year || local.getMonth() !== month || local.getDate() !== day) return null;
+    return local.getTime();
+  }
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : null;
+}
 
 export function parseDate(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
+  const ms = parseInstant(value);
+  return ms === null ? null : new Date(ms);
 }
 
 export function frDate(value: string | null | undefined): string {
@@ -17,10 +46,17 @@ export function frDate(value: string | null | undefined): string {
   return `${FR_DAYS[d.getDay()]} ${d.getDate()} ${FR_MONTHS[d.getMonth()]}`;
 }
 
+/** « 16 octobre 2026 » ; vide si la date est illisible. */
+export function frDateLong(value: string | null | undefined): string {
+  const d = parseDate(value);
+  if (!d) return "";
+  return `${d.getDate()} ${FR_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 export function frDateShort(value: string | null | undefined): string {
   const d = parseDate(value);
   if (!d) return "";
-  return `${d.getDate()} ${FR_MONTHS[d.getMonth()]?.slice(0, 4)}.`;
+  return `${d.getDate()} ${FR_MONTHS_SHORT[d.getMonth()] ?? ""}`;
 }
 
 export function frTime(value: string | null | undefined): string {

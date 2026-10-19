@@ -1,7 +1,7 @@
 // Logique pure de l'écran Tâches, portée de `AssignmentsSections.kt` et
 // `AssignmentsRepository.kt`. Aucun React, aucun réseau : les parsers et les
 // regroupements sont testables avec un `now` injecté.
-import { addDays, frDate, frTime, isoDay, startOfWeek } from "../../lib/format";
+import { addDays, frDate, frTime, isoDay, parseDate, startOfWeek } from "../../lib/format";
 
 export interface AssignmentAttachment {
   id: string;
@@ -82,20 +82,13 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/;
 
 /** DueDate du contrat : instant ISO complet ou date seule. Tout le reste est
- *  illisible (jamais une date fabriquée à partir des dix premiers caractères). */
+ *  illisible (jamais une date fabriquée à partir des dix premiers caractères).
+ *  Une date seule est minuit local (analyseur partagé). */
 export function assignmentDate(value: unknown): Date | null {
   if (typeof value !== "string") return null;
   const raw = value.trim();
   if (!DATE_ONLY.test(raw) && !ISO_INSTANT.test(raw)) return null;
-  if (DATE_ONLY.test(raw)) {
-    const [year, month, day] = raw.split("-").map((part) => Number.parseInt(part, 10));
-    if (!year || !month || !day) return null;
-    const date = new Date(year, month - 1, day);
-    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
-    return date;
-  }
-  const date = new Date(raw);
-  return Number.isNaN(date.getTime()) ? null : date;
+  return parseDate(raw);
 }
 
 export function assignmentDayKey(value: unknown): string | null {
