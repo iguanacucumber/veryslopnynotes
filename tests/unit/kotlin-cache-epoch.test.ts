@@ -23,16 +23,13 @@ const POLICY = join(DATA, "CachePolicy.kt");
 const REPO = join(DATA, "SyncedRepository.kt");
 const ACCOUNT = join(DATA, "AccountStore.kt");
 const WORKER = join(DATA, "PeriodicSyncWorker.kt");
-// JSON du pilote : le `Json` embarqué du port (pur, aucun import Android).
-const JSON_LIB = join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote", "Json.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "CacheEpochParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
 
 let link: ParityLink | null = null;
 if (!skip) {
-  const jar = await parityToolchain.ensureJar("kotlin-cache-epoch", [CACHE, POLICY, JSON_LIB, DRIVER]);
-  link = await parityToolchain.openLink(jar);
+  link = await parityToolchain.openParityLink(DRIVER);
 }
 
 afterAll(async () => {
