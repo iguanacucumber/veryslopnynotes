@@ -7,7 +7,7 @@
 // même donnée sous `{"items":[]}` : on accepte les deux formes, jamais un
 // troisième schéma inventé. Tout texte reste une DONNÉE (React l'échappe) —
 // aucun HTML n'est construit ni interprété.
-import { cleanText } from "../../lib/format";
+import { cleanText, parseInstant } from "../../lib/format";
 import { subjectKey } from "../../lib/subject";
 
 export const MAX_ID = 64;
@@ -91,26 +91,10 @@ function payloadRoot(payload: string | null): Record<string, unknown> | null {
   }
 }
 
-/** Instant d'un ISO du contrat, ou null s'il est illisible.
- *  Les deux formes sont admises : instant complet et date seule. */
-export function parseInstant(value: string | null | undefined): number | null {
-  if (!value) return null;
-  const raw = value.trim();
-  if (!raw) return null;
-  // Une DATE SEULE est minuit LOCAL (comme le parseur natif), sinon elle
-  // glisserait d'un jour dans les fuseaux à l'ouest de Greenwich.
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
-  if (dateOnly) {
-    const year = Number(dateOnly[1]);
-    const month = Number(dateOnly[2]) - 1;
-    const day = Number(dateOnly[3]);
-    const local = new Date(year, month, day);
-    if (local.getFullYear() !== year || local.getMonth() !== month || local.getDate() !== day) return null;
-    return local.getTime();
-  }
-  const ms = Date.parse(raw);
-  return Number.isFinite(ms) ? ms : null;
-}
+/** Instant d'un ISO du contrat, ou null s'il est illisible. Les deux formes
+ *  sont admises : instant complet et date seule (minuit local). L'analyseur
+ *  est partagé avec le reste du web. */
+export { parseInstant };
 
 export function parseDiscussions(payload: string | null): Discussion[] {
   const root = payloadRoot(payload);
