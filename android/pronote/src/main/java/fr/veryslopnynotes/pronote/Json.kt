@@ -239,6 +239,28 @@ object Json {
             }
         }
 
+        /**
+         * `\u` : 4 chiffres hexadécimaux EXACTEMENT, ou `null`.
+         *
+         * `toIntOrNull(16)` acceptait un signe (`+41` → 65, `-41` → -65) : le
+         * port acceptait un échappement que `JSON.parse` refuse (`SyntaxError`).
+         */
+        private fun hex4(s: String, at: Int): Int? {
+            if (at + 4 > s.length) return null
+            var v = 0
+            for (i in 0 until 4) {
+                val c = s[at + i]
+                val d = when {
+                    c in '0'..'9' -> c - '0'
+                    c in 'a'..'f' -> c - 'a' + 10
+                    c in 'A'..'F' -> c - 'A' + 10
+                    else -> return null
+                }
+                v = v * 16 + d
+            }
+            return v
+        }
+
         private fun parseStr(): String {
             pos++ // "
             val out = StringBuilder()
@@ -257,12 +279,15 @@ object Json {
                         't' -> out.append('\t')
                         'u' -> {
                             if (pos + 4 > text.length) fail("\\u tronqué")
-                            val hi = text.substring(pos, pos + 4).toIntOrNull(16) ?: fail("\\u invalide")
+                            // STRICT : 4 hex EXACTEMENT (`toIntOrNull(16)` acceptait
+                            // un signe : `+41` passait, `-41` donnait un caractère
+                            // faux). En JS, `"\u+41"` est un `SyntaxError`.
+                            val hi = hex4(text, pos) ?: fail("\\u invalide")
                             pos += 4
                             if (hi in 0xD800..0xDBFF && pos + 6 <= text.length &&
                                 text[pos] == '\\' && text[pos + 1] == 'u'
                             ) {
-                                val lo = text.substring(pos + 2, pos + 6).toIntOrNull(16)
+                                val lo = hex4(text, pos + 2)
                                 if (lo != null && lo in 0xDC00..0xDFFF) {
                                     out.appendCodePoint(0x10000 + ((hi - 0xD800) shl 10) + (lo - 0xDC00))
                                     pos += 6

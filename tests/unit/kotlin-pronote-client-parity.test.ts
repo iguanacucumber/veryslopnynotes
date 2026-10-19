@@ -838,6 +838,39 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
     }
   });
 
+  // #417 : `Number()` d'un TABLEAU = `Number(join)` côté JS. Le port rendait
+  // `NaN` pour TOUT tableau : `"nbNonLus": []` → 0, `"duree": [30]` → 30.
+  test.skipIf(skip)("nombres : `Number()` des TABLEAUX comme en JS ([] = 0, [30] = 30, [1,2] = NaN)", async () => {
+    const { num } = await import("../../node_modules/pronotets/dist/resolver.js");
+    const cases: unknown[] = [[], [30], [null], [1, 2], [true], [[]], [[1], [2]], [{}], [" "], ["1"], ["1,2"]];
+    for (const value of cases) {
+      const kt = JSON.parse(await ask({ op: "numOf", value })) as { value: number | null };
+      expect(`num ${JSON.stringify(value)} -> ${canonTs(kt)}`).toBe(`num ${JSON.stringify(value)} -> ${canonTs({ value: num(value) })}`);
+    }
+  });
+
+  // #417 : `String()` d'un TABLEAU = son `join(",")` : `null` → chaîne VIDE.
+  // Le port rendait le texte littéral `null` (un motif d'absence affiché).
+  test.skipIf(skip)("chaînes : `String()` des TABLEAUX comme en JS ([null] = \"\", [1,2] = \"1,2\")", async () => {
+    const { str } = await import("../../node_modules/pronotets/dist/resolver.js");
+    const cases: unknown[] = [[], [null], [1, 2], [[1], [2]], [{}], [[null]], ["a", null, "b"], [true], [0], [""]];
+    for (const value of cases) {
+      const kt = JSON.parse(await ask({ op: "strOf", value })) as { value: string };
+      expect(`str ${JSON.stringify(value)} -> ${canonTs(kt)}`).toBe(`str ${JSON.stringify(value)} -> ${canonTs({ value: str(value) })}`);
+    }
+  });
+
+  // #417 : `new Date(y, …)` REMAPPE les années 0..99 en 1900+y (`new Date(26, 8, 5)`
+  // = 1926). Le port gardait l'année 26 : une date qui n'existe pas.
+  test.skipIf(skip)("dates : `new Date()` remappe les années 0..99 (05/09/0026 → 1926)", async () => {
+    const { Util } = await import("../../node_modules/pronotets/dist/resolver.js");
+    for (const text of ["05/09/0026", "05/09/0099", "05/09/0026 08:00:00", "12/09/26"]) {
+      const kt = JSON.parse(await ask({ op: "dateParse", text })) as { millis: number };
+      const ts = (Util.dateParse as (s: string) => Date)(text).getTime();
+      expect(`dateParse ${text} -> ${kt.millis}`).toBe(`dateParse ${text} -> ${ts}`);
+    }
+  });
+
   test.skipIf(skip)("auth : QR heureux, rotation du jeton, état identique", async () => {
     const tsa = startStub();
     const kta = startStub();
@@ -1200,6 +1233,44 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
     }
   });
 
+  // #417 : le contenu du cours court-circuite comme la référence — `listeContenus`
+  // n'est lu QUE pour le cours demandé. Avant, une entrée SANS `listeContenus`
+  // (un cours d'un autre jour) jetait et PERDAIT tout le bloc « Contenu de cours ».
+  test.skipIf(skip)("cours : contenu court-circuité (entrée sans `listeContenus`)", async () => {
+    const tsa = startStub();
+    const kta = startStub();
+    try {
+      richScript(tsa.script);
+      richScript(kta.script);
+      const contenu = {
+        cours: { V: { N: "t2-l-1" } },
+        listeContenus: {
+          V: [
+            { L: "Fractions", descriptif: { V: "<p>Exercices</p>" }, categorie: { V: { L: "Cours" } }, ListePieceJointe: { V: [] } },
+          ],
+        },
+      };
+      // PAS de `listeContenus` — et ce n'est PAS le cours demandé.
+      const sansListe = { cours: { V: { N: "t2-l-2" } } };
+      for (const s of [tsa.script, kta.script]) s.lessonContent = [sansListe, contenu];
+      const tsClient = await tsLogin(tsa);
+      const ktCid = await ktLogin(kta);
+      const from = new Date(2026, 8, 20);
+      const to = new Date(2026, 8, 27);
+      const tsLessons = await tsClient.lessons(from, to);
+      const tsContent = await (tsLessons[0] as { content(): Promise<unknown> }).content();
+      const ktContent = JSON.parse(
+        await ask({ op: "lessonContent", cid: ktCid, lessonId: "t2-l-1", from: "2026-09-20T00:00:00.000Z", to: "2026-09-27T00:00:00.000Z" }),
+      );
+      expect(canonTs(ktContent)).toBe(tsCanon(tsContent));
+      // Le contenu est bien celui du cours demandé (pas `null`, pas une erreur).
+      expect((ktContent as { title: string }).title).toBe("Fractions");
+    } finally {
+      tsa.close();
+      kta.close();
+    }
+  });
+
   test.skipIf(skip)("devoirs : fenêtre, bascule fait, URL magique + octets", async () => {
     const tsa = startStub();
     const kta = startStub();
@@ -1464,6 +1535,46 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
         (tsIdent?.inner as { data: Record<string, unknown> }).data,
       );
       expect(((tsIdent?.inner as { data: Record<string, unknown> }).data as Record<string, unknown>).pourENT).toBe(true);
+      const ktState = JSON.parse(await ask({ op: "clientState", cid: ktCid }));
+      expect(canonTs(ktState)).toBe(canonTs(tsStateOf(tsClient)));
+    } finally {
+      tsa.close();
+      kta.close();
+    }
+  });
+
+  // #417 : le chemin ENT doit survivre à une page SANS `e`/`f` — la référence
+  // traite l'attribut absent comme `undefined` (`String(undefined)`), le port
+  // jetait un `KotlinNullPointerException` et le login s'arrêtait.
+  test.skipIf(skip)("ENT : page sans `e`/`f` → le login aboutit (comme la référence)", async () => {
+    const tsa = startStub();
+    const kta = startStub();
+    try {
+      // Pas de `e`/`f` dans la page : le mot de passe ENT vaut `undefined`
+      // (JS : `String(undefined)`) — le stub attend exactement ce mot de passe.
+      for (const stub of [tsa, kta]) {
+        stub.htmlExtra = "";
+        stub.password = "undefined";
+        stub.script.securisation = 0;
+      }
+      const entTs = async () => {
+        const { CookieJar } = await import("tough-cookie");
+        return new CookieJar();
+      };
+      const { Client: C } = await import("pronotets");
+      const tsClient = await C.login(`${tsa.base}/pronote/eleve.html`, "nimporte", "entpass", { ent: entTs as never });
+      const ktCid = Number(
+        JSON.parse(await ask({ op: "clientLogin", site: `${kta.base}/pronote/eleve.html`, username: "nimporte", password: "entpass", ent: true })).cid,
+      );
+      // `identifiant` ABSENT des deux côtés (la page n'a pas `e`).
+      const tsIdent = tsa.posts.find((p) => p.id === "Identification");
+      const ktIdent = kta.posts.find((p) => p.id === "Identification");
+      expect((ktIdent?.inner as { data: Record<string, unknown> }).data).toEqual(
+        (tsIdent?.inner as { data: Record<string, unknown> }).data,
+      );
+      expect(((tsIdent?.inner as { data: Record<string, unknown> }).data as Record<string, unknown>).pourENT).toBe(true);
+      expect((ktIdent?.inner as { data: Record<string, unknown> }).data.identifiant).toBeUndefined();
+      // Le login aboutit des deux côtés (état identique).
       const ktState = JSON.parse(await ask({ op: "clientState", cid: ktCid }));
       expect(canonTs(ktState)).toBe(canonTs(tsStateOf(tsClient)));
     } finally {

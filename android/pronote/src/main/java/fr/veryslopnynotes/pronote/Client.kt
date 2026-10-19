@@ -148,9 +148,13 @@ open class ClientBase(
             ?: throw ParsingError("Identification sans data", listOf("dataSec", "data"))
         val e = Encryption()
         e.aesSetIv(communication.encryption.aesIv)
-        // `.toLowerCase()` sur absent jetterait côté TS aussi (`!!` miroir).
-        var uname = unameRaw!!
-        var pwd = pwdRaw!!
+        // ENT : `attributes["e"]`/`["f"]` ABSENTS = `undefined` côté TS, pas une
+        // exception : `String(undefined)` vaut `"undefined"` et le login
+        // continue. Le `!!` jettait (`KotlinNullPointerException`) là où la
+        // référence enchaîne. Hors ENT, `username`/`password` ne sont jamais
+        // nuls (le constructeur refuse les deux vides).
+        var uname = unameRaw ?: "undefined"
+        var pwd = pwdRaw ?: "undefined"
         if (ent != null) {
             val motdepasse = sha256HexUpper(pwd)
             e.aesSetKey(motdepasse.toByteArray(Charsets.UTF_8))
