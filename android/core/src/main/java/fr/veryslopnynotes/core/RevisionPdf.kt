@@ -12,8 +12,10 @@ import java.io.OutputStream
 // lui-même. API 26 (minSdk), ZÉRO dépendance — c'est tout l'objet de ce fichier.
 //
 // Le CONTENU dessiné vient de `revisionPdfLines` (même découpage titre/date/
-// corps/gabarit que l'ex-référence serveur, supprimée en #210) : ce fichier ne
-// fait que paginer et dessiner, aucune logique métier.
+// corps/sources/gabarit que l'ex-référence serveur, supprimée en #210) : ce
+// fichier ne fait que paginer et dessiner, aucune logique métier. Le corps
+// entier est dessiné (le PDF pagine) et les sources viennent de la liste
+// canonique de la fiche, jamais du texte du modèle (#412).
 //
 // Fichier non rejoué par le harnais `kotlinc` seul (`android.graphics` vient du
 // SDK) : vérifié par `check-kotlin` (structure) + `make android-compile` (le
