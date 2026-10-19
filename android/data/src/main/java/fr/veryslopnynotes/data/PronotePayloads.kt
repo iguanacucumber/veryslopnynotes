@@ -743,11 +743,17 @@ internal fun capabilitiesPayload(client: Client, nowIso: String = parisNowIso())
         ),
         nowIso,
     )
-    val body = JSONObject().apply {
-        put("accountId", caps.accountId)
-        put("tabs", JSONArray(caps.tabs))
-        put("fetchedAt", caps.fetchedAt)
-    }
+    // Contrat invalide = rien n'est affirmé : on publie `capabilities: null`
+    // (le lecteur web et le pont en font « inconnu », donc rien n'est masqué).
+    // JAMAIS une liste d'onglets vide : elle affirmerait « tous les onglets
+    // désactivés » et blackouterait la navigation (#413).
+    val body = caps?.let {
+        JSONObject().apply {
+            put("accountId", it.accountId)
+            put("tabs", JSONArray(it.tabs))
+            put("fetchedAt", it.fetchedAt)
+        }
+    } ?: JSONObject.NULL
     return JSONObject().put("capabilities", body).toString()
 }
 

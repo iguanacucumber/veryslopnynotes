@@ -48,9 +48,14 @@ object Humanize {
         if (answer.length > MAX_CORRIGE_CHARS) throw AiError("corrigé trop long (VALIDATE)")
         val rawSources = obj.fields["sources"]
         val src: List<JsonValue> = when (rawSources) {
+            // Champ ABSENT = corpus vide : autorisé (rendu "aucune").
             null -> emptyList()
             is JsonValue.Arr -> rawSources.items
-            else -> emptyList()
+            // Champ présent mais MAL FORMÉ (chaîne, nombre, objet, null) : on
+            // REFUSE (#413). Avant, ce cas devenait une liste vide — la source
+            // invalide était confondue avec « aucune source », et le texte
+            // était présenté comme un corrigé validé, sans sources.
+            else -> throw AiError("corrigé invalide : sources (VALIDATE)")
         }
         if (src.size > MAX_SOURCES) throw AiError("corrigé invalide : trop de sources (VALIDATE)")
         val clean = ArrayList<String>(src.size)
