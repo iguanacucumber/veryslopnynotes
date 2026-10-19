@@ -389,3 +389,16 @@ export function subjectInitial(subject: string): string {
   const first = subject.trim().match(/[\p{L}\p{N}]/u)?.[0];
   return first ? first.toLocaleUpperCase("fr-FR") : "?";
 }
+
+/**
+ * Phrase de refus affichée quand l'assistant refuse de répondre (#416).
+ *
+ * Le pont natif envoie une phrase française bornée (jamais le motif libre du
+ * modèle) : c'est ELLE qui fait foi. Le repli est générique : « pas assez de
+ * matière » serait un FAUX diagnostic quand le modèle a refusé pour une autre
+ * raison, et enverrait l'élève chercher d'autres documents pour rien.
+ */
+export function homeworkRefusalText(message: string | undefined): string {
+  const texte = (message ?? "").trim();
+  return texte !== "" ? texte : "L'assistant a refusé de répondre à cette question.";
+}

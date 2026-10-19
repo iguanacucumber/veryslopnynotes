@@ -66,8 +66,10 @@ export const PRODUCTION_SOURCES: string[] = [
   join(DATA, "OfflineCache.kt"),
   join(DATA, "SyncJobOutcome.kt"),
   join(DATA, "WeekWindow.kt"),
-  // `app` — les messages d'appairage et le type MIME des pièces jointes.
+  // `app` — les messages d'appairage, le message de refus du devoir et le
+  // type MIME des pièces jointes.
   join(APP, "AttachmentMime.kt"),
+  join(APP, "HomeworkMessages.kt"),
   join(APP, "PairingMessages.kt"),
 ];
 
