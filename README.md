@@ -131,8 +131,9 @@ de la requête, pour scraper une page de manuel.
 
 Les commandes Gradle trouvent le JDK et le SDK toutes seules, et **échouent**
 si l'outillage manque : un APK demandé en silence n'en est pas un. `make check`
-signale au contraire un SKIP bruyant quand la compilation Kotlin n'a pas pu
-tourner.
+**échoue** lui aussi quand la compilation Kotlin n'a pas pu tourner (c'est le
+seul filet qui résout les symboles) : `ALLOW_SKIP_ANDROID=1` assume
+explicitement ce saut, hors merge.
 
 ### Interface seule, sans téléphone
 
@@ -192,7 +193,7 @@ session Pronote ni clé OpenRouter.
 | `make contracts` | Tests des contrats partagés. |
 | `make architecture-test` | Scans d'architecture + invariants. |
 | `make check-kotlin` | Garde-fou structurel Kotlin, sans SDK ni réseau. |
-| `make android-compile` | Vraie compilation Kotlin (le seul contrôle des symboles et surcharges). |
+| `make android-compile` | Vraie compilation Kotlin (le seul contrôle des symboles et surcharges). Sans JDK/SDK, elle ÉCHOUE (`ALLOW_SKIP_ANDROID=1` assume le saut, hors merge). |
 | `make web-smoke` | Test navigateur du frontend (Chromium requis), hors `make check` : les 14 routes, plus les deux parcours d'appairage (téléphone neuf, session expirée). |
 | `make buildDebugApk` / `make buildRelApk` | APK debug / APK + AAB release. |
 | `make updateApkToPhone` | APK debug puis `adb install -r` (données conservées). |
