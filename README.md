@@ -1,137 +1,304 @@
 <h1 align="center">veryslopnynotes</h1>
 
+<p align="center"><strong>Ton Pronote. Ta session. Rien que toi.</strong></p>
+
 <p align="center">
-  <a href="android/README.md">App Android</a> |
-  <a href="docs/RELEASE.md">Build & release</a> |
-  <a href="docs/architecture/INVARIANTS.md">Invariants</a> |
+  <a href="android/README.md">App Android</a> ·
+  <a href="web/README.md">Interface React</a> ·
+  <a href="server/README.md">Scraper</a> ·
+  <a href="docs/RELEASE.md">Build & release</a> ·
+  <a href="docs/architecture/INVARIANTS.md">Invariants</a> ·
   <a href="AGENTS.md">Contribuer</a>
 </p>
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Contracts](https://img.shields.io/badge/contracts-0.8.0-blue.svg)](shared/contracts/api.openapi.yaml)
-[![Bun](https://img.shields.io/badge/bun-1.4.2-f9f1de.svg)](https://bun.sh)
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green.svg"></a>
+  <a href="shared/contracts/api.openapi.yaml"><img alt="Contracts 0.8.0" src="https://img.shields.io/badge/contracts-0.8.0-blue.svg"></a>
+  <a href="https://bun.sh"><img alt="Bun 1.4.2" src="https://img.shields.io/badge/bun-1.4.2-f9f1de.svg"></a>
+  <img alt="Android 8.0+" src="https://img.shields.io/badge/android-8.0%2B-3ddc84.svg">
+</p>
 
-veryslopnynotes est un projet qui vise à consulter son Pronote sans jamais confier sa session à un
-serveur, afin de :
+veryslopnynotes est un client Android open source pour Pronote. L'application
+parle **directement à l'établissement depuis le téléphone** : aucun serveur
+intermédiaire ne voit la session. L'interface React est embarquée dans l'APK, et
+tout contenu venu de l'extérieur — cours, devoirs, messages, manuels — est traité
+comme une **donnée**, jamais comme une instruction.
 
-- Tenir la session sur le téléphone seul ([ADR-003](docs/adr/003-client-direct.md))
-- Garder session Pronote et clé LLM hors du serveur
-- Traiter le contenu externe comme une donnée, jamais comme une instruction
-- Rester hors-ligne d'abord : cache par ressource, repli si le réseau tombe
+Le serveur de ce dépôt est facultatif : il ne sert qu'au scraper de manuels.
+Pronote et l'assistant IA fonctionnent sans lui.
 
-Voir [`android/README.md`](android/README.md) pour l'app,
-[`web/README.md`](web/README.md) pour l'interface React embarquée et
-[`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) pour les règles de sécurité.
+> Projet non affilié à Pronote / Index Éducation. L'app utilise un port Kotlin du
+> protocole de la bibliothèque communautaire
+> [`pronotets`](https://www.npmjs.com/package/pronotets) (MIT), avec un compte et
+> une autorisation de l'établissement — à toi de vérifier que cet usage est
+> autorisé chez toi.
 
-> Projet non affilié à Pronote / Index Éducation. Accès Pronote via la bibliothèque communautaire
-> [`pronotets`](https://www.npmjs.com/package/pronotets), avec un compte et une autorisation de
-> l'établissement — à toi de vérifier que cet usage est autorisé chez toi.
+## Ce qui distingue l'app
 
-Features
---------
+- **La session reste sur le téléphone.** Le QR et son PIN sont lus dans l'app ;
+  le jeton de session est stocké chiffré sur l'appareil et purgé à la
+  déconnexion ([ADR-003](docs/adr/003-client-direct.md)).
+- **Aucun serveur applicatif dans le flux.** L'app ne relaie ni session Pronote
+  ni clé OpenRouter. Seul `android/pronote/` contacte l'établissement.
+- **L'IA n'a ni outils ni secrets.** La clé OpenRouter est chiffrée localement et
+  part directement au fournisseur ; le contenu externe est délimité et marqué
+  non fiable avant tout prompt ([I4–I6](docs/architecture/INVARIANTS.md)).
+- **Hors-ligne d'abord.** Chaque ressource a son cache et son TTL ; l'interface
+  affiche le cache avant le réseau et signale les données périmées.
+- **Zéro réseau dans la WebView.** CSP `connect-src 'none'`, pas de `fetch`, pas
+  de contenu distant. Tout passe par un pont natif allowlisté
+  ([ADR-004](docs/adr/004-webview.md)).
 
-- **Notes & moyennes** — 3 algorithmes (matière, pondérée par coefficient, médiane), moyenne du
-  bulletin publiée sinon estimée, influence par note, courbe d'historique, périodes.
-- **Devoirs** — consigne, contenus, pièces jointes, filtre par semaine, toggle « fait » écrit dans
-  Pronote (action confirmée, jamais déclenchée par l'IA).
-- **Aide devoirs (IA)** — corrigé sourcé ou refus motivé ; la clé chiffrée part directement de
-  l'app vers OpenRouter, sans transiter par le serveur.
-- **Cours (EDT)** — vue semaine, professeur, salle, annulés/déplacés, badge « prochain cours ».
-- **Vie scolaire** — absences, retards, sanctions, compteurs par période.
-- **Actualités, cantine, messagerie** — fils, réponse, création, état lu, suppression.
-- **Profil & accueil** — multi-comptes parent, déconnexion qui purge session et cache, mode anonyme.
-- **Matières personnalisées** — couleur, emoji, libellé appliqué partout, thème clair/sombre.
-- **Capacités dynamiques** — onglets non publiés par l'établissement masqués, pas vides-cassés.
-- **Hors-ligne** — cache par ressource avec TTL et badge « périmé ».
-- **Fiches de révision** — réponses sourcées (cours + manuels), citations vérifiées, export PDF.
-- **Alertes sécurité** — injections neutralisées, pour vérifier que le contenu externe n'a jamais
-  été exécuté.
+## Écrans et fonctionnalités
 
-Détail app : [`android/README.md`](android/README.md). Le serveur optionnel sert uniquement au
-scraping de manuels : [`server/README.md`](server/README.md).
+| Route | Écran | Ce que tu y trouves |
+|---|---|---|
+| `/pairing` | Appairage | Scan du QR de l'établissement + PIN, session ouverte en direct, sans serveur intermédiaire. |
+| `/` | Accueil | Moyenne, dernière note, prochains cours, devoirs à faire, alertes et accès rapides. |
+| `/calendar` | Cours | Navigation par semaine, professeur, salle, cours en cours / prochain, annulés et déplacés. |
+| `/tasks` | Tâches | Devoirs de la semaine, consigne, pièces jointes, case « fait » écrite dans Pronote, aide IA. |
+| `/grades` | Notes | Moyenne du bulletin ou estimée, 3 algorithmes (matières, pondérée, médiane), courbe d'historique, influence de chaque note, périodes. |
+| `/attendance` | Vie scolaire | Absences et retards, justifiés / à justifier, heures manquées, compteurs par période. |
+| `/sanctions` | Sanctions | Sanctions publiées par l'établissement, gravité et durée. |
+| `/messages` | Messagerie | Discussions, recherche, non-lus, réponse, création et suppression. |
+| `/news` | Actualités | Fils par catégorie, lecture développée, état lu conservé localement. |
+| `/canteen` | Cantine | Menus de la semaine et allergènes. |
+| `/fiches` | Fiches de révision | Fiches locales avec sources citées, consultation et export PDF. |
+| `/alerts` | Alertes | Contenus hostiles détectés puis neutralisés, affichés en texte brut, avec l'état de la dernière vérification. |
+| `/profile` | Profil | Profil du compte, nombre de comptes appairés, déconnexion qui purge session et caches. |
+| `/settings` | Réglages | Thème clair / sombre / système, 20 palettes, matières personnalisées (couleur, emoji, libellé), adresse du scraper, clé de l'assistant. |
 
-Installation
-------------
+En plus des écrans :
 
-Prérequis : [Bun](https://bun.sh) 1.4.2 ; pour l'app, JDK 17–21 et SDK Android 34
-([détails](docs/RELEASE.md)).
+- **Capacités dynamiques** — les widgets et accès rapides que l'établissement ne
+  publie pas sont masqués, au lieu d'afficher des blocs vides.
+- **Cache par ressource** — notes, devoirs, emploi du temps, actualités, cantine,
+  vie scolaire, sanctions, messagerie, capacités et alertes ont chacun leur TTL
+  et leur badge « périmé ». Une erreur réseau n'efface pas ce qui est déjà
+  lisible.
+- **Synchronisation de fond** — WorkManager rafraîchit notes, devoirs et emploi
+  du temps toutes les 6 h (réseau connecté, batterie suffisante) et réécrit le
+  cache partagé avec l'interface, sans serveur ni push.
+- **Accessibilité** — libellés ARIA, contrastes vérifiés dans les palettes
+  claire et sombre, `prefers-reduced-motion` respecté.
+- **Aide devoirs sourcée** — la réponse vient de la consigne et du cours du
+  devoir ; sans source suffisante, l'assistant refuse au lieu d'inventer.
+
+## Comment ça marche
+
+```mermaid
+flowchart LR
+  subgraph Phone["Téléphone Android"]
+    UI["WebView locale<br/>web/ · React + TypeScript<br/>CSP connect-src 'none'"]
+    Bridge["Pont natif allowlisté<br/>VsnBridge.kt"]
+    App["app/<br/>Activity, WebView, scan QR, pièces jointes"]
+    Data["data/<br/>session chiffrée, cache, clé LLM"]
+    Port["pronote/<br/>client direct"]
+    UI -->|"appels sémantiques"| Bridge
+    Bridge --> App
+    App --> Data
+    App --> Port
+  end
+
+  Port --> School["Établissement Pronote"]
+  App -->|"HTTPS + Authorization"| OpenRouter["OpenRouter<br/>(facultatif)"]
+  App -.->|"scraper facultatif"| Scraper["server/<br/>Playwright"]
+  Scraper -.-> Manuals["Portail de manuels"]
+```
+
+Le serveur n'est **jamais** dans le flux Pronote ni dans celui de l'assistant.
+Il ne reçoit que les identifiants du portail et une URL de départ, dans le corps
+de la requête, pour scraper une page de manuel.
+
+### Ce qui ne quitte pas le téléphone
+
+- Le **PIN** déchiffre le QR en mémoire et n'est jamais persisté ; seul le jeton
+  tourné est stocké chiffré (`SessionStore`, `EncryptedSharedPreferences`).
+- La **clé OpenRouter** est chiffrée au repos et envoyée directement au
+  fournisseur dans l'en-tête HTTPS `Authorization`.
+- Le **profil** reste en mémoire ; les caches ne contiennent que les données
+  nécessaires au fonctionnement hors-ligne.
+- Une **déconnexion** invalide la session et purge tous les caches locaux.
+
+## Démarrage rapide
+
+### Prérequis
+
+- [Bun](https://bun.sh) **1.4.2**
+- Pour l'APK : **JDK 17–21** et **SDK Android 34**
+  (`platforms;android-34`, `build-tools;34.0.0`, `platform-tools`)
+- Un téléphone **Android 8.0+** (API 26)
+
+Les commandes Gradle trouvent le JDK et le SDK toutes seules, et **échouent**
+si l'outillage manque : un APK demandé en silence n'en est pas un. `make check`
+signale au contraire un SKIP bruyant quand la compilation Kotlin n'a pas pu
+tourner.
+
+### Interface seule, sans téléphone
 
 ```bash
+git clone https://github.com/iguanacucumber/veryslopnynotes.git
+cd veryslopnynotes
 bun install
-make check                     # secrets + typecheck + unit + arch + contracts + Kotlin + web
-make web                       # typecheck + tests + build de l'interface React
-make runServer                 # scraper de manuels facultatif, HTTPS sur :8080
+bun run dev:web       # Chromium + pont factice (src/bridge/mock.ts)
+bun run typecheck:web
+bun run build:web     # écrit dans android/app/src/main/assets/web/
 ```
 
-Client Android :
+Le pont factice imite les payloads réels : les écrans se développent sans
+session Pronote ni appareil.
+
+### APK
 
 ```bash
-make buildDebugApk             # APK debug  -> android/app/build/outputs/apk/debug/
-make buildRelApk               # APK + AAB release (signés ; custom si STORE_FILE, sinon debug)
+make check             # toutes les vérifications, en parallèle
+make buildDebugApk     # APK debug -> android/app/build/outputs/apk/debug/
+make updateApkToPhone  # construire puis installer en conservant les données
+make buildRelApk       # APK + AAB release (signés ; custom si STORE_FILE)
 ```
 
-Les trois cibles Gradle trouvent leur JDK et leur SDK toutes seules et **échouent** si l'outillage
-manque : un APK demandé en silence n'en est pas un. Détails build/signature :
-[`android/README.md`](android/README.md) et [`docs/RELEASE.md`](docs/RELEASE.md).
+L'interface React est reconstruite **avant** Gradle (`preBuild` →
+`bun run build:web`) : un build APK sans `bun` échoue bruyamment plutôt que
+d'embarquer une UI absente. Détails : [`android/README.md`](android/README.md)
+et [`docs/RELEASE.md`](docs/RELEASE.md).
 
-L'app n'a pas besoin du serveur pour Pronote ni pour l'assistant IA. `make runServer` lance le
-scraper de manuels facultatif ; il ne relaie ni session Pronote ni clé OpenRouter.
-
-Configuration
--------------
-
-**Pas de `.env` ni de secrets de serveur.** Le QR et son PIN sont déchiffrés sur le téléphone ; la
-clé OpenRouter est chiffrée sur l'appareil et envoyée directement au fournisseur. Exception : le
-scraper reçoit les identifiants du portail de manuels dans le corps de sa requête. Son endpoint est
-sans authentification : ne pas l'exposer publiquement (voir [I8](docs/architecture/INVARIANTS.md)).
-
-Seules variables lues, aucune secrète : `PORT`, `HOST`, `TLS_CERT_FILE`, `TLS_KEY_FILE`.
-`make runServer` génère un certificat auto-signé hors du dépôt (`~/.cache/veryslopnynotes/tls`) ;
-fournissez les deux variables TLS pour un certificat émis (mkcert, Let's Encrypt).
-
-Apports humains (compte Pronote, clé OpenRouter, signature) : [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md).
-
-Tests
------
+### Scraper de manuels (facultatif)
 
 ```bash
-make check                  # tout : secrets, typecheck, unit, arch, contracts, compile Kotlin
-make unit / contracts / architecture-test
+make runServer         # HTTPS sur 0.0.0.0:8080
 ```
 
-Fixtures 100 % synthétiques, aucun accès réseau dans la suite par défaut. Un changement qui casse un
-invariant est bloquant, même s'il passe fonctionnellement. Sans JDK 17-21 / SDK Android, la
-compilation Kotlin est skipée en l'écrivant — jamais un faux vert.
+`make runServer` génère un certificat auto-signé hors du dépôt
+(`~/.cache/veryslopnynotes/tls`). Fournis `TLS_CERT_FILE` et `TLS_KEY_FILE`
+pour un certificat émis (mkcert, Let's Encrypt). Le serveur ne relaie ni
+session Pronote ni clé OpenRouter.
 
-Project layout
---------------
+> **Sécurité :** `POST /v1/manuals/scrape` est volontairement sans
+> authentification. Il reçoit des identifiants éditeur et une URL dans le corps
+> de la requête, et pilote Playwright : toute personne pouvant joindre le
+> serveur peut s'en servir (SSRF) et consommer le compte du portail. Garde-le
+> sur la boucle locale ou un réseau de confiance, ou place un proxy authentifié
+> devant. Voir [I8](docs/architecture/INVARIANTS.md).
 
-    ├─ android/          APK, services Kotlin, pont et accès Pronote direct
-    ├─ web/              interface React/TS embarquée dans la WebView (zéro réseau)
-    ├─ server/           scraper de manuels facultatif
-    ├─ shared/contracts/ routes scraper, OpenAPI et validateurs conservés pour les tests
-    ├─ agents/           scans, capture et harnais de test locaux
-    ├─ tests/            tests unitaires, contrats et architecture
-    └─ docs/             décisions, invariants, recette et release
+## Commandes
 
-Flux Pronote : `web (pont) → android/pronote/ → établissement`. Le serveur n'est pas dans ce flux.
-Invariants : [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md).
+| Commande | Rôle |
+|---|---|
+| `make check` | Secrets, typecheck, tests unitaires, architecture, contrats, garde-fou Kotlin, compilation Kotlin réelle et frontend — en parallèle. |
+| `make web` | Typecheck + tests + build de l'interface React. |
+| `make unit` | Tests unitaires (`tests/unit`). |
+| `make contracts` | Tests des contrats partagés. |
+| `make architecture-test` | Scans d'architecture + invariants. |
+| `make check-kotlin` | Garde-fou structurel Kotlin, sans SDK ni réseau. |
+| `make android-compile` | Vraie compilation Kotlin (le seul contrôle des symboles et surcharges). |
+| `make web-smoke` | Test navigateur du frontend (Chromium requis), hors `make check`. |
+| `make buildDebugApk` / `make buildRelApk` | APK debug / APK + AAB release. |
+| `make updateApkToPhone` | APK debug puis `adb install -r` (données conservées). |
+| `make shot ROUTE=grades` | Capture vérifiée sur téléphone réel (`SHOT_ARGS="--theme dark"` pour le thème). |
+| `make runServer` | Scraper de manuels HTTPS sur `:8080`. |
+| `make build` | Vérification des secrets + image Docker du serveur (skip si Docker est absent). |
 
-Contributing
-------------
+## Tests et qualité
 
-Le circuit est **une issue = une branche = une PR** (`agent/<n>-<slug>`), zéro commit direct sur
-`main`. PR via MCP GitHub uniquement (`gh` CLI interdit), relecture du diff + `make check` avant
-merge. Invariant cassant = PR bloquante.
+```bash
+make check
+make unit
+make contracts
+make architecture-test
+bun audit
+```
 
-- [`AGENTS.md`](AGENTS.md) — workflow, garde-fous, règles d'or
-- [`docs/adr/`](docs/adr/) — décisions d'architecture (stack, provider Pronote, client direct)
+Les tests Bun par défaut utilisent des **fixtures synthétiques** et ne font aucun
+accès réseau. Le corpus Pronote de `tests/fixtures/pronote/` est gitignoré : s'il
+existe localement, il contient des données personnelles et ne doit jamais être
+publié. Les captures de `shots/` sont également gitignorées (elles montrent le
+vrai nom et les vraies notes d'un élève) ; `make shot` les rejoue et vérifie que
+l'écran demandé a bien été atteint.
 
-Nouvelles dépendances : justifiées dans la PR, version épinglée, licence MIT-compatible.
+Un changement qui casse un invariant est **bloquant**, même s'il passe
+fonctionnellement. Les captures et les tests de bout en bout sur un compte réel
+ne font pas partie de la suite par défaut.
 
-License
--------
+## Configuration
 
-MIT — voir [`LICENSE`](LICENSE). Identité et écrans propres, aucun asset tiers copié.
+**Pas de `.env` ni de secret côté serveur.** Le QR contient l'adresse de
+l'établissement ; le PIN et la session restent sur le téléphone.
+
+| Variable | Usage | Secrète ? |
+|---|---|---|
+| `PORT`, `HOST` | Écoute du scraper. `make runServer` force `8080` et `0.0.0.0` ; sans `HOST`, le binaire écoute sur la boucle locale. | Non |
+| `TLS_CERT_FILE`, `TLS_KEY_FILE` | Certificat et clé du scraper. | Non (chemins) |
+| `SERVER_HOST` ou `server.host` dans `android/local.properties` | Graine de l'adresse du scraper ; l'adresse se change ensuite dans l'app. | Non |
+| `STORE_FILE`, `STORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` | Signature release, toujours hors du dépôt. | **Oui** |
+| `ANDROID_HOME`, `ANDROID_JDK_HOME` | Découverte du SDK et du JDK. | Non |
+
+Variables et apports humains : [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md).
+
+## Structure du dépôt
+
+```text
+├─ android/          APK, Activity + WebView, pont natif, modules core/data/pronote
+├─ web/              interface React/TypeScript embarquée (zéro réseau)
+├─ server/           scraper de manuels facultatif (Playwright, HTTPS)
+├─ shared/contracts/ routes du scraper, OpenAPI et validateurs gardés pour les tests
+├─ agents/           vérifications, captures et harnais de test locaux
+├─ tests/            tests unitaires, contrats et architecture
+├─ site/             page de présentation animée (vanilla, hors ligne)
+├─ keynote/          deck vidéo de présentation et export MP4
+└─ docs/             ADR, invariants, recette, release, apports humains
+```
+
+Flux Pronote : `web (pont) → android/pronote/ → établissement`. Le serveur n'est
+pas dans ce flux. Règles détaillées :
+[`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md).
+
+## Documentation
+
+- [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) — règles
+  critiques (I1–I10) et tests qui les pinent.
+- [`docs/adr/`](docs/adr/) — décisions d'architecture : stack, client direct,
+  WebView locale.
+- [`docs/RELEASE.md`](docs/RELEASE.md) — versions épinglées, build, signature,
+  livrable.
+- [`docs/RECETTE.md`](docs/RECETTE.md) — recette des 14 routes, thèmes, grande
+  police, hors-ligne.
+- [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md) — ce qui doit être fourni à la
+  main, sans valeur secrète.
+- [`android/README.md`](android/README.md) — modules, appairage QR, certificat
+  de développement, build.
+- [`web/README.md`](web/README.md) — contrat du pont, budget, structure.
+- [`server/README.md`](server/README.md) — routes et limites du scraper.
+
+## Contribuer
+
+Le circuit du dépôt est **une issue = une branche = une PR**
+(`agent/<n>-<slug>`), sans commit direct sur `main`. PR via MCP GitHub
+uniquement (`gh` CLI interdit), relecture du diff et `make check` avant merge.
+Un invariant cassé rend la PR bloquante.
+
+- [`AGENTS.md`](AGENTS.md) — workflow, garde-fous, règles d'or.
+- [`docs/adr/`](docs/adr/) — contexte des choix d'architecture.
+
+Toute nouvelle dépendance doit être justifiée dans la PR, épinglée, auditée avec
+`bun audit` et compatible MIT. Aucun secret, aucune donnée personnelle, aucune
+capture réelle dans le dépôt.
+
+## État et limites
+
+Le projet est en développement (`versionName` `0.1.0`) et aucune release n'est
+publiée à ce jour. Les limites connues sont documentées et assumées :
+
+- l'accès Pronote dépend de l'établissement, du QR fourni et de l'autorisation
+  d'usage ;
+- l'assistant IA est inactif sans clé OpenRouter ;
+- le scraper de manuels n'a pas d'authentification par conception et ne doit pas
+  être exposé publiquement ;
+- la suite par défaut ne teste pas de compte Pronote réel ; la recette hors-ligne
+  et les fixtures synthétiques couvrent les états reproductibles.
+
+## License
+
+MIT — voir [`LICENSE`](LICENSE). Identité et écrans propres ; le port du
+protocole Pronote est crédité à `pronotets` (MIT) dans les sources.
 
 <!-- vim: set tw=80: -->
