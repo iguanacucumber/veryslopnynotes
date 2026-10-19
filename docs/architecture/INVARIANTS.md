@@ -58,7 +58,7 @@ Format : Invariant → test → commande → emplacement.
 
 ## I6 — Contenu externe = UNTRUSTED_DATA
 - Invariant : tout contenu externe marqué `Untrusted` avant traitement IA, entre délimiteurs à nonce, déclaré donnée (`server/ai/` supprimé en #210 ; le marquage vit dans `android/core/Untrusted.kt`).
-- Test : `tests/architecture/invariants.test.ts` (I6) + `tests/unit/android-homework.test.ts` (miroirs).
+- Test : `tests/architecture/invariants.test.ts` (I6) + `tests/unit/android-homework.test.ts` (miroirs) + `tests/unit/android-untrusted.test.ts` (Kotlin réel : marqueur non forgeable, #373).
 - Commande : `make check`.
 - Emplacement : `android/core/Untrusted.kt`.
 
