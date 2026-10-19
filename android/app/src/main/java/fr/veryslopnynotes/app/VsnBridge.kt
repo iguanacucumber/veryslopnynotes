@@ -763,10 +763,13 @@ class VsnBridge(
                 .put("message", result.error ?: OpenRouterHomework.GENERIC_ERROR_MESSAGE)
         return when (outcome) {
             is HomeworkOutcome.Answer -> JSONObject().put("ok", true).put("body", outcome.answer)
+            // #416 : le motif du modèle est un texte LIBRE (echo de la consigne
+            // possible) : il ne franchit JAMAIS le pont. Le pont rend une
+            // phrase française bornée, dans le champ `message` que l'UI lit.
             is HomeworkOutcome.Refused -> JSONObject()
                 .put("ok", true)
                 .put("refused", true)
-                .put("body", outcome.reason)
+                .put("message", homeworkRefusalMessage(outcome.reason))
         }
     }
 
