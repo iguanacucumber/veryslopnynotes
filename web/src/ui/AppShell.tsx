@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "./AppContext";
@@ -40,8 +40,16 @@ export function Shell() {
   const go = useViewNavigate();
   const { refresh, notify, authLost } = useApp();
   const [spinning, setSpinning] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const meta = ROUTE_META[location.pathname] ?? { title: "VerySlopyNyNotes" };
   const activeTab = TABS.findIndex((tab) => tab.to === location.pathname);
+
+  // Le titre suit l'écran et le focus passe au titre : un lecteur d'écran
+  // annonce la nouvelle page au lieu de laisser le focus sur le lien d'onglet.
+  useEffect(() => {
+    document.title = `${meta.title} · VerySlopyNyNotes`;
+    titleRef.current?.focus({ preventScroll: true });
+  }, [location.pathname, meta.title]);
 
   useEffect(() => {
     if (authLost && location.pathname !== "/pairing") {
@@ -66,7 +74,12 @@ export function Shell() {
             <IconBack />
           </button>
         ) : null}
-        <h1 className="topbar__title t-title" style={{ margin: 0 }}>
+        <h1
+          ref={titleRef}
+          tabIndex={-1}
+          className="topbar__title t-title"
+          style={{ margin: 0 }}
+        >
           {meta.title}
         </h1>
         <div className="topbar__actions">
@@ -82,17 +95,21 @@ export function Shell() {
           >
             <IconRefresh />
           </button>
-          <button type="button" className="icon-btn" aria-label="Alertes" onClick={() => go("/alerts")}>
-            <IconBell />
-          </button>
-          <button
-            type="button"
-            className="icon-btn icon-btn--accent"
-            aria-label="Profil"
-            onClick={() => go("/profile")}
-          >
-            <IconUser />
-          </button>
+          {location.pathname !== "/alerts" ? (
+            <button type="button" className="icon-btn" aria-label="Alertes" onClick={() => go("/alerts")}>
+              <IconBell />
+            </button>
+          ) : null}
+          {location.pathname !== "/profile" ? (
+            <button
+              type="button"
+              className="icon-btn icon-btn--accent"
+              aria-label="Profil"
+              onClick={() => go("/profile")}
+            >
+              <IconUser />
+            </button>
+          ) : null}
         </div>
       </header>
 
