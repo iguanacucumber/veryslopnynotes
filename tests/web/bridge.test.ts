@@ -13,6 +13,7 @@ import {
   DEFAULT_TIMEOUT_MS,
   MAX_NATIVE_WAIT_MS,
   NATIVE_WAIT_MS,
+  type SessionStatus,
 } from "../../web/src/bridge/types";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -47,6 +48,7 @@ function stubNative(): void {
 
 afterEach(() => {
   Reflect.deleteProperty(globalThis, "window");
+  Reflect.deleteProperty(globalThis, "VSN");
 });
 
 describe("pont : délais", () => {
@@ -116,5 +118,65 @@ describe("pont : abandon", () => {
     expect(pendingCount()).toBe(1);
     await expect(next).rejects.toThrow("le téléphone n'a pas répondu");
     expect(pendingCount()).toBe(0);
+  });
+});
+
+// #423 : le pont factice est un artefact de DÉVELOPPEMENT. En production il
+// n'est pas embarqué : un pont absent doit échouer bruyamment, jamais servir
+// une école fictive (faux profil, fausses notes, session « restored »).
+describe("pont : le factice n'existe qu'en développement", () => {
+  /** Fenêtre SANS pont natif : le client ne doit rien inventer. */
+  function stubSansPont(): void {
+    const g = globalThis as unknown as { VSN?: unknown };
+    Reflect.deleteProperty(g, "VSN");
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: globalThis,
+      writable: true,
+    });
+  }
+
+  /** Bascule le mode dev (`import.meta.env.DEV`) le temps du test. */
+  async function enModeDev<T>(valeur: boolean, action: () => Promise<T>): Promise<T> {
+    const precedent = process.env["DEV"];
+    process.env["DEV"] = valeur ? "true" : "";
+    try {
+      return await action();
+    } finally {
+      if (precedent === undefined) Reflect.deleteProperty(process.env, "DEV");
+      else process.env["DEV"] = precedent;
+    }
+  }
+
+  test("hors mode dev : un pont absent échoue au lieu de renvoyer des données fictives", async () => {
+    stubSansPont();
+    await enModeDev(false, async () => {
+      // Le factice aurait répondu `{state:"restored"}` : c'est exactement ce
+      // qu'on ne veut plus voir en production.
+      await expect(call("session.restore")).rejects.toThrow("pont natif indisponible");
+      await expect(call("resources.load", { key: "grades" })).rejects.toThrow(
+        "pont natif indisponible",
+      );
+    });
+  });
+
+  test("en mode dev : le pont factice répond (Chromium sans téléphone)", async () => {
+    stubSansPont();
+    await enModeDev(true, async () => {
+      const status = await call<SessionStatus>("session.restore");
+      expect(status.state).toBe("restored");
+    });
+  });
+
+  test("un pont natif présent ne retombe JAMAIS sur le factice", async () => {
+    // Le natif gagne toujours : une méthode absente de l'allowlist est
+    // refusée par le Kotlin (« Méthode inconnue. »), jamais servie en faux.
+    stubNative();
+    await enModeDev(true, async () => {
+      await expect(call("session.restore", {}, 30)).rejects.toThrow(
+        "le téléphone n'a pas répondu",
+      );
+      expect(nativeCalls[0]?.method).toBe("session.restore");
+    });
   });
 });

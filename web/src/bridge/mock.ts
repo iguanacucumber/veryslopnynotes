@@ -1,6 +1,11 @@
 // Pont factice pour Chromium (`bun run dev:web`) et Playwright. Les formes
 // imitent les payloads réels déjà lus par les écrans Compose. Aucun de ces
 // objets n'est une donnée personnelle : tout est fictif.
+//
+// DÉVELOPPEMENT SEULEMENT (#423) : `client.ts` ne l'importe que dans une
+// branche `import.meta.env.DEV`, donc le build de production ne l'embarque
+// pas (le bundle livré à l'APK ne contient aucune donnée scolaire fictice).
+// Hors mode dev, un pont natif absent est un ÉCHEC bruyant, jamais ce mock.
 import type {
   PairParams,
   PairResult,

@@ -1,8 +1,14 @@
 // Smoke Playwright du frontend : sert le build local et vérifie toutes les
 // routes dans Chromium. Hors `make check` (un navigateur n'est pas requis pour
 // vérifier le code) ; `make web-smoke` le lance explicitement.
+//
+// Le bundle de PRODUCTION n'embarque plus le pont factice (#423) : le smoke
+// le fournit lui-même, en exécutant le MÊME module `web/src/bridge/mock.ts`
+// côté Node (`page.exposeFunction`). Les écrans sont donc servis par les
+// données de démonstration, sans réintroduire le factice dans l'APK.
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
+import { mockCall } from "../../web/src/bridge/mock";
 
 const ROOT = new URL("../..", import.meta.url).pathname;
 const PORT = 4173;
@@ -24,6 +30,24 @@ const ROUTES = [
   ["fiches", "/fiches"],
   ["pairing", "/pairing"],
 ] as const;
+
+/**
+ * Pont factice injecté dans la page : il parle le protocole natif
+ * (`call(requestId, method, paramsJson)` + `__vsnResolve`/`__vsnReject`) et
+ * délègue au module factice, exécuté côté Node.
+ */
+const BRIDGE_FACTICE = `
+  window.VSN = {
+    call(requestId, method, paramsJson) {
+      let params = {};
+      try { params = paramsJson ? JSON.parse(paramsJson) : {}; } catch (e) { params = {}; }
+      window.__vsnMock(method, params).then(
+        (value) => window.__vsnResolve?.(requestId, JSON.stringify(value ?? null)),
+        (error) => window.__vsnReject?.(requestId, JSON.stringify({ code: "unknown", message: String(error) })),
+      );
+    },
+  };
+`;
 
 const preview = Bun.spawn(["bunx", "vite", "preview", "--config", "web/vite.config.ts", "--host", "127.0.0.1", "--port", String(PORT), "--strictPort"], {
   cwd: ROOT,
@@ -50,6 +74,9 @@ try {
   await waitForServer();
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  // Le pont factice, servi par le module `web/src/bridge/mock.ts` (côté Node).
+  await page.exposeFunction("__vsnMock", (method: string, params: unknown) => mockCall(method, params));
+  await page.addInitScript(BRIDGE_FACTICE);
   const errors: string[] = [];
   page.on("console", (msg) => {
     if (msg.type() === "error") errors.push(msg.text());
