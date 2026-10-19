@@ -3,6 +3,7 @@ import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { bridge } from "../../bridge/client";
 import { BridgeCallError } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
+import { logoutSession } from "../../lib/session";
 import { Avatar, Card, Divider, EmptyState, ErrorBox, Loading, Page, Section } from "../../ui/components";
 import { IconChevronRight, IconClose, IconUser } from "../../ui/icons";
 import {
@@ -71,7 +72,7 @@ function Rows({ children }: { children: ReactNode }) {
 }
 
 export default function ProfileScreen() {
-  const { refresh, refreshTick, notify } = useApp();
+  const { refresh, refreshTick, notify, closeSession } = useApp();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
@@ -135,7 +136,10 @@ export default function ProfileScreen() {
     setLoggingOut(true);
     setLogoutError("");
     try {
-      await bridge.logout();
+      // La session est invalidée côté natif (caches purgés) : l'interface
+      // se ferme dans la foulée, sinon l'accueil afficherait « aucune donnée
+      // en cache » pour un compte déconnecté (#360).
+      await logoutSession({ logout: bridge.logout, closeSession });
       setLogoutAsk(false);
       setProfile(null);
       setPhoto(null);
