@@ -48,11 +48,20 @@ export const PRODUCTION_SOURCES: string[] = [
   join(PRONOTE, "Json.kt"),
   join(PRONOTE, "Resolver.kt"),
   // `core` — les règles métier pures (dates, notes, IA, garde-fous).
+  //
+  // `core/CapabilitiesJson.kt` n'est PAS listé : il lit le contrat avec
+  // `org.json` (API Android, absente hors Gradle). Le MODÈLE pur
+  // (`core/Capabilities.kt`) et la SONDE (`core/CapabilityProbe.kt`) sont,
+  // eux, compilés ici : le verdict « contrat invalide = inconnu » est donc
+  // testé sur le VRAI code exécuté (#413).
   join(CORE, "AiPrompts.kt"),
   join(CORE, "Assignment.kt"),
   join(CORE, "Attendance.kt"),
   join(CORE, "Averages.kt"),
+  join(CORE, "Capabilities.kt"),
+  join(CORE, "CapabilityProbe.kt"),
   join(CORE, "GradeDiff.kt"),
+  join(CORE, "Humanize.kt"),
   join(CORE, "IsoDates.kt"),
   join(CORE, "LlmGuard.kt"),
   join(CORE, "NotifyFormat.kt"),

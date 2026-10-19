@@ -36,6 +36,7 @@ import {
   parseAttendance,
   parseCapabilities,
   parsePunishments,
+  sanctionsVisible,
 } from "../../web/src/features/attendance/model";
 
 useParisTz();
@@ -417,7 +418,26 @@ describe("vie scolaire — absences, retards, sanctions", () => {
     ]);
     expect(parseCapabilities(JSON.stringify({ items: { tabs: ["attendance"] } }))).toEqual(["attendance"]);
     expect(parseCapabilities(JSON.stringify({ tabs: ["punishments"] }))).toEqual(["punishments"]);
-    expect(parseCapabilities("{}")).toEqual([]);
+    // Inconnu ≠ liste vide (#413) : un payload illisible n'affirme RIEN, donc
+    // rien n'est masqué. Une liste vide, elle, est un contrat AFFIRMÉ.
+    expect(parseCapabilities("{}")).toBeNull();
+    expect(parseCapabilities(null)).toBeNull();
+    expect(parseCapabilities(JSON.stringify({ capabilities: null }))).toBeNull();
+    expect(parseCapabilities(JSON.stringify({ capabilities: { tabs: [] } }))).toEqual([]);
+  });
+
+  // #413 : Capabilities inconnues = rien n'est affirmé = rien n'est masqué.
+  // La sanction ne disparaît pas sur une panne (ni sur un contrat invalide
+  // publié comme `capabilities: null` par le natif).
+  test("la sanction reste visible quand les capacités sont inconnues", () => {
+    expect(sanctionsVisible(null)).toBe(true);
+    expect(sanctionsVisible(parseCapabilities(JSON.stringify({ capabilities: null })))).toBe(true);
+    expect(sanctionsVisible(parseCapabilities("{}"))).toBe(true);
+    // Une liste AFFIRMÉE qui n'a pas l'onglet, elle, masque la sanction.
+    expect(sanctionsVisible(parseCapabilities(JSON.stringify({ capabilities: { tabs: ["grades"] } })))).toBe(
+      false,
+    );
+    expect(sanctionsVisible(parseCapabilities(JSON.stringify({ capabilities: { tabs: [] } })))).toBe(false);
   });
 });
 
