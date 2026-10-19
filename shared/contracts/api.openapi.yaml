@@ -45,10 +45,12 @@ paths:
                 $ref: '#/components/schemas/ManualsScrapeResponse'
         '400':
           description: corps hors contrat (config incompletes, URL non http)
+        '403':
+          description: hote prive/interne refuse (garde SSRF : nom resolu vers une IP interne)
         '501':
           description: Playwright indisponible sur le scraper
         '502':
-          description: scrape impossible (page d'erreur, mur de connexion)
+          description: scrape impossible (page d'erreur, mur de connexion, nom d'hote introuvable)
 components:
   schemas:
     HealthResponse:

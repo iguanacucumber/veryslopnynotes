@@ -9,11 +9,14 @@
 //
 // Périmètre : hôte LITTÉRAL privé/interne (loopback, RFC1918, link-local,
 // métadonnées cloud, ULA IPv6, IPv4-mapped IPv6, formes entières/hexadécimales
-// /octales). Un nom DNS reste ACCEPTÉ : sa résolution peut pointer vers une IP
-// privée (rebinding DNS) — risque assumé, documenté (cf. issue #362).
+// /octales). Un nom DNS reste ACCEPTÉ ICI : cette garde est LITTÉRALE (elle
+// vit dans un validateur synchrone, donc sans E/S). C'est le SERVEUR qui
+// résout le nom avant la navigation — `server/infrastructure/ssrf.ts`
+// (issue #419) : le nom est résolu et chaque adresse obtenue est testée
+// contre les plages privées.
 // ponytail: analyse lexicale pure, zéro dépendance, zéro résolution DNS.
-// Upgrade: résoudre l'hôte, tester l'IP obtenue, re-tester à chaque
-// redirection (cf. `assertPublicUrl` côté serveur).
+// Upgrade: (fait côté serveur, #419) résolution DNS + re-test à chaque
+// redirection — cf. `server/infrastructure/ssrf.ts` et `assertPublicUrl`.
 
 /** Partie d'adresse IPv4 : décimal, hexadécimal (0x…) ou octal (0177…). */
 function ipv4Part(part: string): number | null {
@@ -159,7 +162,8 @@ function isBlockedIPv6(g: readonly number[]): boolean {
 /**
  * Hôte privé/interne ? Couvre IPv4 (littéral, entier, hex, octal), IPv6
  * (mapped, ULA, link-local, multicast) et les noms de loopback. Un nom DNS
- * public est accepté (résolution DNS = risque assumé, cf. en-tête).
+ * public est accepté (garde LITTÉRALE : la résolution DNS est faite par le
+ * serveur, cf. `server/infrastructure/ssrf.ts`).
  */
 export function isBlockedHost(host: string): boolean {
   let h = host.trim().toLowerCase();
@@ -176,6 +180,21 @@ export function isBlockedHost(host: string): boolean {
   if (v4) return isBlockedIPv4(v4);
   if (/^[0-9.]+$/.test(h) || /^0[xX]/.test(h)) return true; // numérique illisible = refus
   return false;
+}
+
+/**
+ * L'hôte est-il un LITTÉRAL IP (v4 ou v6) ? Une adresse ne se résout pas :
+ * le dialogue est direct. Sert à ne pas demander une résolution DNS d'un
+ * littéral — et à ne pas casser les IPv6 littéraux publics, que le
+ * résolveur refuserait entre crochets (`[2606:4700::1111]`).
+ */
+export function isIpLiteral(host: string): boolean {
+  let h = host.trim().toLowerCase();
+  if (h === "") return false;
+  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
+  if (h.endsWith(".")) h = h.slice(0, -1); // FQDN point final
+  if (h.includes(":")) return parseIPv6(h) !== null;
+  return parseIPv4(h) !== null;
 }
 
 /** URL http(s) PUBLIQUE ? (protocole + hôte non privé/interne). */
