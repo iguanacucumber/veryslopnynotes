@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bridge } from "../../bridge/client";
 import { useApp } from "../../ui/AppContext";
-import { Card, EmptyState, ErrorBox, Loading, Page, Section } from "../../ui/components";
+import { Card, EmptyState, ErrorBox, Loading, Page, Section, SubjectAvatar } from "../../ui/components";
 import { IconBook, IconDownload } from "../../ui/icons";
 import { revisionDateLabel, parseRevisionSheet, parseRevisionSheets, type RevisionSheet } from "./sheets";
 
@@ -13,7 +13,7 @@ type Selected = {
 };
 
 export function RevisionSheetsScreen() {
-  const { notify, refreshTick } = useApp();
+  const { notify, refreshTick, dark } = useApp();
   const [sheets, setSheets] = useState<RevisionSheet[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Selected | null>(null);
@@ -152,13 +152,16 @@ export function RevisionSheetsScreen() {
               const opened = selected?.id === sheet.id;
               const bodyId = `sheet-body-${sheet.id}`;
               return (
-                <Card key={sheet.id} as="article">
+                <Card key={sheet.id} as="article" className="revision-card">
                   <div className="stack" style={{ gap: 8 }}>
-                    <div>
-                      <h3 className="t-title" style={{ display: "block", margin: 0 }}>
-                        {sheet.title}
-                      </h3>
-                      <span className="t-caption muted">{sheetMeta(sheet)}</span>
+                    <div className="revision-card__head">
+                      <SubjectAvatar subject={sheet.subject} size={38} dark={dark} />
+                      <div className="grow">
+                        <h3 className="t-title" style={{ display: "block", margin: 0 }}>
+                          {sheet.title}
+                        </h3>
+                        <span className="t-caption muted">{sheetMeta(sheet)}</span>
+                      </div>
                     </div>
                     <div className="row row--wrap" style={{ gap: 6 }}>
                       <button

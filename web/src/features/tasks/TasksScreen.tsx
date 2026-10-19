@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../../bridge/client";
 import { useApp, useResource } from "../../ui/AppContext";
-import { Card, EmptyState, ErrorBox, Loading, Page, Section, StaleBadge } from "../../ui/components";
+import {
+  Card,
+  EmptyState,
+  ErrorBox,
+  Loading,
+  Page,
+  Section,
+  StaleBadge,
+  SubjectAvatar,
+} from "../../ui/components";
 import { IconAttach, IconCheck, IconChevronLeft, IconChevronRight, IconSparkles } from "../../ui/icons";
-import { subjectColor } from "../../lib/format";
+import { parseDate } from "../../lib/format";
 import {
   assignmentCardText,
   assignmentSections,
@@ -12,7 +21,6 @@ import {
   parseAssignmentsPayload,
   shiftWeek,
   subjectDisplayFr,
-  subjectInitial,
   weekEndOf,
   weekLabelFr,
   weekRangeFr,
@@ -20,6 +28,7 @@ import {
   type Assignment,
   type AssignmentAttachment,
 } from "./assignments";
+import "./tasks.css";
 
 type HelpState = {
   id: string;
@@ -42,23 +51,23 @@ export function TasksScreen() {
 
   return (
     <Page>
-      <Card className="card--flat">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+      <Card className="tasks-week">
+        <div className="tasks-week__row">
           <button
             type="button"
-            className="icon-btn"
+            className="tasks-week__nav"
             aria-label="Semaine précédente"
             onClick={() => setWeek((value) => shiftWeek(value, -1))}
           >
             <IconChevronLeft />
           </button>
-          <span className="t-caption">
-            {weekLabelFr(week)}
-            {range ? ` · ${range}` : ""}
+          <span className="tasks-week__label">
+            <strong>{weekLabelFr(week)}</strong>
+            {range ? <small>{range}</small> : null}
           </span>
           <button
             type="button"
-            className="icon-btn"
+            className="tasks-week__nav"
             aria-label="Semaine suivante"
             onClick={() => setWeek((value) => shiftWeek(value, 1))}
           >
@@ -66,11 +75,13 @@ export function TasksScreen() {
           </button>
         </div>
         {week !== currentWeek ? (
-          <div className="row" style={{ justifyContent: "center", marginTop: 6 }}>
-            <button type="button" className="btn btn--ghost btn--small" onClick={() => setWeek(currentWeek)}>
-              Revenir à la semaine en cours
-            </button>
-          </div>
+          <button
+            type="button"
+            className="tasks-week__today"
+            onClick={() => setWeek(currentWeek)}
+          >
+            Revenir à cette semaine
+          </button>
         ) : null}
       </Card>
 
@@ -233,10 +244,11 @@ function TasksWeek({ week }: { week: string }) {
 
   return (
     <Page>
-      <div className="row row--between">
-        <h2 className="t-headline" style={{ margin: 0 }}>
-          Devoirs
-        </h2>
+      <div className="tasks-head">
+        <div>
+          <span className="tasks-head__eyebrow">Semaine en cours</span>
+          <h2 className="tasks-head__title">Devoirs</h2>
+        </div>
         <div className="row" style={{ gap: 6 }}>
           {resource.stale ? <StaleBadge /> : null}
           <button type="button" className="btn btn--ghost btn--small" onClick={resource.refresh}>
@@ -248,15 +260,15 @@ function TasksWeek({ week }: { week: string }) {
       {resource.error ? <ErrorBox message={resource.error} /> : null}
 
       {assistantDisabled ? (
-        <Card className="card--flat">
-          <div className="row" role="note" style={{ alignItems: "flex-start" }}>
+        <Card className="tasks-assistant">
+          <span className="tasks-assistant__icon" aria-hidden="true">
             <IconSparkles />
-            <div className="grow">
-              <strong>Assistant désactivé</strong>
-              <p className="t-body-m muted" style={{ margin: "2px 0 0" }} id="tasks-assistant-reason">
-                {assistantReason}
-              </p>
-            </div>
+          </span>
+          <div className="grow" role="note">
+            <strong>Assistant désactivé</strong>
+            <p className="t-body-m muted" style={{ margin: "2px 0 0" }} id="tasks-assistant-reason">
+              {assistantReason}
+            </p>
           </div>
         </Card>
       ) : null}
@@ -324,6 +336,16 @@ function TasksWeek({ week }: { week: string }) {
   );
 }
 
+/** Rouge sous 24 h, accent sous 72 h, neutre ensuite. */
+function dueTone(due: string | null): string {
+  const date = parseDate(due ?? "");
+  if (!date) return "";
+  const hours = (date.getTime() - Date.now()) / 3_600_000;
+  if (hours < 24) return "task-card__due--soon";
+  if (hours < 72) return "task-card__due--near";
+  return "";
+}
+
 function AssignmentCard({
   assignment,
   busy,
@@ -345,62 +367,40 @@ function AssignmentCard({
   onHelp: () => void;
   onCloseHelp: () => void;
 }) {
+  const { dark } = useApp();
   const text = assignmentCardText(assignment);
-  const colour = subjectColor(assignment.subject);
-  const dim = assignment.done ? 0.6 : 1;
+  const due = dueLabel(assignment.dueDate);
+  const tone = dueTone(assignment.dueDate);
 
   return (
-    <Card as="article">
-      <div className="row" style={{ alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
-        <span
-          aria-hidden="true"
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 999,
-            background: colour,
-            color: "#fff",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontWeight: 700,
-            flex: "0 0 auto",
-          }}
-        >
-          {subjectInitial(assignment.subject)}
-        </span>
-        <div className="grow" style={{ opacity: dim }}>
-          <strong style={{ display: "block" }}>{subjectDisplayFr(assignment.subject)}</strong>
-          {text.title ? (
-            <h3 className="t-title" style={{ margin: 0, fontSize: 16 }}>
-              {text.title}
-            </h3>
-          ) : null}
-          {dueLabel(assignment.dueDate) ? (
-            <span className="tiny muted" style={{ display: "block", marginTop: 2 }}>
-              {dueLabel(assignment.dueDate)}
-            </span>
-          ) : null}
+    <Card as="article" className={`task-card${assignment.done ? " task-card--done" : ""}`}>
+      <div className="task-card__head">
+        <SubjectAvatar subject={assignment.subject} size={42} dark={dark} />
+        <div className="task-card__main">
+          <span className="task-card__subject">{subjectDisplayFr(assignment.subject)}</span>
+          {text.title ? <h3 className="task-card__title">{text.title}</h3> : null}
+          {due ? <span className={`task-card__due ${tone}`}>{due}</span> : null}
         </div>
+        <button
+          type="button"
+          aria-pressed={assignment.done}
+          aria-label={`${assignment.done ? "Marquer à faire" : "Marquer fait"} : ${assignment.title}`}
+          className={`task-check${assignment.done ? " task-check--done" : ""}`}
+          disabled={busy}
+          onClick={() => onToggle(!assignment.done)}
+        >
+          {assignment.done ? <IconCheck size={18} /> : null}
+        </button>
       </div>
 
-      {text.body ? (
-        <p
-          className="t-body-m"
-          style={{ margin: "8px 0 0", whiteSpace: "pre-wrap", overflowWrap: "anywhere", opacity: dim }}
-        >
-          {text.body}
-        </p>
-      ) : null}
+      {text.body ? <p className="task-card__body">{text.body}</p> : null}
 
       {assignment.lessonContent ? (
-        <p className="chip" style={{ marginTop: 8, maxWidth: "100%" }}>
-          Cours : {assignment.lessonContent.title}
-        </p>
+        <p className="chip task-card__lesson">Cours : {assignment.lessonContent.title}</p>
       ) : null}
 
       {assignment.attachments.length > 0 ? (
-        <div className="row row--wrap" style={{ gap: 6, marginTop: 8 }}>
+        <div className="row row--wrap" style={{ gap: 6, marginTop: 10 }}>
           {assignment.attachments.map((attachment) => (
             <button
               key={attachment.id}
@@ -418,12 +418,11 @@ function AssignmentCard({
         </div>
       ) : null}
 
-      <div className="row" style={{ justifyContent: "flex-end", gap: 6, marginTop: 10 }}>
+      <div className="task-card__foot">
         <button
           type="button"
-          className="chip"
+          className="task-help"
           disabled={assistantDisabled}
-          style={assistantDisabled ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
           aria-describedby={assistantReasonId}
           aria-label={`Aide devoirs pour ${assignment.title}`}
           onClick={onHelp}
@@ -431,32 +430,14 @@ function AssignmentCard({
           <IconSparkles size={16} />
           Aide devoirs
         </button>
-        <button
-          type="button"
-          aria-pressed={assignment.done}
-          aria-label={`${assignment.done ? "Marquer à faire" : "Marquer fait"} : ${assignment.title}`}
-          className={assignment.done ? "chip chip--active" : "chip"}
-          disabled={busy}
-          onClick={() => onToggle(!assignment.done)}
-        >
-          {assignment.done ? <IconCheck size={16} /> : null}
-          {assignment.done ? "Terminé" : "Marquer fait"}
-        </button>
       </div>
 
       {help ? (
         <div
           role="region"
           aria-label={`Aide devoirs — ${assignment.subject}`}
-          aria-live="polite"          style={{
-            marginTop: 10,
-            padding: 12,
-            borderRadius: "var(--radius-sm)",
-            background: "var(--surface-variant)",
-            display: "flex",
-            flexDirection: "column",
-            gap: 6,
-          }}
+          aria-live="polite"
+          className="task-help__panel"
         >
           <div className="row row--between">
             <strong>Aide devoirs</strong>
