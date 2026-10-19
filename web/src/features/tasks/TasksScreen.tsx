@@ -145,7 +145,7 @@ function TasksWeek({ week }: { week: string }) {
     setPending((state) => ({ ...state, [assignment.id]: true }));
     setItems((list) => list.map((item) => (item.id === assignment.id ? { ...item, done: next } : item)));
     try {
-      const result = await bridge.toggleAssignment(assignment.id, next);
+      const result = await bridge.toggleAssignment(assignment.id, next, week);
       if (!result.ok) throw new Error(result.error || "Le devoir n'a pas pu être mis à jour.");
     } catch (e) {
       if (toggleSeq.current.get(assignment.id) !== seq) return;
@@ -166,7 +166,7 @@ function TasksWeek({ week }: { week: string }) {
 
   async function openAttachment(assignment: Assignment, attachment: AssignmentAttachment) {
     try {
-      const result = await bridge.openAttachment(assignment.id, attachment.id);
+      const result = await bridge.openAttachment(assignment.id, attachment.id, week);
       if (!result.ok) throw new Error(result.error || "Pièce jointe introuvable.");
     } catch (e) {
       notify(e instanceof Error ? e.message : "Impossible d'ouvrir la pièce jointe.", "error");
@@ -177,7 +177,7 @@ function TasksWeek({ week }: { week: string }) {
     const seq = ++helpSeq.current;
     setHelp({ id: assignment.id, loading: true, answer: null, refusal: null, error: null });
     try {
-      const result = await bridge.askHomework(assignment.id);
+      const result = await bridge.askHomework(assignment.id, week);
       if (seq !== helpSeq.current) return;
       if (result.refused) {
         setHelp({

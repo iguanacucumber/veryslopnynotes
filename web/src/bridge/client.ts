@@ -142,10 +142,10 @@ export const bridge = {
   sync: () => call<ResourceResult>("resources.sync"),
   capabilities: () => call<{ tabs: string[] }>("capabilities.load"),
   refreshCapabilities: () => call<{ tabs: string[] }>("capabilities.refresh"),
-  toggleAssignment: (id: string, done: boolean) =>
-    call<{ ok: boolean; error?: string }>("assignments.toggle", { id, done }),
-  openAttachment: (homeworkId: string, attachmentId: string) =>
-    call<{ ok: boolean; error?: string }>("assignments.attachment", { homeworkId, attachmentId }),
+  toggleAssignment: (id: string, done: boolean, weekStart: string) =>
+    call<{ ok: boolean; error?: string }>("assignments.toggle", { id, done, weekStart }),
+  openAttachment: (homeworkId: string, attachmentId: string, weekStart: string) =>
+    call<{ ok: boolean; error?: string }>("assignments.attachment", { homeworkId, attachmentId, weekStart }),
   messages: () => call<{ payload: string | null }>("messages.list"),
   thread: (id: string) => call<{ payload: string | null; error?: string }>("messages.thread", { id }),
   reply: (id: string, body: string) => call<{ ok: boolean; error?: string }>("messages.reply", { id, body }),
@@ -161,8 +161,8 @@ export const bridge = {
   llmStatus: () => call<{ configured: boolean }>("llm.status"),
   saveLlmKey: (key: string) => call<{ ok: boolean; message?: string }>("llm.saveKey", { key }),
   forgetLlmKey: () => call<{ ok: true }>("llm.forgetKey"),
-  askHomework: (assignmentId: string) =>
-    call<{ ok: boolean; body?: string; refused?: boolean; message?: string }>("llm.askHomework", { assignmentId }),
+  askHomework: (assignmentId: string, weekStart: string) =>
+    call<{ ok: boolean; body?: string; refused?: boolean; message?: string }>("llm.askHomework", { assignmentId, weekStart }),
   generateRevision: (assignmentId: string) =>
     call<{ ok: boolean; message?: string }>("llm.generateRevision", { assignmentId }),
   revisions: () => call<{ sheets: unknown[] }>("revision.list"),
