@@ -36,6 +36,26 @@ fun parseRevisionAnswer(v: JsonValue): String {
     return t
 }
 
+// Cause d'un echec de generation, vue par l'UI. Jamais le message brut de
+// l'exception : il peut nommer un compte, un hote ou une cle.
+enum class RevisionFailure {
+    FORMAT,   // sortie non conforme au schema {"fiche"} (I5)
+    KEY,      // cle LLM absente, trop courte ou refusee
+    QUOTA,    // quota fournisseur atteint
+    PROVIDER, // le fournisseur n'a pas repondu (reseau, sortie vide, tronquee)
+    UNKNOWN,  // autre cause
+}
+
+// Message utilisateur : francais, borne, sans secret. La cause, elle, reste
+// explicite — « Fiche non generee » ne disait rien de l'echec (#367).
+fun revisionFailureMessage(failure: RevisionFailure): String = when (failure) {
+    RevisionFailure.FORMAT -> "Le modèle n'a pas renvoyé le format attendu (JSON {\"fiche\"})."
+    RevisionFailure.KEY -> "Clé LLM absente ou refusée : renseigne-la dans Réglages."
+    RevisionFailure.QUOTA -> "Quota LLM atteint : réessaie plus tard."
+    RevisionFailure.PROVIDER -> "Le fournisseur LLM n'a pas répondu."
+    RevisionFailure.UNKNOWN -> "Échec de la génération de la fiche."
+}
+
 object RevisionAi {
     // Docs brutes -> marquees Untrusted ici, nonce cote prompt.
     fun buildRevisionDocs(exam: RevisionExam, chunks: List<RevisionChunk>): List<String> {
@@ -60,7 +80,7 @@ object RevisionAi {
     ): String {
         val docs = buildRevisionDocs(exam, chunks)
         val data: List<Untrusted<String>> = docs.map { markExternal(it) }
-        val parsed = generateGuardedJson(provider, SYSTEM_REVISION, data, nonce)
+        val parsed = generateGuardedJson(provider, SYSTEM_REVISION_JSON, data, nonce)
         return parseRevisionAnswer(parsed)
     }
 }

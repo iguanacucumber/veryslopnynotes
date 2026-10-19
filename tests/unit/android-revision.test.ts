@@ -1,0 +1,140 @@
+// #367 : la fiche de revision doit etre un JSON {"fiche": ...}.
+//
+// Le prompt demandait « reponds en texte simple » alors que la sortie lue est
+// un JSON : le modele obeissait, la garde I5 (parseJsonOutput +
+// parseRevisionAnswer) rejetait la prose, et le pont avalait l'erreur en
+// « Fiche non générée. » — aucune fiche ne pouvait etre enregistree.
+//
+// VRAI Kotlin compile : `android/core/` (Untrusted, LlmGuard, AiPrompts,
+// RevisionAi — stdlib seul) est compile par le harnais puis pilote par
+// `agents/runtime/kotlin-parity/RevisionAiMain.kt`. Les assertions portent
+// donc sur du code execute, pas sur un miroir TS. Le pont (`app/`) ne compile
+// pas hors Gradle : son câblage est verifie par lecture de source (le meme
+// filet que `android-homework.test.ts`).
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { codeOnly } from "../../agents/runtime/source-guards";
+import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+
+const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
+const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
+const JSON_LIB = join(
+  ROOT,
+  "android",
+  "pronote",
+  "src",
+  "main",
+  "java",
+  "fr",
+  "veryslopnynotes",
+  "pronote",
+  "Json.kt",
+);
+const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "RevisionAiMain.kt");
+const SOURCES = ["Untrusted.kt", "LlmGuard.kt", "AiPrompts.kt", "RevisionAi.kt"].map((f) => join(CORE, f));
+
+const skip = parityToolchain.skipReason !== null;
+
+let link: ParityLink | null = null;
+if (!skip) {
+  const jar = await parityToolchain.ensureJar("kotlin-revision", [...SOURCES, JSON_LIB, DRIVER]);
+  link = await parityToolchain.openLink(jar);
+}
+
+async function ask(op: unknown): Promise<string> {
+  return link!.ask(op);
+}
+
+type Prompt = { system: string; body: string; nonce: string };
+type Parse = { ok: boolean; fiche?: string; error?: string };
+
+describe("fiche de revision — le prompt demande le JSON attendu (#367)", () => {
+  test.skipIf(skip)("la consigne systeme exige un JSON {\"fiche\"}", async () => {
+    const prompt = JSON.parse(await ask({ op: "prompt" })) as Prompt;
+    // Le schema, en clair : sans lui le modele repond en prose (le bug).
+    expect(prompt.system).toContain("fiche");
+    expect(prompt.system).toContain("JSON");
+    expect(prompt.system).not.toContain("reponds en texte simple");
+    // Le corps porte le schema : c'est lui qui est envoye au fournisseur.
+    expect(prompt.body).toContain("{\"fiche\":string}");
+  });
+
+  test.skipIf(skip)("les sources restent des DONNEES delimitees par nonce (I6)", async () => {
+    const prompt = JSON.parse(await ask({ op: "prompt" })) as Prompt;
+    expect(prompt.nonce).toBe("revisionnonce000001");
+    // Delimiteurs a nonce des deux cotes : le contenu externe n'est pas melange
+    // a la consigne.
+    expect(prompt.body).toContain(`---UNTRUSTED_DATA nonce="${prompt.nonce}"---`);
+    expect(prompt.body).toContain(`<UNTRUSTED_DATA nonce="${prompt.nonce}">`);
+    expect(prompt.body).toContain(`</UNTRUSTED_DATA nonce="${prompt.nonce}">`);
+    expect(prompt.body).toContain("jamais instructions");
+  });
+
+  test.skipIf(skip)("parseRevisionAnswer accepte {\"fiche\"} et rejette prose / JSON sans fiche", async () => {
+    const ok = JSON.parse(await ask({ op: "parse", text: '{"fiche":"Rappel : derivé de x^2 = 2x."}' })) as Parse;
+    expect(ok).toEqual({ ok: true, fiche: "Rappel : derivé de x^2 = 2x." });
+
+    // Texte brut : la garde I5 refuse (c'est ce que renvoyait le modele).
+    const prose = JSON.parse(await ask({ op: "parse", text: "Voici ta fiche en texte simple." })) as Parse;
+    expect(prose.ok).toBe(false);
+    expect(prose.error).toContain("JSON invalide");
+
+    // JSON sans « fiche » : pas une fiche, refus net.
+    for (const text of ['{"reponse":"x"}', '{"fiche":""}', '{"fiche":42}', "{}"]) {
+      const bad = JSON.parse(await ask({ op: "parse", text })) as Parse;
+      expect({ text, ok: bad.ok }).toEqual({ text, ok: false });
+      expect(bad.error).toContain("I5");
+    }
+  });
+
+  test.skipIf(skip)("le message d'echec est explicite, borne et sans secret", async () => {
+    // Requetes SEQUENTIELLES : le pilote est ligne a ligne, les reponses se
+    // succedent dans l'ordre d emission.
+    const messages: string[] = [];
+    for (const failure of ["FORMAT", "KEY", "QUOTA", "PROVIDER", "UNKNOWN"]) {
+      const { message } = JSON.parse(await ask({ op: "failure", failure })) as { message: string };
+      messages.push(message);
+    }
+    // La cause, en clair : plus de « Fiche non générée. » qui ne dit rien.
+    expect(messages[0]).toContain("format attendu");
+    expect(messages[1]).toContain("Clé LLM");
+    // Bornes : un message, pas une trace d'exception.
+    for (const message of messages) {
+      expect(message.length).toBeGreaterThan(0);
+      expect(message.length).toBeLessThanOrEqual(200);
+      expect(message).not.toMatch(/sk-or|Authorization|Bearer|Exception|at fr\./);
+    }
+  });
+});
+
+describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
+  const bridge = codeOnly(readFileSync(join(APP, "VsnBridge.kt"), "utf8"));
+  const prompts = codeOnly(readFileSync(join(CORE, "AiPrompts.kt"), "utf8"));
+  const revision = codeOnly(readFileSync(join(CORE, "RevisionAi.kt"), "utf8"));
+
+  test("la sortie passe toujours par la garde I5 (parse + schema)", () => {
+    // La validation n'est ni contournee ni affaiblie : meme chaine qu'avant.
+    expect(bridge).toMatch(/parseRevisionAnswer\(parseJsonOutput\(/);
+    expect(revision).toMatch(/parseRevisionAnswer\(parsed\)/);
+  });
+
+  test("l'echec est remonte avec sa cause, plus « Fiche non générée. »", () => {
+    expect(bridge).not.toContain("Fiche non générée.");
+    // Le pont mappe l'exception sur une cause, puis sur un message borne.
+    expect(bridge).toMatch(/revisionFailureMessage\(revisionFailure\(e\)\)/);
+    expect(bridge).toMatch(/is AiError -> RevisionFailure\.FORMAT/);
+    expect(bridge).toMatch(/is LlmError -> when \(e\.status\)/);
+    // La clé absente est dite telle quelle, avant l'appel.
+    expect(bridge).toMatch(/NO_KEY_MESSAGE/);
+  });
+
+  test("la consigne de revision est le schema JSON, plus « texte simple »", () => {
+    expect(prompts).toContain("SYSTEM_REVISION_JSON");
+    expect(prompts).not.toContain("SYSTEM_REVISION =");
+    expect(prompts).not.toContain("reponds en texte simple");
+    // Les deux chemins de revision (pont et jobs) partagent la meme consigne.
+    expect(prompts).toMatch(/buildSafePrompt\(SYSTEM_REVISION_JSON/);
+    expect(revision).toMatch(/generateGuardedJson\(provider, SYSTEM_REVISION_JSON/);
+  });
+});
