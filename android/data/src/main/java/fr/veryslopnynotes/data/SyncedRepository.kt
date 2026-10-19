@@ -22,6 +22,9 @@ sealed interface RefreshOutcome {
 // evenement local -> clear().
 // I1 : aucun appel hors telephone ; seul `android/pronote/` parle au serveur
 // de l'etablissement, via le client tenu par [PronoteSession] (#206 le remplit).
+// #364 : l'ecriture du cache est gardee par l'epoch de session : une
+// deconnexion survenue pendant la lecture annule l'ecriture (la purge reste
+// effective, le cache du compte deconnecte ne ressuscite pas).
 class SyncedRepository(
     private val store: CacheStore,
     private val clock: () -> Long = System::currentTimeMillis,
@@ -109,16 +112,30 @@ class SyncedRepository(
 
     /** Corps de lecture (jamais d'exception qui s'echappe : tout echec = outcome). */
     private fun readOutcome(save: Boolean, resource: String, query: String): RefreshOutcome {
+        // #364 : epoque capturee AVANT la lecture locale (le client local peut
+        // mettre des secondes) : une deconnexion pendant la lecture invalide
+        // l'ecriture, sinon la purge du cache etait annulee par cette lecture.
+        val epoch = SessionEpoch.current()
         return try {
             val payload = readLocal(resource, query)
             if (save) {
-                try {
-                    // #365 : l'entrée retient la requête qui l'a produite.
-                    store.save(resource, payload, clock(), query)
-                } catch (_: Exception) {
-                    return RefreshOutcome.Failed("Cache illisible.", payload)
+                // Ecriture gardee par l'epoch : `null` = la session a change
+                // (deconnexion) -> payload ABANDONNE, rien n'est ecrit sur le
+                // disque, la purge reste effective.
+                val written = SessionEpoch.writeIfCurrent(epoch) {
+                    try {
+                        // #365 : l'entree retient la requete qui l'a produite.
+                        store.save(resource, payload, clock(), query)
+                        true
+                    } catch (_: Exception) {
+                        false
+                    }
                 }
-                RefreshOutcome.Updated(payload, clock())
+                when {
+                    written == null -> RefreshOutcome.Failed("Session déconnectée.", null)
+                    written == false -> RefreshOutcome.Failed("Cache illisible.", payload)
+                    else -> RefreshOutcome.Updated(payload, clock())
+                }
             } else {
                 RefreshOutcome.Updated(payload, clock())
             }
