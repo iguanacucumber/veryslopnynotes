@@ -91,6 +91,9 @@ class AccountStore(
      * elle perd la course d'époque et abandonne son payload. Sans ça, la purge
      * était annulée et le cache « frais » du compte déconnecté resservait au
      * compte appairé suivant.
+     *
+     * #407 : la purge passe par [CacheScope] (UN seul endroit, avec l'appairage
+     * d'un autre compte et la session morte) — donc sous la même garde d'époque.
      */
     fun logout() {
         sessions.clear()
@@ -99,7 +102,7 @@ class AccountStore(
         PronoteSession.clear()
         // Purge totale : la liste de ressources dérive des contrats, une liste
         // codée en dur laisserait fuiter la donnee d'une ressource ajoutée plus tard.
-        SessionEpoch.invalidate { cacheStore.clearAll() }
+        CacheScope.purge(cacheStore)
         prefs.edit().clear().apply()
     }
 
