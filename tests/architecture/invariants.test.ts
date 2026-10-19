@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { listFiles } from "../../agents/runtime/check-architecture";
 import {
   codeOnly,
   hasDirectFetch,
@@ -14,21 +15,12 @@ import {
 
 const ROOT = join(import.meta.dir, "..", "..");
 
-function list(dir: string): string[] {
-  const out: string[] = [];
-  if (!existsSync(dir)) return out;
-  const walk = (d: string) => {
-    for (const e of readdirSync(d)) {
-      const p = join(d, e);
-      if (statSync(p).isDirectory()) {
-        if ([".git", "node_modules"].includes(e)) continue;
-        walk(p);
-      } else if (/\.(ts|tsx|kt|kts|java)$/.test(e)) out.push(p);
-    }
-  };
-  walk(dir);
-  return out;
-}
+// #418 : le parcours des fichiers est celui de `agents/runtime/check-architecture.ts`
+// (`listFiles`), pas une copie maison. La copie avait deux défauts : elle
+// n'excluait pas les ARTEFACTS GÉNÉRÉS (`android/app/src/main/assets/web/`, le
+// bundle Vite réécrit pendant le build) ni les dossiers de build Gradle — le
+// dossier pouvait disparaître sous les pieds du parcours (flake) —, et une
+// entrée illisible faisait abandonner tout le répertoire en silence.
 
 describe("invariants", () => {
   // I1 repointé #200 puis #205 : seul `android/pronote/` parle Pronote en
@@ -38,7 +30,7 @@ describe("invariants", () => {
   // déclaration du module dans `settings.gradle.kts` est l'unique mention
   // tolérée hors module. Prose (INVARIANTS, AGENTS.md) en #211.
   test("I1: android sans hote Pronote", () => {
-    const files = list(join(ROOT, "android")).filter((f) => {
+    const files = listFiles(join(ROOT, "android")).filter((f) => {
       if (f.endsWith(".md")) return false;
       if (f.includes("/android/pronote/")) return false;
       try {
@@ -59,7 +51,7 @@ describe("invariants", () => {
   test("I1: le module direct est déclaré une fois, et il existe", () => {
     const settings = readFileSync(join(ROOT, "android", "settings.gradle.kts"), "utf8");
     expect(settings).toContain('include(":app", ":core", ":data", ":pronote")');
-    expect(list(join(ROOT, "android", "pronote")).filter((f) => f.endsWith(".kt")).length).toBeGreaterThan(0);
+    expect(listFiles(join(ROOT, "android", "pronote")).filter((f) => f.endsWith(".kt")).length).toBeGreaterThan(0);
   });
 
   test("I1 FP: commentaires et docs ignorés", () => {
@@ -71,7 +63,7 @@ describe("invariants", () => {
   });
 
   test("I3: android/core sans sqlite ni framework HTTP", () => {
-    const files = list(join(ROOT, "android/core")).filter((f) => {
+    const files = listFiles(join(ROOT, "android/core")).filter((f) => {
       const code = codeOnly(readFileSync(f, "utf8"));
       return sqliteRe.test(code) || httpRe.test(code);
     });
@@ -88,12 +80,12 @@ describe("invariants", () => {
   });
 
   test("I2: serveur sans accès Pronote + un seul Client android", () => {
-    const server = list(join(ROOT, "server"));
+    const server = listFiles(join(ROOT, "server"));
     const directFetch = server.filter((f) => hasDirectFetch(codeOnly(readFileSync(f, "utf8"))));
     expect(directFetch).toEqual([]);
     // Côté app, tout accès réseau Pronote passe par l'unique `Client` dans
     // `android/pronote/` (ADR-003) ; aucun autre module ne fait de réseau.
-    const pronote = list(join(ROOT, "android", "pronote"));
+    const pronote = listFiles(join(ROOT, "android", "pronote"));
     expect(pronote.filter((f) => f.endsWith(".kt")).length).toBeGreaterThan(0);
     const clients = pronote.filter((f) => /^class Client\(/m.test(codeOnly(readFileSync(f, "utf8"))));
     expect(clients.map((f) => f.replace(ROOT, ""))).toHaveLength(1);
@@ -142,7 +134,7 @@ describe("invariants", () => {
     // s'authentifie (QR de l'établissement, clé LLM) vient du client, à la demande.
     const allowedRead = /envValue\(env,\s*"(PORT|HOST|TLS_CERT_FILE|TLS_KEY_FILE)"\)/;
     const hits: string[] = [];
-    for (const f of list(join(ROOT, "server"))) {
+    for (const f of listFiles(join(ROOT, "server"))) {
       for (const line of codeOnly(readFileSync(f, "utf8")).split("\n")) {
         if (!/Bun\.env|process\.env/.test(line)) continue;
         // La lecture de PORT/HOST/TLS est le seul accès autorisé, et il passe par
@@ -161,7 +153,7 @@ describe("invariants", () => {
 
     // La clé privée de ce certificat n'a rien à faire dans le dépôt : ni versionnée,
     // ni même présente (le serveur la lit à l'exécution, hors de l'arbre).
-    expect(list(join(ROOT, "server")).filter((f) => /\.(pem|key)$/.test(f))).toEqual([]);
+    expect(listFiles(join(ROOT, "server")).filter((f) => /\.(pem|key)$/.test(f))).toEqual([]);
 
     // Et le template d'env n'existe plus du tout (rien à commiter, rien à documenter).
     expect(existsSync(join(ROOT, ".env.example"))).toBe(false);
@@ -195,7 +187,7 @@ describe("invariants", () => {
   // encore rejoués par les miroirs `tests/unit/android-*.test.ts` (jobs, IA,
   // moyennes) : la liste les garde jusqu'à leur branchement applicatif.
   test("I9: android sans code mort (aucun fun/class jamais appele)", () => {
-    const files = list(join(ROOT, "android")).filter((f) => f.endsWith(".kt"));
+    const files = listFiles(join(ROOT, "android")).filter((f) => f.endsWith(".kt"));
     const code = files.map((f) => codeOnly(readFileSync(f, "utf8"))).join("\n");
     const tolere = new Set([
       "MainActivity",
@@ -336,7 +328,7 @@ describe("invariants", () => {
   test("I8 closed (#242): envValue n'ouvre que PORT/HOST/TLS_*", () => {
     const allowed = new Set(["PORT", "HOST", "TLS_CERT_FILE", "TLS_KEY_FILE"]);
     const keys = new Set<string>();
-    for (const f of list(join(ROOT, "server"))) {
+    for (const f of listFiles(join(ROOT, "server"))) {
       const src = codeOnly(readFileSync(f, "utf8"));
       for (const m of src.matchAll(/envValue\(\s*env\s*,\s*"([^"]+)"\s*\)/g)) keys.add(m[1]!);
     }
@@ -345,7 +337,7 @@ describe("invariants", () => {
 
   test("I3 Kotlin (#242): core sans OkHttp/Room/SQLite plateforme", () => {
     const extra = /okhttp3|HttpURLConnection|URL\s*\(\s*"https?|android\.net\.|androidx\.room|Room\.databaseBuilder|@Entity|@Dao|SQLiteOpenHelper|android\.database\.sqlite/i;
-    const files = list(join(ROOT, "android/core")).filter((f) => extra.test(codeOnly(readFileSync(f, "utf8"))));
+    const files = listFiles(join(ROOT, "android/core")).filter((f) => extra.test(codeOnly(readFileSync(f, "utf8"))));
     expect({ files }).toEqual({ files: [] });
   });
 
@@ -410,7 +402,7 @@ describe("invariants", () => {
     ]);
     const bad: string[] = [];
     for (const mod of ["app", "core", "data"]) {
-      for (const f of list(join(ROOT, "android", mod))) {
+      for (const f of listFiles(join(ROOT, "android", mod))) {
         if (!f.endsWith(".kt")) continue;
         const src = codeOnly(readFileSync(f, "utf8"));
         if (/\b(HttpSession|CookieJar|ClientBase)\b/.test(src)) bad.push(`${f.replace(ROOT, "")}: transport direct`);
@@ -422,11 +414,39 @@ describe("invariants", () => {
     expect({ bad }).toEqual({ bad: [] });
     // Un seul transport : `class Client(` + sa base `open class ClientBase(`.
     // Un `class Client2(` ou `object XClient(` passerait l'ancien compteur.
-    const pronote = list(join(ROOT, "android", "pronote")).filter((f) => f.endsWith(".kt"));
+    const pronote = listFiles(join(ROOT, "android", "pronote")).filter((f) => f.endsWith(".kt"));
     const src = pronote.map((f) => codeOnly(readFileSync(f, "utf8"))).join("\n");
     expect((src.match(/^class Client\(/gm) ?? []).length).toBe(1);
     expect((src.match(/^open class ClientBase\(/gm) ?? []).length).toBe(1);
     // `ClientInfo` = simple porteuse de données (pas de transport), tolérée.
     expect(src).not.toMatch(/^(?:open )?class (?!Client\(|ClientBase\(|ClientInfo\()\w*Client\w*\(/m);
+  });
+
+  // #418 : le bundle Vite est écrit PENDANT le gate (`web-build` écrit dans
+  // `android/app/src/main/assets/web/`, et `check.ts` lance les étapes en
+  // parallèle) : un parcours qui le liste voit le dossier disparaître sous
+  // ses pieds (flake). Le parcours ROBUSTE partagé l'exclut, et les tests
+  // d'architecture n'ont plus de parcours « maison » — sans les garde-fous de
+  // `listFiles` (exclusion des artefacts, erreur gérée FICHIER PAR FICHIER),
+  // le flake revient.
+  test("#418: aucun parcours de test ne liste android/app/src/main/assets", () => {
+    const artefacts = listFiles(join(ROOT, "android")).filter((f) =>
+      f.includes(join("app", "src", "main", "assets")),
+    );
+    expect(artefacts).toEqual([]);
+    // Aucun test d'architecture ne se fabrique sa propre traversée de
+    // `android/` : elle n'aurait ni l'exclusion des artefacts, ni la gestion
+    // d'erreur par fichier (le `catch` global avalait tout le répertoire).
+    // Le motif est assemblé PIÈCE par pièce : écrit en clair, ce fichier se
+    // détecterait LUI-MÊME.
+    const traverse = new RegExp(["readdir", "Sync|readdir", "\\("].join(""));
+    const menages = listFiles(join(ROOT, "tests", "architecture"))
+      .filter((f) => {
+        const code = codeOnly(readFileSync(f, "utf8"));
+        const surAndroid = /join\([^)]*["']android["']/.test(code);
+        return traverse.test(code) && surAndroid;
+      })
+      .map((f) => f.replace(ROOT, ""));
+    expect(menages).toEqual([]);
   });
 });
