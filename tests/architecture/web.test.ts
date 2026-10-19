@@ -163,6 +163,24 @@ describe("contrat du pont natif", () => {
     expect(kotlinCeiling(kotlin)).toBe(MAX_NATIVE_WAIT_MS);
   });
 
+  test("le payload des sanctions publie la DURÉE, pas une gravité (#424)", () => {
+    // Le natif publiait la durée de la sanction dans le champ `gravity` : le
+    // web en faisait un « Niveau 120 » (deux heures de retenue) et la puce
+    // « Durée » restait morte. Le champ publié et le champ lu doivent être
+    // le même.
+    const payload = codeOnly(
+      readFileSync(
+        join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data/PronotePayloads.kt"),
+        "utf8",
+      ),
+    );
+    expect(payload).toContain('put("durationMinutes"');
+    expect(payload).not.toContain('put("gravity"');
+    const model = codeOnly(readFileSync(join(WEB, "src/features/attendance/model.ts"), "utf8"));
+    expect(model).toContain("durationMinutes: optMinutes(obj)");
+    expect(model).not.toContain('"gravity"');
+  });
+
   test("l'appairage n'envoie jamais le message brut au JS (#396)", () => {
     // Un message d'exception peut nommer l'hôte de l'établissement (adresse
     // interne, port) : il ne franchit pas la frontière native/JS (I10). Le

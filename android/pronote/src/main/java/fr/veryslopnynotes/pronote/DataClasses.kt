@@ -261,6 +261,7 @@ class Punishment(private val client: PronoteClientLike, json: JVal?) : PronoteOb
                 items.map { ScheduledPunishment(client, it) }
             }, listOf("programmation", "V"))
         } else emptyList()
+    /** Durée de la sanction, en MINUTES (`duree` Pronote, comme le retard). */
     val duration: Double? = r(::optNum, listOf("duree"), ResolveOpts.lenient())
 }
 

@@ -1,6 +1,8 @@
 import { useParisTz } from "./setup";
 
 import { describe, expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   algorithmHint,
   computeAverages,
@@ -20,8 +22,10 @@ import {
   sparklineDescription,
   sparklinePoints,
   subjectAlgorithmAverage,
+  type AveragesReport,
   type Grade,
 } from "../../web/src/features/grades/model";
+import { GradesSubjectSections } from "../../web/src/features/grades/components";
 
 useParisTz();
 
@@ -321,6 +325,38 @@ describe("mise en forme", () => {
     expect(gradeContextLabel(grade({ subject: "Maths", value: 15 }))).toBe("");
     expect(gradeLabel(grade({ subject: "Maths", value: 15 }))).toBe("Maths");
     expect(gradeLabel(grade({ subject: "Maths", value: 15, label: "DS" }))).toBe("DS");
+  });
+});
+
+describe("compteur de notes — les notes RETENUES (coefficient 0 exclu)", () => {
+  // Le rapport natif publie `gradeCount` = notes retenues (coefficient 0
+  // exclu) ; l'écran affichait le nombre de notes LISTÉES.
+  const grades = [
+    grade({ subject: "Maths", value: 12, coefficient: 1 }),
+    grade({ subject: "Maths", value: 8, coefficient: 0 }),
+  ];
+  const report: AveragesReport = {
+    algorithm: "subject",
+    generalValue: 12,
+    provided: true,
+    subjectCount: 1,
+    subjects: [{ subject: "Maths", value: 12, provided: true, gradeCount: 1 }],
+    history: [],
+    influences: [],
+  };
+
+  test("la carte d'une matière annonce le compte du rapport, pas la liste", () => {
+    const groups = gradeGroups(grades, report.subjects);
+    expect(groups[0]?.gradeCount).toBe(1);
+    expect(groups[0]?.grades).toHaveLength(2);
+    const html = renderToStaticMarkup(createElement(GradesSubjectSections, { groups, report, dark: false }));
+    expect(html).toContain("1 note");
+    expect(html).not.toContain("2 notes");
+  });
+
+  test("sans rapport, le compte local exclut les coefficients nuls", () => {
+    const groups = gradeGroups(grades, []);
+    expect(groups[0]?.gradeCount).toBe(1);
   });
 });
 
