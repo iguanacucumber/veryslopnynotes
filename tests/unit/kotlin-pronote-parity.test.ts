@@ -456,6 +456,23 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
     }
   });
 
+  // #417 : `\u` STRICT — 4 chiffres hexadécimaux EXACTEMENT. `toIntOrNull(16)`
+  // acceptait un signe : `"\u+41"` passait, `"\u-41"` donnait un caractère faux.
+  test.skipIf(skip)("json : échappement `\\u` strict (4 hex, pas de signe)", async () => {
+    const invalides = ['"\\u+041"', '"\\u-041"', '"\\u 41"', '"\\u00g1"', '"\\ud83d\\u+123"'];
+    for (const text of invalides) {
+      const ktErr = portError(await ask({ op: "jsonEcho", text }, true));
+      const tsErr = tsErrorOf(() => JSON.parse(text));
+      expect(`${text} -> ${ktErr.name}`).toBe(`${text} -> JsonError`);
+      expect(`${text} -> ${tsErr?.name}`).toBe(`${text} -> SyntaxError`);
+    }
+    // Les échappements valides restent acceptés (paire de surrogates comprise).
+    for (const text of ['"\\u0041"', '"\\u00e9"', '"\\ud83d\\ude00"', '"\\ud83d"']) {
+      const kt = await ask({ op: "jsonEcho", text });
+      expect(`${text} -> ${kt}`).toBe(`${text} -> ${JSON.stringify(JSON.parse(text))}`);
+    }
+  });
+
   test.skipIf(skip)("nombres : le rendu Kotlin est IDENTIQUE à `JSON.stringify` (#410)", async () => {
     // Le texte, pas un nombre JSON : `-0` ne survit pas à `JSON.stringify`
     // (`JSON.stringify(-0)` vaut `"0"`). Chaque case est lue des DEUX côtés
