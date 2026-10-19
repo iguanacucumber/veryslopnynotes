@@ -14,6 +14,10 @@ import java.time.Instant
 // stocké par fiche. Push = payload structuré (sujet/date), jamais texte modèle.
 // Logs = compteurs seuls, jamais de token en clair.
 //
+// L'export PDF rend le corps ENTIER (il pagine) et la liste CANONIQUE des
+// sources : le bloc « Sources : » écrit par le modèle est validé puis
+// remplacé par cette liste (#412).
+//
 // `RevisionKv` est bloquant (pas de coroutines dans `core`, zéro dépendance) ;
 // l'appelant expose le thread. Le JSON du stockage est lu/écrit à la main
 // (stdlib seule) : les fiches survivent à un aller-retour exact.
@@ -121,7 +125,10 @@ fun formatRevisionPush(exam: ExamCandidate): GradePush {
 private fun dedupeRevisionSources(sources: List<String>): List<String> {
     val out = mutableListOf<String>()
     for (s in sources) {
-        val t = s.trim()
+        // Une source est un LIBELLÉ : il tient sur une ligne (le bloc
+        // « Sources : » en dépend — un saut de ligne le déferait hors du
+        // bloc et laissait un bout de texte dans le corps).
+        val t = s.trim().replace("\r", " ").replace("\n", " ")
         if (t.isEmpty() || out.contains(t)) continue
         out.add(t)
     }
@@ -140,19 +147,14 @@ fun assembleRevisionSheet(
     if (text.isEmpty()) throw IllegalArgumentException("fiche vide (refus)")
     val deduped = dedupeRevisionSources(sources)
     if (deduped.isEmpty()) throw IllegalArgumentException("sources insuffisantes (refus)")
-    val cited = if (text.contains("Sources :")) {
-        text
-    } else {
-        "$text\n\nSources :\n${deduped.joinToString("\n") { "- $it" }}"
-    }
     val sheet = RevisionSheet(
         id = revisionIdForExam(exam.id),
         examId = exam.id,
         subject = exam.subject,
         date = exam.date,
         title = buildRevisionTitle(exam),
-        body = cited,
-        sources = deduped,
+        body = revisionSheetBody(text, deduped),
+        sources = revisionSheetSources(text, deduped),
         templateVersion = REVISION_TEMPLATE_VERSION,
         createdAt = now,
     )
@@ -456,18 +458,166 @@ fun listRevisionSheets(store: RevisionKv): List<RevisionSheet> {
     return out
 }
 
+// --- Sources de la fiche (liste canonique) ------------------------------------
+
+/** En-tête du bloc de sources : celui du corps, celui de l'export. */
+const val REVISION_SOURCES_HEADING = "Sources :"
+
+/** Marqueur de troncature : une fiche tronquée le DIT (jamais en silence). */
+const val REVISION_PDF_TRUNCATED = "(suite tronquée)"
+
+/** Puces admises pour une entrée de source (« - x », « • x »…). */
+private val REVISION_SOURCE_BULLETS = charArrayOf('-', '•', '*', '–')
+
+/** La ligne est-elle une entrée de source (« - x ») ? */
+private fun isRevisionSourceEntry(line: String): Boolean {
+    val t = line.trim()
+    return t.length > 1 && REVISION_SOURCE_BULLETS.contains(t[0])
+}
+
+/** L'en-tête du bloc de sources ? (casse et espace avant le colon tolérés) */
+private fun isRevisionSourcesHeading(line: String): Boolean {
+    val t = line.trim().lowercase()
+    return t == REVISION_SOURCES_HEADING.lowercase() || t == "sources:"
+}
+
+/** Index de la DERNIÈRE ligne d'en-tête « Sources : », ou -1. */
+private fun revisionSourcesHeading(lines: List<String>): Int {
+    var found = -1
+    for (i in lines.indices) {
+        if (isRevisionSourcesHeading(lines[i])) found = i
+    }
+    return found
+}
+
+/** Fin (exclusive) du bloc « Sources : » : l'en-tête plus ses entrées à puce. */
+private fun revisionSourcesBlockEnd(lines: List<String>, heading: Int): Int {
+    var i = heading + 1
+    while (i < lines.size) {
+        val t = lines[i].trim()
+        if (t.isEmpty() || isRevisionSourceEntry(t)) {
+            i++
+            continue
+        }
+        break
+    }
+    return i
+}
+
+/**
+ * Citations écrites par le modèle sous « Sources : » (liste vide s'il n'en a
+ * pas écrit) : les entrées à puce, sans leur puce.
+ */
+private fun revisionModelCitations(text: String): List<String> {
+    val lines = text.split("\n")
+    val heading = revisionSourcesHeading(lines)
+    if (heading < 0) return emptyList()
+    val end = revisionSourcesBlockEnd(lines, heading)
+    val out = mutableListOf<String>()
+    for (i in heading + 1 until end) {
+        val t = lines[i].trim()
+        if (isRevisionSourceEntry(t)) out.add(t.substring(1).trim())
+    }
+    return out.filter { it.isNotEmpty() }
+}
+
+/**
+ * Texte SANS son bloc « Sources : » : ce que l'export dessine.
+ *
+ * Seul le bloc part (l'en-tête et ses entrées à puce) : le reste du corps
+ * n'est jamais perdu.
+ */
+private fun revisionContent(text: String): String {
+    val lines = text.split("\n")
+    val heading = revisionSourcesHeading(lines)
+    if (heading < 0) return text.trim()
+    val end = revisionSourcesBlockEnd(lines, heading)
+    val kept = mutableListOf<String>()
+    for (i in lines.indices) {
+        if (i == heading || (i > heading && i < end)) continue
+        kept.add(lines[i])
+    }
+    return kept.joinToString("\n").trim()
+}
+
+/**
+ * Sources de la fiche : les citations du modèle VALIDÉES contre les sources
+ * canoniques, puis les autres sources canoniques (la liste reste complète).
+ *
+ * Une citation du modèle qui ne figure pas dans les sources canoniques est
+ * REJETÉE (pas ajoutée) — même règle que le chemin devoirs
+ * (`HomeworkAi.parseHomeworkResponse`).
+ */
+fun revisionSheetSources(modelText: String, canonicalSources: List<String>): List<String> {
+    val canonical = canonicalSources.map { it.trim() }.filter { it.isNotEmpty() }
+    val allowed = canonical.toSet()
+    val cited = mutableListOf<String>()
+    for (c in revisionModelCitations(modelText)) {
+        if (c in allowed && !cited.contains(c)) cited.add(c)
+    }
+    // Les sources citées par le modèle d'abord : l'élève voit ce que la
+    // fiche a réellement utilisé. La liste reste COMPLÈTE (les sources non
+    // citées y sont conservées) : c'est la liste canonique qui fait foi.
+    return cited + canonical.filter { it !in cited }
+}
+
+/**
+ * Corps de la fiche : le texte du modèle (sans son bloc « Sources : »), puis
+ * le bloc des sources.
+ *
+ * Le bloc écrit par le modèle est REMPLACÉ par la liste canonique : une
+ * attribution libre (du texte) ne peut pas remplacer la source de vérité.
+ */
+fun revisionSheetBody(modelText: String, canonicalSources: List<String>): String {
+    val sources = revisionSheetSources(modelText, canonicalSources)
+    val content = revisionContent(modelText)
+    val block = (listOf(REVISION_SOURCES_HEADING) + sources.map { "- $it" }).joinToString("\n")
+    return if (content.isEmpty()) block else "$content\n\n$block"
+}
+
 // --- Mise en page PDF (pure, rejouée en parité) -------------------------------
 
-/** Corps découpé en lignes affichables : ce que `RevisionPdf` dessine. */
-const val REVISION_PDF_MAX_LINES = 60
+/**
+ * Filet de sécurité du rendu : le PDF PAGINE (cf. `RevisionPdf`), donc la
+ * fiche entière tient en plusieurs pages. Cette borne n'est plus un plafond
+ * de contenu : elle n'attrape qu'une fiche colossale (magasin altéré), et la
+ * troncature qu'elle provoque est SIGNALÉE (jamais silencieuse).
+ */
+const val REVISION_PDF_MAX_LINES = 400
+
+/** Largeur d'une ligne de corps (colonnes). */
 const val REVISION_PDF_WRAP = 90
 
+/**
+ * Corps découpé en lignes affichables : ce que `RevisionPdf` dessine.
+ *
+ * Le corps est rendu ENTIER : `RevisionPdf` pagine, la fiche exportée porte
+ * donc la fin du texte ET ses sources. Le bloc « Sources : » est rendu depuis
+ * la liste CANONIQUE (`sheet.sources`), jamais depuis le corps : une citation
+ * écrite dans du texte libre ne peut pas remplacer la source de vérité.
+ */
 fun revisionPdfLines(sheet: RevisionSheet): List<String> {
     if (!isRevisionSheetValid(sheet)) throw IllegalArgumentException("fiche invalide (contrat)")
+    val content = revisionContent(sheet.body)
+    // Garde I5 : le corps du modèle est borné (MAX_OUTPUT_CHARS). Un corps
+    // plus long (magasin altéré) est tronqué — et SIGNALÉ, jamais en silence.
+    val truncated = content.length > MAX_OUTPUT_CHARS
+    val body = if (truncated) content.take(MAX_OUTPUT_CHARS) else content
+    val bodyLines = body.split("\n").flatMap { l ->
+        if (l.trim().isEmpty()) listOf(" ") else splitRevisionLine(l, REVISION_PDF_WRAP)
+    }
+    // Filet de sécurité : le PDF pagine, mais la fiche ne doit pas déborder.
+    val capped = if (bodyLines.size > REVISION_PDF_MAX_LINES) {
+        bodyLines.take(REVISION_PDF_MAX_LINES - 1) + listOf(REVISION_PDF_TRUNCATED)
+    } else {
+        bodyLines
+    }
     val raw = listOf(sheet.title, "${sheet.subject} — ${localDay(sheet.date)}", "") +
-        sheet.body.split("\n") + listOf("", "Gabarit ${sheet.templateVersion}")
+        capped +
+        (if (truncated) listOf(REVISION_PDF_TRUNCATED) else emptyList()) +
+        listOf("", REVISION_SOURCES_HEADING) + sheet.sources.map { "- $it" } +
+        listOf("", "Gabarit ${sheet.templateVersion}")
     return raw.flatMap { l -> if (l.trim().isEmpty()) listOf(" ") else splitRevisionLine(l, REVISION_PDF_WRAP) }
-        .take(REVISION_PDF_MAX_LINES)
 }
 
 private fun splitRevisionLine(line: String, max: Int): List<String> {
