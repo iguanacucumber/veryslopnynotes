@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { codeOnly, hasDirectFetch, httpRe, pronoteHost, sqliteRe } from "../../agents/runtime/source-guards";
+import {
+  codeOnly,
+  hasDirectFetch,
+  httpRe,
+  pronoteHost,
+  sqliteRe,
+  EXECUTABLE_MIME_TYPES,
+  parseKotlinStringSet,
+  parseMimeTable,
+} from "../../agents/runtime/source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 
@@ -252,6 +261,56 @@ describe("invariants", () => {
       }
     }
     expect({ morts }).toEqual({ morts: [] });
+  });
+
+  // #398 : I6 — le contenu externe est une DONNÉE, jamais un programme. Le
+  // nom d'une pièce jointe vient du SERVEUR : le type MIME qui en découle ne
+  // peut donc pas être EXÉCUTABLE, sinon `consignes.html` part vers un
+  // lecteur tiers comme du HTML exécutable (script) au lieu d'octets inertes.
+  //
+  // `WebApp.mimeOfAsset` (les assets LOCAUX de l'app, servis à la WebView)
+  // est hors périmètre : ce n'est pas une donnée du serveur.
+  test("I6: la table MIME des pièces jointes ne mappe aucun type exécutable", () => {
+    const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
+    const src = codeOnly(readFileSync(join(APP, "AttachmentMime.kt"), "utf8"));
+
+    // 1. La table des formats connus ne sort JAMAIS un type exécutable.
+    const table = parseMimeTable(src);
+    expect(table.size).toBeGreaterThan(0);
+    const executable = [...table]
+      .filter(([, type]) => EXECUTABLE_MIME_TYPES.has(type))
+      .map(([ext]) => ext);
+    expect({ executable }).toEqual({ executable: [] });
+
+    // 2. La liste de refus couvre les types exécutables attendus, ET tous
+    //    ceux que le test connaît comme exécutables (le garde-fou runtime
+    //    refuse au moins tout le catalogue).
+    const refus = parseKotlinStringSet(src, "EXECUTABLE_MIME_TYPES");
+    for (const attendu of [
+      "text/html",
+      "application/xhtml+xml",
+      "image/svg+xml",
+      "text/xml",
+      "application/xml",
+      "application/javascript",
+    ]) {
+      expect([...refus]).toContain(attendu);
+    }
+    const nonRefuses = [...EXECUTABLE_MIME_TYPES].filter((t) => !refus.has(t));
+    expect({ nonRefuses }).toEqual({ nonRefuses: [] });
+
+    // 3. Les extensions à risque sont explicitement neutralisées en texte, et
+    //    aucune n'est servie par la table des formats connus.
+    const texteSeul = parseKotlinStringSet(src, "TEXT_ONLY_EXTENSIONS");
+    for (const ext of ["html", "htm", "svg", "xml"]) {
+      expect([...texteSeul]).toContain(ext);
+      expect(table.has(ext)).toBe(false);
+    }
+
+    // 4. Le pont sert le type de `mimeOf` — jamais un type écrit en dur pour
+    //    une pièce jointe nommée par le serveur.
+    const bridge = codeOnly(readFileSync(join(APP, "VsnBridge.kt"), "utf8"));
+    expect(bridge).toMatch(/openFile\(file,\s*mimeOf\(/);
   });
 
   test("I7: pas de jobs serveur, jobs device sans LLM", () => {

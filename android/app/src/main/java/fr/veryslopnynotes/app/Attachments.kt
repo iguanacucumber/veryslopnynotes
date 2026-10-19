@@ -11,6 +11,10 @@ import java.io.File
 // Ces helpers vivaient dans `android/ui/Assignments.kt` ; ils restent ici avec
 // le pont WebView qui les appelle (`VsnBridge.attachmentsOpen`), seul
 // utilisateur depuis la suppression de Compose.
+//
+// Le TYPE MIME de la pièce jointe vit dans `AttachmentMime.kt` : le nom du
+// fichier vient du serveur, donc le type qui en découle ne peut pas être
+// exécutable (I6).
 
 /** Autorité FileProvider (manifeste app) : seul `cacheDir/attachments/` est partagé. */
 const val ATTACHMENT_PROVIDER_AUTHORITY = "fr.veryslopnynotes.app.fileprovider"
@@ -35,18 +39,4 @@ fun writeAttachmentFile(context: Context, homeworkId: String, att: AssignmentAtt
     require(file.canonicalPath.startsWith(dir.canonicalPath + File.separator)) { "nom de pièce jointe refusé" }
     file.writeBytes(bytes)
     return file
-}
-
-/** Type MIME depuis l'extension, défaut binaire. */
-fun mimeOf(name: String): String = when (name.trim().substringAfterLast('.', "").lowercase()) {
-    "pdf" -> "application/pdf"
-    "jpg", "jpeg" -> "image/jpeg"
-    "png" -> "image/png"
-    "gif" -> "image/gif"
-    "webp" -> "image/webp"
-    "txt" -> "text/plain"
-    "html", "htm" -> "text/html"
-    "mp4" -> "video/mp4"
-    "mp3" -> "audio/mpeg"
-    else -> "application/octet-stream"
 }
