@@ -457,8 +457,12 @@ class Lesson(private val client: PronoteClientLike, json: JVal?) : PronoteObject
             // (non-texte ne matche jamais, comme `===` côté TS).
             val o = lesson as JVal.Obj
             val coursN = (((o.fields["cours"] as JVal.Obj).fields["V"] as JVal.Obj).fields["N"] as? JVal.Str)?.value
+            // COURT-CIRCUIT comme la référence : `listeContenus` n'est lu QUE pour
+            // le cours demandé. Avant, une entrée SANS `listeContenus` (un cours
+            // d'un autre jour) jetait et PERDAIT tout le bloc « Contenu de cours ».
+            if (coursN != id) continue
             val list = ((o.fields["listeContenus"] as JVal.Obj).fields["V"] as JVal.Arr).items
-            if (coursN == id && list.isNotEmpty()) {
+            if (list.isNotEmpty()) {
                 contents = list[0]
                 break
             }

@@ -44,28 +44,44 @@ fun gradeParse(v: JVal?): String? {
     return if (idx in GRADE_TRANSLATE.indices) GRADE_TRANSLATE[idx] else null
 }
 
-/** `String(v)` : null → `"null"`, nombre au format JS, booléen, objet/arbre plats. */
+/**
+ * `String(v)` : null → `"null"`, nombre au format JS, booléen, objet/arbre plats.
+ * Tableau → son `join(",")` (`null` → chaîne VIDE : `String([null])` = `""`).
+ */
 fun strOf(v: JVal?): String = when (v) {
     null, is JVal.Null -> "null"
     is JVal.Str -> v.value
     is JVal.Num -> jsNumber(v.value)
     is JVal.Bool -> if (v.value) "true" else "false"
     is JVal.Obj -> "[object Object]"
-    is JVal.Arr -> v.items.joinToString(",") { strOf(it) }
+    is JVal.Arr -> jsArrayToString(v.items)
     // `RawBytes` (transient interne à `Communication.post`) ne traverse jamais ici.
     else -> throw IllegalStateException("JVal non affichable : ${v.javaClass.simpleName}")
 }
 
 /**
+ * `Array.prototype.toString` = `join(",")` : `null`/`undefined` → chaîne VIDE
+ * (pas `"null"`), un tableau imbriqué → son propre `join` (`"1,2"`, pas
+ * `"[1],[2]"`). C'est ce que rend `String([null])` = `""` et
+ * `String([[1],[2]])` = `"1,2"`.
+ */
+private fun jsArrayToString(items: List<JVal>): String =
+    items.joinToString(",") { if (it == null || it is JVal.Null) "" else strOf(it) }
+
+/**
  * `Number(v)` (sous-ensemble) : nombre direct ; chaîne taillée puis `""` → 0,
  * hexadécimal (`0x10` → 16), `Infinity` signés, décimal/exposant ; le reste →
- * `NaN`. Booléen → 1/0, `null` → 0, objet/tableau → `NaN` (pas de `valueOf`).
+ * `NaN`. Booléen → 1/0, `null` → 0, objet → `NaN` (pas de `valueOf`).
+ * TABLEAU → `Number(String(x))` (le `toString` du tableau) : `Number([])` = 0,
+ * `Number([30])` = 30, `Number([null])` = 0, `Number([1,2])` = `NaN`.
  */
 fun numOf(v: JVal?): Double {
     if (v == null || v is JVal.Null) return 0.0
     if (v is JVal.Num) return v.value
     if (v is JVal.Bool) return if (v.value) 1.0 else 0.0
-    if (v is JVal.Obj || v is JVal.Arr) return Double.NaN
+    if (v is JVal.Obj) return Double.NaN
+    // Tableau : `Number(x)` = `Number(ToPrimitive(x))` = `Number(join(x))`.
+    if (v is JVal.Arr) return numOf(JVal.Str(jsArrayToString(v.items)))
     val t = jsTrim((v as JVal.Str).value)
     if (t.isEmpty()) return 0.0
     val hex = Regex("^[+-]?0[xX]([0-9a-fA-F]+)$").matchEntire(t)
@@ -120,9 +136,14 @@ private fun frParts(s: String): Triple<Int, Int, Int> {
  * cascade (32/09 → 02/10, mois 13 → janvier +1, 25h → lendemain 01h), jamais
  * d'erreur de plage. Mois négatifs idem (`floorDiv`, pas de troncature).
  * Résolu dans la zone système (trous DST décalés vers l'avant, comme JS).
+ *
+ * ANNÉE 0..99 REMAPPÉE en 1900+y (règle JS de `new Date(y, …)`) : `"05/09/0026"`
+ * vaut le 5 septembre 1926, pas l'an 26. `LocalDateTime` ne connaît pas ce
+ *-remappage : sans lui, le port affichait une date inexistante.
  */
 private fun jsDate(y: Int, mo0: Int, d: Int, h: Int = 0, mi: Int = 0, s: Int = 0): LocalDateTime {
-    val totalMonths = y * 12 + mo0
+    val year = if (y in 0..99) y + 1900 else y
+    val totalMonths = year * 12 + mo0
     val yy = Math.floorDiv(totalMonths, 12)
     val mm = Math.floorMod(totalMonths, 12) + 1
     val base = LocalDateTime.of(yy, mm, 1, 0, 0)
