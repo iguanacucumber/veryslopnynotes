@@ -136,9 +136,14 @@ private fun frParts(s: String): Triple<Int, Int, Int> {
  * cascade (32/09 → 02/10, mois 13 → janvier +1, 25h → lendemain 01h), jamais
  * d'erreur de plage. Mois négatifs idem (`floorDiv`, pas de troncature).
  * Résolu dans la zone système (trous DST décalés vers l'avant, comme JS).
+ *
+ * ANNÉE 0..99 REMAPPÉE en 1900+y (règle JS de `new Date(y, …)`) : `"05/09/0026"`
+ * vaut le 5 septembre 1926, pas l'an 26. `LocalDateTime` ne connaît pas ce
+ *-remappage : sans lui, le port affichait une date inexistante.
  */
 private fun jsDate(y: Int, mo0: Int, d: Int, h: Int = 0, mi: Int = 0, s: Int = 0): LocalDateTime {
-    val totalMonths = y * 12 + mo0
+    val year = if (y in 0..99) y + 1900 else y
+    val totalMonths = year * 12 + mo0
     val yy = Math.floorDiv(totalMonths, 12)
     val mm = Math.floorMod(totalMonths, 12) + 1
     val base = LocalDateTime.of(yy, mm, 1, 0, 0)
