@@ -14,7 +14,9 @@ export const EXCERPT_COLLAPSED = 140;
 // réserve.
 export const ALERTS_HEURISTIC_NOTE =
   "Filtre heuristique : il repère des formulations d’injection courantes, pas toutes. Un contenu hostile peut donc passer inaperçu, et une note légitime peut être signalée à tort.";
-export const ALERTS_CLEAR_NOTE = "Aucun contenu hostile détecté par le filtre.";
+// L'état vide n'affirme PAS l'absence de contenu hostile (fausse assurance) :
+// il dit ce que le filtre a fait (rien signalé), le rappel heuristique suit.
+export const ALERTS_CLEAR_NOTE = "Le filtre n’a rien signalé sur les contenus lus jusqu’ici.";
 export const ALERTS_FLAGGED_NOTE = "Signalé par un filtre heuristique : un faux positif reste possible.";
 
 export interface SecurityAlert {

@@ -84,7 +84,9 @@ de la référence). « Papillon » = l'application de référence.
   chaque écran sans cache montre son état vide neutre + « Actualiser ».
   Aucun écran n'affiche un vide trompeur — ni un « Hors-ligne, … » plein-écran.
   Seule exception : les alertes distinguent « Aucune alerte de sécurité »
-  (vérifié frais) de « Aucune vérification disponible » (non vérifié).
+  (filtre passé, rien signalé) de « Aucune analyse disponible » (rien en
+  cache). Le filtre est une HEURISTIQUE : l'écran le dit, jamais « vérifié »
+  (#415).
 
 ## Comment rejouer
 

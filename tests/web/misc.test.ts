@@ -248,7 +248,10 @@ describe("web alertes de sécurité", () => {
   test("l’interface qualifie le filtre d’heuristique, jamais de « vérifié »", () => {
     expect(ALERTS_HEURISTIC_NOTE).toContain("heuristique");
     expect(ALERTS_FLAGGED_NOTE).toContain("heuristique");
-    expect(ALERTS_CLEAR_NOTE).toContain("Aucun contenu hostile détecté");
+    // L'état vide ne dit PAS « aucun contenu hostile » (fausse assurance) :
+    // il dit ce que le filtre a fait, et le rappel heuristique suit.
+    expect(ALERTS_CLEAR_NOTE).toContain("rien signalé");
+    expect(ALERTS_CLEAR_NOTE.toLowerCase()).not.toContain("contenu hostile");
     for (const note of [ALERTS_HEURISTIC_NOTE, ALERTS_CLEAR_NOTE, ALERTS_FLAGGED_NOTE]) {
       expect(note.toLowerCase()).not.toContain("vérifi");
     }
@@ -258,6 +261,9 @@ describe("web alertes de sécurité", () => {
     expect(route).toContain("ALERTS_HEURISTIC_NOTE");
     expect(route).toContain("ALERTS_FLAGGED_NOTE");
     expect(route).toContain("ALERTS_CLEAR_NOTE");
+    // L'écran des alertes ne parle JAMAIS de « vérification » : le filtre
+    // repère des formulations, il ne vérifie rien.
+    expect(route.toLowerCase()).not.toContain("vérifi");
   });
 });
 
