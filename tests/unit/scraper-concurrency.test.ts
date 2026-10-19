@@ -91,7 +91,10 @@ describe("plafond de concurrence du scraper (#363)", () => {
     });
 
     const res = await app.handler(post(scrapeBody()));
-    expect(res.status).toBe(502);
+    // #422 : le délai dépassé = 504 (le code exact), pas 502 : le portail
+    // n'est pas en cause, c'est le temps qui manque.
+    expect(res.status).toBe(504);
+    expect((await res.json()) as unknown).toMatchObject({ error: { code: "timeout" } });
     expect(gotSignal).toBe(true);
     // Le délai n'a pas seulement rejeté la promesse : le scraper a été
     // annulé (sinon le Chromium continue en arrière-plan).

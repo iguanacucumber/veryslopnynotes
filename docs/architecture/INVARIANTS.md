@@ -106,12 +106,20 @@ placer un proxy authentifié devant lui.
 **Plafond de concurrence :** l'endpoint étant public, il borne les navigateurs
 vivants : 2 scrapes simultanés (les autres = 503) et 30 s de délai — délai
 auquel le Chromium est réellement fermé, pas seulement la promesse rejetée
-(empilement de Chromium = épuisement mémoire, cf. #363).
+(empilement de Chromium = épuisement mémoire, cf. #363). Le délai dépassé
+répond **504** (le code exact), pas 502 : le portail n'est pas en cause.
+
+**Volume lu :** le HTML récupéré est borné (1 Mo de caractères, plafond
+appliqué AVANT le reparse) et sa lecture a son propre délai (10 s) : sans ça,
+une page de 50 Mo est reparsée par cheerio (plusieurs fois sa taille) et une
+page qui ne finit pas de streamer survit au délai HTTP en gardant le Chromium
+vivant (cf. #422).
 
 Piné par `tests/architecture/invariants.test.ts` (I8),
 `tests/unit/android-homework.test.ts`, `tests/unit/scraper-only.test.ts` et
 `tests/unit/scraper-concurrency.test.ts` ; garde SSRF (littérale + résolution
-DNS) et jar : `tests/unit/scraper-ssrf.test.ts`.
+DNS) et jar : `tests/unit/scraper-ssrf.test.ts` ; bornes du HTML lu et délai
+de lecture : `tests/unit/scraper-limits.test.ts`.
 
 ## I9 — Pas de code mort dans `android/`
 - Invariant : aucun `fun`/`class` de premier niveau sans appelant dans le code
