@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
+import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
@@ -61,9 +62,11 @@ import fr.veryslopnynotes.data.ProfileRepository
 import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.RestoreResult
 import fr.veryslopnynotes.data.SchoolQr
+import fr.veryslopnynotes.data.SecureStorage
 import fr.veryslopnynotes.data.ServerStore
 import fr.veryslopnynotes.data.SessionEpoch
 import fr.veryslopnynotes.data.SessionStores
+import fr.veryslopnynotes.data.StoreHealth
 import fr.veryslopnynotes.data.SubjectPrefInput
 import fr.veryslopnynotes.data.SubjectPrefRules
 import fr.veryslopnynotes.data.SubjectPrefs
@@ -129,6 +132,17 @@ class VsnBridge(
     private val profileRepo = ProfileRepository()
     private val accounts = AccountStore(ctx, cacheStore, sessions)
     private val llmKeys = LlmKeys.get(ctx)
+
+    // #401 : l'échec du Keystore est DIT, ici (le pont), pas dans les stores :
+    // le store tient le secret, la règle du dépôt est « jamais de log à côté
+    // d'un secret ». Le journal ne porte QUE l'état — ni clé, ni jeton, ni
+    // chemin, ni hôte. L'interface, elle, affiche le message à l'utilisateur.
+    init {
+        if (SecureStorage.health() == StoreHealth.UNAVAILABLE) {
+            Log.w(TAG, "Stockage chiffré indisponible : les identifiants vivent en mémoire, ils ne sont pas conservés.")
+        }
+    }
+
     private val pairing = PairingRepository(sessions, cacheStore)
     private val prefsRepo = SubjectPrefsRepository(
         try {
@@ -369,23 +383,38 @@ class VsnBridge(
             sessions.hasSession() -> "offline"
             else -> "no_session"
         }
-        return JSONObject().put("state", state)
+        return JSONObject().put("state", state).put("storage", storageState())
     }
 
-    private fun restoreSession(): JSONObject = synchronized(restoreLock) {
-        when (val result = pairing.restoreBlocking()) {
-            RestoreResult.Restored -> {
-                sessionReady = true
-                JSONObject().put("state", "restored")
+    private fun restoreSession(): JSONObject {
+        val response = synchronized(restoreLock) {
+            when (val result = pairing.restoreBlocking()) {
+                RestoreResult.Restored -> {
+                    sessionReady = true
+                    JSONObject().put("state", "restored")
+                }
+                RestoreResult.NoSession -> JSONObject().put("state", "no_session")
+                is RestoreResult.Dead ->
+                    JSONObject().put("state", "dead").put("message", result.message)
+                RestoreResult.Offline ->
+                    JSONObject().put("state", "offline")
+                        .put("message", "Réseau indisponible : session conservée.")
             }
-            RestoreResult.NoSession -> JSONObject().put("state", "no_session")
-            is RestoreResult.Dead ->
-                JSONObject().put("state", "dead").put("message", result.message)
-            RestoreResult.Offline ->
-                JSONObject().put("state", "offline")
-                    .put("message", "Réseau indisponible : session conservée.")
         }
+        // #401 : l'état du stockage chiffré est PUBLIE avec le statut de la
+        // session : un Keystore mort est un état dégradé (repli mémoire), pas
+        // un silence — l'interface doit pouvoir le dire à l'utilisateur.
+        return response.put("storage", storageState())
     }
+
+    /**
+     * L'état du stockage chiffré, PUBLIE à l'interface (#401).
+     *
+     * `available` : le Keystore répond, les secrets sont chiffrés au repos.
+     * `unavailable` : le Keystore a échoué, les secrets vivent en mémoire
+     * (jamais en clair) et sont PERDUS au redémarrage — l'interface le dit.
+     */
+    private fun storageState(): String = SecureStorage.health().name.lowercase()
 
     private fun logout(): JSONObject {
         sessionReady = false
@@ -1213,6 +1242,9 @@ class VsnBridge(
         private const val MAX_PARAMS_CHARS = 256 * 1024
         private const val THEME_PREFS = "settings"
         private const val THEME_KEY = "theme"
+
+        /** Journal du pont (jamais de secret : cf. le `init` de la classe). */
+        private const val TAG = "vsn-bridge"
 
         /** Méthode d'abandon d'un appel (allowlistée, comme toute autre). */
         private const val CANCEL_METHOD = "bridge.cancel"

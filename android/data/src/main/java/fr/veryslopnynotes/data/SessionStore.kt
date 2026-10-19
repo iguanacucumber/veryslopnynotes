@@ -48,8 +48,13 @@ interface SessionStore {
  * #206 : PLUS DE REPLI EN CLAIR. Avant, un Keystore indisponible écrivait le
  * jeton en `MODE_PRIVATE` lisible — un secret au repos en clair, silencieux.
  * Maintenant l'échec est BRUYANT (l'exception remonte) et les singletons
- * (`SessionStores`, `LlmKeys`) basculent sur le secours mémoire en le DISANT
- * (session perdue au redémarrage = ré-appairage, jamais un secret en clair).
+ * (`SessionStores`, `LlmKeys`) basculent sur le secours mémoire (session
+ * perdue au redémarrage = ré-appairage, jamais un secret en clair).
+ *
+ * #401 : le repli mémoire est désormais SIGNALÉ : l'état dégradé est
+ * publié (`SecureStorage` -> pont -> interface, qui le journalise). L'app ne
+ * croit plus en silence ne pas être appairée, et la clé de l'assistant ne
+ * disparaît plus sans explication.
  * ponytail: pas de DataStore ici (quelques paires clé/valeur suffisent).
  *
  * #249 : UNE seule MasterKey pour tout le process (session + clé LLM).
@@ -179,6 +184,10 @@ class InMemorySessionStore : SessionStore {
  * La sonde `hasSession()` force l'init paresseuse DANS le `try` : sans elle,
  * un Keystore KO ne jetterait qu'au premier usage réel (hors `try`), et le
  * repli mémoire n'aurait jamais lieu.
+ *
+ * #401 : le repli mémoire est SIGNALÉ, plus avalé en silence. L'échec est
+ * publié (`SecureStorage` -> pont -> interface, qui le journalise) : l'app ne
+ * croit plus en silence ne pas être appairée.
  * ponytail: double-checked locking sur un @Volatile, pas de framework de DI.
  */
 object SessionStores {
@@ -195,6 +204,14 @@ object SessionStores {
     private fun newStore(context: Context): SessionStore = try {
         EncryptedSessionStore(context).also { it.hasSession() }
     } catch (_: Exception) {
+        // #401 : l'échec n'est PLUS SILENCIEUX. Le repli mémoire reste (jamais
+        // un secret en clair), mais il est DIT : l'état dégradé est publié et
+        // l'interface l'affiche.
+        //
+        // AUCUN journal ici : le store tient le jeton, la règle du dépôt est
+        // « jamais de log à côté d'un secret » (cf. le pin sur
+        // `SessionStore.kt`). Le diagnostic passe par l'ÉTAT, pas par un log.
+        SecureStorage.markUnavailable()
         InMemorySessionStore()
     }
 }

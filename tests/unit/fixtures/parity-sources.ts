@@ -90,6 +90,11 @@ export const PRODUCTION_SOURCES: string[] = [
   // #RRGGBB, emoji court, libellé) et ses bornes, en un fichier PUR pour que
   // le harnais les EXÉCUTE. Le pont et le dépôt s'appuient dessus.
   join(DATA, "SubjectPrefRules.kt"),
+  // `data/StoreHealth.kt` : l'état du stockage chiffré (#401). La DÉCISION
+  // (« le Keystore a échoué -> dégradation signalée ») est pure et se compile
+  // hors Gradle ; l'appel Keystore lui-même ne l'est pas, il reste dans le
+  // `catch` des stores (un source guard le vérifie).
+  join(DATA, "StoreHealth.kt"),
   join(DATA, "SyncJobOutcome.kt"),
   join(DATA, "WeekWindow.kt"),
   // `app` — les messages d'appairage, le message de refus du devoir, le type

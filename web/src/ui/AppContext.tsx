@@ -36,6 +36,14 @@ interface AppContextValue {
   openSession: () => void;
   /** Ferme la session (déconnexion) : annule aussi « session expirée ». */
   closeSession: () => void;
+  /**
+   * Le stockage CHIFFRÉ est indisponible (Keystore mort) : la session et la
+   * clé de l'assistant ne sont PAS conservées sur l'appareil. Sans ce
+   * signal, l'app croyait ne pas être appairée, sans explication (#401).
+   */
+  storageUnavailable: boolean;
+  /** Signale l'état du stockage lu au démarrage. */
+  reportStorage: (unavailable: boolean) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -51,6 +59,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [authLost, setAuthLost] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [sessionClosed, setSessionClosed] = useState(false);
+  const [storageUnavailable, setStorageUnavailable] = useState(false);
   const noticeTimer = useRef<number | undefined>(undefined);
   const leaveTimer = useRef<number | undefined>(undefined);
   const [notice, setNotice] = useState<{ message: string; kind: NoticeKind; leaving: boolean } | null>(null);
@@ -101,6 +110,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSessionOpen(false);
     setSessionClosed(true);
     setAuthLost(false);
+  }, []);
+
+  // Le stockage chiffré est PUBLIE par le natif au démarrage (Keystore
+  // mort -> repli mémoire) : l'interface doit le dire, sinon l'app laisse
+  // croire que tout est enregistré alors que rien ne l'est (#401).
+  const reportStorage = useCallback((unavailable: boolean) => {
+    setStorageUnavailable(unavailable);
   }, []);
 
   // Notice : entrée, temps de lecture, sortie animée (#336). La sortie est un
@@ -154,6 +170,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sessionClosed,
       openSession,
       closeSession,
+      storageUnavailable,
+      reportStorage,
     }),
     [
       theme,
@@ -169,6 +187,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       sessionClosed,
       openSession,
       closeSession,
+      storageUnavailable,
+      reportStorage,
     ],
   );
 

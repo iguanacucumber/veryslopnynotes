@@ -88,6 +88,10 @@ class InMemoryLlmKeyStore : LlmKeyStore {
  * La sonde `isConfigured()` force l'init paresseuse DANS le `try` : un
  * Keystore KO bascule sur le secours mémoire (clé perdue au redémarrage,
  * jamais écrite en clair — même contrat que la session, #206).
+ *
+ * #401 : ce repli est SIGNALÉ, plus avalé en silence : l'état dégradé est
+ * publié (`SecureStorage` -> pont -> interface, qui le journalise). La clé de
+ * l'utilisateur ne disparaît plus sans explication.
  * ponytail: double-checked locking sur un @Volatile, pas de framework de DI.
  */
 object LlmKeys {
@@ -104,6 +108,11 @@ object LlmKeys {
     private fun newStore(context: Context): LlmKeyStore = try {
         EncryptedLlmKeyStore(context).also { it.isConfigured() }
     } catch (_: Exception) {
+        // #401 : ce repli est SIGNALÉ, plus avalé en silence : l'état dégradé
+        // est publié (`SecureStorage` -> pont -> interface). AUCUN journal ici :
+        // le store tient la clé, la règle du dépôt est « jamais de log à côté
+        // d'un secret ».
+        SecureStorage.markUnavailable()
         InMemoryLlmKeyStore()
     }
 }

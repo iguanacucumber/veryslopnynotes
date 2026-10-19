@@ -5,6 +5,7 @@ import { BridgeCallError } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
 import { Card, Page } from "../../ui/components";
 import { IconCamera, IconChevronLeft, IconLock } from "../../ui/icons";
+import { STORAGE_UNAVAILABLE_MESSAGE } from "../../lib/session";
 import {
   PIN_MAX_CHARS,
   normalizePin,
@@ -37,7 +38,7 @@ function StepChip({ label, done }: { label: string; done: boolean }) {
 
 export default function PairingScreen() {
   const navigate = useNavigate();
-  const { refresh, notify, openSession } = useApp();
+  const { refresh, notify, openSession, storageUnavailable } = useApp();
   const [qr, setQr] = useState<SchoolQr | null>(null);
   const [pin, setPin] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -174,6 +175,18 @@ export default function PairingScreen() {
               </span>
             </div>
           </Card>
+
+          {storageUnavailable ? (
+            // #401 : le stockage chiffré est mort. L'appairage va
+            // « marcher » mais la session ne sera PAS conservée : sans ce
+            // bandeau, l'utilisateur croit en silence que tout est
+            // enregistré.
+            <div className="card card--danger" role="alert">
+              <p className="t-body-m" style={{ margin: 0, color: "var(--danger-ink)" }}>
+                {STORAGE_UNAVAILABLE_MESSAGE}
+              </p>
+            </div>
+          ) : null}
 
           <div className="row row--wrap">
             <StepChip label="1 · Scanner" done={qr !== null} />
