@@ -22,6 +22,7 @@ import fr.veryslopnynotes.core.ExamCandidate
 import fr.veryslopnynotes.core.HomeworkOutcome
 import fr.veryslopnynotes.core.RevisionChunk
 import fr.veryslopnynotes.core.RevisionExam
+import fr.veryslopnynotes.core.RevisionFailure
 import fr.veryslopnynotes.core.RevisionKv
 import fr.veryslopnynotes.core.RevisionPdf
 import fr.veryslopnynotes.core.RevisionSheet
@@ -32,6 +33,7 @@ import fr.veryslopnynotes.core.listRevisionSheets
 import fr.veryslopnynotes.core.loadRevisionSheet
 import fr.veryslopnynotes.core.parseJsonOutput
 import fr.veryslopnynotes.core.parseRevisionAnswer
+import fr.veryslopnynotes.core.revisionFailureMessage
 import fr.veryslopnynotes.core.saveRevisionSheet
 import fr.veryslopnynotes.data.AccountStore
 import fr.veryslopnynotes.data.AssignmentsRepository
@@ -742,9 +744,15 @@ class VsnBridge(
         val store = revisions ?: throw BridgeFailure("unavailable", "Stockage des fiches indisponible.")
         val assignment = loadAssignments().firstOrNull { it.id == id }
             ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
-        val apiKey = llmKeys.apiKey()
+        val apiKey = llmKeys.apiKey()?.trim()
             ?: return JSONObject().put("ok", false)
                 .put("message", fr.veryslopnynotes.data.HomeworkRepository.NO_KEY_MESSAGE)
+        // Clé trop courte = refus AVANT l'appel : pas d'aller-retour inutile,
+        // et un message qui dit la vraie cause (« clé absente »).
+        if (apiKey.length < OpenRouterLlm.MIN_API_KEY_CHARS) {
+            return JSONObject().put("ok", false)
+                .put("message", "Clé LLM trop courte : renseigne-la dans Réglages.")
+        }
         val chunks = revisionChunks(assignment)
         if (chunks.isEmpty()) {
             return JSONObject().put("ok", false).put("message", "Devoir sans contenu à réviser.")
@@ -774,14 +782,30 @@ class VsnBridge(
             JSONObject().put("ok", true)
         } catch (e: LlmError) {
             // Cause identifiée (clé, crédits, modèle, quota, réseau) : message
-            // utile, distinct du repli « fiche non générée ».
+            // précis, distinct du repli « fiche non générée » (#359).
             JSONObject().put("ok", false).put("message", e.userMessage)
-        } catch (_: AiError) {
-            // Le modèle a répondu, mais pas au format attendu (JSON invalide).
-            JSONObject().put("ok", false).put("message", "Fiche hors format : l'assistant n'a pas renvoyé la fiche attendue.")
-        } catch (_: Exception) {
-            JSONObject().put("ok", false).put("message", "Fiche non générée.")
+        } catch (e: Exception) {
+            // La cause RÉELLE, en français et bornée : « Fiche non générée. »
+            // avalait tout, sortie invalide comprise (#367). Jamais le message
+            // brut de l'exception : il peut nommer un compte ou un hôte.
+            JSONObject().put("ok", false)
+                .put("message", revisionFailureMessage(revisionFailure(e)))
         }
+    }
+
+    /**
+     * Cause d'un échec de génération de fiche, depuis l'exception levée.
+     * `AiError` = garde I5 (sortie non conforme au schéma `{"fiche"}`) ;
+     * `LlmError` = fournisseur (clé refusée, quota, réseau, sortie tronquée).
+     */
+    private fun revisionFailure(e: Throwable): RevisionFailure = when {
+        e is AiError -> RevisionFailure.FORMAT
+        e is LlmError -> when (e.status) {
+            401, 403 -> RevisionFailure.KEY
+            429 -> RevisionFailure.QUOTA
+            else -> RevisionFailure.PROVIDER
+        }
+        else -> RevisionFailure.UNKNOWN
     }
 
     private fun revisionChunks(a: Assignment): List<RevisionChunk> {

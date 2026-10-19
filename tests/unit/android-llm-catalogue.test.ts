@@ -122,7 +122,10 @@ describe("android LLM — l'erreur remonte à l'appelant (#359)", () => {
     expect(bridge).toMatch(/result\.error \?: OpenRouterHomework\.GENERIC_ERROR_MESSAGE/);
     // Fiches : idem, au lieu du « Fiche non générée. » unique.
     expect(bridge).toMatch(/catch \(e: LlmError\) \{\s*JSONObject\(\)\.put\("ok", false\)\.put\("message", e\.userMessage\)/);
-    expect(bridge).toContain("Fiche non générée.");
+    // Repli : la cause est déduite, pas un message unique en dur (#367 : le
+    // repli vient de core, `revisionFailureMessage`, plus « Fiche non
+    // générée. » unique).
+    expect(bridge).toMatch(/revisionFailureMessage\(revisionFailure\(e\)\)/);
   });
 
   test("le message affiché ne fuit ni la clé ni l'URL de l'appel", () => {
