@@ -4,14 +4,21 @@
 # une seule implémentation, sinon une des trois finit par oublier la borne 17-21.
 ANDROID_ENV = . agents/runtime/android-env.sh
 
+# Le gate de merge : 10 étapes, TOUJOURS. `CHECK_HARNESS=` vide l'opt-in
+# même si le shell en exporte un : personne ne rétrécit le gate par
+# l'environnement (agents/ship.sh hérite de l'env du shell). Un `CHECK_TARGETS`
+# resté dans l'environnement est REFUSÉ et signalé par check.ts.
 check:
-	bun run agents/runtime/check.ts
+	CHECK_HARNESS= bun run agents/runtime/check.ts
 
 # Boucle interne : tout sauf la compilation Gradle (~2,1 s à chaud). Le build
 # Vite est inclus ; ce n'est PAS le gate de merge — `make check` ajoute
 # android-compile, le seul contrôle des symboles Kotlin.
+# CHECK_HARNESS=1 : opt-in EXPLICITE qui autorise `check.ts` à remplacer sa
+# liste d'étapes par `CHECK_TARGETS` (usage interne du harnais). Sans lui,
+# `CHECK_TARGETS` est refusé et les 10 étapes par défaut s'imposent (#368).
 check-fast:
-	CHECK_TARGETS="lint typecheck unit architecture contracts check-kotlin web-typecheck web-test web-build" bun run agents/runtime/check.ts
+	CHECK_HARNESS=1 CHECK_TARGETS="lint typecheck unit architecture contracts check-kotlin web-typecheck web-test web-build" bun run agents/runtime/check.ts
 
 # TDD : relance les tests au moindre changement. `make watch T=tests/unit/foo.test.ts`
 # cible un fichier ; par défaut unitaires + web (~2,1 s). Pas de `bun test --changed` :
@@ -68,9 +75,16 @@ check-kotlin:
 # résolution de symbole, un import manquant ou une surcharge ambiguë : les miroirs
 # TS et check-kotlin ne les voient pas (piège réel : `MAX_LABEL_CHARS` non
 # qualifié dans core/Homework.kt, invisible côté TS).
-# Outillage absent = SKIP bruyant, jamais un faux vert : `make check` dit alors
-# ce qu'il n'a pas fait. Les commandes APK (buildDebugApk/buildRelApk) échouent
-# au lieu de sauter : un APK demandé en silence n'en est pas un.
+#
+# Outillage absent = ÉCHEC, pas un SKIP silencieux (#368) : la compilation
+# Kotlin est la SEULE vérification du gate qui résout les symboles, donc un
+# `make check` vert sans elle est un faux vert. ALLOW_SKIP_ANDROID=1 reste
+# l'opt-in EXPLICITE pour assumer ce SKIP hors merge (poste sans outillage) —
+# et le SKIP reste bruyant. Les commandes APK (buildDebugApk/buildRelApk)
+# échouent de la même façon : un APK demandé en silence n'en est pas un.
+#
+# La découverte du JDK/SDK passe par agents/runtime/android-env.sh (borne
+# 17-21) — une seule implémentation, cf. ANDROID_ENV plus haut.
 #
 # --offline d'ABORD : versions figées + cache local = la configuration ne doit
 # rien au réseau (95 s perdus sinon ici : le JVM ne reçoit jamais la réponse de
@@ -84,12 +98,15 @@ check-kotlin:
 android-compile:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
-	if [ -z "$$jdk" ]; then \
-	  echo "android-compile SKIP : aucun JDK 17-21."; \
-	  echo "  compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
-	elif [ -z "$$sdk" ]; then \
-	  echo "android-compile SKIP : SDK Android absent (ANDROID_HOME ou android/local.properties)."; \
-	  echo "  compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
+	if [ -z "$$jdk" ] || [ -z "$$sdk" ]; then \
+	  echo "android-compile : outillage ABSENT (JDK=$${jdk:-aucun}, SDK=$${sdk:-aucun}) — la compile Kotlin n'a PAS tourné."; \
+	  if [ "$${ALLOW_SKIP_ANDROID:-0}" = "1" ]; then \
+	    echo "android-compile SKIP (ALLOW_SKIP_ANDROID=1) : compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
+	  else \
+	    echo "  ÉCHEC : le gate exige la compilation Kotlin (seul filet qui résout les symboles)."; \
+	    echo "  ALLOW_SKIP_ANDROID=1 pour assumer explicitement ce SKIP (usage hors merge)."; \
+	    exit 1; \
+	  fi; \
 	else \
 	  echo "android-compile : JDK $$jdk, SDK $$sdk"; \
 	  cd android && { \
