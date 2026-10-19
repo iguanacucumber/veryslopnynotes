@@ -31,7 +31,9 @@ violerait ADR-003 et I8.
   supprimés. Tout build APK dépend de `bun run build:web` (tâche Gradle
   `preBuild`), et `MainActivity` monte toujours `NativeWebShell`.
 - L'app web tourne aussi dans Chromium avec un pont factice
-  (`web/src/bridge/mock.ts`) pour Playwright et le développement.
+  (`web/src/bridge/mock.ts`) pour Playwright et le développement. Ce pont est
+  un artefact de développement : le build de production ne l'embarque pas et
+  un pont natif absent y est un échec bruyant (I13, #423).
 
 ## Alternatives rejetées
 

@@ -160,3 +160,21 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   `android/data/src/main/java/fr/veryslopnynotes/data/SyncJobOutcome.kt`,
   `android/data/src/main/java/fr/veryslopnynotes/data/PairingRepository.kt`.
 
+## I13 — Le pont factice est un artefact de développement
+- Invariant : le pont factice (`web/src/bridge/mock.ts`) n'existe qu'en
+  développement. `client.ts` ne l'importe que dans une branche
+  `import.meta.env.DEV` (jamais d'import statique) : le bundle livré à l'APK
+  ne contient AUCUNE donnée scolaire fictive, et hors mode dev un pont natif
+  absent ÉCHOUE (`BridgeCallError`) au lieu de servir une école fictive (faux
+  profil, fausses notes, `session.restore` = « restored », donc jamais d'écran
+  d'appairage). `web/vite.config.ts` force `NODE_ENV=production` pour le
+  build : un `NODE_ENV=development` ambiant ne peut pas fabriquer un bundle de
+  développement embarqué dans l'APK.
+- Test : `tests/architecture/web-mock.test.ts` (pas d'import statique + analyse
+  du bundle Vite réellement produit) + `tests/web/bridge.test.ts` (hors mode
+  dev : le pont absent échoue ; en mode dev : le factice répond ; un pont
+  natif présent ne retombe jamais sur le factice).
+- Commande : `make architecture-test` (ou `make check`).
+- Emplacement : `web/src/bridge/client.ts`, `web/src/bridge/mock.ts`,
+  `web/vite.config.ts`.
+
