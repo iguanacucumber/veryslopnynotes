@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  HOMEWORK_MAX_ANSWER_CHARS,
   HOMEWORK_MAX_API_KEY_CHARS,
   HOMEWORK_MAX_QUESTION_CHARS,
   HOMEWORK_MAX_SOURCE_CHARS,
@@ -101,7 +102,7 @@ function tsParse(body: unknown, allowedLabels: string[]): Outcome | null {
     const answer = typeof r["answer"] === "string" ? r["answer"].trim() : "";
     const steps = strings(r["steps"]);
     const sources = strings(r["sources"]);
-    if (answer.length === 0 || answer.length > 8000) return null;
+    if (answer.length === 0 || answer.length > HOMEWORK_MAX_ANSWER_CHARS) return null;
     if (sources.length === 0) return null;
     // Citation hors étiquettes fournies = réponse inventée : on jette tout.
     if (!sources.every((s) => allowedLabels.includes(s))) return null;

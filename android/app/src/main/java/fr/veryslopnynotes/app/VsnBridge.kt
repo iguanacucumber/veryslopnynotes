@@ -21,6 +21,7 @@ import fr.veryslopnynotes.core.ChildAccount
 import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.ExamCandidate
 import fr.veryslopnynotes.core.HomeworkOutcome
+import fr.veryslopnynotes.core.OutputTooLongException
 import fr.veryslopnynotes.core.RevisionChunk
 import fr.veryslopnynotes.core.RevisionExam
 import fr.veryslopnynotes.core.RevisionFailure
@@ -861,6 +862,11 @@ class VsnBridge(
             // AVANT le repli generique, sinon un secret serait affiche comme
             // une sortie hors format.
             JSONObject().put("ok", false).put("message", secretRefusalMessage(e.kind))
+        } catch (e: OutputTooLongException) {
+            // #411 : la sortie depasse la garde I5. « Format attendu » serait
+            // un diagnostic FAUX (la fiche est bien formee, juste trop longue) :
+            // on nomme la LIMITE REELLE.
+            JSONObject().put("ok", false).put("message", e.userMessage)
         } catch (e: LlmError) {
             // Cause identifiée (clé, crédits, modèle, quota, réseau) : message
             // précis, distinct du repli « fiche non générée » (#359).

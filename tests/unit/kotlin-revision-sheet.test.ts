@@ -77,13 +77,15 @@ describe("export PDF de fiche : le corps entier et ses sources (#412)", () => {
   });
 
   test.skipIf(skip)("un corps plus long que la garde I5 est tronqué ET signalé", async () => {
-    const huge = "x".repeat(9_000);
+    // La garde I5 plafonne a 12 000 caracteres (#411 : le plafond de sortie
+    // deduit du budget de tokens du fournisseur).
+    const huge = "x".repeat(13_000);
     const res = JSON.parse(await ask({ op: "pdfLines", body: huge, sources: CANONICAL })) as Lines;
     const text = res.lines.join("\n");
     // Jamais en silence : la troncature est dite.
     expect(text).toContain("(suite tronquée)");
-    // Et le corps rendu s'arrête à la borne I5 (8 000 caractères).
-    expect((text.match(/x/g) ?? []).length).toBe(8_000);
+    // Et le corps rendu s'arrête à la borne I5 (12 000 caractères).
+    expect((text.match(/x/g) ?? []).length).toBe(12_000);
     // Les sources canoniques restent là : la troncature ne mange pas la liste.
     expect(text).toContain("- Consigne");
     expect(text).toContain("- Cours : chapitre 4");
