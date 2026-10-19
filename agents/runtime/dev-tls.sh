@@ -12,6 +12,9 @@
 #
 # Fonction (aucun effet de bord à part définir) :
 #   dev_tls -> exporte TLS_CERT_FILE + TLS_KEY_FILE, ou échoue (exit 1)
+#     - couple DÉJÀ fourni (TLS_CERT_FILE + TLS_KEY_FILE) : respecté TEL QUEL,
+#       openssl inutile, aucun certificat créé (#421) ;
+#     - sinon : auto-signé généré hors du dépôt, réutilisé s'il existe.
 #
 # ponytail: certificat feuille auto-signé, pas d'AC locale, pas de renouvellement.
 # Upgrade: mkcert (racine de confiance installable en un geste sur le téléphone),
@@ -29,6 +32,24 @@ dev_tls_san() {
 }
 
 dev_tls() {
+    # Un couple fourni par l'opérateur est RESPECTÉ TEL QUEL (#421) : pas de
+    # génération, pas d'openssl. Sinon on écrasait TLS_CERT_FILE/TLS_KEY_FILE
+    # avec notre auto-signé — le téléphone voyait alors le mauvais certificat
+    # (« Trust anchor not found ») et l'opérateur dépanne le téléphone.
+    if [ -n "${TLS_CERT_FILE:-}" ] || [ -n "${TLS_KEY_FILE:-}" ]; then
+        if [ -z "${TLS_CERT_FILE:-}" ] || [ -z "${TLS_KEY_FILE:-}" ]; then
+            echo "runServer : TLS_CERT_FILE et TLS_KEY_FILE doivent etre definis ensemble." >&2
+            exit 1
+        fi
+        for f in "$TLS_CERT_FILE" "$TLS_KEY_FILE"; do
+            if [ ! -f "$f" ] || [ ! -r "$f" ]; then
+                echo "runServer : $f absent ou illisible — couple TLS fourni REFUSE (pas de repli auto-signe)." >&2
+                exit 1
+            fi
+        done
+        export TLS_CERT_FILE TLS_KEY_FILE
+        return 0
+    fi
     if ! command -v openssl >/dev/null 2>&1; then
         cat >&2 <<'HINT'
 runServer : openssl absent, donc PAS de HTTPS.

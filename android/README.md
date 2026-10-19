@@ -92,7 +92,9 @@ remplacer ensuite depuis l'app.
 
 ### Certificat de `make runServer` (« Trust anchor … not found »)
 
-`make runServer` sert en HTTPS avec un certificat **auto-signé**. Depuis
+`make runServer` sert en HTTPS avec un certificat **auto-signé** (généré
+seulement si `TLS_CERT_FILE`/`TLS_KEY_FILE` ne sont pas fournis : un couple
+fourni est servi tel quel, installez-le sur l'appareil). Depuis
 Android 7, une app ne fait pas confiance par défaut aux certificats installés
 par l'utilisateur, d'où `CertPathValidatorException: Trust anchor for
 certification path not found`. Le correctif est en deux temps :

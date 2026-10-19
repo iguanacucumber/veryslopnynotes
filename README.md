@@ -168,12 +168,16 @@ et [`docs/RELEASE.md`](docs/RELEASE.md).
 ### Scraper de manuels (facultatif)
 
 ```bash
-make runServer         # HTTPS sur 0.0.0.0:8080
+make runServer            # HTTPS sur 127.0.0.1:8080 (boucle locale)
+make runServer HOST=0.0.0.0   # pour joindre le scraper depuis le téléphone
 ```
 
 `make runServer` génère un certificat auto-signé hors du dépôt
-(`~/.cache/veryslopnynotes/tls`). Fournis `TLS_CERT_FILE` et `TLS_KEY_FILE`
-pour un certificat émis (mkcert, Let's Encrypt). Le serveur ne relaie ni
+(`~/.cache/veryslopnynotes/tls`) **seulement si** `TLS_CERT_FILE` et
+`TLS_KEY_FILE` ne sont pas fournis : un couple fourni (mkcert, Let's Encrypt)
+est servi tel quel, sans openssl. La préparation TLS est obligatoire — si elle
+échoue, le lancement s'arrête, jamais de repli en clair. `PORT` et `HOST`
+restent surchargeables (`PORT=9090 make runServer`). Le serveur ne relaie ni
 session Pronote ni clé OpenRouter.
 
 > **Sécurité :** `POST /v1/manuals/scrape` est volontairement sans
@@ -200,7 +204,7 @@ session Pronote ni clé OpenRouter.
 | `make buildDebugApk` / `make buildRelApk` | APK debug / APK + AAB release. |
 | `make updateApkToPhone` | APK debug puis `adb install -r` (données conservées). |
 | `make shot ROUTE=grades` | Capture vérifiée sur téléphone réel (`SHOT_ARGS="--theme dark"` pour le thème). |
-| `make runServer` | Scraper de manuels HTTPS sur `:8080`. |
+| `make runServer` | Scraper de manuels HTTPS sur `:8080` (boucle locale par défaut). |
 | `make build` | Vérification des secrets + image Docker du serveur (skip si Docker est absent). |
 
 ## Tests et qualité
@@ -231,7 +235,7 @@ l'établissement ; le PIN et la session restent sur le téléphone.
 
 | Variable | Usage | Secrète ? |
 |---|---|---|
-| `PORT`, `HOST` | Écoute du scraper. `make runServer` force `8080` et `0.0.0.0` ; sans `HOST`, le binaire écoute sur la boucle locale. | Non |
+| `PORT`, `HOST` | Écoute du scraper. `make runServer` prend `8080` et `127.0.0.1` par défaut, surchargeables (`PORT=9090 make runServer`) ; sans `HOST`, le binaire écoute sur la boucle locale. | Non |
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | Certificat et clé du scraper. | Non (chemins) |
 | `SERVER_HOST` ou `server.host` dans `android/local.properties` | Graine de l'adresse du scraper ; l'adresse se change ensuite dans l'app. | Non |
 | `STORE_FILE`, `STORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` | Signature release, toujours hors du dépôt. | **Oui** |
