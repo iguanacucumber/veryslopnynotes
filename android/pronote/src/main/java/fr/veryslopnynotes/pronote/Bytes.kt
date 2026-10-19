@@ -22,13 +22,26 @@ fun ByteArray.toHexLower(): String {
     return out.toString()
 }
 
+/**
+ * Chiffre hexadécimal ASCII, ou -1.
+ *
+ * `Character.digit` acceptait les chiffres Unicode non ASCII (`０１`, `٠١`) :
+ * le port décodait `0x01` là où le contrat annonce un hex STRICT.
+ */
+private fun hexDigit(c: Char): Int = when (c) {
+    in '0'..'9' -> c - '0'
+    in 'a'..'f' -> c - 'a' + 10
+    in 'A'..'F' -> c - 'A' + 10
+    else -> -1
+}
+
 /** Strict : longueur paire, uniquement `[0-9a-fA-F]`, sinon `IllegalArgumentException`. */
 fun String.hexToBytes(): ByteArray {
     if (length % 2 != 0) throw IllegalArgumentException("hex de longueur impaire ($length)")
     val out = ByteArray(length / 2)
     for (i in out.indices) {
-        val hi = Character.digit(this[i * 2], 16)
-        val lo = Character.digit(this[i * 2 + 1], 16)
+        val hi = hexDigit(this[i * 2])
+        val lo = hexDigit(this[i * 2 + 1])
         if (hi < 0 || lo < 0) throw IllegalArgumentException("hex invalide à l'octet $i")
         out[i] = ((hi shl 4) or lo).toByte()
     }

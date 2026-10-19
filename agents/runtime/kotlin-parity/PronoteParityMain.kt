@@ -155,6 +155,7 @@ private class Driver {
             )
             // --- Fonctions pures ----------------------------------------------
             "enleverAlea" -> ok("value" to JVal.Str(enleverAlea(op.str("text") ?: "")))
+            "hexToBytes" -> ok("hex" to JVal.Str((op.str("hex") ?: "").hexToBytes().toHexLower()))
             "enBytes" -> ok("hex" to JVal.Str(enBytes(op.str("text") ?: "").toHexLower()))
             "prepareOnglets" -> ok(
                 "value" to JVal.Arr(prepareOnglets(op.fields["value"]).map { JVal.Num(it) }),
