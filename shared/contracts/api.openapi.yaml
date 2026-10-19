@@ -51,6 +51,14 @@ paths:
           description: Playwright indisponible sur le scraper
         '502':
           description: scrape impossible (page d'erreur, mur de connexion, nom d'hote introuvable)
+        '503':
+          description: >-
+            scraper occupe (plafond de concurrence : 2 scrapes en vol, les
+            suivants sont refuses avec un en-tete Retry-After)
+        '504':
+          description: >-
+            delai de scrape depasse (30 s) ou lecture de la page trop longue
+            (le HTML recupere est borne a 1 Mo de caracteres)
 components:
   schemas:
     HealthResponse:

@@ -27,6 +27,13 @@ explicite (`403 private_host`) — jamais un échec muet. Un nom introuvable est
 refusé de même (`502 unresolved_host`). Il reste la fenêtre TOCTOU : le
 navigateur résout de son côté, au moment de la connexion.
 
+Le service est borné (#422) : 2 scrapes simultanés (les suivants = `503
+busy`, avec `Retry-After`), 30 s de délai (dépassé = `504 timeout`, le code
+exact), et le HTML lu est plafonné à 1 Mo de caractères avant reparse, avec
+son propre délai de lecture (10 s) — une page de 50 Mo n'est plus reparsée
+en entier, et une page qui ne finit pas de streamer ne garde plus le
+Chromium vivant.
+
 Le navigateur n'est pas téléchargé par `bun install` (le paquet `playwright`
 n'a aucun script d'installation) : hors Docker, lancer `bunx playwright install
 chromium` une fois, sinon le scrape répond 501 « scraper sans navigateur ».
