@@ -19,6 +19,7 @@ import {
   assignmentSections,
   assignmentsInWeek,
   dueLabel,
+  homeworkRefusalText,
   parseAssignmentsPayload,
   shiftWeek,
   subjectDisplayFr,
@@ -180,13 +181,14 @@ function TasksWeek({ week }: { week: string }) {
       const result = await bridge.askHomework(assignment.id, week);
       if (seq !== helpSeq.current) return;
       if (result.refused) {
+        // #416 : la phrase du pont fait foi (le motif libre du modèle ne
+        // franchit jamais la frontière) ; le repli est générique, jamais le
+        // faux diagnostic « pas assez de matière ».
         setHelp({
           id: assignment.id,
           loading: false,
           answer: null,
-          refusal:
-            result.message ||
-            "Le devoir n'a pas assez de matière : l'assistant refuse de répondre sans source.",
+          refusal: homeworkRefusalText(result.message),
           error: null,
         });
       } else if (!result.ok) {
