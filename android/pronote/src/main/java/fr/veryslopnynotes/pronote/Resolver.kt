@@ -57,15 +57,28 @@ fun strOf(v: JVal?): String = when (v) {
 }
 
 /**
+ * `Array.prototype.toString` = `join(",")` : `null`/`undefined` → chaîne VIDE
+ * (pas `"null"`), un tableau imbriqué → son propre `join` (`"1,2"`, pas
+ * `"[1],[2]"`). C'est ce que rend `String([null])` = `""` et
+ * `String([[1],[2]])` = `"1,2"`.
+ */
+private fun jsArrayToString(items: List<JVal>): String =
+    items.joinToString(",") { if (it == null || it is JVal.Null) "" else strOf(it) }
+
+/**
  * `Number(v)` (sous-ensemble) : nombre direct ; chaîne taillée puis `""` → 0,
  * hexadécimal (`0x10` → 16), `Infinity` signés, décimal/exposant ; le reste →
- * `NaN`. Booléen → 1/0, `null` → 0, objet/tableau → `NaN` (pas de `valueOf`).
+ * `NaN`. Booléen → 1/0, `null` → 0, objet → `NaN` (pas de `valueOf`).
+ * TABLEAU → `Number(String(x))` (le `toString` du tableau) : `Number([])` = 0,
+ * `Number([30])` = 30, `Number([null])` = 0, `Number([1,2])` = `NaN`.
  */
 fun numOf(v: JVal?): Double {
     if (v == null || v is JVal.Null) return 0.0
     if (v is JVal.Num) return v.value
     if (v is JVal.Bool) return if (v.value) 1.0 else 0.0
-    if (v is JVal.Obj || v is JVal.Arr) return Double.NaN
+    if (v is JVal.Obj) return Double.NaN
+    // Tableau : `Number(x)` = `Number(ToPrimitive(x))` = `Number(join(x))`.
+    if (v is JVal.Arr) return numOf(JVal.Str(jsArrayToString(v.items)))
     val t = jsTrim((v as JVal.Str).value)
     if (t.isEmpty()) return 0.0
     val hex = Regex("^[+-]?0[xX]([0-9a-fA-F]+)$").matchEntire(t)
