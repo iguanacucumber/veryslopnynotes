@@ -75,8 +75,13 @@ export async function ensureSingleJar(
   compile: () => void | Promise<void>,
   opts?: { waitMs?: number; pollMs?: number },
 ): Promise<string> {
-  const lock = `${jar}.lock`;
-  const errorFile = `${jar}.error`;
+  // Les fichiers voisins s'appellent `parity.lock` / `parity.error`, PAS
+  // `parity.jar.lock` : un glob `*.jar*` (le test du harnais qui exige
+  // qu'aucun binaire ne reste après un échec) ne doit pas les prendre pour
+  // des binaires.
+  const base = jar.replace(/\.jar$/, "");
+  const lock = `${base}.lock`;
+  const errorFile = `${base}.error`;
   const waitMs = opts?.waitMs ?? WAIT_MS;
   const pollMs = opts?.pollMs ?? POLL_MS;
   const deadline = Date.now() + waitMs;
