@@ -147,7 +147,7 @@ export default function PairingScreen() {
                 <h1 className="t-headline" style={{ margin: 0 }}>
                   Connecte ton établissement
                 </h1>
-                <p className="t-body-m" style={{ margin: "6px 0 0", color: "rgba(255,255,255,0.9)" }}>
+                <p className="t-body-m" style={{ margin: "6px 0 0", color: "var(--on-brand-soft)" }}>
                   Scanne le QR de l'application de ton établissement, puis saisis son PIN. Ta session reste sur ce
                   téléphone.
                 </p>
@@ -158,7 +158,7 @@ export default function PairingScreen() {
                   width: 52,
                   height: 52,
                   borderRadius: 999,
-                  background: "rgba(255,255,255,0.16)",
+                  background: "var(--on-brand-veil)",
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",

@@ -195,7 +195,7 @@ export default function ProfileScreen() {
                 {profile.displayName}
               </h2>
               {subtitle ? (
-                <p className="t-body-m" style={{ margin: "2px 0 0", color: "rgba(255,255,255,0.88)" }}>
+                <p className="t-body-m" style={{ margin: "2px 0 0", color: "var(--on-brand-soft)" }}>
                   {subtitle}
                 </p>
               ) : null}

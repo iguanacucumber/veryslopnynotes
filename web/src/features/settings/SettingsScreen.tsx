@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { bridge } from "../../bridge/client";
 import { BridgeCallError, type SubjectPref } from "../../bridge/types";
 import { subjectColor } from "../../lib/format";
+import { schemeLabel } from "../../lib/schemes";
 import { useApp } from "../../ui/AppContext";
 import { Card, Divider, ErrorBox, Loading, Page, Section } from "../../ui/components";
 import { IconChevronRight, IconLock, IconSettings, IconUser } from "../../ui/icons";
+import { SchemePicker } from "./SchemePicker";
 import { SubjectEditor } from "./SubjectEditor";
 import {
   MAX_API_KEY_CHARS,
@@ -15,6 +17,7 @@ import {
   themeLabel,
   validateServerHost,
 } from "./model";
+import "./settings.css";
 
 function actionMessage(error: unknown, fallback: string): string {
   if (error instanceof BridgeCallError) {
@@ -32,7 +35,7 @@ function subjectInitial(subject: string): string {
 }
 
 export default function SettingsScreen() {
-  const { theme, setTheme, refreshTick, notify } = useApp();
+  const { theme, setTheme, scheme, setScheme, refreshTick, notify } = useApp();
   const [host, setHost] = useState("");
   const [accountCount, setAccountCount] = useState<number | null>(null);
   const [llmConfigured, setLlmConfigured] = useState(false);
@@ -230,6 +233,16 @@ export default function SettingsScreen() {
           </div>
           <p className="tiny muted" style={{ margin: "8px 0 0" }}>
             Thème actuel : {themeLabel(theme)}.
+          </p>
+
+          <Divider />
+
+          <p className="tiny muted" style={{ margin: "10px 0 0" }}>
+            Palette
+          </p>
+          <SchemePicker value={scheme} onChange={setScheme} />
+          <p className="tiny muted" style={{ margin: "8px 0 0" }}>
+            Palette actuelle : {schemeLabel(scheme)} — chaque palette a sa variante claire et sombre.
           </p>
         </Card>
       </Section>
