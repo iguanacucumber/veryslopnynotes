@@ -79,13 +79,22 @@ le dépôt, les variables serveur ou les logs.
 **Exception de sécurité :** `POST /v1/manuals/scrape` est volontairement sans
 authentification. Il reçoit les identifiants du portail de manuels et une URL
 dans le corps de la requête, sans les journaliser ; Playwright réutilise un
-cookie jar local gitignoré (`playwright/.auth/manuals.json`). Toute personne
-pouvant joindre ce serveur peut piloter une navigation Playwright (risque SSRF)
-et consommer ce compte. Garder le serveur sur loopback/réseau de confiance ;
-pour l'exposer, placer un proxy authentifié devant lui.
+cookie jar local gitignoré (`playwright/.auth/manuals.json`) dont le chemin
+n'est **plus** choisi par l'appelant (seulement le nom du jar : le serveur
+impose son répertoire, #362). La navigation est gardée (`shared/contracts/net.ts`
++ `server/infrastructure/manuals-scrape.ts`) : hôte privé/interne refusé
+(IP littérale, entière, hexadécimale, IPv4-mapped IPv6, ULA, link-local,
+métadonnées), **chaîne de redirections vérifiée avant le navigateur** et
+**URL finale re-vérifiée après navigation**. Reste le risque résolu par le
+réseau : un nom DNS public qui pointe vers une IP interne (rebinding), et
+l'épuisement du compte. Toute personne pouvant joindre ce serveur peut donc
+encore piloter une navigation Playwright (risque SSRF résiduel) et consommer ce
+compte. Garder le serveur sur loopback/réseau de confiance ; pour l'exposer,
+placer un proxy authentifié devant lui.
 
 Piné par `tests/architecture/invariants.test.ts` (I8),
-`tests/unit/android-homework.test.ts` et `tests/unit/scraper-only.test.ts`.
+`tests/unit/android-homework.test.ts` et `tests/unit/scraper-only.test.ts` ;
+garde SSRF et jar : `tests/unit/scraper-ssrf.test.ts`.
 
 ## I9 — Pas de code mort dans `android/`
 - Invariant : aucun `fun`/`class` de premier niveau sans appelant dans le code

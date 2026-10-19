@@ -10,3 +10,9 @@ Le scraper est sans authentification et accepte identifiants éditeur dans le
 corps de requête. Risque SSRF et d'épuisement du compte : garder sur réseau de
 confiance ou placer un proxy authentifié devant. `make runServer` et Docker
 lancent ce seul service.
+
+Garde-fous côté serveur (#362) : la navigation ne va que vers un hôte public
+(IP privée refusée, forme IPv4-mapped IPv6 comprise), la chaîne de
+redirections est vérifiée avant le navigateur et l'URL finale après ; le
+chemin du cookie jar n'est plus fourni par l'appelant (seulement son nom, dans
+`playwright/.auth/`).
