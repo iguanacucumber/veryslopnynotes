@@ -54,7 +54,7 @@ absence de secrets/hôtes réels.
 - Boucles <5 s partout : flottement, shimmer, pulsations, cascade de badges,
   balayage de progression, paquets voxel, carrousel de l'école.
 - **Hero voxel S3** : école qui s'assemble brique par brique (Three.js
-  `0.180.0` vendu dans `keynote/vendor/` via `bun build
+  `0.186.1` vendu dans `keynote/vendor/` via `bun build
   keynote/vendor/entry.js --format=iife --minify`, MIT), paquets verts vers
   l'école et le cloud, anneau rouge pulsé sur la caisse serveur boudée.
   Sans WebGL : repli automatique sur le schéma SVG (`#voxelFallback`).

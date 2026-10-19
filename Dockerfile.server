@@ -2,10 +2,10 @@
 # Le process ne sert QUE des manuels (plain HTTPS, sans auth — risque accepté
 # documenté dans server/infrastructure/http.ts) : seuls http.ts + manuals*.ts
 # sont embarqués (le client Pronote TS a été supprimé en #238).
-# Base épinglée exacte (ADR-001, `bun --version` 1.4.2). Digest : `docker pull
-# oven/bun:1.4.2` puis figer `FROM oven/bun:1.4.2@sha256:<digest>` (daemon
+# Base épinglée exacte (ADR-001, `bun --version` 1.4.3). Digest : `docker pull
+# oven/bun:1.4.3` puis figer `FROM oven/bun:1.4.3@sha256:<digest>` (daemon
 # absent en local, tag exact en attendant).
-FROM oven/bun:1.4.2 AS base
+FROM oven/bun:1.4.3 AS base
 WORKDIR /app
 # Lock commité : install strict, aucun fallback (dérive interdite).
 COPY package.json bun.lock tsconfig.json ./

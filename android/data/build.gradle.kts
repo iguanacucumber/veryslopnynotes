@@ -2,12 +2,11 @@
 // Cache offline Room phase 4 (#14), SSE client + pairing #15.
 plugins {
     id("com.android.library")
-    id("org.jetbrains.kotlin.android")
 }
 
 android {
     namespace = "fr.veryslopnynotes.data"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26
@@ -15,9 +14,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
 }
 
@@ -30,7 +26,7 @@ dependencies {
     // #212 : `api` et non `implementation` — le constructeur public
     // OpenRouterLlm(..., client: OkHttpClient) expose le type à l'appelant
     // (app/VsnBridge.kt), qui doit le voir sur sa classe de chemin.
-    api("com.squareup.okhttp3:okhttp:4.12.0")
+    api("com.squareup.okhttp3:okhttp:5.5.0")
     // #15 : stockage token sécurisé (EncryptedSharedPreferences, Apache-2.0).
     // Version épinglée, licence MIT-compatible, justifiée en PR.
     implementation("androidx.security:security-crypto:1.1.0")

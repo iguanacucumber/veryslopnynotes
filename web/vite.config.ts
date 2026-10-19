@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react";
 // ponytail: pas de serveur de dev dans l'APK ; `bun run dev:web` sert seulement
 // à itérer dans Chromium avec le pont factice.
 export default defineConfig({
-  root: __dirname,
+  root: import.meta.dirname,
   base: "./",
   plugins: [react()],
   build: {
@@ -16,8 +16,12 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        manualChunks: {
-          react: ["react", "react-dom", "react-router-dom"],
+        // Rolldown (Vite 8) n'accepte plus l'objet manuel : une fonction garde
+        // le même regroupement et reste compatible avec l'ancien Rollup.
+        manualChunks(id) {
+          return /node_modules\/(react|react-dom|react-router|react-router-dom)\//.test(id)
+            ? "react"
+            : undefined;
         },
       },
     },
