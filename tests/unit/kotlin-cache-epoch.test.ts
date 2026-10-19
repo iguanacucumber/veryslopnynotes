@@ -70,12 +70,17 @@ describe("purge de déconnexion (#364)", () => {
     const acc = readFileSync(ACCOUNT, "utf8");
     const iLogout = acc.indexOf("fun logout(");
     expect(iLogout).toBeGreaterThan(-1);
-    const iInvalidate = acc.indexOf("SessionEpoch.invalidate", iLogout);
-    expect(iInvalidate).toBeGreaterThan(iLogout);
-    // La purge est DANS la garde (une seule section critique).
-    expect(acc).toContain("SessionEpoch.invalidate { cacheStore.clearAll() }");
+    // #407 : la purge est UN SEUL endroit (`CacheScope.purge`) — la
+    // déconnexion, l'appairage d'un autre compte et la session morte y
+    // passent tous, donc sous la même garde d'époque.
+    expect(acc).toContain("CacheScope.purge(cacheStore)");
+    expect(acc).not.toContain("SessionEpoch.invalidate");
+    // La purge est DANS la garde (une seule section critique) : l'invalidation
+    // de l'époque et l'effacement du cache sont dans le même bloc.
+    const scope = readFileSync(join(DATA, "CacheScope.kt"), "utf8");
+    expect(scope).toContain("SessionEpoch.invalidate { store.clearAll() }");
     // La purge brute ne subsiste pas (elle passerait hors section critique).
-    expect(acc.match(/cacheStore\.clearAll\(\)/g)?.length).toBe(1);
+    expect(scope.match(/store\.clearAll\(\)/g)?.length).toBe(1);
   });
 
   test("câblage : le worker de fond écrit sous la même garde", () => {

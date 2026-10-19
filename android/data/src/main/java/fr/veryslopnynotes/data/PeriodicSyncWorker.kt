@@ -63,7 +63,7 @@ class PeriodicSyncWorker(
      * Lecture des trois ressources + réécriture du cache (session disponible).
      */
     private fun refresh(client: Client): Result {
-        val store = FileCacheStore(File(applicationContext.filesDir, "offline"))
+        val store = cacheStore()
         // #364 : epoque capturee AVANT les lectures locales (le client peut
         // mettre des secondes) : une deconnexion pendant la lecture annule
         // l'ecriture du cache.
@@ -108,9 +108,20 @@ class PeriodicSyncWorker(
     private fun restoreClient(): Client? {
         PronoteSession.client?.let { return it }
         val sessions = SessionStores.get(applicationContext)
-        val restored = PairingRepository(sessions).restoreBlocking()
+        // #407 : le dépôt de restauration purge le cache si la session est
+        // MORTE — MÊME chemin que le pont, MÊME store (le dossier de cache
+        // est partagé : une session morte en fond laisse le cache de l'app
+        // intact, donc l'app servirait les données d'un compte mort).
+        val restored = PairingRepository(sessions, cacheStore()).restoreBlocking()
         return if (restored is RestoreResult.Restored) PronoteSession.client else null
     }
+
+    /**
+     * Store de cache du téléphone : MÊME dossier que l'app (`filesDir/offline`),
+     * donc le verrou est partagé (une écriture du job et une de l'app ne
+     * s'entrelacent pas).
+     */
+    private fun cacheStore(): CacheStore = FileCacheStore(File(applicationContext.filesDir, "offline"))
 
     /**
      * Ecriture gardee par l'epoch : `false` = la session a change (deconnexion
