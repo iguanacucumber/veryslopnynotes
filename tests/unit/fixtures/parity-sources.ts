@@ -86,6 +86,10 @@ export const PRODUCTION_SOURCES: string[] = [
   join(DATA, "LocalRequestQueue.kt"),
   join(DATA, "OfflineArtifacts.kt"),
   join(DATA, "OfflineCache.kt"),
+  // `data` — les règles des préférences matière (#395) : le contrat (couleur
+  // #RRGGBB, emoji court, libellé) et ses bornes, en un fichier PUR pour que
+  // le harnais les EXÉCUTE. Le pont et le dépôt s'appuient dessus.
+  join(DATA, "SubjectPrefRules.kt"),
   join(DATA, "SyncJobOutcome.kt"),
   join(DATA, "WeekWindow.kt"),
   // `app` — les messages d'appairage, le message de refus du devoir, le type
@@ -94,6 +98,8 @@ export const PRODUCTION_SOURCES: string[] = [
   join(APP, "BridgeErrors.kt"),
   join(APP, "HomeworkMessages.kt"),
   join(APP, "PairingMessages.kt"),
+  // `app` — la phrase de refus d'une matière hors contrat (#395).
+  join(APP, "SubjectPrefMessages.kt"),
 ];
 
 /** Les pilotes du dossier `kotlin-parity` (tous, triés : parcours déterministe). */
