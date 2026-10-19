@@ -378,6 +378,8 @@ private class ClientDriver {
                 clients[cid] = client
                 ok("cid" to JVal.Num(cid.toDouble()), "loggedIn" to JVal.Bool(client.logged_in))
             }
+            // URL de QR réécrite (hôte « non serveur » : underscore, IDN).
+            "rewriteQrUrl" -> ok("url" to JVal.Str(Client.rewriteQrUrl(op.reqStr("url"))))
             "clientLogin" -> {
                 // Mot de passe (+ ENT injecté fixe côté pilote comme côté test).
                 val cid = nextId++
