@@ -9,12 +9,12 @@
 #   android_jdk  -> chemin d'un JDK 17-21, ou rien
 #   android_sdk  -> chemin d'un SDK Android existant, ou rien
 #
-# Pourquoi 17-21 : Gradle 8.7 (android/gradle/wrapper) REFUSE un JDK plus récent
-# avec un échec illisible («Unsupported class file major version… »). On choisit
-# donc un JDK compatible plutôt que de laisser l'utilisateur le découvrir.
+# Pourquoi 17-21 : plage testée avec AGP 9.4.1 / Gradle 9.8.1. On choisit un JDK
+# compatible plutôt que de laisser l'utilisateur découvrir un échec de classe.
 # ponytail: pas de `sdkmanager --install` automatique ni de téléchargement ;
 # on lit ce qui est là, l'installation est documentée (android/README.md).
-# Upgrade: `org.gradle.java.installations.auto-download` une fois Gradle ≥ 8.8.
+# Upgrade: `org.gradle.java.installations.auto-download` si l'installation
+# automatique devient souhaitable.
 
 # Repertoire du projet Android (celui qui contient local.properties), relatif a la
 # racine du repo : les recipes Make tournent de la racine. Surchargeable pour les
@@ -66,9 +66,9 @@ android_sdk() {
 # Message d'installation, une seule formulation pour les deux commandes APK.
 android_toolchain_hint() {
     cat <<'HINT'
-  JDK 17-21 : Adoptium 17 suffit (Gradle 8.7 refuse > 21).
+  JDK 17-21 : Adoptium 17 suffit (AGP 9.4.1).
               Pointez ANDROID_JDK_HOME ou JAVA_HOME dessus.
-  SDK Android : sdkmanager "platforms;android-34" "build-tools;34.0.0" platform-tools
+  SDK Android : sdkmanager "platforms;android-37.0" "build-tools;36.0.0" platform-tools
               puis ANDROID_HOME=<sdk> ou sdk.dir dans android/local.properties.
 HINT
 }
