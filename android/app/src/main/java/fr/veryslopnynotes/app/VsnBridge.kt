@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.core.content.FileProvider
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import fr.veryslopnynotes.core.AiError
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.AssignmentAttachment
 import fr.veryslopnynotes.core.Capabilities
@@ -42,6 +43,7 @@ import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.FileSubjectPrefsStore
 import fr.veryslopnynotes.data.InMemoryCacheStore
 import fr.veryslopnynotes.data.InMemorySubjectPrefsStore
+import fr.veryslopnynotes.data.LlmError
 import fr.veryslopnynotes.data.LlmKeys
 import fr.veryslopnynotes.data.MeResult
 import fr.veryslopnynotes.data.OpenRouterHomework
@@ -718,7 +720,8 @@ class VsnBridge(
             OpenRouterHomework(OpenRouterLlm(), llmKeys).generate(question, sources, cb)
         } ?: return JSONObject().put("ok", false).put("message", "L'assistant n'a pas répondu.")
         val outcome = result.outcome
-            ?: return JSONObject().put("ok", false).put("message", result.error ?: "Échec de l'assistant.")
+            ?: return JSONObject().put("ok", false)
+                .put("message", result.error ?: OpenRouterHomework.GENERIC_ERROR_MESSAGE)
         return when (outcome) {
             is HomeworkOutcome.Answer -> JSONObject().put("ok", true).put("body", outcome.answer)
             is HomeworkOutcome.Refused -> JSONObject()
@@ -769,6 +772,13 @@ class VsnBridge(
             )
             saveRevisionSheet(store, assembleRevisionSheet(candidate, fiche, chunks.map { it.source }))
             JSONObject().put("ok", true)
+        } catch (e: LlmError) {
+            // Cause identifiée (clé, crédits, modèle, quota, réseau) : message
+            // utile, distinct du repli « fiche non générée ».
+            JSONObject().put("ok", false).put("message", e.userMessage)
+        } catch (_: AiError) {
+            // Le modèle a répondu, mais pas au format attendu (JSON invalide).
+            JSONObject().put("ok", false).put("message", "Fiche hors format : l'assistant n'a pas renvoyé la fiche attendue.")
         } catch (_: Exception) {
             JSONObject().put("ok", false).put("message", "Fiche non générée.")
         }
