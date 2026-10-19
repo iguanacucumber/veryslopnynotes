@@ -85,6 +85,17 @@ describe("profil : lecture défensive et comptes", () => {
     ).toBeNull();
   });
 
+  test("libellé de période : la borne du contrat, pas celle du nom (#420)", () => {
+    // Le natif publie jusqu'à 100 caractères : le web ne tronque plus le
+    // profil (borne partagée : `USER_PERIOD_NAME_MAX_CHARS`).
+    const long = "Trimestre 1 — année scolaire 2026-2027";
+    expect(parseProfilePayload(JSON.stringify({ user: { ...USER, periodName: long } }))?.periodName).toBe(long);
+    expect(parseProfilePayload(JSON.stringify({ user: { ...USER, periodName: "P".repeat(100) } }))?.periodName).toHaveLength(
+      100,
+    );
+    expect(parseProfilePayload(JSON.stringify({ user: { ...USER, periodName: "P".repeat(101) } }))).toBeNull();
+  });
+
   test("initiales, sous-titre et compteur", () => {
     expect(profileInitials({ displayName: "Camille Exemple" })).toBe("CE");
     expect(initialsOf("JEAN-PIERRE DUPONT")).toBe("JP");
