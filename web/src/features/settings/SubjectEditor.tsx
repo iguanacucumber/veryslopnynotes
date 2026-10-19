@@ -44,7 +44,7 @@ export function SubjectEditor({
   }
 
   return (
-    <div className="card card--flat" role="group" aria-label={`Modifier ${subject}`}>
+    <div className="card card--flat subject-editor" role="group" aria-label={`Modifier ${subject}`}>
       <div className="row row--between" style={{ alignItems: "flex-start" }}>
         <h3 className="t-title" style={{ margin: 0 }}>
           Modifier la matière
