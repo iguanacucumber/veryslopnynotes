@@ -228,6 +228,31 @@ async function handleScrape(
   }
 }
 
+/**
+ * Navigateur Playwright ABSENT = capability manquante (501 franc), pas un
+ * faux 500 « unexpected failure ». Le message réel de Playwright change selon
+ * la version et la cause (« Executable doesn't exist at … », « Please run the
+ * following command to download new browsers », « Host system is missing
+ * dependencies… », « playwright install ») : on matche une LISTE de motifs,
+ * jamais une chaîne fragile. ponytail: regex sur le message, pas de
+ * dépendance et pas de parsing de sortie d'outil.
+ * Upgrade: appellate d'erreur stable de Playwright si un jour elle existe.
+ */
+const MISSING_BROWSER_PATTERNS: readonly RegExp[] = [
+  /playwright non install/i, // module absent (message interne du scraper)
+  /executable doesn't exist/i, // binaire du navigateur non téléchargé
+  /download new browsers/i, // Playwright invite à télécharger le navigateur
+  /playwright install/i, // commande d'installation citée dans le message
+  /host system is missing dependencies/i, // libs système absentes
+  /navigateur (?:absent|manquant|introuvable)/i,
+];
+
+/** L'erreur signifie-t-elle « pas de navigateur utilisable » ? */
+function isMissingBrowserError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  return MISSING_BROWSER_PATTERNS.some((re) => re.test(message));
+}
+
 function error(code: string, status: number, message: string, extraHeaders?: Record<string, string>): Response {
   return Response.json({ error: { code, message } }, { status, headers: extraHeaders });
 }

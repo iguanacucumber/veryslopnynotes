@@ -71,7 +71,11 @@ Format : Invariant → test → commande → emplacement.
 ## I8 — Session Pronote et clé LLM restent hors serveur
 
 Le serveur ne lit que `PORT`, `HOST` et les chemins TLS `TLS_CERT_FILE` /
-`TLS_KEY_FILE`. La session Pronote est ouverte et stockée sur le téléphone ; la
+`TLS_KEY_FILE`. L'image Docker déclare en plus `PLAYWRIGHT_BROWSERS_PATH` :
+c'est le chemin des navigateurs téléchargés au build (un chemin, pas un
+credential — le paquet `playwright` n'a aucun script d'installation, le
+navigateur ne vient donc pas de `bun install`). La session Pronote est ouverte
+et stockée sur le téléphone ; la
 clé OpenRouter reste chiffrée dans l'app et part directement au fournisseur dans
 un en-tête HTTPS `Authorization`. Aucun `.env*`, jeton de session ou clé LLM dans
 le dépôt, les variables serveur ou les logs.

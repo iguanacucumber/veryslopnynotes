@@ -193,9 +193,10 @@ describe("scraper-only (#209)", () => {
         throw new ScrapeManualsError("Playwright non installé — e2e manuals skippé");
       },
     });
-    // Playwright absent : message reconnu comme capability manquante.
+    // Playwright absent : message reconnu comme capability manquante (#374 :
+    // 501 franc, pas 502 « scrape impossible » ni 500 « unexpected failure »).
     const res = await noBrowser.handler(post("/v1/manuals/scrape", scrapeBody()));
-    expect([501, 502]).toContain(res.status);
+    expect(res.status).toBe(501);
   });
 
   test("contrat : gardes requête/réponse", async () => {
