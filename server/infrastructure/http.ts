@@ -314,6 +314,16 @@ export function start(
   const port = parsePort(envValue(env, "PORT"));
   const hostname = envValue(env, "HOST") || "127.0.0.1";
   const tls = tlsFromEnv(env);
+  if (!tls) {
+    // #421 : le repli en clair doit être BRUYANT, pas une ligne discrète
+    // parmi les autres. Le scraper est sans auth (I8) : un opérateur qui
+    // croit démarrer en HTTPS ne doit pas se retrouver en clair sans le
+    // savoir (c'est ce que laissait passer `make runServer` avant).
+    console.warn(
+      "[server] ATTENTION : service en CLAIR (http) — aucun TLS_CERT_FILE/TLS_KEY_FILE. " +
+        "Le scraper est sans authentification (I8) : ne l'exposez que sur un réseau de confiance.",
+    );
+  }
   const server = Bun.serve({
     port,
     hostname,
