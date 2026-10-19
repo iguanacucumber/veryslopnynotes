@@ -363,6 +363,7 @@ private class ClientDriver {
                 ok("hour" to JVal.Num(h.toDouble()), "minute" to JVal.Num(m.toDouble()))
             }
             "numOf" -> ok("value" to JVal.Num(numOf(op.fields["value"])))
+            "strOf" -> ok("value" to JVal.Str(strOf(op.fields["value"])))
             "boolOf" -> ok("value" to JVal.Bool(boolOf(op.fields["value"])))
             // --- Client --------------------------------------------------------
             "clientQrcode" -> {

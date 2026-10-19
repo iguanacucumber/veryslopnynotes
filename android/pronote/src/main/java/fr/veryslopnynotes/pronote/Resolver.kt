@@ -44,14 +44,17 @@ fun gradeParse(v: JVal?): String? {
     return if (idx in GRADE_TRANSLATE.indices) GRADE_TRANSLATE[idx] else null
 }
 
-/** `String(v)` : null → `"null"`, nombre au format JS, booléen, objet/arbre plats. */
+/**
+ * `String(v)` : null → `"null"`, nombre au format JS, booléen, objet/arbre plats.
+ * Tableau → son `join(",")` (`null` → chaîne VIDE : `String([null])` = `""`).
+ */
 fun strOf(v: JVal?): String = when (v) {
     null, is JVal.Null -> "null"
     is JVal.Str -> v.value
     is JVal.Num -> jsNumber(v.value)
     is JVal.Bool -> if (v.value) "true" else "false"
     is JVal.Obj -> "[object Object]"
-    is JVal.Arr -> v.items.joinToString(",") { strOf(it) }
+    is JVal.Arr -> jsArrayToString(v.items)
     // `RawBytes` (transient interne à `Communication.post`) ne traverse jamais ici.
     else -> throw IllegalStateException("JVal non affichable : ${v.javaClass.simpleName}")
 }

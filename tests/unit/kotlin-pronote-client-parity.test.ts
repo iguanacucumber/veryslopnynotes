@@ -849,6 +849,17 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
     }
   });
 
+  // #417 : `String()` d'un TABLEAU = son `join(",")` : `null` → chaîne VIDE.
+  // Le port rendait le texte littéral `null` (un motif d'absence affiché).
+  test.skipIf(skip)("chaînes : `String()` des TABLEAUX comme en JS ([null] = \"\", [1,2] = \"1,2\")", async () => {
+    const { str } = await import("../../node_modules/pronotets/dist/resolver.js");
+    const cases: unknown[] = [[], [null], [1, 2], [[1], [2]], [{}], [[null]], ["a", null, "b"], [true], [0], [""]];
+    for (const value of cases) {
+      const kt = JSON.parse(await ask({ op: "strOf", value })) as { value: string };
+      expect(`str ${JSON.stringify(value)} -> ${canonTs(kt)}`).toBe(`str ${JSON.stringify(value)} -> ${canonTs({ value: str(value) })}`);
+    }
+  });
+
   test.skipIf(skip)("auth : QR heureux, rotation du jeton, état identique", async () => {
     const tsa = startStub();
     const kta = startStub();
