@@ -4,7 +4,7 @@ import { bridge } from "./bridge/client";
 import type { SessionStatus } from "./bridge/types";
 import { AppProvider, useApp } from "./ui/AppContext";
 import { Shell } from "./ui/AppShell";
-import { mustPair } from "./lib/session";
+import { mustPair, storageUnavailable } from "./lib/session";
 import IndexRoute from "./routes/index";
 import CalendarRoute from "./routes/calendar";
 import GradesRoute from "./routes/grades";
@@ -24,14 +24,19 @@ function Gate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionStatus | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const { authLost, sessionOpen, sessionClosed } = useApp();
+  const { authLost, sessionOpen, sessionClosed, reportStorage } = useApp();
 
   useEffect(() => {
     let alive = true;
     void bridge
       .restore()
       .then((s) => {
-        if (alive) setSession(s);
+        if (!alive) return;
+        setSession(s);
+        // #401 : le statut porte l'état du stockage chiffré. Un Keystore
+        // mort est un état dégradé (rien n'est conservé) : l'interface
+        // l'affiche au lieu de croire en silence que tout va bien.
+        reportStorage(storageUnavailable(s));
       })
       .catch(() => {
         if (alive) setSession({ state: "offline", message: "téléphone injoignable" });
@@ -39,7 +44,7 @@ function Gate({ children }: { children: ReactNode }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [reportStorage]);
 
   // Un appairage réussi ouvre la session : le statut lu au démarrage
   // (« pas de session ») est périmé. Sans cette information, le garde-fou

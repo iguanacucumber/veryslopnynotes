@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { logoutSession, mustPair } from "../../web/src/lib/session";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { logoutSession, mustPair, storageUnavailable, STORAGE_UNAVAILABLE_MESSAGE } from "../../web/src/lib/session";
+
+const ROOT = join(import.meta.dir, "..", "..");
 
 describe("session web", () => {
   test("une session ouverte prime sur le statut lu au démarrage", () => {
@@ -68,5 +72,30 @@ describe("session web", () => {
     // et annule la fermeture d'une déconnexion précédente.
     expect(mustPair({ status: { state: "no_session" }, open: true, expired: false, closed: false })).toBe(false);
     expect(mustPair({ status: { state: "no_session" }, open: true, expired: true, closed: false })).toBe(false);
+  });
+});
+
+describe("stockage chiffré indisponible (#401)", () => {
+  test("le native publie l'état : l'interface sait que rien n'est conservé", () => {
+    expect(storageUnavailable({ state: "no_session", storage: "unavailable" })).toBe(true);
+    expect(storageUnavailable({ state: "restored", storage: "unavailable" })).toBe(true);
+    // Le cas nominal : rien à signaler.
+    expect(storageUnavailable({ state: "restored", storage: "available" })).toBe(false);
+    expect(storageUnavailable({ state: "restored" })).toBe(false);
+    expect(storageUnavailable(null)).toBe(false);
+  });
+
+  test("la dégradation est DITE là où l'utilisateur perd ses identifiants", () => {
+    // L'appairage : la session ne sera PAS conservée (repli mémoire).
+    const pairing = readFileSync(join(ROOT, "web/src/features/pairing/PairingScreen.tsx"), "utf8");
+    expect(pairing).toContain("STORAGE_UNAVAILABLE_MESSAGE");
+    expect(pairing).toContain("storageUnavailable");
+    // Les réglages : la clé de l'assistant ne sera pas conservée non plus.
+    const settings = readFileSync(join(ROOT, "web/src/features/settings/SettingsScreen.tsx"), "utf8");
+    expect(settings).toContain("STORAGE_UNAVAILABLE_MESSAGE");
+    // L'état lu au démarrage est PROPAGÉ jusqu'à l'interface.
+    const app = readFileSync(join(ROOT, "web/src/App.tsx"), "utf8");
+    expect(app).toContain("reportStorage(storageUnavailable(s))");
+    expect(STORAGE_UNAVAILABLE_MESSAGE).toContain("Stockage chiffré indisponible");
   });
 });

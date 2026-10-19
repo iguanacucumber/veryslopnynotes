@@ -3,6 +3,7 @@ import { bridge } from "../../bridge/client";
 import { BridgeCallError, type SubjectPref } from "../../bridge/types";
 import { subjectColor } from "../../lib/format";
 import { schemeLabel } from "../../lib/schemes";
+import { STORAGE_UNAVAILABLE_MESSAGE } from "../../lib/session";
 import { useApp } from "../../ui/AppContext";
 import { Card, Divider, ErrorBox, Loading, Page, Section } from "../../ui/components";
 import { IconChevronRight, IconLock, IconSettings, IconUser } from "../../ui/icons";
@@ -36,7 +37,7 @@ function subjectInitial(subject: string): string {
 }
 
 export default function SettingsScreen() {
-  const { theme, setTheme, scheme, setScheme, refreshTick, notify } = useApp();
+  const { theme, setTheme, scheme, setScheme, refreshTick, notify, storageUnavailable } = useApp();
   const [host, setHost] = useState("");
   const [accountCount, setAccountCount] = useState<number | null>(null);
   const [llmConfigured, setLlmConfigured] = useState(false);
@@ -434,6 +435,14 @@ export default function SettingsScreen() {
           <p className="tiny muted" style={{ margin: "6px 0 0" }}>
             Collée depuis ton compte fournisseur. Elle ne quitte jamais cet appareil.
           </p>
+          {storageUnavailable ? (
+            // #401 : la clé vit en MÉMOIRE (le Keystore est mort) : elle
+            // fonctionnera jusqu'à la fermeture de l'app, puis disparaîtra.
+            // Sans ce message, l'utilisateur croit sa clé enregistrée.
+            <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "6px 0 0" }}>
+              {STORAGE_UNAVAILABLE_MESSAGE}
+            </p>
+          ) : null}
           {llmError ? (
             <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "6px 0 0" }}>
               {llmError}
