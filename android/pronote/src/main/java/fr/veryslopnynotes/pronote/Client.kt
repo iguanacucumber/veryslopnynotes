@@ -268,7 +268,7 @@ open class ClientBase(
     /** Garde de session (le `post("Navigation", …)` est branché ici, pas dans le modèle). */
     fun keepAlive(): KeepAlive = KeepAlive(
         shouldPing = { System.currentTimeMillis() / 1000 - communication.lastPing >= 110 },
-        ping = {
+        pingRequest = {
             post(
                 "Navigation", 7.0,
                 mapOf("onglet" to JVal.Num(7.0), "ongletPrec" to JVal.Num(7.0)),

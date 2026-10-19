@@ -1041,6 +1041,13 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
       jest.useRealTimers();
     }
     expect(ktFresh.pings).toBe(0);
+
+    // Ping MANUEL (#408) : INCONDITIONNEL — le seuil ne s'applique pas (le
+    // seuil vient d'être rafraîchi par une lecture, un ping « si dû » ne
+    // partirait donc pas). C'est une EXTENSION du port : la référence n'a que
+    // le ping périodique, dont le fil est comparé plus haut.
+    const ktManual = JSON.parse(await ask({ op: "keepAlivePing" })) as { pings: number };
+    expect(ktManual.pings).toBe(1);
   }, 30000);
 
   // #429 : une redirection illisible ne doit ni fuir la connexion ni renvoyer

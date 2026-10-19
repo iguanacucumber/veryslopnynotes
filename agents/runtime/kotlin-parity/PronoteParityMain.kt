@@ -322,7 +322,7 @@ private class Driver {
                 var pings = 0
                 val ka = KeepAlive(
                     shouldPing = { System.currentTimeMillis() / 1000 - lastPing >= 110 },
-                    ping = { pings++ },
+                    pingRequest = { pings++ },
                 )
                 ka.start()
                 Thread.sleep(((op.num("runMs") ?: 0.0).toLong()))
@@ -336,8 +336,18 @@ private class Driver {
                 var pings = 0
                 KeepAlive(
                     shouldPing = { System.currentTimeMillis() / 1000 - lastPing >= 110 },
-                    ping = { pings++ },
+                    pingRequest = { pings++ },
                 ).pingIfDue()
+                ok("pings" to JVal.Num(pings.toDouble()))
+            }
+            // Ping MANUEL (#408) : INCONDITIONNEL — le seuil ne s'applique pas.
+            // `shouldPing` vaut faux : un ping « si dû » ne partirait pas.
+            "keepAlivePing" -> {
+                var pings = 0
+                KeepAlive(
+                    shouldPing = { false },
+                    pingRequest = { pings++ },
+                ).ping()
                 ok("pings" to JVal.Num(pings.toDouble()))
             }
             else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")
