@@ -860,6 +860,17 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
     }
   });
 
+  // #417 : `new Date(y, …)` REMAPPE les années 0..99 en 1900+y (`new Date(26, 8, 5)`
+  // = 1926). Le port gardait l'année 26 : une date qui n'existe pas.
+  test.skipIf(skip)("dates : `new Date()` remappe les années 0..99 (05/09/0026 → 1926)", async () => {
+    const { Util } = await import("../../node_modules/pronotets/dist/resolver.js");
+    for (const text of ["05/09/0026", "05/09/0099", "05/09/0026 08:00:00", "12/09/26"]) {
+      const kt = JSON.parse(await ask({ op: "dateParse", text })) as { millis: number };
+      const ts = (Util.dateParse as (s: string) => Date)(text).getTime();
+      expect(`dateParse ${text} -> ${kt.millis}`).toBe(`dateParse ${text} -> ${ts}`);
+    }
+  });
+
   test.skipIf(skip)("auth : QR heureux, rotation du jeton, état identique", async () => {
     const tsa = startStub();
     const kta = startStub();
