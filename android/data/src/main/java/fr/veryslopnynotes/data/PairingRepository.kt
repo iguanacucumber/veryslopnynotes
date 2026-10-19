@@ -174,7 +174,10 @@ class PairingRepository(
      */
     private fun failure(e: Exception): PairingResult.Err {
         if (e is IOException) {
-            return PairingResult.Err("network", e.message ?: "Réseau indisponible")
+            // Jamais le message de l'exception : il peut nommer l'hôte de
+            // l'établissement (adresse interne, port) (#396). Le pont rend la
+            // phrase affichée à partir du code.
+            return PairingResult.Err("network", "Réseau indisponible : vérifie ta connexion, puis réessaie.")
         }
         val message = e.message.orEmpty()
         return when {
