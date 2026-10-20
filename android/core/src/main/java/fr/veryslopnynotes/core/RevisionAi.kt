@@ -78,7 +78,7 @@ object RevisionAi {
     // n'etait pas transmise et le point d'entree public ne pouvait produire
     // AUCUNE fiche.
     fun requestRevisionFiche(
-        provider: LlmProvider,
+        provider: SafePromptProvider,
         exam: RevisionExam,
         chunks: List<RevisionChunk>,
         apiKey: String?,

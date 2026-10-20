@@ -103,6 +103,9 @@ const LEGITIMES: string[] = [
   // Un exemple de documentation : un en-tête, un placeholder, une consigne.
   "Authorization : Bearer <votre-token>",
   "Mot de passe : ne le partage jamais.",
+  // #493 : un paramètre de URL n'est pas une affectation de variable (c'est
+  // la forme d'un exemple de doc, pas d'un secret collé dans un cours).
+  "L'API se lit ainsi : https://api.exemple.fr/eleves?token=aB3dE5fG7hJ9kL1mN3pQ5rS7",
 ];
 
 async function ask(op: "prompt" | "output", text: string): Promise<Verdict> {
@@ -142,6 +145,15 @@ describe("garde I4 : des FORMES de secret, pas des mots (#409)", () => {
 
   test.skipIf(skip)("une affectation de variable sensible est détectée", async () => {
     const r = await ask("prompt", FAKE_ENV);
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("ENV_ASSIGN");
+  });
+
+  // #493 : l'affectation n'est plus cantonnée au DÉBUT de ligne. La valeur
+  // fait 30 caractères (donc `RE_OPAQUE`, qui en exige 40, ne peut pas la
+  // prendre) : seul `RE_ENV` peut la voir.
+  test.skipIf(skip)("une affectation sensible en MILIEU de ligne est détectée", async () => {
+    const r = await ask("prompt", ["mon cours utilise GITHUB_", "TOKEN=aB3dE5fG7hJ9kL1mN3pQ5rS7"].join(""));
     expect(r.ok).toBe(false);
     expect(r.kind).toBe("ENV_ASSIGN");
   });
@@ -263,5 +275,31 @@ describe("le câblage ne ravale plus la cause (#409)", () => {
     for (const forme of ["PRIVATE_KEY", "AUTHORIZATION", "JWT", "SESSION_COOKIE", "ENV_ASSIGN"]) {
       expect(core).toContain(forme);
     }
+  });
+
+  // #493 : le prompt VÉRIFIÉ par la garde doit être le prompt ENVOYÉ. Avant,
+  // `callProvider` acceptait un `LlmProvider` et, si ce n'était pas un
+  // `SafePromptProvider`, RECONSTRUISAIT le prompt (nouveau nonce) : le corps
+  // envoyé n'était alors pas le corps vérifié.
+  test("le fournisseur est un SafePromptProvider : plus de reconstruction du prompt", () => {
+    // Le type porte la garantie : les deux points d'entrée exigent un
+    // `SafePromptProvider`.
+    expect(core).toMatch(/fun generateGuardedJson\(\s*provider: SafePromptProvider/);
+    expect(core).toMatch(/fun generateGuarded\(\s*provider: SafePromptProvider/);
+    // Et le repli « reconstruct » a disparu.
+    expect(core).not.toContain("provider.generate(");
+    expect(core).not.toContain("as? SafePromptProvider");
+    // L'ancien contrat `LlmProvider` (system + data) n'existe plus : il
+    // reconstruisait le prompt.
+    expect(core).not.toContain("fun interface LlmProvider");
+    // L'adaptateur réel n'implémente que le chemin sûr.
+    const openRouter = codeOnly(
+      readFileSync(
+        join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data", "OpenRouterLlm.kt"),
+        "utf8",
+      ),
+    );
+    expect(openRouter).toContain(": SafePromptProvider");
+    expect(openRouter).not.toContain("override fun generate(");
   });
 });
