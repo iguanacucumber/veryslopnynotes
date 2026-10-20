@@ -83,6 +83,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // `data` — cache, file d'attente locale, issue de synchronisation.
   join(DATA, "CachePolicy.kt"),
   join(DATA, "CacheScope.kt"),
+  // `ClientQueue.kt` : LA file PARTAGÉE du client local (#403) — c'est elle
+  // qui sérialise les lectures de l'interface ET celles du job de fond.
+  join(DATA, "ClientQueue.kt"),
   join(DATA, "LocalRequestQueue.kt"),
   join(DATA, "OfflineArtifacts.kt"),
   join(DATA, "OfflineCache.kt"),
@@ -95,6 +98,10 @@ export const PRODUCTION_SOURCES: string[] = [
   // hors Gradle ; l'appel Keystore lui-même ne l'est pas, il reste dans le
   // `catch` des stores (un source guard le vérifie).
   join(DATA, "StoreHealth.kt"),
+  // `SessionFailure.kt` : la décision « session morte » du job de fond, Pure
+  // (déménagée de `PronotePayloads.kt`, qui lit `org.json` et ne compile
+  // donc pas hors Gradle).
+  join(DATA, "SessionFailure.kt"),
   join(DATA, "SyncJobOutcome.kt"),
   join(DATA, "WeekWindow.kt"),
   // `app` — les messages d'appairage, le message de refus du devoir, le type
