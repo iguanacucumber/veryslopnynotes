@@ -72,47 +72,6 @@ jobs:
             ~/.gradle/caches/9.8.1
           key: gradle-${{ runner.os }}-${{ hashFiles('android/gradle/libs.versions.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/gradle.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/*/build.gradle.kts') }}
 
-      # La parité TS <-> Kotlin compile et EXÉCUTE le port Kotlin : sans
-      # `kotlinc` + `java`, toute la suite saute et le gate est vert sans une
-      # ligne de production Kotlin exécutée. La version suit le catalogue
-      # (`android/gradle/libs.versions.toml`).
-      #
-      # L'archive (90 Mo) est en cache : téléchargée puis décompressée à chaque
-      # run, elle coûteait 5-13 s. L'étape ne télécharge QUE si le binaire
-      # manque — et `kotlinc -version` vérifie l'outillage dans les DEUX cas
-      # (un outillage cassé doit rester bruyant).
-      #
-      # SOUS LE HOME, PAS DANS /opt (#513). Un chemin ABSOLU hors du workspace
-      # ET hors du $HOME n'était JAMAIS sauvegardé — et `actions/cache` ne le
-      # signale pas : `saveImpl` avale l'erreur, l'étape post reste verte, le
-      # cache est simplement ABSENT (en silence). Les deux caches qui
-      # fonctionnent sont sous `~` ou dans le workspace ; celui-ci suit le
-      # même schéma.
-      - name: Cache compilateur Kotlin
-        uses: actions/cache@v4
-        continue-on-error: true
-        with:
-          path: ~/.cache/kotlin-compiler-2.4.21
-          key: kotlinc-2.4.21-${{ runner.os }}
-
-      - name: Compilateur Kotlin
-        run: |
-          set -euo pipefail
-          version=2.4.21
-          home="$HOME/.cache/kotlin-compiler-${version}"
-          # Un cache CORROMPU se RÉPARE : on vérifie le BINAIRE, pas sa
-          # présence. Un `kotlinc` cassé doit être re-téléchargé, pas faire
-          # échouer le gate.
-          if ! "$home/bin/kotlinc" -version >/dev/null 2>&1; then
-            rm -rf "$home"
-            mkdir -p "$HOME/.cache"
-            curl -sSfL -o /tmp/kotlin.zip \
-              "https://github.com/JetBrains/kotlin/releases/download/v${version}/kotlin-compiler-${version}.zip"
-            unzip -q /tmp/kotlin.zip -d "$HOME/.cache"
-          fi
-          echo "$home/bin" >> "$GITHUB_PATH"
-          kotlinc -version
-
       # SDK Android : même version que `compileSdk`/`buildToolsVersion` du
       # module app (`android/app/build.gradle.kts`). Installation DIRECTE des
       # archives versionnées (pas d'action tierce dans le chemin du gate :
@@ -152,6 +111,56 @@ jobs:
 
       - name: Dépendances
         run: bun install --frozen-lockfile
+
+      # La parité TS <-> Kotlin compile et EXÉCUTE le port Kotlin : sans
+      # `kotlinc` + `java`, toute la suite saute et le gate est vert sans une
+      # ligne de production Kotlin exécutée. La version suit le catalogue
+      # (`android/gradle/libs.versions.toml`).
+      #
+      # LE DOSSIER EST `kotlinc/`, PAS `kotlin-compiler-<version>/` (#513).
+      # L'archive de JetBrains contient UN dossier de premier niveau nommé
+      # `kotlinc` : l'ancien chemin n'a JAMAIS existé, donc le compilateur
+      # téléchargé n'était JAMAIS utilisé — c'est celui de l'image du runner
+      # qui compilait la parité (et l'image en fournit un, dans la MÊME
+      # version). Le téléchargement coûtait 9-17 s pour rien, et le cache ne
+      # pouvait pas se sauver : `actions/cache` avale l'erreur de
+      # sauvegarde, l'étape post reste verte, l'entrée est simplement ABSENTE.
+      #
+      # Ici le chemin est le BON, la version est ÉPINGLÉE (celle que la parité
+      # compile, pas celle de l'image) et le cache porte sur un dossier qui
+      # EXISTE. Un binaire corrompu se répare au lieu de faire échouer le gate.
+      - name: Cache compilateur Kotlin
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: node_modules/.cache/kotlinc-2.4.21
+          key: kotlinc-2.4.21-${{ runner.os }}
+
+      - name: Compilateur Kotlin
+        run: |
+          set -euo pipefail
+          version=2.4.21
+          root="$GITHUB_WORKSPACE/node_modules/.cache/kotlinc-${version}"
+          home="$root/kotlinc"
+          # Un cache CORROMPU se RÉPARE : on vérifie le BINAIRE, pas sa
+          # présence. Un `kotlinc` cassé doit être re-téléchargé, pas faire
+          # échouer le gate.
+          if ! "$home/bin/kotlinc" -version >/dev/null 2>&1; then
+            rm -rf "$root"
+            mkdir -p "$root"
+            curl -sSfL -o /tmp/kotlin.zip \
+              "https://github.com/JetBrains/kotlin/releases/download/v${version}/kotlin-compiler-${version}.zip"
+            unzip -q /tmp/kotlin.zip -d "$root"
+          fi
+          # Le binaire ÉCRIT passe AVANT celui de l'image : c'est la version
+          # ÉPINGLÉE que la parité doit compiler.
+          export PATH="$home/bin:$PATH"
+          echo "$home/bin" >> "$GITHUB_PATH"
+          if [ "$(command -v kotlinc)" != "$home/bin/kotlinc" ]; then
+            echo "kotlinc hors du chemin épinglé : $(command -v kotlinc)" >&2
+            exit 1
+          fi
+          kotlinc -version
 
       # LE CACHE DU JAR DE PARITÉ (6,5 Mo). Le harnais compile le port Kotlin
       # dans `node_modules/.cache/kotlin-parity/<empreinte>/parity.jar` —
