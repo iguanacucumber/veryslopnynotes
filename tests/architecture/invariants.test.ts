@@ -398,6 +398,11 @@ describe("invariants", () => {
       "PronoteClientLike",
       "JVal",
       "MFAError",
+      // G=22 : l'objet d'une session précédente. `data/` doit savoir le
+      // distinguer d'une session MORTE (par TYPE, pas par motif : le message
+      // de G=22 contient le mot « session ») — même nature que `MFAError` et
+      // `QRCodeDecryptError`, des erreurs de protocole.
+      "ExpiredObject",
       "QrCode",
       "QRCodeDecryptError",
       "QrLoginOptions",
