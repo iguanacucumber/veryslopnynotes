@@ -9,14 +9,20 @@
 //     (pas d'import statique : le module n'entre jamais dans le graphe) ;
 //  2. le bundle réellement produit par Vite ne contient AUCUN marqueur du
 //     factice (le build est rejoué ici, dans un dossier jetable).
+//
+// #516 : ce build est un VRAI build Vite, donc un processus qui peut MOURIR
+// (le binding natif Rolldown se fait tuer) ou TUÉ par le runner. Le build
+// passe par `agents/runtime/build-web.ts` : plafond de durée + UN réessai si
+// le processus meurt, et un diagnostic qui NOMME la cause. Le plafond du
+// test est explicite : le défaut de `bun test` (5 s) TUERAIT le build au
+// milieu — c'est exactement le rouge par intermittence du #516.
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { buildWeb, describeOutcome } from "../../agents/runtime/build-web";
 
-const ROOT = join(import.meta.dir, "..", "..");
-const CLIENT = join(ROOT, "web/src/bridge/client.ts");
-const VITE = join(ROOT, "node_modules/.bin/vite");
+const CLIENT = join(import.meta.dir, "..", "..", "web", "src", "bridge", "client.ts");
 
 /**
  * Marqueurs du module factice : des CHAÎNES du code source, donc présentes
@@ -51,28 +57,31 @@ describe("le pont factice reste un artefact de développement", () => {
     );
   });
 
-  test("le bundle de production n'embarque aucun marqueur du factice", () => {
-    // Le VRAI build (pas une relecture de source) : c'est l'artefact livré
-    // dans l'APK qui est contrôlé, dossier jetable pour ne pas marcher sur
-    // les assets de l'APK pendant qu'un autre build tourne.
-    const sortie = mkdtempSync(join(tmpdir(), "vsn-web-423-"));
-    const build = Bun.spawnSync(
-      [VITE, "build", "--config", "web/vite.config.ts", "--outDir", sortie, "--emptyOutDir"],
-      { cwd: ROOT, stdout: "pipe", stderr: "pipe" },
-    );
-    const journal =
-      new TextDecoder().decode(build.stdout) + new TextDecoder().decode(build.stderr);
-    if (build.exitCode !== 0) {
-      throw new Error(`build web ÉCHOUÉ :\n${journal}`);
-    }
-    const produits = fichiers(sortie);
-    expect(produits.length).toBeGreaterThan(0);
-    for (const fichier of produits) {
-      const contenu = readFileSync(fichier, "utf8");
-      for (const marqueur of MARQUEURS) {
-        expect(contenu).not.toContain(marqueur);
+  test(
+    "le bundle de production n'embarque aucun marqueur du factice",
+    () => {
+      // Le VRAI build (pas une relecture de source) : c'est l'artefact livré
+      // dans l'APK qui est contrôlé, dossier jetable pour ne pas marcher sur
+      // les assets de l'APK pendant qu'un autre build tourne.
+      const sortie = mkdtempSync(join(tmpdir(), "vsn-web-423-"));
+      try {
+        const r = buildWeb({ outDir: sortie });
+        if (!r.ok) throw new Error(`build web ÉCHOUÉ :\n${describeOutcome(r)}`);
+        const produits = fichiers(sortie);
+        expect(produits.length).toBeGreaterThan(0);
+        for (const fichier of produits) {
+          const contenu = readFileSync(fichier, "utf8");
+          for (const marqueur of MARQUEURS) {
+            expect(contenu).not.toContain(marqueur);
+          }
+        }
+      } finally {
+        rmSync(sortie, { recursive: true, force: true });
       }
-    }
-    rmSync(sortie, { recursive: true, force: true });
-  });
+    },
+    // LENT : un build Vite complet (+ son réessai si le processus meurt).
+    // Le défaut de 5 s de `bun test` tuerait le build en plein milieu — le
+    // gate rougissait alors pour un bundle intact (#516).
+    300_000,
+  );
 });
