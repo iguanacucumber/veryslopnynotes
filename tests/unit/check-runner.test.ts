@@ -175,23 +175,41 @@ describe("check.ts : pilote de `make check`", () => {
     // refait 353 Mo de transformations AAR.
     expect(paths).toContain("~/.gradle/caches/modules-2");
     expect(paths).toContain("~/.gradle/caches/9.8.1");
-    // Le compilateur Kotlin (90 Mo d'archive, 5-13 s de téléchargement).
-    expect(paths).toContain("~/.cache/kotlin-compiler-2.4.21");
+    // Le compilateur Kotlin (90 Mo d'archive, 9-17 s de téléchargement).
+    expect(paths).toContain("node_modules/.cache/kotlinc-2.4.21");
     // La clé vient de l'empreinte, pas d'un nom figé.
     expect(ci).toContain("parity-digest");
     expect(ci).toContain("kotlin-parity-${{ steps.port-kotlin.outputs.empreinte }}");
   });
 
-  // #513 : un chemin de cache ABSOLU, hors du workspace ET hors du $HOME,
-  // n'est JAMAIS sauvegardé — et `actions/cache` ne le signale pas : son
-  // `saveImpl` avale l'erreur, l'étape post reste verte, le cache est
-  // simplement ABSENT (en silence). Les deux caches qui fonctionnaient sont
-  // sous `~` ou dans le workspace : la règle est ÉCRITE, elle ne tient pas au
-  // hasard.
-  test("tout chemin mis en cache est sous le HOME ou dans le workspace", async () => {
+  // #513 : le cache du compilateur Kotlin n'était JAMAIS sauvegardé, en
+  // silence — `actions/cache` avale l'erreur de sauvegarde, l'étape post
+  // reste verte, l'entrée est simplement ABSENTE (90 Mo retéléchargés à
+  // chaque run). La cause : le cache pointait sur
+  // `kotlin-compiler-<version>/` alors que l'archive de JetBrains dépose un
+  // dossier `kotlinc/` — le cache visait un dossier INEXISTANT.
+  //
+  // Ces trois faits sont ÉCRITS : le cache porte sur le dossier que l'étape
+  // remplit, et le binaire est SOUS ce dossier.
+  test("le cache du compilateur pointe sur le dossier que l'étape remplit", async () => {
     const ci = await Bun.file(join(ROOT, ".github", "workflows", "ci.yml")).text();
-    const absolus = cachedPaths(ci).filter((p) => p.startsWith("/"));
-    expect(absolus).toEqual([]);
+    // Le dossier que l'étape remplit, sous le workspace...
+    expect(ci).toContain('root="$GITHUB_WORKSPACE/node_modules/.cache/kotlinc-${version}"');
+    // ...et le binaire, DEDANS (l'archive contient `kotlinc/`).
+    expect(ci).toContain('home="$root/kotlinc"');
+    // Le cache porte sur ce dossier-là — et sur la MÊME version qu'on installe.
+    const version = /version=([\d.]+)/.exec(ci)?.[1];
+    expect(version).toBeTruthy();
+    expect(cachedPaths(ci)).toContain(`node_modules/.cache/kotlinc-${version}`);
+    expect(ci).toContain(`key: kotlinc-${version}-`);
+  });
+
+  // #513 : aucun chemin ABSOLU. Hors du workspace, le cache n'a jamais
+  // survécu au voyage ; sous le HOME ou dans le workspace, il fonctionne.
+  test("tout chemin mis en cache est relatif au workspace ou sous le HOME", async () => {
+    const ci = await Bun.file(join(ROOT, ".github", "workflows", "ci.yml")).text();
+    const chemins = cachedPaths(ci);
+    expect(chemins.filter((p) => p.startsWith("/"))).toEqual([]);
   });
 
   // #511 : le build cache Gradle (`caches/build-cache-1`) NE doit PAS être mis
