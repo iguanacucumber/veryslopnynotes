@@ -82,7 +82,6 @@ import java.io.FileOutputStream
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
@@ -93,6 +92,10 @@ import java.util.concurrent.TimeUnit
  * L'abandon d'un appel passe par la méthode allowlistée `bridge.cancel` :
  * pas de seconde interface exposée au JS (I10), et l'annulation reste
  * best-effort (le JS a déjà lâché la promesse).
+ *
+ * Fils : un fil par appel et une file LLM à part (`BridgeExecutors`, #393) —
+ * le pont ne fait JAMAIS la queue, donc le bouton retour répond même quand
+ * l'accueil charge cinq ressources.
  *
  * Secrets : la session Pronote (SessionStore) et la clé LLM (LlmKeys) ne
  * sortent JAMAIS d'ici. Aucun paramètre n'est journalisé (QR, PIN, corps).
@@ -105,9 +108,10 @@ class VsnBridge(
 ) {
     private val ctx: Context = activity.applicationContext
     private val main = Handler(Looper.getMainLooper())
-    private val executor = Executors.newFixedThreadPool(2) { runnable ->
-        Thread(runnable, "vsn-bridge").apply { isDaemon = true }
-    }
+    // #393 : un fil par appel (le pont ne fait JAMAIS la queue : `app.back`
+    // répond même avec cinq lectures et deux appels LLM en vol) et une file
+    // LLM à part (les opérations longues ne gèlent plus le pont).
+    private val executors = BridgeExecutors()
     private val cancelled: MutableSet<String> =
         Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     /** Appels acceptés et pas encore terminés : un abandon ne vise que ceux-là. */
@@ -242,15 +246,17 @@ class VsnBridge(
             resolve(requestId, JSONObject().put("ok", true))
             return
         }
-        if (executor.isShutdown) return
+        if (executors.isShutdown) return
         inFlight.add(requestId)
         // #404 : l'époque de session est capturée À L'ARRIVÉE de l'appel, pas
-        // à son exécution : la file a deux fils, donc une écriture demandée
-        // AVANT la purge de déconnexion peut être exécutée APRÈS. Capturée
-        // ici, elle perd la course d'époque et son écriture est abandonnée —
-        // le répertoire purgé ne ressuscite pas.
+        // à son exécution : le travail part sur un autre fil, donc une écriture
+        // demandée AVANT la purge de déconnexion peut être exécutée APRÈS.
+        // Capturée ici, elle perd la course d'époque et son écriture est
+        // abandonnée — le répertoire purgé ne ressuscite pas.
         val epoch = SessionEpoch.current()
-        executor.execute {
+        // #393 : le LLM part sur SA file (bornée) : deux appels LLM simultanés
+        // ne prennent plus les fils des appels ordinaires.
+        executors.workerFor(method).execute {
             try {
                 if (cancelled.contains(requestId)) return@execute
                 // #394 : TOUT échec natif — un `Error` compris — devient un
@@ -296,7 +302,7 @@ class VsnBridge(
 
     /** Fin de vie de la WebView : aucun fil ne survit à la rotation. */
     fun close() {
-        executor.shutdownNow()
+        executors.shutdown()
     }
 
     private fun handle(requestId: String, method: String, p: JSONObject, epoch: Long): JSONObject? {
