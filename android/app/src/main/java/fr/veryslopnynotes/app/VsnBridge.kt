@@ -759,7 +759,7 @@ class VsnBridge(
                 "payload",
                 JSONObject()
                     .put("messages", arr)
-                    .put("participants", JSONArray(thread?.participants ?: emptyList()))
+                    .put("participants", JSONArray(thread?.participants ?: emptyList<String>()))
                     .toString(),
             )
         error?.let { obj.put("error", it) }
