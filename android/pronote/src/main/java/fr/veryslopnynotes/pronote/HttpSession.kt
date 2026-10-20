@@ -6,6 +6,10 @@ import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import java.util.zip.GZIPInputStream
+
+/** Plafond d'une réponse (10 Mo), une fois décompressée comme avant (#474). */
+private const val MAX_RESPONSE_BYTES = 10_485_760
 
 /**
  * Session HTTP du protocole (#200, port de `pronotets` `http.js`).
@@ -283,6 +287,27 @@ class HttpSession(
             throw java.io.IOException("Redirection invalide", e)
         }
 
+    /**
+     * Décompression d'une réponse `gzip` (#474).
+     *
+     * `HttpURLConnection` ne décompresse QUE ce qu'il a lui-même demandé : dès
+     * qu'on pose `Accept-Encoding`, la decompression nous revient. Donc
+     * `Content-Encoding: gzip` présent = corps ENCORE compressé.
+     *
+     * ÉCHEC = octets BRUTS conservés : on ne perd JAMAIS la réponse (un
+     * serveur qui annonce `gzip` et envoie autre chose ne doit pas faire
+     * échouer la lecture). Le PLAFOND reste le même une fois décompressé
+     * (une bombe gzip ne doit pas non plus faire exploser la mémoire).
+     */
+    private fun gunzip(raw: ByteArray): ByteArray {
+        if (raw.isEmpty()) return raw
+        return try {
+            GZIPInputStream(java.io.ByteArrayInputStream(raw)).use { cappedBytes(it, MAX_RESPONSE_BYTES) }
+        } catch (_: Exception) {
+            raw
+        }
+    }
+
     fun request(method: String, url: String, opts: RequestOpts = RequestOpts()): HttpResponse {
         val maxRedirects = opts.maxRedirects
         var currentMethod = method
@@ -290,6 +315,13 @@ class HttpSession(
         var body: ByteArray? = null
         val headers = HashMap(baseHeaders)
         opts.headers?.let { headers.putAll(it) }
+        // #474 : la session DEMANDE la compression. Sans cet en-tête, les
+        // réponses volumineuses de l'établissement (EDT, notes, cahier de
+        // texte) remontent en clair. On ne l'écrase pas si l'appelant en a
+        // déjà posé un (il sait ce qu'il demande).
+        if (headers.keys.none { it.equals("Accept-Encoding", ignoreCase = true) }) {
+            headers["Accept-Encoding"] = "gzip"
+        }
         if (opts.json !== null) {
             body = Json.stringify(opts.json).toByteArray(Charsets.UTF_8)
             headers["Content-Type"] = "application/json"
@@ -359,7 +391,13 @@ class HttpSession(
                 // réutilise la MÊME connexion au lieu de repayer un handshake TCP+TLS
                 // (#309). Fermer ici à chaque réponse vidait ce cache.
                 val stream = if (status >= 400) conn.errorStream else conn.inputStream
-                val bytes: ByteArray = if (stream == null) ByteArray(0) else cappedBytes(stream, 10_485_760)
+                val raw: ByteArray = if (stream == null) ByteArray(0) else cappedBytes(stream, MAX_RESPONSE_BYTES)
+                // #474 : l'établissement a compressé la réponse — on la rend
+                // lisible. Un `Content-Encoding` absent = corps déjà en clair
+                // (la décompression est faite PAR LE PLATEFORME quand celui-ci
+                // a posé l'en-tête ; le nôtre l'a posé, donc c'est à nous).
+                val gzipped = header("content-encoding").any { it.trim().equals("gzip", ignoreCase = true) }
+                val bytes: ByteArray = if (gzipped) gunzip(raw) else raw
                 return HttpResponse(
                     status = status,
                     ok = status in 200..299,
