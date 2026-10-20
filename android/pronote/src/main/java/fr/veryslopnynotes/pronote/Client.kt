@@ -27,6 +27,10 @@ data class ClientOptions(
     val accountPin: String? = null,
     val clientIdentifier: String? = null,
     val deviceName: String? = null,
+    // #473 : mémo des lectures identiques (60 s, mémoire du process). DÉSACTIVÉE
+    // par défaut : le harnais de parité compare le fil de la référence TS, il
+    // doit rester inchangé. L'APP l'active (cf. `PairingRepository`).
+    val memoizeReads: Boolean = false,
 )
 
 data class QrLoginOptions(
@@ -34,6 +38,9 @@ data class QrLoginOptions(
     val clientIdentifier: String? = null,
     val deviceName: String? = null,
     val skip2fa: Boolean = false,
+    // #473 : même règle que `ClientOptions.memoizeReads` (désactivée par
+    // défaut, activée par l'app à l'appairage).
+    val memoizeReads: Boolean = false,
 )
 
 data class ExportedCredentials(
@@ -68,6 +75,17 @@ open class ClientBase(
     val accountPin: String? = opts.accountPin
     var clientIdentifier: String? = opts.clientIdentifier
     val deviceName: String? = opts.deviceName
+
+    /**
+     * Mémo des lectures identiques (#473) : `null` = désactivée.
+     *
+     * Elle vit dans le client (donc dans le process) et repart vide à chaque
+     * session renouvelée (`refresh`) comme à chaque écriture.
+     *
+     * `internal` : le harnais de parité y injecte une horloge (le TTL se
+     * rejoue sans attendre une vraie minute).
+     */
+    internal var readMemo: ReadMemo? = if (opts.memoizeReads) ReadMemo() else null
 
     /**
      * État de session PUBLIÉ (#405) : `refresh()` remplace ces champs d'un
@@ -305,6 +323,9 @@ open class ClientBase(
      */
     @Synchronized
     fun refresh() {
+        // #473 : la session est neuve, les lectures mémorisées sont de l'ancien
+        // monde (mêmes clés, nouvelle session) — elles repartent.
+        readMemo?.clear()
         val cookieJar = ent?.invoke(username, password, mapOf("pronote_url" to pronoteUrl))
         communication = Communication(pronoteUrl, cookieJar, loginMode != "normal")
         val (attrs, funcs) = communication.initialise(clientIdentifier)
@@ -322,8 +343,9 @@ open class ClientBase(
 
     /**
      * Enveloppe `{Signature, data}` (`Signature` omise si onglet nul/zéro/NaN,
-     * `data` omise si nulle) + rejeu unique après `refresh` sur `PronoteAPIError`
-     * (`ExpiredObject` et le reste remontent tels quels).
+     * `data` omise si nulle), mémo des lectures identiques (#473) et rejeu
+     * unique après `refresh` sur `PronoteAPIError` (`ExpiredObject` et le
+     * reste remontent tels quels).
      *
      * VERRU DE SESSION (#405) : `post` et `refresh` partagent le moniteur.
      * Le job de fond (`PeriodicSyncWorker`) et la lecture de l'interface
@@ -343,8 +365,35 @@ open class ClientBase(
             postData["Signature"] = JVal.Obj(linkedMapOf("onglet" to JVal.Num(onglet)))
         }
         if (data != null) postData["data"] = JVal.Obj(LinkedHashMap(data))
+        // #473 : la MÊME lecture (fonction + onglet + charge utile) ne part
+        // qu'une fois par minute. Une fonction HORS liste blanche (écriture,
+        // ping, authentification) VIDE la mémo : l'état du compte vient de
+        // changer, les lectures servies seraient fausses.
+        val memo = readMemo
+        val key = memo?.keyFor(functionName, onglet, JVal.Obj(postData))
+        if (key == null) {
+            memo?.clear()
+            return sendWithRefresh(functionName, postData)
+        }
+        memo.get(key)?.let { return it }
+        val response = sendWithRefresh(functionName, postData)
+        // Seule une RÉUSSITE est mémorisée (une erreur remontera au même
+        // écran, pas à la mémo).
+        memo.put(key, response)
+        return response
+    }
+
+    /**
+     * Envoi effectif d'une fonction à l'établissement, avec rejeu unique après
+     * `refresh` sur `PronoteAPIError` (`ExpiredObject` et le reste remontent
+     * tels quels).
+     *
+     * `send` est ouvert pour les TESTS (un stub qui compte les requêtes
+     * rejoue le vrai `post` sans réseau) : le harnais de parité l'exploite.
+     */
+    private fun sendWithRefresh(functionName: String, postData: Map<String, JVal>): JVal {
         try {
-            return communication.post(functionName, postData)
+            return send(functionName, postData)
         } catch (e: ExpiredObject) {
             throw e
         } catch (e: PronoteAPIError) {
@@ -356,9 +405,13 @@ open class ClientBase(
             } finally {
                 refreshGate.leave()
             }
-            return communication.post(functionName, postData)
+            return send(functionName, postData)
         }
     }
+
+    /** POST effectif vers l'établissement (surchargeable par les tests). */
+    internal open fun send(functionName: String, postData: Map<String, JVal>): JVal =
+        communication.post(functionName, postData)
 
 }
 
@@ -389,7 +442,7 @@ class Client(
             val client = Client(
                 rewriteQrUrl(qrCode.url),
                 login, jeton,
-                ClientOptions(mode = "qr_code", uuid = uuid, accountPin = opts.accountPin, clientIdentifier = opts.clientIdentifier, deviceName = opts.deviceName),
+                ClientOptions(mode = "qr_code", uuid = uuid, accountPin = opts.accountPin, clientIdentifier = opts.clientIdentifier, deviceName = opts.deviceName, memoizeReads = opts.memoizeReads),
             )
             // Les déchiffrements ont déjà jeté (`QRCodeDecryptError`) si le PIN est faux.
             client.init()
@@ -404,7 +457,7 @@ class Client(
                 val creds = client.exportCredentials()
                 return tokenLogin(
                     creds.pronoteUrl, creds.username, creds.password, creds.uuid,
-                    ClientOptions(accountPin = opts.accountPin, clientIdentifier = creds.clientIdentifier, deviceName = opts.deviceName),
+                    ClientOptions(accountPin = opts.accountPin, clientIdentifier = creds.clientIdentifier, deviceName = opts.deviceName, memoizeReads = opts.memoizeReads),
                 )
             }
             return client

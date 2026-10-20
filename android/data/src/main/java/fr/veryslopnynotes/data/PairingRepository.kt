@@ -111,7 +111,12 @@ class PairingRepository(
                 QrCode(login = qr.login, jeton = qr.jeton, url = schoolUrl),
                 pin,
                 uuid,
-                QrLoginOptions(deviceName = deviceName.trim().ifEmpty { null }),
+                QrLoginOptions(
+                    deviceName = deviceName.trim().ifEmpty { null },
+                    // #473 : mémo des lectures identiques (60 s) — l'app redemande
+                    // moins souvent la même chose à l'établissement.
+                    memoizeReads = true,
+                ),
             )
         } catch (e: IllegalArgumentException) {
             // URL du QR illisible (URI malformée) : la faute est dans le code
@@ -198,7 +203,8 @@ class PairingRepository(
                 stored.username,
                 stored.password,
                 stored.uuid,
-                ClientOptions(clientIdentifier = stored.clientIdentifier),
+                // #473 : mémo des lectures identiques (60 s), comme à l'appairage.
+                ClientOptions(clientIdentifier = stored.clientIdentifier, memoizeReads = true),
             )
             PronoteSession.set(client)
             RestoreResult.Restored
