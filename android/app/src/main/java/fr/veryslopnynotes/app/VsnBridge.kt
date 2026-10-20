@@ -719,13 +719,13 @@ class VsnBridge(
     private fun messagesThread(p: JSONObject): JSONObject {
         val id = bounded(p.string("id"), 64)
         if (id.isEmpty()) throw BridgeFailure("bad_request", "Fil introuvable.")
-        val result = await<Pair<List<fr.veryslopnynotes.core.DiscussionMessage>, String?>> { cb ->
-            discussions.fetchMessages(id) { list, error -> cb(list to error) }
+        val result = await<Pair<fr.veryslopnynotes.data.DiscussionThread?, String?>> { cb ->
+            discussions.fetchMessages(id) { thread, error -> cb(thread to error) }
         } ?: throw BridgeFailure("unavailable", "Fil indisponible.")
-        val (messages, error) = result
+        val (thread, error) = result
         sessionOrThrow(error)
         val arr = JSONArray()
-        for (m in messages) {
+        for (m in thread?.messages ?: emptyList()) {
             arr.put(
                 JSONObject()
                     .put("id", m.id)
@@ -749,7 +749,15 @@ class VsnBridge(
             )
         }
         val obj = JSONObject()
-            .put("payload", JSONObject().put("messages", arr).toString())
+            // #476 : les participants voyagent avec le fil ouvert (ils ne sont
+            // plus téléchargés pour toute la liste).
+            .put(
+                "payload",
+                JSONObject()
+                    .put("messages", arr)
+                    .put("participants", JSONArray(thread?.participants ?: emptyList()))
+                    .toString(),
+            )
         error?.let { obj.put("error", it) }
         return obj
     }

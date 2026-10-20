@@ -61,11 +61,14 @@ describe("fraîcheur des fils : jamais de date inventée (#427)", () => {
     expect(body).toContain("if (i < DISCUSSION_ENRICH_LIMIT)");
   });
 
-  test("le JSON reste valide : le fil garde son identifiant, son sujet et ses participants", () => {
+  test("le JSON reste valide : le fil garde son identifiant et son sujet", () => {
     expect(body).toContain('put("id", id)');
     expect(body).toContain('put("subject"');
-    expect(body).toContain('put("participants", JSONArray(participants))');
     expect(body).toContain('put("discussions", arr)');
+    // #476 : les participants ne sont PLUS dans la liste (ils sont demandés
+    // à l'ouverture du fil) : le champ est OMIS, jamais une liste vide qui
+    // ferait croire à un fil sans interlocuteur.
+    expect(body).not.toContain('put("participants"');
   });
 
   test("le miroir Kotlin accepte un fil de fraîcheur inconnue", () => {
