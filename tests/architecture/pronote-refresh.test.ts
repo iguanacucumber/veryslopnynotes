@@ -63,11 +63,16 @@ describe("rafraîchissement de session atomique (#405)", () => {
 
   test("la porte est relâchée même quand le rafraîchissement échoue", () => {
     const client = codeOnly(readFileSync(CLIENT, "utf8"));
-    const post = slice(client, "override fun post(", "\n    }\n");
-    // La porte est PRISE avant le refresh (un refresh déjà en cours n'est pas
-    // doublé) et RELÂCHÉE dans le `finally` (un refresh raté ne bloque pas
-    // les suivants).
-    expect(post).toContain("if (!refreshGate.tryEnter()) throw e");
-    expect(post).toMatch(/finally\s*\{\s*refreshGate\.leave\(\)\s*\}/);
+    // Le rejeu après `refresh` vit dans la fonction d'ENVOI (`sendWithRefresh`),
+    // sortie de `post` pour laisser place à la mémo des lectures identiques
+    // (#473) : `post` prépare l'enveloppe et la clé, `sendWithRefresh` envoie
+    // et rejoue. La garde reste la même : la porte est PRISE avant le refresh
+    // (un refresh déjà en cours n'est pas doublé) et RELÂCHÉE dans le
+    // `finally` (un refresh raté ne bloque pas les suivants).
+    const retry = slice(client, "private fun sendWithRefresh(", "\n    }\n");
+    expect(retry).toContain("if (!refreshGate.tryEnter()) throw e");
+    expect(retry).toMatch(/finally\s*\{\s*refreshGate\.leave\(\)\s*\}/);
+    // Et c'est bien elle qui porte l'envoi (donc le rejeu).
+    expect(retry).toContain("send(functionName, postData)");
   });
 });
