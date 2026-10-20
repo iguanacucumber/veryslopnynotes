@@ -111,6 +111,23 @@ describe("cible build : le build Docker ne se masque plus (#418)", () => {
   });
 });
 
+describe("le daemon Gradle ne traîne pas trois heures (#517)", () => {
+  /** `android/gradle.properties`, tel qu'il est écrit. */
+  function proprietes(): string {
+    return readFileSync(join(ROOT, "android", "gradle.properties"), "utf8");
+  }
+
+  test("le délai d'inactivité du daemon est court", () => {
+    const m = /org\.gradle\.daemon\.idletimeout=(\d+)/.exec(proprietes());
+    expect(m).not.toBeNull();
+    // Le défaut de Gradle est 3 h : un daemon fantôme garde ~780 Mo de RSS,
+    // et plusieurs worktrees en parallèle en laissaient jusqu'à 5. Un daemon
+    // fantôme ne fait jamais ÉCHOUER quoi que ce soit — il mange de la RAM
+    // en silence, donc rien ne le signale s'il disparaît du fichier.
+    expect(Number(m![1])).toBeLessThanOrEqual(300_000);
+  });
+});
+
 describe("runServer : PORT et HOST sont surchargeables (#418)", () => {
   /** La recette `runServer`, telle qu'elle est écrite. */
   function recette(): string {
