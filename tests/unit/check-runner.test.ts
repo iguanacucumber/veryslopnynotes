@@ -175,9 +175,23 @@ describe("check.ts : pilote de `make check`", () => {
     // refait 353 Mo de transformations AAR.
     expect(paths).toContain("~/.gradle/caches/modules-2");
     expect(paths).toContain("~/.gradle/caches/9.8.1");
+    // Le compilateur Kotlin (90 Mo d'archive, 5-13 s de téléchargement).
+    expect(paths).toContain("~/.cache/kotlin-compiler-2.4.21");
     // La clé vient de l'empreinte, pas d'un nom figé.
     expect(ci).toContain("parity-digest");
     expect(ci).toContain("kotlin-parity-${{ steps.port-kotlin.outputs.empreinte }}");
+  });
+
+  // #513 : un chemin de cache ABSOLU, hors du workspace ET hors du $HOME,
+  // n'est JAMAIS sauvegardé — et `actions/cache` ne le signale pas : son
+  // `saveImpl` avale l'erreur, l'étape post reste verte, le cache est
+  // simplement ABSENT (en silence). Les deux caches qui fonctionnaient sont
+  // sous `~` ou dans le workspace : la règle est ÉCRITE, elle ne tient pas au
+  // hasard.
+  test("tout chemin mis en cache est sous le HOME ou dans le workspace", async () => {
+    const ci = await Bun.file(join(ROOT, ".github", "workflows", "ci.yml")).text();
+    const absolus = cachedPaths(ci).filter((p) => p.startsWith("/"));
+    expect(absolus).toEqual([]);
   });
 
   // #511 : le build cache Gradle (`caches/build-cache-1`) NE doit PAS être mis
