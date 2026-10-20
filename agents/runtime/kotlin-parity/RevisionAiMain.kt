@@ -13,11 +13,12 @@
 package fr.veryslopnynotes.revision
 
 import fr.veryslopnynotes.core.AiError
-import fr.veryslopnynotes.core.LlmProvider
 import fr.veryslopnynotes.core.RevisionAi
 import fr.veryslopnynotes.core.RevisionChunk
 import fr.veryslopnynotes.core.RevisionExam
 import fr.veryslopnynotes.core.RevisionFailure
+import fr.veryslopnynotes.core.SafePrompt
+import fr.veryslopnynotes.core.SafePromptProvider
 import fr.veryslopnynotes.core.parseJsonOutput
 import fr.veryslopnynotes.core.parseRevisionAnswer
 import fr.veryslopnynotes.core.revisionFailureMessage
@@ -83,11 +84,18 @@ private class Driver {
             val body = op.str("body") ?: "{\"fiche\":\"Rappel : derivé de x^2 = 2x.\"}"
             var seenKey: String? = null
             var calls = 0
-            val provider = LlmProvider { _, _, apiKey ->
-                calls += 1
-                seenKey = apiKey
-                if (apiKey.isNullOrBlank()) throw IllegalStateException("clé LLM absente")
-                body
+            // #493 : le fournisseur implemente `SafePromptProvider` : il
+            // recoit le SafePrompt TEL QUE la garde l'a verifie (nonce de
+            // l'appelant preserve). L'ancien `LlmProvider` (lambda) rebuildait
+            // le prompt avec un nouveau nonce — le corps envoye n'etait donc
+            // pas le corps verifie.
+            val provider = object : SafePromptProvider {
+                override fun generateSafe(safe: SafePrompt, apiKey: String?): String {
+                    calls += 1
+                    seenKey = apiKey
+                    if (apiKey.isNullOrBlank()) throw IllegalStateException("clé LLM absente")
+                    return body
+                }
             }
             try {
                 val fiche = RevisionAi.requestRevisionFiche(
