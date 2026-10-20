@@ -1,0 +1,75 @@
+# Le gate de merge, en CI (#491).
+#
+# AVANT : le gate n'existait que comme convention locale (`agents/ship.sh`
+# appelle `make check`), sans aucune CI. Une PR fusionnée par un autre chemin
+# (push direct, merge MCP, humain) n'était vérifiée par RIEN — la PR #481 a
+# ainsi cassé la compilation Kotlin de `main` (#483).
+#
+# Ce workflow joue le MÊME gate que le poste : `make check` (11 étapes, dont
+# la compilation Kotlin Gradle, la parité TS <-> Kotlin exécutée, les scans
+# d'architecture et l'audit des dépendances). Pas de version « light » : un
+# gate qui ne rejoue pas les étapes locales ne prouve rien.
+#
+# Aucun secret : le dépôt est public, le job ne lit ni `.env`, ni token, ni
+# corpus Pronote (celui-ci est gitignoré : la parité sur données réelles est
+# donc SKIPpée, bruyamment, comme sur le poste).
+name: gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Un seul job : les étapes du gate sont déjà parallélisées par `check.ts`.
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Code
+        uses: actions/checkout@v4
+
+      - name: Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.3"
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # La parité TS <-> Kotlin compile et EXÉCUTE le port Kotlin : sans
+      # `kotlinc` + `java`, toute la suite saute et le gate est vert sans une
+      # ligne de production Kotlin exécutée. La version suit le catalogue
+      # (`android/gradle/libs.versions.toml`).
+      - name: Compilateur Kotlin
+        run: |
+          set -euo pipefail
+          version=2.4.21
+          curl -sSfL -o /tmp/kotlin.zip \
+            "https://github.com/JetBrains/kotlin/releases/download/v${version}/kotlin-compiler-${version}.zip"
+          unzip -q /tmp/kotlin.zip -d /opt
+          echo "/opt/kotlin-compiler-${version}/bin" >> "$GITHUB_PATH"
+          kotlinc -version
+
+      # SDK Android : même version que `compileSdk`/`buildToolsVersion` du
+      # module app (`android/app/build.gradle.kts`).
+      - name: SDK Android
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: yes
+
+      - name: Paquets SDK
+        run: sdkmanager --install "platforms;android-37.0" "build-tools;36.0.0" "platform-tools"
+
+      - name: Dépendances
+        run: bun install --frozen-lockfile
+
+      - name: Gate
+        run: make check

@@ -129,6 +129,11 @@ de la requête, pour scraper une page de manuel.
 - [Bun](https://bun.sh) **1.4.3**
 - Pour l'APK : **JDK 17–21** et **SDK Android 37**
   (`platforms;android-37.0`, `build-tools;36.0.0`, `platform-tools`)
+- Pour la **parité TS ↔ Kotlin** (la suite qui *exécute* le port Kotlin) :
+  le compilateur **`kotlinc`** (même version que le catalogue Gradle) et un
+  `java` dans le `PATH`. Sans eux, toute la parité saute — donc `make check`
+  les **exige** (un gate vert sans une ligne de Kotlin exécutée est un faux
+  vert). `make check-fast` garde le saut bruyant, pour l'itération.
 - Un téléphone **Android 8.0+** (API 26)
 
 Les commandes Gradle trouvent le JDK et le SDK toutes seules, et **échouent**
