@@ -73,3 +73,50 @@ describe("scan anti-secrets : carve-out .agents", () => {
     expect(patternsFor(".agentsfoo/x.md")).toBe(PATTERNS);
   });
 });
+
+// #503 : le jeu du DÉPÔT n'avait que quatre formes, alors que le jeu
+// VENDORED en avait huit : le dossier tiers, le moins contrôlé, était mieux
+// surveillé que le dépôt lui-même. Et le test de placeholder n'était pas
+// ancré : un mot de placeholder PRÉSENT dans la valeur excusait la ligne.
+describe("scan anti-secrets : le dépôt surveille les mêmes formes que le jeu vendorisé", () => {
+  // Fragments : un littéral complet written en clair se ferait flaguer par le
+  // scan (qui passe aussi sur `tests/`).
+  const urlCred = ["https://user:s3cr3tP4", "ss@host/x"].join("");
+  const jwt = [
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+    ".eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+    ".dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+  ].join("");
+  const envReal = ["MASTER_", "KEY=prod-9f3a2b8c7d6e5f4a3b2c1d0e9f8a7b6c"].join("");
+  const envFake = ["MASTER_", "KEY=prod-example-key-9f3a2b"].join("");
+  const envPlaceholder = ["MASTER_", "KEY=your-key-here"].join("");
+
+  test("le dépôt couvre les mêmes formes que le jeu vendorisé", () => {
+    for (const [name, secret] of [
+      ["github-token", ghToken],
+      ["slack-token", slackToken],
+      ["aws-key", awsKey],
+      ["jwt", jwt],
+      ["url-credential", urlCred],
+      ["credential-literal", credLiteral],
+    ] as const) {
+      expect(matchPatterns(secret, PATTERNS)).toContain(name);
+    }
+  });
+
+  test("un placeholder dans la valeur n'excuse plus une vraie affectation", () => {
+    // Le mot « example » au milieu de la valeur ne suffit plus : seule une
+    // valeur ENTIÈREMENT placeholder est excusée.
+    expect(matchPatterns(envReal, PATTERNS)).toContain("env-assign");
+    expect(matchPatterns(envFake, PATTERNS)).toContain("env-assign");
+    // Un placeholder franc reste un placeholder.
+    expect(matchPatterns(envPlaceholder, PATTERNS)).toEqual([]);
+  });
+
+  test("les exemples d'attaque des tests ne sont pas des secrets", () => {
+    // « user:pass@ » et un port après un @ : des charges utiles de test, pas
+    // des credentials (le mot de passe doit faire 8 caractères).
+    expect(matchPatterns("https://user:pass@host/", PATTERNS)).toEqual([]);
+    expect(matchPatterns("http://127.0.0.1:80@editeur.example/", PATTERNS)).toEqual([]);
+  });
+});
