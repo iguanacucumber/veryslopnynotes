@@ -104,11 +104,50 @@ describe("export PDF de fiche : la liste CANONIQUE des sources fait foi (#412)",
     expect(text).toContain("Sources :");
     expect(text).toContain("- Consigne");
     expect(text).toContain("- Cours : chapitre 4");
-    // La citation libre n'est PAS rendue : elle n'est pas canonique.
-    expect(text).not.toContain("Source inventee");
     // Et le reste du corps n'est pas perdu pour autant.
     expect(text).toContain("Rappel du cours.");
     expect(text).toContain("Suite du corps.");
+  });
+
+  // #499 : un « Sources : » AU MILIEU du corps (le cours le contient, ou le
+  // modèle en cite un) ne doit pas MANGER le contenu qui suit : avant, le
+  // bloc était retiré en bloc, jusqu'à la fin du corps — les puces de contenu
+  // disparaissaient du corps ET de l'export, silencieusement.
+  test.skipIf(skip)("un « Sources : » au milieu du corps ne mange pas le contenu qui suit", async () => {
+    const body = [
+      "Rappel : derivee de x^2 = 2x.",
+      "",
+      "Sources :",
+      "- Consigne",
+      "- Methode : poser f(3) = 9 et verifier",
+      "",
+      "Suite du corps.",
+    ].join("\n");
+    const res = JSON.parse(await ask({ op: "pdfLines", body, sources: CANONICAL })) as Lines;
+    const text = res.lines.join("\n");
+    // Le CONTENU est entier : la puce qui n'est pas une source canonique
+    // reste (c'est du cours, pas une attribution).
+    expect(text).toContain("- Methode : poser f(3) = 9 et verifier");
+    expect(text).toContain("Rappel : derivee de x^2 = 2x.");
+    expect(text).toContain("Suite du corps.");
+    // La CITATION canonique du modèle, elle, est remplacée par la liste
+    // canonique (une seule fois).
+    expect(text).toContain("- Consigne");
+    expect(text).toContain("- Cours : chapitre 4");
+  });
+
+  test.skipIf(skip)("une citation libre n'entre JAMAIS dans la liste des sources", async () => {
+    // Même au milieu du corps, une citation qui n'est pas dans le corpus
+    // n'entre pas dans l'ATTRIBUTION : la liste reste canonique.
+    const res = JSON.parse(
+      await ask({
+        op: "assemble",
+        fiche: "Rappel du cours.\n\nSources :\n- Source inventee\n\nSuite du corps.",
+        sources: CANONICAL,
+      }),
+    ) as Sheet;
+    expect(res.sources).toEqual(expect.arrayContaining(CANONICAL));
+    expect(res.sources).not.toContain("Source inventee");
   });
 
   test.skipIf(skip)("les citations du modèle sont validées contre les sources canoniques", async () => {
