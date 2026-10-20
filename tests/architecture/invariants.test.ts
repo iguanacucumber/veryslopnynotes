@@ -62,6 +62,20 @@ describe("invariants", () => {
     expect(pronoteHost.test(codeOnly('const url = "https://pronote.example.fr/";'))).toBe(true);
   });
 
+  // #489 : `index-education.net` est le domaine RÉEL des établissements PRONOTE
+  // (cf. la référence `pronotets`). `/pronote/i` seul ne le voyait pas : un
+  // hôte PRONOTE glissé dans `android/data/` passait la garde I1.
+  test("I1: l'hôte PRONOTE RÉEL est reconnu (index-education.net)", () => {
+    expect(pronoteHost.test(codeOnly('const url = "https://demo.index-education.net/eleve";'))).toBe(true);
+    expect(pronoteHost.test(codeOnly('val base = "https://demo.index-education.net/eleve"'))).toBe(true);
+    // Un domaine ordinaire ne déclenche rien.
+    expect(pronoteHost.test(codeOnly('const url = "https://api.example.fr/x";'))).toBe(false);
+    // Et le serveur ne doit pas non plus y joindre un accès direct.
+    expect(
+      hasDirectFetch(codeOnly('const u = "https://hubeduconnect.index-education.net/";\nawait fetch(u);')),
+    ).toBe(true);
+  });
+
   test("I3: android/core sans sqlite ni framework HTTP", () => {
     const files = listFiles(join(ROOT, "android/core")).filter((f) => {
       const code = codeOnly(readFileSync(f, "utf8"));
