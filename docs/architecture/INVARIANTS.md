@@ -164,7 +164,16 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   VRAI secret y échoue au scan anti-secrets, seuls les exemples de
   documentation passent. Le jeu de motifs strict du dépôt s'applique partout
   ailleurs. Aucun secret, domaine, IP ni donnée perso dans ce dossier.
+  **Le contenu vendorisé est VERROUILLÉ de façon vérifiable** (#505) : le
+  `computedHash` de `skills-lock.json` vient de l'outil `npx skills`, dont
+  l'algorithme n'est pas documenté dans le dépôt — il n'est donc pas
+  recalculable ici, et le lock amont ne prouve rien tout seul. Le test
+  `skills-lock.test.ts` recalcule un sha256 de chaque ARBRE de skill
+  (chemins + contenu) et le compare à une table : une édition manuelle d'une
+  skill échoue le gate.
 - Test : `tests/architecture/secret-scan.test.ts` (carve-out étroit) +
+  `tests/architecture/skills-lock.test.ts` (l'empreinte de chaque arbre
+  vendorisé) +
   `make lint` (scan réel du dépôt, `.agents/` inclus une fois tracké).
 - Commande : `make lint` (scan) et `make architecture-test` (m invariants).
 - Emplacement : `.agents/**/*`, motifs dans `agents/runtime/secret-patterns.ts`.
