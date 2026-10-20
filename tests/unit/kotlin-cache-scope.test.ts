@@ -29,6 +29,7 @@ import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harnes
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const SCOPE = join(DATA, "CacheScope.kt");
+const REPAIR = join(DATA, "SessionRepair.kt");
 const PAIRING = join(DATA, "PairingRepository.kt");
 const ACCOUNT = join(DATA, "AccountStore.kt");
 const WORKER = join(DATA, "PeriodicSyncWorker.kt");
@@ -147,6 +148,7 @@ describe("câblage du scopage du cache (#407)", () => {
   const worker = readFileSync(WORKER, "utf8");
   const bridge = readFileSync(BRIDGE, "utf8");
   const scope = readFileSync(SCOPE, "utf8");
+  const repair = readFileSync(REPAIR, "utf8");
 
   test("la purge est UN SEUL endroit, sous la garde d'époque", () => {
     // La purge passe par l'époque de session (#364) : l'invalidation ET la
@@ -154,7 +156,10 @@ describe("câblage du scopage du cache (#407)", () => {
     // abandonne son payload (le cache purgé ne ressuscite pas).
     expect(scope).toContain("SessionEpoch.invalidate { store.clearAll() }");
     // La déconnexion passe par le MÊME endroit (une seule implémentation).
-    expect(account).toContain("CacheScope.purge(cacheStore)");
+    // #397 : la déconnexion ET la session morte partagent `SessionRepair.purge`
+    // (la session persistée + la session en mémoire + le cache).
+    expect(repair).toContain("CacheScope.purge(cacheStore)");
+    expect(account).toContain("SessionRepair.purge(");
     expect(account).not.toContain("SessionEpoch.invalidate");
   });
 
