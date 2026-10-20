@@ -86,9 +86,16 @@ export const PRODUCTION_SOURCES: string[] = [
   // `ClientQueue.kt` : LA file PARTAGÉE du client local (#403) — c'est elle
   // qui sérialise les lectures de l'interface ET celles du job de fond.
   join(DATA, "ClientQueue.kt"),
+  // `data` — le signal « session morte » et sa RÉPARATION (#397) : le rejet
+  // invalide la session ET purge le cache. Fichiers PURS (aucun import
+  // Android) : le harnais les compile et les REJOUE (un rejet de session
+  // purge vraiment le cache, sur le code de production).
+  join(DATA, "DeviceAuth.kt"),
   join(DATA, "LocalRequestQueue.kt"),
   join(DATA, "OfflineArtifacts.kt"),
   join(DATA, "OfflineCache.kt"),
+  join(DATA, "PronoteSession.kt"),
+  join(DATA, "SessionRepair.kt"),
   // `data` — les règles des préférences matière (#395) : le contrat (couleur
   // #RRGGBB, emoji court, libellé) et ses bornes, en un fichier PUR pour que
   // le harnais les EXÉCUTE. Le pont et le dépôt s'appuient dessus.

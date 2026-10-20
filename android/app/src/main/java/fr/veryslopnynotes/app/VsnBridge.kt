@@ -145,6 +145,14 @@ class VsnBridge(
         if (SecureStorage.health() == StoreHealth.UNAVAILABLE) {
             Log.w(TAG, "Stockage chiffré indisponible : les identifiants vivent en mémoire, ils ne sont pas conservés.")
         }
+        // #397 : le signal « session morte » a enfin un ABONNÉ — l'app. Il
+        // répare par le chemin EXISTANT (`accounts.logout()` : session
+        // invalidée ET cache purgé) puis l'interface renvoie à l'appairage.
+        // Avant, `reject()` ne purgeait rien : le natif gardait le jeton mort
+        // et servait un cache périmé comme frais.
+        // UN SEUL abonné : le job de fond NE s'abonne pas (il partage le
+        // process : il remplacerait celui de l'app).
+        DeviceAuth.setOnRejected { onSessionRejected() }
     }
 
     private val pairing = PairingRepository(sessions, cacheStore)
@@ -428,6 +436,25 @@ class VsnBridge(
         return JSONObject().put("ok", true)
     }
 
+    /**
+     * Session MORTE (jeton tourné par l'établissement) : la session ET le cache
+     * sont purgés, par le chemin EXISTANT (`accounts.logout()` — la purge part
+     * sous la garde d'époque, #364/#407).
+     *
+     * #397 : c'est ici que le signal étaitMUET. Sans cette purge, le natif
+     * gardait le jeton mort et le cache continuaient d'être servi comme
+     * frais — l'app affichait « session expirée » par-dessus des données
+     * périmées.
+     *
+     * Le fil qui lève le signal est un fil de fond (dépôt, job de fond) : la
+     * purge y est légitime (elle n'écrit pas sur l'UI). `sessionReady` tombe :
+     * la session n'existe plus, `session.status` ne doit pas dire « restaurée ».
+     */
+    private fun onSessionRejected() {
+        sessionReady = false
+        accounts.logout()
+    }
+
     // --- Appairage -------------------------------------------------------------
 
     private fun scanQr(requestId: String) {
@@ -479,6 +506,15 @@ class VsnBridge(
         return when (result) {
             is PairingResult.Ok -> {
                 sessionReady = true
+                // #397 : le compte appairé est ENREGISTRÉ. Le magasin
+                // multi-compte n'était jamais alimenté (rien n'écrivait
+                // `account_ids` depuis la bascule Compose -> WebView) :
+                // `current()` valait toujours `null` et le compte courant
+                // n'était jamais connu. L'id est celui de la ressource client
+                // (jamais le login, jamais le jeton). Le compte appairé
+                // devient le compte COURANT : c'est lui que la relecture
+                // (`resources.sync`) annonce.
+                result.accountId?.let { accounts.add(it); accounts.select(it) }
                 JSONObject().put("ok", true)
             }
             is PairingResult.Err -> JSONObject()

@@ -73,8 +73,14 @@ describe("purge de déconnexion (#364)", () => {
     // #407 : la purge est UN SEUL endroit (`CacheScope.purge`) — la
     // déconnexion, l'appairage d'un autre compte et la session morte y
     // passent tous, donc sous la même garde d'époque.
-    expect(acc).toContain("CacheScope.purge(cacheStore)");
+    // #397 : la déconnexion ET la session morte partagent le même code de
+    // purge (`SessionRepair.purge`) — l'UNIQUE appel de `CacheScope.purge`
+    // hors `CacheScope` lui-même.
+    expect(acc).toContain("SessionRepair.purge(");
     expect(acc).not.toContain("SessionEpoch.invalidate");
+    const repair = readFileSync(join(DATA, "SessionRepair.kt"), "utf8");
+    expect(repair).toContain("CacheScope.purge(cacheStore)");
+    expect(repair).not.toContain("SessionEpoch.invalidate");
     // La purge est DANS la garde (une seule section critique) : l'invalidation
     // de l'époque et l'effacement du cache sont dans le même bloc.
     const scope = readFileSync(join(DATA, "CacheScope.kt"), "utf8");

@@ -388,3 +388,21 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Emplacement : `android/app/src/main/java/fr/veryslopnynotes/app/BridgeExecutors.kt`,
   `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`,
   `web/src/bridge/client.ts`, `web/src/bridge/types.ts`.
+## I21 — Une session morte purge la session ET le cache
+- Invariant : le signal « session morte » (`DeviceAuth.reject()`) a UN abonné —
+  l'app (le pont). Le rejet invalide la session PERSISTÉE, abandonne la session
+  en mémoire et PURGE le cache, par le chemin EXISTANT (`AccountStore.logout()`
+  -> `SessionRepair.purge` -> `CacheScope.purge`, donc sous la garde d'époque).
+  Sans ça, le natif gardait le jeton mort et servait un cache périmé comme
+  frais. La purge ne lève jamais le signal (pas de boucle) et n'échoue jamais
+  celui qui le lève. Le compte appairé est ENREGISTRÉ à l'appairage
+  (`accounts.add`) : le magasin multi-compte n'est plus vide.
+- Test : `tests/unit/kotlin-session-repair.test.ts` (Kotlin réel : le rejet
+  purge la session et le cache) + `tests/architecture/session-repair.test.ts`
+  (câblage : l'abonné, le chemin de purge, l'enregistrement du compte).
+- Commande : `make check`.
+- Emplacement : `android/data/src/main/java/fr/veryslopnynotes/data/DeviceAuth.kt`,
+  `android/data/src/main/java/fr/veryslopnynotes/data/SessionRepair.kt`,
+  `android/data/src/main/java/fr/veryslopnynotes/data/AccountStore.kt`,
+  `android/data/src/main/java/fr/veryslopnynotes/data/PairingRepository.kt`,
+  `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`.
