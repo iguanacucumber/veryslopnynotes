@@ -19,6 +19,7 @@ import {
   type DiscussionRecipient,
 } from "../features/messages/model";
 import { useApp } from "../ui/AppContext";
+import { createSeq } from "../lib/seq";
 
 type Mode = "list" | "thread" | "new";
 
@@ -58,21 +59,31 @@ export default function MessagesRoute() {
   const [recipientsError, setRecipientsError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  // Séquences de chargement : une réponse PÉRIMÉE est ignorée. Sans elles,
+  // ouvrir le fil A, revenir à la liste et ouvrir le fil B pouvait afficher
+  // les messages de A sous l'en-tête de B (A répondait après B) — même motif
+  // que `features/revisions/RevisionSheets.tsx` (#501).
+  const threadsSeq = useRef(createSeq());
+  const threadSeq = useRef(createSeq());
+
   const loadThreads = useCallback(async () => {
+    const seq = threadsSeq.current.next();
     setLoading(true);
     try {
       const result = await bridge.messages();
+      if (!threadsSeq.current.isCurrent(seq)) return;
       setThreads(sortDiscussions(parseDiscussions(result.payload)));
       setError(null);
       setStale(false);
     } catch (e) {
+      if (!threadsSeq.current.isCurrent(seq)) return;
       if (e instanceof BridgeCallError && e.code === "auth_required") {
         window.dispatchEvent(new Event("vsn:auth"));
       }
       setError(errorMessage(e, "messagerie indisponible"));
       setStale(true);
     } finally {
-      setLoading(false);
+      if (threadsSeq.current.isCurrent(seq)) setLoading(false);
     }
   }, []);
 
@@ -81,10 +92,15 @@ export default function MessagesRoute() {
   }, [loadThreads, refreshTick]);
 
   const loadThread = useCallback(async (discussion: Discussion) => {
+    const seq = threadSeq.current.next();
     setThreadLoading(true);
     setThreadError(null);
     try {
       const result = await bridge.thread(discussion.id);
+      // Réponse PÉRIMÉE : un autre fil a été ouvert entre-temps (ou l'écran a
+      // été refermé). On l'ignore — sinon les messages de l'ancien fil
+      // s'affichaient sous l'en-tête du nouveau.
+      if (!threadSeq.current.isCurrent(seq)) return;
       if (result.error) setThreadError(result.error);
       const parsed = parseMessages(result.payload);
       setMessages(parsed);
@@ -105,16 +121,20 @@ export default function MessagesRoute() {
         setPreviews((current) => ({ ...current, [discussion.id]: messagePreview(last.body) }));
       }
     } catch (e) {
+      if (!threadSeq.current.isCurrent(seq)) return;
       if (e instanceof BridgeCallError && e.code === "auth_required") {
         window.dispatchEvent(new Event("vsn:auth"));
       }
       setThreadError(errorMessage(e, "fil indisponible"));
     } finally {
-      setThreadLoading(false);
+      if (threadSeq.current.isCurrent(seq)) setThreadLoading(false);
     }
   }, []);
 
   const resetToList = useCallback(() => {
+    // Le fil refermé : sa réponse en vol est périmée (elle ne doit plus rien
+    // écrire dans l'écran).
+    threadSeq.current.invalidate();
     setMode("list");
     setOpen(null);
     setMessages([]);
