@@ -66,6 +66,21 @@ describe("la clé de cache porte la requête (#365)", () => {
     expect(repo).toContain("store.save(resource, payload, clock(), query)");
   });
 
+  // #509 : une lecture SANS écriture et une lecture AVEC écriture de la même
+  // requête ne doivent pas partager le même travail : sinon celle qui arrive
+  // en premier décide pour les deux, et l'entrée du cache n'est jamais
+  // enregistrée.
+  test.skipIf(skip)("la clé de dédoublonnage distingue l'écriture", async () => {
+    const write = await ask({ op: "dedupKey", resource: "assignments", query: "weekStart=2026-10-19", save: true });
+    const read = await ask({ op: "dedupKey", resource: "assignments", query: "weekStart=2026-10-19", save: false });
+    expect(write["key"]).not.toBe(read["key"]);
+    // Mais la MÊME lecture se dédoublonne toujours avec elle-même.
+    const again = await ask({ op: "dedupKey", resource: "assignments", query: "weekStart=2026-10-19", save: true });
+    expect(again["key"]).toBe(write["key"]);
+    // Et le dépôt utilise BIEN cette clé.
+    expect(readFileSync(REPO, "utf8")).toContain("CachePolicy.dedupKey(resource, query, save)");
+  });
+
   test.skipIf(skip)("deux requêtes différentes ⇒ la seconde relit le client local", async () => {
     const entry: Entry = { payload: "semaine 1", fetchedAt: 1_000, query: "weekStart=2026-10-19" };
     // La même requête : l'entrée fraîche suffit (aucune relecture).

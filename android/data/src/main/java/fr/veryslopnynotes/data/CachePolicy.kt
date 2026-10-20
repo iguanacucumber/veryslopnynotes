@@ -124,6 +124,19 @@ object CachePolicy {
      */
     fun normalizeQuery(query: String): String =
         query.trim().replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+
+    /**
+     * Clé de DÉDOUBLONNAGE d'une lecture en vol (#509).
+     *
+     * La requête normalisée (l'identité de la réponse) et le fait d'ÉCRIRE le
+     * cache font partie de la clé : une lecture SANS écriture (l'assistant,
+     * qui cherche un devoir dans le cache) et une lecture AVEC écriture
+     * (l'écran, qui alimente le cache) de la même requête ne doivent pas
+     * partager le même travail — sinon celle qui arrive en premier décide
+     * pour les deux, et l'entrée du cache n'est jamais enregistrée.
+     */
+    fun dedupKey(resource: String, query: String, save: Boolean): String =
+        "$resource|${normalizeQuery(query)}|save=$save"
 }
 
 /**

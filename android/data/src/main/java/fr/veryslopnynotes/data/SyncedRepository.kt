@@ -107,11 +107,19 @@ class SyncedRepository(
     }
 
     private fun readAsync(save: Boolean, resource: String, query: String, cb: (RefreshOutcome) -> Unit) {
-        // Cle de dedoublonnage : ressource|query. Deux lectures identiques EN VOL
-        // = une seule execution du client, le MEME RefreshOutcome pour tous les
-        // callbacks (relayes un par un sur le main thread).
+        // Cle de dedoublonnage : ressource|query|ecriture. Deux lectures
+        // identiques EN VOL = une seule execution du client, le MEME
+        // RefreshOutcome pour tous les callbacks (relayes un par un sur le main
+        // thread).
+        //
+        // L'ECRITURE fait partie de la cle (#509) : une lecture SANS ecriture
+        // (l'assistant, qui cherche un devoir dans le cache) et une lecture
+        // AVEC ecriture (l'ecran, qui alimente le cache) de la meme requete
+        // se partageaient la meme cle — donc celle qui arrivait en premier
+        // decidait pour les deux : une lecture sans ecriture pouvait avaler
+        // l'ecriture du cache, et l'entree n'etait jamais enregistree.
         ClientQueue.submit(
-            "$resource|$query",
+            CachePolicy.dedupKey(resource, query, save),
             work = { readOutcome(save, resource, query) },
             deliver = { o -> post(cb, o) },
         )
