@@ -60,8 +60,57 @@ class MainActivity : ComponentActivity() {
         }
         setContentView(container)
         applyImeInsets(container)
-        shell.open(routePath(intent))
+        // #400 : la route à l'ouverture. Une RECRÉATION de l'activité (rotation,
+        // changement de configuration, mort du processus) rouvre sur la route
+        // SAUVEGARDÉE ; sinon, sur la route du deep link ; sinon, l'accueil.
+        // La route sauvée prime TOUJOURS sur le deep link : l'intention est
+        // périmée (c'est elle qui renvoyait l'utilisateur sur l'ancien écran).
+        shell.open(savedRoute(savedInstanceState) ?: routePath(intent))
     }
+
+    /**
+     * #400 : la route CURRENTE est sauvegardée avec l'état de la WebView.
+     *
+     * Deux choses sont sauvées :
+     *  - le CHEMIN de la route (`ROUTE_STATE_KEY`) : c'est le REPLI. L'état
+     *    de la WebView peut être perdu (mort du processus) ; la route, elle,
+     *    est un simple chemin, donc elle se relit ;
+     *  - l'état de la WebView (historique, page) : c'est lui qui restitue
+     *    l'écran tel qu'il était.
+     */
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        val view = webShell?.view ?: return
+        // Une URL sans hash = l'accueil : on l'écrit quand même, pour que la
+        // route relue soit TOUJOURS une route (et jamais une intention).
+        outState.putString(ROUTE_STATE_KEY, routePathFromUrl(view.url) ?: HOME_ROUTE)
+        view.saveState(outState)
+    }
+
+    /**
+     * #400 : la route survit à la recréation de l'activité.
+     *
+     * `restoreState` restitue l'historique et la page de la WebView. Il
+     * renvoie `null` quand l'état n'a pas pu être restauré : on rouvre alors
+     * sur la route SAUVEGARDÉE, jamais sur l'accueil (la route est le contrat,
+     * pas l'écran de départ).
+     */
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        val view = webShell?.view ?: return
+        val restored = view.restoreState(savedInstanceState)
+        if (restored == null) {
+            webShell?.open(savedRoute(savedInstanceState))
+        }
+    }
+
+    /**
+     * Route relue dans l'état sauvegardé (`null` s'il n'y en a pas).
+     *
+     * Un chemin hors contrat est refusé : l'accueil, pas une route inventée.
+     */
+    private fun savedRoute(savedInstanceState: Bundle?): String? =
+        routePathFromState(savedInstanceState?.getString(ROUTE_STATE_KEY))
 
     /**
      * #399 : le clavier logiciel ne masque plus un champ de saisie.
