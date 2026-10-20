@@ -32,13 +32,10 @@ const val WEB_ASSET_HOST = "appassets.androidplatform.net"
 
 private const val WEB_INDEX = "web/index.html"
 
-// Routes hash connues (miroir de `web/src/App.tsx` et des constantes
-// `ROUTE_*` d'AppNav). Sert à refuser un deep link hors contrat.
-val WEB_ROUTES: Set<String> = setOf(
-    "/", "/calendar", "/grades", "/tasks", "/profile", "/settings",
-    "/pairing", "/messages", "/attendance", "/sanctions", "/news",
-    "/canteen", "/alerts", "/fiches",
-)
+// Les routes hash connues vivent dans `WebRouteState.kt` (#400) : ce fichier
+// est PUR (il compile hors Gradle, donc le harnais de parité le rejoue), et
+// la liste n'a ainsi qu'UN endroit de vérité — la WebView, l'activité et les
+// tests lisent la même.
 
 @SuppressLint("SetJavaScriptEnabled")
 class NativeWebShell(private val activity: ComponentActivity) {
@@ -48,6 +45,11 @@ class NativeWebShell(private val activity: ComponentActivity) {
     private var pageLoaded = false
 
     private val webView: WebView = WebView(activity).apply {
+        // #400 : identifiant STABLE (`res/values/ids.xml`). L'état d'une vue
+        // est indexé par son id : un id régénéré à chaque lancement ne
+        // survivrait pas à la recréation de l'activité, et l'état de la
+        // WebView ne serait jamais retrouvé.
+        id = R.id.web_view
         setBackgroundColor(splashColor)
         alpha = 0f // fond natif (= splash) jusqu'au premier rendu
         settings.apply {
