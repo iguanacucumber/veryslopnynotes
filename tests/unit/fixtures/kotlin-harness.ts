@@ -208,6 +208,18 @@ function resolveJava(): string | null {
   return process.env.KOTLIN_JAVA_BIN ?? Bun.which("java");
 }
 
+/**
+ * Drapeaux de la JVM du pilote : C1 seul + GC sériel.
+ *
+ * Le pilote est un processus COURT : quelques opérations, puis il meurt. Le
+ * compilateur C2 et le GC parallèle coûtent cher à démarrer et ne servent à
+ * rien sur une charge minuscule. Ces drapeaux ne changent AUCUNE sémantique
+ * (mêmes classes, mêmes résultats) — seulement la stratégie de compilation et
+ * de GC. Mesuré : ~40 ms → ~34 ms de démarrage, et les 30 fichiers de
+ * parité le paient 30 fois.
+ */
+const JVM_FLAGS = ["-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC"];
+
 /** Shell du superviseur de compilation. */
 function bash(): string {
   return Bun.which("bash") ?? "/bin/bash";
@@ -414,9 +426,18 @@ function toolchain(): ParityToolchain {
     // Le jar de parité porte 17 `main()` : `java -jar` ne peut pas choisir.
     // Avec une classe, on la lance par son nom (`-cp` + classe).
     const args = ["-Dfile.encoding=UTF-8", `-Duser.timezone=${timezone}`];
+    // C1 SEUL (`TieredStopAtLevel=1`) : le pilote est un processus COURT qui
+    // fait quelques opérations puis meurt. Le compilateur C2 (le-optimisant)
+    // coûte cher à démarrer et ne sert à rien sur une charge si petite — le
+    // pilote y passe 20 ms. `-XX:+UseSerialGC` va de pair : un GC parallèle
+    // lance des fils de GC pour une heap minuscule.
+    // Ces drapeaux ne CHANGENT AUCUNE sémantique (même code, mêmes classes,
+    // mêmes résultats) : ils changent la stratégie de compilation et de GC.
+    // Mesuré sur ce harnais : le démarrage du pilote passe de ~40 ms à ~34 ms,
+    // et les 30 fichiers de parité le paient 30 fois.
     if (opts?.mainClass) args.push("-cp", jar, opts.mainClass);
     else args.push("-jar", jar);
-    const proc = Bun.spawn([java, ...args], {
+    const proc = Bun.spawn([java, ...JVM_FLAGS, ...args], {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
@@ -456,27 +477,62 @@ function toolchain(): ParityToolchain {
     // Le pilote doit MOURIR avec le test ET être RÉCOLTÉ : `kill()` seul
     // laissait un `[java] <defunct>` empilé dans `ps` (le processus mort, jamais
     // attendu). `proc.exited` attend la mort ET ramasse le fils.
+    //
+    // ARRÊT PAR EOF D'ABORD (mesuré : 358 ms sur SIGTERM contre ~2 ms par
+    // fermeture de stdin). Le pilote lit ses opérations ligne à ligne sur
+    // stdin (`stdin.readLine() ?: break`) : à la fermeture du tube, `readLine`
+    // rend null, la boucle se termine et la JVM sort TOUTE SEULE. Un SIGTERM,
+    // lui, laisse la JVM dérouler ses hooks d'arrêt : ~350 ms × 30 fichiers de
+    // parité, c'était le poste le plus lourd de la suite.
+    //
+    // LE FILET EST INDISPENSABLE : un pilote qui ne LIT PAS stdin (le faux
+    // `java` de `kotlin-harness-process.test.ts`) ne sort pas par là. SIGTERM
+    // puis SIGKILL, donc un pilote coincé ne survit jamais au test.
     let stopped = false;
     const stop = async (): Promise<void> => {
       if (stopped) return;
       stopped = true;
       try {
+        sink.end(); // EOF : le pilote sort de sa boucle de lecture.
+      } catch {
+        // tube déjà fermé (le pilote était mort)
+      }
+      // Course : si le pilote sort sur EOF, c'est gagné en ~2 ms. Le délai
+      // n'est JAMAIS attendu quand le pilote est sage.
+      //
+      // Le minuteur est ANNULÉ dans les deux cas : un `Bun.sleep` laissé en
+      // vol retiendrait le worker de test vivant jusqu'à son terme (250 ms
+      // × 30 fichiers de parité : exactement le temps qu'on cherche à
+      // gagner).
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const exited = await Promise.race([
+        proc.exited.then(() => true),
+        new Promise<boolean>((resolve) => {
+          timer = setTimeout(() => resolve(false), 250);
+        }),
+      ]);
+      if (timer) clearTimeout(timer);
+      if (exited) return;
+      try {
         proc.kill("SIGTERM");
       } catch {
         // déjà mort
       }
-      const hard = setTimeout(() => {
-        try {
-          proc.kill("SIGKILL");
-        } catch {
-          // déjà mort
-        }
-      }, 2000);
+      let hard: ReturnType<typeof setTimeout> | undefined;
+      const killed = await Promise.race([
+        proc.exited.then(() => true),
+        new Promise<boolean>((resolve) => {
+          hard = setTimeout(() => resolve(false), 2000);
+        }),
+      ]);
+      if (hard) clearTimeout(hard);
+      if (killed) return;
       try {
-        await proc.exited;
-      } finally {
-        clearTimeout(hard);
+        proc.kill("SIGKILL");
+      } catch {
+        // déjà mort
       }
+      await proc.exited; // récolte : pas de zombie.
     };
     afterAll(stop);
     return {

@@ -49,9 +49,37 @@ function zombiePids(): number[] {
   return childPids().filter((pid) => ps(["-o", "stat=", "-p", String(pid)]).trim().startsWith("Z"));
 }
 
+/**
+ * Attend qu'une condition devienne VRAIE, en scrutant l'état réel.
+ *
+ * Une attente FIXE (`Bun.sleep(400)`) suppose que la machine est assez
+ * rapide : sur une machine chargée, elle attend 400 ms pour rien ; sur une
+ * machine lente, elle peut ne PAS suffire (le test devient faussement
+ * VERT). Attendre l'ÉTAT — l'enfant est né, le processus est mort — est
+ * à la fois plus rapide ET plus sûr.
+ *
+ * `timeoutMs` n'est PAS une durée d'attente : c'est le PLAFOND après lequel
+ * on renonce (le test échoue alors, bruyamment, au lieu de boucler).
+ */
+async function until(
+  cond: () => boolean | Promise<boolean>,
+  timeoutMs: number,
+  stepMs = 10,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await cond()) return true;
+    if (Date.now() > deadline) return false;
+    await Bun.sleep(stepMs);
+  }
+}
+
 /** Faux compilateur : journalise son début/fin et produit un jar vide.
  *  Le journal et le jar sortent des variables d'environnement (le harnais
- *  passe les sources en arguments, pas le journal). */
+ *  passe les sources en arguments, pas le journal).
+ *  Le `sleep` rend la compilation PLUS LONGUE que l.start de l'autre : c'est
+ *  ce qui rend un CHEVAUCHEMENT visible dans le journal (« S » puis « S »).
+ *  50 ms suffisent : le test n'observe que l'ordre des marqueurs. */
 const STUB_OK = `#!/usr/bin/env bash
 out=""
 prev=""
@@ -60,7 +88,7 @@ for a in "$@"; do
   prev="$a"
 done
 echo "S" >> "$KOTLIN_STUB_LOG"
-sleep 0.2
+sleep 0.05
 : > "$out"
 echo "F" >> "$KOTLIN_STUB_LOG"
 `;
@@ -121,7 +149,12 @@ describe("harnais de parité Kotlin : gestion des processus", () => {
       stdout: "pipe",
       stderr: "pipe",
     });
-    await Bun.sleep(400);
+    // On attend l'ÉTAT (l'enfant existe), pas une durée fixe.
+    const born = await until(
+      () => ps(["-o", "pid=", "--ppid", String(proc.pid)]).trim().length > 0,
+      10_000,
+    );
+    expect(born).toBe(true);
     const kids = ps(["-o", "pid=", "--ppid", String(proc.pid)])
       .split("\n")
       .map((l) => l.trim())
@@ -132,7 +165,9 @@ describe("harnais de parité Kotlin : gestion des processus", () => {
     expect(alive(child)).toBe(true);
 
     killGroup(proc.pid);
-    await Bun.sleep(400);
+    // La mort est OBSERVÉE, pas supposée après un délai.
+    const dead = await until(() => !alive(child) && !alive(proc.pid), 10_000);
+    expect(dead).toBe(true);
     // LE petit-fils doit être mort : pas de compilateur orphelin à 100 % CPU.
     expect(alive(child)).toBe(false);
     expect(alive(proc.pid)).toBe(false);
@@ -153,9 +188,16 @@ describe("harnais de parité Kotlin : gestion des processus", () => {
     let child = 0;
     clearCache("kotlin-harness-proc");
     try {
+      // Plafond COURT : le faux compilateur ne rend jamais la main, donc le
+      // plafond est ce que le test attend — pas la durée du travail. 400 ms
+      // suffisent à prouver que le plafond TUE (et non 1 500 ms de patience
+      // pour un résultat identique).
       await expect(
-        parityToolchain.ensureJar("kotlin-harness-proc", [src], { timeoutMs: 1500 }),
+        parityToolchain.ensureJar("kotlin-harness-proc", [src], { timeoutMs: 400 }),
       ).rejects.toThrow(/dépassé/);
+      // Le faux compilateur a lancé son enfant : on attend le PID RÉEL.
+      const written = await until(() => existsSync(pidFile), 10_000);
+      expect(written).toBe(true);
       child = Number(readFileSync(pidFile, "utf8").trim());
     } finally {
       restoreBin();
@@ -166,7 +208,8 @@ describe("harnais de parité Kotlin : gestion des processus", () => {
     expect(child).toBeGreaterThan(0);
     // Le « java » du faux compilateur : mort avec son groupe. (Le SIGKILL est
     // asynchrone : on attend la mort, on ne la suppose pas immédiate.)
-    for (let i = 0; i < 60 && alive(child); i++) await Bun.sleep(50);
+    const dead = await until(() => !alive(child), 10_000);
+    expect(dead).toBe(true);
     expect(alive(child)).toBe(false);
     // Aucun jar (même partiel) ne doit rester dans le cache.
     rmSync(join(ROOT, "node_modules", ".cache", "kotlin-harness-proc"), { recursive: true, force: true });
@@ -244,15 +287,18 @@ describe("harnais de parité Kotlin : gestion des processus", () => {
     const restorePid = env("KOTLIN_STUB_PIDFILE", pidFile);
     try {
       const link = await parityToolchain.openLink(join(dir, "peu-importe.jar"));
-      // Le faux `java` tourne : il ne rend jamais la main tout seul.
-      for (let i = 0; i < 50 && !existsSync(pidFile); i++) await Bun.sleep(50);
+      // Le faux `java` tourne : il ne rend jamais la main tout seul. On attend
+      // que son PID soit ÉCRIT (état), pas qu'un délai s'écoule.
+      const written = await until(() => existsSync(pidFile), 10_000);
+      expect(written).toBe(true);
       const pid = Number(readFileSync(pidFile, "utf8").trim());
       expect(pid).toBeGreaterThan(0);
       expect(alive(pid)).toBe(true);
 
       link.close();
-      for (let i = 0; i < 50 && alive(pid); i++) await Bun.sleep(50);
       // Arrêté…
+      const dead = await until(() => !alive(pid), 10_000);
+      expect(dead).toBe(true);
       expect(alive(pid)).toBe(false);
       // … ET récolté (pas de `[java] <defunct>` empilé dans `ps`).
       expect(zombiePids()).toEqual([]);

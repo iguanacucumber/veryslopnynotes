@@ -389,8 +389,20 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
  * Maintient la session en vie : un ping quand ~110 s d'inactivité, comme
  * `_KeepAlive` (le `post("Navigation", …)` est fourni par le client #201 :
  * ici `shouldPing`/`pingRequest`, zéro dépendance, thread démon).
+ *
+ * [tickMs] est la PÉRIODE du fil de garde (1 000 ms en production). C'est un
+ * paramètre, pas une constante : le harnais de parité (#202) pilote le VRAI
+ * code et doit observer un tick RÉEL, or 1 s de attente réelle par test est
+ * un luxe que la suite ne peut pas payer 30 fois. La valeur par défaut est
+ * celle de production — un test la vérifie
+ * (`tests/architecture/keepalive-ping.test.ts`) pour que personne ne la
+ * change par accident.
  */
-class KeepAlive(private val shouldPing: () -> Boolean, private val pingRequest: () -> Unit) {
+class KeepAlive(
+    private val shouldPing: () -> Boolean,
+    private val pingRequest: () -> Unit,
+    private val tickMs: Long = 1000L,
+) {
     @Volatile
     private var flag = false
     private var thread: Thread? = null
@@ -422,7 +434,7 @@ class KeepAlive(private val shouldPing: () -> Boolean, private val pingRequest: 
         val t = Thread({
             while (true) {
                 try {
-                    Thread.sleep(1000)
+                    Thread.sleep(tickMs)
                 } catch (_: InterruptedException) {
                     return@Thread
                 }
