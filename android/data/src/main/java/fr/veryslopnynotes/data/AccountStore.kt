@@ -94,15 +94,16 @@ class AccountStore(
      *
      * #407 : la purge passe par [CacheScope] (UN seul endroit, avec l'appairage
      * d'un autre compte et la session morte) — donc sous la même garde d'époque.
+     *
+     * #397 : la déconnexion et la SESSION MORTE partagent le MÊME code de purge
+     * ([SessionRepair.purge]) : une seule implémentation, donc pas de divergence
+     * entre « déconnecté » et « jeton tourné ».
      */
     fun logout() {
-        sessions.clear()
-        // #205 : la session locale part avec le reste (plus de client, repli
-        // cache impossible : les ressources sont purgees juste apres).
-        PronoteSession.clear()
-        // Purge totale : la liste de ressources dérive des contrats, une liste
-        // codée en dur laisserait fuiter la donnee d'une ressource ajoutée plus tard.
-        CacheScope.purge(cacheStore)
+        // #397 : la déconnexion et la SESSION MORTE partagent le MÊME code de
+        // purge (`SessionRepair.purge`) : une seule implémentation, donc pas de
+        // divergence entre « déconnecté » et « jeton tourné ».
+        SessionRepair.purge({ sessions.clear() }, cacheStore)
         prefs.edit().clear().apply()
     }
 

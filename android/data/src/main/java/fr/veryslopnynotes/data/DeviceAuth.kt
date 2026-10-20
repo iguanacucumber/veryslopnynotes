@@ -7,8 +7,15 @@ package fr.veryslopnynotes.data
 // refermée côté établissement). L'UI répare par le chemin EXISTANT
 // `accounts.logout()` puis renvoie à l'appairage.
 //
+// #397 : le signal a enfin un ABONNÉ — l'app (le pont), branché UNE fois au
+// démarrage. Il répare par le chemin EXISTANT : `accounts.logout()` — session
+// invalidée ET cache purgé (`SessionRepair.purge`, cf. #407) — puis l'interface
+// renvoie vers l'appairage. Avant, `reject()` ne purgeait rien : le natif
+// gardait le jeton mort et servait un cache périmé comme frais.
+//
 // Anti-boucle : après `logout()` il n'y a plus de session (`PronoteSession`
-// purgée, store vidé), donc plus aucun dépôt ne peut lever le signal.
+// purgée, store vidé), donc plus aucun dépôt ne peut lever le signal ; et la
+// purge ne lève jamais le signal elle-même.
 // ponytail: un seul listener, pas de bus d'événements. Upgrade: `StateFlow` si
 // plusieurs écrans doivent observer la session.
 object DeviceAuth {
@@ -29,6 +36,13 @@ object DeviceAuth {
 
     /** Interne : seuls les dépôts lèvent le signal (jamais l'UI, jamais une piste). */
     internal fun reject() {
-        onRejected?.invoke()
+        // Le signal ne doit JAMAIS faire échouer celui qui le lève : le dépôt
+        // doit pouvoir renvoyer son refus. Sans ce filet, une purge en échec
+        // traverserait la file de lecture (ou le `Thread` du dépôt) et tuerait
+        // son fil — la promesse JS pendrait jusqu'au délai.
+        try {
+            onRejected?.invoke()
+        } catch (_: Exception) {
+        }
     }
 }

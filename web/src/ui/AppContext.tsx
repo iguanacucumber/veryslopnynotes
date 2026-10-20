@@ -87,6 +87,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
+  // #397 : c'est le NATIF qui répare, pas l'interface. Au moment du rejet
+  // (jeton tourné), le pont invalide la session ET purge les caches par le
+  // chemin EXISTANT (`accounts.logout()`), puis la réponse porte
+  // `auth_required` : l'interface n'a plus qu'à renvoyer vers l'appairage.
+  // Appeler `session.logout` depuis ici serait une SECONDE purge, en retard
+  // sur le rejeu — elle pourrait même effacer une session re-ouverte
+  // entre-temps (l'app se ré-appaire).
   useEffect(() => {
     const onAuth = () => setAuthLost(true);
     window.addEventListener("vsn:auth", onAuth);
