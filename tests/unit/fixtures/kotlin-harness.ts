@@ -217,8 +217,11 @@ function resolveJava(): string | null {
  * (mêmes classes, mêmes résultats) — seulement la stratégie de compilation et
  * de GC. Mesuré : ~40 ms → ~34 ms de démarrage, et les 30 fichiers de
  * parité le paient 30 fois.
+ *
+ * Exporté : `kotlin-parity-union.test.ts` lance lui-même des JVM (pour
+ * vérifier que chaque pilote se lance) et doit porter les mêmes drapeaux.
  */
-const JVM_FLAGS = ["-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC"];
+export const JVM_FLAGS = ["-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC"];
 
 /** Shell du superviseur de compilation. */
 function bash(): string {
@@ -507,14 +510,14 @@ function toolchain(): ParityToolchain {
         // n'est JAMAIS attendu quand le pilote est sage.
         //
         // Le minuteur est ANNULÉ dans les deux cas : un `Bun.sleep` laissé en
-        // vol retiendrait le worker de test vivant jusqu'à son terme (250 ms
+        // vol retiendrait le worker de test vivant jusqu'à son terme (100 ms
         // × 30 fichiers de parité : exactement le temps qu'on cherche à
         // gagner).
         let timer: ReturnType<typeof setTimeout> | undefined;
         const exited = await Promise.race([
           proc.exited.then(() => true),
           new Promise<boolean>((resolve) => {
-            timer = setTimeout(() => resolve(false), 250);
+            timer = setTimeout(() => resolve(false), 100);
           }),
         ]);
         if (timer) clearTimeout(timer);
