@@ -209,10 +209,16 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Test : `tests/architecture/web-mock.test.ts` (pas d'import statique + analyse
   du bundle Vite réellement produit) + `tests/web/bridge.test.ts` (hors mode
   dev : le pont absent échoue ; en mode dev : le factice répond ; un pont
-  natif présent ne retombe jamais sur le factice).
+  natif présent ne retombe jamais sur le factice) +
+  `tests/unit/build-web.test.ts` (le build Vite passe par
+  `agents/runtime/build-web.ts` : plafond de durée par essai, UN réessai si le
+  processus MORT — jamais s'il a échoué — et un diagnostic qui nomme la cause ;
+  le build de l'APK passe par le même helper, donc la même protection —
+  #516 : le binding natif de Vite peut mourir sans message et rougissait le
+  gate pour un bundle intact).
 - Commande : `make architecture-test` (ou `make check`).
 - Emplacement : `web/src/bridge/client.ts`, `web/src/bridge/mock.ts`,
-  `web/vite.config.ts`.
+  `web/vite.config.ts`, `agents/runtime/build-web.ts`.
 
 ## I14 — « Invalide » n'est jamais « vide » (fail-closed / fail-open)
 - Invariant : une sortie mal formée est REFUSÉE, jamais réinterprétée en valeur
