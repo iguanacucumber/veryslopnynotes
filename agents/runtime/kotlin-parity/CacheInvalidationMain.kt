@@ -43,7 +43,7 @@ private fun ok(vararg pairs: Pair<String, JVal>): JVal.Obj = JVal.Obj(linkedMapO
 
 /** Ce que l'écran voit d'une entrée de cache : servie ? périmée ? relecture ? */
 private fun view(store: InMemoryCacheStore, resource: String, now: Long): JVal.Obj {
-    val entry = store.load(resource)
+    val entry = store.load(resource, "")
     return ok(
         "served" to JVal.Bool(entry != null),
         "stale" to JVal.Bool(entry != null && CachePolicy.isStale(resource, entry.fetchedAt, now)),

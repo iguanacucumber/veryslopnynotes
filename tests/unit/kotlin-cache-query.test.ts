@@ -124,7 +124,12 @@ describe("la clé de cache porte la requête (#365)", () => {
         fetchedAt: 1_234,
         query: "weekStart=2026-10-19",
       });
-      const loaded = await ask({ op: "load", store: kind, resource: "timetable" });
+      const loaded = await ask({
+        op: "load",
+        store: kind,
+        resource: "timetable",
+        query: "weekStart=2026-10-19",
+      });
       expect(loaded["found"]).toBe(true);
       expect(loaded["query"]).toBe("weekStart=2026-10-19");
       expect(loaded["fetchedAt"]).toBe(1_234);
@@ -132,29 +137,141 @@ describe("la clé de cache porte la requête (#365)", () => {
     }
   });
 
-  test.skipIf(skip)("une écriture plus récente remplace l'entrée (avec sa requête)", async () => {
-    // Un seul emplacement par ressource : l'entrée suit la DERNIÈRE requête
-    // écrite (l'EDT d'une semaine ne sert pas l'autre).
-    await ask({
-      op: "save",
-      store: "memory",
-      resource: "timetable",
-      payload: "{\"entries\":[\"semaine 1\"]}",
-      fetchedAt: 1_000,
-      query: "weekStart=2026-10-19",
-    });
-    await ask({
-      op: "save",
-      store: "memory",
-      resource: "timetable",
-      payload: "{\"entries\":[\"semaine 2\"]}",
-      fetchedAt: 2_000,
-      query: "weekStart=2026-10-26",
-    });
-    const loaded = await ask({ op: "load", store: "memory", resource: "timetable" });
-    expect(loaded["query"]).toBe("weekStart=2026-10-26");
-    expect(loaded["fetchedAt"]).toBe(2_000);
-    expect(loaded["payload"]).toBe("{\"entries\":[\"semaine 2\"]}");
+  test.skipIf(skip)("#477 : deux requêtes = deux entrées, chacune servie à la sienne", async () => {
+    for (const kind of ["file", "memory"]) {
+      await ask({
+        op: "save",
+        store: kind,
+        resource: "timetable",
+        payload: "{\"entries\":[\"semaine 1\"]}",
+        fetchedAt: 1_000,
+        query: "weekStart=2026-10-19",
+      });
+      await ask({
+        op: "save",
+        store: kind,
+        resource: "timetable",
+        payload: "{\"entries\":[\"semaine 2\"]}",
+        fetchedAt: 2_000,
+        query: "weekStart=2026-10-26",
+      });
+      // Revenir sur la PREMIÈRE requête = cache-hit : l'entrée est toujours là.
+      const first = await ask({
+        op: "load",
+        store: kind,
+        resource: "timetable",
+        query: "weekStart=2026-10-19",
+      });
+      expect(first["found"]).toBe(true);
+      expect(first["payload"]).toBe("{\"entries\":[\"semaine 1\"]}");
+      const second = await ask({
+        op: "load",
+        store: kind,
+        resource: "timetable",
+        query: "weekStart=2026-10-26",
+      });
+      expect(second["payload"]).toBe("{\"entries\":[\"semaine 2\"]}");
+      // Une requête jamais vue : ABSENTE (donc relecture).
+      const unknown = await ask({
+        op: "load",
+        store: kind,
+        resource: "timetable",
+        query: "weekStart=2026-11-02",
+      });
+      expect(unknown["found"]).toBe(false);
+    }
+  });
+
+  test.skipIf(skip)("#477 : la purge de la ressource efface TOUTES ses entrées", async () => {
+    for (const kind of ["file", "memory"]) {
+      await ask({
+        op: "save",
+        store: kind,
+        resource: "timetable",
+        payload: "{\"entries\":[\"semaine 1\"]}",
+        fetchedAt: 1_000,
+        query: "weekStart=2026-10-19",
+      });
+      await ask({
+        op: "save",
+        store: kind,
+        resource: "timetable",
+        payload: "{\"entries\":[\"semaine 2\"]}",
+        fetchedAt: 2_000,
+        query: "weekStart=2026-10-26",
+      });
+      const before = await ask({ op: "payloads", store: kind, resource: "timetable" });
+      expect((before["payloads"] as string[]).length).toBe(2);
+      await ask({ op: "clear", store: kind, resource: "timetable" });
+      for (const query of ["weekStart=2026-10-19", "weekStart=2026-10-26"]) {
+        const loaded = await ask({ op: "load", store: kind, resource: "timetable", query });
+        expect(loaded["found"]).toBe(false);
+      }
+    }
+  });
+
+  test.skipIf(skip)("#477 : la purge TOTALE (déconnexion) efface les deux entrées", async () => {
+    for (const kind of ["file", "memory"]) {
+      await ask({
+        op: "save",
+        store: kind,
+        resource: "timetable",
+        payload: "{\"entries\":[\"semaine 1\"]}",
+        fetchedAt: 1_000,
+        query: "weekStart=2026-10-19",
+      });
+      await ask({
+        op: "save",
+        store: kind,
+        resource: "timetable",
+        payload: "{\"entries\":[\"semaine 2\"]}",
+        fetchedAt: 2_000,
+        query: "weekStart=2026-10-26",
+      });
+      await ask({ op: "clearAll", store: kind });
+      for (const query of ["weekStart=2026-10-19", "weekStart=2026-10-26"]) {
+        const loaded = await ask({ op: "load", store: kind, resource: "timetable", query });
+        expect(loaded["found"]).toBe(false);
+      }
+    }
+  });
+
+  test.skipIf(skip)("#477 : les entrées périmées sont purgées (le cache ne grossit pas)", async () => {
+    for (const kind of ["file", "memory"]) {
+      // Une entrée VIEILLE (le TTL de l'EDT est d'une heure).
+      await ask({
+        op: "save",
+        store: kind,
+        resource: "timetable",
+        payload: "{\"entries\":[\"vieille\"]}",
+        fetchedAt: 1_000,
+        query: "weekStart=2026-10-19",
+      });
+      // L'écriture d'une AUTRE requête purge l'entrée périmée : une
+      // ressource a une entrée par requête, mais le cache ne vit pas.
+      await ask({
+        op: "save",
+        store: kind,
+        resource: "timetable",
+        payload: "{\"entries\":[\"neuve\"]}",
+        fetchedAt: 10_000_000,
+        query: "weekStart=2026-10-26",
+      });
+      const old = await ask({
+        op: "load",
+        store: kind,
+        resource: "timetable",
+        query: "weekStart=2026-10-19",
+      });
+      expect(old["found"]).toBe(false);
+      const fresh = await ask({
+        op: "load",
+        store: kind,
+        resource: "timetable",
+        query: "weekStart=2026-10-26",
+      });
+      expect(fresh["found"]).toBe(true);
+    }
   });
 
   test.skipIf(skip)("un fichier écrit avant #365 (sans requête) est ignoré", async () => {

@@ -86,7 +86,8 @@ private class Driver {
         }
         "load" -> {
             val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
-            val loaded = store(op.str("store")).load(resource)
+            val query = op.str("query") ?: ""
+            val loaded = store(op.str("store")).load(resource, query)
             if (loaded == null) {
                 ok("found" to JVal.Bool(false))
             } else {
@@ -97,6 +98,23 @@ private class Driver {
                     "payload" to JVal.Str(loaded.payload),
                 )
             }
+        }
+        // TOUS les payloads de la ressource (#477 : une entrée par requête).
+        "payloads" -> {
+            val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
+            val payloads = store(op.str("store")).payloads(resource)
+            ok("payloads" to JVal.Arr(payloads.map { JVal.Str(it) }))
+        }
+        // Purge de la ressource : TOUTES ses entrées (#477).
+        "clear" -> {
+            val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
+            store(op.str("store")).clear(resource)
+            ok("ok" to JVal.Bool(true))
+        }
+        // Purge TOTALE (déconnexion) : plus aucune entrée, nulle part.
+        "clearAll" -> {
+            store(op.str("store")).clearAll()
+            ok("ok" to JVal.Bool(true))
         }
         // Fichier écrit AVANT #365 (pas de requête dans l'en-tête) : l'entrée
         // ne répond à aucune requête, elle doit être ignorée.
