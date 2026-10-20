@@ -337,6 +337,7 @@ class VsnBridge(
             "resources.sync" -> resourceSync()
             "capabilities.load" -> capabilitiesJson(force = false)
             "capabilities.refresh" -> capabilitiesJson(force = true)
+            "news.item" -> newsItem(p)
             "assignments.toggle" -> toggleAssignment(p)
             "assignments.attachment" -> openAttachment(p)
             "messages.list" -> messagesList()
@@ -629,6 +630,30 @@ class VsnBridge(
         // Capacités inconnues = rien n'est affirmé : liste complète.
         val tabs = CapabilitiesJson.parse(payload)?.tabs ?: Capabilities.TABS
         return JSONObject().put("tabs", JSONArray(tabs))
+    }
+
+    // --- Actualités -----------------------------------------------------------
+
+    /**
+     * Corps d'une actualité (#475) : lu À LA DEMANDE, au dépliage.
+     *
+     * La liste ne télécharge plus les corps (21 POST pour un écran dont
+     * l'élève ne lit que 2-3 actus) : celui-ci arrive ici, à la demande, en
+     * un POST. Le corps est une DONNÉE (texte brut), jamais du HTML (I6) : le
+     * JS l'affiche dans un nœud texte.
+     */
+    private fun newsItem(p: JSONObject): JSONObject {
+        val id = bounded(p.string("id"), 64)
+        if (id.isEmpty()) throw BridgeFailure("bad_request", "Actualité introuvable.")
+        val result = await<Pair<String?, String?>> { cb ->
+            repo.fetchNewsBody(id) { body, error -> cb(body to error) }
+        } ?: throw BridgeFailure("unavailable", "Actualité indisponible.")
+        val (body, error) = result
+        sessionOrThrow(error)
+        // Un échec de lecture = un REJET borné : la carte affiche son état
+        // (« Contenu indisponible. »), jamais une page d'erreur.
+        if (error != null) throw BridgeFailure("unavailable", error)
+        return JSONObject().put("body", body ?: "")
     }
 
     // --- Devoirs ---------------------------------------------------------------
@@ -1312,6 +1337,7 @@ class VsnBridge(
             "pairing.scanQr", "pairing.pair", "pairing.cancel",
             "resources.cached", "resources.load", "resources.invalidate", "resources.sync",
             "capabilities.load", "capabilities.refresh",
+            "news.item",
             "assignments.toggle", "assignments.attachment",
             "messages.list", "messages.thread", "messages.reply", "messages.create",
             "messages.setRead", "messages.delete", "messages.recipients",

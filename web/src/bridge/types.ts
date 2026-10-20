@@ -28,6 +28,7 @@ export const BRIDGE_METHODS = [
   "resources.sync",
   "capabilities.load",
   "capabilities.refresh",
+  "news.item",
   "assignments.toggle",
   "assignments.attachment",
   "messages.list",
