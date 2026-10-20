@@ -87,7 +87,9 @@ describe("invariants", () => {
     // `android/pronote/` (ADR-003) ; aucun autre module ne fait de réseau.
     const pronote = listFiles(join(ROOT, "android", "pronote"));
     expect(pronote.filter((f) => f.endsWith(".kt")).length).toBeGreaterThan(0);
-    const clients = pronote.filter((f) => /^class Client\(/m.test(codeOnly(readFileSync(f, "utf8"))));
+    // `Client` est `open` depuis #475 (le harnais de parité en dérive un
+    // client au stub) : le compte reste UN SEUL client Android.
+    const clients = pronote.filter((f) => /^(?:open )?class Client\(/m.test(codeOnly(readFileSync(f, "utf8"))));
     expect(clients.map((f) => f.replace(ROOT, ""))).toHaveLength(1);
   });
 
@@ -414,9 +416,11 @@ describe("invariants", () => {
     expect({ bad }).toEqual({ bad: [] });
     // Un seul transport : `class Client(` + sa base `open class ClientBase(`.
     // Un `class Client2(` ou `object XClient(` passerait l'ancien compteur.
+    // `Client` est `open` depuis #475 : le harnais de parité en dérive un
+    // client dont l'envoi est un stub (aucun réseau).
     const pronote = listFiles(join(ROOT, "android", "pronote")).filter((f) => f.endsWith(".kt"));
     const src = pronote.map((f) => codeOnly(readFileSync(f, "utf8"))).join("\n");
-    expect((src.match(/^class Client\(/gm) ?? []).length).toBe(1);
+    expect((src.match(/^(?:open )?class Client\(/gm) ?? []).length).toBe(1);
     expect((src.match(/^open class ClientBase\(/gm) ?? []).length).toBe(1);
     // `ClientInfo` = simple porteuse de données (pas de transport), tolérée.
     expect(src).not.toMatch(/^(?:open )?class (?!Client\(|ClientBase\(|ClientInfo\()\w*Client\w*\(/m);

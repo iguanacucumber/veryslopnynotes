@@ -3,7 +3,19 @@ import { useParisTz } from "./setup";
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { newsDateLabel, newsGroups, parseNewsPayload } from "../../web/src/features/news/news";
+import {
+  NEWS_BODY_ERROR,
+  needsNewsBody,
+  newsBodyCollapsible,
+  newsBodyFailed,
+  newsBodyLoaded,
+  newsBodyLoading,
+  newsBodyState,
+  newsBodyText,
+  newsDateLabel,
+  newsGroups,
+  parseNewsPayload,
+} from "../../web/src/features/news/news";
 import {
   CANTEEN_MAX_DAYS,
   canteenDayLabel,
@@ -97,6 +109,51 @@ describe("web actualités", () => {
   test("date longue française, vide si illisible", () => {
     expect(newsDateLabel("2026-10-16T12:00:00.000Z")).toContain("octobre 2026");
     expect(newsDateLabel("pas une date")).toBe("");
+  });
+});
+
+describe("web actualités — corps à la demande (#475)", () => {
+  test("sans corps, la carte propose de lire ; le corps reçu s'affiche", () => {
+    const absent = newsBodyState("");
+    expect(absent.status).toBe("absent");
+    // Le bouton de lecture est là : le corps n'est pas encore arrivé.
+    expect(needsNewsBody(absent)).toBe(true);
+    expect(newsBodyText(absent, false)).toBe("");
+
+    const loading = newsBodyLoading(absent);
+    expect(loading.status).toBe("loading");
+    // Pendant la demande, on ne redemande pas.
+    expect(needsNewsBody(loading)).toBe(false);
+
+    const loaded = newsBodyLoaded(loading, "Les ateliers ont lieu mardi.");
+    expect(loaded.status).toBe("loaded");
+    expect(loaded.body).toBe("Les ateliers ont lieu mardi.");
+    // Le corps reste affiché, et le bouton n'a plus lieu d'être.
+    expect(newsBodyText(loaded, false)).toBe("Les ateliers ont lieu mardi.");
+    expect(needsNewsBody(loaded)).toBe(false);
+  });
+
+  test("un corps déjà présent (cache ancien) s'affiche sans rien demander", () => {
+    const state = newsBodyState("Le self ferme vendredi.");
+    expect(state.status).toBe("loaded");
+    expect(needsNewsBody(state)).toBe(false);
+  });
+
+  test("un échec est dit, et la lecture peut être réessayée", () => {
+    const failed = newsBodyFailed(newsBodyState(""));
+    expect(failed.status).toBe("error");
+    expect(failed.error).toBe(NEWS_BODY_ERROR);
+    expect(failed.body).toBe("");
+    // Le bouton reste là : l'utilisateur peut réessayer.
+    expect(needsNewsBody(failed)).toBe(true);
+  });
+
+  test("un corps long s'affiche en aperçu, puis en entier une fois déplié", () => {
+    const long = "a".repeat(400);
+    const state = newsBodyLoaded(newsBodyState(""), long);
+    expect(newsBodyCollapsible(state)).toBe(true);
+    expect(newsBodyText(state, false).length).toBeLessThan(long.length);
+    expect(newsBodyText(state, true)).toBe(long);
   });
 });
 

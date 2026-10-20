@@ -110,19 +110,19 @@ const fixtures: Record<ResourceKey, unknown> = {
   },
   news: {
     __untrusted: true,
+    // #475 : la liste ne porte QUE les métadonnées : le corps se charge à la
+    // demande (`news.item`), comme le fait le pont natif.
     items: [
       {
         id: "n1",
         title: "Semaine de l'orientation",
         author: "Mme LEROY D.",
-        body: "Les ateliers d'orientation ont lieu mardi et jeudi au CDI. Inscription auprès de la vie scolaire.",
         publishedAt: iso(16, 8),
       },
       {
         id: "n2",
         title: "Menu du self",
         author: "Intendance",
-        body: "Le self ferme exceptionnellement vendredi à 12 h 30.",
         publishedAt: iso(14, 8),
       },
     ],
@@ -229,6 +229,12 @@ const revisions: unknown[] = [
 
 const sessions: SessionStatus = { state: "restored" };
 
+/** Corps des actus : servis À LA DEMANDE par `news.item` (#475). */
+const newsBodies: Record<string, string> = {
+  n1: "Les ateliers d'orientation ont lieu mardi et jeudi au CDI. Inscription auprès de la vie scolaire.",
+  n2: "Le self ferme exceptionnellement vendredi à 12 h 30.",
+};
+
 function resource(key: ResourceKey): ResourceResult {
   const payload = JSON.stringify(fixtures[key]);
   return { payload, fetchedAt: now, stale: false, error: null };
@@ -281,6 +287,8 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
     case "capabilities.load":
     case "capabilities.refresh":
       return ok({ tabs: (fixtures.capabilities as { items: { tabs: string[] } }).items.tabs }) as Promise<T>;
+    case "news.item":
+      return ok({ body: newsBodies[String(p["id"])] ?? "" }) as Promise<T>;
     case "assignments.toggle": {
       const items = (fixtures.assignments as { items: Array<{ id: string; done: boolean }> }).items;
       const found = items.find((a) => a.id === p["id"]);

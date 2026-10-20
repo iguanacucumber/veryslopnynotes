@@ -1,12 +1,18 @@
 import { useMemo, useState } from "react";
+import { bridge } from "../bridge/client";
 import { useResource } from "../ui/AppContext";
 import { Card, EmptyState, ErrorBox, Loading, Page, Section, StaleBadge } from "../ui/components";
 import { IconBell } from "../ui/icons";
 import {
-  NEWS_BODY_PREVIEW,
+  needsNewsBody,
+  newsBodyCollapsible,
+  newsBodyFailed,
+  newsBodyLoaded,
+  newsBodyLoading,
+  newsBodyState,
+  newsBodyText,
   newsByline,
   newsGroups,
-  newsPreview,
   parseNewsPayload,
   type NewsItem,
 } from "../features/news/news";
@@ -21,10 +27,25 @@ function NewsCard({
   read: boolean;
   onMarkRead: (id: string, title: string) => void;
 }) {
+  // #475 : le corps arrive À LA DEMANDE (au dépliage) : la liste ne le
+  // télécharge plus. Un corps déjà présent (cache ancien) s'affiche tel quel.
+  const [body, setBody] = useState(() => newsBodyState(item.body));
   const [expanded, setExpanded] = useState(false);
-  const collapsible = item.body.length > NEWS_BODY_PREVIEW;
-  const body = expanded || !collapsible ? item.body : newsPreview(item.body);
+  const collapsible = newsBodyCollapsible(body);
+  const text = newsBodyText(body, expanded);
   const byline = newsByline(item);
+
+  const load = () => {
+    if (!needsNewsBody(body)) return;
+    setBody(newsBodyLoading(body));
+    void bridge.newsItem(item.id).then(
+      (result) => {
+        setBody(newsBodyLoaded(body, typeof result?.body === "string" ? result.body : ""));
+        setExpanded(true);
+      },
+      () => setBody(newsBodyFailed(body)),
+    );
+  };
 
   return (
     <Card as="article" className={`stack news-card${read ? "" : " news-card--unread"}`}>
@@ -39,9 +60,29 @@ function NewsCard({
           {byline}
         </p>
       ) : null}
-      {body ? (
+      {text ? (
         <p className="t-body-m" style={{ margin: 0, whiteSpace: "pre-wrap" }}>
-          {body}
+          {text}
+        </p>
+      ) : null}
+      {needsNewsBody(body) ? (
+        <button
+          type="button"
+          className="btn btn--ghost btn--small"
+          aria-label={`Lire l’actualité « ${item.title} »`}
+          onClick={load}
+        >
+          Lire le texte
+        </button>
+      ) : null}
+      {body.status === "loading" ? (
+        <p className="tiny muted" role="status" style={{ margin: 0 }}>
+          Chargement du texte…
+        </p>
+      ) : null}
+      {body.error ? (
+        <p className="tiny" role="status" style={{ margin: 0, color: "var(--danger-ink)" }}>
+          {body.error}
         </p>
       ) : null}
       {collapsible ? (

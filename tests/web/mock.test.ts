@@ -66,6 +66,18 @@ describe("pont factice", () => {
     expect(status.state).toBe("restored");
   });
 
+  test("le corps d'une actualité arrive À LA DEMANDE (#475)", async () => {
+    const news = parseNewsPayload(await payloadOf("news"));
+    expect(news.length).toBeGreaterThan(0);
+    // La liste ne porte QUE les métadonnées : le corps est ailleurs.
+    expect(news[0]?.body).toBe("");
+    const body = await mockCall<{ body: string }>("news.item", { id: news[0]?.id });
+    expect(body.body.length).toBeGreaterThan(0);
+    // Un identifiant inconnu = corps vide, jamais une exception.
+    const missing = await mockCall<{ body: string }>("news.item", { id: "inconnu" });
+    expect(missing.body).toBe("");
+  });
+
   test("appairage sans PIN refusé, avec PIN accepté", async () => {
     const bad = await mockCall<PairResult>("pairing.pair", {
       qr: { login: "x", jeton: "y", url: "https://school.invalid" },
