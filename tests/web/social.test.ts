@@ -17,6 +17,7 @@ import {
   parseDiscussions,
   parseInstant,
   parseMessages,
+  parseParticipants,
   parseRecipients,
   pickedCountLabel,
   searchDiscussions,
@@ -64,6 +65,39 @@ const discussionPayload = JSON.stringify({
     { id: "", subject: "Identifiant vide", updatedAt: "2026-10-11T09:00:00.000Z" },
     { id: "d", subject: "", updatedAt: "2026-10-01T00:00:00.000Z" },
   ],
+});
+
+describe("messagerie — participants à la demande (#476)", () => {
+  test("les participants arrivent AVEC le fil ouvert", () => {
+    const payload = JSON.stringify({
+      messages: [{ id: "m1", discussionId: "d1", body: "Bonjour", sentAt: "2026-10-18T09:00:00Z" }],
+      participants: ["M. MARTIN C.", "DUPONT Camille"],
+    });
+    expect(parseParticipants(payload)).toEqual(["M. MARTIN C.", "DUPONT Camille"]);
+    // Les messages du même payload restent lisibles.
+    expect(parseMessages(payload)).toHaveLength(1);
+  });
+
+  test("payload sans participants = aucun nom, jamais une exception", () => {
+    expect(parseParticipants(null)).toEqual([]);
+    expect(parseParticipants("{pas du json")).toEqual([]);
+    expect(parseParticipants(JSON.stringify({ messages: [] }))).toEqual([]);
+    expect(parseParticipants(JSON.stringify({ participants: "non" }))).toEqual([]);
+  });
+
+  test("la recherche par participant ne porte plus sur la liste", () => {
+    // La LISTE ne porte plus les participants (les noms seraient douze
+    // requêtes de plus) : le nom ne trouve plus le fil.
+    const list = parseDiscussions(JSON.stringify({ discussions: [{ id: "a", subject: "Économie — DM" }] }));
+    expect(list[0]?.participants).toEqual([]);
+    expect(searchDiscussions(list, "Leroy")).toEqual([]);
+    // Le SUJET, lui, se trouve toujours.
+    expect(searchDiscussions(list, "economie").map((d) => d.id)).toEqual(["a"]);
+  });
+
+  test("l'interface ne promet plus la recherche par participant", () => {
+    expect(read("features/messages/MessagesScreen.tsx")).not.toContain("ni participant");
+  });
 });
 
 describe("messagerie — lecture défensive", () => {

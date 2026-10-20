@@ -190,12 +190,15 @@ const threads: Record<string, unknown> = {
     items: [
       { id: "m1", discussionId: "d1", authorName: "M. MARTIN C.", body: "Le DS de rattrapage aura lieu vendredi en salle poly.", sentAt: iso(18, 9) },
     ],
+    // #476 : les participants arrivent avec le fil OUVERT.
+    participants: ["M. MARTIN C.", "DUPONT Camille"],
   },
   d2: {
     __untrusted: true,
     items: [
       { id: "m2", discussionId: "d2", authorName: "Mme LEROY D.", body: "Pensez à rendre l'autorisation signée avant jeudi.", sentAt: iso(15, 14) },
     ],
+    participants: ["Mme LEROY D.", "DUPONT Camille"],
   },
 };
 
