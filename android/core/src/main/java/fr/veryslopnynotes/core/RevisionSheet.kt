@@ -544,17 +544,39 @@ private fun revisionModelCitations(text: String): List<String> {
 /**
  * Texte SANS son bloc « Sources : » : ce que l'export dessine.
  *
- * Seul le bloc part (l'en-tête et ses entrées à puce) : le reste du corps
- * n'est jamais perdu.
+ * Le bloc du modèle ne part que s'il est le DERNIER bloc du corps (#499) :
+ * sinon il effacerait le contenu du cours. Avant, le bloc était retiré en
+ * bloc, jusqu'à la fin du corps : une fiche dont le texte contenait
+ * « Sources : » AU MILIEU perdait toutes les lignes suivantes — du corps ET
+ * de l'export PDF, silencieusement (I15 : le corps est ENTIER).
+ *
+ * Dans le cas d'un bloc AU MILIEU, seules les puces qui sont des CITATIONS
+ * (une source canonique) sont retirées : une puce qui n'est pas une source
+ * est du contenu, elle reste.
  */
-private fun revisionContent(text: String): String {
+private fun revisionContent(text: String, allowed: Set<String>): String {
     val lines = text.split("\n")
     val heading = revisionSourcesHeading(lines)
     if (heading < 0) return text.trim()
     val end = revisionSourcesBlockEnd(lines, heading)
+    // Le bloc est-il le dernier ? (rien de non vide après)
+    var last = true
+    for (i in end until lines.size) {
+        if (lines[i].trim().isNotEmpty()) {
+            last = false
+            break
+        }
+    }
     val kept = mutableListOf<String>()
     for (i in lines.indices) {
-        if (i == heading || (i > heading && i < end)) continue
+        if (i == heading) continue
+        if (i > heading && i < end) {
+            val t = lines[i].trim()
+            if (t.isEmpty()) continue
+            if (last) continue // bloc final : il est REMPLACÉ par la liste canonique
+            // Bloc au milieu : seule une citation (une source canonique) part.
+            if (isRevisionSourceEntry(t) && t.substring(1).trim() in allowed) continue
+        }
         kept.add(lines[i])
     }
     return kept.joinToString("\n").trim()
@@ -590,7 +612,7 @@ fun revisionSheetSources(modelText: String, canonicalSources: List<String>): Lis
  */
 fun revisionSheetBody(modelText: String, canonicalSources: List<String>): String {
     val sources = revisionSheetSources(modelText, canonicalSources)
-    val content = revisionContent(modelText)
+    val content = revisionContent(modelText, sources.toSet())
     val block = (listOf(REVISION_SOURCES_HEADING) + sources.map { "- $it" }).joinToString("\n")
     return if (content.isEmpty()) block else "$content\n\n$block"
 }
@@ -618,7 +640,7 @@ const val REVISION_PDF_WRAP = 90
  */
 fun revisionPdfLines(sheet: RevisionSheet): List<String> {
     if (!isRevisionSheetValid(sheet)) throw IllegalArgumentException("fiche invalide (contrat)")
-    val content = revisionContent(sheet.body)
+    val content = revisionContent(sheet.body, sheet.sources.toSet())
     // Garde I5 : le corps du modèle est borné (MAX_OUTPUT_CHARS). Un corps
     // plus long (magasin altéré) est tronqué — et SIGNALÉ, jamais en silence.
     val truncated = content.length > MAX_OUTPUT_CHARS

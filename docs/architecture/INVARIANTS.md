@@ -231,7 +231,12 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   jamais un bloc « Sources : » recopié du texte libre du modèle : une
   citation écrite par le modèle ne peut ni remplacer l'attribution ni
   introduire une source absente du corpus (citations validées comme le chemin
-  devoirs, `HomeworkAi.parseHomeworkResponse`). Une troncature — au-delà de
+  devoirs, `HomeworkAi.parseHomeworkResponse`). Le bloc « Sources : » du modèle
+  n'est retiré que s'il est le **dernier** bloc du corps : un « Sources : » au
+  milieu (le cours en contient un, ou le modèle en cite un) ne mange plus le
+  contenu qui suit — les puces qui ne sont pas des sources canoniques sont du
+  CONTENU, elles restent (#499) ; une citation libre, elle, n'entre jamais dans
+  la liste des sources. Une troncature — au-delà de
   la garde I5 (12 000 caractères) ou du filet de sécurité du rendu — est
   SIGNALÉE (« suite tronquée »), jamais silencieuse.
 - Test : `tests/unit/kotlin-revision-sheet.test.ts` (Kotlin compilé : corps
