@@ -270,6 +270,17 @@ export interface ParityToolchain {
 function toolchain(): ParityToolchain {
   const skipReason = computeSkipReason();
   if (skipReason) {
+    // #491 : le GATE exige la chaîne Kotlin (`REQUIRE_KOTLIN_TOOLCHAIN=1`) :
+    // sans elle, toute la parité saute et le gate est vert sans une ligne de
+    // production Kotlin exécutée (I4/I5/I6/I12/I14/I16/I18/I19/I20/I21 non
+    // vérifiées) — un faux vert. L'itération (`make check-fast`, `make watch`)
+    // garde le SKIP bruyant.
+    if (process.env.REQUIRE_KOTLIN_TOOLCHAIN === "1") {
+      throw new Error(
+        `outillage Kotlin ABSENT — la parité TS <-> Kotlin n'est PAS vérifiée : ${skipReason} ` +
+          "(installez `kotlinc`, ou pointez KOTLINC_BIN/KOTLIN_JAVA_BIN ; le gate l'exige).",
+      );
+    }
     console.warn(
       "\n" +
         "  SKIP BRUYANT — parité TS <-> Kotlin non vérifiée.\n" +
