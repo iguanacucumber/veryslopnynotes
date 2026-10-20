@@ -85,7 +85,7 @@ export function ConversationListScreen({
           title={query.trim() ? "Aucune discussion ne correspond." : "Aucune discussion."}
           body={
             query.trim()
-              ? "Aucun sujet ni participant ne porte ces mots."
+              ? "Aucun sujet ne porte ces mots."
               : "L’établissement n’a publié aucune discussion."
           }
           action={

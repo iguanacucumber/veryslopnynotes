@@ -25,6 +25,18 @@ import org.json.JSONObject
  */
 data class DiscussionWriteOutcome(val ok: Boolean, val error: String?)
 
+/**
+ * Un fil OUVERT : ses messages et ses participants (#476).
+ *
+ * Les participants ne sont plus téléchargés pour TOUTE la liste : ils sont
+ * demandés à l'ouverture du fil (un POST de plus là, douze de moins dans la
+ * liste).
+ */
+data class DiscussionThread(
+    val messages: List<DiscussionMessage>,
+    val participants: List<String>,
+)
+
 class DiscussionsRepository(
     private val cache: CacheStore,
     private val provider: PronoteClientProvider = { PronoteSession.client },
@@ -34,31 +46,34 @@ class DiscussionsRepository(
     /**
      * Messages d'un fil : lus à la demande, JAMAIS en cache (donnée personnelle).
      * Fil vide/illisible = liste vide, l'écran affiche son état vide propre.
+     *
+     * #476 : les PARTICIPANTS du fil voyagent avec ses messages (ils sont
+     * demandés à l'ouverture, plus pour toute la liste).
      */
-    fun fetchMessages(discussionId: String, cb: (List<DiscussionMessage>, String?) -> Unit) {
+    fun fetchMessages(discussionId: String, cb: (DiscussionThread?, String?) -> Unit) {
         Thread {
             val client = provider()
             if (client == null) {
                 // Sans session : liste vide, état vide propre — pas d'écran
                 // d'erreur plein-écran pour l'absence de connexion (#260).
-                post { cb(emptyList(), null) }
+                post { cb(null, null) }
                 return@Thread
             }
             try {
                 val target = boundedCp(discussionId, 64)
                 val discussion = client.discussions().firstOrNull { it.id == target }
                 if (discussion == null) {
-                    post { cb(emptyList(), "Fil introuvable.") }
+                    post { cb(null, "Fil introuvable.") }
                     return@Thread
                 }
                 val body = messagesPayload(discussionId, discussion)
-                post { cb(parseMessages(body), null) }
+                post { cb(parseThread(body), null) }
             } catch (e: Exception) {
                 if (isSessionFailure(e)) {
                     DeviceAuth.reject()
-                    post { cb(emptyList(), DeviceAuth.REJECTED_MESSAGE) }
+                    post { cb(null, DeviceAuth.REJECTED_MESSAGE) }
                 } else {
-                    post { cb(emptyList(), null) }
+                    post { cb(null, null) }
                 }
             }
         }.start()
@@ -276,6 +291,23 @@ class DiscussionsRepository(
                 if (m.isValid()) out.add(m)
             }
             return out
+        }
+
+        /**
+         * Un fil ouvert : ses messages et ses participants (#476).
+         *
+         * Les participants sont Bornés (20) et ignorés s'ils sont vides : un
+         * nom de participant est une DONNÉE affichée telle quelle.
+         */
+        fun parseThread(body: String): DiscussionThread {
+            val root = JSONObject(body)
+            val parts = mutableListOf<String>()
+            val pArr = root.optJSONArray("participants")
+            for (i in 0 until (pArr?.length() ?: 0)) {
+                val name = pArr?.optString(i, "") ?: ""
+                if (name.isNotBlank()) parts.add(name)
+            }
+            return DiscussionThread(parseMessages(body), parts)
         }
 
         /** Pièces jointes : `ref` en URL = rejetée (règle d'or média, I1). */

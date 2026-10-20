@@ -185,8 +185,27 @@ export function parseMessages(payload: string | null): DiscussionMessage[] {
   return out;
 }
 
-export function parseRecipients(payload: string | null): DiscussionRecipient[] {
+/**
+ * Participants d'un fil OUVERT (#476) : ils arrivent avec ses messages.
+ *
+ * La LISTE ne les porte plus (les noms seraient douze requêtes de plus pour
+ * un écran qui les affiche à peine) : une recherche par nom de participant ne
+ * porte donc plus sur la liste, les noms arrivent à l'ouverture du fil.
+ */
+export function parseParticipants(payload: string | null): string[] {
   const root = payloadRoot(payload);
+  if (!root) return [];
+  const raw = root["participants"];
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const part of raw) {
+    const name = text(part, MAX_NAME);
+    if (name) out.push(name);
+  }
+  return out.slice(0, MAX_PARTICIPANTS);
+}
+
+export function parseRecipients(payload: string | null): DiscussionRecipient[] {  const root = payloadRoot(payload);
   if (!root) return [];
   const out: DiscussionRecipient[] = [];
   for (const raw of arrayOf(root, "recipients")) {

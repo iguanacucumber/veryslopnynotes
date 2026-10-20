@@ -10,6 +10,7 @@ import {
   messagePreview,
   parseDiscussions,
   parseMessages,
+  parseParticipants,
   parseRecipients,
   searchDiscussions,
   sortDiscussions,
@@ -87,6 +88,18 @@ export default function MessagesRoute() {
       if (result.error) setThreadError(result.error);
       const parsed = parseMessages(result.payload);
       setMessages(parsed);
+      // #476 : les participants du fil arrivent AVEC ses messages (la liste ne
+      // les télécharge plus) : on les garde pour l'en-tête du fil et pour la
+      // ligne de la liste.
+      const participants = parseParticipants(result.payload);
+      if (participants.length > 0) {
+        setOpen((current) =>
+          current && current.id === discussion.id ? { ...current, participants } : current,
+        );
+        setThreads((current) =>
+          current.map((d) => (d.id === discussion.id ? { ...d, participants } : d)),
+        );
+      }
       const last = parsed[parsed.length - 1];
       if (last) {
         setPreviews((current) => ({ ...current, [discussion.id]: messagePreview(last.body) }));
