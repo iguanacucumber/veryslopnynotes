@@ -92,88 +92,96 @@ class PairingRepository(
      * identifie CET appareil auprès de l'établissement (2e tour 2FA) : un par
      * appairage, persisté avec la session (le re-pair en régénère un).
      */
-    fun pairBlocking(input: PairingInput, deviceName: String = "", uuid: String = newUuid()): PairingResult {
-        // QR + PIN = la seule méthode : sans les deux, pas d'appel réseau (le
-        // téléphone refuserait comme l'établissement, en plus lent).
-        val qr = input.qr
-        val pin = input.pin.trim()
-        if (qr == null || pin.isEmpty()) {
-            return PairingResult.Err("bad_request", "QR de l'établissement et son PIN requis")
-        }
-        if (pin.length > PIN_MAX_CHARS) {
-            return PairingResult.Err("bad_request", "PIN refusé : vérifie le code défini dans ton compte établissement.")
-        }
-        // L'adresse vient du QR (#299) : `parseSchoolQr` refuse déjà un QR sans
-        // URL, donc elle est là et bornée. Le client la revalide.
-        val schoolUrl = qr.url
-        val client = try {
-            Client.qrcodeLogin(
-                QrCode(login = qr.login, jeton = qr.jeton, url = schoolUrl),
-                pin,
-                uuid,
-                QrLoginOptions(
-                    deviceName = deviceName.trim().ifEmpty { null },
-                    // #473 : mémo des lectures identiques (60 s) — l'app redemande
-                    // moins souvent la même chose à l'établissement.
-                    memoizeReads = true,
-                ),
-            )
-        } catch (e: IllegalArgumentException) {
-            // URL du QR illisible (URI malformée) : la faute est dans le code
-            // scanné, donc le seul geste utile est de le rescanner.
-            return PairingResult.Err("bad_request", "QR sans adresse d'établissement valide : rescane le code affiché par son application.")
-        } catch (e: Exception) {
-            return failure(e)
-        }
-        // La session vit en mémoire (lectures) ET sur disque chiffré (redémarrage).
-        PronoteSession.set(client)
-        // L'identifiant du compte : l'id de la ressource client — PAS le login,
-        // PAS le jeton (un accountId n'est pas un secret). Il devient connu à
-        // l'appairage : c'est le moment d'enregistrer le compte (#397).
-        val accountId = try {
-            client.infoId?.trim()?.takeIf { it.isNotEmpty() }
-        } catch (_: Exception) {
-            null
-        }
-        try {
-            // Déstructuré, pas nommé : le champ du port s'appelle `pronoteUrl`
-            // (I1 : ce mot ne figure dans aucun identifiant hors `android/pronote/`).
-            val (endpoint, username, password, clientId, rebuiltUuid) = client.exportCredentials()
-            // #407 : le compte vient de changer ? Alors le cache du compte
-            // précédent part : il ne doit JAMAIS être servi au nouveau compte.
-            // L'identité vient de la session PERSISTÉE (toujours présente,
-            // contrairement à `AccountStore.current()`) et de celle qu'on
-            // appaire maintenant.
-            // La purge est AVANT `sessions.save` : si le process meurt entre
-            // les deux, la session restaurée est l'ANCIENNE (dont le cache
-            // vient d'être purgé), jamais le nouveau compte avec le cache de
-            // l'ancien.
-            val previous = try {
-                sessions.load()?.let { AccountIdentity.of(it.endpointUrl, it.username) }
+    fun pairBlocking(input: PairingInput, deviceName: String = "", uuid: String = newUuid()): PairingResult =
+        // MÊME VERROU que la restauration (#507) : l'appairage ouvre une
+        // session comme la restauration, donc il ne doit pas non plus courir
+        // en parallèle d'un restore (pont OU job de fond) — deux `tokenLogin`
+        // sur le même compte = erreur 25, et l'établissement LIMITE le compte.
+        //
+        // Le pont garde en plus son propre verrou (il protège `sessionReady`) :
+        // l'ordre est toujours pont -> dépôt, donc pas d'inversion.
+        synchronized(restoreLock) {
+            // QR + PIN = la seule méthode : sans les deux, pas d'appel réseau (le
+            // téléphone refuserait comme l'établissement, en plus lent).
+            val qr = input.qr
+            val pin = input.pin.trim()
+            if (qr == null || pin.isEmpty()) {
+                return@synchronized PairingResult.Err("bad_request", "QR de l'établissement et son PIN requis")
+            }
+            if (pin.length > PIN_MAX_CHARS) {
+                return@synchronized PairingResult.Err("bad_request", "PIN refusé : vérifie le code défini dans ton compte établissement.")
+            }
+            // L'adresse vient du QR (#299) : `parseSchoolQr` refuse déjà un QR sans
+            // URL, donc elle est là et bornée. Le client la revalide.
+            val schoolUrl = qr.url
+            val client = try {
+                Client.qrcodeLogin(
+                    QrCode(login = qr.login, jeton = qr.jeton, url = schoolUrl),
+                    pin,
+                    uuid,
+                    QrLoginOptions(
+                        deviceName = deviceName.trim().ifEmpty { null },
+                        // #473 : mémo des lectures identiques (60 s) — l'app redemande
+                        // moins souvent la même chose à l'établissement.
+                        memoizeReads = true,
+                    ),
+                )
+            } catch (e: IllegalArgumentException) {
+                // URL du QR illisible (URI malformée) : la faute est dans le code
+                // scanné, donc le seul geste utile est de le rescanner.
+                return@synchronized PairingResult.Err("bad_request", "QR sans adresse d'établissement valide : rescane le code affiché par son application.")
+            } catch (e: Exception) {
+                return@synchronized failure(e)
+            }
+            // La session vit en mémoire (lectures) ET sur disque chiffré (redémarrage).
+            PronoteSession.set(client)
+            // L'identifiant du compte : l'id de la ressource client — PAS le login,
+            // PAS le jeton (un accountId n'est pas un secret). Il devient connu à
+            // l'appairage : c'est le moment d'enregistrer le compte (#397).
+            val accountId = try {
+                client.infoId?.trim()?.takeIf { it.isNotEmpty() }
             } catch (_: Exception) {
                 null
             }
-            CacheScope.onAccountPaired(
-                cacheStore,
-                previous,
-                AccountIdentity.of(endpoint, username),
-            )
-            sessions.save(
-                StoredSession(
-                    endpointUrl = endpoint,
-                    username = username,
-                    password = password,
-                    uuid = rebuiltUuid,
-                    clientIdentifier = clientId,
-                    schoolUrl = schoolUrl,
-                ),
-            )
-        } catch (_: Exception) {
-            PronoteSession.clear()
-            return PairingResult.Err("internal", "Session illisible : réessaie l'appairage.")
+            try {
+                // Déstructuré, pas nommé : le champ du port s'appelle `pronoteUrl`
+                // (I1 : ce mot ne figure dans aucun identifiant hors `android/pronote/`).
+                val (endpoint, username, password, clientId, rebuiltUuid) = client.exportCredentials()
+                // #407 : le compte vient de changer ? Alors le cache du compte
+                // précédent part : il ne doit JAMAIS être servi au nouveau compte.
+                // L'identité vient de la session PERSISTÉE (toujours présente,
+                // contrairement à `AccountStore.current()`) et de celle qu'on
+                // appaire maintenant.
+                // La purge est AVANT `sessions.save` : si le process meurt entre
+                // les deux, la session restaurée est l'ANCIENNE (dont le cache
+                // vient d'être purgé), jamais le nouveau compte avec le cache de
+                // l'ancien.
+                val previous = try {
+                    sessions.load()?.let { AccountIdentity.of(it.endpointUrl, it.username) }
+                } catch (_: Exception) {
+                    null
+                }
+                CacheScope.onAccountPaired(
+                    cacheStore,
+                    previous,
+                    AccountIdentity.of(endpoint, username),
+                )
+                sessions.save(
+                    StoredSession(
+                        endpointUrl = endpoint,
+                        username = username,
+                        password = password,
+                        uuid = rebuiltUuid,
+                        clientIdentifier = clientId,
+                        schoolUrl = schoolUrl,
+                    ),
+                )
+            } catch (_: Exception) {
+                PronoteSession.clear()
+                return@synchronized PairingResult.Err("internal", "Session illisible : réessaie l'appairage.")
+            }
+            return@synchronized PairingResult.Ok(accountId)
         }
-        return PairingResult.Ok(accountId)
-    }
 
     /**
      * Restauration au démarrage : le jeton persisté rouvre la session SANS

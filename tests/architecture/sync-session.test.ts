@@ -74,4 +74,22 @@ describe("session du job de fond (#406)", () => {
     // verrou d'instance : le worker et le pont n'ont pas le même dépôt.
     expect(pairing).toMatch(/companion object \{[\s\S]*private val restoreLock = Any\(\)/);
   });
+
+  // #507 : l'appairage ouvre une session comme la restauration — il devait
+  // donc prendre le MÊME verrou. Sans cela, un appairage (pont) et une
+  // restauration (job de fond) pouvaient courir en parallèle : deux
+  // authentifications sur le même compte (erreur 25), et le client en RAM
+  // pouvait être celui d'un compte pendant que la session persistée était
+  // celle de l'autre.
+  test("l'appairage prend le MÊME verrou de restauration", () => {
+    const pairing = readFileSync(PAIRING, "utf8");
+    const start = pairing.indexOf("fun pairBlocking(");
+    const end = pairing.indexOf("fun restoreBlocking()", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const body = pairing.slice(start, end);
+    // Le verrou partagé du dépôt (pas un verrou d'instance, pas celui du
+    // pont : le pont a le sien pour `sessionReady`).
+    expect(body).toContain("synchronized(restoreLock)");
+  });
 });
