@@ -17,6 +17,7 @@
 import { describe, expect, jest, test } from "bun:test";
 import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createServer, type AddressInfo, type Socket } from "node:net";
 import { CookieJar } from "tough-cookie";
@@ -1092,6 +1093,31 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
       }
     }
   }, 30000);
+
+  // #497 : la détection d'une `Location` illisible ne doit PAS dépendre de la
+  // JVM : le constructeur `java.net.URL` valide l'hôte selon la version (JDK 17
+  // ACCEPTE « http://ho st/x », JDK 25 le refuse). Le port valide donc l'hôte
+  // lui-même, sinon l'erreur remontée à l'app change de nature selon la JVM
+  // (UnknownHostException brute au lieu de la panne réseau mappée).
+  test("le port valide l'hôte de la redirection lui-même (indépendant de la JVM)", () => {
+    const port = readFileSync(
+      join(
+        ROOT,
+        "android",
+        "pronote",
+        "src",
+        "main",
+        "java",
+        "fr",
+        "veryslopnynotes",
+        "pronote",
+        "HttpSession.kt",
+      ),
+      "utf8",
+    );
+    expect(port).toMatch(/host\.isEmpty\(\)\s*\|\|\s*host\.any/);
+    expect(port).toContain("Redirection invalide");
+  });
 
   // #429 : un site d'établissement SANS chemin (`https://host`) doit viser la
   // MÊME page que la référence — l'ancien découpage coupait l'AUTORITÉ en
