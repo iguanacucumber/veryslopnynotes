@@ -31,10 +31,11 @@ class SyncedRepository(
     private val main: Handler = Handler(Looper.getMainLooper()),
     private val provider: PronoteClientProvider = { PronoteSession.client },
 ) {
-    // File d'attente unique (#310) : UN appel client a la fois, dans l'ordre
-    // d'arrivee. Le client local est mutable (refresh() reassigne son etat) :
-    // deux lectures concurrentes = course et login en double.
-    private val queue = LocalRequestQueue<RefreshOutcome>()
+    // La file PARTAGÉE (#403) : UN appel client à la fois dans le process, pour
+    // TOUS (les écrans ET le job de fond). Le client local est mutable
+    // (refresh() reassigne son etat) : deux lectures concurrentes = course et
+    // login en double. Avant, chaque dépôt avait SA file : le job de fond et
+    // l'interface pouvaient se croiser.
 
     fun cached(resource: String): CachedEntry? = store.load(resource)
 
@@ -103,7 +104,7 @@ class SyncedRepository(
         // Cle de dedoublonnage : ressource|query. Deux lectures identiques EN VOL
         // = une seule execution du client, le MEME RefreshOutcome pour tous les
         // callbacks (relayes un par un sur le main thread).
-        queue.submit(
+        ClientQueue.submit(
             "$resource|$query",
             work = { readOutcome(save, resource, query) },
             deliver = { o -> post(cb, o) },
@@ -183,7 +184,7 @@ class SyncedRepository(
         }
         // Relectures simultanees = UN seul ping (cle sans query : la requete ne
         // depend d'aucun ecran) ; tous les callbacks recoivent le meme outcome.
-        queue.submit("sync|", work = { syncOutcome() }, deliver = { o -> post(cb, o) })
+        ClientQueue.submit("sync|", work = { syncOutcome() }, deliver = { o -> post(cb, o) })
     }
 
     private fun syncOutcome(): RefreshOutcome {
@@ -225,7 +226,7 @@ class SyncedRepository(
         }
         // Dédoublonnage (#310) : deux écrans qui demandent les tranches en meme
         // temps declenchent UNE lecture locale, pas deux.
-        queue.submit("periods|", work = { periodsOutcome() }, deliver = { o -> post(cb, o) })
+        ClientQueue.submit("periods|", work = { periodsOutcome() }, deliver = { o -> post(cb, o) })
     }
 
     private fun periodsOutcome(): RefreshOutcome {
@@ -250,6 +251,10 @@ class SyncedRepository(
     /**
      * Lecture d'une ressource sur le client local. `null` = pas de session
      * ([NoLocalSession] : repli cache, comme un reseau KO).
+     *
+     * #403 : la lecture elle-même est faite par `cachedRead` (la porte unique),
+     * et elle est exécutée DANS la file partagée : le client n'est jamais lu
+     * en direct.
      */
     private fun readLocal(resource: String, query: String): String {
         val client = try {
@@ -257,22 +262,11 @@ class SyncedRepository(
         } catch (_: Exception) {
             null
         } ?: throw NoLocalSession()
-        val q = parseQuery(query)
-        return when (resource) {
-            CachePolicy.GRADES -> gradesPayload(client, q)
-            CachePolicy.ASSIGNMENTS -> assignmentsPayload(client, q)
-            CachePolicy.TIMETABLE -> timetablePayload(client, q)
-            CachePolicy.NEWS -> newsPayload(client)
-            CachePolicy.MENUS -> menusPayload(client)
-            CachePolicy.ATTENDANCE -> attendancePayload(client)
-            CachePolicy.PUNISHMENTS -> punishmentsPayload(client)
-            CachePolicy.CAPABILITIES -> capabilitiesPayload(client)
-            CachePolicy.DISCUSSIONS -> discussionsPayload(client)
-            // Alertes : balayage des contenus DEJA en cache (aucun reseau :
-            // marche hors ligne, frais = « heuristique, rien trouve »).
-            CachePolicy.SECURITY_ALERTS -> alertsPayload(scanTexts())
-            else -> throw IllegalArgumentException("ressource non cachable: $resource")
-        }
+        // Alertes : balayage des contenus DEJA en cache (aucun reseau : marche
+        // hors ligne, frais = « heuristique, rien trouve ») — ce n'est pas une
+        // lecture du client.
+        if (resource == CachePolicy.SECURITY_ALERTS) return alertsPayload(scanTexts())
+        return cachedRead(client, resource, query)
     }
 
     private fun scanTexts(): List<SecurityAlert.ScannableText> {
