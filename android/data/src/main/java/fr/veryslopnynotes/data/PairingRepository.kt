@@ -42,7 +42,13 @@ data class PairingInput(
 
 /** Sortie de l'appairage local, avec un message prêt à afficher pour chaque refus. */
 sealed interface PairingResult {
-    data class Ok(val schoolUrl: String) : PairingResult
+    /**
+     * Appairé. [accountId] identifie le compte (l'id de la ressource client) :
+     * c'est lui que le magasin multi-compte enregistre à l'appairage (#397).
+     * `null` = identifiant inconnu — l'appairage reste réussi, le compte n'est
+     * simplement pas nommé.
+     */
+    data class Ok(val accountId: String?) : PairingResult
     data class Err(val code: String, val message: String) : PairingResult
 }
 
@@ -116,6 +122,14 @@ class PairingRepository(
         }
         // La session vit en mémoire (lectures) ET sur disque chiffré (redémarrage).
         PronoteSession.set(client)
+        // L'identifiant du compte : l'id de la ressource client — PAS le login,
+        // PAS le jeton (un accountId n'est pas un secret). Il devient connu à
+        // l'appairage : c'est le moment d'enregistrer le compte (#397).
+        val accountId = try {
+            client.infoId?.trim()?.takeIf { it.isNotEmpty() }
+        } catch (_: Exception) {
+            null
+        }
         try {
             // Déstructuré, pas nommé : le champ du port s'appelle `pronoteUrl`
             // (I1 : ce mot ne figure dans aucun identifiant hors `android/pronote/`).
@@ -153,7 +167,7 @@ class PairingRepository(
             PronoteSession.clear()
             return PairingResult.Err("internal", "Session illisible : réessaie l'appairage.")
         }
-        return PairingResult.Ok(schoolUrl)
+        return PairingResult.Ok(accountId)
     }
 
     /**
