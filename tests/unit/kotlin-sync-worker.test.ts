@@ -94,3 +94,30 @@ describe("job de fond : lecture par la file partagée (#403)", () => {
     expect(ok.payload).toBe("payload");
   });
 });
+
+// #485 : G=22 (« l'objet vient d'une session précédente ») n'est PAS une
+// session MORTE. Le message de l'établissement contient le mot « session »,
+// donc la détection par motif classait un objet périmé en session morte ->
+// logout + purge du cache hors ligne.
+describe("session morte : G=22 n'en est PAS une", () => {
+  test.skipIf(skip)("G=22 -> réessai, jamais « session morte »", async () => {
+    const r = await ask({ op: "decision", kind: "expiredObject" });
+    expect(r.decision).toBe("retry");
+  });
+
+  test("le VRAI message G=22 contient bien « session » (l'exclusion par type est donc nécessaire)", () => {
+    // Le message est lu dans la source de production : si PRONOTE change de
+    // formulation, le test suit — il ne fige pas une recopie.
+    const comm = readFileSync(
+      join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote", "Communication.kt"),
+      "utf8",
+    );
+    const m = comm.match(/22 to "([^"]+)"/);
+    expect(m).not.toBeNull();
+    expect(m![1]).toMatch(/session/i);
+    // Et la décision tranche par TYPE : `ExpiredObject` est exclu, pas son
+    // message.
+    const failure = readFileSync(join(DATA, "SessionFailure.kt"), "utf8");
+    expect(failure).toContain("e is ExpiredObject");
+  });
+});

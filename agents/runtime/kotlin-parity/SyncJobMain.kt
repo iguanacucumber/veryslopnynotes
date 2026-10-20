@@ -18,8 +18,10 @@ import fr.veryslopnynotes.data.SyncJobRead
 import fr.veryslopnynotes.data.safeRead
 import fr.veryslopnynotes.data.syncJobDecision
 import fr.veryslopnynotes.data.syncJobOutcome
+import fr.veryslopnynotes.pronote.ExpiredObject
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
+import fr.veryslopnynotes.pronote.PRONOTE_ERROR_MESSAGES
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintStream
@@ -52,9 +54,17 @@ private class Driver {
         // appairage (le job « réussit »), autre échec = réessai.
         "decision" -> {
             val cause = op.str("cause")
-            val read: SyncJobRead =
-                if (cause == null) SyncJobRead.Ok("payload")
-                else SyncJobRead.Failed(RuntimeException(cause))
+            // G=22 : l'ERREUR RÉELLE de production (le message de
+            // `Communication.kt`), pas une recopie : c'est lui qui contient
+            // le mot « session » qui faisait classer l'objet périmé en
+            // session morte.
+            val kind = op.str("kind")
+            val read: SyncJobRead = when {
+                kind == "expiredObject" ->
+                    SyncJobRead.Failed(ExpiredObject(PRONOTE_ERROR_MESSAGES.getValue(22)))
+                cause == null -> SyncJobRead.Ok("payload")
+                else -> SyncJobRead.Failed(RuntimeException(cause))
+            }
             when (val decision = syncJobDecision(read)) {
                 is SyncJobDecision.Loaded -> ok(
                     "decision" to JVal.Str("loaded"),
