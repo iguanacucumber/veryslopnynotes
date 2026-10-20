@@ -85,10 +85,11 @@ object CachePolicy {
     }
 
     /**
-     * #369 : une écriture CONFIRMÉE invalide l'entrée de cache de la ressource
-     * — le cache ne doit plus resservir l'état d'avant (devoir « fait » qui se
-     * décoche au retour, fil supprimé qui réapparaît, compteur figé). Le TTL
-     * ne change pas : c'est l'entrée qui part, pas la politique.
+     * #369 : une écriture CONFIRMÉE invalide les entrées de cache de la
+     * ressource — le cache ne doit plus resservir l'état d'avant (devoir «
+     * fait » qui se décoche au retour, fil supprimé qui réapparaît, compteur
+     * figé). Le TTL ne change pas : ce sont les entrées qui partent, pas la
+     * politique. #477 : TOUTES les entrées de la ressource (une par requête).
      *
      * La source de vérité est le natif : l'invalidation suit l'écriture, pas
      * l'écran qui l'a demandée (une seule fois, jamais des deux côtés).

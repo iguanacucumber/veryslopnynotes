@@ -94,7 +94,7 @@ private class Driver {
         "load" -> {
             val slot = bench.slot(op)
             val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
-            val entry = slot.store.load(resource)
+            val entry = slot.store.load(resource, op.str("query") ?: "")
             if (entry == null) {
                 ok("found" to JVal.Bool(false))
             } else {

@@ -42,6 +42,10 @@ private fun err(name: String, message: String?): JVal.Obj = JVal.Obj(
 
 private fun ok(vararg pairs: Pair<String, JVal>): JVal.Obj = JVal.Obj(linkedMapOf(*pairs))
 
+/** Les fichiers d'une ressource (#477 : un fichier par requête, nom empreinté). */
+private fun filesOf(dir: File, resource: String): List<File> =
+    dir.listFiles { f -> f.name.startsWith("cache_${resource}_") }?.sortedBy { it.name } ?: emptyList()
+
 /**
  * Un store + son dossier. Le worker de fond a sa PROPRE instance sur le même
  * dossier que l'app : c'est exactement le cas que #364 visait (deux
@@ -128,7 +132,7 @@ private class Driver {
         "load" -> {
             val slot = bench.slot(op)
             val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
-            val entry = slot.store.load(resource)
+            val entry = slot.store.load(resource, op.str("query") ?: "")
             if (entry == null) {
                 ok("found" to JVal.Bool(false))
             } else {
@@ -143,9 +147,12 @@ private class Driver {
         "raw" -> {
             val slot = bench.slot(op)
             val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
-            val file = File(slot.dir, "cache_$resource.txt")
-            val content = if (file.exists()) file.readText() else ""
-            ok("exists" to JVal.Bool(file.exists()), "content" to JVal.Str(content))
+            // #477 : un fichier par (ressource, requête) — le nom porte
+            // l'empreinte de la requête.
+            val file = filesOf(slot.dir, resource).firstOrNull()
+            val exists = file != null && file.exists()
+            val content = if (exists) file!!.readText() else ""
+            ok("exists" to JVal.Bool(exists), "content" to JVal.Str(content))
         }
         "files" -> {
             val slot = bench.slot(op)
@@ -175,16 +182,18 @@ private class Driver {
         // n'appartient à aucun d'eux, un fichier tronqué n'est pas parsable.
         val payloads = (0 until rounds).map { i -> "{\"w\":\"$i\",\"pad\":\"" + "x".repeat(size) + "\"}" }
         val known = payloads.toHashSet()
-        val file = File(a.dir, "cache_$resource.txt")
         val reads = AtomicInteger()
         val bad = AtomicInteger()
         val mixed = AtomicInteger()
         val running = AtomicBoolean(true)
         val start = CountDownLatch(1)
+        // #477 : le fichier porte l'empreinte de la requête — le lecteur le
+        // retrouve DANS le dossier (une seule requête ici : un seul fichier).
+        var target: File? = null
         val reader = Thread {
             start.await()
             while (running.get()) {
-                if (!file.exists()) continue
+                val file = target ?: filesOf(a.dir, resource).firstOrNull()?.also { target = it } ?: continue
                 val text = try {
                     file.readText()
                 } catch (_: Exception) {

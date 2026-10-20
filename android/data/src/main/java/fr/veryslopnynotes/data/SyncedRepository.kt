@@ -37,7 +37,11 @@ class SyncedRepository(
     // login en double. Avant, chaque dépôt avait SA file : le job de fond et
     // l'interface pouvaient se croiser.
 
-    fun cached(resource: String): CachedEntry? = store.load(resource)
+    /** L'entrée de (ressource, requête) : une par requête (#477). */
+    fun cached(resource: String, query: String): CachedEntry? = store.load(resource, query)
+
+    /** TOUS les payloads d'une ressource (une entrée par requête, #477). */
+    fun payloads(resource: String): List<String> = store.payloads(resource)
 
     fun isStale(resource: String, entry: CachedEntry, now: Long = clock()): Boolean =
         CachePolicy.isStale(resource, entry.fetchedAt, now)
@@ -73,12 +77,14 @@ class SyncedRepository(
     ) {
         require(CachePolicy.isCacheable(resource)) { "ressource non cachable: $resource" }
         val entry = try {
-            store.load(resource)
+            store.load(resource, query)
         } catch (_: Exception) {
             null
         }
         // #365 : l'entrée ne sert que si elle vient de la MÊME requête ; sinon
         // elle est ABSENTE (semaine / période / algorithme différents).
+        // #477 : le magasin garde une entrée PAR requête : revenir sur une
+        // requête déjà vue est un cache-hit, sans réseau.
         if (entry != null && !CachePolicy.shouldFetch(entry, resource, query, clock(), force)) {
             post(cb, RefreshOutcome.Updated(entry.payload, entry.fetchedAt))
             return
@@ -159,7 +165,7 @@ class SyncedRepository(
     // celle d'une autre semaine afficherait un écran vide sans le dire.
     private fun cachedOrFailed(resource: String, query: String, message: String): RefreshOutcome {
         val c = try {
-            store.load(resource)
+            store.load(resource, query)
         } catch (_: Exception) {
             null
         }
@@ -322,33 +328,38 @@ class SyncedRepository(
     private fun scanTexts(): List<SecurityAlert.ScannableText> {
         val out = mutableListOf<SecurityAlert.ScannableText>()
         for (resource in listOf(CachePolicy.NEWS, CachePolicy.ASSIGNMENTS, CachePolicy.DISCUSSIONS)) {
-            val payload = try {
-                store.load(resource)?.payload
+            // #477 : une ressource a une entrée PAR requête : le balayage lit
+            // TOUTES les entrées en cache (une semaine oubliée ne doit pas
+            // échapper à l'alerte de sécurité).
+            val payloads = try {
+                store.payloads(resource)
             } catch (_: Exception) {
-                null
-            } ?: continue
+                emptyList()
+            }
             val source = when (resource) {
                 CachePolicy.NEWS -> "news"
                 CachePolicy.ASSIGNMENTS -> "homework"
                 else -> "discussions"
             }
-            try {
-                val root = JSONObject(payload)
-                val key = when (resource) {
-                    CachePolicy.NEWS -> "news"
-                    CachePolicy.ASSIGNMENTS -> "assignments"
-                    else -> "discussions"
-                }
-                val arr = root.optJSONArray(key) ?: continue
-                for (i in 0 until arr.length()) {
-                    val o = arr.optJSONObject(i) ?: continue
-                    for (field in listOf("body", "description", "subject", "title")) {
-                        val text = o.optString(field, "")
-                        if (text.isNotBlank()) out.add(SecurityAlert.ScannableText(source, text))
+            for (payload in payloads) {
+                try {
+                    val root = JSONObject(payload)
+                    val key = when (resource) {
+                        CachePolicy.NEWS -> "news"
+                        CachePolicy.ASSIGNMENTS -> "assignments"
+                        else -> "discussions"
                     }
+                    val arr = root.optJSONArray(key) ?: continue
+                    for (i in 0 until arr.length()) {
+                        val o = arr.optJSONObject(i) ?: continue
+                        for (field in listOf("body", "description", "subject", "title")) {
+                            val text = o.optString(field, "")
+                            if (text.isNotBlank()) out.add(SecurityAlert.ScannableText(source, text))
+                        }
+                    }
+                } catch (_: Exception) {
+                    continue
                 }
-            } catch (_: Exception) {
-                continue
             }
         }
         return out
