@@ -1005,10 +1005,15 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
   });
 
   test.skipIf(skip)("keepAlive : ping si dû, silence sinon (seuil 110 s)", async () => {
-    // Kotlin : vrai thread de garde, un tick réel de 1 s + marge (1,2 s).
+    // Kotlin : vrai thread de garde, un tick RÉEL — mais une PÉRIODE courte
+    // (25 ms) au lieu des 1 000 ms de production. Ce qui est testé, c'est le
+    // SEUIL (110 s) et le fait que le fil pinge quand il est dû : la
+    // période n'en est qu'un détail. La période de production (1 000 ms)
+    // est vérifiée par source dans `tests/architecture/keepalive-ping.test.ts`.
     // TS : horloge factice, aucun temps réel, mêmes 1 s d'intervalle.
     // Le seuil « frais » passe par `keepAliveTick` : pas besoin d'un second thread.
-    const ktStaleP = ask({ op: "keepAlive", staleSec: 200, runMs: 1200 });
+    const TICK_MS = 25;
+    const ktStaleP = ask({ op: "keepAlive", staleSec: 200, runMs: 200, tickMs: TICK_MS });
 
     jest.useFakeTimers();
     try {
