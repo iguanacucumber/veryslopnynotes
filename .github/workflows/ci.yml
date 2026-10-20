@@ -44,18 +44,65 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # LE CACHE GRADLE. Sans lui, chaque run retélécharge la distribution
+      # Gradle (165 Mo), les dépendances AGP/Kotlin/AndroidX (213 Mo) et
+      # REFAIT les transformations AAR (353 Mo) : 139 s à froid contre 28 s
+      # avec le cache (mesuré, même machine, daemon froid).
+      #
+      # `caches/build-cache-1` est VOLONTAIREMENT ABSENT : ce cache servirait
+      # la compilation Kotlin au lieu de la faire TOURNER — le gate compile,
+      # il ne rejoue pas un cache. C'est la seule vérification du gate qui
+      # résout les symboles : la garder réelle vaut 15 s.
+      #
+      # PAS de `restore-keys` : un jeu de transformations plus ancien que les
+      # jars de plugins rend la construction `--offline` ILLISIBLE (l'analyse
+      # d'instrumentation ne se désérialise plus). La clé est datée des
+      # versions : un changement de version la casse et repart de zéro.
+      #
+      # `continue-on-error` : un cache est une OPTIMISATION, jamais une
+      # condition de verdeur. Une panne du service de cache ne doit pas
+      # rougir une PR sans rapport avec son code — au pire, le run est lent.
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: |
+            ~/.gradle/wrapper/dists
+            ~/.gradle/caches/modules-2
+            ~/.gradle/caches/9.8.1
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/gradle/libs.versions.toml', 'android/gradle/wrapper/gradle-wrapper.properties', 'android/gradle.properties', 'android/build.gradle.kts', 'android/settings.gradle.kts', 'android/*/build.gradle.kts') }}
+
       # La parité TS <-> Kotlin compile et EXÉCUTE le port Kotlin : sans
       # `kotlinc` + `java`, toute la suite saute et le gate est vert sans une
       # ligne de production Kotlin exécutée. La version suit le catalogue
       # (`android/gradle/libs.versions.toml`).
+      #
+      # L'archive (90 Mo) est en cache : téléchargée puis décompressée à chaque
+      # run, elle coûteait 5-13 s. L'étape ne télécharge QUE si le binaire
+      # manque — et `kotlinc -version` vérifie l'outillage dans les DEUX cas
+      # (un outillage cassé doit rester bruyant).
+      - name: Cache compilateur Kotlin
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: /opt/kotlin-compiler-2.4.21
+          key: kotlinc-2.4.21-${{ runner.os }}
+
       - name: Compilateur Kotlin
         run: |
           set -euo pipefail
           version=2.4.21
-          curl -sSfL -o /tmp/kotlin.zip \
-            "https://github.com/JetBrains/kotlin/releases/download/v${version}/kotlin-compiler-${version}.zip"
-          unzip -q /tmp/kotlin.zip -d /opt
-          echo "/opt/kotlin-compiler-${version}/bin" >> "$GITHUB_PATH"
+          home="/opt/kotlin-compiler-${version}"
+          # Un cache CORROMPU se RÉPARE : on vérifie le BINAIRE, pas sa
+          # présence. Un `kotlinc` cassé doit être re-téléchargé, pas faire
+          # échouer le gate.
+          if ! "$home/bin/kotlinc" -version >/dev/null 2>&1; then
+            rm -rf "$home"
+            curl -sSfL -o /tmp/kotlin.zip \
+              "https://github.com/JetBrains/kotlin/releases/download/v${version}/kotlin-compiler-${version}.zip"
+            unzip -q /tmp/kotlin.zip -d /opt
+          fi
+          echo "$home/bin" >> "$GITHUB_PATH"
           kotlinc -version
 
       # SDK Android : même version que `compileSdk`/`buildToolsVersion` du
@@ -97,6 +144,36 @@ jobs:
 
       - name: Dépendances
         run: bun install --frozen-lockfile
+
+      # LE CACHE DU JAR DE PARITÉ (6,5 Mo). Le harnais compile le port Kotlin
+      # dans `node_modules/.cache/kotlin-parity/<empreinte>/parity.jar` —
+      # l'empreinte est le sha256 du CONTENU des sources. La CI met ce jar en
+      # cache sous la MÊME empreinte (calcul partagé, une seule source de
+      # vérité) : quand les sources Kotlin n'ont pas bougé, la compilation
+      # (43,6 s) est reprise du cache au lieu d'être refaite.
+      #
+      # CE QUE ÇA NE CHANGE PAS. Les tests exécutent TOUJOURS le Kotlin
+      # compilé et le comparent à la référence TS — seul le RECOMPILAGE est
+      # réutilisé, et seulement pour des sources IDENTIQUES.
+      - name: Empreinte du port Kotlin
+        id: port-kotlin
+        run: |
+          set -euo pipefail
+          digest=$(bun run agents/runtime/parity-digest.ts | tail -1)
+          # Une empreinte vide ou malformée produirait une clé de cache
+          # silencieusement mauvaise : mieux vaut un ÉCHEC bruyant.
+          if ! [[ "$digest" =~ ^[0-9a-f]{16}$ ]]; then
+            echo "empreinte du port Kotlin INVALIDE : « $digest »" >&2
+            exit 1
+          fi
+          echo "empreinte=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache du jar de parité
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: node_modules/.cache/kotlin-parity
+          key: kotlin-parity-${{ steps.port-kotlin.outputs.empreinte }}
 
       - name: Gate
         run: make check

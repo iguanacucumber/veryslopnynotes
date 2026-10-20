@@ -15,6 +15,7 @@
 // CE QUE ÇA NE CHANGE PAS. Les assertions portent toujours sur le VRAI code
 // compilé : on compile les MÊMES sources de production, en plus. Aucun
 // miroir, aucune source de moins.
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 
@@ -147,6 +148,36 @@ export function driverSources(): string[] {
  * clé de cache. Un ordre instable invaliderait le cache sans raison.
  */
 export const PARITY_SOURCES: string[] = [...PRODUCTION_SOURCES, ...driverSources()];
+
+/**
+ * Empreinte du CONTENU d'un ensemble de sources : sha256 des contenus
+ * concaténés, ramené à 16 hex.
+ *
+ * UNE SEULE SOURCE DE VÉRITÉ. C'est ce calcul qui nomme le dossier de cache
+ * du harnais (`node_modules/.cache/<nom>/<empreinte>/`) ET la clé du cache CI
+ * du jar de parité : deux calculs, deux clés, un cache mort. La CI lit donc
+ * CETTE fonction (`agents/runtime/parity-digest.ts`).
+ *
+ * 16 hex (64 bits) : assez court pour une clé de cache, assez long pour
+ * qu'une collision soit invraisemblable — et une collision nuirait au
+ * VERDICT (un jar compilé pour d'autres sources), pas seulement au cache.
+ */
+export function digestOf(sources: string[]): string {
+  const h = createHash("sha256");
+  for (const f of sources) h.update(readFileSync(f));
+  return h.digest("hex").slice(0, 16);
+}
+
+/**
+ * L'empreinte DU PORT de parité (le jar unique que le harnais compile).
+ *
+ * Change dès qu'un octet d'une source de production ou d'un pilote change :
+ * c'est ce qui rend le cache du jar sûr — un jar restauré a été compilé
+ * EXACTEMENT à partir de ces sources.
+ */
+export function parityDigest(): string {
+  return digestOf(PARITY_SOURCES);
+}
 
 /**
  * Classe principale d'un pilote : `<package>.<Fichier>Kt`.

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { DEFAULT_TARGETS } from "../../agents/runtime/check";
+import { digestOf, PARITY_SOURCES, parityDigest } from "./fixtures/parity-sources";
 
 // agents/runtime/check.ts — le pilote de `make check` : 11 étapes lancées en
 // même temps, une sortie par étape, un code de sortie global.
@@ -49,6 +50,37 @@ function plan(env: Record<string, string>): { code: number; out: string } {
     code: p.exitCode ?? -1,
     out: text.decode(p.stdout) + text.decode(p.stderr),
   };
+}
+
+/**
+ * Les CHEMINS réellement mis en cache par le workflow : le contenu des blocs
+ * `path:` des étapes `actions/cache`.
+ *
+ * On parse la CONFIGURATION, pas le texte : une mention dans un commentaire
+ * ne configure rien, et un test qui lit les commentaires teste les
+ * commentaires.
+ */
+function cachedPaths(ci: string): string[] {
+  const lines = ci.split("\n");
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    // `path: |` suivi du bloc indenté…
+    if (!/^\s*path:\s*\|\s*$/.test(line)) {
+      // …ou `path: <un seul chemin>`.
+      const scalar = /^\s*path:\s*(\S.*?)\s*$/.exec(line);
+      if (scalar) out.push(scalar[1]!);
+      continue;
+    }
+    const indent = line.length - line.trimStart().length;
+    for (let j = i + 1; j < lines.length; j++) {
+      const next = lines[j]!;
+      if (!next.trim()) continue;
+      if (next.length - next.trimStart().length <= indent) break;
+      out.push(next.trim());
+    }
+  }
+  return out;
 }
 
 describe("check.ts : pilote de `make check`", () => {
@@ -129,5 +161,48 @@ describe("check.ts : pilote de `make check`", () => {
     expect(ci).toContain("branches: [main]");
     // Dépôt public : aucun secret lu par le job.
     expect(ci).not.toContain("secrets.");
+  });
+
+  // #511 : la CI ne doit pas payer, à chaque run, le prix de la compilation du
+  // port Kotlin (43,6 s) — ni celui des dépendances Gradle (139 s à froid).
+  // Le jar de parité est mis en cache par l'empreinte de SES SOURCES.
+  test("la CI met en cache le jar de parité et les dépendances Gradle", async () => {
+    const ci = await Bun.file(join(ROOT, ".github", "workflows", "ci.yml")).text();
+    const paths = cachedPaths(ci);
+    // Le jar, dans le dossier que le harnais remplit déjà.
+    expect(paths).toContain("node_modules/.cache/kotlin-parity");
+    // Les dépendances Gradle : sans elles, chaque run retélécharge 378 Mo et
+    // refait 353 Mo de transformations AAR.
+    expect(paths).toContain("~/.gradle/caches/modules-2");
+    expect(paths).toContain("~/.gradle/caches/9.8.1");
+    // La clé vient de l'empreinte, pas d'un nom figé.
+    expect(ci).toContain("parity-digest");
+    expect(ci).toContain("kotlin-parity-${{ steps.port-kotlin.outputs.empreinte }}");
+  });
+
+  // #511 : le build cache Gradle (`caches/build-cache-1`) NE doit PAS être mis
+  // en cache. Il servirait la compilation Kotlin au lieu de la faire tourner :
+  // le gate compile, il ne rejoue pas un cache. C'est la SEULE vérification du
+  // gate qui résout les symboles (une surcharge ambiguë, un import manquant).
+  test("la CI ne met PAS le build cache Gradle en cache", async () => {
+    const ci = await Bun.file(join(ROOT, ".github", "workflows", "ci.yml")).text();
+    expect(cachedPaths(ci).some((p) => p.includes("build-cache-1"))).toBe(false);
+  });
+
+  // #511 : la clé du cache CI et le dossier de cache LOCAL doivent venir du
+  // MÊME calcul. Deux calculs, deux clés : le cache restauré ne serait jamais
+  // trouvé par le harnais — un cache mort qui coûte 43,6 s à chaque run.
+  test("le harnais et la CI partagent UNE empreinte de sources", async () => {
+    const harness = await Bun.file(join(ROOT, "tests", "unit", "fixtures", "kotlin-harness.ts")).text();
+    // Le harnais IMPORTE le calcul, il ne le refait pas.
+    expect(harness).toContain("digestOf");
+    expect(harness).not.toContain("createHash");
+    // Et le calcul vit dans le module qui définit les sources.
+    const sources = await Bun.file(join(ROOT, "tests", "unit", "fixtures", "parity-sources.ts")).text();
+    expect(sources).toContain("export function digestOf");
+    expect(sources).toContain("export function parityDigest");
+    // La clé de la CI est donc l'empreinte du port : 16 hex.
+    expect(parityDigest()).toMatch(/^[0-9a-f]{16}$/);
+    expect(digestOf(PARITY_SOURCES)).toBe(parityDigest());
   });
 });
