@@ -126,3 +126,63 @@ export function newsPreview(body: string, max = NEWS_BODY_PREVIEW): string {
   const lastSpace = cut.lastIndexOf(" ");
   return `${(lastSpace > max / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }
+
+/**
+ * Corps d'une actualité : absent (à demander), en cours, chargé, en erreur.
+ *
+ * #475 : la liste ne porte plus le corps — il se charge À LA DEMANDE, au
+ * dépliage (un POST par actualité déployee, pas vingt par écran). L'état vit
+ * ici, hors du composant : la route n'affiche que des textes.
+ */
+export type NewsBodyStatus = "absent" | "loading" | "loaded" | "error";
+
+export interface NewsBodyState {
+  status: NewsBodyStatus;
+  body: string;
+  error: string;
+}
+
+/** Message d'échec de la demande du corps (borné : jamais le message natif). */
+export const NEWS_BODY_ERROR = "Contenu indisponible.";
+
+/** État initial : le corps du payload s'il y en a un, sinon à demander. */
+export function newsBodyState(payloadBody: string): NewsBodyState {
+  return payloadBody.trim().length > 0
+    ? { status: "loaded", body: payloadBody, error: "" }
+    : { status: "absent", body: "", error: "" };
+}
+
+/**
+ * Le corps est-il à demander au natif ? (absent, ou échec à réessayer)
+ *
+ * Pendant la demande, le statut est « loading » : on ne redemande pas.
+ */
+export function needsNewsBody(state: NewsBodyState): boolean {
+  return state.status === "absent" || state.status === "error";
+}
+
+/** Demande en cours. */
+export function newsBodyLoading(state: NewsBodyState): NewsBodyState {
+  return { status: "loading", body: state.body, error: "" };
+}
+
+/** Corps reçu (vide = l'établissement n'a rien publié). */
+export function newsBodyLoaded(state: NewsBodyState, body: string): NewsBodyState {
+  return { status: "loaded", body, error: "" };
+}
+
+/** Échec de la demande : le corps reste absent, l'erreur est dite. */
+export function newsBodyFailed(state: NewsBodyState, message = NEWS_BODY_ERROR): NewsBodyState {
+  return { status: "error", body: state.body, error: message };
+}
+
+/** Le texte affiché : le corps, en entier s'il est déplié, en aperçu sinon. */
+export function newsBodyText(state: NewsBodyState, expanded: boolean): string {
+  if (!state.body) return "";
+  return expanded || state.body.length <= NEWS_BODY_PREVIEW ? state.body : newsPreview(state.body);
+}
+
+/** Le corps est-il long (donc repliable) ? */
+export function newsBodyCollapsible(state: NewsBodyState): boolean {
+  return state.body.length > NEWS_BODY_PREVIEW;
+}

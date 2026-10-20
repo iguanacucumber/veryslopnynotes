@@ -414,21 +414,14 @@ internal fun newsPayload(client: Client): String {
     val arr = JSONArray()
     val raws = client.informationAndSurveys()
     raws.take(100).forEachIndexed { i, info ->
-        var body = ""
-        if (i < 20) {
-            body = try {
-                boundedCp(info.content(), 2000)
-            } catch (e: Exception) {
-                if (isSessionFailure(e)) throw e
-                ""
-            }
-        }
+        // #475 : la LISTE ne télécharge plus le corps (1 POST, pas 21) : le
+        // corps est une DONNÉE demandée à la demande, au dépliage
+        // (`news.item` -> `Client.informationContent(id)`).
         val title = boundedCp(info.title, 200)
-        val finalTitle = title.ifEmpty { boundedCp(body, 200).ifEmpty { "Actualité" } }
+        val finalTitle = title.ifEmpty { "Actualité" }
         arr.put(JSONObject().apply {
             put("id", info.id.ifBlank { "news-$i" })
             put("title", finalTitle)
-            putIf("body", body.ifEmpty { null })
             put("publishedAt", (info.creationDate ?: info.startDate)?.parisIso() ?: parisNowIso())
             putIf("category", boundedCp(info.category, 100).ifEmpty { null })
             putIf("author", boundedCp(info.author, 100).ifEmpty { null })

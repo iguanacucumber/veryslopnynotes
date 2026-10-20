@@ -217,6 +217,9 @@ export const bridge = {
   sync: () => call<ResourceResult>("resources.sync"),
   capabilities: () => call<{ tabs: string[] }>("capabilities.load"),
   refreshCapabilities: () => call<{ tabs: string[] }>("capabilities.refresh"),
+  // #475 : le corps d'une actualité arrive À LA DEMANDE (au dépliage) : la
+  // liste ne le télécharge plus.
+  newsItem: (id: string) => call<{ body: string }>("news.item", { id }),
   toggleAssignment: (id: string, done: boolean, weekStart: string) =>
     call<{ ok: boolean; error?: string }>("assignments.toggle", { id, done, weekStart }),
   openAttachment: (homeworkId: string, attachmentId: string, weekStart: string) =>

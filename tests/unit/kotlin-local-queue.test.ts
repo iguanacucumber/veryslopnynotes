@@ -102,7 +102,10 @@ describe("file d'attente unique du client local (#310)", () => {
     const repo = readFileSync(REPO, "utf8");
     // #403 : LA file partagée (une pour tous), pas une file par dépôt.
     expect(repo).toContain("ClientQueue.submit(");
-    expect(repo.match(/ClientQueue\.submit\(/g)?.length).toBe(3);
+    // Quatre lectures passent par la file : les ressources, la relecture
+    // manuelle, les tranches et le CORPS d'une actualité (#475, lu à la
+    // demande comme les autres).
+    expect(repo.match(/ClientQueue\.submit\(/g)?.length).toBe(4);
     expect(repo).not.toContain("LocalRequestQueue<");
     // Clé de dédoublonnage `ressource|query`.
     expect(repo).toContain('"$resource|$query"');

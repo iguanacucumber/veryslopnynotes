@@ -213,6 +213,56 @@ class SyncedRepository(
     }
 
     /**
+     * Corps d'une actualité (#475) : lu À LA DEMANDE (au dépliage), JAMAIS en
+     * cache.
+     *
+     * La liste des actus ne porte que les métadonnées (titre, date, auteur) :
+     * le corps est un POST par actualité déployee, pas vingt POST par écran.
+     * Le corps reste une DONNÉE (texte brut), jamais du HTML (I6).
+     *
+     * Une session morte = échec PIDÉGÉ (le cache ne masque pas une session
+     * morte) : l'écran peut proposer l'appairage.
+     */
+    fun fetchNewsBody(id: String, cb: (String?, String?) -> Unit) {
+        val target = id.trim()
+        if (target.isEmpty()) {
+            postBody(cb, null to "Actualité introuvable.")
+            return
+        }
+        ClientQueue.submit(
+            "news-body|$target",
+            work = { newsBodyOutcome(target) },
+            deliver = { o -> postBody(cb, o) },
+        )
+    }
+
+    private fun newsBodyOutcome(id: String): Pair<String?, String?> {
+        val client = try {
+            provider()
+        } catch (_: Exception) {
+            null
+        } ?: return null to "Connexion indisponible."
+        return try {
+            client.informationContent(id) to null
+        } catch (e: Exception) {
+            if (isSessionFailure(e)) {
+                DeviceAuth.reject()
+                null to DeviceAuth.REJECTED_MESSAGE
+            } else {
+                null to "Contenu indisponible."
+            }
+        }
+    }
+
+    private fun postBody(cb: (String?, String?) -> Unit, o: Pair<String?, String?>) {
+        try {
+            main.post { cb(o.first, o.second) }
+        } catch (_: Exception) {
+            cb(o.first, o.second)
+        }
+    }
+
+    /**
      * Tranches de l'etablissement, lues sur le client local.
      *
      * Volontairement HORS cache (comme avant) : `/v1/periods` n'est pas dans

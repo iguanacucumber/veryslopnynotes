@@ -415,8 +415,13 @@ open class ClientBase(
 
 }
 
-/** Client élève (lectures + écritures devoir/discussion). */
-class Client(
+/**
+ * Client élève (lectures + écritures devoir/discussion).
+ *
+ * `open` : le harnais de parité en dérive un client dont l'envoi est un
+ * STUB qui compte les requêtes (aucun réseau, aucun établissement).
+ */
+open class Client(
     pronoteUrl: String,
     username: String = "",
     password: String = "",
@@ -722,6 +727,16 @@ class Client(
         if (opts.dateTo != null) info = info.filter { it.startDate != null && it.startDate < opts.dateTo }.toMutableList()
         return info
     }
+
+    /**
+     * Corps d'une actualité (#475) : TEXTE BRUT, 1 POST `PageActualites`.
+     *
+     * La liste des actus ne télécharge plus les corps (21 POST pour un écran
+     * dont l'élève ne lit que 2-3 actus) : le corps se charge à la demande,
+     * au dépliage.
+     */
+    fun informationContent(id: String): String =
+        informationBodyText(informationQuestions(this, id))
 
     /** Cantine (semaines calendaires balayées, `Date` injectée par jour, filtrée sur la fenêtre). */
     fun menus(dateFrom: LocalDateTime, dateTo: LocalDateTime?): List<Menu> {

@@ -506,6 +506,43 @@ class Homework(private val client: PronoteClientLike, json: JVal?) : PronoteObje
     }
 }
 
+/**
+ * Questions d'une actualité : 1 POST `PageActualites` — le CORPS (texte) et
+ * les pièces jointes.
+ *
+ * Facteur commun de `Information` et de `Client.informationContent(id)` : la
+ * liste des actus ne télécharge plus les corps (#475), le corps se charge à
+ * la demande, au dépliage.
+ */
+internal fun informationQuestions(client: PronoteClientLike, infoId: String): List<JVal> {
+    // `N` brut (info.id) : absent = cle omise, comme `undefined` cote TS.
+    val public = LinkedHashMap<String, JVal>()
+    client.infoId?.let { public["N"] = JVal.Str(it) }
+    public["G"] = JVal.Num(4.0)
+    val resp = client.post(
+        "PageActualites", 8.0,
+        mapOf(
+            "actualite" to jobj(
+                "N" to JVal.Str(infoId),
+                "genrePublic" to JVal.Num(4.0),
+                "public" to JVal.Obj(public),
+            ),
+            "genreRequeteActualite" to JVal.Num(1.0),
+            "modeAffActu" to JVal.Num(0.0),
+        ),
+    )
+    // Acces directs : absent = jete (comme `.x` sur `undefined` cote TS).
+    val data = dataOf(resp)
+    return (((data.fields["detailsActualite"] as JVal.Obj).fields["listeQuestions"] as JVal.Obj).fields["V"] as JVal.Arr).items
+}
+
+/** Corps d'une actualité : texte du PREMIER texte, dés-HTML-isé (une DONNÉE). */
+internal fun informationBodyText(questions: List<JVal>): String {
+    val texte = (((questions.firstOrNull() as? JVal.Obj)?.fields?.get("texte") as? JVal.Obj)?.fields?.get("V"))
+        ?: throw ParsingError("Texte d'info manquant", listOf("texte", "V"))
+    return htmlParse(texte)
+}
+
 /** Info (`fetchContent` poste `PageActualites` 8 ; `content()` dés-HTML-ise, `""` si vide). */
 class Information(private val client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
     val id: String = r(::strOf, listOf("N"))
@@ -532,9 +569,7 @@ class Information(private val client: PronoteClientLike, json: JVal?) : PronoteO
         fetchContent()
         val rc = rawContent ?: return ""
         if (contentCache == null) {
-            val texte = (((rc.firstOrNull() as? JVal.Obj)?.fields?.get("texte") as? JVal.Obj)?.fields?.get("V"))
-                ?: throw ParsingError("Texte d'info manquant", listOf("texte", "V"))
-            contentCache = htmlParse(texte)
+            contentCache = informationBodyText(rc)
         }
         return contentCache ?: ""
     }
@@ -555,26 +590,7 @@ class Information(private val client: PronoteClientLike, json: JVal?) : PronoteO
 
     private fun fetchContent() {
         if (rawContent != null) return
-        // `N` brut (info.id) : absent = cle omise, comme `undefined` cote TS.
-        val public = LinkedHashMap<String, JVal>()
-        client.infoId?.let { public["N"] = JVal.Str(it) }
-        public["G"] = JVal.Num(4.0)
-        val resp = client.post(
-            "PageActualites", 8.0,
-            mapOf(
-                "actualite" to jobj(
-                    "N" to JVal.Str(id),
-                    "genrePublic" to JVal.Num(4.0),
-                    "public" to JVal.Obj(public),
-                ),
-                "genreRequeteActualite" to JVal.Num(1.0),
-                "modeAffActu" to JVal.Num(0.0),
-            ),
-        )
-        // Acces directs : absent = jete (comme `.x` sur `undefined` cote TS).
-        val data = dataOf(resp)
-        val questions = (((data.fields["detailsActualite"] as JVal.Obj).fields["listeQuestions"] as JVal.Obj).fields["V"] as JVal.Arr).items
-        rawContent = questions
+        rawContent = informationQuestions(client, id)
     }
 }
 
