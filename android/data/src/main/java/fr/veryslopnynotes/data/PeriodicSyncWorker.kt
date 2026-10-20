@@ -16,10 +16,10 @@ import java.util.concurrent.TimeUnit
 // Sync périodique de fond (#208) : SANS serveur, donc ni SSE (flux du
 // serveur vers l'app), ni push (jamais câblé), ni cron serveur (jamais
 // câblé). WorkManager est la seule solution de sync périodique sans serveur.
-// Relit notes/devoirs/EDT sur le client local du téléphone (mêmes payloads
-// et bornes que SyncedRepository : gradesPayload, assignmentsPayload,
-// timetablePayload) et réécrit le cache fichier partagé avec les écrans
-// (même répertoire "offline" que AppNav, mêmes clés CachePolicy).
+// Relit notes/devoirs/EDT sur le client local du téléphone (MÊME porte
+// d'entrée et MÊMES bornes que les écrans : `cachedRead` sur les ressources
+// `CachePolicy`) et réécrit le cache fichier partagé avec les écrans (même
+// répertoire "offline" que AppNav, mêmes clés CachePolicy).
 //
 // Pas de drain batterie : contraintes réseau connecté + batterie non faible,
 // intervalle 6 h (les données scolaires changent quelques fois par jour ; le
@@ -61,6 +61,18 @@ class PeriodicSyncWorker(
 
     /**
      * Lecture des trois ressources + réécriture du cache (session disponible).
+     *
+     * #403 : les lectures passent par la file PARTAGÉE (`ClientQueue`), la
+     * MÊME que celle des écrans. Le `Client` est MUTABLE (`refresh()`
+     * réassigne `communication`, `attributes` et la clé AES) : une lecture de
+     * l'écran et une du job en parallèle = deux authentifications sur le même
+     * compte = « Exceeded max authorization requests » (erreur 25) →
+     * l'établissement LIMITE le compte. La file sérialise : UN appel client
+     * à la fois dans le process. Avant, le job lisait le client EN DIRECT.
+     *
+     * Le job est BLOQUANT (`Worker.doWork`) : il pose sa lecture dans la file
+     * et ATTEND (délai BORNÉ par `READ_TIMEOUT_MS` : au-delà, le job
+     * réessaiera — il ne bloque jamais WorkManager indéfiniment).
      */
     private fun refresh(client: Client): Result {
         val store = cacheStore()
@@ -68,29 +80,45 @@ class PeriodicSyncWorker(
         // mettre des secondes) : une deconnexion pendant la lecture annule
         // l'ecriture du cache.
         val epoch = SessionEpoch.current()
+        val now = System.currentTimeMillis()
         return try {
-            val now = System.currentTimeMillis()
-            // Requête vide = la vue par défaut (fenêtre courante, aucun
-            // algorithme) : c'est ce que demandent l'accueil et l'EDT (#365).
-            if (!saveIfCurrent(epoch, store, CachePolicy.GRADES, gradesPayload(client, emptyMap()), now, "")) {
-                return Result.success()
-            }
-            if (!saveIfCurrent(epoch, store, CachePolicy.ASSIGNMENTS, assignmentsPayload(client, emptyMap()), now, "")) {
-                return Result.success()
-            }
-            if (!saveIfCurrent(epoch, store, CachePolicy.TIMETABLE, timetablePayload(client, emptyMap()), now, "")) {
-                return Result.success()
+            for (resource in JOB_RESOURCES) {
+                // La lecture passe par la file partagée (clé namespacée `job|` :
+                // jamais celle d'un écran, donc jamais un résultat étranger).
+                val read = ClientQueue.submitAndAwait("job|$resource|", READ_TIMEOUT_MS) {
+                    safeRead { cachedRead(client, resource, "") }
+                } ?: return Result.retry()
+                when (val decision = syncJobDecision(read)) {
+                    SyncJobDecision.Retry -> return Result.retry()
+                    SyncJobDecision.SessionDead -> {
+                        DeviceAuth.reject()
+                        return Result.success()
+                    }
+                    is SyncJobDecision.Loaded -> {
+                        if (!saveIfCurrent(epoch, store, resource, decision.payload, now, "")) {
+                            return Result.success()
+                        }
+                    }
+                }
             }
             Result.success()
         } catch (e: Exception) {
-            if (isSessionFailure(e)) {
-                DeviceAuth.reject()
-                Result.success()
-            } else {
-                Result.retry()
-            }
+            failure(e)
         }
     }
+
+    /**
+     * Session MORTE = l'app doit se ré-appairer : le job « réussit » (un
+     * réessai ne ressusciterait pas la session). Autre échec = RÉESSAI
+     * (backoff WorkManager).
+     */
+    private fun failure(e: Exception): Result =
+        if (isSessionFailure(e)) {
+            DeviceAuth.reject()
+            Result.success()
+        } else {
+            Result.retry()
+        }
 
     /**
      * Session locale du process, restaurée si elle n'y est pas (#406).
@@ -147,6 +175,22 @@ class PeriodicSyncWorker(
         const val UNIQUE_WORK_NAME = "periodic-sync"
         const val INTERVAL_HOURS = 6L
         const val BACKOFF_MINUTES = 10L
+
+        /**
+         * Les trois ressources que le job relit (mêmes bornes que
+         * l'interface : requête vide = vue par défaut, fenêtre courante —
+         * c'est ce que demandent l'accueil et l'EDT, #365).
+         */
+        private val JOB_RESOURCES =
+            listOf(CachePolicy.GRADES, CachePolicy.ASSIGNMENTS, CachePolicy.TIMETABLE)
+
+        /**
+         * Délai d'attente d'une lecture dans la file partagée : au-delà, le job
+         * RÉESSAIE (la file est occupée par une longue lecture). 2 min < la
+         * limite de 10 min de WorkManager : le job ne peut pas se le faire
+         * tuer en attendant.
+         */
+        private const val READ_TIMEOUT_MS = 120_000L
 
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()

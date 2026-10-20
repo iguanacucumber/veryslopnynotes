@@ -35,3 +35,55 @@ sealed interface SyncJobOutcome<out T> {
  */
 fun <T> syncJobOutcome(session: T?): SyncJobOutcome<T> =
     if (session == null) SyncJobOutcome.Retry else SyncJobOutcome.Refresh(session)
+
+/**
+ * Ce que le job de fond LIT dans la file partagée (#403).
+ *
+ * `Failed` porte la CAUSE : c'est elle qui décide réessai ou session morte
+ * (`isSessionFailure`). La lecture ne LÈVE JAMAIS hors de la file : un
+ * travail qui jette perd ses callbacks (et son fil), donc l'échec est une
+ * VALEUR, pas une exception.
+ */
+sealed interface SyncJobRead {
+    /** Le payload lu. */
+    data class Ok(val payload: String) : SyncJobRead
+
+    /** La lecture a échoué : la cause décide (réessai ou appairage). */
+    data class Failed(val cause: Exception) : SyncJobRead
+}
+
+/**
+ * Une lecture NE LÈVE JAMAIS (#403) : la file perdrait ses callbacks si le
+ * travail jette. L'échec est un résultat, pas une exception.
+ */
+fun safeRead(read: () -> String): SyncJobRead =
+    try {
+        SyncJobRead.Ok(read())
+    } catch (e: Exception) {
+        SyncJobRead.Failed(e)
+    }
+
+/**
+ * Ce que le job de fond FAIT du résultat d'une lecture (#403).
+ *
+ * La sémantique est celle d'avant (#406) : une session MORTE = l'app doit se
+ * ré-appairer (le job « réussit » : un réessai ne ressusciterait pas la
+ * session), tout autre échec = RÉESSAI (backoff WorkManager).
+ */
+sealed interface SyncJobDecision {
+    /** Lecture OK : le payload est réécrit dans le cache. */
+    data class Loaded(val payload: String) : SyncJobDecision
+
+    /** La session est MORTE : l'app doit se ré-appairer. */
+    data object SessionDead : SyncJobDecision
+
+    /** Échec banal : le job réessaiera (backoff WorkManager). */
+    data object Retry : SyncJobDecision
+}
+
+/** La décision du job sur une lecture : session morte = appairage, sinon réessai. */
+fun syncJobDecision(read: SyncJobRead): SyncJobDecision = when (read) {
+    is SyncJobRead.Ok -> SyncJobDecision.Loaded(read.payload)
+    is SyncJobRead.Failed ->
+        if (isSessionFailure(read.cause)) SyncJobDecision.SessionDead else SyncJobDecision.Retry
+}

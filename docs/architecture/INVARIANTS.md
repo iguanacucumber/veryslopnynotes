@@ -324,3 +324,36 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Emplacement : `android/data/StoreHealth.kt`, `android/data/SessionStore.kt`,
   `android/data/LlmKeyStore.kt`, `android/app/VsnBridge.kt`,
   `web/src/lib/session.ts`, `web/src/ui/AppContext.tsx`.
+
+## I19 — Le job de fond lit par la file PARTAGÉE
+- Invariant : toute lecture de l'interface (ressources cachées) ET toute lecture
+  du job de fond passent par LA MÊME file partagée (`ClientQueue`), jamais en
+  direct sur le client. Le `Client` est MUTABLE (`refresh()` réassigne
+  `communication`, `attributes` et la clé AES) : une lecture de l'écran et une
+  du job en parallèle = deux authentifications sur le même compte = « Exceeded
+  max authorization requests » (erreur 25) → l'établissement LIMITE le compte.
+  UNE SEULE instance de file (une file par dépôt ne partagerait pas les
+  requêtes EN VOL, donc le dédoublonnage ne vaudrait pas pour tous) ; les clés
+  sont NAMESPACÉES par producteur (`ressource|query` pour les écrans,
+  `job|ressource|` pour le job) : un résultat n'est jamais livré à un
+  producteur d'un autre type. Le job de fond est BLOQUANT (`Worker.doWork`) : il
+  pose sa lecture dans la file et ATTEND, avec un délai BORNÉ (au-delà :
+  `Result.retry()` — il ne bloque jamais WorkManager indéfiniment). La
+  sémantique de résultat est INCHANGÉE : session MORTE = appairage
+  (`DeviceAuth.reject()` + succès), autre échec = réessai, absence de session =
+  réessai.
+- Périmètre : les lectures de RESSOURCES CACHÉES (celles que le job relit). Les
+  dépôts à usage ponctuel (profil, bascule de devoir, messagerie) gardent leur
+  propre `Thread` : hors périmètre ici (le verrou de session atomique, I17,
+  borne déjà leur impact).
+- Test : `tests/architecture/shared-queue.test.ts` (une file pour tous ; le job
+  ne lit plus le client en direct ; les ressources du job n'ont qu'une porte
+  d'entrée) + `tests/unit/kotlin-local-queue.test.ts` (Kotlin EXÉCUTÉ :
+  l'interface et le job ne se croisent pas, l'attente du job est bornée, une
+  seule instance) + `tests/unit/kotlin-sync-worker.test.ts` (Kotlin EXÉCUTÉ :
+  la décision session morte / réessai, la lecture qui jette devient un
+  résultat).
+- Commande : `make check`.
+- Emplacement : `android/data/ClientQueue.kt`, `android/data/CachedReads.kt`,
+  `android/data/SyncedRepository.kt`, `android/data/PeriodicSyncWorker.kt`,
+  `android/data/SyncJobOutcome.kt`, `android/data/SessionFailure.kt`.

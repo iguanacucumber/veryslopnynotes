@@ -12,7 +12,11 @@
 // refusées par le test.
 package fr.veryslopnynotes.syncjob
 
+import fr.veryslopnynotes.data.SyncJobDecision
 import fr.veryslopnynotes.data.SyncJobOutcome
+import fr.veryslopnynotes.data.SyncJobRead
+import fr.veryslopnynotes.data.safeRead
+import fr.veryslopnynotes.data.syncJobDecision
 import fr.veryslopnynotes.data.syncJobOutcome
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
@@ -41,6 +45,35 @@ private class Driver {
                 is SyncJobOutcome.Refresh -> ok(
                     "outcome" to JVal.Str("refresh"),
                     "session" to JVal.Str(outcome.session),
+                )
+            }
+        }
+        // #403 : la décision sur le RÉSULTAT d'une lecture : session morte =
+        // appairage (le job « réussit »), autre échec = réessai.
+        "decision" -> {
+            val cause = op.str("cause")
+            val read: SyncJobRead =
+                if (cause == null) SyncJobRead.Ok("payload")
+                else SyncJobRead.Failed(RuntimeException(cause))
+            when (val decision = syncJobDecision(read)) {
+                is SyncJobDecision.Loaded -> ok(
+                    "decision" to JVal.Str("loaded"),
+                    "payload" to JVal.Str(decision.payload),
+                )
+                SyncJobDecision.SessionDead -> ok("decision" to JVal.Str("sessionDead"))
+                SyncJobDecision.Retry -> ok("decision" to JVal.Str("retry"))
+            }
+        }
+        // Une lecture qui jette devient un RÉSULTAT (la file ne perd pas ses
+        // callbacks si le travail jette).
+        "safeRead" -> {
+            val cause = op.str("cause")
+            val read = safeRead { if (cause == null) "payload" else throw IllegalStateException(cause) }
+            when (read) {
+                is SyncJobRead.Ok -> ok("read" to JVal.Str("ok"), "payload" to JVal.Str(read.payload))
+                is SyncJobRead.Failed -> ok(
+                    "read" to JVal.Str("failed"),
+                    "cause" to JVal.Str(read.cause.message ?: ""),
                 )
             }
         }
