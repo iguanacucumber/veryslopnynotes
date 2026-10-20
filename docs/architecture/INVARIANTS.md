@@ -58,7 +58,7 @@ Format : Invariant → test → commande → emplacement.
 
 ## I2 — Aucun accès Pronote côté serveur ; un seul client Android (ADR-003)
 - Invariant : le serveur ne contacte jamais Pronote. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android (`app`, `core`, `data`) ne contacte Pronote (pinné par I1).
-- Test : `tests/architecture/invariants.test.ts` (aucun accès réseau serveur + un `Client` Android) + `agents/runtime/check-architecture.ts`.
+- Test : `tests/architecture/invariants.test.ts` (aucun accès réseau serveur + un `Client` Android + la surface importée hors `pronote/` : `Client` et les types protocoles, dont `ExpiredObject` — G=22) + `agents/runtime/check-architecture.ts`.
 - Commande : `make architecture-test`.
 - Emplacement : `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
 
