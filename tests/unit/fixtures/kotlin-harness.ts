@@ -40,11 +40,10 @@
 //   4. ZOMBIS. Le pilote `java` était tué sans être récolté — `[java] <defunct>`
 //      empilé dans `ps` après chaque run. On attend désormais sa mort.
 import { afterAll } from "bun:test";
-import { createHash } from "node:crypto";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, renameSync, unlinkSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { ensureSingleJar, lockIsStale } from "./jar-lock";
-import { mainClassOf, PARITY_SOURCES } from "./parity-sources";
+import { digestOf, mainClassOf, PARITY_SOURCES } from "./parity-sources";
 
 export const ROOT = join(import.meta.dir, "..", "..", "..");
 
@@ -289,13 +288,6 @@ function toolchain(): ParityToolchain {
     );
   }
 
-  /** sha256 du CONTENU des sources (une modification = nouveau cache). */
-  function fileDigest(sources: string[]): string {
-    const h = createHash("sha256");
-    for (const f of sources) h.update(readFileSync(f));
-    return h.digest("hex").slice(0, 16);
-  }
-
   /**
    * Compile les sources dans `jar`.
    *
@@ -406,7 +398,7 @@ function toolchain(): ParityToolchain {
     sources: string[],
     opts?: { timeoutMs?: number },
   ): Promise<string> {
-    const dir = join(ROOT, "node_modules", ".cache", cacheName, fileDigest(sources));
+    const dir = join(ROOT, "node_modules", ".cache", cacheName, digestOf(sources));
     const jar = join(dir, "parity.jar");
     if (existsSync(jar)) return jar;
     mkdirSync(dir, { recursive: true });
