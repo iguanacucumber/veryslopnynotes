@@ -5,7 +5,8 @@ import { join } from "node:path";
 
 // agents/runtime/shot.sh + deep links de debug (issue #133). La capture
 // déterministe repose sur DEUX listes qui doivent rester d'accord :
-//   1. les `WEB_ROUTES` de `WebApp.kt` (les routes hash servies à la WebView),
+//   1. les `WEB_ROUTES` de `WebRouteState.kt` (les routes hash servies à la
+//      WebView — #400 : la liste est dans le fichier PUR, hors `android.*`),
 //   2. les `<data android:host>` du manifest DEBUG (qui rend l'URL ouvrable).
 // Un oubli ne plante rien : `am start` échoue ou l'app ouvre l'accueil en
 // silence. Ces tests sont la seule chose qui attrape la dérive — sans
@@ -13,6 +14,10 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dir, "..", "..");
 const WEBAPP = readFileSync(
   join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/WebApp.kt"),
+  "utf8",
+);
+const WEB_ROUTE_STATE = readFileSync(
+  join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/WebRouteState.kt"),
   "utf8",
 );
 const MAIN_ACTIVITY = readFileSync(
@@ -30,7 +35,7 @@ const MAIN_MANIFEST = readFileSync(
 const SHOT = readFileSync(join(ROOT, "agents/runtime/shot.sh"), "utf8");
 
 /** Routes hash de `WEB_ROUTES`, ramenées à l'hôte du deep link. */
-const ROUTES = [.../val WEB_ROUTES: Set<String> = setOf\(([\s\S]*?)\)/.exec(WEBAPP)![1]!.matchAll(/"([^"]+)"/g)]
+const ROUTES = [.../val WEB_ROUTES: Set<String> = setOf\(([\s\S]*?)\)/.exec(WEB_ROUTE_STATE)![1]!.matchAll(/"([^"]+)"/g)]
   .map((m) => m[1]!)
   .map((route) => (route === "/" ? "index" : route.replace(/^\//, "")));
 

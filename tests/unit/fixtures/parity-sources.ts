@@ -112,7 +112,8 @@ export const PRODUCTION_SOURCES: string[] = [
   join(DATA, "SyncJobOutcome.kt"),
   join(DATA, "WeekWindow.kt"),
   // `app` — les messages d'appairage, le message de refus du devoir, le type
-  // MIME des pièces jointes et la traduction d'un échec natif en rejet.
+  // MIME des pièces jointes, la traduction d'un échec natif en rejet et la
+  // route de l'interface web (le chemin porté par le HASH de l'URL, #400).
   join(APP, "AttachmentMime.kt"),
   join(APP, "BridgeErrors.kt"),
   // `app` — les EXÉCUTEURS du pont (#393) : un fil par appel et une file LLM
@@ -123,6 +124,10 @@ export const PRODUCTION_SOURCES: string[] = [
   join(APP, "PairingMessages.kt"),
   // `app` — la phrase de refus d'une matière hors contrat (#395).
   join(APP, "SubjectPrefMessages.kt"),
+  // `app` — la ROUTE de l'interface web (#400) : le chemin porté par le HASH
+  // de l'URL. Fichier PUR (aucun import `android.*`) : le harnais le compile
+  // et le REJOUE, donc le test porte sur du code de production.
+  join(APP, "WebRouteState.kt"),
 ];
 
 /** Les pilotes du dossier `kotlin-parity` (tous, triés : parcours déterministe). */
