@@ -52,4 +52,18 @@ describe("ping de session (#408)", () => {
     const ifDue = slice(comm, "fun pingIfDue()", "\n    fun ");
     expect(ifDue).toContain("shouldPing()");
   });
+
+  // La période du fil de garde est un PARAMÈTRE (le harnais de parité
+  // #202 l'accélère pour ne pas payer un tick de production par test), mais
+  // le DÉFAUT est celui de production : 1 000 ms. Ce test verrouille ce
+  // défaut, sinon un « petit ajustement » duparamètre tirerait le ping de
+  // session vers le CPU.
+  test("la période du fil de garde reste de 1 000 ms par défaut", () => {
+    const comm = codeOnly(readFileSync(COMM, "utf8"));
+    expect(comm).toContain("tickMs: Long = 1000L");
+    // Et le fil DORT de cette période (pas d'une constante oubliée en place).
+    const start = slice(comm, "fun start()", "\n    fun ");
+    expect(start).toContain("Thread.sleep(tickMs)");
+    expect(start).not.toContain("Thread.sleep(1000");
+  });
 });

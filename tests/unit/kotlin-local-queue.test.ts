@@ -227,7 +227,12 @@ describe("file PARTAGÉE : l'interface et le job de fond ne se croisent pas (#40
     // Une lecture longue occupe la file.
     await sharedSubmit("grades|2", 200);
     // Le job attend, mais son délai est court : il rend la main (réessai).
-    const id = await sharedAwait("job|grades|2", 300);
+    // La VALEUR du délai ne fait pas partie du contrat : ce qui est testé,
+    // c'est que l'attente FINIT (elle rend la main au lieu de bloquer à
+    // jamais). 100 ms suffisent donc — la file reste occupée jusqu'au
+    // `sharedRelease` ci-dessous, donc le job ne peut de toute façon pas
+    // être servi pendant l'attente.
+    const id = await sharedAwait("job|grades|2", 100);
     const res = await sharedAwaitResult(id);
     expect(res.timedOut).toBe(true);
     // La file se libère : le travail orphelin s'exécute, sans conséquence.

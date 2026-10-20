@@ -44,14 +44,27 @@ private class Driver {
             val start = CountDownLatch(1)
             val winners = AtomicInteger(0)
             val losers = AtomicInteger(0)
+            // DÉTERMINISTE, sans attente. Le gagnant GARDE la porte jusqu'à ce
+            // que TOUS les autres aient TENTÉ (et donc échoué) : c'est ce qui
+            // vaut un CAS. Avant, un `Thread.sleep(200)` faisait la même
+            // chose — mais par TIMING : un fil lent à démarrer pouvait
+            // tenter APRÈS la libération, gagner lui aussi, et faire
+            // échouer le test par pur hasard. Ici l'ordre est garanti par le
+            // compteur : `attempted == n` implique que les n fils ont
+            // appelé `tryEnter`, donc qu'aucun ne peut plus gagner.
+            val attempted = AtomicInteger(0)
             val threads = (0 until n).map {
                 Thread {
                     start.await()
-                    if (gate.tryEnter()) {
+                    val won = gate.tryEnter()
+                    // Ma tentative est finie : je le dis IMMÉDIATEMENT (avant
+                    // d'attendre), sinon le gagnant qui m'attend ne verrait
+                    // jamais le compteur arriver à n.
+                    attempted.incrementAndGet()
+                    if (won) {
                         winners.incrementAndGet()
-                        // Le gagnant GARDE la porte un moment : les autres la
-                        // trouvent fermée (c'est ce que vaut un CAS).
-                        Thread.sleep(200)
+                        // Attend que les n-1 autres aient tenté (et perdu).
+                        while (attempted.get() < n) Thread.sleep(1)
                         gate.leave()
                     } else {
                         losers.incrementAndGet()
