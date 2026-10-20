@@ -120,7 +120,7 @@ object HomeworkAi {
     // La cle de l'appelant (apiKey) est relayee a l'adaptateur telle quelle :
     // elle n'entre pas dans le prompt et n'est jamais journalisee.
     fun generateHomework(
-        provider: LlmProvider,
+        provider: SafePromptProvider,
         question: String,
         sources: List<HomeworkSource>,
         apiKey: String?,

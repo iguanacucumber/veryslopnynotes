@@ -5,7 +5,6 @@ import fr.veryslopnynotes.core.Homework
 import fr.veryslopnynotes.core.HomeworkAi
 import fr.veryslopnynotes.core.HomeworkOutcome
 import fr.veryslopnynotes.core.HomeworkSource
-import fr.veryslopnynotes.core.LlmProvider
 // Budget de tokens du fournisseur : IMPORTE du core (#411), jamais recopie
 // ici. Il est DEDUIT du plafond de caracteres de la garde I5
 // (MAX_OUTPUT_CHARS / CHARS_PER_TOKEN) : le fournisseur ne peut donc pas
@@ -15,9 +14,7 @@ import fr.veryslopnynotes.core.OutputTooLongException
 import fr.veryslopnynotes.core.SafePrompt
 import fr.veryslopnynotes.core.SafePromptProvider
 import fr.veryslopnynotes.core.SecretDetectedException
-import fr.veryslopnynotes.core.Untrusted
 import fr.veryslopnynotes.core.assertNoSecretsInPrompt
-import fr.veryslopnynotes.core.buildSafePrompt
 import fr.veryslopnynotes.core.secretRefusalMessage
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -85,10 +82,6 @@ class OpenRouterLlm(
 
     init {
         if (model.isBlank()) throw LlmError("Configuration LLM incomplète.")
-    }
-
-    override fun generate(system: String, data: List<Untrusted<String>>, apiKey: String?): String {
-        return generateSafe(buildSafePrompt(system, data), apiKey)
     }
 
     // Envoie le SafePrompt DEJA valide par la garde (nonce de l'appelant preserve

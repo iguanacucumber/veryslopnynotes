@@ -131,7 +131,18 @@ private val RE_AUTH = Regex(
 private val RE_PEM = Regex(
     Regex.escape(F_PEM_BEGIN) + "([A-Z0-9 ]*)" + Regex.escape(F_PEM_KEY) + Regex.escape(F_PEM_DASH),
 )
-private val RE_ENV = Regex("(?m)^[ \\t]*(?:export[ \\t]+)?([A-Za-z_][A-Za-z0-9_]*)[ \\t]*[:=][ \\t]*(\\S+)")
+// Affectation d'une variable SENSIBLE, en DEBUT de ligne OU en milieu de
+// ligne (#493) : l'ancien motif était ancré en début de ligne (`(?m)^[ \t]*`),
+// donc « mon cours utilise GITHUB_TOKEN=… » passait.
+//
+// Deux garde-fous contre les faux positifs (I4 : un cours légitime ne doit pas
+// être refusé) :
+//   - le nom ne doit PAS être un suffixe d'un autre mot (`monTOKEN=` n'est pas
+//     `TOKEN=`) : le (?<![?\w-]) refuse la position après un mot, un `-` ou
+//     un `?`/`&` ;
+//   - un paramètre de URL (`?token=…`) n'est PAS une affectation : c'est la
+//     forme d'un exemple de documentation.
+private val RE_ENV = Regex("(?<![?\\w-])([A-Za-z_][A-Za-z0-9_]*)[ \\t]*[:=][ \\t]*(\\S+)")
 private val RE_COOKIE = Regex("(?i)\\b(?:set-)?cookie[ \\t]*:[ \\t]*([A-Za-z0-9_.$-]+)=([^;\\s]{8,})")
 private val RE_OPAQUE = Regex("[A-Za-z0-9+/=_-]{40,}")
 private val RE_PLACEHOLDER = Regex("(?i)your|example|placeholder|dummy|change-?me|x{3,}|todo")
@@ -539,28 +550,28 @@ fun parseJsonOutput(out: String): JsonValue {
     return parsed
 }
 
-// Fournisseur qui sait envoyer un SafePrompt deja valide (nonce de l'appelant
-// preserve). Meme repli que cote TS : sinon generate(), qui reconstruit.
-fun interface LlmProvider {
-    fun generate(system: String, data: List<Untrusted<String>>, apiKey: String?): String
-}
-
-interface SafePromptProvider : LlmProvider {
+/**
+ * Fournisseur qui sait envoyer un SafePrompt DEJA VALIDE.
+ *
+ * Le type porte la garantie : il n'y a plus de chemin « reconstruit » (un
+ * `generate(system, data)` qui regenere un nonce et renvoie un corps que la
+ * garde n'a PAS verifie). Avant #493, `callProvider` acceptait un
+ * `LlmProvider` quelconque et, si ce n'etait pas un `SafePromptProvider`,
+ * REBUILLAIT le prompt : le corps verifie par `assertNoSecretsInPrompt`
+ * n'etait alors pas le corps envoye — le commentaire du fichier affirmait
+ * l'inverse.
+ */
+interface SafePromptProvider {
     fun generateSafe(safe: SafePrompt, apiKey: String?): String
 }
 
 // Envoie le prompt VALIDE ici (jamais une reconstruction) : le corps controle par
 // assertNoSecretsInPrompt est exactement celui transmis.
 private fun callProvider(
-    provider: LlmProvider,
+    provider: SafePromptProvider,
     safe: SafePrompt,
-    data: List<Untrusted<String>>,
     apiKey: String?,
-): String {
-    val p = provider as? SafePromptProvider
-    if (p != null) return p.generateSafe(safe, apiKey)
-    return provider.generate(safe.system, data, apiKey)
-}
+): String = provider.generateSafe(safe, apiKey)
 
 // Pont SafePrompt (body nonce) -> LlmProvider (system + data Untrusted).
 // Valide prompt avant appel, valide sortie apres. Aucun outil/reseau ici.
@@ -568,7 +579,7 @@ private fun callProvider(
 // n'entre JAMAIS dans le prompt (donc jamais dans assertNoSecretsInPrompt) et
 // n'est jamais journalisee ici.
 fun generateGuarded(
-    provider: LlmProvider,
+    provider: SafePromptProvider,
     system: String,
     data: List<Untrusted<String>>,
     nonce: String? = null,
@@ -576,12 +587,12 @@ fun generateGuarded(
 ): String {
     val safe = buildSafePrompt(system, data, nonce)
     assertNoSecretsInPrompt(safe, data)
-    val out = callProvider(provider, safe, data, apiKey)
+    val out = callProvider(provider, safe, apiKey)
     return validateTextOutput(out)
 }
 
 fun generateGuardedJson(
-    provider: LlmProvider,
+    provider: SafePromptProvider,
     system: String,
     data: List<Untrusted<String>>,
     nonce: String? = null,
@@ -589,6 +600,6 @@ fun generateGuardedJson(
 ): JsonValue {
     val safe = buildSafePrompt(system, data, nonce)
     assertNoSecretsInPrompt(safe, data)
-    val out = callProvider(provider, safe, data, apiKey)
+    val out = callProvider(provider, safe, apiKey)
     return parseJsonOutput(out)
 }
