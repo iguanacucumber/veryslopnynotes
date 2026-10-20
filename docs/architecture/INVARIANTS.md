@@ -398,7 +398,13 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   frais. La purge ne lève jamais le signal (pas de boucle) et n'échoue jamais
   celui qui le lève. Le compte appairé est ENREGISTRÉ à l'appairage
   (`accounts.add`) : le magasin multi-compte n'est plus vide.
-- Test : `tests/unit/kotlin-session-repair.test.ts` (Kotlin réel : le rejet
+  **Un objet d'une session PRÉCÉDENTE n'est pas une session morte** (G=22,
+  `ExpiredObject`) : son message contient le mot « session », donc la décision
+  tranche par TYPE, pas par motif (#485) — sinon un simple objet périmé
+  déconnectait l'élève ET purgeait le cache hors ligne.
+- Test : `tests/unit/kotlin-sync-worker.test.ts` (Kotlin réel : G=22 = réessai,
+  pas « session morte » ; le vrai message de production est utilisé) +
+  `tests/unit/kotlin-session-repair.test.ts` (Kotlin réel : le rejet
   purge la session et le cache) + `tests/architecture/session-repair.test.ts`
   (câblage : l'abonné, le chemin de purge, l'enregistrement du compte).
 - Commande : `make check`.
