@@ -23,6 +23,21 @@ export const PATTERNS: SecretPattern[] = [
   { name: "openrouter-key", re: /sk-or-v1-[A-Za-z0-9]{8,}/ },
   { name: "env-assign", re: /(OPENROUTER_API_KEY|MASTER_KEY|PRONOTE_PASSWORD|MANUAL_PASSWORD)\s*=\s*[^$\s][^\n]{3,}/ },
   { name: "storageState", re: /storageState.*(token|session|cookie)/i },
+  // Formes qui manquaient au jeu du dépôt (#503) : elles n'existaient que
+  // dans le jeu VENDORED — donc le dossier tiers, le moins contrôlé, était
+  // mieux surveillé que le dépôt lui-même.
+  { name: "github-token", re: /gh[pousr]_[A-Za-z0-9]{30,}/ },
+  { name: "slack-token", re: /xox[baprs]-[A-Za-z0-9-]{20,}/ },
+  // Clé AWS d'exemple canonique (doc AWS) : exclue, elle n'ouvre rien.
+  { name: "aws-key", re: /AKIA(?!IOSFODNN7EXAMPLE)[0-9A-Z]{16}/ },
+  // JWT : trois segments base64url. Un cours qui parle de JWT n'en a pas.
+  { name: "jwt", re: /eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}/ },
+  // Identifiants dans une URL : `https://user:pass@host/`. Le mot de passe
+  // doit faire 8 caractères ou plus : les ATTACKS DE TEST (« user:pass@ »)
+  // sont alors ignorés, comme les exemples de documentation.
+  { name: "url-credential", re: /https?:\/\/[^\s/:@"]+:[^\s/@"]{8,}@/ },
+  // Littéral de credential : `api_key = "…"`, `password: "…"`.
+  { name: "credential-literal", re: /(api[_-]?key|secret|token|password|passwd|pwd)\s*[:=]\s*["']([A-Za-z0-9+/=_-]{32,})["']/i },
 ];
 
 export const VENDORED_PATTERNS: SecretPattern[] = [
@@ -60,10 +75,18 @@ export function matchPatterns(content: string, patterns: SecretPattern[]): strin
     const m = content.match(re);
     if (!m) continue;
     if (name === "env-assign") {
-      // Ignore lignes placeholders (docs légitimes), échoue sinon.
-      const bad = m.input!.split("\n").filter(
-        (l) => re.test(l) && !PLACEHOLDER_RE.test(l.split("=").slice(1).join("=")),
-      );
+      // Ignore les lignes PLACEHOLDER (docs légitimes), échoue sinon.
+      //
+      // Le test de placeholder porte sur la VALEUR ENTIÈRE, ancré à son
+      // début (#503) : avant, il suffisait qu'un mot de placeholder soit
+      // PRÉSENT dans la valeur pour que la ligne soit excusée — donc
+      // `MASTER_KEY=prod-example-key-9f3a2b` passait. Un vrai secret ne
+      // commence pas par « example ».
+      const bad = m.input!.split("\n").filter((l) => {
+        if (!re.test(l)) return false;
+        const value = l.split("=").slice(1).join("=");
+        return !VALUE_PLACEHOLDER_RE.test(value.trim());
+      });
       if (!bad.length) continue;
     }
     if (name === "credential-literal" && VALUE_PLACEHOLDER_RE.test(m[2] ?? "")) continue;
