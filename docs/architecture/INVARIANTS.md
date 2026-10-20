@@ -118,7 +118,10 @@ IPv6, ULA, link-local, métadonnées), **nom d'hôte RÉSOLU avant la navigation
 qui pointe vers une IP interne — rebinding — est refusé, motif explicite
 `403 private_host` ; un nom introuvable est refusé aussi, `502
 unresolved_host` ; jamais un échec muet), **chaîne de redirections vérifiée
-avant le navigateur** et **URL finale re-vérifiée après navigation**. Restent
+avant le navigateur — autant de sauts que Chromium en suit (20)** : sous ce
+plafond, le dernier saut partait vers une cible privée sans être vérifié ; au
+delà, la chaîne est refusée (fail-closed) — et **URL finale re-vérifiée après
+navigation**. Restent
 résolus par le réseau : la fenêtre TOCTOU entre la résolution vérifiée et la
 connexion (le navigateur résout de son côté, au moment de connecter) et
 l'épuisement du compte. Toute personne pouvant joindre ce serveur peut donc
