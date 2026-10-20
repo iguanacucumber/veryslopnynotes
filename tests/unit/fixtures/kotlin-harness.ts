@@ -488,51 +488,59 @@ function toolchain(): ParityToolchain {
     // LE FILET EST INDISPENSABLE : un pilote qui ne LIT PAS stdin (le faux
     // `java` de `kotlin-harness-process.test.ts`) ne sort pas par là. SIGTERM
     // puis SIGKILL, donc un pilote coincé ne survit jamais au test.
-    let stopped = false;
-    const stop = async (): Promise<void> => {
-      if (stopped) return;
-      stopped = true;
-      try {
-        sink.end(); // EOF : le pilote sort de sa boucle de lecture.
-      } catch {
-        // tube déjà fermé (le pilote était mort)
-      }
-      // Course : si le pilote sort sur EOF, c'est gagné en ~2 ms. Le délai
-      // n'est JAMAIS attendu quand le pilote est sage.
-      //
-      // Le minuteur est ANNULÉ dans les deux cas : un `Bun.sleep` laissé en
-      // vol retiendrait le worker de test vivant jusqu'à son terme (250 ms
-      // × 30 fichiers de parité : exactement le temps qu'on cherche à
-      // gagner).
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const exited = await Promise.race([
-        proc.exited.then(() => true),
-        new Promise<boolean>((resolve) => {
-          timer = setTimeout(() => resolve(false), 250);
-        }),
-      ]);
-      if (timer) clearTimeout(timer);
-      if (exited) return;
-      try {
-        proc.kill("SIGTERM");
-      } catch {
-        // déjà mort
-      }
-      let hard: ReturnType<typeof setTimeout> | undefined;
-      const killed = await Promise.race([
-        proc.exited.then(() => true),
-        new Promise<boolean>((resolve) => {
-          hard = setTimeout(() => resolve(false), 2000);
-        }),
-      ]);
-      if (hard) clearTimeout(hard);
-      if (killed) return;
-      try {
-        proc.kill("SIGKILL");
-      } catch {
-        // déjà mort
-      }
-      await proc.exited; // récolte : pas de zombie.
+    //
+    // L'arrêt est IDEMPOTENT et PARTAGEABLE : `close()` (appelé en cours de
+    // test) et `afterAll` (la récolte finale) obtiennent la MÊME promesse.
+    // Avant, `close()` lancait l'arrêt en fond et `afterAll` repartait
+    // aussitôt : la récolte pouvait ne jamais.aboutir. Ici, `afterAll`
+    // attend toujours la mort effective du fils — pas de `[java] <defunct>`.
+    let stopping: Promise<void> | null = null;
+    const stop = (): Promise<void> => {
+      if (stopping) return stopping;
+      stopping = (async (): Promise<void> => {
+        try {
+          sink.end(); // EOF : le pilote sort de sa boucle de lecture.
+        } catch {
+          // tube déjà fermé (le pilote était mort)
+        }
+        // Course : si le pilote sort sur EOF, c'est gagné en ~2 ms. Le délai
+        // n'est JAMAIS attendu quand le pilote est sage.
+        //
+        // Le minuteur est ANNULÉ dans les deux cas : un `Bun.sleep` laissé en
+        // vol retiendrait le worker de test vivant jusqu'à son terme (250 ms
+        // × 30 fichiers de parité : exactement le temps qu'on cherche à
+        // gagner).
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const exited = await Promise.race([
+          proc.exited.then(() => true),
+          new Promise<boolean>((resolve) => {
+            timer = setTimeout(() => resolve(false), 250);
+          }),
+        ]);
+        if (timer) clearTimeout(timer);
+        if (exited) return;
+        try {
+          proc.kill("SIGTERM");
+        } catch {
+          // déjà mort
+        }
+        let hard: ReturnType<typeof setTimeout> | undefined;
+        const killed = await Promise.race([
+          proc.exited.then(() => true),
+          new Promise<boolean>((resolve) => {
+            hard = setTimeout(() => resolve(false), 2000);
+          }),
+        ]);
+        if (hard) clearTimeout(hard);
+        if (killed) return;
+        try {
+          proc.kill("SIGKILL");
+        } catch {
+          // déjà mort
+        }
+        await proc.exited; // récolte : pas de zombie.
+      })();
+      return stopping;
     };
     afterAll(stop);
     return {
@@ -555,6 +563,9 @@ function toolchain(): ParityToolchain {
         return line;
       },
       close() {
+        // L'arrêt est lancé mais pas attendu : `close()` est synchrone par
+        // contrat. `afterAll` attend la MÊME promesse (voir `stop`), donc la
+        // récolte aboutit quand même.
         void stop();
       },
     };

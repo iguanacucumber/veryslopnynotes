@@ -332,7 +332,8 @@ private class Driver {
                 ok("pings" to JVal.Num(pings.toDouble()))
             }
             // Variante sans thread : teste le seuil pur (`pingIfDue`) sans
-            // attendre le tick de 1 s. Le thread reste couvert par `keepAlive`.
+            // attendre le tick du fil de garde. Le thread reste couvert par
+            // `keepAlive` (avec une période courte : `tickMs`).
             "keepAliveTick" -> {
                 val lastPing = System.currentTimeMillis() / 1000 - ((op.num("staleSec") ?: 0.0).toLong())
                 var pings = 0
