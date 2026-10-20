@@ -6,6 +6,7 @@
 3. Review — `make watch` pendant le code, puis relire le diff + `bun run check`. Répéter build↔review jusqu'à bon (`check` pass, rien de douteux). Si sensible, relire une 2e fois en adversarial : `android/pronote/`, `web/src/bridge/`, CSP/WebView, crypto/secrets/auth, appairage, fixtures, lockfiles, `Makefile`, `AGENTS.md`, scripts de capture.
 4. Merge auto — `./agents/ship.sh <n> "<titre>"` (fetch + rebase + check complet + push + corps de PR), puis en UN bloc : `tools.github.create_pull_request`, `tools.github.merge_pull_request` (`merge_method: "merge"`), fermer l'issue via `tools.github.issue_write` (`method: "update"`, `state: "closed"`, `state_reason: "completed"`). Aucune validation humaine, jamais d'attente. Enfin `git fetch --prune`, puis supprimer worktree et branche.
 - `make check-fast` (~2,1 s à chaud) pour l'itération, jamais avant PR : il saute `android-compile` seulement (le build Vite est inclus).
+- **CI = le gate** (`.github/workflows/ci.yml`) : chaque PR et chaque push sur `main` rejouent `make check` (11 étapes, dont la compilation Kotlin, la parité TS ↔ Kotlin exécutée, les scans d'architecture et `bun audit`). Le gate ne se rétrécit pas par l'environnement : `make check` neutralise `CHECK_HARNESS`, `ALLOW_SKIP_ANDROID` et pose `REQUIRE_KOTLIN_TOOLCHAIN=1` (sans `kotlinc`, la parité saute et le gate échoue — pas de faux vert).
 - Parallèle : push = claim. `launch.sh` refuse si `origin/agent/<n>-<slug>` existe déjà.
 
 ## Garde-fous

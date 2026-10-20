@@ -1,22 +1,32 @@
-.PHONY: check check-fast watch lint typecheck unit architecture contracts check-kotlin android-compile web web-typecheck web-build web-test web-smoke runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
+.PHONY: check check-fast watch lint audit typecheck unit architecture contracts check-kotlin android-compile web web-typecheck web-build web-test web-smoke runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
 
 # Découverte JDK/SDK partagée par android-compile, buildDebugApk, buildRelApk :
 # une seule implémentation, sinon une des trois finit par oublier la borne 17-21.
 ANDROID_ENV = . agents/runtime/android-env.sh
 
-# Le gate de merge : 10 étapes, TOUJOURS. `CHECK_HARNESS=` vide l'opt-in
+# Le gate de merge : 11 étapes, TOUJOURS. `CHECK_HARNESS=` vide l'opt-in
 # même si le shell en exporte un : personne ne rétrécit le gate par
 # l'environnement (agents/ship.sh hérite de l'env du shell). Un `CHECK_TARGETS`
 # resté dans l'environnement est REFUSÉ et signalé par check.ts.
+#
+# `ALLOW_SKIP_ANDROID=` : même traitement — elle lançait un SKIP de la
+# compilation Kotlin, donc le gate pouvait être vert SANS résolution de
+# symbole (le filet unique qui la voit).
+#
+# `REQUIRE_KOTLIN_TOOLCHAIN=1` : le gate exige la chaîne Kotlin (`kotlinc` +
+# `java`). Sans elle, toute la parité TS <-> Kotlin SAUTE et le gate est vert
+# sans une ligne de production Kotlin exécutée (I4/I5/I6/I12/I14/I16/I18/
+# I19/I20/I21 non vérifiées) — un faux vert. L'itération (`check-fast`, `watch`)
+# garde le SKIP bruyant : le gate est strict, la boucle reste rapide.
 check:
-	CHECK_HARNESS= bun run agents/runtime/check.ts
+	CHECK_HARNESS= ALLOW_SKIP_ANDROID= REQUIRE_KOTLIN_TOOLCHAIN=1 bun run agents/runtime/check.ts
 
 # Boucle interne : tout sauf la compilation Gradle (~2,1 s à chaud). Le build
 # Vite est inclus ; ce n'est PAS le gate de merge — `make check` ajoute
 # android-compile, le seul contrôle des symboles Kotlin.
 # CHECK_HARNESS=1 : opt-in EXPLICITE qui autorise `check.ts` à remplacer sa
 # liste d'étapes par `CHECK_TARGETS` (usage interne du harnais). Sans lui,
-# `CHECK_TARGETS` est refusé et les 10 étapes par défaut s'imposent (#368).
+# `CHECK_TARGETS` est refusé et les 11 étapes par défaut s'imposent (#368).
 check-fast:
 	CHECK_HARNESS=1 CHECK_TARGETS="lint typecheck unit architecture contracts check-kotlin web-typecheck web-test web-build" bun run agents/runtime/check.ts
 
@@ -29,6 +39,13 @@ watch:
 
 lint:
 	bun run agents/runtime/check-secrets.ts
+
+# Audit des dépendances (AGENTS.md : toute nouvelle dépendance doit être
+# épinglée, auditée avec `bun audit`, compatible MIT). L'audit demande le
+# réseau : un registre injoignable fait ÉCHOUER l'étape (on ne déclare pas
+# « aucune vulnérabilité » quand on n'a rien demandé).
+audit:
+	bun audit
 
 typecheck:
 	bun run typecheck
