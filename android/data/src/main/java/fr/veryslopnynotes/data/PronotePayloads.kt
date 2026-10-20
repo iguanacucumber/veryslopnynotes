@@ -623,18 +623,15 @@ internal fun discussionsPayload(client: Client, nowIso: String = parisNowIso()):
     raws.forEachIndexed { i, d ->
         val id = boundedCp(d.id, 64)
         if (id.isEmpty()) return@forEachIndexed
-        var participants: List<String> = emptyList()
         var lastMessageAt: String? = null
         // NULLE = fraîcheur inconnue : le champ sera omis du JSON.
         var updatedAt: String? = null
         if (i < DISCUSSION_ENRICH_LIMIT) {
-            try {
-                participants = d.participants().mapNotNullTo(LinkedHashSet()) {
-                    boundedCp(it, 100).ifEmpty { null }
-                }.take(20)
-            } catch (e: Exception) {
-                if (isSessionFailure(e)) throw e
-            }
+            // #476 : les PARTICIPANTS ne sont PLUS téléchargés ici (un POST de
+            // moins par fil) : ils ne servent qu'à l'affichage de la ligne et
+            // à la recherche par nom — or le fil ouvert les redemande. La
+            // LISTE ne promet donc plus de nom : les noms arrivent à
+            // l'ouverture du fil.
             try {
                 val msgs = d.messages()
                 val last = msgs.lastOrNull()
@@ -650,8 +647,7 @@ internal fun discussionsPayload(client: Client, nowIso: String = parisNowIso()):
         arr.put(JSONObject().apply {
             put("id", id)
             put("subject", boundedCp(d.subject, 200).ifEmpty { "Discussion" })
-            put("participants", JSONArray(participants))
-            // Champ OMIS quand la fraîcheur est inconnue (jamais « maintenant »).
+            // Champ OMIS : les participants sont INCONNUS à ce stade (#476).
             putIf("updatedAt", updatedAt)
             unreadOf(d.unread)?.let { put("unreadCount", it) }
             lastMessageAt?.let { put("lastMessageAt", it) }
@@ -677,7 +673,18 @@ internal fun messagesPayload(
             put("sentAt", m.created.parisIso())
         })
     }
-    return JSONObject().put("messages", arr).toString()
+    // #476 : les participants du fil, demandés À L'OUVERTURE (un POST de
+    // plus, là où la liste en economisait douze).
+    val parts = JSONArray()
+    try {
+        discussion.participants()
+            .mapNotNullTo(LinkedHashSet()) { boundedCp(it, 100).ifEmpty { null } }
+            .take(20)
+            .forEach { parts.put(it) }
+    } catch (e: Exception) {
+        if (isSessionFailure(e)) throw e
+    }
+    return JSONObject().put("messages", arr).put("participants", parts).toString()
 }
 
 /** Destinataires (enseignants + vie scolaire, miroir `getRecipients`). */
