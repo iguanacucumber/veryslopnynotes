@@ -81,6 +81,22 @@ export const MAX_NATIVE_WAIT_MS = NATIVE_WAIT_MS.default + NATIVE_WAIT_MS.llm;
 export const DEFAULT_TIMEOUT_MS = 90_000;
 
 /**
+ * Lectures simultanées autorisées côté JS (#393).
+ *
+ * Le natif SÉRIALISE les lectures (une file locale, partagée avec le job de
+ * fond) et son délai d'appel (`NATIVE_WAIT_MS.default`) ne couvre QUE le
+ * travail : en parallèle, la N-ième lecture attend son tour et son délai
+ * expire AVANT lui — « Lecture indisponible. ». Le JS sérialise donc aussi :
+ * chaque lecture part sans attendre les autres et son délai natif couvre son
+ * propre travail.
+ *
+ * 1 = le budget d'une lecture (le délai HTTP de l'établissement, 15 s) tient
+ * dans le délai natif d'un appel (20 s). La relation est vérifiée sur les
+ * sources réelles (Kotlin) par `tests/web/bridge.test.ts`.
+ */
+export const MAX_PARALLEL_READS = 1;
+
+/**
  * Timeout JS par méthode (ms). 0 = pas de timeout.
  *
  * Jamais sous le plafond natif de la méthode : le scan attend que

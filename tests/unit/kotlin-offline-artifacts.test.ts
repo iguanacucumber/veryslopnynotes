@@ -83,11 +83,14 @@ describe("écritures hors CacheStore et purge de déconnexion (#404)", () => {
     const core = readFileSync(REVISION, "utf8");
     expect(core).toContain("fun set(key: String, value: ByteArray, epoch: Long): Boolean");
     expect(core).toContain("fun saveRevisionSheet(store: RevisionKv, sheet: RevisionSheet, epoch: Long): Boolean");
-    // Le pont : l'époque est capturée à l'ARRIVÉE de l'appel (la file a deux
-    // fils : une écriture demandée avant la purge peut être exécutée après).
+    // Le pont : l'époque est capturée à l'ARRIVÉE de l'appel (le travail part
+    // sur un fil : une écriture demandée avant la purge peut être exécutée
+    // après).
     const bridge = readFileSync(BRIDGE, "utf8");
     const iCapture = bridge.indexOf("val epoch = SessionEpoch.current()");
-    const iDispatch = bridge.indexOf("executor.execute {");
+    // Le MARQUEUR de dispatch reste générique (`.execute {`) : le nom de la file
+    // peut changer (#393 : un fil par appel, le LLM à part), l'ordre, non.
+    const iDispatch = bridge.indexOf(".execute {");
     expect(iCapture).toBeGreaterThan(-1);
     expect(iDispatch).toBeGreaterThan(-1);
     expect(iCapture).toBeLessThan(iDispatch);

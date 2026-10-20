@@ -12,12 +12,14 @@ import {
   BRIDGE_TIMEOUTS,
   DEFAULT_TIMEOUT_MS,
   MAX_NATIVE_WAIT_MS,
+  MAX_PARALLEL_READS,
   NATIVE_WAIT_MS,
   type SessionStatus,
 } from "../../web/src/bridge/types";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const BRIDGE = join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt");
+const HTTP = join(ROOT, "android/pronote/src/main/java/fr/veryslopnynotes/pronote/HttpSession.kt");
 
 interface NativeCall {
   requestId: string;
@@ -168,6 +170,118 @@ describe("pont : un rejet natif règle la promesse", () => {
     expect(erreur.code).toBe("unknown");
     expect(erreur.message.trim()).not.toBe("");
     expect(pendingCount()).toBe(0);
+  });
+});
+
+// #393 : l'accueil déclenche CINQ lectures en parallèle (`HomeScreen`). Le natif
+// les sérialise (une seule file locale) et son délai d'appel ne couvre QUE le
+// travail : en parallèle, la N-ième lecture attend son tour et son délai expire
+// AVANT lui — « Lecture indisponible. », puis « le téléphone n'a pas répondu »
+// côté JS. Le JS sérialise donc les lectures : une seule en vol, chaque
+// lecture part sur une file vide.
+describe("pont : les lectures ne saturent pas le pont (#393)", () => {
+  /** Faux pont qui suit les appels EN VOL et laisse le test les résoudre. */
+  function stubConcurrent(): {
+    inflight: () => number;
+    resolve: (id: string) => void;
+    resolveAll: () => void;
+  } {
+    const enVol = new Set<string>();
+    nativeCalls.length = 0;
+    const g = globalThis as unknown as {
+      VSN?: { call: (requestId: string, method: string, paramsJson: string) => void };
+    };
+    g.VSN = {
+      call(requestId: string, method: string, paramsJson: string) {
+        enVol.add(requestId);
+        nativeCalls.push({ requestId, method, params: JSON.parse(paramsJson) as Record<string, unknown> });
+      },
+    };
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: globalThis,
+      writable: true,
+    });
+    const resolve = (id: string) => {
+      enVol.delete(id);
+      const w = globalThis as unknown as {
+        __vsnResolve?: (requestId: string, resultJson: string) => void;
+      };
+      w.__vsnResolve?.(id, JSON.stringify({ payload: "{}", fetchedAt: 0, stale: false, error: null }));
+    };
+    return {
+      inflight: () => enVol.size,
+      resolve,
+      // Un test qui échoue ne doit pas laisser la file de lectures OCCUPÉE :
+      // les tests suivants partiraient en retard (et échoueraient aussi).
+      resolveAll: () => {
+        for (const id of [...enVol]) resolve(id);
+      },
+    };
+  }
+
+  /** Un tour de boucle : laisse les microtâches (départs) s'exécuter. */
+  function tick(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  test("cinq lectures de l'accueil : une seule en vol, les cinq aboutissent", async () => {
+    const pont = stubConcurrent();
+    const cles = ["grades", "assignments", "timetable", "alerts", "capabilities"];
+    const lectures = cles.map((key) => call("resources.load", { key }));
+    try {
+      // Une seule lecture est partie : les quatre autres attendent leur tour
+      // (parties en parallèle, leur délai natif expirerait avant leur travail).
+      await tick();
+      let parties = nativeCalls.filter((c) => c.method === "resources.load");
+      expect(parties).toHaveLength(1);
+      expect(pont.inflight()).toBe(1);
+      // Chacune part à son tour, et UNE SEULE reste en vol.
+      for (let i = 0; i < cles.length; i++) {
+        pont.resolve(parties[i]!.requestId);
+        await tick();
+        parties = nativeCalls.filter((c) => c.method === "resources.load");
+        expect(parties).toHaveLength(Math.min(i + 2, cles.length));
+        expect(pont.inflight()).toBeLessThanOrEqual(1);
+      }
+      const resultats = await Promise.all(lectures);
+      expect(resultats).toHaveLength(5);
+      expect(pendingCount()).toBe(0);
+    } finally {
+      pont.resolveAll();
+    }
+  });
+
+  test("le bouton retour ne fait pas la queue des lectures", async () => {
+    const pont = stubConcurrent();
+    const lecture = call("resources.load", { key: "grades" });
+    try {
+      await tick();
+      // Le retour part TOUT DE SUITE : il n'attend pas la lecture en vol.
+      const retour = call("app.back");
+      await tick();
+      expect(nativeCalls.map((c) => c.method)).toEqual(["resources.load", "app.back"]);
+      // …et la lecture n'est pas bloquée par le retour.
+      pont.resolve(nativeCalls[0]!.requestId);
+      pont.resolve(nativeCalls[1]!.requestId);
+      await lecture;
+      await retour;
+    } finally {
+      pont.resolveAll();
+    }
+  });
+
+  test("le nombre de lectures en vol tient dans le délai natif", () => {
+    // Le budget d'une lecture = le délai HTTP de l'établissement (lu dans le
+    // Kotlin de production) ; le délai natif d'un appel = le miroir de
+    // `VsnBridge`. Les lectures en file s'additionnent : la N-ième attend
+    // (N-1) lectures avant son travail, son délai doit couvrir le tout.
+    const http = readFileSync(HTTP, "utf8");
+    const budget = Number(/readTimeout\s*=\s*([\d_]+)/.exec(http)?.[1]?.replace(/_/g, ""));
+    expect(budget).toBeGreaterThan(0);
+    expect(MAX_PARALLEL_READS * budget).toBeLessThanOrEqual(NATIVE_WAIT_MS.default);
+    // Et le JS attend plus longtemps que le plafond natif (#371).
+    expect(DEFAULT_TIMEOUT_MS).toBeGreaterThan(MAX_NATIVE_WAIT_MS);
   });
 });
 
