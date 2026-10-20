@@ -110,6 +110,11 @@ check-kotlin:
 # pb d'environnement JVM/réseau, cf. docs/HUMAN_INPUTS.md). Cache froid = échec
 # explicite puis repli EN LIGNE : jamais de blocage silencieux.
 #
+# La CI met les dépendances ET les transformations en cache (cf.
+# .github/workflows/ci.yml) : sa jambe `--offline` passe donc du premier coup
+# (139 s à froid → 28 s), et le build cache Gradle en est VOLONTAIREMENT
+# absent — la compilation doit TOURNER, pas être servie par un cache.
+#
 # -x buildWebUi : `:app:compileDebugKotlin` tire `preBuild`, donc Gradle lançait
 # un Vite complet. `make check` exécute déjà `web-build` en parallèle : deux Vite
 # concurrents sur le même outDir (emptyOutDir) pouvaient se marcher dessus.
