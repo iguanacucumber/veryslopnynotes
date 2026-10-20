@@ -11,7 +11,7 @@ Format : Invariant → test → commande → emplacement.
 - `shared/contracts/` décrit les deux routes du scraper et conserve des validateurs utilisés par les tests Android.
 
 ## I1 — Seuls `android/pronote/` et le scraper parlent réseau (ADR-003)
-- Invariant : hors `android/pronote/`, `android/` ne contient aucune URL/référence hôte Pronote. Le module du port (zéro dépendance) est le seul à parler Pronote en direct ; la déclaration du module dans `settings.gradle.kts` est l'unique mention tolérée hors module. Côté app, PLUS AUCUN client HTTP vers un serveur applicatif (`ApiClient` supprimé en #206 : appairage, lectures et médias sont device-only) ; côté process, seul le scraper Playwright parle réseau (portail éditeur, `server/infrastructure/http.ts`).
+- Invariant : hors `android/pronote/`, `android/` ne contient aucune URL/référence hôte Pronote — **le mot du produit ET le domaine réel de l'éditeur** (`index-education.net`, cf. la référence `pronotets`) : `/pronote/i` seul laissait passer un hôte PRONOTE glissé dans `android/data/` (#489). Le module du port (zéro dépendance) est le seul à parler Pronote en direct ; la déclaration du module dans `settings.gradle.kts` est l'unique mention tolérée hors module. Côté app, PLUS AUCUN client HTTP vers un serveur applicatif (`ApiClient` supprimé en #206 : appairage, lectures et médias sont device-only) ; côté process, seul le scraper Playwright parle réseau (portail éditeur, `server/infrastructure/http.ts`).
 - Hôte auxiliaire (le scraper) choisi à l'exécution : l'allowlist n'est plus une
   constante de build mais `ServerConfig.validateBaseUrl` (https, sauf émulateur/
   boucle locale en http ; hôte et port bornés ; identifiants, chemin, query,

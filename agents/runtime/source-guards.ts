@@ -1,10 +1,18 @@
-export const pronoteHost = /pronote/i;
+/**
+ * Hôte PRONOTE : le mot du produit ET le domaine de l'éditeur.
+ *
+ * `index-education.net` est le domaine RÉEL des établissements PRONOTE (cf. la
+ * référence `pronotets` : `hubeduconnect.index-education.net`) : avec
+ * `/pronote/i` seul, un hôte PRONOTE glissé dans `android/data/` passait la
+ * garde I1 (#489).
+ */
+export const pronoteHost = /pronote|index-education/i;
 export const sqliteRe =
   /import\s+[^;]*sqlite|from\s+['"][^'"]*sqlite|require\s*\([^)]*sqlite|bun:sqlite|better-sqlite3/i;
 export const httpRe = /from\s+['"]hono|from\s+['"]express|require\s*\([^)]*(hono|express|fastify)|Bun\.serve/;
 
 const netRe = /fetch\(|axios|got\(|https?\.(get|request)|Bun\.serve|XMLHttpRequest|WebSocket/;
-const pronoteUrlRe = /https?:\/\/[^\s"']*(pronote)/i;
+const pronoteUrlRe = /https?:\/\/[^\s"']*(pronote|index-education)/i;
 
 // ponytail: two source-text heuristics; upgrade to AST/dataflow if server gains more outbound routes.
 export function hasDirectFetch(code: string): boolean {
