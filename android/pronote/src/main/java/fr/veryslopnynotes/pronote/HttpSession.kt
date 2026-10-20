@@ -279,13 +279,30 @@ class HttpSession(
      * autorité cassée) est une PANNE RÉSEAU : elle devient une `IOException`
      * — donc « réseau » pour l'app — et non une `MalformedURLException`
      * brute qui remontait au caller sans mapper (#429).
+     *
+     * L'hôte est validé ICI, pas par le constructeur `URL` : celui-ci ne
+     * valide pas l'hôte de la même façon selon la JVM. Sur JDK 25,
+     * `URL("http://ho st/x")` est refusée à la construction ; sur JDK 17 elle
+     * est ACCEPTÉE, et l'échec arrive plus tard, à la résolution DNS —
+     * `UnknownHostException` BRUTE, non mappée, et un comportement différent
+     * selon la JVM (#497). La panne est donc toujours la même.
      */
-    private fun resolveRedirect(currentUrl: String, location: String): String =
-        try {
+    private fun resolveRedirect(currentUrl: String, location: String): String {
+        val target = try {
             URL(URL(currentUrl), location).toString()
         } catch (e: Exception) {
             throw java.io.IOException("Redirection invalide", e)
         }
+        val host = try {
+            URL(target).host
+        } catch (_: Exception) {
+            ""
+        }
+        if (host.isEmpty() || host.any { it.isWhitespace() }) {
+            throw java.io.IOException("Redirection invalide")
+        }
+        return target
+    }
 
     /**
      * Décompression d'une réponse `gzip` (#474).
