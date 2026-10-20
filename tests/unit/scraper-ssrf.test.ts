@@ -257,15 +257,59 @@ describe("redirection : l'URL finale est re-vérifiée (#362)", () => {
     const seen: string[] = [];
     stubFetch((url) => {
       seen.push(url);
-      return new Response(null, { status: 302, headers: { location: "https://manuels.example.invalid/6e/maths" } });
+      // Un seul saut, puis la chaîne se termine (200) : c'est une chaîne
+      // FINIE, donc le navigateur peut la suivre.
+      if (seen.length === 1) {
+        return new Response(null, { status: 302, headers: { location: "https://manuels.example.invalid/6e/maths" } });
+      }
+      return new Response("ok", { status: 200 });
     });
     await assertPublicRedirectChain(PUBLIC_URL, undefined, PUBLIC_RESOLVER);
     expect(seen[0]).toBe(PUBLIC_URL);
+    expect(seen[1]).toBe("https://manuels.example.invalid/6e/maths");
     // La cible privée d'un 302 est refusée par la fonction de garde.
     stubFetch(() => new Response(null, { status: 302, headers: { location: "http://[::ffff:127.0.0.1]:9/x" } }));
     await expect(assertPublicRedirectChain(PUBLIC_URL, undefined, PUBLIC_RESOLVER)).rejects.toThrow(
       ScrapeManualsError,
     );
+  });
+
+  // #487 : la garde suivait 3 sauts, le navigateur en suit 20 : le dernier
+  // saut partait vers une cible PRIVÉE sans jamais être vérifié.
+  test("le dernier saut d'une chaîne longue vers une cible privée est REFUSÉ", async () => {
+    const hops = [
+      "https://manuels.example.invalid/a",
+      "https://manuels.example.invalid/b",
+      "https://manuels.example.invalid/c",
+    ];
+    let n = 0;
+    stubFetch(() => {
+      const location = n < hops.length ? hops[n]! : "http://169.254.169.254/latest/meta-data/";
+      n += 1;
+      return new Response(null, { status: 302, headers: { location } });
+    });
+    await expect(assertPublicRedirectChain(PUBLIC_URL, undefined, PUBLIC_RESOLVER)).rejects.toThrow(
+      ScrapeManualsError,
+    );
+    // La garde a suivi le 4e saut (c'est là que la cible privée apparaît).
+    expect(n).toBe(4);
+  });
+
+  test("une chaîne plus longue que le plafond du navigateur est refusée (fail-closed)", async () => {
+    let n = 0;
+    stubFetch(() => {
+      n += 1;
+      return new Response(null, {
+        status: 302,
+        headers: { location: `https://manuels.example.invalid/hop/${n}` },
+      });
+    });
+    await expect(assertPublicRedirectChain(PUBLIC_URL, undefined, PUBLIC_RESOLVER)).rejects.toThrow(
+      ScrapeManualsError,
+    );
+    // La garde a couvert TOUS les sauts que Chromium pourrait suivre (20) :
+    // au-delà, elle refuse au lieu de laisser partir une cible non vérifiée.
+    expect(n).toBe(21);
   });
 
   test("redirection interceptée : requête vers la cible privée coupée, aucun extrait", async () => {

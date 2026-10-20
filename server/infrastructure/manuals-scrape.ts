@@ -177,7 +177,16 @@ async function assertPublicUrl(raw: string, label: string, resolve: HostResolver
 
 /** Budget de la vérification de redirection, et nombre de sauts suivis. */
 const REDIRECT_CHECK_TIMEOUT_MS = 5_000;
-const MAX_REDIRECT_HOPS = 3;
+/**
+ * Nombre de sauts que la garde suit À LA MAIN.
+ *
+ * DOIT couvrir le plafond de Chromium (20 redirections, `ERR_TOO_MANY_REDIRECTS`) :
+ * le navigateur suit les redirections SANS repasser par le route handler, donc
+ * un saut de plus que la garde = une cible PRIVÉE atteinte à l'aveugle. Avec un
+ * plafond plus petit que celui du navigateur, la garde s'arrêtait trop tôt et
+ * la cible privée du dernier saut partait quand même (#487).
+ */
+const MAX_REDIRECT_HOPS = 20;
 
 /**
  * Vérifie la chaîne de redirections AVANT de lancer le navigateur.
@@ -194,6 +203,12 @@ const MAX_REDIRECT_HOPS = 3;
  * une redirection vers un nom public qui pointe vers l'IP interne est
  * refusée elle aussi.
  *
+ * #487 : la garde suit autant de sauts que le navigateur peut en suivre
+ * (20) et REFUSE au-delà (fail-closed) ; un délai de vérification est un
+ * refus, jamais une navigation à l'aveugle. En dessous du plafond du
+ * navigateur, le dernier saut partait vers une cible privée sans être
+ * vérifié.
+ *
  * ponytail: lecture seule, sans cookie ni JS : le navigateur peut voir une
  * chaîne différente — d'où la re-vérification de l'URL finale après
  * navigation (le filet qui protège le contenu).
@@ -205,12 +220,19 @@ export async function assertPublicRedirectChain(
 ): Promise<void> {
   const signal = AbortSignal.timeout(timeoutMs);
   let current = startUrl;
-  for (let hop = 0; hop < MAX_REDIRECT_HOPS; hop += 1) {
+  for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
     await assertPublicUrl(current, "redirection", resolve);
     let res: Response;
     try {
       res = await fetch(current, { redirect: "manual", signal });
     } catch {
+      // Délai de la garde : la chaîne est INCONNUE, donc on ne navigue pas à
+      // l'aveugle (fail-closed, #487). Une simple erreur réseau (hôte
+      // injoignable) laisse le navigateur trancher : il n'atteindra rien
+      // non plus.
+      if (signal.aborted) {
+        throw new ScrapeManualsError("verification des redirections interrompue", "timeout");
+      }
       return; // DNS/réseau indisponible : le navigateur tranchera
     }
     if (res.status < 300 || res.status >= 400) return; // pas de redirection
@@ -224,6 +246,12 @@ export async function assertPublicRedirectChain(
     }
     await assertPublicUrl(target, "redirection", resolve);
     current = target;
+    if (hop === MAX_REDIRECT_HOPS) {
+      // Le navigateur dépasserait son propre plafond : la cible suivante n'est
+      // pas vérifiée. On REFUSE (fail-closed) au lieu de laisser partir une
+      // cible non contrôlée.
+      throw new ScrapeManualsError("trop de redirections (chaine non verifiee)", "private_host");
+    }
   }
 }
 
