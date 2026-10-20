@@ -211,7 +211,9 @@ export const bridge = {
   scanQr: () => call<{ qr: PairParams["qr"] | null; cancelled: boolean }>("pairing.scanQr", {}, 0),
   pair: (params: PairParams) => call<PairResult>("pairing.pair", params),
   cancelPairing: () => call<{ ok: true }>("pairing.cancel"),
-  cached: (key: ResourceParams["key"]) => call<ResourceResult>("resources.cached", { key }),
+  // #477 : le cache est indexé par (ressource, requête) : l'entrée servie est
+  // celle de la requête AFFICHÉE.
+  cached: (key: ResourceParams["key"], query = "") => call<ResourceResult>("resources.cached", { key, query }),
   load: (params: ResourceParams) => call<ResourceResult>("resources.load", params),
   invalidate: (key: ResourceParams["key"]) => call<{ ok: true }>("resources.invalidate", { key }),
   sync: () => call<ResourceResult>("resources.sync"),

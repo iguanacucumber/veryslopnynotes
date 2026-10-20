@@ -2,7 +2,28 @@ package fr.veryslopnynotes.data
 
 import java.io.File
 import java.io.IOException
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * Empreinte de la requete (#477) : 16 caracteres hexadecimaux (SHA-256 tronque).
+ *
+ * Le nom de fichier doit rester lisible PAR LE SYSTEME (pas de `/`, pas de
+ * `?`) et court : l'empreinte remplace la requete brute. Une collision (quasi
+ * impossible) ne sert PAS la mauvaise reponse : l'entree verifie sa requete
+ * dans son en-tete avant d'etre servie.
+ */
+private fun queryDigest(query: String): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest(CachePolicy.normalizeQuery(query).toByteArray(Charsets.UTF_8))
+    val out = StringBuilder(16)
+    for (i in 0 until 8) {
+        val b = digest[i].toInt() and 0xff
+        out.append("0123456789abcdef"[b shr 4])
+        out.append("0123456789abcdef"[b and 0xf])
+    }
+    return out.toString()
+}
 
 // Entrée cache : payload brut serveur (donnee affichee, jamais interpretee)
 // + horodatage ecriture (badge frais/perime via CachePolicy) + la requete qui
@@ -13,10 +34,20 @@ data class CachedEntry(val payload: String, val fetchedAt: Long, val query: Stri
 
 // Stockage cache offline. Payload = corps reponse serveur tel quel.
 // Cle = ressource cachable (grades/assignments/timetable).
+//
+// #477 : une ressource a UNE ENTRÉE PAR REQUÊTE (semaine, période, algorithme).
+// Revenir sur une requête déjà vue est servi du cache, sans réseau ; le TTL
+// par ressource est inchangé.
 interface CacheStore {
     // La requete fait partie de l'entree (#365) : elle identifie la reponse.
     fun save(resource: String, payload: String, fetchedAt: Long, query: String)
-    fun load(resource: String): CachedEntry?
+    // L'entree de (ressource, requete) : `null` si elle n'existe pas.
+    fun load(resource: String, query: String): CachedEntry?
+    // TOUS les payloads de la ressource (une par requete) : le balayage de
+    // securite lit ce qui est reellement en cache.
+    fun payloads(resource: String): List<String>
+    // Purge de la ressource : TOUTES ses entrees (une ecriture confirmee
+    // invalide l'etat d'avant, quelle que soit la requete).
     fun clear(resource: String)
     // Purge totale (logout #82) : toute donnee scolaire locale disparait, sans
     // dependre d'une liste de ressources qui deriverait des contrats.
@@ -25,20 +56,38 @@ interface CacheStore {
 
 // ponytail: memoire seule pour tests/preview. Upgrade: persistance seule (File).
 class InMemoryCacheStore : CacheStore {
+    // Cle = ressource|requete normalisee (#477) : une entree par requete.
     private val map = mutableMapOf<String, CachedEntry>()
+
+    private fun keyOf(resource: String, query: String): String =
+        "$resource|${CachePolicy.normalizeQuery(query)}"
 
     @Synchronized
     override fun save(resource: String, payload: String, fetchedAt: Long, query: String) {
         require(CachePolicy.isCacheable(resource)) { "ressource non cachable: $resource" }
-        map[resource] = CachedEntry(payload, fetchedAt, CachePolicy.normalizeQuery(query))
+        map[keyOf(resource, query)] = CachedEntry(payload, fetchedAt, CachePolicy.normalizeQuery(query))
+        // #477 : une entrée par requête — les entrées PÉRIMÉES de la ressource
+        // sont purgées à l'écriture (le cache ne grossit pas sans borne).
+        val prefix = "$resource|"
+        map.keys
+            .filter { it.startsWith(prefix) }
+            .forEach { key ->
+                val entry = map[key] ?: return@forEach
+                if (CachePolicy.isStale(resource, entry.fetchedAt, fetchedAt)) map.remove(key)
+            }
     }
 
     @Synchronized
-    override fun load(resource: String): CachedEntry? = map[resource]
+    override fun load(resource: String, query: String): CachedEntry? = map[keyOf(resource, query)]
+
+    @Synchronized
+    override fun payloads(resource: String): List<String> =
+        map.entries.filter { it.key.startsWith("$resource|") }.map { it.value.payload }
 
     @Synchronized
     override fun clear(resource: String) {
-        map.remove(resource)
+        val prefix = "$resource|"
+        map.keys.filter { it.startsWith(prefix) }.forEach { map.remove(it) }
     }
 
     @Synchronized
@@ -99,7 +148,7 @@ object SessionEpoch {
 }
 
 // Persistance native sans dependance (stdlib java.io seul, pas de Room/DataStore).
-// Un fichier par ressource : ligne 1 = fetchedAt (epoch ms) + requete
+// Un fichier par (ressource, requete) : ligne 1 = fetchedAt (epoch ms) + requete
 // (separateur TAB), suite = payload.
 // Repertoire fourni par l'appelant (ex. context.filesDir, jamais en dur ici).
 //
@@ -108,10 +157,27 @@ object SessionEpoch {
 // — `@Synchronized` est par INSTANCE, les deux stores ne s'excluaient pas — et
 // l'ecriture est ATOMIQUE (fichier temporaire + rename) : un lecteur ne voit
 // jamais un fichier tronque ni deux payloads entrelaces.
+//
+// #477 : le nom du fichier porte l'EMPREINTE de la requete : une ressource a
+// une entree par requete (revenir sur une semaine deja vue = cache-hit, sans
+// reseau). L'entree garde la requete dans son en-tete : une empreinte qui
+// tomberait sur une autre requete est IGNOREE (jamais le payload d'une
+// semaine affiche a la place d'une autre).
 class FileCacheStore(private val dir: File) : CacheStore {
     private val lock = lockFor(dir)
 
-    private fun fileFor(resource: String): File = File(dir, "cache_$resource.txt")
+    // #477 : le nom reste lisible (ressource) et lisible par le systeme
+    // (empreinte hexadecimale de la requete).
+    private fun fileFor(resource: String, query: String): File =
+        File(dir, "cache_${resource}_${queryDigest(query)}.txt")
+
+    // Tous les fichiers de la ressource (hache + ancien nom sans empreinte).
+    private fun filesOf(resource: String): List<File> {
+        val prefix = "cache_${resource}_"
+        val legacy = File(dir, "cache_$resource.txt")
+        val hashed = dir.listFiles { f -> f.name.startsWith(prefix) }?.sortedBy { it.name } ?: emptyList()
+        return if (legacy.exists()) hashed + legacy else hashed
+    }
 
     // #364 : le verrou est celui du REPERTOIRE (partage entre l'app et le
     // worker de fond), pas celui de l'instance. #365 : l'en-tete porte la
@@ -124,12 +190,31 @@ class FileCacheStore(private val dir: File) : CacheStore {
             // ponytail: premiere ligne horodatage + requete, reste payload brut.
             // Upgrade: SQLite si requetes.
             val head = "$fetchedAt\t${CachePolicy.normalizeQuery(query)}"
-            writeAtomic(fileFor(resource), "$head\n$payload")
+            writeAtomic(fileFor(resource, query), "$head\n$payload")
+            // #477 : une entrée par requête — les entrées PÉRIMÉES de la
+            // ressource sont purgées (le cache ne grossit pas sans borne).
+            pruneStale(resource, fetchedAt)
         }
     }
 
-    override fun load(resource: String): CachedEntry? = synchronized(lock) {
-        val f = fileFor(resource)
+    /** Efface les entrées de la ressource dont le TTL est dépassé (#477). */
+    private fun pruneStale(resource: String, now: Long) {
+        for (f in filesOf(resource)) {
+            try {
+                val text = f.readText()
+                val cut = text.indexOf('\n')
+                // En-tête illisible (fichier ancien) : l'entrée ne répond à
+                // aucune requête, elle est effacée.
+                val fetchedAt = if (cut < 0) null else text.substring(0, cut).substringBefore('\t').toLongOrNull()
+                if (fetchedAt == null || CachePolicy.isStale(resource, fetchedAt, now)) f.delete()
+            } catch (_: Exception) {
+                // ponytail: purge best-effort (le cache est jetable).
+            }
+        }
+    }
+
+    override fun load(resource: String, query: String): CachedEntry? = synchronized(lock) {
+        val f = fileFor(resource, query)
         if (!f.exists()) return@synchronized null
         try {
             val text = f.readText()
@@ -143,16 +228,36 @@ class FileCacheStore(private val dir: File) : CacheStore {
             // perimee).
             if (!head.contains('\t')) return@synchronized null
             val fetchedAt = head.substringBefore('\t').toLongOrNull() ?: return@synchronized null
-            CachedEntry(text.substring(cut + 1), fetchedAt, head.substringAfter('\t', ""))
+            val stored = head.substringAfter('\t', "")
+            // L'empreinte a pu tomber sur une autre requete (#477) : on ne
+            // sert JAMAIS la reponse d'une requete differente.
+            if (CachePolicy.normalizeQuery(stored) != CachePolicy.normalizeQuery(query)) return@synchronized null
+            CachedEntry(text.substring(cut + 1), fetchedAt, stored)
         } catch (_: Exception) {
             null
         }
     }
 
+    override fun payloads(resource: String): List<String> = synchronized(lock) {
+        val out = mutableListOf<String>()
+        for (f in filesOf(resource)) {
+            try {
+                val text = f.readText()
+                val cut = text.indexOf('\n')
+                if (cut < 0) continue
+                out.add(text.substring(cut + 1))
+            } catch (_: Exception) {
+                // ponytail: un fichier illisible est ignore, pas fatal.
+            }
+        }
+        out
+    }
+
     override fun clear(resource: String) {
         synchronized(lock) {
             try {
-                fileFor(resource).delete()
+                // #477 : TOUTES les entrees de la ressource (une par requete).
+                filesOf(resource).forEach { it.delete() }
             } catch (_: Exception) {
                 // ponytail: clear best-effort (cache seul, pas de donnee critique).
             }
