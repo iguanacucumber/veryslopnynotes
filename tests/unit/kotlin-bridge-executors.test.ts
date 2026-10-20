@@ -117,8 +117,12 @@ describe("exécuteurs du pont (#393)", () => {
       expect(await waitStarted(qid, 2)).toBe(2);
       // Le TROISIÈME appel LLM attend un fil libre : la file LLM est bornée.
       await ask({ op: "execSlow", qid, count: 1, method: "llm.generateRevision" });
+      // Le délai n'est PAS le contrat : ce qui l'est, c'est que le troisième
+      // appel ne DÉMARRE PAS pendant que les deux autres bloquent les deux
+      // fils. 150 ms suffisent à le montrer (les deux premiers sont déjà
+      // démarrés et bloqués : le troisième ne peut pas obtenir de fil).
       const troisieme = JSON.parse(
-        await ask({ op: "execWaitStarted", qid, want: 3, timeoutMs: 400 }),
+        await ask({ op: "execWaitStarted", qid, want: 3, timeoutMs: 150 }),
       ) as { started: number; timedOut: boolean };
       expect(troisieme.timedOut).toBe(true);
       expect(troisieme.started).toBe(2);

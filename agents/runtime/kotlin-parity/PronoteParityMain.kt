@@ -317,12 +317,14 @@ private class Driver {
             // --- KeepAlive --------------------------------------------------------
             "keepAlive" -> {
                 // `staleSec` : ancienneté simulée du dernier ping ; `runMs` :
-                // durée d'écoute. Renvoie le nombre de pings (seuils, pas exact).
+                // durée d'écoute ; `tickMs` : période du fil de garde (1 000 ms
+                // en production). Renvoie le nombre de pings (seuils, pas exact).
                 val lastPing = System.currentTimeMillis() / 1000 - ((op.num("staleSec") ?: 0.0).toLong())
                 var pings = 0
                 val ka = KeepAlive(
                     shouldPing = { System.currentTimeMillis() / 1000 - lastPing >= 110 },
                     pingRequest = { pings++ },
+                    tickMs = ((op.num("tickMs") ?: 1000.0).toLong()),
                 )
                 ka.start()
                 Thread.sleep(((op.num("runMs") ?: 0.0).toLong()))
@@ -330,7 +332,8 @@ private class Driver {
                 ok("pings" to JVal.Num(pings.toDouble()))
             }
             // Variante sans thread : teste le seuil pur (`pingIfDue`) sans
-            // attendre le tick de 1 s. Le thread reste couvert par `keepAlive`.
+            // attendre le tick du fil de garde. Le thread reste couvert par
+            // `keepAlive` (avec une période courte : `tickMs`).
             "keepAliveTick" -> {
                 val lastPing = System.currentTimeMillis() / 1000 - ((op.num("staleSec") ?: 0.0).toLong())
                 var pings = 0

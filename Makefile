@@ -21,7 +21,8 @@ check-fast:
 	CHECK_HARNESS=1 CHECK_TARGETS="lint typecheck unit architecture contracts check-kotlin web-typecheck web-test web-build" bun run agents/runtime/check.ts
 
 # TDD : relance les tests au moindre changement. `make watch T=tests/unit/foo.test.ts`
-# cible un fichier ; par défaut unitaires + web (~2,1 s). Pas de `bun test --changed` :
+# cible un fichier ; par défaut unitaires + web (~7 s, SÉQUENTIEL : `--parallel`
+# casserait la boucle, voir #471). Pas de `bun test --changed` :
 # les scans d'architecture lisent les sources, pas les imports, donc ils seraient ratés.
 watch:
 	bun test --watch $(if $(T),$(T),tests/unit tests/web)
