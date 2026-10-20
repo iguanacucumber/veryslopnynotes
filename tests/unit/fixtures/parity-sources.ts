@@ -108,6 +108,10 @@ export const PRODUCTION_SOURCES: string[] = [
   // MIME des pièces jointes et la traduction d'un échec natif en rejet.
   join(APP, "AttachmentMime.kt"),
   join(APP, "BridgeErrors.kt"),
+  // `app` — les EXÉCUTEURS du pont (#393) : un fil par appel et une file LLM
+  // à part. Logique pure (`java.util.concurrent` seul) : le harnais les
+  // EXÉCUTE, donc le test porte sur du code de production, pas sur un miroir.
+  join(APP, "BridgeExecutors.kt"),
   join(APP, "HomeworkMessages.kt"),
   join(APP, "PairingMessages.kt"),
   // `app` — la phrase de refus d'une matière hors contrat (#395).

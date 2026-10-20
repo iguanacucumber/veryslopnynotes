@@ -2,6 +2,7 @@ import {
   BRIDGE_TIMEOUTS,
   BridgeCallError,
   DEFAULT_TIMEOUT_MS,
+  MAX_PARALLEL_READS,
   type BridgeError,
   type BridgeMethod,
   type SessionStatus,
@@ -105,11 +106,55 @@ export function pendingCount(): number {
   return pending.size;
 }
 
-/** Appel unique vers Kotlin. En développement (`bun run dev:web`), le pont
- *  factice répond avec des données de démonstration ; en production, il
- *  n'existe pas : un pont absent est un ÉCHEC, jamais des données fictives. */
-export function call<T>(method: BridgeMethod, params: unknown = {}, timeoutMs?: number): Promise<T> {
-  if (!isNative()) return devCall<T>(method, params);
+/**
+ * Méthodes qui partent vers l'établissement : les LECTURES (#393).
+ *
+ * Le natif les sérialise (une file locale) ; le JS aussi, sinon la N-ième
+ * lecture expire avant son tour (« Lecture indisponible. »). La liste est
+ * fermée : une méthode de lecture oubliée ici revient au bug d'origine.
+ */
+const READ_METHODS = new Set<BridgeMethod>(["resources.load", "resources.sync"]);
+
+/**
+ * File des lectures : `MAX_PARALLEL_READS` en vol au plus (#393).
+ *
+ * Le minuteur JS part AU DÉPART DANS LA FILE (pas à l'appel) : une lecture
+ * en attente n'use pas son budget avant d'être partie. Un rejet ne brise pas la
+ * file : le suivant part quand même.
+ */
+let readSlots = MAX_PARALLEL_READS;
+const readWaiters: Array<() => void> = [];
+
+/** Prend un emplacement s'il y en a un libre (synchrone : le départ est immédiat). */
+function tryTakeReadSlot(): boolean {
+  if (readSlots <= 0) return false;
+  readSlots -= 1;
+  return true;
+}
+
+/** Attend un emplacement (départ différé : le timer part alors). */
+function waitReadSlot(): Promise<void> {
+  return new Promise<void>((resolve) => readWaiters.push(resolve));
+}
+
+/** Rend un emplacement : le premier en attente le récupère. */
+function releaseReadSlot(): void {
+  const next = readWaiters.shift();
+  if (next) next();
+  else readSlots += 1;
+}
+
+function inReadLane<T>(run: () => Promise<T>): Promise<T> {
+  if (tryTakeReadSlot()) return run().finally(releaseReadSlot);
+  return waitReadSlot().then(() => run().finally(releaseReadSlot));
+}
+
+/** Appel natif : la promesse JS et son minuteur. */
+function callNative<T>(
+  method: BridgeMethod,
+  params: unknown,
+  timeoutMs?: number,
+): Promise<T> {
   installCallbacks();
   const requestId = `r${++sequence}`;
   // Le JS attend TOUJOURS plus longtemps que le plafond natif de la méthode
@@ -141,6 +186,17 @@ export function call<T>(method: BridgeMethod, params: unknown = {}, timeoutMs?: 
       reject(new BridgeCallError("unknown", "pont natif indisponible"));
     }
   });
+}
+
+/** Appel unique vers Kotlin. En développement (`bun run dev:web`), le pont
+ *  factice répond avec des données de démonstration ; en production, il
+ *  n'existe pas : un pont absent est un ÉCHEC, jamais des données fictives. */
+export function call<T>(method: BridgeMethod, params: unknown = {}, timeoutMs?: number): Promise<T> {
+  if (!isNative()) return devCall<T>(method, params);
+  // Les lectures font la QUEUE (une seule en vol) : le délai natif ne couvre
+  // que le travail, pas l'attente devant la file locale (#393).
+  if (READ_METHODS.has(method)) return inReadLane(() => callNative<T>(method, params, timeoutMs));
+  return callNative<T>(method, params, timeoutMs);
 }
 
 export const bridge = {
