@@ -239,7 +239,8 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 
 ## I16 — Le cache ne sert jamais les données d'un autre compte
 - Invariant : le cache est la DONNÉE D'UN COMPTE. Les clés de cache sont
-  globales (`cache_grades.txt`, sans compte) et les TTL vont jusqu'à 24 h
+  globales (`cache_grades_<empreinte de la requête>.txt`, sans compte — une
+  entrée par requête depuis #477) et les TTL vont jusqu'à 24 h
   (capacités) : le cache est donc PURGÉ quand le compte change (appairage d'un
   autre compte) et quand la session est déclarée MORTE (jeton tourné). Purge et
   invalidation d'époque sont dans la MÊME section critique (#364) : une lecture

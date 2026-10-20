@@ -543,7 +543,10 @@ class VsnBridge(
     private fun resourceCached(p: JSONObject): JSONObject {
         val key = p.string("key")
         val resource = cacheKey(key) ?: return emptyCached()
-        val entry = repo.cached(resource) ?: return emptyCached()
+        // #477 : le cache est indexé par (ressource, requête) : l'entrée servie
+        // est celle de la requête AFFICHÉE, pas celle d'une autre semaine.
+        val query = bounded(p.string("query"), 200)
+        val entry = repo.cached(resource, query) ?: return emptyCached()
         return JSONObject()
             .put("payload", entry.payload)
             .put("fetchedAt", entry.fetchedAt)
@@ -575,7 +578,7 @@ class VsnBridge(
         val outcome = await<RefreshOutcome> { cb ->
             repo.refreshAsync(resource, currentBaseUrl(), query, p.optBoolean("force", false), cb)
         } ?: throw BridgeFailure("unavailable", "Lecture indisponible.")
-        return resultJson(outcome, resource)
+        return resultJson(outcome, resource, query)
     }
 
     private fun resourceInvalidate(p: JSONObject): JSONObject {
@@ -592,7 +595,7 @@ class VsnBridge(
         return resultJson(outcome, null)
     }
 
-    private fun resultJson(outcome: RefreshOutcome, resource: String?): JSONObject {
+    private fun resultJson(outcome: RefreshOutcome, resource: String?, query: String = ""): JSONObject {
         val obj = JSONObject()
         when (outcome) {
             is RefreshOutcome.Updated -> obj
@@ -607,7 +610,8 @@ class VsnBridge(
                 .put("error", "Données en cache (hors ligne).")
             is RefreshOutcome.Failed -> {
                 sessionOrThrow(outcome.message)
-                val cached = resource?.let { repo.cached(it) }
+                // #477 : l'entrée de cache servie est celle de la MÊME requête.
+                val cached = resource?.let { repo.cached(it, query) }
                 obj.put("payload", outcome.cachedPayload ?: JSONObject.NULL)
                     .put("fetchedAt", cached?.fetchedAt ?: 0L)
                     .put("stale", true)
@@ -1058,14 +1062,14 @@ class VsnBridge(
     }
 
     /**
-     * Devoirs pour l'assistant : le cache d'abord (il porte la dernière
-     * semaine lue), puis une lecture LOCALE de la fenêtre AFFICHÉE si le cache
-     * ne porte pas le devoir demandé (#369 : semaine non courante, ou cache
-     * purgé par une écriture). `fetchAsync` n'écrase pas le cache.
+     * Devoirs pour l'assistant : le cache d'abord (TOUTES les semaines en
+     * cache, #477), puis une lecture LOCALE de la fenêtre AFFICHÉE si le
+     * cache ne porte pas le devoir demandé (#369 : semaine non courante, ou
+     * cache purgé par une écriture). `fetchAsync` n'écrase pas le cache.
      */
     private fun loadAssignments(wantedId: String, weekStart: String): List<Assignment> {
-        val cached = repo.cached(CachePolicy.ASSIGNMENTS)?.payload
-        val fromCache = cached?.let { runCatching { AssignmentsRepository.parse(it) }.getOrNull() } ?: emptyList()
+        val fromCache = repo.payloads(CachePolicy.ASSIGNMENTS)
+            .flatMap { payload -> runCatching { AssignmentsRepository.parse(payload) }.getOrDefault(emptyList()) }
         if (fromCache.any { it.id == wantedId }) return fromCache
         val query = if (weekStart.isNotEmpty()) "weekStart=$weekStart" else ""
         val outcome = await<RefreshOutcome> { cb ->
