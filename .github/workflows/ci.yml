@@ -59,14 +59,41 @@ jobs:
           kotlinc -version
 
       # SDK Android : même version que `compileSdk`/`buildToolsVersion` du
-      # module app (`android/app/build.gradle.kts`).
+      # module app (`android/app/build.gradle.kts`). Installation DIRECTE des
+      # archives versionnées (pas d'action tierce dans le chemin du gate :
+      # `android-actions/setup-android` a rendu `failure` sur la première CI,
+      # #495) — c'est exactement la disposition qui fait passer le gate sur le
+      # poste.
       - name: SDK Android
-        uses: android-actions/setup-android@v3
-        with:
-          accept-android-sdk-licenses: yes
-
-      - name: Paquets SDK
-        run: sdkmanager --install "platforms;android-37.0" "build-tools;36.0.0" "platform-tools"
+        run: |
+          set -euo pipefail
+          sdk="$RUNNER_TEMP/android-sdk"
+          base=https://dl.google.com/android/repository
+          mkdir -p "$sdk/platforms" "$sdk/build-tools" "$RUNNER_TEMP/dl"
+          curl -sSfL -o "$RUNNER_TEMP/dl/platform.zip" "$base/platform-37.0_r02.zip"
+          curl -sSfL -o "$RUNNER_TEMP/dl/build-tools.zip" "$base/build-tools_r36_linux.zip"
+          curl -sSfL -o "$RUNNER_TEMP/dl/platform-tools.zip" "$base/platform-tools_r37.0.1-linux.zip"
+          # Chaque archive contient UN dossier de premier niveau : on l'extrait
+          # dans un dossier temporaire, puis on RENOMME ce dossier à
+          # l'emplacement que Gradle attend (le nom interne du build-tools
+          # n'est pas son numéro de version : d'où le renommage explicite).
+          unzip -q "$RUNNER_TEMP/dl/platform.zip" -d "$RUNNER_TEMP/dl/x-platform"
+          top=$(ls "$RUNNER_TEMP/dl/x-platform")
+          mv "$RUNNER_TEMP/dl/x-platform/$top" "$sdk/platforms/android-37.0"
+          unzip -q "$RUNNER_TEMP/dl/build-tools.zip" -d "$RUNNER_TEMP/dl/x-build-tools"
+          top=$(ls "$RUNNER_TEMP/dl/x-build-tools")
+          mv "$RUNNER_TEMP/dl/x-build-tools/$top" "$sdk/build-tools/36.0.0"
+          unzip -q "$RUNNER_TEMP/dl/platform-tools.zip" -d "$RUNNER_TEMP/dl/x-platform-tools"
+          top=$(ls "$RUNNER_TEMP/dl/x-platform-tools")
+          mv "$RUNNER_TEMP/dl/x-platform-tools/$top" "$sdk/platform-tools"
+          # Licences acceptées (empreintes publiques) : sans elles, Gradle
+          # refuse le SDK.
+          mkdir -p "$sdk/licenses"
+          printf '\n24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e\n8933bad161af4178b1185d1a37fbf41ea5269c55\n' > "$sdk/licenses/android-sdk-license"
+          printf '\n84831b9409646a918e30573bab4c9c91346d8abd\n' > "$sdk/licenses/android-sdk-preview-license"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+          ls "$sdk/platforms" "$sdk/build-tools"
 
       - name: Dépendances
         run: bun install --frozen-lockfile
