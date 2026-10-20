@@ -76,6 +76,14 @@ private class Driver {
             val query = op.str("query") ?: ""
             ok("query" to JVal.Str(CachePolicy.normalizeQuery(query)))
         }
+        // La clé de dédoublonnage d'une lecture en vol (#509) : le fait
+        // d'ÉCRIRE le cache en fait partie.
+        "dedupKey" -> {
+            val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
+            val query = op.str("query") ?: ""
+            val save = op.bool("save") ?: false
+            ok("key" to JVal.Str(CachePolicy.dedupKey(resource, query, save)))
+        }
         "save" -> {
             val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
             val payload = op.str("payload") ?: ""

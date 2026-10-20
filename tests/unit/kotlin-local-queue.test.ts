@@ -107,8 +107,10 @@ describe("file d'attente unique du client local (#310)", () => {
     // demande comme les autres).
     expect(repo.match(/ClientQueue\.submit\(/g)?.length).toBe(4);
     expect(repo).not.toContain("LocalRequestQueue<");
-    // Clé de dédoublonnage `ressource|query`.
-    expect(repo).toContain('"$resource|$query"');
+    // Clé de dédoublonnage : ressource|requête|écriture (#509 — le fait
+    // d'écrire le cache en fait partie, sinon une lecture SANS écriture
+    // avale l'écriture d'une lecture identique).
+    expect(repo).toContain("CachePolicy.dedupKey(resource, query, save)");
     // Callbacks relayés par le Handler main existant, un par un (post), et plus
     // aucun Thread par lecture.
     expect(repo).toContain("deliver = { o -> post(cb, o) }");
