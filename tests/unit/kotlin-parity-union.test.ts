@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureSingleJar, lockIsStale } from "./fixtures/jar-lock";
 import { driverSources, mainClassOf, PARITY_SOURCES, PRODUCTION_SOURCES } from "./fixtures/parity-sources";
-import { parityToolchain, ROOT } from "./fixtures/kotlin-harness";
+import { JVM_FLAGS, parityToolchain, ROOT } from "./fixtures/kotlin-harness";
 
 const DRIVERS = driverSources();
 
@@ -203,7 +203,9 @@ describe("le jar de l'union expose le main de chaque pilote", () => {
           const cls = mainClassOf(driver);
           // Le pilote lit stdin : on le ferme. Il doit mourir sur une erreur
           // d'OPÉRATION (unknown op), jamais sur un « classe introuvable ».
-          const proc = Bun.spawn(["java", "-cp", jar, cls], {
+          // Mêmes drapeaux que les pilotes du harnais (C1 seul, GC sériel) :
+          // une JVM qui fait une opération et meurt n'a rien à optimiser.
+          const proc = Bun.spawn(["java", ...JVM_FLAGS, "-cp", jar, cls], {
             stdin: "ignore",
             stdout: "pipe",
             stderr: "pipe",
