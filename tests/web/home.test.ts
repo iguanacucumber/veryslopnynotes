@@ -1,6 +1,8 @@
 import { useParisTz } from "./setup";
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { isoDay, startOfWeek } from "../../web/src/lib/format";
 import {
   ENTRANCE_WINDOW_MS,
@@ -23,10 +25,12 @@ import {
   parseGrades,
   parseTimetable,
   pendingAssignments,
+  pendingCount,
   shouldAnimateOnMount,
   subjectAverage,
   tabVisible,
   timeRange,
+  upcomingCount,
   upcomingLessons,
   type Grade,
 } from "../../web/src/features/home/parse";
@@ -242,6 +246,89 @@ describe("devoirs", () => {
       ],
     });
     expect(parseAssignments(alike).map((task) => task.id)).toEqual(["1", "2"]);
+  });
+});
+
+describe("compteurs de l'accueil (#571)", () => {
+  const now = new Date(2026, 9, 19, 12).getTime();
+
+  // 5 devoirs : 1 fait, 2 en retard, 2 à venir.
+  const cinqDevoirs = JSON.stringify({
+    assignments: [
+      { id: "fait", subject: "MATHS", title: "Factors", dueDate: local(19, 8), done: true },
+      { id: "retard-1", subject: "NSI", title: "Exercice 4", dueDate: local(17, 20), done: false },
+      { id: "retard-2", subject: "HG", title: "Fiche 2", dueDate: local(18, 20), done: false },
+      { id: "avenir-1", subject: "ANGLAIS", title: "Traduction", dueDate: local(20, 20), done: false },
+      { id: "avenir-2", subject: "PHILO", title: "Résumé", dueDate: local(21, 20), done: false },
+    ],
+  });
+
+  test("« À faire » compte les devoirs en retard, sans plafond", () => {
+    const assignments = parseAssignments(cinqDevoirs);
+    // 4 à faire : les 2 en retard comptent, le devoir fait non.
+    expect(pendingCount(assignments)).toBe(4);
+    // La LISTE du widget reste bornée à deux : c'est un extrait, pas le compte.
+    expect(pendingAssignments(assignments, now, 2)).toHaveLength(2);
+  });
+
+  test("« À faire » : aucun devoir = 0, tous faits = 0", () => {
+    expect(pendingCount(parseAssignments(JSON.stringify({ assignments: [] })))).toBe(0);
+    const tousFaits = parseAssignments(
+      JSON.stringify({
+        assignments: [
+          { id: "a", subject: "MATHS", title: "Fait", dueDate: local(19, 8), done: true },
+          { id: "b", subject: "NSI", title: "Fait aussi", dueDate: local(18, 8), done: true },
+        ],
+      }),
+    );
+    expect(pendingCount(tousFaits)).toBe(0);
+  });
+
+  test("« À venir » compte tous les cours à venir, annulés et terminés exclus", () => {
+    const lessons = parseTimetable(
+      JSON.stringify({
+        entries: [
+          { id: "c1", subject: "MATHS", start: local(19, 14), end: local(19, 15) },
+          { id: "c2", subject: "NSI", start: local(19, 15), end: local(19, 16) },
+          { id: "c3", subject: "HG", start: local(20, 8), end: local(20, 9) },
+          { id: "c4", subject: "ANGLAIS", start: local(20, 9), end: local(20, 10) },
+          { id: "c5", subject: "PHILO", start: local(20, 10), end: local(20, 11) },
+          {
+            id: "annule",
+            subject: "EPS",
+            start: local(20, 11),
+            end: local(20, 12),
+            status: "cancelled",
+          },
+          { id: "termine", subject: "SVT", start: local(18, 8), end: local(18, 9) },
+        ],
+      }),
+    );
+    expect(upcomingCount(lessons, now)).toBe(5);
+    // La LISTE du widget reste bornée à deux.
+    expect(upcomingLessons(lessons, now, 2)).toHaveLength(2);
+  });
+
+  test("« À venir » : aucun cours = 0", () => {
+    expect(upcomingCount(parseTimetable(null), now)).toBe(0);
+  });
+
+  test("la carte d'accueil affiche les compteurs, pas la longueur des listes bornées", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "features", "home", "HomeScreen.tsx"),
+      "utf8",
+    );
+    // Les compteurs sont calculés sur TOUTES les données…
+    expect(source).toContain("pendingCount(assignments)");
+    expect(source).toContain("upcomingCount(lessons, now)");
+    // …et la carte les affiche tels quels : plus jamais la longueur d'une
+    // liste BORNÉE à deux.
+    const debut = source.indexOf('className="home-hero__stats"');
+    expect(debut).toBeGreaterThan(-1);
+    const stats = source.slice(debut, source.indexOf("</Card>", debut));
+    expect(stats).toContain("tasksTotal");
+    expect(stats).toContain("upcomingTotal");
+    expect(stats).not.toContain(".length");
   });
 });
 

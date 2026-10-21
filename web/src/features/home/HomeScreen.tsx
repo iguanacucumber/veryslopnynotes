@@ -42,9 +42,11 @@ import {
   parseGrades,
   parseTimetable,
   pendingAssignments,
+  pendingCount,
   shouldAnimateOnMount,
   tabVisible,
   timeRange,
+  upcomingCount,
   upcomingLessons,
   type GeneralAverage,
   type GradeSummary,
@@ -339,12 +341,17 @@ export default function HomeScreen() {
   const average = useMemo(() => generalAverage(gradesRes.payload, grades), [gradesRes.payload, grades]);
   const latest = useMemo(() => latestGrades(grades, 1), [grades]);
   const lessons = useMemo(() => parseTimetable(timetableRes.payload), [timetableRes.payload]);
+  // La liste des widgets reste BORNÉE (deux cours) ; le compteur de la carte
+  // d'accueil est le nombre VRAI, sans plafond (#571).
   const upcoming = useMemo(() => upcomingLessons(lessons, now, 2), [lessons, now]);
+  const upcomingTotal = useMemo(() => upcomingCount(lessons, now), [lessons, now]);
   const assignments = useMemo(
     () => parseAssignments(assignmentsRes.payload),
     [assignmentsRes.payload],
   );
   const tasks = useMemo(() => pendingAssignments(assignments, now, 2), [assignments, now]);
+  // Un devoir en retard reste un devoir À FAIRE : il compte (#571).
+  const tasksTotal = useMemo(() => pendingCount(assignments), [assignments]);
   const alertCount = useMemo(() => countAlerts(alertsRes.payload), [alertsRes.payload]);
   const capabilities = useMemo(
     () => parseCapabilities(capabilitiesRes.payload),
@@ -374,7 +381,7 @@ export default function HomeScreen() {
   const showHomework = tabVisible(capabilities, "homework");
   const showTimetable = tabVisible(capabilities, "timetable");
   const hasData =
-    average.value !== null || latest.length > 0 || upcoming.length > 0 || tasks.length > 0;
+    average.value !== null || latest.length > 0 || upcomingTotal > 0 || tasksTotal > 0;
   const refreshAll = () => resources.forEach((resource) => resource.refresh());
 
   const hour = new Date(now).getHours();
@@ -405,11 +412,11 @@ export default function HomeScreen() {
           </div>
           <div className="home-hero__stat">
             <span>À venir</span>
-            <strong>{upcoming.length}</strong>
+            <strong>{upcomingTotal}</strong>
           </div>
           <div className="home-hero__stat">
             <span>À faire</span>
-            <strong>{tasks.length}</strong>
+            <strong>{tasksTotal}</strong>
           </div>
         </div>
       </Card>
