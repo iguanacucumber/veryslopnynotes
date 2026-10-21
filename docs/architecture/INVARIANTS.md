@@ -185,6 +185,13 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   `skills-lock.test.ts` recalcule un sha256 de chaque ARBRE de skill
   (chemins + contenu) et le compare à une table : une édition manuelle d'une
   skill échoue le gate.
+  **La PROVENANCE du lock amont est ÉPINGLÉE** (#534) : le test comparait les
+  NOMS du lock au disque, sans `source`, `sourceType`, `skillPath` ni
+  `computedHash` — éditer `source` vers un autre dépôt laissait le test VERT
+  (le lock était décoratif côté provenance, et `npx skills update` irait
+  chercher le contenu ailleurs). Le verrou vérifiable protège le CONTENU sur
+  disque ; il ne dit pas d'où il vient. Une seule table porte les deux
+  (empreinte + provenance), mise à jour dans la MÊME PR que le lock amont.
 - Test : `tests/architecture/secret-scan.test.ts` (carve-out étroit) +
   `tests/architecture/skills-lock.test.ts` (l'empreinte de chaque arbre
   vendorisé) +
