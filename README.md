@@ -107,8 +107,10 @@ flowchart LR
 ```
 
 Le serveur n'est **jamais** dans le flux Pronote ni dans celui de l'assistant.
-Il ne reçoit que les identifiants du portail et une URL de départ, dans le corps
-de la requête, pour scraper une page de manuel.
+Il ne reçoit que la plateforme et une URL de départ, dans le corps de la
+requête, pour scraper une page de manuel. Il ne s'authentifie pas : sa session
+est son cookie jar local, et les identifiants de portail reçus dans le corps
+sont refusés.
 
 ### Ce qui ne quitte pas le téléphone
 
@@ -186,8 +188,8 @@ restent surchargeables (`PORT=9090 make runServer`). Le serveur ne relaie ni
 session Pronote ni clé OpenRouter.
 
 > **Sécurité :** `POST /v1/manuals/scrape` est volontairement sans
-> authentification. Il reçoit des identifiants éditeur et une URL dans le corps
-> de la requête, et pilote Playwright : toute personne pouvant joindre le
+> authentification. Il reçoit une plateforme et une URL dans le corps de la
+> requête, et pilote Playwright : toute personne pouvant joindre le
 > serveur peut s'en servir (SSRF) et consommer le compte du portail. Garde-le
 > sur la boucle locale ou un réseau de confiance, ou place un proxy authentifié
 > devant. Voir [I8](docs/architecture/INVARIANTS.md).

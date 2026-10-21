@@ -18,7 +18,7 @@ import {
 } from "../../server/infrastructure/manuals-scrape";
 import type { HostResolver } from "../../server/infrastructure/ssrf";
 
-const CONFIG = { platform: "editeur-fake", username: "u", password: "p" };
+const CONFIG = { platform: "editeur-fake" };
 const PUBLIC_URL = "https://manuels.example.invalid/6e";
 /** IP publique factice (aucune adresse réelle n'est contactée). */
 const PUBLIC_IP = "93.184.216.34";
@@ -208,8 +208,6 @@ describe("délai de lecture du HTML (#422)", () => {
         method: "POST",
         body: JSON.stringify({
           platform: "editeur-fake",
-          username: "u",
-          password: "p",
           startUrl: PUBLIC_URL,
         }),
       }),

@@ -6,12 +6,15 @@ L'app parle directement à Pronote et à OpenRouter ; ce serveur ne participe pa
 - `GET /v1/health` pour la sonde.
 - `POST /v1/manuals/scrape` pour extraire une page de manuel.
 
-Le scraper est sans authentification et accepte identifiants éditeur dans le
-corps de requête. Risque SSRF et d'épuisement du compte : garder sur réseau de
-confiance ou placer un proxy authentifié devant. `make runServer` et Docker
-lancent ce seul service. `make runServer` écoute par défaut sur la boucle
-locale (`HOST=0.0.0.0` pour l'exposer, sur un réseau de confiance), et sa
-préparation TLS est obligatoire : un échec arrête le lancement, jamais de
+Le scraper est sans authentification et n'exige que la plateforme et l'URL de
+départ dans le corps de requête. Les identifiants de portail (`username` /
+`password`) sont REFUSÉS (400) : le scraper ne s'authentifie pas — la session
+est celle du serveur (son cookie jar), donc un identifiant reçu ne serait
+collecté pour rien (#526). Risque SSRF et d'épuisement du compte : garder sur
+réseau de confiance ou placer un proxy authentifié devant. `make runServer` et
+Docker lancent ce seul service. `make runServer` écoute par défaut sur la
+boucle locale (`HOST=0.0.0.0` pour l'exposer, sur un réseau de confiance), et
+sa préparation TLS est obligatoire : un échec arrête le lancement, jamais de
 repli en clair.
 
 L'IMAGE Docker suit la même règle (#533) : elle refuse de démarrer sans
@@ -53,6 +56,12 @@ exact), et le HTML lu est plafonné à 1 Mo de caractères avant reparse, avec
 son propre délai de lecture (10 s) — une page de 50 Mo n'est plus reparsée
 en entier, et une page qui ne finit pas de streamer ne garde plus le
 Chromium vivant.
+
+Une page de CONNEXION (le portail la renvoie en HTTP 200 quand la session du
+jar n'est plus valable) n'est jamais ingérée comme un manuel : elle est
+refusée (`502 login_required`) avant extraction, et elle n'écrase pas le jar
+de session (#526). Un portail qui masque son formulaire (JavaScript) n'est pas
+détecté : c'est un défaut accepté, pas un silence.
 
 Le navigateur n'est pas téléchargé par `bun install` (le paquet `playwright`
 n'a aucun script d'installation) : hors Docker, lancer `bunx playwright install

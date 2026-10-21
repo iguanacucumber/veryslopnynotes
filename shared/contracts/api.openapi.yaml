@@ -44,13 +44,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/ManualsScrapeResponse'
         '400':
-          description: corps hors contrat (config incompletes, URL non http)
+          description: >-
+            corps hors contrat (config incompletes, URL non http) ou corps
+            portant des identifiants de portail (username/password) : le
+            scraper ne s'authentifie pas (#526)
         '403':
           description: hote prive/interne refuse (garde SSRF : nom resolu vers une IP interne)
         '501':
           description: Playwright indisponible sur le scraper
         '502':
-          description: scrape impossible (page d'erreur, mur de connexion, nom d'hote introuvable)
+          description: >-
+            scrape impossible (page d'erreur, mur de connexion, nom d'hote
+            introuvable, page de connexion detectee : la session du scraper
+            est a renouveler)
         '503':
           description: >-
             scraper occupe (plafond de concurrence : 2 scrapes en vol, les
@@ -82,17 +88,21 @@ components:
         excerpt: { type: string, maxLength: 8000 }
     ManualsScrapeRequest:
       type: object
-      required: [platform, username, password, startUrl]
+      required: [platform, startUrl]
       description: >-
-        Credentials portail + URL de depart, injectes par l'appelant a chaque
-        appel. Le scraper ne detient rien : ni env, ni disque (hors cookie jar
+        Plateforme + URL de depart, injectes par l'appelant a chaque appel.
+        Le scraper ne detient rien : ni env, ni disque (hors cookie jar
         gitignore), ni log. Champs sensibles writeOnly. Le jar de session est
         choisi par le SERVEUR : aucun champ ne permet a l'appelant de
         demander la session d'un autre tenant (#538).
+        Les identifiants de portail (username/password) ne sont PLUS exiges :
+        le scraper ne s'authentifie pas (la session est celle du serveur,
+        #526). Ils restent declares en optionnel pour que les appelants
+        existants compilent, mais un corps qui les porte est REFUSE (400).
       properties:
         platform: { type: string, maxLength: 100 }
-        username: { type: string, maxLength: 512, writeOnly: true }
-        password: { type: string, maxLength: 512, writeOnly: true }
+        username: { type: string, maxLength: 512, writeOnly: true, description: Obsolete, refuse par le serveur (#526) : le scraper ne s'authentifie pas. }
+        password: { type: string, maxLength: 512, writeOnly: true, description: Obsolete, refuse par le serveur (#526) : le scraper ne s'authentifie pas. }
         startUrl: { type: string, maxLength: 2000 }
         headless: { type: boolean }
     ManualsScrapeResponse:

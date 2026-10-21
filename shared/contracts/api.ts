@@ -23,10 +23,12 @@ export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/v1/health" },
   // #209 : scraper Playwright minimal — le process ne sert QUE des manuels
   // (plain HTTPS, sans auth : décision utilisateur du 2026-10-11, risque
-  // accepté documenté côté server/infrastructure/http.ts). Credentials portail
-  // + startUrl injectés par l'appelant dans le corps (writeOnly), jamais en
-  // env ni commités. Les 31 routes métier du serveur applicatif sont
-  // supprimées en #210 (app device-only, ADR-003).
+  // accepté documenté côté server/infrastructure/http.ts). Plateforme +
+  // startUrl injectés par l'appelant dans le corps (writeOnly), jamais en
+  // env ni commités ; les identifiants de portail sont REFUSÉS (#526 : le
+  // scraper ne s'authentifie pas, la session est celle du serveur).
+  // Les 31 routes métier du serveur applicatif sont supprimées en #210
+  // (app device-only, ADR-003).
   { method: "POST", path: "/v1/manuals/scrape" },
 ] as const;
 
@@ -268,9 +270,8 @@ export function isDiscussionRecipientsResponse(v: unknown): v is DiscussionRecip
 // --- #209 scraper Playwright minimal (page -> ManualDoc) ---
 // Corps POST borné AVANT parse comme les autres routes ouvertes : sans borne,
 // un POST non authentifié de taille arbitraire est entièrement bufferisé.
-// `password`/`username`/`startUrl` sont writeOnly : jamais journalisés, jamais
-// persistés, jamais renvoyés (seul le cookie jar Playwright vit sur disque,
-// hors dépôt).
+// `startUrl` est writeOnly : jamais journalisé, jamais persisté, jamais
+// renvoyé (seul le cookie jar Playwright vit sur disque, hors dépôt).
 //
 // LE JAR DE SESSION EST CHOISI PAR LE SERVEUR (#538). Il ne l'est plus par
 // l'appelant, même indirectement : `authFile` a d'abord été un CHEMIN (écriture
@@ -279,17 +280,29 @@ export function isDiscussionRecipientsResponse(v: unknown): v is DiscussionRecip
 // l'isolation. Le champ n'existe donc plus dans le contrat, et le serveur
 // REFUSE explicitement un corps qui le porte (message dédié, pas un 400
 // générique).
+//
+// #526 : LE SCRAPER NE S'AUTHENTIFIE PAS. Le navigateur monte le jar de
+// session du SERVEUR (#538/I24) : `username`/`password` n'étaient lus par
+// AUCUN chemin de code — exigés par le contrat, transmis par le serveur, puis
+// jetés. L'appelant croyait s'authentifier ; le serveur n'utilisait rien.
+// Les deux champs ne sont donc PLUS REQUIS (optionnels), et le serveur REFUSE
+// un corps qui les porte (message dédié) : un credential collecté pour rien
+// ne doit jamais passer pour une authentification.
 export const MANUALS_SCRAPE_PATH = "/v1/manuals/scrape";
 export const MANUALS_SCRAPE_MAX_BODY_CHARS = 8192;
 export const MANUALS_SCRAPE_PLATFORM_MAX_CHARS = 100;
-export const MANUALS_SCRAPE_CREDENTIAL_MAX_CHARS = 512;
 export const MANUALS_SCRAPE_URL_MAX_CHARS = 2000;
 
 export interface ManualsScrapeRequest {
   readonly platform: string;
-  readonly username: string;
-  /** Credential de l'appelant : `writeOnly`, jamais renvoyé ni journalisé. */
-  readonly password: string;
+  /**
+   * Obsolète : REFUSÉ par le serveur (#526). Le scraper ne s'authentifie pas
+   * — la session est celle du SERVEUR (jar, I24). Déclaré optionnel pour que
+   * les appelants existants compilent ; l'envoi est rejeté (400).
+   */
+  readonly username?: string;
+  /** Obsolète : REFUSÉ par le serveur (#526), comme `username`. */
+  readonly password?: string;
   /** URL de départ fournie par l'humain (jamais committée). */
   readonly startUrl: string;
   /** false = première connexion interactive visible. */
@@ -317,8 +330,10 @@ export function isManualsScrapeRequest(v: unknown): v is ManualsScrapeRequest {
   if (typeof v !== "object" || v === null) return false;
   const r = v as Record<string, unknown>;
   if (!isBoundedNonEmptyString(r["platform"], MANUALS_SCRAPE_PLATFORM_MAX_CHARS)) return false;
-  if (!isBoundedNonEmptyString(r["username"], MANUALS_SCRAPE_CREDENTIAL_MAX_CHARS)) return false;
-  if (!isBoundedNonEmptyString(r["password"], MANUALS_SCRAPE_CREDENTIAL_MAX_CHARS)) return false;
+  // #526 : `username`/`password` ne sont PLUS exigés (le scraper ne
+  // s'authentifie pas : la session est celle du serveur). Le contrat les
+  // IGNORE — c'est le SERVEUR qui refuse un corps qui les porte (message
+  // dédié), comme pour `authFile` (#538).
   if (!isBoundedNonEmptyString(r["startUrl"], MANUALS_SCRAPE_URL_MAX_CHARS)) return false;
   if (!/^https?:\/\//i.test(r["startUrl"] as string)) return false;
   // Garde SSRF partagée avec le serveur (shared/contracts/net.ts) : IPv4
