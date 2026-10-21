@@ -477,6 +477,34 @@ export function tabVisible(capabilities: string[] | null, tab: string): boolean 
   return capabilities === null || capabilities.includes(tab);
 }
 
+// --- Entrée des widgets (#569) ------------------------------------------------
+
+/**
+ * Fenêtre de FRAÎCHEUR d'une entrée, en ms.
+ *
+ * L'entrée d'un widget appartient à l'OUVERTURE de l'écran : un widget monté
+ * dans les fractions de seconde qui suivent l'ouverture entre avec le reste,
+ * un widget monté plus tard (données asynchrones, rafraîchissement qui change
+ * les conditions) apparaît SANS entrée — une entrée tardive est une faute
+ * d'affichage, pas un effet.
+ */
+export const ENTRANCE_WINDOW_MS = 400;
+
+/**
+ * L'élément joue-t-il son entrée ? Décision PURE, figée au montage.
+ *
+ * - `openedAt` : l'ouverture de l'écran (figée à son montage) ;
+ * - `mountedAt` : le montage de l'élément.
+ *
+ * Vrai seulement si l'élément est monté dans la fenêtre de fraîcheur. La
+ * décision ne se rejoue jamais : l'appelant la fige au montage (retirer la
+ * classe en cours d'entrée couperait l'animation au milieu).
+ */
+export function shouldAnimateOnMount(openedAt: number, mountedAt: number): boolean {
+  if (!Number.isFinite(openedAt) || !Number.isFinite(mountedAt)) return false;
+  return mountedAt - openedAt <= ENTRANCE_WINDOW_MS;
+}
+
 // --- Dates et libellés -------------------------------------------------------
 
 /** Écart en JOURS locaux (pas en heures : le changement d'heure ne compte pas). */

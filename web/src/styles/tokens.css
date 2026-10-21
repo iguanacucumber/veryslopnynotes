@@ -125,6 +125,10 @@
   --hero-hover: color-mix(in srgb, var(--brand) 18%, transparent);
 }
 
+/* GARDE UNIQUE de mouvement réduit (#569) : elle porte sur TOUT l'arbre CSS,
+   donc aucune garde locale ne doit la dupliquer (deux gardes finissent par se
+   contredire). Elle neutralise aussi le DÉCALAGE : sans cela, les entrées en
+   cascade (les accès rapides) resteraient espacées sous mouvement réduit. */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --duration: 0ms;
@@ -133,6 +137,7 @@
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
