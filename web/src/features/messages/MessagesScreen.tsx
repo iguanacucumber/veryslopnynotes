@@ -262,7 +262,9 @@ export function ThreadScreen({
       {loading ? (
         <Loading label="Chargement du fil…" />
       ) : messages.length === 0 ? (
-        <EmptyState icon={<IconMessage size={30} />} title="Aucun message." body="Ce fil est vide." />
+        // #537 : avec une erreur, on ne SAIT PAS que le fil est vide (le
+        // payload peut être illisible) : l'état vide serait un fait faux.
+        error ? null : <EmptyState icon={<IconMessage size={30} />} title="Aucun message." body="Ce fil est vide." />
       ) : (
         <div className="list" aria-labelledby={titleId}>
           {messages.map((message) => (
