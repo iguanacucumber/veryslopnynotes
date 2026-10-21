@@ -7,6 +7,7 @@ import {
   ThreadScreen,
 } from "../features/messages/MessagesScreen";
 import {
+  isMessagesPayloadReadable,
   messagePreview,
   parseDiscussions,
   parseMessages,
@@ -104,6 +105,11 @@ export default function MessagesRoute() {
       if (result.error) setThreadError(result.error);
       const parsed = parseMessages(result.payload);
       setMessages(parsed);
+      // #537 : un payload ILLISIBLE n'est pas un fil vide : c'est une erreur
+      // (« la donnée n'a pas pu être lue »), jamais « Ce fil est vide ».
+      if (!result.error && !isMessagesPayloadReadable(result.payload)) {
+        setThreadError("Fil illisible : la donnée n’a pas pu être lue.");
+      }
       // #476 : les participants du fil arrivent AVEC ses messages (la liste ne
       // les télécharge plus) : on les garde pour l'en-tête du fil et pour la
       // ligne de la liste.

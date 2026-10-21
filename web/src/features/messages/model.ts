@@ -149,6 +149,22 @@ function attachmentValid(a: MessageAttachment): boolean {
   return true;
 }
 
+/**
+ * Le payload est-il LISIBLE ? (#537)
+ *
+ * Un JSON illisible n'est PAS un fil vide : l'écran doit le dire (erreur),
+ * jamais « Ce fil est vide » (I14 : « invalide » n'est jamais « vide »). Le
+ * parseur reste TOLÉRANT (aucun crash, aucun message) ; c'est l'écran qui
+ * distingue « illisible » de « vide ».
+ *
+ * `null` = aucun payload : l'appelant le traite à part (« pas de cache » et
+ * « cache illisible » ne sont pas la même chose).
+ */
+export function isMessagesPayloadReadable(payload: string | null): boolean {
+  if (payload === null) return false;
+  return payloadRoot(payload) !== null;
+}
+
 export function parseMessages(payload: string | null): DiscussionMessage[] {
   const root = payloadRoot(payload);
   if (!root) return [];

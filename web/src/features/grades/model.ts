@@ -247,6 +247,23 @@ export function parseGradesPayload(
   return { grades, report };
 }
 
+/**
+ * Le payload est-il LISIBLE ? (#537)
+ *
+ * Un JSON illisible (ou un corps qui n'est pas un objet) n'est PAS une absence
+ * de note : l'écran doit le dire (erreur), jamais « aucune note en cache »
+ * (I14 : « invalide » n'est jamais « vide »). Le parseur reste TOLÉRANT
+ * (aucun crash, aucune note exploitable) ; c'est l'écran qui distingue
+ * « illisible » de « vide ».
+ *
+ * `null` = aucun payload (pas de cache) : l'appelant le traite à part —
+ * « pas de cache » et « cache illisible » ne sont pas la même chose.
+ */
+export function isGradesPayloadReadable(payload: string | null): boolean {
+  if (payload === null) return false;
+  return record(parseJson(payload)) !== null;
+}
+
 /** Payload `/v1/periods` -> tranches, dans l'ordre du contrat. */
 export function parsePeriods(payload: string | null): Period[] {
   const root = record(parseJson(payload));
