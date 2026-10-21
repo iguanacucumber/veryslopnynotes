@@ -84,8 +84,10 @@ describe("purge de déconnexion (#364)", () => {
     // La purge est DANS la garde (une seule section critique) : l'invalidation
     // de l'époque et l'effacement du cache sont dans le même bloc.
     const scope = readFileSync(join(DATA, "CacheScope.kt"), "utf8");
-    expect(scope).toContain("SessionEpoch.invalidate { store.clearAll() }");
+    expect(scope).toMatch(/SessionEpoch\.invalidate \{[\s\S]*?store\.clearAll\(\)/);
     // La purge brute ne subsiste pas (elle passerait hors section critique).
+    // #529 : la bascule de compte purge ET publie dans la MÊME section
+    // critique — donc UN SEUL effacement, toujours gardé.
     expect(scope.match(/store\.clearAll\(\)/g)?.length).toBe(1);
   });
 

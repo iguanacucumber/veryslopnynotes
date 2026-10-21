@@ -349,7 +349,7 @@ class VsnBridge(
             }
             "pairing.pair" -> pair(p)
             "pairing.cancel" -> cancelPairing()
-            "resources.cached" -> resourceCached(p)
+            "resources.cached" -> resourceCached(p, epoch)
             "resources.load" -> resourceLoad(p)
             "resources.invalidate" -> resourceInvalidate(p)
             "resources.sync" -> resourceSync()
@@ -558,7 +558,11 @@ class VsnBridge(
 
     // --- Ressources ------------------------------------------------------------
 
-    private fun resourceCached(p: JSONObject): JSONObject {
+    private fun resourceCached(p: JSONObject, epoch: Long): JSONObject {
+        // #529 : la session a changé depuis l'ARRIVÉE de l'appel (le cache a
+        // été purgé : déconnexion, session morte, OU bascule de compte). L'entrée
+        // servie pourrait alors être celle d'un AUTRE compte — on ne sert rien.
+        if (SessionEpoch.current() != epoch) return emptyCached()
         val key = p.string("key")
         val resource = cacheKey(key) ?: return emptyCached()
         // #477 : le cache est indexé par (ressource, requête) : l'entrée servie

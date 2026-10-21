@@ -345,12 +345,22 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   un mot de son message** (#520) : le `Titre` de l'établissement («
   Confirmation de connexion requise », « Erreur de session ») ne peut pas
   vider le cache de l'élève.
+  #529 : la BASCULE de compte (purge du cache précédent + PUBLICATION du
+  nouveau client) est ATOMIQUE et ORDONNÉE — la purge précède la publication,
+  les deux dans la section critique d'époque. Publier d'abord laissait une
+  fenêtre où `resources.cached` servait le payload du compte précédent au
+  nouveau compte, et une lecture qui y démarrait lisait le client du nouveau
+  compte mais écrivait dans le cache de l'ancien. Le pont ne sert pas
+  non plus une entrée d'un autre compte : il compare l'époque capturée à
+  l'ARRIVÉE de l'appel (une purge depuis = plus rien à servir).
 - Test : `tests/unit/kotlin-cache-scope.test.ts` (Kotlin EXÉCUTÉ : appairage
   d'un autre compte → le cache du précédent n'est plus servi ; appairage du
   MÊME compte → le cache est conservé ; session morte → purge ; lecture en vol
-  → écriture refusée ; + le câblage `PairingRepository` / pont / job de fond) +
-  `tests/unit/kotlin-cache-epoch.test.ts` (la purge reste sous la garde
-  d'époque).
+  → écriture refusée ; bascule → la purge est EXÉCUTÉE AVANT la publication,
+  le pilote observant l'époque ET le cache au moment exact de la publication ;
+  + le câblage `PairingRepository` (l'ordre dans `pairBlocking`) / pont / job
+  de fond) + `tests/unit/kotlin-cache-epoch.test.ts` (la purge reste sous la
+  garde d'époque).
 - Commande : `make check`.
 - Emplacement : `android/data/CacheScope.kt`, `android/data/PairingRepository.kt`,
   `android/data/AccountStore.kt`, `android/data/PeriodicSyncWorker.kt`,
