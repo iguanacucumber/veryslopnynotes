@@ -341,8 +341,9 @@ export default function HomeScreen() {
   const average = useMemo(() => generalAverage(gradesRes.payload, grades), [gradesRes.payload, grades]);
   const latest = useMemo(() => latestGrades(grades, 1), [grades]);
   const lessons = useMemo(() => parseTimetable(timetableRes.payload), [timetableRes.payload]);
-  // La liste des widgets reste BORNÉE (deux cours) ; le compteur de la carte
-  // d'accueil est le nombre VRAI, sans plafond (#571).
+  // La liste des widgets reste BORNÉE (deux cours) ; le compteur est le nombre
+  // VRAI, sans plafond (#571). Depuis #566, il ne sert plus qu'à savoir si
+  // l'accueil a de quoi afficher : la tuile « À venir » a été retirée.
   const upcoming = useMemo(() => upcomingLessons(lessons, now, 2), [lessons, now]);
   const upcomingTotal = useMemo(() => upcomingCount(lessons, now), [lessons, now]);
   const assignments = useMemo(
@@ -409,10 +410,6 @@ export default function HomeScreen() {
               {average.value !== null ? formatAverage(average.value) : "—"}
               {average.value !== null ? <small>/20</small> : null}
             </strong>
-          </div>
-          <div className="home-hero__stat">
-            <span>À venir</span>
-            <strong>{upcomingTotal}</strong>
           </div>
           <div className="home-hero__stat">
             <span>À faire</span>

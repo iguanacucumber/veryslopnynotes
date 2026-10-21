@@ -66,6 +66,13 @@ function grade(partial: Partial<Grade> & Pick<Grade, "subject" | "value" | "scal
   };
 }
 
+/** Le balisage de la carte d'accueil : du bloc de tuiles à la fin de la carte. */
+function heroStats(source: string): string {
+  const debut = source.indexOf('className="home-hero__stats"');
+  expect(debut).toBeGreaterThan(-1);
+  return source.slice(debut, source.indexOf("</Card>", debut));
+}
+
 describe("parseTimetable", () => {
   const payload = JSON.stringify({
     entries: [
@@ -321,14 +328,41 @@ describe("compteurs de l'accueil (#571)", () => {
     // Les compteurs sont calculés sur TOUTES les données…
     expect(source).toContain("pendingCount(assignments)");
     expect(source).toContain("upcomingCount(lessons, now)");
-    // …et la carte les affiche tels quels : plus jamais la longueur d'une
+    // …et la carte affiche le compte VRAI, plus jamais la longueur d'une
     // liste BORNÉE à deux.
-    const debut = source.indexOf('className="home-hero__stats"');
-    expect(debut).toBeGreaterThan(-1);
-    const stats = source.slice(debut, source.indexOf("</Card>", debut));
+    const stats = heroStats(source);
     expect(stats).toContain("tasksTotal");
-    expect(stats).toContain("upcomingTotal");
     expect(stats).not.toContain(".length");
+  });
+
+  // #566 : la tuile « À venir » quitte la carte d'accueil — elle doublait le
+  // widget « Devoirs » et l'onglet « Cours ».
+  test("la carte d'accueil ne montre plus la tuile « À venir » (#566)", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "features", "home", "HomeScreen.tsx"),
+      "utf8",
+    );
+    const stats = heroStats(source);
+    // La tuile elle-même : ni le libellé, ni son compteur.
+    expect(stats).not.toContain("À venir");
+    expect(stats).not.toContain("upcomingTotal");
+    // Les deux tuiles qui restent : « Moyenne » et « À faire ».
+    expect(stats).toContain("Moyenne");
+    expect(stats).toContain("À faire");
+    expect(stats).toContain("tasksTotal");
+    // Le compteur des cours reste vivant : il décide si l'accueil a des données.
+    expect(source).toContain("upcomingTotal > 0");
+  });
+
+  // #566 : la grille des tuiles tient deux colonnes — pas de troisième vide.
+  test("la grille des tuiles de l'accueil tient deux colonnes (#566)", () => {
+    const css = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "features", "home", "home.css"),
+      "utf8",
+    );
+    const regle = /\.home-hero__stats\s*\{\s*display:\s*grid;([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    expect(regle).toContain("grid-template-columns: 1.25fr 1fr;");
+    expect(regle).not.toContain("1fr 1fr 1fr");
   });
 });
 
