@@ -1,4 +1,4 @@
-import { useMemo, type ComponentType, type CSSProperties, type ReactElement } from "react";
+import { useMemo, useState, type ComponentType, type CSSProperties, type ReactElement } from "react";
 import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { frDate, relativeFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
@@ -42,6 +42,7 @@ import {
   parseGrades,
   parseTimetable,
   pendingAssignments,
+  shouldAnimateOnMount,
   tabVisible,
   timeRange,
   upcomingLessons,
@@ -54,6 +55,19 @@ import { useNow } from "./useNow";
 import "./home.css";
 
 type IconComponent = ComponentType<{ size?: number }>;
+
+/**
+ * Décision d'entrée, FIGÉE au montage (#569).
+ *
+ * Un élément entre UNE fois, à l'ouverture de l'écran : celui qui arrive plus
+ * tard (données asynchrones, rafraîchissement) apparaît SANS entrée. La
+ * décision ne bouge plus ensuite : retirer la classe en cours d'entrée
+ * couperait l'animation au milieu.
+ */
+function useEntrance(openedAt: number): boolean {
+  const [animate] = useState(() => shouldAnimateOnMount(openedAt, Date.now()));
+  return animate;
+}
 
 interface Palette {
   base: string;
@@ -102,16 +116,19 @@ function AverageWidget({
   latest,
   dark,
   onMore,
+  openedAt,
 }: {
   average: GeneralAverage;
   latest: GradeSummary[];
   dark: boolean;
   onMore: () => void;
+  openedAt: number;
 }) {
+  const animate = useEntrance(openedAt);
   const value = average.value;
   const fraction = value === null ? 0 : Math.max(0, Math.min(1, value / 20));
   return (
-    <Card className="home-widget home-rise">
+    <Card className={animate ? "home-widget home-rise" : "home-widget"}>
       <WidgetHeader icon={IconGrades} title="Moyenne générale" onMore={onMore} />
       {value !== null ? (
         <div
@@ -162,14 +179,17 @@ function CourseWidget({
   now,
   dark,
   onMore,
+  openedAt,
 }: {
   lessons: Lesson[];
   now: number;
   dark: boolean;
   onMore: () => void;
+  openedAt: number;
 }) {
+  const animate = useEntrance(openedAt);
   return (
-    <Card className="home-widget home-rise">
+    <Card className={animate ? "home-widget home-rise" : "home-widget"}>
       <WidgetHeader icon={IconCalendar} title={courseWidgetTitle(lessons[0], now)} onMore={onMore} />
       <div className="home-courses">
         {lessons.map((lesson) => {
@@ -207,14 +227,17 @@ function TasksWidget({
   now,
   dark,
   onMore,
+  openedAt,
 }: {
   tasks: Assignment[];
   now: number;
   dark: boolean;
   onMore: () => void;
+  openedAt: number;
 }) {
+  const animate = useEntrance(openedAt);
   return (
-    <Card className="home-widget home-rise">
+    <Card className={animate ? "home-widget home-rise" : "home-widget"}>
       <WidgetHeader icon={IconTasks} title="Devoirs" onMore={onMore} />
       <div className="home-tasks">
         {tasks.map((task) => {
@@ -256,9 +279,10 @@ const QUICK_ACTIONS: QuickAction[] = [
   { to: "/settings", label: "Réglages", status: "Compte", icon: IconSettings },
 ];
 
-function QuickActions({ capabilities }: { capabilities: string[] | null }) {
+function QuickActions({ capabilities, openedAt }: { capabilities: string[] | null; openedAt: number }) {
   const navigate = useNavigate();
   const dark = useApp().dark;
+  const animate = useEntrance(openedAt);
   const actions = QUICK_ACTIONS.filter((action) => !action.tab || tabVisible(capabilities, action.tab));
   if (actions.length === 0) return null;
   return (
@@ -270,9 +294,9 @@ function QuickActions({ capabilities }: { capabilities: string[] | null }) {
           return (
             <button
               type="button"
-              className="home-action home-rise"
+              className={animate ? "home-action home-rise" : "home-action"}
               key={action.to}
-              style={{ animationDelay: `${index * 35}ms` }}
+              style={animate ? { animationDelay: `${index * 35}ms` } : undefined}
               onClick={() => navigate(action.to)}
               aria-label={`${action.label} — ${action.status}`}
             >
@@ -300,6 +324,10 @@ export default function HomeScreen() {
   const navigate = useNavigate();
   const { dark } = useApp();
   const now = useNow();
+  // Ouverture de l'écran : figée au montage. Tout élément monté après cette
+  // fenêtre de fraîcheur apparaît SANS entrée (#569).
+  const [openedAt] = useState(() => Date.now());
+  const entrance = useEntrance(openedAt);
 
   const gradesRes = useResource("grades");
   const assignmentsRes = useResource("assignments");
@@ -422,6 +450,7 @@ export default function HomeScreen() {
           latest={latest}
           dark={dark}
           onMore={() => navigate("/grades")}
+          openedAt={openedAt}
         />
       ) : null}
 
@@ -431,16 +460,23 @@ export default function HomeScreen() {
           now={now}
           dark={dark}
           onMore={() => navigate("/calendar")}
+          openedAt={openedAt}
         />
       ) : null}
 
       {!loading && showHomework && tasks.length > 0 ? (
-        <TasksWidget tasks={tasks} now={now} dark={dark} onMore={() => navigate("/tasks")} />
+        <TasksWidget
+          tasks={tasks}
+          now={now}
+          dark={dark}
+          onMore={() => navigate("/tasks")}
+          openedAt={openedAt}
+        />
       ) : null}
 
       <button
         type="button"
-        className={`home-alert home-rise${alertCount > 0 ? " home-alert--active" : ""}`}
+        className={`home-alert${entrance ? " home-rise" : ""}${alertCount > 0 ? " home-alert--active" : ""}`}
         onClick={() => navigate("/alerts")}
         aria-label={`Alertes, ${alertText}`}
       >
@@ -459,7 +495,7 @@ export default function HomeScreen() {
         <IconChevronRight size={16} />
       </button>
 
-      <QuickActions capabilities={capabilities} />
+      <QuickActions capabilities={capabilities} openedAt={openedAt} />
 
       {scheduleHint(upcoming[0], now)}
     </Page>
