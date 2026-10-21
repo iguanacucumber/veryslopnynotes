@@ -9,15 +9,9 @@ import {
   Page,
   StaleBadge,
   SubjectAvatar,
+  WeekNavigator,
 } from "../../ui/components";
-import {
-  IconCalendar,
-  IconChevronLeft,
-  IconChevronRight,
-  IconPin,
-  IconUser,
-  IconWarning,
-} from "../../ui/icons";
+import { IconCalendar, IconPin, IconUser, IconWarning } from "../../ui/icons";
 import {
   clockLabel,
   countdownFr,
@@ -200,38 +194,13 @@ function WeekView({
 
   return (
     <Page className="tt">
-      <Card className="tt-toolbar">
-        <div className="tt-toolbar__top">
-          <strong className="tt-toolbar__week">{weekLabel(weekStart)}</strong>
-        </div>
-        <div className="tt-toolbar__nav">
-          <button
-            type="button"
-            className="tt-nav"
-            aria-label="Semaine précédente"
-            onClick={() => onShift(-1)}
-          >
-            <IconChevronLeft />
-          </button>
-          <button
-            type="button"
-            className="tt-current"
-            onClick={onToday}
-            disabled={offset === 0}
-            aria-label="Revenir à la semaine courante"
-          >
-            Cette semaine
-          </button>
-          <button
-            type="button"
-            className="tt-nav"
-            aria-label="Semaine suivante"
-            onClick={() => onShift(1)}
-          >
-            <IconChevronRight />
-          </button>
-        </div>
-      </Card>
+      <WeekNavigator
+        label={weekLabel(weekStart)}
+        current={offset === 0}
+        onPrevious={() => onShift(-1)}
+        onNext={() => onShift(1)}
+        onToday={onToday}
+      />
 
       {loaded && (resource.stale || resource.error) ? (
         <div className="tt-status" role="status">
@@ -246,12 +215,7 @@ function WeekView({
 
       {!resource.loading && empty && resource.error ? (
         <ErrorBox message={resource.error}>
-          <button
-            type="button"
-            className="btn btn--small"
-            style={{ marginTop: 10 }}
-            onClick={resource.refresh}
-          >
+          <button type="button" className="btn btn--small" onClick={resource.refresh}>
             Réessayer
           </button>
         </ErrorBox>

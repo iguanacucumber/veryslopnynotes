@@ -14,7 +14,6 @@ import {
   switchableAccounts,
 } from "../../web/src/features/profile/model";
 import {
-  accountCountText,
   buildSubjectPref,
   normalizeColorHex,
   normalizeEmoji,
@@ -249,8 +248,6 @@ describe("réglages : validation de l'adresse et des matières", () => {
       { subject: "Philo", color: null, emoji: null, label: null },
     ]);
     expect(sanitizeSubjectPrefs(undefined)).toEqual([]);
-    expect(accountCountText(1)).toContain("1 compte");
-    expect(accountCountText(null)).toContain("indisponible");
   });
 });
 

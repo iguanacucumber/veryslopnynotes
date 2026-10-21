@@ -1,18 +1,25 @@
 import { useEffect, useState } from "react";
 import { bridge } from "../../bridge/client";
 import { BridgeCallError, type SubjectPref } from "../../bridge/types";
-import { subjectColor } from "../../lib/format";
 import { schemeLabel } from "../../lib/schemes";
 import { STORAGE_UNAVAILABLE_MESSAGE } from "../../lib/session";
 import { useApp } from "../../ui/AppContext";
-import { Card, Divider, ErrorBox, Loading, Page, Section } from "../../ui/components";
-import { IconChevronRight, IconLock, IconSettings, IconUser } from "../../ui/icons";
+import {
+  Card,
+  Divider,
+  ErrorBox,
+  ListRow,
+  Loading,
+  Page,
+  Section,
+  SubjectBadge,
+} from "../../ui/components";
+import { IconLock, IconSettings } from "../../ui/icons";
 import { SchemePicker } from "./SchemePicker";
 import { SubjectEditor } from "./SubjectEditor";
 import {
   MAX_API_KEY_CHARS,
   THEME_OPTIONS,
-  accountCountText,
   sanitizeSubjectPrefs,
   subjectNameError,
   subjectSaveRefusal,
@@ -37,9 +44,8 @@ function subjectInitial(subject: string): string {
 }
 
 export default function SettingsScreen() {
-  const { theme, setTheme, scheme, setScheme, refreshTick, notify, storageUnavailable } = useApp();
+  const { theme, setTheme, scheme, setScheme, refreshTick, notify, storageUnavailable, dark } = useApp();
   const [host, setHost] = useState("");
-  const [accountCount, setAccountCount] = useState<number | null>(null);
   const [llmConfigured, setLlmConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [settingsError, setSettingsError] = useState("");
@@ -76,11 +82,6 @@ export default function SettingsScreen() {
         const snapshot = settingsResult.value;
         setHost(typeof snapshot.serverHost === "string" ? snapshot.serverHost : "");
         setLlmConfigured(snapshot.llmConfigured === true);
-        setAccountCount(
-          typeof snapshot.accountCount === "number" && Number.isFinite(snapshot.accountCount)
-            ? Math.max(0, Math.trunc(snapshot.accountCount))
-            : null,
-        );
       } else {
         setSettingsError(actionMessage(settingsResult.reason, "Réglages indisponibles : réessaie dans un instant."));
       }
@@ -225,7 +226,7 @@ export default function SettingsScreen() {
 
       {settingsError ? (
         <ErrorBox message={settingsError}>
-          <button type="button" className="btn btn--small" style={{ marginTop: 10 }} onClick={() => setReload((n) => n + 1)}>
+          <button type="button" className="btn btn--small" onClick={() => setReload((n) => n + 1)}>
             Réessayer
           </button>
         </ErrorBox>
@@ -271,7 +272,7 @@ export default function SettingsScreen() {
               </p>
               <button
                 type="button"
-                className="btn btn--ghost btn--small"
+                className="btn btn--small"
                 style={{ marginTop: 8 }}
                 onClick={() => setReload((n) => n + 1)}
               >
@@ -288,56 +289,26 @@ export default function SettingsScreen() {
 
           <div className="list">
             {prefs.map((pref) => {
-              const color = pref.color ?? subjectColor(pref.subject);
               const display = pref.label ?? pref.subject;
               return (
                 <div key={pref.subject}>
-                  <button
-                    type="button"
+                  <ListRow
+                    title={display}
+                    subtitle={pref.label ? pref.subject : undefined}
+                    leading={
+                      <SubjectBadge
+                        subject={pref.subject}
+                        color={pref.color ?? undefined}
+                        emoji={pref.emoji ?? subjectInitial(pref.subject)}
+                        size={38}
+                        dark={dark}
+                      />
+                    }
                     onClick={() => {
                       setEditorError("");
                       setEditing(pref.subject);
                     }}
-                    className="row"
-                    style={{
-                      width: "100%",
-                      minHeight: 52,
-                      padding: "8px 4px",
-                      border: 0,
-                      background: "transparent",
-                      textAlign: "left",
-                      color: "inherit",
-                      borderRadius: "var(--radius-sm)",
-                    }}
-                  >
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        width: 38,
-                        height: 38,
-                        borderRadius: 12,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: color,
-                        color: "#fff",
-                        fontWeight: 700,
-                        textShadow: "0 1px 2px rgba(0,0,0,0.45)",
-                        flex: "0 0 auto",
-                      }}
-                    >
-                      {pref.emoji ?? subjectInitial(pref.subject)}
-                    </span>
-                    <span className="grow">
-                      <span style={{ display: "block", fontWeight: 600 }}>{display}</span>
-                      {pref.label ? (
-                        <span className="tiny muted" style={{ display: "block" }}>
-                          {pref.subject}
-                        </span>
-                      ) : null}
-                    </span>
-                    <IconChevronRight size={18} />
-                  </button>
+                  />
                   {editing === pref.subject ? (
                     <div style={{ marginTop: 8 }}>
                       <SubjectEditor
@@ -520,24 +491,6 @@ export default function SettingsScreen() {
               {savingHost ? "Enregistrement…" : "Enregistrer l'adresse"}
             </button>
           </div>
-        </Card>
-      </Section>
-
-      <Section title="Compte">
-        <Card className="card--flat">
-          <div className="row">
-            <span style={{ color: "var(--muted)" }}>
-              <IconUser size={20} />
-            </span>
-            <div className="grow">
-              <strong style={{ display: "block" }}>Comptes appairés</strong>
-              <span className="tiny muted">{accountCountText(accountCount)}</span>
-            </div>
-          </div>
-          <p className="tiny muted" style={{ margin: "10px 0 0" }}>
-            L'appairage, la déconnexion et le changement de compte se font depuis le Profil. La clé de l'assistant
-            ne sort jamais de l'appareil.
-          </p>
         </Card>
       </Section>
 

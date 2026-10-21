@@ -1,5 +1,8 @@
 import { useState } from "react";
 import type { SubjectPref } from "../../bridge/types";
+import { readableInk } from "../../lib/format";
+import { useApp } from "../../ui/AppContext";
+import { SubjectBadge } from "../../ui/components";
 import { IconCheck } from "../../ui/icons";
 import {
   buildSubjectPref,
@@ -33,6 +36,7 @@ export function SubjectEditor({
     emoji: pref?.emoji ?? "",
     label: pref?.label ?? "",
   });
+  const { dark } = useApp();
   const chosenColor = normalizeColorHex(draft.color);
   const badge = draft.emoji.trim() || initialOf(subject);
   const display = draft.label.trim() || subject;
@@ -54,36 +58,15 @@ export function SubjectEditor({
         </button>
       </div>
 
-      <div
-        className="row"
-        style={{
-          marginTop: 12,
-          padding: 12,
-          borderRadius: "var(--radius-sm)",
-          border: "1px solid var(--border)",
-          background: "var(--surface-variant)",
-        }}
-      >
-        <span
-          aria-hidden="true"
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 12,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: chosenColor || "var(--brand-pale)",
-            color: chosenColor ? "#fff" : "var(--brand-deep)",
-            fontWeight: 700,
-            textShadow: chosenColor ? "0 1px 2px rgba(0,0,0,0.45)" : undefined,
-          }}
-        >
-          {badge}
-        </span>
-        <span className="grow" style={{ fontWeight: 700, overflowWrap: "anywhere" }}>
-          {display}
-        </span>
+      <div className="row subject-editor__preview">
+        <SubjectBadge
+          subject={subject}
+          color={chosenColor || undefined}
+          emoji={badge}
+          size={38}
+          dark={dark}
+        />
+        <span className="grow subject-editor__preview-name">{display}</span>
       </div>
 
       <label className="tiny muted" htmlFor="subject-label" style={{ display: "block", marginTop: 14 }}>
@@ -102,29 +85,18 @@ export function SubjectEditor({
         <legend className="tiny muted" style={{ padding: 0 }}>
           Couleur
         </legend>
-        <div className="row row--wrap" style={{ gap: 8, marginTop: 6 }}>
+        <div className="row row--wrap subject-editor__swatches">
           {subjectSwatchColors(pref?.color).map((hex) => {
             const selected = hex === chosenColor;
             return (
               <button
                 key={hex}
                 type="button"
+                className="subject-swatch"
                 aria-label={`Couleur ${hex}`}
                 aria-pressed={selected}
                 onClick={() => setDraft((current) => ({ ...current, color: selected ? "" : hex }))}
-                style={{
-                  width: 42,
-                  height: 42,
-                  padding: 0,
-                  borderRadius: 999,
-                  border: selected ? "3px solid var(--ink)" : "2px solid var(--surface)",
-                  background: hex,
-                  boxShadow: "var(--shadow-soft)",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#fff",
-                }}
+                style={{ background: hex, color: readableInk(hex) }}
               >
                 {selected ? <IconCheck size={18} /> : null}
               </button>
@@ -137,26 +109,17 @@ export function SubjectEditor({
         <legend className="tiny muted" style={{ padding: 0 }}>
           Emoji
         </legend>
-        <div className="row row--wrap" style={{ gap: 8, marginTop: 6 }}>
+        <div className="row row--wrap subject-editor__swatches">
           {subjectEmojiChoices(pref?.emoji).map((emoji) => {
             const selected = emoji === draft.emoji;
             return (
               <button
                 key={emoji}
                 type="button"
+                className="subject-emoji"
                 aria-label={`Emoji ${emoji}`}
                 aria-pressed={selected}
                 onClick={() => setDraft((current) => ({ ...current, emoji: selected ? "" : emoji }))}
-                style={{
-                  width: 42,
-                  height: 42,
-                  padding: 0,
-                  borderRadius: 999,
-                  border: selected ? "2px solid var(--brand)" : "1px solid var(--border)",
-                  background: selected ? "var(--brand-pale)" : "var(--surface)",
-                  fontSize: 20,
-                  lineHeight: 1,
-                }}
               >
                 {emoji}
               </button>

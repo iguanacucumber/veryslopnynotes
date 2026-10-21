@@ -143,7 +143,7 @@ export default function NewsRoute() {
 
       {items.length === 0 && !resource.loading && resource.error ? (
         <ErrorBox message={resource.error}>
-          <button type="button" className="btn btn--ghost btn--small" onClick={resource.refresh}>
+          <button type="button" className="btn btn--small" onClick={resource.refresh}>
             Réessayer
           </button>
         </ErrorBox>
@@ -151,11 +151,11 @@ export default function NewsRoute() {
 
       {items.length === 0 && !resource.loading && !resource.error ? (
         <EmptyState
-          icon={<IconBell />}
+          icon={<IconBell size={30} />}
           title="Aucune actualité"
           body="L’établissement n’a rien publié pour le moment."
           action={
-            <button type="button" className="btn btn--ghost btn--small" onClick={resource.refresh}>
+            <button type="button" className="btn btn--small" onClick={resource.refresh}>
               Actualiser
             </button>
           }
