@@ -87,7 +87,10 @@ mock.module("playwright", () => ({
         newPage: async () => ({
           url: () => PUBLIC_URL,
           title: async () => "Titre factice",
-          content: async () => renderedHtml,
+          // #525 : la lecture passe par `evaluate` (la borne est appliquée
+          // DANS le navigateur) : le faux rend au plus `max` caractères.
+          evaluate: async (_fn: unknown, max: number) =>
+            renderedHtml.length > max ? renderedHtml.slice(0, max + 1) : renderedHtml,
           route: async () => {},
           goto: async () => ({ status: () => 200, ok: () => true }),
         }),

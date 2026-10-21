@@ -12,6 +12,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { createApp } from "../../server/infrastructure/http";
 import {
   CONTENT_TIMEOUT_MS,
+  MAX_HTML_BYTES,
   MAX_HTML_CHARS,
   ScrapeManualsError,
   scrapeManuals,
@@ -39,17 +40,29 @@ interface FakeState {
   /** true = la lecture ÉCHOUE (navigateur mort pendant la lecture). */
   contentFails: boolean;
   contentCalls: number;
+  /** Borne demandée au navigateur (#525) : `null` = aucune lecture. */
+  contentMax: number | null;
+  /** En-têtes de la réponse (`content-length`, mesuré AVANT la lecture). */
+  headers: Record<string, string>;
   browserClosed: boolean;
   contextClosed: boolean;
 }
 
-let state: FakeState = {
-  html: "<html><body>texte</body></html>",
-  contentFails: false,
-  contentCalls: 0,
-  browserClosed: false,
-  contextClosed: false,
-};
+/** État neuf du faux navigateur (champs complets : le faux applique la borne). */
+function fakeState(overrides: Partial<FakeState> = {}): FakeState {
+  return {
+    html: "<html><body>texte</body></html>",
+    contentFails: false,
+    contentCalls: 0,
+    contentMax: null,
+    headers: {},
+    browserClosed: false,
+    contextClosed: false,
+    ...overrides,
+  };
+}
+
+let state: FakeState = fakeState();
 
 let fetchSpy: { mockRestore: () => void } | null = null;
 
@@ -65,15 +78,19 @@ mock.module("playwright", () => ({
         newPage: async () => ({
           url: () => PUBLIC_URL,
           title: async () => "Titre factice",
-          content: async () => {
+          // #525 : la borne est appliquée DANS le navigateur : le faux rend
+          // au plus `max` caractères (+1 témoin) et ne matérialise jamais plus
+          // que la borne.
+          evaluate: async (_fn: unknown, max: number) => {
             state.contentCalls += 1;
+            state.contentMax = max;
             // `null` = la page streame sans jamais finir.
             if (state.html === null) return await new Promise<string>(() => {});
             if (state.contentFails) throw new Error("Target page, context or browser has been closed");
-            return state.html;
+            return state.html.length > max ? state.html.slice(0, max + 1) : state.html;
           },
           route: async () => {},
-          goto: async () => ({ status: () => 200, ok: () => true }),
+          goto: async () => ({ status: () => 200, ok: () => true, headers: () => state.headers }),
         }),
         storageState: async () => {},
         close: async () => {
@@ -107,13 +124,9 @@ async function refusal(promise: Promise<unknown>): Promise<ScrapeManualsError> {
 describe("HTML scrapé borné (#422)", () => {
   test("une page factice VOLUMINEUSE est tronquée au plafond (avant le reparse)", async () => {
     stubFetch();
-    state = {
+    state = fakeState({
       html: `<html><body>${"x".repeat(MAX_HTML_CHARS + 5_000)}<p>FIN</p></body></html>`,
-      contentFails: false,
-      contentCalls: 0,
-      browserClosed: false,
-      contextClosed: false,
-    };
+    });
     const logs: string[] = [];
     const docs = await scrapeManuals(CONFIG, {
       startUrl: PUBLIC_URL,
@@ -137,27 +150,64 @@ describe("HTML scrapé borné (#422)", () => {
     // « FIN » — c'est ce qui prouve l'ordre (plafond AVANT cheerio).
     const page = (pad: number) => `<html><body><!--${"z".repeat(pad)}--><p>FIN</p></body></html>`;
 
-    state = { html: page(10), contentFails: false, contentCalls: 0, browserClosed: false, contextClosed: false };
+    state = fakeState({ html: page(10) });
     const court = await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
     expect(court).toHaveLength(1);
     expect(court[0]?.excerpt).toContain("FIN");
 
-    state = {
-      html: page(MAX_HTML_CHARS),
-      contentFails: false,
-      contentCalls: 0,
-      browserClosed: false,
-      contextClosed: false,
-    };
+    state = fakeState({ html: page(MAX_HTML_CHARS) });
     const long = await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
     expect(long).toHaveLength(0);
+  });
+});
+
+// #525 : le plafond doit protéger l'ALLOCATION, pas seulement le REPARSE.
+// Avant, `page.content()` lisait TOUTE la page en mémoire : une page de
+// plusieurs centaines de Mo vivait côté navigateur ET côté processus, x2 avec
+// le plafond de concurrence. Le plafond ne s'appliquait qu'APRÈS.
+describe("plafond appliqué AVANT la matérialisation (#525)", () => {
+  test("la borne est demandée AU navigateur (la chaîne traversante est bornée)", async () => {
+    stubFetch();
+    state = fakeState({ html: "<html><body>texte</body></html>" });
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    // Le plafond est demandé À LA PAGE : il n'est pas fixé après coup sur une
+    // chaîne déjà construite. C'est la preuve que le processus ne
+    // matérialise jamais la page entière.
+    expect(state.contentCalls).toBe(1);
+    expect(state.contentMax).toBe(MAX_HTML_CHARS);
+  });
+
+  test("une page trop volumineuse est REFUSÉE SANS être lue", async () => {
+    stubFetch();
+    state = fakeState({
+      html: "<html><body>texte</body></html>",
+      headers: { "content-length": String(MAX_HTML_BYTES + 1) },
+    });
+    const err = await refusal(
+      scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER }),
+    );
+    expect(err).toBeInstanceOf(ScrapeManualsError);
+    expect(err.message).toContain("trop volumineuse");
+    // La page n'a JAMAIS été lue : rien n'a été matérialisé, ni sérialisé.
+    expect(state.contentCalls).toBe(0);
+  });
+
+  test("une réponse SANS content-length reste bornée par la lecture", async () => {
+    stubFetch();
+    state = fakeState({ html: "<html><body>texte</body></html>" });
+    const docs = await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    // Taille inconnue (réponse en morceaux) : c'est la lecture BORNÉE qui
+    // s'applique — la chaîne qui traverse le pont reste ≤ plafond.
+    expect(docs).toHaveLength(1);
+    expect(state.contentCalls).toBe(1);
+    expect(state.contentMax).toBe(MAX_HTML_CHARS);
   });
 });
 
 describe("délai de lecture du HTML (#422)", () => {
   test("une page qui ne finit pas de streamer est coupée, le navigateur meurt", async () => {
     stubFetch();
-    state = { html: null, contentFails: false, contentCalls: 0, browserClosed: false, contextClosed: false };
+    state = fakeState({ html: null });
     const err = await refusal(
       scrapeManuals(CONFIG, {
         startUrl: PUBLIC_URL,
@@ -182,13 +232,7 @@ describe("délai de lecture du HTML (#422)", () => {
 
   test("navigateur mort pendant la lecture = échec de scrape (502), pas une panne du serveur", async () => {
     stubFetch();
-    state = {
-      html: "<html><body>texte</body></html>",
-      contentFails: true,
-      contentCalls: 0,
-      browserClosed: false,
-      contextClosed: false,
-    };
+    state = fakeState({ html: "<html><body>texte</body></html>", contentFails: true });
     const err = await refusal(scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER }));
     expect(err).toBeInstanceOf(ScrapeManualsError);
     // Motif `generic` => 502 « scrape impossible » (jamais 500 « unexpected »).
