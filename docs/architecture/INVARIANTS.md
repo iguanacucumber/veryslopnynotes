@@ -18,6 +18,12 @@ Format : Invariant → test → commande → emplacement.
   fragment, espaces et caractères de contrôle refusés) + `isAllowed` en préfixe
   strict. `BuildConfig.SERVER_HOST` n'est plus qu'une graine. Une déconnexion
   purge la session et les caches (`AccountStore.logout()`).
+- **Établissement de DÉMONSTRATION** : le site public de démonstration de
+  l'éditeur est le seul hôte public du dépôt (le compte est public lui aussi :
+  l'éditeur publie ses identifiants). Son adresse et ses identifiants ne
+  vivent que dans `android/pronote/DemoSchool.kt` ; le web n'a qu'un bouton
+  (« Connexion démo ») et le dépôt ne connaît que le mode de réouverture de la
+  session (`SessionMode`). Test : `tests/architecture/demo-school.test.ts`.
 - Test : `tests/architecture/invariants.test.ts` (I1 : zéro mention hors module + déclaration unique) + `agents/runtime/check-architecture.ts` (I1) + `tests/unit/android-server-config.test.ts`.
 - Commande : `make architecture-test`.
 - Emplacement : `android/**/*` (tolérances : `android/pronote/**` + ligne `include(...)` de `settings.gradle.kts`). Réf : `docs/adr/003-client-direct.md`.

@@ -138,75 +138,120 @@ class PairingRepository(
             } catch (e: Exception) {
                 return@synchronized failure(e)
             }
-            // #529 : la purge du cache du compte précédent précède la
-            // PUBLICATION du nouveau client. Les identifiants sont donc
-            // exportés AVANT : la purge a besoin de l'identité du nouveau
-            // compte.
-            // Déstructuré, pas nommé : le champ du port s'appelle `pronoteUrl`
-            // (I1 : ce mot ne figure dans aucun identifiant hors `android/pronote/`).
-            val (endpoint, username, password, clientId, rebuiltUuid) = try {
-                client.exportCredentials()
-            } catch (_: Exception) {
-                // Le client n'est PAS encore publié : l'ancien compte reste en
-                // place, il n'y a rien à nettoyer.
-                return@synchronized PairingResult.Err("internal", "Session illisible : réessaie l'appairage.")
-            }
-            // L'identifiant du compte : l'id de la ressource client — PAS le login,
-            // PAS le jeton (un accountId n'est pas un secret). Il devient connu à
-            // l'appairage : c'est le moment d'enregistrer le compte (#397).
-            val accountId = try {
-                client.infoId?.trim()?.takeIf { it.isNotEmpty() }
-            } catch (_: Exception) {
-                null
-            }
-            try {
-                // #407 : le compte vient de changer ? Alors le cache du compte
-                // précédent part : il ne doit JAMAIS être servi au nouveau compte.
-                // L'identité vient de la session PERSISTÉE (toujours présente,
-                // contrairement à `AccountStore.current()`) et de celle qu'on
-                // appaire maintenant.
-                // La purge est AVANT `sessions.save` : si le process meurt entre
-                // les deux, la session restaurée est l'ANCIENNE (dont le cache
-                // vient d'être purgé), jamais le nouveau compte avec le cache de
-                // l'ancien.
-                val previous = try {
-                    sessions.load()?.let { AccountIdentity.of(it.endpointUrl, it.username) }
-                } catch (_: Exception) {
-                    null
-                }
-                // #529 : la bascule est ATOMIQUE (purge + publication dans la
-                // MÊME section critique d'époque) : le client du nouveau compte
-                // ne devient visible qu'une fois le cache de l'ancien purgé.
-                CacheScope.switchAccount(
-                    cacheStore,
-                    previous,
-                    AccountIdentity.of(endpoint, username),
-                ) {
-                    // La session vit en mémoire (lectures) ET sur disque
-                    // chiffré (redémarrage) — la publication vient APRÈS la
-                    // purge du cache du compte précédent.
-                    PronoteSession.set(client)
-                }
-                sessions.save(
-                    StoredSession(
-                        endpointUrl = endpoint,
-                        username = username,
-                        password = password,
-                        uuid = rebuiltUuid,
-                        clientIdentifier = clientId,
-                        schoolUrl = schoolUrl,
-                    ),
-                )
-            } catch (_: Exception) {
-                PronoteSession.clear()
-                return@synchronized PairingResult.Err("internal", "Session illisible : réessaie l'appairage.")
-            }
-            return@synchronized PairingResult.Ok(accountId)
+            publish(client, SessionMode.JETON, schoolUrl)
         }
 
     /**
+     * Connexion à l'établissement de DÉMONSTRATION : un clic, sans QR ni PIN.
+     *
+     * Le compte de démonstration est public (l'éditeur le publie sur son site
+     * de démonstration) : il s'ouvre par son identifiant, pas par un jeton
+     * d'appairage. La session obtenue est publiée comme une session QR —
+     * cache purgé, client en RAM, session persistée — donc l'app se rouvre
+     * dessus au redémarrage.
+     *
+     * Même verrou que l'appairage et la restauration : une seule session à la
+     * fois dans le process (deux ouvertures sur le même compte = erreur 25
+     * côté établissement).
+     */
+    fun pairDemoBlocking(): PairingResult = synchronized(restoreLock) {
+        val client = try {
+            Client.demoLogin()
+        } catch (_: Exception) {
+            // Un seul code pour la démo : le geste à faire est le même
+            // partout (« réessaie »), et le pont ne reçoit JAMAIS le message
+            // brut d'une exception (il peut nommer l'hôte).
+            return@synchronized PairingResult.Err("demo_failed", "Connexion à la démo impossible : réessaie dans un instant.")
+        }
+        // Pas d'adresse d'établissement à la main : c'est celle du client
+        // (l'adresse de l'établissement de démonstration).
+        publish(client, SessionMode.IDENTIFIANT)
+    }
+
+    /**
+     * Publication d'une session : purge du cache du compte précédent, client
+     * en RAM, session persistée. Partagée par l'appairage QR et la connexion
+     * de démonstration.
+     *
+     * #529 : la purge du cache du compte précédent précède la PUBLICATION du
+     * nouveau client. Les identifiants sont donc exportés AVANT : la purge a
+     * besoin de l'identité du nouveau compte.
+     * Déstructuré, pas nommé : le champ du port s'appelle `pronoteUrl`
+     * (I1 : ce mot ne figure dans aucun identifiant hors `android/pronote/`).
+     */
+    private fun publish(client: Client, mode: String, schoolUrl: String = ""): PairingResult {
+        val (endpoint, username, password, clientId, rebuiltUuid) = try {
+            client.exportCredentials()
+        } catch (_: Exception) {
+            // Le client n'est PAS encore publié : l'ancien compte reste en
+            // place, il n'y a rien à nettoyer.
+            return PairingResult.Err("internal", "Session illisible : réessaie l'appairage.")
+        }
+        // L'identifiant du compte : l'id de la ressource client — PAS le login,
+        // PAS le jeton (un accountId n'est pas un secret). Il devient connu à
+        // l'appairage : c'est le moment d'enregistrer le compte (#397).
+        val accountId = try {
+            client.infoId?.trim()?.takeIf { it.isNotEmpty() }
+        } catch (_: Exception) {
+            null
+        }
+        try {
+            // #407 : le compte vient de changer ? Alors le cache du compte
+            // précédent part : il ne doit JAMAIS être servi au nouveau compte.
+            // L'identité vient de la session PERSISTÉE (toujours présente,
+            // contrairement à `AccountStore.current()`) et de celle qu'on
+            // appaire maintenant.
+            // La purge est AVANT `sessions.save` : si le process meurt entre
+            // les deux, la session restaurée est l'ANCIENNE (dont le cache
+            // vient d'être purgé), jamais le nouveau compte avec le cache de
+            // l'ancien.
+            val previous = try {
+                sessions.load()?.let { AccountIdentity.of(it.endpointUrl, it.username) }
+            } catch (_: Exception) {
+                null
+            }
+            // #529 : la bascule est ATOMIQUE (purge + publication dans la
+            // MÊME section critique d'époque) : le client du nouveau compte
+            // ne devient visible qu'une fois le cache de l'ancien purgé.
+            CacheScope.switchAccount(
+                cacheStore,
+                previous,
+                AccountIdentity.of(endpoint, username),
+            ) {
+                // La session vit en mémoire (lectures) ET sur disque
+                // chiffré (redémarrage) — la publication vient APRÈS la
+                // purge du cache du compte précédent.
+                PronoteSession.set(client)
+            }
+            sessions.save(
+                StoredSession(
+                    endpointUrl = endpoint,
+                    username = username,
+                    password = password,
+                    // La session de DÉMONSTRATION s'ouvre par identifiant : elle
+                    // n'a pas d'UUID d'appareil. Un UUID tiré au sort occupe la
+                    // place (le store refuse une session sans UUID).
+                    uuid = rebuiltUuid.ifEmpty { newUuid() },
+                    clientIdentifier = clientId,
+                    // L'adresse de l'établissement : celle du QR quand il y en
+                    // a un, celle du client (l'établissement de démonstration)
+                    // sinon.
+                    schoolUrl = schoolUrl.ifEmpty { endpoint },
+                    mode = mode,
+                ),
+            )
+        } catch (_: Exception) {
+            PronoteSession.clear()
+            return PairingResult.Err("internal", "Session illisible : réessaie l'appairage.")
+        }
+        return PairingResult.Ok(accountId)
+    }
+
+    /**
      * Restauration au démarrage : le jeton persisté rouvre la session SANS
-     * rescanner (`Client.tokenLogin`). Session morte = store vidé (un jeton
+     * rescanner (`Client.tokenLogin`). La session de DÉMONSTRATION se rouvre
+     * par LOGIN (couple identifiant / mot de passe public) : elle n'a pas de
+     * jeton. Session morte = store vidé (un jeton
      * mort ne ressuscitera pas) ET cache purgé (#407) ; réseau KO = store gardé
      * (la session n'est pas morte, l'app lit ses caches).
      *
@@ -227,14 +272,27 @@ class PairingRepository(
         } ?: return@synchronized RestoreResult.NoSession
         if (provider() != null) return@synchronized RestoreResult.Restored
         try {
-            val client = Client.tokenLogin(
-                stored.endpointUrl,
-                stored.username,
-                stored.password,
-                stored.uuid,
-                // #473 : mémo des lectures identiques (60 s), comme à l'appairage.
-                ClientOptions(clientIdentifier = stored.clientIdentifier, memoizeReads = true),
-            )
+            val client = if (SessionMode.of(stored.mode) == SessionMode.IDENTIFIANT) {
+                // Session de DÉMONSTRATION : le compte est un couple
+                // identifiant / mot de passe PUBLIC, pas un jeton d'appairage.
+                // On le rouvre donc par login, comme il a été ouvert.
+                Client.login(
+                    stored.endpointUrl,
+                    stored.username,
+                    stored.password,
+                    // #473 : mémo des lectures identiques (60 s), comme à l'appairage.
+                    ClientOptions(clientIdentifier = stored.clientIdentifier, memoizeReads = true),
+                )
+            } else {
+                Client.tokenLogin(
+                    stored.endpointUrl,
+                    stored.username,
+                    stored.password,
+                    stored.uuid,
+                    // #473 : mémo des lectures identiques (60 s), comme à l'appairage.
+                    ClientOptions(clientIdentifier = stored.clientIdentifier, memoizeReads = true),
+                )
+            }
             PronoteSession.set(client)
             RestoreResult.Restored
         } catch (e: Exception) {
