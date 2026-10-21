@@ -1,7 +1,7 @@
 import { useId } from "react";
-import { IconChevronRight } from "../../ui/icons";
+import { IconChevronRight, IconGrades } from "../../ui/icons";
 import { frDateShort, subjectColor, tint } from "../../lib/format";
-import { SubjectAvatar } from "../../ui/components";
+import { EmptyState, ErrorBox, Loading, SubjectAvatar } from "../../ui/components";
 import {
   algorithmChipLabel,
   algorithmHint,
@@ -15,6 +15,7 @@ import {
   historyNote,
   influenceLabel,
   influenceOf,
+  isGradesPayloadReadable,
   originLabel,
   periodLabel,
   scaleSuffix,
@@ -30,6 +31,63 @@ import {
 
 const CHART_WIDTH = 320;
 const CHART_HEIGHT = 96;
+
+/**
+ * Écran SANS donnée : distingue trois états, jamais deux (#537, I14).
+ *
+ * - pas de payload du tout = « Notes indisponibles » (erreur + Réessayer) ;
+ * - payload CORROMPU (JSON illisible) = ERREUR : le cache n'est pas vide, il
+ *   est illisible — dire « aucune note » affirmerait un fait faux ;
+ * - payload lisible mais sans note = « Aucune note en cache » (état vide).
+ *
+ * Composant PUR (aucun état interne) : l'écran est donc rendu tel quel par
+ * les tests (`tests/web/grades.test.ts`).
+ */
+export function GradesNoData({
+  payload,
+  loading,
+  error,
+  onRefresh,
+}: {
+  payload: string | null;
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  if (loading && payload === null) {
+    return <Loading label="Chargement des notes…" />;
+  }
+  if (payload === null) {
+    return (
+      <ErrorBox message={error ?? "Notes indisponibles."}>
+        <button type="button" className="btn btn--ghost" style={{ marginTop: 10 }} onClick={onRefresh}>
+          Réessayer
+        </button>
+      </ErrorBox>
+    );
+  }
+  if (!isGradesPayloadReadable(payload)) {
+    return (
+      <ErrorBox message="Cache de notes illisible : la donnée n’a pas pu être lue.">
+        <button type="button" className="btn btn--ghost" style={{ marginTop: 10 }} onClick={onRefresh}>
+          Réessayer
+        </button>
+      </ErrorBox>
+    );
+  }
+  return (
+    <EmptyState
+      icon={<IconGrades size={28} />}
+      title="Aucune note en cache"
+      body="Actualise pour lire les notes de l’établissement."
+      action={
+        <button type="button" className="btn" onClick={onRefresh}>
+          Actualiser
+        </button>
+      }
+    />
+  );
+}
 
 interface ChartPoint {
   x: number;
