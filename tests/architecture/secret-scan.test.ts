@@ -120,3 +120,39 @@ describe("scan anti-secrets : le dépôt surveille les mêmes formes que le jeu 
     expect(matchPatterns("http://127.0.0.1:80@editeur.example/", PATTERNS)).toEqual([]);
   });
 });
+
+// #521 : le scan n'inspectait que le PREMIER match de chaque motif. Un
+// placeholder en tête de fichier excusait le fichier ENTIER, secret compris :
+// un exemple de documentation placé AVANT la valeur réelle neutralisait la
+// détection sur tout le fichier. Le motif ne passe que si AUCUN match n'est
+// un secret réel.
+describe("scan anti-secrets : tous les matchs d'un motif sont inspectés", () => {
+  const placeholder = ["api", '_key = "your_key_here_placeholder_value_xxxx"'].join("");
+  const reel = ["api", '_key = "aB3dE5fG7hJ9kL1mN2pQ4rS6tU8vW0xY"'].join("");
+
+  test("un placeholder seul ne fait rien passer", () => {
+    // Rien à signaler : le SEUL match est un placeholder.
+    expect(matchPatterns(placeholder, PATTERNS)).toEqual([]);
+    expect(matchPatterns(placeholder, VENDORED)).toEqual([]);
+  });
+
+  test("un placeholder AVANT un vrai secret ne l'excuse plus", () => {
+    // Le défaut exact : le premier match est un placeholder, donc le fichier
+    // passait — le vrai secret, en deuxième position, n'était jamais vu.
+    expect(matchPatterns(`${placeholder}\n${reel}\n`, PATTERNS)).toContain("credential-literal");
+    // Le carve-out vendorisé suffers du même défaut : même comportement.
+    expect(matchPatterns(`${placeholder}\n${reel}\n`, VENDORED)).toContain("credential-literal");
+  });
+
+  test("un vrai secret AVANT un placeholder est signalé (ordre inverse)", () => {
+    expect(matchPatterns(`${reel}\n${placeholder}\n`, PATTERNS)).toContain("credential-literal");
+    expect(matchPatterns(`${reel}\n${placeholder}\n`, VENDORED)).toContain("credential-literal");
+  });
+
+  test("le même motif, plusieurs fois, ne signale qu'une fois", () => {
+    // Le motif est le SIGNAL, pas le compte des occurrences : un fichier avec
+    // trois secrets est un fichier à corriger, pas trois fautes distinctes.
+    const hits = matchPatterns(`${reel}\n${reel}\n${reel}\n`, PATTERNS);
+    expect(hits.filter((h) => h === "credential-literal")).toHaveLength(1);
+  });
+});
