@@ -348,6 +348,7 @@ class VsnBridge(
                 null
             }
             "pairing.pair" -> pair(p)
+            "pairing.pairDemo" -> pairDemo()
             "pairing.cancel" -> cancelPairing()
             "resources.cached" -> resourceCached(p, epoch)
             "resources.load" -> resourceLoad(p)
@@ -542,6 +543,31 @@ class VsnBridge(
                 // Jamais le message de la couche `data` : il peut nommer l'hôte
                 // de l'établissement (adresse interne, port) (#396). Le pont
                 // choisit la phrase : bornée, sans hôte ni IP.
+                .put("message", pairingFailureMessage(result.code))
+        }
+    }
+
+    /**
+     * Connexion à l'établissement de DÉMONSTRATION : un clic, sans QR ni PIN.
+     *
+     * Même verrou que l'appairage et la restauration : une seule session à la
+     * fois dans le process. Le pont ne renvoie que le CODE d'échec et une
+     * phrase choisie par lui — jamais le message brut d'une exception, qui
+     * pourrait nommer l'hôte (I10, #396).
+     */
+    private fun pairDemo(): JSONObject {
+        val result = synchronized(restoreLock) {
+            pairing.pairDemoBlocking()
+        }
+        return when (result) {
+            is PairingResult.Ok -> {
+                sessionReady = true
+                result.accountId?.let { accounts.add(it); accounts.select(it) }
+                JSONObject().put("ok", true)
+            }
+            is PairingResult.Err -> JSONObject()
+                .put("ok", false)
+                .put("code", result.code)
                 .put("message", pairingFailureMessage(result.code))
         }
     }
@@ -1382,7 +1408,7 @@ class VsnBridge(
         private val METHODS = setOf(
             "app.ready", "app.theme", "app.setTheme", "app.back",
             "session.status", "session.restore", "session.logout", "session.accounts",
-            "pairing.scanQr", "pairing.pair", "pairing.cancel",
+            "pairing.scanQr", "pairing.pair", "pairing.pairDemo", "pairing.cancel",
             "resources.cached", "resources.load", "resources.invalidate", "resources.sync",
             "capabilities.load", "capabilities.refresh",
             "news.item",

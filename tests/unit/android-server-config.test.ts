@@ -508,6 +508,12 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     const allowed = new Set([
       "https://domaine[:port].",
       "https://openrouter.ai/api/v1/chat/completions",
+      // L'établissement de DÉMONSTRATION public de l'éditeur : une adresse
+      // PUBLIQUE par nature (l'éditeur la publie sur son site de
+      // démonstration), avec un compte public lui aussi. Elle ne sert qu'à la
+      // connexion en un clic — l'adresse de l'établissement de l'utilisateur,
+      // elle, vient toujours du QR (#299).
+      "https://demo.index-education.net/pronote/eleve.html",
       "https://",
       "http://",
     ]);

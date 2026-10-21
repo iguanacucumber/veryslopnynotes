@@ -59,6 +59,28 @@ export function pinError(raw: string): string | null {
   return null;
 }
 
+/**
+ * Message d'un échec de la connexion à l'établissement de DÉMONSTRATION.
+ *
+ * Même règle que `pairErrorMessage` : le geste à faire, jamais un diagnostic
+ * brut. Le QR n'est pas en jeu ici (la démo n'en demande aucun) — on ne dit
+ * donc jamais « rescane ».
+ */
+export function demoErrorMessage(code: string | undefined): string {
+  switch ((code ?? "").toLowerCase()) {
+    case "network":
+      return "Réseau indisponible : vérifie ta connexion, puis réessaie.";
+    case "demo_failed":
+      return "L'établissement de démonstration ne répond pas : réessaie dans un instant.";
+    case "auth_required":
+      return "Session expirée : reconnecte l'établissement de démonstration.";
+    case "unavailable":
+      return "Le téléphone n'a pas répondu : réessaie dans un instant.";
+    default:
+      return "Connexion à la démo impossible : réessaie dans un instant.";
+  }
+}
+
 /** Message d'un scan qui n'a rien rendu (annulation, caméra, code illisible). */
 export function scanErrorMessage(cancelled: boolean): string {
   if (cancelled) return "Scan annulé : aucun QR lu. Tu peux rescanner quand tu veux.";

@@ -53,7 +53,7 @@ Pronote et l'assistant IA fonctionnent sans lui.
 
 | Route | Écran | Ce que tu y trouves |
 |---|---|---|
-| `/pairing` | Appairage | Scan du QR de l'établissement + PIN, session ouverte en direct, sans serveur intermédiaire. |
+| `/pairing` | Appairage | Scan du QR de l'établissement + PIN, session ouverte en direct, sans serveur intermédiaire. Un bouton « Connexion démo » ouvre l'établissement de démonstration public, sans QR ni PIN. |
 | `/` | Accueil | Moyenne, dernière note, prochains cours, devoirs à faire, alertes et accès rapides. |
 | `/calendar` | Cours | Navigation par semaine, professeur, salle, cours en cours / prochain, annulés et déplacés. |
 | `/tasks` | Tâches | Devoirs de la semaine, consigne, pièces jointes, case « fait » écrite dans Pronote, aide IA. |
@@ -83,6 +83,11 @@ En plus des écrans :
   claire et sombre, `prefers-reduced-motion` respecté.
 - **Aide devoirs sourcée** — la réponse vient de la consigne et du cours du
   devoir ; sans source suffisante, l'assistant refuse au lieu d'inventer.
+- **Connexion en un clic** — l'établissement de démonstration public de
+  l'éditeur s'ouvre sans QR ni PIN : un bouton, une session. Le compte est
+  public (l'éditeur le publie sur son site de démonstration) et ne contient
+  aucune donnée personnelle ; la session s'ouvre par le pont natif, comme
+  n'importe quel appairage.
 
 ## Comment ça marche
 

@@ -8,6 +8,7 @@ import { IconCamera, IconChevronLeft, IconLock } from "../../ui/icons";
 import { STORAGE_UNAVAILABLE_MESSAGE } from "../../lib/session";
 import {
   PIN_MAX_CHARS,
+  demoErrorMessage,
   normalizePin,
   pairErrorMessage,
   pinError,
@@ -45,6 +46,8 @@ export default function PairingScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [scanError, setScanError] = useState("");
   const [pairError, setPairError] = useState("");
+  const [demoError, setDemoError] = useState("");
+  const [demoing, setDemoing] = useState(false);
 
   useEffect(() => {
     document.title = "Appairage · VerySlopyNyNotes";
@@ -126,6 +129,36 @@ export default function PairingScreen() {
       );
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  /**
+   * Connexion à l'établissement de DÉMONSTRATION : un clic, sans QR ni PIN.
+   * Le native ouvre la session (le web ne parle jamais à l'établissement) ;
+   * le même câblage que l'appairage s'applique : session ouverte côté web,
+   * puis on quitte l'écran d'appairage.
+   */
+  async function connectDemo(): Promise<void> {
+    setDemoError("");
+    setDemoing(true);
+    try {
+      const result = await bridge.pairDemo();
+      if (result.ok) {
+        notify("Connecté à l'établissement de démonstration.");
+        openSession();
+        refresh();
+        navigate("/", { replace: true });
+        return;
+      }
+      setDemoError(demoErrorMessage(result.code));
+    } catch (error) {
+      setDemoError(
+        error instanceof BridgeCallError
+          ? demoErrorMessage(error.code)
+          : "Connexion à la démo impossible : réessaie dans un instant.",
+      );
+    } finally {
+      setDemoing(false);
     }
   }
 
@@ -294,6 +327,32 @@ export default function PairingScreen() {
               {submitting ? "Connexion…" : "Terminer"}
             </button>
           </form>
+
+          <Card className="card--flat">
+            <strong style={{ display: "block" }}>Essayer sans établissement</strong>
+            <p className="tiny muted" style={{ margin: "2px 0 0" }}>
+              Connexion à l'établissement de démonstration public : aucun QR, aucun PIN.
+            </p>
+            <p className="tiny muted" style={{ margin: "2px 0 0" }}>
+              Le compte est partagé (ce que tu y changes peut être vu par d'autres) et la session
+              appairée, si tu en as une, est remplacée.
+            </p>
+            {demoError ? (
+              <p className="t-body-m" role="alert" style={{ margin: "8px 0 0", color: "var(--danger-ink)" }}>
+                {demoError}
+              </p>
+            ) : null}
+            <div className="row" style={{ marginTop: 10, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="btn btn--ghost btn--small"
+                disabled={demoing || submitting || scanning}
+                onClick={() => void connectDemo()}
+              >
+                {demoing ? "Connexion…" : "Connexion démo"}
+              </button>
+            </div>
+          </Card>
         </Page>
       </main>
     </div>

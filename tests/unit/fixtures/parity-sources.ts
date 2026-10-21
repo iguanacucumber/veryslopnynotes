@@ -44,6 +44,10 @@ export const PRODUCTION_SOURCES: string[] = [
   join(PRONOTE, "Communication.kt"),
   join(PRONOTE, "Crypto.kt"),
   join(PRONOTE, "DataClasses.kt"),
+  // `pronote/DemoSchool.kt` : l'établissement de DÉMONSTRATION public de
+  // l'éditeur (adresse et identifiants PUBLICS). Le module est le seul qui
+  // parle à un établissement : cet hôte n'existe que là.
+  join(PRONOTE, "DemoSchool.kt"),
   join(PRONOTE, "Errors.kt"),
   join(PRONOTE, "HttpSession.kt"),
   join(PRONOTE, "Json.kt"),
@@ -117,6 +121,10 @@ export const PRODUCTION_SOURCES: string[] = [
   // (déménagée de `PronotePayloads.kt`, qui lit `org.json` et ne compile
   // donc pas hors Gradle).
   join(DATA, "SessionFailure.kt"),
+  // `data/SessionMode.kt` : le mode de réouverture d'une session persistée
+  // (jeton pour un appairage QR, identifiant pour l'établissement de
+  // démonstration). Fichier PUR : le harnais le compile et le REJOUE.
+  join(DATA, "SessionMode.kt"),
   join(DATA, "SyncJobOutcome.kt"),
   join(DATA, "WeekWindow.kt"),
   // `app` — les messages d'appairage, le message de refus du devoir, le type
