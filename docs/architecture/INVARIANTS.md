@@ -415,7 +415,7 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   `Result.retry()` — il ne bloque jamais WorkManager indéfiniment). La
   sémantique de résultat est INCHANGÉE : session MORTE = appairage
   (`DeviceAuth.reject()` + succès), autre échec = réessai, absence de session =
-  réessai.
+  réessai. Un travail qui JETTE est un ÉCHEC LIVRÉ (I28), pas une attente.
 - Périmètre : les lectures de RESSOURCES CACHÉES (celles que le job relit). Les
   dépôts à usage ponctuel (profil, bascule de devoir, messagerie) gardent leur
   propre `Thread` : hors périmètre ici (le verrou de session atomique, I17,
@@ -424,7 +424,8 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   ne lit plus le client en direct ; les ressources du job n'ont qu'une porte
   d'entrée) + `tests/unit/kotlin-local-queue.test.ts` (Kotlin EXÉCUTÉ :
   l'interface et le job ne se croisent pas, l'attente du job est bornée, une
-  seule instance) + `tests/unit/kotlin-sync-worker.test.ts` (Kotlin EXÉCUTÉ :
+  seule instance, un travail qui jette livre son échec à tous les callbacks —
+  I28) + `tests/unit/kotlin-sync-worker.test.ts` (Kotlin EXÉCUTÉ :
   la décision session morte / réessai, la lecture qui jette devient un
   résultat).
 - Commande : `make check`.
@@ -537,6 +538,7 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Emplacement : `shared/contracts/api.ts`, `shared/contracts/api.openapi.yaml`,
   `server/infrastructure/http.ts`, `server/infrastructure/manuals-scrape.ts`.
 
+
 ## I25 — Un payload n'est affiché que pour SA requête
 - Invariant : le payload d'une ressource est RATTACHÉ à sa requête (clé +
   query). Changer de requête (période, algorithme, semaine) INVALIDE le
@@ -579,6 +581,7 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   `android/app/Attachments.kt`, `android/app/VsnBridge.kt`,
   `android/data/PeriodicSyncWorker.kt`.
 
+
 ## I27 — Une réponse tardive n'écrit que dans le fil qui l'attend
 - Invariant : une réponse qui arrive APRÈS un changement d'écran est
   PÉRIMÉE : elle n'écrit rien dans l'écran. Dans la messagerie (#524), la
@@ -600,3 +603,29 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Emplacement : `web/src/features/messages/reply.ts`,
   `web/src/routes/messages.tsx`, `web/src/features/messages/MessagesScreen.tsx`,
   `web/src/lib/seq.ts`.
+
+
+
+## I28 — La file locale livre TOUJOURS un résultat (jamais de promesse pendante)
+- Invariant : un travail de la file locale (`LocalRequestQueue`, partagée par
+  `ClientQueue`) qui JETTE livre son ÉCHEC à TOUS les callbacks de la clé
+  (`QueueOutcome.Failed`) : l'échec est une VALEUR, pas une exception. Avant,
+  l'exception était RELANCÉE : les callbacks n'étaient jamais appelés — la
+  promesse JS attendait le délai natif complet (20 s), le job de fond brûlait
+  ses 120 s, et les co-demandeurs de la même clé n'étaient jamais servis.
+  `Throwable` et non `Exception` : un `Error` (OOM) est un échec comme un
+  autre, il ne laisse pas les callbacks en attente non plus. Le cast interne de
+  `ClientQueue` est VÉRIFIÉ (`reified`) : une collision de clés (deux types
+  pour une même clé) livre l'échec au callback fautif au lieu de l'avaler en
+  silence. Un callback qui JETTE n'affame pas les autres de la volée — il est
+  SIGNALÉ, jamais avalé en silence.
+- Test : `tests/unit/kotlin-local-queue.test.ts` (Kotlin EXÉCUTÉ : une
+  exception → tous les callbacks de la clé reçoivent l'échec ; un `Error`
+  aussi ; la file PARTAGÉE réveille l'attente du job de fond ; une collision de
+  clés livre l'échec du cast) + `tests/architecture/shared-queue.test.ts` (le
+  câblage de la file partagée).
+- Commande : `make check`.
+- Emplacement : `android/data/LocalRequestQueue.kt`, `android/data/ClientQueue.kt`,
+  `android/data/SyncedRepository.kt`, `android/data/PeriodicSyncWorker.kt`.
+ (data: la file locale livre l'échec à tous les callbacks de la clé)
+ (data: la file locale livre l'échec à tous les callbacks de la clé)

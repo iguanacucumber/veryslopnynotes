@@ -12,6 +12,10 @@
 // se croise pas avec l'interface, et son attente est BORNÉE (il ne bloque
 // jamais WorkManager indéfiniment).
 //
+// #530 : un travail qui JETTE livre son ÉCHEC à tous les callbacks de la clé
+// (aucune promesse pendante) : une exception, un `Error` (OOM), et le cast
+// interne qui jette sur une collision de clés.
+//
 // Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
 // vert) ; un échec de compilation, lui, est un défaut (le test rougit).
 import { describe, expect, test } from "bun:test";
@@ -76,13 +80,17 @@ async function newShared(): Promise<void> {
 }
 
 /** Une lecture posée dans la file partagée (elle attend le verrou du pilote). */
-async function sharedSubmit(key: string, workMs = 0): Promise<void> {
-  await ask({ op: "sharedSubmit", key, workMs });
+async function sharedSubmit(
+  key: string,
+  workMs = 0,
+  extra: { fail?: string; type?: string } = {},
+): Promise<void> {
+  await ask({ op: "sharedSubmit", key, workMs, ...extra });
 }
 
 /** L'attente BLOQUANTE du job de fond (elle part dans un fil à part). */
-async function sharedAwait(key: string, timeoutMs: number): Promise<number> {
-  return (JSON.parse(await ask({ op: "sharedAwait", key, timeoutMs })) as { id: number }).id;
+async function sharedAwait(key: string, timeoutMs: number, extra: { fail?: string } = {}): Promise<number> {
+  return (JSON.parse(await ask({ op: "sharedAwait", key, timeoutMs, ...extra })) as { id: number }).id;
 }
 
 async function sharedAwaitResult(id: number, timeoutMs = 8000): Promise<{ timedOut: boolean; value?: string }> {
@@ -112,8 +120,9 @@ describe("file d'attente unique du client local (#310)", () => {
     // avale l'écriture d'une lecture identique).
     expect(repo).toContain("CachePolicy.dedupKey(resource, query, save)");
     // Callbacks relayés par le Handler main existant, un par un (post), et plus
-    // aucun Thread par lecture.
-    expect(repo).toContain("deliver = { o -> post(cb, o) }");
+    // aucun Thread par lecture. L'échec de la file devient un outcome
+    // d'échec : la promesse est TOUJOURS réglée (#530).
+    expect(repo).toContain("post(cb, o.orFailed(");
     expect(repo).not.toContain("Thread {");
     expect(repo).not.toContain("Thread(");
     // La logique pure ne connaît ni Android ni le reste du paquet data : elle
@@ -191,6 +200,67 @@ describe("file d'attente unique du client local (#310)", () => {
     expect(s.executed).toEqual(keys);
     expect(s.callbacks).toEqual([`${keys[0]}#1`, `${keys[1]}#1`]);
   });
+});
+
+// #530 : un travail qui JETTE ne doit PAS perdre les callbacks de sa clé.
+//
+// Avant, l'exception était RELANCÉE : les callbacks n'étaient jamais appelés —
+// la promesse JS attendait le délai natif complet (20 s) et le job de fond
+// brûlait ses 120 s ; les co-demandeurs de la même clé n'étaient jamais servis.
+// L'échec est un RÉSULTAT : il est livré à TOUS les callbacks de la clé.
+describe("file locale : un travail qui jette livre un ÉCHEC (#530)", () => {
+  test.skipIf(skip)("une exception : TOUS les callbacks de la clé reçoivent l'échec", async () => {
+    const qid = await newQueue();
+    const key = "grades|boom";
+    await ask({ op: "queueSubmit", qid, key, fail: "exception" });
+    // Co-demandeur de la MÊME clé : il doit être servi lui aussi.
+    await ask({ op: "queueSubmit", qid, key, fail: "exception" });
+    await release(qid);
+    // AUCUNE promesse en attente : les DEUX callbacks sont servis.
+    expect(await waitCallbacks(qid, 2)).toEqual({ served: 2, timedOut: false });
+    const s = await stats(qid);
+    expect(s.callbacks).toEqual(["failed:IllegalStateException", "failed:IllegalStateException"]);
+    // UN seul appel client (déduplonnage) : la clé n'a pas été rejouée.
+    expect(s.workCalls).toBe(1);
+  });
+
+  test.skipIf(skip)("un `Error` (OOM) est traité comme une exception : l'échec est livré", async () => {
+    const qid = await newQueue();
+    const key = "news|oom";
+    await ask({ op: "queueSubmit", qid, key, fail: "error" });
+    await release(qid);
+    expect(await waitCallbacks(qid, 1)).toEqual({ served: 1, timedOut: false });
+    const s = await stats(qid);
+    expect(s.callbacks).toEqual(["failed:OutOfMemoryError"]);
+  });
+
+  test.skipIf(skip)("la file PARTAGÉE : le job de fond est RÉVEILLÉ par l'échec (pas de pendance)", async () => {
+    await newShared();
+    await sharedSubmit("grades|boom", 0, { fail: "exception" });
+    // L'attente du job : elle NE DOIT PAS attendre son délai (120 s en prod).
+    const id = await sharedAwait("job|grades|boom", 10000, { fail: "exception" });
+    await sharedRelease();
+    const res = await sharedAwaitResult(id);
+    expect(res.timedOut).toBe(false);
+    expect(res.value).toBe("failed:IllegalStateException");
+  }, 20000);
+
+  test.skipIf(skip)("collision de clés : le cast qui jette est un ÉCHEC livré, pas un silence", async () => {
+    await newShared();
+    // La MÊME clé, deux types : le cast interne de `ClientQueue` jette.
+    await sharedSubmit("grades|collision");
+    await sharedSubmit("grades|collision", 0, { type: "int" });
+    await sharedRelease();
+    const served = JSON.parse(await ask({ op: "sharedWait", callbacks: 2, timeoutMs: 8000 })) as {
+      served: number;
+      timedOut: boolean;
+    };
+    expect(served).toEqual({ served: 2, timedOut: false });
+    const after = await sharedStats();
+    // Le premier callback reçoit la valeur ; le second, l'ÉCHEC du cast
+    // (avant : un silence permanent, jusqu'au délai natif).
+    expect(after.callbacks).toEqual(["grades|collision", "failed:ClassCastException"]);
+  }, 20000);
 });
 
 // #403 : le job de fond passe par LA MÊME file que l'interface. Sans ça, le

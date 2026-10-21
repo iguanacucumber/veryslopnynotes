@@ -26,25 +26,61 @@ import java.util.concurrent.TimeUnit
  * Logique pure : stdlib `java.util.concurrent`, aucun import Android — compilée
  * et EXÉCUTÉE pour de vrai par le harnais de parité JVM
  * (`tests/unit/kotlin-local-queue.test.ts`).
+ *
+ * Un travail qui JETTE est un ÉCHEC LIVRÉ (#530) : tous les callbacks de la
+ * clé le reçoivent. Aucun appelant n'attend le délai natif (ni la promesse
+ * JS, ni le job de fond).
  */
 object ClientQueue {
     /**
      * LA file unique. Le résultat est typé `Any` : chaque producteur a son
      * propre type (`RefreshOutcome` pour les écrans, `SyncJobRead` pour le
      * job de fond) — la clé fait le lien entre le travail et ses callbacks.
+     *
+     * `@PublishedApi` : `submit` est `inline` (le cast interne est vérifié),
+     * elle doit donc voir la file.
      */
-    private val queue = LocalRequestQueue<Any>()
+    @PublishedApi
+    internal val queue = LocalRequestQueue<Any>()
 
     /**
-     * Soumet [work] à la file partagée ; [deliver] reçoit son résultat.
+     * Soumet [work] à la file partagée ; [deliver] reçoit son résultat OU son
+     * échec.
      *
+     * L'échec est un RÉSULTAT (#530) : un travail qui jette ne laisse AUCUNE
+     * promesse en attente (la promesse JS attendait le délai natif, le job de
+     * fond brûlait ses 120 s).
+     *
+     * `inline` + `reified` : le cast interne est VÉRIFIÉ à l'exécution. Un
+     * cast effacé (`as T` sans `reified`) ne jette JAMAIS — une collision de
+     * clés aurait livré un résultat du mauvais type, puis un
+     * `ClassCastException` plus loin, avalé en silence.
+     */
+    inline fun <reified T : Any> submit(
+        key: String,
+        crossinline work: () -> T,
+        crossinline deliver: (QueueOutcome<T>) -> Unit,
+    ) {
+        queue.submit(key, work = { work() }, deliver = { o -> deliver(cast(o)) })
+    }
+
+    /**
      * Le cast interne est sûr PAR CONSTRUCTION : la clé lie un travail à ses
      * callbacks (la file ne livre un résultat qu'aux callbacks de la même
      * clé), et les clés sont namespacées par producteur.
+     *
+     * S'il JETTE quand même (collision de clés : deux types pour une même
+     * clé), l'échec est un RÉSULTAT, pas un silence (#530) : le callback
+     * fautif reçoit l'échec au lieu d'attendre le délai natif.
      */
-    @Suppress("UNCHECKED_CAST")
-    fun <T : Any> submit(key: String, work: () -> T, deliver: (T) -> Unit) {
-        queue.submit(key, work = { work() }, deliver = { deliver(it as T) })
+    @PublishedApi
+    internal inline fun <reified T : Any> cast(o: QueueOutcome<Any>): QueueOutcome<T> = when (o) {
+        is QueueOutcome.Failed -> o
+        is QueueOutcome.Ok -> try {
+            QueueOutcome.Ok(o.value as T)
+        } catch (t: Throwable) {
+            QueueOutcome.Failed(t)
+        }
     }
 
     /**
@@ -59,12 +95,18 @@ object ClientQueue {
      * `null` = délai dépassé (la file est occupée par une longue lecture) :
      * l'appelant réessaiera plus tard. Le travail reste alors en file (la
      * file n'a pas d'annulation) : il lira le client, sans conséquence.
+     * Un travail qui JETTE est livré en échec (`QueueOutcome.Failed`) : là,
+     * l'attente finit tout de suite (#530).
      */
-    fun <T : Any> submitAndAwait(key: String, timeoutMs: Long, work: () -> T): T? {
+    inline fun <reified T : Any> submitAndAwait(
+        key: String,
+        timeoutMs: Long,
+        crossinline work: () -> T,
+    ): QueueOutcome<T>? {
         val latch = CountDownLatch(1)
-        var result: T? = null
-        submit(key, work = work, deliver = { r -> result = r; latch.countDown() })
+        var outcome: QueueOutcome<T>? = null
+        submit(key, work = work, deliver = { o -> outcome = o; latch.countDown() })
         if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) return null
-        return result
+        return outcome
     }
 }

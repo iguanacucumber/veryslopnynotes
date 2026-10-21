@@ -20,10 +20,16 @@
 // `queueRelease`. Les scénarios sont donc déterministes (aucun sleep de course) :
 // on empile les soumissions, on libère, on observe. `workMs` fait durer chaque
 // appel pour qu'un chevauchement — s'il y en avait un — soit TOUJOURS vu.
+//
+// #530 : `fail` fait JETER le travail (`exception` ou `error`) : le pilote
+// observe alors ce que la file LIVRE aux callbacks (un échec, pas un silence).
+// `type: "int"` pose un travail d'un AUTRE type sous la MÊME clé : c'est la
+// collision qui fait jeter le cast interne de `ClientQueue`.
 package fr.veryslopnynotes.localqueue
 
 import fr.veryslopnynotes.data.ClientQueue
 import fr.veryslopnynotes.data.LocalRequestQueue
+import fr.veryslopnynotes.data.QueueOutcome
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
 import java.io.BufferedReader
@@ -50,6 +56,25 @@ private fun ok(vararg pairs: Pair<String, JVal>): JVal.Obj = JVal.Obj(linkedMapO
 private const val TIMEOUT = "__timeout__"
 
 /**
+ * L'échec que le travail simulé jette (`exception` ou `error`), ou `null`.
+ *
+ * `error` = un `Error` (OOM) : ce n'est PAS une `Exception`, et l'issue
+ * #530 le veut traité comme les autres.
+ */
+private fun failureOf(kind: String?): Throwable? = when (kind) {
+    null -> null
+    "exception" -> IllegalStateException("travail en échec")
+    "error" -> OutOfMemoryError("mémoire épuisée")
+    else -> throw IllegalArgumentException("pilote: échec inconnu : $kind")
+}
+
+/** Ce que la file livre : la valeur, ou l'échec (classe de la cause). */
+private fun describe(o: QueueOutcome<*>): String = when (o) {
+    is QueueOutcome.Ok -> o.value.toString()
+    is QueueOutcome.Failed -> "failed:${o.cause.javaClass.simpleName}"
+}
+
+/**
  * État observé d'une file : ce que le test compare aux attentes.
  *
  * `executed` = ordre de DÉMARRAGE des travaux ; `callbacks` = résultats
@@ -73,7 +98,8 @@ private class QueueState {
     var workerDaemon = false
 
     /** Soumission « lecture client » : simule un appel bloquant sur le client. */
-    fun submit(key: String, workMs: Long) {
+    fun submit(key: String, workMs: Long, fail: String?) {
+        val boom = failureOf(fail)
         queue.submit(
             key,
             work = {
@@ -85,12 +111,16 @@ private class QueueState {
                 val t = Thread.currentThread()
                 workerThread = t.name
                 workerDaemon = t.isDaemon
-                gate.await(10, TimeUnit.SECONDS)
-                if (workMs > 0) Thread.sleep(workMs)
-                inflight.decrementAndGet()
-                "$key#$n"
+                try {
+                    gate.await(10, TimeUnit.SECONDS)
+                    if (workMs > 0) Thread.sleep(workMs)
+                    if (boom != null) throw boom
+                    "$key#$n"
+                } finally {
+                    inflight.decrementAndGet()
+                }
             },
-            deliver = { callbacks.add(it) },
+            deliver = { o -> callbacks.add(describe(o)) },
         )
     }
 }
@@ -112,15 +142,28 @@ private class SharedState {
     val gate = CountDownLatch(1)
 
     /** Un travail « lecture client » : compte, bloque sur le verrou, dure. */
-    fun body(key: String, workMs: Long): String {
+    fun body(key: String, workMs: Long, boom: Throwable? = null): String {
         val now = inflight.incrementAndGet()
         maxConcurrent.accumulateAndGet(now) { a, b -> maxOf(a, b) }
         workCalls.incrementAndGet()
         executed.add(key)
-        gate.await(10, TimeUnit.SECONDS)
-        if (workMs > 0) Thread.sleep(workMs)
-        inflight.decrementAndGet()
-        return key
+        try {
+            gate.await(10, TimeUnit.SECONDS)
+            if (workMs > 0) Thread.sleep(workMs)
+            if (boom != null) throw boom
+            return key
+        } finally {
+            inflight.decrementAndGet()
+        }
+    }
+
+    /**
+     * Le MÊME travail, mais d'un AUTRE type : le cast interne de
+     * `ClientQueue` jette alors (collision de clés).
+     */
+    fun bodyInt(key: String, workMs: Long): Int {
+        body(key, workMs)
+        return 1
     }
 }
 
@@ -142,7 +185,7 @@ private class Driver {
         "queueSubmit" -> {
             val state = state(op)
             val key = op.str("key") ?: throw IllegalArgumentException("pilote: key absent")
-            state.submit(key, (op.num("workMs") ?: 0.0).toLong())
+            state.submit(key, (op.num("workMs") ?: 0.0).toLong(), op.str("fail"))
             ok("ok" to JVal.Bool(true))
         }
         "queueRelease" -> {
@@ -180,12 +223,23 @@ private class Driver {
         "sharedSubmit" -> {
             val key = op.str("key") ?: throw IllegalArgumentException("pilote: key absent")
             val workMs = (op.num("workMs") ?: 0.0).toLong()
+            val boom = failureOf(op.str("fail"))
             val s = shared
-            ClientQueue.submit(
-                key,
-                work = { s.body(key, workMs) },
-                deliver = { s.callbacks.add(it) },
-            )
+            if (op.str("type") == "int") {
+                // Un AUTRE type sous la MÊME clé : la file dédoublonne, donc le
+                // cast interne jette (collision de clés).
+                ClientQueue.submit(
+                    key,
+                    work = { s.bodyInt(key, workMs) },
+                    deliver = { o -> s.callbacks.add(describe(o)) },
+                )
+            } else {
+                ClientQueue.submit(
+                    key,
+                    work = { s.body(key, workMs, boom) },
+                    deliver = { o -> s.callbacks.add(describe(o)) },
+                )
+            }
             // Le travail a DÉMARRÉ (et il attend le verrou) : le test peut
             // empiler la lecture suivante sans course.
             val deadline = System.currentTimeMillis() + 5000
@@ -195,14 +249,15 @@ private class Driver {
         "sharedAwait" -> {
             val key = op.str("key") ?: throw IllegalArgumentException("pilote: key absent")
             val workMs = (op.num("workMs") ?: 0.0).toLong()
+            val boom = failureOf(op.str("fail"))
             val timeoutMs = (op.num("timeoutMs") ?: 5000.0).toLong()
             val id = nextAwaitId++
             val s = shared
             // L'attente BLOQUE : elle part dans un fil à part, sinon le
             // pilote ne pourrait plus libérer le verrou de la file.
             val t = Thread {
-                val value = ClientQueue.submitAndAwait(key, timeoutMs) { s.body(key, workMs) }
-                awaitResults[id] = value ?: TIMEOUT
+                val outcome = ClientQueue.submitAndAwait(key, timeoutMs) { s.body(key, workMs, boom) }
+                awaitResults[id] = outcome?.let { describe(it) } ?: TIMEOUT
             }
             t.isDaemon = true
             t.start()
