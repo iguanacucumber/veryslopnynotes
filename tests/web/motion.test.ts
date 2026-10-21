@@ -3,11 +3,22 @@
 // d'animer (repli sans DOM ni API), et la politique de mouvement du CSS
 // (propriétés animées + garde `prefers-reduced-motion` unique).
 import { afterEach, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { animateNavigation, withViewTransition } from "../../web/src/ui/viewTransition";
 
 const ROOT = join(import.meta.dir, "..", "..");
+
+/** Tous les fichiers CSS de l'arbre web, récursivement. */
+function cssFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...cssFiles(path));
+    else if (entry.name.endsWith(".css")) out.push(path);
+  }
+  return out.sort();
+}
 
 const realDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
 const realMatchMedia = Object.getOwnPropertyDescriptor(globalThis, "matchMedia");
@@ -81,15 +92,52 @@ describe("web mouvement", () => {
     expect(stub.updates).toBe(1);
   });
 
-  test("garde unique de mouvement réduit dans tokens.css", () => {
+  // #569 : la doctrine « UNE garde » est désormais tenue sur TOUT l'arbre CSS,
+  // pas seulement dans le fichier où elle se trouve. Une garde locale répétée
+  // ailleurs finit toujours par contredire la garde globale (ici : l'escalier
+  // des accès rapides qui continuait sous mouvement réduit).
+  test("garde unique de mouvement réduit dans TOUT l'arbre CSS", () => {
+    const files = cssFiles(join(ROOT, "web/src"));
+    expect(files.length).toBeGreaterThan(1);
+    const guards = files.flatMap((file) => {
+      const css = readFileSync(file, "utf8");
+      const count = css.match(/@media \(prefers-reduced-motion: reduce\)/g)?.length ?? 0;
+      return Array.from({ length: count }, () => file.slice(ROOT.length + 1));
+    });
+    expect(guards).toEqual([join("web/src/styles/tokens.css")]);
+  });
+
+  test("la garde globale neutralise durée, itération ET décalage", () => {
     const css = readFileSync(join(ROOT, "web/src/styles/tokens.css"), "utf8");
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
     expect(css).toContain("animation-duration: 0.01ms !important");
     expect(css).toContain("transition-duration: 0.01ms !important");
     expect(css).toContain("animation-iteration-count: 1 !important");
-    // La garde doit couvrir tout l'arbre, une fois : deux gardes divergentes
-    // finissent toujours par se contredire.
-    expect(css.match(/@media \(prefers-reduced-motion: reduce\)/g)).toHaveLength(1);
+    // Sans le décalage neutralisé, les accès rapides s'espacent encore sous
+    // mouvement réduit : la cascade reste une cascade.
+    expect(css).toContain("animation-delay: 0ms !important");
+    // La garde porte sur TOUT (`*`) : c'est ce qui permet de supprimer les
+    // gardes locales, qui ne faisaient que redire « pas d'animation ».
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\*,\s*\*::before,\s*\*::after\s*\{[\s\S]*?animation-duration: 0\.01ms !important/,
+    );
+  });
+
+  // Les dérives décoratives (orbes du héros, reflet, halos de page) sont des
+  // animations INFINIES : la garde globale les arrête (durée ~0, une seule
+  // itération). Mais `*` a la plus FAIBLE spécificité : une durée `!important`
+  // écrite ailleurs la battrait, et la dérive repartirait pour toujours.
+  test("aucune durée d'animation ne dispute la garde globale", () => {
+    const files = cssFiles(join(ROOT, "web/src"));
+    const rivals = files.flatMap((file) => {
+      const css = readFileSync(file, "utf8");
+      return [...css.matchAll(/animation-(?:duration|delay|iteration-count)\s*:[^;]*!important/g)].map(
+        (match) => ({ file: file.slice(ROOT.length + 1), declaration: match[0] }),
+      );
+    });
+    // La garde globale est la seule à pouvoir l'emporter : `!important` y est
+    // légitime, ailleurs il est une garde concurrente déguisée.
+    expect(rivals.filter((rival) => !rival.file.endsWith("styles/tokens.css"))).toEqual([]);
   });
 
   test("fond : les halos dérivent derrière le contenu et ne captent aucun geste", () => {

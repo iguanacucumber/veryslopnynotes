@@ -3,6 +3,7 @@ import { useParisTz } from "./setup";
 import { describe, expect, test } from "bun:test";
 import { isoDay, startOfWeek } from "../../web/src/lib/format";
 import {
+  ENTRANCE_WINDOW_MS,
   MAX_ITEMS,
   alertCountLabel,
   clockLabel,
@@ -22,6 +23,7 @@ import {
   parseGrades,
   parseTimetable,
   pendingAssignments,
+  shouldAnimateOnMount,
   subjectAverage,
   tabVisible,
   timeRange,
@@ -358,6 +360,30 @@ describe("alertes et capacités", () => {
     const vide = parseCapabilities(JSON.stringify({ capabilities: { tabs: [] } }));
     expect(vide).toEqual([]);
     expect(tabVisible(vide, "grades")).toBe(false);
+  });
+});
+
+describe("entrée des widgets de l'accueil (#569)", () => {
+  const opened = new Date(2026, 9, 21, 8).getTime();
+
+  test("monté avec l'écran : l'entrée se joue", () => {
+    expect(shouldAnimateOnMount(opened, opened)).toBe(true);
+  });
+
+  test("monté 2 s plus tard : aucune entrée (pas de surgissement tardif)", () => {
+    expect(shouldAnimateOnMount(opened, opened + 2_000)).toBe(false);
+  });
+
+  test("la fenêtre de fraîcheur est courte, et la borne est incluse", () => {
+    expect(ENTRANCE_WINDOW_MS).toBeLessThanOrEqual(500);
+    expect(shouldAnimateOnMount(opened, opened + ENTRANCE_WINDOW_MS)).toBe(true);
+    expect(shouldAnimateOnMount(opened, opened + ENTRANCE_WINDOW_MS + 1)).toBe(false);
+  });
+
+  test("une horloge illisible n'anime jamais", () => {
+    expect(shouldAnimateOnMount(Number.NaN, opened)).toBe(false);
+    expect(shouldAnimateOnMount(opened, Number.NaN)).toBe(false);
+    expect(shouldAnimateOnMount(Number.POSITIVE_INFINITY, opened)).toBe(false);
   });
 });
 

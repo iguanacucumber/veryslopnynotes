@@ -419,14 +419,6 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .tt-banner,
-  .tt-day,
-  .tt-lesson--current .tt-card {
-    animation: none;
-  }
-}
-
 @media (min-width: 700px) {
   .tt-lesson {
     grid-template-columns: 58px minmax(0, 1fr);

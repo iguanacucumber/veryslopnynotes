@@ -253,6 +253,11 @@
   );
   display: grid;
   place-items: center;
+}
+
+/* L'anneau entre AVEC sa carte : une moyenne qui arrive en retard n'a pas
+   de bague qui surgit seule une seconde après l'écran ouvert (#569). */
+.home-widget.home-rise .home-average__ring {
   animation: home-ring-in 640ms var(--ease-out) both;
 }
 
@@ -714,15 +719,5 @@
 
   .home-average__ring-core strong {
     font-size: 25px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .home-rise,
-  .home-average__ring,
-  .home-action,
-  .home-alert {
-    animation: none;
-    transition: none;
   }
 }
