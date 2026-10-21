@@ -405,6 +405,27 @@ describe("vie scolaire — absences, retards, sanctions", () => {
     expect(parseAttendance(payload).absences.map((a) => a.id)).toEqual(["a1", "a2"]);
   });
 
+  // Les absences et les retards sont numérotés par DEUX TABLEES Pronote
+  // indépendantes : une absence `N = 12` et un retard `N = 12` sont deux
+  // événements DIFFÉRENTS. L'identité est (kind, id) : les deux sont gardés
+  // et COMPTÉS (un ensemble partagé ferait disparaître le second).
+  test("une absence et un retard de même identifiant sont tous deux gardés (#570)", () => {
+    const payload = JSON.stringify({
+      absences: [
+        { id: "12", kind: "absence", date: "2026-10-12T08:00:00+02:00", durationMinutes: 60 },
+        { id: "12", kind: "late", date: "2026-10-13T08:00:00+02:00", durationMinutes: 20 },
+      ],
+    });
+    const rows = parseAttendance(payload).absences;
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.kind).sort()).toEqual(["absence", "late"]);
+    const status = attendanceStatus(rows);
+    expect(status.eventCount).toBe(2);
+    expect(status.absenceCount).toBe(1);
+    expect(status.lateCount).toBe(1);
+    expect(status.totalMinutes).toBe(80);
+  });
+
   // Une ligne HORS CONTRAT (plage inversée) ne fait pas d'ombre à une ligne
   // valide de même identifiant : elle est écartée, pas mémorisée.
   test("une ligne hors contrat n'identifie pas la ligne valide suivante (#570)", () => {
