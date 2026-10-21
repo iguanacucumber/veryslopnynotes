@@ -333,17 +333,28 @@ function isEarlierToday(assignment: Assignment, date: Date, now: Date): boolean 
 /**
  * Section d'un devoir, RELATIVE À LA SEMAINE AFFICHÉE (`weekStart`, un lundi).
  *
- * - « En retard » : échéance avant le début de la semaine affichée ; pour la
- *   semaine courante s'y ajoutent les échéances déjà passées aujourd'hui ;
- * - « Aujourd'hui » : aujourd'hui — seule la semaine courante en a une (une
- *   semaine passée ou à venir n'invente pas de section « Aujourd'hui ») ;
- * - section de semaine : échéances du lundi au dimanche de la semaine
- *   affichée (titre : « Cette semaine » ou « Semaine 43 ») ;
- * - « Plus tard » : échéances après la fin de la semaine affichée ;
- * - « Sans échéance » : date illisible ; « Terminés » : le fait prime.
+ * Semaine courante (celle d'aujourd'hui) :
+ * - « En retard » : échéance d'AVANT aujourd'hui — un devoir dû hier est en
+ *   retard, il ne repasse pas dans « Cette semaine » ; et, pour une
+ *   échéance du jour dont l'heure est déjà passée, retard également ;
+ * - « Aujourd'hui » : échéance du jour qu'il reste à faire (une date SANS
+ *   heure est un rendez-vous de la journée entière : jamais en retard) ;
+ * - section de semaine : échéances des jours qui viennent, jusqu'au
+ *   dimanche (titre : « Cette semaine ») ;
+ * - « Plus tard » : échéances après la fin de la semaine (hors de l'écran :
+ *   la liste affichée ne contient que la semaine choisie).
  *
- * Le FAIT prime sur la date ; une dueDate illisible n'est jamais « en retard ».
- * Elle a sa propre section : un devoir sans échéance reste visible.
+ * Autre semaine (passée ou à venir) :
+ * - « En retard » : échéance avant le début de la semaine affichée ;
+ * - section de semaine : échéances du lundi au dimanche de la semaine
+ *   affichée (titre : « Semaine 43 ») ;
+ * - « Plus tard » : échéances après la fin de la semaine affichée ;
+ * - pas de section « Aujourd'hui » : elle n'aurait aucun sens hors de la
+ *   semaine en cours.
+ *
+ * Le FAIT prime sur la date (« Terminés ») ; une dueDate illisible n'est
+ * jamais « en retard » : elle a sa propre section (« Sans échéance »), un
+ * devoir sans échéance reste visible.
  */
 export function assignmentSectionOf(
   assignment: Assignment,
@@ -355,13 +366,17 @@ export function assignmentSectionOf(
   if (!date) return "undated";
   const { start, end } = weekWindow(weekStart, now);
   const day = isoDay(date);
+  if (start === weekStartOf(now)) {
+    // Semaine en cours : « En retard » = ce qui aurait déjà dû être rendu.
+    const today = isoDay(now);
+    if (day < today) return "overdue";
+    if (day === today) return isEarlierToday(assignment, date, now) ? "overdue" : "today";
+    if (day > end) return "later";
+    return "week";
+  }
+  // Autre semaine : les sections décrivent la fenêtre affichée.
   if (day < start) return "overdue";
   if (day > end) return "later";
-  // Dans la semaine affichée : « Aujourd'hui » n'a de sens que pour la
-  // semaine courante ; ailleurs, la semaine affichée est le seul seau.
-  if (start === weekStartOf(now) && day === isoDay(now)) {
-    return isEarlierToday(assignment, date, now) ? "overdue" : "today";
-  }
   return "week";
 }
 

@@ -186,7 +186,7 @@ describe("web tâches — sections", () => {
     // affichée, et « Cette semaine » quand on navigue jusqu'à lui.
     const items = parseAssignmentsPayload(
       payload([
-        { ...VALID, id: "lundi", dueDate: "2026-10-19T08:00:00.000Z" },
+        { ...VALID, id: "lundi-passe", dueDate: "2026-10-19T08:00:00.000Z" },
         { ...VALID, id: "aujourdhui-passe", dueDate: "2026-10-21T08:00:00.000Z" },
         { ...VALID, id: "aujourdhui-a-venir", dueDate: "2026-10-21T16:00:00.000Z" },
         { ...VALID, id: "samedi", dueDate: "2026-10-24T18:00:00.000Z" },
@@ -197,9 +197,9 @@ describe("web tâches — sections", () => {
     const courante = assignmentSections(items, CURRENT_WEEK, NOW);
     expect(courante.map((section) => section.id)).toEqual(["overdue", "today", "week", "later"]);
     expect(courante.map((section) => section.items.map((item) => item.id))).toEqual([
-      ["aujourdhui-passe"],
+      ["lundi-passe", "aujourdhui-passe"],
       ["aujourdhui-a-venir"],
-      ["lundi", "samedi"],
+      ["samedi"],
       ["semaine-suivante"],
     ]);
     expect(courante.find((section) => section.id === "week")?.title).toBe("Cette semaine");
@@ -212,6 +212,39 @@ describe("web tâches — sections", () => {
       "semaine-suivante",
     ]);
     expect(suivante.find((section) => section.id === "week")?.title).toBe("Semaine 44");
+  });
+
+  test("semaine courante : un devoir dû hier reste « En retard », pas dans la semaine", () => {
+    // #567 (suite) : la semaine affichée ne doit pas faire perdre le signal
+    // « en retard » — l'écran ne montre que la semaine choisie, donc un
+    // devoir en retard depuis lundi doit rester visible comme tel.
+    const items = parseAssignmentsPayload(
+      payload([
+        { ...VALID, id: "hier", dueDate: "2026-10-20T18:00:00.000Z" },
+        { ...VALID, id: "aujourdhui-passe", dueDate: "2026-10-21T08:00:00.000Z" },
+        { ...VALID, id: "aujourdhui-a-venir", dueDate: "2026-10-21T16:00:00.000Z" },
+        { ...VALID, id: "demain", dueDate: "2026-10-22T08:00:00.000Z" },
+      ]),
+    ).items;
+    const sections = assignmentSections(items, CURRENT_WEEK, NOW);
+    expect(sections.map((section) => section.id)).toEqual(["overdue", "today", "week"]);
+    expect(sections.map((section) => section.items.map((item) => item.id))).toEqual([
+      ["hier", "aujourdhui-passe"],
+      ["aujourdhui-a-venir"],
+      ["demain"],
+    ]);
+    expect(sections.find((section) => section.id === "week")?.title).toBe("Cette semaine");
+  });
+
+  test("une échéance du jour SANS heure n'est jamais en retard", () => {
+    // Une date seule est un rendez-vous de la journée entière : elle reste
+    // « Aujourd'hui », jamais « En retard ».
+    const items = parseAssignmentsPayload(
+      payload([{ ...VALID, id: "aujourdhui", dueDate: "2026-10-21" }]),
+    ).items;
+    const sections = assignmentSections(items, CURRENT_WEEK, NOW);
+    expect(sections.map((section) => section.id)).toEqual(["today"]);
+    expect(sections[0]?.items.map((item) => item.id)).toEqual(["aujourdhui"]);
   });
 
   test("une semaine passée : « En retard » avant la semaine, la semaine à l'intérieur", () => {
