@@ -21,9 +21,12 @@ import fr.veryslopnynotes.data.DeviceAuth
 import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.PronoteSession
 import fr.veryslopnynotes.data.SessionRepair
+import fr.veryslopnynotes.data.isSessionFailure
 import fr.veryslopnynotes.pronote.Client
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
+import fr.veryslopnynotes.pronote.PRONOTE_ERROR_MESSAGES
+import fr.veryslopnynotes.pronote.PronoteAPIError
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -143,6 +146,41 @@ private class Driver {
             }
             DeviceAuth.reject()
             ok(
+                "sessionCleared" to JVal.Bool(sessionCleared),
+                "client" to JVal.Bool(PronoteSession.client != null),
+            )
+        }
+        // #520 : une LECTURE qui échoue — le chemin RÉEL d'un dépôt : la
+        // décision de production (`isSessionFailure`) décide si le signal
+        // « session morte » est levé, donc si le cache est purgé. La
+        // décision tranche par TYPE et par code `G`, JAMAIS par un mot du
+        // message : un `Titre` de l'établissement (« Confirmation de
+        // connexion requise ») ne peut donc pas vider le cache de l'élève.
+        "readFailure" -> {
+            val slot = bench.slot(op)
+            val cause: Exception = when (op.str("kind")) {
+                // L'établissement refuse (G=3) : son message contient un mot
+                // de session, mais ce n'est PAS une session morte.
+                "establishment" -> PronoteAPIError(
+                    "Unknown error from pronote: 3 | Confirmation de connexion requise",
+                    3,
+                    "Confirmation de connexion requise",
+                )
+                // G=10 : la VRAIE session morte (« Session has expired… »).
+                "deadSession" -> PronoteAPIError(PRONOTE_ERROR_MESSAGES.getValue(10), 10, "session expirée")
+                // HTTP 401 : le jeton n'est plus accepté — le STATUT le dit
+                // (c'est un champ de l'erreur, pas un mot du message).
+                "http401" -> PronoteAPIError("Bad request (http status: 401)", httpStatus = 401)
+                else -> throw IllegalArgumentException("pilote: kind inconnu (${op.str("kind")})")
+            }
+            var sessionCleared = false
+            DeviceAuth.setOnRejected {
+                SessionRepair.purge({ sessionCleared = true }, slot.store)
+            }
+            val dead = isSessionFailure(cause)
+            if (dead) DeviceAuth.reject()
+            ok(
+                "dead" to JVal.Bool(dead),
                 "sessionCleared" to JVal.Bool(sessionCleared),
                 "client" to JVal.Bool(PronoteSession.client != null),
             )

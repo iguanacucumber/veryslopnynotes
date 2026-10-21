@@ -485,8 +485,10 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
       // #205 : les dépôts manipulent les TYPES du client local (`PronoteSession`,
       // `PronoteClientProvider`, paquet `fr.veryslopnynotes.pronote`) — aucune
       // adresse là-dedans, le garde-fou des URL en dur ci-dessous reste entier.
+      // #520 : l'erreur de protocole et son code `G` aussi (`data` décide
+      // « session morte » par TYPE et par code, jamais par un mot du message).
       code = code
-        .replace(/PronoteSession|PronoteClientProvider/g, "")
+        .replace(/PronoteSession|PronoteClientProvider|PronoteAPIError|pronoteErrorCode/g, "")
         .replace(/fr\.veryslopnynotes\.pronote/g, "");
       expect({ file: f.split("/").slice(-2).join("/"), hit: pronoteHost.test(code) }).toEqual({
         file: f.split("/").slice(-2).join("/"),
