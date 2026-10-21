@@ -359,6 +359,92 @@ describe("vie scolaire — absences, retards, sanctions", () => {
     expect(clean.detail).toContain("sont justifiés");
   });
 
+  // #570 : la MÊME absence est publiée par le natif pour chaque période dont
+  // la plage la recouvre (même identifiant). Le lecteur web n'en garde
+  // qu'UNE ligne — et les compteurs ne comptent qu'elle.
+  test("une absence parue deux fois n'est comptée qu'une fois (#570)", () => {
+    const payload = JSON.stringify({
+      absences: [
+        {
+          id: "a1",
+          kind: "absence",
+          date: "2026-10-12T08:00:00+02:00",
+          durationMinutes: 240,
+          justified: true,
+          periodId: "p1",
+        },
+        {
+          id: "a1",
+          kind: "absence",
+          date: "2026-10-12T08:00:00+02:00",
+          durationMinutes: 240,
+          justified: true,
+          periodId: "p2",
+        },
+      ],
+      periods: [],
+    });
+    const rows = parseAttendance(payload).absences;
+    expect(rows).toHaveLength(1);
+    const status = attendanceStatus(rows);
+    expect(status.eventCount).toBe(1);
+    expect(status.absenceCount).toBe(1);
+    expect(status.totalMinutes).toBe(240);
+    expect(status.justifiedCount).toBe(1);
+  });
+
+  // La déduplication est par IDENTIFIANT : deux absences RÉELLES distinctes
+  // (même jour, même durée) ne sont jamais confondues.
+  test("deux absences distinctes ne sont jamais confondues (#570)", () => {
+    const payload = JSON.stringify({
+      absences: [
+        { id: "a1", kind: "absence", date: "2026-10-12T08:00:00+02:00", durationMinutes: 60 },
+        { id: "a2", kind: "absence", date: "2026-10-12T08:00:00+02:00", durationMinutes: 60 },
+      ],
+    });
+    expect(parseAttendance(payload).absences.map((a) => a.id)).toEqual(["a1", "a2"]);
+  });
+
+  // Les absences et les retards sont numérotés par DEUX TABLEES Pronote
+  // indépendantes : une absence `N = 12` et un retard `N = 12` sont deux
+  // événements DIFFÉRENTS. L'identité est (kind, id) : les deux sont gardés
+  // et COMPTÉS (un ensemble partagé ferait disparaître le second).
+  test("une absence et un retard de même identifiant sont tous deux gardés (#570)", () => {
+    const payload = JSON.stringify({
+      absences: [
+        { id: "12", kind: "absence", date: "2026-10-12T08:00:00+02:00", durationMinutes: 60 },
+        { id: "12", kind: "late", date: "2026-10-13T08:00:00+02:00", durationMinutes: 20 },
+      ],
+    });
+    const rows = parseAttendance(payload).absences;
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.kind).sort()).toEqual(["absence", "late"]);
+    const status = attendanceStatus(rows);
+    expect(status.eventCount).toBe(2);
+    expect(status.absenceCount).toBe(1);
+    expect(status.lateCount).toBe(1);
+    expect(status.totalMinutes).toBe(80);
+  });
+
+  // Une ligne HORS CONTRAT (plage inversée) ne fait pas d'ombre à une ligne
+  // valide de même identifiant : elle est écartée, pas mémorisée.
+  test("une ligne hors contrat n'identifie pas la ligne valide suivante (#570)", () => {
+    const payload = JSON.stringify({
+      absences: [
+        {
+          id: "a1",
+          kind: "absence",
+          date: "2026-10-12T08:00:00+02:00",
+          dateEnd: "2026-10-10T08:00:00+02:00",
+        },
+        { id: "a1", kind: "absence", date: "2026-10-12T08:00:00+02:00", durationMinutes: 60 },
+      ],
+    });
+    const rows = parseAttendance(payload).absences;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.minutes).toBe(60);
+  });
+
   test("sections fixes : absences puis retards, vides omises", () => {
     const rows = parseAttendance(attendancePayload).absences;
     expect(attendanceSections(rows).map((s) => [s.title, s.rows.length])).toEqual([

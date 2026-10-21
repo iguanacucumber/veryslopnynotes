@@ -126,6 +126,14 @@ export function parseAttendance(payload: string | null): AttendanceData {
   const root = payloadRoot(payload);
   if (!root) return { absences: [], periods: [] };
   const absences: Absence[] = [];
+  // #570 : un événement = UNE ligne. Le même identifiant publié deux fois
+  // (la même absence, vue par deux périodes) n'est compté qu'une fois.
+  //
+  // L'identité est (kind, id), JAMAIS id seul : les absences et les retards
+  // sont numérotés par DEUX TABLEES indépendantes — une absence `12` et un
+  // retard `12` sont deux événements DIFFÉRENTS. Un ensemble partagé les
+  // confondrait : le second disparaîtrait de l'écran.
+  const seen = new Set<string>();
   for (const raw of arrayOf(root, "absences")) {
     const obj = record(raw);
     if (!obj) continue;
@@ -136,11 +144,18 @@ export function parseAttendance(payload: string | null): AttendanceData {
     const date = bound(obj["date"], 40);
     if (!id || !(ABSENCE_KINDS as readonly string[]).includes(kind)) continue;
     if (date.length < 10 || parseInstant(date) === null) continue;
+    // La clé porte le KIND : deux événements de kinds DIFFÉRENTS qui
+    // partagent un identifiant sont deux événements, pas un doublon.
+    const key = `${kind}:${id}`;
+    if (seen.has(key)) continue;
     const dateEnd = optBounded(obj, "dateEnd", 40);
     // Plage inversée = bruit, pas un événement.
     const start = parseInstant(date);
     const end = dateEnd ? parseInstant(dateEnd) : null;
     if (start !== null && end !== null && end < start) continue;
+    // L'identifiant n'est marqué vu qu'une fois la ligne retenue : une ligne
+    // hors contrat ne fait pas d'ombre à une ligne valide de même identifiant.
+    seen.add(key);
     absences.push({
       id,
       kind,

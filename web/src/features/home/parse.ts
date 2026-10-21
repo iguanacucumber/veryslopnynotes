@@ -117,11 +117,13 @@ function optionalText(value: unknown): string | null {
   return text || null;
 }
 
-/** Cours lisibles, triés par début. Les cours annulés restent (l'EDT les montre). */
+/** Cours lisibles, triés par début. Les cours annulés restent (l'EDT les montre).
+ *  Un cours déjà vu (même identifiant) n'est affiché qu'UNE fois (#570). */
 export function parseTimetable(payload: string | null): Lesson[] {
   const root = payloadRoot(payload);
   if (!root) return [];
   const out: Lesson[] = [];
+  const seen = new Set<string>();
   const rows = rowsOf(root, "entries");
   for (let index = 0; index < rows.length; index++) {
     const row = asObject(rows[index]);
@@ -130,8 +132,11 @@ export function parseTimetable(payload: string | null): Lesson[] {
     const start = millisOf(row["start"]);
     const end = millisOf(row["end"]);
     if (!subject || start === null || end === null || end < start) continue;
+    const id = boundedText(row["id"], 64) || `lesson-${index}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
     out.push({
-      id: boundedText(row["id"], 64) || `lesson-${index}`,
+      id,
       subject,
       room: optionalText(row["room"]),
       teacher: optionalText(row["teacher"]),
@@ -172,11 +177,13 @@ export interface Assignment {
   done: boolean;
 }
 
-/** Devoirs lisibles, triés par échéance. `done` est conservé pour filtrer. */
+/** Devoirs lisibles, triés par échéance. `done` est conservé pour filtrer.
+ *  Un devoir déjà vu (même identifiant) n'est affiché qu'UNE fois (#570). */
 export function parseAssignments(payload: string | null): Assignment[] {
   const root = payloadRoot(payload);
   if (!root) return [];
   const out: Assignment[] = [];
+  const seen = new Set<string>();
   const rows = rowsOf(root, "assignments");
   for (let index = 0; index < rows.length; index++) {
     const row = asObject(rows[index]);
@@ -185,8 +192,11 @@ export function parseAssignments(payload: string | null): Assignment[] {
     const title = boundedText(row["title"], 200);
     const due = millisOf(row["dueDate"]);
     if (!subject || !title || due === null) continue;
+    const id = boundedText(row["id"], 64) || `assignment-${index}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
     out.push({
-      id: boundedText(row["id"], 64) || `assignment-${index}`,
+      id,
       subject,
       title,
       due,
