@@ -737,3 +737,28 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   réponse sans `content-length` reste bornée par la lecture).
 - Commande : `make check`.
 - Emplacement : `server/infrastructure/manuals-scrape.ts`.
+
+## I31 — Un enregistrement publié = UNE ligne
+- Invariant : une absence, un retard, un devoir est publié UNE fois, et
+  compté UNE fois. La déduplication se fait par IDENTIFIANT, jamais par
+  contenu (matière + titre + date) : deux enregistrements RÉELS qui se
+  ressemblent ne sont jamais confondus. L'identifiant est donc l'identité
+  de la ligne — un repli SYNTHÉTIQUE ne peut pas être partagé par deux
+  enregistrements distincts (le repli d'absence porte la période, celui de
+  devoir la fenêtre servie). Les compteurs de vie scolaire sont calculés
+  depuis la liste DÉDUPLIQUÉE, jamais depuis la liste brute. Côté web, la
+  défense est redondante : un lecteur écarte l'identifiant déjà vu (#570).
+- Test : `tests/unit/kotlin-payload-dedupe.test.ts` (câblage natif, par
+  LECTURE DE SOURCE : `PronotePayloads.kt` lit `org.json` et ne compile pas
+  hors Gradle) + `tests/web/social.test.ts` (une absence parue deux fois =
+  une ligne, comptée une fois ; une ligne hors contrat ne fait pas d'ombre à
+  une ligne valide ; deux absences distinctes ne sont jamais confondues) +
+  `tests/web/home.test.ts` (devoir et cours publiés deux fois = une ligne ;
+  deux devoirs distincts ne sont jamais confondus) +
+  `tests/web/tasks.test.ts` (la déduplication par id de l'écran Tâches
+  tient, et ne confond pas deux devoirs distincts).
+- Commande : `make check`.
+- Emplacement : `android/data/PronotePayloads.kt`,
+  `android/data/AssignmentsRepository.kt`, `android/app/VsnBridge.kt`,
+  `web/src/features/attendance/model.ts`, `web/src/features/home/parse.ts`,
+  `web/src/features/tasks/assignments.ts`.
