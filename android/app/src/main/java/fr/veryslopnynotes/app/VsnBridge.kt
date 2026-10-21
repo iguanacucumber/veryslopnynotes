@@ -44,6 +44,7 @@ import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.DeviceAuth
 import fr.veryslopnynotes.data.DiscussionsRepository
 import fr.veryslopnynotes.data.DiscussionWriteOutcome
+import fr.veryslopnynotes.data.DownloadedFiles
 import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.FileRevisionStore
 import fr.veryslopnynotes.data.FileSubjectPrefsStore
@@ -51,6 +52,7 @@ import fr.veryslopnynotes.data.InMemoryCacheStore
 import fr.veryslopnynotes.data.InMemorySubjectPrefsStore
 import fr.veryslopnynotes.data.LlmError
 import fr.veryslopnynotes.data.LlmKeys
+import fr.veryslopnynotes.data.LocalDataStore
 import fr.veryslopnynotes.data.MeResult
 import fr.veryslopnynotes.data.OpenRouterHomework
 import fr.veryslopnynotes.data.OpenRouterLlm
@@ -78,7 +80,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.io.FileOutputStream
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
@@ -124,8 +125,11 @@ class VsnBridge(
         BuildConfig.SERVER_HOST,
     )
     private val serverStore = ServerStore(ctx)
+    // #540 : le store englobe le CACHE (`cacheDir/attachments/`,
+    // `cacheDir/exports/`) : une purge de compte efface les pièces jointes
+    // téléchargées comme le cache, sans chemin de purge qui en oublie.
     private val cacheStore = try {
-        FileCacheStore(File(ctx.filesDir, "offline"))
+        LocalDataStore(FileCacheStore(File(ctx.filesDir, "offline")), ctx.cacheDir)
     } catch (_: Exception) {
         InMemoryCacheStore()
     }
@@ -701,6 +705,10 @@ class VsnBridge(
         }
         // Même semaine affichée que le toggle (#369).
         val week = bounded(p.string("weekStart"), 10)
+        // #540 : l'époque est capturée AVANT le téléchargement : une pièce
+        // jointe téléchargée pendant une déconnexion n'est pas écrite (le
+        // cache purgé ne ressuscite pas).
+        val epoch = SessionEpoch.current()
         val data = await<fr.veryslopnynotes.data.AttachmentData?> { cb ->
             assignments.fetchAttachment(homeworkId, attachmentId, week, cb)
         } ?: return JSONObject().put("ok", false).put("error", "Pièce jointe indisponible.")
@@ -710,7 +718,8 @@ class VsnBridge(
                 homeworkId,
                 AssignmentAttachment(id = attachmentId, label = data.name, ref = ""),
                 data.bytes,
-            )
+                epoch,
+            ) ?: return JSONObject().put("ok", false).put("error", "Pièce jointe indisponible.")
             openFile(file, mimeOf(data.name))
             JSONObject().put("ok", true)
         } catch (_: Exception) {
@@ -1130,13 +1139,22 @@ class VsnBridge(
             null
         } ?: return JSONObject().put("ok", false).put("message", "Fiche introuvable.")
         return try {
-            val safeName = sheet.id.map {
-                if (it.isLetterOrDigit() || it == '-' || it == '_') it else '_'
-            }.joinToString("").take(80).ifEmpty { "fiche" }
-            val dir = File(File(ctx.cacheDir, "exports"), "fiches")
-            dir.mkdirs()
-            val file = File(dir, "$safeName.pdf")
-            FileOutputStream(file).use { RevisionPdf.writeSheet(sheet, it) }
+            // #540 : le MÊME nom que les pièces jointes (l'IDENTIFIANT de la
+            // fiche d'abord), la MÊME garde d'époque (une exportation pendant
+            // une déconnexion n'est pas écrite) et le MÊME cache borné.
+            val epoch = SessionEpoch.current()
+            val bytes = ByteArrayOutputStream().use { out ->
+                RevisionPdf.writeSheet(sheet, out)
+                out.toByteArray()
+            }
+            val file = DownloadedFiles.write(
+                File(ctx.cacheDir, DownloadedFiles.EXPORTS),
+                "fiches",
+                sheet.id,
+                "fiche.pdf",
+                bytes,
+                epoch,
+            ) ?: return JSONObject().put("ok", false).put("message", "Export PDF indisponible.")
             openFile(file, "application/pdf")
             JSONObject().put("ok", true)
         } catch (_: Exception) {
