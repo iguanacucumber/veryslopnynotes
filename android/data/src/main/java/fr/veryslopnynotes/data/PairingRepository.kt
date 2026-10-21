@@ -83,6 +83,10 @@ sealed interface RestoreResult {
 // compte, donc un appairage d'un AUTRE compte (ou une session MORTE) purge
 // le cache — sinon les écrans Notes/EDT/Cantine/Capacités servent le payload
 // du compte précédent, hors ligne, jusqu'à 24 h (TTL des capacités).
+//
+// #529 : la purge précède la PUBLICATION du nouveau client (et les deux sont
+// atomiques) : publier d'abord laissait une fenêtre où le cache servait
+// encore l'ancien compte au nouveau.
 class PairingRepository(
     private val sessions: SessionStore,
     private val cacheStore: CacheStore,
@@ -134,8 +138,19 @@ class PairingRepository(
             } catch (e: Exception) {
                 return@synchronized failure(e)
             }
-            // La session vit en mémoire (lectures) ET sur disque chiffré (redémarrage).
-            PronoteSession.set(client)
+            // #529 : la purge du cache du compte précédent précède la
+            // PUBLICATION du nouveau client. Les identifiants sont donc
+            // exportés AVANT : la purge a besoin de l'identité du nouveau
+            // compte.
+            // Déstructuré, pas nommé : le champ du port s'appelle `pronoteUrl`
+            // (I1 : ce mot ne figure dans aucun identifiant hors `android/pronote/`).
+            val (endpoint, username, password, clientId, rebuiltUuid) = try {
+                client.exportCredentials()
+            } catch (_: Exception) {
+                // Le client n'est PAS encore publié : l'ancien compte reste en
+                // place, il n'y a rien à nettoyer.
+                return@synchronized PairingResult.Err("internal", "Session illisible : réessaie l'appairage.")
+            }
             // L'identifiant du compte : l'id de la ressource client — PAS le login,
             // PAS le jeton (un accountId n'est pas un secret). Il devient connu à
             // l'appairage : c'est le moment d'enregistrer le compte (#397).
@@ -145,9 +160,6 @@ class PairingRepository(
                 null
             }
             try {
-                // Déstructuré, pas nommé : le champ du port s'appelle `pronoteUrl`
-                // (I1 : ce mot ne figure dans aucun identifiant hors `android/pronote/`).
-                val (endpoint, username, password, clientId, rebuiltUuid) = client.exportCredentials()
                 // #407 : le compte vient de changer ? Alors le cache du compte
                 // précédent part : il ne doit JAMAIS être servi au nouveau compte.
                 // L'identité vient de la session PERSISTÉE (toujours présente,
@@ -162,11 +174,19 @@ class PairingRepository(
                 } catch (_: Exception) {
                     null
                 }
-                CacheScope.onAccountPaired(
+                // #529 : la bascule est ATOMIQUE (purge + publication dans la
+                // MÊME section critique d'époque) : le client du nouveau compte
+                // ne devient visible qu'une fois le cache de l'ancien purgé.
+                CacheScope.switchAccount(
                     cacheStore,
                     previous,
                     AccountIdentity.of(endpoint, username),
-                )
+                ) {
+                    // La session vit en mémoire (lectures) ET sur disque
+                    // chiffré (redémarrage) — la publication vient APRÈS la
+                    // purge du cache du compte précédent.
+                    PronoteSession.set(client)
+                }
                 sessions.save(
                     StoredSession(
                         endpointUrl = endpoint,
