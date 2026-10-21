@@ -10,7 +10,12 @@
 // anti-secrets passe aussi sur `tests/`, et un littéral complet le ferait
 // échouer lui-même. Un littéral entier ne doit jamais être écrit en clair.
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { matchPatterns, PATTERNS, patternsFor, VENDORED_PATTERNS } from "../../agents/runtime/secret-patterns";
+
+const ROOT = join(import.meta.dir, "..", "..");
 
 const VENDORED = patternsFor(".agents/skills/security-review/SKILL.md");
 const REPO = patternsFor("web/src/App.tsx");
@@ -71,6 +76,121 @@ describe("scan anti-secrets : carve-out .agents", () => {
     expect(patternsFor(".agents/skills/code-review/SKILL.md")).toBe(VENDORED_PATTERNS);
     // Un dossier qui COMMENCE PAR .agents n'est pas vendorisé.
     expect(patternsFor(".agentsfoo/x.md")).toBe(PATTERNS);
+  });
+});
+
+// #522 : le jeu VENDORED était plus étroit que le jeu du dépôt sur deux
+// formes : le JWT et les identifiants dans une URL. Le dossier tiers, le moins
+// contrôlé du dépôt, était donc le moins surveillé sur les deux formes les
+// plus répandues — alors que c'est le seul dont le contenu IMITE des secrets
+// (I11).
+describe("scan anti-secrets : le jeu vendorisé couvre le JWT et les identifiants d'URL", () => {
+  const jwt = [
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+    ".eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+    ".dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+  ].join("");
+  // Fragmenté : un littéral COMPLET dans la source serait lui-même un secret
+  // (le scan passe sur `tests/`), donc le mot de passe est coupé.
+  const urlCred = ["https://user:s3cr3tP4", "ssword", "Long@host/x"].join("");
+
+  test("le jeu vendorisé couvre TOUTES les formes du jeu du dépôt", () => {
+    // Le carve-out peut être PLUS STRICT (exiger une preuve plus forte),
+    // jamais PLUS LARGE : un motif absent du jeu vendorisé est un motif
+    // qu'un contenu tiers peut contenir sans être signalé.
+    const couverture = new Set(VENDORED_PATTERNS.map((p) => p.name));
+    for (const { name } of PATTERNS) {
+      expect({ name, couvert: couverture.has(name) }).toEqual({ name, couvert: true });
+    }
+  });
+
+  test("un JWT VIVANT échoue dans .agents/", () => {
+    // Un JWT est une PREUVE, pas un indice (I11) : les trois segments de
+    // longueur plausible suffisent.
+    expect(matchPatterns(jwt, VENDORED)).toContain("jwt");
+    expect(matchPatterns(jwt, PATTERNS)).toContain("jwt");
+  });
+
+  test("des identifiants dans une URL échouent dans .agents/", () => {
+    expect(matchPatterns(urlCred, VENDORED)).toContain("url-credential");
+    expect(matchPatterns(urlCred, PATTERNS)).toContain("url-credential");
+  });
+
+  test("la preuve exigée : un JWT tronqué ou une URL d'exemple passe", () => {
+    // Un JWT d'un seul segment n'est pas un JWT.
+    expect(matchPatterns("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", VENDORED)).toEqual([]);
+    // Des identifiants d'exemple (mot de passe court) ne sont pas des
+    // credentials : « user:pass@ » et « user:password@ » sont des exemples.
+    // Fragmentés : la source ne doit pas contenir le littéral complet (le
+    // scan passe sur `tests/`).
+    expect(matchPatterns(["https://user:pass", "@host/"].join(""), VENDORED)).toEqual([]);
+    expect(matchPatterns(["https://user:pass", "word@host/"].join(""), VENDORED)).toEqual([]);
+  });
+});
+
+// #522 (fin) : la preuve est VÉRIFIÉE sur le SCAN RÉEL, pas seulement sur les
+// motifs : un JWT et une URL à identifiants déposés dans `.agents/` font
+// échouer `check-secrets`. Sans ça, le carve-out pouvait rester troué.
+describe("scan anti-secrets : un secret dans .agents/ fait échouer le scan", () => {
+  const jwt = [
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+    ".eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+    ".dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+  ].join("");
+  // Fragmenté (voir plus haut) : la source ne doit pas contenir le secret.
+  const urlCred = ["https://user:s3cr3tP4", "ssword", "Long@host/x"].join("");
+
+  /** Fixture : un dossier `.agents/skills/x/` avec le contenu donné. */
+  function fixture(contenu: string): string {
+    const dir = mkdtempSync(join(tmpdir(), "secret-scan-"));
+    const skill = join(dir, ".agents", "skills", "x");
+    mkdirSync(skill, { recursive: true });
+    writeFileSync(join(skill, "SKILL.md"), contenu);
+    return dir;
+  }
+
+  /** Lance le VRAI scan sur la fixture. */
+  function scan(dir: string): { code: number; out: string } {
+    const p = Bun.spawnSync(["bun", join(ROOT, "agents", "runtime", "check-secrets.ts"), dir], {
+      cwd: ROOT,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const dec = new TextDecoder();
+    return { code: p.exitCode ?? -1, out: dec.decode(p.stdout) + dec.decode(p.stderr) };
+  }
+
+  test("un JWT déposé dans .agents/ fait échouer le scan", () => {
+    const dir = fixture(`Un exemple de jeton : ${jwt}\n`);
+    try {
+      const r = scan(dir);
+      expect(r.code).not.toBe(0);
+      expect(r.out).toContain("jwt");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("des identifiants dans une URL déposés dans .agents/ font échouer le scan", () => {
+    const dir = fixture(`Une URL : ${urlCred}\n`);
+    try {
+      const r = scan(dir);
+      expect(r.code).not.toBe(0);
+      expect(r.out).toContain("url-credential");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("un contenu tiers sans secret passe le scan", () => {
+    const dir = fixture("Une skill qui parle de JWT et d'URL, sans en contenir.\nhttps://exemple.fr/page\n");
+    try {
+      const r = scan(dir);
+      expect({ code: r.code, out: r.out }).toEqual({ code: 0, out: r.out });
+      expect(r.out).toContain("check-secrets OK");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

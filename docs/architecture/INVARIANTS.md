@@ -168,7 +168,16 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   **Tous les matchs d'un motif sont inspectés** (#521) : le motif ne passe que
   si AUCUN match n'est un secret réel. Avant, seul le PREMIER match était
   inspecté — un placeholder en tête de fichier excusait le fichier **entier**,
-  secret compris. Le contenu vendorisé est VERROUILLÉ de façon vérifiable
+  secret compris.
+  **Le jeu de motifs VENDORED COUVRE toutes les formes du jeu du dépôt**
+  (#522) : le carve-out peut être plus STRICT (exiger une preuve plus
+  forte), jamais plus LARGE. Le jeu vendorisé ne couvrait ni le JWT ni les
+  identifiants dans une URL, le jeu du dépôt si — le dossier tiers, le moins
+  contrôlé, était donc le moins surveillé sur les deux formes les plus
+  répandues. La preuve exigée par I11 s'applique : pour le JWT, les trois
+  segments de longueur plausible ; pour une URL à identifiants, un mot de
+  passe de 12 caractères ou plus.
+  Le contenu vendorisé est VERROUILLÉ de façon vérifiable
   (#505) : le
   `computedHash` de `skills-lock.json` vient de l'outil `npx skills`, dont
   l'algorithme n'est pas documenté dans le dépôt — il n'est donc pas
