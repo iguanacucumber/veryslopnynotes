@@ -7,10 +7,11 @@
 // jeu élargi (preuve au lieu d'indice) pour le contenu vendorisé `.agents/`.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { matchPatterns, patternsFor } from "./secret-patterns";
 
-const ROOT = join(import.meta.dir, "..", "..");
+// ponytail: racine en argument pour le test (fixture temporaire), défaut dépôt.
+const ROOT = process.argv[2] ? resolve(process.argv[2]) : join(import.meta.dir, "..", "..");
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage", ".bun-cache"]);
 const SKIP_FILES = new Set(["bun.lock", "bun.lockb", "package-lock.json", "check-secrets.ts", "secret-patterns.ts"]);
 // Chemins locaux jamais commités (gitignorés) : pas de scan contenu.
