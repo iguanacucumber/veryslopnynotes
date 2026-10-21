@@ -237,7 +237,15 @@ class VsnBridge(
     }
 
     private fun runCall(requestId: String, method: String, paramsJson: String) {
-        if (!validId(requestId)) return
+        if (!validId(requestId)) {
+            // #539 : la réponse ne manque JAMAIS (I10). Un identifiant mal
+            // formé était IGNORÉ : la promesse pendait (pour `pairing.scanQr`,
+            // dont le délai JS est 0, elle pendait POUR TOUJOURS). On le
+            // refuse donc — l'identifiant est renvoyé TEL QUEL, sinon le JS
+            // ne retrouverait pas sa promesse.
+            reject(requestId, "bad_request", "Identifiant d'appel invalide.")
+            return
+        }
         if (method.length > MAX_METHOD_CHARS || method !in METHODS) {
             reject(requestId, "bad_request", "Méthode inconnue.")
             return
@@ -254,7 +262,13 @@ class VsnBridge(
             resolve(requestId, JSONObject().put("ok", true))
             return
         }
-        if (executors.isShutdown) return
+        if (executors.isShutdown) {
+            // #539 : pont fermé (WebView détruite) — l'appel tardif reçoit un
+            // REJET borné, pas le silence : une promesse pendrait pour toujours
+            // sur une méthode sans délai JS.
+            reject(requestId, "unavailable", "Pont fermé.")
+            return
+        }
         inFlight.add(requestId)
         // #404 : l'époque de session est capturée À L'ARRIVÉE de l'appel, pas
         // à son exécution : le travail part sur un autre fil, donc une écriture

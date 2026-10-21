@@ -144,6 +144,19 @@ describe("pont : un rejet natif règle la promesse", () => {
     expect(pendingCount()).toBe(0);
   });
 
+  // #539 : le scan QR n'a PAS de timeout JS (0) : une promesse qui ne
+  // recevrait JAMAIS de réponse pendrait POUR TOUJOURS. Le natif répond
+  // toujours (identifiant mal formé ou pont fermé = rejet borné) — ici on
+  // vérifie que la réponse native règle bien la promesse, rejet compris.
+  test("une méthode SANS timeout se règle quand le natif répond", async () => {
+    stubNative();
+    const promise = call("pairing.scanQr", {}, 0);
+    expect(pendingCount()).toBe(1);
+    rejetNatif("bad_request", "Identifiant d'appel invalide.");
+    await expect(promise).rejects.toThrow("Identifiant d'appel invalide.");
+    expect(pendingCount()).toBe(0);
+  });
+
   test("les codes que l'UI traite portent un message NON VIDE", async () => {
     // `unavailable` et `unknown` sont les deux chemins d'erreur du pont : le
     // message doit être affichable (l'UI n'affiche pas un diagnostic vide).
