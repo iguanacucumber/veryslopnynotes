@@ -159,11 +159,26 @@ export function isMoved(lesson: Lesson): boolean {
   return lesson.status === "moved";
 }
 
+/** Un cours est « à venir » s'il n'est pas annulé et pas encore terminé. */
+export function isUpcomingLesson(lesson: Lesson, now: number): boolean {
+  return !isCancelled(lesson) && lesson.end > now;
+}
+
 /** Cours en cours ou à venir, annulés exclus, bornés (étage horloge). */
 export function upcomingLessons(lessons: Lesson[], now: number, limit = 3): Lesson[] {
   const max = boundedLimit(limit, 3);
   if (max === 0) return [];
-  return lessons.filter((lesson) => !isCancelled(lesson) && lesson.end > now).slice(0, max);
+  return lessons.filter((lesson) => isUpcomingLesson(lesson, now)).slice(0, max);
+}
+
+/**
+ * Nombre de cours à venir, SANS plafond (#571).
+ *
+ * La LISTE des widgets est bornée (deux cours) : c'est un extrait. Le
+ * COMPTEUR de l'accueil est le nombre vrai — un compteur plafonné ment.
+ */
+export function upcomingCount(lessons: Lesson[], now: number): number {
+  return lessons.filter((lesson) => isUpcomingLesson(lesson, now)).length;
 }
 
 // --- Devoirs -----------------------------------------------------------------
@@ -207,6 +222,21 @@ export function parseAssignments(payload: string | null): Assignment[] {
   return out.sort((a, b) => a.due - b.due);
 }
 
+/**
+ * Un devoir reste À FAIRE tant qu'il n'est pas fait (#571).
+ *
+ * Son échéance est lisible par construction (le lecteur écarte les lignes
+ * sans échéance). Un devoir EN RETARD reste à faire : il est compté.
+ */
+export function isPendingTask(task: Assignment): boolean {
+  return !task.done && Number.isFinite(task.due);
+}
+
+/** Un devoir non fait dont l'échéance n'est pas encore passée. */
+export function isUpcomingTask(task: Assignment, now: number): boolean {
+  return isPendingTask(task) && task.due > now;
+}
+
 /** Devoirs non faits dont l'échéance n'est pas passée, bornés. */
 export function pendingAssignments(
   assignments: Assignment[],
@@ -215,7 +245,18 @@ export function pendingAssignments(
 ): Assignment[] {
   const max = boundedLimit(limit, 3);
   if (max === 0) return [];
-  return assignments.filter((task) => !task.done && task.due > now).slice(0, max);
+  return assignments.filter((task) => isUpcomingTask(task, now)).slice(0, max);
+}
+
+/**
+ * Nombre de devoirs à faire, SANS plafond (#571).
+ *
+ * La LISTE des widgets est bornée (deux devoirs) : c'est un extrait. Le
+ * COMPTEUR de l'accueil est le nombre vrai — un compteur plafonné ment, et
+ * un devoir en retard reste un devoir à faire.
+ */
+export function pendingCount(assignments: Assignment[]): number {
+  return assignments.filter((task) => isPendingTask(task)).length;
 }
 
 // --- Notes et moyennes -------------------------------------------------------
