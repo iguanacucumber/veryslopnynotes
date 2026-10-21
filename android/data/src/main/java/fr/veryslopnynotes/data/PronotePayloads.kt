@@ -533,6 +533,12 @@ internal fun attendancePayload(client: Client): String {
     // #570 : une absence = UNE ligne publiée. La MÊME absence (même `N`
     // Pronote) est renvoyée par CHAQUE période dont la plage la recouvre :
     // sans déduplication, elle était publiée deux fois et COMPTÉE deux fois.
+    //
+    // L'identité est (kind, id), JAMAIS id seul : les absences et les
+    // retards sont numérotés par DEUX TABLEES Pronote indépendantes
+    // (`listeAbsences`, filtrée sur `G` 13 ou 14) — une absence `N = 12` et
+    // un retard `N = 12` sont deux enregistrements DIFFÉRENTS. Un ensemble
+    // partagé les confondrait : le second disparaîtrait de l'écran.
     val seen = HashSet<String>()
     for ((periodIndex, p) in client.periods.withIndex()) {
         val pid = p.id.ifBlank { null }
@@ -547,9 +553,9 @@ internal fun attendancePayload(client: Client): String {
             for ((i, a) in ab.withIndex()) {
                 // Le repli est UNIQUE dans le payload : deux périodes ne
                 // forgent jamais le même identifiant pour deux absences
-                // DIFFÉRENTES (le web déduplique par identifiant).
+                // DIFFÉRENTES (le web déduplique par (kind, id)).
                 val id = a.id.ifBlank { "abs-$periodIndex-$i" }
-                if (!seen.add(id)) continue
+                if (!seen.add("absence:$id")) continue
                 add(JSONObject().apply {
                     put("id", id)
                     put("kind", "absence")
@@ -570,7 +576,7 @@ internal fun attendancePayload(client: Client): String {
             }
             for ((i, d) in dl.withIndex()) {
                 val id = d.id.ifBlank { "late-$periodIndex-$i" }
-                if (!seen.add(id)) continue
+                if (!seen.add("late:$id")) continue
                 add(JSONObject().apply {
                     put("id", id)
                     put("kind", "late")

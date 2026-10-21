@@ -740,18 +740,24 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 
 ## I31 — Un enregistrement publié = UNE ligne
 - Invariant : une absence, un retard, un devoir est publié UNE fois, et
-  compté UNE fois. La déduplication se fait par IDENTIFIANT, jamais par
-  contenu (matière + titre + date) : deux enregistrements RÉELS qui se
-  ressemblent ne sont jamais confondus. L'identifiant est donc l'identité
-  de la ligne — un repli SYNTHÉTIQUE ne peut pas être partagé par deux
-  enregistrements distincts (le repli d'absence porte la période, celui de
-  devoir la fenêtre servie). Les compteurs de vie scolaire sont calculés
-  depuis la liste DÉDUPLIQUÉE, jamais depuis la liste brute. Côté web, la
-  défense est redondante : un lecteur écarte l'identifiant déjà vu (#570).
+  compté UNE fois. L'identité d'un événement de vie scolaire est le COUPLE
+  (kind, id), JAMAIS l'identifiant seul : les absences et les retards sont
+  numérotés par DEUX TABLEAS Pronote indépendantes (`listeAbsences`, filtrée
+  sur `G` 13 ou 14) — une absence `N = 12` et un retard `N = 12` sont deux
+  enregistrements DIFFÉRENTS, et les deux sont publiés et comptés. La
+  déduplication ne se fait jamais par CONTENU (matière + titre + date) : deux
+  enregistrements RÉELS qui se ressemblent ne sont jamais confondus. Un repli
+  SYNTHÉTIQUE ne peut pas être partagé par deux enregistrements distincts (le
+  repli d'absence porte la période, celui de devoir la fenêtre servie). Les
+  compteurs de vie scolaire sont calculés depuis la liste DÉDUPLIQUÉE, jamais
+  depuis la liste brute. Côté web, la défense est redondante : un lecteur
+  écarte l'événement déjà vu, kind par kind (#570).
 - Test : `tests/unit/kotlin-payload-dedupe.test.ts` (câblage natif, par
   LECTURE DE SOURCE : `PronotePayloads.kt` lit `org.json` et ne compile pas
-  hors Gradle) + `tests/web/social.test.ts` (une absence parue deux fois =
-  une ligne, comptée une fois ; une ligne hors contrat ne fait pas d'ombre à
+  hors Gradle ; la clé de déduplication porte le kind, jamais l'id seul) +
+  `tests/web/social.test.ts` (une absence parue deux fois = une ligne,
+  comptée une fois ; une absence et un retard de MÊME identifiant = deux
+  lignes, comptées deux fois ; une ligne hors contrat ne fait pas d'ombre à
   une ligne valide ; deux absences distinctes ne sont jamais confondues) +
   `tests/web/home.test.ts` (devoir et cours publiés deux fois = une ligne ;
   deux devoirs distincts ne sont jamais confondus) +

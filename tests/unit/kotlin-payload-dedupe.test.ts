@@ -60,11 +60,27 @@ describe("vie scolaire : une absence publiée une seule fois (#570)", () => {
     expect(attendance).toContain("val seen = HashSet<String>()");
     // La ligne dont l'identifiant est déjà vu est ÉCARTÉE (avant d'être
     // publiée et avant d'être comptée).
-    expect(attendance.match(/if \(!seen\.add\(id\)\) continue/g) ?? []).toHaveLength(2);
+    expect(attendance.match(/if \(!seen\.add\([^)]*\)\) continue/g) ?? []).toHaveLength(2);
     // La déduplication est par IDENTIFIANT, jamais par contenu (matière,
     // date, motif) : deux absences RÉELLES distinctes ne sont jamais
     // confondues.
-    expect(attendance.match(/seen\.add\(([^)]*)\)/g)).toEqual(["seen.add(id)", "seen.add(id)"]);
+    expect(attendance.match(/seen\.add\(([^)]*)\)/g)).toEqual([
+      'seen.add("absence:$id")',
+      'seen.add("late:$id")',
+    ]);
+  });
+
+  // Les absences et les retards sont numérotés par DEUX TABLEES Pronote
+  // indépendantes : une absence `N = 12` et un retard `N = 12` sont deux
+  // enregistrements DIFFÉRENTS. Un ensemble partagé les confondrait — le
+  // second disparaîtrait de l'écran (perte de donnée).
+  test("une absence et un retard de même identifiant ne se cachent pas (#570)", () => {
+    // La clé de déduplication porte le KIND.
+    expect(attendance).toContain('seen.add("absence:$id")');
+    expect(attendance).toContain('seen.add("late:$id")');
+    // L'identité n'est JAMAIS l'identifiant seul.
+    expect(attendance).not.toMatch(/seen\.add\(id\)/);
+    expect(attendance).not.toMatch(/seen\.add\("\$\{?id/);
   });
 
   test("le repli d'identifiant est unique dans le payload", () => {
@@ -87,7 +103,7 @@ describe("vie scolaire : une absence publiée une seule fois (#570)", () => {
     expect(counter).toBeGreaterThan(publish);
     // La déduplication précède la publication (les lignes dédupliquées
     // seules arrivent au compteur).
-    const dedupe = attendance.indexOf("if (!seen.add(id)) continue");
+    const dedupe = attendance.indexOf('if (!seen.add("absence:$id")) continue');
     expect(dedupe).toBeGreaterThan(-1);
     expect(dedupe).toBeLessThan(publish);
   });
