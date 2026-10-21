@@ -12,8 +12,27 @@ confiance ou placer un proxy authentifié devant. `make runServer` et Docker
 lancent ce seul service. `make runServer` écoute par défaut sur la boucle
 locale (`HOST=0.0.0.0` pour l'exposer, sur un réseau de confiance), et sa
 préparation TLS est obligatoire : un échec arrête le lancement, jamais de
-repli en clair. Sans `TLS_CERT_FILE`/`TLS_KEY_FILE` (Docker), le serveur sert
-en clair et le dit bruyamment (`[server] ATTENTION : service en CLAIR`).
+repli en clair.
+
+L'IMAGE Docker suit la même règle (#533) : elle refuse de démarrer sans
+`TLS_CERT_FILE`/`TLS_KEY_FILE` (le couple est monté en volume), elle ne force
+pas `HOST` (l'exposition est un choix de l'opérateur) et elle tourne sous un
+utilisateur non privilégié. Le couple peut venir de la préparation TLS locale
+(`~/.cache/veryslopnynotes/tls`, hors dépôt) :
+
+```sh
+docker run --rm -p 3000:3000 \
+  -e HOST=0.0.0.0 \
+  -e TLS_CERT_FILE=/tls/cert.pem -e TLS_KEY_FILE=/tls/key.pem \
+  -v ~/.cache/veryslopnynotes/tls:/tls:ro \
+  veryslopnynotes-server:local
+```
+
+Sans `-e HOST=0.0.0.0`, le service n'écoute que sur la boucle locale du
+conteneur (comme `make runServer`). Sans le couple TLS, il ne démarre pas :
+un point d'entrée sans authentification ne se sert pas en clair. Hors image,
+un lancement local sans couple TLS sert en clair et le dit bruyamment
+(`[server] ATTENTION : service en CLAIR`).
 
 Garde-fous côté serveur (#362) : la navigation ne va que vers un hôte public
 (IP privée refusée, forme IPv4-mapped IPv6 comprise), la chaîne de
