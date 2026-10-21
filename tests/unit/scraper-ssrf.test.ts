@@ -26,7 +26,7 @@ import {
 import { checkPublicHost } from "../../server/infrastructure/ssrf";
 import type { HostResolver } from "../../server/infrastructure/ssrf";
 
-const CONFIG = { platform: "editeur-fake", username: "u", password: "p" };
+const CONFIG = { platform: "editeur-fake" };
 const PUBLIC_URL = "https://manuels.example.invalid/6e";
 
 /** IP publique factice (aucune adresse réelle n'est contactée). */
@@ -242,7 +242,7 @@ describe("garde SSRF : hôte privé/interne refusé (#362)", () => {
   });
 
   test("le contrat refuse aussi les startUrl privées", () => {
-    const base = { platform: "p", username: "u", password: "m", startUrl: PUBLIC_URL };
+    const base = { platform: "p", startUrl: PUBLIC_URL };
     expect(isManualsScrapeRequest(base)).toBe(true);
     for (const url of [
       "http://[::ffff:127.0.0.1]:9/x",
@@ -484,8 +484,6 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
         method: "POST",
         body: JSON.stringify({
           platform: "editeur-fake",
-          username: "u",
-          password: "p",
           startUrl: "https://interne.example.invalid/secret",
         }),
       }),
@@ -505,8 +503,6 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
         method: "POST",
         body: JSON.stringify({
           platform: "editeur-fake",
-          username: "u",
-          password: "p",
           startUrl: PUBLIC_URL,
         }),
       }),
@@ -524,7 +520,7 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
 // Le champ n'existe plus dans le contrat, et un corps qui le porte est
 // REFUSÉ par le serveur (message dédié, pas un 400 générique).
 describe("jar de session : choisi par le serveur, jamais par l'appelant (#538)", () => {
-  const base = { platform: "p", username: "u", password: "m", startUrl: PUBLIC_URL };
+  const base = { platform: "p", startUrl: PUBLIC_URL };
 
   test("un corps qui demande un jar est REFUSÉ : ni navigateur, ni jar, rien d'écrit", async () => {
     resetState();

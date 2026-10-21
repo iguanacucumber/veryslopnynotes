@@ -122,13 +122,17 @@ un en-tête HTTPS `Authorization`. Aucun `.env*`, jeton de session ou clé LLM d
 le dépôt, les variables serveur ou les logs.
 
 **Exception de sécurité :** `POST /v1/manuals/scrape` est volontairement sans
-authentification. Il reçoit les identifiants du portail de manuels et une URL
-dans le corps de la requête, sans les journaliser ; Playwright réutilise un
-cookie jar local gitignoré (`playwright/.auth/manuals.json`) **choisi par le
-serveur** : le corps ne peut plus en demander le nom — un nom de jar suffisait
-à appeler la session d'un autre tenant (le répertoire était imposé, pas
-l'isolation, #538 et I24). La navigation est gardée (`shared/contracts/net.ts`
-+ `server/infrastructure/ssrf.ts` + `server/infrastructure/manuals-scrape.ts`) :
+authentification. Il reçoit une plateforme et une URL dans le corps de la
+requête, sans les journaliser ; Playwright réutilise un cookie jar local
+gitignoré (`playwright/.auth/manuals.json`) **choisi par le serveur** : le corps
+ne peut plus en demander le nom — un nom de jar suffisait à appeler la
+session d'un autre tenant (le répertoire était imposé, pas l'isolation, #538
+et I24). Les identifiants de portail (`username`/`password`) sont **REFUSÉS**
+(400, message dédié) : le scraper ne s'authentifie pas, la session est celle
+du serveur — les exiger au contrat reviendrait à annoncer une authentification
+qui n'existe pas (#526 et I28). La navigation est gardée
+(`shared/contracts/net.ts` + `server/infrastructure/ssrf.ts` +
+`server/infrastructure/manuals-scrape.ts`) :
 hôte privé/interne refusé (IP littérale, entière, hexadécimale, IPv4-mapped
 IPv6, ULA, link-local, métadonnées, **NAT64 local-use `64:ff9b:1::/48`
 (RFC 8215) : préfixe non global, fail-closed — tout le préfixe est refusé**),
@@ -159,6 +163,13 @@ appliqué AVANT le reparse) et sa lecture a son propre délai (10 s) : sans ça,
 une page de 50 Mo est reparsée par cheerio (plusieurs fois sa taille) et une
 page qui ne finit pas de streamer survit au délai HTTP en gardant le Chromium
 vivant (cf. #422).
+
+**Page de connexion :** un portail qui ne reconnaît pas la session renvoie sa
+page de login en **HTTP 200** — le test HTTP (`ok = status < 400`) la laissait
+passer, et elle devenait un `ManualDoc` que l'assistant pouvait citer comme
+source (« Se connecter »). Elle est maintenant refusée (motif `login_required`,
+HTTP 502 `login_required`) AVANT extraction et AVANT écriture du jar : une
+page de login n'écrase pas la session du serveur (#526 et I28).
 
 Piné par `tests/architecture/invariants.test.ts` (I8),
 `tests/unit/android-homework.test.ts`, `tests/unit/scraper-only.test.ts` et
@@ -644,3 +655,31 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   `android/data/SyncedRepository.kt`, `android/data/PeriodicSyncWorker.kt`.
  (data: la file locale livre l'échec à tous les callbacks de la clé)
  (data: la file locale livre l'échec à tous les callbacks de la clé)
+
+## I29 — Le scraper ne s'authentifie pas, une page de connexion n'est pas un manuel
+- Invariant : deux promesses que le contrat faisait mais que le code ne
+  tenait pas.
+  1. **Aucun identifiant n'est collecté pour rien.** Le contrat exigeait
+     `username`/`password`, le serveur les recevait et les transmettait — mais
+     AUCUN chemin de code ne les lisait : le navigateur monte le jar de
+     session du SERVEUR (I24). Les deux champs ne sont donc PLUS REQUIS par le
+     contrat (optionnels, pour que les appelants existants compilent), et le
+     serveur REFUSE un corps qui les porte (400, message dédié qui NOMME les
+     champs). Le scraper ne reçoit que la plateforme.
+  2. **Une page de connexion n'est jamais ingérée.** Un portail qui ne
+     reconnaît pas la session renvoie sa page de login en HTTP 200 : le test
+     HTTP (`ok = status < 400`) la laissait passer, et elle devenait un
+     `ManualDoc` — donc une SOURCE que l'assistant pouvait citer (« Se
+     connecter »). Elle est refusée (motif `login_required`, HTTP 502
+     `login_required`) AVANT extraction et AVANT écriture du jar (une page de
+     login n'écrase pas la session du serveur). Le signal : un champ MOT DE
+     PASSE (le formulaire d'authentification en a toujours un, une page de
+     manuel jamais).
+- Test : `tests/unit/scraper-only.test.ts` (le contrat n'exige plus
+  d'identifiants ; un corps qui les porte = 400 dédié, aucun scrape, aucun
+  log ; une page de login en 200 = refus, jamais un `ManualDoc` ; une vraie
+  page de manuel reste ingérée) + `tests/contracts/contracts.test.ts` (le
+  contrat reflète l'usage réel : `required: [platform, startUrl]`).
+- Commande : `make check`.
+- Emplacement : `shared/contracts/api.ts`, `shared/contracts/api.openapi.yaml`,
+  `server/infrastructure/http.ts`, `server/infrastructure/manuals-scrape.ts`.

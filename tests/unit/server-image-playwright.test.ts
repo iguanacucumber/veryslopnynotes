@@ -17,8 +17,6 @@ const ROOT = join(import.meta.dir, "..", "..");
 /** Corps de scrape synthétique (aucun credential réel, aucun réseau). */
 const BODY = {
   platform: "exemple",
-  username: "utilisateur-synthetique",
-  password: "mot-de-passe-synthetique",
   startUrl: "https://manuels.example.invalid/6e/maths",
 };
 
