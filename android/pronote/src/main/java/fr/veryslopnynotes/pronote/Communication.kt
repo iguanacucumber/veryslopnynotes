@@ -290,7 +290,9 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
         requestNumber += 2
         lastResponse = response
         if (!response.ok) {
-            throw PronoteAPIError("Bad request (http status: ${response.status})")
+            // Le STATUT porte l'information (401 = session morte) : il est un
+            // CHAMP de l'erreur, jamais un mot du message (#520).
+            throw PronoteAPIError("Bad request (http status: ${response.status})", httpStatus = response.status)
         }
         // ponytail: ping arme seulement sur succes, sinon session morte semble vivante.
         lastPing = System.currentTimeMillis() / 1000

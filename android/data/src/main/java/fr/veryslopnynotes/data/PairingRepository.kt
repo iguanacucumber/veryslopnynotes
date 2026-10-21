@@ -3,6 +3,7 @@ package fr.veryslopnynotes.data
 import fr.veryslopnynotes.pronote.Client
 import fr.veryslopnynotes.pronote.ClientOptions
 import fr.veryslopnynotes.pronote.MFAError
+import fr.veryslopnynotes.pronote.PronoteAPIError
 import fr.veryslopnynotes.pronote.QRCodeDecryptError
 import fr.veryslopnynotes.pronote.QrCode
 import fr.veryslopnynotes.pronote.QrLoginOptions
@@ -252,6 +253,12 @@ class PairingRepository(
                 PairingResult.Err("qr_rejected", "QR ou PIN refusé par l'établissement : rescane le code affiché par son application.")
             e is MFAError ->
                 PairingResult.Err("mfa_required", "Ce compte exige une vérification supplémentaire que l'app ne prend pas en charge.")
+            // L'établissement a RÉPONDU avec un code d'erreur : il a REFUSÉ.
+            // C'est le `G` qui le dit, pas un mot de son message (#520) — le
+            // rate-limit (G=25) n'est pas un refus de compte : « réessaie
+            // plus tard ».
+            e is PronoteAPIError && e.pronoteErrorCode != null && e.pronoteErrorCode != G_RATE_LIMIT ->
+                PairingResult.Err("login_refused", "Compte refusé par l'établissement : régénère le QR dans son application, puis rescane-le.")
             isSessionFailure(e) || message.isNotBlank() && isLoginRefused(message) ->
                 PairingResult.Err("login_refused", "Compte refusé par l'établissement : régénère le QR dans son application, puis rescane-le.")
             else ->
@@ -278,6 +285,13 @@ class PairingRepository(
 private fun isLoginRefused(message: String): Boolean =
     Regex("login|credential|username|password|identifiant|refus", RegexOption.IGNORE_CASE)
         .containsMatchIn(message)
+
+/**
+ * `G=25` : « Exceeded max authorization requests » — le rate-limit de
+ * l'établissement. Ce n'est pas un refus de compte : c'est « réessaie dans un
+ * instant ».
+ */
+private const val G_RATE_LIMIT = 25
 
 // Miroir de SETUP_* (shared/contracts/api.ts). Bornes appliquées à la saisie :
 // l'établissement revalide de son côté.

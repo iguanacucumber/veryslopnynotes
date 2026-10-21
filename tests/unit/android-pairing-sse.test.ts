@@ -152,7 +152,7 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
       // Plus aucune URL d'établissement en dur depuis #299 : elle vient du QR.
       const sanctionne = code
         .replace(/project\(":pronote"\)/g, "")
-        .replace(/PronoteSession|PronoteClientProvider/g, "")
+        .replace(/PronoteSession|PronoteClientProvider|PronoteAPIError|pronoteErrorCode/g, "")
         .replace(/fr\.veryslopnynotes\.pronote/g, "");
       expect({ file: f, hit: pronoteHost.test(sanctionne) }).toEqual({ file: f, hit: false });
     }
