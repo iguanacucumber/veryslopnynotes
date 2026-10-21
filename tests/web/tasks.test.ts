@@ -176,25 +176,81 @@ describe("web tâches — dates et semaines", () => {
 });
 
 describe("web tâches — sections", () => {
-  test("range en retard / aujourd'hui / cette semaine / plus tard / terminés", () => {
+  // NOW = mercredi 21 octobre 2026, 12:00 (Europe/Paris). La semaine
+  // courante commence le lundi 19 octobre 2026.
+  const CURRENT_WEEK = "2026-10-19";
+
+  test("les sections suivent la semaine affichée, pas la semaine en cours", () => {
+    // #567 : les sections décrivent la semaine AFFICHÉE. Un devoir de la
+    // semaine suivante est « Plus tard » quand la semaine courante est
+    // affichée, et « Cette semaine » quand on navigue jusqu'à lui.
     const items = parseAssignmentsPayload(
       payload([
-        { ...VALID, id: "late", dueDate: "2026-10-20T18:00:00.000Z" },
-        { ...VALID, id: "today", dueDate: "2026-10-21T08:00:00.000Z" },
-        { ...VALID, id: "week", dueDate: "2026-10-24T18:00:00.000Z" },
-        { ...VALID, id: "later", dueDate: "2026-11-02T18:00:00.000Z" },
-        { ...VALID, id: "done", dueDate: "2026-10-20T18:00:00.000Z", done: true },
+        { ...VALID, id: "lundi", dueDate: "2026-10-19T08:00:00.000Z" },
+        { ...VALID, id: "aujourdhui-passe", dueDate: "2026-10-21T08:00:00.000Z" },
+        { ...VALID, id: "aujourdhui-a-venir", dueDate: "2026-10-21T16:00:00.000Z" },
+        { ...VALID, id: "samedi", dueDate: "2026-10-24T18:00:00.000Z" },
+        { ...VALID, id: "semaine-suivante", dueDate: "2026-10-26T08:00:00.000Z" },
       ]),
     ).items;
-    const sections = assignmentSections(items, NOW);
-    expect(sections.map((section) => section.id)).toEqual(["overdue", "today", "week", "later", "done"]);
-    expect(sections.map((section) => section.items.map((item) => item.id))).toEqual([
-      ["late"],
-      ["today"],
-      ["week"],
-      ["later"],
-      ["done"],
+
+    const courante = assignmentSections(items, CURRENT_WEEK, NOW);
+    expect(courante.map((section) => section.id)).toEqual(["overdue", "today", "week", "later"]);
+    expect(courante.map((section) => section.items.map((item) => item.id))).toEqual([
+      ["aujourdhui-passe"],
+      ["aujourdhui-a-venir"],
+      ["lundi", "samedi"],
+      ["semaine-suivante"],
     ]);
+    expect(courante.find((section) => section.id === "week")?.title).toBe("Cette semaine");
+
+    // Semaine suivante affichée : plus de « Aujourd'hui », le devoir de
+    // lundi 26 octobre entre dans la semaine affichée.
+    const suivante = assignmentSections(items, "2026-10-26", NOW);
+    expect(suivante.map((section) => section.id)).toEqual(["overdue", "week"]);
+    expect(suivante.find((section) => section.id === "week")?.items.map((item) => item.id)).toEqual([
+      "semaine-suivante",
+    ]);
+    expect(suivante.find((section) => section.id === "week")?.title).toBe("Semaine 44");
+  });
+
+  test("une semaine passée : « En retard » avant la semaine, la semaine à l'intérieur", () => {
+    const items = parseAssignmentsPayload(
+      payload([
+        { ...VALID, id: "avant", dueDate: "2026-10-08T08:00:00.000Z" },
+        { ...VALID, id: "dedans", dueDate: "2026-10-14T08:00:00.000Z" },
+        { ...VALID, id: "apres", dueDate: "2026-10-21T08:00:00.000Z" },
+      ]),
+    ).items;
+    const sections = assignmentSections(items, "2026-10-12", NOW);
+    // Pas de « Aujourd'hui » pour une semaine passée : la journée en cours
+    // est simplement « Plus tard » pour cette semaine-là.
+    expect(sections.map((section) => section.id)).toEqual(["overdue", "week", "later"]);
+    expect(sections.map((section) => section.items.map((item) => item.id))).toEqual([
+      ["avant"],
+      ["dedans"],
+      ["apres"],
+    ]);
+  });
+
+  test("chaque devoir reste visible une fois et une seule, quelle que soit la semaine", () => {
+    const items = parseAssignmentsPayload(
+      payload([
+        { ...VALID, id: "lundi", dueDate: "2026-10-19T08:00:00.000Z" },
+        { ...VALID, id: "mardi", dueDate: "2026-10-20T08:00:00.000Z" },
+        { ...VALID, id: "aujourdhui", dueDate: "2026-10-21T08:00:00.000Z" },
+        { ...VALID, id: "vendredi", dueDate: "2026-10-23T08:00:00.000Z" },
+        { ...VALID, id: "plus-tard", dueDate: "2026-11-02T08:00:00.000Z" },
+        { ...VALID, id: "sans-echeance", dueDate: "illisible" },
+        { ...VALID, id: "fait", dueDate: "2026-10-21T08:00:00.000Z", done: true },
+      ]),
+    ).items;
+    for (const week of ["2026-10-05", "2026-10-12", "2026-10-19", "2026-10-26", "2026-11-02"]) {
+      const sections = assignmentSections(items, week, NOW);
+      const ids = sections.flatMap((section) => section.items.map((item) => item.id));
+      expect(new Set(ids).size).toBe(ids.length);
+      expect([...ids].sort()).toEqual(items.map((item) => item.id).sort());
+    }
   });
 
   test("le fait prime sur la date et une date illisible reste visible sans échéance", () => {
@@ -204,7 +260,7 @@ describe("web tâches — sections", () => {
         { ...VALID, id: "undated", dueDate: "illisible" },
       ]),
     ).items;
-    const sections = assignmentSections(items, NOW);
+    const sections = assignmentSections(items, CURRENT_WEEK, NOW);
     expect(sections.map((section) => section.id)).toEqual(["undated", "done"]);
     expect(sections[0]?.items[0]?.id).toBe("undated");
     expect(sections[1]?.items[0]?.id).toBe("future-done");
@@ -213,11 +269,13 @@ describe("web tâches — sections", () => {
   test("trie chaque section par échéance", () => {
     const items = parseAssignmentsPayload(
       payload([
-        { ...VALID, id: "b", dueDate: "2026-10-21T18:00:00.000Z" },
-        { ...VALID, id: "a", dueDate: "2026-10-21T08:00:00.000Z" },
+        { ...VALID, id: "b", dueDate: "2026-10-24T18:00:00.000Z" },
+        { ...VALID, id: "a", dueDate: "2026-10-24T08:00:00.000Z" },
       ]),
     ).items;
-    expect(assignmentSections(items, NOW)[0]?.items.map((item) => item.id)).toEqual(["a", "b"]);
+    const sections = assignmentSections(items, CURRENT_WEEK, NOW);
+    expect(sections[0]?.id).toBe("week");
+    expect(sections[0]?.items.map((item) => item.id)).toEqual(["a", "b"]);
   });
 });
 
@@ -292,6 +350,25 @@ describe("web tâches — navigation de semaine", () => {
     expect(components).toContain('aria-label="Semaine précédente"');
     expect(components).toContain('aria-label="Semaine suivante"');
     expect(source).not.toContain("bounds && displayStart");
+  });
+
+  test("l'écran regroupe les devoirs sur la semaine AFFICHÉE (#567)", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "features", "tasks", "TasksScreen.tsx"),
+      "utf8",
+    );
+    // Les sections suivent l'en-tête : la semaine affichée, pas « maintenant ».
+    expect(source).toContain("assignmentSections(items, week, new Date())");
+  });
+
+  test("le bouton de retour annonce la semaine courante, pas « Cette semaine » (#567)", () => {
+    const components = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "ui", "components.tsx"),
+      "utf8",
+    );
+    expect(components).toContain("Semaine courante");
+    expect(components).not.toContain("Cette semaine");
+    expect(components).toContain('aria-label="Revenir à la semaine courante"');
   });
 });
 
