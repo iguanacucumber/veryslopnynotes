@@ -28,7 +28,7 @@ import {
   type AveragesReport,
   type Grade,
 } from "../../web/src/features/grades/model";
-import { GradesNoData, GradesScreen, GradesSubjectSections } from "../../web/src/features/grades/components";
+import { GradesNoData, GradesScreen, GradesSubjectSections, Sparkline } from "../../web/src/features/grades/components";
 import {
   invalidateOnRequestChange,
   requestId,
@@ -410,6 +410,69 @@ describe("sparkline", () => {
     expect(sparklineAverageY([12, 12, 12], 88)).toBeNull();
     expect(sparklineAverageY([10, 20], 0)).toBeNull();
     expect(sparklineAverageY([null, null], 88)).toBeNull();
+  });
+});
+
+// #568 : la courbe de moyenne s'affichait DÉFORMÉE.
+//
+// Le `viewBox` était un cadre fixe (320×96) étiré par
+// `preserveAspectRatio="none"` sur toute la largeur de la carte : la courbe
+// était tirée en largeur (tendance aplatie) et la pastille — un REMPLISSAGE
+// sur lequel `vector-effect` n'agit pas — devenait une ELLIPSE. Le dessin
+// est RENDU (`react-dom/server`) : c'est ce que l'élève voit.
+describe("sparkline — le dessin reste net, quelle que soit la largeur (#568)", () => {
+  const VALUES = [10, 12, 11, 15, 14, 18];
+  const CSS = readFileSync(join(ROOT, "web/src/features/grades/grades.css"), "utf8");
+
+  function render(width: number): string {
+    return renderToStaticMarkup(createElement(Sparkline, { values: VALUES, width }));
+  }
+
+  test("le viewBox suit la largeur mesurée : plus d'échelle non uniforme", () => {
+    const html = render(480);
+    // Le cadre est en pixels réels : l'échelle du dessin est 1:1.
+    expect(html).toContain('viewBox="0 0 480 96"');
+    // Le point final est au bord droit : la courbe occupe toute la largeur.
+    expect(html).toContain('cx="480"');
+    // L'étirement non uniforme est la cause de la déformation : il n'y est plus.
+    expect(html).not.toContain('preserveAspectRatio="none"');
+  });
+
+  test("la pastille et son halo ne s'appuient pas sur `vector-effect`", () => {
+    const html = render(480);
+    // `vector-effect` ne s'applique qu'aux TRAITS : sur un remplissage il ne
+    // fait rien — la pastille suivait l'étirement au lieu de rester ronde.
+    expect(html).not.toContain("vector-effect");
+    expect(html).not.toContain("non-scaling-stroke");
+    // Le remplissage est bien là (une pastille, pas un contour).
+    expect(html).toContain('class="grades-chart__dot"');
+    expect(html).toContain('r="3.5"');
+  });
+
+  test("le tracé progressif couvre TOUTE la courbe", () => {
+    const html = render(480);
+    // `pathLength={1}` : une unité de trait = la courbe entière.
+    expect(html).toContain('pathLength="1"');
+    const rule = /\.grades-chart__line\s*\{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? "";
+    // Les COMMENTAIRES ne sont pas des déclarations.
+    const declarations = rule.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(declarations).toContain("stroke-dasharray: 1");
+    expect(declarations).toContain("stroke-dashoffset: 1");
+    // Un trait non scalable ramène les cotes à l'écran : le tracé ne
+    // couvrirait plus la courbe entière.
+    expect(declarations).not.toContain("non-scaling-stroke");
+  });
+
+  test("le graphique s'assemble en un seul geste", () => {
+    const block = CSS.slice(CSS.indexOf(".grades-chart {"), CSS.indexOf("@keyframes chart-draw"));
+    const delays = [...block.matchAll(/animation:\s*[^;]+;/g)].map((match) => {
+      const times = [...match[0].matchAll(/(\d+)ms/g)].map((time) => Number(time[1]));
+      return times[1] ?? 0;
+    });
+    expect(delays.length).toBe(5);
+    // Toutes les pièces partent ensemble : plus de « montage » d'une seconde
+    // où la ligne flottait seule.
+    expect(Math.max(...delays)).toBeLessThanOrEqual(600);
   });
 });
 
