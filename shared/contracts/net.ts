@@ -140,8 +140,15 @@ function isBlockedIPv6(g: readonly number[]): boolean {
   if (zero(0, 6) && (g[7] ?? 0) === 1) return true; // ::1 (loopback)
   if (zero(0, 4) && (g[5] ?? 0) === 0xffff) return isBlockedIPv4(ipv6TailToIPv4(g)); // ::ffff:a.b.c.d
   if (zero(0, 5)) return isBlockedIPv4(ipv6TailToIPv4(g)); // ::a.b.c.d (déprécié)
-  if ((g[0] ?? 0) === 0x0064 && (g[1] ?? 0) === 0xff9b && zero(2, 5)) {
-    return isBlockedIPv4(ipv6TailToIPv4(g)); // 64:ff9b::/96 (NAT64)
+  if ((g[0] ?? 0) === 0x0064 && (g[1] ?? 0) === 0xff9b) {
+    // 64:ff9b:1::/48 — NAT64 « local-use » (RFC 8215) : préfixe NON GLOBAL,
+    // qui n'atteint qu'un réseau local — et y embedde le loopback ou le
+    // RFC1918 du réseau (les deux formes d'embarquement : derniers 32 bits ou
+    // groupes 3-4, RFC 6052). Fail-closed : tout le préfixe est refusé, on
+    // ne devine pas la forme. Le préfixe BIEN CONNU 64:ff9b::/96, lui, est
+    // public par nature : on y regarde l'IPv4 embarqué.
+    if ((g[2] ?? 0) === 0x0001) return true;
+    if (zero(2, 5)) return isBlockedIPv4(ipv6TailToIPv4(g)); // 64:ff9b::/96 (NAT64)
   }
   if ((g[0] ?? 0) === 0x2002) {
     // 6to4 : IPv4 embarqué dans les groupes 1-2.

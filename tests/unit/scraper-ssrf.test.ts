@@ -223,10 +223,20 @@ describe("garde SSRF : hôte privé/interne refusé (#362)", () => {
       "http://[::]/",
       "http://[0:0:0:0:0:ffff:127.0.0.1]/",
       "http://[64:ff9b::7f00:1]/",
+      // #531 : NAT64 « local-use » (RFC 8215) — le préfixe n'est pas global,
+      // il n'atteint qu'un réseau local : les deux formes d'embarquement de
+      // l'IPv4 y pointent le loopback du réseau.
+      "http://[64:ff9b:1::7f00:1]/",
+      "http://[64:ff9b:1:7f00:1::]/",
+      "http://[64:ff9b:1::]/",
       "http://user:pass@127.0.0.1/",
     ]) {
       expect(isPublicHttpUrl(url)).toBe(false);
     }
+    // Le NAT64 BIEN CONNU reste public si l'IPv4 embarqué l'est : un réseau
+    // NAT64 légitime doit pouvoir atteindre un site public.
+    expect(isBlockedHost("64:ff9b::808:808")).toBe(false);
+    expect(isBlockedHost("64:ff9b::7f00:1")).toBe(true);
     // Le userinfo ne doit pas servir de leurre : l'hôte reste le vrai.
     expect(isPublicHttpUrl("http://127.0.0.1:80@editeur.example.invalid/")).toBe(true);
   });

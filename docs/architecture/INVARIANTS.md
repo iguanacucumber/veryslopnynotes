@@ -116,7 +116,9 @@ serveur** : le corps ne peut plus en demander le nom — un nom de jar suffisait
 l'isolation, #538 et I24). La navigation est gardée (`shared/contracts/net.ts`
 + `server/infrastructure/ssrf.ts` + `server/infrastructure/manuals-scrape.ts`) :
 hôte privé/interne refusé (IP littérale, entière, hexadécimale, IPv4-mapped
-IPv6, ULA, link-local, métadonnées), **nom d'hôte RÉSOLU avant la navigation**
+IPv6, ULA, link-local, métadonnées, **NAT64 local-use `64:ff9b:1::/48`
+(RFC 8215) : préfixe non global, fail-closed — tout le préfixe est refusé**),
+**nom d'hôte RÉSOLU avant la navigation**
 (chaque adresse obtenue est testée contre les plages privées : un nom public
 qui pointe vers une IP interne — rebinding — est refusé, motif explicite
 `403 private_host` ; un nom introuvable est refusé aussi, `502
