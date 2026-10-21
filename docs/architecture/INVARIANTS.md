@@ -486,3 +486,18 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Commande : `make check`.
 - Emplacement : `Makefile` (cibles `check-run` / `check`),
   `agents/runtime/check.ts` (environnement des make enfants).
+
+## I23 — L'image du scraper n'est ni root ni en clair
+- Invariant : l'image Docker du scraper tourne sous un utilisateur NON
+  PRIVILÉGIÉ (le jar de session lui appartient, pas à root) et REFUSE de
+  démarrer sans `TLS_CERT_FILE`/`TLS_KEY_FILE` : le service est sans
+  authentification (I8), il ne doit jamais être joignable en CLAIR. Elle ne
+  force pas `HOST` : l'exposition hors du conteneur est une décision EXPLICITE
+  de l'opérateur, comme pour `make runServer` (boucle locale par défaut).
+  L'image est donc alignée sur `make runServer` : TLS obligatoire, exposition
+  décidée, jamais de repli silencieux en clair (#533).
+- Test : `tests/unit/server-image-playwright.test.ts` (USER non root, jar
+  appartenant à cet utilisateur, TLS obligatoire dans le CMD, pas de `HOST`
+  forcé, `HOME` de l'utilisateur).
+- Commande : `make check`.
+- Emplacement : `Dockerfile.server`, `server/README.md`, `docs/RELEASE.md`.

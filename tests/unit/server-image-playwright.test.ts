@@ -121,3 +121,61 @@ describe("#374 — image Docker : le navigateur est installé au build", () => {
     }
   });
 });
+
+// #533 : l'image Docker du scraper tournait en ROOT, en CLAIR, sur toutes les
+// interfaces — un point d'entrée sans authentification (I8) qui pilote
+// Chromium, joignable depuis tout le réseau du conteneur.
+//
+// L'image est alignée sur `make runServer` : TLS obligatoire (un échec de
+// préparation arrête le lancement, jamais de repli en clair), et exposition
+// décidée par l'opérateur (127.0.0.1 par défaut).
+describe("#533 — l'image Docker n'est ni root ni en clair", () => {
+  const dockerfile = readFileSync(join(ROOT, "Dockerfile.server"), "utf8");
+  const lines = dockerfile.split("\n");
+  /** Les directives `USER` de l'image (la dernière est celle qui s'applique). */
+  const users = lines
+    .filter((l) => /^\s*USER\b/.test(l))
+    .map((l) => l.replace(/^\s*USER\s+/, "").trim());
+  /** Le CMD de l'image (forme exec ou shell). */
+  const cmd = lines.filter((l) => /^\s*CMD\b/.test(l)).join("\n");
+
+  test("elle tourne sous un utilisateur NON privilégié", () => {
+    expect(users.length).toBeGreaterThan(0);
+    for (const user of users) {
+      expect(user).not.toBe("root");
+      // uid 0 = root, écrit en toutes lettres.
+      expect(user).not.toMatch(/^0\b/);
+    }
+  });
+
+  test("le jar de session appartient à cet utilisateur (pas de fichier root)", () => {
+    const user = users.at(-1)!;
+    // Le jar est ÉCRIT par le scraper : son répertoire doit lui appartenir,
+    // sinon le scraper non-root ne peut pas persister la session.
+    expect(dockerfile).toContain("playwright/.auth");
+    expect(dockerfile).toMatch(new RegExp(`chown[^\\n]*${user}`));
+  });
+
+  test("le TLS est obligatoire : pas de repli en clair (le service est sans auth, I8)", () => {
+    expect(cmd).toContain("TLS_CERT_FILE");
+    expect(cmd).toContain("TLS_KEY_FILE");
+    // Le garde REFUSE (exit 1) : sans couple, le service ne démarre pas.
+    expect(cmd).toMatch(/exit 1/);
+  });
+
+  test("elle ne force pas HOST : l'exposition est une décision explicite", () => {
+    // `make runServer` écoute sur la boucle locale par défaut ; l'image
+    // fait pareil (le serveur boucle par défaut) : exposer le conteneur
+    // (`-e HOST=0.0.0.0`) reste un choix de l'opérateur, sur un réseau de
+    // confiance (le service est sans auth).
+    expect(dockerfile).not.toMatch(/^\s*ENV\s+HOST\s*=/m);
+  });
+
+  test("le HOME est celui de l'utilisateur (sinon Chromium n'écrit rien)", () => {
+    // Sans HOME explicite, le process hériterait de /root : le profil
+    // Chromium et le jar de session seraient inaccessibles.
+    const home = /^\s*ENV\s+HOME=(\S+)/m.exec(dockerfile)?.[1];
+    expect(home).toBeTruthy();
+    expect(home).toMatch(/^\/home\//);
+  });
+});
