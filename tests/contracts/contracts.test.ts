@@ -71,6 +71,15 @@ describe("contracts", () => {
     expect(health).not.toContain("'504':");
   });
 
+  // #526 : le contrat reflète l'usage RÉEL des identifiants — le scraper ne
+  // s'authentifie pas (la session est celle du serveur) : les identifiants ne
+  // sont PLUS exigés, et le serveur refuse un corps qui les porte (400).
+  test("openapi : les identifiants de portail ne sont plus requis", () => {
+    const raw = readFileSync(OPENAPI, "utf8");
+    expect(raw).toContain("required: [platform, startUrl]");
+    expect(raw).not.toContain("required: [platform, username, password, startUrl]");
+  });
+
   test("sonde : valide OK, invalides rejetés", () => {
     expect(isHealthResponse({ status: "ok", version: CONTRACTS_VERSION })).toBe(true);
     expect(isHealthResponse({ status: "ko", version: CONTRACTS_VERSION })).toBe(false);
@@ -80,12 +89,13 @@ describe("contracts", () => {
   test("scrape : gardes requête/réponse", () => {
     const body = {
       platform: "editeur-fake",
-      username: "u",
-      password: "p",
       startUrl: "https://manuels.example.invalid/6e/maths",
     };
     expect(isManualsScrapeRequest(body)).toBe(true);
-    expect(isManualsScrapeRequest({ ...body, password: "" })).toBe(false);
+    // #526 : les identifiants de portail ne sont PLUS exigés (le scraper ne
+    // s'authentifie pas : la session est celle du serveur). Le contrat les
+    // ignore ; c'est le SERVEUR qui refuse un corps qui les porte.
+    expect(isManualsScrapeRequest({ ...body, username: "u", password: "p" })).toBe(true);
     expect(isManualsScrapeRequest({ ...body, startUrl: "ftp://hote.invalid/x" })).toBe(false);
     expect(isManualsScrapeRequest(null)).toBe(false);
     const doc = {

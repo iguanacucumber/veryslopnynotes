@@ -20,8 +20,6 @@ const FAKE_DOC = {
 function scrapeBody(overrides: Record<string, unknown> = {}) {
   return {
     platform: syntheticManualAccount.platform,
-    username: syntheticManualAccount.username,
-    password: syntheticManualAccount.password,
     startUrl: "https://manuels.example.invalid/6e/maths",
     ...overrides,
   };
@@ -144,11 +142,7 @@ describe("plafond de concurrence du scraper (#363)", () => {
     // Aucun Chromium lancé : le refus part avant l'import de Playwright.
     await expect(
       scrapeManuals(
-        {
-          platform: syntheticManualAccount.platform,
-          username: syntheticManualAccount.username,
-          password: syntheticManualAccount.password,
-        },
+        { platform: syntheticManualAccount.platform },
         { startUrl: "https://manuels.example.invalid/6e/maths", signal: ac.signal },
       ),
     ).rejects.toThrow(/annul/);
