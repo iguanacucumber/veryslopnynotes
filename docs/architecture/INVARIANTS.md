@@ -110,9 +110,10 @@ le dépôt, les variables serveur ou les logs.
 **Exception de sécurité :** `POST /v1/manuals/scrape` est volontairement sans
 authentification. Il reçoit les identifiants du portail de manuels et une URL
 dans le corps de la requête, sans les journaliser ; Playwright réutilise un
-cookie jar local gitignoré (`playwright/.auth/manuals.json`) dont le chemin
-n'est **plus** choisi par l'appelant (seulement le nom du jar : le serveur
-impose son répertoire, #362). La navigation est gardée (`shared/contracts/net.ts`
+cookie jar local gitignoré (`playwright/.auth/manuals.json`) **choisi par le
+serveur** : le corps ne peut plus en demander le nom — un nom de jar suffisait
+à appeler la session d'un autre tenant (le répertoire était imposé, pas
+l'isolation, #538 et I24). La navigation est gardée (`shared/contracts/net.ts`
 + `server/infrastructure/ssrf.ts` + `server/infrastructure/manuals-scrape.ts`) :
 hôte privé/interne refusé (IP littérale, entière, hexadécimale, IPv4-mapped
 IPv6, ULA, link-local, métadonnées), **nom d'hôte RÉSOLU avant la navigation**
@@ -501,3 +502,20 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   forcé, `HOME` de l'utilisateur).
 - Commande : `make check`.
 - Emplacement : `Dockerfile.server`, `server/README.md`, `docs/RELEASE.md`.
+
+## I24 — Le jar de session est choisi par le serveur
+- Invariant : le cookie jar Playwright monté par le navigateur est celui du
+  SERVEUR. Le corps de la requête ne peut plus en demander le NOM : le
+  répertoire était imposé (#362), mais pas l'isolation — un nom de jar
+  suffisait à appeler la session d'un AUTRE tenant (le nom ne se déduisait pas
+  du contenu de la session, il l'appelait). Le champ `authFile` a donc
+  disparu du contrat, et un corps qui le porte est REFUSÉ (400, message
+  dédié) : le jar n'est pas un paramètre de requête.
+- Test : `tests/unit/scraper-ssrf.test.ts` (un corps qui demande un jar est
+  refusé — ni navigateur, ni jar monté, rien d'écrit ; le seul jar monté est
+  celui du serveur) + `tests/unit/scraper-only.test.ts` (le scrape part avec
+  le jar du serveur) + `tests/contracts/contracts.test.ts` (le contrat ne
+  déclare plus le champ).
+- Commande : `make check`.
+- Emplacement : `shared/contracts/api.ts`, `shared/contracts/api.openapi.yaml`,
+  `server/infrastructure/http.ts`, `server/infrastructure/manuals-scrape.ts`.

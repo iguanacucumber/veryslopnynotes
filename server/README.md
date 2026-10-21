@@ -37,8 +37,9 @@ un lancement local sans couple TLS sert en clair et le dit bruyamment
 Garde-fous côté serveur (#362) : la navigation ne va que vers un hôte public
 (IP privée refusée, forme IPv4-mapped IPv6 comprise), la chaîne de
 redirections est vérifiée avant le navigateur et l'URL finale après ; le
-chemin du cookie jar n'est plus fourni par l'appelant (seulement son nom, dans
-`playwright/.auth/`).
+cookie jar n'est plus fourni par l'appelant : c'est le SERVEUR qui choisit
+le sien (#538 — le corps ne peut plus en demander le nom, ce qui appelait la
+session d'un autre tenant).
 
 Le nom de l'hôte est aussi RÉSOLU (#419) : un nom public qui pointe vers une
 IP interne (rebinding DNS) est refusé avant la navigation, avec un motif
