@@ -18,7 +18,7 @@
 //    PR #114, invisible ici), toute sémantique d'expression.
 // ponytail: lecture mot à mot, pas de parser Kotlin ni de résolution de types ; un class-like
 //    sans corps (`class A : B`) est invisible. Upgrade: ktlint (le compilateur, lui, est déjàbranché : `make android-compile`).
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -322,6 +322,21 @@ const failures = files.flatMap(checkFile);
 if (failures.length) {
   console.error("check-kotlin FAIL:");
   for (const f of failures) console.error(" - " + f);
+  process.exit(1);
+}
+
+// #532 : un scanner sans fichiers à scanner n'a rien vérifié. Avant, un
+// répertoire absent (renommé, déplacé) rendait le script « OK (0 fichiers) » :
+// le garde-fou devenait vacuously vrai, et chaque étape du gate annonçait
+// « OK » sans avoir lu une ligne de Kotlin. Un répertoire vide est un ÉCHEC
+// bruyant, pas un « OK ».
+if (files.length === 0) {
+  console.error(`check-kotlin FAIL: aucun fichier .kt/.kts à vérifier dans ${TARGET}`);
+  console.error(
+    existsSync(TARGET)
+      ? "  répertoire présent mais vide — rien n'a été scanné."
+      : "  répertoire ABSENT — rien n'a été scanné.",
+  );
   process.exit(1);
 }
 console.log(`check-kotlin OK (${files.length} fichiers .kt/.kts)`);
