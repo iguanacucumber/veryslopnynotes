@@ -199,4 +199,34 @@ describe("check-kotlin", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  // #532 : un scanner sans fichiers à scanner n'a rien vérifié. Avant, un
+  // répertoire absent rendait « check-kotlin OK (0 fichiers) » : le garde-fou
+  // devenait vacuously vrai, et chaque étape du gate annonçait « OK » sans
+  // avoir lu une ligne de Kotlin.
+  test("un répertoire ABSENT = ÉCHEC bruyant, pas « OK (0 fichiers) »", () => {
+    const dir = join(tmpdir(), "check-kotlin-absent-xyz");
+    const p = Bun.spawnSync(["bun", "run", SCRIPT, dir], { cwd: ROOT, stderr: "pipe" });
+    const out = p.stderr.toString() + p.stdout.toString();
+    expect(p.exitCode).toBe(1);
+    expect(out).toContain("check-kotlin FAIL");
+    expect(out).toContain("aucun fichier .kt/.kts");
+    expect(out).toContain("ABSENT");
+    // Jamais le faux vert.
+    expect(out).not.toContain("check-kotlin OK");
+  });
+
+  test("un répertoire VIDE = ÉCHEC bruyant, pas « OK (0 fichiers) »", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-kotlin-vide-"));
+    try {
+      const p = Bun.spawnSync(["bun", "run", SCRIPT, dir], { cwd: ROOT, stderr: "pipe" });
+      const out = p.stderr.toString() + p.stdout.toString();
+      expect(p.exitCode).toBe(1);
+      expect(out).toContain("check-kotlin FAIL");
+      expect(out).toContain("aucun fichier .kt/.kts");
+      expect(out).not.toContain("check-kotlin OK");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
