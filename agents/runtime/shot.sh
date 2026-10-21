@@ -467,8 +467,23 @@ fiches|Fiches de révision|Fiches disponibles;Aucune fiche
 '
 
 # Ligne de la table d'une route. Vide = route inconnue (donc absente des 14).
+#
+# #536 : la route est comparée LITTÉRALEMENT (le premier champ `|`, `=`
+# exact), jamais par une EXPRESSION RÉGULIÈRE. Interpolée dans un `grep -E`,
+# elle passait la liste blanche : `ROUTE='.*'` matchait la PREMIÈRE ligne de la
+# table (`index|Accueil`), donc une route INCONNUE était acceptée, la capture
+# était rangée sous `.*.png` et la vérification de titre comparait l'accueil à
+# l'accueil — le script annonçait une capture « vérifiée » d'un écran qui
+# n'est pas la route demandée. Le mot `|` échappé (`\|`) ne change rien : le
+# route DOIT être le premier champ entier, `index|Accueil` ne l'est pas.
 witness_row() {
-    printf '%s\n' "$ROUTE_WITNESSES" | grep -E "^$1[|]" | head -1 || true
+    local route="$1" line
+    while IFS= read -r line; do
+        [ "${line%%|*}" = "$route" ] || continue
+        printf '%s\n' "$line"
+        break
+    done <<< "$ROUTE_WITNESSES"
+    return 0
 }
 
 # Titre de barre du haut attendu pour la route, "" si elle est inconnue.
@@ -493,7 +508,14 @@ route_known() {
 # Ligne DU FICHIEL où vit le marqueur : le message d'échec la nomme, donc on ne
 # laisse pas deviner où le changer.
 witness_line() {
-    grep -n -E "^$1[|]" "$RUNTIME_DIR/shot.sh" | head -1 | cut -d: -f1 || true
+    local route="$1" n=0 line
+    while IFS= read -r line; do
+        n=$((n + 1))
+        [ "${line%%|*}" = "$route" ] || continue
+        printf '%s\n' "$n"
+        break
+    done < "$RUNTIME_DIR/shot.sh"
+    return 0
 }
 
 # Le bouton que seul l'écran Profil affiche (ProfileRoute). TIRÉ DE LA TABLE,
