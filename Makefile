@@ -1,4 +1,4 @@
-.PHONY: check check-fast watch lint audit typecheck unit architecture contracts check-kotlin android-compile web web-typecheck web-build web-test web-smoke runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
+.PHONY: check check-run check-fast watch lint audit typecheck unit architecture contracts check-kotlin android-compile web web-typecheck web-build web-test web-smoke runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
 
 # Découverte JDK/SDK partagée par android-compile, buildDebugApk, buildRelApk :
 # une seule implémentation, sinon une des trois finit par oublier la borne 17-21.
@@ -18,8 +18,36 @@ ANDROID_ENV = . agents/runtime/android-env.sh
 # sans une ligne de production Kotlin exécutée (I4/I5/I6/I12/I14/I16/I18/
 # I19/I20/I21 non vérifiées) — un faux vert. L'itération (`check-fast`, `watch`)
 # garde le SKIP bruyant : le gate est strict, la boucle reste rapide.
-check:
-	CHECK_HARNESS= ALLOW_SKIP_ANDROID= REQUIRE_KOTLIN_TOOLCHAIN=1 bun run agents/runtime/check.ts
+#
+# `MAKEFLAGS=` : `-i` (ou `MAKEFLAGS=-i`) fait IGNORER l'échec d'une RECETTE
+# par make — un gate ROUGE devenait VERT (#523). Le harnais repart d'un
+# environnement sans options make, et neutralise la même variable pour SES
+# make enfants (une étape par enfant).
+#
+# LE GATE EST EN DEUX PHASES (`check-run` puis `check`). `-i` ignore l'échec
+# d'une recette, mais PAS une erreur de MAKE : `check-run` lance le harnais
+# et ÉCRIT son code de sortie, `check` REFUSE tout code ≠ 0 par `$(error)`.
+# Donc `MAKEFLAGS=-i make check` sort NON-ZÉRO si le gate est rouge, et
+# `agents/ship.sh` (en `set -e`) s'arrête avant d'écrire « `make check` : OK ».
+#
+# Le statut est EFFACÉ avant chaque run : un statut resté d'un gate VERT ne
+# peut pas valider un gate qui n'a pas tourné (pas de statut = ÉCHEC).
+GATE_STATUS = $(CURDIR)/node_modules/.cache/gate-status
+
+# Phase 1 : le harnais tourne, son code de sortie est ÉCRIT. La recette se
+# termine par `echo` (succès) : make n'y voit aucun échec, mais le code est
+# là, et c'est lui qui décide (phase 2).
+check-run:
+	@mkdir -p $(dir $(GATE_STATUS)); rm -f $(GATE_STATUS); \
+	 MAKEFLAGS= CHECK_HARNESS= ALLOW_SKIP_ANDROID= REQUIRE_KOTLIN_TOOLCHAIN=1 bun run agents/runtime/check.ts; \
+	 echo $$? > $(GATE_STATUS)
+
+# Phase 2 : le VERDICT. `$(error)` est une erreur de MAKE, pas de recette :
+# `-i` ne l'ignore pas. Sans statut, le gate n'A PAS TOURNÉ — c'est un
+# ÉCHEC, jamais un vert.
+check: check-run
+	$(if $(wildcard $(GATE_STATUS)),,$(error gate NON EXÉCUTÉ : aucun statut — le gate n'a pas tourné))
+	$(if $(filter 0,$(shell cat $(GATE_STATUS))),,$(error gate ROUGE : code de sortie $(shell cat $(GATE_STATUS))))
 
 # Boucle interne : tout sauf la compilation Gradle (~2,1 s à chaud). Le build
 # Vite est inclus ; ce n'est PAS le gate de merge — `make check` ajoute

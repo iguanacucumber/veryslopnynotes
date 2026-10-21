@@ -27,9 +27,15 @@
 // faire passer le gate en vert (#368).
 // `--plan` : affiche le plan résolu et sort SANS lancer les étapes (lecture du
 // plan, jamais un gate).
-import { join } from "node:path";
+//
+// MAKEFLAGS (#523) : chaque étape est un `make` ENFANT, et `make -i` (ou
+// `MAKEFLAGS=-i`) fait IGNORER l'échec d'une recette : l'enfant rendrait une
+// étape ROUGE verte. Les enfants sont donc lancés SANS `MAKEFLAGS` — les
+// seules options sont celles qu'on passe en ligne de commande.
+import { join, resolve } from "node:path";
 
-const ROOT = join(import.meta.dir, "..", "..");
+// ponytail: racine en argument pour le test (fixture temporaire), défaut dépôt.
+const ROOT = process.argv[2] ? resolve(process.argv[2]) : join(import.meta.dir, "..", "..");
 
 /** Ordre de départ : le plus long d'abord, pour que le dernier fini soit bref.
  *  `web` était une cible unique qui sérialisait typecheck + tests + build
@@ -74,10 +80,25 @@ interface Result {
   stderr: string;
 }
 
+/** Environnement des make ENFANTS : `MAKEFLAGS` NEUTRALISÉ.
+ *
+ *  `make -i` (ou `MAKEFLAGS=-i`) fait IGNORER l'échec d'une recette : sans
+ *  cette neutralisation, une étape ROUGE passait pour verte (#523). On repart
+ *  d'un environnement sans options make — les seules options sont celles
+ *  qu'on passe en ligne de commande. `MFLAGS` (compat BSD) part avec. */
+export function childEnv(env: Record<string, string | undefined> = process.env): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) if (v !== undefined) out[k] = v;
+  delete out["MAKEFLAGS"];
+  delete out["MFLAGS"];
+  return out;
+}
+
 async function run(target: string): Promise<Result> {
   const start = performance.now();
   const p = Bun.spawn(["make", "--no-print-directory", "-s", target], {
     cwd: ROOT,
+    env: childEnv(),
     stdout: "pipe",
     stderr: "pipe",
   });
