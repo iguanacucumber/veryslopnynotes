@@ -1,10 +1,9 @@
 // Scrape manuels via Playwright (issue #25, phase 8).
 // 0.7.0 : le compte éditeur n'est PLUS lu dans l'environnement (le serveur ne
-// détient aucun credential). `ManualsConfig` est fourni par l'appelant — donc
-// la seule façon de l'obtenir est de le faire vivre avec le processus.
-// Aucune URL/credential en dur : startUrl fourni par l'appelant (humain,
-// jamais commité), plateforme = nom symbolique. Playwright en import
-// dynamique optionnel : zéro dépendance ajoutée, e2e skippé sans navigateur.
+// détient aucun credential). Aucune URL/credential en dur : startUrl fourni par
+// l'appelant (humain, jamais commité), plateforme = nom symbolique.
+// Playwright en import dynamique optionnel : zéro dépendance ajoutée, e2e
+// skippé sans navigateur.
 // Contenu retourné = brut à marquer Untrusted (markManualsUntrusted) avant IA.
 // ponytail: squelette extraction texte générique, pas de sélecteurs par éditeur.
 // Upgrade: sélecteurs par plateforme + pagination + PDF-detect si corpus réel.
@@ -32,6 +31,13 @@
 //  mémoire (50 Mo => des centaines de Mo au reparse, x2 scrapes simultanés)
 //  et n'a aucun délai natif (une page qui ne finit pas de streamer survit au
 //  délai HTTP et garde le Chromium vivant).
+// #526 : le scraper NE S'AUTHENTIFIE PAS. Le navigateur monte le jar de
+//  session du SERVEUR (#538/I24) : `username`/`password` n'étaient lus par
+//  AUCUN chemin de code (exigés par le contrat, transmis, puis jetés). Le
+//  contrat ne les exige donc plus, et le serveur REFUSE un corps qui les
+//  porte. Et une PAGE DE CONNEXION (le portail la renvoie en HTTP 200 quand
+//  la session n'est plus valable) n'est JAMAIS ingérée comme un manuel : elle
+//  deviendrait une source citée par l'assistant (« Se connecter »).
 import { join } from "node:path";
 import { load } from "cheerio";
 import { truncateManualText } from "./manuals";
@@ -41,12 +47,15 @@ import type { HostResolver } from "./ssrf";
 
 export interface ManualsConfig {
   readonly platform: string;
-  readonly username: string;
-  readonly password: string;
 }
 
 /** Motif de refus typé : le serveur l'expose à l'appelant (jamais l'URL). */
-export type ScrapeRefusal = "private_host" | "unresolved_host" | "timeout" | "generic";
+export type ScrapeRefusal =
+  | "private_host"
+  | "unresolved_host"
+  | "timeout"
+  | "login_required"
+  | "generic";
 
 export class ScrapeManualsError extends Error {
   /** Motif du refus : `private_host` = garde SSRF (403), `timeout` = 504, `generic` = 502. */
@@ -256,6 +265,31 @@ function stripTags(html: string): string {
     .trim();
 }
 
+/**
+ * La page est-elle un FORMULAIRE DE CONNEXION ? (#526)
+ *
+ * Un portail qui ne reconnaît pas la session renvoie sa page de login en
+ * HTTP 200 : `ok = status < 400` passait, la page devenait un ManualDoc et
+ * l'assistant pouvait la citer comme source (« Se connecter »). Le signal
+ * retenu : un champ MOT DE PASSE — le formulaire d'authentification en a
+ * toujours un, une page de manuel jamais.
+ *
+ * ponytail: un seul signal (le champ mot de passe), pour rester testable
+ * sans connaître le HTML d'un vrai portail. Un portail qui masque son
+ * formulaire (JavaScript) n'est pas détecté : c'est un défaut ACCEPTÉ, pas
+ * un trou silencieux (le refus reste visible : 502 « login_required »).
+ */
+export function isLoginPage(html: string): boolean {
+  const $ = load(html);
+  let login = false;
+  $("input").each((_i, el) => {
+    const type = ($(el).attr("type") ?? "").toLowerCase();
+    const name = ($(el).attr("name") ?? "").toLowerCase();
+    if (type === "password" || name === "password") login = true;
+  });
+  return login;
+}
+
 /** Page Playwright : seule la lecture du HTML nous intéresse ici. */
 interface HtmlPage {
   content: () => Promise<string>;
@@ -310,9 +344,9 @@ async function readHtml(page: HtmlPage, timeoutMs: number, log: (message: string
 
 // Scrape générique v1 : une page -> un ManualDoc (titre + texte).
 // Lève ScrapeManualsError si config incomplète, URL invalide ou navigateur absent.
-// Ne logue jamais username/password, seulement plateforme + compteurs.
+// Ne logue jamais l'URL ni aucun credential : seulement plateforme + compteurs.
 export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOptions): Promise<ManualDoc[]> {
-  if (!config) throw new ScrapeManualsError("manuels non configurés (aucun compte éditeur fourni par l'appelant)");
+  if (!config) throw new ScrapeManualsError("manuels non configurés (plateforme absente)");
   // Annulation AVANT toute résolution DNS : un client parti ne doit pas
   // déclencher de requête réseau.
   if (opts.signal?.aborted) throw new ScrapeManualsError("scrape annulé");
@@ -422,6 +456,17 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     // = plusieurs fois sa taille) et une page qui ne finit pas de streamer
     // bloquait le scrape au-delà du délai HTTP.
     const html = await readHtml(page, opts.contentTimeoutMs ?? CONTENT_TIMEOUT_MS, log);
+    // #526 : une PAGE DE CONNEXION (HTTP 200) n'est JAMAIS un manuel. Avant,
+    // le mur de connexion passait le test HTTP (`ok = status < 400`) et
+    // devenait un ManualDoc — l'assistant le citait comme source. Le refus
+    // arrive AVANT l'extraction ET avant l'écriture du jar : une page de
+    // login ne doit pas non plus écraser la session du serveur.
+    if (isLoginPage(html)) {
+      throw new ScrapeManualsError(
+        "page de connexion detectee (session du scraper a renouveler)",
+        "login_required",
+      );
+    }
     const text = truncateManualText(stripTags(html), 4000);
     await context.storageState({ path: jar }).catch(() => {
       log(`scrape ${config.platform} -> jar non persiste`);

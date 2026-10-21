@@ -1,10 +1,11 @@
 // Scraper-only (#209, #210) : le process ne sert QUE des manuels.
 // Surface : GET /v1/health + POST /v1/manuals/scrape, sans auth. Tout le reste
-// (les 28 chemins métier supprimés en #210) = 404. Credentials portail injectés par l'appelant
-// dans le corps, jamais en env ni commités, jamais journalisés.
+// (les 28 chemins métier supprimés en #210) = 404. Plateforme + URL de départ
+// injectées par l'appelant dans le corps, jamais en env ni commités, jamais
+// journalisées ; les identifiants de portail sont REFUSÉS (#526).
 // Fakes 100 % synthétiques : scrape injecté, aucun navigateur, aucun réseau
 // externe (Bun.serve uniquement sur 127.0.0.1 éphémère pour le client HTTPS).
-import { describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createApp, start } from "../../server/infrastructure/http";
@@ -13,7 +14,8 @@ import {
   isManualsScrapeRequest,
   isManualsScrapeResponse,
 } from "../../shared/contracts/api";
-import { ScrapeManualsError } from "../../server/infrastructure/manuals-scrape";
+import { ScrapeManualsError, isLoginPage, scrapeManuals } from "../../server/infrastructure/manuals-scrape";
+import type { HostResolver } from "../../server/infrastructure/ssrf";
 import { syntheticManualAccount } from "./fixtures/manuals";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -41,15 +43,92 @@ function fakeScrape(docs: unknown[] = [FAKE_DOC]) {
 function scrapeBody(overrides: Record<string, unknown> = {}) {
   return {
     platform: syntheticManualAccount.platform,
-    username: syntheticManualAccount.username,
-    password: syntheticManualAccount.password,
     startUrl: "https://manuels.example.invalid/6e/maths",
     ...overrides,
   };
 }
 
+/** Corps qui PORTE des identifiants : le serveur doit le refuser (#526). */
+function scrapeBodyWithCredentials() {
+  return scrapeBody({
+    username: syntheticManualAccount.username,
+    password: syntheticManualAccount.password,
+  });
+}
+
 const post = (path: string, body: unknown) =>
   new Request(`http://127.0.0.1${path}`, { method: "POST", body: JSON.stringify(body) });
+
+// --- #526 : le VRAI scraper, navigateur MOCKÉ (aucun réseau, aucun Chromium).
+// Le module `playwright` est mocké et le `fetch` global (chaîne de
+// redirections) est stubé : le test joue le bout en bout du scrape.
+const PUBLIC_URL = "https://manuels.example.invalid/6e/maths";
+/** IP publique factice (aucune adresse réelle n'est contactée). */
+const PUBLIC_IP = "93.184.216.34";
+
+/** Page de CONNEXION factice : le portail ne reconnaît pas la session. */
+const LOGIN_HTML = `<html><body><form action="/connexion" method="post">
+  <input type="text" name="username" />
+  <input type="password" name="password" />
+  <button type="submit">Se connecter</button>
+</form></body></html>`;
+
+/** Page de MANUEL factice : aucun champ mot de passe. */
+const MANUAL_HTML =
+  "<html><body><h1>Maths 6e</h1><p>Fractions : un demi, un quart.</p></body></html>";
+
+/** HTML rendu par la page factice (commutable par les tests). */
+let renderedHtml = MANUAL_HTML;
+
+mock.module("playwright", () => ({
+  chromium: {
+    launch: async () => ({
+      newContext: async () => ({
+        newPage: async () => ({
+          url: () => PUBLIC_URL,
+          title: async () => "Titre factice",
+          content: async () => renderedHtml,
+          route: async () => {},
+          goto: async () => ({ status: () => 200, ok: () => true }),
+        }),
+        storageState: async () => {},
+        close: async () => {},
+      }),
+      close: async () => {},
+    }),
+  },
+}));
+
+/** Résolveur FACTICE : aucun DNS réel dans les tests. */
+const PUBLIC_RESOLVER: HostResolver = async (host) => {
+  if (host === "manuels.example.invalid") return [PUBLIC_IP];
+  throw new Error(`ENOTFOUND ${host}`);
+};
+
+let fetchSpy: { mockRestore: () => void } | null = null;
+
+/** Stub du `fetch` global (chaîne de redirections) : aucun réseau réel. */
+function stubFetch(): void {
+  fetchSpy?.mockRestore();
+  fetchSpy = spyOn(globalThis, "fetch").mockImplementation((() =>
+    Promise.resolve(new Response("ok", { status: 200 }))) as unknown as typeof fetch);
+}
+
+afterEach(() => {
+  fetchSpy?.mockRestore();
+  fetchSpy = null;
+  renderedHtml = MANUAL_HTML;
+});
+
+/** Motif de refus du scrape (le message seul ne dit pas tout). */
+async function refusal(promise: Promise<unknown>): Promise<ScrapeManualsError> {
+  try {
+    await promise;
+  } catch (err) {
+    return err as ScrapeManualsError;
+  }
+  throw new Error("le scrape aurait dû être refusé");
+}
 
 describe("scraper-only (#209)", () => {
   test("sonde vivacité sans auth, HEAD sans corps", async () => {
@@ -124,7 +203,7 @@ describe("scraper-only (#209)", () => {
     expect(put.headers.get("allow")).toBe("GET");
   });
 
-  test("scrape : page -> ManualDoc, credentials transmis au scraper sans transiter par un log", async () => {
+  test("scrape : page -> ManualDoc, aucun credential transmis au scraper, rien dans un log", async () => {
     const fake = fakeScrape();
     const app = createApp({ scrape: fake.scrape });
     const logs: string[] = [];
@@ -138,11 +217,9 @@ describe("scraper-only (#209)", () => {
       expect(isManualsScrapeResponse(payload)).toBe(true);
       expect(payload.docs).toHaveLength(1);
       expect(fake.calls).toHaveLength(1);
-      expect(fake.calls[0]?.config).toEqual({
-        platform: syntheticManualAccount.platform,
-        username: syntheticManualAccount.username,
-        password: syntheticManualAccount.password,
-      });
+      // #526 : le scraper ne s'authentifie pas — il ne reçoit QUE la
+      // plateforme (la session est celle du serveur, I24).
+      expect(fake.calls[0]?.config).toEqual({ platform: syntheticManualAccount.platform });
       expect(fake.calls[0]?.opts).toMatchObject({ startUrl: "https://manuels.example.invalid/6e/maths" });
     } finally {
       spy.mockRestore();
@@ -157,7 +234,6 @@ describe("scraper-only (#209)", () => {
     const fake = fakeScrape();
     const app = createApp({ scrape: fake.scrape });
     for (const body of [
-      scrapeBody({ password: undefined }),
       scrapeBody({ startUrl: "ftp://hote.invalid/x" }),
       scrapeBody({ startUrl: "  " }),
       // #538 : le corps ne demande plus de jar — le serveur refuse (400).
@@ -207,7 +283,10 @@ describe("scraper-only (#209)", () => {
     // est choisi par le serveur) : un champ inconnu est ignoré par le
     // contrat, c'est le SERVEUR qui refuse le corps (message dédié).
     expect(isManualsScrapeRequest({ ...scrapeBody(), authFile: "manuel.json" })).toBe(true);
-    expect(isManualsScrapeRequest({ ...scrapeBody(), password: "" })).toBe(false);
+    // #526 : le contrat n'exige PLUS d'identifiants (le scraper ne
+    // s'authentifie pas) et n'en VALIDE aucun : c'est le SERVEUR qui refuse
+    // un corps qui en porte (message dédié, cf. le test #526 plus bas).
+    expect(isManualsScrapeRequest({ ...scrapeBody(), username: "u", password: "p" })).toBe(true);
     expect(isManualsScrapeRequest(null)).toBe(false);
     expect(isManualsScrapeResponse({ docs: [FAKE_DOC] })).toBe(true);
     expect(isManualsScrapeResponse({ docs: [] })).toBe(true);
@@ -288,5 +367,92 @@ describe("scraper-only (#209)", () => {
       warn.mockRestore();
       log.mockRestore();
     }
+  });
+});
+
+// #526 : le scraper NE S'AUTHENTIFIE PAS et une PAGE DE CONNEXION n'est
+// jamais un manuel.
+//
+// Avant : le contrat exigeait `username`/`password`, le serveur les recevait
+// et les transmettait — mais AUCUN chemin de code ne les lisait (le
+// navigateur montait le jar de session du serveur). Un appelant croyait
+// s'authentifier ; le portail, lui, renvoyait sa page de login en HTTP 200 :
+// `ok = status < 400` passait, la page devenait un ManualDoc, et l'assistant
+// pouvait la citer comme source.
+describe("#526 — identifiants refusés, page de connexion jamais ingérée", () => {
+  test("le contrat n'exige plus d'identifiants (usage réel : la session est celle du serveur)", () => {
+    expect(
+      isManualsScrapeRequest({ platform: "editeur-fake", startUrl: "https://manuels.example.invalid/6e/maths" }),
+    ).toBe(true);
+  });
+
+  test("des identifiants dans le corps = 400 dédié, aucun scrape, aucun log", async () => {
+    const fake = fakeScrape();
+    const app = createApp({ scrape: fake.scrape });
+    const logs: string[] = [];
+    const spy = spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      logs.push(args.map((a) => String(a)).join(" "));
+    });
+    try {
+      const res = await app.handler(post("/v1/manuals/scrape", scrapeBodyWithCredentials()));
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { error?: { code?: string; message?: string } };
+      expect(json.error?.code).toBe("bad_request");
+      // Le message NOMME les champs à retirer : l'appelant sait quoi enlever.
+      expect(json.error?.message).toContain("username");
+      expect(json.error?.message).toContain("password");
+      // Aucun scrape lancé : le credential ne va nulle part.
+      expect(fake.calls).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+    // Et il ne finit pas dans un log.
+    const joined = logs.join("\n");
+    expect(joined).not.toContain(syntheticManualAccount.username);
+    expect(joined).not.toContain(syntheticManualAccount.password);
+  });
+
+  test("la détection : un champ mot de passe = page de connexion, un manuel = non", () => {
+    expect(isLoginPage(LOGIN_HTML)).toBe(true);
+    expect(isLoginPage(MANUAL_HTML)).toBe(false);
+    // Le type peut être écrit en majuscules, le nom peut porter la casse.
+    expect(isLoginPage("<html><body><input type='Password'></body></html>")).toBe(true);
+    expect(isLoginPage("<html><body><input name='PASSWORD'></body></html>")).toBe(true);
+    // Un champ qui n'est PAS un mot de passe n'est pas un formulaire de login.
+    expect(isLoginPage("<html><body><input type='text' name='username'></body></html>")).toBe(false);
+  });
+
+  test("une page de connexion (HTTP 200) n'est JAMAIS ingérée comme un manuel", async () => {
+    stubFetch();
+    renderedHtml = LOGIN_HTML;
+    const err = await refusal(
+      scrapeManuals(
+        { platform: syntheticManualAccount.platform },
+        { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER },
+      ),
+    );
+    expect(err).toBeInstanceOf(ScrapeManualsError);
+    expect(err.reason).toBe("login_required");
+    expect(err.message).toMatch(/page de connexion/);
+  });
+
+  test("une vraie page de manuel est toujours ingérée (le refus ne mord pas tout)", async () => {
+    stubFetch();
+    renderedHtml = MANUAL_HTML;
+    const docs = await scrapeManuals(
+      { platform: syntheticManualAccount.platform },
+      { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER },
+    );
+    expect(docs).toHaveLength(1);
+    expect(docs[0]?.excerpt).toContain("Fractions");
+  });
+
+  test("côté HTTP : la page de connexion = 502 login_required (jamais un doc)", async () => {
+    stubFetch();
+    renderedHtml = LOGIN_HTML;
+    const app = createApp({ scrape: scrapeManuals, resolveHost: PUBLIC_RESOLVER });
+    const res = await app.handler(post("/v1/manuals/scrape", scrapeBody()));
+    expect(res.status).toBe(502);
+    expect((await res.json()) as unknown).toMatchObject({ error: { code: "login_required" } });
   });
 });

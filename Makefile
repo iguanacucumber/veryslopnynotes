@@ -254,8 +254,10 @@ buildRelApk:
 # émulateur, cf. android/app/src/main/res/xml/network_security_config.xml).
 # SANS auth (décision utilisateur du 2026-10-11, risque accepté documenté dans
 # server/infrastructure/http.ts) : le process ne sert QUE GET /v1/health +
-# POST /v1/manuals/scrape. Credentials portail injectés par l'appelant dans le
-# corps, jamais en env ni commités. Le certificat auto-signé est généré HORS du
+# POST /v1/manuals/scrape. Plateforme + URL de depart injectees par
+# l'appelant dans le corps, jamais en env ni commites ; les identifiants du
+# portail sont REFUSES (#526 : le scraper ne s'authentifie pas, la session est
+# son cookie jar). Le certificat auto-signé est généré HORS du
 # dépôt et seulement s'il manque (agents/runtime/dev-tls.sh) ; TLS_CERT_FILE /
 # TLS_KEY_FILE fournies par ailleurs (mkcert, Let's Encrypt) sont respectées
 # telles quelles.

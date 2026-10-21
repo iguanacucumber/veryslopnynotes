@@ -12,15 +12,17 @@
 // Tout le reste = 404 : les anciennes routes métier et le chemin de capture TS
 // sont supprimés. Le processus sert uniquement les deux routes du scraper.
 //
-// Credentials portail (platform/username/password/startUrl) injectés par
-// l'appelant dans le corps (writeOnly) : jamais en env, jamais commités,
-// jamais journalisés — seuls compteurs et codes d'erreur sortent dans les
-// logs. Seul le cookie jar Playwright vit sur disque (gitignoré, réutilisé
-// entre runs) : son CHEMIN n'est plus choisi par l'appelant, seulement son
-// NOM (#362) — le serveur impose le répertoire du jar. La navigation est
-// gardée : hôte public obligatoire, nom d'hôte RÉSOLU avant la navigation
-// (#419 — un nom public qui pointe vers une IP interne est refusé, 403
-// explicite), redirections et URL finale re-vérifiées.
+// Credentials portail (platform/startUrl) injectés par l'appelant dans le
+// corps (writeOnly) : jamais en env, jamais commités, jamais journalisés —
+// seuls compteurs et codes d'erreur sortent dans les logs. Les identifiants
+// de portail (`username`/`password`) sont REFUSÉS (#526) : le scraper ne
+// s'authentifie pas, la session est celle du serveur. Seul le cookie jar
+// Playwright vit sur disque (gitignoré, réutilisé entre runs) : son CHEMIN
+// n'est plus choisi par l'appelant, seulement son NOM (#362) — le serveur
+// impose le répertoire du jar. La navigation est gardée : hôte public
+// obligatoire, nom d'hôte RÉSOLU avant la navigation (#419 — un nom public
+// qui pointe vers une IP interne est refusé, 403 explicite), redirections et
+// URL finale re-vérifiées.
 // I8 inchangé : `PORT`/`HOST` + chemins TLS = seules variables lues,
 // uniquement dans `start()`.
 import { readFileSync } from "node:fs";
@@ -45,7 +47,7 @@ export interface ScraperDeps {
    * signal passe à `aborted` (délai dépassé ou client parti).
    */
   readonly scrape?: (
-    config: { readonly platform: string; readonly username: string; readonly password: string },
+    config: { readonly platform: string },
     opts: {
       readonly startUrl: string;
       /**
@@ -151,6 +153,24 @@ function hasAuthFileField(body: unknown): boolean {
   return typeof body === "object" && body !== null && "authFile" in body;
 }
 
+/**
+ * Le corps porte-t-il des identifiants de portail ? (#526)
+ *
+ * Le scraper ne s'authentifie PAS : le navigateur monte le jar de session du
+ * SERVEUR (#538/I24). `username`/`password` n'étaient lus par aucun chemin de
+ * code — ils étaient exigés par le contrat, transmis par le serveur, puis
+ * jetés : l'appelant croyait s'authentifier. Un corps qui les porte est donc
+ * REFUSÉ (message dédié) : mieux vaut un 400 franc qu'un credential
+ * collecté pour rien, jamais journalisé, jamais transmis au scraper.
+ */
+function hasCredentialFields(body: unknown): boolean {
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    ("username" in body || "password" in body)
+  );
+}
+
 async function handleScrape(
   req: Request,
   runScrape: NonNullable<ScraperDeps["scrape"]>,
@@ -185,6 +205,16 @@ async function handleScrape(
       return error("bad_request", 400, "invalid JSON body");
     }
     if (!isManualsScrapeRequest(body)) return error("bad_request", 400, "invalid scrape request");
+    // #526 : le scraper ne s'authentifie pas (la session est le jar du
+    // serveur, I24). Des identifiants dans le corps seraient collectés pour
+    // rien : le corps est REFUSÉ, et rien n'est transmis au scraper.
+    if (hasCredentialFields(body)) {
+      return error(
+        "bad_request",
+        400,
+        "username/password : le scraper ne s'authentifie pas (session du serveur)",
+      );
+    }
     // #538 : le jar de session est CHOISI par le serveur. Un corps qui le
     // demande est REFUSÉ (message dédié) : le nom du jar ne se déduisait pas
     // du contenu de la session, mais l'appelait — un appelant pouvait donc
@@ -198,7 +228,7 @@ async function handleScrape(
     let onClientAbort: (() => void) | undefined;
     try {
       const scrapeP = runScrape(
-        { platform: body.platform, username: body.username, password: body.password },
+        { platform: body.platform },
         {
           startUrl: body.startUrl,
           // #538 : le SEUL jar monté est celui du serveur.
@@ -259,6 +289,12 @@ async function handleScrape(
         // #422 : délai dépassé = 504 (le code exact), pas 502. Le délai HTTP
         // ET le délai de lecture du HTML (page.content()) finissent ici.
         if (err.reason === "timeout") return error("timeout", 504, "delai de scrape depasse");
+        // #526 : le portail a renvoyé sa PAGE DE CONNEXION (HTTP 200) : la
+        // session du jar n'est plus valable. Le code le dit (jamais un
+        // « scrape impossible » trompeur).
+        if (err.reason === "login_required") {
+          return error("login_required", 502, "page de connexion detectee (session a renouveler)");
+        }
         return error("school_unreachable", 502, "scrape impossible");
       }
       // Client parti : le 500 serait un faux diagnostic.
