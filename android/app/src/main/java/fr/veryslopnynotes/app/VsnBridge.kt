@@ -1121,8 +1121,12 @@ class VsnBridge(
      * cache purgé par une écriture). `fetchAsync` n'écrase pas le cache.
      */
     private fun loadAssignments(wantedId: String, weekStart: String): List<Assignment> {
+        // #570 : le cache garde une entrée par requête (fenêtre de semaine),
+        // donc le même devoir peut être présent dans PLUSIEURS payloads : la
+        // fusion est DÉDUPLIQUÉE par identifiant (une entrée par devoir).
         val fromCache = repo.payloads(CachePolicy.ASSIGNMENTS)
             .flatMap { payload -> runCatching { AssignmentsRepository.parse(payload) }.getOrDefault(emptyList()) }
+            .distinctBy { it.id }
         if (fromCache.any { it.id == wantedId }) return fromCache
         val query = if (weekStart.isNotEmpty()) "weekStart=$weekStart" else ""
         val outcome = await<RefreshOutcome> { cb ->

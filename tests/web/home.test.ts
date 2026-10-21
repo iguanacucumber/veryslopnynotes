@@ -170,6 +170,30 @@ describe("parseTimetable", () => {
     expect(range).toContain(clockLabel(lesson.end));
     expect(durationLabel(lesson.end - lesson.start)).toBe("1h");
   });
+
+  // #570 : le même cours publié deux fois (même identifiant) n'est affiché
+  // qu'une fois.
+  test("un cours publié deux fois n'est affiché qu'une fois (#570)", () => {
+    const twice = JSON.stringify({
+      entries: [
+        { id: "a", subject: "MATHEMATIQUES", start: local(19, 8), end: local(19, 9) },
+        { id: "a", subject: "MATHEMATIQUES", start: local(19, 8), end: local(19, 9) },
+      ],
+    });
+    expect(parseTimetable(twice).map((lesson) => lesson.id)).toEqual(["a"]);
+  });
+
+  // Deux cours RÉELS distincts ne sont jamais confondus, même s'ils se
+  // ressemblent (la déduplication est par identifiant, pas par matière).
+  test("deux cours distincts ne sont jamais confondus (#570)", () => {
+    const alike = JSON.stringify({
+      entries: [
+        { id: "a", subject: "MATHEMATIQUES", start: local(19, 8), end: local(19, 9) },
+        { id: "b", subject: "MATHEMATIQUES", start: local(19, 8), end: local(19, 9) },
+      ],
+    });
+    expect(parseTimetable(alike).map((lesson) => lesson.id)).toEqual(["a", "b"]);
+  });
 });
 
 describe("devoirs", () => {
@@ -192,6 +216,30 @@ describe("devoirs", () => {
     const pending = pendingAssignments(parseAssignments(payload), now, 5);
     expect(pending.map((task) => task.id)).toEqual(["1"]);
     expect(dueLabel(pending[0]!.due, now)).toBe("demain 20:00");
+  });
+
+  // #570 : le même devoir publié deux fois (même identifiant) n'est affiché
+  // qu'une fois.
+  test("un devoir publié deux fois n'est affiché qu'une fois (#570)", () => {
+    const twice = JSON.stringify({
+      assignments: [
+        { id: "1", subject: "MATHS", title: "Exercices 12 à 18", dueDate: local(20, 20) },
+        { id: "1", subject: "MATHS", title: "Exercices 12 à 18", dueDate: local(20, 20) },
+      ],
+    });
+    expect(parseAssignments(twice).map((task) => task.id)).toEqual(["1"]);
+  });
+
+  // La déduplication est par IDENTIFIANT : deux devoirs RÉELS qui se
+  // ressemblent (matière, titre, échéance) ne sont jamais confondus.
+  test("deux devoirs distincts ne sont jamais confondus (#570)", () => {
+    const alike = JSON.stringify({
+      assignments: [
+        { id: "1", subject: "MATHS", title: "Exercices", dueDate: local(20, 20) },
+        { id: "2", subject: "MATHS", title: "Exercices", dueDate: local(20, 20) },
+      ],
+    });
+    expect(parseAssignments(alike).map((task) => task.id)).toEqual(["1", "2"]);
   });
 });
 
