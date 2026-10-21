@@ -85,6 +85,12 @@ export const PRODUCTION_SOURCES: string[] = [
   // `data` — cache, file d'attente locale, issue de synchronisation.
   join(DATA, "CachePolicy.kt"),
   join(DATA, "CacheScope.kt"),
+  // `data/DownloadedFiles.kt` + `data/LocalDataStore.kt` (#540) : les pièces
+  // jointes téléchargées (nom, cache borné, purge). Fichiers PURS : le
+  // harnais les compile et les REJOUE, donc le test porte sur du code
+  // exécuté (deux pièces du même libellé -> deux fichiers distincts).
+  join(DATA, "DownloadedFiles.kt"),
+  join(DATA, "LocalDataStore.kt"),
   // `ClientQueue.kt` : LA file PARTAGÉE du client local (#403) — c'est elle
   // qui sérialise les lectures de l'interface ET celles du job de fond.
   join(DATA, "ClientQueue.kt"),
