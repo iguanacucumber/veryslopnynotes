@@ -579,4 +579,50 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
       noBuild: SHOT.includes("--no-build"),
     }).toEqual({ perime: true, empreinte: true, installR: true, noBuild: true });
   });
+
+  // #536 : la route était interpolée SANS ÉCHAPPEMENT dans un `grep -E` :
+  // `ROUTE='.*'` matchait la PREMIÈRE ligne de la table (`index|Accueil`),
+  // donc une route INCONNUE passait la liste blanche. La capture était rangée
+  // sous `.*.png` et la vérification de titre comparait l'accueil à l'accueil :
+  // le script annonçait une capture « VÉRIFIÉE » d'un écran qui n'est pas la
+  // route demandée. La route est désormais comparée LITTÉRALEMENT.
+  test("une route contenant un métacaractère est refusée comme route inconnue", () => {
+    const h = harness();
+    for (const route of [".*", "index|Accueil", "grades|tasks", "^index$"]) {
+      const r = h.run([route, "--wait", "0"]);
+      expect({ route, code: r.code }).toEqual({ route, code: 1 });
+      expect(r.out).toContain("route inconnue");
+      // Aucune capture produite : une route inconnue est refusée AVANT toute
+      // écriture (pas de `shots/`, pas d'APK construit, pas d'installation).
+      expect(r.out).not.toContain("route vérifiée");
+      expect(r.gradle).toBe(0);
+      expect(r.installs).toEqual([]);
+      expect(existsSync(join(h.dir, "shots"))).toBe(false);
+    }
+  });
+
+  test("la route n'est plus interpolée dans une expression régulière", () => {
+    // La forme du défaut : `grep -E "^$1[|]"` (motif) au lieu d'une
+    // comparaison LITTÉRALE du premier champ.
+    expect(SHOT).not.toMatch(/grep\s+(-[a-zA-Z]+\s+)*-E[^\n]*\$\{?1/);
+    expect(SHOT).not.toMatch(/grep\s+(-[a-zA-Z]+\s+)*-E[^\n]*\$\{?ROUTE/);
+  });
+
+  test("les routes RÉELLES passent toujours la liste blanche", () => {
+    const h = harness();
+    for (const route of ROUTES) {
+      // La liste blanche EST la table : chaque route de l'app a un témoin.
+      expect({ route, connu: WITNESSES.get(route)?.title }).toEqual({
+        route,
+        connu: expect.any(String),
+      });
+    }
+    // Une route RÉELLE n'est jamais refusée comme inconnue : le script va
+    // jusqu'à la capture (l'écran factice ne porte que l'accueil, donc la
+    // vérification d'écran échoue — c'est le refus de LISTE BLANCHE qu'on
+    // surveille ici, pas la présence de la capture).
+    const r = h.run(["grades", "--wait", "0"]);
+    expect(r.out).not.toContain("route inconnue");
+    expect(r.out).not.toContain("Rien capturé");
+  });
 });
