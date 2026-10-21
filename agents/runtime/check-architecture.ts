@@ -17,7 +17,7 @@
 //     n'était scanné, verdict vert). Maintenant : erreur fichier par
 //     fichier, on CONTINUE, et un fichier illisible est SIGNALÉ (invariant
 //     non vérifiable ≠ invariant respecté).
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
 import { codeOnly, hasDirectFetch, httpRe, pronoteHost, sqliteRe } from "./source-guards";
 
@@ -74,6 +74,34 @@ export function listFiles(dir: string, out: string[] = []): string[] {
     }
   }
   return out;
+}
+
+/**
+ * Un répertoire scanné doit EXISTER et contenir des fichiers.
+ *
+ * #532 : les scanners passaient au VERT quand ils n'avaient rien à scanner.
+ * `listFiles` renvoyait une liste VIDE pour un répertoire absent (renommé,
+ * déplacé), donc I1, I2, I3 et I9 devenaient **vacuement vrais** : chaque
+ * étape du gate annonçait « OK » sans avoir rien vérifié. Un invariant non
+ * vérifiable n'est pas un invariant respecté — donc c'est un ÉCHEC, bruyant.
+ *
+ * `root` = racine du dépôt. `sousDossiers` = ce que cet invariant exige
+ * d'avoir trouvé. Un répertoire absent est distingué d'un répertoire vide :
+ * les deux sont des échecs, mais le message doit nommer la cause.
+ */
+function repertoiresManquants(root: string, sousDossiers: string[]): string[] {
+  const manquants: string[] = [];
+  for (const sous of sousDossiers) {
+    const dir = join(root, sous);
+    if (!existsSync(dir)) {
+      manquants.push(`${sous}/ : répertoire ABSENT (invariant non vérifiable)`);
+      continue;
+    }
+    if (listFiles(dir).length === 0) {
+      manquants.push(`${sous}/ : aucun fichier à vérifier (invariant non vérifiable)`);
+    }
+  }
+  return manquants;
 }
 
 /** Scan des invariants. `root` = racine du dépôt (surchargeable pour les
@@ -168,6 +196,15 @@ export function scanArchitecture(root: string = ROOT): string[] {
   if (unreadable.size) {
     fail.push(`fichiers illisibles (invariant non vérifiable) : ${[...unreadable].join(", ")}`);
   }
+
+  // #532 : rien à scanner = rien de vérifié. Un répertoire renommé (ou une
+  // racine vide) rendait I1, I2 et I3 vacuement vrais : le gate annonçait
+  // « OK » sans avoir lu une seule ligne.
+  const vides = repertoiresManquants(root, ["android", "server"]);
+  for (const v of vides) fail.push(v);
+  // I3 porte sur `android/core/` : un module vide = invariant non vérifiable.
+  const coreVide = repertoiresManquants(root, [join("android", "core")]);
+  for (const v of coreVide) fail.push(`I3: ${v}`);
 
   return fail;
 }
