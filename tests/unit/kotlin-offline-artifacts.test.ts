@@ -18,7 +18,10 @@
 //      laisse AUCUN fichier sur le disque (le répertoire n'est pas ressuscité) ;
 //   2. hors déconnexion, les deux écritures se font normalement ;
 //   3. une écriture qui précède la purge est effacée par la purge (l'ordre
-//      des deux est total, comme pour le cache en #364).
+//      des deux est total, comme pour le cache en #364) ;
+//   4. #528 : une déconnexion qui survient ENTRE l'écriture de la fiche et
+//      celle de l'index REFUSE l'index : l'enregistrement ÉCHOUE (aucun « ok »
+//      sans avoir écrit, I10).
 //
 // Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
 // vert) ; un échec de compilation, lui, est un défaut (le test rougit).
@@ -102,6 +105,12 @@ describe("écritures hors CacheStore et purge de déconnexion (#404)", () => {
     expect(bridge).toContain("generateRevision(p, epoch)");
     // Plus aucune écriture nue hors garde.
     expect(bridge).not.toContain("FileRevisionKv");
+    // #528 : l'index et le journal ne sont PLUS écrits « en best effort » : un
+    // refus fait ÉCHOUER l'enregistrement (le pont ne répond JAMAIS « ok »
+    // sans avoir écrit, I10).
+    for (const key of ["INDEX_KEY", "INDEX_JOURNAL_KEY"]) {
+      expect(core).toMatch(new RegExp(`if \\(!store\\.set\\(${key}[^)]*\\)\\)[\\s\\S]{0,80}return false`));
+    }
   });
 
   test.skipIf(skip)("écriture de préférences pendant un logout : aucun fichier sur le disque", async () => {
@@ -164,6 +173,26 @@ describe("écritures hors CacheStore et purge de déconnexion (#404)", () => {
     expect(files).toContain("revisions/revision_sheet_fiche-devoir-1.bin");
     expect(files).toContain("revisions/revision_index.bin");
     expect(files).toContain("revisions/revision_index_journal.bin");
+  });
+
+  test.skipIf(skip)("déconnexion entre la fiche et l'index : l'enregistrement ÉCHOUE (#528)", async () => {
+    const store = await ask({ op: "newStore" });
+    const sid = store.sid as number;
+    const epoch = (await ask({ op: "epoch" })).epoch as number;
+
+    // La fiche est écrite, puis la déconnexion survient (l'époque bascule et
+    // le dossier est purgé) : l'index et le journal sont REFUSÉS.
+    const write = await ask({
+      op: "writeSheetDisconnect",
+      sid,
+      epoch,
+      body: "Derivees de fonctions",
+    });
+    // AUCUN « ok » : l'index a été refusé, donc la fiche n'est pas enregistrée
+    // (elle ne serait pas listable) — le pont doit répondre `ok:false`.
+    expect(write.written).toBe(false);
+    // Et rien ne traîne : la purge a emporté la fiche déjà écrite.
+    expect((await ask({ op: "files", sid })).files).toEqual([]);
   });
 
   test.skipIf(skip)("une écriture qui précède la purge est effacée par la purge", async () => {
