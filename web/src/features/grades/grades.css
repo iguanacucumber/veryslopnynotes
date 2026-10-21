@@ -167,6 +167,8 @@
   line-height: 17px;
 }
 
+/* La hauteur du cadre vaut celle du `viewBox` (96) : l'échelle du dessin est
+   1:1, la courbe n'est ni étirée ni aplatie, et la pastille reste ronde. */
 .grades-chart {
   display: block;
   width: 100%;
@@ -176,10 +178,12 @@
   overflow: visible;
 }
 
+/* Un seul geste : l'aire et le repère de moyenne apparaissent avec la courbe,
+   la pastille se pose à son extrémité (rien ne traîne une seconde seul). */
 .grades-chart__area {
   fill: currentColor;
   opacity: 0.14;
-  animation: chart-fade 600ms var(--ease) 180ms both;
+  animation: chart-fade 420ms var(--ease) 40ms both;
 }
 
 /* Ligne de moyenne de la période : repère de lecture de la tendance, en
@@ -189,7 +193,7 @@
   stroke-width: 1;
   stroke-dasharray: 3 5;
   opacity: 0.3;
-  animation: chart-fade 600ms var(--ease) both;
+  animation: chart-fade 320ms var(--ease) both;
 }
 
 .grades-chart__line {
@@ -198,10 +202,12 @@
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
-  /* `pathLength={1}` côté SVG : le tracé se dessine sans mesurer la courbe. */
+  /* `pathLength={1}` côté SVG : le tracé se dessine sans mesurer la courbe.
+     Les cotes restent en unités du dessin : `non-scaling-stroke` les
+     ramènerait à l'écran et le trait ne couvrirait plus la courbe entière. */
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  animation: chart-draw 900ms var(--ease) 120ms forwards;
+  animation: chart-draw 560ms var(--ease) 40ms forwards;
 }
 
 .grades-chart__halo {
@@ -209,14 +215,14 @@
   opacity: 0.18;
   transform-box: fill-box;
   transform-origin: center;
-  animation: chart-pop 320ms var(--ease) 760ms both;
+  animation: chart-pop 220ms var(--ease) 540ms both;
 }
 
 .grades-chart__dot {
   fill: currentColor;
   transform-box: fill-box;
   transform-origin: center;
-  animation: chart-pop 260ms var(--ease) 820ms both;
+  animation: chart-pop 200ms var(--ease) 560ms both;
 }
 
 @keyframes chart-draw {
