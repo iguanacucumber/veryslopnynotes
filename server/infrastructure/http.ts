@@ -48,7 +48,10 @@ export interface ScraperDeps {
     config: { readonly platform: string; readonly username: string; readonly password: string },
     opts: {
       readonly startUrl: string;
-      readonly authFile?: string;
+      /**
+       * Jar de session du SERVEUR (jamais choisi par l'appelant, #538) :
+       * chemin libre, sous la responsabilité de l'exploitant.
+       */
       readonly defaultAuthFile?: string;
       readonly headless?: boolean;
       readonly signal?: AbortSignal;
@@ -56,8 +59,8 @@ export interface ScraperDeps {
     },
   ) => Promise<ManualDoc[]>;
   /**
-   * Jar de session par DÉFAUT, choisi par le serveur (jamais par l'appelant de
-   * l'API) : chemin libre, sous la responsabilité de l'exploitant.
+   * Jar de session du serveur : le seul jar monté par le navigateur, choisi
+   * par l'exploitant (jamais par l'appelant de l'API, #538).
    */
   readonly authFile?: string;
   /** Délai d'attente du scrape (défaut 30 s) ; injectable pour les tests. */
@@ -136,6 +139,18 @@ function timeoutError(ms: number): Error {
   return new ScrapeManualsError(`scrape timeout ${ms}ms`, "timeout");
 }
 
+/**
+ * Le corps porte-t-il un champ `authFile` ? (#538)
+ *
+ * Le contrat ne connaît PLUS ce champ : le jar de session est choisi par le
+ * serveur. Un corps qui le porte est donc hors contrat — on le dit par son
+ * NOM (message dédié) plutôt que par un 400 générique : l'appelant sait
+ * quoi retirer de sa requête.
+ */
+function hasAuthFileField(body: unknown): boolean {
+  return typeof body === "object" && body !== null && "authFile" in body;
+}
+
 async function handleScrape(
   req: Request,
   runScrape: NonNullable<ScraperDeps["scrape"]>,
@@ -170,6 +185,13 @@ async function handleScrape(
       return error("bad_request", 400, "invalid JSON body");
     }
     if (!isManualsScrapeRequest(body)) return error("bad_request", 400, "invalid scrape request");
+    // #538 : le jar de session est CHOISI par le serveur. Un corps qui le
+    // demande est REFUSÉ (message dédié) : le nom du jar ne se déduisait pas
+    // du contenu de la session, mais l'appelait — un appelant pouvait donc
+    //Naviguer avec la session d'un autre tenant.
+    if (hasAuthFileField(body)) {
+      return error("bad_request", 400, "authFile : le jar de session est choisi par le serveur");
+    }
     if (req.signal?.aborted) return error("school_unreachable", 502, "scrape impossible");
     let docs: ManualDoc[];
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -179,10 +201,7 @@ async function handleScrape(
         { platform: body.platform, username: body.username, password: body.password },
         {
           startUrl: body.startUrl,
-          // #362 : le corps ne fournit plus un CHEMIN de jar, seulement un NOM.
-          // Le serveur impose son répertoire : l'appelant ne peut plus écrire
-          // de fichier n'importe où.
-          authFile: body.authFile,
+          // #538 : le SEUL jar monté est celui du serveur.
           defaultAuthFile: defaultJar,
           headless: body.headless,
           // #419 : la garde SSRF résout le nom d'hôte avant la navigation.

@@ -270,18 +270,20 @@ export function isDiscussionRecipientsResponse(v: unknown): v is DiscussionRecip
 // un POST non authentifié de taille arbitraire est entièrement bufferisé.
 // `password`/`username`/`startUrl` sont writeOnly : jamais journalisés, jamais
 // persistés, jamais renvoyés (seul le cookie jar Playwright vit sur disque,
-// hors dépôt). `authFile` n'est plus un CHEMIN (#362) : c'est le NOM du jar
-// de session, que le serveur place sous SON répertoire (`playwright/.auth/`).
-// Un chemin venant de l'appelant = écriture de fichier arbitraire (constaté :
-// `shared/contracts/api.ts` écrasé par le jar de cookies) : refusé.
+// hors dépôt).
+//
+// LE JAR DE SESSION EST CHOISI PAR LE SERVEUR (#538). Il ne l'est plus par
+// l'appelant, même indirectement : `authFile` a d'abord été un CHEMIN (écriture
+// de fichier arbitraire, #362), puis un NOM de jar — mais le nom suffit à
+// demander la session d'un AUTRE tenant : le répertoire était imposé, pas
+// l'isolation. Le champ n'existe donc plus dans le contrat, et le serveur
+// REFUSE explicitement un corps qui le porte (message dédié, pas un 400
+// générique).
 export const MANUALS_SCRAPE_PATH = "/v1/manuals/scrape";
 export const MANUALS_SCRAPE_MAX_BODY_CHARS = 8192;
 export const MANUALS_SCRAPE_PLATFORM_MAX_CHARS = 100;
 export const MANUALS_SCRAPE_CREDENTIAL_MAX_CHARS = 512;
 export const MANUALS_SCRAPE_URL_MAX_CHARS = 2000;
-/** Nom de jar : nom de fichier simple, extension .json, jamais un chemin. */
-export const MANUALS_SCRAPE_AUTH_FILE_MAX_CHARS = 64;
-export const MANUALS_SCRAPE_AUTH_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,58}\.json$/;
 
 export interface ManualsScrapeRequest {
   readonly platform: string;
@@ -290,8 +292,6 @@ export interface ManualsScrapeRequest {
   readonly password: string;
   /** URL de départ fournie par l'humain (jamais committée). */
   readonly startUrl: string;
-  /** Nom du jar de session (défaut = jar du serveur), jamais un chemin. */
-  readonly authFile?: string;
   /** false = première connexion interactive visible. */
   readonly headless?: boolean;
 }
@@ -328,13 +328,6 @@ export function isManualsScrapeRequest(v: unknown): v is ManualsScrapeRequest {
   // navigation et refuse le nom dont une adresse est privée
   // (server/infrastructure/ssrf.ts, issue #419).
   if (!isPublicHttpUrl(r["startUrl"] as string)) return false;
-  const authFile = r["authFile"];
-  if (authFile !== undefined) {
-    if (!isBoundedNonEmptyString(authFile, MANUALS_SCRAPE_AUTH_FILE_MAX_CHARS)) return false;
-    const p = (authFile as string).trim();
-    // Un NOM de jar, jamais un chemin : ni séparateur, ni « .. ».
-    if (!MANUALS_SCRAPE_AUTH_FILE_RE.test(p) || p.includes("..")) return false;
-  }
   const headless = r["headless"];
   return headless === undefined || typeof headless === "boolean";
 }

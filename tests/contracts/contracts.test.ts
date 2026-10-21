@@ -43,6 +43,10 @@ describe("contracts", () => {
       "PairingStartRequest:",
       "SetupRequest:",
       "AssignmentsToggleRequest:",
+      // #538 : le jar de session est choisi par le serveur — le contrat ne
+      // déclare PLUS de champ pour le demander (l'appelant aurait pu
+      // appeler la session d'un autre tenant).
+      "authFile:",
     ]) {
       expect(raw).not.toContain(dead);
     }
