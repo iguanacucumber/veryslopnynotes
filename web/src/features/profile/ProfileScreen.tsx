@@ -1,11 +1,23 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { bridge } from "../../bridge/client";
 import { BridgeCallError } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
 import { logoutSession } from "../../lib/session";
-import { Avatar, Card, Divider, EmptyState, ErrorBox, Loading, Page, Section } from "../../ui/components";
-import { IconChevronRight, IconClose, IconUser } from "../../ui/icons";
+import {
+  Avatar,
+  Card,
+  Divider,
+  EmptyState,
+  ErrorBox,
+  ListRow,
+  Loading,
+  Page,
+  Rows,
+  Section,
+} from "../../ui/components";
+import { Dialog } from "../../ui/Dialog";
+import { IconUser } from "../../ui/icons";
 import {
   accountCountLabel,
   isSafePhotoDataUrl,
@@ -23,52 +35,6 @@ function messageOf(error: unknown): string {
     if (error.code === "unavailable") return "Téléphone injoignable : réessaie dans un instant.";
   }
   return error instanceof Error && error.message.trim() !== "" ? error.message : "Profil indisponible.";
-}
-
-function LinkRow({
-  title,
-  subtitle,
-  onClick,
-}: {
-  title: string;
-  subtitle?: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="row"
-      style={{
-        width: "100%",
-        minHeight: 52,
-        padding: "10px 4px",
-        border: 0,
-        background: "transparent",
-        textAlign: "left",
-        color: "inherit",
-        borderRadius: "var(--radius-sm)",
-      }}
-    >
-      <span className="grow">
-        <span style={{ display: "block", fontWeight: 600 }}>{title}</span>
-        {subtitle ? (
-          <span className="tiny muted" style={{ display: "block" }}>
-            {subtitle}
-          </span>
-        ) : null}
-      </span>
-      <IconChevronRight size={18} />
-    </button>
-  );
-}
-
-function Rows({ children }: { children: ReactNode }) {
-  return (
-    <Card className="card--flat">
-      <div style={{ padding: "4px 12px" }}>{children}</div>
-    </Card>
-  );
 }
 
 export default function ProfileScreen() {
@@ -121,15 +87,6 @@ export default function ProfileScreen() {
     };
   }, [refreshTick, attempt]);
 
-  useEffect(() => {
-    if (!logoutAsk) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !loggingOut) setLogoutAsk(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [logoutAsk, loggingOut]);
-
   const subtitle = profile ? profileSubtitle(profile) : "";
 
   async function logout(): Promise<void> {
@@ -163,7 +120,6 @@ export default function ProfileScreen() {
           <button
             type="button"
             className="btn btn--small"
-            style={{ marginTop: 10 }}
             onClick={() => setAttempt((value) => value + 1)}
           >
             Réessayer
@@ -179,7 +135,7 @@ export default function ProfileScreen() {
 
       {loaded && !profile && !error ? (
         <EmptyState
-          icon={<IconUser size={28} />}
+          icon={<IconUser size={30} />}
           title="Aucune information"
           body="Aucune information publiée pour ce compte."
           action={
@@ -210,9 +166,9 @@ export default function ProfileScreen() {
 
       <Section title="Compte">
         <Rows>
-          <LinkRow
+          <ListRow
             title="Appairage QR + PIN"
-            subtitle="Connecte ou reconnecte l'appareil à l'établissement"
+            subtitle="Connecte ou reconnecte l’appareil à l’établissement"
             onClick={() => navigate("/pairing")}
           />
           <Divider />
@@ -225,113 +181,73 @@ export default function ProfileScreen() {
 
       <Section title="Ressources">
         <Rows>
-          <LinkRow title="Fiches de révision" onClick={() => navigate("/fiches")} />
+          <ListRow title="Fiches de révision" onClick={() => navigate("/fiches")} />
           <Divider />
-          <LinkRow title="Messages" onClick={() => navigate("/messages")} />
+          <ListRow title="Messagerie" onClick={() => navigate("/messages")} />
           <Divider />
-          <LinkRow title="Actualités" onClick={() => navigate("/news")} />
+          <ListRow title="Actualités" onClick={() => navigate("/news")} />
           <Divider />
-          <LinkRow title="Cantine de la semaine" onClick={() => navigate("/canteen")} />
+          <ListRow title="Cantine de la semaine" onClick={() => navigate("/canteen")} />
           <Divider />
-          <LinkRow title="Vie scolaire" onClick={() => navigate("/attendance")} />
+          <ListRow title="Vie scolaire" onClick={() => navigate("/attendance")} />
         </Rows>
       </Section>
 
       <Section title="Réglages">
         <Rows>
-          <LinkRow title="Réglages" subtitle="Thème, matières, clé de l'assistant" onClick={() => navigate("/settings")} />
+          <ListRow title="Préférences" subtitle="Thème, matières, clé de l’assistant" onClick={() => navigate("/settings")} />
         </Rows>
       </Section>
 
       <Section title="Session">
         <Rows>
-          <button
-            type="button"
+          <ListRow
+            title="Se déconnecter"
+            subtitle="Session invalidée, caches purgés"
+            danger
+            trailing={null}
             onClick={() => {
               setLogoutError("");
               setLogoutAsk(true);
             }}
-            className="row"
-            style={{
-              width: "100%",
-              minHeight: 52,
-              padding: "10px 4px",
-              border: 0,
-              background: "transparent",
-              textAlign: "left",
-              color: "var(--danger-ink)",
-              borderRadius: "var(--radius-sm)",
-            }}
-          >
-            <span className="grow">
-              <span style={{ display: "block", fontWeight: 700 }}>Se déconnecter</span>
-              <span className="tiny muted" style={{ display: "block" }}>
-                Session invalidée, caches purgés
-              </span>
-            </span>
-          </button>
+          />
         </Rows>
       </Section>
 
-      {logoutAsk ? (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 60,
-            background: "rgba(0,0,0,0.42)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 20,
-          }}
-          onClick={() => {
-            if (!loggingOut) setLogoutAsk(false);
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="logout-title"
-            aria-describedby="logout-body"
-            className="card"
-            style={{ width: "100%", maxWidth: 420 }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="row row--between" style={{ alignItems: "flex-start" }}>
-              <h2 className="t-title" id="logout-title" style={{ margin: 0 }}>
-                Se déconnecter
-              </h2>
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label="Fermer"
-                disabled={loggingOut}
-                onClick={() => setLogoutAsk(false)}
-              >
-                <IconClose size={18} />
-              </button>
-            </div>
-            <p className="t-body-m muted" id="logout-body" style={{ margin: "8px 0 14px" }}>
-              La session appairée est invalidée et les données en cache de cet appareil sont purgées. Il faudra appairer à
-              nouveau pour revenir.
-            </p>
-            {logoutError ? (
-              <p className="tiny" role="alert" style={{ color: "var(--danger-ink)" }}>
-                {logoutError}
-              </p>
-            ) : null}
-            <div className="row row--between" style={{ justifyContent: "flex-end" }}>
-              <button type="button" className="btn btn--ghost btn--small" disabled={loggingOut} onClick={() => setLogoutAsk(false)}>
-                Annuler
-              </button>
-              <button type="button" className="btn btn--danger btn--small" disabled={loggingOut} onClick={() => void logout()}>
-                {loggingOut ? "Déconnexion…" : "Se déconnecter"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <Dialog
+        open={logoutAsk}
+        title="Se déconnecter"
+        description="La session appairée est invalidée et les données en cache de cet appareil sont purgées. Il faudra appairer à nouveau pour revenir."
+        busy={loggingOut}
+        onClose={() => setLogoutAsk(false)}
+        actions={
+          <>
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              data-autofocus
+              disabled={loggingOut}
+              onClick={() => setLogoutAsk(false)}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger btn--small"
+              disabled={loggingOut}
+              onClick={() => void logout()}
+            >
+              {loggingOut ? "Déconnexion…" : "Se déconnecter"}
+            </button>
+          </>
+        }
+      >
+        {logoutError ? (
+          <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "10px 0 0" }}>
+            {logoutError}
+          </p>
+        ) : null}
+      </Dialog>
     </Page>
   );
 }

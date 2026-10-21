@@ -81,7 +81,7 @@ export function Shell() {
         <h1
           ref={titleRef}
           tabIndex={-1}
-          className="topbar__title t-title"
+          className="topbar__title"
           style={{ margin: 0 }}
         >
           {meta.title}

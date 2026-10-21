@@ -8,9 +8,11 @@ import {
   ErrorBox,
   Loading,
   Page,
+  PageHeading,
   Section,
   StaleBadge,
   SubjectAvatar,
+  WeekNavigator,
 } from "../../ui/components";
 import { IconAttach, IconCheck, IconChevronLeft, IconChevronRight, IconSparkles } from "../../ui/icons";
 import { parseDate } from "../../lib/format";
@@ -53,39 +55,14 @@ export function TasksScreen() {
 
   return (
     <Page>
-      <Card className="tasks-week">
-        <div className="tasks-week__row">
-          <button
-            type="button"
-            className="tasks-week__nav"
-            aria-label="Semaine précédente"
-            onClick={() => setWeek((value) => shiftWeek(value, -1))}
-          >
-            <IconChevronLeft />
-          </button>
-          <span className="tasks-week__label">
-            <strong>{weekLabelFr(week)}</strong>
-            {range ? <small>{range}</small> : null}
-          </span>
-          <button
-            type="button"
-            className="tasks-week__nav"
-            aria-label="Semaine suivante"
-            onClick={() => setWeek((value) => shiftWeek(value, 1))}
-          >
-            <IconChevronRight />
-          </button>
-        </div>
-        {week !== currentWeek ? (
-          <button
-            type="button"
-            className="tasks-week__today"
-            onClick={() => setWeek(currentWeek)}
-          >
-            Revenir à cette semaine
-          </button>
-        ) : null}
-      </Card>
+      <WeekNavigator
+        label={weekLabelFr(week)}
+        detail={range ?? undefined}
+        current={week === currentWeek}
+        onPrevious={() => setWeek((value) => shiftWeek(value, -1))}
+        onNext={() => setWeek((value) => shiftWeek(value, 1))}
+        onToday={() => setWeek(currentWeek)}
+      />
 
       <TasksWeek key={week} week={week} />
     </Page>
@@ -239,7 +216,7 @@ function TasksWeek({ week }: { week: string }) {
     return (
       <Page>
         <ErrorBox message={resource.error}>
-          <button type="button" className="btn btn--ghost btn--small" onClick={resource.refresh}>
+          <button type="button" className="btn btn--small" onClick={resource.refresh}>
             Réessayer
           </button>
         </ErrorBox>
@@ -249,15 +226,11 @@ function TasksWeek({ week }: { week: string }) {
 
   return (
     <Page>
-      <div className="tasks-head">
-        <div>
-          <span className="tasks-head__eyebrow">
-            {week === currentWeek ? "Semaine en cours" : "Semaine sélectionnée"}
-          </span>
-          <h2 className="tasks-head__title">Devoirs</h2>
-        </div>
-        {resource.stale ? <StaleBadge /> : null}
-      </div>
+      <PageHeading
+        eyebrow={week === currentWeek ? "Semaine en cours" : "Semaine sélectionnée"}
+        title="Devoirs"
+        action={resource.stale ? <StaleBadge /> : null}
+      />
 
       {resource.error ? <ErrorBox message={resource.error} /> : null}
 
@@ -284,11 +257,11 @@ function TasksWeek({ week }: { week: string }) {
 
       {sections.length === 0 ? (
         <EmptyState
-          icon={<IconCheck size={32} />}
+          icon={<IconCheck size={30} />}
           title="Aucun devoir"
           body="Rien à rendre pour le moment."
           action={
-            <button type="button" className="btn btn--ghost btn--small" onClick={resource.refresh}>
+            <button type="button" className="btn btn--small" onClick={resource.refresh}>
               Actualiser
             </button>
           }

@@ -191,3 +191,15 @@ export function tint(hex: string, amount: number): string {
   const [r, g, b] = rgb.map((v) => Math.round(channel(v))) as [number, number, number];
   return `rgb(${r} ${g} ${b})`;
 }
+
+/** Encre lisible sur une couleur arbitraire (aperçu de palette, pastille). */
+export function readableInk(hex: string): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return "#ffffff";
+  const [r, g, b] = rgb.map((value) => {
+    const channel = value / 255;
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.55 ? "#1f292e" : "#ffffff";
+}

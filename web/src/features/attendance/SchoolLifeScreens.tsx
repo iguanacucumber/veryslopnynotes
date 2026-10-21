@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { Link } from "react-router-dom";
-import { Card, EmptyState, ErrorBox, Loading, StaleBadge } from "../../ui/components";
-import { IconCheck, IconRefresh, IconShield, IconWarning } from "../../ui/icons";
+import { Card, EmptyState, ErrorBox, Loading, PageHeading, StaleBadge } from "../../ui/components";
+import { IconCheck, IconShield, IconWarning } from "../../ui/icons";
 import {
   absenceTitle,
   attendanceSections,
@@ -63,7 +63,7 @@ export function AttendanceScreen({
   if (error && rows.length === 0) {
     return (
       <ErrorBox message={error}>
-        <button type="button" className="btn btn--ghost btn--small" style={{ minHeight: 48 }} onClick={onRefresh}>
+        <button type="button" className="btn btn--small" onClick={onRefresh}>
           Réessayer
         </button>
       </ErrorBox>
@@ -72,19 +72,11 @@ export function AttendanceScreen({
 
   return (
     <div className="stack">
-      <div className="row row--wrap">
-        <h2 className="t-title grow" style={{ margin: 0 }}>
-          Absences et retards
-        </h2>
-        {stale ? <StaleBadge /> : null}
-        <button type="button" className="icon-btn" aria-label="Actualiser la vie scolaire" onClick={onRefresh}>
-          <IconRefresh />
-        </button>
-      </div>
+      <PageHeading title="Absences et retards" action={stale ? <StaleBadge /> : null} />
 
       {error ? (
         <ErrorBox message={error}>
-          <button type="button" className="btn btn--ghost btn--small" style={{ minHeight: 48 }} onClick={onRefresh}>
+          <button type="button" className="btn btn--small" onClick={onRefresh}>
             Réessayer
           </button>
         </ErrorBox>
@@ -96,7 +88,7 @@ export function AttendanceScreen({
           title="Aucune absence ni retard"
           body="L’établissement n’a rien publié sur cette période."
           action={
-            <button type="button" className="btn btn--ghost btn--small" style={{ minHeight: 48 }} onClick={onRefresh}>
+            <button type="button" className="btn btn--small" onClick={onRefresh}>
               Actualiser
             </button>
           }
@@ -142,7 +134,6 @@ export function AttendanceScreen({
             <button
               type="button"
               className={`chip${onlyPending ? "" : " chip--active"}`}
-              style={{ minHeight: 48 }}
               aria-pressed={!onlyPending}
               onClick={() => onOnlyPendingChange(false)}
             >
@@ -151,7 +142,6 @@ export function AttendanceScreen({
             <button
               type="button"
               className={`chip${onlyPending ? " chip--active" : ""}`}
-              style={{ minHeight: 48 }}
               aria-pressed={onlyPending}
               onClick={() => onOnlyPendingChange(true)}
             >
@@ -169,7 +159,7 @@ export function AttendanceScreen({
                     Les sanctions publiées par l’établissement.
                   </p>
                 </div>
-                <Link to="/sanctions" className="btn btn--ghost btn--small" style={{ minHeight: 48 }}>
+                <Link to="/sanctions" className="btn btn--ghost btn--small">
                   Voir
                 </Link>
               </div>
@@ -182,12 +172,7 @@ export function AttendanceScreen({
               title="Aucun événement à justifier"
               body="Aucune absence ni retard n’attend de justificatif sur cette période."
               action={
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--small"
-                  style={{ minHeight: 48 }}
-                  onClick={() => onOnlyPendingChange(false)}
-                >
+                <button type="button" className="btn btn--ghost btn--small" onClick={() => onOnlyPendingChange(false)}>
                   Voir tout
                 </button>
               }
@@ -263,19 +248,19 @@ interface SanctionsProps {
 export function SanctionsScreen({ rows, loading, error, stale, onRefresh }: SanctionsProps) {
   return (
     <div className="stack">
-      <div className="row row--wrap">
-        <h2 className="t-title grow" style={{ margin: 0 }}>
-          Sanctions déclarées ({rows.length})
-        </h2>
-        {stale ? <StaleBadge /> : null}
-        <button type="button" className="icon-btn" aria-label="Actualiser les sanctions" onClick={onRefresh}>
-          <IconRefresh />
-        </button>
-      </div>
+      <PageHeading
+        title="Sanctions déclarées"
+        action={
+          <>
+            {stale ? <StaleBadge /> : null}
+            <span className="chip">{rows.length}</span>
+          </>
+        }
+      />
 
       {error ? (
         <ErrorBox message={error}>
-          <button type="button" className="btn btn--ghost btn--small" style={{ minHeight: 48 }} onClick={onRefresh}>
+          <button type="button" className="btn btn--small" onClick={onRefresh}>
             Réessayer
           </button>
         </ErrorBox>
@@ -289,7 +274,7 @@ export function SanctionsScreen({ rows, loading, error, stale, onRefresh }: Sanc
           title="Aucune sanction publiée"
           body="L’établissement n’a publié aucune sanction."
           action={
-            <button type="button" className="btn btn--ghost btn--small" style={{ minHeight: 48 }} onClick={onRefresh}>
+            <button type="button" className="btn btn--small" onClick={onRefresh}>
               Actualiser
             </button>
           }

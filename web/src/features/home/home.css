@@ -211,7 +211,7 @@
   display: inline-flex;
   align-items: center;
   gap: 1px;
-  min-height: 44px;
+  min-height: var(--tap);
   padding: 0 6px 0 10px;
   border: 0;
   border-radius: 999px;

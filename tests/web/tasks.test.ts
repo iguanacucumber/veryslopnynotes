@@ -283,9 +283,14 @@ describe("web tâches — navigation de semaine", () => {
       join(import.meta.dir, "..", "..", "web", "src", "features", "tasks", "TasksScreen.tsx"),
       "utf8",
     );
+    const components = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "ui", "components.tsx"),
+      "utf8",
+    );
     expect(source).toContain("weekStartOf(new Date())");
-    expect(source).toContain('aria-label="Semaine précédente"');
-    expect(source).toContain('aria-label="Semaine suivante"');
+    expect(source).toContain("<WeekNavigator");
+    expect(components).toContain('aria-label="Semaine précédente"');
+    expect(components).toContain('aria-label="Semaine suivante"');
     expect(source).not.toContain("bounds && displayStart");
   });
 });
@@ -425,7 +430,9 @@ describe("web fiches — parsing défensif", () => {
     // Disclosure inline : le corps est rendu DANS la carte de la fiche, après
     // son déclencheur, jamais dans une carte séparée au-dessus de la liste.
     expect(source.indexOf("<SheetBody")).toBeGreaterThan(source.indexOf("aria-controls={bodyId}"));
-    expect(source).toContain("closeRef.current?.focus()");
+    // Un seul « Fermer » : le déclencheur devient Fermer et porte le focus.
+    expect(source).toContain("triggers.current.get(selected.id)?.focus()");
+    expect(source).not.toContain("Fiche ouverte");
     expect(source).toContain("triggers.current.get(id)?.focus()");
   });
 

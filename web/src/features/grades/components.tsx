@@ -63,7 +63,7 @@ export function GradesNoData({
   if (payload === null) {
     return (
       <ErrorBox message={error ?? "Notes indisponibles."}>
-        <button type="button" className="btn btn--ghost" style={{ marginTop: 10 }} onClick={onRefresh}>
+        <button type="button" className="btn btn--small" onClick={onRefresh}>
           Réessayer
         </button>
       </ErrorBox>
@@ -72,7 +72,7 @@ export function GradesNoData({
   if (!isGradesPayloadReadable(payload)) {
     return (
       <ErrorBox message="Cache de notes illisible : la donnée n’a pas pu être lue.">
-        <button type="button" className="btn btn--ghost" style={{ marginTop: 10 }} onClick={onRefresh}>
+        <button type="button" className="btn btn--small" onClick={onRefresh}>
           Réessayer
         </button>
       </ErrorBox>
@@ -80,11 +80,11 @@ export function GradesNoData({
   }
   return (
     <EmptyState
-      icon={<IconGrades size={28} />}
+      icon={<IconGrades size={30} />}
       title="Aucune note en cache"
       body="Actualise pour lire les notes de l’établissement."
       action={
-        <button type="button" className="btn" onClick={onRefresh}>
+        <button type="button" className="btn btn--small" onClick={onRefresh}>
           Actualiser
         </button>
       }
@@ -492,7 +492,7 @@ export function GradesScreen({
         <GradesSubjectSections groups={groups} report={data.report} dark={dark} />
       ) : (
         <EmptyState
-          icon={<IconGrades size={28} />}
+          icon={<IconGrades size={30} />}
           title="Aucune note sur cette période"
           body="L’établissement n’a publié aucune note ici."
         />
