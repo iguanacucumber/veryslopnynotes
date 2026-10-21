@@ -1,6 +1,8 @@
 // #362 : garde SSRF + `authFile` non piloté par l'appelant.
 // #419 : la garde résout le NOM (DNS) — un nom public qui pointe vers une IP
 //        privée est refusé avant la navigation.
+// #538 : le jar de session est choisi par le SERVEUR (le corps ne peut plus
+//        en demander le nom : il demandait la session d'un autre tenant).
 //
 // Fakes 100 % synthétiques : le module `playwright` est MOCKÉ (aucun
 // navigateur, aucun réseau), la résolution DNS est INJECTÉE (aucune requête
@@ -19,7 +21,6 @@ import {
   DEFAULT_AUTH_FILE,
   ScrapeManualsError,
   assertPublicRedirectChain,
-  resolveAuthFile,
   scrapeManuals,
 } from "../../server/infrastructure/manuals-scrape";
 import { checkPublicHost } from "../../server/infrastructure/ssrf";
@@ -74,6 +75,8 @@ interface FakeState {
   aborted: string[];
   continued: string[];
   storageStatePaths: string[];
+  /** Jar MONTÉ par le navigateur (le `storageState` du contexte). */
+  mountedStates: string[];
   routePattern: string | null;
 }
 
@@ -84,6 +87,7 @@ const state: FakeState = {
   aborted: [],
   continued: [],
   storageStatePaths: [],
+  mountedStates: [],
   routePattern: null,
 };
 let routeHandler: ((route: unknown) => Promise<void>) | null = null;
@@ -110,6 +114,7 @@ function resetState(): void {
   state.aborted = [];
   state.continued = [];
   state.storageStatePaths = [];
+  state.mountedStates = [];
   state.routePattern = null;
   routeHandler = null;
   stubFetch(() => new Response("ok", { status: 200 })); // pas de redirection
@@ -125,43 +130,48 @@ mock.module("playwright", () => ({
     launch: async () => {
       state.launched += 1;
       return {
-        newContext: async () => ({
-          newPage: async () => ({
-            url: () => fake.finalUrl,
-            title: async () => "Titre factice",
-            content: async () => {
-              state.contentCalls += 1;
-              return "<html><body>SECRET-INTERNAL-SERVICE</body></html>";
+        newContext: async (opts?: { storageState?: string }) => {
+          // Le jar MONTÉ par le navigateur : c'est lui qui dit quelle session
+          // est utilisée (#538).
+          if (opts?.storageState) state.mountedStates.push(opts.storageState);
+          return {
+            newPage: async () => ({
+              url: () => fake.finalUrl,
+              title: async () => "Titre factice",
+              content: async () => {
+                state.contentCalls += 1;
+                return "<html><body>SECRET-INTERNAL-SERVICE</body></html>";
+              },
+              route: async (pattern: string, handler: (r: unknown) => Promise<void>) => {
+                state.routePattern = pattern;
+                routeHandler = handler;
+              },
+              goto: async (url: string) => {
+                const targets = fake.routeSeesRedirect === false ? [url] : [url, fake.finalUrl];
+                for (const target of targets) {
+                  if (!routeHandler) break;
+                  let aborted = false;
+                  await routeHandler({
+                    request: () => ({ url: () => target, resourceType: () => "document" }),
+                    abort: async () => {
+                      aborted = true;
+                      state.aborted.push(target);
+                    },
+                    continue: async () => {
+                      state.continued.push(target);
+                    },
+                  });
+                  if (aborted) throw new Error("net::ERR_BLOCKED_BY_CLIENT");
+                }
+                return { status: () => fake.status ?? 200, ok: () => (fake.status ?? 200) < 400 };
+              },
+            }),
+            storageState: async (o: { path: string }) => {
+              state.storageStatePaths.push(o.path);
             },
-            route: async (pattern: string, handler: (r: unknown) => Promise<void>) => {
-              state.routePattern = pattern;
-              routeHandler = handler;
-            },
-            goto: async (url: string) => {
-              const targets = fake.routeSeesRedirect === false ? [url] : [url, fake.finalUrl];
-              for (const target of targets) {
-                if (!routeHandler) break;
-                let aborted = false;
-                await routeHandler({
-                  request: () => ({ url: () => target, resourceType: () => "document" }),
-                  abort: async () => {
-                    aborted = true;
-                    state.aborted.push(target);
-                  },
-                  continue: async () => {
-                    state.continued.push(target);
-                  },
-                });
-                if (aborted) throw new Error("net::ERR_BLOCKED_BY_CLIENT");
-              }
-              return { status: () => fake.status ?? 200, ok: () => (fake.status ?? 200) < 400 };
-            },
-          }),
-          storageState: async (o: { path: string }) => {
-            state.storageStatePaths.push(o.path);
-          },
-          close: async () => {},
-        }),
+            close: async () => {},
+          };
+        },
         close: async () => {},
       };
     },
@@ -498,54 +508,64 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
   });
 });
 
-describe("authFile : plus piloté par l'appelant (#362)", () => {
-  test("un chemin hors périmètre est refusé et AUCUN fichier n'est écrit", async () => {
+// #538 : le jar de session est CHOISI par le serveur. Avant, le corps pouvait
+// en demander le NOM : le répertoire était imposé (#362), mais pas
+// l'isolation — un appelant pouvait donc monter la session d'un autre tenant.
+// Le champ n'existe plus dans le contrat, et un corps qui le porte est
+// REFUSÉ par le serveur (message dédié, pas un 400 générique).
+describe("jar de session : choisi par le serveur, jamais par l'appelant (#538)", () => {
+  const base = { platform: "p", username: "u", password: "m", startUrl: PUBLIC_URL };
+
+  test("un corps qui demande un jar est REFUSÉ : ni navigateur, ni jar, rien d'écrit", async () => {
     resetState();
     const dir = mkdtempSync(join(tmpdir(), "vsn-authfile-"));
     const victim = join(dir, "victim.json");
     writeFileSync(victim, "ORIGINAL");
     try {
-      await expect(
-        scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, authFile: victim, resolveHost: PUBLIC_RESOLVER }),
-      ).rejects.toThrow(ScrapeManualsError);
-      // Le fichier est intact, le navigateur n'est même pas lancé, aucun jar
-      // n'est écrit : le refus arrive AVANT toute écriture.
-      expect(readFileSync(victim, "utf8")).toBe("ORIGINAL");
+      const app = createApp();
+      for (const asked of [
+        "tenant-b.json", // le jar d'un autre tenant
+        victim, // un chemin hors périmètre
+        "../jar.json",
+        "/etc/passwd",
+        "playwright/.auth/x.json",
+        "..",
+      ]) {
+        const res = await app.handler(
+          new Request("http://127.0.0.1/v1/manuals/scrape", {
+            method: "POST",
+            body: JSON.stringify({ ...base, authFile: asked }),
+          }),
+        );
+        expect(res.status).toBe(400);
+        const json = (await res.json()) as { error?: { code?: string; message?: string } };
+        expect(json.error?.code).toBe("bad_request");
+        // Le message NOMME le champ à retirer : l'appelant sait quoi enlever.
+        expect(json.error?.message).toContain("authFile");
+      }
+      // Aucun navigateur lancé, aucun jar monté, aucun jar écrit, et le
+      // fichier d'un autre tenant est intact.
       expect(state.launched).toBe(0);
+      expect(state.mountedStates).toEqual([]);
       expect(state.storageStatePaths).toEqual([]);
+      expect(readFileSync(victim, "utf8")).toBe("ORIGINAL");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  test("tout chemin (absolu, relatif, « .. ») est refusé", () => {
-    for (const p of [
-      "shared/contracts/api.ts",
-      "../jar.json",
-      "/etc/passwd",
-      "playwright/.auth/x.json",
-      "..",
-      "x/../y.json",
-      "  ",
-      "jar.txt",
-    ]) {
-      expect(() => resolveAuthFile(p)).toThrow(ScrapeManualsError);
-    }
+  test("le SEUL jar monté est celui du serveur", async () => {
+    resetState();
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    // Monté ET persisté : le même jar, celui du serveur.
+    expect(state.mountedStates).toEqual([DEFAULT_AUTH_FILE]);
+    expect(state.storageStatePaths).toEqual([DEFAULT_AUTH_FILE]);
   });
 
-  test("un NOM valide reste sous le répertoire imposé par le serveur", () => {
-    expect(resolveAuthFile("manuel.json")).toBe(join("playwright/.auth", "manuel.json"));
-    expect(resolveAuthFile(undefined)).toBe(DEFAULT_AUTH_FILE);
-    // Le jar par défaut est choisi par l'exploitant du serveur, pas par
-    // l'appelant de l'API : il passe tel quel.
-    expect(resolveAuthFile(undefined, "/var/lib/scraper/jar.json")).toBe("/var/lib/scraper/jar.json");
-  });
-
-  test("le contrat n'accepte plus un chemin de jar", () => {
-    const base = { platform: "p", username: "u", password: "m", startUrl: PUBLIC_URL };
+  test("le contrat ne connaît plus de champ de jar (le jar n'est pas un paramètre de requête)", () => {
+    expect(isManualsScrapeRequest(base)).toBe(true);
+    // Le contrat ignore les champs inconnus ; c'est le SERVEUR qui refuse le
+    // corps (message dédié) — le contrat ne valide plus de nom de jar.
     expect(isManualsScrapeRequest({ ...base, authFile: "manuel.json" })).toBe(true);
-    for (const p of ["playwright/.auth/x.json", "../jar.json", "/etc/passwd", "..", "jar.txt"]) {
-      expect(isManualsScrapeRequest({ ...base, authFile: p })).toBe(false);
-    }
   });
 });
