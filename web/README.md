@@ -14,6 +14,10 @@ Android (`android/app/src/main/assets/web/`), jamais chargé depuis un serveur.
   construit depuis un payload.
 - **Offline-first.** `useResource` affiche le cache avant le réseau et expose
   `stale` / `error`.
+- **Un payload, une requête.** Le payload est rattaché à sa requête (clé +
+  query) : changer de requête (période, algorithme, semaine) l'invalide —
+  l'écran montre un chargement, jamais les chiffres d'une autre requête
+  (`src/lib/resource.ts`, #527).
 
 ## Développement
 

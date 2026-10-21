@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { bridge } from "../bridge/client";
 import { BridgeCallError, type ResourceKey } from "../bridge/types";
 import { forceReload, type LoadSignature } from "../lib/refresh";
+import { beginLoad, invalidateOnRequestChange, requestId, visibleResource, type ResourceStatus } from "../lib/resource";
 import { cssVarsOf, paletteOf, parseScheme } from "../lib/schemes";
 
 type Theme = "SYSTEM" | "LIGHT" | "DARK";
@@ -231,10 +232,17 @@ export interface ResourceState {
 }
 
 /** Lecture offline-first : cache d'abord, puis réseau natif. Le cache est
- *  affiché sans spinner ; un échec garde le cache et expose `error`. */
+ *  affiché sans spinner ; un échec garde le cache et expose `error`.
+ *
+ *  #527 : le payload est RATTACHÉ à sa requête. Changer de requête (période,
+ *  algorithme, semaine) INVALIDE le payload précédent : l'écran montre un
+ *  chargement, jamais les chiffres d'une autre requête — même si le
+ *  chargement échoue. */
 export function useResource(key: ResourceKey, query = ""): ResourceState {
   const { refreshTick } = useApp();
-  const [state, setState] = useState<Omit<ResourceState, "refresh">>({
+  const request = requestId(key, query);
+  const [status, setStatus] = useState<ResourceStatus>({
+    request,
     payload: null,
     fetchedAt: 0,
     stale: false,
@@ -264,13 +272,17 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
     const force = forceReload(lastLoad.current, signature);
     lastLoad.current = signature;
     const run = async () => {
-      setState((s) => (s.payload ? s : { ...s, loading: true }));
+      // #527 : un changement de requête vide l'état (le payload de la
+      // requête précédente devient INVALIDE). Même requête : le cache reste
+      // affiché pendant la relecture.
+      setStatus((s) => beginLoad(s, request));
       try {
         const cached = await bridge.cached(key, query);
         if (!cancelled && cached.payload) {
           // Le cache frais ne doit pas faire clignoter « hors-ligne » : le
           // natif dit déjà s'il est périmé (`stale`), on ne le devine pas.
-          setState({
+          setStatus({
+            request,
             payload: cached.payload,
             fetchedAt: cached.fetchedAt,
             stale: cached.stale,
@@ -284,7 +296,8 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
       try {
         const result = await bridge.load({ key, query, force });
         if (cancelled) return;
-        setState({
+        setStatus({
+          request,
           payload: result.payload,
           fetchedAt: result.fetchedAt,
           stale: result.stale,
@@ -296,8 +309,10 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
         if (e instanceof BridgeCallError && e.code === "auth_required") {
           window.dispatchEvent(new Event("vsn:auth"));
         }
-        setState((s) => ({
-          ...s,
+        setStatus((s) => ({
+          // L'échec porte sur la requête COURANTE : le cache de cette même
+          // requête reste affiché, celui d'une autre requête, jamais.
+          ...invalidateOnRequestChange(s, request),
           loading: false,
           error: e instanceof Error ? e.message : "lecture indisponible",
         }));
@@ -310,7 +325,9 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
   }, [key, query, manual, refreshTick]);
 
   const refresh = useCallback(() => setManual((n) => n + 1), []);
-  return { ...state, refresh };
+  // La vue est PROJETÉE à chaque rendu : entre le changement de requête et
+  // l'effet qui recharge, l'ancien payload est déjà invisible (#527).
+  return { ...visibleResource(status, request), refresh };
 }
 
 /** Appel ponctuel (action utilisateur, appairage, réglages). */
