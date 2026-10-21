@@ -14,8 +14,12 @@
 //     IPv6, entiers, hex), chaîne de redirections vérifiée AVANT le navigateur
 //     (Chromium suit un 302 sans repasser par le route handler), URL FINALE
 //     re-vérifiée après navigation, sous-ressources privées coupées.
-//  2. `authFile` n'est plus un chemin piloté par l'appelant : c'est un NOM de
-//     jar, placé par le serveur sous SON répertoire (playwright/.auth/).
+//  2. le jar de session n'est plus choisi par l'appelant : d'abord un chemin
+//     (écriture de fichier arbitraire), puis un NOM de jar — mais le nom
+//     suffit à appeler la session d'un autre tenant.
+// #538 : le jar est celui du SERVEUR, et lui seul. Plus de nom de jar à
+//  résoudre : le navigateur ne monte jamais la session d'un autre tenant,
+//  et le corps qui demande un jar est refusé par le serveur (message dédié).
 // #419 : la garde ne s'arrête plus au NOM — le nom est RÉSOLU
 //  (server/infrastructure/ssrf.ts) et chaque adresse obtenue est testée
 //  contre les plages privées : un nom public qui pointe vers une IP interne
@@ -28,9 +32,8 @@
 //  mémoire (50 Mo => des centaines de Mo au reparse, x2 scrapes simultanés)
 //  et n'a aucun délai natif (une page qui ne finit pas de streamer survit au
 //  délai HTTP et garde le Chromium vivant).
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { load } from "cheerio";
-import { MANUALS_SCRAPE_AUTH_FILE_RE } from "../../shared/contracts/api";
 import { truncateManualText } from "./manuals";
 import type { ManualDoc } from "./manuals";
 import { checkPublicHost, systemResolver } from "./ssrf";
@@ -59,11 +62,11 @@ export interface ScrapeOptions {
   /** URL de départ fournie par l'humain (jamais committée). */
   readonly startUrl: string;
   /**
-   * NOM du jar de session demandé (jamais un chemin) : le serveur impose son
-   * répertoire. Absent = jar serveur par défaut.
+   * Jar de session du SERVEUR (chemin choisi par l'exploitant). Jamais celui
+   * d'un appelant : le nom du jar ne se déduisait pas du contenu de la
+   * session, mais l'appelait — un appelant pouvait donc naviguer avec la
+   * session d'un autre tenant (#538). Absent = jar serveur par défaut.
    */
-  readonly authFile?: string;
-  /** Jar par défaut du serveur (chemin choisi par l'exploitant). */
   readonly defaultAuthFile?: string;
   /** false = première connexion interactive visible. */
   readonly headless?: boolean;
@@ -104,26 +107,6 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 export const MAX_HTML_CHARS = 1_000_000;
 /** Délai de lecture du HTML : `page.content()` n'en a pas (#422). */
 export const CONTENT_TIMEOUT_MS = 10_000;
-
-/**
- * Résout le jar de session. `requested` = NOM de fichier (contrat) : le
- * chemin final est IMPOSÉ par le serveur (répertoire + nom), donc l'appelant
- * ne peut plus écrire où il veut. Un chemin (séparateur, « .. », absolu) est
- * refusé explicitement, jamais réécrit en silence.
- * ponytail: un seul niveau (pas d'arborescence) : un jar = un fichier.
- */
-export function resolveAuthFile(requested?: string, fallback: string = DEFAULT_AUTH_FILE): string {
-  if (requested === undefined) return fallback;
-  const name = requested.trim();
-  if (name === "" || name.includes("..") || !MANUALS_SCRAPE_AUTH_FILE_RE.test(name)) {
-    throw new ScrapeManualsError("authFile invalide (nom de jar attendu, chemin refuse)");
-  }
-  const resolved = join(AUTH_DIR, name);
-  if (resolve(dirname(resolved)) !== resolve(AUTH_DIR)) {
-    throw new ScrapeManualsError("authFile hors du repertoire serveur");
-  }
-  return resolved;
-}
 
 /**
  * Hôte d'une URL http(s) (null si l'URL est illisible). Utilisé par le route
@@ -345,9 +328,10 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     Math.min(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, REDIRECT_CHECK_TIMEOUT_MS),
     resolve,
   );
-  // Le jar est résolu AVANT le navigateur : un authFile hors périmètre est
-  // refusé sans rien écrire, sans lancer Playwright.
-  const authFile = resolveAuthFile(opts.authFile, opts.defaultAuthFile ?? DEFAULT_AUTH_FILE);
+  // Le jar est celui du SERVEUR, et lui seul (#538) : il n'y a plus de nom
+  // de jar à résoudre, donc plus rien à refuser ici — le navigateur ne
+  // monte jamais la session d'un autre tenant.
+  const jar = opts.defaultAuthFile ?? DEFAULT_AUTH_FILE;
   const log = opts.logger ?? (() => {});
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const signal = opts.signal;
@@ -378,7 +362,7 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
   let context: any = null;
   try {
     context =
-      (await browser.newContext({ ...(authFile ? { storageState: authFile } : {}) }).catch(
+      (await browser.newContext({ ...(jar ? { storageState: jar } : {}) }).catch(
         // Premier run : pas de fichier local, contexte frais pour login interactif.
         async () => browser.newContext(),
       )) ?? null;
@@ -439,7 +423,7 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     // bloquait le scrape au-delà du délai HTTP.
     const html = await readHtml(page, opts.contentTimeoutMs ?? CONTENT_TIMEOUT_MS, log);
     const text = truncateManualText(stripTags(html), 4000);
-    await context.storageState({ path: authFile }).catch(() => {
+    await context.storageState({ path: jar }).catch(() => {
       log(`scrape ${config.platform} -> jar non persiste`);
     });
     await context.close().catch(() => {

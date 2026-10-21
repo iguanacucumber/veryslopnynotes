@@ -86,13 +86,14 @@ components:
       description: >-
         Credentials portail + URL de depart, injectes par l'appelant a chaque
         appel. Le scraper ne detient rien : ni env, ni disque (hors cookie jar
-        gitignore), ni log. Champs sensibles writeOnly.
+        gitignore), ni log. Champs sensibles writeOnly. Le jar de session est
+        choisi par le SERVEUR : aucun champ ne permet a l'appelant de
+        demander la session d'un autre tenant (#538).
       properties:
         platform: { type: string, maxLength: 100 }
         username: { type: string, maxLength: 512, writeOnly: true }
         password: { type: string, maxLength: 512, writeOnly: true }
         startUrl: { type: string, maxLength: 2000 }
-        authFile: { type: string, maxLength: 64, description: Nom du jar de session (fichier .json) place par le serveur dans `playwright/.auth/`. Jamais un chemin : tout chemin est refuse (#362). }
         headless: { type: boolean }
     ManualsScrapeResponse:
       type: object

@@ -160,6 +160,7 @@ describe("scraper-only (#209)", () => {
       scrapeBody({ password: undefined }),
       scrapeBody({ startUrl: "ftp://hote.invalid/x" }),
       scrapeBody({ startUrl: "  " }),
+      // #538 : le corps ne demande plus de jar — le serveur refuse (400).
       scrapeBody({ authFile: "/etc/passwd" }),
       scrapeBody({ authFile: "../jar.json" }),
       {},
@@ -202,9 +203,10 @@ describe("scraper-only (#209)", () => {
   test("contrat : gardes requête/réponse", async () => {
     expect(isManualsScrapeRequest(scrapeBody())).toBe(true);
     expect(isManualsScrapeRequest({ ...scrapeBody(), headless: false })).toBe(true);
-    // #362 : `authFile` = NOM de jar, plus un chemin.
+    // #538 : le contrat ne connaît PLUS de champ de jar (le jar de session
+    // est choisi par le serveur) : un champ inconnu est ignoré par le
+    // contrat, c'est le SERVEUR qui refuse le corps (message dédié).
     expect(isManualsScrapeRequest({ ...scrapeBody(), authFile: "manuel.json" })).toBe(true);
-    expect(isManualsScrapeRequest({ ...scrapeBody(), authFile: "playwright/.auth/x.json" })).toBe(false);
     expect(isManualsScrapeRequest({ ...scrapeBody(), password: "" })).toBe(false);
     expect(isManualsScrapeRequest(null)).toBe(false);
     expect(isManualsScrapeResponse({ docs: [FAKE_DOC] })).toBe(true);
@@ -213,15 +215,21 @@ describe("scraper-only (#209)", () => {
     expect(isManualsScrapeResponse({ docs: "non" })).toBe(false);
   });
 
-  test("#362 : le corps ne fournit qu'un NOM de jar, le serveur impose son chemin", async () => {
+  test("#538 : le corps ne choisit plus le jar : le serveur impose le sien", async () => {
     const fake = fakeScrape();
     const app = createApp({ scrape: fake.scrape, authFile: "/srv/jars/serveur.json" });
-    await app.handler(post("/v1/manuals/scrape", scrapeBody({ authFile: "manuel.json" })));
-    expect(fake.calls[0]?.opts).toMatchObject({ authFile: "manuel.json" });
-    // Sans nom demandé : le jar du serveur, jamais un chemin venu du corps.
+    // Un corps qui demande un jar : REFUSÉ. Le jar d'un autre tenant n'est
+    // jamais monté, et le scrape ne part pas.
+    const refused = await app.handler(
+      post("/v1/manuals/scrape", scrapeBody({ authFile: "manuel.json" })),
+    );
+    expect(refused.status).toBe(400);
+    expect(fake.calls).toHaveLength(0);
+    // Sans demande : le jar du serveur, et lui seul.
     await app.handler(post("/v1/manuals/scrape", scrapeBody()));
-    expect(fake.calls[1]?.opts).toMatchObject({ authFile: undefined });
-    expect(fake.calls[1]?.opts).toMatchObject({ defaultAuthFile: "/srv/jars/serveur.json" });
+    expect(fake.calls[0]?.opts).toMatchObject({ defaultAuthFile: "/srv/jars/serveur.json" });
+    // Et le corps ne peut pas nommer un jar : l'option n'existe plus.
+    expect(fake.calls[0]?.opts).not.toHaveProperty("authFile");
   });
 
   test("I8 : aucun credential lu dans l'environnement (PORT/HOST/TLS seuls, dans start)", async () => {
