@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_TARGETS } from "../../agents/runtime/check";
 import { digestOf, PARITY_SOURCES, parityDigest } from "./fixtures/parity-sources";
@@ -129,14 +131,131 @@ describe("check.ts : pilote de `make check`", () => {
     // `check-fast` (boucle interne) : l'opt-in EXPLICITE qui autorise la liste
     // réduite — c'est le seul usage légitime de CHECK_TARGETS.
     expect(makefile).toMatch(/check-fast:\n\tCHECK_HARNESS=1 CHECK_TARGETS=/);
-    // `check` (gate de merge) : l'opt-in est VIDE, donc même un shell qui
-    // exporterait CHECK_HARNESS=1 ne peut pas rétrécir le gate.
-    expect(makefile).toMatch(/\ncheck:\n\tCHECK_HARNESS= /);
+    // Le GATE (la phase 1, `check-run`) : l'opt-in est VIDE, donc même un
+    // shell qui exporterait CHECK_HARNESS=1 ne peut pas rétrécir le gate.
+    const gate = /check-run:\n((?:\t[^\n]*\n)+)/.exec(makefile)?.[1] ?? "";
+    expect(gate).toContain(
+      "CHECK_HARNESS= ALLOW_SKIP_ANDROID= REQUIRE_KOTLIN_TOOLCHAIN=1 bun run agents/runtime/check.ts",
+    );
     // #491 : `ALLOW_SKIP_ANDROID` est neutralisé de la même façon — sinon un
     // shell qui l'exporte fait sauter la SEULE compilation Kotlin du gate.
-    expect(makefile).toMatch(/\ncheck:\n\tCHECK_HARNESS= ALLOW_SKIP_ANDROID= /);
-    // Et le gate exige la chaîne Kotlin (sinon la parité saute en silence).
-    expect(makefile).toMatch(/\ncheck:\n\tCHECK_HARNESS= ALLOW_SKIP_ANDROID= REQUIRE_KOTLIN_TOOLCHAIN=1 /);
+    expect(gate).toContain("ALLOW_SKIP_ANDROID=");
+    // #523 : `MAKEFLAGS` aussi — `-i` faisait d'un gate ROUGE un gate VERT.
+    expect(gate).toContain("MAKEFLAGS=");
+  });
+
+  // #523 : le gate ne se laisse pas neutraliser par l'environnement. Deux
+  // niveaux, deux trous, deux tests :
+  //   1. le harnais lance un `make` ENFANT par étape — `-i` y faisait passer
+  //      une étape ROUGE pour verte ;
+  //   2. `make check` elle-même : `-i` y faisait ignorer l'échec de la
+  //      recette, donc `make check` sortait 0 avec un gate rouge.
+  describe("#523 : MAKEFLAGS ne neutralise plus le gate", () => {
+    /** Faux `bun` : le harnais ne démarre pas, son code de sortie est piloté. */
+    const FAKE_BUN = `#!/bin/sh
+echo "fake bun: code \${FAKE_BUN_CODE:-0}" >&2
+exit "\${FAKE_BUN_CODE:-0}"
+`;
+
+    /** Lance le VRAI `make check` du dépôt, un faux `bun` devant le PATH. */
+    function makeCheck(env: Record<string, string>): { code: number; out: string; status: string } {
+      const dir = mkdtempSync(join(tmpdir(), "gate-523-make-"));
+      const bin = join(dir, "bin");
+      mkdirSync(bin, { recursive: true });
+      writeFileSync(join(bin, "bun"), FAKE_BUN);
+      chmodSync(join(bin, "bun"), 0o755);
+      const status = join(dir, "gate-status");
+      const p = Bun.spawnSync(["make", "--no-print-directory", "-s", `GATE_STATUS=${status}`, "check"], {
+        cwd: ROOT,
+        env: { ...process.env, PATH: `${bin}:${process.env["PATH"] ?? ""}`, ...env },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const dec = new TextDecoder();
+      return {
+        code: p.exitCode ?? -1,
+        out: dec.decode(p.stdout) + dec.decode(p.stderr),
+        status: existsSync(status) ? readFileSync(status, "utf8").trim() : "",
+      };
+    }
+
+    test("le harnais neutralise MAKEFLAGS : une étape en échec reste ROUGE", () => {
+      const dir = mkdtempSync(join(tmpdir(), "gate-523-enfant-"));
+      try {
+        // Un dépôt-jouet dont la cible échoue : c'est le VRAI `make` enfant
+        // qu'on éprouve, pas une réécriture de sa logique.
+        writeFileSync(join(dir, "Makefile"), "echec:\n\t@exit 3\n");
+        const p = Bun.spawnSync(["bun", DRIVER, dir], {
+          cwd: ROOT,
+          env: { ...process.env, CHECK_HARNESS: "1", CHECK_TARGETS: "echec", MAKEFLAGS: "-i" },
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        const dec = new TextDecoder();
+        const out = dec.decode(p.stdout) + dec.decode(p.stderr);
+        expect(p.exitCode).toBe(1);
+        expect(out).toContain("✘ echec");
+        expect(out).toContain("check : ÉCHEC — echec");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test("`make check` reste ROUGE sous MAKEFLAGS=-i (le verdict est une erreur de MAKE)", () => {
+      const r = makeCheck({ MAKEFLAGS: "-i", FAKE_BUN_CODE: "1" });
+      // Avant : `-i` faisait ignorer l'échec de la recette, `make check`
+      // sortait 0, et `agents/ship.sh` écrivait « `make check` : OK ».
+      expect(r.code).not.toBe(0);
+      expect(r.out).toContain("gate ROUGE");
+      // Le code de sortie du harnais a bien été ÉCRIT, puis REFUSÉ par make.
+      expect(r.status).toBe("1");
+    });
+
+    test("`make check` reste VERT quand le gate réussit (le verdict ne casse rien)", () => {
+      const r = makeCheck({ MAKEFLAGS: "-i", FAKE_BUN_CODE: "0" });
+      expect(r.code).toBe(0);
+      expect(r.status).toBe("0");
+    });
+
+    test("un gate qui CRASH avant d'écrire son statut ne valide rien", () => {
+      const dir = mkdtempSync(join(tmpdir(), "gate-523-crash-"));
+      try {
+        const bin = join(dir, "bin");
+        mkdirSync(bin, { recursive: true });
+        // Le faux `bun` tue son parent (la shell de la recette) : le harnais
+        // meurt, le statut n'est JAMAIS écrit.
+        writeFileSync(join(bin, "bun"), "#!/bin/sh\nkill -9 $PPID\n");
+        chmodSync(join(bin, "bun"), 0o755);
+        const status = join(dir, "gate-status");
+        // Un statut VERT d'un run précédent traîne : il ne doit PAS valider
+        // un gate qui n'a pas tourné.
+        writeFileSync(status, "0");
+        const p = Bun.spawnSync(["make", "--no-print-directory", "-s", `GATE_STATUS=${status}`, "check"], {
+          cwd: ROOT,
+          env: { ...process.env, PATH: `${bin}:${process.env["PATH"] ?? ""}`, MAKEFLAGS: "-i" },
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        const dec = new TextDecoder();
+        const out = dec.decode(p.stdout) + dec.decode(p.stderr);
+        expect(p.exitCode).not.toBe(0);
+        expect(out).toContain("gate NON EXÉCUTÉ");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test("le gate est en DEUX phases : le verdict refuse par `$(error)`", async () => {
+      const makefile = await Bun.file(join(ROOT, "Makefile")).text();
+      // `check` dépend de `check-run` : la phase 1 (le harnais) tourne AVANT
+      // que la phase 2 (le verdict) soit expandue.
+      expect(makefile).toMatch(/^check: check-run$/m);
+      // Le verdict refuse par `$(error)` : `-i` ignore l'échec d'une RECETTE,
+      // pas une erreur de make.
+      const verdict = /^check: check-run\n((?:\t[^\n]*\n)+)/m.exec(makefile)?.[1] ?? "";
+      expect(verdict).toContain("$(error");
+      expect(verdict).toContain("GATE_STATUS");
+    });
   });
 
   // #491 : sans la chaîne Kotlin, la parité SAUTE — donc le gate était vert

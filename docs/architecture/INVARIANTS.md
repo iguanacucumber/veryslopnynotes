@@ -468,3 +468,21 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   `android/data/src/main/java/fr/veryslopnynotes/data/AccountStore.kt`,
   `android/data/src/main/java/fr/veryslopnynotes/data/PairingRepository.kt`,
   `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`.
+
+## I22 — Le gate ne peut pas être neutralisé par l'environnement
+- Invariant : `make check` sort NON-ZÉRO dès qu'une étape échoue, QUEL QUE SOIT
+  l'environnement (`MAKEFLAGS`, `make -i`, `make -k`). `make -i` fait IGNORER
+  l'échec d'une RECETTE : un gate ROUGE devenait VERT, et `agents/ship.sh`
+  (lui-même en `set -e`) écrivait « `make check` : OK » dans le corps de PR
+  (#523). Le gate est donc en DEUX phases : `check-run` lance le harnais et
+  ÉCRIT son code de sortie, `check` REFUSE tout code ≠ 0 par `$(error)` — une
+  erreur de MAKE, que `-i` n'ignore pas. Sans statut, le gate n'A PAS
+  TOURNÉ : c'est un ÉCHEC, jamais un vert. Même règle côté harnais : les make
+  ENFANTS (un par étape) sont lancés SANS `MAKEFLAGS`, sinon une étape rouge
+  passait pour verte.
+- Test : `tests/unit/check-runner.test.ts` (le harnais neutralise `MAKEFLAGS`
+  pour ses enfants ; `make check` reste rouge sous `MAKEFLAGS=-i` ; le verdict
+  refuse par `$(error)`).
+- Commande : `make check`.
+- Emplacement : `Makefile` (cibles `check-run` / `check`),
+  `agents/runtime/check.ts` (environnement des make enfants).
