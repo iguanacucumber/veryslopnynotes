@@ -12,12 +12,23 @@ export const sqliteRe =
 export const httpRe = /from\s+['"]hono|from\s+['"]express|require\s*\([^)]*(hono|express|fastify)|Bun\.serve/;
 
 const netRe = /fetch\(|axios|got\(|https?\.(get|request)|Bun\.serve|XMLHttpRequest|WebSocket/;
-const pronoteUrlRe = /https?:\/\/[^\s"']*(pronote|index-education)/i;
 
 // ponytail: two source-text heuristics; upgrade to AST/dataflow if server gains more outbound routes.
+//
+// #535 : le mot de l'hôte suffit, n'importe où dans le fichier. Avant, il
+// fallait que le mot ET l'appel réseau soient sur la MÊME ligne, ou que
+// l'URL soit un littéral COMPLET (`https://…index-education.net…`) : une URL
+// assemblée à l'exécution passait — `const h = "index-education" + ".net";
+// await fetch("https://" + h);` — alors que le mot est bien dans le fichier.
+//
+// Le signal est déjà là : le mot `pronote`/`index-education` est INTERDIT
+// hors du module `android/pronote/` (I1). Un fichier du serveur qui le
+// mentionne ET appelle le réseau est donc un accès PRONOTE direct, que la
+// forme de l'URL cache ou non. fail-closed : on refuse le fichier.
 export function hasDirectFetch(code: string): boolean {
-  if (code.split("\n").some((line) => pronoteHost.test(line) && netRe.test(line))) return true;
-  return pronoteUrlRe.test(code) && netRe.test(code);
+  if (!netRe.test(code)) return false;
+  // Commentaires ignorés : une mention en prose n'est pas un accès.
+  return pronoteHost.test(codeOnly(code));
 }
 
 /**
