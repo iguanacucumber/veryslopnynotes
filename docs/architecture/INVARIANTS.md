@@ -58,7 +58,8 @@ Format : Invariant → test → commande → emplacement.
 
 ## I2 — Aucun accès Pronote côté serveur ; un seul client Android (ADR-003)
 - Invariant : le serveur ne contacte jamais Pronote. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android (`app`, `core`, `data`) ne contacte Pronote (pinné par I1).
-- Test : `tests/architecture/invariants.test.ts` (aucun accès réseau serveur + un `Client` Android + la surface importée hors `pronote/` : `Client` et les types protocoles, dont `ExpiredObject` — G=22) + `agents/runtime/check-architecture.ts`.
+- **Le scan d'hôte ne se fie plus à un littéral COMPLET** (#535) : le mot `pronote`/`index-education` **et** un appel réseau dans le **même fichier** suffisent, quelle que soit la forme de l'URL (assemblée à l'exécution, sur une ou plusieurs lignes). Avant, il fallait le mot ET l'appel réseau sur la MÊME ligne, ou une URL littérale entière : `const h = "index-education" + ".net"; await fetch("https://" + h);` passait. Le signal est déjà là — le mot est interdit hors module (I1).
+- Test : `tests/architecture/invariants.test.ts` (aucun accès réseau serveur + un `Client` Android + la surface importée hors `pronote/` : `Client` et les types protocoles, dont `ExpiredObject` — G=22 + l'hôte assemblé à l'exécution détecté) + `agents/runtime/check-architecture.ts`.
 - Commande : `make architecture-test`.
 - Emplacement : `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
 
