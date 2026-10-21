@@ -219,7 +219,15 @@ export function ThreadScreen({
   return (
     <div className="stack">
       <div className="row" style={{ alignItems: "center" }}>
-        <button type="button" className="icon-btn" aria-label="Retour à la liste des discussions" onClick={onBack}>
+        {/* #524 : pendant l'envoi, on ne change PAS de fil — la réponse de
+            l'envoi ne doit pas pouvoir arriver dans un autre fil. */}
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="Retour à la liste des discussions"
+          onClick={onBack}
+          disabled={sending}
+        >
           <IconBack />
         </button>
         <div className="grow" style={{ minWidth: 0 }}>
