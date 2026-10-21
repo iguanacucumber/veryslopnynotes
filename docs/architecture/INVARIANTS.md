@@ -165,7 +165,11 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   VRAI secret y échoue au scan anti-secrets, seuls les exemples de
   documentation passent. Le jeu de motifs strict du dépôt s'applique partout
   ailleurs. Aucun secret, domaine, IP ni donnée perso dans ce dossier.
-  **Le contenu vendorisé est VERROUILLÉ de façon vérifiable** (#505) : le
+  **Tous les matchs d'un motif sont inspectés** (#521) : le motif ne passe que
+  si AUCUN match n'est un secret réel. Avant, seul le PREMIER match était
+  inspecté — un placeholder en tête de fichier excusait le fichier **entier**,
+  secret compris. Le contenu vendorisé est VERROUILLÉ de façon vérifiable
+  (#505) : le
   `computedHash` de `skills-lock.json` vient de l'outil `npx skills`, dont
   l'algorithme n'est pas documenté dans le dépôt — il n'est donc pas
   recalculable ici, et le lock amont ne prouve rien tout seul. Le test
