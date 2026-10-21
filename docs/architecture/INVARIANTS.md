@@ -155,7 +155,17 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   miroirs (`core/`, `data/`), surface `pronote/`, jobs et IA : c'est la liste
   qui est gardée, pas du code oublié. Les noms qui n'existaient que pour
   l'interface Compose ont disparu avec `android/ui/`.
-- Test : `tests/architecture/invariants.test.ts` (I9).
+- **Un scanner sans fichiers à scanner est un ÉCHEC, pas un « OK »** (#532) :
+  les scanners passaient au VERT quand ils n'avaient rien à vérifier (un
+  répertoire absent ou renommé rendait `listFiles` vide) — I1, I2, I3 et I9
+  devenaient **vacuement vrais**, et chaque étape du gate annonçait « OK »
+  sans avoir lu une seule ligne. `check-architecture.ts` exige `android/`,
+  `android/core/` et `server/` présents ET peuplés ; `check-kotlin.ts` refuse
+  un répertoire absent ou vide.
+- Test : `tests/architecture/invariants.test.ts` (I9) +
+  `tests/unit/check-architecture-scan.test.ts` (racine vide / répertoire
+  renommé / répertoire vide = ÉCHEC) +
+  `tests/architecture/kotlin-check.test.ts` (répertoire absent ou vide = FAIL).
 - Commande : `make architecture-test`.
 - Emplacement : `android/**/*`.
 
