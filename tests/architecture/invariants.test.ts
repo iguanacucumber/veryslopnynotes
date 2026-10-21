@@ -108,9 +108,7 @@ describe("invariants", () => {
   });
 
   test("I2 FP: fetch hors Pronote ignoré, accès direct détecté", () => {
-    // FP: mot pronote + fetch sur lignes différentes, sans URL → ignoré
-    expect(hasDirectFetch(codeOnly("const p = pronoteProvider;\nawait fetch(apiUrl);"))).toBe(false);
-    // FP: commentaire seul → ignoré
+    // FP: commentaire seul → ignoré (une mention en prose n'est pas un accès)
     expect(hasDirectFetch(codeOnly("// fetch pronote\nconst a = 1;"))).toBe(false);
     // vrai positif: même ligne
     expect(hasDirectFetch(codeOnly('await fetch("https://pronote.example.fr/x");'))).toBe(true);
@@ -118,6 +116,36 @@ describe("invariants", () => {
     expect(
       hasDirectFetch(codeOnly('const u = "https://pronote.example.invalid/eleve/";\nawait fetch(u);')),
     ).toBe(true);
+  });
+
+  // #535 : l'hôte PRONOTE assemblé à l'exécution passait le scan. Le mot est
+  // dans le fichier, mais PAS dans un littéral complet d'URL : l'ancien scan
+  // exigeait le mot ET l'appel réseau sur la MÊME ligne, ou une URL littérale
+  // entière. Or le mot `pronote`/`index-education` est déjà INTERDIT hors du
+  // module `android/pronote/` (I1) : sa présence + un appel réseau dans le
+  // MÊME fichier suffit, la forme de l'URL n'a rien à y faire.
+  test("I2: l'hôte PRONOTE est détecté même assemblé à l'exécution", () => {
+    // Le cas de l'issue : le mot est dans un littéral, l'URL est concaténée,
+    // et l'appel réseau est sur une AUTRE ligne.
+    expect(
+      hasDirectFetch(
+        codeOnly('const h = "index-education" + ".net";\nawait fetch("https://" + h);'),
+      ),
+    ).toBe(true);
+    // Le mot seul, sans mot complet dans un seul littéral : la forme la plus
+    // naturelle quand on veut passer sous le radar.
+    expect(hasDirectFetch(codeOnly('const h = "pronote";\nawait fetch("https://" + h);'))).toBe(true);
+    // Sur plusieurs lignes, le mot et l'appel réseau peuvent être éloignés.
+    expect(
+      hasDirectFetch(
+        codeOnly('const a = "hubeduconnect";\nconst b = "index-education.net";\nawait fetch(a + b);'),
+      ),
+    ).toBe(true);
+    // Le signal est le MOT + un appel réseau dans le même fichier : sans appel
+    // réseau, un fichier qui mentionne l'hôte n'est pas un accès.
+    expect(hasDirectFetch(codeOnly('const h = "index-education.net";\nconst a = 1;'))).toBe(false);
+    // FP préservé : aucune mention d'hôte → rien à signaler.
+    expect(hasDirectFetch(codeOnly("const p = apiProvider;\nawait fetch(apiUrl);"))).toBe(false);
   });
 
   test("I4/I5: IA android sans reseau/secrets/outils (server/ai supprimé en #210)", () => {
