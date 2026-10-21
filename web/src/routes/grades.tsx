@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useApp, useResource } from "../ui/AppContext";
-import { EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../ui/components";
+import { EmptyState, Page, StaleBadge } from "../ui/components";
 import { IconGrades } from "../ui/icons";
 import {
   gradeGroups,
@@ -12,6 +12,7 @@ import {
 } from "../features/grades/model";
 import {
   GradesHero,
+  GradesNoData,
   GradesSubjectSections,
   GradesToolbar,
   LatestGrades,
@@ -47,41 +48,20 @@ export default function GradesRoute() {
     [visibleGrades, data.report],
   );
 
-  const hasPayload = gradesResource.payload !== null;
   const hasData = data.report !== null || data.grades.length > 0;
 
-  if (gradesResource.loading && !hasPayload) {
-    return (
-      <Page>
-        <Loading label="Chargement des notes…" />
-      </Page>
-    );
-  }
-
-  if (!hasData && !hasPayload) {
-    return (
-      <Page>
-        <ErrorBox message={gradesResource.error ?? "Notes indisponibles."}>
-          <button type="button" className="btn btn--ghost" style={{ marginTop: 10 }} onClick={gradesResource.refresh}>
-            Réessayer
-          </button>
-        </ErrorBox>
-      </Page>
-    );
-  }
-
+  // #537 : l'écran SANS donnée est un composant pur (`GradesNoData`) : il
+  // distingue « pas de cache », « cache ILLISIBLE » (erreur) et « aucune
+  // note » (vide). Un JSON corrompu n'est jamais présenté comme une absence
+  // de donnée.
   if (!hasData) {
     return (
       <Page>
-        <EmptyState
-          icon={<IconGrades size={28} />}
-          title="Aucune note en cache"
-          body="Actualise pour lire les notes de l’établissement."
-          action={
-            <button type="button" className="btn" onClick={gradesResource.refresh}>
-              Actualiser
-            </button>
-          }
+        <GradesNoData
+          payload={gradesResource.payload}
+          loading={gradesResource.loading}
+          error={gradesResource.error}
+          onRefresh={gradesResource.refresh}
         />
       </Page>
     );

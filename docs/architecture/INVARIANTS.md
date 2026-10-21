@@ -263,14 +263,23 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   les onglets restent accessibles). Les deux notions restent distinctes :
   `sources` ABSENT ou `[]` = corpus vide (autorisé) ; `capabilities: null` =
   inconnu ; `capabilities: {tabs: []}` = contrat affirmé qui désactive tout.
+  Même règle dans l'INTERFACE (#537) : un payload CORROMPU (JSON illisible)
+  n'est pas une absence de donnée — l'écran Notes affiche une erreur (« cache
+  illisible »), jamais « aucune note en cache », et un fil de messagerie
+  illisible n'est jamais présenté comme « un fil vide ». Les parseurs
+  restent TOLÉRANTS (aucun crash) : c'est l'écran qui distingue « illisible »
+  de « vide ».
 - Test : `tests/unit/kotlin-core-validation-parity.test.ts` (Kotlin EXÉCUTÉ :
   `sources: "abc"` refusé, contrat invalide → `null` et aucun onglet masqué) +
   `tests/web/home.test.ts` et `tests/web/social.test.ts` (web : `capabilities:
-  null` = inconnu, la sanction reste visible).
+  null` = inconnu, la sanction reste visible) + `tests/web/grades.test.ts` et
+  `tests/web/messages.test.ts` (écrans RENDUS : cache illisible = erreur, pas
+  un état vide).
 - Commande : `make check`.
 - Emplacement : `android/core/Humanize.kt`, `android/core/CapabilityProbe.kt`,
   `android/core/Capabilities.kt`, `android/core/CapabilitiesJson.kt`,
-  `android/data/PronotePayloads.kt`, `web/src/features/attendance/model.ts`.
+  `android/data/PronotePayloads.kt`, `web/src/features/attendance/model.ts`,
+  `web/src/features/grades/model.ts`, `web/src/features/messages/model.ts`.
 
 ## I15 — L'export PDF d'une fiche garde le corps entier et ses sources
 - Invariant : l'export PDF d'une fiche de révision rend le corps ENTIER

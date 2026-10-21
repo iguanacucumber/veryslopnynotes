@@ -15,6 +15,7 @@ import {
   gradesQuery,
   historyNote,
   influenceLabel,
+  isGradesPayloadReadable,
   parseGradesPayload,
   parsePeriods,
   scaleSuffix,
@@ -25,7 +26,7 @@ import {
   type AveragesReport,
   type Grade,
 } from "../../web/src/features/grades/model";
-import { GradesSubjectSections } from "../../web/src/features/grades/components";
+import { GradesNoData, GradesSubjectSections } from "../../web/src/features/grades/components";
 
 useParisTz();
 
@@ -399,5 +400,45 @@ describe("sparkline", () => {
     expect(sparklineAverageY([12, 12, 12], 88)).toBeNull();
     expect(sparklineAverageY([10, 20], 0)).toBeNull();
     expect(sparklineAverageY([null, null], 88)).toBeNull();
+  });
+});
+
+// #537 : un payload CORROMPU (JSON illisible) ne doit JAMAIS être présenté
+// comme une absence de note (I14 : « invalide » n'est jamais « vide »).
+// L'écran est RENDU (`react-dom/server`) : c'est ce que l'élève voit.
+describe("notes : un cache illisible est une ERREUR, pas un état vide (#537)", () => {
+  function renderNoData(payload: string | null, loading = false): string {
+    return renderToStaticMarkup(
+      createElement(GradesNoData, { payload, loading, error: null, onRefresh: () => {} }),
+    );
+  }
+
+  test("payload corrompu : une erreur, PAS « aucune note en cache »", () => {
+    const html = renderNoData("{ceci n'est pas du json");
+    expect(html).toContain("illisible");
+    // L'état vide affirmerait un fait faux : les notes ne sont pas vides,
+    // elles sont illisibles.
+    expect(html).not.toContain("Aucune note en cache");
+  });
+
+  test("payload lisible sans note : l'état vide est honnête", () => {
+    const html = renderNoData('{"grades":[]}');
+    expect(html).toContain("Aucune note en cache");
+    expect(html).not.toContain("illisible");
+  });
+
+  test("aucun payload : « Notes indisponibles », pas un cache vide", () => {
+    expect(renderNoData(null, true)).toContain("Chargement des notes");
+    const loaded = renderNoData(null);
+    expect(loaded).toContain("Notes indisponibles");
+    expect(loaded).not.toContain("Aucune note en cache");
+  });
+
+  test("le prédicat distingue le payload illisible du payload lisible", () => {
+    expect(isGradesPayloadReadable("pas du json")).toBe(false);
+    expect(isGradesPayloadReadable("[]")).toBe(false);
+    expect(isGradesPayloadReadable("{}")).toBe(true);
+    expect(isGradesPayloadReadable('{"grades":[]}')).toBe(true);
+    expect(isGradesPayloadReadable(null)).toBe(false);
   });
 });
