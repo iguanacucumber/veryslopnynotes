@@ -13,6 +13,10 @@
 // une écriture normale (elle s'écrit), et une écriture qui précède la purge
 // (la purge l'efface : l'ordre des deux est total).
 //
+// #528 : une déconnexion qui survient ENTRE l'écriture de la fiche et celle
+// de l'index : l'index et le journal sont REFUSÉS, donc l'enregistrement
+// ÉCHOUE (aucun « ok » sans avoir écrit, I10).
+//
 // Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
 // stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
 // erreurs du PILOTE (op inconnue, sid absent) sont préfixées `pilote: ` et
@@ -20,6 +24,7 @@
 package fr.veryslopnynotes.offline
 
 import fr.veryslopnynotes.core.REVISION_TEMPLATE_VERSION
+import fr.veryslopnynotes.core.RevisionKv
 import fr.veryslopnynotes.core.RevisionSheet
 import fr.veryslopnynotes.core.saveRevisionSheet
 import fr.veryslopnynotes.data.CacheScope
@@ -117,6 +122,31 @@ private fun listFiles(dir: File): List<String> {
     return out
 }
 
+/**
+ * Store qui fait basculer l'époque AU MILIEU de l'enregistrement (#528) :
+ * la première écriture (la fiche) passe, puis la déconnexion survient
+ * (invalidation d'époque ET purge dans la MÊME section critique). Les
+ * écritures suivantes — l'index, le journal — sont donc REFUSÉES par la
+ * garde d'époque du VRAI store.
+ */
+private class DisconnectingStore(
+    private val delegate: RevisionKv,
+    private val cache: FileCacheStore,
+) : RevisionKv {
+    private var disconnected = false
+
+    override fun get(key: String): ByteArray? = delegate.get(key)
+
+    override fun set(key: String, value: ByteArray, epoch: Long): Boolean {
+        val written = delegate.set(key, value, epoch)
+        if (written && !disconnected) {
+            disconnected = true
+            CacheScope.purge(cache) // l'époque bascule ET le dossier est purgé
+        }
+        return written
+    }
+}
+
 private class Driver {
     private val bench = Bench()
 
@@ -140,6 +170,18 @@ private class Driver {
             val slot = bench.slot(op)
             val epoch = (op.num("epoch") ?: 0.0).toLong()
             val written = saveRevisionSheet(slot.revisions, sheetFrom(op), epoch)
+            ok("written" to JVal.Bool(written))
+        }
+        // Enregistrement d'une fiche avec une DÉCONNEXION au milieu (#528) :
+        // la coupure tombe ENTRE l'écriture de la fiche et celle de l'index.
+        "writeSheetDisconnect" -> {
+            val slot = bench.slot(op)
+            val epoch = (op.num("epoch") ?: 0.0).toLong()
+            val written = saveRevisionSheet(
+                DisconnectingStore(slot.revisions, slot.cache),
+                sheetFrom(op),
+                epoch,
+            )
             ok("written" to JVal.Bool(written))
         }
         // Déconnexion : la purge passe par le `CacheScope` (le même chemin que

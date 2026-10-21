@@ -38,7 +38,11 @@ Format : Invariant → test → commande → emplacement.
   partagées (`data/SubjectPrefRules.kt` — la source UNIQUE, que le dépôt
   applique aussi), donc une couleur, un emoji ou un libellé hors contrat sont
   REFUSÉS avec une phrase bornée, au lieu d'un « enregistré » suivi d'une
-  écriture abandonnée.
+  écriture abandonnée. Une fiche de révision suit la MÊME règle (#528) :
+  l'enregistrement n'est « ok » que si la fiche ET son index (le journal qui
+  la liste) ont été écrits — un index REFUSÉ (l'époque de session a basculé
+  entre deux écritures) fait répondre `ok:false`, jamais « fiche enregistrée »
+  pour une fiche que `revision.list` ne verra pas.
 - Test : `tests/architecture/web.test.ts` (réseau, CSP, HTML injecté, hôte
   Pronote, secrets persistés, message d'appairage borné) +
   `tests/unit/android-pairing-message.test.ts` (table de messages du pont,
@@ -54,13 +58,17 @@ Format : Invariant → test → commande → emplacement.
   `tests/web/bridge.test.ts` (un rejet natif règle toujours la promesse,
   message non vide ; une méthode SANS timeout se règle quand le natif répond) +
   `tests/web/profile.test.ts` (un
-  refus du natif est affiché, jamais avalé en « Matière enregistrée. »).
+  refus du natif est affiché, jamais avalé en « Matière enregistrée. ») +
+  `tests/unit/kotlin-offline-artifacts.test.ts` (Kotlin EXÉCUTÉ : une fiche
+  dont l'index est REFUSÉ fait ÉCHOUER l'enregistrement — aucun « ok » sans
+  avoir écrit, #528).
 - Commande : `make web` (ou `make architecture-test`).
 - Emplacement : `web/**`, `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`,
   `android/app/src/main/java/fr/veryslopnynotes/app/HomeworkMessages.kt`,
   `android/app/src/main/java/fr/veryslopnynotes/app/BridgeErrors.kt`,
   `android/app/src/main/java/fr/veryslopnynotes/app/SubjectPrefMessages.kt`,
-  `android/data/src/main/java/fr/veryslopnynotes/data/SubjectPrefRules.kt`.
+  `android/data/src/main/java/fr/veryslopnynotes/data/SubjectPrefRules.kt`,
+  `android/core/src/main/java/fr/veryslopnynotes/core/RevisionSheet.kt`.
 
 ## I2 — Aucun accès Pronote côté serveur ; un seul client Android (ADR-003)
 - Invariant : le serveur ne contacte jamais Pronote. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android (`app`, `core`, `data`) ne contacte Pronote (pinné par I1).
@@ -343,11 +351,18 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   ressuscite pas le dossier purgé et n'y laisse pas le contenu scolaire ni les
   préférences du compte déconnecté. L'époque est capturée au DÉBUT de
   l'opération (une fiche passe par un appel LLM de plusieurs secondes) ; hors
-  déconnexion, les écritures se font normalement.
+  déconnexion, les écritures se font normalement. Les écritures d'UNE fiche
+  (la fiche, son index, son journal) forment UNE tentative : si l'index ou le
+  journal est REFUSÉ (l'époque a basculé entre deux écritures),
+  l'enregistrement ÉCHOUE — le pont ne répond JAMAIS « ok » sans avoir écrit
+  (I10, #528). L'état partiel ne laisse rien derrière : l'invalidation
+  d'époque et la purge sont dans la MÊME section critique, donc le
+  basculement qui refuse l'index a déjà purgé la fiche.
 - Test : `tests/unit/kotlin-offline-artifacts.test.ts` (Kotlin EXÉCUTÉ : une
   écriture de fiche ou de préférences pendant un logout ne laisse AUCUN
   fichier ; hors déconnexion, les deux s'écrivent ; une écriture qui précède la
-  purge est effacée par elle ; + le câblage du pont et des stores).
+  purge est effacée par elle ; une déconnexion ENTRE la fiche et son index fait
+  ÉCHOUER l'enregistrement ; + le câblage du pont et des stores).
 - Commande : `make check`.
 - Emplacement : `android/data/OfflineArtifacts.kt`, `android/data/SubjectPrefs.kt`,
   `android/core/RevisionSheet.kt`, `android/app/VsnBridge.kt`.
