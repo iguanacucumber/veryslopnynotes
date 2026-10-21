@@ -578,3 +578,25 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Emplacement : `android/data/DownloadedFiles.kt`, `android/data/LocalDataStore.kt`,
   `android/app/Attachments.kt`, `android/app/VsnBridge.kt`,
   `android/data/PeriodicSyncWorker.kt`.
+
+## I27 — Une réponse tardive n'écrit que dans le fil qui l'attend
+- Invariant : une réponse qui arrive APRÈS un changement d'écran est
+  PÉRIMÉE : elle n'écrit rien dans l'écran. Dans la messagerie (#524), la
+  réponse d'un ENVOI ne peut écrire que dans le fil qui était OUVERT au
+  moment de l'envoi : sinon les messages du fil A s'affichaient sous
+  l'en-tête du fil B, et le brouillon tapé dans B disparaissait. Pendant un
+  envoi, le fil ne change pas (bouton Retour désactivé) ; seul le brouillon
+  ENVOYÉ est effacé (un brouillon tapé pendant l'attente reste). Le
+  rechargement d'un fil suit la même règle depuis #501 : une réponse de
+  chargement dépassée n'écrit pas dans l'écran.
+- Test : `tests/web/messages.test.ts` (garde PURE
+  `web/src/features/messages/reply.ts` : la réponse d'un envoi est ignorée
+  dès que le fil affiché a changé — le fil B garde SES messages et SON
+  brouillon ; la réponse d'un envoi s'applique à son propre fil ; revenir au
+  fil d'origine ne ressuscite pas une réponse périmée ; le bouton Retour est
+  désactivé pendant l'envoi) + `tests/web/messages.test.ts` (#501 : la
+  séquence ignore la réponse d'une demande dépassée).
+- Commande : `make check`.
+- Emplacement : `web/src/features/messages/reply.ts`,
+  `web/src/routes/messages.tsx`, `web/src/features/messages/MessagesScreen.tsx`,
+  `web/src/lib/seq.ts`.
