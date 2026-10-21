@@ -99,7 +99,7 @@ export default function AlertsRoute() {
 
       {layout === "error" ? (
         <ErrorBox message={resource.error ?? "Lecture des alertes indisponible."}>
-          <button type="button" className="btn btn--ghost btn--small" onClick={resource.refresh}>
+          <button type="button" className="btn btn--small" onClick={resource.refresh}>
             Réessayer
           </button>
         </ErrorBox>
@@ -107,11 +107,11 @@ export default function AlertsRoute() {
 
       {layout === "offline-empty" ? (
         <EmptyState
-          icon={<IconShield />}
+          icon={<IconShield size={30} />}
           title="Aucune analyse disponible"
-          body="La dernière lecture n’a pas répondu et aucune alerte n’est en cache. L’absence d’alerte ne peut donc pas être affirmée : actualisez une fois connecté."
+          body="La dernière lecture n’a pas répondu et aucune alerte n’est en cache. L’absence d’alerte ne peut donc pas être affirmée : actualise une fois connecté."
           action={
-            <button type="button" className="btn btn--ghost btn--small" onClick={resource.refresh}>
+            <button type="button" className="btn btn--small" onClick={resource.refresh}>
               Actualiser
             </button>
           }
@@ -125,7 +125,7 @@ export default function AlertsRoute() {
         >
           <div className="row" style={{ alignItems: "center" }}>
             <span style={{ color: "var(--brand-deep)" }}>
-              <IconCheck size={28} />
+              <IconCheck size={30} />
             </span>
             <div className="stack" style={{ gap: 4 }}>
               <h2 className="t-title" style={{ margin: 0 }}>

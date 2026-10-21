@@ -1,7 +1,8 @@
 import { useId, useState } from "react";
 import type { FormEvent } from "react";
 import { Avatar, Card, EmptyState, ErrorBox, Loading, StaleBadge } from "../../ui/components";
-import { IconBack, IconMessage, IconPlus, IconRefresh, IconSend, IconTrash, IconWarning } from "../../ui/icons";
+import { Dialog } from "../../ui/Dialog";
+import { IconBack, IconMessage, IconPlus, IconSend, IconTrash, IconWarning } from "../../ui/icons";
 import {
   conversationCountLabel,
   conversationDateLabel,
@@ -49,9 +50,9 @@ export function ConversationListScreen({
       <div className="row row--wrap">
         <span className="grow t-body-m muted">{conversationCountLabel(discussions.length)}</span>
         {stale ? <StaleBadge /> : null}
-        <button type="button" className="btn btn--ghost btn--small" style={{ minHeight: 48 }} onClick={onNew}>
+        <button type="button" className="btn btn--ghost btn--small" onClick={onNew}>
           <IconPlus size={18} />
-          Nouvelle
+          Nouvelle discussion
         </button>
       </div>
 
@@ -71,7 +72,7 @@ export function ConversationListScreen({
 
       {error ? (
         <ErrorBox message={error}>
-          <button type="button" className="btn btn--ghost btn--small" style={{ minHeight: 48 }} onClick={onRefresh}>
+          <button type="button" className="btn btn--small" onClick={onRefresh}>
             Réessayer
           </button>
         </ErrorBox>
@@ -89,7 +90,7 @@ export function ConversationListScreen({
               : "L’établissement n’a publié aucune discussion."
           }
           action={
-            <button type="button" className="btn btn--ghost btn--small" style={{ minHeight: 48 }} onClick={onRefresh}>
+            <button type="button" className="btn btn--small" onClick={onRefresh}>
               Actualiser
             </button>
           }
@@ -108,7 +109,6 @@ export function ConversationListScreen({
                     style={{
                       flex: 1,
                       minWidth: 0,
-                      minHeight: 48,
                       display: "flex",
                       alignItems: "center",
                       gap: 10,
@@ -162,7 +162,7 @@ export function ConversationListScreen({
                       <button
                         type="button"
                         className="chip chip--active"
-                        style={{ minHeight: 48, minWidth: 48, justifyContent: "center" }}
+                        style={{ minWidth: 48, justifyContent: "center" }}
                         aria-label={`${unread} message${unread > 1 ? "s" : ""} non lu${
                           unread > 1 ? "s" : ""
                         }, marquer comme lu`}
@@ -246,22 +246,14 @@ export function ThreadScreen({
       </div>
 
       <div className="row row--wrap">
-        <button type="button" className="icon-btn" aria-label="Actualiser le fil" onClick={onRefresh}>
-          <IconRefresh />
-        </button>
-        <button
-          type="button"
-          className="btn btn--ghost btn--small"
-          style={{ minHeight: 48 }}
-          onClick={onToggleRead}
-        >
+        <button type="button" className="btn btn--ghost btn--small" onClick={onToggleRead}>
           {read ? "Marquer non lu" : "Marquer lu"}
         </button>
       </div>
 
       {error ? (
         <ErrorBox message={error}>
-          <button type="button" className="btn btn--ghost btn--small" style={{ minHeight: 48 }} onClick={onRefresh}>
+          <button type="button" className="btn btn--small" onClick={onRefresh}>
             Réessayer
           </button>
         </ErrorBox>
@@ -371,55 +363,25 @@ function ConfirmDeleteDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const titleId = useId();
-  const bodyId = useId();
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 60,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-        background: "rgba(0, 0, 0, 0.45)",
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onCancel();
-      }}
-    >
-      <div
-        className="card"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={bodyId}
-        style={{ maxWidth: 440, width: "100%" }}
-      >
-        <div className="row" style={{ alignItems: "flex-start" }}>
-          <span style={{ color: "var(--danger-ink)" }}>
-            <IconWarning />
-          </span>
-          <div className="grow">
-            <h2 className="t-title" id={titleId} style={{ margin: 0 }}>
-              Supprimer la discussion
-            </h2>
-            <p className="t-body-m muted" id={bodyId} style={{ margin: "6px 0 0" }}>
-              « {subject} » sera supprimée. Cette action est définitive.
-            </p>
-          </div>
-        </div>
-        <div className="row" style={{ justifyContent: "flex-end", marginTop: 16 }}>
-          <button type="button" className="btn btn--ghost" autoFocus onClick={onCancel}>
+    <Dialog
+      open
+      role="alertdialog"
+      title="Supprimer la discussion"
+      description={`« ${subject} » sera supprimée. Cette action est définitive.`}
+      icon={<IconWarning />}
+      onClose={onCancel}
+      actions={
+        <>
+          <button type="button" className="btn btn--ghost btn--small" data-autofocus onClick={onCancel}>
             Annuler
           </button>
-          <button type="button" className="btn btn--danger" onClick={onConfirm}>
+          <button type="button" className="btn btn--danger btn--small" onClick={onConfirm}>
             Supprimer
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }
 
@@ -503,7 +465,7 @@ export function NewDiscussionScreen({ recipients, loading, error, sending, onBac
 
       {error ? (
         <ErrorBox message={error}>
-          <button type="button" className="btn btn--ghost btn--small" style={{ minHeight: 48 }} onClick={onRetry}>
+          <button type="button" className="btn btn--small" onClick={onRetry}>
             Réessayer
           </button>
         </ErrorBox>
@@ -538,7 +500,6 @@ export function NewDiscussionScreen({ recipients, loading, error, sending, onBac
                       key={recipient.id}
                       type="button"
                       className={`chip${on ? " chip--active" : ""}`}
-                      style={{ minHeight: 48 }}
                       aria-pressed={on}
                       onClick={() =>
                         setPicked((current) =>

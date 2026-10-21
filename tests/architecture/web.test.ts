@@ -104,6 +104,18 @@ describe("web invariants", () => {
     expect(hits).toEqual([]);
   });
 
+  test("aucune couleur en dur dans les composants UI (#564)", () => {
+    // Les couleurs vivent dans `styles/tokens.css` et les palettes. Un
+    // `#fff`/`rgba()` dans un TSX contourne le thème sombre et les 20 palettes.
+    const tsx = ["features", "routes", "ui"]
+      .flatMap((dir) => list(join(WEB, "src", dir)))
+      .filter((file) => file.endsWith(".tsx"));
+    const hits = tsx
+      .filter((file) => /#[0-9a-fA-F]{3,8}\b|rgba?\(/.test(codeOnly(readFileSync(file, "utf8"))))
+      .map((file) => file.replace(`${ROOT}/`, ""));
+    expect(hits).toEqual([]);
+  });
+
   test("un appairage réussi ouvre la session côté web", () => {
     // Le statut lu au démarrage est périmé après un appairage : sans ce
     // câblage, le garde-fou renvoie vers /pairing et le menu principal

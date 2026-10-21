@@ -5,6 +5,59 @@
   animation: rise-in 220ms var(--ease) both;
 }
 
+.subject-editor__preview {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-variant);
+}
+
+.subject-editor__preview-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.subject-editor__swatches {
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.subject-swatch,
+.subject-emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  box-shadow: var(--shadow-soft);
+  transition: transform var(--duration) var(--ease-out), border-color var(--duration) var(--ease);
+}
+
+.subject-swatch:active,
+.subject-emoji:active {
+  transform: scale(0.94);
+}
+
+.subject-swatch[aria-pressed="true"],
+.subject-emoji[aria-pressed="true"] {
+  border-color: var(--ink);
+}
+
+.subject-emoji {
+  border-color: var(--border);
+  background: var(--surface);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.subject-emoji[aria-pressed="true"] {
+  background: var(--brand-pale);
+}
+
 .scheme-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

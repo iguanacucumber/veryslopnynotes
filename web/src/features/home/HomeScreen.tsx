@@ -251,7 +251,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   { to: "/news", label: "Actualités", status: "Établissement", icon: IconBell, tab: "news" },
   { to: "/canteen", label: "Cantine", status: "Menus", icon: IconFood, tab: "menus" },
   { to: "/attendance", label: "Vie scolaire", status: "Absences", icon: IconWarning, tab: "attendance" },
-  { to: "/messages", label: "Messages", status: "Messagerie", icon: IconMessage, tab: "discussions" },
+  { to: "/messages", label: "Messagerie", status: "Discussions", icon: IconMessage, tab: "discussions" },
   { to: "/fiches", label: "Fiches", status: "Révisions", icon: IconBook },
   { to: "/settings", label: "Réglages", status: "Compte", icon: IconSettings },
 ];
@@ -397,7 +397,7 @@ export default function HomeScreen() {
 
       {!loading && !hasData && error ? (
         <ErrorBox message={error}>
-          <button type="button" className="btn btn--small" style={{ marginTop: 10 }} onClick={refreshAll}>
+          <button type="button" className="btn btn--small" onClick={refreshAll}>
             Réessayer
           </button>
         </ErrorBox>

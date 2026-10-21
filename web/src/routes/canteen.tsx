@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useResource } from "../ui/AppContext";
-import { Card, EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../ui/components";
+import { Card, EmptyState, ErrorBox, Loading, Page, PageHeading, StaleBadge } from "../ui/components";
 import { IconFood } from "../ui/icons";
 import {
   canteenDayLabel,
@@ -41,12 +41,7 @@ export default function CanteenRoute() {
 
   return (
     <Page>
-      <div className="row row--between">
-        <h2 className="t-title" style={{ margin: 0 }}>
-          Menus de la semaine
-        </h2>
-        {resource.stale ? <StaleBadge /> : null}
-      </div>
+      <PageHeading title="Menus de la semaine" action={resource.stale ? <StaleBadge /> : null} />
 
       {resource.error && days.length > 0 ? (
         <p className="tiny" role="status" style={{ margin: 0, color: "var(--danger-ink)" }}>
@@ -58,7 +53,7 @@ export default function CanteenRoute() {
 
       {days.length === 0 && !resource.loading && resource.error ? (
         <ErrorBox message={resource.error}>
-          <button type="button" className="btn btn--ghost btn--small" onClick={resource.refresh}>
+          <button type="button" className="btn btn--small" onClick={resource.refresh}>
             Réessayer
           </button>
         </ErrorBox>
@@ -66,15 +61,15 @@ export default function CanteenRoute() {
 
       {days.length === 0 && !resource.loading && !resource.error ? (
         <EmptyState
-          icon={<IconFood />}
+          icon={<IconFood size={30} />}
           title={resource.payload === null ? "Aucun menu en cache" : "Aucun menu publié cette semaine"}
           body={
             resource.payload === null
-              ? "Actualisez pour charger les menus de la semaine."
+              ? "Actualise pour charger les menus de la semaine."
               : "L’établissement n’a pas publié de menu sur cette période."
           }
           action={
-            <button type="button" className="btn btn--ghost btn--small" onClick={resource.refresh}>
+            <button type="button" className="btn btn--small" onClick={resource.refresh}>
               Actualiser
             </button>
           }

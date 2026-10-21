@@ -22,7 +22,6 @@ export function RevisionSheetsScreen() {
   const openSeq = useRef(0);
   const exportSeq = useRef(0);
   const triggers = useRef(new Map<string, HTMLButtonElement>());
-  const closeRef = useRef<HTMLButtonElement>(null);
   const restoreId = useRef<string | null>(null);
 
   const load = useCallback(async () => {
@@ -44,9 +43,10 @@ export function RevisionSheetsScreen() {
     void load();
   }, [load, refreshTick]);
 
-  // Focus sur « Fermer » à l'ouverture, retour au déclencheur à la fermeture.
+  // Le déclencheur devient « Fermer » à l'ouverture : il porte le focus, et le
+  // retour se fait au même endroit à la fermeture (#564, un seul « Fermer »).
   useEffect(() => {
-    if (selected) closeRef.current?.focus();
+    if (selected) triggers.current.get(selected.id)?.focus();
   }, [selected?.id]);
 
   useEffect(() => {
@@ -114,7 +114,7 @@ export function RevisionSheetsScreen() {
     return (
       <Page>
         <ErrorBox message={error}>
-          <button type="button" className="btn btn--ghost btn--small" onClick={() => void load()}>
+          <button type="button" className="btn btn--small" onClick={() => void load()}>
             Réessayer
           </button>
         </ErrorBox>
@@ -124,21 +124,15 @@ export function RevisionSheetsScreen() {
 
   return (
     <Page>
-      <div className="row" style={{ justifyContent: "flex-end" }}>
-        <button type="button" className="btn btn--ghost btn--small" onClick={() => void load()}>
-          Actualiser
-        </button>
-      </div>
-
       {error ? <ErrorBox message={error} /> : null}
 
       {sheets && sheets.length === 0 ? (
         <EmptyState
-          icon={<IconBook size={32} />}
+          icon={<IconBook size={30} />}
           title="Aucune fiche de révision"
           body="Une fiche est générée automatiquement à l’annonce d’un DS détecté avec certitude."
           action={
-            <button type="button" className="btn btn--ghost btn--small" onClick={() => void load()}>
+            <button type="button" className="btn btn--small" onClick={() => void load()}>
               Actualiser
             </button>
           }
@@ -192,18 +186,6 @@ export function RevisionSheetsScreen() {
 
                     {opened ? (
                       <div id={bodyId} role="region" aria-label={`Fiche ${sheet.title}`}>
-                        <div className="row row--between" style={{ alignItems: "center" }}>
-                          <span className="t-caption muted">Fiche ouverte</span>
-                          <button
-                            ref={closeRef}
-                            type="button"
-                            className="btn btn--ghost btn--small"
-                            aria-label={`Fermer la fiche ${sheet.title}`}
-                            onClick={close}
-                          >
-                            Fermer
-                          </button>
-                        </div>
                         {selected.loading ? <Loading label="Ouverture de la fiche…" /> : null}
                         {selected.error ? <ErrorBox message={selected.error} /> : null}
                         {selected.sheet ? <SheetBody sheet={selected.sheet} /> : null}

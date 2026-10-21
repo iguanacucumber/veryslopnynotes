@@ -30,6 +30,7 @@
   --border: rgba(31, 41, 46, 0.16);
   --surface: #ffffff;
   --page: #f6fbfa;
+  --overlay: rgba(12, 24, 20, 0.48);
   --surface-variant: #f3f6f7;
   --surface-container: #f1f1f1;
   --shadow: 0 10px 30px rgba(31, 41, 46, 0.08);
@@ -101,6 +102,7 @@
   --border: rgba(242, 245, 244, 0.16);
   --surface: #121212;
   --page: #000000;
+  --overlay: rgba(0, 0, 0, 0.7);
   --surface-variant: #1b1b1b;
   --surface-container: #202020;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
