@@ -73,7 +73,7 @@ Format : Invariant → test → commande → emplacement.
 ## I2 — Aucun accès Pronote côté serveur ; un seul client Android (ADR-003)
 - Invariant : le serveur ne contacte jamais Pronote. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android (`app`, `core`, `data`) ne contacte Pronote (pinné par I1).
 - **Le scan d'hôte ne se fie plus à un littéral COMPLET** (#535) : le mot `pronote`/`index-education` **et** un appel réseau dans le **même fichier** suffisent, quelle que soit la forme de l'URL (assemblée à l'exécution, sur une ou plusieurs lignes). Avant, il fallait le mot ET l'appel réseau sur la MÊME ligne, ou une URL littérale entière : `const h = "index-education" + ".net"; await fetch("https://" + h);` passait. Le signal est déjà là — le mot est interdit hors module (I1).
-- Test : `tests/architecture/invariants.test.ts` (aucun accès réseau serveur + un `Client` Android + la surface importée hors `pronote/` : `Client` et les types protocoles, dont `ExpiredObject` — G=22 + l'hôte assemblé à l'exécution détecté) + `agents/runtime/check-architecture.ts`.
+- Test : `tests/architecture/invariants.test.ts` (aucun accès réseau serveur + un `Client` Android + la surface importée hors `pronote/` : `Client` et les types protocoles, dont `ExpiredObject` (G=22) et `PronoteAPIError` (le code `G` de la décision « session morte », #520) — l'hôte assemblé à l'exécution détecté) + `agents/runtime/check-architecture.ts`.
 - Commande : `make architecture-test`.
 - Emplacement : `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
 
@@ -330,6 +330,10 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   la session PERSISTÉE (endpoint + login), jamais de `AccountStore.current()`
   (qui vaut `null` tant que #397 est ouvert). Le login ne sort jamais (ni log,
   ni rapport de crash).
+  **La purge est déclenchée par le TYPE et le CODE `G` de l'erreur, jamais par
+  un mot de son message** (#520) : le `Titre` de l'établissement («
+  Confirmation de connexion requise », « Erreur de session ») ne peut pas
+  vider le cache de l'élève.
 - Test : `tests/unit/kotlin-cache-scope.test.ts` (Kotlin EXÉCUTÉ : appairage
   d'un autre compte → le cache du précédent n'est plus servi ; appairage du
   MÊME compte → le cache est conservé ; session morte → purge ; lecture en vol
@@ -491,16 +495,33 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   `ExpiredObject`) : son message contient le mot « session », donc la décision
   tranche par TYPE, pas par motif (#485) — sinon un simple objet périmé
   déconnectait l'élève ET purgeait le cache hors ligne.
+  **La décision tranche par TYPE et par CODE `G`, JAMAIS par un mot du
+  message** (#520). Le message d'une erreur de PRONOTE est en partie ÉCRIT par
+  l'ÉTABLISSEMENT (`Erreur.Titre`) : « Confirmation de connexion requise »,
+  « Erreur de session »… un seul mot suffisait à détruire la session ET tout
+  le cache hors ligne (notes, devoirs, absences, sanctions, messagerie,
+  fiches, préférences) et à renvoyer l'élève vers l'appairage. Ce qui
+  décide, c'est le TYPE de l'exception et le code `G` (`pronoteErrorCode`,
+  `G=10` : « Session has expired… ») ou le statut HTTP (`401` : le jeton
+  n'est plus accepté) ; tout le reste se RÉESSAIE (le cache reste : mieux
+  vaut une donnée périmée qu'un cache vidé). Le `Titre` de l'établissement ne
+  peut donc jamais purger le cache.
 - Test : `tests/unit/kotlin-sync-worker.test.ts` (Kotlin réel : G=22 = réessai,
-  pas « session morte » ; le vrai message de production est utilisé) +
+  pas « session morte » ; le vrai message de production est utilisé ; un
+  message d'établissement = réessai, une VRAIE session morte (G=10) reste
+  détectée ; plus aucun motif dans la décision) +
   `tests/unit/kotlin-session-repair.test.ts` (Kotlin réel : le rejet
-  purge la session et le cache) + `tests/architecture/session-repair.test.ts`
+  purge la session et le cache ; un `Titre` d'établissement NE purge rien —
+  la session survit ; G=10 purge TOUJOURS) +
+  `tests/architecture/session-repair.test.ts`
   (câblage : l'abonné, le chemin de purge, l'enregistrement du compte).
 - Commande : `make check`.
 - Emplacement : `android/data/src/main/java/fr/veryslopnynotes/data/DeviceAuth.kt`,
   `android/data/src/main/java/fr/veryslopnynotes/data/SessionRepair.kt`,
+  `android/data/src/main/java/fr/veryslopnynotes/data/SessionFailure.kt`,
   `android/data/src/main/java/fr/veryslopnynotes/data/AccountStore.kt`,
   `android/data/src/main/java/fr/veryslopnynotes/data/PairingRepository.kt`,
+  `android/pronote/src/main/java/fr/veryslopnynotes/pronote/Errors.kt`,
   `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`.
 
 ## I22 — Le gate ne peut pas être neutralisé par l'environnement

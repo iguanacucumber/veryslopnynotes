@@ -38,7 +38,7 @@ describe("invariants", () => {
         if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
         code = code
           .replace(/project\(":pronote"\)/g, "")
-          .replace(/PronoteSession|PronoteClientProvider/g, "")
+          .replace(/PronoteSession|PronoteClientProvider|PronoteAPIError|pronoteErrorCode/g, "")
           .replace(/fr\.veryslopnynotes\.pronote/g, "");
         return pronoteHost.test(code);
       } catch {
@@ -445,6 +445,10 @@ describe("invariants", () => {
       // de G=22 contient le mot « session ») — même nature que `MFAError` et
       // `QRCodeDecryptError`, des erreurs de protocole.
       "ExpiredObject",
+      // L'erreur de protocole qui porte le CODE `G` et le statut HTTP : la
+      // décision « session morte » tranche par eux, jamais par un mot du
+      // message (#520).
+      "PronoteAPIError",
       "QrCode",
       "QRCodeDecryptError",
       "QrLoginOptions",

@@ -76,7 +76,9 @@ describe("job de fond : lecture par la file partagée (#403)", () => {
   });
 
   test.skipIf(skip)("la sémantique de résultat est PRÉSERVÉE : session morte = appairage, sinon réessai", async () => {
-    const dead = await ask({ op: "decision", cause: "session expirée" });
+    // Session morte = l'erreur RÉELLE de l'établissement (G=10), pas une
+    // exception dont le message contient le mot « session » (#520).
+    const dead = await ask({ op: "decision", kind: "deadSession" });
     expect(dead.decision).toBe("sessionDead");
     const other = await ask({ op: "decision", cause: "reseau injoignable" });
     expect(other.decision).toBe("retry");
@@ -119,5 +121,48 @@ describe("session morte : G=22 n'en est PAS une", () => {
     // message.
     const failure = readFileSync(join(DATA, "SessionFailure.kt"), "utf8");
     expect(failure).toContain("e is ExpiredObject");
+  });
+});
+
+// #520 : la décision « session morte » ne doit PAS se fier à un MOT du
+// message. Le message d'une erreur de PRONOTE est en partie ÉCRIT par
+// l'établissement (`Erreur.Titre`) : « Confirmation de connexion requise »,
+// « Erreur de session »… un mot suffisait à détruire la session ET tout le
+// cache hors ligne, et à renvoyer l'élève vers l'appairage.
+describe("session morte : la décision tranche par TYPE et par code G (#520)", () => {
+  test.skipIf(skip)("un message d'ÉTABLISSEMENT (« Confirmation de connexion ») = RÉESSAI, pas « session morte »", async () => {
+    const r = await ask({ op: "decision", kind: "establishmentError" });
+    expect(r.decision).toBe("retry");
+  });
+
+  test.skipIf(skip)("une VRAIE session morte (G=10) reste détectée", async () => {
+    const r = await ask({ op: "decision", kind: "deadSession" });
+    expect(r.decision).toBe("sessionDead");
+  });
+
+  test("la décision ne cherche plus de MOT dans le message (le code `G` tranche)", () => {
+    const failure = readFileSync(join(DATA, "SessionFailure.kt"), "utf8");
+    // Plus aucun motif : ni regex, ni recherche de sous-chaîne.
+    expect(failure).not.toMatch(/Regex\(/);
+    expect(failure).not.toMatch(/containsMatchIn/);
+    expect(failure).not.toMatch(/\.contains\(/);
+    // L'information vient du TYPE de l'exception et du code `G`.
+    expect(failure).toContain("pronoteErrorCode");
+    expect(failure).toContain("is PronoteAPIError");
+  });
+
+  test("le statut HTTP d'un refus est un CHAMP de l'erreur (401 = session morte)", () => {
+    // Le port jette l'erreur HTTP avec son statut : la décision le lit sans
+    // jamais relire le message (« Bad request (http status: 401) »).
+    const comm = readFileSync(
+      join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote", "Communication.kt"),
+      "utf8",
+    );
+    expect(comm).toContain("httpStatus = response.status");
+    const errors = readFileSync(
+      join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote", "Errors.kt"),
+      "utf8",
+    );
+    expect(errors).toContain("val httpStatus: Int? = null");
   });
 });

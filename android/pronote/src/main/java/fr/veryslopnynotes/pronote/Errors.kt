@@ -20,6 +20,16 @@ open class PronoteAPIError(
     message: String,
     val pronoteErrorCode: Int? = null,
     val pronoteErrorMsg: String? = null,
+    /**
+     * Statut HTTP de la réponse refusée (401 = le jeton n'est plus accepté),
+     * `null` quand l'échec n'est pas HTTP (une erreur `G` de l'établissement,
+     * une enveloppe illisible).
+     *
+     * C'est un CHAMP, pas un mot du message : la décision « session morte »
+     * s'y fie (#520). Le NOM de la classe reste `PronoteAPIError` — c'est le
+     * contrat avec la référence TS (les tests comparent `name`).
+     */
+    val httpStatus: Int? = null,
 ) : Exception(message)
 
 class ExpiredObject(message: String) : PronoteAPIError(message)

@@ -78,3 +78,58 @@ describe("le rejet d'une session morte purge la session et le cache (#397)", () 
     expect((await ask({ op: "files", sid })).files).toEqual([]);
   });
 });
+
+// #520 : la détection de session morte ne doit PAS se fier à un MOT du
+// message. Le message d'une erreur de PRONOTE est en partie ÉCRIT par
+// l'établissement (`Erreur.Titre`) : « Confirmation de connexion requise »,
+// « Erreur de session »… un mot suffisait à Purger le cache hors ligne
+// (notes, devoirs, absences, sanctions, messagerie, fiches, préférences) et à
+// renvoyer l'élève vers l'appairage.
+//
+// Ce test rejoue le chemin RÉEL d'un dépôt : l'échec → la décision de
+// production (`isSessionFailure`) → le signal (`DeviceAuth.reject()`) → la
+// purge (`SessionRepair.purge`). Le VRAI code est compilé par le harnais.
+describe("session morte : un message d'établissement ne purge pas le cache (#520)", () => {
+  test.skipIf(skip)("un `Titre` d'établissement (« Confirmation de connexion ») : la session SURVIT", async () => {
+    const store = await ask({ op: "newStore" });
+    const sid = store.sid as number;
+    await ask({ op: "openSession" });
+    await ask({ op: "write", sid, resource: "grades", payload: '{"grades":[{"moyenne":15}]}', fetchedAt: 1000 });
+
+    // L'établissement répond par une erreur dont le message contient un mot
+    // de session : ce n'est PAS une session morte.
+    const r = await ask({ op: "readFailure", sid, kind: "establishment" });
+    expect(r.dead).toBe(false);
+    // La session n'est pas invalidée…
+    expect(r.sessionCleared).toBe(false);
+    expect(r.client).toBe(true);
+    // …et le cache SURVIT (les notes de l'élève sont encore là).
+    expect((await ask({ op: "load", sid, resource: "grades" })).found).toBe(true);
+    expect((await ask({ op: "files", sid })).files.length).toBeGreaterThan(0);
+  });
+
+  test.skipIf(skip)("une VRAIE session morte (G=10) purge TOUJOURS (la détection n'est pas supprimée)", async () => {
+    const store = await ask({ op: "newStore" });
+    const sid = store.sid as number;
+    await ask({ op: "openSession" });
+    await ask({ op: "write", sid, resource: "grades", payload: '{"grades":[]}', fetchedAt: 1000 });
+
+    const r = await ask({ op: "readFailure", sid, kind: "deadSession" });
+    expect(r.dead).toBe(true);
+    expect(r.sessionCleared).toBe(true);
+    expect(r.client).toBe(false);
+    expect((await ask({ op: "load", sid, resource: "grades" })).found).toBe(false);
+  });
+
+  test.skipIf(skip)("un jeton refusé (HTTP 401) est DÉTOCTÉ : le statut HTTP tranche", async () => {
+    const store = await ask({ op: "newStore" });
+    const sid = store.sid as number;
+    await ask({ op: "openSession" });
+    await ask({ op: "write", sid, resource: "grades", payload: '{"grades":[]}', fetchedAt: 1000 });
+
+    const r = await ask({ op: "readFailure", sid, kind: "http401" });
+    expect(r.dead).toBe(true);
+    expect(r.sessionCleared).toBe(true);
+    expect((await ask({ op: "load", sid, resource: "grades" })).found).toBe(false);
+  });
+});

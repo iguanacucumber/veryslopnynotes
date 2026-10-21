@@ -144,7 +144,7 @@ export function scanArchitecture(root: string = ROOT): string[] {
     if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
     code = code
       .replace(/project\(":pronote"\)/g, "")
-      .replace(/PronoteSession|PronoteClientProvider/g, "")
+      .replace(/PronoteSession|PronoteClientProvider|PronoteAPIError|pronoteErrorCode/g, "")
       .replace(/fr\.veryslopnynotes\.pronote/g, "");
     return pronoteHost.test(code);
   });

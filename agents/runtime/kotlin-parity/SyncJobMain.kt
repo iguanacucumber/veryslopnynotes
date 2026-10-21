@@ -22,6 +22,7 @@ import fr.veryslopnynotes.pronote.ExpiredObject
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
 import fr.veryslopnynotes.pronote.PRONOTE_ERROR_MESSAGES
+import fr.veryslopnynotes.pronote.PronoteAPIError
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintStream
@@ -62,6 +63,23 @@ private class Driver {
             val read: SyncJobRead = when {
                 kind == "expiredObject" ->
                     SyncJobRead.Failed(ExpiredObject(PRONOTE_ERROR_MESSAGES.getValue(22)))
+                // G=10 : la VRAIE session morte (« Session has expired… »).
+                // La décision tranche par CODE `G`, pas par un mot du
+                // message (#520).
+                kind == "deadSession" ->
+                    SyncJobRead.Failed(PronoteAPIError(PRONOTE_ERROR_MESSAGES.getValue(10), 10, "session expirée"))
+                // L'ÉTABLISSEMENT refuse (G=3) avec un message qui contient un
+                // mot de session (« Confirmation de connexion requise ») :
+                // c'est un message de l'établissement, pas une session morte
+                // (#520).
+                kind == "establishmentError" ->
+                    SyncJobRead.Failed(
+                        PronoteAPIError(
+                            "Unknown error from pronote: 3 | Confirmation de connexion requise",
+                            3,
+                            "Confirmation de connexion requise",
+                        )
+                    )
                 cause == null -> SyncJobRead.Ok("payload")
                 else -> SyncJobRead.Failed(RuntimeException(cause))
             }
