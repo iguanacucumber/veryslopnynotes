@@ -536,3 +536,23 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Commande : `make check`.
 - Emplacement : `shared/contracts/api.ts`, `shared/contracts/api.openapi.yaml`,
   `server/infrastructure/http.ts`, `server/infrastructure/manuals-scrape.ts`.
+
+## I25 — Un payload n'est affiché que pour SA requête
+- Invariant : le payload d'une ressource est RATTACHÉ à sa requête (clé +
+  query). Changer de requête (période, algorithme, semaine) INVALIDE le
+  payload précédent : l'écran montre un chargement, JAMAIS les chiffres d'une
+  autre requête. Un chargement en échec n'affiche JAMAIS le payload d'une
+  autre requête non plus (l'ancien rapport resterait affiché indéfiniment
+  sous le nouveau sélecteur, avec la ligne d'erreur en dessous) — #527. Même
+  esprit que I14 : une donnée qui ne vaut pas pour ce qu'on demande n'est
+  jamais présentée comme si elle valait. Le rafraîchissement d'une MÊME
+  requête (geste « Actualiser ») garde le cache affiché : c'est le
+  offline-first, pas une invalidation.
+- Test : `tests/web/grades.test.ts` (écran RENDU : changer de période → le
+  héros ne montre plus la moyenne de la période précédente ; le chargement en
+  échec n'affiche aucun payload ; le rafraîchissement de la même requête garde
+  le cache) + le câblage vérifié dans le même fichier.
+- Commande : `make check`.
+- Emplacement : `web/src/lib/resource.ts` (règles pures), `web/src/ui/AppContext.tsx`
+  (`useResource`), `web/src/features/grades/components.tsx` (écran pur
+  `GradesScreen`), `web/src/routes/grades.tsx`.

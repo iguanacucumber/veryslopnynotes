@@ -1,6 +1,8 @@
 import { useParisTz } from "./setup";
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -26,9 +28,17 @@ import {
   type AveragesReport,
   type Grade,
 } from "../../web/src/features/grades/model";
-import { GradesNoData, GradesSubjectSections } from "../../web/src/features/grades/components";
+import { GradesNoData, GradesScreen, GradesSubjectSections } from "../../web/src/features/grades/components";
+import {
+  invalidateOnRequestChange,
+  requestId,
+  visibleResource,
+  type ResourceStatus,
+} from "../../web/src/lib/resource";
 
 useParisTz();
+
+const ROOT = join(import.meta.dir, "..", "..");
 
 let seq = 0;
 
@@ -440,5 +450,147 @@ describe("notes : un cache illisible est une ERREUR, pas un état vide (#537)", 
     expect(isGradesPayloadReadable("{}")).toBe(true);
     expect(isGradesPayloadReadable('{"grades":[]}')).toBe(true);
     expect(isGradesPayloadReadable(null)).toBe(false);
+  });
+});
+
+// #527 : un changement de requête INVALIDE le payload précédent.
+//
+// L'écran des notes recalculait le rapport sur l'ANCIEN payload avec la
+// NOUVELLE période : le héros affichait la moyenne de l'autre période sous
+// le nouveau sélecteur — et, si le chargement échouait, l'ancien rapport
+// restait affiché indéfiniment. L'écran est RENDU (`react-dom/server`) : c'est
+// ce que l'élève voit.
+describe("notes : un changement de requête invalide le payload précédent (#527)", () => {
+  const PERIOD_1 = "algorithm=subject&periodId=p1";
+  const PERIOD_2 = "algorithm=subject&periodId=p2";
+
+  // Payload de la période 1 : moyenne 12.
+  const payloadP1 = JSON.stringify({
+    averages: {
+      algorithm: "subject",
+      general: { value: 12, origin: "provided", subjectCount: 1 },
+      subjects: [{ subject: "Maths", value: 12, origin: "provided", gradeCount: 1 }],
+      history: [{ date: "2026-10-01T00:00:00.000Z", value: 12 }],
+      influences: [],
+    },
+    grades: [
+      { id: "g1", subject: "Maths", value: 12, scale: 20, date: "2026-10-01T08:00:00.000Z", periodId: "p1" },
+    ],
+  });
+
+  // Payload de la période 2 : moyenne 16.
+  const payloadP2 = JSON.stringify({
+    averages: {
+      algorithm: "subject",
+      general: { value: 16, origin: "provided", subjectCount: 1 },
+      subjects: [{ subject: "Maths", value: 16, origin: "provided", gradeCount: 1 }],
+      history: [{ date: "2026-10-08T00:00:00.000Z", value: 16 }],
+      influences: [],
+    },
+    grades: [
+      { id: "g2", subject: "Maths", value: 16, scale: 20, date: "2026-10-08T08:00:00.000Z", periodId: "p2" },
+    ],
+  });
+
+  const periods = [{ id: "p1", name: "Trimestre 1", start: null, end: null }];
+
+  function render(status: ResourceStatus, request: string, periodId: string | null): string {
+    const view = visibleResource(status, request);
+    return renderToStaticMarkup(
+      createElement(GradesScreen, {
+        payload: view.payload,
+        loading: view.loading,
+        error: view.error,
+        stale: view.stale,
+        periodsError: null,
+        algorithm: "subject",
+        periodId,
+        periods,
+        dark: false,
+        onAlgorithm: () => {},
+        onPeriod: () => {},
+        onRefresh: () => {},
+      }),
+    );
+  }
+
+  test("changer de période : l'héro ne montre plus la moyenne de la période précédente", () => {
+    const request1 = requestId("grades", PERIOD_1);
+    const request2 = requestId("grades", PERIOD_2);
+    const loaded: ResourceStatus = {
+      request: request1,
+      payload: payloadP1,
+      fetchedAt: 1,
+      stale: false,
+      error: null,
+      loading: false,
+    };
+    // La période 1 est bien affichée…
+    expect(render(loaded, request1, "p1")).toContain("12,00");
+
+    // …puis l'élève change de période : la requête change, le payload est invalide.
+    const changed = invalidateOnRequestChange(loaded, request2);
+    const html = render(changed, request2, "p2");
+    expect(html).not.toContain("12,00");
+    expect(html).toContain("Chargement des notes");
+
+    // Le chargement de la période 2 arrive : l'héro montre la NOUVELLE moyenne.
+    const reloaded: ResourceStatus = {
+      request: request2,
+      payload: payloadP2,
+      fetchedAt: 2,
+      stale: false,
+      error: null,
+      loading: false,
+    };
+    const after = render(reloaded, request2, "p2");
+    expect(after).toContain("16,00");
+    expect(after).not.toContain("12,00");
+  });
+
+  test("un chargement en échec n'affiche JAMAIS le payload d'une autre requête", () => {
+    const request1 = requestId("grades", PERIOD_1);
+    const request2 = requestId("grades", PERIOD_2);
+    const loaded: ResourceStatus = {
+      request: request1,
+      payload: payloadP1,
+      fetchedAt: 1,
+      stale: false,
+      error: null,
+      loading: false,
+    };
+    // La requête change, le chargement échoue : l'ancien rapport ne doit pas
+    // rester affiché sous la nouvelle période.
+    const failed: ResourceStatus = {
+      ...invalidateOnRequestChange(loaded, request2),
+      loading: false,
+      error: "Lecture indisponible.",
+    };
+    const html = render(failed, request2, "p2");
+    expect(html).not.toContain("12,00");
+    expect(html).toContain("Lecture indisponible.");
+    // L'état de la requête précédente reste bien distinct de celui-ci.
+    expect(visibleResource(failed, request1).payload).toBeNull();
+  });
+
+  test("un rafraîchissement de la MÊME requête garde le cache affiché", () => {
+    const request1 = requestId("grades", PERIOD_1);
+    const loaded: ResourceStatus = {
+      request: request1,
+      payload: payloadP1,
+      fetchedAt: 1,
+      stale: false,
+      error: null,
+      loading: false,
+    };
+    // Le geste « Actualiser » ne change pas la requête : le cache reste là.
+    expect(invalidateOnRequestChange(loaded, request1).payload).toBe(payloadP1);
+    expect(visibleResource(loaded, request1).payload).toBe(payloadP1);
+  });
+
+  test("le câblage invalide le payload au changement de requête", () => {
+    const source = readFileSync(join(ROOT, "web/src/ui/AppContext.tsx"), "utf8");
+    expect(source).toContain("invalidateOnRequestChange");
+    expect(source).toContain("visibleResource");
   });
 });
