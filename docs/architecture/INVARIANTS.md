@@ -556,3 +556,25 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Emplacement : `web/src/lib/resource.ts` (règles pures), `web/src/ui/AppContext.tsx`
   (`useResource`), `web/src/features/grades/components.tsx` (écran pur
   `GradesScreen`), `web/src/routes/grades.tsx`.
+
+## I26 — Les fichiers téléchargés ne se chevauchent pas et ne s'accumulent pas
+- Invariant : une pièce jointe téléchargée est écrite dans le cache sous un nom
+  qui porte son IDENTIFIANT (`42-consigne.pdf`), jamais son seul LIBELLÉ :
+  deux pièces distinctes du même devoir ne peuvent donc pas viser le même
+  chemin (la seconde n'écrase plus la première, le viewer n'ouvre plus le
+  mauvais document). Le cache des téléchargements est BORNÉ (24 fichiers, les
+  plus anciens partent) et PURGÉ avec le cache du compte (déconnexion,
+  changement de compte, session morte) : un fichier téléchargé est la DONNÉE
+  DU COMPTE, comme le cache. L'écriture passe par la garde d'époque : une
+  pièce téléchargée pendant une déconnexion n'est PAS écrite, donc le cache
+  purgé ne ressuscite pas.
+- Test : `tests/unit/downloaded-files.test.ts` (Kotlin EXÉCUTÉ : deux pièces du
+  même devoir portant le même libellé donnent deux fichiers distincts, chacun
+  avec son contenu ; le nom porte l'identifiant ; le cache est borné ; la purge
+  de déconnexion ET le changement de compte effacent les pièces jointes ; une
+  écriture pendant une déconnexion est refusée ; + le câblage du pont et du
+  job de fond).
+- Commande : `make check`.
+- Emplacement : `android/data/DownloadedFiles.kt`, `android/data/LocalDataStore.kt`,
+  `android/app/Attachments.kt`, `android/app/VsnBridge.kt`,
+  `android/data/PeriodicSyncWorker.kt`.
