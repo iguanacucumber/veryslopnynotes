@@ -148,8 +148,12 @@ class PeriodicSyncWorker(
      * Store de cache du téléphone : MÊME dossier que l'app (`filesDir/offline`),
      * donc le verrou est partagé (une écriture du job et une de l'app ne
      * s'entrelacent pas).
+     *
+     * #540 : le store englobe le CACHE (`cacheDir/`) : une purge de compte
+     * (session morte) efface aussi les pièces jointes téléchargées.
      */
-    private fun cacheStore(): CacheStore = FileCacheStore(File(applicationContext.filesDir, "offline"))
+    private fun cacheStore(): CacheStore =
+        LocalDataStore(FileCacheStore(File(applicationContext.filesDir, "offline")), applicationContext.cacheDir)
 
     /**
      * Ecriture gardee par l'epoch : `false` = la session a change (deconnexion
