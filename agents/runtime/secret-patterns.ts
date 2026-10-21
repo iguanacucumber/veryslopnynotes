@@ -50,6 +50,19 @@ export const VENDORED_PATTERNS: SecretPattern[] = [
   { name: "aws-key", re: /AKIA(?!IOSFODNN7EXAMPLE)[0-9A-Z]{16}/ },
   // storageState RÉEL : un tableau de cookies. La doc montre `{ cookies: [] }`.
   { name: "storageState", re: /"cookies"\s*:\s*\[\s*\{/ },
+  // JWT (#522) : le jeu vendorisé NE COUVRAIT pas cette forme — le dossier
+  // tiers, le moins contrôlé du dépôt, était donc le moins surveillé sur les
+  // deux formes les plus répandues. La PREUVE exigée par I11 : les TROIS
+  // segments base64url d'une longueur plausible (10 caractères mini par
+  // segment — un vrai JWT a un header, un payload et une signature, tous
+  // longs) et le préfixe `eyJ` (base64 de `{"`, propre à un header JWT).
+  // Un cours qui MENTIONNE un JWT n'en a pas.
+  { name: "jwt", re: /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/ },
+  // Identifiants dans une URL (#522) : `https://user:pass@host/`. La preuve
+  // exigée par I11 : un mot de passe de 12 caractères ou plus — les
+  // exemples de documentation (« user:password@ », « user:changeme@ ») sont
+  // alors ignorés, comme les charges utiles de test.
+  { name: "url-credential", re: /https?:\/\/[^\s/:@"]+:[^\s/@"]{12,}@/ },
   { name: "credential-literal", re: /(api[_-]?key|secret|token|password|passwd|pwd)\s*[:=]\s*["']([A-Za-z0-9+/=_-]{32,})["']/i },
 ];
 
