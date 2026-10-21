@@ -68,12 +68,24 @@ export function patternsFor(rel: string): SecretPattern[] {
   return inVendored ? VENDORED_PATTERNS : PATTERNS;
 }
 
+/**
+ * Tous les matchs d'un motif dans le contenu (le motif est recompilé en
+ * version globale : `matchAll` l'exige, et on veut TOUS les matchs).
+ *
+ * #521 : le scan n'inspectait que le PREMIER match de chaque motif — un
+ * placeholder en tête de fichier excusait le fichier ENTIER, secret compris.
+ */
+function allMatches(content: string, re: RegExp): RegExpExecArray[] {
+  const global = re.flags.includes("g") ? re : new RegExp(re.source, `${re.flags}g`);
+  return [...content.matchAll(global)];
+}
+
 /** Noms des motifs qui matchent `content` pour le jeu donné. */
 export function matchPatterns(content: string, patterns: SecretPattern[]): string[] {
   const hits: string[] = [];
   for (const { name, re } of patterns) {
-    const m = content.match(re);
-    if (!m) continue;
+    const all = allMatches(content, re);
+    if (!all.length) continue;
     if (name === "env-assign") {
       // Ignore les lignes PLACEHOLDER (docs légitimes), échoue sinon.
       //
@@ -82,14 +94,20 @@ export function matchPatterns(content: string, patterns: SecretPattern[]): strin
       // PRÉSENT dans la valeur pour que la ligne soit excusée — donc
       // `MASTER_KEY=prod-example-key-9f3a2b` passait. Un vrai secret ne
       // commence pas par « example ».
-      const bad = m.input!.split("\n").filter((l) => {
+      const bad = content.split("\n").filter((l) => {
         if (!re.test(l)) return false;
         const value = l.split("=").slice(1).join("=");
         return !VALUE_PLACEHOLDER_RE.test(value.trim());
       });
       if (!bad.length) continue;
     }
-    if (name === "credential-literal" && VALUE_PLACEHOLDER_RE.test(m[2] ?? "")) continue;
+    if (name === "credential-literal") {
+      // #521 : TOUS les matchs sont inspectés. Le motif ne passe que si
+      // AUCUN match n'est un secret réel : un placeholder (premier match)
+      // n'excuse plus le fichier entier.
+      const reels = all.filter((m) => !VALUE_PLACEHOLDER_RE.test(m[2] ?? ""));
+      if (!reels.length) continue;
+    }
     hits.push(name);
   }
   return hits;
