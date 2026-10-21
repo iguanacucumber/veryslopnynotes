@@ -1,4 +1,4 @@
-import { useId, useMemo } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { IconChevronRight, IconGrades } from "../../ui/icons";
 import { frDateShort, subjectColor, tint } from "../../lib/format";
 import { EmptyState, ErrorBox, Loading, Page, StaleBadge, SubjectAvatar } from "../../ui/components";
@@ -32,8 +32,10 @@ import {
   type Period,
 } from "./model";
 
-const CHART_WIDTH = 320;
 const CHART_HEIGHT = 96;
+/** Largeur de repli, avant la première mesure : le tracé est déjà lisible,
+ *  il est recalculé à la taille réelle dès que l'élément est mesuré. */
+const CHART_FALLBACK_WIDTH = 320;
 
 /**
  * Écran SANS donnée : distingue trois états, jamais deux (#537, I14).
@@ -130,13 +132,39 @@ function subjectTint(hex: string, dark: boolean): { background: string; ink: str
  * Sparkline de l'historique, dessinée en SVG inline (aucune dépendance).
  * Décorative pour le lecteur d'écran : la phrase `aria-label` porte le sens,
  * et le point final reprend le geste de la référence.
+ *
+ * Géométrie ISOTROPE (#568) : le `viewBox` est exprimé en PIXELS RÉELS (la
+ * largeur mesurée de l'élément), pas un cadre fixe étiré — un cadre étiré
+ * (`preserveAspectRatio="none"`) déformait la courbe, la pastille et son halo
+ * en ellipses, et aplatissait la tendance.
+ *
+ * `width` (px CSS) est la largeur mesurée : elle n'est passée à la main que
+ * par les tests, qui n'ont pas de navigateur.
  */
-export function Sparkline({ values }: { values: Array<number | null> }) {
-  const points = sparklinePoints(values, CHART_WIDTH, CHART_HEIGHT);
+export function Sparkline({ values, width }: { values: Array<number | null>; width?: number }) {
+  const ref = useRef<SVGSVGElement | null>(null);
+  const [measured, setMeasured] = useState(0);
+
+  // Largeur RÉELLE de l'élément : le `viewBox` suit le conteneur, l'échelle
+  // du dessin reste 1:1 et rien n'est déformé, du téléphone à la tablette.
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      // La taille de MISE EN PAGE (pas la boîte transformée) : le cadre reste
+      // dans les mêmes unités que l'écran.
+      const next = entries[0]?.contentRect.width ?? 0;
+      if (next > 0) setMeasured(next);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const chartWidth = width ?? (measured > 0 ? measured : CHART_FALLBACK_WIDTH);
+  const points = sparklinePoints(values, chartWidth, CHART_HEIGHT);
   const averageY = sparklineAverageY(values, CHART_HEIGHT);
   const description = sparklineDescription(values);
   if (points.length === 0) return null;
-  const line = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
   const first = points[0];
   const last = points[points.length - 1];
   if (!first || !last) return null;
@@ -144,9 +172,9 @@ export function Sparkline({ values }: { values: Array<number | null> }) {
   const area = `${path} L ${last.x.toFixed(1)} ${CHART_HEIGHT} L ${first.x.toFixed(1)} ${CHART_HEIGHT} Z`;
   return (
     <svg
+      ref={ref}
       className="grades-chart"
-      viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-      preserveAspectRatio="none"
+      viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}
       role="img"
       aria-label={description}
     >
@@ -155,22 +183,16 @@ export function Sparkline({ values }: { values: Array<number | null> }) {
           className="grades-chart__grid"
           x1={0}
           y1={averageY.toFixed(1)}
-          x2={CHART_WIDTH}
+          x2={chartWidth}
           y2={averageY.toFixed(1)}
-          vectorEffect="non-scaling-stroke"
         />
       ) : null}
       {points.length > 1 ? <path className="grades-chart__area" d={area} /> : null}
-      {points.length > 1 ? (
-        <path
-          className="grades-chart__line"
-          d={path}
-          pathLength={1}
-          vectorEffect="non-scaling-stroke"
-        />
-      ) : null}
-      <circle className="grades-chart__halo" cx={last.x} cy={last.y} r={8} vectorEffect="non-scaling-stroke" />
-      <circle className="grades-chart__dot" cx={last.x} cy={last.y} r={3.5} vectorEffect="non-scaling-stroke" />
+      {points.length > 1 ? <path className="grades-chart__line" d={path} pathLength={1} /> : null}
+      {/* Remplissages : `vector-effect` ne s'applique qu'aux traits, il ne les
+          garde donc pas ronds — ici l'échelle est uniforme, ils le sont. */}
+      <circle className="grades-chart__halo" cx={last.x} cy={last.y} r={8} />
+      <circle className="grades-chart__dot" cx={last.x} cy={last.y} r={3.5} />
     </svg>
   );
 }
