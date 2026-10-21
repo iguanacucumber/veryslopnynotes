@@ -23,6 +23,12 @@ class StoredSession(
     val uuid: String,
     val clientIdentifier: String?,
     val schoolUrl: String,
+    /**
+     * Mode de réouverture (`SessionMode`) : `JETON` pour un appairage QR,
+     * `IDENTIFIANT` pour l'établissement de démonstration. Une session
+     * enregistrée avant ce mode n'a pas de valeur : elle reste `JETON`.
+     */
+    val mode: String = SessionMode.JETON,
 ) {
     // Secret JAMAIS imprimé : ni crash, ni log, ni capture d'écran de debug.
     override fun toString(): String = "StoredSession(url=***, user=***)"
@@ -104,6 +110,7 @@ class EncryptedSessionStore(context: Context) : SessionStore {
             .putString(KEY_UUID, session.uuid)
             .putString(KEY_CLIENT_ID, session.clientIdentifier ?: "")
             .putString(KEY_SCHOOL_URL, session.schoolUrl.trim())
+            .putString(KEY_MODE, SessionMode.of(session.mode))
             .apply()
     }
 
@@ -121,6 +128,9 @@ class EncryptedSessionStore(context: Context) : SessionStore {
             uuid = uuid,
             clientIdentifier = prefs.getString(KEY_CLIENT_ID, null)?.takeIf { it.isNotEmpty() },
             schoolUrl = prefs.getString(KEY_SCHOOL_URL, null)?.trim().orEmpty(),
+            // Une session enregistrée avant le mode de démonstration n'a pas
+            // de valeur : elle se rouvre par son jeton, comme toujours.
+            mode = SessionMode.of(prefs.getString(KEY_MODE, null)),
         )
     }
 
@@ -138,6 +148,7 @@ class EncryptedSessionStore(context: Context) : SessionStore {
         private const val KEY_UUID = "uuid"
         private const val KEY_CLIENT_ID = "client_identifier"
         private const val KEY_SCHOOL_URL = "school_url"
+        private const val KEY_MODE = "session_mode"
 
         private const val MAX_URL_CHARS = 2000
         private const val MAX_SECRET_CHARS = 4096

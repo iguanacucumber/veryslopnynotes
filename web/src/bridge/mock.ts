@@ -278,6 +278,12 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       if (result.ok) sessions.state = "restored";
       return ok(result) as Promise<T>;
     }
+    case "pairing.pairDemo": {
+      // Le pont factice n'a pas d'établissement : la connexion de
+      // démonstration ouvre la session factice (développement seulement).
+      sessions.state = "restored";
+      return ok({ ok: true }) as Promise<T>;
+    }
     case "pairing.cancel":
       return ok({ ok: true }) as Promise<T>;
     case "resources.cached":

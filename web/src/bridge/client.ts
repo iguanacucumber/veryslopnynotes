@@ -210,6 +210,9 @@ export const bridge = {
   accounts: () => call<{ count: number }>("session.accounts"),
   scanQr: () => call<{ qr: PairParams["qr"] | null; cancelled: boolean }>("pairing.scanQr", {}, 0),
   pair: (params: PairParams) => call<PairResult>("pairing.pair", params),
+  // Connexion à l'établissement de démonstration : ni QR, ni PIN — le native
+  // ouvre la session et rend le même contrat que `pair`.
+  pairDemo: () => call<PairResult>("pairing.pairDemo"),
   cancelPairing: () => call<{ ok: true }>("pairing.cancel"),
   // #477 : le cache est indexé par (ressource, requête) : l'entrée servie est
   // celle de la requête AFFICHÉE.
