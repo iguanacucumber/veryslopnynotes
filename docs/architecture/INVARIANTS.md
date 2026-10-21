@@ -158,11 +158,14 @@ auquel le Chromium est réellement fermé, pas seulement la promesse rejetée
 (empilement de Chromium = épuisement mémoire, cf. #363). Le délai dépassé
 répond **504** (le code exact), pas 502 : le portail n'est pas en cause.
 
-**Volume lu :** le HTML récupéré est borné (1 Mo de caractères, plafond
-appliqué AVANT le reparse) et sa lecture a son propre délai (10 s) : sans ça,
-une page de 50 Mo est reparsée par cheerio (plusieurs fois sa taille) et une
-page qui ne finit pas de streamer survit au délai HTTP en gardant le Chromium
-vivant (cf. #422).
+**Volume lu :** le HTML récupéré est borné (1 Mo de caractères) DÈS LA
+LECTURE : la borne est demandée AU navigateur (la chaîne qui traverse le pont
+est bornée) et la TAILLE est mesurée AVANT la lecture (en-tête
+`content-length` : au-delà de 4 Mo, la page est REFUSÉE sans être lue). Le
+plafond s'applique donc à l'ALLOCATION, pas seulement au reparse ; la lecture
+a en outre son propre délai (10 s) : sans ça, une page de 50 Mo était reparsée
+par cheerio (plusieurs fois sa taille) et une page qui ne finit pas de streamer
+survivait au délai HTTP en gardant le Chromium vivant (cf. #422, I30).
 
 **Page de connexion :** un portail qui ne reconnaît pas la session renvoie sa
 page de login en **HTTP 200** — le test HTTP (`ok = status < 400`) la laissait
@@ -714,3 +717,17 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Commande : `make check`.
 - Emplacement : `shared/contracts/api.ts`, `shared/contracts/api.openapi.yaml`,
   `server/infrastructure/http.ts`, `server/infrastructure/manuals-scrape.ts`.
+
+## I30 — Le plafond de HTML s'applique AVANT la matérialisation
+- Invariant : le HTML lu par le scraper ne dépasse jamais 1 Mo de caractères,
+  et il ne coûte JAMAIS plus : la borne est demandée AU navigateur (la chaîne
+  qui traverse le pont est bornée) et la TAILLE est MESURÉE avant la lecture
+  (en-tête `content-length` : au-delà de 4 Mo, la page est REFUSÉE sans être
+  lue). Avant, `page.content()` lisait TOUTE la page en mémoire : le plafond
+  ne protégeait que le REPARSE, pas l'ALLOCATION — une page de plusieurs
+  centaines de Mo vivait x2 avec le plafond de concurrence (#525).
+- Test : `tests/unit/scraper-limits.test.ts` (la borne est demandée au
+  navigateur ; une page trop volumineuse est refusée SANS lecture ; une
+  réponse sans `content-length` reste bornée par la lecture).
+- Commande : `make check`.
+- Emplacement : `server/infrastructure/manuals-scrape.ts`.
