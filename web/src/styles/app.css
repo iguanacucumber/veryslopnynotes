@@ -167,6 +167,15 @@ a {
   background: var(--surface-variant);
 }
 
+/* Bouton Retour désactivé pendant l'envoi (#524) : sans ça, le bouton
+   PARAÎT cliquable alors qu'il ne l'est plus. */
+.icon-btn:disabled,
+.icon-btn:disabled:hover {
+  background: transparent;
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .icon-btn:active {
   transform: scale(0.92);
 }

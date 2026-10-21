@@ -19,6 +19,7 @@ import {
   type DiscussionMessage,
   type DiscussionRecipient,
 } from "../features/messages/model";
+import { createReplyGuard, draftAfterReply } from "../features/messages/reply";
 import { useApp } from "../ui/AppContext";
 import { createSeq } from "../lib/seq";
 
@@ -66,6 +67,12 @@ export default function MessagesRoute() {
   // que `features/revisions/RevisionSheets.tsx` (#501).
   const threadsSeq = useRef(createSeq());
   const threadSeq = useRef(createSeq());
+
+  // #524 : la réponse d'un envoi ne peut écrire que dans le fil OUVERT au
+  // moment de l'envoi. La garde ignore les réponses PÉRIMÉES (le fil a
+  // changé entre-temps) : sinon les messages de A s'affichaient sous
+  // l'en-tête de B et le brouillon tapé dans B disparaissait.
+  const replyGuard = useRef(createReplyGuard());
 
   const loadThreads = useCallback(async () => {
     const seq = threadsSeq.current.next();
@@ -141,6 +148,8 @@ export default function MessagesRoute() {
     // Le fil refermé : sa réponse en vol est périmée (elle ne doit plus rien
     // écrire dans l'écran).
     threadSeq.current.invalidate();
+    replyGuard.current.setDisplayedThread(null);
+    setSending(false);
     setMode("list");
     setOpen(null);
     setMessages([]);
@@ -162,6 +171,10 @@ export default function MessagesRoute() {
   const openThread = useCallback(
     (discussion: Discussion) => {
       pushSentinel();
+      // Le fil affiché change : l'envoi en cours (s'il y en a un) ne vaut plus
+      // rien pour cet écran.
+      replyGuard.current.setDisplayedThread(discussion.id);
+      setSending(false);
       setOpen(discussion);
       setMode("thread");
       setMessages([]);
@@ -216,6 +229,8 @@ export default function MessagesRoute() {
     if (!open) return;
     const body = draft.trim();
     if (!body) return;
+    const sentDraft = draft;
+    const token = replyGuard.current.start();
     setSending(true);
     try {
       const result = await bridge.reply(open.id, body);
@@ -223,14 +238,25 @@ export default function MessagesRoute() {
         notify(result.error || "Réponse impossible.", "error");
         return;
       }
-      setDraft("");
+      // #524 : la réponse n'écrit que dans le fil ouvert à l'envoi. Fil
+      // changé (ou écran refermé) → réponse PÉRIMÉE : elle ne recharge AUCUN
+      // fil et n'efface AUCUN brouillon.
+      const target = replyGuard.current.resolveThreadId(token);
       notify("Message envoyé.");
-      await loadThread(open);
+      if (target !== null) {
+        // Le brouillon n'est effacé que s'il est ENCORE celui envoyé : un
+        // brouillon tapé pendant l'attente est conservé.
+        setDraft((current) => draftAfterReply(current, sentDraft));
+        await loadThread(open);
+      }
+      // La LISTE, elle, n'est pas un fil : elle peut se rafraîchir.
       await loadThreads();
     } catch (e) {
       reportable(e, notify);
     } finally {
-      setSending(false);
+      // Un envoi plus récent (ou un fil changé) a pris la main : on ne touche
+      // plus à l'état d'envoi, qui n'est plus le nôtre.
+      if (replyGuard.current.isCurrent(token)) setSending(false);
     }
   }, [draft, loadThread, loadThreads, notify, open]);
 
