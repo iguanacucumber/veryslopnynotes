@@ -62,7 +62,7 @@ export function WeekNavigator({
           disabled={current}
           aria-label="Revenir à la semaine courante"
         >
-          Cette semaine
+          Semaine courante
         </button>
         <button type="button" className="week-nav__arrow" aria-label="Semaine suivante" onClick={onNext}>
           <IconChevronRight />

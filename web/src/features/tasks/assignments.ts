@@ -279,27 +279,105 @@ export function parseAssignmentsPayload(payload: string | null | undefined): Ass
 
 // --- Regroupement -----------------------------------------------------------
 
-const SECTION_TITLES: Array<[AssignmentSectionId, string]> = [
-  ["overdue", "En retard"],
-  ["today", "Aujourd'hui"],
-  ["week", "Cette semaine"],
-  ["later", "Plus tard"],
-  ["undated", "Sans échéance"],
-  ["done", "Terminés"],
+/** Ordre d'affichage : stable, que la semaine affichée soit la semaine
+ *  courante ou une autre. */
+const SECTION_ORDER: AssignmentSectionId[] = [
+  "overdue",
+  "today",
+  "week",
+  "later",
+  "undated",
+  "done",
 ];
 
-/** Le FAIT prime sur la date ; une dueDate illisible n'est jamais « en retard ».
- *  Elle a sa propre section : un devoir sans échéance reste visible. */
-export function assignmentSectionOf(assignment: Assignment, now: Date): AssignmentSectionId {
+/** Titres fixes ; celui de la semaine est calculé (il nomme la semaine
+ *  AFFICHÉE). */
+const SECTION_TITLES: Record<Exclude<AssignmentSectionId, "week">, string> = {
+  overdue: "En retard",
+  today: "Aujourd'hui",
+  later: "Plus tard",
+  undated: "Sans échéance",
+  done: "Terminés",
+};
+
+/** Lundi 00:00 de la semaine affichée. Une semaine illisible retombe sur la
+ *  semaine courante : la partition reste exhaustive (aucun devoir ne
+ *  disparaît, aucun ne se retrouve deux fois). */
+function resolveWeekStart(weekStart: string, now: Date): Date {
+  return assignmentDate(weekStart) ?? assignmentDate(weekStartOf(now)) ?? new Date(now);
+}
+
+/** Fenêtre de la semaine affichée : lundi → dimanche (jours locaux). */
+function weekWindow(weekStart: string, now: Date): { start: string; end: string } {
+  const date = resolveWeekStart(weekStart, now);
+  return { start: isoDay(date), end: isoDay(addDays(date, 6)) };
+}
+
+/** Titre de la section de semaine : il nomme la semaine AFFICHÉE, pas
+ *  « maintenant » — « Cette semaine » pour la semaine courante, « Semaine 43 »
+ *  pour une autre. */
+function weekSectionTitle(weekStart: string, now: Date): string {
+  const { start } = weekWindow(weekStart, now);
+  return start === weekStartOf(now) ? "Cette semaine" : weekLabelFr(start);
+}
+
+/** Une échéance datée du jour et DÉJÀ PASSÉE est « en retard ». Une date
+ *  SEULE (sans heure) est un rendez-vous de la journée entière : elle n'est
+ *  jamais « plus tôt que maintenant », sinon la moitié des devoirs du jour
+ *  signaleraient à tort un retard. */
+function isEarlierToday(assignment: Assignment, date: Date, now: Date): boolean {
+  if (DATE_ONLY.test(assignment.dueDate.trim())) return false;
+  return date.getTime() < now.getTime();
+}
+
+/**
+ * Section d'un devoir, RELATIVE À LA SEMAINE AFFICHÉE (`weekStart`, un lundi).
+ *
+ * Semaine courante (celle d'aujourd'hui) :
+ * - « En retard » : échéance d'AVANT aujourd'hui — un devoir dû hier est en
+ *   retard, il ne repasse pas dans « Cette semaine » ; et, pour une
+ *   échéance du jour dont l'heure est déjà passée, retard également ;
+ * - « Aujourd'hui » : échéance du jour qu'il reste à faire (une date SANS
+ *   heure est un rendez-vous de la journée entière : jamais en retard) ;
+ * - section de semaine : échéances des jours qui viennent, jusqu'au
+ *   dimanche (titre : « Cette semaine ») ;
+ * - « Plus tard » : échéances après la fin de la semaine (hors de l'écran :
+ *   la liste affichée ne contient que la semaine choisie).
+ *
+ * Autre semaine (passée ou à venir) :
+ * - « En retard » : échéance avant le début de la semaine affichée ;
+ * - section de semaine : échéances du lundi au dimanche de la semaine
+ *   affichée (titre : « Semaine 43 ») ;
+ * - « Plus tard » : échéances après la fin de la semaine affichée ;
+ * - pas de section « Aujourd'hui » : elle n'aurait aucun sens hors de la
+ *   semaine en cours.
+ *
+ * Le FAIT prime sur la date (« Terminés ») ; une dueDate illisible n'est
+ * jamais « en retard » : elle a sa propre section (« Sans échéance »), un
+ * devoir sans échéance reste visible.
+ */
+export function assignmentSectionOf(
+  assignment: Assignment,
+  weekStart: string,
+  now: Date,
+): AssignmentSectionId {
   if (assignment.done) return "done";
   const date = assignmentDate(assignment.dueDate);
   if (!date) return "undated";
-  const today = isoDay(now);
+  const { start, end } = weekWindow(weekStart, now);
   const day = isoDay(date);
-  if (day < today) return "overdue";
-  if (day === today) return "today";
-  const weekEnd = isoDay(addDays(now, 7));
-  return day < weekEnd ? "week" : "later";
+  if (start === weekStartOf(now)) {
+    // Semaine en cours : « En retard » = ce qui aurait déjà dû être rendu.
+    const today = isoDay(now);
+    if (day < today) return "overdue";
+    if (day === today) return isEarlierToday(assignment, date, now) ? "overdue" : "today";
+    if (day > end) return "later";
+    return "week";
+  }
+  // Autre semaine : les sections décrivent la fenêtre affichée.
+  if (day < start) return "overdue";
+  if (day > end) return "later";
+  return "week";
 }
 
 function byDate(a: Assignment, b: Assignment): number {
@@ -309,12 +387,21 @@ function byDate(a: Assignment, b: Assignment): number {
 }
 
 /** Sections non vides, dans l'ordre d'affichage, triées par échéance. Les
- *  devoirs sans date lisible restent visibles dans « Sans échéance ». */
-export function assignmentSections(items: Assignment[], now: Date): AssignmentSection[] {
+ *  devoirs sans date lisible restent visibles dans « Sans échéance ». Les
+ *  sections suivent la semaine AFFICHÉE (`weekStart`), pas « aujourd'hui ». */
+export function assignmentSections(
+  items: Assignment[],
+  weekStart: string,
+  now: Date,
+): AssignmentSection[] {
   const sections: AssignmentSection[] = [];
-  for (const [id, title] of SECTION_TITLES) {
-    const sectionItems = items.filter((item) => assignmentSectionOf(item, now) === id).sort(byDate);
-    if (sectionItems.length > 0) sections.push({ id, title, items: sectionItems });
+  for (const id of SECTION_ORDER) {
+    const sectionItems = items
+      .filter((item) => assignmentSectionOf(item, weekStart, now) === id)
+      .sort(byDate);
+    if (sectionItems.length === 0) continue;
+    const title = id === "week" ? weekSectionTitle(weekStart, now) : SECTION_TITLES[id];
+    sections.push({ id, title, items: sectionItems });
   }
   return sections;
 }

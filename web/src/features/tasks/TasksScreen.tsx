@@ -114,7 +114,10 @@ function TasksWeek({ week }: { week: string }) {
     };
   }, [refreshTick]);
 
-  const sections = useMemo(() => assignmentSections(items, new Date()), [items]);
+  // Les sections suivent la semaine AFFICHÉE (#567) : « En retard »,
+  // « Aujourd'hui » et la section de semaine décrivent la semaine affichée,
+  // pas la semaine en cours quel que soit l'en-tête.
+  const sections = useMemo(() => assignmentSections(items, week, new Date()), [items, week]);
 
   async function toggle(assignment: Assignment, next: boolean) {
     if (pending[assignment.id]) return;
