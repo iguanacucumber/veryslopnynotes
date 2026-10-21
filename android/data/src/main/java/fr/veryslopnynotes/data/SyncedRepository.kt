@@ -121,7 +121,12 @@ class SyncedRepository(
         ClientQueue.submit(
             CachePolicy.dedupKey(resource, query, save),
             work = { readOutcome(save, resource, query) },
-            deliver = { o -> post(cb, o) },
+            deliver = { o ->
+                // L'échec de la file est un outcome d'échec (#530) : la
+                // promesse est TOUJOURS réglée (elle attendait le délai natif
+                // quand le travail jétait).
+                post(cb, o.orFailed(RefreshOutcome.Failed("Lecture impossible.", null)))
+            },
         )
     }
 
@@ -156,7 +161,11 @@ class SyncedRepository(
             }
         } catch (e: NoLocalSession) {
             cachedOrFailed(resource, query, "Aucune donnée en cache.")
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            // `Throwable` et non `Exception` (#530) : un `Error` (OOM) est un
+            // échec comme un autre — il ne doit pas remonter comme une
+            // exception libre (la file le livrerait, mais l'écran perdrait le
+            // repli cache).
             if (isSessionFailure(e)) {
                 // Session locale morte : le cache ne masque PAS une session
                 // morte (des donnees perimees comme si tout allait bien) :
@@ -198,7 +207,11 @@ class SyncedRepository(
         }
         // Relectures simultanees = UN seul ping (cle sans query : la requete ne
         // depend d'aucun ecran) ; tous les callbacks recoivent le meme outcome.
-        ClientQueue.submit("sync|", work = { syncOutcome() }, deliver = { o -> post(cb, o) })
+        ClientQueue.submit(
+            "sync|",
+            work = { syncOutcome() },
+            deliver = { o -> post(cb, o.orFailed(RefreshOutcome.Failed("Relecture indisponible.", null))) },
+        )
     }
 
     private fun syncOutcome(): RefreshOutcome {
@@ -246,7 +259,7 @@ class SyncedRepository(
         ClientQueue.submit(
             "news-body|$target",
             work = { newsBodyOutcome(target) },
-            deliver = { o -> postBody(cb, o) },
+            deliver = { o -> postBody(cb, o.orFailed(null to "Contenu indisponible.")) },
         )
     }
 
@@ -290,7 +303,11 @@ class SyncedRepository(
         }
         // Dédoublonnage (#310) : deux écrans qui demandent les tranches en meme
         // temps declenchent UNE lecture locale, pas deux.
-        ClientQueue.submit("periods|", work = { periodsOutcome() }, deliver = { o -> post(cb, o) })
+        ClientQueue.submit(
+            "periods|",
+            work = { periodsOutcome() },
+            deliver = { o -> post(cb, o.orFailed(RefreshOutcome.Failed("Tranches indisponibles.", null))) },
+        )
     }
 
     private fun periodsOutcome(): RefreshOutcome {
@@ -384,3 +401,14 @@ class SyncedRepository(
 
 /** Pas de session locale : repli cache, exactement comme un reseau KO. */
 private class NoLocalSession : Exception()
+
+/**
+ * L'échec de la file = le repli du lecteur (#530).
+ *
+ * L'échec est une VALEUR livrée à tous les callbacks de la clé : l'écran
+ * affiche son message au lieu d'attendre le délai natif (promesse pendante).
+ */
+private fun <T> QueueOutcome<T>.orFailed(fallback: T): T = when (this) {
+    is QueueOutcome.Ok -> value
+    is QueueOutcome.Failed -> fallback
+}

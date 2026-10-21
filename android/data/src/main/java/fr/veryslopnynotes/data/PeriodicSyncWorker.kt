@@ -85,9 +85,16 @@ class PeriodicSyncWorker(
             for (resource in JOB_RESOURCES) {
                 // La lecture passe par la file partagée (clé namespacée `job|` :
                 // jamais celle d'un écran, donc jamais un résultat étranger).
-                val read = ClientQueue.submitAndAwait("job|$resource|", READ_TIMEOUT_MS) {
+                val outcome = ClientQueue.submitAndAwait("job|$resource|", READ_TIMEOUT_MS) {
                     safeRead { cachedRead(client, resource, "") }
                 } ?: return Result.retry()
+                // Un travail qui JETTE est un ÉCHEC LIVRÉ (#530) : l'attente
+                // finit tout de suite (avant : 120 s de pendance), et la cause
+                // décide (session morte = appairage, sinon réessai).
+                val read = when (outcome) {
+                    is QueueOutcome.Failed -> return failure(outcome.cause)
+                    is QueueOutcome.Ok -> outcome.value
+                }
                 when (val decision = syncJobDecision(read)) {
                     SyncJobDecision.Retry -> return Result.retry()
                     SyncJobDecision.SessionDead -> {
@@ -112,7 +119,7 @@ class PeriodicSyncWorker(
      * réessai ne ressusciterait pas la session). Autre échec = RÉESSAI
      * (backoff WorkManager).
      */
-    private fun failure(e: Exception): Result =
+    private fun failure(e: Throwable): Result =
         if (isSessionFailure(e)) {
             DeviceAuth.reject()
             Result.success()

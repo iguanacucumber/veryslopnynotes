@@ -40,9 +40,8 @@ fun <T> syncJobOutcome(session: T?): SyncJobOutcome<T> =
  * Ce que le job de fond LIT dans la file partagée (#403).
  *
  * `Failed` porte la CAUSE : c'est elle qui décide réessai ou session morte
- * (`isSessionFailure`). La lecture ne LÈVE JAMAIS hors de la file : un
- * travail qui jette perd ses callbacks (et son fil), donc l'échec est une
- * VALEUR, pas une exception.
+ * (`isSessionFailure`). La lecture ne LÈVE JAMAIS hors de la file : l'échec
+ * est une VALEUR, pas une exception.
  */
 sealed interface SyncJobRead {
     /** Le payload lu. */
@@ -53,8 +52,14 @@ sealed interface SyncJobRead {
 }
 
 /**
- * Une lecture NE LÈVE JAMAIS (#403) : la file perdrait ses callbacks si le
- * travail jette. L'échec est un résultat, pas une exception.
+ * Une lecture NE LÈVE JAMAIS (#403) : l'échec est un résultat, pas une
+ * exception — la cause est conservée, c'est elle qui décide.
+ *
+ * Depuis #530, la file NE perd plus ses callbacks : elle livre l'échec à
+ * tous ceux de la clé. `safeRead` garde l'avantage du job : la cause d'une
+ * `Exception` du client est classée ICI (session morte ou réessai) ; un
+ * `Error` — qui n'est pas un échec métier — remonte à la file, qui le livre
+ * en échec (le job réessaie).
  */
 fun safeRead(read: () -> String): SyncJobRead =
     try {
