@@ -441,6 +441,15 @@ private fun allKnownIds(store: RevisionKv): List<String> {
  * la session a changé depuis (déconnexion), l'écriture est REFUSÉE et
  * `false` est renvoyé — rien n'est écrit, donc le répertoire purgé ne
  * ressuscite pas.
+ *
+ * #528 : les trois écritures forment UNE tentative. L'époque peut basculer
+ * ENTRE l'écriture de la fiche et celle de l'index (la génération dure
+ * plusieurs secondes) : l'index et le journal sont alors REFUSÉS, et
+ * l'enregistrement ÉCHOUE — le pont ne doit JAMAIS répondre « ok » sans
+ * avoir écrit (I10). Une fiche non listable n'est pas une fiche
+ * enregistrée. L'état partiel ne laisse rien derrière : l'invalidation
+ * d'époque et la purge sont dans la MÊME section critique (I16), donc le
+ * basculement qui refuse l'index a déjà purgé la fiche écrite.
  */
 fun saveRevisionSheet(store: RevisionKv, sheet: RevisionSheet, epoch: Long): Boolean {
     if (!isRevisionSheetValid(sheet)) throw IllegalArgumentException("fiche invalide (contrat)")
@@ -452,10 +461,11 @@ fun saveRevisionSheet(store: RevisionKv, sheet: RevisionSheet, epoch: Long): Boo
         ids.add(sheet.id)
         ids.sort()
         val encoded = revisionIndexJson(ids).toByteArray(Charsets.UTF_8)
-        store.set(INDEX_KEY, encoded, epoch)
+        // Index REFUSÉ = l'époque a basculé : l'enregistrement échoue.
+        if (!store.set(INDEX_KEY, encoded, epoch)) return false
         // Le journal est la source de vérité qui ne rétrécit jamais : même si
         // l'index est corrompu au prochain tour, l'id reste listable.
-        store.set(INDEX_JOURNAL_KEY, encoded, epoch)
+        if (!store.set(INDEX_JOURNAL_KEY, encoded, epoch)) return false
     }
     return true
 }
