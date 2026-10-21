@@ -64,7 +64,7 @@ class AssignmentsRepository(
                 // ressert plus l'état d'avant (la case se décochait au retour).
                 // `setDone` lève si l'écriture échoue : rien n'est purgé alors.
                 writeAndInvalidate(cache, CachePolicy.ASSIGNMENTS) { found.setDone(done) }
-                val payload = JSONObject().put("assignment", assignmentJson(found, 0, null)).toString()
+                val payload = JSONObject().put("assignment", assignmentJson(found, found.id.ifBlank { "a-0" }, 0, null)).toString()
                 val updated = parseToggle(payload)?.copy(done = done)
                 if (updated == null) {
                     post { onDone(ToggleOutcome(null, "Réponse illisible.")) }
@@ -133,10 +133,15 @@ class AssignmentsRepository(
             val root = JSONObject(body)
             val arr: JSONArray = root.optJSONArray("assignments") ?: JSONArray()
             val out = mutableListOf<Assignment>()
+            // #570 : un devoir = UNE entrée. Le même identifiant publié deux
+            // fois (deux fenêtres de cache, #477) n'est lu qu'une fois.
+            val seen = HashSet<String>()
             for (i in 0 until arr.length()) {
                 val o: JSONObject = arr.optJSONObject(i) ?: continue
                 val a = fromJson(o) ?: continue
-                if (Assignment.isValid(a)) out.add(a)
+                if (!Assignment.isValid(a)) continue
+                if (!seen.add(a.id)) continue
+                out.add(a)
             }
             return out
         }

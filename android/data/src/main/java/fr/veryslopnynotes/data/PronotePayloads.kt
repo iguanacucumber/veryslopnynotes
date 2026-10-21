@@ -287,8 +287,25 @@ private fun lessonContents(client: Client, from: LocalDateTime, to: LocalDateTim
     return out
 }
 
+/**
+ * Identifiant PUBLIÉ d'un devoir (#570).
+ *
+ * L'identifiant Pronote (`N`) quand il existe : c'est l'IDENTITÉ du devoir
+ * (le toggle le renvoie tel quel au dépôt). Sinon un repli SYNTHÉTIQUE,
+ * unique dans le payload ET dans la fenêtre servie : le cache garde une
+ * entrée par semaine (#477), et deux fenêtres ne doivent JAMAIS forger le
+ * même identifiant pour deux devoirs DIFFÉRENTS — le web déduplique par
+ * identifiant, un repli partagé effacerait un vrai devoir.
+ */
+private fun homeworkIdOf(
+    hw: fr.veryslopnynotes.pronote.Homework,
+    index: Int,
+    scope: String,
+): String = hw.id.ifBlank { "a-$scope-$index" }
+
 internal fun assignmentJson(
     hw: fr.veryslopnynotes.pronote.Homework,
+    id: String,
     index: Int,
     lesson: Pair<String, String>?,
 ): JSONObject? {
@@ -318,7 +335,7 @@ internal fun assignmentJson(
     }
     val subject = hw.subject.name.ifBlank { GRADE_SUBJECT_FALLBACK }
     return JSONObject().apply {
-        put("id", hw.id.ifBlank { "a-$index" })
+        put("id", id)
         put("subject", subject)
         put("title", (if (description.isEmpty()) "Devoir" else description.take(200)))
         put("dueDate", hw.date.parisIso())
@@ -351,11 +368,20 @@ internal fun assignmentsPayload(client: Client, query: Map<String, String>, now:
     val arr = JSONArray()
     val fromMs = from.atZone(PARIS).toInstant().toEpochMilli()
     val toMs = to.atZone(PARIS).toInstant().toEpochMilli()
+    // #570 : un devoir = UNE ligne publiée. Le même devoir (même `N`) peut
+    // revenir dans la liste brute : il est publié UNE fois (le web
+    // déduplique par identifiant, mais le NATIF est la source de vérité).
+    val seen = HashSet<String>()
+    // La fenêtre servie : le repli d'identifiant est unique par fenêtre
+    // (deux fenêtres = deux entrées de cache, #477).
+    val scope = "${from.toLocalDate()}-${to.toLocalDate()}"
     raws.forEachIndexed { i, hw ->
         val dueMs = hw.date.atZone(PARIS).toInstant().toEpochMilli()
         if (win != null && (dueMs < fromMs || dueMs > toMs)) return@forEachIndexed
+        val id = homeworkIdOf(hw, i, scope)
+        if (!seen.add(id)) return@forEachIndexed
         val key = lessonKeyOf(hw.subject.name, parisDay(hw.date))
-        assignmentJson(hw, i, key?.let { lessons[it] })?.let { arr.put(it) }
+        assignmentJson(hw, id, i, key?.let { lessons[it] })?.let { arr.put(it) }
     }
     return JSONObject().put("assignments", arr).toString()
 }
@@ -504,7 +530,11 @@ internal fun attendancePayload(client: Client): String {
     val absences = JSONArray()
     val counters = LinkedHashMap<String, JSONObject>()
     val names = mutableMapOf<String, String>()
-    for (p in client.periods) {
+    // #570 : une absence = UNE ligne publiée. La MÊME absence (même `N`
+    // Pronote) est renvoyée par CHAQUE période dont la plage la recouvre :
+    // sans déduplication, elle était publiée deux fois et COMPTÉE deux fois.
+    val seen = HashSet<String>()
+    for ((periodIndex, p) in client.periods.withIndex()) {
         val pid = p.id.ifBlank { null }
         if (pid != null) names[pid] = p.name
         val rows: List<Pair<JSONObject, String?>> = mutableListOf<Pair<JSONObject, String?>>().apply {
@@ -515,8 +545,13 @@ internal fun attendancePayload(client: Client): String {
                 emptyList()
             }
             for ((i, a) in ab.withIndex()) {
+                // Le repli est UNIQUE dans le payload : deux périodes ne
+                // forgent jamais le même identifiant pour deux absences
+                // DIFFÉRENTES (le web déduplique par identifiant).
+                val id = a.id.ifBlank { "abs-$periodIndex-$i" }
+                if (!seen.add(id)) continue
                 add(JSONObject().apply {
-                    put("id", a.id.ifBlank { "abs-$i" })
+                    put("id", id)
                     put("kind", "absence")
                     put("date", a.fromDate.parisIso())
                     val to = a.toDate.parisIso()
@@ -534,8 +569,10 @@ internal fun attendancePayload(client: Client): String {
                 emptyList()
             }
             for ((i, d) in dl.withIndex()) {
+                val id = d.id.ifBlank { "late-$periodIndex-$i" }
+                if (!seen.add(id)) continue
                 add(JSONObject().apply {
-                    put("id", d.id.ifBlank { "late-$i" })
+                    put("id", id)
                     put("kind", "late")
                     put("date", d.date.parisIso())
                     putIf("motif", joinReasons(d.reasons, 500))
@@ -545,6 +582,8 @@ internal fun attendancePayload(client: Client): String {
                 } to pid)
             }
         }
+        // Les compteurs sont calculés depuis les lignes DÉDUPLIQUÉES : une
+        // absence parue dans deux périodes ne compte qu'une fois.
         for ((obj, id) in rows) {
             absences.put(obj)
             if (id != null) {

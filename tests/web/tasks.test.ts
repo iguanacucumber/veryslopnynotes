@@ -147,6 +147,22 @@ describe("web tâches — parsing défensif", () => {
     );
     expect(duplicates.items.map((item) => item.id)).toEqual(["same", "other"]);
   });
+
+  // #570 : la déduplication par identifiant TIENT toujours, et elle est
+  // par identifiant SEUL : deux devoirs RÉELS qui se ressemblent (matière,
+  // titre, échéance) ne sont jamais confondus.
+  test("la déduplication par id écarte le doublon et garde les devoirs distincts (#570)", () => {
+    const twice = parseAssignmentsPayload(payload([VALID, { ...VALID }]));
+    expect(twice.items.map((item) => item.id)).toEqual(["a3"]);
+
+    const alike = parseAssignmentsPayload(
+      payload([
+        { ...VALID, id: "x" },
+        { ...VALID, id: "y" },
+      ]),
+    );
+    expect(alike.items.map((item) => item.id)).toEqual(["x", "y"]);
+  });
 });
 
 describe("web tâches — dates et semaines", () => {
