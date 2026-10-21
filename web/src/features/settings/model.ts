@@ -274,10 +274,3 @@ export function subjectEmojiChoices(current: string | null | undefined): string[
   if (emoji === null || SUBJECT_EMOJI.includes(emoji)) return [...SUBJECT_EMOJI];
   return [...SUBJECT_EMOJI, emoji];
 }
-
-/** Compteur de l'écran Réglages ; `null` = réglages indisponibles. */
-export function accountCountText(count: number | null): string {
-  if (count === null) return "Nombre de comptes indisponible";
-  if (count <= 0) return "Aucun compte appairé : l'appairage se fait depuis le Profil";
-  return count === 1 ? "1 compte · l'appairage se fait depuis le Profil" : `${count} comptes · la session en cours garde ses accès`;
-}

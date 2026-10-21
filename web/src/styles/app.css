@@ -375,11 +375,137 @@ button.card:active {
   user-select: none;
 }
 
+/* --- Lignes de liste (Profil, Réglages) ---------------------------------- */
+
+.rows {
+  padding: 4px 12px;
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  transition: background var(--duration) var(--ease);
+}
+
+.list-row:hover,
+.list-row:active {
+  background: color-mix(in srgb, var(--brand) 5%, transparent);
+}
+
+.list-row__leading {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.list-row__title {
+  display: block;
+  font-weight: 600;
+}
+
+.list-row__subtitle {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.list-row--danger,
+.list-row--danger .list-row__subtitle {
+  color: var(--danger-ink);
+}
+
 /* Carte d'erreur : le bord porte le signal, le fond reste une teinte discrète
    (le rouge plein est réservé aux notices et aux boutons destructifs). */
 .card--danger {
   border-color: var(--danger);
   background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+}
+
+.error-box__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* --- Dialogue modal ------------------------------------------------------- */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--overlay);
+  animation: dialog-fade 160ms var(--ease) both;
+}
+
+.dialog {
+  width: 100%;
+  max-width: 440px;
+  max-height: calc(var(--app-height) - 32px);
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+  outline: none;
+  animation: dialog-rise 220ms var(--ease-out) both;
+}
+
+.dialog__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.dialog__icon {
+  display: inline-flex;
+  color: var(--danger-ink);
+}
+
+.dialog__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 19px;
+  line-height: 25px;
+  font-weight: 700;
+}
+
+.dialog__body {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+@keyframes dialog-fade {
+  from { opacity: 0; }
+}
+
+@keyframes dialog-rise {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
 }
 
 .stack {
@@ -424,10 +550,136 @@ button.card:active {
   margin: 20px 2px 10px;
 }
 
-.section-title h2 {
+.section-title__heading {
+  margin: 0;
   font-size: 19px;
   line-height: 24px;
+  font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+.page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 2px 0;
+}
+
+.page-heading__text {
+  min-width: 0;
+}
+
+.page-heading__eyebrow {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.page-heading__title {
+  margin: 1px 0 0;
+  font-size: 21px;
+  line-height: 27px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.page-heading__action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+/* --- Semaine (Tâches, Cours) --------------------------------------------- */
+
+.card.week-nav {
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--surface) 94%, var(--brand) 6%), var(--surface));
+}
+
+.week-nav__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding-left: 4px;
+}
+
+.week-nav__label {
+  font-size: 14px;
+  line-height: 19px;
+  font-weight: 700;
+}
+
+.week-nav__detail {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 600;
+}
+
+.week-nav__row {
+  display: grid;
+  grid-template-columns: var(--tap) minmax(0, 1fr) var(--tap);
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.week-nav__arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  transition: background var(--duration) var(--ease), transform var(--duration) var(--ease-out);
+}
+
+.week-nav__arrow:hover,
+.week-nav__arrow:active {
+  background: var(--surface-variant);
+}
+
+.week-nav__arrow:active {
+  transform: scale(0.92);
+}
+
+.week-nav__today {
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 0 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--brand-pale);
+  color: var(--brand-deep);
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: transform var(--duration) var(--ease-out), background var(--duration) var(--ease);
+}
+
+.week-nav__today:active {
+  transform: scale(0.97);
+}
+
+.week-nav__today:disabled {
+  background: var(--surface-variant);
+  color: var(--muted);
+  opacity: 0.7;
+  cursor: default;
 }
 
 .chip {
@@ -505,7 +757,7 @@ button.card:active {
 }
 
 .btn--small {
-  min-height: 44px;
+  min-height: var(--tap);
   padding: 0 14px;
   font-size: 13px;
 }
@@ -513,7 +765,7 @@ button.card:active {
 /* Une puce cliquable reste une cible tactile : même hauteur que les boutons
    compacts. Les puces purement décoratives gardent leur taille. */
 button.chip {
-  min-height: 44px;
+  min-height: var(--tap);
 }
 
 .field {

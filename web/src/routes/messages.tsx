@@ -73,6 +73,7 @@ export default function MessagesRoute() {
   // changé entre-temps) : sinon les messages de A s'affichaient sous
   // l'en-tête de B et le brouillon tapé dans B disparaissait.
   const replyGuard = useRef(createReplyGuard());
+  const threadRefresh = useRef(refreshTick);
 
   const loadThreads = useCallback(async () => {
     const seq = threadsSeq.current.next();
@@ -143,6 +144,15 @@ export default function MessagesRoute() {
       if (threadSeq.current.isCurrent(seq)) setThreadLoading(false);
     }
   }, []);
+
+  // Le geste global « Actualiser » recharge aussi le fil OUVERT : son bouton
+  // local a disparu (#564), sans quoi le fil serait le seul écran que le
+  // geste global ne rafraîchit pas.
+  useEffect(() => {
+    if (threadRefresh.current === refreshTick) return;
+    threadRefresh.current = refreshTick;
+    if (mode === "thread" && open) void loadThread(open);
+  }, [refreshTick, mode, open, loadThread]);
 
   const resetToList = useCallback(() => {
     // Le fil refermé : sa réponse en vol est périmée (elle ne doit plus rien

@@ -516,9 +516,14 @@ describe("écrans — garde-fous de source", () => {
     const messages = read("features/messages/MessagesScreen.tsx");
     expect(messages).toContain('role="alertdialog"');
     expect(messages).toContain("Supprimer la discussion");
-    // 48 px minimum sur les contrôles interactifs de la messagerie.
-    expect(messages).toContain("minHeight: 48");
-    expect(read("features/attendance/SchoolLifeScreens.tsx")).toContain("minHeight: 48");
+    // Le dialogue et les cibles tactiles sont partagés (#564) : `--tap` vaut
+    // 48 px, et `btn--small`/`button.chip` le consomment sans override inline.
+    expect(messages).toContain("<Dialog");
+    expect(messages).toContain("btn--danger btn--small");
+    expect(messages).not.toContain("minHeight: 48");
+    expect(read("styles/app.css")).toContain("min-height: var(--tap)");
+    expect(read("styles/tokens.css")).toContain("--tap: 48px");
+    expect(read("features/attendance/SchoolLifeScreens.tsx")).not.toContain("minHeight: 48");
     // Le retour du fil ramène à la liste sans quitter la route (sentinelle
     // d’historique de même URL, consommée par le retour système).
     expect(messages).toContain("Retour à la liste des discussions");

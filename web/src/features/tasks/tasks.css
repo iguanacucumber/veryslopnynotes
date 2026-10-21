@@ -1,102 +1,4 @@
-/* Tâches — semaine, cartes de devoir, état terminé. */
-
-.tasks-week {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: var(--radius-lg);
-  background:
-    linear-gradient(160deg, color-mix(in srgb, var(--surface) 94%, var(--brand) 6%), var(--surface));
-}
-
-.tasks-week__row {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 44px;
-  align-items: center;
-  gap: 6px;
-}
-
-.tasks-week__nav {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink);
-  transition: background var(--duration) var(--ease), transform var(--duration) var(--ease-out);
-}
-
-.tasks-week__nav:hover,
-.tasks-week__nav:active {
-  background: var(--surface-variant);
-}
-
-.tasks-week__nav:active {
-  transform: scale(0.92);
-}
-
-.tasks-week__label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  min-width: 0;
-}
-
-.tasks-week__label strong {
-  font-size: 14px;
-  line-height: 19px;
-  font-weight: 700;
-}
-
-.tasks-week__label small {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 15px;
-  font-weight: 600;
-}
-
-.tasks-week__today {
-  align-self: center;
-  min-height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  background: var(--brand-pale);
-  color: var(--brand-deep);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.tasks-head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.tasks-head__eyebrow {
-  display: block;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 15px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.tasks-head__title {
-  margin: 1px 0 0;
-  font-size: 26px;
-  line-height: 31px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
+/* Tâches — cartes de devoir, état terminé. */
 
 .tasks-assistant {
   display: flex;
@@ -204,8 +106,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: var(--tap);
+  height: var(--tap);
   flex: 0 0 auto;
   border: 2px solid var(--border);
   border-radius: 999px;
@@ -257,7 +159,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
+  min-height: var(--tap);
   padding: 0 14px;
   border: 1px solid var(--border-soft);
   border-radius: 999px;
@@ -292,17 +194,7 @@
 }
 
 @media (max-width: 380px) {
-  .tasks-head__title {
-    font-size: 23px;
-    line-height: 28px;
-  }
-
   .task-card {
     padding: 13px;
-  }
-
-  .task-check {
-    width: 44px;
-    height: 44px;
   }
 }
