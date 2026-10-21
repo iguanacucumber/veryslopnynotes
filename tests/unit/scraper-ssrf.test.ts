@@ -138,9 +138,12 @@ mock.module("playwright", () => ({
             newPage: async () => ({
               url: () => fake.finalUrl,
               title: async () => "Titre factice",
-              content: async () => {
+              // #525 : la lecture passe par `evaluate` (la borne est appliquée
+              // DANS le navigateur) : le faux rend au plus `max` caractères.
+              evaluate: async (_fn: unknown, max: number) => {
                 state.contentCalls += 1;
-                return "<html><body>SECRET-INTERNAL-SERVICE</body></html>";
+                const html = "<html><body>SECRET-INTERNAL-SERVICE</body></html>";
+                return html.length > max ? html.slice(0, max + 1) : html;
               },
               route: async (pattern: string, handler: (r: unknown) => Promise<void>) => {
                 state.routePattern = pattern;

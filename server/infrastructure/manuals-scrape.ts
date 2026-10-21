@@ -114,6 +114,16 @@ const DEFAULT_TIMEOUT_MS = 30_000;
  * final est tronqué à 4 000 caractères).
  */
 export const MAX_HTML_CHARS = 1_000_000;
+/**
+ * Plafond du HTML en OCTETS, mesuré par l'en-tête `content-length` (#525).
+ *
+ * 4× le plafond de caractères : le pire cas UTF-8 (4 octets par caractère).
+ * Au-delà, la page est REFUSÉE SANS ÊTRE LUE — elle serait de toute façon
+ * tronquée au plafond de caractères, et la sérialiser coûterait des centaines
+ * de Mo de mémoire (le plafond ne protégeait que le REPARSE, pas
+ * l'allocation).
+ */
+export const MAX_HTML_BYTES = 4 * MAX_HTML_CHARS;
 /** Délai de lecture du HTML : `page.content()` n'en a pas (#422). */
 export const CONTENT_TIMEOUT_MS = 10_000;
 
@@ -290,19 +300,62 @@ export function isLoginPage(html: string): boolean {
   return login;
 }
 
-/** Page Playwright : seule la lecture du HTML nous intéresse ici. */
-interface HtmlPage {
-  content: () => Promise<string>;
+/**
+ * Taille de la réponse, en OCTETS (en-tête `content-length`), 0 si inconnue.
+ *
+ * C'est la MESURE AVANT la matérialisation (#525) : la pile réseau la donne
+ * sans construire la page. Une réponse en morceaux (pas d'en-tête) donne 0 :
+ * c'est alors la lecture BORNÉE qui s'applique.
+ */
+function contentLengthOf(response: unknown): number {
+  const res = response as { headers?: () => Record<string, string> } | null;
+  if (!res || typeof res.headers !== "function") return 0;
+  let headers: Record<string, string>;
+  try {
+    headers = res.headers() ?? {};
+  } catch {
+    return 0;
+  }
+  const raw = headers["content-length"] ?? headers["Content-Length"];
+  const size = Number(raw);
+  return Number.isFinite(size) && size > 0 ? size : 0;
 }
 
 /**
- * Lecture du HTML BORNÉE (#422) : `page.content()` lit TOUTE la page en
- * mémoire et n'a aucun délai.
+ * Page Playwright : seule la lecture du HTML nous intéresse ici.
+ *
+ * La lecture passe par `evaluate` : la borne est appliquée DANS le
+ * navigateur, donc la chaîne qui traverse le pont ne dépasse jamais le
+ * plafond (+1 caractère témoin : « la page est plus grande que ça »). Avant,
+ * `content()` lisait TOUTE la page en mémoire — le plafond ne protégeait que
+ * le REPARSE, pas l'ALLOCATION (#525).
+ */
+interface HtmlPage {
+  evaluate: (fn: (max: number) => string, max: number) => Promise<string>;
+}
+
+/**
+ * Sérialisation BORNÉE de la page, exécutée DANS le navigateur (#525).
+ *
+ * Le DOM tient déjà en mémoire (Chromium l'a construit) ; c'est la
+ * SÉRIALISATION qui coûtait des centaines de Mo, et la chaîne qui traverse
+ * le pont. Ici, seul le plafond (+1 caractère témoin) sort du navigateur.
+ */
+const BOUNDED_HTML = (max: number): string => {
+  const full = document.documentElement.outerHTML;
+  return full.length > max ? full.slice(0, max + 1) : full;
+};
+
+/**
+ * Lecture du HTML BORNÉE (#422, #525) : la lecture a un DÉLAI et la chaîne
+ * reçue est bornée.
  *  - délai propre : la course tranche et le refus porte le motif `timeout`
  *    (=> 504 côté HTTP) ; sans lui, une page qui ne finit pas de streamer
  *    survit au délai HTTP et garde le Chromium vivant ;
  *  - plafond de caractères AVANT le reparse cheerio : le coût du parse est
- *    linéaire, donc on borne la chaîne qu'il va reparcourir.
+ *    linéaire, donc on borne la chaîne qu'il va reparcourir ;
+ *  - la borne est demandée AU NAVIGATEUR (`evaluate`) : le processus ne
+ *    matérialise jamais une page de plusieurs centaines de Mo (#525).
  * La course peut être perdue (délai) : la rejection tardive de la lecture ne
  * doit pas devenir une rejection non geree.
  */
@@ -310,7 +363,9 @@ async function readHtml(page: HtmlPage, timeoutMs: number, log: (message: string
   let timer: ReturnType<typeof setTimeout> | undefined;
   const contentP: Promise<string> = (async () => {
     try {
-      return await page.content();
+      // #525 : la borne est demandée AU NAVIGATEUR : la chaîne qui traverse
+      // le pont ne dépasse jamais le plafond (+1 caractère témoin).
+      return await page.evaluate(BOUNDED_HTML, MAX_HTML_CHARS);
     } catch {
       // Navigateur (ou page) mort pendant la lecture : un échec de scrape,
       // pas une panne du serveur (502 « scrape impossible », jamais 500).
@@ -451,10 +506,24 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     // ferait entrer le corps du service interne dans l'extrait.
     await assertPublicUrl(typeof page.url === "function" ? page.url() : opts.startUrl, "cible finale", resolve);
     const title = (await page.title().catch(() => config.platform)) || config.platform;
+    // #525 : la TAILLE est mesurée AVANT la lecture (en-tête `content-length`) :
+    // une page de plusieurs centaines de Mo est REFUSÉE sans être sérialisée
+    // ni transférée — elle serait de toute façon tronquée au plafond de
+    // caractères, et la sérialiser coûtait des centaines de Mo de mémoire.
+    // Sans en-tête (réponse en morceaux), c'est la lecture BORNÉE qui s'applique.
+    const contentLength = contentLengthOf(response);
+    if (contentLength > MAX_HTML_BYTES) {
+      throw new ScrapeManualsError(
+        `page trop volumineuse (${contentLength} octets, maximum ${MAX_HTML_BYTES}) — scrape refuse`,
+      );
+    }
     // #422 : HTML borné (plafond de caractères) et lecture à DÉLAI : sans
     // ça, `page.content()` lisait toute la page en mémoire (reparse cheerio
     // = plusieurs fois sa taille) et une page qui ne finit pas de streamer
     // bloquait le scrape au-delà du délai HTTP.
+    // #525 : la borne est appliquée DANS le navigateur (`evaluate`) : la
+    // chaîne qui traverse le pont est bornée, donc le processus ne
+    // matérialise jamais une page de plusieurs centaines de Mo.
     const html = await readHtml(page, opts.contentTimeoutMs ?? CONTENT_TIMEOUT_MS, log);
     // #526 : une PAGE DE CONNEXION (HTTP 200) n'est JAMAIS un manuel. Avant,
     // le mur de connexion passait le test HTTP (`ok = status < 400`) et
