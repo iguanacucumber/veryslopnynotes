@@ -19,6 +19,9 @@ private val PAIRING_MESSAGES: Map<String, String> = mapOf(
     "login_refused" to "Compte refusé par l'établissement : régénère le QR dans son application, puis rescane-le.",
     "school_unreachable" to "L'établissement ne répond pas : réessaie dans un instant.",
     "network" to "Réseau indisponible : vérifie ta connexion, puis réessaie.",
+    // Connexion à l'établissement de DÉMONSTRATION : le compte est public, le
+    // geste est « réessaie » — jamais « rescane le QR ».
+    "demo_failed" to "Connexion à la démo impossible : l'établissement de démonstration ne répond pas. Réessaie dans un instant.",
     "internal" to "Session illisible : réessaie l'appairage.",
 )
 

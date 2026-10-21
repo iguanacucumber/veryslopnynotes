@@ -435,6 +435,16 @@ open class Client(
         }
 
         /**
+         * Session sur l'établissement de DÉMONSTRATION public de l'éditeur
+         * (`DemoSchool`) : ni QR, ni PIN — le compte de démonstration est
+         * public et s'ouvre par son identifiant.
+         *
+         * Symétrique de `qrcodeLogin` : c'est le client qui ouvre la session,
+         * le dépôt ne fait que la publier.
+         */
+        fun demoLogin(): Client = DemoSchool.login()
+
+        /**
          * QR de l'établissement : `login`/`jeton` déchiffrés par le PIN
          * (`md5`), URL réécrite (`mobile.` + `?fd=1&…&login=true`), session
          * mobile (UA iPhone), rotation du jeton, second tour `token` si la

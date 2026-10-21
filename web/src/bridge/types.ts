@@ -21,6 +21,7 @@ export const BRIDGE_METHODS = [
   "session.accounts",
   "pairing.scanQr",
   "pairing.pair",
+  "pairing.pairDemo",
   "pairing.cancel",
   "resources.cached",
   "resources.load",
@@ -107,6 +108,9 @@ export const MAX_PARALLEL_READS = 1;
 export const BRIDGE_TIMEOUTS: Partial<Record<BridgeMethod, number>> = {
   "pairing.scanQr": 0,
   "pairing.pair": 120_000,
+  // La connexion de démonstration ouvre une session sur l'établissement de
+  // démonstration : c'est un aller-retour de login, comme l'appairage.
+  "pairing.pairDemo": 120_000,
   "session.restore": 120_000,
 };
 
