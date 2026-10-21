@@ -9,7 +9,8 @@
 //
 // Scénarios rejoués : l'appairage d'un AUTRE compte purge le cache du compte
 // précédent, l'appairage du MÊME compte le conserve, la session MORTE purge
-// elle aussi, et une lecture en vol ne ressuscite pas un cache purgé.
+// elle aussi, une lecture en vol ne ressuscite pas un cache purgé, et la
+// bascule de compte purge AVANT de publier le nouveau client (#529).
 //
 // Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
 // stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
@@ -112,15 +113,29 @@ private class Driver {
                 )
             }
         }
-        // Appairage : le dépôt purge le cache si le compte a changé.
-        "pair" -> {
+        // Bascule de compte (#529) : la purge du cache précédent précède la
+        // publication du nouveau client, les deux dans la MÊME section
+        // critique. Le pilote observe ce que voit un LECTEUR au moment EXACT
+        // de la publication (époque + contenu du cache).
+        "switch" -> {
             val slot = bench.slot(op)
-            val purged = CacheScope.onAccountPaired(
+            val epochBefore = SessionEpoch.current()
+            var epochAtPublish = -1L
+            var payloadAtPublish = ""
+            val purged = CacheScope.switchAccount(
                 slot.store,
                 identityOf(op.obj("previous")),
                 identityOf(op.obj("current")),
+            ) {
+                epochAtPublish = SessionEpoch.current()
+                payloadAtPublish = slot.store.load("grades", "")?.payload ?: ""
+            }
+            ok(
+                "purged" to JVal.Bool(purged),
+                "epochBefore" to JVal.Num(epochBefore.toDouble()),
+                "epochAtPublish" to JVal.Num(epochAtPublish.toDouble()),
+                "payloadAtPublish" to JVal.Str(payloadAtPublish),
             )
-            ok("purged" to JVal.Bool(purged))
         }
         // Session morte : le cache part avec elle.
         "dead" -> {

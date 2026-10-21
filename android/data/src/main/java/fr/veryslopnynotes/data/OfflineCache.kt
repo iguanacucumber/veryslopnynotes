@@ -128,8 +128,9 @@ object SessionEpoch {
     fun current(): Long = synchronized(lock) { value }
 
     /**
-     * Déconnexion : invalide les lectures en vol ET purge le cache, en une
-     * seule section critique.
+     * Invalidation des lectures en vol ET purge du cache, en une seule section
+     * critique (déconnexion, session morte, ou bascule de compte — #529 : la
+     * publication du nouveau client se fait dans cette section aussi).
      */
     fun invalidate(purge: () -> Unit) {
         synchronized(lock) {
