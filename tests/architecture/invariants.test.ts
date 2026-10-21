@@ -538,6 +538,29 @@ describe("invariants", () => {
       expect(corps(bridge, signature)).toMatch(/catch\s*\(\s*_\s*:\s*Throwable\s*\)/);
     }
   });
+
+  // #539 : toute ENTRÉE du pont répond EXACTEMENT une fois. Deux branches
+  // sortaient SANS répondre (identifiant d'appel mal formé, pont fermé) : la
+  // promesse JS pendait — pour TOUJOURS sur `pairing.scanQr`, dont le délai
+  // JS est 0.
+  test("#539: aucune sortie de runCall sans réponse (resolve ou reject)", () => {
+    const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
+    const bridge = codeOnly(readFileSync(join(APP, "VsnBridge.kt"), "utf8"));
+    const body = corps(bridge, "private fun runCall(");
+    expect(body.length).toBeGreaterThan(0);
+    // Chaque `return` de la fonction est précédé d'une réponse — même quand il
+    // est en fin de ligne (`if (x) return`). Les retours ÉTIQUETÉS
+    // (`return@execute`) ne sortent pas de la fonction : l'appel a été
+    // ANNULÉ par le JS, qui a déjà lâché sa promesse.
+    const lignes = body.split("\n");
+    const sansReponse: string[] = [];
+    lignes.forEach((l, i) => {
+      if (!/\breturn\b/.test(l) || /\breturn@/.test(l)) return;
+      const precedent = lignes.slice(0, i).reverse().find((p) => p.trim() !== "") ?? "";
+      if (!/resolve\(|reject\(/.test(precedent)) sansReponse.push(l.trim());
+    });
+    expect(sansReponse).toEqual([]);
+  });
 });
 
 /** Un bloc `catch` du Kotlin : le type attrapé et son corps (accolades). */

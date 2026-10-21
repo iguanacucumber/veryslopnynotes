@@ -29,6 +29,10 @@ Format : Invariant → test → commande → emplacement.
   des méthodes allowlistées, jamais un proxy d'URL. Le pont ne laisse JAMAIS
   une promesse sans réponse : tout échec natif — un `Error` compris, pas
   seulement une `Exception` — devient un rejet borné `{code,message}` (#394).
+  **Toute ENTRÉE du pont répond EXACTEMENT une fois** (#539) : un identifiant
+  d'appel mal formé et un pont fermé (WebView détruite) sont REFUSÉS, jamais
+  ignorés — sinon la promesse pendait, pour TOUJOURS sur `pairing.scanQr`
+  dont le délai JS est 0.
   **Toute ENTRÉE du pont est BORNÉE, et le pont ne répond JAMAIS « ok » sans
   avoir écrit** (#395) : les préférences matière sont lues par les règles
   partagées (`data/SubjectPrefRules.kt` — la source UNIQUE, que le dépôt
@@ -46,8 +50,10 @@ Format : Invariant → test → commande → emplacement.
   `ok:false` AVANT toute écriture, entrées bornées, règles du dépôt et du
   pont partagées : Kotlin exécuté) +
   `tests/architecture/invariants.test.ts` (les blocs `catch` qui RÉPONDENT
-  capturent `Throwable`) + `tests/web/bridge.test.ts` (un rejet natif règle
-  toujours la promesse, message non vide) + `tests/web/profile.test.ts` (un
+  capturent `Throwable` ; aucune sortie de `runCall` sans réponse) +
+  `tests/web/bridge.test.ts` (un rejet natif règle toujours la promesse,
+  message non vide ; une méthode SANS timeout se règle quand le natif répond) +
+  `tests/web/profile.test.ts` (un
   refus du natif est affiché, jamais avalé en « Matière enregistrée. »).
 - Commande : `make web` (ou `make architecture-test`).
 - Emplacement : `web/**`, `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`,
