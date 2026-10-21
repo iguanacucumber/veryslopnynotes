@@ -1,7 +1,7 @@
-import { useId } from "react";
+import { useId, useMemo } from "react";
 import { IconChevronRight, IconGrades } from "../../ui/icons";
 import { frDateShort, subjectColor, tint } from "../../lib/format";
-import { EmptyState, ErrorBox, Loading, SubjectAvatar } from "../../ui/components";
+import { EmptyState, ErrorBox, Loading, Page, StaleBadge, SubjectAvatar } from "../../ui/components";
 import {
   algorithmChipLabel,
   algorithmHint,
@@ -10,13 +10,16 @@ import {
   averageLabel,
   formatMark,
   gradeContextLabel,
+  gradeGroups,
   gradeLabel,
   gradeValueLabel,
+  gradesForPeriod,
   historyNote,
   influenceLabel,
   influenceOf,
   isGradesPayloadReadable,
   originLabel,
+  parseGradesPayload,
   periodLabel,
   scaleSuffix,
   sparklineAverageY,
@@ -401,5 +404,99 @@ export function GradesSubjectSections({
         <SubjectSection key={group.subject} group={group} report={report} dark={dark} />
       ))}
     </section>
+  );
+}
+
+/**
+ * Onglet Notes, écran PUR (#527) : il ne lit que ce qu'on lui donne.
+ *
+ * La route ne fait que brancher la ressource et les sélecteurs ; l'écran est
+ * donc RENDU par les tests (`tests/web/grades.test.ts`). Le payload reçu
+ * porte déjà la requête à laquelle il appartient : un payload d'une autre
+ * période n'arrive donc jamais ici (invalidé par `useResource`).
+ */
+export function GradesScreen({
+  payload,
+  loading,
+  error,
+  stale,
+  periodsError,
+  algorithm,
+  periodId,
+  periods,
+  dark,
+  onAlgorithm,
+  onPeriod,
+  onRefresh,
+}: {
+  payload: string | null;
+  loading: boolean;
+  error: string | null;
+  stale: boolean;
+  periodsError: string | null;
+  algorithm: Algorithm;
+  periodId: string | null;
+  periods: Period[];
+  dark: boolean;
+  onAlgorithm: (algorithm: Algorithm) => void;
+  onPeriod: (periodId: string | null) => void;
+  onRefresh: () => void;
+}) {
+  const data = useMemo(() => parseGradesPayload(payload, algorithm, periodId), [payload, algorithm, periodId]);
+  const visibleGrades = useMemo(() => gradesForPeriod(data.grades, periodId), [data.grades, periodId]);
+  const groups = useMemo(
+    () => gradeGroups(visibleGrades, data.report?.subjects ?? []),
+    [visibleGrades, data.report],
+  );
+
+  const hasData = data.report !== null || data.grades.length > 0;
+
+  // #537 : l'écran SANS donnée est un composant pur (`GradesNoData`) : il
+  // distingue « pas de cache », « cache ILLISIBLE » (erreur) et « aucune
+  // note » (vide). Un JSON corrompu n'est jamais présenté comme une absence
+  // de donnée.
+  if (!hasData) {
+    return (
+      <Page>
+        <GradesNoData payload={payload} loading={loading} error={error} onRefresh={onRefresh} />
+      </Page>
+    );
+  }
+
+  return (
+    <Page className="grades">
+      <div className="grades-headline">
+        {stale && !loading ? <StaleBadge /> : null}
+        {periodsError ? <span className="grades-caption">{periodsError}</span> : null}
+      </div>
+
+      {error ? (
+        <p className="grades-error-line" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      <GradesToolbar
+        algorithm={algorithm}
+        onAlgorithm={onAlgorithm}
+        periods={periods}
+        periodId={periodId}
+        onPeriod={onPeriod}
+      />
+
+      {data.report ? <GradesHero report={data.report} /> : null}
+
+      {groups.length > 0 ? <LatestGrades groups={groups} dark={dark} /> : null}
+
+      {groups.length > 0 && data.report ? (
+        <GradesSubjectSections groups={groups} report={data.report} dark={dark} />
+      ) : (
+        <EmptyState
+          icon={<IconGrades size={28} />}
+          title="Aucune note sur cette période"
+          body="L’établissement n’a publié aucune note ici."
+        />
+      )}
+    </Page>
   );
 }

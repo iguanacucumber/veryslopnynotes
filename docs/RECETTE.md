@@ -66,6 +66,7 @@ de la référence). « Papillon » = l'application de référence.
 | Alertes sécurité | « Hors-ligne, aucune donnée en cache. » affiché deux fois (ligne rouge + grand bloc d'erreur) | la ligne de cause ne se rend plus quand l'écran EST l'état d'erreur |
 | Tâches | « Rechercher un devoir » + puces matière au-dessus de « Hors-ligne, aucune donnée en cache. » — des contrôles qui ne filtrent rien, au-dessus d'un vide | les deux contrôles ne sortent qu'avec une liste |
 | Appairage | « Retour » en bouton VERT REMPLI, à côté de « Continuer » : deux actions principales, donc aucune | `TextButton` (l'encre dit « secondaire ») |
+| Notes | changer de période : la moyenne de la période précédente reste affichée sous le nouveau sélecteur — et l'ancien rapport reste là si la lecture échoue | le payload est rattaché à sa requête : un changement de requête l'invalide, l'écran montre un chargement (#527) |
 
 ## États vérifiés
 
