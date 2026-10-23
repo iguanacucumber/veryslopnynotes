@@ -263,6 +263,12 @@ export const bridge = {
   forgetLlmKey: () => call<{ ok: true }>("llm.forgetKey"),
   askHomework: (assignmentId: string, weekStart: string) =>
     call<{ ok: boolean; body?: string; refused?: boolean; message?: string }>("llm.askHomework", { assignmentId, weekStart }),
+  solveHomeworkPhoto: (assignmentId: string, weekStart: string, source: "camera" | "gallery") =>
+    call<{ ok: boolean; body?: string; refused?: boolean; cancelled?: boolean; message?: string }>(
+      "llm.solvePhoto",
+      { assignmentId, weekStart, source },
+      BRIDGE_TIMEOUTS["llm.solvePhoto"],
+    ),
   generateRevision: (assignmentId: string) =>
     call<{ ok: boolean; message?: string }>("llm.generateRevision", { assignmentId }),
   revisions: () => call<{ sheets: unknown[] }>("revision.list"),

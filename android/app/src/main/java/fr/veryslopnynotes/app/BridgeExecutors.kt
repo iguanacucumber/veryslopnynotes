@@ -39,6 +39,11 @@ class BridgeExecutors {
          * oubliée ici gèlerait le pont comme avant.
          */
         val LLM_METHODS = setOf("llm.askHomework", "llm.generateRevision")
+
+        // `llm.solvePhoto` et `lessons.addPhoto` restent volontairement dans
+        // `calls` : leur attente comprend le CADRAGE de la photo par l'élève
+        // (plusieurs minutes), pas seulement l'appel LLM. Les mettre dans la
+        // file à deux fils immobiliserait un worker LLM pendant ce temps.
     }
 
     private val calls: ExecutorService = Executors.newCachedThreadPool(daemon("vsn-bridge"))

@@ -81,12 +81,20 @@ class PhotoCapture(private val activity: ComponentActivity) {
             onDone(Result.Error("Une photo est déjà en cours."))
             return
         }
+        if (activity.isFinishing || activity.isDestroyed) {
+            onDone(Result.Error("Photo indisponible : l'application se ferme."))
+            return
+        }
         pending = onDone
-        activity.runOnUiThread {
-            when (source) {
-                "gallery" -> openGallery()
-                else -> requestCamera()
+        try {
+            activity.runOnUiThread {
+                when (source) {
+                    "gallery" -> openGallery()
+                    else -> requestCamera()
+                }
             }
+        } catch (_: Exception) {
+            finish(Result.Error("Photo indisponible : réessaie dans un instant."))
         }
     }
 

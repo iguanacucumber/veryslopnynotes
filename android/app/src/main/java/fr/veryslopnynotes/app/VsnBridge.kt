@@ -21,7 +21,9 @@ import fr.veryslopnynotes.core.CapabilitiesJson
 import fr.veryslopnynotes.core.ChildAccount
 import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.ExamCandidate
+import fr.veryslopnynotes.core.HomeworkAi
 import fr.veryslopnynotes.core.HomeworkOutcome
+import fr.veryslopnynotes.core.HomeworkSource
 import fr.veryslopnynotes.core.LessonNote
 import fr.veryslopnynotes.core.LessonNotes
 import fr.veryslopnynotes.core.ManualCatalog
@@ -421,6 +423,7 @@ class VsnBridge(
                 JSONObject().put("ok", true)
             }
             "llm.askHomework" -> askHomework(p)
+            "llm.solvePhoto" -> solveHomeworkPhoto(p)
             "llm.generateRevision" -> generateRevision(p, epoch)
             "revision.list" -> revisionList()
             "revision.load" -> revisionLoad(p)
@@ -1303,18 +1306,7 @@ class VsnBridge(
         val week = bounded(p.string("weekStart"), 10)
         val assignment = loadAssignments(id, week).firstOrNull { it.id == id }
             ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
-        val sources = fr.veryslopnynotes.data.HomeworkRepository.sourcesFor(assignment).toMutableList()
-        // Manuel choisi pour la MATIÈRE du devoir (catalogue) ou ouvrage précis.
-        // Une source CITABLE supplémentaire, marquée Untrusted par le prompt.
-        manualDocFor(assignment.subject)?.let { doc ->
-            fr.veryslopnynotes.data.HomeworkRepository.manualSource(doc)?.let { sources.add(it) }
-        }
-        // #586 : les cours mémorisés sont des sources CITABLES de la matière.
-        // Bornés et marqués Untrusted par le prompt, comme le reste.
-        for (source in LessonNotes.sources(lessons.notes(), assignment.subject)) {
-            if (sources.size >= fr.veryslopnynotes.core.Homework.MAX_SOURCES) break
-            if (sources.none { it.label == source.label }) sources.add(source)
-        }
+        val sources = homeworkSourcesFor(assignment)
         val question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment)
         val result = await<fr.veryslopnynotes.data.HomeworkResult>(AWAIT_LLM_MS) { cb ->
             OpenRouterHomework(OpenRouterLlm(), llmKeys).generate(question, sources, cb)
@@ -1331,6 +1323,89 @@ class VsnBridge(
                 .put("ok", true)
                 .put("refused", true)
                 .put("message", homeworkRefusalMessage(outcome.reason))
+        }
+    }
+
+    /**
+     * Sources texte d'un devoir : consigne, cours Pronote, manuel (si activé)
+     * et cahier local. UNE seule fabrique, utilisée par l'aide texte ET la
+     * photo d'énoncé : les deux chemins citent le même corpus.
+     */
+    private fun homeworkSourcesFor(assignment: Assignment): MutableList<HomeworkSource> {
+        val sources = fr.veryslopnynotes.data.HomeworkRepository.sourcesFor(assignment).toMutableList()
+        manualDocFor(assignment.subject)?.let { doc ->
+            fr.veryslopnynotes.data.HomeworkRepository.manualSource(doc)?.let { sources.add(it) }
+        }
+        for (source in LessonNotes.sources(lessons.notes(), assignment.subject)) {
+            if (sources.size >= fr.veryslopnynotes.core.Homework.MAX_SOURCES) break
+            if (sources.none { it.label == source.label }) sources.add(source)
+        }
+        return sources
+    }
+
+    /**
+     * Photo d'énoncé -> corrigé (#588). Même schéma et mêmes citations que
+     * l'aide texte ; la photo est une source citable supplémentaire. Aucun
+     * enregistrement du corrigé, aucun effet métier (I7).
+     */
+    private fun solveHomeworkPhoto(p: JSONObject): JSONObject {
+        val id = bounded(p.string("assignmentId"), 128)
+        if (id.isEmpty()) throw BridgeFailure("bad_request", "Devoir introuvable.")
+        val week = bounded(p.string("weekStart"), 10)
+        val assignment = loadAssignments(id, week).firstOrNull { it.id == id }
+            ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
+        val apiKey = llmKeys.apiKey()?.trim()
+            ?: return JSONObject().put("ok", false)
+                .put("message", fr.veryslopnynotes.data.HomeworkRepository.NO_KEY_MESSAGE)
+        if (apiKey.length < OpenRouterLlm.MIN_API_KEY_CHARS) {
+            return JSONObject().put("ok", false)
+                .put("message", "Clé LLM trop courte : renseigne-la dans Réglages.")
+        }
+        return when (val shot = awaitPhoto(bounded(p.string("source"), 16).ifEmpty { "camera" })) {
+            is PhotoCapture.Result.Cancelled -> JSONObject().put("ok", false).put("cancelled", true)
+            is PhotoCapture.Result.Error -> JSONObject().put("ok", false).put("message", shot.message)
+            is PhotoCapture.Result.Ok -> {
+                val bytes = try {
+                    PhotoPrep.prepare(shot.file)
+                } finally {
+                    photos.discard(shot.file)
+                }
+                if (bytes == null) {
+                    return JSONObject().put("ok", false)
+                        .put("message", "Photo illisible ou trop lourde : reprends-la.")
+                }
+                try {
+                    val outcome = HomeworkAi.generateHomeworkFromPhoto(
+                        provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
+                        question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment),
+                        sources = homeworkSourcesFor(assignment),
+                        image = VisionImage(
+                            mime = "image/jpeg",
+                            base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
+                        ),
+                        apiKey = apiKey,
+                    )
+                    when (outcome) {
+                        is HomeworkOutcome.Answer ->
+                            JSONObject().put("ok", true).put("body", outcome.answer)
+                        is HomeworkOutcome.Refused -> JSONObject()
+                            .put("ok", true)
+                            .put("refused", true)
+                            .put("message", homeworkRefusalMessage(outcome.reason))
+                    }
+                } catch (e: SecretDetectedException) {
+                    JSONObject().put("ok", false).put("message", secretRefusalMessage(e.kind))
+                } catch (e: OutputTooLongException) {
+                    JSONObject().put("ok", false).put("message", e.userMessage)
+                } catch (e: LlmError) {
+                    JSONObject().put("ok", false).put("message", e.userMessage)
+                } catch (_: AiError) {
+                    JSONObject().put("ok", false)
+                        .put("message", "Réponse de l'assistant hors format : réessaie avec une photo plus nette.")
+                } catch (_: Exception) {
+                    JSONObject().put("ok", false).put("message", "Aide photo indisponible : réessaie dans un instant.")
+                }
+            }
         }
     }
 
@@ -1884,7 +1959,7 @@ class VsnBridge(
             "lessons.list", "lessons.load", "lessons.save", "lessons.delete", "lessons.setManual",
             "lessons.addPhoto",
             "llm.status", "llm.saveKey", "llm.forgetKey", "llm.askHomework",
-            "llm.generateRevision",
+            "llm.solvePhoto", "llm.generateRevision",
             "revision.list", "revision.load", "revision.exportPdf",
             "profile.me", "profile.photo",
             "bridge.cancel",

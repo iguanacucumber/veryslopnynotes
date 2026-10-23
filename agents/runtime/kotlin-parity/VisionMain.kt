@@ -15,6 +15,9 @@ import java.nio.charset.StandardCharsets
 
 private fun JVal.Obj.str(key: String): String? = (fields[key] as? JVal.Str)?.value
 
+private fun JVal.Obj.arr(key: String): List<JVal.Obj> =
+    (fields[key] as? JVal.Arr)?.items?.mapNotNull { it as? JVal.Obj } ?: emptyList()
+
 private fun ok(vararg pairs: Pair<String, JVal>): JVal.Obj = JVal.Obj(linkedMapOf(*pairs))
 
 private fun err(name: String, message: String?): JVal.Obj =
@@ -54,6 +57,39 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
             "sawImage" to JVal.Bool(provider.sawImage),
             "sawMarker" to JVal.Bool(provider.sawMarker),
         )
+    }
+    "homeworkPhoto" -> {
+        val provider = FakeProvider(op.str("response") ?: "{}")
+        val sources = op.arr("sources").map {
+            HomeworkSource(
+                label = it.str("label") ?: "",
+                text = it.str("text") ?: "",
+            )
+        }
+        val outcome = HomeworkAi.generateHomeworkFromPhoto(
+            provider = provider,
+            question = op.str("question") ?: "",
+            sources = sources,
+            image = imageOf(op),
+            apiKey = "synthetic-key",
+        )
+        when (outcome) {
+            is HomeworkOutcome.Answer -> ok(
+                "status" to JVal.Str("ok"),
+                "answer" to JVal.Str(outcome.answer),
+                "steps" to JVal.Arr(outcome.steps.map { JVal.Str(it) }),
+                "sources" to JVal.Arr(outcome.sources.map { JVal.Str(it) }),
+                "sawImage" to JVal.Bool(provider.sawImage),
+                "sawMarker" to JVal.Bool(provider.sawMarker),
+            )
+            is HomeworkOutcome.Refused -> ok(
+                "status" to JVal.Str("refused"),
+                "reason" to JVal.Str(outcome.reason),
+                "sources" to JVal.Arr(outcome.sources.map { JVal.Str(it) }),
+                "sawImage" to JVal.Bool(provider.sawImage),
+                "sawMarker" to JVal.Bool(provider.sawMarker),
+            )
+        }
     }
     else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")
 }

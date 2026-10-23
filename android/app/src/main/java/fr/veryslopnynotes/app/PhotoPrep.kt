@@ -45,6 +45,10 @@ object PhotoPrep {
         } catch (_: Exception) {
             null
         } ?: return null
+        if (decoded.width <= 0 || decoded.height <= 0) {
+            decoded.recycle()
+            return null
+        }
 
         val rotated = try {
             rotate(decoded, orientationOf(file))

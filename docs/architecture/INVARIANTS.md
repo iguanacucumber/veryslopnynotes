@@ -788,5 +788,7 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Commande : `make check`.
 - Emplacement : `android/app/PhotoCapture.kt`, `android/app/PhotoPrep.kt`,
   `android/app/VsnBridge.kt`, `android/core/Vision.kt`,
-  `android/core/LessonAi.kt`, `android/data/OpenRouterLlm.kt`,
-  `android/data/LocalDataStore.kt`, `web/src/features/cahier/CahierScreen.tsx`.
+  `android/core/LessonAi.kt`, `android/core/HomeworkAi.kt`,
+  `android/data/OpenRouterLlm.kt`, `android/data/LocalDataStore.kt`,
+  `web/src/features/cahier/CahierScreen.tsx`,
+  `web/src/features/tasks/TasksScreen.tsx`.
