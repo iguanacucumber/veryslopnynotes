@@ -57,6 +57,11 @@ interface WindowResult {
   outside: string[];
 }
 
+interface InstantWindow {
+  from: string;
+  to: string;
+}
+
 describe("invalidation du cache après une écriture (#369)", () => {
   test.skipIf(skip)("toggle réussi : l'entrée « assignments » n'est plus servie comme fraîche", async () => {
     const result = JSON.parse(
@@ -155,6 +160,28 @@ describe("fenêtre de recherche = semaine affichée (#369)", () => {
     ) as WindowResult;
     expect(illisible).toEqual(absente);
     expect(illisible.inside).toEqual(["2026-10-15T08:00:00"]);
+  });
+});
+
+describe("fenêtre EDT = lundi 00:00 Paris (#578)", () => {
+  test.skipIf(skip)("démarre lundi 00:00 Paris, pas lundi 00:00 UTC", async () => {
+    // 19 octobre 2026 : encore à +02:00 (l'heure d'été finit le 25).
+    const automne = JSON.parse(
+      await ask({ op: "timetableWindow", weekStart: "2026-10-19" }),
+    ) as InstantWindow;
+    expect(automne.from).toBe("2026-10-18T22:00:00Z");
+    // Fin = lundi 26 00:00 CET − 1 ms, jamais 7 × 24 h après le début.
+    expect(automne.to).toBe("2026-10-25T22:59:59.999Z");
+    expect(Date.parse(automne.to) + 1 - Date.parse(automne.from)).toBe(169 * 3_600_000);
+  });
+
+  test.skipIf(skip)("la semaine qui traverse l'heure d'été dure 167 h", async () => {
+    const printemps = JSON.parse(
+      await ask({ op: "timetableWindow", weekStart: "2026-03-23" }),
+    ) as InstantWindow;
+    expect(printemps.from).toBe("2026-03-22T23:00:00Z");
+    expect(printemps.to).toBe("2026-03-29T21:59:59.999Z");
+    expect(Date.parse(printemps.to) + 1 - Date.parse(printemps.from)).toBe(167 * 3_600_000);
   });
 });
 

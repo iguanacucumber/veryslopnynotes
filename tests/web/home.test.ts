@@ -38,8 +38,10 @@ import {
   currentLesson,
   groupDays,
   highlightOf,
+  isCurrentWeek,
   lessonsInWeek,
   nextLesson,
+  shiftWeeks,
   shortDay,
   weekLabel,
   weekQuery,
@@ -524,9 +526,29 @@ describe("semaine de l'EDT", () => {
     expect(isoDay(weekStart)).toBe("2026-10-19");
     expect(isoDay(weekStartFrom(1, base))).toBe("2026-10-26");
     expect(weekQuery(weekStart)).toBe("weekStart=2026-10-19");
-    expect(weekLabel(weekStart)).toContain("19");
-    expect(weekLabel(weekStart)).toContain("25");
-    expect(weekLabel(weekStart)).toContain("octobre");
+    expect(weekLabel(weekStart)).toBe("Semaine du 19 au 25 octobre 2026");
+    // Le premier du mois s'écrit « 1er » (les deux bornes).
+    expect(weekLabel(weekStartFrom(1, base))).toBe("Semaine du 26 octobre au 1er novembre 2026");
+    expect(weekLabel(new Date(2026, 5, 1))).toBe("Semaine du 1er au 7 juin 2026");
+  });
+
+  test("une semaine ancrée ne saute pas à minuit", () => {
+    const sunday = new Date(2026, 9, 25, 23, 59);
+    const nextWeek = shiftWeeks(weekStartFrom(0, sunday), 1);
+    expect(isoDay(nextWeek)).toBe("2026-10-26");
+    expect(isCurrentWeek(nextWeek, sunday)).toBe(false);
+    // Minuit passe : la semaine AFFICHÉE reste la même, seul le drapeau
+    // « semaine courante » change. Un offset relatif à `now` sautait, lui.
+    const monday = new Date(2026, 9, 26, 0, 1);
+    expect(isoDay(nextWeek)).toBe("2026-10-26");
+    expect(isCurrentWeek(nextWeek, monday)).toBe(true);
+  });
+
+  test("shiftWeeks passe par la date locale, jamais 7 × 24 h", () => {
+    const mar23 = new Date(2026, 2, 23);
+    const mar30 = shiftWeeks(mar23, 1);
+    expect(isoDay(mar30)).toBe("2026-03-30");
+    expect(mar30.getTime() - mar23.getTime()).toBe(167 * 3_600_000);
   });
 
   test("filtre et groupe les cours par jour local", () => {
@@ -553,6 +575,26 @@ describe("semaine de l'EDT", () => {
     expect(highlightOf(lessons[2]!, current, next)).toBeNull();
     expect(currentLesson(week, new Date(2026, 9, 19, 7).getTime())).toBeNull();
     expect(nextLesson(week, new Date(2026, 9, 23, 23).getTime())).toBeNull();
+  });
+
+  test("deux cours au même début ne sont pas le même cours", () => {
+    const same = parseTimetable(
+      JSON.stringify({
+        entries: [
+          { id: "long", subject: "MATHS", start: local(19, 8), end: local(19, 10) },
+          { id: "court", subject: "NSI", start: local(19, 8), end: local(19, 9) },
+        ],
+      }),
+    );
+    const long = same.find((lesson) => lesson.id === "long")!;
+    const court = same.find((lesson) => lesson.id === "court")!;
+    const at930 = new Date(2026, 9, 19, 9, 30).getTime();
+    const current = currentLesson(same, at930);
+    expect(current?.id).toBe("long");
+    expect(highlightOf(long, current, null)).toBe("current");
+    // Terminé, mais même heure de début : l'ancienne comparaison le marquait
+    // encore « En cours ».
+    expect(highlightOf(court, current, null)).toBeNull();
   });
 });
 

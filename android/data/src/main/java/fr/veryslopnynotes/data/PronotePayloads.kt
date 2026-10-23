@@ -358,7 +358,7 @@ internal fun assignmentJson(
  * doit rester trouvable (#369).
  */
 internal fun assignmentsPayload(client: Client, query: Map<String, String>, now: LocalDateTime = LocalDateTime.now()): String {
-    val win = weekWindowUtc(query)
+    val win = weekWindow(query)
     val (from, to) = assignmentWindow(query["weekStart"], now)
     val raws = client.homework(from, to)
     val wanted = raws.mapNotNullTo(LinkedHashSet()) {
@@ -401,7 +401,7 @@ private fun lessonStatusOf(l: fr.veryslopnynotes.pronote.Lesson): String? {
 
 /** Semaine demandée ou -7/+7 jours (miroir `getTimetable`). */
 internal fun timetablePayload(client: Client, query: Map<String, String>, now: LocalDateTime = LocalDateTime.now()): String {
-    val win = weekWindowUtc(query)
+    val win = weekWindow(query)
     val from = if (win != null) {
         Instant.ofEpochMilli(win.first).atZone(PARIS).toLocalDateTime()
     } else {

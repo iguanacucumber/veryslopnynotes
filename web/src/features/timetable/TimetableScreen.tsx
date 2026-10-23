@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
-import { frDateShort, frDay, isSameDay, relativeFr, subjectColor, tint, isoDay } from "../../lib/format";
+import { frDateShort, frDay, isSameDay, relativeFr, startOfWeek, subjectColor, tint, isoDay } from "../../lib/format";
 import { useApp, useResource } from "../../ui/AppContext";
 import {
   Card,
@@ -29,13 +29,14 @@ import {
   currentLesson,
   groupDays,
   highlightOf,
+  isCurrentWeek,
   lessonsInWeek,
   nextLesson,
+  shiftWeeks,
   shortDay,
   weekDays,
   weekLabel,
   weekQuery,
-  weekStartFrom,
   type Highlight,
 } from "./week";
 import "./timetable.css";
@@ -145,17 +146,20 @@ function LessonRow({
 
 export default function TimetableScreen() {
   const now = useNow();
-  const [offset, setOffset] = useState(0);
-  const weekStart = useMemo(() => weekStartFrom(offset, new Date(now)), [offset, now]);
+  // Semaine ANCRÉE : un offset relatif à `now` faisait sauter la semaine
+  // affichée à minuit le lundi, sans geste de l'élève. « Semaine courante »
+  // est désormais la seule façon de revenir à la semaine de `now`.
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const showingCurrentWeek = useMemo(() => isCurrentWeek(weekStart, new Date(now)), [weekStart, now]);
 
   return (
     <WeekView
       key={isoDay(weekStart)}
       weekStart={weekStart}
       now={now}
-      offset={offset}
-      onShift={(delta) => setOffset((value) => value + delta)}
-      onToday={() => setOffset(0)}
+      showingCurrentWeek={showingCurrentWeek}
+      onShift={(delta) => setWeekStart((week) => shiftWeeks(week, delta))}
+      onToday={() => setWeekStart(startOfWeek(new Date()))}
     />
   );
 }
@@ -163,13 +167,13 @@ export default function TimetableScreen() {
 function WeekView({
   weekStart,
   now,
-  offset,
+  showingCurrentWeek,
   onShift,
   onToday,
 }: {
   weekStart: Date;
   now: number;
-  offset: number;
+  showingCurrentWeek: boolean;
   onShift: (delta: number) => void;
   onToday: () => void;
 }) {
@@ -181,7 +185,10 @@ function WeekView({
   const groups = useMemo(() => groupDays(weekLessons, weekStart), [weekLessons, weekStart]);
   const current = useMemo(() => currentLesson(weekLessons, now), [weekLessons, now]);
   const next = useMemo(() => nextLesson(weekLessons, now), [weekLessons, now]);
-  const focus = current ?? next;
+  // Le bandeau ne parle du « prochain cours » que sur la semaine courante : le
+  // payload est borné à la semaine affichée, donc sur une autre semaine ce
+  // « next » est seulement le premier cours de cette semaine-là.
+  const focus = showingCurrentWeek ? current ?? next : null;
   const focusPalette = focus ? cancelledPalette(focus, dark) : null;
   const days = groups.filter((group) => group.lessons.length > 0);
   const today = new Date(now);
@@ -189,14 +196,14 @@ function WeekView({
   const empty = !resource.loading && weekLessons.length === 0;
 
   const staleLabel = resource.fetchedAt
-    ? `hors-ligne · mis à jour ${relativeFr(new Date(resource.fetchedAt).toISOString())}`
+    ? `hors-ligne · mis à jour ${relativeFr(new Date(resource.fetchedAt).toISOString(), now)}`
     : "hors-ligne";
 
   return (
     <Page className="tt">
       <WeekNavigator
         label={weekLabel(weekStart)}
-        current={offset === 0}
+        current={showingCurrentWeek}
         onPrevious={() => onShift(-1)}
         onNext={() => onShift(1)}
         onToday={onToday}
@@ -225,14 +232,10 @@ function WeekView({
         <EmptyState
           icon={<IconCalendar size={30} />}
           title="Aucun cours cette semaine"
-          body={
-            offset === 0
-              ? "Rien n’est publié pour les sept prochains jours. Actualise ou change de semaine."
-              : "Cette semaine ne contient aucun cours publié."
-          }
+          body="Rien n’est publié pour cette semaine. Actualise ou change de semaine."
           action={
             <div className="row row--wrap" style={{ justifyContent: "center" }}>
-              {offset !== 0 ? (
+              {!showingCurrentWeek ? (
                 <button type="button" className="btn btn--small btn--ghost" onClick={onToday}>
                   Cette semaine
                 </button>
