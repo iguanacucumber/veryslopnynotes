@@ -130,6 +130,16 @@ function numberOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Moyenne lisible : un nombre fini >= 0. Une moyenne négative est une donnée
+ * incohérente (aucune note n'est négative, cf. `parseGrade`) : elle est traitée
+ * comme ABSENTE, jamais affichée « -3,00/20 ».
+ */
+function markOrNull(value: unknown): number | null {
+  const n = numberOrNull(value);
+  return n !== null && n >= 0 ? n : null;
+}
+
 function flag(value: unknown): boolean {
   return value === true;
 }
@@ -182,7 +192,7 @@ function parseSubjectAverage(raw: unknown): SubjectAverage | null {
   if (!subject || (origin !== "provided" && origin !== "estimated")) return null;
   return {
     subject,
-    value: numberOrNull(obj["value"]),
+    value: markOrNull(obj["value"]),
     provided: origin === "provided",
     gradeCount: Math.max(0, Math.trunc(asNumber(obj["gradeCount"], 0))),
   };
@@ -193,7 +203,7 @@ function parseHistoryPoint(raw: unknown): HistoryPoint | null {
   if (!obj) return null;
   const date = dateOf(obj["date"]);
   if (!date) return null;
-  return { date: date.text, value: numberOrNull(obj["value"]) };
+  return { date: date.text, value: markOrNull(obj["value"]) };
 }
 
 function parseInfluence(raw: unknown): Influence | null {
@@ -215,7 +225,7 @@ function parseReport(raw: unknown): AveragesReport | null {
   if (origin !== "provided" && origin !== "estimated") return null;
   return {
     algorithm: isAlgorithm(obj["algorithm"]) ? obj["algorithm"] : ALGORITHM_DEFAULT,
-    generalValue: numberOrNull(general["value"]),
+    generalValue: markOrNull(general["value"]),
     provided: origin === "provided",
     subjectCount: Math.max(0, Math.trunc(asNumber(general["subjectCount"], 0))),
     subjects: items(obj["subjects"]).map(parseSubjectAverage).filter((s): s is SubjectAverage => s !== null),
@@ -537,6 +547,11 @@ export function gradesQuery(algorithm: Algorithm, periodId: string | null): stri
  *
  * La graphie affichée est celle du rapport (donc la première graphie rencontrée
  * par le natif) ; à défaut, celle de la première note du groupe.
+ *
+ * Repli LOCAL quand le rapport n'a AUCUNE entrée pour la matière (payload
+ * ancien, rapport partiel) : la carte estime à partir des notes présentes,
+ * marquée `provided: false`. Une entrée présente mais à `null` reste « pas de
+ * moyenne » : le rapport fait foi, on ne le contredit pas.
  */
 export function gradeGroups(grades: readonly Grade[], subjects: readonly SubjectAverage[]): GradeGroup[] {
   const byKey = new Map<string, { subject: string; grades: Grade[] }>();
@@ -560,9 +575,10 @@ export function gradeGroups(grades: readonly Grade[], subjects: readonly Subject
       const bucket = byKey.get(key);
       const average = averages.get(key);
       const grades = [...(bucket?.grades ?? [])].sort((a, b) => (b.millis ?? 0) - (a.millis ?? 0));
+      const local = average === undefined ? subjectAverageInner(grades, false) : NO_DATA;
       return {
         subject: average?.subject ?? bucket?.subject ?? key,
-        average: average?.value ?? null,
+        average: average ? average.value : local === NO_DATA ? null : local,
         provided: average?.provided ?? false,
         // Le rapport natif compte les notes RETENUES (coefficient 0 exclu) :
         // afficher `grades.length` montrait « 3 notes » pour une moyenne
@@ -614,22 +630,47 @@ export function algorithmLabel(algorithm: Algorithm): string {
   return "Moyenne des matières";
 }
 
+/** Titre du héros : une moyenne fournie ne dépend pas de l'algorithme choisi. */
+export function reportTitle(report: AveragesReport): string {
+  return report.provided ? "Moyenne générale" : algorithmLabel(report.algorithm);
+}
+
 export function algorithmChipLabel(algorithm: Algorithm): string {
   if (algorithm === "weighted") return "Pondérée";
   if (algorithm === "median") return "Médiane";
   return "Matières";
 }
 
-/** Une phrase pour expliquer le calcul choisi, sans jargon. */
-export function algorithmHint(algorithm: Algorithm): string {
+/**
+ * Une phrase pour expliquer le calcul choisi, sans jargon.
+ *
+ * Quand l'établissement publie la moyenne générale, les puces ne changent PAS
+ * ce nombre : elles ne portent que sur la courbe et les influences, estimées.
+ * Le dire évite de laisser croire que « Médiane » a produit le 12,50 affiché.
+ */
+export function algorithmHint(algorithm: Algorithm, provided = false): string {
+  if (provided) {
+    return "Moyenne publiée par l'établissement ; la courbe et les influences sont estimées.";
+  }
   if (algorithm === "weighted") return "Chaque note pèse selon son coefficient.";
-  if (algorithm === "median") return "La note médiane de chaque matière, peu sensible aux extrêmes.";
+  if (algorithm === "median") return "La médiane de toutes les notes, peu sensible aux extrêmes.";
   return "Moyenne simple des moyennes de matières.";
 }
 
-/** « par l'établissement » / « estimée au 12/10/2026 ». */
+/** « 2 matières · 3 notes » : ce que couvre la moyenne affichée. */
+export function coverageLabel(report: AveragesReport): string {
+  const grades = report.subjects.reduce((total, subject) => total + subject.gradeCount, 0);
+  const parts: string[] = [];
+  if (report.subjectCount > 0) {
+    parts.push(`${report.subjectCount} matière${report.subjectCount > 1 ? "s" : ""}`);
+  }
+  if (grades > 0) parts.push(`${grades} note${grades > 1 ? "s" : ""}`);
+  return parts.join(" · ");
+}
+
+/** « publiée par l'établissement » / « estimée au 12/10/2026 ». */
 export function originLabel(provided: boolean, estimatedAt: string | null): string {
-  if (provided) return "par l'établissement";
+  if (provided) return "publiée par l'établissement";
   const date = parseDate(estimatedAt);
   if (!date) return "estimée";
   const day = String(date.getDate()).padStart(2, "0");
@@ -643,12 +684,13 @@ export function averageLabel(value: number | null, provided: boolean, algorithm:
   return `${formatMark(value)}/20 (moyenne ${origin})`;
 }
 
-/** Phrase d'influence : « +0,42 sur la moyenne ». */
-export function influenceLabel(impact: number): string {
+/** Phrase d'influence : « +0,42 sur la moyenne » (ou « estimée »). */
+export function influenceLabel(impact: number, estimated = false): string {
   if (!Number.isFinite(impact)) return "";
   const rounded = formatMark(Math.abs(impact));
-  if (rounded === "0,00") return "Sans effet sur la moyenne";
-  return `${impact > 0 ? "+" : "−"}${rounded} sur la moyenne`;
+  const target = estimated ? "sur la moyenne estimée" : "sur la moyenne";
+  if (rounded === "0,00") return estimated ? "Sans effet sur la moyenne estimée" : "Sans effet sur la moyenne";
+  return `${impact > 0 ? "+" : "−"}${rounded} ${target}`;
 }
 
 /** Contexte de classe et de coefficient, vide si rien n'est publié. */
@@ -743,19 +785,34 @@ export function sparklineAverageY(values: readonly (number | null)[], height: nu
   return height * (1 - (average - min) / span);
 }
 
-export function historyNote(values: readonly (number | null)[]): string {
+/**
+ * Phrase sous la courbe. Quand la moyenne affichée est FOURNIE, la courbe reste
+ * une estimation au fil des notes : le dire évite de faire passer le dernier
+ * point pour la moyenne de l'établissement.
+ */
+export function historyNote(values: readonly (number | null)[], provided = false): string {
   const size = knownValues(values).length;
-  if (size === 0) return "Pas d'historique de moyenne sur cette période.";
-  if (size === 1) return "Une seule moyenne connue : la courbe se dessine à la note suivante.";
+  if (size === 0) {
+    return provided
+      ? "Pas d'historique de moyenne estimée sur cette période."
+      : "Pas d'historique de moyenne sur cette période.";
+  }
+  if (size === 1) {
+    return provided
+      ? "Une seule moyenne estimée connue : la courbe se dessine à la note suivante."
+      : "Une seule moyenne connue : la courbe se dessine à la note suivante.";
+  }
+  if (provided) return "Courbe estimée à partir des notes ; la moyenne affichée est celle de l'établissement.";
   return "";
 }
 
-export function sparklineDescription(values: readonly (number | null)[]): string {
+export function sparklineDescription(values: readonly (number | null)[], provided = false): string {
   const known = knownValues(values);
   if (known.length === 0) return "Pas d'historique de moyenne.";
   const first = known[0];
   const last = known[known.length - 1];
   if (first === undefined || last === undefined) return "Pas d'historique de moyenne.";
-  if (known.length === 1) return `Une seule moyenne connue : ${gradeValueLabel(first)} sur 20.`;
-  return `Évolution de la moyenne : de ${gradeValueLabel(first)} à ${gradeValueLabel(last)}.`;
+  const kind = provided ? "estimée " : "";
+  if (known.length === 1) return `Une seule moyenne ${kind}connue : ${gradeValueLabel(first)} sur 20.`;
+  return `Évolution ${kind}de la moyenne : de ${gradeValueLabel(first)} à ${gradeValueLabel(last)}.`;
 }
