@@ -83,7 +83,7 @@ export const IconBook = (p: Props) => (
   <Svg {...p}><path d="M4 4h7a3 3 0 0 1 3 3v13a3 3 0 0 0-3-3H4V4Z" /><path d="M20 4h-3a3 3 0 0 0-3 3v13a3 3 0 0 1 3-3h3V4Z" /></Svg>
 );
 export const IconFood = (p: Props) => (
-  <Svg {...p}><path d="M4 3v8a3 3 0 0 0 6 0V3M7 11v10M18 3c-2 2-3 4.5-3 8h4V3Z" /></Svg>
+  <Svg {...p}><path d="M4 3v6a3 3 0 0 0 6 0V3M7 9v12" /><path d="M19 3v10h-4v-3c0-3 1.4-5.4 4-7Z" /><path d="M17 13v8" /></Svg>
 );
 export const IconMessage = (p: Props) => (
   <Svg {...p}><path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12Z" /></Svg>
