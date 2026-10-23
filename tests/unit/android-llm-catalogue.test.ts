@@ -50,6 +50,18 @@ describe("android LLM — modèle par défaut au catalogue (#359)", () => {
     expect(model!).toMatch(/^[a-z0-9][a-z0-9.-]*\/[a-z0-9][a-z0-9.:-]*$/);
   });
 
+  test("le modèle vision est lui aussi au catalogue, et DISTINCT du texte", () => {
+    const kotlin = src(DATA, "OpenRouterLlm.kt");
+    const text = /const val LLM_DEFAULT_MODEL = "([^"]+)"/.exec(kotlin)?.[1];
+    const vision = /const val LLM_VISION_MODEL = "([^"]+)"/.exec(kotlin)?.[1];
+    expect(vision).toBeTruthy();
+    expect(KNOWN_MODELS).toContain(vision!);
+    // Le modèle texte demandé (Nemotron Lightning) n'accepte pas les images :
+    // les deux constantes ne doivent pas être confondues.
+    expect(vision).not.toBe(text);
+    expect(vision).toMatch(/^[a-z0-9][a-z0-9.-]*\/[a-z0-9][a-z0-9.:-]*$/);
+  });
+
   test("la liste de référence est elle-même plausible (tripwire)", () => {
     expect(KNOWN_MODELS.length).toBeGreaterThan(0);
     for (const id of KNOWN_MODELS) {

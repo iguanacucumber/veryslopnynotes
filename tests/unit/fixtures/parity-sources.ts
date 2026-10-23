@@ -82,6 +82,10 @@ export const PRODUCTION_SOURCES: string[] = [
   // #586 : les règles du cahier de cours, exécutées par le pilote
   // `LessonNotesMain` (validation, sélection par matière, sources citables).
   join(CORE, "LessonNote.kt"),
+  // #587 : le prompt vision et la transcription d'un cours. Fichiers PURS :
+  // le harnais exécute la garde d'image, le schéma et la citation.
+  join(CORE, "LessonAi.kt"),
+  join(CORE, "Vision.kt"),
   join(CORE, "LlmGuard.kt"),
   join(CORE, "ManualUrl.kt"),
   join(CORE, "ManualCatalog.kt"),

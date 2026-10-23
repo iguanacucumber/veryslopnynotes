@@ -6,6 +6,7 @@ import {
   type BridgeError,
   type BridgeMethod,
   type LessonLoadResult,
+  type LessonPhotoResult,
   type LessonsSnapshot,
   type LessonSaveResult,
   type ManualSaveResult,
@@ -254,6 +255,9 @@ export const bridge = {
   deleteLesson: (id: string) => call<LessonSaveResult>("lessons.delete", { id }),
   setLessonManual: (subject: string, enabled: boolean) =>
     call<LessonSaveResult>("lessons.setManual", { subject, enabled }),
+  addLessonPhoto: (subject: string, source: "camera" | "gallery") =>
+    call<LessonPhotoResult>("lessons.addPhoto", { subject, source }, BRIDGE_TIMEOUTS["lessons.addPhoto"]),
+
   llmStatus: () => call<{ configured: boolean }>("llm.status"),
   saveLlmKey: (key: string) => call<{ ok: boolean; message?: string }>("llm.saveKey", { key }),
   forgetLlmKey: () => call<{ ok: true }>("llm.forgetKey"),

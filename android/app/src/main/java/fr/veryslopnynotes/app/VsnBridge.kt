@@ -37,12 +37,14 @@ import fr.veryslopnynotes.core.RevisionSheet
 import fr.veryslopnynotes.core.RevisionAi
 import fr.veryslopnynotes.core.SecretDetectedException
 import fr.veryslopnynotes.core.UserProfile
+import fr.veryslopnynotes.core.VisionImage
 import fr.veryslopnynotes.core.assembleRevisionSheet
 import fr.veryslopnynotes.core.listRevisionSheets
 import fr.veryslopnynotes.core.loadRevisionSheet
 import fr.veryslopnynotes.core.revisionFailureMessage
 import fr.veryslopnynotes.core.saveRevisionSheet
 import fr.veryslopnynotes.core.secretRefusalMessage
+import fr.veryslopnynotes.core.transcribeLesson
 import fr.veryslopnynotes.data.AccountStore
 import fr.veryslopnynotes.data.AssignmentsRepository
 import fr.veryslopnynotes.data.CachePolicy
@@ -147,6 +149,8 @@ class VsnBridge(
             InMemoryLessonNotesStore()
         },
     )
+    /** #587 : capture native, fichier temporaire privé, jamais exposé au JS. */
+    private val photos = PhotoCapture(activity)
     // #540 : le store englobe le CACHE (`cacheDir/attachments/`,
     // `cacheDir/exports/`) : une purge de compte efface les pièces jointes
     // téléchargées comme le cache, sans chemin de purge qui en oublie.
@@ -359,6 +363,7 @@ class VsnBridge(
 
     /** Fin de vie de la WebView : aucun fil ne survit à la rotation. */
     fun close() {
+        photos.cancel()
         executors.shutdown()
     }
 
@@ -408,6 +413,7 @@ class VsnBridge(
             "lessons.save" -> lessonsSave(p, epoch)
             "lessons.delete" -> lessonsDelete(p, epoch)
             "lessons.setManual" -> lessonsSetManual(p)
+            "lessons.addPhoto" -> lessonsAddPhoto(p)
             "llm.status" -> JSONObject().put("configured", llmKeys.isConfigured())
             "llm.saveKey" -> saveLlmKey(p)
             "llm.forgetKey" -> {
@@ -1159,6 +1165,83 @@ class VsnBridge(
         }
     }
 
+    /**
+     * Photo de cours -> brouillon de note (#587). La photo ne traverse JAMAIS
+     * le pont : elle est lue ici, ré-encodée, envoyée au fournisseur vision,
+     * puis supprimée. Le texte revient pour relecture avant enregistrement.
+     *
+     * L'attente inclut le temps que l'élève cadre la photo : le JS met cette
+     * méthode à 0 (timeout illimité), comme le scan du QR. Le plafond natif
+     * évite seulement un fil pendu pour toujours.
+     */
+    private fun lessonsAddPhoto(p: JSONObject): JSONObject {
+        val subject = bounded(p.string("subject"), LessonNote.MAX_SUBJECT_CHARS)
+        if (subject.isEmpty()) return JSONObject().put("ok", false).put("message", "Choisis une matière.")
+        val source = bounded(p.string("source"), 16).ifEmpty { "camera" }
+        val apiKey = llmKeys.apiKey()?.trim()
+            ?: return JSONObject().put("ok", false).put("message", fr.veryslopnynotes.data.HomeworkRepository.NO_KEY_MESSAGE)
+        if (apiKey.length < OpenRouterLlm.MIN_API_KEY_CHARS) {
+            return JSONObject().put("ok", false).put("message", "Clé LLM trop courte : renseigne-la dans Réglages.")
+        }
+        return when (val shot = awaitPhoto(source)) {
+            is PhotoCapture.Result.Cancelled ->
+                JSONObject().put("ok", false).put("cancelled", true)
+            is PhotoCapture.Result.Error ->
+                JSONObject().put("ok", false).put("message", shot.message)
+            is PhotoCapture.Result.Ok -> {
+                val bytes = try {
+                    PhotoPrep.prepare(shot.file)
+                } finally {
+                    photos.discard(shot.file)
+                }
+                if (bytes == null) {
+                    return JSONObject().put("ok", false)
+                        .put("message", "Photo illisible ou trop lourde : reprends-la.")
+                }
+                val image = VisionImage(
+                    mime = "image/jpeg",
+                    base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
+                )
+                try {
+                    val draft = transcribeLesson(
+                        provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
+                        image = image,
+                        apiKey = apiKey,
+                    )
+                    JSONObject().put("ok", true).put("title", draft.title).put("text", draft.text)
+                } catch (e: SecretDetectedException) {
+                    JSONObject().put("ok", false).put("message", secretRefusalMessage(e.kind))
+                } catch (e: OutputTooLongException) {
+                    JSONObject().put("ok", false).put("message", e.userMessage)
+                } catch (e: LlmError) {
+                    JSONObject().put("ok", false).put("message", e.userMessage)
+                } catch (_: AiError) {
+                    JSONObject().put("ok", false).put("message", "Transcription hors format : réessaie avec une photo plus nette.")
+                } catch (_: Exception) {
+                    JSONObject().put("ok", false).put("message", "Transcription impossible : réessaie dans un instant.")
+                }
+            }
+        }
+    }
+
+    /**
+     * Attend la capture. Le callback de l'activité arrive sur le thread
+     * principal ; le résultat est publié au fil du pont via le latch.
+     */
+    private fun awaitPhoto(source: String): PhotoCapture.Result {
+        val latch = CountDownLatch(1)
+        var result: PhotoCapture.Result? = null
+        photos.capture(source) {
+            result = it
+            latch.countDown()
+        }
+        if (!latch.await(AWAIT_PHOTO_MS, TimeUnit.MILLISECONDS)) {
+            photos.cancel()
+            return PhotoCapture.Result.Error("Photo annulée : délai dépassé.")
+        }
+        return result ?: PhotoCapture.Result.Error("Photo indisponible : réessaie.")
+    }
+
     private fun lessonJson(note: LessonNote): JSONObject = JSONObject()
         .put("id", note.id)
         .put("subject", note.subject)
@@ -1761,6 +1844,13 @@ class VsnBridge(
         const val AWAIT_LLM_MS = 45_000L
 
         /**
+         * Attente d'une photo : l'élève cadre, l'appareil écrit, puis la
+         * transcription. Le JS ne met PAS de timeout sur cette méthode ;
+         * ce plafond natif évite seulement un fil pendu pour toujours.
+         */
+        const val AWAIT_PHOTO_MS = 180_000L
+
+        /**
          * Récupération d'un extrait de manuel via le scraper, avant l'appel
          * LLM. Bornée par le client (`ManualsClient`), mais comptée dans le
          * plafond pour que le JS n'abandonne jamais trop tôt.
@@ -1792,6 +1882,7 @@ class VsnBridge(
             "settings.get", "settings.saveServer", "settings.subjectPrefs", "settings.saveSubject",
             "settings.saveManualUrl", "settings.dismissManualPrompt",
             "lessons.list", "lessons.load", "lessons.save", "lessons.delete", "lessons.setManual",
+            "lessons.addPhoto",
             "llm.status", "llm.saveKey", "llm.forgetKey", "llm.askHomework",
             "llm.generateRevision",
             "revision.list", "revision.load", "revision.exportPdf",
