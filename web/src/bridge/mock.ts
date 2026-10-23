@@ -43,8 +43,8 @@ const fixtures: Record<ResourceKey, unknown> = {
   periods: {
     __untrusted: true,
     items: [
-      { id: "p1", name: "Trimestre 1", start: iso(17, 0), end: iso(8, 0) },
-      { id: "p2", name: "Trimestre 2", start: iso(9, 0), end: iso(14, 0) },
+      { id: "p1", name: "Trimestre 1", start: iso(1, 0), end: iso(16, 0) },
+      { id: "p2", name: "Trimestre 2", start: iso(17, 0), end: iso(31, 0) },
     ],
   },
   grades: {
