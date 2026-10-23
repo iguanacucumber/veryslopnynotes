@@ -13,14 +13,19 @@ export interface DayGroup {
   lessons: Lesson[];
 }
 
-/** Lundi 00:00 local de la semaine contenant `date`. */
-export function mondayOf(date: Date): Date {
-  return startOfWeek(date);
-}
-
 /** Lundi de la semaine décalée de `offset` semaines (0 = semaine courante). */
 export function weekStartFrom(offset: number, base: Date = new Date()): Date {
   return addDays(startOfWeek(base), offset * 7);
+}
+
+/** Semaine ± `weeks` par DATE locale, jamais par 7 × 24 h (heure d'été). */
+export function shiftWeeks(weekStart: Date, weeks: number): Date {
+  return addDays(weekStart, weeks * 7);
+}
+
+/** La semaine affichée est-elle celle de `now` ? (minuit ne la déplace pas) */
+export function isCurrentWeek(weekStart: Date, now: Date = new Date()): boolean {
+  return isoDay(weekStart) === isoDay(startOfWeek(now));
 }
 
 /** Les sept jours de la semaine, lundi d'abord. */
@@ -73,14 +78,16 @@ export function nextLesson(lessons: Lesson[], now: number): Lesson | null {
 
 export type Highlight = "current" | "next" | null;
 
-/** Mise en avant : en cours > prochain > rien. Comparaison par heure de début. */
+/** Mise en avant : en cours > prochain > rien. Comparaison par IDENTITÉ, pas
+ *  par heure de début : deux cours à 08:00 ne sont pas le même cours (et un
+ *  cours terminé qui partage son début avec le cours courant n'est pas lui). */
 export function highlightOf(
   lesson: Lesson,
   current: Lesson | null,
   next: Lesson | null,
 ): Highlight {
-  if (current && lesson.start === current.start) return "current";
-  if (next && lesson.start === next.start) return "next";
+  if (current && lesson.id === current.id) return "current";
+  if (next && lesson.id === next.id) return "next";
   return null;
 }
 
@@ -98,10 +105,15 @@ export function weekLabel(weekStart: Date): string {
   const sameMonth = weekStart.getMonth() === end.getMonth();
   const month = end.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
   if (sameMonth) {
-    return `Semaine du ${weekStart.getDate()} au ${end.getDate()} ${month}`;
+    return `Semaine du ${dayOfMonth(weekStart)} au ${dayOfMonth(end)} ${month}`;
   }
-  const startLabel = weekStart.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
-  return `Semaine du ${startLabel} au ${end.getDate()} ${month}`;
+  const startMonth = weekStart.toLocaleDateString("fr-FR", { month: "long" });
+  return `Semaine du ${dayOfMonth(weekStart)} ${startMonth} au ${dayOfMonth(end)} ${month}`;
+}
+
+/** « 1er » au premier du mois, le nombre nu sinon (usage français). */
+function dayOfMonth(date: Date): string {
+  return date.getDate() === 1 ? "1er" : String(date.getDate());
 }
 
 /** Étiquette courte d'une case de la bande de semaine : « lun. ». */

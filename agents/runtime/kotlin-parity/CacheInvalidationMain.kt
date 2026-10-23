@@ -20,6 +20,7 @@ package fr.veryslopnynotes.cacheinvalid
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.InMemoryCacheStore
 import fr.veryslopnynotes.data.assignmentWindow
+import fr.veryslopnynotes.data.weekWindow
 import fr.veryslopnynotes.data.writeAndInvalidate
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
@@ -27,6 +28,7 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintStream
 import java.nio.charset.StandardCharsets
+import java.time.Instant
 import java.time.LocalDateTime
 
 private fun JVal.Obj.str(key: String): String? = (fields[key] as? JVal.Str)?.value
@@ -103,6 +105,15 @@ private class Driver {
                 "to" to JVal.Str(to.toString()),
                 "inside" to JVal.Arr(inside),
                 "outside" to JVal.Arr(outside),
+            )
+        }
+        // Fenêtre EDT : lundi 00:00 Paris -> lundi suivant 00:00 − 1 ms.
+        "timetableWindow" -> {
+            val win = weekWindow(op.str("weekStart"))
+                ?: throw IllegalArgumentException("pilote: semaine illisible")
+            ok(
+                "from" to JVal.Str(Instant.ofEpochMilli(win.first).toString()),
+                "to" to JVal.Str(Instant.ofEpochMilli(win.second).toString()),
             )
         }
         else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")

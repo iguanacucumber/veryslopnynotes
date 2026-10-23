@@ -116,10 +116,10 @@ export function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
-export function relativeFr(value: string): string {
+export function relativeFr(value: string, now: number = Date.now()): string {
   const d = parseDate(value);
   if (!d) return "";
-  const diff = Date.now() - d.getTime();
+  const diff = now - d.getTime();
   const min = Math.round(diff / 60000);
   if (min < 1) return "à l'instant";
   if (min < 60) return `il y a ${min} min`;

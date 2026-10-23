@@ -238,8 +238,42 @@ const newsBodies: Record<string, string> = {
   n2: "Le self ferme exceptionnellement vendredi à 12 h 30.",
 };
 
-function resource(key: ResourceKey): ResourceResult {
-  const payload = JSON.stringify(fixtures[key]);
+/** Lundi des fixtures EDT (2026-10-19), en UTC comme `iso`. */
+const TIMETABLE_MONDAY = Date.UTC(2026, 9, 19);
+
+/** Décalage en semaines entre `weekStart` et la semaine des fixtures. */
+function timetableWeeks(query: string | undefined): number {
+  const raw = query ? new URLSearchParams(query).get("weekStart") : null;
+  if (!raw) return 0;
+  const monday = Date.parse(`${raw}T00:00:00Z`);
+  if (!Number.isFinite(monday)) return 0;
+  return Math.round((monday - TIMETABLE_MONDAY) / (7 * 86_400_000));
+}
+
+/** Recale les cours de démonstration sur la semaine demandée (`weekStart`). */
+function timetableFor(query: string | undefined): unknown {
+  const weeks = timetableWeeks(query);
+  const fixture = fixtures.timetable as { items: Array<Record<string, unknown>> };
+  if (weeks === 0) return fixture;
+  const delta = weeks * 7 * 86_400_000;
+  return {
+    ...fixture,
+    items: fixture.items.map((item) => {
+      const start = typeof item["start"] === "string" ? Date.parse(item["start"]) : NaN;
+      const end = typeof item["end"] === "string" ? Date.parse(item["end"]) : NaN;
+      if (!Number.isFinite(start) || !Number.isFinite(end)) return item;
+      return {
+        ...item,
+        start: new Date(start + delta).toISOString(),
+        end: new Date(end + delta).toISOString(),
+      };
+    }),
+  };
+}
+
+function resource(key: ResourceKey, query?: string): ResourceResult {
+  const body = key === "timetable" ? timetableFor(query) : fixtures[key];
+  const payload = JSON.stringify(body);
   return { payload, fetchedAt: now, stale: false, error: null };
 }
 
@@ -287,8 +321,10 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
     case "pairing.cancel":
       return ok({ ok: true }) as Promise<T>;
     case "resources.cached":
-    case "resources.load":
-      return ok(resource((p as unknown as ResourceParams).key)) as Promise<T>;
+    case "resources.load": {
+      const params = p as unknown as ResourceParams;
+      return ok(resource(params.key, params.query)) as Promise<T>;
+    }
     case "resources.sync":
       return ok({ ...resource("grades"), stale: false }) as Promise<T>;
     case "resources.invalidate":

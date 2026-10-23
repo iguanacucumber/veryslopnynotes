@@ -407,8 +407,8 @@ export function assignmentSections(
 }
 
 /** Devoirs dont l'échéance tombe dans la semaine commençant à `weekStart`.
- *  La fenêtre est celle du producteur natif : lundi 00:00 UTC → dimanche
- *  23:59:59 UTC (`weekWindowUtc`). Une date seule est lue en UTC, comme le
+ *  La fenêtre est celle du producteur natif : lundi 00:00 Paris → dimanche
+ *  23:59:59 Paris (`weekWindow`). Une date seule est lue en UTC, comme le
  *  contrat qui ne publie que des instants complets. Sert à ignorer un payload
  *  en cache qui appartient à une autre semaine (`useResource` met en cache par
  *  ressource, pas par requête). */
