@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useLocation } from "react-router-dom";
 import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { bridge } from "../../bridge/client";
 import { BridgeCallError } from "../../bridge/types";
@@ -39,7 +40,14 @@ function StepChip({ label, done }: { label: string; done: boolean }) {
 
 export default function PairingScreen() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { refresh, notify, openSession, storageUnavailable } = useApp();
+  // Le Profil arrive ici avec `replacing` : la session vivante va être
+  // remplacée. Au premier lancement, l'écran reste un simple appairage.
+  const replacing =
+    typeof location.state === "object" &&
+    location.state !== null &&
+    (location.state as { replacing?: unknown }).replacing === true;
   const [qr, setQr] = useState<SchoolQr | null>(null);
   const [pin, setPin] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -184,11 +192,12 @@ export default function PairingScreen() {
             <div className="row" style={{ alignItems: "flex-start" }}>
               <div className="grow">
                 <h1 className="t-headline" style={{ margin: 0 }}>
-                  Connecte ton établissement
+                  {replacing ? "Changer de compte" : "Connecte ton établissement"}
                 </h1>
                 <p className="t-body-m" style={{ margin: "6px 0 0", color: "var(--hero-soft)" }}>
-                  Scanne le QR de l'application de ton établissement, puis saisis son PIN. Ta session reste sur ce
-                  téléphone.
+                  {replacing
+                    ? "Scanne le QR du compte à utiliser, puis son PIN. Le nouvel appairage remplace la session actuelle ; si le compte change, les données en cache du précédent sont purgées."
+                    : "Scanne le QR de l'application de ton établissement, puis saisis son PIN. Ta session reste sur ce téléphone."}
                 </p>
               </div>
               <span
@@ -217,6 +226,14 @@ export default function PairingScreen() {
             <div className="card card--danger" role="alert">
               <p className="t-body-m" style={{ margin: 0, color: "var(--danger-ink)" }}>
                 {STORAGE_UNAVAILABLE_MESSAGE}
+              </p>
+            </div>
+          ) : null}
+
+          {replacing ? (
+            <div className="card card--flat">
+              <p className="tiny muted" style={{ margin: 0 }}>
+                Tes préférences et la clé de l’assistant restent sur cet appareil.
               </p>
             </div>
           ) : null}

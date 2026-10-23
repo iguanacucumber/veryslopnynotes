@@ -274,7 +274,7 @@ try {
     await flow.getByRole("button", { name: "Profil" }).click();
     await flow.waitForURL(/#\/profile$/, { timeout: 5000 }).catch(() => undefined);
     await flow.getByRole("button", { name: "Se déconnecter" }).first().click();
-    await flow.getByRole("dialog").getByRole("button", { name: "Se déconnecter" }).click();
+    await flow.getByRole("alertdialog").getByRole("button", { name: "Se déconnecter" }).click();
     await flow.waitForURL(/#\/pairing$/, { timeout: 5000 }).catch(() => undefined);
     if (!flow.url().endsWith("#/pairing")) {
       console.error(`web-smoke : la déconnexion ne mène pas à l'appairage (${flow.url()})`);

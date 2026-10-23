@@ -18,8 +18,11 @@ import { IconLock, IconSettings } from "../../ui/icons";
 import { SchemePicker } from "./SchemePicker";
 import { SubjectEditor } from "./SubjectEditor";
 import {
+  DEFAULT_MANUAL_URL,
   MAX_API_KEY_CHARS,
+  MAX_MANUAL_URL_CHARS,
   THEME_OPTIONS,
+  llmSaveError,
   sanitizeSubjectPrefs,
   subjectNameError,
   subjectSaveRefusal,
@@ -55,6 +58,16 @@ export default function SettingsScreen() {
   const [hostSaved, setHostSaved] = useState("");
   const [savingHost, setSavingHost] = useState(false);
 
+  const [manualUrl, setManualUrl] = useState(DEFAULT_MANUAL_URL);
+  const [manualConfigured, setManualConfigured] = useState(false);
+  const [manualAuto, setManualAuto] = useState(false);
+  const [manualReady, setManualReady] = useState(false);
+  const [manualLevel, setManualLevel] = useState("");
+  const [manualSpecialties, setManualSpecialties] = useState<string[]>([]);
+  const [manualError, setManualError] = useState("");
+  const [manualNotice, setManualNotice] = useState("");
+  const [savingManual, setSavingManual] = useState(false);
+
   const [prefs, setPrefs] = useState<SubjectPref[]>([]);
   const [prefsError, setPrefsError] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
@@ -82,6 +95,16 @@ export default function SettingsScreen() {
         const snapshot = settingsResult.value;
         setHost(typeof snapshot.serverHost === "string" ? snapshot.serverHost : "");
         setLlmConfigured(snapshot.llmConfigured === true);
+        setManualUrl(
+          typeof snapshot.manualUrl === "string" && snapshot.manualUrl !== ""
+            ? snapshot.manualUrl
+            : DEFAULT_MANUAL_URL,
+        );
+        setManualConfigured(snapshot.manualConfigured === true);
+        setManualAuto(snapshot.manualAuto === true);
+        setManualReady(snapshot.manualReady === true);
+        setManualLevel(typeof snapshot.manualLevel === "string" ? snapshot.manualLevel : "");
+        setManualSpecialties(Array.isArray(snapshot.manualSpecialties) ? snapshot.manualSpecialties : []);
       } else {
         setSettingsError(actionMessage(settingsResult.reason, "Réglages indisponibles : réessaie dans un instant."));
       }
@@ -122,6 +145,77 @@ export default function SettingsScreen() {
     }
   }
 
+  async function saveManual(): Promise<void> {
+    const value = manualUrl.trim();
+    if (value === "") {
+      setManualError("Colle l'adresse de ton manuel avant d'enregistrer.");
+      return;
+    }
+    setManualError("");
+    setManualNotice("");
+    setSavingManual(true);
+    try {
+      const response = await bridge.saveManualUrl(value);
+      if (!response.ok) {
+        setManualError(response.message || "Adresse refusée : vérifie-la.");
+        return;
+      }
+      setManualUrl(value);
+      setManualConfigured(true);
+      setManualAuto(response.auto === true);
+      setManualReady(response.ready === true);
+      setManualLevel(typeof response.level === "string" ? response.level : "");
+      setManualSpecialties(Array.isArray(response.specialties) ? response.specialties : []);
+      if (response.auto === true) {
+        const guess = [response.level ?? "", (response.specialties ?? []).join(", ")]
+          .map((part) => part.trim())
+          .filter((part) => part !== "")
+          .join(" · ");
+        const notice =
+          guess === ""
+            ? "Manuel automatique activé : l’ouvrage suivra la matière du devoir."
+            : `Manuel automatique activé (${guess}).`;
+        setManualNotice(notice);
+        notify(notice);
+      } else {
+        const notice = response.ready
+          ? "Manuel récupéré : l'assistant peut le citer."
+          : response.message || "Adresse enregistrée, mais le manuel n'a pas pu être récupéré.";
+        setManualNotice(notice);
+        notify(notice, response.ready ? "info" : "error");
+      }
+    } catch (error) {
+      setManualError(actionMessage(error, "Manuel non enregistré : réessaie dans un instant."));
+    } finally {
+      setSavingManual(false);
+    }
+  }
+
+  async function forgetManual(): Promise<void> {
+    setManualError("");
+    setManualNotice("");
+    setSavingManual(true);
+    try {
+      const response = await bridge.saveManualUrl("");
+      if (!response.ok) {
+        setManualError(response.message || "Manuel non supprimé : réessaie dans un instant.");
+        return;
+      }
+      setManualUrl(DEFAULT_MANUAL_URL);
+      setManualConfigured(false);
+      setManualAuto(false);
+      setManualReady(false);
+      setManualLevel("");
+      setManualSpecialties([]);
+      setManualNotice("Manuel oublié.");
+      notify("Manuel oublié.");
+    } catch (error) {
+      setManualError(actionMessage(error, "Manuel non supprimé : réessaie dans un instant."));
+    } finally {
+      setSavingManual(false);
+    }
+  }
+
   async function saveKey(): Promise<void> {
     const key = llmKey.trim();
     if (key === "") {
@@ -132,8 +226,9 @@ export default function SettingsScreen() {
     setSavingKey(true);
     try {
       const response = await bridge.saveLlmKey(key);
-      if (!response.ok) {
-        setLlmError("Clé refusée : vérifie qu'elle est complète.");
+      const refusal = llmSaveError(response);
+      if (refusal !== "") {
+        setLlmError(refusal);
         return;
       }
       setLlmConfigured(true);
@@ -219,6 +314,10 @@ export default function SettingsScreen() {
   }
 
   const nameError = subjectNameError(newSubject);
+  const manualGuess = [manualLevel, manualSpecialties.join(", ")]
+    .map((part) => part.trim())
+    .filter((part) => part !== "")
+    .join(" · ");
 
   return (
     <Page>
@@ -370,7 +469,9 @@ export default function SettingsScreen() {
               <strong style={{ display: "block" }}>Assistant devoirs</strong>
               <p className="tiny muted" style={{ margin: "2px 0 0" }}>
                 {llmConfigured
-                  ? "Clé enregistrée (chiffrée). Elle part avec chaque demande, jamais stockée par le serveur."
+                  ? storageUnavailable
+                    ? "Clé en mémoire seulement : elle sera oubliée à la fermeture de l'app."
+                    : "Clé enregistrée (chiffrée). Elle part avec chaque demande, jamais stockée par le serveur."
                   : "Aucune clé : l'assistant reste inactif tant qu'elle n'est pas saisie."}
               </p>
             </div>
@@ -391,7 +492,10 @@ export default function SettingsScreen() {
               spellCheck={false}
               disabled={loading}
               placeholder={llmConfigured ? "Nouvelle clé (facultatif)" : "Colle ta clé ici"}
-              onChange={(event) => setLlmKey(event.target.value.slice(0, MAX_API_KEY_CHARS))}
+              onChange={(event) => {
+                setLlmKey(event.target.value.slice(0, MAX_API_KEY_CHARS));
+                if (llmError) setLlmError("");
+              }}
             />
             <button
               type="button"
@@ -404,7 +508,8 @@ export default function SettingsScreen() {
             </button>
           </div>
           <p className="tiny muted" style={{ margin: "6px 0 0" }}>
-            Collée depuis ton compte fournisseur. Elle ne quitte jamais cet appareil.
+            Collée depuis ton compte fournisseur. Chaque demande l’envoie directement au
+            fournisseur, sans passer par nos serveurs.
           </p>
           {storageUnavailable ? (
             // #401 : la clé vit en MÉMOIRE (le Keystore est mort) : elle
@@ -441,6 +546,100 @@ export default function SettingsScreen() {
       </Section>
 
       <Section title="Avancé">
+        <Card className="card--flat">
+          <strong style={{ display: "block" }}>Manuel de l’élève (facultatif)</strong>
+          <p className="tiny muted" style={{ margin: "2px 0 0" }}>
+            L’assistant choisit l’ouvrage selon ta classe et la matière du devoir, puis en cite un
+            extrait dans l’aide devoirs et les fiches de révision. L’adresse est lue par le scraper
+            ci-dessous, jamais par l’établissement.
+          </p>
+          <label className="tiny muted" htmlFor="manual-url" style={{ display: "block", marginTop: 12 }}>
+            Adresse du manuel
+          </label>
+          <input
+            id="manual-url"
+            className="field"
+            type="url"
+            value={manualUrl}
+            maxLength={MAX_MANUAL_URL_CHARS}
+            inputMode="url"
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            disabled={loading || savingManual}
+            aria-invalid={manualError !== ""}
+            aria-describedby="manual-help"
+            placeholder="https://manuel.exemple.fr/chapitre"
+            onChange={(event) => {
+              setManualUrl(event.target.value);
+              setManualConfigured(false);
+              setManualAuto(false);
+              setManualReady(false);
+              setManualNotice("");
+              if (manualError) setManualError("");
+            }}
+          />
+          <p id="manual-help" className="tiny muted" style={{ margin: "6px 0 0" }}>
+            Garde l’adresse du catalogue : l’assistant choisit l’ouvrage selon ta classe et la
+            matière du devoir. Tu peux aussi coller l’adresse d’un manuel précis. La récupération
+            passe par le scraper facultatif ci-dessous.
+          </p>
+          {manualConfigured && !manualNotice ? (
+            <p
+              className="tiny"
+              role="status"
+              style={{
+                color: manualAuto || manualReady ? "var(--brand-deep)" : "var(--danger-ink)",
+                margin: "6px 0 0",
+              }}
+            >
+              {manualAuto
+                ? manualGuess === ""
+                  ? "Manuel automatique : l’ouvrage suivra la matière du devoir."
+                  : `Manuel automatique (${manualGuess}) : l’ouvrage suivra la matière du devoir.`
+                : manualReady
+                  ? "Manuel récupéré : l’assistant peut le citer."
+                  : "Manuel pas encore récupéré : enregistre-le pour réessayer."}
+            </p>
+          ) : null}
+          {manualNotice ? (
+            <p
+              className="tiny"
+              role="status"
+              style={{
+                color: manualAuto || manualReady ? "var(--brand-deep)" : "var(--danger-ink)",
+                margin: "6px 0 0",
+              }}
+            >
+              {manualNotice}
+            </p>
+          ) : null}
+          {manualError ? (
+            <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "6px 0 0" }}>
+              {manualError}
+            </p>
+          ) : null}
+          <div className="row" style={{ justifyContent: "flex-end", marginTop: 10 }}>
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              disabled={loading || savingManual || !manualConfigured}
+              onClick={() => void forgetManual()}
+            >
+              Oublier
+            </button>
+            <button
+              type="button"
+              className="btn btn--small"
+              disabled={loading || savingManual || manualUrl.trim() === ""}
+              onClick={() => void saveManual()}
+            >
+              {savingManual ? "Enregistrement…" : "Enregistrer le manuel"}
+            </button>
+          </div>
+        </Card>
+
         <Card className="card--flat">
           <strong style={{ display: "block" }}>Scraper de manuels (facultatif)</strong>
           <p className="tiny muted" style={{ margin: "2px 0 0" }}>

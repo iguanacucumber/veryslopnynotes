@@ -171,6 +171,7 @@ describe("contrat du pont natif", () => {
     const kotlin = readFileSync(BRIDGE, "utf8");
     const constants = kotlinConstants(kotlin);
     expect(constants.get("AWAIT_DEFAULT_MS")).toBe(NATIVE_WAIT_MS.default);
+    expect(constants.get("AWAIT_MANUAL_MS")).toBe(NATIVE_WAIT_MS.manual);
     expect(constants.get("AWAIT_LLM_MS")).toBe(NATIVE_WAIT_MS.llm);
     expect(kotlinCeiling(kotlin)).toBe(MAX_NATIVE_WAIT_MS);
   });

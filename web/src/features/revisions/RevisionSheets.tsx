@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bridge } from "../../bridge/client";
 import { useApp } from "../../ui/AppContext";
-import { Card, EmptyState, ErrorBox, Loading, Page, Section, SubjectAvatar } from "../../ui/components";
+import {
+  Card,
+  EmptyState,
+  ErrorBox,
+  Loading,
+  Page,
+  PageHeading,
+  Section,
+  SubjectAvatar,
+} from "../../ui/components";
 import { IconBook, IconDownload } from "../../ui/icons";
+import { useViewNavigate } from "../../ui/viewTransition";
 import { revisionDateLabel, parseRevisionSheet, parseRevisionSheets, type RevisionSheet } from "./sheets";
 
 type Selected = {
@@ -14,6 +24,7 @@ type Selected = {
 
 export function RevisionSheetsScreen() {
   const { notify, refreshTick, dark } = useApp();
+  const navigate = useViewNavigate();
   const [sheets, setSheets] = useState<RevisionSheet[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Selected | null>(null);
@@ -124,23 +135,34 @@ export function RevisionSheetsScreen() {
 
   return (
     <Page>
+      <PageHeading
+        eyebrow="Assistant"
+        title="Révisions"
+        action={sheets && sheets.length > 0 ? <span className="chip">{sheets.length}</span> : null}
+      />
+
       {error ? <ErrorBox message={error} /> : null}
 
       {sheets && sheets.length === 0 ? (
         <EmptyState
           icon={<IconBook size={30} />}
           title="Aucune fiche de révision"
-          body="Une fiche est générée automatiquement à l’annonce d’un DS détecté avec certitude."
+          body="Ouvre un devoir dans Tâches et touche « Fiche de révision » : elle apparaîtra ici."
           action={
-            <button type="button" className="btn btn--small" onClick={() => void load()}>
-              Actualiser
-            </button>
+            <div className="row" style={{ gap: 8, justifyContent: "center" }}>
+              <button type="button" className="btn btn--small" onClick={() => navigate("/tasks")}>
+                Voir les devoirs
+              </button>
+              <button type="button" className="btn btn--ghost btn--small" onClick={() => void load()}>
+                Actualiser
+              </button>
+            </div>
           }
         />
       ) : null}
 
       {sheets && sheets.length > 0 ? (
-        <Section title="Fiches disponibles" action={<span className="chip">{sheets.length}</span>}>
+        <Section title="Toutes les fiches">
           <div className="list">
             {sheets.map((sheet) => {
               const opened = selected?.id === sheet.id;
@@ -176,6 +198,7 @@ export function RevisionSheetsScreen() {
                         type="button"
                         className="btn btn--small"
                         disabled={exporting !== null}
+                        aria-busy={exporting === sheet.id}
                         aria-label={`Exporter en PDF la fiche ${sheet.title}`}
                         onClick={() => void exportSheet(sheet.id)}
                       >
@@ -187,7 +210,17 @@ export function RevisionSheetsScreen() {
                     {opened ? (
                       <div id={bodyId} role="region" aria-label={`Fiche ${sheet.title}`}>
                         {selected.loading ? <Loading label="Ouverture de la fiche…" /> : null}
-                        {selected.error ? <ErrorBox message={selected.error} /> : null}
+                        {selected.error ? (
+                          <ErrorBox message={selected.error}>
+                            <button
+                              type="button"
+                              className="btn btn--small"
+                              onClick={() => void open(sheet.id)}
+                            >
+                              Réessayer
+                            </button>
+                          </ErrorBox>
+                        ) : null}
                         {selected.sheet ? <SheetBody sheet={selected.sheet} /> : null}
                       </div>
                     ) : null}

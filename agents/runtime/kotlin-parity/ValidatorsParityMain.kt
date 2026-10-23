@@ -23,6 +23,9 @@ private fun JVal.Obj.str(key: String): String? = (fields[key] as? JVal.Str)?.val
 
 private fun JVal.Obj.num(key: String): Double? = (fields[key] as? JVal.Num)?.value
 
+private fun JVal.Obj.strList(key: String): List<String> =
+    (fields[key] as? JVal.Arr)?.items?.mapNotNull { (it as? JVal.Str)?.value } ?: emptyList()
+
 private fun ok(vararg pairs: Pair<String, JVal>): JVal.Obj = JVal.Obj(linkedMapOf(*pairs))
 
 private fun err(name: String, message: String?): JVal.Obj =
@@ -62,6 +65,32 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
         )
         ok("ok" to JVal.Bool(isAbsenceRecord(record)))
     }
+    // Adresse du manuel : même verdict que le premier filtre de l'app avant
+    // l'envoi au scraper (schéma, hôte, identifiants, bornes).
+    "manualUrl" -> when (val result = ManualUrl.validate(op.str("text") ?: "")) {
+        is ManualUrlResult.Ok -> ok("ok" to JVal.Bool(true), "url" to JVal.Str(result.url))
+        is ManualUrlResult.Rejected -> ok("ok" to JVal.Bool(false), "message" to JVal.Str(result.message))
+    }
+    // Catalogue lelivrescolaire : choix de l'ouvrage par classe + matière.
+    "manualResolve" -> {
+        val subjects = op.strList("subjects")
+        val url = ManualCatalog.resolve(
+            baseUrl = op.str("baseUrl") ?: "",
+            classLabel = op.str("classLabel") ?: "",
+            subjects = subjects,
+            subject = op.str("subject") ?: "",
+        )
+        ok("url" to (url?.let { JVal.Str(it) } ?: JVal.Null))
+    }
+    "manualGuess" -> {
+        val subjects = op.strList("subjects")
+        val level = ManualCatalog.levelOf(op.str("classLabel") ?: "", subjects)
+        ok(
+            "level" to JVal.Str(ManualCatalog.levelLabel(level)),
+            "specialties" to JVal.Arr(ManualCatalog.specialties(op.str("classLabel") ?: "", subjects).map { JVal.Str(it) }),
+        )
+    }
+    "manualIsCatalog" -> ok("ok" to JVal.Bool(ManualCatalog.isCatalog(op.str("text") ?: "")))
     else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")
 }
 

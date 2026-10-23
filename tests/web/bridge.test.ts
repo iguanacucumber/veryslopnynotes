@@ -68,7 +68,7 @@ describe("pont : délais", () => {
       native += constants.get(term) ?? Number(term);
     }
     expect(native).toBe(MAX_NATIVE_WAIT_MS);
-    expect(native).toBe(NATIVE_WAIT_MS.default + NATIVE_WAIT_MS.llm);
+    expect(native).toBe(NATIVE_WAIT_MS.default + NATIVE_WAIT_MS.manual + NATIVE_WAIT_MS.llm);
     // Strictement au-dessus : sinon la réponse native arrive après l'abandon
     // et se perd (plus d'entrée dans `pending`).
     expect(DEFAULT_TIMEOUT_MS).toBeGreaterThan(MAX_NATIVE_WAIT_MS);

@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  accountCountHint,
   accountCountLabel,
   activeAccount,
   initialsOf,
@@ -108,6 +109,10 @@ describe("profil : lecture défensive et comptes", () => {
     expect(accountCountLabel(1)).toBe("1 compte appairé");
     expect(accountCountLabel(4)).toBe("4 comptes appairés");
     expect(accountCountLabel(Number.NaN)).toBe("Aucun compte appairé");
+    expect(accountCountHint(0)).toBe("Aucun compte n'est actif.");
+    expect(accountCountHint(1)).toBe("Un seul compte est actif à la fois.");
+    expect(accountCountHint(4)).toContain("changer de compte remplace la session");
+    expect(accountCountHint(Number.NaN)).toBe("Aucun compte n'est actif.");
   });
 
   test("sélecteur : session d'abord, enfants sans doublon, plafond", () => {
@@ -141,6 +146,19 @@ describe("profil : lecture défensive et comptes", () => {
       }),
     );
     expect(switchableAccounts(many)).toHaveLength(9);
+  });
+
+  test("le profil montre les comptes liés sans promettre une bascule impossible", () => {
+    // `session.accounts` ne rend qu'un compteur et la session est mono-compte :
+    // l'écran LIT les enfants publiés par /v1/me, il ne les sélectionne pas.
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "features", "profile", "ProfileScreen.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("switchableAccounts(profile)");
+    expect(source).toContain('title="Comptes liés"');
+    expect(source).toContain('title="Changer de compte"');
+    expect(source).not.toContain("accounts.select");
   });
 
   test("photo : data URL bitmap seulement, jamais une URL distante ou un SVG", () => {

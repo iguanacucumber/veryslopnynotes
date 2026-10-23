@@ -54,6 +54,7 @@ import {
   type Assignment,
 } from "./parse";
 import { useNow } from "./useNow";
+import { ManualPrompt } from "../settings/ManualPrompt";
 import "./home.css";
 
 type IconComponent = ComponentType<{ size?: number }>;
@@ -390,6 +391,7 @@ export default function HomeScreen() {
 
   return (
     <Page className="home">
+      <ManualPrompt />
       <Card className="home-hero">
         <span className="home-hero__orb home-hero__orb--one" aria-hidden="true" />
         <span className="home-hero__orb home-hero__orb--two" aria-hidden="true" />

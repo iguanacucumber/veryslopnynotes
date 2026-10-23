@@ -487,6 +487,25 @@ export function subjectInitial(subject: string): string {
 }
 
 /**
+ * Le devoir a-t-il du texte exploitable par l'assistant ?
+ *
+ * Le natif refuse AVANT l'appel quand ni la consigne ni l'extrait de cours
+ * n'existent : proposer « Aide devoirs » ou « Fiche de révision » ne mènerait
+ * qu'à une erreur. Le titre seul ne suffit pas. Un manuel enregistré est une
+ * source supplémentaire : il suffit à lui seul.
+ */
+export function assignmentHasAssistantMaterial(
+  assignment: Pick<Assignment, "description" | "lessonContent">,
+  manualReady = false,
+): boolean {
+  return (
+    manualReady ||
+    assignment.description.trim() !== "" ||
+    (assignment.lessonContent?.excerpt.trim() ?? "") !== ""
+  );
+}
+
+/**
  * Phrase de refus affichée quand l'assistant refuse de répondre (#416).
  *
  * Le pont natif envoie une phrase française bornée (jamais le motif libre du

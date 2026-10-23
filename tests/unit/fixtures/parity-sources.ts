@@ -80,6 +80,8 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "Humanize.kt"),
   join(CORE, "IsoDates.kt"),
   join(CORE, "LlmGuard.kt"),
+  join(CORE, "ManualUrl.kt"),
+  join(CORE, "ManualCatalog.kt"),
   join(CORE, "NotifyFormat.kt"),
   join(CORE, "RevisionAi.kt"),
   join(CORE, "RevisionSheet.kt"),

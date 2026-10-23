@@ -178,8 +178,11 @@ const fixtures: Record<ResourceKey, unknown> = {
       lastName: "DUPONT",
       classLabel: "TG2",
       periodName: "Trimestre 1",
-      hasKids: false,
-      kids: [],
+      hasKids: true,
+      kids: [
+        { accountId: "demo-kid-1", displayName: "DUPONT Noé", classLabel: "5E" },
+        { accountId: "demo-kid-2", displayName: "DUPONT Léa", classLabel: "3E" },
+      ],
     },
   },
 };
@@ -211,7 +214,14 @@ let settings: SettingsSnapshot = {
   theme: "SYSTEM",
   serverHost: "10.0.2.2:3000",
   llmConfigured: false,
-  accountCount: 1,
+  accountCount: 3,
+  manualUrl: "",
+  manualConfigured: false,
+  manualAuto: false,
+  manualReady: false,
+  manualLevel: "",
+  manualSpecialties: [],
+  manualPromptSeen: false,
 };
 
 let prefs: SubjectPref[] = [
@@ -358,6 +368,57 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
     case "settings.saveServer":
       settings = { ...settings, serverHost: String(p["host"] ?? "") };
       return ok({ ok: true }) as Promise<T>;
+    case "settings.saveManualUrl": {
+      const url = String(p["url"] ?? "").trim();
+      if (url === "") {
+        settings = {
+          ...settings,
+          manualUrl: "",
+          manualConfigured: false,
+          manualAuto: false,
+          manualReady: false,
+          manualLevel: "",
+          manualSpecialties: [],
+          manualPromptSeen: true,
+        };
+        return ok({ ok: true, ready: false, auto: false }) as Promise<T>;
+      }
+      if (!/^https?:\/\/\S+$/i.test(url)) {
+        return ok({ ok: false, message: "Adresse incomplète : le format attendu est https://…" }) as Promise<T>;
+      }
+      const auto = /\/manuels\/?$/i.test(url);
+      settings = auto
+        ? {
+            ...settings,
+            manualUrl: url,
+            manualConfigured: true,
+            manualAuto: true,
+            manualReady: false,
+            manualLevel: "Terminale",
+            manualSpecialties: ["Mathématiques", "NSI"],
+            manualPromptSeen: true,
+          }
+        : {
+            ...settings,
+            manualUrl: url,
+            manualConfigured: true,
+            manualAuto: false,
+            manualReady: true,
+            manualLevel: "Terminale",
+            manualSpecialties: ["Mathématiques", "NSI"],
+            manualPromptSeen: true,
+          };
+      return ok({
+        ok: true,
+        ready: !auto,
+        auto,
+        level: settings.manualLevel,
+        specialties: settings.manualSpecialties,
+      }) as Promise<T>;
+    }
+    case "settings.dismissManualPrompt":
+      settings = { ...settings, manualPromptSeen: true };
+      return ok({ ok: true }) as Promise<T>;
     case "settings.subjectPrefs":
       return ok({ prefs }) as Promise<T>;
     case "settings.saveSubject": {
@@ -378,8 +439,25 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
         ok: true,
         body: "Le corrigé attendu : relier chaque régime à ses caractéristiques (parti unique, terreur, propagande) puis comparer deux régimes.",
       }) as Promise<T>;
-    case "llm.generateRevision":
+    case "llm.generateRevision": {
+      const id = String(p["assignmentId"] ?? "");
+      const assignment = (
+        fixtures.assignments as { items: Array<{ id: string; subject: string; title: string; dueDate: string }> }
+      ).items.find((item) => item.id === id);
+      if (!assignment) return ok({ ok: false, message: "Devoir introuvable." }) as Promise<T>;
+      const sheetId = `rev-${assignment.id}`;
+      if (!revisions.some((sheet) => (sheet as { id: string }).id === sheetId)) {
+        revisions.unshift({
+          id: sheetId,
+          title: `Fiche révision — ${assignment.title}`,
+          subject: assignment.subject,
+          date: assignment.dueDate,
+          sources: [assignment.id],
+          body: `1. Relire la consigne : ${assignment.title}.\n2. Retenir les notions clés.\n3. S'entraîner sur un exercice.`,
+        });
+      }
       return ok({ ok: true }) as Promise<T>;
+    }
     case "revision.list":
       return ok({ sheets: revisions }) as Promise<T>;
     case "revision.load":

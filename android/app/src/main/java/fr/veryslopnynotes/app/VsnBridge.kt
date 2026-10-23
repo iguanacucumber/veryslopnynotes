@@ -22,6 +22,9 @@ import fr.veryslopnynotes.core.ChildAccount
 import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.ExamCandidate
 import fr.veryslopnynotes.core.HomeworkOutcome
+import fr.veryslopnynotes.core.ManualCatalog
+import fr.veryslopnynotes.core.ManualUrl
+import fr.veryslopnynotes.core.ManualUrlResult
 import fr.veryslopnynotes.core.OutputTooLongException
 import fr.veryslopnynotes.core.RevisionChunk
 import fr.veryslopnynotes.core.RevisionExam
@@ -53,6 +56,9 @@ import fr.veryslopnynotes.data.InMemorySubjectPrefsStore
 import fr.veryslopnynotes.data.LlmError
 import fr.veryslopnynotes.data.LlmKeys
 import fr.veryslopnynotes.data.LocalDataStore
+import fr.veryslopnynotes.data.ManualDoc
+import fr.veryslopnynotes.data.ManualStore
+import fr.veryslopnynotes.data.ManualsClient
 import fr.veryslopnynotes.data.MeResult
 import fr.veryslopnynotes.data.OpenRouterHomework
 import fr.veryslopnynotes.data.OpenRouterLlm
@@ -125,6 +131,7 @@ class VsnBridge(
         BuildConfig.SERVER_HOST,
     )
     private val serverStore = ServerStore(ctx)
+    private val manuals = ManualStore(ctx)
     // #540 : le store englobe le CACHE (`cacheDir/attachments/`,
     // `cacheDir/exports/`) : une purge de compte efface les pièces jointes
     // téléchargées comme le cache, sans chemin de purge qui en oublie.
@@ -187,6 +194,15 @@ class VsnBridge(
     // vit encore.
     @Volatile
     private var sessionReady = false
+
+    /** Dernier profil publié (jamais persisté) : sert à éviter un aller-retour
+     *  Pronote quand on a déjà la classe sous la main. */
+    @Volatile
+    private var cachedProfile: UserProfile? = null
+
+    /** Échecs de scrape récents (adresse -> millis) : ne pas repayer 35 s à
+     *  chaque question quand le scraper est injoignable. */
+    private val manualFailures = ConcurrentHashMap<String, Long>()
 
     @Volatile
     private var pendingScanId: String? = null
@@ -368,6 +384,8 @@ class VsnBridge(
             "messages.recipients" -> messagesRecipients()
             "settings.get" -> settings()
             "settings.saveServer" -> saveServer(p)
+            "settings.saveManualUrl" -> saveManualUrl(p)
+            "settings.dismissManualPrompt" -> dismissManualPrompt()
             "settings.subjectPrefs" -> subjectPrefs()
             "settings.saveSubject" -> saveSubject(p, epoch)
             "llm.status" -> JSONObject().put("configured", llmKeys.isConfigured())
@@ -452,6 +470,8 @@ class VsnBridge(
 
     private fun logout(): JSONObject {
         sessionReady = false
+        cachedProfile = null
+        manualFailures.clear()
         accounts.logout()
         return JSONObject().put("ok", true)
     }
@@ -472,6 +492,8 @@ class VsnBridge(
      */
     private fun onSessionRejected() {
         sessionReady = false
+        cachedProfile = null
+        manualFailures.clear()
         accounts.logout()
     }
 
@@ -526,6 +548,8 @@ class VsnBridge(
         return when (result) {
             is PairingResult.Ok -> {
                 sessionReady = true
+                cachedProfile = null
+                manualFailures.clear()
                 // #397 : le compte appairé est ENREGISTRÉ. Le magasin
                 // multi-compte n'était jamais alimenté (rien n'écrivait
                 // `account_ids` depuis la bascule Compose -> WebView) :
@@ -562,6 +586,8 @@ class VsnBridge(
         return when (result) {
             is PairingResult.Ok -> {
                 sessionReady = true
+                cachedProfile = null
+                manualFailures.clear()
                 result.accountId?.let { accounts.add(it); accounts.select(it) }
                 JSONObject().put("ok", true)
             }
@@ -889,6 +915,14 @@ class VsnBridge(
         .put("serverHost", currentBaseUrl().substringAfter("://").trimEnd('/').take(300))
         .put("llmConfigured", llmKeys.isConfigured())
         .put("accountCount", accounts.count())
+        // Adresse du manuel : réglage saisi par l'utilisateur, jamais un secret.
+        .put("manualUrl", manuals.url() ?: "")
+        .put("manualConfigured", manuals.url() != null)
+        .put("manualAuto", manuals.url()?.let { ManualCatalog.isCatalog(it) } == true)
+        .put("manualReady", manuals.hasDoc())
+        .put("manualLevel", ManualCatalog.levelLabel(ManualCatalog.levelOf(manuals.classLabel(), manuals.subjects())))
+        .put("manualSpecialties", JSONArray(ManualCatalog.specialties(manuals.classLabel(), manuals.subjects())))
+        .put("manualPromptSeen", manuals.promptSeen())
 
     private fun saveServer(p: JSONObject): JSONObject {
         var host = bounded(p.string("host"), 300)
@@ -897,11 +931,74 @@ class VsnBridge(
             host = "$scheme://$host"
         }
         return when (val result = serverStore.save(host)) {
-            is fr.veryslopnynotes.core.ServerUrlResult.Ok ->
+            is fr.veryslopnynotes.core.ServerUrlResult.Ok -> {
+                // Nouveau scraper = nouvelle chance pour les manuels.
+                manualFailures.clear()
                 JSONObject().put("ok", true)
+            }
             is fr.veryslopnynotes.core.ServerUrlResult.Rejected ->
                 JSONObject().put("ok", false).put("message", result.message)
         }
+    }
+
+    /**
+     * Enregistre l'adresse du manuel puis prépare le choix :
+     * - adresse de CATALOGUE (`/manuels`) : la classe et la matière décideront
+     *   de l'ouvrage à chaque devoir — rien n'est scrapé ici ;
+     * - adresse d'un ouvrage PRÉCIS : son extrait est récupéré tout de suite.
+     *
+     * La classe vient du profil (une seule lecture, mise en cache), les
+     * matières des caches locaux. L'adresse reste enregistrée même quand la
+     * récupération échoue.
+     *
+     * Le corps vide = « oublier le manuel » (et ses extraits).
+     */
+    private fun saveManualUrl(p: JSONObject): JSONObject {
+        val raw = bounded(p.string("url"), ManualUrl.MAX_CHARS)
+        if (raw.isEmpty()) {
+            manuals.clear()
+            return JSONObject().put("ok", true).put("ready", false).put("auto", false)
+        }
+        return when (val saved = manuals.save(raw)) {
+            is ManualUrlResult.Rejected ->
+                JSONObject().put("ok", false).put("message", saved.message)
+            is ManualUrlResult.Ok -> {
+                val classLabel = profileClassLabel()
+                val subjects = knownSubjects()
+                manuals.saveGuess(classLabel, subjects)
+                val auto = ManualCatalog.isCatalog(saved.url)
+                var warning: String? = null
+                if (!auto && manuals.doc(saved.url) == null) {
+                    // Enregistrement explicite = nouvelle tentative, même si
+                    // la précédente a échoué.
+                    manualFailures.remove(saved.url)
+                    val fetched = ManualsClient(currentBaseUrl()).fetch(saved.url)
+                    if (fetched.doc != null) {
+                        fetched.doc?.let { manuals.saveDoc(saved.url, it) }
+                        manualFailures.remove(saved.url)
+                    } else {
+                        manualFailures[saved.url] = System.currentTimeMillis()
+                    }
+                    warning = fetched.error
+                }
+                val ready = manuals.hasDoc()
+                val level = ManualCatalog.levelOf(classLabel, subjects)
+                JSONObject()
+                    .put("ok", true)
+                    .put("ready", ready)
+                    .put("auto", auto)
+                    .put("level", ManualCatalog.levelLabel(level))
+                    .put("specialties", JSONArray(ManualCatalog.specialties(classLabel, subjects)))
+                    .apply {
+                        if (!auto && !ready && warning != null) put("message", warning)
+                    }
+            }
+        }
+    }
+
+    private fun dismissManualPrompt(): JSONObject {
+        manuals.markPromptSeen()
+        return JSONObject().put("ok", true)
     }
 
     private fun subjectPrefs(): JSONObject = JSONObject()
@@ -982,7 +1079,12 @@ class VsnBridge(
         val week = bounded(p.string("weekStart"), 10)
         val assignment = loadAssignments(id, week).firstOrNull { it.id == id }
             ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
-        val sources = fr.veryslopnynotes.data.HomeworkRepository.sourcesFor(assignment)
+        val sources = fr.veryslopnynotes.data.HomeworkRepository.sourcesFor(assignment).toMutableList()
+        // Manuel choisi pour la MATIÈRE du devoir (catalogue) ou ouvrage précis.
+        // Une source CITABLE supplémentaire, marquée Untrusted par le prompt.
+        manualDocFor(assignment.subject)?.let { doc ->
+            fr.veryslopnynotes.data.HomeworkRepository.manualSource(doc)?.let { sources.add(it) }
+        }
         val question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment)
         val result = await<fr.veryslopnynotes.data.HomeworkResult>(AWAIT_LLM_MS) { cb ->
             OpenRouterHomework(OpenRouterLlm(), llmKeys).generate(question, sources, cb)
@@ -1111,7 +1213,107 @@ class VsnBridge(
         a.lessonContent?.takeIf { it.excerpt.isNotBlank() }?.let {
             out.add(RevisionChunk(it.excerpt, it.title.ifBlank { "Cours" }))
         }
+        // Le manuel est choisi pour la matière du devoir, comme l'aide devoirs.
+        manualDocFor(a.subject)?.let { doc ->
+            val text = doc.excerpt.take(4000)
+            if (text.isNotBlank()) {
+                out.add(RevisionChunk(text, "Manuel : ${doc.title.ifBlank { "manuel" }}".take(200)))
+            }
+        }
         return out
+    }
+
+    /**
+     * Extrait du manuel pour `subject`. Catalogue = choix par classe/matière ;
+     * ouvrage précis = adresse telle quelle. Un ouvrage inconnu de la table ne
+     * produit AUCUNE source (jamais un manuel d'une autre matière).
+     */
+    private fun manualDocFor(subject: String): ManualDoc? {
+        val stored = manuals.url() ?: return null
+        val target = if (ManualCatalog.isCatalog(stored)) {
+            val classLabel = cachedProfile?.classLabel?.takeIf { it.isNotBlank() } ?: manuals.classLabel()
+            val known = manuals.subjects()
+            val subjects = (if (known.isEmpty()) knownSubjects() else known + subject).distinct()
+            if (known.isEmpty() && subjects.isNotEmpty()) manuals.saveGuess(classLabel, subjects)
+            ManualCatalog.resolve(stored, classLabel, subjects, subject) ?: return null
+        } else {
+            stored
+        }
+        manuals.doc(target)?.let { return it }
+        val now = System.currentTimeMillis()
+        val lastFailure = manualFailures[target] ?: 0L
+        if (now - lastFailure < MANUAL_RETRY_MS) return null
+        val fetched = ManualsClient(currentBaseUrl()).fetch(target)
+        val doc = fetched.doc
+        if (doc == null) {
+            manualFailures[target] = now
+            return null
+        }
+        manualFailures.remove(target)
+        manuals.saveDoc(target, doc)
+        return doc
+    }
+
+    /**
+     * Matières réellement présentes dans les caches (notes, devoirs, EDT) :
+     * elles servent à deviner les spécialités, jamais à les inventer. Aucun
+     * accès réseau ici — hors ligne, la liste est simplement plus courte.
+     */
+    private fun knownSubjects(): List<String> {
+        val out = LinkedHashSet<String>()
+        fun add(raw: String) {
+            val subject = raw.trim()
+            if (subject.isNotEmpty() && subject.length <= 100) out.add(subject)
+        }
+        for (payload in repo.payloads(CachePolicy.GRADES)) {
+            try {
+                val root = JSONObject(payload)
+                val averages = root.optJSONObject("averages")?.optJSONArray("subjects")
+                for (i in 0 until (averages?.length() ?: 0)) {
+                    averages?.optJSONObject(i)?.let { add(it.optString("subject")) }
+                }
+                val grades = root.optJSONArray("grades")
+                for (i in 0 until (grades?.length() ?: 0)) {
+                    grades?.optJSONObject(i)?.let { add(it.optString("subject")) }
+                }
+            } catch (_: Exception) {
+                // Payload illisible : il ne prouve aucune matière.
+            }
+        }
+        for (payload in repo.payloads(CachePolicy.ASSIGNMENTS)) {
+            try {
+                AssignmentsRepository.parse(payload).forEach { add(it.subject) }
+            } catch (_: Exception) {
+                // Idem : le cache suivant suffira peut-être.
+            }
+        }
+        for (payload in repo.payloads(CachePolicy.TIMETABLE)) {
+            try {
+                val entries = JSONObject(payload).optJSONArray("entries")
+                for (i in 0 until (entries?.length() ?: 0)) {
+                    entries?.optJSONObject(i)?.let { add(it.optString("subject")) }
+                }
+            } catch (_: Exception) {
+                // Idem.
+            }
+        }
+        return out.take(ManualStore.MAX_SUBJECTS)
+    }
+
+    /** Classe du profil, lue au plus une fois et gardée en mémoire. */
+    private fun profileClassLabel(): String {
+        cachedProfile?.classLabel?.takeIf { it.isNotBlank() }?.let { return it }
+        val result = await<MeResult> { cb -> profileRepo.fetchMe(cb) } ?: return ""
+        return when (result) {
+            is MeResult.Ok -> {
+                cachedProfile = result.profile
+                result.profile?.classLabel.orEmpty()
+            }
+            is MeResult.Err -> {
+                sessionOrThrow(result.message)
+                ""
+            }
+        }
     }
 
     /**
@@ -1210,8 +1412,11 @@ class VsnBridge(
         val result = await<MeResult> { cb -> profileRepo.fetchMe(cb) }
             ?: throw BridgeFailure("unavailable", "Profil indisponible.")
         return when (result) {
-            is MeResult.Ok -> JSONObject()
-                .put("payload", JSONObject().put("user", result.profile?.let { profileJson(it) } ?: JSONObject.NULL).toString())
+            is MeResult.Ok -> {
+                cachedProfile = result.profile
+                JSONObject()
+                    .put("payload", JSONObject().put("user", result.profile?.let { profileJson(it) } ?: JSONObject.NULL).toString())
+            }
             is MeResult.Err -> {
                 sessionOrThrow(result.message)
                 JSONObject()
@@ -1225,6 +1430,7 @@ class VsnBridge(
         val me = await<MeResult> { cb -> profileRepo.fetchMe(cb) }
         val profile = (me as? MeResult.Ok)?.profile
             ?: return JSONObject().put("dataUrl", JSONObject.NULL)
+        cachedProfile = profile
         val photo = await<PhotoState> { cb -> profileRepo.fetchPhoto(profile) { bitmap -> cb(bitmap.toState()) } }
         val bitmap = (photo as? PhotoState.Loaded)?.bitmap
             ?: return JSONObject().put("dataUrl", JSONObject.NULL)
@@ -1401,12 +1607,22 @@ class VsnBridge(
         const val AWAIT_LLM_MS = 45_000L
 
         /**
-         * Plafond d'attente natif : le chemin le plus long (chargement des
-         * devoirs 20 s + appel LLM 45 s). Le JS doit attendre PLUS que ce
-         * plafond, sinon il abandonne avant la réponse native et la perd
-         * définitivement (#371). Miroir : `web/src/bridge/types.ts`.
+         * Récupération d'un extrait de manuel via le scraper, avant l'appel
+         * LLM. Bornée par le client (`ManualsClient`), mais comptée dans le
+         * plafond pour que le JS n'abandonne jamais trop tôt.
          */
-        const val MAX_NATIVE_WAIT_MS = AWAIT_DEFAULT_MS + AWAIT_LLM_MS
+        const val AWAIT_MANUAL_MS = 35_000L
+
+        /** Après un échec de scrape, on ne réessaie pas à chaque question. */
+        private const val MANUAL_RETRY_MS = 10 * 60 * 1000L
+
+        /**
+         * Plafond d'attente natif : le chemin le plus long (chargement des
+         * devoirs 20 s + manuel 35 s + appel LLM 45 s). Le JS doit attendre
+         * PLUS que ce plafond, sinon il abandonne avant la réponse native et
+         * la perd définitivement (#371). Miroir : `web/src/bridge/types.ts`.
+         */
+        const val MAX_NATIVE_WAIT_MS = AWAIT_DEFAULT_MS + AWAIT_MANUAL_MS + AWAIT_LLM_MS
 
         /** Miroir exact de `web/src/bridge/types.ts`. Aucun autre nom n'entre. */
         private val METHODS = setOf(
@@ -1420,6 +1636,7 @@ class VsnBridge(
             "messages.list", "messages.thread", "messages.reply", "messages.create",
             "messages.setRead", "messages.delete", "messages.recipients",
             "settings.get", "settings.saveServer", "settings.subjectPrefs", "settings.saveSubject",
+            "settings.saveManualUrl", "settings.dismissManualPrompt",
             "llm.status", "llm.saveKey", "llm.forgetKey", "llm.askHomework",
             "llm.generateRevision",
             "revision.list", "revision.load", "revision.exportPdf",

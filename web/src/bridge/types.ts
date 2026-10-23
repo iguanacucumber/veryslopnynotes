@@ -41,6 +41,8 @@ export const BRIDGE_METHODS = [
   "messages.recipients",
   "settings.get",
   "settings.saveServer",
+  "settings.saveManualUrl",
+  "settings.dismissManualPrompt",
   "settings.subjectPrefs",
   "settings.saveSubject",
   "llm.status",
@@ -72,15 +74,17 @@ export type BridgeMethod = (typeof BRIDGE_METHODS)[number];
 export const NATIVE_WAIT_MS = {
   /** Attente par défaut d'un dépôt natif (`await`). */
   default: 20_000,
+  /** Récupération d'un extrait de manuel via le scraper, avant le LLM. */
+  manual: 35_000,
   /** Attente de l'appel LLM : le plus long du pont. */
   llm: 45_000,
 } as const;
 
-/** Plafond d'attente natif : chargement (20 s) + appel LLM (45 s). */
-export const MAX_NATIVE_WAIT_MS = NATIVE_WAIT_MS.default + NATIVE_WAIT_MS.llm;
+/** Plafond d'attente natif : chargement (20 s) + manuel (35 s) + LLM (45 s). */
+export const MAX_NATIVE_WAIT_MS = NATIVE_WAIT_MS.default + NATIVE_WAIT_MS.manual + NATIVE_WAIT_MS.llm;
 
 /** Timeout JS par défaut : au-dessus du plafond natif, sinon réponse perdue. */
-export const DEFAULT_TIMEOUT_MS = 90_000;
+export const DEFAULT_TIMEOUT_MS = 120_000;
 
 /**
  * Lectures simultanées autorisées côté JS (#393).
@@ -174,6 +178,32 @@ export interface SettingsSnapshot {
   serverHost: string;
   llmConfigured: boolean;
   accountCount: number;
+  /** Adresse du manuel saisie une fois ("" = aucun manuel). */
+  manualUrl: string;
+  /** Une adresse de manuel est enregistrée (catalogue ou ouvrage précis). */
+  manualConfigured: boolean;
+  /** Adresse de catalogue : l'ouvrage sera choisi par classe + matière. */
+  manualAuto: boolean;
+  /** Au moins un extrait est en cache. */
+  manualReady: boolean;
+  /** Classe devinée (« Terminale », « 1re »…) ou "". */
+  manualLevel: string;
+  /** Spécialités probables, déduites des matières suivies. */
+  manualSpecialties: string[];
+  /** L'invitation à saisir le manuel a déjà été montrée (jamais deux fois). */
+  manualPromptSeen: boolean;
+}
+
+/** Réponse de l'enregistrement du manuel : l'URL est gardée même si l'extrait
+ *  n'a pas pu être récupéré (`ready:false` + `message` actionnable). */
+export interface ManualSaveResult {
+  ok: boolean;
+  ready?: boolean;
+  /** Adresse de catalogue : rien n'est scrapé avant le premier devoir. */
+  auto?: boolean;
+  level?: string;
+  specialties?: string[];
+  message?: string;
 }
 
 export interface SubjectPref {
