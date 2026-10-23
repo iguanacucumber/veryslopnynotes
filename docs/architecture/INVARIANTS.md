@@ -768,3 +768,25 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   `android/data/AssignmentsRepository.kt`, `android/app/VsnBridge.kt`,
   `web/src/features/attendance/model.ts`, `web/src/features/home/parse.ts`,
   `web/src/features/tasks/assignments.ts`.
+
+## I32 — Une photo ne part que sur geste explicite, ré-encodée et bornée
+- Invariant : aucune photo n'est capturée ni envoyée automatiquement. Une
+  capture part d'un bouton (« Prendre une photo » ou « Choisir une image »),
+  jamais d'un rafraîchissement, d'un job de fond ou d'une sortie LLM. L'image
+  est ré-encodée en JPEG (métadonnées EXIF supprimées), bornée à 1600 px et
+  2 Mo, puis elle seule est envoyée au modèle vision — le texte du prompt
+  reste soumis à la garde I4. L'image est OPAQUE : elle n'est pas scannable
+  pour des secrets, d'où le geste explicite et l'avertissement affiché. Aucun
+  octet d'image ne traverse le pont JS, n'est journalisé ou recopié dans un
+  message d'erreur. Le fichier temporaire est supprimé après usage et la purge
+  de compte efface `cacheDir/photos/`.
+- Test : `tests/unit/kotlin-vision.test.ts` (Kotlin EXÉCUTÉ : types bitmap
+  bornés, taille décodée, schéma de transcription, prompt Untrusted) +
+  `tests/web/cahier.test.ts` (le pont ne renvoie que du texte, l'écran exige
+  un geste explicite) + `tests/unit/kotlin-vision.test.ts` (source :
+  `PhotoPrep` ré-encode/borne, `LocalDataStore` purge les photos).
+- Commande : `make check`.
+- Emplacement : `android/app/PhotoCapture.kt`, `android/app/PhotoPrep.kt`,
+  `android/app/VsnBridge.kt`, `android/core/Vision.kt`,
+  `android/core/LessonAi.kt`, `android/data/OpenRouterLlm.kt`,
+  `android/data/LocalDataStore.kt`, `web/src/features/cahier/CahierScreen.tsx`.

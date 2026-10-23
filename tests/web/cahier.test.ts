@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { mockCall } from "../../web/src/bridge/mock";
-import type { LessonLoadResult, LessonsSnapshot, LessonSaveResult, SettingsSnapshot } from "../../web/src/bridge/types";
+import type {
+  LessonLoadResult,
+  LessonPhotoResult,
+  LessonsSnapshot,
+  LessonSaveResult,
+  SettingsSnapshot,
+} from "../../web/src/bridge/types";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const WEB = join(ROOT, "web", "src");
@@ -61,6 +67,23 @@ describe("cahier de cours — pont et écran (#586)", () => {
     const snapshot = await mockCall<LessonsSnapshot>("lessons.list", {});
     expect(snapshot.subjects.find((item) => item.subject === "MATHEMATIQUES")?.manualEnabled).toBe(false);
     await mockCall<LessonSaveResult>("lessons.setManual", { subject: "MATHEMATIQUES", enabled: true });
+  });
+
+  test("une photo de cours revient en brouillon, jamais en image dans le pont", async () => {
+    const result = await mockCall<LessonPhotoResult>("lessons.addPhoto", {
+      subject: "MATHEMATIQUES",
+      source: "camera",
+    });
+    expect(result.ok).toBe(true);
+    expect(result.title).toBeTruthy();
+    expect(result.text).toContain("transcrit");
+    // Le contrat ne transporte que du texte : aucun champ base64/data URL.
+    expect(JSON.stringify(result)).not.toContain("base64");
+    const screen = source("features/cahier/CahierScreen.tsx");
+    expect(screen).toContain("bridge.addLessonPhoto");
+    expect(screen).toContain("Prendre une photo");
+    expect(screen).toContain("Choisir une image");
+    expect(screen).toContain("puis elle est supprimée");
   });
 
   test("le cahier est une source des devoirs et des fiches, jamais un miroir UI", () => {

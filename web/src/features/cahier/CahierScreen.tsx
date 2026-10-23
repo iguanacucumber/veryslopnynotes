@@ -51,6 +51,7 @@ export function CahierScreen() {
   const [deleteTarget, setDeleteTarget] = useState<LessonSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [manualBusy, setManualBusy] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState<string | null>(null);
   const listId = useId();
 
   useEffect(() => {
@@ -196,6 +197,35 @@ export function CahierScreen() {
     }
   }
 
+  /**
+   * Photo de cours -> brouillon. La photo ne passe jamais par la WebView :
+   * le natif l'envoie au fournisseur puis la supprime. L'élève relit le texte
+   * avant l'enregistrement.
+   */
+  async function addPhoto(subject: string, source: "camera" | "gallery") {
+    if (photoBusy !== null) return;
+    setPhotoBusy(subject);
+    try {
+      const result = await bridge.addLessonPhoto(subject, source);
+      if (result.cancelled) return;
+      if (!result.ok) {
+        notify(result.message || "Photo non transcrite.", "error");
+        return;
+      }
+      setEditor({
+        id: "",
+        subject,
+        title: result.title || "Cours photographié",
+        text: result.text || "",
+      });
+      notify("Photo transcrite : relis le texte avant d’enregistrer.");
+    } catch (e) {
+      notify(messageOf(e, "Photo non transcrite : réessaie dans un instant."), "error");
+    } finally {
+      setPhotoBusy(null);
+    }
+  }
+
   if (loading && snapshot === null && error === "") {
     return (
       <Page>
@@ -290,6 +320,29 @@ export function CahierScreen() {
                   Ajouter un cours
                 </button>
               </div>
+
+              <div className="row row--wrap" style={{ gap: 6, marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  disabled={photoBusy !== null}
+                  onClick={() => void addPhoto(subject.subject, "camera")}
+                >
+                  {photoBusy === subject.subject ? "Transcription…" : "Prendre une photo"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small"
+                  disabled={photoBusy !== null}
+                  onClick={() => void addPhoto(subject.subject, "gallery")}
+                >
+                  Choisir une image
+                </button>
+              </div>
+              <p className="tiny muted" style={{ margin: "6px 0 0" }}>
+                La photo part directement au fournisseur d’IA, avec ta clé, puis elle est supprimée.
+                Le texte revient ici pour relecture.
+              </p>
 
               {subject.notes.length === 0 ? (
                 <p className="tiny muted" style={{ margin: "10px 0 0" }}>

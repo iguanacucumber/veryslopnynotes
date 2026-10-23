@@ -6,4 +6,7 @@
     <!-- #206 : exports PDF des fiches de révision, rendus sur place puis servis
          au viewer externe (même motif que les pièces jointes). -->
     <cache-path name="exports" path="exports/" />
+    <!-- #587 : photo de cours, écrite par l'appareil photo puis ré-encodée
+         avant l'envoi. Jamais exposée au JS, supprimée après usage. -->
+    <cache-path name="photos" path="photos/" />
 </paths>

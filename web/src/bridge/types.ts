@@ -50,6 +50,7 @@ export const BRIDGE_METHODS = [
   "lessons.save",
   "lessons.delete",
   "lessons.setManual",
+  "lessons.addPhoto",
   "llm.status",
   "llm.saveKey",
   "llm.forgetKey",
@@ -116,6 +117,9 @@ export const MAX_PARALLEL_READS = 1;
  */
 export const BRIDGE_TIMEOUTS: Partial<Record<BridgeMethod, number>> = {
   "pairing.scanQr": 0,
+  // La photo inclut le cadrage par l'élève : aucun timeout JS. Le natif a
+  // son propre plafond (AWAIT_PHOTO_MS) pour ne pas pendre un fil.
+  "lessons.addPhoto": 0,
   "pairing.pair": 120_000,
   // La connexion de démonstration ouvre une session sur l'établissement de
   // démonstration : c'est un aller-retour de login, comme l'appairage.
@@ -243,6 +247,14 @@ export interface LessonLoadResult {
 
 export interface LessonSaveResult {
   ok: boolean;
+  message?: string;
+}
+
+export interface LessonPhotoResult {
+  ok: boolean;
+  cancelled?: boolean;
+  title?: string;
+  text?: string;
   message?: string;
 }
 

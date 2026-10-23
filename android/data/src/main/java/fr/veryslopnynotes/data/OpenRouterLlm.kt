@@ -13,6 +13,8 @@ import fr.veryslopnynotes.core.MAX_OUTPUT_TOKENS
 import fr.veryslopnynotes.core.OutputTooLongException
 import fr.veryslopnynotes.core.SafePrompt
 import fr.veryslopnynotes.core.SafePromptProvider
+import fr.veryslopnynotes.core.SafeVisionPrompt
+import fr.veryslopnynotes.core.SafeVisionPromptProvider
 import fr.veryslopnynotes.core.SecretDetectedException
 import fr.veryslopnynotes.core.assertNoSecretsInPrompt
 import fr.veryslopnynotes.core.secretRefusalMessage
@@ -72,7 +74,11 @@ class OpenRouterLlm(
     // pool et dispatcher sans reprendre les intercepteurs. Défaut = client
     // vierge (l'UI n'a pas à construire d'OkHttpClient elle-même).
     client: OkHttpClient = OkHttpClient(),
-) : SafePromptProvider {
+    // Modèle VISION distinct : le modèle texte par défaut (Nemotron
+    // Lightning) n'accepte pas les images. `google/gemma-4-31b-it:free` est
+    // multimodal et gratuit ; il ne sert QU'aux photos.
+    private val visionModel: String = LLM_VISION_MODEL,
+) : SafePromptProvider, SafeVisionPromptProvider {
     private val timeout = normalizeTimeoutMs(timeoutMs)
     private val http: OkHttpClient = client.newBuilder()
         .connectTimeout(timeout, TimeUnit.MILLISECONDS)
@@ -81,7 +87,7 @@ class OpenRouterLlm(
         .build()
 
     init {
-        if (model.isBlank()) throw LlmError("Configuration LLM incomplète.")
+        if (model.isBlank() || visionModel.isBlank()) throw LlmError("Configuration LLM incomplète.")
     }
 
     // Envoie le SafePrompt DEJA valide par la garde (nonce de l'appelant preserve
@@ -101,18 +107,54 @@ class OpenRouterLlm(
                 },
             )
             .put("max_tokens", MAX_OUTPUT_TOKENS)
-            .toString()
+        return parseCompletion(send(payload, key))
+    }
+
+    /**
+     * Prompt vision : le texte est le MÊME corps nonce-bound (déjà validé),
+     * l'image est un data URL JPEG ré-encodé. Aucune image n'est journalisée,
+     * et le message d'erreur ne la recopie jamais.
+     */
+    override fun generateVisionSafe(prompt: SafeVisionPrompt, apiKey: String?): String {
+        val key = (apiKey ?: "").trim()
+        if (key.length < MIN_API_KEY_CHARS) throw LlmError("Clé LLM absente ou trop courte : renseigne-la dans Réglages.")
+        assertNoSecretsInPrompt(prompt.prompt)
+        val images = prompt.images
+        if (images.isEmpty() || images.size > 1) throw LlmError("Image invalide : une seule photo par demande.")
+        val image = images[0]
+        if (!image.isValid()) throw LlmError("Image invalide ou trop volumineuse.")
+        val content = JSONArray()
+            .put(JSONObject().put("type", "text").put("text", prompt.prompt.body))
+            .put(
+                JSONObject()
+                    .put("type", "image_url")
+                    .put(
+                        "image_url",
+                        JSONObject().put("url", "data:" + image.mime + ";base64," + image.base64),
+                    ),
+            )
+        val payload = JSONObject()
+            .put("model", visionModel)
+            .put(
+                "messages",
+                JSONArray().apply {
+                    put(JSONObject().put("role", "system").put("content", prompt.prompt.system))
+                    put(JSONObject().put("role", "user").put("content", content))
+                },
+            )
+            .put("max_tokens", MAX_OUTPUT_TOKENS)
+        return parseCompletion(send(payload, key))
+    }
+
+    /** Envoi HTTPS + cause d'erreur bornée. Seule la clé est interpolée (Bearer). */
+    private fun send(payload: JSONObject, key: String): String {
         val request = Request.Builder()
             .url(OPENROUTER_URL)
             .header("Authorization", "Bearer $key")
-            .post(payload.toRequestBody(JSON))
+            .post(payload.toString().toRequestBody(JSON))
             .build()
-        // Seule interpolation de la cle de tout le fichier : l'en-tete Bearer.
-        // Rien d'autre ne la touche : ni log, ni erreur, ni URL.
-        val bodyText = try {
+        return try {
             http.newCall(request).execute().use { res ->
-                // Un code HTTP par cause (clé, crédits, modèle, quota) : le
-                // message est affichable tel quel, sans corps de réponse.
                 if (!res.isSuccessful) throw LlmError.forStatus(res.code)
                 res.body?.string().orEmpty()
             }
@@ -121,6 +163,9 @@ class OpenRouterLlm(
         } catch (_: Exception) {
             throw LlmError("Erreur réseau LLM : réessaie dans un instant.")
         }
+    }
+
+    private fun parseCompletion(bodyText: String): String {
         val choice = try {
             JSONObject(bodyText).optJSONArray("choices")?.optJSONObject(0)
         } catch (_: Exception) {
@@ -142,6 +187,11 @@ class OpenRouterLlm(
         // public, gratuit, francais correct et rapide. Il est TEXTE seul :
         // les photos passent par `LLM_VISION_MODEL` (voir #587).
         const val LLM_DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning:free"
+
+        // Modèle VISION : le modèle texte par défaut n'accepte PAS les
+        // images. Gemma 4 31B est multimodal, gratuit, au catalogue public.
+        // Un modèle séparé évite de dégrader le texte pour les photos.
+        const val LLM_VISION_MODEL = "google/gemma-4-31b-it:free"
 
         // URL publique du fournisseur, pas une donnee perso/etablissement.
         const val OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"

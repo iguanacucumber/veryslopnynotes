@@ -23,5 +23,13 @@ class LocalDataStore(
     override fun clearAll() {
         store.clearAll()
         DownloadedFiles.purge(cacheRoot)
+        // #587 : une photo de cours en attente est de la donnée scolaire.
+        // Elle part avec le cache du compte, même si la capture est restée
+        // ouverte au moment de la déconnexion.
+        try {
+            File(cacheRoot, "photos").deleteRecursively()
+        } catch (_: Exception) {
+            // best-effort : le cache est jetable.
+        }
     }
 }

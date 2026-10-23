@@ -498,6 +498,15 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       else manualDisabled.delete(subject);
       return ok({ ok: true, enabled: p["enabled"] !== false }) as Promise<T>;
     }
+    case "lessons.addPhoto": {
+      const subject = String(p["subject"] ?? "").trim();
+      if (!subject) return ok({ ok: false, message: "Choisis une matière." }) as Promise<T>;
+      return ok({
+        ok: true,
+        title: "Chapitre photographié",
+        text: "Le cours photographié est transcrit ici. Corrige-le avant d’enregistrer.",
+      }) as Promise<T>;
+    }
     case "llm.status":
       return ok({ configured: settings.llmConfigured }) as Promise<T>;
     case "llm.saveKey":
