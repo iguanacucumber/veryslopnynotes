@@ -88,7 +88,8 @@ function TasksWeek({ week }: { week: string }) {
   const [help, setHelp] = useState<HelpState | null>(null);
   const [revisionPending, setRevisionPending] = useState<Record<string, boolean>>({});
   const [llm, setLlm] = useState<LlmState>({ configured: null, error: null });
-  const [manualConfigured, setManualConfigured] = useState(false);
+  const [manualSubjects, setManualSubjects] = useState<string[]>([]);
+  const [lessonSubjects, setLessonSubjects] = useState<string[]>([]);
   const helpSeq = useRef(0);
   const toggleSeq = useRef(new Map<string, number>());
 
@@ -113,7 +114,18 @@ function TasksWeek({ week }: { week: string }) {
               : "état de l'assistant indisponible",
         });
       }
-      setManualConfigured(settingsResult.status === "fulfilled" && settingsResult.value.manualConfigured === true);
+      if (settingsResult.status === "fulfilled") {
+        setManualSubjects(
+          Array.isArray(settingsResult.value.manualSubjects)
+            ? settingsResult.value.manualSubjects.filter((s): s is string => typeof s === "string")
+            : [],
+        );
+        setLessonSubjects(
+          Array.isArray(settingsResult.value.lessonSubjects)
+            ? settingsResult.value.lessonSubjects.filter((s): s is string => typeof s === "string")
+            : [],
+        );
+      }
     });
     return () => {
       alive = false;
@@ -348,7 +360,8 @@ function TasksWeek({ week }: { week: string }) {
                       busy={Boolean(pending[assignment.id])}
                       assistantDisabled={assistantDisabled}
                       assistantReasonId={assistantDisabled ? "tasks-assistant-reason" : undefined}
-                      manualReady={manualConfigured}
+                      manualReady={manualSubjects.includes(assignment.subject)}
+                      lessonReady={lessonSubjects.includes(assignment.subject)}
                       help={help?.id === assignment.id ? help : null}
                       revisionBusy={Boolean(revisionPending[assignment.id])}
                       onToggle={(next) => void toggle(assignment, next)}
@@ -384,6 +397,7 @@ function AssignmentCard({
   assistantDisabled,
   assistantReasonId,
   manualReady,
+  lessonReady,
   help,
   revisionBusy,
   onToggle,
@@ -397,6 +411,7 @@ function AssignmentCard({
   assistantDisabled: boolean;
   assistantReasonId?: string;
   manualReady: boolean;
+  lessonReady: boolean;
   help: HelpState | null;
   revisionBusy: boolean;
   onToggle: (next: boolean) => void;
@@ -413,8 +428,9 @@ function AssignmentCard({
   const tone = dueTone(assignment.dueDate);
   // Sans consigne ni extrait de cours, le natif refuse AVANT d'appeler le
   // modèle : proposer les deux actions IA ne mènerait qu'à une erreur. Un
-  // manuel enregistré compte comme source (le natif l'ajoute au prompt).
-  const hasMaterial = assignmentHasAssistantMaterial(assignment, manualReady);
+  // manuel utilisable ou un cours du cahier pour CETTE matière compte comme
+  // source (le natif l'ajoute au prompt).
+  const hasMaterial = assignmentHasAssistantMaterial(assignment, manualReady, lessonReady);
   const assistantOff = assistantDisabled || !hasMaterial;
   const offReason = hasMaterial ? assistantReasonId : noMaterialId;
 
@@ -529,9 +545,13 @@ function AssignmentCard({
             </div>
           ) : null}
           <p className="tiny muted" style={{ margin: 0 }}>
-            {manualReady
-              ? "Le sujet, la consigne, l’extrait de cours et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
-              : "Le sujet, la consigne et l’extrait de cours de ce devoir sont envoyés directement au fournisseur, avec ta clé."}
+            {manualReady && lessonReady
+              ? "Le sujet, la consigne, l’extrait de cours, ton cahier et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
+              : lessonReady
+                ? "Le sujet, la consigne, l’extrait de cours et ton cours mémorisé sont envoyés directement au fournisseur, avec ta clé."
+                : manualReady
+                  ? "Le sujet, la consigne, l’extrait de cours et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
+                  : "Le sujet, la consigne et l’extrait de cours de ce devoir sont envoyés directement au fournisseur, avec ta clé."}
           </p>
         </div>
       ) : null}

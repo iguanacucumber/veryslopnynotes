@@ -25,6 +25,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/messages": { title: "Messagerie", back: "/profile" },
   "/alerts": { title: "Alertes", back: "/" },
   "/fiches": { title: "Fiches de révision", back: "/profile" },
+  "/cahier": { title: "Cahier de cours", back: "/profile" },
 };
 
 const TABS = [

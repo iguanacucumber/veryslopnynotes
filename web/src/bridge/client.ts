@@ -5,6 +5,9 @@ import {
   MAX_PARALLEL_READS,
   type BridgeError,
   type BridgeMethod,
+  type LessonLoadResult,
+  type LessonsSnapshot,
+  type LessonSaveResult,
   type ManualSaveResult,
   type SessionStatus,
   type SettingsSnapshot,
@@ -244,6 +247,13 @@ export const bridge = {
   dismissManualPrompt: () => call<{ ok: boolean }>("settings.dismissManualPrompt"),
   subjectPrefs: () => call<{ prefs: SubjectPref[] }>("settings.subjectPrefs"),
   saveSubject: (pref: SubjectPref) => call<SubjectSaveResult>("settings.saveSubject", pref),
+  lessons: () => call<LessonsSnapshot>("lessons.list"),
+  lesson: (id: string) => call<LessonLoadResult>("lessons.load", { id }),
+  saveLesson: (lesson: { id?: string; subject: string; title: string; text: string }) =>
+    call<LessonSaveResult>("lessons.save", lesson),
+  deleteLesson: (id: string) => call<LessonSaveResult>("lessons.delete", { id }),
+  setLessonManual: (subject: string, enabled: boolean) =>
+    call<LessonSaveResult>("lessons.setManual", { subject, enabled }),
   llmStatus: () => call<{ configured: boolean }>("llm.status"),
   saveLlmKey: (key: string) => call<{ ok: boolean; message?: string }>("llm.saveKey", { key }),
   forgetLlmKey: () => call<{ ok: true }>("llm.forgetKey"),

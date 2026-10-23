@@ -19,6 +19,7 @@ import NewsRoute from "./routes/news";
 import CanteenRoute from "./routes/canteen";
 import AlertsRoute from "./routes/alerts";
 import FichesRoute from "./routes/fiches";
+import CahierRoute from "./routes/cahier";
 
 function Gate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionStatus | null>(null);
@@ -81,6 +82,7 @@ export function App() {
             <Route path="/canteen" element={<CanteenRoute />} />
             <Route path="/alerts" element={<AlertsRoute />} />
             <Route path="/fiches" element={<FichesRoute />} />
+            <Route path="/cahier" element={<CahierRoute />} />
           </Route>
           <Route path="/pairing" element={<PairingRoute />} />
           <Route path="*" element={<Navigate to="/" replace />} />

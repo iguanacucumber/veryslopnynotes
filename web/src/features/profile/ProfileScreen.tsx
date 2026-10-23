@@ -270,6 +270,12 @@ export default function ProfileScreen() {
 
       <Section title="Ressources">
         <Rows>
+          <ListRow
+            title="Cahier de cours"
+            subtitle="Les cours que l’assistant utilise comme sources"
+            onClick={() => navigate("/cahier")}
+          />
+          <Divider />
           <ListRow title="Fiches de révision" onClick={() => navigate("/fiches")} />
           <Divider />
           <ListRow title="Messagerie" onClick={() => navigate("/messages")} />

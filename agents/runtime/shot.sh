@@ -464,6 +464,7 @@ messages|Messagerie|Rechercher une discussion;discussion;Aucune discussion
 pairing|Connecte ton établissement|Retour;Code PIN du QR
 alerts|Alertes|Contenus hostiles;Aucune alerte de sécurité
 fiches|Fiches de révision|Fiches disponibles;Aucune fiche
+cahier|Cahier de cours|Cahier de cours;Ajouter un cours;Aucun cours enregistré
 '
 
 # Ligne de la table d'une route. Vide = route inconnue (donc absente des 14).

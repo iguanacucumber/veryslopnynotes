@@ -22,6 +22,8 @@ import fr.veryslopnynotes.core.ChildAccount
 import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.ExamCandidate
 import fr.veryslopnynotes.core.HomeworkOutcome
+import fr.veryslopnynotes.core.LessonNote
+import fr.veryslopnynotes.core.LessonNotes
 import fr.veryslopnynotes.core.ManualCatalog
 import fr.veryslopnynotes.core.ManualUrl
 import fr.veryslopnynotes.core.ManualUrlResult
@@ -53,6 +55,10 @@ import fr.veryslopnynotes.data.FileRevisionStore
 import fr.veryslopnynotes.data.FileSubjectPrefsStore
 import fr.veryslopnynotes.data.InMemoryCacheStore
 import fr.veryslopnynotes.data.InMemorySubjectPrefsStore
+import fr.veryslopnynotes.data.FileLessonNotesStore
+import fr.veryslopnynotes.data.InMemoryLessonNotesStore
+import fr.veryslopnynotes.data.LessonNotesRepository
+import fr.veryslopnynotes.data.LessonNotesWrite
 import fr.veryslopnynotes.data.LlmError
 import fr.veryslopnynotes.data.LlmKeys
 import fr.veryslopnynotes.data.LocalDataStore
@@ -132,6 +138,15 @@ class VsnBridge(
     )
     private val serverStore = ServerStore(ctx)
     private val manuals = ManualStore(ctx)
+    // #586 : cahier de cours local, dans `offline/` (donc purgé avec le cache
+    // du compte). Le fichier est relu avant chaque fusion par le dépôt.
+    private val lessons = LessonNotesRepository(
+        try {
+            FileLessonNotesStore(File(ctx.filesDir, "offline/cahier.json"))
+        } catch (_: Exception) {
+            InMemoryLessonNotesStore()
+        },
+    )
     // #540 : le store englobe le CACHE (`cacheDir/attachments/`,
     // `cacheDir/exports/`) : une purge de compte efface les pièces jointes
     // téléchargées comme le cache, sans chemin de purge qui en oublie.
@@ -388,6 +403,11 @@ class VsnBridge(
             "settings.dismissManualPrompt" -> dismissManualPrompt()
             "settings.subjectPrefs" -> subjectPrefs()
             "settings.saveSubject" -> saveSubject(p, epoch)
+            "lessons.list" -> lessonsList()
+            "lessons.load" -> lessonsLoad(p)
+            "lessons.save" -> lessonsSave(p, epoch)
+            "lessons.delete" -> lessonsDelete(p, epoch)
+            "lessons.setManual" -> lessonsSetManual(p)
             "llm.status" -> JSONObject().put("configured", llmKeys.isConfigured())
             "llm.saveKey" -> saveLlmKey(p)
             "llm.forgetKey" -> {
@@ -909,20 +929,28 @@ class VsnBridge(
 
     // --- Réglages --------------------------------------------------------------
 
-    private fun settings(): JSONObject = JSONObject()
-        .put("theme", theme())
-        // Hôte seul, jamais une URL de session ni un jeton.
-        .put("serverHost", currentBaseUrl().substringAfter("://").trimEnd('/').take(300))
-        .put("llmConfigured", llmKeys.isConfigured())
-        .put("accountCount", accounts.count())
-        // Adresse du manuel : réglage saisi par l'utilisateur, jamais un secret.
-        .put("manualUrl", manuals.url() ?: "")
-        .put("manualConfigured", manuals.url() != null)
-        .put("manualAuto", manuals.url()?.let { ManualCatalog.isCatalog(it) } == true)
-        .put("manualReady", manuals.hasDoc())
-        .put("manualLevel", ManualCatalog.levelLabel(ManualCatalog.levelOf(manuals.classLabel(), manuals.subjects())))
-        .put("manualSpecialties", JSONArray(ManualCatalog.specialties(manuals.classLabel(), manuals.subjects())))
-        .put("manualPromptSeen", manuals.promptSeen())
+    private fun settings(): JSONObject {
+        val known = knownSubjects()
+        return JSONObject()
+            .put("theme", theme())
+            // Hôte seul, jamais une URL de session ni un jeton.
+            .put("serverHost", currentBaseUrl().substringAfter("://").trimEnd('/').take(300))
+            .put("llmConfigured", llmKeys.isConfigured())
+            .put("accountCount", accounts.count())
+            // Adresse du manuel : réglage saisi par l'utilisateur, jamais un secret.
+            .put("manualUrl", manuals.url() ?: "")
+            .put("manualConfigured", manuals.url() != null)
+            .put("manualAuto", manuals.url()?.let { ManualCatalog.isCatalog(it) } == true)
+            .put("manualReady", manuals.hasDoc())
+            .put("manualLevel", ManualCatalog.levelLabel(ManualCatalog.levelOf(manuals.classLabel(), manuals.subjects())))
+            .put("manualSpecialties", JSONArray(ManualCatalog.specialties(manuals.classLabel(), manuals.subjects())))
+            .put("manualPromptSeen", manuals.promptSeen())
+            // #586 : l'interface n'active l'assistant texte que si la matière a
+            // VRAIMENT une source (manuel résolu ou cours mémorisé). Une liste
+            // vide n'est pas une erreur : elle dit « aucune source connue ».
+            .put("manualSubjects", JSONArray(known.filter { manualAvailableForSubject(it, known) }))
+            .put("lessonSubjects", JSONArray(lessons.subjects()))
+    }
 
     private fun saveServer(p: JSONObject): JSONObject {
         var host = bounded(p.string("host"), 300)
@@ -1038,6 +1066,119 @@ class VsnBridge(
         return JSONObject().put("ok", true).put("prefs", JSONArray().apply { putAllPrefs(prefsRepo.prefs()) })
     }
 
+    // --- Cahier de cours (#586) -------------------------------------------------
+
+    /**
+     * Matières proposées par le Cahier : celles déjà connues des caches
+     * (notes, devoirs, EDT), les préférences et les notes existantes. Aucune
+     * lecture réseau ici : l'écran s'ouvre même hors ligne.
+     */
+    private fun lessonsList(): JSONObject {
+        val known = LinkedHashSet<String>()
+        knownSubjects().forEach { known.add(it) }
+        lessons.subjects().forEach { known.add(it) }
+        prefsRepo.prefs().forEach { known.add(it.subject) }
+        val arr = JSONArray()
+        for (subject in known.take(64)) {
+            val notes = lessons.notesFor(subject)
+            arr.put(
+                JSONObject()
+                    .put("subject", subject)
+                    .put("manualEnabled", manuals.isEnabled(subject))
+                    .put("manualAvailable", manualAvailableForSubject(subject, known.toList()))
+                    .put(
+                        "notes",
+                        JSONArray().apply {
+                            for (note in notes) {
+                                put(
+                                    JSONObject()
+                                        .put("id", note.id)
+                                        .put("title", note.title)
+                                        .put("createdAt", note.createdAt)
+                                        .put("chars", note.text.length),
+                                )
+                            }
+                        },
+                    ),
+            )
+        }
+        return JSONObject()
+            .put("subjects", arr)
+            .put("maxNotesPerSubject", LessonNotes.MAX_PER_SUBJECT)
+            .put("maxTextChars", LessonNote.MAX_TEXT_CHARS)
+            .put("maxTitleChars", LessonNote.MAX_TITLE_CHARS)
+    }
+
+    private fun lessonsLoad(p: JSONObject): JSONObject {
+        val id = bounded(p.string("id"), LessonNote.MAX_ID_CHARS)
+        val note = lessons.find(id)
+            ?: return JSONObject().put("ok", false).put("message", "Cours introuvable.")
+        return JSONObject().put("ok", true).put("note", lessonJson(note))
+    }
+
+    private fun lessonsSave(p: JSONObject, epoch: Long): JSONObject {
+        val id = bounded(p.string("id"), LessonNote.MAX_ID_CHARS)
+        val subject = bounded(p.string("subject"), LessonNote.MAX_SUBJECT_CHARS)
+        val title = bounded(p.string("title"), LessonNote.MAX_TITLE_CHARS)
+        val text = bounded(p.string("text"), LessonNote.MAX_TEXT_CHARS)
+        return when (lessons.save(id, subject, title, text, epoch)) {
+            LessonNotesWrite.WRITTEN -> JSONObject().put("ok", true)
+            LessonNotesWrite.INVALID -> JSONObject().put("ok", false)
+                .put("message", "Cours invalide : matière, titre et texte sont obligatoires (texte 4000 caractères maximum).")
+            LessonNotesWrite.LIMIT -> JSONObject().put("ok", false)
+                .put("message", "Cours non ajouté : ${LessonNotes.MAX_PER_SUBJECT} cours maximum par matière.")
+            LessonNotesWrite.NOT_FOUND -> JSONObject().put("ok", false)
+                .put("message", "Cours introuvable : recharge le cahier.")
+            LessonNotesWrite.REFUSED -> JSONObject().put("ok", false)
+                .put("message", "Session modifiée : cours non enregistré.")
+        }
+    }
+
+    private fun lessonsDelete(p: JSONObject, epoch: Long): JSONObject {
+        val id = bounded(p.string("id"), LessonNote.MAX_ID_CHARS)
+        return when (lessons.delete(id, epoch)) {
+            LessonNotesWrite.WRITTEN -> JSONObject().put("ok", true)
+            LessonNotesWrite.NOT_FOUND -> JSONObject().put("ok", false)
+                .put("message", "Cours introuvable.")
+            LessonNotesWrite.REFUSED -> JSONObject().put("ok", false)
+                .put("message", "Session modifiée : cours non supprimé.")
+            else -> JSONObject().put("ok", false).put("message", "Cours non supprimé.")
+        }
+    }
+
+    private fun lessonsSetManual(p: JSONObject): JSONObject {
+        val subject = bounded(p.string("subject"), LessonNote.MAX_SUBJECT_CHARS)
+        if (subject.isEmpty()) {
+            return JSONObject().put("ok", false).put("message", "Matière invalide.")
+        }
+        val enabled = p.optBoolean("enabled", true)
+        return if (manuals.setEnabled(subject, enabled)) {
+            JSONObject().put("ok", true).put("enabled", enabled)
+        } else {
+            JSONObject().put("ok", false).put("message", "Réglage du manuel non enregistré.")
+        }
+    }
+
+    private fun lessonJson(note: LessonNote): JSONObject = JSONObject()
+        .put("id", note.id)
+        .put("subject", note.subject)
+        .put("title", note.title)
+        .put("text", note.text)
+        .put("createdAt", note.createdAt)
+
+    /** Le manuel est-il utilisable pour cette matière, sans réseau ? */
+    private fun manualAvailableForSubject(
+        subject: String,
+        known: List<String>,
+    ): Boolean {
+        val url = manuals.url() ?: return false
+        if (!manuals.isEnabled(subject)) return false
+        if (!ManualCatalog.isCatalog(url)) return true
+        val classLabel = manuals.classLabel().ifEmpty { cachedProfile?.classLabel.orEmpty() }
+        val subjects = (known + subject).distinct()
+        return ManualCatalog.resolve(url, classLabel, subjects, subject) != null
+    }
+
     private fun JSONArray.putAllPrefs(prefs: List<SubjectPrefs>) {
         for (pref in prefs) {
             put(
@@ -1084,6 +1225,12 @@ class VsnBridge(
         // Une source CITABLE supplémentaire, marquée Untrusted par le prompt.
         manualDocFor(assignment.subject)?.let { doc ->
             fr.veryslopnynotes.data.HomeworkRepository.manualSource(doc)?.let { sources.add(it) }
+        }
+        // #586 : les cours mémorisés sont des sources CITABLES de la matière.
+        // Bornés et marqués Untrusted par le prompt, comme le reste.
+        for (source in LessonNotes.sources(lessons.notes(), assignment.subject)) {
+            if (sources.size >= fr.veryslopnynotes.core.Homework.MAX_SOURCES) break
+            if (sources.none { it.label == source.label }) sources.add(source)
         }
         val question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment)
         val result = await<fr.veryslopnynotes.data.HomeworkResult>(AWAIT_LLM_MS) { cb ->
@@ -1220,6 +1367,11 @@ class VsnBridge(
                 out.add(RevisionChunk(text, "Manuel : ${doc.title.ifBlank { "manuel" }}".take(200)))
             }
         }
+        // #586 : le cahier local est une source de la fiche, au même titre que
+        // le cours Pronote. Il est marqué Untrusted par le prompt.
+        for (source in LessonNotes.sources(lessons.notes(), a.subject)) {
+            out.add(RevisionChunk(source.text, source.label))
+        }
         return out
     }
 
@@ -1229,6 +1381,8 @@ class VsnBridge(
      * produit AUCUNE source (jamais un manuel d'une autre matière).
      */
     private fun manualDocFor(subject: String): ManualDoc? {
+        // #586 : une matière peut explicitement ne pas utiliser le manuel.
+        if (!manuals.isEnabled(subject)) return null
         val stored = manuals.url() ?: return null
         val target = if (ManualCatalog.isCatalog(stored)) {
             val classLabel = cachedProfile?.classLabel?.takeIf { it.isNotBlank() } ?: manuals.classLabel()
@@ -1637,6 +1791,7 @@ class VsnBridge(
             "messages.setRead", "messages.delete", "messages.recipients",
             "settings.get", "settings.saveServer", "settings.subjectPrefs", "settings.saveSubject",
             "settings.saveManualUrl", "settings.dismissManualPrompt",
+            "lessons.list", "lessons.load", "lessons.save", "lessons.delete", "lessons.setManual",
             "llm.status", "llm.saveKey", "llm.forgetKey", "llm.askHomework",
             "llm.generateRevision",
             "revision.list", "revision.load", "revision.exportPdf",

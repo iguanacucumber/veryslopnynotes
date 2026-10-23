@@ -44,11 +44,13 @@ describe("manuel — source de l'assistant", () => {
     const empty = { description: "", lessonContent: null };
     expect(assignmentHasAssistantMaterial(empty, false)).toBe(false);
     expect(assignmentHasAssistantMaterial(empty, true)).toBe(true);
+    // #586 : un cours du cahier pour la matière suffit aussi.
+    expect(assignmentHasAssistantMaterial(empty, false, true)).toBe(true);
   });
 
   test("l'écran Tâches tient compte du manuel et le déclare dans la divulgation", () => {
     const tasks = source("features/tasks/TasksScreen.tsx");
-    expect(tasks).toContain("assignmentHasAssistantMaterial(assignment, manualReady)");
+    expect(tasks).toContain("assignmentHasAssistantMaterial(assignment, manualReady, lessonReady)");
     expect(tasks).toContain("le texte du manuel sont envoyés");
     // Le natif ajoute l'extrait aux DEUX pipelines IA.
     const bridge = readFileSync(

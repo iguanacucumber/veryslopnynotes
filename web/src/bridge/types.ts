@@ -45,6 +45,11 @@ export const BRIDGE_METHODS = [
   "settings.dismissManualPrompt",
   "settings.subjectPrefs",
   "settings.saveSubject",
+  "lessons.list",
+  "lessons.load",
+  "lessons.save",
+  "lessons.delete",
+  "lessons.setManual",
   "llm.status",
   "llm.saveKey",
   "llm.forgetKey",
@@ -192,6 +197,53 @@ export interface SettingsSnapshot {
   manualSpecialties: string[];
   /** L'invitation à saisir le manuel a déjà été montrée (jamais deux fois). */
   manualPromptSeen: boolean;
+  /**
+   * Matières pour lesquelles le manuel est réellement utilisable (résolu par
+   * le catalogue et non désactivé). Une liste vide = aucune source manuel.
+   */
+  manualSubjects: string[];
+  /** Matières qui ont au moins un cours mémorisé dans le cahier. */
+  lessonSubjects: string[];
+}
+
+export interface LessonSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  chars: number;
+}
+
+export interface LessonSubject {
+  subject: string;
+  manualEnabled: boolean;
+  manualAvailable: boolean;
+  notes: LessonSummary[];
+}
+
+export interface LessonsSnapshot {
+  subjects: LessonSubject[];
+  maxNotesPerSubject: number;
+  maxTextChars: number;
+  maxTitleChars: number;
+}
+
+export interface LessonNote {
+  id: string;
+  subject: string;
+  title: string;
+  text: string;
+  createdAt: string;
+}
+
+export interface LessonLoadResult {
+  ok: boolean;
+  note?: LessonNote;
+  message?: string;
+}
+
+export interface LessonSaveResult {
+  ok: boolean;
+  message?: string;
 }
 
 /** Réponse de l'enregistrement du manuel : l'URL est gardée même si l'extrait

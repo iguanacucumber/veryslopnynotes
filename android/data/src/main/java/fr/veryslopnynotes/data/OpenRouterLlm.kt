@@ -137,13 +137,11 @@ class OpenRouterLlm(
     }
 
     companion object {
-        // Modele par defaut : choix de code, PAS un credential (donc pas d'env).
-        // #359 : l'ancien identifiant n'existait PAS au catalogue public — chaque
-        // appel partait en 404. Choix : la variante gratuite (`:free`) d'un
-        // modèle dense Google Gemma 4 31B — present au catalogue, francais
-        // correct, 256k de contexte, cout nul pour l'eleve (le meme modele
-        // payant coute ~0,2 $ / M tokens).
-        const val LLM_DEFAULT_MODEL = "google/gemma-4-31b-it:free"
+        // Modele texte par defaut : choix de code, PAS un credential (donc pas
+        // d'env). `nvidia/nemotron-3.5-lightning:free` est au catalogue
+        // public, gratuit, francais correct et rapide. Il est TEXTE seul :
+        // les photos passent par `LLM_VISION_MODEL` (voir #587).
+        const val LLM_DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning:free"
 
         // URL publique du fournisseur, pas une donnee perso/etablissement.
         const val OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"

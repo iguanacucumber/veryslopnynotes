@@ -67,6 +67,54 @@ class ManualStore(context: Context) {
         false
     }
 
+    /**
+     * Le manuel est-il autorisé pour cette matière ? (défaut : oui)
+     *
+     * Une matière absente de la table, ou dont l'élève n'utilise pas le
+     * manuel, doit pouvoir s'appuyer uniquement sur le cahier de cours.
+     */
+    fun isEnabled(subject: String): Boolean = !disabledSubjects().contains(normalizeSubject(subject))
+
+    /**
+     * Active/désactive le manuel pour une matière. Une matière invalide ou un
+     * stockage indisponible renvoie `false` : l'interface ne doit pas annoncer
+     * un réglage qui n'a pas été écrit.
+     */
+    fun setEnabled(subject: String, enabled: Boolean): Boolean {
+        val key = normalizeSubject(subject)
+        if (key.isEmpty() || key.length > MAX_SUBJECT_CHARS) return false
+        val p = prefs ?: return false
+        return try {
+            val next = disabledSubjects().toMutableSet()
+            if (enabled) next.remove(key) else next.add(key)
+            val arr = JSONArray()
+            next.take(MAX_SUBJECTS).forEach { arr.put(it) }
+            p.edit().putString(KEY_DISABLED_SUBJECTS, arr.toString()).apply()
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun disabledSubjects(): Set<String> = try {
+        val raw = prefs?.getString(KEY_DISABLED_SUBJECTS, null)
+        if (raw.isNullOrBlank()) emptySet() else {
+            val arr = JSONArray(raw)
+            val out = LinkedHashSet<String>()
+            for (i in 0 until arr.length()) {
+                val key = normalizeSubject(arr.optString(i))
+                if (key.isNotEmpty() && key.length <= MAX_SUBJECT_CHARS) out.add(key)
+                if (out.size >= MAX_SUBJECTS) break
+            }
+            out
+        }
+    } catch (_: Exception) {
+        emptySet()
+    }
+
+    private fun normalizeSubject(raw: String): String =
+        raw.trim().lowercase(java.util.Locale.ROOT)
+
     /** Classe lue sur le profil (ex. « TG2 ») au moment de l'enregistrement. */
     fun classLabel(): String = try {
         prefs?.getString(KEY_CLASS_LABEL, null)?.trim()?.take(64).orEmpty()
@@ -130,6 +178,7 @@ class ManualStore(context: Context) {
                 ?.remove(KEY_DOCS)
                 ?.remove(KEY_CLASS_LABEL)
                 ?.remove(KEY_SUBJECTS)
+                ?.remove(KEY_DISABLED_SUBJECTS)
                 ?.putBoolean(KEY_PROMPT_SEEN, true)
                 ?.apply()
         } catch (_: Exception) {
@@ -239,11 +288,13 @@ class ManualStore(context: Context) {
         const val PREFS = "manual"
         const val MAX_DOCS = 8
         const val MAX_SUBJECTS = 32
+        const val MAX_SUBJECT_CHARS = 64
         private const val KEY_URL = "url"
         private const val KEY_PROMPT_SEEN = "prompt_seen"
         private const val KEY_DOCS = "docs"
         private const val KEY_CLASS_LABEL = "class_label"
         private const val KEY_SUBJECTS = "subjects"
+        private const val KEY_DISABLED_SUBJECTS = "disabled_subjects"
         private val STORAGE_KO = ManualUrlResult.Rejected(
             "Manuel non enregistré (stockage indisponible) : réessaie.",
         )

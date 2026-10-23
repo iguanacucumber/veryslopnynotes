@@ -7,6 +7,7 @@
 // pas (le bundle livré à l'APK ne contient aucune donnée scolaire fictice).
 // Hors mode dev, un pont natif absent est un ÉCHEC bruyant, jamais ce mock.
 import type {
+  LessonNote,
   PairParams,
   PairResult,
   ResourceKey,
@@ -222,7 +223,21 @@ let settings: SettingsSnapshot = {
   manualLevel: "",
   manualSpecialties: [],
   manualPromptSeen: false,
+  manualSubjects: [],
+  lessonSubjects: [subjects.math],
 };
+
+const manualDisabled = new Set<string>();
+
+let lessons: LessonNote[] = [
+  {
+    id: "l1",
+    subject: subjects.math,
+    title: "Chapitre 1 — suites",
+    text: "Une suite est arithmétique si u(n+1) - u(n) est constant. Une suite est géométrique si u(n+1) / u(n) est constant.",
+    createdAt: iso(5, 18),
+  },
+];
 
 let prefs: SubjectPref[] = [
   { subject: subjects.math, color: "#3A56D0", emoji: "∑", label: "Maths" },
@@ -425,6 +440,63 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       const pref = p as unknown as SubjectPref;
       prefs = [...prefs.filter((x) => x.subject !== pref.subject), pref];
       return ok({ ok: true, prefs }) as Promise<T>;
+    }
+    case "lessons.list": {
+      const known = [...new Set([...Object.values(subjects), ...prefs.map((x) => x.subject), ...lessons.map((n) => n.subject)])];
+      return ok({
+        subjects: known.map((subject) => ({
+          subject,
+          manualEnabled: !manualDisabled.has(subject),
+          manualAvailable: !manualDisabled.has(subject) && settings.manualConfigured,
+          notes: lessons
+            .filter((note) => note.subject === subject)
+            .map((note) => ({ id: note.id, title: note.title, createdAt: note.createdAt, chars: note.text.length })),
+        })),
+        maxNotesPerSubject: 8,
+        maxTextChars: 4000,
+        maxTitleChars: 120,
+      }) as Promise<T>;
+    }
+    case "lessons.load": {
+      const note = lessons.find((item) => item.id === String(p["id"] ?? ""));
+      return ok(note ? { ok: true, note } : { ok: false, message: "Cours introuvable." }) as Promise<T>;
+    }
+    case "lessons.save": {
+      const id = String(p["id"] ?? "").trim();
+      const subject = String(p["subject"] ?? "").trim();
+      const title = String(p["title"] ?? "").trim();
+      const text = String(p["text"] ?? "").trim();
+      if (!subject || !title || !text || text.length > 4000 || title.length > 120) {
+        return ok({ ok: false, message: "Cours invalide." }) as Promise<T>;
+      }
+      const existing = id ? lessons.find((item) => item.id === id) : null;
+      if (id && !existing) return ok({ ok: false, message: "Cours introuvable." }) as Promise<T>;
+      const note: LessonNote = {
+        id: existing?.id ?? `l${lessons.length + 1}`,
+        subject,
+        title,
+        text,
+        createdAt: existing?.createdAt ?? new Date().toISOString(),
+      };
+      lessons = existing ? lessons.map((item) => (item.id === note.id ? note : item)) : [note, ...lessons];
+      settings = { ...settings, lessonSubjects: [...new Set(lessons.map((item) => item.subject))] };
+      return ok({ ok: true }) as Promise<T>;
+    }
+    case "lessons.delete": {
+      const id = String(p["id"] ?? "");
+      if (!lessons.some((item) => item.id === id)) {
+        return ok({ ok: false, message: "Cours introuvable." }) as Promise<T>;
+      }
+      lessons = lessons.filter((item) => item.id !== id);
+      settings = { ...settings, lessonSubjects: [...new Set(lessons.map((item) => item.subject))] };
+      return ok({ ok: true }) as Promise<T>;
+    }
+    case "lessons.setManual": {
+      const subject = String(p["subject"] ?? "").trim();
+      if (!subject) return ok({ ok: false, message: "Matière invalide." }) as Promise<T>;
+      if (p["enabled"] === false) manualDisabled.add(subject);
+      else manualDisabled.delete(subject);
+      return ok({ ok: true, enabled: p["enabled"] !== false }) as Promise<T>;
     }
     case "llm.status":
       return ok({ configured: settings.llmConfigured }) as Promise<T>;

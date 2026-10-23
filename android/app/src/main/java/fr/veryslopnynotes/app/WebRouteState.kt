@@ -36,7 +36,7 @@ const val ROUTE_STATE_KEY = "fr.veryslopnynotes.app.route"
 val WEB_ROUTES: Set<String> = setOf(
     "/", "/calendar", "/grades", "/tasks", "/profile", "/settings",
     "/pairing", "/messages", "/attendance", "/sanctions", "/news",
-    "/canteen", "/alerts", "/fiches",
+    "/canteen", "/alerts", "/fiches", "/cahier",
 )
 
 /**
