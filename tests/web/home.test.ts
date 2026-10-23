@@ -3,7 +3,7 @@ import { useParisTz } from "./setup";
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isoDay, startOfWeek } from "../../web/src/lib/format";
+import { isoDay, startOfWeek, weekStatusFr, weeksBetween } from "../../web/src/lib/format";
 import {
   ENTRANCE_WINDOW_MS,
   MAX_ITEMS,
@@ -549,6 +549,25 @@ describe("semaine de l'EDT", () => {
     const mar30 = shiftWeeks(mar23, 1);
     expect(isoDay(mar30)).toBe("2026-03-30");
     expect(mar30.getTime() - mar23.getTime()).toBe(167 * 3_600_000);
+  });
+
+  test("le libellé dit d'où l'on vient (#580)", () => {
+    expect(weekStatusFr(0)).toBe("Semaine courante");
+    expect(weekStatusFr(-1)).toBe("Semaine précédente de 1 semaine");
+    expect(weekStatusFr(1)).toBe("Semaine suivante de 1 semaine");
+    expect(weekStatusFr(-2)).toBe("Semaine précédente de 2 semaines");
+    expect(weekStatusFr(3)).toBe("Semaine suivante de 3 semaines");
+    // Illisible : jamais « suivante de NaN ».
+    expect(weekStatusFr(Number.NaN)).toBe("Semaine courante");
+
+    expect(weeksBetween(weekStartFrom(1, base), base)).toBe(1);
+    expect(weeksBetween(weekStartFrom(-1, base), base)).toBe(-1);
+    // L'heure ne change pas la semaine : dimanche 23:59 et mercredi midi.
+    expect(weeksBetween(new Date(2026, 9, 25, 23, 59), new Date(2026, 9, 21, 12))).toBe(0);
+    // En revanche lundi 00:01 est bien la semaine suivante.
+    expect(weeksBetween(new Date(2026, 9, 26, 0, 1), new Date(2026, 9, 25, 23, 59))).toBe(1);
+    // Semaine de changement d'heure : 167 h réelles, toujours 1 semaine.
+    expect(weeksBetween(new Date(2026, 2, 30), new Date(2026, 2, 23))).toBe(1);
   });
 
   test("filtre et groupe les cours par jour local", () => {

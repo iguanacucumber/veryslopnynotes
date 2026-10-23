@@ -1,7 +1,7 @@
 // Logique pure de l'écran Tâches, portée de `AssignmentsSections.kt` et
 // `AssignmentsRepository.kt`. Aucun React, aucun réseau : les parsers et les
 // regroupements sont testables avec un `now` injecté.
-import { addDays, frDate, frTime, isoDay, parseDate, startOfWeek } from "../../lib/format";
+import { addDays, frDate, frTime, isoDay, parseDate, startOfWeek, weeksBetween } from "../../lib/format";
 
 export interface AssignmentAttachment {
   id: string;
@@ -122,6 +122,15 @@ export function shiftWeek(startIso: string, weeks: number): string {
   const date = assignmentDate(startIso);
   if (!date) return startIso;
   return isoDay(addDays(date, weeks * 7));
+}
+
+/** Écart en semaines avec la semaine courante : 0 = même semaine, -1 =
+ *  précédente, +1 = suivante. Une date illisible ne prétend pas être ailleurs. */
+export function weekGap(fromIso: string, currentIso: string): number {
+  const from = assignmentDate(fromIso);
+  const current = assignmentDate(currentIso);
+  if (!from || !current) return 0;
+  return weeksBetween(from, current);
 }
 
 /** Numéro de semaine ISO 8601 (la semaine du jeudi). */

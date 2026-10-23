@@ -1,5 +1,15 @@
 import { Fragment, useMemo, useState } from "react";
-import { frDateShort, frDay, isSameDay, relativeFr, startOfWeek, subjectColor, tint, isoDay } from "../../lib/format";
+import {
+  frDateShort,
+  frDay,
+  isSameDay,
+  isoDay,
+  relativeFr,
+  startOfWeek,
+  subjectColor,
+  tint,
+  weeksBetween,
+} from "../../lib/format";
 import { useApp, useResource } from "../../ui/AppContext";
 import {
   Card,
@@ -29,7 +39,6 @@ import {
   currentLesson,
   groupDays,
   highlightOf,
-  isCurrentWeek,
   lessonsInWeek,
   nextLesson,
   shiftWeeks,
@@ -150,14 +159,16 @@ export default function TimetableScreen() {
   // affichée à minuit le lundi, sans geste de l'élève. « Semaine courante »
   // est désormais la seule façon de revenir à la semaine de `now`.
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
-  const showingCurrentWeek = useMemo(() => isCurrentWeek(weekStart, new Date(now)), [weekStart, now]);
+  // Écart AFFICHÉ : il suit la même horloge que le reste de l'écran, donc le
+  // libellé passe de « suivante de 1 semaine » à « courante » à minuit.
+  const weeks = useMemo(() => weeksBetween(weekStart, new Date(now)), [weekStart, now]);
 
   return (
     <WeekView
       key={isoDay(weekStart)}
       weekStart={weekStart}
       now={now}
-      showingCurrentWeek={showingCurrentWeek}
+      weeks={weeks}
       onShift={(delta) => setWeekStart((week) => shiftWeeks(week, delta))}
       onToday={() => setWeekStart(startOfWeek(new Date()))}
     />
@@ -167,18 +178,19 @@ export default function TimetableScreen() {
 function WeekView({
   weekStart,
   now,
-  showingCurrentWeek,
+  weeks,
   onShift,
   onToday,
 }: {
   weekStart: Date;
   now: number;
-  showingCurrentWeek: boolean;
+  weeks: number;
   onShift: (delta: number) => void;
   onToday: () => void;
 }) {
   const { dark } = useApp();
   const resource = useResource("timetable", weekQuery(weekStart));
+  const showingCurrentWeek = weeks === 0;
 
   const lessons = useMemo(() => parseTimetable(resource.payload), [resource.payload]);
   const weekLessons = useMemo(() => lessonsInWeek(lessons, weekStart), [lessons, weekStart]);
@@ -203,7 +215,7 @@ function WeekView({
     <Page className="tt">
       <WeekNavigator
         label={weekLabel(weekStart)}
-        current={showingCurrentWeek}
+        weeks={weeks}
         onPrevious={() => onShift(-1)}
         onNext={() => onShift(1)}
         onToday={onToday}
