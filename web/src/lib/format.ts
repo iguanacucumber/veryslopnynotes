@@ -116,6 +116,26 @@ export function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
+/** Écart en semaines entre les semaines de deux jours : 0 = même semaine.
+ *  Chaque jour est ramené à son lundi, par DATE locale, donc insensible aux
+ *  semaines de 167/169 h (changement d'heure). */
+export function weeksBetween(from: Date, to: Date): number {
+  const monday = (d: Date) => {
+    const m = startOfWeek(d);
+    return Date.UTC(m.getFullYear(), m.getMonth(), m.getDate());
+  };
+  return Math.round((monday(from) - monday(to)) / (7 * 86_400_000));
+}
+
+/** Statut relatif de la semaine affichée : 0 = courante, -1 = précédente, +1 = suivante. */
+export function weekStatusFr(weeks: number): string {
+  const gap = Number.isFinite(weeks) ? Math.trunc(weeks) : 0;
+  if (gap === 0) return "Semaine courante";
+  const count = Math.abs(gap);
+  const direction = gap < 0 ? "précédente" : "suivante";
+  return `Semaine ${direction} de ${count} semaine${count > 1 ? "s" : ""}`;
+}
+
 export function relativeFr(value: string, now: number = Date.now()): string {
   const d = parseDate(value);
   if (!d) return "";
