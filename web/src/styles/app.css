@@ -658,16 +658,18 @@ button.card:active {
 .week-nav__today {
   min-width: 0;
   min-height: var(--tap);
-  padding: 0 12px;
+  padding: 4px 10px;
   border: 1px solid var(--border-soft);
   border-radius: 999px;
   background: var(--brand-pale);
   color: var(--brand-deep);
   font-size: 12px;
+  line-height: 15px;
   font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* « Semaine précédente de 2 semaines » ne tient pas sur une ligne à 360 px :
+     on laisse le libellé passer à la ligne plutôt que le tronquer. */
+  white-space: normal;
+  text-wrap: balance;
   transition: transform var(--duration) var(--ease-out), background var(--duration) var(--ease);
 }
 

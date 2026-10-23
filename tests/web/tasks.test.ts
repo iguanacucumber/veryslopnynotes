@@ -19,11 +19,13 @@ import {
   subjectDisplayFr,
   subjectInitial,
   weekEndOf,
+  weekGap,
   weekLabelFr,
   weekRangeFr,
   weekStartOf,
 } from "../../web/src/features/tasks/assignments";
 import { bridge } from "../../web/src/bridge/client";
+import { weekStatusFr } from "../../web/src/lib/format";
 import {
   parseRevisionSheet,
   parseRevisionSheets,
@@ -188,6 +190,15 @@ describe("web tâches — dates et semaines", () => {
     expect(shiftWeek("2026-10-19", 1)).toBe("2026-10-26");
     expect(shiftWeek("2026-10-19", -1)).toBe("2026-10-12");
     expect(shiftWeek("illisible", 1)).toBe("illisible");
+  });
+
+  test("l'écart avec la semaine courante alimente le libellé (#580)", () => {
+    expect(weekGap("2026-10-19", "2026-10-19")).toBe(0);
+    expect(weekGap("2026-10-12", "2026-10-19")).toBe(-1);
+    expect(weekGap("2026-10-26", "2026-10-19")).toBe(1);
+    expect(weekGap("2026-11-02", "2026-10-19")).toBe(2);
+    // Illisible : on ne prétend pas être sur une autre semaine.
+    expect(weekGap("illisible", "2026-10-19")).toBe(0);
   });
 });
 
@@ -410,14 +421,18 @@ describe("web tâches — navigation de semaine", () => {
     expect(source).toContain("assignmentSections(items, week, new Date())");
   });
 
-  test("le bouton de retour annonce la semaine courante, pas « Cette semaine » (#567)", () => {
+  test("le bouton de retour annonce le statut relatif, pas « Cette semaine » (#567, #580)", () => {
     const components = readFileSync(
       join(import.meta.dir, "..", "..", "web", "src", "ui", "components.tsx"),
       "utf8",
     );
-    expect(components).toContain("Semaine courante");
+    // Le libellé vient de la fonction pure : le composant partagé n'écrit plus
+    // « Semaine courante » en dur.
+    expect(components).toContain("weekStatusFr(weeks)");
     expect(components).not.toContain("Cette semaine");
-    expect(components).toContain('aria-label="Revenir à la semaine courante"');
+    expect(components).toContain("revenir à la semaine courante");
+    expect(weekStatusFr(0)).toBe("Semaine courante");
+    expect(weekStatusFr(-1)).toBe("Semaine précédente de 1 semaine");
   });
 });
 

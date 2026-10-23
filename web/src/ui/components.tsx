@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { subjectColor, tint } from "../lib/format";
+import { subjectColor, tint, weekStatusFr } from "../lib/format";
 import { subjectEmoji } from "../lib/subjectVisual";
 import { useApp } from "./AppContext";
 import { IconChevronLeft, IconChevronRight, IconWarning } from "./icons";
@@ -29,22 +29,27 @@ export function PageHeading({
   );
 }
 
-/** Semaine précédente / courante / suivante : un seul motif pour Tâches et Cours. */
+/** Semaine précédente / courante / suivante : un seul motif pour Tâches et Cours.
+ *  `weeks` = écart avec la semaine de `now` (0 = courante) : le libellé dit
+ *  d'où l'on vient, pas seulement que l'on est ailleurs. Le clic ramène à la
+ *  semaine courante ; le nom accessible reprend le libellé visible. */
 export function WeekNavigator({
   label,
   detail,
-  current,
+  weeks,
   onPrevious,
   onNext,
   onToday,
 }: {
   label: string;
   detail?: string;
-  current: boolean;
+  weeks: number;
   onPrevious: () => void;
   onNext: () => void;
   onToday: () => void;
 }) {
+  const current = weeks === 0;
+  const status = weekStatusFr(weeks);
   return (
     <Card className="week-nav">
       <div className="week-nav__top">
@@ -60,9 +65,9 @@ export function WeekNavigator({
           className="week-nav__today"
           onClick={onToday}
           disabled={current}
-          aria-label="Revenir à la semaine courante"
+          aria-label={current ? "Revenir à la semaine courante" : `${status} — revenir à la semaine courante`}
         >
-          Semaine courante
+          {status}
         </button>
         <button type="button" className="week-nav__arrow" aria-label="Semaine suivante" onClick={onNext}>
           <IconChevronRight />
