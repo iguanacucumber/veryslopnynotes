@@ -61,6 +61,24 @@ describe("pont factice", () => {
     expect(parsedAlerts[0]?.excerpt).toContain("<img");
   });
 
+  test("le pont factice suit la semaine demandée", async () => {
+    const base = parseTimetable(await payloadOf("timetable"));
+    const result = await mockCall<ResourceResult>("resources.load", {
+      key: "timetable",
+      query: "weekStart=2026-10-26",
+    });
+    const next = parseTimetable(result.payload);
+    expect(next.map((lesson) => lesson.id)).toEqual(base.map((lesson) => lesson.id));
+    expect(next[0]!.start - base[0]!.start).toBe(7 * 86_400_000);
+
+    // Requête illisible : la semaine de démonstration, jamais une semaine inventée.
+    const bogus = await mockCall<ResourceResult>("resources.load", {
+      key: "timetable",
+      query: "weekStart=nope",
+    });
+    expect(parseTimetable(bogus.payload)[0]!.start).toBe(base[0]!.start);
+  });
+
   test("session restaurée par défaut", async () => {
     const status = await mockCall<SessionStatus>("session.restore", {});
     expect(status.state).toBe("restored");
