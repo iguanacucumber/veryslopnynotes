@@ -26,6 +26,7 @@ import {
   shiftWeek,
   subjectDisplayFr,
   weekEndOf,
+  weekGap,
   weekLabelFr,
   weekRangeFr,
   weekStartOf,
@@ -58,7 +59,7 @@ export function TasksScreen() {
       <WeekNavigator
         label={weekLabelFr(week)}
         detail={range ?? undefined}
-        current={week === currentWeek}
+        weeks={weekGap(week, currentWeek)}
         onPrevious={() => setWeek((value) => shiftWeek(value, -1))}
         onNext={() => setWeek((value) => shiftWeek(value, 1))}
         onToday={() => setWeek(currentWeek)}
