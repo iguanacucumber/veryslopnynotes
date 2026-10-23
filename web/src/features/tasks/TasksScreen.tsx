@@ -42,6 +42,9 @@ type HelpState = {
   answer: string | null;
   refusal: string | null;
   error: string | null;
+  /** true = corrigé obtenu depuis une photo d'énoncé. */
+  photo?: boolean;
+  photoSource?: "camera" | "gallery";
 };
 
 type LlmState = { configured: boolean | null; error: string | null };
@@ -218,6 +221,69 @@ function TasksWeek({ week }: { week: string }) {
     }
   }
 
+  async function askPhoto(assignment: Assignment, source: "camera" | "gallery") {
+    const seq = ++helpSeq.current;
+    setHelp({
+      id: assignment.id,
+      loading: true,
+      answer: null,
+      refusal: null,
+      error: null,
+      photo: true,
+      photoSource: source,
+    });
+    try {
+      const result = await bridge.solveHomeworkPhoto(assignment.id, week, source);
+      if (seq !== helpSeq.current) return;
+      if (result.cancelled) {
+        setHelp(null);
+        return;
+      }
+      if (result.refused) {
+        setHelp({
+          id: assignment.id,
+          loading: false,
+          answer: null,
+          refusal: homeworkRefusalText(result.message),
+          error: null,
+          photo: true,
+          photoSource: source,
+        });
+      } else if (!result.ok) {
+        setHelp({
+          id: assignment.id,
+          loading: false,
+          answer: null,
+          refusal: null,
+          error: result.message || "L'assistant n'a pas répondu.",
+          photo: true,
+          photoSource: source,
+        });
+      } else {
+        setHelp({
+          id: assignment.id,
+          loading: false,
+          answer: result.body || "Réponse vide.",
+          refusal: null,
+          error: null,
+          photo: true,
+          photoSource: source,
+        });
+      }
+    } catch (e) {
+      if (seq !== helpSeq.current) return;
+      setHelp({
+        id: assignment.id,
+        loading: false,
+        answer: null,
+        refusal: null,
+        error: e instanceof Error ? e.message : "Aide photo indisponible.",
+        photo: true,
+        photoSource: source,
+      });
+    }
+  }
+
   /** Fermer annule AUSSI la demande en vol : sinon une réponse tardive
    *  rouvrirait le panneau que l'élève vient de fermer. */
   function closeHelp() {
@@ -367,6 +433,7 @@ function TasksWeek({ week }: { week: string }) {
                       onToggle={(next) => void toggle(assignment, next)}
                       onOpenAttachment={(attachment) => void openAttachment(assignment, attachment)}
                       onHelp={() => void askHelp(assignment)}
+                      onPhoto={(source) => void askPhoto(assignment, source)}
                       onCloseHelp={closeHelp}
                       onGenerateSheet={() => void generateSheet(assignment)}
                     />
@@ -403,6 +470,7 @@ function AssignmentCard({
   onToggle,
   onOpenAttachment,
   onHelp,
+  onPhoto,
   onCloseHelp,
   onGenerateSheet,
 }: {
@@ -417,6 +485,7 @@ function AssignmentCard({
   onToggle: (next: boolean) => void;
   onOpenAttachment: (attachment: AssignmentAttachment) => void;
   onHelp: () => void;
+  onPhoto: (source: "camera" | "gallery") => void;
   onCloseHelp: () => void;
   onGenerateSheet: () => void;
 }) {
@@ -426,13 +495,14 @@ function AssignmentCard({
   const text = assignmentCardText(assignment);
   const due = dueLabel(assignment.dueDate);
   const tone = dueTone(assignment.dueDate);
-  // Sans consigne ni extrait de cours, le natif refuse AVANT d'appeler le
-  // modèle : proposer les deux actions IA ne mènerait qu'à une erreur. Un
-  // manuel utilisable ou un cours du cahier pour CETTE matière compte comme
-  // source (le natif l'ajoute au prompt).
+  // Sans consigne ni extrait de cours, l'aide TEXTE refuserait avant le
+  // modèle. La photo, elle, est une source à part entière : elle reste
+  // disponible même sans manuel ni cahier. Un manuel utilisable ou un cours
+  // du cahier pour CETTE matière compte comme source pour le texte.
   const hasMaterial = assignmentHasAssistantMaterial(assignment, manualReady, lessonReady);
-  const assistantOff = assistantDisabled || !hasMaterial;
-  const offReason = hasMaterial ? assistantReasonId : noMaterialId;
+  const textOff = assistantDisabled || !hasMaterial;
+  const photoOff = assistantDisabled || revisionBusy;
+  const offReason = assistantDisabled ? assistantReasonId : hasMaterial ? undefined : noMaterialId;
 
   return (
     <Card as="article" className={`task-card${assignment.done ? " task-card--done" : ""}`}>
@@ -484,7 +554,7 @@ function AssignmentCard({
         <button
           type="button"
           className="task-help"
-          disabled={assistantOff || revisionBusy}
+          disabled={textOff || revisionBusy}
           aria-describedby={offReason}
           aria-label={`Créer une fiche de révision pour ${assignment.title}`}
           onClick={onGenerateSheet}
@@ -494,36 +564,63 @@ function AssignmentCard({
         </button>
         <button
           type="button"
-          className={`task-help${help ? " task-help--open" : ""}`}
-          disabled={assistantOff}
+          className={`task-help${help && !help.photo ? " task-help--open" : ""}`}
+          disabled={textOff}
           aria-describedby={offReason}
-          aria-expanded={help !== null}
-          aria-controls={help ? helpPanelId : undefined}
-          aria-label={`${help ? "Fermer" : "Ouvrir"} l'aide devoirs pour ${assignment.title}`}
-          onClick={help ? onCloseHelp : onHelp}
+          aria-expanded={help !== null && !help.photo}
+          aria-controls={help && !help.photo ? helpPanelId : undefined}
+          aria-label={`${help && !help.photo ? "Fermer" : "Ouvrir"} l'aide devoirs pour ${assignment.title}`}
+          onClick={help && !help.photo ? onCloseHelp : onHelp}
         >
           <IconSparkles size={16} />
-          {help ? "Fermer l’aide" : "Aide devoirs"}
+          {help && !help.photo ? "Fermer l’aide" : "Aide devoirs"}
+        </button>
+        <button
+          type="button"
+          className={`task-help${help?.photo ? " task-help--open" : ""}`}
+          disabled={photoOff}
+          aria-describedby={assistantDisabled ? assistantReasonId : undefined}
+          aria-expanded={help?.photo === true}
+          aria-controls={help?.photo ? helpPanelId : undefined}
+          aria-label={`Résoudre la photo de l'énoncé de ${assignment.title}`}
+          onClick={help?.photo ? onCloseHelp : () => onPhoto("camera")}
+        >
+          <IconAttach size={16} />
+          {help?.photo ? "Fermer la photo" : "Photo de l’énoncé"}
+        </button>
+        <button
+          type="button"
+          className="task-help"
+          disabled={photoOff || help?.loading === true}
+          aria-describedby={assistantDisabled ? assistantReasonId : undefined}
+          aria-label={`Choisir une image pour ${assignment.title}`}
+          onClick={() => onPhoto("gallery")}
+        >
+          <IconAttach size={16} />
+          Galerie
         </button>
       </div>
 
-      {!hasMaterial ? (
+      {assistantDisabled ? null : (
         <p id={noMaterialId} className="tiny muted" style={{ margin: "8px 0 0" }}>
-          Aucun contenu à envoyer pour ce devoir : ajoute une consigne côté établissement pour
-          activer l’assistant.
+          {hasMaterial
+            ? "Tu peux aussi photographier l’énoncé : la photo est envoyée directement au fournisseur, avec ta clé."
+            : "Aucun texte à envoyer pour l’aide écrite. Photographie l’énoncé ci-dessus : la photo devient la source du corrigé."}
         </p>
-      ) : null}
+      )}
 
       {help ? (
         <div
           id={helpPanelId}
           role="region"
-          aria-label={`Aide devoirs — ${assignment.subject}`}
+          aria-label={`${help.photo ? "Photo de l’énoncé" : "Aide devoirs"} — ${assignment.subject}`}
           aria-live="polite"
           className="task-help__panel"
         >
-          <strong>Aide devoirs</strong>
-          {help.loading ? <span>L’assistant rédige…</span> : null}
+          <strong>{help.photo ? "Photo de l’énoncé" : "Aide devoirs"}</strong>
+          {help.loading ? (
+            <span>{help.photo ? "L’assistant lit la photo…" : "L’assistant rédige…"}</span>
+          ) : null}
           {help.answer ? (
             <p className="t-body-m" style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
               {help.answer}
@@ -539,19 +636,28 @@ function AssignmentCard({
               <p className="t-body-m" role="alert" style={{ margin: 0, color: "var(--danger-ink)" }}>
                 {help.error}
               </p>
-              <button type="button" className="btn btn--ghost btn--small" onClick={onHelp}>
+              <button
+                type="button"
+                className="btn btn--ghost btn--small"
+                onClick={help.photo ? () => onPhoto(help.photoSource ?? "camera") : onHelp}
+              >
                 Réessayer
               </button>
             </div>
           ) : null}
           <p className="tiny muted" style={{ margin: 0 }}>
-            {manualReady && lessonReady
-              ? "Le sujet, la consigne, l’extrait de cours, ton cahier et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
-              : lessonReady
-                ? "Le sujet, la consigne, l’extrait de cours et ton cours mémorisé sont envoyés directement au fournisseur, avec ta clé."
-                : manualReady
-                  ? "Le sujet, la consigne, l’extrait de cours et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
-                  : "Le sujet, la consigne et l’extrait de cours de ce devoir sont envoyés directement au fournisseur, avec ta clé."}
+            {help.photo
+              ? "La photo de l’énoncé, la consigne, l’extrait de cours" +
+                (lessonReady ? ", ton cours mémorisé" : "") +
+                (manualReady ? " et le texte du manuel" : "") +
+                " sont envoyés directement au fournisseur, avec ta clé. La photo est supprimée après lecture."
+              : manualReady && lessonReady
+                ? "Le sujet, la consigne, l’extrait de cours, ton cahier et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
+                : lessonReady
+                  ? "Le sujet, la consigne, l’extrait de cours et ton cours mémorisé sont envoyés directement au fournisseur, avec ta clé."
+                  : manualReady
+                    ? "Le sujet, la consigne, l’extrait de cours et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
+                    : "Le sujet, la consigne et l’extrait de cours de ce devoir sont envoyés directement au fournisseur, avec ta clé."}
           </p>
         </div>
       ) : null}

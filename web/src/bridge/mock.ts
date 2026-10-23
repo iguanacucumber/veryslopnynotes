@@ -520,6 +520,11 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
         ok: true,
         body: "Le corrigé attendu : relier chaque régime à ses caractéristiques (parti unique, terreur, propagande) puis comparer deux régimes.",
       }) as Promise<T>;
+    case "llm.solvePhoto":
+      return ok({
+        ok: true,
+        body: "Photo lue : le corrigé suit la méthode du cours. Commence par poser les données, puis applique la formule du chapitre.",
+      }) as Promise<T>;
     case "llm.generateRevision": {
       const id = String(p["assignmentId"] ?? "");
       const assignment = (

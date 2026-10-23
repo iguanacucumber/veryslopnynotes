@@ -73,6 +73,47 @@ describe("photo de cours — garde d'image exécutée (#587)", () => {
     expect(res.text).toBe("f'(x)=2x");
   });
 
+  test.skipIf(skip)("la photo seule est une source citable du corrigé", async () => {
+    const res = await ask({
+      op: "homeworkPhoto",
+      mime: "image/jpeg",
+      base64: IMAGE,
+      question: "Résous l'exercice 12.",
+      sources: [],
+      response: JSON.stringify({
+        status: "ok",
+        answer: "x = 3",
+        steps: ["poser l'équation", "résoudre"],
+        sources: ["Photo de l'énoncé"],
+      }),
+    });
+    expect(res.status).toBe("ok");
+    expect(res.answer).toBe("x = 3");
+    expect(res.sources).toEqual(["Photo de l'énoncé"]);
+    expect(res.sawImage).toBe(true);
+    expect(res.sawMarker).toBe(true);
+  });
+
+  test.skipIf(skip)("une citation inventée est refusée, même avec une photo", async () => {
+    const res = await ask(
+      {
+        op: "homeworkPhoto",
+        mime: "image/jpeg",
+        base64: IMAGE,
+        question: "Résous.",
+        sources: [{ label: "Consigne", text: "exercice 12" }],
+        response: JSON.stringify({
+          status: "ok",
+          answer: "x = 3",
+          steps: [],
+          sources: ["Manuel inventé"],
+        }),
+      },
+      true,
+    );
+    expect(res.error).toBe("AiError");
+  });
+
   test("la préparation photo ré-encode, borne et supprime les métadonnées", () => {
     const prep = readFileSync(join(APP, "PhotoPrep.kt"), "utf8");
     expect(prep).toContain("MAX_DIMENSION = 1600");

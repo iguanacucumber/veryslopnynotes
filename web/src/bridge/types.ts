@@ -55,6 +55,7 @@ export const BRIDGE_METHODS = [
   "llm.saveKey",
   "llm.forgetKey",
   "llm.askHomework",
+  "llm.solvePhoto",
   "llm.generateRevision",
   "revision.list",
   "revision.load",
@@ -120,6 +121,7 @@ export const BRIDGE_TIMEOUTS: Partial<Record<BridgeMethod, number>> = {
   // La photo inclut le cadrage par l'élève : aucun timeout JS. Le natif a
   // son propre plafond (AWAIT_PHOTO_MS) pour ne pas pendre un fil.
   "lessons.addPhoto": 0,
+  "llm.solvePhoto": 0,
   "pairing.pair": 120_000,
   // La connexion de démonstration ouvre une session sur l'établissement de
   // démonstration : c'est un aller-retour de login, comme l'appairage.
