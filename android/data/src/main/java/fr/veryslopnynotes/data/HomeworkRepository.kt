@@ -48,6 +48,18 @@ class HomeworkRepository {
             return out.filter { it.isValid() }.take(Homework.MAX_SOURCES)
         }
 
+        /**
+         * Extrait du manuel enregistré, comme source CITABLE. Le contenu vient
+         * du scraper : il est déjà borné (4 000 caractères) et sera marqué
+         * Untrusted par le prompt. Sans texte, aucune source n'est ajoutée.
+         */
+        fun manualSource(doc: ManualDoc): HomeworkSource? {
+            val excerpt = capped(doc.excerpt, Homework.MAX_SOURCE_CHARS)
+            if (excerpt.isEmpty()) return null
+            val label = capped("Manuel : ${doc.title}", Homework.MAX_LABEL_CHARS).ifEmpty { "Manuel" }
+            return HomeworkSource(label = label, text = excerpt).takeIf { it.isValid() }
+        }
+
         /** Question proposée : matière + intitulé + la consigne si elle existe. */
         fun questionFor(a: Assignment): String = capped(
             listOf(a.subject, a.title).filter { it.isNotBlank() }.joinToString(" — ") +

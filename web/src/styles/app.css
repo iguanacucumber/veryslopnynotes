@@ -423,6 +423,37 @@ button.card:active {
   color: var(--danger-ink);
 }
 
+/* Ligne d'information : même gabarit qu'une ligne de liste, sans l'affordance
+   du clic (les comptes liés se lisent, ils ne se sélectionnent pas). */
+.list-row--static,
+.list-row--static:hover,
+.list-row--static:active {
+  background: transparent;
+  cursor: default;
+}
+
+/* État de session dans le héros du profil : un point et une phrase, posés
+   sous l'identité. La teinte vient du héros, donc elle suit la palette. */
+.account-hero__status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 7px 0 0;
+  color: var(--hero-soft);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.account-hero__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--hero-ink);
+  box-shadow: 0 0 0 3px var(--hero-veil);
+  flex: 0 0 auto;
+}
+
 /* Carte d'erreur : le bord porte le signal, le fond reste une teinte discrète
    (le rouge plein est réservé aux notices et aux boutons destructifs). */
 .card--danger {

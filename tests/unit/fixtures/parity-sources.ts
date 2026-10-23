@@ -79,7 +79,12 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "HomeworkAi.kt"),
   join(CORE, "Humanize.kt"),
   join(CORE, "IsoDates.kt"),
+  // #586 : les règles du cahier de cours, exécutées par le pilote
+  // `LessonNotesMain` (validation, sélection par matière, sources citables).
+  join(CORE, "LessonNote.kt"),
   join(CORE, "LlmGuard.kt"),
+  join(CORE, "ManualUrl.kt"),
+  join(CORE, "ManualCatalog.kt"),
   join(CORE, "NotifyFormat.kt"),
   join(CORE, "RevisionAi.kt"),
   join(CORE, "RevisionSheet.kt"),

@@ -19,6 +19,15 @@ Le serveur n'est pas nécessaire pour Pronote ou l'assistant IA. Il ne sert qu'a
 scraper de manuels ; son adresse se configure dans l'app (`data/ServerStore`).
 L'adresse de build n'est qu'une valeur par défaut.
 
+L'app demande **une seule fois** l'adresse du manuel de l'élève
+(`data/Manuals.kt`). Par défaut, c'est le catalogue
+`https://www.lelivrescolaire.fr/manuels` : `core/ManualCatalog.kt` devine la
+classe depuis le profil (`classLabel`) et les spécialités depuis les matières
+présentes dans les caches, puis choisit l'ouvrage de la matière du devoir. Une
+matière absente de la table ne produit aucune source — jamais un manuel d'une
+autre matière. Le texte récupéré est une donnée externe, marquée Untrusted
+avant le prompt, comme le cours et la consigne.
+
 ## Aide devoirs (clé du fournisseur)
 
 Réglages → « Assistant devoirs » : saisie de la clé, puis « Oublier » pour l'effacer.
@@ -26,8 +35,9 @@ Elle est **chiffrée au repos** (`EncryptedSharedPreferences`), jamais affichée
 loggée ou mise en URL. L'app l'envoie directement à OpenRouter dans l'en-tête HTTPS
 `Authorization` ; la requête ne passe pas par le serveur de manuels.
 
-Onglet Tâches → bouton « Aide devoirs » sur un devoir : les sources sont la consigne et
-l'extrait de cours de ce devoir, la réponse est un corrigé sourcé ou un refus motivé. Sans clé,
+Onglet Tâches → bouton « Aide devoirs » sur un devoir : les sources sont la consigne,
+l'extrait de cours de ce devoir et, s'il est enregistré, un extrait du manuel,
+la réponse est un corrigé sourcé ou un refus motivé. Sans clé,
 l'assistant reste inactif (aucun appel). Le serveur de manuels ne reçoit pas cette clé ; elle
 reste une credential stockée sur l'appareil.
 

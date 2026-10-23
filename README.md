@@ -56,17 +56,18 @@ Pronote et l'assistant IA fonctionnent sans lui.
 | `/pairing` | Appairage | Scan du QR de l'établissement + PIN, session ouverte en direct, sans serveur intermédiaire. Un bouton « Connexion démo » ouvre l'établissement de démonstration public, sans QR ni PIN. |
 | `/` | Accueil | Moyenne, dernière note, prochains cours, devoirs à faire, alertes et accès rapides. |
 | `/calendar` | Cours | Navigation par semaine, professeur, salle, cours en cours / prochain, annulés et déplacés. |
-| `/tasks` | Tâches | Devoirs de la semaine, consigne, pièces jointes, case « fait » écrite dans Pronote, aide IA. |
+| `/tasks` | Tâches | Devoirs de la semaine, consigne, pièces jointes, case « fait » écrite dans Pronote, aide IA et création d'une fiche de révision. |
 | `/grades` | Notes | Moyenne du bulletin ou estimée, 3 algorithmes (matières, pondérée, médiane), courbe d'historique, influence de chaque note, périodes. |
 | `/attendance` | Vie scolaire | Absences et retards, justifiés / à justifier, heures manquées, compteurs par période. |
 | `/sanctions` | Sanctions | Sanctions publiées par l'établissement, gravité et durée. |
 | `/messages` | Messagerie | Discussions, recherche, non-lus, réponse, création et suppression. |
 | `/news` | Actualités | Fils par catégorie, lecture développée, état lu conservé localement. |
 | `/canteen` | Cantine | Menus de la semaine et allergènes. |
-| `/fiches` | Fiches de révision | Fiches locales avec sources citées, consultation et export PDF. |
+| `/fiches` | Fiches de révision | Fiches générées depuis un devoir, sources citées, consultation et export PDF. |
+| `/cahier` | Cahier de cours | Cours mémorisés par matière, réutilisés comme sources par l’assistant, avec manuel activable matière par matière. |
 | `/alerts` | Alertes | Contenus hostiles détectés puis neutralisés, affichés en texte brut, avec l'état de la dernière vérification. |
-| `/profile` | Profil | Profil du compte, nombre de comptes appairés, déconnexion qui purge session et caches. |
-| `/settings` | Réglages | Thème clair / sombre / système, 20 palettes, matières personnalisées (couleur, emoji, libellé), adresse du scraper, clé de l'assistant. |
+| `/profile` | Profil | Compte actif, comptes liés publiés par l'établissement, changement d'appairage et déconnexion qui purge session et caches. |
+| `/settings` | Réglages | Thème clair / sombre / système, 20 palettes, matières personnalisées (couleur, emoji, libellé), adresse du scraper, adresse du manuel, clé de l'assistant. |
 
 En plus des écrans :
 
@@ -76,13 +77,17 @@ En plus des écrans :
   vie scolaire, sanctions, messagerie, capacités et alertes ont chacun leur TTL
   et leur badge « périmé ». Une erreur réseau n'efface pas ce qui est déjà
   lisible.
+- **Cahier de cours local** — les cours sont gardés par matière sur le
+  téléphone, puis envoyés au fournisseur avec la clé de l’assistant uniquement
+  quand une aide est demandée. Ils sont purgés avec les données du compte.
 - **Synchronisation de fond** — WorkManager rafraîchit notes, devoirs et emploi
   du temps toutes les 6 h (réseau connecté, batterie suffisante) et réécrit le
   cache partagé avec l'interface, sans serveur ni push.
 - **Accessibilité** — libellés ARIA, contrastes vérifiés dans les palettes
   claire et sombre, `prefers-reduced-motion` respecté.
-- **Aide devoirs sourcée** — la réponse vient de la consigne et du cours du
-  devoir ; sans source suffisante, l'assistant refuse au lieu d'inventer.
+- **Aide devoirs sourcée** — la réponse vient de la consigne, du cours du
+  devoir et, si tu l'as enregistré une fois, d'un extrait de ton manuel ; sans
+  source suffisante, l'assistant refuse au lieu d'inventer.
 - **Connexion en un clic** — l'établissement de démonstration public de
   l'éditeur s'ouvre sans QR ni PIN : un bouton, une session. Le compte est
   public (l'éditeur le publie sur son site de démonstration) et ne contient
@@ -191,6 +196,15 @@ est servi tel quel, sans openssl. La préparation TLS est obligatoire — si ell
 échoue, le lancement s'arrête, jamais de repli en clair. `PORT` et `HOST`
 restent surchargeables (`PORT=9090 make runServer`). Le serveur ne relaie ni
 session Pronote ni clé OpenRouter.
+
+L'app demande **une seule fois** l'adresse du manuel (et la garde modifiable
+dans Réglages). L'adresse par défaut est le catalogue
+`https://www.lelivrescolaire.fr/manuels` : l'app devine la classe depuis le
+profil et les spécialités depuis les matières suivies, puis choisit l'ouvrage
+correspondant à la matière du devoir. Si l'ouvrage n'existe pas dans sa table,
+elle n'ajoute aucune source plutôt que d'en citer un mauvais. Le texte récupéré
+est une donnée citée ; l'adresse elle-même ne part jamais vers l'établissement
+ni vers le fournisseur LLM.
 
 > **Sécurité :** `POST /v1/manuals/scrape` est volontairement sans
 > authentification. Il reçoit une plateforme et une URL dans le corps de la

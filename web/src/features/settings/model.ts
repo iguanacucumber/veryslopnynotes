@@ -20,6 +20,25 @@ export const MAX_LABEL_CHARS = 64;
 export const MAX_EMOJI_CHARS = 8;
 export const MAX_SUBJECT_PREFS = 64;
 export const MAX_API_KEY_CHARS = 512;
+/** Miroir de `ManualUrl.MAX_CHARS` (core Kotlin) et du contrat scraper. */
+export const MAX_MANUAL_URL_CHARS = 2000;
+
+/**
+ * Adresse par défaut : catalogue de l'éditeur. L'app en déduit l'ouvrage
+ * selon la classe et la matière du devoir ; l'élève peut la remplacer par
+ * l'adresse d'un manuel précis.
+ */
+export const DEFAULT_MANUAL_URL = "https://www.lelivrescolaire.fr/manuels";
+
+/**
+ * Refus d'enregistrement de la clé LLM : le message NATIF fait foi quand il
+ * existe (« trop courte », « caractère interdit »…). Le repli est générique.
+ */
+export function llmSaveError(response: { ok: boolean; message?: string }): string {
+  if (response.ok) return "";
+  const message = (response.message ?? "").trim();
+  return message !== "" ? message : "Clé refusée : vérifie qu'elle est complète.";
+}
 
 const MAX_LABEL_PART = 63;
 const MAX_PORT = 65535;

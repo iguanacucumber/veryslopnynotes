@@ -7,6 +7,7 @@ import {
   ASSIGNMENTS_MAX_ITEMS,
   assignmentCardText,
   assignmentDate,
+  assignmentHasAssistantMaterial,
   assignmentDayKey,
   assignmentSections,
   assignmentsInWeek,
@@ -458,6 +459,19 @@ describe("web tâches — texte", () => {
     expect(subjectInitial("NUMERIQUE SC.INFORM.")).toBe("N");
     expect(subjectInitial("   ")).toBe("?");
     expect(foldFr("Économie — DÉJÀ")).toBe("economie — deja");
+  });
+});
+
+describe("web tâches — matière de l'assistant", () => {
+  test("un devoir sans consigne ni extrait ne propose pas les actions IA", () => {
+    // `lessonContent: null` ne doit pas passer pour « extrait vide » : la
+    // condition chaînée `?.` rendait `undefined !== ""` vrai avant ce test.
+    expect(assignmentHasAssistantMaterial({ description: "", lessonContent: null })).toBe(false);
+    expect(assignmentHasAssistantMaterial({ description: "  ", lessonContent: { title: "", excerpt: "  " } })).toBe(false);
+    expect(assignmentHasAssistantMaterial({ description: "Relire le II.", lessonContent: null })).toBe(true);
+    expect(
+      assignmentHasAssistantMaterial({ description: "", lessonContent: { title: "Cours", excerpt: "Extrait" } }),
+    ).toBe(true);
   });
 });
 

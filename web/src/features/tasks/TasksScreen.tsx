@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { bridge } from "../../bridge/client";
 import { useApp, useResource } from "../../ui/AppContext";
 import { useViewNavigate } from "../../ui/viewTransition";
@@ -14,10 +14,11 @@ import {
   SubjectAvatar,
   WeekNavigator,
 } from "../../ui/components";
-import { IconAttach, IconCheck, IconChevronLeft, IconChevronRight, IconSparkles } from "../../ui/icons";
+import { IconAttach, IconBook, IconCheck, IconChevronLeft, IconChevronRight, IconSparkles } from "../../ui/icons";
 import { parseDate } from "../../lib/format";
 import {
   assignmentCardText,
+  assignmentHasAssistantMaterial,
   assignmentSections,
   assignmentsInWeek,
   dueLabel,
@@ -85,7 +86,10 @@ function TasksWeek({ week }: { week: string }) {
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [doneOpen, setDoneOpen] = useState(false);
   const [help, setHelp] = useState<HelpState | null>(null);
+  const [revisionPending, setRevisionPending] = useState<Record<string, boolean>>({});
   const [llm, setLlm] = useState<LlmState>({ configured: null, error: null });
+  const [manualSubjects, setManualSubjects] = useState<string[]>([]);
+  const [lessonSubjects, setLessonSubjects] = useState<string[]>([]);
   const helpSeq = useRef(0);
   const toggleSeq = useRef(new Map<string, number>());
 
@@ -97,19 +101,32 @@ function TasksWeek({ week }: { week: string }) {
   useEffect(() => {
     let alive = true;
     setLlm((state) => ({ ...state, error: null }));
-    void bridge
-      .llmStatus()
-      .then((status) => {
-        if (alive) setLlm({ configured: Boolean(status.configured), error: null });
-      })
-      .catch((e: unknown) => {
-        if (alive) {
-          setLlm({
-            configured: false,
-            error: e instanceof Error ? e.message : "état de l'assistant indisponible",
-          });
-        }
-      });
+    void Promise.allSettled([bridge.llmStatus(), bridge.settings()]).then(([llmResult, settingsResult]) => {
+      if (!alive) return;
+      if (llmResult.status === "fulfilled") {
+        setLlm({ configured: Boolean(llmResult.value.configured), error: null });
+      } else {
+        setLlm({
+          configured: false,
+          error:
+            llmResult.reason instanceof Error
+              ? llmResult.reason.message
+              : "état de l'assistant indisponible",
+        });
+      }
+      if (settingsResult.status === "fulfilled") {
+        setManualSubjects(
+          Array.isArray(settingsResult.value.manualSubjects)
+            ? settingsResult.value.manualSubjects.filter((s): s is string => typeof s === "string")
+            : [],
+        );
+        setLessonSubjects(
+          Array.isArray(settingsResult.value.lessonSubjects)
+            ? settingsResult.value.lessonSubjects.filter((s): s is string => typeof s === "string")
+            : [],
+        );
+      }
+    });
     return () => {
       alive = false;
     };
@@ -201,12 +218,38 @@ function TasksWeek({ week }: { week: string }) {
     }
   }
 
+  /** Fermer annule AUSSI la demande en vol : sinon une réponse tardive
+   *  rouvrirait le panneau que l'élève vient de fermer. */
+  function closeHelp() {
+    helpSeq.current += 1;
+    setHelp(null);
+  }
+
+  async function generateSheet(assignment: Assignment) {
+    if (revisionPending[assignment.id]) return;
+    setRevisionPending((state) => ({ ...state, [assignment.id]: true }));
+    try {
+      const result = await bridge.generateRevision(assignment.id);
+      if (!result.ok) throw new Error(result.message || "La fiche n'a pas pu être créée.");
+      notify("Fiche de révision créée.");
+      navigate("/fiches");
+    } catch (e) {
+      notify(e instanceof Error ? e.message : "La fiche n'a pas pu être créée.", "error");
+    } finally {
+      setRevisionPending((state) => {
+        const nextState = { ...state };
+        delete nextState[assignment.id];
+        return nextState;
+      });
+    }
+  }
+
+  const assistantChecking = llm.configured === null;
   const assistantDisabled = llm.configured !== true;
-  const assistantReason =
-    llm.error ??
-    (llm.configured === null
-      ? "Vérification de l'assistant…"
-      : "Clé LLM absente : renseigne-la dans Réglages pour activer l'assistant.");
+  const assistantReason = assistantChecking
+    ? "Vérification de la clé…"
+    : llm.error ??
+      "Clé LLM absente : renseigne-la dans Réglages pour activer l'assistant.";
 
   if (resource.loading && items.length === 0) {
     return (
@@ -238,13 +281,25 @@ function TasksWeek({ week }: { week: string }) {
 
       {resource.error ? <ErrorBox message={resource.error} /> : null}
 
-      {assistantDisabled ? (
+      {assistantChecking ? (
+        <Card className="tasks-assistant tasks-assistant--checking">
+          <span className="tasks-assistant__icon" aria-hidden="true">
+            <IconSparkles />
+          </span>
+          <div className="grow" role="status">
+            <strong>Assistant devoirs</strong>
+            <p className="t-body-m muted" style={{ margin: "2px 0 0" }} id="tasks-assistant-reason">
+              {assistantReason}
+            </p>
+          </div>
+        </Card>
+      ) : assistantDisabled ? (
         <Card className="tasks-assistant">
           <span className="tasks-assistant__icon" aria-hidden="true">
             <IconSparkles />
           </span>
           <div className="grow" role="note">
-            <strong>Assistant désactivé</strong>
+            <strong>{llm.error ? "Assistant indisponible" : "Assistant désactivé"}</strong>
             <p className="t-body-m muted" style={{ margin: "2px 0 0" }} id="tasks-assistant-reason">
               {assistantReason}
             </p>
@@ -305,11 +360,15 @@ function TasksWeek({ week }: { week: string }) {
                       busy={Boolean(pending[assignment.id])}
                       assistantDisabled={assistantDisabled}
                       assistantReasonId={assistantDisabled ? "tasks-assistant-reason" : undefined}
+                      manualReady={manualSubjects.includes(assignment.subject)}
+                      lessonReady={lessonSubjects.includes(assignment.subject)}
                       help={help?.id === assignment.id ? help : null}
+                      revisionBusy={Boolean(revisionPending[assignment.id])}
                       onToggle={(next) => void toggle(assignment, next)}
                       onOpenAttachment={(attachment) => void openAttachment(assignment, attachment)}
                       onHelp={() => void askHelp(assignment)}
-                      onCloseHelp={() => setHelp(null)}
+                      onCloseHelp={closeHelp}
+                      onGenerateSheet={() => void generateSheet(assignment)}
                     />
                   ))}
                 </div>
@@ -337,26 +396,43 @@ function AssignmentCard({
   busy,
   assistantDisabled,
   assistantReasonId,
+  manualReady,
+  lessonReady,
   help,
+  revisionBusy,
   onToggle,
   onOpenAttachment,
   onHelp,
   onCloseHelp,
+  onGenerateSheet,
 }: {
   assignment: Assignment;
   busy: boolean;
   assistantDisabled: boolean;
   assistantReasonId?: string;
+  manualReady: boolean;
+  lessonReady: boolean;
   help: HelpState | null;
+  revisionBusy: boolean;
   onToggle: (next: boolean) => void;
   onOpenAttachment: (attachment: AssignmentAttachment) => void;
   onHelp: () => void;
   onCloseHelp: () => void;
+  onGenerateSheet: () => void;
 }) {
   const { dark } = useApp();
+  const helpPanelId = useId();
+  const noMaterialId = useId();
   const text = assignmentCardText(assignment);
   const due = dueLabel(assignment.dueDate);
   const tone = dueTone(assignment.dueDate);
+  // Sans consigne ni extrait de cours, le natif refuse AVANT d'appeler le
+  // modèle : proposer les deux actions IA ne mènerait qu'à une erreur. Un
+  // manuel utilisable ou un cours du cahier pour CETTE matière compte comme
+  // source (le natif l'ajoute au prompt).
+  const hasMaterial = assignmentHasAssistantMaterial(assignment, manualReady, lessonReady);
+  const assistantOff = assistantDisabled || !hasMaterial;
+  const offReason = hasMaterial ? assistantReasonId : noMaterialId;
 
   return (
     <Card as="article" className={`task-card${assignment.done ? " task-card--done" : ""}`}>
@@ -408,29 +484,45 @@ function AssignmentCard({
         <button
           type="button"
           className="task-help"
-          disabled={assistantDisabled}
-          aria-describedby={assistantReasonId}
-          aria-label={`Aide devoirs pour ${assignment.title}`}
-          onClick={onHelp}
+          disabled={assistantOff || revisionBusy}
+          aria-describedby={offReason}
+          aria-label={`Créer une fiche de révision pour ${assignment.title}`}
+          onClick={onGenerateSheet}
+        >
+          <IconBook size={16} />
+          {revisionBusy ? "Création…" : "Fiche de révision"}
+        </button>
+        <button
+          type="button"
+          className={`task-help${help ? " task-help--open" : ""}`}
+          disabled={assistantOff}
+          aria-describedby={offReason}
+          aria-expanded={help !== null}
+          aria-controls={help ? helpPanelId : undefined}
+          aria-label={`${help ? "Fermer" : "Ouvrir"} l'aide devoirs pour ${assignment.title}`}
+          onClick={help ? onCloseHelp : onHelp}
         >
           <IconSparkles size={16} />
-          Aide devoirs
+          {help ? "Fermer l’aide" : "Aide devoirs"}
         </button>
       </div>
 
+      {!hasMaterial ? (
+        <p id={noMaterialId} className="tiny muted" style={{ margin: "8px 0 0" }}>
+          Aucun contenu à envoyer pour ce devoir : ajoute une consigne côté établissement pour
+          activer l’assistant.
+        </p>
+      ) : null}
+
       {help ? (
         <div
+          id={helpPanelId}
           role="region"
           aria-label={`Aide devoirs — ${assignment.subject}`}
           aria-live="polite"
           className="task-help__panel"
         >
-          <div className="row row--between">
-            <strong>Aide devoirs</strong>
-            <button type="button" className="btn btn--ghost btn--small" onClick={onCloseHelp}>
-              Fermer
-            </button>
-          </div>
+          <strong>Aide devoirs</strong>
           {help.loading ? <span>L’assistant rédige…</span> : null}
           {help.answer ? (
             <p className="t-body-m" style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
@@ -443,10 +535,24 @@ function AssignmentCard({
             </p>
           ) : null}
           {help.error ? (
-            <p className="t-body-m" role="alert" style={{ margin: 0, color: "var(--danger-ink)" }}>
-              {help.error}
-            </p>
+            <div className="stack" style={{ gap: 6 }}>
+              <p className="t-body-m" role="alert" style={{ margin: 0, color: "var(--danger-ink)" }}>
+                {help.error}
+              </p>
+              <button type="button" className="btn btn--ghost btn--small" onClick={onHelp}>
+                Réessayer
+              </button>
+            </div>
           ) : null}
+          <p className="tiny muted" style={{ margin: 0 }}>
+            {manualReady && lessonReady
+              ? "Le sujet, la consigne, l’extrait de cours, ton cahier et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
+              : lessonReady
+                ? "Le sujet, la consigne, l’extrait de cours et ton cours mémorisé sont envoyés directement au fournisseur, avec ta clé."
+                : manualReady
+                  ? "Le sujet, la consigne, l’extrait de cours et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
+                  : "Le sujet, la consigne et l’extrait de cours de ce devoir sont envoyés directement au fournisseur, avec ta clé."}
+          </p>
         </div>
       ) : null}
     </Card>

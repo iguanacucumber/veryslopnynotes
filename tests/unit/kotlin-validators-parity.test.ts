@@ -85,6 +85,58 @@ const REFS = [
   "autre:1:2", // autre schéma
 ];
 
+/**
+ * Miroir TS de `core/ManualUrl.kt` : les messages sont ceux affichés à
+ * l'utilisateur, donc la parité porte aussi sur eux.
+ */
+function tsManualUrl(raw: string): { ok: true; url: string } | { ok: false; message: string } {
+  const input = raw.trim();
+  if (input === "") return { ok: false, message: "Adresse vide : colle l'adresse de ton manuel." };
+  if (input.length > 2000) {
+    return { ok: false, message: "Adresse trop longue (2000 caractères maximum)." };
+  }
+  if (/[\s\p{Cc}]/u.test(input)) {
+    return { ok: false, message: "Espace ou caractère interdit dans l'adresse." };
+  }
+  const sep = input.indexOf("://");
+  if (sep <= 0) return { ok: false, message: "Adresse incomplète : commence par http ou https." };
+  const scheme = input.slice(0, sep).toLowerCase();
+  if (scheme !== "http" && scheme !== "https") {
+    return { ok: false, message: "Schéma refusé : utilisez http ou https." };
+  }
+  const authority = input.slice(sep + 3).split(/[/?#]/, 1)[0] ?? "";
+  if (authority === "") return { ok: false, message: "Domaine manquant après le schéma." };
+  if (authority.includes("@")) {
+    return {
+      ok: false,
+      message: "Identifiants dans l'adresse refusés : le scraper ne s'authentifie pas.",
+    };
+  }
+  if (authority.includes("\\")) return { ok: false, message: "Caractère interdit dans le domaine." };
+  return { ok: true, url: input };
+}
+
+const MANUAL_ACCEPTED = [
+  "https://manuel.exemple.fr/chapitre/3",
+  "https://manuel.exemple.fr/chapitre/3?page=12",
+  "https://manuel.exemple.fr:8443/a/b#page",
+  "http://manuel.exemple.fr",
+  "  https://manuel.exemple.fr  ",
+];
+
+const MANUAL_REJECTED: [string, string][] = [
+  ["", "Adresse vide : colle l'adresse de ton manuel."],
+  ["   ", "Adresse vide : colle l'adresse de ton manuel."],
+  [`https://manuel.exemple.fr/${"a".repeat(2000)}`, "Adresse trop longue (2000 caractères maximum)."],
+  ["https://manuel exemple.fr", "Espace ou caractère interdit dans l'adresse."],
+  ["https://manuel.exemple.fr/a\nb", "Espace ou caractère interdit dans l'adresse."],
+  ["manuel.exemple.fr", "Adresse incomplète : commence par http ou https."],
+  ["ftp://manuel.exemple.fr", "Schéma refusé : utilisez http ou https."],
+  ["https://", "Domaine manquant après le schéma."],
+  ["https://user:pass@manuel.exemple.fr", "Identifiants dans l'adresse refusés : le scraper ne s'authentifie pas."],
+  ["https://manuel.exemple.fr\\a", "Caractère interdit dans le domaine."],
+];
+
 /** Verdict du LECTEUR WEB : un devoir dont la `ref` est refusée disparaît. */
 function webAccepts(ref: string): boolean {
   return (
@@ -198,5 +250,149 @@ describe("validateurs du noyau (#366) — parité avec le contrat TS", () => {
       expect(src).not.toContain("fun isoMillis(");
       expect(src).not.toContain("fun isIsoDateLike(");
     }
+  });
+});
+
+describe("adresse du manuel — parité avec l'app", () => {
+  test.skipIf(skip)("mêmes formes acceptées, mêmes refus et mêmes messages", async () => {
+    for (const input of MANUAL_ACCEPTED) {
+      const kotlin = JSON.parse(await ask({ op: "manualUrl", text: input })) as {
+        ok: boolean;
+        url?: string;
+      };
+      expect({ input, kotlin }).toEqual({ input, kotlin: tsManualUrl(input) });
+      expect(kotlin.url).toBe(input.trim());
+    }
+    for (const [input, message] of MANUAL_REJECTED) {
+      const kotlin = JSON.parse(await ask({ op: "manualUrl", text: input })) as {
+        ok: boolean;
+        message?: string;
+      };
+      expect({ input, kotlin }).toEqual({ input, kotlin: tsManualUrl(input) });
+      expect(kotlin.message).toBe(message);
+    }
+  });
+
+  test("câblage : le noyau est la SEULE validation de l'adresse du manuel", () => {
+    const store = readFileSync(join(DATA, "Manuals.kt"), "utf8");
+    expect(store).toContain("ManualUrl.validate(");
+    // Une prefs altérée est revalidée à la lecture, comme le serveur.
+    expect(store).toContain("fun url(): String?");
+    // L'invitation ne revient jamais après un enregistrement ou un « plus tard ».
+    expect(store).toContain("fun save(raw: String): ManualUrlResult");
+    expect(store).toContain("putBoolean(KEY_PROMPT_SEEN, true)");
+    expect(store).toContain("fun markPromptSeen()");
+    // L'adresse n'est jamais journalisée.
+    expect(store).not.toMatch(/Log\.[vdiew]\(|println\(|printStackTrace/);
+    // Le client passe par la route allowlistée du scraper, sans hôte en dur.
+    const client = store.slice(store.indexOf("class ManualsClient"));
+    expect(client).toContain("ServerConfig.manualsScrapeUrl(baseUrl)");
+    expect(client).not.toMatch(/https?:\/\//);
+  });
+});
+
+describe("catalogue de manuels — classe et spécialités", () => {
+  const BASE = "https://www.lelivrescolaire.fr/manuels";
+
+  async function resolve(classLabel: string, subjects: string[], subject: string): Promise<string | null> {
+    const result = JSON.parse(await ask({ op: "manualResolve", baseUrl: BASE, classLabel, subjects, subject })) as {
+      url: string | null;
+    };
+    return result.url;
+  }
+
+  test.skipIf(skip)("une adresse de catalogue n'est pas un manuel précis", async () => {
+    for (const [text, expected] of [
+      [BASE, true],
+      [`${BASE}/`, true],
+      ["https://www.lelivrescolaire.fr/tous-les-manuels", true],
+      ["https://www.lelivrescolaire.fr/manuels/mathematiques-2de-2019", false],
+      ["https://www.lelivrescolaire.fr/page/123", false],
+    ] as [string, boolean][]) {
+      const result = JSON.parse(await ask({ op: "manualIsCatalog", text })) as { ok: boolean };
+      expect({ text, catalog: result.ok }).toEqual({ text, catalog: expected });
+    }
+  });
+
+  test.skipIf(skip)("la classe et la matière choisissent un ouvrage VÉRIFIÉ", async () => {
+    expect(await resolve("TG2", [], "MATHEMATIQUES")).toBe(
+      "https://www.lelivrescolaire.fr/manuels/mathematiques-specialite-terminale-2020",
+    );
+    expect(await resolve("TG2", [], "MATHEMATIQUES EXPERTES")).toBe(
+      "https://www.lelivrescolaire.fr/manuels/mathematiques-experte-terminale-2020",
+    );
+    expect(await resolve("TG2", [], "PHYSIQUE-CHIMIE")).toBe(
+      "https://www.lelivrescolaire.fr/manuels/physique-chimie-terminale-2020",
+    );
+    expect(await resolve("TG2", [], "HISTOIRE-GEOGRAPHIE")).toBe(
+      "https://www.lelivrescolaire.fr/manuels/histoire-geographie-emc-terminale-2020",
+    );
+    expect(await resolve("TG2", [], "PHILOSOPHIE")).toBe(
+      "https://www.lelivrescolaire.fr/manuels/philosophie-terminale-2020",
+    );
+    expect(await resolve("1G3", [], "MATHEMATIQUES")).toBe(
+      "https://www.lelivrescolaire.fr/manuels/mathematiques-1re-2019",
+    );
+    expect(await resolve("1ère 2", [], "ENSEIGNEMENT SCIENTIFIQUE")).toBe(
+      "https://www.lelivrescolaire.fr/manuels/enseignement-scientifique-1re-2023",
+    );
+    expect(await resolve("2NDE 5", [], "SNT")).toBe(
+      "https://www.lelivrescolaire.fr/manuels/sciences-numeriques-et-technologie-2de-2021",
+    );
+    expect(await resolve("TG2", [], "DNL-ANG-LV9")).toBe(
+      "https://www.lelivrescolaire.fr/manuels/anglais-terminale-2026",
+    );
+    expect(await resolve("2NDE 5", [], "MATHS")).toBe(
+      "https://www.lelivrescolaire.fr/manuels/mathematiques-2de-2019",
+    );
+    expect(await resolve("3E-Fake", [], "MATHEMATIQUES")).toBe(
+      "https://www.lelivrescolaire.fr/manuels/mathematiques-3eme-2021",
+    );
+    // Matière absente du catalogue : aucun manuel plutôt qu'un mauvais.
+    expect(await resolve("TG2", [], "NSI")).toBeNull();
+    expect(await resolve("TG2", [], "HGGSP")).toBeNull();
+    expect(await resolve("TG2", [], "SVT")).toBeNull();
+  });
+
+  test.skipIf(skip)("classe devinée + spécialités probables, jamais inventées", async () => {
+    const guessed = JSON.parse(
+      await ask({
+        op: "manualGuess",
+        classLabel: "TG2",
+        subjects: ["MATHEMATIQUES", "NSI", "HISTOIRE-GEOGRAPHIE", "ANGLAIS", "PHILOSOPHIE"],
+      }),
+    ) as { level: string; specialties: string[] };
+    expect(guessed.level).toBe("Terminale");
+    expect(guessed.specialties).toEqual(["Mathématiques", "NSI"]);
+
+    const seconde = JSON.parse(
+      await ask({
+        op: "manualGuess",
+        classLabel: "2NDE 5",
+        subjects: ["MATHEMATIQUES", "NSI", "SNT"],
+      }),
+    ) as { level: string; specialties: string[] };
+    expect(seconde.level).toBe("2de");
+    // Pas de spécialité en 2de : le tronc commun n'en est pas une.
+    expect(seconde.specialties).toEqual([]);
+
+    const sansClasse = JSON.parse(
+      await ask({ op: "manualGuess", classLabel: "", subjects: ["PHILOSOPHIE", "MATHEMATIQUES"] }),
+    ) as { level: string; specialties: string[] };
+    expect(sansClasse.level).toBe("Terminale");
+    expect(sansClasse.specialties).toEqual(["Mathématiques"]);
+  });
+
+  test("câblage : le pont choisit par matière et garde des extraits par adresse", () => {
+    const bridge = readFileSync(
+      join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt"),
+      "utf8",
+    );
+    expect(bridge).toContain("ManualCatalog.resolve(stored, classLabel, subjects, subject)");
+    expect(bridge).toContain("manualDocFor(assignment.subject)");
+    expect(bridge).toContain("manualDocFor(a.subject)");
+    expect(bridge).toContain("manuals.saveDoc(target, doc)");
+    expect(bridge).toContain("private fun knownSubjects()");
+    expect(bridge).toContain("private fun profileClassLabel()");
   });
 });

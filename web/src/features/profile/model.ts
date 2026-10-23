@@ -150,6 +150,17 @@ export function accountCountLabel(count: number): string {
 }
 
 /**
+ * Ce que le compteur ne dit pas : l'appareil ne sert qu'UN compte à la fois.
+ * Changer de compte passe par un nouvel appairage, qui remplace la session.
+ */
+export function accountCountHint(count: number): string {
+  const safe = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
+  if (safe === 0) return "Aucun compte n'est actif.";
+  if (safe === 1) return "Un seul compte est actif à la fois.";
+  return "Un seul compte est actif à la fois ; changer de compte remplace la session.";
+}
+
+/**
  * Photo : uniquement une data URL d'image bitmap, bornée. Une URL distante
  * (`https:`) ou un SVG (scriptable) sont refusés : la WebView n'a aucune raison
  * d'aller chercher une image, et le bridge ne renvoie que des octets.

@@ -22,6 +22,10 @@
   color: var(--brand-deep);
 }
 
+.tasks-assistant--checking {
+  opacity: 0.85;
+}
+
 .tasks-assistant__action {
   margin-top: 8px;
 }
@@ -151,7 +155,9 @@
 
 .task-card__foot {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 8px;
   margin-top: 10px;
 }
 
@@ -172,6 +178,11 @@
 
 .task-help:hover {
   background: var(--brand-pale);
+}
+
+.task-help--open {
+  background: var(--brand-pale);
+  border-color: var(--border-brand);
 }
 
 .task-help:active {
