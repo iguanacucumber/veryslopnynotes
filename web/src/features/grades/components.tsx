@@ -5,9 +5,9 @@ import { EmptyState, ErrorBox, Loading, Page, StaleBadge, SubjectAvatar } from "
 import {
   algorithmChipLabel,
   algorithmHint,
-  algorithmLabel,
   ALGORITHMS,
   averageLabel,
+  coverageLabel,
   formatMark,
   gradeContextLabel,
   gradeGroups,
@@ -21,6 +21,7 @@ import {
   originLabel,
   parseGradesPayload,
   periodLabel,
+  reportTitle,
   scaleSuffix,
   sparklineAverageY,
   sparklineDescription,
@@ -141,7 +142,15 @@ function subjectTint(hex: string, dark: boolean): { background: string; ink: str
  * `width` (px CSS) est la largeur mesurée : elle n'est passée à la main que
  * par les tests, qui n'ont pas de navigateur.
  */
-export function Sparkline({ values, width }: { values: Array<number | null>; width?: number }) {
+export function Sparkline({
+  values,
+  width,
+  provided = false,
+}: {
+  values: Array<number | null>;
+  width?: number;
+  provided?: boolean;
+}) {
   const ref = useRef<SVGSVGElement | null>(null);
   const [measured, setMeasured] = useState(0);
 
@@ -163,7 +172,7 @@ export function Sparkline({ values, width }: { values: Array<number | null>; wid
   const chartWidth = width ?? (measured > 0 ? measured : CHART_FALLBACK_WIDTH);
   const points = sparklinePoints(values, chartWidth, CHART_HEIGHT);
   const averageY = sparklineAverageY(values, CHART_HEIGHT);
-  const description = sparklineDescription(values);
+  const description = sparklineDescription(values, provided);
   if (points.length === 0) return null;
   const first = points[0];
   const last = points[points.length - 1];
@@ -202,12 +211,16 @@ export function GradesHero({ report }: { report: AveragesReport }) {
   const titleId = useId();
   const value = report.generalValue;
   const lastHistory = report.history[report.history.length - 1]?.date ?? null;
-  const note = historyNote(report.history.map((point) => point.value));
+  const note = historyNote(
+    report.history.map((point) => point.value),
+    report.provided,
+  );
+  const coverage = coverageLabel(report);
   return (
     <section className="card grades-hero" aria-labelledby={titleId}>
       <div className="grades-hero__top">
         <h2 id={titleId} className="grades-hero__title">
-          {algorithmLabel(report.algorithm)}
+          {reportTitle(report)}
         </h2>
         <span className="grades-tag">{report.provided ? "établissement" : "estimée"}</span>
       </div>
@@ -221,8 +234,11 @@ export function GradesHero({ report }: { report: AveragesReport }) {
           </>
         )}
       </div>
-      <p className="grades-hero__origin">{originLabel(report.provided, lastHistory)}</p>
-      <Sparkline values={report.history.map((point) => point.value)} />
+      <p className="grades-hero__origin">
+        {originLabel(report.provided, lastHistory)}
+        {coverage ? ` · ${coverage}` : ""}
+      </p>
+      <Sparkline values={report.history.map((point) => point.value)} provided={report.provided} />
       {note ? <p className="grades-hero__note">{note}</p> : null}
     </section>
   );
@@ -275,12 +291,14 @@ export function GradesToolbar({
   periods,
   periodId,
   onPeriod,
+  provided,
 }: {
   algorithm: Algorithm;
   onAlgorithm: (algorithm: Algorithm) => void;
   periods: Period[];
   periodId: string | null;
   onPeriod: (periodId: string | null) => void;
+  provided: boolean;
 }) {
   const selected = periods.find((period) => period.id === periodId) ?? null;
   return (
@@ -321,13 +339,23 @@ export function GradesToolbar({
         ))}
       </div>
       <p className="grades-caption" aria-live="polite">
-        {algorithmHint(algorithm)}
+        {algorithmHint(algorithm, provided)}
       </p>
     </div>
   );
 }
 
-function GradeRow({ grade, influence, dark }: { grade: Grade; influence: number | null; dark: boolean }) {
+function GradeRow({
+  grade,
+  influence,
+  estimated,
+  dark,
+}: {
+  grade: Grade;
+  influence: number | null;
+  estimated: boolean;
+  dark: boolean;
+}) {
   const color = subjectColor(grade.subject);
   const palette = subjectTint(color, dark);
   const context = gradeContextLabel(grade);
@@ -341,7 +369,7 @@ function GradeRow({ grade, influence, dark }: { grade: Grade; influence: number 
         </p>
         {influence !== null ? (
           <p className={`grades-grade__influence${influence < 0 ? " grades-grade__influence--down" : ""}`}>
-            {influenceLabel(influence)}
+            {influenceLabel(influence, estimated)}
           </p>
         ) : null}
       </div>
@@ -403,7 +431,15 @@ function SubjectSection({
       <ul className="grades-list">
         {group.grades.map((grade) => {
           const influence = influenceOf(report.influences, grade.id);
-          return <GradeRow key={grade.id} grade={grade} influence={influence?.impact ?? null} dark={dark} />;
+          return (
+            <GradeRow
+              key={grade.id}
+              grade={grade}
+              influence={influence?.impact ?? null}
+              estimated={report.provided}
+              dark={dark}
+            />
+          );
         })}
       </ul>
     </details>
@@ -504,6 +540,7 @@ export function GradesScreen({
         periods={periods}
         periodId={periodId}
         onPeriod={onPeriod}
+        provided={data.report?.provided ?? false}
       />
 
       {data.report ? <GradesHero report={data.report} /> : null}

@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   algorithmHint,
   computeAverages,
+  coverageLabel,
   formatMark,
   gradeContextLabel,
   gradeGroups,
@@ -18,8 +19,10 @@ import {
   historyNote,
   influenceLabel,
   isGradesPayloadReadable,
+  originLabel,
   parseGradesPayload,
   parsePeriods,
+  reportTitle,
   scaleSuffix,
   sparklineAverageY,
   sparklineDescription,
@@ -27,8 +30,15 @@ import {
   subjectAlgorithmAverage,
   type AveragesReport,
   type Grade,
+  type SubjectAverage,
 } from "../../web/src/features/grades/model";
-import { GradesNoData, GradesScreen, GradesSubjectSections, Sparkline } from "../../web/src/features/grades/components";
+import {
+  GradesHero,
+  GradesNoData,
+  GradesScreen,
+  GradesSubjectSections,
+  Sparkline,
+} from "../../web/src/features/grades/components";
 import {
   invalidateOnRequestChange,
   requestId,
@@ -159,6 +169,23 @@ describe("parseGradesPayload", () => {
     expect(data.grades[0]?.label).toBe("DS de maths");
     expect(data.grades[0]?.teacher).toBeNull();
   });
+
+  test("une moyenne négative du rapport est ABSENTE, jamais affichée", () => {
+    const payload = JSON.stringify({
+      averages: {
+        algorithm: "subject",
+        general: { value: -3, origin: "provided", subjectCount: 1 },
+        subjects: [{ subject: "Maths", value: -2, origin: "provided", gradeCount: 1 }],
+        history: [{ date: "2026-10-01T00:00:00.000Z", value: -1 }],
+        influences: [],
+      },
+      grades: [],
+    });
+    const data = parseGradesPayload(payload);
+    expect(data.report?.generalValue).toBeNull();
+    expect(data.report?.subjects[0]?.value).toBeNull();
+    expect(data.report?.history[0]?.value).toBeNull();
+  });
 });
 
 describe("algorithmes (parité core/Averages.kt)", () => {
@@ -181,6 +208,20 @@ describe("algorithmes (parité core/Averages.kt)", () => {
     ];
     // Le bonus vaut 10 : s'il était compté, la médiane serait 10.
     expect(computeAverages(grades, "median").generalValue).toBe(15);
+  });
+
+  test("la médiane porte sur TOUTES les notes, pas sur chaque matière", () => {
+    // Médiane par matière : A = 10, B = 20 → 15. Médiane de toutes les notes
+    // (0, 20, 20) : 20. L'aide doit décrire le calcul RÉEL.
+    const grades = [
+      grade({ subject: "A", value: 0 }),
+      grade({ subject: "A", value: 20 }),
+      grade({ subject: "B", value: 20 }),
+    ];
+    expect(subjectAlgorithmAverage(grades)).toBe(15);
+    expect(computeAverages(grades, "median").generalValue).toBe(20);
+    expect(algorithmHint("median")).toContain("toutes les notes");
+    expect(algorithmHint("median")).not.toContain("chaque matière");
   });
 
   test("coefficient 0 exclut la note", () => {
@@ -233,6 +274,107 @@ describe("algorithmes (parité core/Averages.kt)", () => {
   });
 });
 
+// Une moyenne publiée par l'établissement ne dépend PAS de l'algorithme choisi.
+// L'écran disait pourtant « Moyenne des matières / Pondérée / Médiane » au-dessus
+// du chiffre fourni, et présentait les influences comme si elles portaient sur
+// ce chiffre. La courbe, elle, reste une estimation.
+describe("moyenne fournie par l'établissement : l'écran ne ment pas", () => {
+  const report: AveragesReport = {
+    algorithm: "median",
+    generalValue: 12.5,
+    provided: true,
+    subjectCount: 2,
+    subjects: [
+      { subject: "Maths", value: 12, provided: true, gradeCount: 1 },
+      { subject: "NSI", value: 13, provided: true, gradeCount: 2 },
+    ],
+    history: [
+      { date: "2026-10-01T08:00:00.000Z", value: 11 },
+      { date: "2026-10-08T08:00:00.000Z", value: 14 },
+    ],
+    influences: [{ gradeId: "g1", subject: "Maths", impact: 0.42 }],
+  };
+
+  test("titre et provenance décrivent une moyenne publiée, pas un algorithme", () => {
+    expect(reportTitle(report)).toBe("Moyenne générale");
+    expect(originLabel(true, null)).toBe("publiée par l'établissement");
+  });
+
+  test("l'aide dit que seules la courbe et les influences sont estimées", () => {
+    const hint = algorithmHint("median", true);
+    expect(hint).toContain("établissement");
+    expect(hint).toContain("estimées");
+    // L'algorithme médian n'a jamais produit le 12,50 affiché.
+    expect(hint).not.toContain("médiane");
+  });
+
+  test("courbe et influences sont annoncées comme estimées", () => {
+    expect(historyNote([11, 14], true)).toContain("Courbe estimée");
+    expect(sparklineDescription([11, 14], true)).toBe("Évolution estimée de la moyenne : de 11 à 14.");
+    expect(influenceLabel(0.42, true)).toBe("+0,42 sur la moyenne estimée");
+    expect(influenceLabel(0, true)).toBe("Sans effet sur la moyenne estimée");
+    // Sans moyenne fournie, les libellés d'origine restent inchangés.
+    expect(historyNote([11, 14])).toBe("");
+    expect(influenceLabel(0.42)).toBe("+0,42 sur la moyenne");
+  });
+
+  test("le héros porte le titre, la provenance, la couverture et la mention de courbe", () => {
+    const html = renderToStaticMarkup(createElement(GradesHero, { report }));
+    expect(html).toContain("Moyenne générale");
+    expect(html).not.toContain("Médiane des notes");
+    expect(html).toContain("publiée par l&#x27;établissement");
+    expect(html).toContain("2 matières · 3 notes");
+    expect(html).toContain("Courbe estimée à partir des notes");
+    // La description accessible de la courbe aussi est estimée.
+    expect(html).toContain("Évolution estimée de la moyenne");
+  });
+
+  test("la couverture compte les matières et les notes retenues", () => {
+    expect(coverageLabel(report)).toBe("2 matières · 3 notes");
+    expect(coverageLabel({ ...report, subjectCount: 1, subjects: [report.subjects[0]!] })).toBe("1 matière · 1 note");
+    expect(coverageLabel({ ...report, subjectCount: 0, subjects: [] })).toBe("");
+  });
+
+  test("l'écran de Notes annonce une moyenne fournie et des influences estimées", () => {
+    const payload = JSON.stringify({
+      averages: {
+        algorithm: "median",
+        general: { value: 12.5, origin: "provided", subjectCount: 1 },
+        subjects: [{ subject: "Maths", value: 12, origin: "provided", gradeCount: 1 }],
+        history: [
+          { date: "2026-10-01T08:00:00.000Z", value: 11 },
+          { date: "2026-10-08T08:00:00.000Z", value: 14 },
+        ],
+        influences: [{ gradeId: "g1", subject: "Maths", impact: 0.42 }],
+      },
+      grades: [
+        { id: "g1", subject: "Maths", value: 12, scale: 20, date: "2026-10-01T08:00:00.000Z" },
+      ],
+    });
+    const html = renderToStaticMarkup(
+      createElement(GradesScreen, {
+        payload,
+        loading: false,
+        error: null,
+        stale: false,
+        periodsError: null,
+        algorithm: "median",
+        periodId: null,
+        periods: [],
+        dark: false,
+        onAlgorithm: () => {},
+        onPeriod: () => {},
+        onRefresh: () => {},
+      }),
+    );
+    expect(html).toContain("Moyenne générale");
+    expect(html).not.toContain("Médiane des notes");
+    expect(html).toContain("Moyenne publiée par l&#x27;établissement ; la courbe et les influences sont estimées.");
+    expect(html).toContain("+0,42 sur la moyenne estimée");
+    expect(html).toContain("Courbe estimée à partir des notes");
+  });
+});
+
 describe("sélection et regroupement", () => {
   test("gradesForPeriod garde tout si aucun periodId n'est publié", () => {
     const grades = [grade({ subject: "A", value: 1 }), grade({ subject: "B", value: 2 })];
@@ -265,6 +407,34 @@ describe("sélection et regroupement", () => {
     expect(gradesQuery("weighted", null)).toBe("algorithm=weighted");
     expect(gradesQuery("median", "p/1")).toBe("algorithm=median&periodId=p%2F1");
     expect(gradesQuery("subject", `  ${"x".repeat(70)}  `)).toBe(`algorithm=subject&periodId=${"x".repeat(64)}`);
+  });
+
+  test("une matière ABSENTE du rapport est estimée localement", () => {
+    const grades = [
+      grade({ subject: "Maths", value: 12 }),
+      grade({ subject: "NSI", value: 16 }),
+    ];
+    const report: SubjectAverage[] = [{ subject: "Maths", value: 12, provided: true, gradeCount: 1 }];
+    const groups = gradeGroups(grades, report);
+    const nsi = groups.find((group) => group.subject === "NSI");
+    // Le rapport ne dit rien de NSI : estimer vaut mieux qu'affirmer
+    // « Pas de moyenne » alors que la note est là.
+    expect(nsi?.average).toBe(16);
+    expect(nsi?.provided).toBe(false);
+    expect(nsi?.gradeCount).toBe(1);
+  });
+
+  test("une entrée du rapport à null fait foi : pas de repli local", () => {
+    const grades = [
+      grade({ subject: "Maths", value: 12 }),
+      grade({ subject: "NSI", value: 16 }),
+    ];
+    const report: SubjectAverage[] = [
+      { subject: "Maths", value: 12, provided: true, gradeCount: 1 },
+      { subject: "NSI", value: null, provided: false, gradeCount: 0 },
+    ];
+    const nsi = gradeGroups(grades, report).find((group) => group.subject === "NSI");
+    expect(nsi?.average).toBeNull();
   });
 });
 
