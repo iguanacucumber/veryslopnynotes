@@ -150,6 +150,12 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
     expect(bridge).toMatch(/NO_KEY_MESSAGE/);
   });
 
+  test("le fournisseur porte le délai du pont, pas le défaut 20 s (#594)", () => {
+    // Un modèle gratuit lent est tué à 20 s par le défaut OkHttp alors que
+    // le pont attend AWAIT_LLM_MS (45 s) : même délai que l'aide photo.
+    expect(bridge).toMatch(/requestRevisionFiche\(OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\)/);
+  });
+
   test("la consigne de revision est le schema JSON, plus « texte simple »", () => {
     expect(prompts).toContain("SYSTEM_REVISION_JSON");
     expect(prompts).not.toContain("SYSTEM_REVISION =");
