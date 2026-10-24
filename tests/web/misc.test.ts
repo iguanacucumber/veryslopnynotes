@@ -19,7 +19,9 @@ import {
 import {
   CANTEEN_MAX_DAYS,
   canteenDayLabel,
+  canteenIsToday,
   canteenMealLabel,
+  canteenWeekdayLabel,
   parseCanteenPayload,
 } from "../../web/src/features/canteen/canteen";
 import {
@@ -234,6 +236,34 @@ describe("web cantine", () => {
     expect(canteenDayLabel("2026-10-05T12:00:00.000Z")).toContain("octobre 2026");
     expect(canteenDayLabel("2026-10-05")).toContain("octobre 2026");
     expect(canteenDayLabel("pas une date")).toBe("");
+    expect(canteenWeekdayLabel("2026-10-05")).toBe("Lundi");
+    expect(canteenWeekdayLabel("pas une date")).toBe("");
+  });
+
+  test("trie les repas dans l’ordre du service, quel que soit le payload", () => {
+    const day = "2026-10-05T12:00:00.000Z";
+    const week = parseCanteenPayload(
+      JSON.stringify({
+        menus: [
+          menu({ date: day, meal: "dinner", dishes: ["Soupe"] }),
+          menu({ date: day, meal: "breakfast", dishes: ["Tartines"] }),
+          menu({ date: day, meal: "lunch", dishes: ["Pâtes"] }),
+        ],
+      }),
+    );
+    expect(week.days[0]?.meals.map((meal) => meal.meal)).toEqual([
+      "breakfast",
+      "lunch",
+      "dinner",
+    ]);
+  });
+
+  test("repère le jour courant en jour civil local", () => {
+    const now = new Date(2026, 9, 5, 23, 30).getTime();
+    expect(canteenIsToday("2026-10-05", now)).toBe(true);
+    expect(canteenIsToday("2026-10-06", now)).toBe(false);
+    expect(canteenIsToday("2026-10-04", now)).toBe(false);
+    expect(canteenIsToday("pas une date", now)).toBe(false);
   });
 });
 
