@@ -1287,7 +1287,12 @@ class VsnBridge(
         if (key.length > fr.veryslopnynotes.core.Homework.MAX_API_KEY_CHARS) {
             return JSONObject().put("ok", false).put("message", "Clé LLM trop longue.")
         }
-        if (key.any { it.isWhitespace() || it.isISOControl() }) {
+        // #595 : ASCII imprimable SEUL. OkHttp refuse tout caractère hors
+        // 0x20..0x7E dans un en-tête : une clé collée avec NBSP, zéro-largeur
+        // ou accent était ENREGISTRÉE puis cassait chaque appel (IAE à
+        // l'envoi) — l'élève lisait « Échec de l'assistant. » pour tout,
+        // clé « configurée » d'apparence. isWhitespace ne voit PAS le NBSP.
+        if (key.any { it.isISOControl() || it.isWhitespace() || it > '~' }) {
             return JSONObject().put("ok", false).put("message", "Caractère interdit dans la clé.")
         }
         return try {

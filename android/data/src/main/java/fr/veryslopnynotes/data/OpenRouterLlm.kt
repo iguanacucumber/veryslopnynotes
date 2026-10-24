@@ -148,18 +148,23 @@ class OpenRouterLlm(
 
     /** Envoi HTTPS + cause d'erreur bornée. Seule la clé est interpolée (Bearer). */
     private fun send(payload: JSONObject, key: String): String {
-        val request = Request.Builder()
-            .url(OPENROUTER_URL)
-            .header("Authorization", "Bearer $key")
-            .post(payload.toString().toRequestBody(JSON))
-            .build()
+        // Le build de la requête est DANS le try (#595) : OkHttp refuse un
+        // caractère d'en-tête hors ASCII imprimable AVANT tout réseau — la
+        // cause est alors la CLÉ, et le message la nomme (jamais sa valeur).
         return try {
+            val request = Request.Builder()
+                .url(OPENROUTER_URL)
+                .header("Authorization", "Bearer $key")
+                .post(payload.toString().toRequestBody(JSON))
+                .build()
             http.newCall(request).execute().use { res ->
                 if (!res.isSuccessful) throw LlmError.forStatus(res.code)
                 res.body?.string().orEmpty()
             }
         } catch (e: LlmError) {
             throw e
+        } catch (_: IllegalArgumentException) {
+            throw LlmError("Clé LLM invalide : corrige-la dans Réglages.")
         } catch (_: Exception) {
             throw LlmError("Erreur réseau LLM : réessaie dans un instant.")
         }
