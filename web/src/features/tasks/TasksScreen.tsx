@@ -295,7 +295,9 @@ function TasksWeek({ week }: { week: string }) {
     if (revisionPending[assignment.id]) return;
     setRevisionPending((state) => ({ ...state, [assignment.id]: true }));
     try {
-      const result = await bridge.generateRevision(assignment.id);
+      // La semaine AFFICHÉE, comme l'aide devoirs (#369, #596) : le devoir peut
+      // venir d'une autre semaine et le cache ne garde pas toutes les fenêtres.
+      const result = await bridge.generateRevision(assignment.id, week);
       if (!result.ok) throw new Error(result.message || "La fiche n'a pas pu être créée.");
       notify("Fiche de révision créée.");
       navigate("/fiches");
