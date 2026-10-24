@@ -1015,10 +1015,49 @@ button.chip {
 
 /* --- Cantine -------------------------------------------------------------- */
 
+.canteen-day--today {
+  border-left: 4px solid var(--brand);
+  padding-left: 12px;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--surface) 94%, var(--brand) 6%), var(--surface));
+}
+
 .canteen-day__head {
   display: flex;
   align-items: center;
   gap: 9px;
+}
+
+.canteen-day__titles {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.canteen-day__title {
+  margin: 0;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.canteen-day__date {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.canteen-day__badge {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--brand-solid);
+  color: var(--on-brand);
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 700;
 }
 
 .canteen-day__icon {

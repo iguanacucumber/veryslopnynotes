@@ -4,7 +4,9 @@ import { Card, EmptyState, ErrorBox, Loading, Page, PageHeading, StaleBadge } fr
 import { IconFood } from "../ui/icons";
 import {
   canteenDayLabel,
+  canteenIsToday,
   canteenMealLabel,
+  canteenWeekdayLabel,
   parseCanteenPayload,
   type CanteenMenu,
 } from "../features/canteen/canteen";
@@ -38,6 +40,9 @@ export default function CanteenRoute() {
   const resource = useResource("canteen");
   const week = useMemo(() => parseCanteenPayload(resource.payload), [resource.payload]);
   const days = week.days;
+  // Une seule horloge pour toutes les cartes : au passage de minuit, une
+  // moitié de la liste ne peut pas basculer avant l’autre.
+  const now = Date.now();
 
   return (
     <Page>
@@ -77,16 +82,26 @@ export default function CanteenRoute() {
       ) : null}
 
       {days.map((day) => {
-        const label = canteenDayLabel(day.date);
+        const today = canteenIsToday(day.date, now);
         return (
-          <Card key={day.date} as="article" className="stack canteen-day">
+          <Card
+            key={day.date}
+            as="article"
+            className={`stack canteen-day${today ? " canteen-day--today" : ""}`}
+          >
             <div className="canteen-day__head">
               <span className="canteen-day__icon" aria-hidden="true">
                 <IconFood size={18} />
               </span>
-              <h3 className="t-title" style={{ margin: 0 }}>
-                {label || "Jour non précisé"}
-              </h3>
+              <div className="canteen-day__titles grow">
+                <h3 className="canteen-day__title">
+                  {canteenWeekdayLabel(day.date) || "Jour non précisé"}
+                </h3>
+                <time className="canteen-day__date" dateTime={day.date}>
+                  {canteenDayLabel(day.date)}
+                </time>
+              </div>
+              {today ? <span className="canteen-day__badge">Aujourd’hui</span> : null}
             </div>
             {day.meals.map((menu) => (
               <MealBlock key={`${menu.date}-${menu.meal}`} menu={menu} />

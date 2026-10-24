@@ -1,7 +1,7 @@
 // Menus de la cantine : payload -> jours + repas d'affichage.
 // Aucun HTML : les plats et allergènes sont des chaînes bornées, rendues en
 // texte. Les jetons du contrat sont traduits, jamais affichés bruts.
-import { cleanText, frDateLong, isoDay, parseDate } from "../../lib/format";
+import { cleanText, frDateLong, frDay, isoDay, parseDate } from "../../lib/format";
 
 export const CANTEEN_MAX_DAYS = 14;
 export const CANTEEN_MAX_MEALS_PER_DAY = 3;
@@ -18,6 +18,8 @@ const MEAL_LABELS: Record<string, string> = {
   lunch: "Déjeuner",
   dinner: "Dîner",
 };
+/** Ordre du service dans une journée, indépendant de l’ordre du payload. */
+const MEAL_ORDER: Record<string, number> = { breakfast: 0, lunch: 1, dinner: 2 };
 
 export interface CanteenMenu {
   date: string;
@@ -118,7 +120,16 @@ export function parseCanteenPayload(payload: string | null): CanteenWeek {
 
   const days = [...byDate.entries()]
     .sort(([a], [b]) => (a === b ? 0 : a < b ? -1 : 1))
-    .map(([date, meals]) => ({ date, meals }));
+    .map(([date, meals]) => ({
+      date,
+      // Le payload n’a pas d’ordre garanti : le service se lit toujours dans
+      // le même ordre, quel que soit celui des lignes reçues.
+      meals: meals.sort(
+        (a, b) =>
+          (MEAL_ORDER[a.meal] ?? Number.MAX_SAFE_INTEGER) -
+          (MEAL_ORDER[b.meal] ?? Number.MAX_SAFE_INTEGER),
+      ),
+    }));
   return { days };
 }
 
@@ -130,4 +141,18 @@ export function canteenDayLabel(date: string): string {
 
 export function canteenMealLabel(meal: string): string {
   return MEAL_LABELS[meal] ?? "Repas";
+}
+
+/** Jour de la semaine capitalisé (« Lundi »), vide si la date est illisible. */
+export function canteenWeekdayLabel(date: string): string {
+  const label = frDay(date);
+  return label ? label.charAt(0).toUpperCase() + label.slice(1) : "";
+}
+
+/** Vrai si `date` tombe le jour civil local de `now` (défaut : maintenant).
+ *  Comparaison de jours civils, pas d’instants : 23 h et 00 h 30 restent deux
+ *  jours différents, et aucun fuseau ne décale la carte. */
+export function canteenIsToday(date: string, now: number = Date.now()): boolean {
+  const parsed = parseDate(date);
+  return parsed !== null && isoDay(parsed) === isoDay(new Date(now));
 }
