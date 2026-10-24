@@ -1427,7 +1427,11 @@ class VsnBridge(
     private fun generateRevision(p: JSONObject, epoch: Long): JSONObject {
         val id = bounded(p.string("assignmentId"), 128)
         val store = revisions ?: throw BridgeFailure("unavailable", "Stockage des fiches indisponible.")
-        val assignment = loadAssignments(id, "").firstOrNull { it.id == id }
+        // #369 comme l'aide devoirs (#596) : la semaine AFFICHÉE. Le repli
+        // réseau sans semaine ne couvre que now−7 j / now+21 j — un devoir
+        // affiché hors de cette fenêtre était « introuvable ».
+        val week = bounded(p.string("weekStart"), 10)
+        val assignment = loadAssignments(id, week).firstOrNull { it.id == id }
             ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
         val apiKey = llmKeys.apiKey()?.trim()
             ?: return JSONObject().put("ok", false)

@@ -156,6 +156,14 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
     expect(bridge).toMatch(/requestRevisionFiche\(OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\)/);
   });
 
+  test("la fiche cherche le devoir dans la semaine AFFICHÉE (#369, #596)", () => {
+    // Sans weekStart, le repli réseau ne couvre que now−7 j / now+21 j :
+    // un devoir affiché hors de cette fenêtre était « introuvable ».
+    expect(bridge).toMatch(
+      /fun generateRevision\(p: JSONObject, epoch: Long\)[\s\S]*?val week = bounded\(p\.string\("weekStart"\), 10\)/,
+    );
+  });
+
   test("la consigne de revision est le schema JSON, plus « texte simple »", () => {
     expect(prompts).toContain("SYSTEM_REVISION_JSON");
     expect(prompts).not.toContain("SYSTEM_REVISION =");

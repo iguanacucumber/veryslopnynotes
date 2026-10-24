@@ -56,8 +56,8 @@ describe("IA — aide devoirs", () => {
     expect(tasks).toContain("Assistant devoirs");
   });
 
-  test("un devoir peut générer sa fiche par le pont existant", () => {
-    expect(tasks).toContain("bridge.generateRevision(assignment.id)");
+  test("un devoir peut générer sa fiche par le pont existant, semaine affichée incluse (#369, #596)", () => {
+    expect(tasks).toContain("bridge.generateRevision(assignment.id, week)");
     expect(tasks).toContain('navigate("/fiches")');
     expect(tasks).toContain("Fiche de révision");
   });

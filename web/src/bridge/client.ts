@@ -269,8 +269,8 @@ export const bridge = {
       { assignmentId, weekStart, source },
       BRIDGE_TIMEOUTS["llm.solvePhoto"],
     ),
-  generateRevision: (assignmentId: string) =>
-    call<{ ok: boolean; message?: string }>("llm.generateRevision", { assignmentId }),
+  generateRevision: (assignmentId: string, weekStart: string) =>
+    call<{ ok: boolean; message?: string }>("llm.generateRevision", { assignmentId, weekStart }),
   revisions: () => call<{ sheets: unknown[] }>("revision.list"),
   revision: (id: string) => call<{ sheet: unknown | null }>("revision.load", { id }),
   exportRevision: (id: string) => call<{ ok: boolean; message?: string }>("revision.exportPdf", { id }),
