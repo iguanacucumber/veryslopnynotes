@@ -14,6 +14,7 @@
 // repose sur un miroir TypeScript. `RevisionPdf.kt` (android.graphics) n'est
 // PAS rejoué hors Gradle : il ne fait que dessiner les lignes produites ici.
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 
@@ -209,5 +210,29 @@ describe("export PDF de fiche : la liste CANONIQUE des sources fait foi (#412)",
     expect(text).toContain("- Consigne");
     expect(text).toContain("- Cours : chapitre 4");
     expect(text).not.toContain("Source inventee");
+  });
+});
+
+describe("export PDF de fiche : le dessin tient dans la page (#598)", () => {
+  // `RevisionPdf.kt` (android.graphics) n'est PAS rejoué hors Gradle : le
+  // filet est la lecture de source, comme le câblage du pont.
+  const pdf = readFileSync(
+    join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core", "RevisionPdf.kt"),
+    "utf8",
+  );
+
+  test("chaque ligne est remballée par métrique réelle, pas par compte de caractères", () => {
+    // La borne logique (90 car.) ≈ 570 pt à 12 pt Roboto pour 495 pt utiles :
+    // le titre 16 pt gras débordait encore plus. Le dessin coupe par mesure.
+    expect(pdf).toContain("paint.measureText(text) <= maxWidth");
+    expect(pdf).toContain("fitLine(line, paint, maxWidth)");
+    expect(pdf).toContain("hardPieces(word, paint, maxWidth)");
+  });
+
+  test("aucun drawText n'échappe à l'emballage mesuré", () => {
+    // Toute sous-ligne dessinée vient de `fitLine` (peinture héritée) —
+    // plus de ligne logique dessinée brute.
+    expect(pdf).toContain("page.canvas.drawText(text, MARGIN.toFloat(), y, paint)");
+    expect(pdf).not.toContain("drawText(line,");
   });
 });
