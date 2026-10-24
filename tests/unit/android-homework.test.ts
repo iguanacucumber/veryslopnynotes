@@ -237,4 +237,23 @@ describe("android homework — le credential reste dans l'app", () => {
     // Les trois chemins LLM sont alignés : la photo l'était déjà (#588).
     expect(bridge).toMatch(/provider = OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\)/);
   });
+
+  test("la clé enregistrée est bornée à l'ASCII imprimable (#595)", () => {
+    const bridge = codeOnly(src(APP, "VsnBridge.kt"));
+    // OkHttp refuse tout caractère hors 0x20..0x7E dans un en-tête : une clé
+    // collée avec NBSP (invisible, et isWhitespace ne le voit PAS) ou une
+    // lettre accentuée passait l'ancien filtre puis cassait CHAQUE appel.
+    expect(bridge).toMatch(/it\.isISOControl\(\) \|\| it\.isWhitespace\(\) \|\| it > '~'/);
+  });
+
+  test("un en-tête refusé par OkHttp nomme la clé, pas « réseau » (#595)", () => {
+    const llm = codeOnly(src(DATA, "OpenRouterLlm.kt"));
+    // Le build de la requête est DANS le try : l'IAE du validateur d'en-tête
+    // est interceptée au lieu de s'échapper vers le repli générique.
+    // (lastIndexOf : LlmError, plus haut dans le fichier, a SON companion.)
+    const send = llm.slice(llm.indexOf("private fun send"), llm.lastIndexOf("companion object"));
+    expect(send).toContain("try");
+    expect(send.indexOf("try")).toBeLessThan(send.indexOf("Request.Builder()"));
+    expect(llm).toContain("Clé LLM invalide : corrige-la dans Réglages.");
+  });
 });
