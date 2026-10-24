@@ -20,6 +20,7 @@ import { codeOnly } from "../../agents/runtime/source-guards";
 
 const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/veryslopnynotes/data");
 const CORE = join(import.meta.dir, "..", "..", "android/core/src/main/java/fr/veryslopnynotes/core");
+const APP = join(import.meta.dir, "..", "..", "android/app/src/main/java/fr/veryslopnynotes/app");
 
 const src = (dir: string, file: string) => readFileSync(join(dir, file), "utf8");
 
@@ -226,5 +227,14 @@ describe("android homework — le credential reste dans l'app", () => {
     // Le secret de session part, la clé LLM reste (elle n'est pas reconstructible
     // par le serveur : un ré-appairage ne doit pas coûter une nouvelle saisie).
     expect(store).not.toMatch(/llmKeys|LlmKeys|LlmKeyStore/);
+  });
+
+  test("l'aide texte porte le délai du pont (#594), comme les chemins photo", () => {
+    const bridge = codeOnly(src(APP, "VsnBridge.kt"));
+    // Le défaut OkHttp (20 s) tuait un modèle lent alors que le pont attend
+    // AWAIT_LLM_MS (45 s) : le constructeur porte désormais ce délai.
+    expect(bridge).toMatch(/OpenRouterHomework\(OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\), llmKeys\)/);
+    // Les trois chemins LLM sont alignés : la photo l'était déjà (#588).
+    expect(bridge).toMatch(/provider = OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\)/);
   });
 });

@@ -1309,7 +1309,10 @@ class VsnBridge(
         val sources = homeworkSourcesFor(assignment)
         val question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment)
         val result = await<fr.veryslopnynotes.data.HomeworkResult>(AWAIT_LLM_MS) { cb ->
-            OpenRouterHomework(OpenRouterLlm(), llmKeys).generate(question, sources, cb)
+            // Même délai que les chemins photo (#594) : un modèle gratuit lent
+            // ne doit pas mourir à 20 s (« Erreur réseau LLM ») alors que
+            // l'attente du pont couvre 45 s.
+            OpenRouterHomework(OpenRouterLlm(timeoutMs = AWAIT_LLM_MS), llmKeys).generate(question, sources, cb)
         } ?: return JSONObject().put("ok", false).put("message", "L'assistant n'a pas répondu.")
         val outcome = result.outcome
             ?: return JSONObject().put("ok", false)
@@ -1448,7 +1451,9 @@ class VsnBridge(
             // #428 : le point d'entree PUBLIC du core (prompt + schema + cle
             // relayee). Le pont ne forge plus son propre appel fournisseur :
             // un seul endroit decide du prompt et du schema.
-            val fiche = RevisionAi.requestRevisionFiche(OpenRouterLlm(), exam, chunks, apiKey)
+            // #594 : même délai que l'aide photo — la fiche (manuel + consigne)
+            // prend souvent plus de 20 s sur un modèle gratuit.
+            val fiche = RevisionAi.requestRevisionFiche(OpenRouterLlm(timeoutMs = AWAIT_LLM_MS), exam, chunks, apiKey)
             val candidate = ExamCandidate(
                 source = "assignment",
                 id = assignment.id,
