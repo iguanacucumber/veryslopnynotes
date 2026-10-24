@@ -284,8 +284,9 @@ function TasksWeek({ week }: { week: string }) {
     }
   }
 
-  /** Fermer annule AUSSI la demande en vol : sinon une réponse tardive
-   *  rouvrirait le panneau que l'élève vient de fermer. */
+  /** Fermer ignore la demande en vol : une réponse tardive ne rouvre pas le
+   *  panneau que l'élève vient de fermer. L'appel natif, lui, finit — le pont
+   *  n'a pas d'annulation LLM ; on IGNORE la réponse, on ne l'annule pas. */
   function closeHelp() {
     helpSeq.current += 1;
     setHelp(null);
@@ -504,6 +505,14 @@ function AssignmentCard({
   const hasMaterial = assignmentHasAssistantMaterial(assignment, manualReady, lessonReady);
   const textOff = assistantDisabled || !hasMaterial;
   const photoOff = assistantDisabled || revisionBusy;
+  // #597 : un SEUL assistant en vol. Pendant l'aide texte, « Photo de
+  // l'énoncé » est fermée ; pendant une photo, « Aide devoirs » l'est —
+  // sinon un 2e appel LLM payé part pendant que le panneau change d'état
+  // (la seq jetterait sa réponse). Chaque panneau reste fermable : le bouton
+  // actif garde son rôle « Fermer ».
+  const helpLoading = help?.loading === true;
+  const textOffWhilePhoto = textOff || (helpLoading && help?.photo === true);
+  const photoOffWhileText = photoOff || (helpLoading && help?.photo !== true);
   const offReason = assistantDisabled ? assistantReasonId : hasMaterial ? undefined : noMaterialId;
 
   return (
@@ -567,7 +576,7 @@ function AssignmentCard({
         <button
           type="button"
           className={`task-help${help && !help.photo ? " task-help--open" : ""}`}
-          disabled={textOff}
+          disabled={textOffWhilePhoto}
           aria-describedby={offReason}
           aria-expanded={help !== null && !help.photo}
           aria-controls={help && !help.photo ? helpPanelId : undefined}
@@ -580,7 +589,7 @@ function AssignmentCard({
         <button
           type="button"
           className={`task-help${help?.photo ? " task-help--open" : ""}`}
-          disabled={photoOff}
+          disabled={photoOffWhileText}
           aria-describedby={assistantDisabled ? assistantReasonId : undefined}
           aria-expanded={help?.photo === true}
           aria-controls={help?.photo ? helpPanelId : undefined}
