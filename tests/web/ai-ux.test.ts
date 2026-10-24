@@ -44,10 +44,25 @@ describe("IA — refus d'enregistrement de la clé", () => {
 describe("IA — aide devoirs", () => {
   const tasks = source("features/tasks/TasksScreen.tsx");
 
-  test("fermer l'aide annule la demande en vol (pas de réouverture tardive)", () => {
+  test("fermer l'aide ignore la réponse en vol (pas de réouverture tardive)", () => {
     const close = between(tasks, "function closeHelp()", "async function generateSheet");
     expect(close).toContain("helpSeq.current += 1");
     expect(close).toContain("setHelp(null)");
+  });
+
+  test("un seul assistant en vol : les boutons croisés sont fermés (#597)", () => {
+    // Pendant une photo, « Aide devoirs » ne lance pas un 2e appel LLM ;
+    // pendant l'aide texte, « Photo de l'énoncé » n'ouvre pas la caméra.
+    // Chaque panneau reste fermable : le bouton actif garde son « Fermer ».
+    expect(tasks).toContain("const helpLoading = help?.loading === true;");
+    expect(tasks).toContain(
+      "const textOffWhilePhoto = textOff || (helpLoading && help?.photo === true);",
+    );
+    expect(tasks).toContain(
+      "const photoOffWhileText = photoOff || (helpLoading && help?.photo !== true);",
+    );
+    expect(tasks).toContain("disabled={textOffWhilePhoto}");
+    expect(tasks).toContain("disabled={photoOffWhileText}");
   });
 
   test("pendant la vérification, l'écran ne dit pas déjà « désactivé »", () => {
