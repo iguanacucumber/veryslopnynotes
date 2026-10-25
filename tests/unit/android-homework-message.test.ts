@@ -61,6 +61,10 @@ describe("message de refus de l'assistant (#416)", () => {
     const m = await message(SOURCES_INSUFFISANTES);
     expect(m).toContain("matière");
     expect(m).not.toContain(SOURCES_INSUFFISANTES);
+    // #608 : des sources ONT été envoyées (consigne, cours, manuel, cahier).
+    // La phrase ne doit pas prétendre le contraire.
+    expect(m).not.toMatch(/sans source/i);
+    expect(m).toMatch(/ne suffisent pas/i);
   });
 
   test.skipIf(skip)("un motif libre ne ressort JAMAIS : la phrase est générique", async () => {
