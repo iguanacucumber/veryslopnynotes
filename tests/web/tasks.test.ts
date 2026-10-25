@@ -591,6 +591,29 @@ describe("web fiches — parsing défensif", () => {
     expect(source).toContain("triggers.current.get(id)?.focus()");
   });
 
+  test("la fiche fermée montre un aperçu texte et des actions Ouvrir/PDF", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "features", "revisions", "RevisionSheets.tsx"),
+      "utf8",
+    );
+    expect(source).toContain('eyebrow="Assistant"');
+    expect(source).toContain('title="Fiches de révision"');
+    expect(source).toContain("Créer une fiche");
+    expect(source).toContain('navigate("/tasks")');
+    expect(source).toContain("sourceLabel");
+    expect(source).toContain("revision-card__preview");
+    // Ouvrir est l'action principale, PDF l'action secondaire.
+    const open = source.indexOf("btn btn--small revision-card__open");
+    const pdf = source.indexOf("btn btn--ghost btn--small revision-card__pdf");
+    expect(open).toBeGreaterThan(-1);
+    expect(pdf).toBeGreaterThan(open);
+    expect(source).toContain("Exporter en PDF la fiche");
+    // Corps en texte brut : jamais de HTML ni de markdown injecté.
+    expect(source).toContain("{sheet.body}");
+    expect(source).not.toContain("innerHTML");
+    expect(source).not.toContain("dangerouslySetInnerHTML");
+  });
+
   test("borne le scan, les sources et le corps, déduplique par id", () => {
     const many = Array.from({ length: 5000 }, (_, index) => ({ ...SHEET, id: `rev${index}` }));
     const parsed = parseRevisionSheets(many);
