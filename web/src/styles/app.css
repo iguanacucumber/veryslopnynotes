@@ -1164,10 +1164,77 @@ button.chip {
 
 /* --- Fiches de révision --------------------------------------------------- */
 
+.revision-card {
+  padding: 15px;
+}
+
 .revision-card__head {
   display: flex;
   align-items: flex-start;
   gap: 10px;
+}
+
+.revision-card__title {
+  display: block;
+  margin: 0;
+  font-size: 17px;
+  line-height: 23px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Aperçu fermé : deux lignes, jamais le corps entier dans la carte. */
+.revision-card__preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.revision-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.revision-card__body-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* Corps en texte brut : mesure lisible, retours à la ligne préservés. */
+.revision-card__body {
+  max-width: 62ch;
+  margin: 0;
+  font-size: 15px;
+  line-height: 24px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.revision-card__sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip.revision-card__source {
+  min-height: 26px;
+  padding: 2px 9px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 /* --- Messages ------------------------------------------------------------- */

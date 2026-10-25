@@ -86,6 +86,38 @@ describe("cahier de cours — pont et écran (#586)", () => {
     expect(screen).toContain("puis elle est supprimée");
   });
 
+  test("les matières sans cours sont des lignes compactes, pas des cartes", () => {
+    const screen = source("features/cahier/CahierScreen.tsx");
+    // Une carte complète seulement quand la matière a des cours.
+    expect(screen).toContain("item.notes.length > 0");
+    expect(screen).toContain("item.notes.length === 0");
+    expect(screen).toContain('title="Sans cours"');
+    expect(screen).toContain("cahier-empty-row");
+    const card = screen.indexOf('className="cahier-subject"');
+    expect(card).toBeGreaterThan(screen.indexOf("{withNotes.map((subject) =>"));
+    expect(card).toBeLessThan(screen.indexOf("{withoutNotes.length > 0"));
+  });
+
+  test("une seule note de confidentialité, un seul sélecteur photo", () => {
+    const screen = source("features/cahier/CahierScreen.tsx");
+    // La note de confidentialité est globale : une seule occurrence.
+    expect(screen.match(/puis elle est supprimée/g)).toHaveLength(1);
+    expect(screen).not.toContain("La photo part directement");
+    // Le choix caméra/galerie est un dialogue unique, au niveau de l'écran.
+    expect(screen.match(/Prendre une photo/g)).toHaveLength(1);
+    expect(screen.match(/Choisir une image/g)).toHaveLength(1);
+    expect(screen).toContain("open={photoTarget !== null}");
+    expect(screen.match(/bridge\.addLessonPhoto/g)).toHaveLength(1);
+    // Statut du manuel court, pas un paragraphe par matière.
+    expect(screen).toContain("Cahier seul");
+    expect(screen).toContain("Sans manuel");
+    expect(screen).toContain("cahier-status");
+    expect(screen).not.toContain("Manuel ignoré");
+    // Aucun HTML injecté.
+    expect(screen).not.toContain("innerHTML");
+    expect(screen).not.toContain("dangerouslySetInnerHTML");
+  });
+
   test("le cahier est une source des devoirs et des fiches, jamais un miroir UI", () => {
     const bridge = readFileSync(
       join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),

@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { bridge } from "../../bridge/client";
-import { BridgeCallError, type LessonSummary, type LessonsSnapshot } from "../../bridge/types";
+import { BridgeCallError, type LessonSummary, type LessonSubject, type LessonsSnapshot } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
 import {
   Card,
@@ -11,9 +11,11 @@ import {
   Page,
   PageHeading,
   Section,
+  SubjectAvatar,
 } from "../../ui/components";
 import { Dialog } from "../../ui/Dialog";
-import { IconBook, IconPlus, IconTrash } from "../../ui/icons";
+import { IconBook, IconCamera, IconPlus, IconTrash } from "../../ui/icons";
+import "./cahier.css";
 
 function messageOf(error: unknown, fallback: string): string {
   if (error instanceof BridgeCallError) {
@@ -30,6 +32,16 @@ function dayLabel(iso: string): string {
   return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
+/** Statut court du manuel : une puce, jamais un paragraphe par matière. */
+function manualStatus(subject: LessonSubject): {
+  label: string;
+  tone: "on" | "off" | "none";
+} {
+  if (!subject.manualEnabled) return { label: "Cahier seul", tone: "off" };
+  if (!subject.manualAvailable) return { label: "Sans manuel", tone: "none" };
+  return { label: "Manuel", tone: "on" };
+}
+
 type Editor = {
   id: string;
   subject: string;
@@ -37,9 +49,11 @@ type Editor = {
   text: string;
 };
 
+type PhotoSource = "camera" | "gallery";
+
 /** Cahier de cours local (#586) : la mémoire de l'assistant par matière. */
 export function CahierScreen() {
-  const { notify, refreshTick } = useApp();
+  const { notify, refreshTick, dark } = useApp();
   const [snapshot, setSnapshot] = useState<LessonsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -52,6 +66,7 @@ export function CahierScreen() {
   const [deleting, setDeleting] = useState(false);
   const [manualBusy, setManualBusy] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState<string | null>(null);
+  const [photoTarget, setPhotoTarget] = useState<string | null>(null);
   const listId = useId();
 
   useEffect(() => {
@@ -79,6 +94,9 @@ export function CahierScreen() {
     () => (snapshot?.subjects ?? []).slice().sort((a, b) => a.subject.localeCompare(b.subject, "fr")),
     [snapshot],
   );
+  // Les matières sans cours ne prennent pas une carte : une ligne compacte suffit.
+  const withNotes = useMemo(() => subjects.filter((item) => item.notes.length > 0), [subjects]);
+  const withoutNotes = useMemo(() => subjects.filter((item) => item.notes.length === 0), [subjects]);
 
   function afterWrite(message: string) {
     notify(message);
@@ -202,7 +220,7 @@ export function CahierScreen() {
    * le natif l'envoie au fournisseur puis la supprime. L'élève relit le texte
    * avant l'enregistrement.
    */
-  async function addPhoto(subject: string, source: "camera" | "gallery") {
+  async function addPhoto(subject: string, source: PhotoSource) {
     if (photoBusy !== null) return;
     setPhotoBusy(subject);
     try {
@@ -224,6 +242,13 @@ export function CahierScreen() {
     } finally {
       setPhotoBusy(null);
     }
+  }
+
+  function choosePhoto(source: PhotoSource) {
+    const subject = photoTarget;
+    if (!subject) return;
+    setPhotoTarget(null);
+    void addPhoto(subject, source);
   }
 
   if (loading && snapshot === null && error === "") {
@@ -263,14 +288,15 @@ export function CahierScreen() {
         }
       />
 
-      <Card className="card--flat">
+      <Card className="card--flat cahier-privacy">
         <p className="t-body-m" style={{ margin: 0 }}>
           Garde ici les cours de tes matières. L’assistant les utilise comme sources pour l’aide
           devoirs et les fiches de révision, même quand tu n’as pas de manuel.
         </p>
-        <p className="tiny muted" style={{ margin: "6px 0 0" }}>
-          Ces cours restent sur ton téléphone. Ils sont envoyés directement au fournisseur d’IA,
-          avec ta clé, uniquement quand tu demandes de l’aide. Ils sont supprimés à la déconnexion.
+        <p className="tiny muted cahier-privacy__note">
+          Ces cours restent sur ton téléphone et sont supprimés à la déconnexion. Ils partent
+          directement au fournisseur d’IA, avec ta clé, uniquement quand tu demandes de l’aide ;
+          une photo est transcrite puis elle est supprimée, et le texte revient ici pour relecture.
         </p>
       </Card>
 
@@ -287,87 +313,144 @@ export function CahierScreen() {
             </button>
           }
         />
-      ) : (
-        subjects.map((subject) => (
-          <Section
-            key={subject.subject}
-            title={subject.subject}
-            action={<span className="chip">{subject.notes.length} cours</span>}
-          >
-            <Card className="card--flat">
-              <div className="row" style={{ alignItems: "flex-start", justifyContent: "space-between" }}>
-                <div className="grow">
-                  <label className="row" style={{ gap: 8, alignItems: "center", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={subject.manualEnabled}
-                      disabled={manualBusy === subject.subject}
-                      onChange={(event) => void toggleManual(subject.subject, event.target.checked)}
-                    />
-                    <span className="tiny">Utiliser le manuel pour cette matière</span>
-                  </label>
-                  {!subject.manualEnabled ? (
-                    <p className="tiny muted" style={{ margin: "4px 0 0" }}>
-                      Manuel ignoré : l’assistant utilisera ton cahier.
-                    </p>
-                  ) : !subject.manualAvailable ? (
-                    <p className="tiny muted" style={{ margin: "4px 0 0" }}>
-                      Aucun manuel disponible pour cette matière : l’assistant utilisera ton cahier.
-                    </p>
-                  ) : null}
-                </div>
-                <button type="button" className="btn btn--ghost btn--small" onClick={() => newNote(subject.subject)}>
-                  Ajouter un cours
-                </button>
-              </div>
+      ) : null}
 
-              <div className="row row--wrap" style={{ gap: 6, marginTop: 10 }}>
-                <button
-                  type="button"
-                  className="btn btn--small"
-                  disabled={photoBusy !== null}
-                  onClick={() => void addPhoto(subject.subject, "camera")}
-                >
-                  {photoBusy === subject.subject ? "Transcription…" : "Prendre une photo"}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--small"
-                  disabled={photoBusy !== null}
-                  onClick={() => void addPhoto(subject.subject, "gallery")}
-                >
-                  Choisir une image
-                </button>
+      {withNotes.map((subject) => {
+        const status = manualStatus(subject);
+        return (
+          <Card key={subject.subject} as="article" className="cahier-subject">
+            <div className="cahier-subject__head">
+              <SubjectAvatar subject={subject.subject} size={38} dark={dark} />
+              <div className="grow">
+                <h2 className="cahier-subject__title">{subject.subject}</h2>
+                <span className="cahier-subject__meta">
+                  <span className="t-caption muted">{subject.notes.length} cours</span>
+                  <span className={`cahier-status cahier-status--${status.tone}`}>{status.label}</span>
+                </span>
               </div>
-              <p className="tiny muted" style={{ margin: "6px 0 0" }}>
-                La photo part directement au fournisseur d’IA, avec ta clé, puis elle est supprimée.
-                Le texte revient ici pour relecture.
-              </p>
+            </div>
 
-              {subject.notes.length === 0 ? (
-                <p className="tiny muted" style={{ margin: "10px 0 0" }}>
-                  Aucun cours pour cette matière.
-                </p>
-              ) : (
-                <div className="rows" style={{ marginTop: 10 }}>
-                  {subject.notes.map((note) => (
-                    <ListRow
-                      key={note.id}
-                      title={note.title}
-                      subtitle={`${dayLabel(note.createdAt)} · ${note.chars} caractères`}
-                      onClick={() => void openNote(note.id)}
-                    />
-                  ))}
+            <div className="cahier-manual">
+              <label className="cahier-manual__label">
+                <input
+                  type="checkbox"
+                  checked={subject.manualEnabled}
+                  disabled={manualBusy === subject.subject}
+                  onChange={(event) => void toggleManual(subject.subject, event.target.checked)}
+                />
+                <span className="tiny">Utiliser le manuel</span>
+              </label>
+            </div>
+
+            <div className="rows cahier-subject__notes">
+              {subject.notes.map((note) => (
+                <ListRow
+                  key={note.id}
+                  title={note.title}
+                  subtitle={`${dayLabel(note.createdAt)} · ${note.chars} caractères`}
+                  onClick={() => void openNote(note.id)}
+                />
+              ))}
+            </div>
+
+            <div className="cahier-subject__actions">
+              <button type="button" className="btn btn--small" onClick={() => newNote(subject.subject)}>
+                Ajouter un cours
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost btn--small"
+                disabled={photoBusy !== null}
+                aria-label={`Ajouter une photo de cours pour ${subject.subject}`}
+                onClick={() => setPhotoTarget(subject.subject)}
+              >
+                <IconCamera size={16} />
+                {photoBusy === subject.subject ? "Transcription…" : "Photo"}
+              </button>
+            </div>
+          </Card>
+        );
+      })}
+
+      {withoutNotes.length > 0 ? (
+        <Section
+          title="Sans cours"
+          action={<span className="tiny muted">{withoutNotes.length}</span>}
+        >
+          <Card className="card--flat">
+            <div className="cahier-empty-list">
+              {withoutNotes.map((subject) => (
+                <div key={subject.subject} className="cahier-empty-row">
+                  <SubjectAvatar subject={subject.subject} size={28} dark={dark} />
+                  <span className="grow cahier-empty-row__name">{subject.subject}</span>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    disabled={photoBusy !== null}
+                    aria-label={`Ajouter une photo de cours pour ${subject.subject}`}
+                    onClick={() => setPhotoTarget(subject.subject)}
+                  >
+                    <IconCamera size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--small"
+                    onClick={() => newNote(subject.subject)}
+                  >
+                    Ajouter
+                  </button>
                 </div>
-              )}
-            </Card>
-          </Section>
-        ))
-      )}
+              ))}
+            </div>
+          </Card>
+        </Section>
+      ) : null}
 
       <p className="tiny muted" style={{ textAlign: "center" }}>
         {maxNotes} cours maximum par matière · {maxText} caractères par cours
       </p>
+
+      <Dialog
+        open={photoTarget !== null}
+        title="Ajouter une photo"
+        description={
+          photoTarget
+            ? `${photoTarget} — choisis la source. Le texte revient ici pour relecture.`
+            : undefined
+        }
+        busy={photoBusy !== null}
+        onClose={() => {
+          if (photoBusy === null) setPhotoTarget(null);
+        }}
+        actions={
+          <>
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              disabled={photoBusy !== null}
+              onClick={() => setPhotoTarget(null)}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              disabled={photoBusy !== null}
+              onClick={() => choosePhoto("gallery")}
+            >
+              Choisir une image
+            </button>
+            <button
+              type="button"
+              className="btn btn--small"
+              disabled={photoBusy !== null}
+              onClick={() => choosePhoto("camera")}
+            >
+              Prendre une photo
+            </button>
+          </>
+        }
+      />
 
       <Dialog
         open={editor !== null}

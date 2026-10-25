@@ -133,17 +133,26 @@ export function RevisionSheetsScreen() {
     );
   }
 
+  const list = sheets ?? [];
+  const hasSheets = list.length > 0;
+
   return (
     <Page>
       <PageHeading
         eyebrow="Assistant"
-        title="Révisions"
-        action={sheets && sheets.length > 0 ? <span className="chip">{sheets.length}</span> : null}
+        title="Fiches de révision"
+        action={
+          hasSheets ? (
+            <span className="chip">
+              {list.length} fiche{list.length > 1 ? "s" : ""}
+            </span>
+          ) : null
+        }
       />
 
       {error ? <ErrorBox message={error} /> : null}
 
-      {sheets && sheets.length === 0 ? (
+      {sheets !== null && list.length === 0 ? (
         <EmptyState
           icon={<IconBook size={30} />}
           title="Aucune fiche de révision"
@@ -161,70 +170,76 @@ export function RevisionSheetsScreen() {
         />
       ) : null}
 
-      {sheets && sheets.length > 0 ? (
-        <Section title="Toutes les fiches">
+      {hasSheets ? (
+        <Section
+          title="Toutes les fiches"
+          action={
+            <button type="button" className="btn btn--small" onClick={() => navigate("/tasks")}>
+              Créer une fiche
+            </button>
+          }
+        >
           <div className="list">
-            {sheets.map((sheet) => {
+            {list.map((sheet) => {
               const opened = selected?.id === sheet.id;
               const bodyId = `sheet-body-${sheet.id}`;
               return (
                 <Card key={sheet.id} as="article" className="revision-card">
-                  <div className="stack" style={{ gap: 8 }}>
-                    <div className="revision-card__head">
-                      <SubjectAvatar subject={sheet.subject} size={38} dark={dark} />
-                      <div className="grow">
-                        <h3 className="t-title" style={{ display: "block", margin: 0 }}>
-                          {sheet.title}
-                        </h3>
-                        <span className="t-caption muted">{sheetMeta(sheet)}</span>
-                      </div>
+                  <div className="revision-card__head">
+                    <SubjectAvatar subject={sheet.subject} size={38} dark={dark} />
+                    <div className="grow">
+                      <h3 className="revision-card__title">{sheet.title}</h3>
+                      <span className="t-caption muted">{sheetMeta(sheet)}</span>
                     </div>
-                    <div className="row row--wrap" style={{ gap: 6 }}>
-                      <button
-                        ref={(element) => {
-                          if (element) triggers.current.set(sheet.id, element);
-                          else triggers.current.delete(sheet.id);
-                        }}
-                        type="button"
-                        className="btn btn--ghost btn--small"
-                        aria-expanded={opened}
-                        aria-controls={bodyId}
-                        aria-label={`${opened ? "Fermer" : "Ouvrir"} la fiche ${sheet.title}`}
-                        onClick={() => (opened ? close() : void open(sheet.id))}
-                      >
-                        {opened ? "Fermer" : "Ouvrir"}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--small"
-                        disabled={exporting !== null}
-                        aria-busy={exporting === sheet.id}
-                        aria-label={`Exporter en PDF la fiche ${sheet.title}`}
-                        onClick={() => void exportSheet(sheet.id)}
-                      >
-                        <IconDownload size={16} />
-                        {exporting === sheet.id ? "Export…" : "Exporter en PDF"}
-                      </button>
-                    </div>
-
-                    {opened ? (
-                      <div id={bodyId} role="region" aria-label={`Fiche ${sheet.title}`}>
-                        {selected.loading ? <Loading label="Ouverture de la fiche…" /> : null}
-                        {selected.error ? (
-                          <ErrorBox message={selected.error}>
-                            <button
-                              type="button"
-                              className="btn btn--small"
-                              onClick={() => void open(sheet.id)}
-                            >
-                              Réessayer
-                            </button>
-                          </ErrorBox>
-                        ) : null}
-                        {selected.sheet ? <SheetBody sheet={selected.sheet} /> : null}
-                      </div>
-                    ) : null}
                   </div>
+
+                  {!opened ? <p className="revision-card__preview">{previewOf(sheet.body)}</p> : null}
+
+                  <div className="revision-card__actions">
+                    <button
+                      ref={(element) => {
+                        if (element) triggers.current.set(sheet.id, element);
+                        else triggers.current.delete(sheet.id);
+                      }}
+                      type="button"
+                      className="btn btn--small revision-card__open"
+                      aria-expanded={opened}
+                      aria-controls={bodyId}
+                      aria-label={`${opened ? "Fermer" : "Ouvrir"} la fiche ${sheet.title}`}
+                      onClick={() => (opened ? close() : void open(sheet.id))}
+                    >
+                      {opened ? "Fermer" : "Ouvrir"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--small revision-card__pdf"
+                      disabled={exporting !== null}
+                      aria-busy={exporting === sheet.id}
+                      aria-label={`Exporter en PDF la fiche ${sheet.title}`}
+                      onClick={() => void exportSheet(sheet.id)}
+                    >
+                      <IconDownload size={16} />
+                      {exporting === sheet.id ? "Export…" : "PDF"}
+                    </button>
+                  </div>
+
+                  {opened ? (
+                    <div id={bodyId} role="region" aria-label={`Fiche ${sheet.title}`}>
+                      {selected.loading ? <Loading label="Ouverture de la fiche…" /> : null}
+                      {selected.error ? (
+                        <ErrorBox message={selected.error}>
+                          <button
+                            type="button"
+                            className="btn btn--small"
+                            onClick={() => void open(sheet.id)}
+                          >
+                            Réessayer
+                          </button>
+                        </ErrorBox>
+                      ) : null}
+                      {selected.sheet ? <SheetBody sheet={selected.sheet} /> : null}
+                    </div>
+                  ) : null}
                 </Card>
               );
             })}
@@ -236,25 +251,34 @@ export function RevisionSheetsScreen() {
 }
 
 function sheetMeta(sheet: RevisionSheet): string {
-  return [sheet.subject, revisionDateLabel(sheet)].filter(Boolean).join(" · ");
+  return [sheet.subject, revisionDateLabel(sheet), sourceLabel(sheet.sources.length)]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function sourceLabel(count: number): string {
+  if (count === 0) return "";
+  return `${count} source${count > 1 ? "s" : ""}`;
+}
+
+/** Aperçu texte : deux lignes au plus, jamais de balisage. */
+function previewOf(body: string): string {
+  const flat = body.replace(/\s+/g, " ").trim();
+  return flat.length > 180 ? `${flat.slice(0, 179).trimEnd()}…` : flat;
 }
 
 function SheetBody({ sheet }: { sheet: RevisionSheet }) {
   return (
-    <div className="stack" style={{ gap: 10, marginTop: 10 }}>
-      {sheetMeta(sheet) ? <span className="t-caption muted">{sheetMeta(sheet)}</span> : null}
-      <p
-        className="t-body-m"
-        style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
-      >
-        {sheet.body}
-      </p>
+    <div className="revision-card__body-wrap">
+      <p className="revision-card__body">{sheet.body}</p>
       {sheet.sources.length > 0 ? (
         <div>
           <strong className="t-caption">Sources</strong>
-          <ul className="t-caption muted" style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+          <ul className="revision-card__sources">
             {sheet.sources.map((source, index) => (
-              <li key={`${index}-${source}`}>{source}</li>
+              <li key={`${index}-${source}`} className="chip revision-card__source">
+                {source}
+              </li>
             ))}
           </ul>
         </div>

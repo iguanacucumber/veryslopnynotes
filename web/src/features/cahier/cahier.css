@@ -1,0 +1,110 @@
+/* Cahier de cours — cartes de matière et matières sans cours. */
+
+.cahier-privacy__note {
+  margin: 6px 0 0;
+}
+
+.cahier-subject {
+  padding: 14px;
+}
+
+.cahier-subject__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.cahier-subject__title {
+  margin: 0;
+  font-size: 17px;
+  line-height: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.cahier-subject__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cahier-manual {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: var(--tap);
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.cahier-manual__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.cahier-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 700;
+}
+
+.cahier-status--on {
+  background: var(--brand-pale);
+  color: var(--brand-deep);
+}
+
+.cahier-status--off {
+  background: var(--surface-variant);
+  color: var(--muted);
+}
+
+/* L'absence de manuel est un état normal, pas une erreur : même teinte neutre
+   que « Cahier seul », jamais le rouge réservé aux échecs. */
+.cahier-status--none {
+  background: var(--surface-variant);
+  color: var(--muted);
+}
+
+.cahier-subject__notes {
+  padding: 0;
+  margin-top: 4px;
+}
+
+.cahier-subject__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.cahier-empty-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.cahier-empty-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 4px 0;
+}
+
+.cahier-empty-row + .cahier-empty-row {
+  border-top: 1px solid var(--border-soft);
+}
+
+.cahier-empty-row__name {
+  font-weight: 600;
+}
