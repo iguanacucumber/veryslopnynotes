@@ -173,3 +173,60 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
     expect(revision).toMatch(/generateGuardedJson\(provider, SYSTEM_REVISION_JSON/);
   });
 });
+
+// #606 — recette LIVE sur appareil : « Fiche de révision » échouait sur tout
+// devoir réel avec « Secret détecté (identifiant secret) ».
+//
+// Le prompt portait `Id examen : <id>`. Les ids Pronote sont des jetons à
+// forte entropie (`147#h-etLBzJ2…`) : la garde I4 (forme OPAQUE) les classait
+// en secret et refusait le prompt fabriqué par l'app elle-même. L'identifiant
+// ne sert à RIEN au modèle (titre, matière, date et extraits suffisent).
+describe("fiche de revision — l'id du devoir ne part pas dans le prompt (#606)", () => {
+  // Ids réels observés en mode démo (mêmes formes que la production).
+  const PRONOTE_ID = ["147#h-etLBzJ2Deo5zD2", "02k8QuEiINhwBMzgQvJsLBKuwg"].join("-");
+  const SECOND_ID = ["147#v03_nqVDgdDw4", "JamTg4VyY68BHpDf720dbdH3c3Ljs"].join("-");
+
+  interface PromptFor {
+    ok: boolean;
+    error?: string;
+    kind?: string | null;
+    body?: string;
+  }
+
+  test.skipIf(skip)("un id Pronote ne déclenche plus la garde, matière/date/motif restent", async () => {
+    for (const id of [PRONOTE_ID, SECOND_ID]) {
+      const r = JSON.parse(
+        await ask({ op: "promptFor", id, subject: "MATHEMATIQUES", date: "2026-10-26", matched: "Exercices n°2 à 4" }),
+      ) as PromptFor;
+      // Le vrai chemin public (requestRevisionFiche → garde I4 → parse I5) passe.
+      expect(r.ok).toBe(true);
+      expect(r.body).toContain("MATHEMATIQUES");
+      expect(r.body).toContain("2026-10-26");
+      expect(r.body).toContain("Exercices n°2 à 4");
+      // Et l'identifiant interne n'y est plus : c'était LUI le faux secret.
+      expect(r.body).not.toContain(id);
+    }
+  });
+
+  test.skipIf(skip)("la garde I4 reste effective sur les extraits de cours", async () => {
+    // Un vrai secret dans le cours est toujours refusé : on n'a pas affaibli
+    // la garde, on a retiré du prompt ce qui n'y avait pas sa place.
+    const jwt = [
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+      "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkVsInZ1ZSJ9",
+      "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+    ].join(".");
+    const r = JSON.parse(
+      await ask({ op: "promptFor", id: PRONOTE_ID, chunks: [`Cours : jeton ${jwt}`] }),
+    ) as PromptFor;
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("JWT");
+  });
+
+  test.skipIf(skip)("le prompt n'a plus la ligne « Id examen »", async () => {
+    const r = JSON.parse(await ask({ op: "prompt", chunks: ["Cours : x^2."] })) as Prompt;
+    expect(r.body).toContain("Matiere :");
+    expect(r.body).toContain("Motif :");
+    expect(r.body).not.toContain("Id examen");
+  });
+});

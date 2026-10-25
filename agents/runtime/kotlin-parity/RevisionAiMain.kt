@@ -19,6 +19,7 @@ import fr.veryslopnynotes.core.RevisionExam
 import fr.veryslopnynotes.core.RevisionFailure
 import fr.veryslopnynotes.core.SafePrompt
 import fr.veryslopnynotes.core.SafePromptProvider
+import fr.veryslopnynotes.core.SecretDetectedException
 import fr.veryslopnynotes.core.parseJsonOutput
 import fr.veryslopnynotes.core.parseRevisionAnswer
 import fr.veryslopnynotes.core.revisionFailureMessage
@@ -117,6 +118,44 @@ private class Driver {
                     "error" to JVal.Str(e.message ?: "inconnu"),
                     "apiKey" to (seenKey?.let { JVal.Str(it) } ?: JVal.Null),
                     "calls" to JVal.Num(calls.toDouble()),
+                )
+            }
+        }
+        // Prompt réellement envoyé pour un devoir donné (#606) : le corps est
+        // celui que la garde I4 vient de valider, donc le test voit à la fois
+        // le refus (id entropique) et le contenu (matière/date/motif).
+        "promptFor" -> {
+            val exam = RevisionExam(
+                id = op.str("id") ?: "devoir-1",
+                subject = op.str("subject") ?: "Mathematiques",
+                date = op.str("date") ?: "2026-10-19",
+                matched = op.str("matched") ?: "Devoir dérivées",
+            )
+            val docs = (op.fields["chunks"] as? JVal.Arr)?.items
+                ?.mapNotNull { (it as? JVal.Str)?.value }
+                ?: listOf("Derivee de x^2 = 2x.")
+            val chunks = docs.map { RevisionChunk(it, "Cours : Chapitre 4") }
+            var seenBody: String? = null
+            val provider = object : SafePromptProvider {
+                override fun generateSafe(safe: SafePrompt, apiKey: String?): String {
+                    seenBody = safe.body
+                    return "{\"fiche\":\"Rappel : derivé de x^2 = 2x.\"}"
+                }
+            }
+            try {
+                val fiche = RevisionAi.requestRevisionFiche(provider, exam, chunks, apiKey = "k".repeat(32), nonce = NONCE)
+                ok(
+                    "ok" to JVal.Bool(true),
+                    "fiche" to JVal.Str(fiche),
+                    "body" to JVal.Str(seenBody ?: ""),
+                )
+            } catch (e: Exception) {
+                val kind = (e as? SecretDetectedException)?.kind?.name
+                ok(
+                    "ok" to JVal.Bool(false),
+                    "error" to JVal.Str(e.message ?: "inconnu"),
+                    "kind" to (kind?.let { JVal.Str(it) } ?: JVal.Null),
+                    "body" to JVal.Str(seenBody ?: ""),
                 )
             }
         }
