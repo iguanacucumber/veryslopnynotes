@@ -58,9 +58,16 @@ fun revisionFailureMessage(failure: RevisionFailure): String = when (failure) {
 
 object RevisionAi {
     // Docs brutes -> marquees Untrusted ici, nonce cote prompt.
+    //
+    // L'IDENTIFIANT du devoir ne part PAS dans le prompt (#606). Ce n'est pas
+    // une donnee pedagogique, et les ids Pronote sont des jetons a forte
+    // entropie (`147#h-etLBzJ2...`) : la garde I4 (forme OPAQUE) les classait
+    // en secret et refusait le prompt que l'app venait de fabriquer — donc
+    // « Secret détecté (identifiant secret) » sur TOUTE fiche de revision
+    // (2 ids de demo sur 2, reproduit sur le vrai port compile).
     fun buildRevisionDocs(exam: RevisionExam, chunks: List<RevisionChunk>): List<String> {
         val head = "Matiere : " + exam.subject + "\nDate : " + exam.date +
-            "\nMotif : " + exam.matched + "\nId examen : " + exam.id
+            "\nMotif : " + exam.matched
         val bodies = chunks.map { it.source + "\n" + it.text }
         return listOf(head) + bodies
     }
