@@ -98,137 +98,99 @@ En plus des écrans :
 
 ```mermaid
 flowchart TB
-  %% ---------------------------------------------------------------
-  %% Carte d'architecture : livraison, téléphone, services externes.
-  %% Un seul flux réseau Pronote : android/pronote/ -> établissement.
-  %% Le serveur est facultatif et ne voit ni session ni clé LLM.
-  %% ---------------------------------------------------------------
+  %% Pronote est joignable uniquement depuis android/pronote/.
+  %% Le scraper est facultatif : ni session Pronote, ni clé LLM.
 
   classDef secret fill:#fff3e0,stroke:#e65100,color:#111,stroke-width:2px;
   classDef external fill:#e3f2fd,stroke:#1565c0,color:#111;
   classDef optional fill:#f3e5f5,stroke:#6a1b9a,color:#111,stroke-dasharray:5 5;
   classDef dev fill:#f5f5f5,stroke:#757575,color:#111,stroke-dasharray:3 3;
   classDef build fill:#eceff1,stroke:#455a64,color:#111;
-  classDef danger fill:#ffebee,stroke:#c62828,color:#111;
 
-  LIVRAISON["Livraison<br/>web/ → Vite → assets → Gradle → APK/AAB<br/>server/ → image optionnelle<br/>tests + contrats + scans → make check / CI"]
+  LIVRAISON["Build<br/>web → Vite → assets → Gradle → APK/AAB<br/>server → image optionnelle<br/>tests + contrats + scans → make check / CI"]
   class LIVRAISON build;
 
-  subgraph TELEPHONE["Téléphone Android 8+ · zone de confiance"]
-    subgraph WEBVIEW["WebView locale · appassets.androidplatform.net · CSP connect-src 'none'"]
-      UI["Routes React<br/>pairing · accueil · cours · devoirs<br/>notes · vie scolaire · sanctions<br/>messages · actualités · cantine<br/>fiches · cahier · alertes<br/>profil · réglages"]
-      FEATURES["features/ · parseurs · modèles · vues<br/>un payload = une requête (I25)"]
-      APPCTX["AppContext + useResource<br/>cache d'abord · stale · error"]
-      BCLIENT["bridge/client.ts<br/>window.VSN.call · timeouts"]
-      MOCK["bridge/mock.ts<br/>DEV uniquement (I13)"]
+  subgraph TELEPHONE["Téléphone Android · zone de confiance"]
+    subgraph WEBVIEW["WebView locale · CSP connect-src 'none'"]
+      UI["React 19 + TS<br/>routes + features<br/>useResource : cache d'abord"]
+      BCLIENT["bridge/client.ts<br/>window.VSN.call"]
+      MOCK["bridge/mock.ts<br/>DEV (I13)"]
 
-      UI --> FEATURES --> APPCTX
-      APPCTX -->|"1. resources.cached"| BCLIENT
-      APPCTX -->|"2. resources.load"| BCLIENT
-      MOCK -.->|"dev:web"| BCLIENT
+      UI --> BCLIENT
+      MOCK -.->|"dev"| BCLIENT
     end
 
     subgraph NATIF["app/ · coquille native"]
-      MAIN["MainActivity<br/>deep links · planifie WorkManager"]
-      SHELL["NativeWebShell<br/>assets interceptés · zéro réseau"]
-      BRIDGE["VsnBridge.call<br/>allowlist · réponses bornées"]
-      EXEC["BridgeExecutors<br/>1 fil par appel<br/>LLM 2 fils (I20)"]
-      SCAN["Scan QR zxing"]
-      PHOTO["PhotoCapture · Attachments<br/>JPEG borné · MIME sûr"]
+      SHELL["MainActivity + NativeWebShell<br/>assets locaux · zéro réseau"]
+      BRIDGE["VsnBridge.call<br/>allowlist"]
+      EXEC["BridgeExecutors<br/>1 fil/appel · LLM 2 fils (I20)"]
+      CAPTURE["QR scan · photos · pièces jointes"]
 
-      MAIN --> SHELL --> BRIDGE --> EXEC
-      BRIDGE --> SCAN
-      BRIDGE --> PHOTO
+      SHELL --> BRIDGE --> EXEC
+      BRIDGE --> CAPTURE
     end
 
     subgraph COEUR["core/ · Kotlin pur · sans réseau ni SQLite (I3)"]
-      UNTRUSTED["Untrusted<br/>contenu externe = donnée<br/>délimiteurs + nonce (I6)"]
-      AI["AiPrompts · LlmGuard<br/>HomeworkAi · LessonAi<br/>RevisionAi · Vision<br/>sans outils (I4/I5)"]
-      DOMAIN["Averages · Capabilities<br/>GradeDiff · ExamDetect<br/>ManualCatalog · SecurityAlert"]
-      DOCS["RevisionSheet · RevisionPdf<br/>sources canoniques (I15)"]
+      UNTRUSTED["Untrusted<br/>contenu externe = donnée (I6)"]
+      AI["AiPrompts · LlmGuard<br/>IA sans outils (I4/I5)"]
+      DOMAIN["Domaine + PDF<br/>moyennes · capacités · fiches"]
 
-      UNTRUSTED -->|"données délimitées"| AI
-      AI -->|"fiche validée"| DOCS
+      UNTRUSTED --> AI
     end
 
     subgraph DONNEES["data/ · session · cache · orchestration"]
-      SECRETS["SessionStore · LlmKeyStore<br/>chiffrés · Keystore (I18)<br/>repli mémoire signalé"]
-      SESSION["PairingRepository · AccountStore<br/>SessionRepair · DeviceAuth<br/>CacheScope · époque (I16/I21)"]
-      CACHE["OfflineCache · CachePolicy<br/>TTL · stale · invalidation"]
-      QUEUE["ClientQueue · LocalRequestQueue<br/>une lecture client à la fois<br/>l'échec est livré (I19/I28)"]
-      SYNC["PeriodicSyncWorker<br/>WorkManager 6 h<br/>restore avant lire (I12)"]
-      REPOS["SyncedRepository<br/>Assignments · Discussions<br/>ProfileRepository"]
-      ARTIFACTS["offline/ · cahier · fiches<br/>subject_prefs · downloads<br/>exports · photos (I16/I26)"]
-      OPENROUTER_LLM["OpenRouterLlm<br/>clé locale → Authorization"]
-      MANUALS_CLIENT["ManualsClient · ManualStore<br/>scraper facultatif"]
+      SECRETS["SessionStore · LlmKeyStore<br/>chiffrés (I18)"]
+      ACCOUNT["Pairing · AccountStore<br/>SessionRepair · CacheScope<br/>purge (I16/I21)"]
+      CACHE["OfflineCache · CachePolicy<br/>TTL · offline/ (I26)"]
+      FLOW["Dépôts + file + sync<br/>Synced · Assignments · Messages<br/>ClientQueue · WorkManager<br/>(I12/I19/I28)"]
+      LLM["OpenRouterLlm<br/>clé locale → Authorization"]
+      MANUALS["ManualsClient<br/>scraper facultatif"]
 
-      SECRETS -->|"restaure le jeton"| SESSION
-      SESSION -->|"purge"| CACHE
-      SESSION -->|"purge"| ARTIFACTS
-      REPOS -->|"lectures cachées"| QUEUE
-      SYNC -->|"lectures de fond"| QUEUE
-      REPOS -->|"écrit si époque"| CACHE
+      SECRETS --> ACCOUNT
+      ACCOUNT --> CACHE
+      CACHE --> FLOW
     end
 
-    subgraph PORT["pronote/ · seul code réseau établissement (I1/I2)"]
-      CLIENT["Client · HttpSession<br/>HTTPS direct"]
-      CRYPTO["Crypto · Resolver · Json"]
-      GATE_REFRESH["RefreshGate · ReadMemo<br/>un refresh à la fois (I17)"]
-      DEMO["DemoSchool<br/>démo publique"]
-
-      CLIENT --> CRYPTO
-      CLIENT --> GATE_REFRESH
+    subgraph PORT["pronote/ · seul réseau établissement (I1/I2)"]
+      CLIENT["Client + HttpSession + Crypto<br/>RefreshGate · DemoSchool"]
     end
 
-    BRIDGE -->|"orchestration"| COEUR
-    COEUR -->|"prompt et résultats"| DONNEES
-    BRIDGE -->|"appels data"| DONNEES
-    DONNEES -->|"client unique"| PORT
     BCLIENT -->|"JSON sémantique<br/>jamais de jeton ni de clé"| BRIDGE
-    MAIN -.->|"planifie 6 h"| SYNC
-    BRIDGE -->|"session · appairage QR + PIN"| SESSION
-    BRIDGE -->|"manuel de la matière"| MANUALS_CLIENT
-    SESSION -->|"ouvre · restaure"| CLIENT
-    SESSION -.->|"pairDemo"| DEMO
-    QUEUE -->|"cachedRead"| CLIENT
-    AI -->|"prompt vérifié"| OPENROUTER_LLM
-    MANUALS_CLIENT -.->|"texte externe"| UNTRUSTED
+    BRIDGE -->|"garde · domaine"| COEUR
+    BRIDGE -->|"session · cache · lectures"| DONNEES
+    BRIDGE -->|"manuel"| MANUALS
+    SHELL -.->|"planifie 6 h"| FLOW
+    AI -->|"prompt vérifié"| LLM
+    MANUALS -.->|"texte externe"| UNTRUSTED
+    ACCOUNT -->|"ouvre · restaure"| CLIENT
+    FLOW -->|"client unique"| CLIENT
   end
 
   subgraph EXTERNE["Hors téléphone · aucun serveur applicatif dans le flux"]
     SCHOOL["Établissement Pronote<br/>HTTPS direct · QR + PIN"]
     OPENROUTER["OpenRouter<br/>HTTPS + Authorization"]
+    SCRAPER["Scraper Bun + Playwright<br/>SSRF · jar serveur · sans auth"]
     MANUALS_PORTAL["Portail de manuels"]
-
-    subgraph SCRAPER["Scraper facultatif · sans auth · aucun accès Pronote ni clé LLM"]
-      HTTP["Bun.serve<br/>GET /v1/health<br/>POST /v1/manuals/scrape"]
-      SSRF["Garde SSRF<br/>hôte public · DNS<br/>redirections · jar serveur"]
-      PW["Playwright / Chromium<br/>2 scrapes · 30 s · 1 Mo"]
-
-      HTTP --> SSRF --> PW
-    end
   end
 
-  LIVRAISON -.->|"produit APK et assets"| MAIN
-  LIVRAISON -.->|"produit image"| HTTP
+  LIVRAISON -.->|"APK"| SHELL
+  LIVRAISON -.->|"image"| SCRAPER
   CLIENT -->|"HTTPS direct"| SCHOOL
-  DEMO -->|"HTTPS démo"| SCHOOL
-  OPENROUTER_LLM -->|"HTTPS + Authorization"| OPENROUTER
-  MANUALS_CLIENT -.->|"HTTPS · facultatif"| HTTP
-  PW -->|"HTTPS"| MANUALS_PORTAL
+  LLM -->|"HTTPS + Authorization"| OPENROUTER
+  MANUALS -.->|"HTTPS · facultatif"| SCRAPER
+  SCRAPER -->|"HTTPS"| MANUALS_PORTAL
 
-  class SECRETS,SESSION,OPENROUTER_LLM secret;
+  class SECRETS,ACCOUNT,LLM secret;
   class SCHOOL,OPENROUTER,MANUALS_PORTAL external;
-  class HTTP,SSRF,PW,MANUALS_CLIENT optional;
+  class SCRAPER,MANUALS optional;
   class MOCK dev;
-  class UNTRUSTED danger;
 ```
 
 **Légende** — trait plein : appel à l'exécution ; pointillés : optionnel,
-développement ou build ; orange : secret ; rouge : contenu externe non fiable ;
-violet : serveur facultatif ; bleu : service externe ; `Ix` : invariant couvert
-par un test. Le scraper ne reçoit qu'une plateforme et une URL de départ : ni
-session Pronote, ni clé LLM.
+développement ou build ; orange : secret ; violet : serveur facultatif ; bleu :
+service externe ; gris : livraison ; `Ix` : invariant couvert par un test. Le
+scraper ne reçoit qu'une plateforme et une URL de départ : ni session Pronote,
+ni clé LLM.
 
 Le serveur n'est **jamais** dans le flux Pronote ni dans celui de l'assistant.
 Il ne reçoit que la plateforme et une URL de départ, dans le corps de la
