@@ -7,10 +7,10 @@ perso dans le livrable. Clé signature TOUJOURS hors repo.
 
 | Composant | Version | Source | Licence |
 |---|---|---|---|
-| bun (runtime) | 1.4.3 | `Dockerfile.server` `oven/bun:1.4.3`, ADR-001 | MIT (runtime, ISC-compatible) |
+| bun (runtime) | 1.4.4 | `Dockerfile.server` `oven/bun:1.4.4`, ADR-001 | MIT (runtime, ISC-compatible) |
 | typescript | 7.0.2 | `package.json` exact + `bun.lock` | Apache-2.0 |
-| @types/bun | 1.4.3 | `package.json` exact + `bun.lock` | MIT |
-| bun-types (transitif) | 1.4.3 | `bun.lock` | MIT |
+| @types/bun | 1.4.4 | `package.json` exact + `bun.lock` | MIT |
+| bun-types (transitif) | 1.4.4 | `bun.lock` | MIT |
 | @types/node (transitif) | 26.6.4 | `bun.lock` | MIT |
 | undici-types (transitif) | 8.9.0 | `bun.lock` | MIT |
 | Gradle / AGP / Kotlin | 9.8.1 / 9.4.1 / 2.4.21 | wrapper + `build.gradle.kts` | Apache-2.0 |
@@ -47,8 +47,9 @@ build targets fail instead.
 make build   # check-secrets + docker build (skip si daemon absent)
 ```
 
-- Base `oven/bun:1.4.3` exacte. Digest : `docker pull oven/bun:1.4.3`,
-  figer `FROM oven/bun:1.4.3@sha256:<digest>` (daemon absent en local).
+- Base `oven/bun:1.4.4` exacte (corrige CVE-2026-111497, Brotli). Digest :
+  `docker pull oven/bun:1.4.4`, figer
+  `FROM oven/bun:1.4.4@sha256:<digest>` (daemon absent en local).
 - Install strict `bun install --frozen-lockfile` (aucun fallback).
 - Chromium installé AU BUILD : `bunx playwright install --with-deps chromium`
   (le paquet `playwright` n'a aucun script d'installation : sans cette ligne,
