@@ -1,5 +1,26 @@
 /* Réglages — sélecteur de palette (#335). */
 
+/* #612 : l'assistant a une section unique, identifiable d'un coup d'œil. */
+.settings-assistant__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--brand-pale);
+  color: var(--brand-deep);
+  flex: 0 0 auto;
+}
+
+/* Statut du manuel : même puce que les autres états, teinte d'alerte quand
+   l'ouvrage est enregistré mais pas encore récupéré. */
+.settings-manual__status--warn {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border-soft));
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  color: var(--danger-ink);
+}
+
 /* L'éditeur de matière s'ouvre : il monte au lieu d'apparaître d'un coup. */
 .subject-editor {
   animation: rise-in 220ms var(--ease) both;

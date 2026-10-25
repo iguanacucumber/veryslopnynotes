@@ -14,7 +14,9 @@ import {
   Section,
   SubjectBadge,
 } from "../../ui/components";
-import { IconLock, IconSettings } from "../../ui/icons";
+import { Dialog } from "../../ui/Dialog";
+import { IconBook, IconSettings, IconSparkles } from "../../ui/icons";
+import { useViewNavigate } from "../../ui/viewTransition";
 import { SchemePicker } from "./SchemePicker";
 import { SubjectEditor } from "./SubjectEditor";
 import {
@@ -48,6 +50,7 @@ function subjectInitial(subject: string): string {
 
 export default function SettingsScreen() {
   const { theme, setTheme, scheme, setScheme, refreshTick, notify, storageUnavailable, dark } = useApp();
+  const navigate = useViewNavigate();
   const [host, setHost] = useState("");
   const [llmConfigured, setLlmConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -81,6 +84,7 @@ export default function SettingsScreen() {
   const [keyVisible, setKeyVisible] = useState(false);
   const [llmError, setLlmError] = useState("");
   const [savingKey, setSavingKey] = useState(false);
+  const [forgetAsk, setForgetAsk] = useState(false);
   const [forgettingKey, setForgettingKey] = useState(false);
 
   useEffect(() => {
@@ -244,6 +248,7 @@ export default function SettingsScreen() {
   }
 
   async function forgetKey(): Promise<void> {
+    // #612 : la suppression ne part que du dialogue de confirmation.
     setLlmError("");
     setForgettingKey(true);
     try {
@@ -254,6 +259,7 @@ export default function SettingsScreen() {
       setLlmError(actionMessage(error, "Clé non supprimée : réessaie dans un instant."));
     } finally {
       setForgettingKey(false);
+      setForgetAsk(false);
     }
   }
 
@@ -318,6 +324,7 @@ export default function SettingsScreen() {
     .map((part) => part.trim())
     .filter((part) => part !== "")
     .join(" · ");
+  const manualStatus = manualAuto ? "Automatique" : manualReady ? "Prêt" : "Non récupéré";
 
   return (
     <Page>
@@ -459,26 +466,45 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
-      <Section title="Sécurité">
+      <Section title="Assistant">
         <Card className="card--flat">
           <div className="row" style={{ alignItems: "flex-start" }}>
-            <span style={{ color: "var(--muted)" }}>
-              <IconLock size={20} />
+            <span className="settings-assistant__icon" aria-hidden="true">
+              <IconSparkles size={20} />
             </span>
             <div className="grow">
-              <strong style={{ display: "block" }}>Assistant devoirs</strong>
+              <strong style={{ display: "block" }}>{llmConfigured ? "Assistant actif" : "Aucune clé"}</strong>
               <p className="tiny muted" style={{ margin: "2px 0 0" }}>
                 {llmConfigured
                   ? storageUnavailable
                     ? "Clé en mémoire seulement : elle sera oubliée à la fermeture de l'app."
-                    : "Clé enregistrée (chiffrée). Elle part avec chaque demande, jamais stockée par le serveur."
-                  : "Aucune clé : l'assistant reste inactif tant qu'elle n'est pas saisie."}
+                    : "Clé enregistrée (chiffrée) : l’aide devoirs et les fiches de révision sont disponibles."
+                  : "Sans clé OpenRouter, l’assistant ne peut ni aider sur un devoir ni générer une fiche."}
               </p>
             </div>
           </div>
 
+          <Divider />
+
+          <p className="tiny muted" style={{ margin: "10px 0 6px" }}>
+            Sources de l’assistant
+          </p>
+          <div className="row row--wrap">
+            <button type="button" className="btn btn--ghost btn--small" onClick={() => navigate("/cahier")}>
+              <IconBook size={16} />
+              Cahier de cours
+            </button>
+            <button type="button" className="btn btn--ghost btn--small" onClick={() => navigate("/fiches")}>
+              <IconSparkles size={16} />
+              Fiches de révision
+            </button>
+          </div>
+        </Card>
+
+        <Card className="card--flat">
+          <strong style={{ display: "block" }}>Connexion OpenRouter</strong>
           <label className="tiny muted" htmlFor="llm-key" style={{ display: "block", marginTop: 12 }}>
-            Clé du fournisseur LLM
+            Clé OpenRouter
           </label>
           <div className="row">
             <input
@@ -508,8 +534,8 @@ export default function SettingsScreen() {
             </button>
           </div>
           <p className="tiny muted" style={{ margin: "6px 0 0" }}>
-            Collée depuis ton compte fournisseur. Chaque demande l’envoie directement au
-            fournisseur, sans passer par nos serveurs.
+            Chiffrée localement, elle est envoyée directement au fournisseur OpenRouter avec chaque
+            demande — jamais au serveur de l’établissement.
           </p>
           {storageUnavailable ? (
             // #401 : la clé vit en MÉMOIRE (le Keystore est mort) : elle
@@ -529,9 +555,9 @@ export default function SettingsScreen() {
               type="button"
               className="btn btn--ghost btn--small"
               disabled={loading || forgettingKey || !llmConfigured}
-              onClick={() => void forgetKey()}
+              onClick={() => setForgetAsk(true)}
             >
-              {forgettingKey ? "Suppression…" : "Oublier"}
+              Oublier la clé
             </button>
             <button
               type="button"
@@ -543,15 +569,26 @@ export default function SettingsScreen() {
             </button>
           </div>
         </Card>
-      </Section>
 
-      <Section title="Avancé">
         <Card className="card--flat">
-          <strong style={{ display: "block" }}>Manuel de l’élève (facultatif)</strong>
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+            <strong className="grow" style={{ display: "block" }}>
+              Manuel de l’élève (facultatif)
+            </strong>
+            {manualConfigured ? (
+              <span
+                className={`chip settings-manual__status${
+                  manualAuto || manualReady ? " chip--active" : " settings-manual__status--warn"
+                }`}
+              >
+                {manualStatus}
+              </span>
+            ) : null}
+          </div>
           <p className="tiny muted" style={{ margin: "2px 0 0" }}>
             L’assistant choisit l’ouvrage selon ta classe et la matière du devoir, puis en cite un
             extrait dans l’aide devoirs et les fiches de révision. L’adresse est lue par le scraper
-            ci-dessous, jamais par l’établissement.
+            facultatif, jamais par l’établissement.
           </p>
           <label className="tiny muted" htmlFor="manual-url" style={{ display: "block", marginTop: 12 }}>
             Adresse du manuel
@@ -583,7 +620,7 @@ export default function SettingsScreen() {
           <p id="manual-help" className="tiny muted" style={{ margin: "6px 0 0" }}>
             Garde l’adresse du catalogue : l’assistant choisit l’ouvrage selon ta classe et la
             matière du devoir. Tu peux aussi coller l’adresse d’un manuel précis. La récupération
-            passe par le scraper facultatif ci-dessous.
+            passe par le scraper facultatif des réglages avancés.
           </p>
           {manualConfigured && !manualNotice ? (
             <p
@@ -627,7 +664,7 @@ export default function SettingsScreen() {
               disabled={loading || savingManual || !manualConfigured}
               onClick={() => void forgetManual()}
             >
-              Oublier
+              Oublier le manuel
             </button>
             <button
               type="button"
@@ -639,7 +676,9 @@ export default function SettingsScreen() {
             </button>
           </div>
         </Card>
+      </Section>
 
+      <Section title="Avancé">
         <Card className="card--flat">
           <strong style={{ display: "block" }}>Scraper de manuels (facultatif)</strong>
           <p className="tiny muted" style={{ margin: "2px 0 0" }}>
@@ -692,6 +731,36 @@ export default function SettingsScreen() {
           </div>
         </Card>
       </Section>
+
+      <Dialog
+        open={forgetAsk}
+        title="Oublier la clé de l’assistant ?"
+        role="alertdialog"
+        description="L’assistant deviendra inactif sur cet appareil. Tes cours, tes fiches et le manuel enregistré restent en place."
+        busy={forgettingKey}
+        onClose={() => setForgetAsk(false)}
+        actions={
+          <>
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              data-autofocus
+              disabled={forgettingKey}
+              onClick={() => setForgetAsk(false)}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger btn--small"
+              disabled={forgettingKey}
+              onClick={() => void forgetKey()}
+            >
+              {forgettingKey ? "Suppression…" : "Oublier la clé"}
+            </button>
+          </>
+        }
+      />
 
       <div className="row" style={{ justifyContent: "center", color: "var(--muted)" }}>
         <IconSettings size={16} />

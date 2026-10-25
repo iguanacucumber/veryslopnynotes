@@ -17,7 +17,7 @@ import {
   Section,
 } from "../../ui/components";
 import { Dialog } from "../../ui/Dialog";
-import { IconUser } from "../../ui/icons";
+import { IconBook, IconSparkles, IconUser } from "../../ui/icons";
 import {
   accountCountHint,
   accountCountLabel,
@@ -268,16 +268,26 @@ export default function ProfileScreen() {
         </Section>
       ) : null}
 
-      <Section title="Ressources">
+      <Section title="Assistant">
         <Rows>
           <ListRow
             title="Cahier de cours"
-            subtitle="Les cours que l’assistant utilise comme sources"
+            subtitle="Tes cours, sources de l’assistant"
+            leading={<IconBook size={22} />}
             onClick={() => navigate("/cahier")}
           />
           <Divider />
-          <ListRow title="Fiches de révision" onClick={() => navigate("/fiches")} />
-          <Divider />
+          <ListRow
+            title="Fiches de révision"
+            subtitle="Générées depuis un devoir"
+            leading={<IconSparkles size={22} />}
+            onClick={() => navigate("/fiches")}
+          />
+        </Rows>
+      </Section>
+
+      <Section title="Ressources">
+        <Rows>
           <ListRow title="Messagerie" onClick={() => navigate("/messages")} />
           <Divider />
           <ListRow title="Actualités" onClick={() => navigate("/news")} />
