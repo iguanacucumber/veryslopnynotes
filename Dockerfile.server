@@ -4,10 +4,11 @@
 # sont embarqués (le client Pronote TS a été supprimé en #238).
 # L'image ne tourne ni en root ni en clair (#533) : utilisateur non privilégié,
 # TLS obligatoire, exposition décidée par l'opérateur.
-# Base épinglée exacte (ADR-001, `bun --version` 1.4.3). Digest : `docker pull
-# oven/bun:1.4.3` puis figer `FROM oven/bun:1.4.3@sha256:<digest>` (daemon
-# absent en local, tag exact en attendant).
-FROM oven/bun:1.4.3 AS base
+# Base épinglée exacte (ADR-001, `bun --version` 1.4.4). Digest : `docker pull
+# oven/bun:1.4.4` puis figer `FROM oven/bun:1.4.4@sha256:<digest>` (daemon
+# absent en local, tag exact en attendant). 1.4.4 corrige CVE-2026-111497
+# (Brotli, node2shell/HTTP2Shell) : ne pas redescendre sous cette version.
+FROM oven/bun:1.4.4 AS base
 WORKDIR /app
 # Lock commité : install strict, aucun fallback (dérive interdite).
 COPY package.json bun.lock tsconfig.json ./
@@ -19,7 +20,7 @@ RUN bun install --frozen-lockfile
 # : l'image ne ferait plus son seul travail (seule /v1/health répondrait).
 # Téléchargement AU BUILD, jamais au runtime (déterministe, hors ligne au
 # runtime) : `playwright install` + les libs système via `--with-deps` (base
-# Debian de oven/bun:1.4.3 => apt-get dispo, exécution en root au build).
+# Debian de oven/bun:1.4.4 => apt-get dispo, exécution en root au build).
 # `playwright` est une devDependency : ne jamais passer `--production` ici, le
 # scraper en a besoin à l'exécution. Chemin des navigateurs fixé ET partagé
 # entre le build et le runtime (ENV ci-dessous) : le runtime doit retrouver
