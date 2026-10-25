@@ -138,7 +138,7 @@ export function Dialog({
           </p>
         ) : null}
         {children}
-        <div className="dialog__actions">{actions}</div>
+        {actions ? <div className="dialog__actions">{actions}</div> : null}
       </div>
     </div>
   );

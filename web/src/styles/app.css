@@ -539,6 +539,54 @@ button.card:active {
   from { opacity: 0; transform: translateY(10px) scale(0.98); }
 }
 
+/* Choix de la source photo (Tâches, Cahier) : deux cibles pleine largeur
+   dans un dialogue, lisibles sans dépendre de la taille du libellé. */
+.photo-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.photo-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
+}
+
+.photo-choice:hover {
+  border-color: var(--border-brand);
+  background: var(--brand-pale);
+}
+
+.photo-choice:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.photo-choice__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  background: var(--brand-pale);
+  color: var(--brand-deep);
+}
+
 .stack {
   display: flex;
   flex-direction: column;

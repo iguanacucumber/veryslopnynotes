@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { bridge } from "../../bridge/client";
 import { BridgeCallError, type LessonSummary, type LessonSubject, type LessonsSnapshot } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
@@ -14,7 +14,17 @@ import {
   SubjectAvatar,
 } from "../../ui/components";
 import { Dialog } from "../../ui/Dialog";
-import { IconBook, IconCamera, IconPlus, IconTrash } from "../../ui/icons";
+import {
+  IconBook,
+  IconCamera,
+  IconCheck,
+  IconChevronRight,
+  IconImage,
+  IconPlus,
+  IconShield,
+  IconTrash,
+  IconWarning,
+} from "../../ui/icons";
 import "./cahier.css";
 
 function messageOf(error: unknown, fallback: string): string {
@@ -47,9 +57,16 @@ type Editor = {
   subject: string;
   title: string;
   text: string;
+  /** Brouillon issu d'une photo : il exige une relecture explicite. */
+  fromPhoto?: boolean;
 };
 
 type PhotoSource = "camera" | "gallery";
+
+type PhotoIssue = {
+  subject: string;
+  message: string;
+};
 
 /** Cahier de cours local (#586) : la mémoire de l'assistant par matière. */
 export function CahierScreen() {
@@ -67,6 +84,8 @@ export function CahierScreen() {
   const [manualBusy, setManualBusy] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState<string | null>(null);
   const [photoTarget, setPhotoTarget] = useState<string | null>(null);
+  const [photoIssue, setPhotoIssue] = useState<PhotoIssue | null>(null);
+  const photoBusyRef = useRef(false);
   const listId = useId();
 
   useEffect(() => {
@@ -219,15 +238,24 @@ export function CahierScreen() {
    * Photo de cours -> brouillon. La photo ne passe jamais par la WebView :
    * le natif l'envoie au fournisseur puis la supprime. L'élève relit le texte
    * avant l'enregistrement.
+   *
+   * Une reprise garde le brouillon affiché : il n'est remplacé qu'une fois la
+   * nouvelle photo transcrite. Une annulation ne touche donc à rien.
    */
-  async function addPhoto(subject: string, source: PhotoSource) {
-    if (photoBusy !== null) return;
+  async function addPhoto(subject: string, source: PhotoSource, retake = false) {
+    // Le ref ferme la course entre deux taps : l'état n'est pas encore rendu
+    // quand le second geste arrive.
+    if (photoBusyRef.current) return;
+    photoBusyRef.current = true;
     setPhotoBusy(subject);
+    if (retake) setEditorError("");
     try {
       const result = await bridge.addLessonPhoto(subject, source);
       if (result.cancelled) return;
       if (!result.ok) {
-        notify(result.message || "Photo non transcrite.", "error");
+        const message = result.message || "Photo non transcrite.";
+        if (retake) setEditorError(message);
+        else setPhotoIssue({ subject, message });
         return;
       }
       setEditor({
@@ -235,11 +263,14 @@ export function CahierScreen() {
         subject,
         title: result.title || "Cours photographié",
         text: result.text || "",
+        fromPhoto: true,
       });
-      notify("Photo transcrite : relis le texte avant d’enregistrer.");
     } catch (e) {
-      notify(messageOf(e, "Photo non transcrite : réessaie dans un instant."), "error");
+      const message = messageOf(e, "Photo non transcrite : réessaie dans un instant.");
+      if (retake) setEditorError(message);
+      else setPhotoIssue({ subject, message });
     } finally {
+      photoBusyRef.current = false;
       setPhotoBusy(null);
     }
   }
@@ -249,6 +280,18 @@ export function CahierScreen() {
     if (!subject) return;
     setPhotoTarget(null);
     void addPhoto(subject, source);
+  }
+
+  function retakePhoto(source: PhotoSource) {
+    if (!editor) return;
+    void addPhoto(editor.subject, source, true);
+  }
+
+  function retryPhoto() {
+    const issue = photoIssue;
+    if (!issue) return;
+    setPhotoIssue(null);
+    setPhotoTarget(issue.subject);
   }
 
   if (loading && snapshot === null && error === "") {
@@ -274,6 +317,7 @@ export function CahierScreen() {
   const maxText = snapshot?.maxTextChars ?? 4000;
   const maxNotes = snapshot?.maxNotesPerSubject ?? 8;
   const maxTitle = snapshot?.maxTitleChars ?? 120;
+  const editorBusy = saving || (photoBusy !== null && editor?.fromPhoto === true);
 
   return (
     <Page>
@@ -289,15 +333,31 @@ export function CahierScreen() {
       />
 
       <Card className="card--flat cahier-privacy">
-        <p className="t-body-m" style={{ margin: 0 }}>
-          Garde ici les cours de tes matières. L’assistant les utilise comme sources pour l’aide
-          devoirs et les fiches de révision, même quand tu n’as pas de manuel.
-        </p>
-        <p className="tiny muted cahier-privacy__note">
-          Ces cours restent sur ton téléphone et sont supprimés à la déconnexion. Ils partent
-          directement au fournisseur d’IA, avec ta clé, uniquement quand tu demandes de l’aide ;
-          une photo est transcrite puis elle est supprimée, et le texte revient ici pour relecture.
-        </p>
+        <details className="cahier-privacy__details">
+          <summary className="cahier-privacy__summary">
+            <span className="cahier-privacy__icon" aria-hidden="true">
+              <IconShield size={18} />
+            </span>
+            <span className="grow">
+              <strong className="t-body-m">Tes cours restent sur ton téléphone</strong>
+              <span className="tiny muted">Sources privées, utilisées seulement quand tu demandes de l’aide.</span>
+            </span>
+            <span className="cahier-privacy__chevron" aria-hidden="true">
+              <IconChevronRight size={16} />
+            </span>
+          </summary>
+          <div className="cahier-privacy__body">
+            <p className="t-body-m">
+              Garde ici les cours de tes matières. L’assistant les utilise comme sources pour l’aide
+              devoirs et les fiches de révision, même quand tu n’as pas de manuel.
+            </p>
+            <p className="tiny muted">
+              Ces cours restent sur ton téléphone et sont supprimés à la déconnexion. Ils partent
+              directement au fournisseur d’IA, avec ta clé, uniquement quand tu demandes de l’aide ;
+              une photo est transcrite puis elle est supprimée, et le texte revient ici pour relecture.
+            </p>
+          </div>
+        </details>
       </Card>
 
       {error ? <ErrorBox message={error} /> : null}
@@ -320,12 +380,14 @@ export function CahierScreen() {
         return (
           <Card key={subject.subject} as="article" className="cahier-subject">
             <div className="cahier-subject__head">
-              <SubjectAvatar subject={subject.subject} size={38} dark={dark} />
+              <SubjectAvatar subject={subject.subject} size={42} dark={dark} />
               <div className="grow">
                 <h2 className="cahier-subject__title">{subject.subject}</h2>
                 <span className="cahier-subject__meta">
-                  <span className="t-caption muted">{subject.notes.length} cours</span>
                   <span className={`cahier-status cahier-status--${status.tone}`}>{status.label}</span>
+                  <span className="t-caption muted">
+                    {subject.notes.length} cours
+                  </span>
                 </span>
               </div>
             </div>
@@ -346,6 +408,11 @@ export function CahierScreen() {
               {subject.notes.map((note) => (
                 <ListRow
                   key={note.id}
+                  leading={
+                    <span className="cahier-note-icon" aria-hidden="true">
+                      <IconBook size={16} />
+                    </span>
+                  }
                   title={note.title}
                   subtitle={`${dayLabel(note.createdAt)} · ${note.chars} caractères`}
                   onClick={() => void openNote(note.id)}
@@ -355,6 +422,7 @@ export function CahierScreen() {
 
             <div className="cahier-subject__actions">
               <button type="button" className="btn btn--small" onClick={() => newNote(subject.subject)}>
+                <IconPlus size={16} />
                 Ajouter un cours
               </button>
               <button
@@ -377,28 +445,32 @@ export function CahierScreen() {
           title="Sans cours"
           action={<span className="tiny muted">{withoutNotes.length}</span>}
         >
+          <p className="tiny muted cahier-empty-hint">Une photo ou un cours écrit pour démarrer.</p>
           <Card className="card--flat">
             <div className="cahier-empty-list">
               {withoutNotes.map((subject) => (
                 <div key={subject.subject} className="cahier-empty-row">
-                  <SubjectAvatar subject={subject.subject} size={28} dark={dark} />
+                  <SubjectAvatar subject={subject.subject} size={30} dark={dark} />
                   <span className="grow cahier-empty-row__name">{subject.subject}</span>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    disabled={photoBusy !== null}
-                    aria-label={`Ajouter une photo de cours pour ${subject.subject}`}
-                    onClick={() => setPhotoTarget(subject.subject)}
-                  >
-                    <IconCamera size={18} />
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--small"
-                    onClick={() => newNote(subject.subject)}
-                  >
-                    Ajouter
-                  </button>
+                  <div className="cahier-empty-row__actions">
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      disabled={photoBusy !== null}
+                      aria-label={`Ajouter une photo de cours pour ${subject.subject}`}
+                      onClick={() => setPhotoTarget(subject.subject)}
+                    >
+                      <IconCamera size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label={`Ajouter un cours écrit pour ${subject.subject}`}
+                      onClick={() => newNote(subject.subject)}
+                    >
+                      <IconPlus size={18} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -412,10 +484,10 @@ export function CahierScreen() {
 
       <Dialog
         open={photoTarget !== null}
-        title="Ajouter une photo"
+        title="Photo de cours"
         description={
           photoTarget
-            ? `${photoTarget} — choisis la source. Le texte revient ici pour relecture.`
+            ? `${photoTarget} · La photo est transcrite, puis effacée. Le texte revient ici pour relecture.`
             : undefined
         }
         busy={photoBusy !== null}
@@ -423,42 +495,102 @@ export function CahierScreen() {
           if (photoBusy === null) setPhotoTarget(null);
         }}
         actions={
+          <button
+            type="button"
+            className="btn btn--ghost btn--small"
+            disabled={photoBusy !== null}
+            onClick={() => setPhotoTarget(null)}
+          >
+            Annuler
+          </button>
+        }
+      >
+        <div className="photo-choices">
+          <button
+            type="button"
+            className="photo-choice"
+            data-autofocus
+            disabled={photoBusy !== null}
+            onClick={() => choosePhoto("camera")}
+          >
+            <span className="photo-choice__icon" aria-hidden="true">
+              <IconCamera size={20} />
+            </span>
+            <span>Prendre une photo</span>
+          </button>
+          <button
+            type="button"
+            className="photo-choice"
+            disabled={photoBusy !== null}
+            onClick={() => choosePhoto("gallery")}
+          >
+            <span className="photo-choice__icon" aria-hidden="true">
+              <IconImage size={20} />
+            </span>
+            <span>Choisir une image</span>
+          </button>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={photoBusy !== null && editor === null}
+        title="Transcription de la photo"
+        description={
+          photoBusy
+            ? `${photoBusy} · La photo est lue par le fournisseur puis effacée. Le texte reviendra ici pour relecture.`
+            : undefined
+        }
+        busy
+        onClose={() => undefined}
+        actions={null}
+      >
+        <p className="cahier-photo-progress" role="status">
+          <span className="spinner" aria-hidden="true" />
+          <span>Lecture de la photo…</span>
+        </p>
+      </Dialog>
+
+      <Dialog
+        open={photoIssue !== null}
+        role="alertdialog"
+        title="Photo non transcrite"
+        description={photoIssue?.message}
+        icon={<IconWarning size={20} />}
+        onClose={() => setPhotoIssue(null)}
+        actions={
           <>
-            <button
-              type="button"
-              className="btn btn--ghost btn--small"
-              disabled={photoBusy !== null}
-              onClick={() => setPhotoTarget(null)}
-            >
-              Annuler
+            <button type="button" className="btn btn--ghost btn--small" onClick={() => setPhotoIssue(null)}>
+              Fermer
             </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--small"
-              disabled={photoBusy !== null}
-              onClick={() => choosePhoto("gallery")}
-            >
-              Choisir une image
-            </button>
-            <button
-              type="button"
-              className="btn btn--small"
-              disabled={photoBusy !== null}
-              onClick={() => choosePhoto("camera")}
-            >
-              Prendre une photo
+            <button type="button" className="btn btn--small" onClick={retryPhoto}>
+              Réessayer
             </button>
           </>
         }
-      />
+      >
+        <p className="tiny muted" style={{ margin: "8px 0 0" }}>
+          La photo n’a pas été gardée. Une photo plus nette, cadrée sur la page, a plus de chances
+          d’aboutir.
+        </p>
+      </Dialog>
 
       <Dialog
         open={editor !== null}
-        title={editor?.id ? "Modifier le cours" : "Ajouter un cours"}
-        description="Le texte est envoyé au fournisseur comme une donnée, jamais comme une instruction."
-        busy={saving}
+        title={
+          editor?.fromPhoto
+            ? "Vérifier la photo"
+            : editor?.id
+              ? "Modifier le cours"
+              : "Ajouter un cours"
+        }
+        description={
+          editor?.fromPhoto
+            ? undefined
+            : "Le texte est envoyé au fournisseur comme une donnée, jamais comme une instruction."
+        }
+        busy={editorBusy}
         onClose={() => {
-          if (!saving) setEditor(null);
+          if (!editorBusy) setEditor(null);
         }}
         actions={
           <>
@@ -466,7 +598,7 @@ export function CahierScreen() {
               <button
                 type="button"
                 className="btn btn--danger btn--small"
-                disabled={saving}
+                disabled={editorBusy}
                 onClick={() => {
                   const summary = subjects
                     .flatMap((subject) => subject.notes)
@@ -478,10 +610,20 @@ export function CahierScreen() {
                 Supprimer
               </button>
             ) : null}
-            <button type="button" className="btn btn--ghost btn--small" disabled={saving} onClick={() => setEditor(null)}>
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              disabled={editorBusy}
+              onClick={() => setEditor(null)}
+            >
               Annuler
             </button>
-            <button type="button" className="btn btn--small" disabled={saving || editorLoading} onClick={() => void saveNote()}>
+            <button
+              type="button"
+              className="btn btn--small"
+              disabled={editorBusy || editorLoading}
+              onClick={() => void saveNote()}
+            >
               {saving ? "Enregistrement…" : "Enregistrer"}
             </button>
           </>
@@ -490,6 +632,48 @@ export function CahierScreen() {
         {editorLoading ? <Loading label="Chargement du cours…" /> : null}
         {editor ? (
           <>
+            {editor.fromPhoto ? (
+              <div className={`cahier-photo${photoBusy !== null ? " cahier-photo--busy" : ""}`}>
+                <span className="cahier-photo__icon" aria-hidden="true">
+                  {photoBusy !== null ? <span className="spinner" /> : <IconCheck size={18} />}
+                </span>
+                <div className="grow">
+                  <p className="cahier-photo__status" role="status">
+                    <strong className="t-body">
+                      {photoBusy !== null ? "Nouvelle lecture en cours…" : "Photo transcrite"}
+                    </strong>
+                    <span className="tiny muted">
+                      {photoBusy !== null
+                        ? "Ce brouillon sera remplacé à la fin de la transcription."
+                        : "La photo a été effacée. Relis le texte et corrige les erreurs avant d’enregistrer."}
+                    </span>
+                  </p>
+                  {photoBusy === null ? (
+                    <div className="cahier-photo__actions">
+                      <button
+                        type="button"
+                        className="chip"
+                        disabled={editorBusy}
+                        onClick={() => retakePhoto("camera")}
+                      >
+                        <IconCamera size={15} />
+                        Reprendre
+                      </button>
+                      <button
+                        type="button"
+                        className="chip"
+                        disabled={editorBusy}
+                        onClick={() => retakePhoto("gallery")}
+                      >
+                        <IconImage size={15} />
+                        Galerie
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             <label className="tiny muted" htmlFor={`${listId}-subject`} style={{ display: "block", marginBottom: 6 }}>
               Matière
             </label>
@@ -499,8 +683,8 @@ export function CahierScreen() {
               list={`${listId}-subjects`}
               value={editor.subject}
               maxLength={64}
-              disabled={saving}
-              data-autofocus
+              disabled={editorBusy}
+              data-autofocus={editor.fromPhoto ? undefined : true}
               onChange={(event) => setEditor({ ...editor, subject: event.target.value })}
             />
             <datalist id={`${listId}-subjects`}>
@@ -517,7 +701,7 @@ export function CahierScreen() {
               className="field"
               value={editor.title}
               maxLength={maxTitle}
-              disabled={saving}
+              disabled={editorBusy}
               placeholder="Chapitre 4 — dérivées"
               onChange={(event) => setEditor({ ...editor, title: event.target.value })}
             />
@@ -531,7 +715,7 @@ export function CahierScreen() {
               value={editor.text}
               maxLength={maxText}
               rows={10}
-              disabled={saving}
+              disabled={editorBusy}
               placeholder="Colle ou écris ici le cours de la matière."
               onChange={(event) => setEditor({ ...editor, text: event.target.value })}
             />
