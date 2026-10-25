@@ -201,3 +201,76 @@ describe("câblage : un seul endroit pour le budget (#411)", () => {
     expect(bridge).toContain("catch (e: OutputTooLongException)");
   });
 });
+
+// #604 — recette LIVE du chemin IA. Trois défauts vus sur de vrais appels
+// (`nvidia/nemotron-3.5-lightning:free`, clé réelle), dont deux réparés ici.
+//
+// 1. Le bloc source s'appelait `Source : <libellé>`. La consigne exige que
+//    chaque citation « reprenne exactement un libellé fourni » ; le modèle
+//    recopiait donc `Source : Cours : chapitre 4`, et `parseHomeworkResponse`
+//    jetait la réponse (« source non fournie »). Une citation fabriquée par le
+//    prompt lui-même.
+// 2. Le raisonnement du modèle consommait les 3 000 tokens
+//    (`content=null`, `finish_reason=length`, 10 214 caractères de réflexion) :
+//    l'élève lisait « Réponse LLM tronquée ».
+//
+// (3. le modèle vision livré répondait 429 en permanence : voir
+// `android-llm-catalogue.test.ts`.)
+
+describe("les libellés citables sont envoyés TELS QUELS (#604)", () => {
+  const LABELS = ["Consigne", "Cours : Chapitre 4"];
+
+  test.skipIf(skip)("le VRAI prompt porte le libellé brut, sans préfixe de citation", async () => {
+    const r = (await ask({
+      op: "homeworkData",
+      question: "Résous 3x + 2 = 8.",
+      labels: LABELS,
+      texts: ["Résous et justifie.", "On isole x."],
+    })) as unknown as { blocks: string[] };
+    const body = r.blocks.join("\n\n");
+    // Le libellé exact est là, une fois…
+    for (const label of LABELS) {
+      expect(body.split(label).length - 1).toBe(1);
+      expect(body).toContain("Libelle citable : " + label);
+    }
+    // …et AUCUN préfixe qui ressemble à une citation : c'est ce que le modèle
+    // recopiait, et ce que le validateur refusait ensuite.
+    expect(body).not.toMatch(/Source\s*:\s*Consigne/);
+    expect(body).not.toMatch(/Source\s*:/);
+    // La question reste une DONNÉE distincte (elle n'est pas citable).
+    expect(body).toContain("Question eleve (DONNEE) :");
+  });
+
+  test.skipIf(skip)("une citation préfixée reste rejetée (le validateur n'a pas bougé)", async () => {
+    // Le correctif est dans le PROMPT, pas dans la validation : une réponse qui
+    // invente `Source : Consigne` doit toujours être jetée.
+    const raw = JSON.stringify({
+      status: "ok",
+      answer: "x = 2",
+      steps: ["isoler"],
+      sources: ["Source : Consigne"],
+    });
+    const r = await ask({ op: "homework", raw, labels: LABELS });
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain("source non fournie");
+  });
+});
+
+describe("le raisonnement ne mange plus le budget de sortie (#604)", () => {
+  const data = codeOnly(readFileSync(join(DATA, "OpenRouterLlm.kt"), "utf8"));
+
+  test("les DEUX chemins (texte et vision) désactivent le raisonnement", () => {
+    // Un `reasoning` par requête, et il SUIT `max_tokens` dans le même corps :
+    // sinon le réglage pourrait vivre dans le mauvais payload.
+    const paired = [...data.matchAll(/\.put\("max_tokens", MAX_OUTPUT_TOKENS\)[\s\S]{0,600}?\.put\("reasoning", JSONObject\(\)\.put\("enabled", false\)\)/g)];
+    expect(paired.length).toBe(2);
+    // Aucun autre endroit n'active le raisonnement.
+    expect(data).not.toMatch(/"enabled", true/);
+  });
+
+  test("l'analyse ne se fie pas au raisonnement pour produire la réponse", () => {
+    // Une réponse vide ou tronquée reste une ERREUR nommée, jamais un succès.
+    expect(data).toContain("Réponse LLM tronquée");
+    expect(data).toContain("Réponse LLM vide.");
+  });
+});

@@ -61,7 +61,14 @@ object HomeworkAi {
     // reponse avec parseHomeworkResponse sur le meme schema.
     fun homeworkData(question: String, sources: List<HomeworkSource>): List<Untrusted<String>> {
         val head = markExternal("Question eleve (DONNEE) :\n" + question)
-        val rest = sources.map { markExternal("Source : " + it.label + "\nContenu (DONNEE) :\n" + it.text) }
+        // Le libelle doit apparaitre TEL QUEL : la consigne exige que chaque
+        // citation « reprenne exactement un libelle fourni », et la validation
+        // compare `sources` aux libelles bruts (Homework.uniqueLabels).
+        // Avec l'ancien prefixe « Source : », le modele recopiait
+        // « Source : Cours : chapitre 4 » (ou renvoyait une liste vide) et la
+        // reponse etait jetee — « hors format » pour une citation que le prompt
+        // avait lui-meme fabriquee (#604, recette live).
+        val rest = sources.map { markExternal("Libelle citable : " + it.label + "\nContenu (DONNEE) :\n" + it.text) }
         return listOf(head) + rest
     }
 

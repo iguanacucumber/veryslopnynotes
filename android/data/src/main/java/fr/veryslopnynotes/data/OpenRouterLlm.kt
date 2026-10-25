@@ -107,6 +107,13 @@ class OpenRouterLlm(
                 },
             )
             .put("max_tokens", MAX_OUTPUT_TOKENS)
+            // Le raisonnement est COUPE (#604) : mesure live sur le modele par
+            // defaut, `max_tokens=3000` entierement consomme en reasoning
+            // (10 214 caracteres de reflexion), `content=null` et
+            // `finish_reason=length` => « Reponse LLM tronquee ». Le budget de
+            // sortie doit aller a la reponse, et l'attente du pont (45 s)
+            // couvrait mal 23-42 s de raisonnement. Coupe : 1,2 s.
+            .put("reasoning", JSONObject().put("enabled", false))
         return parseCompletion(send(payload, key))
     }
 
@@ -143,6 +150,9 @@ class OpenRouterLlm(
                 },
             )
             .put("max_tokens", MAX_OUTPUT_TOKENS)
+            // Meme raison que le chemin texte (#604) : un modele multimodal qui
+            // raisonne mangerait le budget avant d'ecrire le JSON.
+            .put("reasoning", JSONObject().put("enabled", false))
         return parseCompletion(send(payload, key))
     }
 
@@ -194,9 +204,13 @@ class OpenRouterLlm(
         const val LLM_DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning:free"
 
         // Modèle VISION : le modèle texte par défaut n'accepte PAS les
-        // images. Gemma 4 31B est multimodal, gratuit, au catalogue public.
-        // Un modèle séparé évite de dégrader le texte pour les photos.
-        const val LLM_VISION_MODEL = "google/gemma-4-31b-it:free"
+        // images. `dots-studio/dots-3-note-preview:free` est multimodal
+        // (text+image), gratuit, au catalogue public — et il RÉPOND :
+        // `google/gemma-4-31b-it:free`, livré avant #604, renvoyait un 429
+        // « temporarily rate-limited upstream » sur 8 tentatives espacées,
+        // donc le chemin photo était mort. Un modèle séparé évite de
+        // dégrader le texte pour les photos.
+        const val LLM_VISION_MODEL = "dots-studio/dots-3-note-preview:free"
 
         // URL publique du fournisseur, pas une donnee perso/etablissement.
         const val OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
