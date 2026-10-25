@@ -153,10 +153,11 @@
   max-width: 100%;
 }
 
+/* Deux actions principales côte à côte, la photo seule sur sa ligne : à
+   360 px, trois pastilles de même poids ne tenaient pas sur deux rangées. */
 .task-card__foot {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   gap: 8px;
   margin-top: 10px;
 }
@@ -164,20 +165,46 @@
 .task-help {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  min-width: 0;
   min-height: var(--tap);
-  padding: 0 14px;
+  padding: 0 12px;
   border: 1px solid var(--border-soft);
   border-radius: 999px;
   background: var(--surface);
   color: var(--brand-deep);
   font-size: 13px;
   font-weight: 700;
+  white-space: nowrap;
   transition: background var(--duration) var(--ease), transform var(--duration) var(--ease-out);
 }
 
 .task-help:hover {
   background: var(--brand-pale);
+}
+
+/* Action secondaire : elle reste accessible, mais ne dispute plus la
+   hiérarchie aux deux actions principales. */
+.task-help--photo {
+  grid-column: 1 / -1;
+  justify-self: start;
+  padding: 0 10px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.task-help--photo:hover {
+  background: var(--surface-variant);
+  color: var(--brand-deep);
+}
+
+.task-help--photo.task-help--open {
+  border-color: var(--border-brand);
+  background: var(--brand-pale);
+  color: var(--brand-deep);
 }
 
 .task-help--open {
@@ -194,18 +221,169 @@
   cursor: not-allowed;
 }
 
+.task-card__hint {
+  margin: 8px 0 0;
+}
+
 .task-help__panel {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   margin-top: 10px;
   padding: 12px;
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   background: var(--surface-variant);
+}
+
+.task-help__panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-help__panel-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: var(--brand-pale);
+  color: var(--brand-deep);
+}
+
+.task-help__panel-title {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.task-help__panel-close {
+  flex: 0 0 auto;
+  margin: -8px -8px -8px 0;
+  color: var(--muted);
+}
+
+.task-help__panel-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.task-help__panel-status .spinner {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.task-help__panel-answer {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.task-help__panel-refusal,
+.task-help__panel-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.task-help__panel-refusal p,
+.task-help__panel-error p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.task-help__panel-error p {
+  color: var(--danger-ink);
+}
+
+.task-help__privacy {
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.task-help__privacy summary {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.task-help__privacy p {
+  margin: 6px 0 0;
+}
+
+/* Choix de la source photo : deux cibles pleine largeur dans le dialogue. */
+.task-photo-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.task-photo-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
+}
+
+.task-photo-choice:hover {
+  border-color: var(--border-brand);
+  background: var(--brand-pale);
+}
+
+.task-photo-choice__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  background: var(--brand-pale);
+  color: var(--brand-deep);
 }
 
 @media (max-width: 380px) {
   .task-card {
     padding: 13px;
+  }
+
+  .task-help {
+    gap: 5px;
+    padding: 0 10px;
+    font-size: 12.5px;
+  }
+
+  .task-help--photo {
+    padding: 0 6px;
   }
 }

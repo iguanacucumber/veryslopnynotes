@@ -51,6 +51,7 @@ describe("manuel — source de l'assistant", () => {
   test("l'écran Tâches tient compte du manuel et le déclare dans la divulgation", () => {
     const tasks = source("features/tasks/TasksScreen.tsx");
     expect(tasks).toContain("assignmentHasAssistantMaterial(assignment, manualReady, lessonReady)");
+    expect(tasks).toContain("<summary>Ce qui est envoyé</summary>");
     expect(tasks).toContain("le texte du manuel sont envoyés");
     // Le natif ajoute l'extrait aux DEUX pipelines IA.
     const bridge = readFileSync(

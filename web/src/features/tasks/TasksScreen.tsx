@@ -14,7 +14,18 @@ import {
   SubjectAvatar,
   WeekNavigator,
 } from "../../ui/components";
-import { IconAttach, IconBook, IconCheck, IconChevronLeft, IconChevronRight, IconSparkles } from "../../ui/icons";
+import { Dialog } from "../../ui/Dialog";
+import {
+  IconAttach,
+  IconBook,
+  IconCamera,
+  IconCheck,
+  IconChevronLeft,
+  IconChevronRight,
+  IconClose,
+  IconImage,
+  IconSparkles,
+} from "../../ui/icons";
 import { parseDate } from "../../lib/format";
 import {
   assignmentCardText,
@@ -89,6 +100,7 @@ function TasksWeek({ week }: { week: string }) {
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [doneOpen, setDoneOpen] = useState(false);
   const [help, setHelp] = useState<HelpState | null>(null);
+  const [photoChooser, setPhotoChooser] = useState<Assignment | null>(null);
   const [revisionPending, setRevisionPending] = useState<Record<string, boolean>>({});
   const [llm, setLlm] = useState<LlmState>({ configured: null, error: null });
   const [manualSubjects, setManualSubjects] = useState<string[]>([]);
@@ -292,6 +304,19 @@ function TasksWeek({ week }: { week: string }) {
     setHelp(null);
   }
 
+  /** Le choix de la source vit HORS des cartes : un seul dialogue pour la
+   *  semaine. Annuler ne touche ni au panneau ni à la demande en vol. */
+  function closePhotoChooser() {
+    setPhotoChooser(null);
+  }
+
+  function choosePhoto(source: "camera" | "gallery") {
+    const assignment = photoChooser;
+    if (!assignment) return;
+    setPhotoChooser(null);
+    void askPhoto(assignment, source);
+  }
+
   async function generateSheet(assignment: Assignment) {
     if (revisionPending[assignment.id]) return;
     setRevisionPending((state) => ({ ...state, [assignment.id]: true }));
@@ -437,7 +462,9 @@ function TasksWeek({ week }: { week: string }) {
                       onOpenAttachment={(attachment) => void openAttachment(assignment, attachment)}
                       onHelp={() => void askHelp(assignment)}
                       onPhoto={(source) => void askPhoto(assignment, source)}
+                      onOpenPhotoChooser={() => setPhotoChooser(assignment)}
                       onCloseHelp={closeHelp}
+                      onAddCourse={() => navigate("/cahier")}
                       onGenerateSheet={() => void generateSheet(assignment)}
                     />
                   ))}
@@ -447,6 +474,45 @@ function TasksWeek({ week }: { week: string }) {
           );
         })
       )}
+
+      <Dialog
+        open={photoChooser !== null}
+        title="Photo de l’énoncé"
+        description="La photo part directement au fournisseur, avec ta clé. Elle est supprimée après lecture."
+        icon={<IconCamera size={20} />}
+        onClose={closePhotoChooser}
+        actions={
+          <button type="button" className="btn btn--ghost btn--small" onClick={closePhotoChooser}>
+            Annuler
+          </button>
+        }
+      >
+        {photoChooser ? (
+          <div className="task-photo-choices">
+            <button
+              type="button"
+              className="task-photo-choice"
+              data-autofocus
+              onClick={() => choosePhoto("camera")}
+            >
+              <span className="task-photo-choice__icon" aria-hidden="true">
+                <IconCamera size={20} />
+              </span>
+              <span>Prendre une photo</span>
+            </button>
+            <button
+              type="button"
+              className="task-photo-choice"
+              onClick={() => choosePhoto("gallery")}
+            >
+              <span className="task-photo-choice__icon" aria-hidden="true">
+                <IconImage size={20} />
+              </span>
+              <span>Choisir une image</span>
+            </button>
+          </div>
+        ) : null}
+      </Dialog>
     </Page>
   );
 }
@@ -474,7 +540,9 @@ function AssignmentCard({
   onOpenAttachment,
   onHelp,
   onPhoto,
+  onOpenPhotoChooser,
   onCloseHelp,
+  onAddCourse,
   onGenerateSheet,
 }: {
   assignment: Assignment;
@@ -489,12 +557,16 @@ function AssignmentCard({
   onOpenAttachment: (attachment: AssignmentAttachment) => void;
   onHelp: () => void;
   onPhoto: (source: "camera" | "gallery") => void;
+  onOpenPhotoChooser: () => void;
   onCloseHelp: () => void;
+  onAddCourse: () => void;
   onGenerateSheet: () => void;
 }) {
   const { dark } = useApp();
   const helpPanelId = useId();
   const noMaterialId = useId();
+  const textTriggerRef = useRef<HTMLButtonElement>(null);
+  const photoTriggerRef = useRef<HTMLButtonElement>(null);
   const text = assignmentCardText(assignment);
   const due = dueLabel(assignment.dueDate);
   const tone = dueTone(assignment.dueDate);
@@ -514,6 +586,14 @@ function AssignmentCard({
   const textOffWhilePhoto = textOff || (helpLoading && help?.photo === true);
   const photoOffWhileText = photoOff || (helpLoading && help?.photo !== true);
   const offReason = assistantDisabled ? assistantReasonId : hasMaterial ? undefined : noMaterialId;
+
+  /** Le bouton du panneau disparaît en le fermant : le focus revient au
+   *  déclencheur qui l'a ouvert, sans remonter la liste. */
+  function closeFromPanel() {
+    const trigger = help?.photo ? photoTriggerRef.current : textTriggerRef.current;
+    onCloseHelp();
+    trigger?.focus();
+  }
 
   return (
     <Card as="article" className={`task-card${assignment.done ? " task-card--done" : ""}`}>
@@ -574,6 +654,7 @@ function AssignmentCard({
           {revisionBusy ? "Création…" : "Fiche de révision"}
         </button>
         <button
+          ref={textTriggerRef}
           type="button"
           className={`task-help${help && !help.photo ? " task-help--open" : ""}`}
           disabled={textOffWhilePhoto}
@@ -587,36 +668,25 @@ function AssignmentCard({
           {help && !help.photo ? "Fermer l’aide" : "Aide devoirs"}
         </button>
         <button
+          ref={photoTriggerRef}
           type="button"
-          className={`task-help${help?.photo ? " task-help--open" : ""}`}
+          className={`task-help task-help--photo${help?.photo ? " task-help--open" : ""}`}
           disabled={photoOffWhileText}
           aria-describedby={assistantDisabled ? assistantReasonId : undefined}
           aria-expanded={help?.photo === true}
           aria-controls={help?.photo ? helpPanelId : undefined}
-          aria-label={`Résoudre la photo de l'énoncé de ${assignment.title}`}
-          onClick={help?.photo ? onCloseHelp : () => onPhoto("camera")}
+          aria-haspopup="dialog"
+          aria-label={`${help?.photo ? "Fermer" : "Ouvrir"} la photo de l’énoncé pour ${assignment.title}`}
+          onClick={help?.photo ? onCloseHelp : onOpenPhotoChooser}
         >
-          <IconAttach size={16} />
+          <IconCamera size={16} />
           {help?.photo ? "Fermer la photo" : "Photo de l’énoncé"}
-        </button>
-        <button
-          type="button"
-          className="task-help"
-          disabled={photoOff || help?.loading === true}
-          aria-describedby={assistantDisabled ? assistantReasonId : undefined}
-          aria-label={`Choisir une image pour ${assignment.title}`}
-          onClick={() => onPhoto("gallery")}
-        >
-          <IconAttach size={16} />
-          Galerie
         </button>
       </div>
 
-      {assistantDisabled ? null : (
-        <p id={noMaterialId} className="tiny muted" style={{ margin: "8px 0 0" }}>
-          {hasMaterial
-            ? "Tu peux aussi photographier l’énoncé : la photo est envoyée directement au fournisseur, avec ta clé."
-            : "Aucun texte à envoyer pour l’aide écrite. Photographie l’énoncé ci-dessus : la photo devient la source du corrigé."}
+      {assistantDisabled || hasMaterial ? null : (
+        <p id={noMaterialId} className="tiny muted task-card__hint">
+          Photographie l’énoncé ci-dessus : la photo devient la source du corrigé.
         </p>
       )}
 
@@ -626,27 +696,43 @@ function AssignmentCard({
           role="region"
           aria-label={`${help.photo ? "Photo de l’énoncé" : "Aide devoirs"} — ${assignment.subject}`}
           aria-live="polite"
+          aria-busy={help.loading}
           className="task-help__panel"
         >
-          <strong>{help.photo ? "Photo de l’énoncé" : "Aide devoirs"}</strong>
+          <div className="task-help__panel-head">
+            <span className="task-help__panel-icon" aria-hidden="true">
+              <IconSparkles size={18} />
+            </span>
+            <strong className="task-help__panel-title">
+              {help.photo ? "Photo de l’énoncé" : "Aide devoirs"}
+            </strong>
+            <button
+              type="button"
+              className="icon-btn task-help__panel-close"
+              aria-label="Fermer l’aide"
+              onClick={closeFromPanel}
+            >
+              <IconClose size={18} />
+            </button>
+          </div>
           {help.loading ? (
-            <span>{help.photo ? "L’assistant lit la photo…" : "L’assistant rédige…"}</span>
-          ) : null}
-          {help.answer ? (
-            <p className="t-body-m" style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-              {help.answer}
+            <p className="task-help__panel-status">
+              <span className="spinner" aria-hidden="true" />
+              <span>{help.photo ? "L’assistant lit la photo…" : "L’assistant rédige…"}</span>
             </p>
           ) : null}
+          {help.answer ? <p className="task-help__panel-answer">{help.answer}</p> : null}
           {help.refusal ? (
-            <p className="t-body-m" style={{ margin: 0 }}>
-              {help.refusal}
-            </p>
+            <div className="task-help__panel-refusal">
+              <p>{help.refusal}</p>
+              <button type="button" className="btn btn--ghost btn--small" onClick={onAddCourse}>
+                Ajouter un cours au cahier
+              </button>
+            </div>
           ) : null}
           {help.error ? (
-            <div className="stack" style={{ gap: 6 }}>
-              <p className="t-body-m" role="alert" style={{ margin: 0, color: "var(--danger-ink)" }}>
-                {help.error}
-              </p>
+            <div className="task-help__panel-error">
+              <p role="alert">{help.error}</p>
               <button
                 type="button"
                 className="btn btn--ghost btn--small"
@@ -656,20 +742,23 @@ function AssignmentCard({
               </button>
             </div>
           ) : null}
-          <p className="tiny muted" style={{ margin: 0 }}>
-            {help.photo
-              ? "La photo de l’énoncé, la consigne, l’extrait de cours" +
-                (lessonReady ? ", ton cours mémorisé" : "") +
-                (manualReady ? " et le texte du manuel" : "") +
-                " sont envoyés directement au fournisseur, avec ta clé. La photo est supprimée après lecture."
-              : manualReady && lessonReady
-                ? "Le sujet, la consigne, l’extrait de cours, ton cahier et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
-                : lessonReady
-                  ? "Le sujet, la consigne, l’extrait de cours et ton cours mémorisé sont envoyés directement au fournisseur, avec ta clé."
-                  : manualReady
-                    ? "Le sujet, la consigne, l’extrait de cours et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
-                    : "Le sujet, la consigne et l’extrait de cours de ce devoir sont envoyés directement au fournisseur, avec ta clé."}
-          </p>
+          <details className="task-help__privacy">
+            <summary>Ce qui est envoyé</summary>
+            <p className="tiny muted">
+              {help.photo
+                ? "La photo de l’énoncé, la consigne, l’extrait de cours" +
+                  (lessonReady ? ", ton cours mémorisé" : "") +
+                  (manualReady ? " et le texte du manuel" : "") +
+                  " sont envoyés directement au fournisseur, avec ta clé. La photo est supprimée après lecture."
+                : manualReady && lessonReady
+                  ? "Le sujet, la consigne, l’extrait de cours, ton cahier et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
+                  : lessonReady
+                    ? "Le sujet, la consigne, l’extrait de cours et ton cours mémorisé sont envoyés directement au fournisseur, avec ta clé."
+                    : manualReady
+                      ? "Le sujet, la consigne, l’extrait de cours et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
+                      : "Le sujet, la consigne et l’extrait de cours de ce devoir sont envoyés directement au fournisseur, avec ta clé."}
+            </p>
+          </details>
         </div>
       ) : null}
     </Card>

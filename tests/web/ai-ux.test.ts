@@ -65,6 +65,49 @@ describe("IA — aide devoirs", () => {
     expect(tasks).toContain("disabled={photoOffWhileText}");
   });
 
+  test("le choix photo est un dialogue unique, annulable sans appel (#610)", () => {
+    expect(tasks).toContain("<Dialog");
+    expect(tasks).toContain("Prendre une photo");
+    expect(tasks).toContain("Choisir une image");
+    expect(tasks).toContain("Annuler");
+    expect(tasks).toContain("La photo part directement au fournisseur");
+    expect(tasks).toContain('aria-haspopup="dialog"');
+    const cancel = between(tasks, "function closePhotoChooser()", "function choosePhoto");
+    expect(cancel).toContain("setPhotoChooser(null)");
+    expect(cancel).not.toContain("askPhoto");
+    const choose = between(tasks, "function choosePhoto", "async function generateSheet");
+    expect(choose).toContain("askPhoto(assignment, source)");
+  });
+
+  test("le panneau se ferme de l'intérieur et garde le focus (#610)", () => {
+    expect(tasks).toContain('aria-label="Fermer l’aide"');
+    expect(tasks).toContain("const trigger = help?.photo ? photoTriggerRef.current : textTriggerRef.current;");
+    expect(tasks).toContain("trigger?.focus()");
+    expect(tasks).toContain("aria-busy={help.loading}");
+    expect(tasks).toContain('className="spinner"');
+    expect(tasks).toContain("L’assistant rédige…");
+    expect(tasks).toContain("L’assistant lit la photo…");
+  });
+
+  test("un refus mène au cahier, jamais au corps brut (#610)", () => {
+    expect(tasks).toContain("Ajouter un cours au cahier");
+    expect(tasks).toContain('onAddCourse={() => navigate("/cahier")}');
+    const panel = between(tasks, 'className="task-help__panel"', "</details>");
+    expect(panel).toContain("{help.refusal}");
+    expect(panel).toContain("Ajouter un cours au cahier");
+    expect(panel).not.toContain("result.body");
+  });
+
+  test("la réponse reste du texte, la divulgation est repliée (#610)", () => {
+    expect(tasks).toContain("<summary>Ce qui est envoyé</summary>");
+    expect(tasks).toContain("le texte du manuel sont envoyés");
+    expect(tasks).toContain("La photo est supprimée après lecture");
+    expect(tasks).toContain('className="task-help__panel-answer"');
+    expect(tasks).not.toContain("Tu peux aussi photographier l’énoncé");
+    expect(tasks).not.toContain("dangerouslySetInnerHTML");
+    expect(tasks).not.toContain("innerHTML");
+  });
+
   test("pendant la vérification, l'écran ne dit pas déjà « désactivé »", () => {
     expect(tasks).toContain("const assistantChecking = llm.configured === null");
     expect(tasks).toContain("{assistantChecking ? (");
