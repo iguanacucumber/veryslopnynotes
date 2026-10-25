@@ -11,6 +11,14 @@ function source(path: string): string {
   return readFileSync(join(WEB, path), "utf8");
 }
 
+function between(text: string, start: string, end: string): string {
+  const from = text.indexOf(start);
+  expect(from).toBeGreaterThan(-1);
+  const to = text.indexOf(end, from + start.length);
+  expect(to).toBeGreaterThan(from);
+  return text.slice(from, to);
+}
+
 describe("devoirs — photo d'énoncé (#588)", () => {
   test("le pont factice rend un corrigé, jamais une image", async () => {
     const result = await mockCall<{ ok: boolean; body?: string }>("llm.solvePhoto", {
@@ -38,12 +46,32 @@ describe("devoirs — photo d'énoncé (#588)", () => {
     const tasks = source("features/tasks/TasksScreen.tsx");
     expect(tasks).toContain("bridge.solveHomeworkPhoto");
     expect(tasks).toContain("Photo de l’énoncé");
-    expect(tasks).toContain("Galerie");
+    expect(tasks).toContain("Prendre une photo");
+    expect(tasks).toContain("Choisir une image");
+    // Plus de pastille « Galerie » concurrente : un seul bouton photo.
+    expect(tasks).not.toContain("Galerie");
     expect(tasks).toContain("const photoOff = assistantDisabled || revisionBusy");
     expect(tasks).toContain("Photographie l’énoncé ci-dessus");
     expect(tasks).toContain("La photo est supprimée après lecture");
     // Le texte reste bloqué sans source ; la photo a sa propre condition.
     expect(tasks).toContain("const textOff = assistantDisabled || !hasMaterial");
+  });
+
+  test("un seul bouton photo ouvre le dialogue de source (#610)", () => {
+    const tasks = source("features/tasks/TasksScreen.tsx");
+    const icons = source("ui/icons.tsx");
+    expect(icons).toContain("export const IconImage");
+    expect(tasks).toContain("<Dialog");
+    expect(tasks).toContain("open={photoChooser !== null}");
+    expect(tasks).toContain("onClose={closePhotoChooser}");
+    expect(tasks).toContain("La photo part directement au fournisseur");
+    expect(tasks).toContain("askPhoto(assignment, source)");
+    // Un seul dialogue pour la semaine, rendu APRÈS la liste des cartes.
+    expect(tasks.indexOf("<Dialog")).toBeGreaterThan(tasks.lastIndexOf('className="list"'));
+    // Annuler ne touche ni au panneau ni à la demande en vol.
+    const cancel = between(tasks, "function closePhotoChooser()", "function choosePhoto");
+    expect(cancel).toContain("setPhotoChooser(null)");
+    expect(cancel).not.toContain("askPhoto");
   });
 
   test("le natif réutilise les MÊMES sources que l'aide texte", () => {

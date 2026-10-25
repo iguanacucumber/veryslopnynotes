@@ -103,6 +103,9 @@ export const IconClose = (p: Props) => (
 export const IconCamera = (p: Props) => (
   <Svg {...p}><path d="M3 8h4l2-3h6l2 3h4v11H3V8Z" /><circle cx="12" cy="13" r="3.5" /></Svg>
 );
+export const IconImage = (p: Props) => (
+  <Svg {...p}><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="1.6" /><path d="m4 18 5-5 4 4 2-2 5 5" /></Svg>
+);
 export const IconCheck = (p: Props) => (
   <Svg {...p}><path d="m4 12 5 5L20 6" /></Svg>
 );
