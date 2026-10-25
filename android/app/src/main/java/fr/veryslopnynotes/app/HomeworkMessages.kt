@@ -34,8 +34,11 @@ const val HOMEWORK_REFUSAL_MESSAGE_MAX_CHARS = 200
 private const val SOURCES_INSUFFISANTES = "sources_insuffisantes"
 
 /** Refus déterministe : c'est la MATIÈRE qui manque, pas l'intention. */
+// #608 : la phrase disait « refuse de répondre sans source » alors que des
+// sources ONT été envoyées (consigne, cours, manuel, cahier) — le modèle les
+// juge seulement insuffisantes. Diagnostic faux, corrigé ici.
 private const val REFUSAL_SOURCES =
-    "Le devoir n'a pas assez de matière : l'assistant refuse de répondre sans source."
+    "Le devoir n'a pas assez de matière : les sources fournies ne suffisent pas pour répondre."
 
 /** Refus pour une autre raison : on n'affirme aucune cause. */
 private const val REFUSAL_GENERIQUE = "L'assistant a refusé de répondre à cette question."
