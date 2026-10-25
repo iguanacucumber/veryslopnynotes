@@ -330,47 +330,8 @@
   margin: 6px 0 0;
 }
 
-/* Choix de la source photo : deux cibles pleine largeur dans le dialogue. */
-.task-photo-choices {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.task-photo-choice {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 56px;
-  padding: 0 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 600;
-  text-align: left;
-  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
-}
-
-.task-photo-choice:hover {
-  border-color: var(--border-brand);
-  background: var(--brand-pale);
-}
-
-.task-photo-choice__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 auto;
-  border-radius: 12px;
-  background: var(--brand-pale);
-  color: var(--brand-deep);
-}
+/* Choix de la source photo : styles partagés dans `styles/app.css`
+   (`.photo-choice`), utilisés aussi par le cahier. */
 
 @media (max-width: 380px) {
   .task-card {

@@ -118,6 +118,24 @@ describe("cahier de cours — pont et écran (#586)", () => {
     expect(screen).not.toContain("dangerouslySetInnerHTML");
   });
 
+  test("après une photo, le brouillon demande une relecture explicite", () => {
+    const screen = source("features/cahier/CahierScreen.tsx");
+    // Le dialogue n'est plus celui d'une saisie manuelle.
+    expect(screen).toContain("Vérifier la photo");
+    expect(screen).toContain("Photo transcrite");
+    expect(screen).toContain("La photo a été effacée");
+    // Reprendre sans perdre le brouillon tant que la capture n'a pas abouti.
+    expect(screen).toContain("retakePhoto");
+    expect(screen).toContain("Reprendre");
+    expect(screen).toContain("Galerie");
+    expect(screen).toContain("Ce brouillon sera remplacé");
+    // Attente et échec ont leur propre surface, pas une notification fugace.
+    expect(screen).toContain("Transcription de la photo");
+    expect(screen).toContain("cahier-photo-progress");
+    expect(screen).toContain("Photo non transcrite");
+    expect(screen).toContain("retryPhoto");
+  });
+
   test("le cahier est une source des devoirs et des fiches, jamais un miroir UI", () => {
     const bridge = readFileSync(
       join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),

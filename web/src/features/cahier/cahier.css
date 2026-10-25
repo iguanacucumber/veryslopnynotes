@@ -1,7 +1,72 @@
-/* Cahier de cours — cartes de matière et matières sans cours. */
+/* Cahier de cours — confidentialité repliable, cartes de matière et
+   relecture d'une photo transcrite. */
 
-.cahier-privacy__note {
-  margin: 6px 0 0;
+.cahier-privacy {
+  padding: 0;
+  overflow: hidden;
+}
+
+.cahier-privacy__details {
+  display: block;
+}
+
+.cahier-privacy__summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.cahier-privacy__summary::-webkit-details-marker {
+  display: none;
+}
+
+.cahier-privacy__summary::marker {
+  content: "";
+}
+
+.cahier-privacy__summary .grow {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cahier-privacy__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: var(--brand-pale);
+  color: var(--brand-deep);
+}
+
+.cahier-privacy__chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform var(--duration) var(--ease-out);
+}
+
+.cahier-privacy__details[open] .cahier-privacy__chevron {
+  transform: rotate(90deg);
+}
+
+.cahier-privacy__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 14px 14px 56px;
+}
+
+.cahier-privacy__body p {
+  margin: 0;
 }
 
 .cahier-subject {
@@ -11,7 +76,7 @@
 .cahier-subject__head {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 11px;
 }
 
 .cahier-subject__title {
@@ -27,17 +92,15 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 3px;
 }
 
 .cahier-manual {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-height: var(--tap);
-  margin-top: 6px;
-  padding-top: 4px;
+  min-height: 44px;
+  margin-top: 8px;
+  padding-top: 6px;
   border-top: 1px solid var(--border-soft);
 }
 
@@ -46,6 +109,13 @@
   align-items: center;
   gap: 8px;
   cursor: pointer;
+}
+
+.cahier-manual__label input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--brand-solid);
 }
 
 .cahier-status {
@@ -77,8 +147,18 @@
 }
 
 .cahier-subject__notes {
-  padding: 0;
-  margin-top: 4px;
+  padding: 2px 0 0;
+}
+
+.cahier-note-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: var(--surface-variant);
+  color: var(--muted);
 }
 
 .cahier-subject__actions {
@@ -86,6 +166,10 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
+}
+
+.cahier-empty-hint {
+  margin: 0 4px 8px;
 }
 
 .cahier-empty-list {
@@ -98,7 +182,7 @@
   align-items: center;
   gap: 8px;
   min-height: 56px;
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
 .cahier-empty-row + .cahier-empty-row {
@@ -107,4 +191,84 @@
 
 .cahier-empty-row__name {
   font-weight: 600;
+}
+
+.cahier-empty-row__actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.cahier-empty-row__actions .icon-btn:last-child {
+  color: var(--brand-deep);
+}
+
+/* --- Relecture d'une photo ------------------------------------------------ */
+
+.cahier-photo {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-brand);
+  border-radius: var(--radius-sm);
+  background: var(--brand-pale);
+}
+
+.cahier-photo--busy {
+  border-color: var(--border-soft);
+  background: var(--surface-variant);
+}
+
+.cahier-photo__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--brand-deep);
+}
+
+.cahier-photo__icon .spinner {
+  width: 18px;
+  height: 18px;
+}
+
+.cahier-photo__status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+
+.cahier-photo__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.cahier-photo__actions .chip {
+  background: var(--surface);
+}
+
+.cahier-photo-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.cahier-photo-progress .spinner {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
 }

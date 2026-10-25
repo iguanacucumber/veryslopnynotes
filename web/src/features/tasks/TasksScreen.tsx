@@ -488,24 +488,24 @@ function TasksWeek({ week }: { week: string }) {
         }
       >
         {photoChooser ? (
-          <div className="task-photo-choices">
+          <div className="photo-choices">
             <button
               type="button"
-              className="task-photo-choice"
+              className="photo-choice"
               data-autofocus
               onClick={() => choosePhoto("camera")}
             >
-              <span className="task-photo-choice__icon" aria-hidden="true">
+              <span className="photo-choice__icon" aria-hidden="true">
                 <IconCamera size={20} />
               </span>
               <span>Prendre une photo</span>
             </button>
             <button
               type="button"
-              className="task-photo-choice"
+              className="photo-choice"
               onClick={() => choosePhoto("gallery")}
             >
-              <span className="task-photo-choice__icon" aria-hidden="true">
+              <span className="photo-choice__icon" aria-hidden="true">
                 <IconImage size={20} />
               </span>
               <span>Choisir une image</span>
