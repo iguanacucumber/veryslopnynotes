@@ -16,11 +16,22 @@ const APP = join(import.meta.dir, "..", "..", "android/app/src/main/java/fr/very
 const src = (dir: string, file: string) => codeOnly(readFileSync(join(dir, file), "utf8"));
 
 // Catalogue de RÉFÉRENCE : identifiants relevés dans le catalogue public
-// (`GET https://openrouter.ai/api/v1/models`, 469 modèles, relevé du
-// 2026-10-19). Liste EN DUR : un test unitaire n'appelle jamais le réseau, et
-// le catalogue bouge plus vite que la suite de tests.
+// (`GET https://openrouter.ai/api/v1/models`, relevé du 2026-10-25 : les
+// modèles livrés y sont, avec leur modalité d'entrée). Liste EN DUR : un test
+// unitaire n'appelle jamais le réseau, et le catalogue bouge plus vite que la
+// suite de tests.
 // Pour la rafraîchir : curl -s https://openrouter.ai/api/v1/models | jq -r '.data[].id'
+//
+// #604 : la liste porte aussi le fait qu'un modèle ACCEPTE les images
+// (`architecture.input_modalities`). Sans ça, un id « au catalogue » mais
+// texte seul passait le test alors que chaque photo partait en 400.
+const IMAGE_MODELS = new Set([
+  "dots-studio/dots-3-note-preview:free",
+  "google/gemma-4-31b-it:free",
+  "google/gemma-4-26b-a4b-it:free",
+]);
 const KNOWN_MODELS = [
+  "dots-studio/dots-3-note-preview:free",
   "google/gemma-4-31b-it:free",
   "google/gemma-4-26b-a4b-it:free",
   "google/gemma-4-31b-it",
@@ -60,6 +71,10 @@ describe("android LLM — modèle par défaut au catalogue (#359)", () => {
     // les deux constantes ne doivent pas être confondues.
     expect(vision).not.toBe(text);
     expect(vision).toMatch(/^[a-z0-9][a-z0-9.-]*\/[a-z0-9][a-z0-9.:-]*$/);
+    // Et il accepte VRAIMENT les images : un modèle texte seul renverrait une
+    // erreur sur chaque photo (#604 : `google/gemma-4-31b-it:free` répondait
+    // 429 en permanence, le chemin photo était mort).
+    expect(IMAGE_MODELS).toContain(vision!);
   });
 
   test("la liste de référence est elle-même plausible (tripwire)", () => {

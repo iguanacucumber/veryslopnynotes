@@ -21,6 +21,7 @@ import fr.veryslopnynotes.core.CHARS_PER_TOKEN
 import fr.veryslopnynotes.core.Homework
 import fr.veryslopnynotes.core.HomeworkAi
 import fr.veryslopnynotes.core.HomeworkOutcome
+import fr.veryslopnynotes.core.HomeworkSource
 import fr.veryslopnynotes.core.JsonValue
 import fr.veryslopnynotes.core.MAX_OUTPUT_CHARS
 import fr.veryslopnynotes.core.MAX_OUTPUT_TOKENS
@@ -61,6 +62,21 @@ private fun driver(op: JsonValue.Obj): JsonValue = when (op.str("op")) {
         } catch (e: Exception) {
             refus(e)
         }
+    }
+    "homeworkData" -> {
+        // Les blocs DONNEE réellement envoyés au modèle (#604) : le test vérifie
+        // que le libellé citable y apparaît TEL QUEL, sans préfixe qui ressemble
+        // à une citation.
+        val question = op.str("question") ?: throw IllegalArgumentException("pilote: question absente")
+        val labels = (op.fields["labels"] as? JsonValue.Arr)?.items
+            ?.mapNotNull { (it as? JsonValue.Str)?.value }
+            ?: emptyList()
+        val texts = (op.fields["texts"] as? JsonValue.Arr)?.items
+            ?.mapNotNull { (it as? JsonValue.Str)?.value }
+            ?: emptyList()
+        val sources = labels.mapIndexed { i, label -> HomeworkSource(label, texts.getOrElse(i) { "" }) }
+        val blocks = HomeworkAi.homeworkData(question, sources)
+        obj("blocks" to JsonValue.Arr(blocks.map { JsonValue.Str(it.value) }))
     }
     "homework" -> {
         val raw = op.str("raw") ?: throw IllegalArgumentException("pilote: raw absent")
