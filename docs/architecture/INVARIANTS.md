@@ -1,14 +1,76 @@
-# INVARIANTS.md — règles critiques (bloquantes)
+# INVARIANTS.md — registre des règles vérifiées
 
-Format : Invariant → test → commande → emplacement.
+Un invariant est une propriété du produit ou de la chaîne de build qui doit
+rester vraie. Une régression est bloquante, même si la fonctionnalité marche.
+Ce fichier est un **registre**, pas un journal d'incidents : le contexte
+historique vit dans l'issue, le commit ou l'ADR.
+
+Format d'une entrée : règle → test → commande → portée. Un identifiant est
+unique et n'est jamais réutilisé. Une entrée tient en 120 mots ; au-delà, le
+détail va dans un lien.
+
+## Comment ajouter ou réviser un invariant
+
+1. Un incident réel ou une menace identifiée. Pas de règle spéculative.
+2. Une règle en une phrase, vérifiable par un test qui échoue avant le
+   correctif.
+3. Comportement et types d'abord ; un scan de source est un dernier recours,
+   avec sa raison et son chemin de remplacement.
+4. Une ligne dans le registre ci-dessous, puis l'entrée détaillée.
+5. Si la règle chevauche un invariant existant, réviser cet invariant au lieu
+   d'en créer un second.
+
+Une règle qui ne peut pas être testée est une convention, pas un invariant.
+`tests/architecture/docs.test.ts` vérifie les identifiants, le format, les
+références et les commandes citées.
 
 ## Architecture actuelle
 
 - `android/` est l'appareil client ; seul `android/pronote/` parle à Pronote.
 - `web/` est l'interface React embarquée dans la WebView ; elle ne parle à
   aucun réseau et passe par le pont natif (`android/app/.../VsnBridge.kt`).
-- `server/` sert uniquement le scraper de manuels.
-- `shared/contracts/` décrit les deux routes du scraper et conserve des validateurs utilisés par les tests Android.
+- `server/` sert uniquement le scraper de manuels, un sidecar optionnel.
+- `shared/contracts/` décrit les routes du scraper et les validateurs partagés.
+
+## Registre
+
+| ID | Règle | Vérification principale |
+|---|---|---|
+| I1 | Seul `android/pronote/` (et le scraper) parle réseau ; aucun hôte scolaire hors module. | `tests/architecture/invariants.test.ts` |
+| I2 | Le serveur ne contacte jamais Pronote ; un seul `Client` Android. | `tests/architecture/invariants.test.ts` |
+| I3 | `android/core/` reste pur : ni SQLite ni HTTP. | `tests/architecture/invariants.test.ts` |
+| I4 | Aucun secret dans un prompt LLM ; le prompt vérifié est le prompt envoyé. | `tests/unit/kotlin-llm-guard.test.ts` |
+| I5 | L'IA n'a ni outils ni secrets ; le budget de sortie est déduit de la garde. | `tests/unit/kotlin-llm-budget.test.ts` |
+| I6 | Tout contenu externe est marqué `Untrusted` ; aucun MIME exécutable. | `tests/unit/android-untrusted.test.ts` |
+| I7 | Aucun effet métier déclenché par une sortie LLM libre. | `tests/architecture/invariants.test.ts` |
+| I8 | Session Pronote et clé LLM hors serveur ; scraper sans auth = local seulement. | `tests/unit/scraper-*.test.ts` |
+| I9 | Aucun code Kotlin mort. | `agents/runtime/check-kotlin.ts` |
+| I10 | WebView sans réseau ni secret ; pont borné, une réponse par entrée. | `tests/architecture/web.test.ts` |
+| I11 | `.agents/` est verrouillé, scanné et sans fuite. | `tests/architecture/skills-lock.test.ts` |
+| I12 | Le job de fond restaure la session avant de lire, sinon `retry`. | `tests/architecture/sync-session.test.ts` |
+| I13 | Le pont factice n'existe qu'en dev ; absent en prod = échec. | `tests/architecture/web-mock.test.ts` |
+| I14 | « Invalide » n'est jamais « vide » (fail-closed, sauf capabilities). | `tests/unit/kotlin-core-validation-parity.test.ts` |
+| I15 | Export PDF = corps entier + sources canoniques ; troncature signalée. | `tests/unit/kotlin-revision-sheet.test.ts` |
+| I16 | La donnée d'un compte n'est jamais servie à un autre. | `tests/unit/kotlin-cache-scope.test.ts` |
+| I16 bis | Toute écriture dans `offline/` respecte la purge de déconnexion. | `tests/unit/kotlin-offline-artifacts.test.ts` |
+| I17 | Un seul rafraîchissement de session à la fois ; rate-limit ≠ session morte. | `tests/unit/kotlin-refresh-gate.test.ts` |
+| I18 | Keystore indisponible = état `UNAVAILABLE` signalé, jamais un secret en clair. | `tests/unit/kotlin-store-health.test.ts` |
+| I19 | Interface et job de fond lisent par la même file partagée. | `tests/architecture/shared-queue.test.ts` |
+| I20 | Le pont ne sature pas : un fil par appel, file LLM séparée et bornée. | `tests/unit/kotlin-bridge-executors.test.ts` |
+| I21 | Session morte = purge session + cache, décidée par type/code, jamais par message. | `tests/unit/kotlin-session-repair.test.ts` |
+| I22 | Le gate ne peut pas être neutralisé par l'environnement. | `tests/unit/check-runner.test.ts` |
+| I23 | Image scraper non-root, TLS obligatoire, pas de `HOST` forcé. | `tests/unit/server-image-playwright.test.ts` |
+| I24 | Le jar de session du scraper est choisi par le serveur. | `tests/unit/scraper-ssrf.test.ts` |
+| I25 | Un payload n'est affiché que pour sa requête. | `tests/web/grades.test.ts` |
+| I26 | Téléchargements : noms portant l'ID, cache borné, purgés avec le compte. | `tests/unit/downloaded-files.test.ts` |
+| I27 | Une réponse tardive n'écrit que dans le fil qui l'attend. | `tests/web/messages.test.ts` |
+| I28 | La file locale livre toujours un résultat, jamais une promesse pendante. | `tests/unit/kotlin-local-queue.test.ts` |
+| I29 | Le scraper ne s'authentifie pas ; une page de login n'est jamais un manuel. | `tests/unit/scraper-only.test.ts` |
+| I30 | Le plafond HTML s'applique avant la matérialisation. | `tests/unit/scraper-limits.test.ts` |
+| I31 | Un enregistrement publié = une ligne (clé kind + id). | `tests/unit/kotlin-payload-dedupe.test.ts` |
+| I32 | Une photo ne part que sur geste explicite, ré-encodée et bornée. | `tests/unit/kotlin-vision.test.ts` |
+
+## Détail
 
 ## I1 — Seuls `android/pronote/` et le scraper parlent réseau (ADR-003)
 - Invariant : hors `android/pronote/`, `android/` ne contient aucune URL/référence hôte Pronote — **le mot du produit ET le domaine réel de l'éditeur** (`index-education.net`, cf. la référence `pronotets`) : `/pronote/i` seul laissait passer un hôte PRONOTE glissé dans `android/data/` (#489). Le module du port (zéro dépendance) est le seul à parler Pronote en direct ; la déclaration du module dans `settings.gradle.kts` est l'unique mention tolérée hors module. Côté app, PLUS AUCUN client HTTP vers un serveur applicatif (`ApiClient` supprimé en #206 : appairage, lectures et médias sont device-only) ; côté process, seul le scraper Playwright parle réseau (portail éditeur, `server/infrastructure/http.ts`).
@@ -27,54 +89,6 @@ Format : Invariant → test → commande → emplacement.
 - Test : `tests/architecture/invariants.test.ts` (I1 : zéro mention hors module + déclaration unique) + `agents/runtime/check-architecture.ts` (I1) + `tests/unit/android-server-config.test.ts`.
 - Commande : `make architecture-test`.
 - Emplacement : `android/**/*` (tolérances : `android/pronote/**` + ligne `include(...)` de `settings.gradle.kts`). Réf : `docs/adr/003-client-direct.md`.
-
-## I10 — WebView sans réseau et sans secret (ADR-004)
-- Invariant : `web/` ne contient ni `fetch`, XHR, WebSocket, EventSource, ni
-  URL distante. La CSP de `web/index.html` impose `connect-src 'none'`. Aucun
-  jeton de session ni clé LLM n'est exposé au JS ; le pont natif n'expose que
-  des méthodes allowlistées, jamais un proxy d'URL. Le pont ne laisse JAMAIS
-  une promesse sans réponse : tout échec natif — un `Error` compris, pas
-  seulement une `Exception` — devient un rejet borné `{code,message}` (#394).
-  **Toute ENTRÉE du pont répond EXACTEMENT une fois** (#539) : un identifiant
-  d'appel mal formé et un pont fermé (WebView détruite) sont REFUSÉS, jamais
-  ignorés — sinon la promesse pendait, pour TOUJOURS sur `pairing.scanQr`
-  dont le délai JS est 0.
-  **Toute ENTRÉE du pont est BORNÉE, et le pont ne répond JAMAIS « ok » sans
-  avoir écrit** (#395) : les préférences matière sont lues par les règles
-  partagées (`data/SubjectPrefRules.kt` — la source UNIQUE, que le dépôt
-  applique aussi), donc une couleur, un emoji ou un libellé hors contrat sont
-  REFUSÉS avec une phrase bornée, au lieu d'un « enregistré » suivi d'une
-  écriture abandonnée. Une fiche de révision suit la MÊME règle (#528) :
-  l'enregistrement n'est « ok » que si la fiche ET son index (le journal qui
-  la liste) ont été écrits — un index REFUSÉ (l'époque de session a basculé
-  entre deux écritures) fait répondre `ok:false`, jamais « fiche enregistrée »
-  pour une fiche que `revision.list` ne verra pas.
-- Test : `tests/architecture/web.test.ts` (réseau, CSP, HTML injecté, hôte
-  Pronote, secrets persistés, message d'appairage borné) +
-  `tests/unit/android-pairing-message.test.ts` (table de messages du pont,
-  Kotlin exécuté) + `tests/unit/android-homework-message.test.ts` (message de
-  refus du devoir : le motif libre du modèle ne sort pas, Kotlin exécuté) +
-  `tests/unit/android-bridge-error.test.ts` (un `Error` natif devient un rejet,
-  pas une promesse pendante : Kotlin exécuté) +
-  `tests/unit/android-subject-pref.test.ts` (matière hors contrat : refus
-  `ok:false` AVANT toute écriture, entrées bornées, règles du dépôt et du
-  pont partagées : Kotlin exécuté) +
-  `tests/architecture/invariants.test.ts` (les blocs `catch` qui RÉPONDENT
-  capturent `Throwable` ; aucune sortie de `runCall` sans réponse) +
-  `tests/web/bridge.test.ts` (un rejet natif règle toujours la promesse,
-  message non vide ; une méthode SANS timeout se règle quand le natif répond) +
-  `tests/web/profile.test.ts` (un
-  refus du natif est affiché, jamais avalé en « Matière enregistrée. ») +
-  `tests/unit/kotlin-offline-artifacts.test.ts` (Kotlin EXÉCUTÉ : une fiche
-  dont l'index est REFUSÉ fait ÉCHOUER l'enregistrement — aucun « ok » sans
-  avoir écrit, #528).
-- Commande : `make web` (ou `make architecture-test`).
-- Emplacement : `web/**`, `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`,
-  `android/app/src/main/java/fr/veryslopnynotes/app/HomeworkMessages.kt`,
-  `android/app/src/main/java/fr/veryslopnynotes/app/BridgeErrors.kt`,
-  `android/app/src/main/java/fr/veryslopnynotes/app/SubjectPrefMessages.kt`,
-  `android/data/src/main/java/fr/veryslopnynotes/data/SubjectPrefRules.kt`,
-  `android/core/src/main/java/fr/veryslopnynotes/core/RevisionSheet.kt`.
 
 ## I2 — Aucun accès Pronote côté serveur ; un seul client Android (ADR-003)
 - Invariant : le serveur ne contacte jamais Pronote. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android (`app`, `core`, `data`) ne contacte Pronote (pinné par I1).
@@ -116,6 +130,9 @@ Format : Invariant → test → commande → emplacement.
 - Emplacement : `android/core/GradeDiff.kt`, `ExamDetect.kt`, `NotifyFormat.kt`, `RevisionSheet.kt`.
 
 ## I8 — Session Pronote et clé LLM restent hors serveur
+
+- Invariant : la session Pronote et la clé LLM ne quittent jamais le téléphone ;
+  le scraper, sans authentification, reste un outil local.
 
 Le serveur ne lit que `PORT`, `HOST` et les chemins TLS `TLS_CERT_FILE` /
 `TLS_KEY_FILE`. L'image Docker déclare en plus `PLAYWRIGHT_BROWSERS_PATH` :
@@ -180,11 +197,9 @@ source (« Se connecter »). Elle est maintenant refusée (motif `login_required
 HTTP 502 `login_required`) AVANT extraction et AVANT écriture du jar : une
 page de login n'écrase pas la session du serveur (#526 et I28).
 
-Piné par `tests/architecture/invariants.test.ts` (I8),
-`tests/unit/android-homework.test.ts`, `tests/unit/scraper-only.test.ts` et
-`tests/unit/scraper-concurrency.test.ts` ; garde SSRF (littérale + résolution
-DNS) et jar : `tests/unit/scraper-ssrf.test.ts` ; bornes du HTML lu et délai
-de lecture : `tests/unit/scraper-limits.test.ts`.
+- Test : `tests/architecture/invariants.test.ts` (I8), `tests/unit/android-homework.test.ts`, `tests/unit/scraper-only.test.ts` et `tests/unit/scraper-concurrency.test.ts` ; garde SSRF (littérale + résolution DNS) et jar : `tests/unit/scraper-ssrf.test.ts` ; bornes du HTML lu et délai de lecture : `tests/unit/scraper-limits.test.ts`.
+- Commande : `make check`.
+- Emplacement : `server/`, `Dockerfile.server`, `shared/contracts/`, `android/data/SessionStore.kt`, `android/data/LlmKeyStore.kt`.
 
 ## I9 — Pas de code mort dans `android/`
 - Invariant : aucun `fun`/`class` de premier niveau sans appelant dans le code
@@ -205,6 +220,54 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   `tests/architecture/kotlin-check.test.ts` (répertoire absent ou vide = FAIL).
 - Commande : `make architecture-test`.
 - Emplacement : `android/**/*`.
+
+## I10 — WebView sans réseau et sans secret (ADR-004)
+- Invariant : `web/` ne contient ni `fetch`, XHR, WebSocket, EventSource, ni
+  URL distante. La CSP de `web/index.html` impose `connect-src 'none'`. Aucun
+  jeton de session ni clé LLM n'est exposé au JS ; le pont natif n'expose que
+  des méthodes allowlistées, jamais un proxy d'URL. Le pont ne laisse JAMAIS
+  une promesse sans réponse : tout échec natif — un `Error` compris, pas
+  seulement une `Exception` — devient un rejet borné `{code,message}` (#394).
+  **Toute ENTRÉE du pont répond EXACTEMENT une fois** (#539) : un identifiant
+  d'appel mal formé et un pont fermé (WebView détruite) sont REFUSÉS, jamais
+  ignorés — sinon la promesse pendait, pour TOUJOURS sur `pairing.scanQr`
+  dont le délai JS est 0.
+  **Toute ENTRÉE du pont est BORNÉE, et le pont ne répond JAMAIS « ok » sans
+  avoir écrit** (#395) : les préférences matière sont lues par les règles
+  partagées (`data/SubjectPrefRules.kt` — la source UNIQUE, que le dépôt
+  applique aussi), donc une couleur, un emoji ou un libellé hors contrat sont
+  REFUSÉS avec une phrase bornée, au lieu d'un « enregistré » suivi d'une
+  écriture abandonnée. Une fiche de révision suit la MÊME règle (#528) :
+  l'enregistrement n'est « ok » que si la fiche ET son index (le journal qui
+  la liste) ont été écrits — un index REFUSÉ (l'époque de session a basculé
+  entre deux écritures) fait répondre `ok:false`, jamais « fiche enregistrée »
+  pour une fiche que `revision.list` ne verra pas.
+- Test : `tests/architecture/web.test.ts` (réseau, CSP, HTML injecté, hôte
+  Pronote, secrets persistés, message d'appairage borné) +
+  `tests/unit/android-pairing-message.test.ts` (table de messages du pont,
+  Kotlin exécuté) + `tests/unit/android-homework-message.test.ts` (message de
+  refus du devoir : le motif libre du modèle ne sort pas, Kotlin exécuté) +
+  `tests/unit/android-bridge-error.test.ts` (un `Error` natif devient un rejet,
+  pas une promesse pendante : Kotlin exécuté) +
+  `tests/unit/android-subject-pref.test.ts` (matière hors contrat : refus
+  `ok:false` AVANT toute écriture, entrées bornées, règles du dépôt et du
+  pont partagées : Kotlin exécuté) +
+  `tests/architecture/invariants.test.ts` (les blocs `catch` qui RÉPONDENT
+  capturent `Throwable` ; aucune sortie de `runCall` sans réponse) +
+  `tests/web/bridge.test.ts` (un rejet natif règle toujours la promesse,
+  message non vide ; une méthode SANS timeout se règle quand le natif répond) +
+  `tests/web/profile.test.ts` (un
+  refus du natif est affiché, jamais avalé en « Matière enregistrée. ») +
+  `tests/unit/kotlin-offline-artifacts.test.ts` (Kotlin EXÉCUTÉ : une fiche
+  dont l'index est REFUSÉ fait ÉCHOUER l'enregistrement — aucun « ok » sans
+  avoir écrit, #528).
+- Commande : `make web` (ou `make architecture-test`).
+- Emplacement : `web/**`, `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`,
+  `android/app/src/main/java/fr/veryslopnynotes/app/HomeworkMessages.kt`,
+  `android/app/src/main/java/fr/veryslopnynotes/app/BridgeErrors.kt`,
+  `android/app/src/main/java/fr/veryslopnynotes/app/SubjectPrefMessages.kt`,
+  `android/data/src/main/java/fr/veryslopnynotes/data/SubjectPrefRules.kt`,
+  `android/core/src/main/java/fr/veryslopnynotes/core/RevisionSheet.kt`.
 
 ## I11 — Contenu vendorisé `.agents/` : docs, pas de passoire
 - Invariant : `.agents/` (skills d'agents copiés depuis des dépôts tiers,
@@ -375,7 +438,7 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   `android/data/AccountStore.kt`, `android/data/PeriodicSyncWorker.kt`,
   `android/app/VsnBridge.kt`.
 
-## I16 — Toute écriture dans `filesDir/offline/` respecte la purge de déconnexion
+## I16 bis — Toute écriture dans `filesDir/offline/` respecte la purge de déconnexion
 - Invariant : `filesDir/offline/` ne contient QUE de la donnée de compte, donc
   la purge de déconnexion l'efface EN TOUT (#404). Le cache n'est pas le seul
   à y écrire : les fiches de révision (`revisions/`) et les préférences
@@ -702,8 +765,6 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
 - Commande : `make check`.
 - Emplacement : `android/data/LocalRequestQueue.kt`, `android/data/ClientQueue.kt`,
   `android/data/SyncedRepository.kt`, `android/data/PeriodicSyncWorker.kt`.
- (data: la file locale livre l'échec à tous les callbacks de la clé)
- (data: la file locale livre l'échec à tous les callbacks de la clé)
 
 ## I29 — Le scraper ne s'authentifie pas, une page de connexion n'est pas un manuel
 - Invariant : deux promesses que le contrat faisait mais que le code ne
