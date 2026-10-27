@@ -39,7 +39,8 @@ production ne l'embarque pas, et un pont natif absent y est un échec bruyant
 - `src/ui/AppContext.tsx` : thème, palette, rafraîchissement global, notices, ressources.
 - `src/ui/components.tsx` : cartes, états vides, erreurs, avatar.
 - `src/styles/tokens.css` : jetons de la palette par défaut (repli si le JS échoue).
-- `src/lib/schemes.ts` : les 20 palettes (claire + sombre), posées en variables CSS sur `<html>`.
+- `src/lib/schemes.ts` : les 21 palettes (claire + sombre), posées en variables CSS sur `<html>`.
+- `src/styles/madoka.css` : skin décoratif « Madoka Magica » (étoiles dorées, halos roses), actif seulement quand la palette `madoka` est choisie.
 - `src/routes/*.tsx` : un écran par route.
 - `src/features/*` : logique/parsers par écran.
 
@@ -59,5 +60,5 @@ schéma par écran.
   (`src/ui/viewTransition.ts`, repli en navigation simple si l'API manque), et
   animations CSS en `transform`/`opacité` uniquement (testé).
 - Couleurs : tout passe par les variables de `src/styles/tokens.css`, posées par
-  `src/lib/schemes.ts` (20 palettes × clair/sombre). Aucune couleur en dur dans
+  `src/lib/schemes.ts` (21 palettes × clair/sombre). Aucune couleur en dur dans
   un écran : une palette retirée retombe sur la palette par défaut.

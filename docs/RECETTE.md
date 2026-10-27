@@ -99,7 +99,7 @@ adb shell cmd connectivity airplane-mode enable    # hors ligne
 
 ## Palettes (#335)
 
-Réglages → Apparence : 20 palettes, chacune avec sa variante claire et sombre ;
+Réglages → Apparence : 21 palettes, chacune avec sa variante claire et sombre ;
 le mode (Système/Clair/Sombre) choisit la variante. Le choix vit dans la
 WebView (`localStorage`), il n'est pas envoyé au natif.
 
@@ -109,6 +109,9 @@ WebView (`localStorage`), il n'est pas envoyé au natif.
 - Contrôle visuel : régler le thème sur chaque mode et rejouer `index`,
   `grades`, `settings`, `pairing` — aucun texte illisible, aucune surface qui
   garde la couleur d'une autre palette.
+- Contrôle visuel Madoka Magica, clair **et** sombre : étoiles dorées et halos
+  roses visibles sans gêner la lecture, texte lisible sur les boutons pleins et
+  la pastille d'onglet, décor figé sous « supprimer les animations ».
 
 ## Mouvement (#336)
 
