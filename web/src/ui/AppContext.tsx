@@ -81,6 +81,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [palette, dark]);
 
+  // La palette est aussi PUBLIÉE en `data-scheme` sur `<html>` : le skin
+  // décoratif (`styles/madoka.css`) cible `:root[data-scheme="madoka"]`, donc
+  // les autres palettes ne voient rien. Le natif n'a pas à connaître ce choix.
+  useEffect(() => {
+    document.documentElement.dataset["scheme"] = scheme;
+  }, [scheme]);
+
   useEffect(() => {
     const mq = matchMedia("(prefers-color-scheme: dark)");
     const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);

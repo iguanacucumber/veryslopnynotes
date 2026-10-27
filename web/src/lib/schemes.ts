@@ -812,6 +812,47 @@ export const SCHEMES: ReadonlyArray<Scheme> = [
       dangerInk: "#FF7B84",
     },
   },
+  // Palette « Madoka Magica » (#620) : son skin décoratif (étoiles dorées,
+  // halos roses) vit dans `styles/madoka.css` et n'est activé que par
+  // `data-scheme="madoka"` posé sur `<html>` — aucune autre palette ne le voit.
+  {
+    id: "madoka",
+    label: "Madoka Magica",
+    light: {
+      page: "#FFF4FA",
+      surface: "#FFFFFF",
+      surfaceVariant: "#FCEAF4",
+      surfaceContainer: "#F7D8E9",
+      ink: "#3B1B2E",
+      brand: "#E85D9E",
+      brandLight: "#F6B73C",
+      brandDeep: "#A8175C",
+      brandPale: "#FFE3F1",
+      brandSolid: "#A8175C",
+      onBrand: "#FFFFFF",
+      danger: "#D91E45",
+      dangerSolid: "#B3123A",
+      onDanger: "#FFFFFF",
+      dangerInk: "#B3123A",
+    },
+    dark: {
+      page: "#1A1024",
+      surface: "#26172F",
+      surfaceVariant: "#321E3D",
+      surfaceContainer: "#432850",
+      ink: "#FCEAF6",
+      brand: "#FF8FC7",
+      brandLight: "#FFD86B",
+      brandDeep: "#FFA8D6",
+      brandPale: "#3E1F3C",
+      brandSolid: "#FF8FC7",
+      onBrand: "#2A0A1C",
+      danger: "#FF9AAE",
+      dangerSolid: "#FF8FA3",
+      onDanger: "#2A0810",
+      dangerInk: "#FFB3C6",
+    },
+  },
 ];
 
 export const SCHEME_IDS: ReadonlyArray<string> = SCHEMES.map((scheme) => scheme.id);

@@ -5,6 +5,7 @@ import { App } from "./App";
 import { watchViewport } from "./lib/viewport";
 import "./styles/tokens.css";
 import "./styles/app.css";
+import "./styles/madoka.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("root absent");
