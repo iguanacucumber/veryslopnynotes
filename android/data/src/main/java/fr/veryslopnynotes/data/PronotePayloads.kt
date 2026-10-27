@@ -15,8 +15,10 @@ import fr.veryslopnynotes.core.computeAverages
 import fr.veryslopnynotes.core.subjectKey
 import fr.veryslopnynotes.pronote.Client
 import fr.veryslopnynotes.pronote.JVal
+import fr.veryslopnynotes.pronote.PeriodNotes
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -123,32 +125,30 @@ private fun mapCoreGrade(g: fr.veryslopnynotes.pronote.Grade, index: Int, period
     )
 }
 
-private fun mapProvided(client: Client, period: fr.veryslopnynotes.pronote.Period): ProvidedAverages? {
+/**
+ * Moyennes publiées d'une période, depuis le SNAPSHOT `Period.notes()`.
+ *
+ * Aucun POST ici : `gradesPayload` a déjà lu la période une fois. Les lignes
+ * illisibles ont été sautées par le snapshot ; cette fonction ne fait que
+ * mettre en forme ce qui est exploitable.
+ */
+private fun mapProvided(periodId: String, notes: PeriodNotes): ProvidedAverages? {
     val subjects = LinkedHashMap<String, Double>()
-    try {
-        for (a in period.averages()) {
-            val name = a.subject.name
-            if (name.isBlank() || name.length > 100) continue
-            val value = toNumOrNull(a.student) ?: continue
-            val outOf = toNum(a.outOf ?: a.defaultOutOf, 20.0)
-            val sur20 = if (outOf.isFinite() && outOf > 0 && outOf != 20.0) (value / outOf) * 20 else value
-            if (sur20.isFinite()) subjects[subjectKey(name)] = sur20
-        }
-    } catch (e: Exception) {
-        if (isSessionFailure(e)) throw e
+    for (a in notes.averages) {
+        val name = a.subject.name
+        if (name.isBlank() || name.length > 100) continue
+        val value = toNumOrNull(a.student) ?: continue
+        val outOf = toNum(a.outOf ?: a.defaultOutOf, 20.0)
+        val sur20 = if (outOf.isFinite() && outOf > 0 && outOf != 20.0) (value / outOf) * 20 else value
+        if (sur20.isFinite()) subjects[subjectKey(name)] = sur20
     }
-    var general: Double? = null
-    try {
-        general = when (val v = period.overallAverage()) {
-            is JVal.Str -> toNumOrNull(v.value)
-            is JVal.Num -> v.value.takeIf { it.isFinite() }
-            else -> null
-        }
-    } catch (e: Exception) {
-        if (isSessionFailure(e)) throw e
+    val general = when (val v = notes.overallAverage) {
+        is JVal.Str -> toNumOrNull(v.value)
+        is JVal.Num -> v.value.takeIf { it.isFinite() }
+        else -> null
     }
     if (subjects.isEmpty() && general == null) return null
-    return ProvidedAverages(periodId = period.id, general = general, subjects = subjects.ifEmpty { null })
+    return ProvidedAverages(periodId = periodId, general = general, subjects = subjects.ifEmpty { null })
 }
 
 private fun gradeJson(g: Grade): JSONObject = JSONObject().apply {
@@ -203,26 +203,73 @@ private fun reportJson(report: AveragesReport): JSONObject = JSONObject().apply 
     })
 }
 
-/** Toutes les périodes, rapport cadré sur la `periodId` demandée (miroir `/v1/grades`). */
+/**
+ * Toutes les périodes, rapport cadré sur la `periodId` demandée (miroir `/v1/grades`).
+ *
+ * UN SEUL `DernieresNotes` par période (le snapshot `Period.notes()`) : notes,
+ * moyennes publiées et moyenne générale viennent de la même réponse. Avant,
+ * chaque période était lue une fois (`grades`) et la période sélectionnée deux
+ * fois de plus (`averages` + `overallAverage`).
+ *
+ * La même note revient dans CHAQUE période dont la plage la recouvre : elle
+ * n'est publiée qu'une fois, par identifiant Pronote NON VIDE (le repli
+ * synthétique reste unique par ligne, jamais dédupliqué). Quand deux périodes
+ * portent le même identifiant, la plus PRÉCISE (la plus courte) gagne : un
+ * semestre ne doit pas usurper la note de son trimestre.
+ */
 internal fun gradesPayload(client: Client, query: Map<String, String>): String {
     val algorithm = query["algorithm"]?.takeIf { it in AVERAGE_ALGORITHMS } ?: ALGORITHM_SUBJECT
     val periodId = query["periodId"]?.trim()?.take(64)?.ifEmpty { null }
     val periods = client.periods
+    val currentIds = periods.mapNotNullTo(HashSet()) { it.id.ifBlank { null } }
+    val spanById = periods.mapNotNull { p ->
+        p.id.ifBlank { null }?.let { id ->
+            id to Duration.between(p.start, p.end).toMillis().coerceAtLeast(0L)
+        }
+    }.toMap()
     val all = mutableListOf<Grade>()
+    val positionById = HashMap<String, Int>()
+    val spanOfId = HashMap<String, Long>()
+    // Snapshot de la période DEMANDÉE, capturé pendant la lecture unique.
+    val snapshots = HashMap<String, PeriodNotes>()
     var seq = 0
     for (p in periods) {
         val pid = p.id.ifBlank { null }
-        val rows = try {
-            p.grades()
+        val notes = try {
+            p.notes()
         } catch (e: Exception) {
-            if (isSessionFailure(e)) throw e
+            if (mustPropagateReadFailure(e)) throw e
             continue
         }
-        for (g in rows) {
-            mapCoreGrade(g, seq++, pid)?.let { all.add(it) }
+        if (pid != null) snapshots[pid] = notes
+        for (g in notes.grades) {
+            // La période PORTÉE par la ligne prime quand elle nomme une période
+            // COURANTE. `Period.instances` est un registre global jamais vidé
+            // entre sessions : un identifiant périmé ne doit pas rattacher une
+            // note à un trimestre d'un autre compte.
+            val rowPeriodId = g.period?.id?.takeIf { it in currentIds } ?: pid
+            val mapped = mapCoreGrade(g, seq++, rowPeriodId) ?: continue
+            if (g.id.isBlank()) {
+                // Repli synthétique unique (`g-<seq>`) : deux lignes distinctes
+                // ne partagent jamais cet identifiant, rien à dédupliquer.
+                all.add(mapped)
+                continue
+            }
+            val span = rowPeriodId?.let { spanById[it] } ?: Long.MAX_VALUE
+            val existing = positionById[g.id]
+            if (existing == null) {
+                positionById[g.id] = all.size
+                spanOfId[g.id] = span
+                all.add(mapped)
+            } else if (span < (spanOfId[g.id] ?: Long.MAX_VALUE)) {
+                // La ligne la plus précise remplace la plus large, à sa place
+                // dans la liste (l'ordre de lecture reste stable).
+                all[existing] = mapped
+                spanOfId[g.id] = span
+            }
         }
     }
-    val provided = periodId?.let { id -> periods.find { it.id == id }?.let { mapProvided(client, it) } }
+    val provided = periodId?.let { id -> snapshots[id]?.let { mapProvided(id, it) } }
     val report = computeAverages(
         all,
         ComputeAveragesOptions(algorithm = algorithm, periodId = periodId, provided = provided),
@@ -265,7 +312,7 @@ private fun lessonContents(client: Client, from: LocalDateTime, to: LocalDateTim
     val lessons = try {
         client.lessons(from, to)
     } catch (e: Exception) {
-        if (isSessionFailure(e)) throw e
+        if (mustPropagateReadFailure(e)) throw e
         return emptyMap()
     }
     var fetched = 0
@@ -281,7 +328,7 @@ private fun lessonContents(client: Client, from: LocalDateTime, to: LocalDateTim
             if (title.isEmpty() && excerpt.isEmpty()) continue
             out[key] = (if (title.isEmpty()) "Contenu de cours" else title) to excerpt
         } catch (e: Exception) {
-            if (isSessionFailure(e)) throw e
+            if (mustPropagateReadFailure(e)) throw e
         }
     }
     return out
@@ -313,7 +360,7 @@ internal fun assignmentJson(
     val files = try {
         hw.files()
     } catch (e: Exception) {
-        if (isSessionFailure(e)) throw e
+        if (mustPropagateReadFailure(e)) throw e
         emptyList()
     }
     val atts = JSONArray()
@@ -547,7 +594,7 @@ internal fun attendancePayload(client: Client): String {
             val ab = try {
                 p.absences()
             } catch (e: Exception) {
-                if (isSessionFailure(e)) throw e
+                if (mustPropagateReadFailure(e)) throw e
                 emptyList()
             }
             for ((i, a) in ab.withIndex()) {
@@ -571,7 +618,7 @@ internal fun attendancePayload(client: Client): String {
             val dl = try {
                 p.delays()
             } catch (e: Exception) {
-                if (isSessionFailure(e)) throw e
+                if (mustPropagateReadFailure(e)) throw e
                 emptyList()
             }
             for ((i, d) in dl.withIndex()) {
@@ -619,7 +666,7 @@ internal fun punishmentsPayload(client: Client): String {
         val rows = try {
             p.punishments()
         } catch (e: Exception) {
-            if (isSessionFailure(e)) throw e
+            if (mustPropagateReadFailure(e)) throw e
             continue
         }
         for (s in rows) {
@@ -686,7 +733,7 @@ internal fun discussionsPayload(client: Client, nowIso: String = parisNowIso()):
                     updatedAt = it
                 } ?: first?.created?.parisIso()?.let { updatedAt = it }
             } catch (e: Exception) {
-                if (isSessionFailure(e)) throw e
+                if (mustPropagateReadFailure(e)) throw e
             }
         }
         arr.put(JSONObject().apply {
@@ -727,7 +774,7 @@ internal fun messagesPayload(
             .take(20)
             .forEach { parts.put(it) }
     } catch (e: Exception) {
-        if (isSessionFailure(e)) throw e
+        if (mustPropagateReadFailure(e)) throw e
     }
     return JSONObject().put("messages", arr).put("participants", parts).toString()
 }
@@ -754,13 +801,13 @@ internal fun recipientsPayload(client: Client): String {
 internal fun capabilitiesPayload(client: Client, nowIso: String = parisNowIso()): String {    val periods = try {
         client.periods
     } catch (e: Exception) {
-        if (isSessionFailure(e)) throw e
+        if (mustPropagateReadFailure(e)) throw e
         emptyList()
     }
     val info = try {
         client.info
     } catch (e: Exception) {
-        if (isSessionFailure(e)) throw e
+        if (mustPropagateReadFailure(e)) throw e
         null
     }
     val caps = CapabilityProbe.fromProbe(
@@ -801,7 +848,7 @@ internal fun mePayload(client: Client, now: LocalDateTime = LocalDateTime.now())
     val periods = try {
         client.periods
     } catch (e: Exception) {
-        if (isSessionFailure(e)) throw e
+        if (mustPropagateReadFailure(e)) throw e
         emptyList()
     }
     val current = periods.find { !now.isBefore(it.start) && !now.isAfter(it.end) } ?: periods.firstOrNull()

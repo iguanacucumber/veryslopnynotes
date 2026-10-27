@@ -45,9 +45,13 @@ function between(src: string, from: string, to: string): string {
 const payloads = source(join(DATA, "PronotePayloads.kt"));
 const repository = source(join(DATA, "AssignmentsRepository.kt"));
 const bridge = source(join(APP, "VsnBridge.kt"));
+const sessionFailure = source(join(DATA, "SessionFailure.kt"));
+const pairing = source(join(DATA, "PairingRepository.kt"));
+const pairingMessages = source(join(APP, "PairingMessages.kt"));
 
 const attendance = kotlinBody(payloads, "internal fun attendancePayload");
 const assignments = kotlinBody(payloads, "internal fun assignmentsPayload");
+const grades = kotlinBody(payloads, "internal fun gradesPayload");
 const homeworkId = between(payloads, "private fun homeworkIdOf", "internal fun assignmentJson");
 const parse = between(repository, "fun parse(body: String)", "fun fromJson");
 const loadAssignments = between(bridge, "private fun loadAssignments", "// --- Fiches de révision");
@@ -130,6 +134,62 @@ describe("devoirs : un devoir publié une seule fois (#570)", () => {
     // L'ancien repli positionnel (`a-$index`) était partagé par toutes les
     // fenêtres : la fusion pouvait effacer un devoir RÉEL.
     expect(payloads).not.toContain('hw.id.ifBlank { "a-$index" }');
+  });
+});
+
+describe("notes : une période lue une fois, une note publiée une fois", () => {
+  test("un seul DernieresNotes par période", () => {
+    // Le snapshot `Period.notes()` porte notes + moyennes + moyenne générale :
+    // le payload ne rappelle PLUS `grades()`, `averages()` ni
+    // `overallAverage()` (trois POST pour le même écran).
+    expect(grades).toContain("p.notes()");
+    expect(grades).not.toContain("p.grades()");
+    expect(grades).not.toContain("p.averages()");
+    expect(grades).not.toContain("p.overallAverage()");
+    expect(grades).not.toContain("DernieresNotes");
+    // La période DEMANDÉE vient du snapshot déjà lu, pas d'une seconde lecture.
+    expect(grades).toContain("snapshots[pid] = notes");
+    expect(grades).toContain("snapshots[id]?.let { mapProvided(id, it) }");
+  });
+
+  test("une note parue dans deux périodes n'est publiée qu'une fois", () => {
+    // La déduplication est par IDENTIFIANT Pronote NON VIDE, jamais par
+    // contenu : deux notes réelles qui se ressemblent ne sont pas confondues.
+    expect(grades).toContain("if (g.id.isBlank())");
+    expect(grades).toContain("positionById[g.id]");
+    expect(grades).toContain("all[existing] = mapped");
+    // La période la plus PRÉCISE (la plus courte) gagne : un semestre ne doit
+    // pas usurper la note de son trimestre.
+    expect(grades).toContain("spanById");
+    expect(grades).toContain("span < (spanOfId[g.id] ?: Long.MAX_VALUE)");
+    // Aucune déduplication par matière/date/valeur.
+    expect(grades).not.toContain("distinctBy");
+  });
+
+  test("la période PORTÉE par la ligne prime, sans identifiant périmé", () => {
+    // `Period.instances` est un registre global jamais vidé : un identifiant
+    // d'une session précédente ne doit pas rattacher la note à un autre compte.
+    expect(grades).toContain("g.period?.id?.takeIf { it in currentIds } ?: pid");
+    expect(grades).toContain("val currentIds = periods.mapNotNullTo(HashSet())");
+  });
+
+  test("le rate-limit n'est jamais avalé par une lecture tolérante", () => {
+    // Une limitation de débit publiée comme « trimestre vide » serait écrite
+    // dans le cache et servie pendant des heures.
+    expect(sessionFailure).toContain("internal fun mustPropagateReadFailure");
+    expect(sessionFailure).toContain("e is RateLimitedError");
+    expect(payloads).toContain("mustPropagateReadFailure(e)");
+    // Plus aucune lecture ne confond « session morte » et « rate-limit » en
+    // laissant filer le second.
+    expect(payloads).not.toContain("isSessionFailure(e)) throw e");
+  });
+
+  test("l'appairage distingue le rate-limit d'un compte refusé", () => {
+    expect(pairing).toContain('PairingResult.Err("rate_limited"');
+    expect(pairing).toContain("G_RATE_LIMIT = 25");
+    // Le code 25 ne doit JAMAIS retomber dans « compte refusé ».
+    expect(pairing).not.toContain("pronoteErrorCode != G_RATE_LIMIT");
+    expect(pairingMessages).toContain('"rate_limited"');
   });
 });
 

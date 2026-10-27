@@ -119,6 +119,14 @@ open class ClientBase(
      * cookies et deux compteurs de requêtes — et le serveur répondait `G=25`).
      */
     private val refreshGate = RefreshGate()
+
+    /**
+     * Porte de LIMITATION DE DÉBIT : un `G=25`/HTTP 429 arme une fenêtre de
+     * calme. Pendant celle-ci, aucune requête ne part et AUCUN refresh n'est
+     * tenté — c'est le refresh qui amplifiait la limite (chaque refresh =
+     * poignée de main + login supplémentaires). La porte se lève toute seule.
+     */
+    private val rateLimitGate = RateLimitGate()
     private var _expired: Boolean = false
 
     init {
@@ -322,7 +330,7 @@ open class ClientBase(
      * vol, et deux rafraîchissements ne peuvent pas se chevaucher.
      */
     @Synchronized
-    fun refresh() {
+    open fun refresh() {
         // #473 : la session est neuve, les lectures mémorisées sont de l'ancien
         // monde (mêmes clés, nouvelle session) — elles repartent.
         readMemo?.clear()
@@ -390,10 +398,21 @@ open class ClientBase(
      *
      * `send` est ouvert pour les TESTS (un stub qui compte les requêtes
      * rejoue le vrai `post` sans réseau) : le harnais de parité l'exploite.
+     * `refresh` l'est aussi pour que le pilote de rate-limit prouve qu'aucun
+     * refresh n'est déclenché sans toucher au réseau.
      */
     private fun sendWithRefresh(functionName: String, postData: Map<String, JVal>): JVal {
+        // Pendant la fenêtre de calme : échec immédiat, sans requête et sans
+        // refresh. C'est le seul chemin qui empêche la boucle
+        // « G=25 -> refresh -> login -> G=25 ».
+        rateLimitGate.check()
         try {
             return send(functionName, postData)
+        } catch (e: RateLimitedError) {
+            // Le serveur vient de refuser le débit. On n'essaie surtout pas de
+            // rafraîchir : on arme la porte et on rend l'erreur telle quelle.
+            rateLimitGate.trip()
+            throw e
         } catch (e: ExpiredObject) {
             throw e
         } catch (e: PronoteAPIError) {
@@ -402,10 +421,23 @@ open class ClientBase(
             if (!refreshGate.tryEnter()) throw e
             try {
                 refresh()
+            } catch (rate: RateLimitedError) {
+                // Le refresh lui-même tombe sur la limite : la session n'est
+                // pas morte, on attend. Sans ce catch, l'appelant verrait une
+                // erreur générique et pourrait réessayer.
+                rateLimitGate.trip()
+                throw rate
             } finally {
                 refreshGate.leave()
             }
-            return send(functionName, postData)
+            return try {
+                send(functionName, postData)
+            } catch (e: RateLimitedError) {
+                // Le rejeu a été refusé aussi : armer la porte évite la
+                // troisième tentative de l'appelant.
+                rateLimitGate.trip()
+                throw e
+            }
         }
     }
 

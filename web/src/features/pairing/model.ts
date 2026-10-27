@@ -96,6 +96,8 @@ export function pairErrorMessage(code: string | undefined): string {
       return "Ce compte exige une vérification supplémentaire que l'app ne prend pas en charge.";
     case "login_refused":
       return "Compte refusé par l'établissement : régénère le QR dans son application, puis rescane-le.";
+    case "rate_limited":
+      return "L'établissement limite les connexions : attends une ou deux minutes, puis réessaie.";
     case "school_unreachable":
       return "L'établissement ne répond pas : réessaie dans un instant.";
     case "network":

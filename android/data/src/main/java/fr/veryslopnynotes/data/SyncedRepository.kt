@@ -3,6 +3,7 @@ package fr.veryslopnynotes.data
 import android.os.Handler
 import android.os.Looper
 import fr.veryslopnynotes.core.SecurityAlert
+import fr.veryslopnynotes.pronote.RateLimitedError
 import org.json.JSONObject
 
 // Resultat refresh reseau avec repli cache (affichage sans reseau).
@@ -161,6 +162,15 @@ class SyncedRepository(
             }
         } catch (e: NoLocalSession) {
             cachedOrFailed(resource, query, "Aucune donnée en cache.")
+        } catch (e: RateLimitedError) {
+            // La limitation de débit n'est ni une panne ni une session morte :
+            // le cache reste servi et la phrase dit quoi faire (attendre).
+            // Surtout, le payload partiel n'a pas été écrit (il a LEVÉ).
+            cachedOrFailed(
+                resource,
+                query,
+                "L'établissement limite les connexions : attends une ou deux minutes, puis réessaie.",
+            )
         } catch (e: Throwable) {
             // `Throwable` et non `Exception` (#530) : un `Error` (OOM) est un
             // échec comme un autre — il ne doit pas remonter comme une

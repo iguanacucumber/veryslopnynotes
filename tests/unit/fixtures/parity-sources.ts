@@ -51,6 +51,7 @@ export const PRODUCTION_SOURCES: string[] = [
   join(PRONOTE, "Errors.kt"),
   join(PRONOTE, "HttpSession.kt"),
   join(PRONOTE, "Json.kt"),
+  join(PRONOTE, "RateLimitGate.kt"),
   join(PRONOTE, "ReadMemo.kt"),
   join(PRONOTE, "RefreshGate.kt"),
   join(PRONOTE, "Resolver.kt"),

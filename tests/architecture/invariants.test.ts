@@ -449,6 +449,13 @@ describe("invariants", () => {
       // décision « session morte » tranche par eux, jamais par un mot du
       // message (#520).
       "PronoteAPIError",
+      // La limitation de débit (`G=25` / HTTP 429) est un TYPE à part : le
+      // dépôt doit la distinguer d'un compte refusé et d'une session morte
+      // (et ne jamais la publier comme un trimestre vide).
+      "RateLimitedError",
+      // Snapshot de période (notes + moyennes + moyenne générale en UN POST) :
+      // un simple porteur de données, comme `Client`/`JVal`.
+      "PeriodNotes",
       "QrCode",
       "QRCodeDecryptError",
       "QrLoginOptions",

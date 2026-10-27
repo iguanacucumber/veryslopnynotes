@@ -308,6 +308,7 @@ describe("appairage : hôte affichable, PIN et codes d'échec", () => {
     expect(pairErrorMessage("qr_rejected")).toContain("rescane");
     expect(pairErrorMessage("mfa_required")).toContain("vérification supplémentaire");
     expect(pairErrorMessage("login_refused")).toContain("Compte refusé");
+    expect(pairErrorMessage("rate_limited")).toContain("limite");
     expect(pairErrorMessage("school_unreachable")).toContain("ne répond pas");
     expect(pairErrorMessage("network")).toContain("Réseau");
     expect(pairErrorMessage("bad_request")).toContain("PIN");

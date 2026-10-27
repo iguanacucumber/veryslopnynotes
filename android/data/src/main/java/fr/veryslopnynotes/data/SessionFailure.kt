@@ -3,6 +3,7 @@ package fr.veryslopnynotes.data
 import fr.veryslopnynotes.pronote.ExpiredObject
 import fr.veryslopnynotes.pronote.MFAError
 import fr.veryslopnynotes.pronote.PronoteAPIError
+import fr.veryslopnynotes.pronote.RateLimitedError
 
 /**
  * Échec de session : l'app doit se ré-appairer, pas afficher un état vide.
@@ -45,6 +46,19 @@ internal fun isSessionFailure(e: Throwable): Boolean {
 
 /** `G=10` : l'établissement dit que la session est expirée et n'a pas pu la rouvrir. */
 private const val G_SESSION_EXPIRED = 10
+
+/**
+ * La lecture en cours doit REMONTER telle quelle, jamais être avalée en
+ * « donnée absente » par les lectures tolérantes de `PronotePayloads`.
+ *
+ * Une session morte (`isSessionFailure`) n'est pas un trimestre vide. Et une
+ * limitation de débit ([RateLimitedError]) non plus : la publier comme un
+ * payload vide ferait écrire ce vide dans le cache, qui serait ensuite servi
+ * pendant des heures — alors que la seule bonne réaction est d'attendre la fin
+ * de la fenêtre de calme et de relire.
+ */
+internal fun mustPropagateReadFailure(e: Throwable): Boolean =
+    isSessionFailure(e) || e is RateLimitedError
 
 /** HTTP 401 : le jeton n'est plus accepté par l'établissement. */
 private const val HTTP_UNAUTHORIZED = 401

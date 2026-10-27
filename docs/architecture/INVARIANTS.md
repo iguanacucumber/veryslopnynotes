@@ -416,11 +416,20 @@ de lecture : `tests/unit/scraper-limits.test.ts`.
   max authorization requests ») ou la session restait à moitié initialisée.
   Le perdant de la course ATTEND le rafraîchissement et rejoue sa requête sur
   la session neuve (aucune erreur ne remonte à l'appelant).
+- Et un refus de DÉBIT (`G=25` ou HTTP 429) n'est jamais traité comme une
+  session morte : `RateLimitedError` arme une `RateLimitGate` (2 min par
+  défaut) et AUCUN refresh n'est tenté — un refresh = poignée de main +
+  login supplémentaires, donc encore plus de limitation. Pendant la fenêtre,
+  les envois échouent immédiatement (le cache reste servi) ; la porte se
+  lève seule à l'échéance et le TYPE ne purge ni le cache ni la session.
 - Test : `tests/unit/kotlin-refresh-gate.test.ts` (Kotlin EXÉCUTÉ : N threads
   lâchés en même temps → un seul gagnant ; la porte se rend après un échec) +
   `tests/unit/kotlin-pronote-client-parity.test.ts` (Kotlin EXÉCUTÉ contre le
   stub PRONOTE : deux requêtes concurrentes → un seul handshake de refresh,
   les deux fils réussissent, fil de requêtes identique à la référence TS) +
+  `tests/unit/kotlin-rate-limit.test.ts` (Kotlin EXÉCUTÉ : la porte s'arme /
+  expire, `G=25` ne déclenche aucun refresh, une erreur générique rafraîchit
+  encore, le rate-limit n'est pas une session morte) +
   `tests/architecture/pronote-refresh.test.ts` (garde de source : plus de
   drapeau non atomique, `post`/`refresh` synchronisés, porte relâchée dans
   le `finally`).

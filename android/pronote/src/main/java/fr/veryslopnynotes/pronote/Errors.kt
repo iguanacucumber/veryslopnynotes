@@ -35,6 +35,25 @@ open class PronoteAPIError(
 class ExpiredObject(message: String) : PronoteAPIError(message)
 
 /**
+ * Limitation de débit de l'établissement (`G == 25` ou HTTP 429).
+ *
+ * C'est un `PronoteAPIError` (les appelants qui attrapent la famille restent
+ * corrects), mais un TYPE à part : le client ne doit PAS rafraîchir la session
+ * pour ce cas. Un refresh = un nouveau login = encore plus de requêtes
+ * d'authentification, donc encore plus de limitation.
+ *
+ * `pronoteErrorCode` vaut 25 quand l'établissement a répondu `Erreur.G` ;
+ * `httpStatus` vaut 429 quand le refus est HTTP. Les deux peuvent être nuls
+ * pour une erreur levée localement par [RateLimitGate].
+ */
+class RateLimitedError(
+    message: String = "[ERROR 25] Exceeded max authorization requests. Please wait before retrying...",
+    pronoteErrorCode: Int? = 25,
+    pronoteErrorMsg: String? = null,
+    httpStatus: Int? = null,
+) : PronoteAPIError(message, pronoteErrorCode, pronoteErrorMsg, httpStatus)
+
+/**
  * Erreurs de lecture du JSON PRONOTE (#201, miroir de `exceptions.js`).
  * - `DataError` : enveloppe inattendue (fils de `Error` nu, pas de code) ;
  * - `ParsingError` : chemin introuvable ou conversion impossible ;

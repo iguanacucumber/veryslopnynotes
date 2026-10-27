@@ -55,7 +55,9 @@ describe("rafraîchissement de session atomique (#405)", () => {
     // `communication` n'est donc jamais permuté pendant qu'une requête est en
     // vol, et deux refreshs ne peuvent pas se chevaucher.
     expect(client).toMatch(/@Synchronized\s+override fun post\(/);
-    expect(client).toMatch(/@Synchronized\s+fun refresh\(/);
+    // `open` (#405/#rate-limit) : le pilote de parité dérive un client dont le
+    // refresh est observable sans réseau.
+    expect(client).toMatch(/@Synchronized\s+open fun refresh\(/);
     // L'état de session est PUBLIÉ (`@Volatile`) : les lecteurs hors verrou
     // (ping de garde, pièces jointes) voient la session neuve.
     expect(client).toMatch(/@Volatile\s+override lateinit var communication:/);

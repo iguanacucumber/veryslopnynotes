@@ -22,6 +22,9 @@ val PRONOTE_ERROR_MESSAGES = mapOf(
     25 to "[ERROR 25] Exceeded max authorization requests. Please wait before retrying...",
 )
 
+/** HTTP 429 : l'établissement refuse le débit (même sens que `G=25`). */
+private const val HTTP_TOO_MANY_REQUESTS = 429
+
 val PRONOTE_HEADERS = mapOf(
     "User-Agent" to "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:73.0) Gecko/20100101 Firefox/73.0",
 )
@@ -221,6 +224,16 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
         var parsed: Map<String, String>? = null
         for (attempt in 0 until 3) {
             val res = session.get("$rootSite/$htmlPage")
+            // 429 sur la PAGE elle-même : inutile de réessayer trois fois (le
+            // serveur compte déjà les requêtes) — c'est le même refus de débit
+            // que `G=25` côté `appelfonction`.
+            if (res.status == HTTP_TOO_MANY_REQUESTS) {
+                throw RateLimitedError(
+                    "Too many requests (http status: $HTTP_TOO_MANY_REQUESTS)",
+                    pronoteErrorCode = null,
+                    httpStatus = HTTP_TOO_MANY_REQUESTS,
+                )
+            }
             try {
                 parsed = parseHtml(res.text)
                 break
@@ -292,6 +305,13 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
         if (!response.ok) {
             // Le STATUT porte l'information (401 = session morte) : il est un
             // CHAMP de l'erreur, jamais un mot du message (#520).
+            if (response.status == HTTP_TOO_MANY_REQUESTS) {
+                throw RateLimitedError(
+                    "Too many requests (http status: $HTTP_TOO_MANY_REQUESTS)",
+                    pronoteErrorCode = null,
+                    httpStatus = HTTP_TOO_MANY_REQUESTS,
+                )
+            }
             throw PronoteAPIError("Bad request (http status: ${response.status})", httpStatus = response.status)
         }
         // ponytail: ping arme seulement sur succes, sinon session morte semble vivante.
@@ -304,6 +324,11 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
             val g = (erreur.fields["G"] as? JVal.Num)?.value
             val gInt = if (g != null && g == kotlin.math.floor(g) && g < Int.MAX_VALUE) g.toInt() else null
             if (gInt == 22) throw ExpiredObject(PRONOTE_ERROR_MESSAGES.getValue(22))
+            // `G=25` n'est pas une session morte : c'est « attends ». Il doit
+            // rester un TYPE distinct pour que le client n'essaie pas de
+            // rafraîchir (un refresh = un login de plus = encore plus de
+            // limitation).
+            if (gInt == 25) throw RateLimitedError(PRONOTE_ERROR_MESSAGES.getValue(25), pronoteErrorCode = 25)
             val titre = (erreur.fields["Titre"] as? JVal.Str)?.value
             // `G`/`Titre` absents : `"undefined"`, comme `${undefined}` côté TS.
             val gStr = if (g == null) "undefined" else jsNumber(g)

@@ -7,6 +7,7 @@ import fr.veryslopnynotes.pronote.PronoteAPIError
 import fr.veryslopnynotes.pronote.QRCodeDecryptError
 import fr.veryslopnynotes.pronote.QrCode
 import fr.veryslopnynotes.pronote.QrLoginOptions
+import fr.veryslopnynotes.pronote.RateLimitedError
 import java.io.IOException
 import java.util.UUID
 import org.json.JSONObject
@@ -327,15 +328,21 @@ class PairingRepository(
         }
         val message = e.message.orEmpty()
         return when {
+            // L'établissement a limité les requêtes d'authentification : le
+            // compte n'est PAS refusé, le QR n'est PAS périmé. Le seul geste
+            // utile est d'attendre — rescanner tout de suite aggraverait la
+            // limite. Le TYPE est la voie normale ; le code brut reste couvert
+            // pour une erreur construite hors de `Communication`.
+            (e is RateLimitedError) || (e is PronoteAPIError && e.pronoteErrorCode == G_RATE_LIMIT) ->
+                PairingResult.Err("rate_limited", "L'établissement limite les connexions : attends une ou deux minutes, puis réessaie.")
             e is QRCodeDecryptError ->
                 PairingResult.Err("qr_rejected", "QR ou PIN refusé par l'établissement : rescane le code affiché par son application.")
             e is MFAError ->
                 PairingResult.Err("mfa_required", "Ce compte exige une vérification supplémentaire que l'app ne prend pas en charge.")
             // L'établissement a RÉPONDU avec un code d'erreur : il a REFUSÉ.
             // C'est le `G` qui le dit, pas un mot de son message (#520) — le
-            // rate-limit (G=25) n'est pas un refus de compte : « réessaie
-            // plus tard ».
-            e is PronoteAPIError && e.pronoteErrorCode != null && e.pronoteErrorCode != G_RATE_LIMIT ->
+            // rate-limit est un TYPE à part (ci-dessus), pas un refus de compte.
+            e is PronoteAPIError && e.pronoteErrorCode != null ->
                 PairingResult.Err("login_refused", "Compte refusé par l'établissement : régénère le QR dans son application, puis rescane-le.")
             isSessionFailure(e) || message.isNotBlank() && isLoginRefused(message) ->
                 PairingResult.Err("login_refused", "Compte refusé par l'établissement : régénère le QR dans son application, puis rescane-le.")
@@ -365,9 +372,8 @@ private fun isLoginRefused(message: String): Boolean =
         .containsMatchIn(message)
 
 /**
- * `G=25` : « Exceeded max authorization requests » — le rate-limit de
- * l'établissement. Ce n'est pas un refus de compte : c'est « réessaie dans un
- * instant ».
+ * `G=25` : « Exceeded max authorization requests ». C'est la limitation de
+ * débit, pas un refus de compte ni une session morte.
  */
 private const val G_RATE_LIMIT = 25
 

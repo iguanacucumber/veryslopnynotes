@@ -93,6 +93,32 @@ private fun dataList(resp: JVal, key: String): List<JVal> {
     return arr?.items ?: throw ParsingError("Liste $key manquante", listOf("dataSec", "data", key, "V"))
 }
 
+/**
+ * Comme [dataList], mais une LISTE absente vaut vide : le snapshot
+ * `Period.notes()` ne jette pas un trimestre entier parce qu'une des deux
+ * listes manque. L'ENVELOPPE (`dataSec.data`), elle, reste stricte — un
+ * payload sans données ne doit pas être publié comme un trimestre vide.
+ */
+private fun tolerantDataList(resp: JVal, key: String): List<JVal> {
+    val data = dataOf(resp)
+    val arr = (data.fields[key] as? JVal.Obj)?.fields?.get("V") as? JVal.Arr
+    return arr?.items ?: emptyList()
+}
+
+/** Lignes tolérantes : une ligne illisible est sautée, les autres restent. */
+private fun <T> tolerantRows(rows: List<JVal>, make: (JVal) -> T): List<T> {
+    val out = mutableListOf<T>()
+    for (row in rows) {
+        try {
+            out.add(make(row))
+        } catch (_: Exception) {
+            // Une note/moyenne tordue ne doit pas jeter TOUT le trimestre :
+            // les autres lignes de la MÊME réponse restent affichables.
+        }
+    }
+    return out
+}
+
 /** `funcOptions.dataSec.data.General.<key>.V` brut (tranches horaires ; `null` si illisible). */
 private fun heuresV(client: PronoteClientLike, key: String): JVal? {
     val root = client.funcOptions as? JVal.Obj ?: return null
@@ -792,6 +818,72 @@ class Discussion(private val client: PronoteClientLike, json: JVal?, callerLabel
 // ---------------------------------------------------------------------------
 
 /**
+ * Lecture d'une période en UNE réponse `DernieresNotes`.
+ *
+ * C'est le snapshot que l'app publie : notes, moyennes et moyenne générale
+ * viennent du MÊME POST (avant, `grades()` + `averages()` + `overallAverage()`
+ * en faisaient trois pour une même période). Les lignes illisibles sont
+ * SAUTÉES une par une : une note tordue ne fait plus disparaître toutes les
+ * autres.
+ *
+ * `overallAverage` garde la forme de `Period.overallAverage()` (`moyGenerale.V`
+ * publiée, sinon moyenne manuelle, `"-1"` si aucune moyenne exploitable) ;
+ * `null` = liste de services absente, donc moyenne INCONNUE.
+ */
+data class PeriodNotes(
+    val grades: List<Grade>,
+    val averages: List<Average>,
+    val overallAverage: JVal?,
+)
+
+/**
+ * Moyenne générale d'une réponse `DernieresNotes` : `moyGenerale.V` si
+ * publiée, sinon moyenne manuelle des `moyEleve` (virgule→point, `NaN`
+ * sautés, arrondi `x100/100`, `"-1"` si vide).
+ *
+ * `tolerant` = les services illisibles sont SAUTÉS et une liste de services
+ * absente vaut `null` (inconnue) ; sinon le comportement strict historique
+ * (`UnsupportedOperation` / `ParsingError`) est conservé.
+ */
+private fun overallAverageOf(resp: JVal, tolerant: Boolean): JVal? {
+    val data = dataOf(resp)
+    // Falsy (`null`, absent, `0`, `""`) = calcul manuel ; sinon `V` BRUT
+    // (même absent : `undefined` côté TS, rendu `null` par le pilote).
+    val avg = data.fields["moyGenerale"]
+    if (boolOf(avg)) return (avg as? JVal.Obj)?.fields?.get("V")
+    val services = if (tolerant) {
+        try {
+            dataList(resp, "listeServices")
+        } catch (_: ParsingError) {
+            return null
+        }
+    } else {
+        dataList(resp, "listeServices")
+    }
+    if (services.isEmpty()) return JVal.Str("-1")
+    var a = 0.0
+    var total = 0
+    for (s in services) {
+        val o = s as? JVal.Obj
+        if (o == null) {
+            if (tolerant) continue
+            throw UnsupportedOperation("Could not get averages")
+        }
+        if (!o.fields.containsKey("moyEleve")) {
+            if (tolerant) continue
+            throw UnsupportedOperation("Could not get averages")
+        }
+        val avrg = strOf((o.fields["moyEleve"] as? JVal.Obj)?.fields?.get("V")).replace(",", ".")
+        val flt = parseFloatJs(avrg)
+        if (!flt.isNaN()) {
+            a += flt
+            total += 1
+        }
+    }
+    return if (total != 0) JVal.Str(jsNumber(roundJs(a / total * 100) / 100)) else JVal.Str("-1")
+}
+
+/**
  * Trimestre (registre `instances` alimenté à la construction, avant parse —
  * comme le `Set` TS ; bornes `PagePresence` via `frDateTime`).
  */
@@ -826,6 +918,24 @@ class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject
     }
 
     /**
+     * Snapshot complet de la période en UN SEUL `DernieresNotes`.
+     *
+     * À préférer à `grades()` + `averages()` + `overallAverage()` pour
+     * l'affichage : un seul POST au lieu de trois. Les lignes tordues sont
+     * sautées (les autres notes/moyennes restent), mais l'enveloppe
+     * `dataSec.data` reste obligatoire : un payload vide ne doit pas être
+     * publié comme un trimestre sans notes.
+     */
+    fun notes(): PeriodNotes {
+        val resp = client.post("DernieresNotes", 198.0, notesPayload())
+        return PeriodNotes(
+            grades = tolerantRows(tolerantDataList(resp, "listeDevoirs")) { Grade(it) },
+            averages = tolerantRows(tolerantDataList(resp, "listeServices")) { Average(it) },
+            overallAverage = overallAverageOf(resp, tolerant = true),
+        )
+    }
+
+    /**
      * Moyennes (`DernieresNotes` 198 ; `moyEleve` illisible =
      * `UnsupportedOperation` ; réseau bloquant).
      */
@@ -847,28 +957,7 @@ class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject
      */
     fun overallAverage(): JVal? {
         val resp = client.post("DernieresNotes", 198.0, notesPayload())
-        val data = dataOf(resp)
-        // Falsy (`null`, absent, `0`, `""`) = calcul manuel ; sinon `V` BRUT
-        // (meme absent : `undefined` cote TS, rendu `null` par le pilote).
-        val avg = data.fields["moyGenerale"]
-        if (boolOf(avg)) return (avg as? JVal.Obj)?.fields?.get("V")
-        val services = dataList(resp, "listeServices")
-        if (services.isNotEmpty()) {
-            var a = 0.0
-            var total = 0
-            for (s in services) {
-                val o = s as? JVal.Obj ?: throw UnsupportedOperation("Could not get averages")
-                if (!o.fields.containsKey("moyEleve")) throw UnsupportedOperation("Could not get averages")
-                val avrg = strOf((o.fields["moyEleve"] as? JVal.Obj)?.fields?.get("V")).replace(",", ".")
-                val flt = parseFloatJs(avrg)
-                if (!flt.isNaN()) {
-                    a += flt
-                    total += 1
-                }
-            }
-            return if (total != 0) JVal.Str(jsNumber(roundJs(a / total * 100) / 100)) else JVal.Str("-1")
-        }
-        return JVal.Str("-1")
+        return overallAverageOf(resp, tolerant = false)
     }
 
     /** Absences (`PagePresence` 19, `G == 13` ; réseau bloquant). */

@@ -17,6 +17,7 @@ private val PAIRING_MESSAGES: Map<String, String> = mapOf(
     "qr_rejected" to "QR ou PIN refusé par l'établissement : rescane le code affiché par son application.",
     "mfa_required" to "Ce compte exige une vérification supplémentaire que l'app ne prend pas en charge.",
     "login_refused" to "Compte refusé par l'établissement : régénère le QR dans son application, puis rescane-le.",
+    "rate_limited" to "L'établissement limite les connexions : attends une ou deux minutes, puis réessaie.",
     "school_unreachable" to "L'établissement ne répond pas : réessaie dans un instant.",
     "network" to "Réseau indisponible : vérifie ta connexion, puis réessaie.",
     // Connexion à l'établissement de DÉMONSTRATION : le compte est public, le
