@@ -251,7 +251,7 @@ ni vers le fournisseur LLM.
 | Commande | Rôle |
 |---|---|
 | `make check` | Secrets, typecheck, tests unitaires, architecture, contrats, garde-fou Kotlin, compilation Kotlin réelle et frontend — en parallèle. |
-| `make check-fast` | Boucle interne (~1,7 s à chaud) sans Gradle ; le build Vite est inclus, jamais le gate de merge. |
+| `make check-fast` | Boucle interne (~2,1 s à chaud) sans Gradle ; le build Vite est inclus, jamais le gate de merge. |
 | `make watch` | Relance les tests unitaires + web à chaque changement (`T=tests/unit/foo.test.ts` pour cibler). |
 | `make web` | Typecheck + tests + build de l'interface React. |
 | `make unit` | Tests unitaires (`tests/unit`). |
@@ -321,10 +321,10 @@ pas dans ce flux. Règles détaillées :
 
 ## Documentation
 
-- [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) — règles
-  critiques (I1–I10) et tests qui les pinent.
+- [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) — registre
+  des invariants (I1–I32) et tests qui les pinent.
 - [`docs/adr/`](docs/adr/) — décisions d'architecture : stack, client direct,
-  WebView locale.
+  WebView locale, règles et architecture ([ADR-005](docs/adr/005-regles-et-architecture.md)).
 - [`docs/RELEASE.md`](docs/RELEASE.md) — versions épinglées, build, signature,
   livrable.
 - [`docs/RECETTE.md`](docs/RECETTE.md) — recette des 14 routes, thèmes, grande
