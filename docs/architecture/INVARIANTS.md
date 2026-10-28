@@ -79,6 +79,7 @@ références, l'existence des fichiers cités et les commandes citées.
 | I31 | Un enregistrement publié = une ligne (clé kind + id). | `tests/unit/kotlin-payload-dedupe.test.ts` |
 | I32 | Une photo ne part que sur geste explicite, ré-encodée et bornée. | `tests/unit/kotlin-vision.test.ts` |
 | I33 | La sauvegarde Android n'emporte jamais les payloads en clair. | `tests/architecture/backup.test.ts` |
+| I34 | Une seule version Kotlin : catalogue = classpath racine = CI. | `tests/architecture/gradle-versions.test.ts` |
 
 ## Retirés
 
@@ -845,3 +846,17 @@ page de login n'écrase pas la session du serveur (#526 et I28).
 - Emplacement : `android/app/src/main/AndroidManifest.xml`,
   `android/app/src/debug/AndroidManifest.xml`,
   `android/app/src/main/res/xml/`.
+
+## I34 — Une seule version Kotlin, du catalogue à la CI
+- Invariant : `android/gradle/libs.versions.toml` est la seule source des
+  versions Gradle. Aucun `build.gradle.kts` ne déclare de version de dépendance
+  en dur ; le classpath Kotlin lit l'entrée `kotlin` du catalogue ; la CI
+  télécharge le `kotlinc` de cette même version. Une version changée à un seul
+  endroit doit faire échouer le gate, pas compiler une parité contre un autre
+  compilateur.
+- Test : `tests/architecture/gradle-versions.test.ts` (catalogue analysé en
+  TOML, build scripts et `ci.yml` réels : littéraux refusés, version Kotlin
+  identique aux trois endroits).
+- Commande : `make architecture`.
+- Emplacement : `android/gradle/libs.versions.toml`, `android/build.gradle.kts`,
+  `android/*/build.gradle.kts`, `.github/workflows/ci.yml`.

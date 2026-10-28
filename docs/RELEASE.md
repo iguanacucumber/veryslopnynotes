@@ -13,16 +13,21 @@ perso dans le livrable. Clé signature TOUJOURS hors repo.
 | bun-types (transitif) | 1.4.4 | `bun.lock` | MIT |
 | @types/node (transitif) | 26.6.4 | `bun.lock` | MIT |
 | undici-types (transitif) | 8.9.0 | `bun.lock` | MIT |
-| Gradle / AGP / Kotlin | 9.8.1 / 9.4.1 / 2.4.21 | wrapper + `build.gradle.kts` | Apache-2.0 |
+| Gradle / AGP / Kotlin | 9.8.1 / 9.4.1 / 2.4.21 | wrapper + `android/gradle/libs.versions.toml` | Apache-2.0 |
 | compileSdk/targetSdk/minSdk | 37 / 37 / 26 | `android/app/build.gradle.kts` | — |
-| activity-ktx / OkHttp | 1.13.0 / 5.5.0 | `android/app/build.gradle.kts` | Apache-2.0 |
-| zxing-android-embedded | 4.3.0 | `android/app/build.gradle.kts` | Apache-2.0 |
+| activity-ktx / OkHttp | 1.13.0 / 5.5.0 | `android/gradle/libs.versions.toml` | Apache-2.0 |
+| zxing-android-embedded | 4.3.0 | `android/gradle/libs.versions.toml` | Apache-2.0 |
 | react / react-dom | 19.3.1 | `package.json` exact + `bun.lock` | MIT |
 | react-router-dom | 7.18.4 | `package.json` exact + `bun.lock` | MIT |
 | vite / @vitejs/plugin-react | 8.3.4 / 6.1.2 | `package.json` exact + `bun.lock` | MIT |
 | rolldown (transitif) | 1.2.14 | `bun.lock` | MIT |
 | lightningcss (transitif) | 1.33.0 | `bun.lock` | MPL-2.0 (build uniquement, non distribué) |
 | tough-cookie | 6.0.2 | `package.json` exact + `bun.lock` | BSD-3-Clause |
+
+Les versions des dépendances Android (AGP, Kotlin, AndroidX, OkHttp, zxing)
+vivent toutes dans `android/gradle/libs.versions.toml` :
+`tests/architecture/gradle-versions.test.ts` verrouille catalogue = classpath
+racine = CI, et refuse toute version en dur dans un `build.gradle.kts`.
 
 Les dépendances applicatives sont compatibles MIT (MIT, Apache-2.0,
 BSD-3-Clause). Vite 8 tire `lightningcss` (MPL-2.0) uniquement comme outil de

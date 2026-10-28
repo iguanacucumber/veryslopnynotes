@@ -30,6 +30,12 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # #624 : UNE version Kotlin en CI. La CI ne lit pas le TOML (pas de parseur
+    # garanti sur le runner) : ce littéral est comparé à l'entrée `kotlin` du
+    # catalogue par `tests/architecture/gradle-versions.test.ts`, qui rougit si
+    # l'un des deux bouge seul.
+    env:
+      KOTLIN_VERSION: "2.4.21"
     steps:
       - name: Code
         uses: actions/checkout@v4
@@ -134,13 +140,13 @@ jobs:
         uses: actions/cache@v4
         continue-on-error: true
         with:
-          path: node_modules/.cache/kotlinc-2.4.21
-          key: kotlinc-2.4.21-${{ runner.os }}
+          path: node_modules/.cache/kotlinc-${{ env.KOTLIN_VERSION }}
+          key: kotlinc-${{ env.KOTLIN_VERSION }}-${{ runner.os }}
 
       - name: Compilateur Kotlin
         run: |
           set -euo pipefail
-          version=2.4.21
+          version="$KOTLIN_VERSION"
           root="$GITHUB_WORKSPACE/node_modules/.cache/kotlinc-${version}"
           home="$root/kotlinc"
           # Un cache CORROMPU se RÉPARE : on vérifie le BINAIRE, pas sa

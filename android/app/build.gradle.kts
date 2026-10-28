@@ -112,12 +112,12 @@ tasks.named("preBuild") { dependsOn(buildWebUi) }
 dependencies {
     implementation(project(":core"))
     implementation(project(":data"))
-    implementation("androidx.core:core-ktx:1.19.1")
+    implementation(libs.core.ktx)
     // ComponentActivity + enableEdgeToEdge, sans Compose.
-    implementation("androidx.activity:activity-ktx:1.13.0")
+    implementation(libs.activity.ktx)
     // #333 : le pont natif lance le scan du QR (ScanContract).
-    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation(libs.zxing.android.embedded)
     // ponytail: un seul client HTTP (OkHttp allowlist serveur).
     // Upgrade: cache offline Room phase 4 (#14), SSE client #15.
-    implementation("com.squareup.okhttp3:okhttp:5.5.0")
+    implementation(libs.okhttp)
 }
