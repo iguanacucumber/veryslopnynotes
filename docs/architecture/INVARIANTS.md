@@ -31,7 +31,7 @@ entrée active échoue au gate.
 
 Une règle qui ne peut pas être testée est une convention, pas un invariant.
 `tests/architecture/docs.test.ts` vérifie les identifiants, le format, les
-références et les commandes citées.
+références, l'existence des fichiers cités et les commandes citées.
 
 ## Architecture actuelle
 

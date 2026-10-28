@@ -5,7 +5,8 @@
 // `make` existantes. Un lien mort ou un ID réutilisé doit rougir le gate, pas
 // attendre une relecture humaine.
 import { describe, expect, test } from "bun:test";
-import { readFileSync, readdirSync } from "node:fs";
+import { Glob } from "bun";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -79,6 +80,80 @@ export function numberingErrors(entries: Entry[], retired: string[]): string[] {
   return errors;
 }
 
+/** Colonnes `Vérification principale` du registre, par ID (hors `## Retirés`). */
+export function registryCheckCells(md: string): Map<string, string> {
+  const cells = new Map<string, string>();
+  let inRegistry = false;
+  for (const line of md.split("\n")) {
+    if (/^## /.test(line)) inRegistry = line.startsWith("## Registre");
+    if (!inRegistry) continue;
+    const parts = line.split("|");
+    if (parts.length > 3 && /^I\d+/.test(parts[1]!.trim())) cells.set(parts[1]!.trim(), parts[3]!);
+  }
+  return cells;
+}
+
+/** Blocs de code entre backticks d'un texte. */
+export function codeSpans(text: string): string[] {
+  return [...text.matchAll(/`([^`]+)`/g)].map((m) => m[1]!);
+}
+
+/** Un backtick « ressemble à un chemin » : tests/ ou agents/ (glob permis). */
+export function isCitedPath(span: string): boolean {
+  return /^(tests|agents)\//.test(span);
+}
+
+/** Un chemin cité est un glob : il contient un caractère de joker. */
+export function isGlobPattern(path: string): boolean {
+  return /[*?[]/.test(path);
+}
+
+/** Le bloc `- Test :` d'une entrée, jusqu'à la ligne `- Commande :` suivante. */
+export function testBlock(body: string): string {
+  const lines = body.split("\n");
+  const start = lines.findIndex((l) => l.startsWith("- Test :"));
+  if (start === -1) return "";
+  const end = lines.findIndex((l, i) => i > start && /^- (Commande|Emplacement) :/.test(l));
+  return lines.slice(start, end === -1 ? lines.length : end).join("\n");
+}
+
+/** Chemins de vérification cités dans le bloc `- Test :` d'une entrée. */
+export function citedTestPaths(body: string): string[] {
+  return codeSpans(testBlock(body)).filter(isCitedPath);
+}
+
+/** Chemins cités par une entrée : bloc `- Test :` + colonne du registre. */
+export function citedPaths(detailBody: string, registryRow: string): string[] {
+  return [...citedTestPaths(detailBody), ...codeSpans(registryRow).filter(isCitedPath)];
+}
+
+/**
+ * Erreurs de citation : un chemin littéral doit exister, un glob doit matcher
+ * au moins un fichier, et une entrée doit citer au moins un fichier réel —
+ * la prose entre backticks n'est jamais vérifiée.
+ */
+export function citationErrors(
+  entries: { id: string; paths: string[] }[],
+  isFile: (path: string) => boolean,
+  globMatchCount: (pattern: string) => number,
+): string[] {
+  const errors: string[] = [];
+  for (const { id, paths } of entries) {
+    if (paths.length === 0) {
+      errors.push(`${id} ne cite aucun fichier de vérification`);
+      continue;
+    }
+    for (const path of paths) {
+      if (isGlobPattern(path)) {
+        if (globMatchCount(path) === 0) errors.push(`${id} : le glob \`${path}\` ne matche aucun fichier`);
+      } else if (!isFile(path)) {
+        errors.push(`${id} : le fichier \`${path}\` n'existe pas`);
+      }
+    }
+  }
+  return errors;
+}
+
 /** Numéros `I<n>` (hors `bis`) des entrées actives. */
 function activeNumericIds(entries: Entry[]): Set<number> {
   return new Set(
@@ -95,6 +170,17 @@ const numeric = ids
   .map((id) => Number(id.slice(1)))
   .sort((a, b) => a - b);
 const retired = parseRetiredIds(INVARIANTS);
+const cells = registryCheckCells(INVARIANTS);
+const cited = entries.map((e) => ({ id: e.id, paths: citedPaths(e.body, cells.get(e.id) ?? "") }));
+
+const isFile = (path: string) => {
+  try {
+    return statSync(join(ROOT, path)).isFile();
+  } catch {
+    return false;
+  }
+};
+const globMatchCount = (pattern: string) => [...new Glob(pattern).scanSync(ROOT)].length;
 
 describe("registre d'invariants", () => {
   test("les identifiants sont uniques", () => {
@@ -132,6 +218,10 @@ describe("registre d'invariants", () => {
     const max = Math.max(...numeric);
     expect(README).toContain(`I1–I${max}`);
   });
+
+  test("chaque entrée pointe vers au moins un fichier existant", () => {
+    expect({ bad: citationErrors(cited, isFile, globMatchCount) }).toEqual({ bad: [] });
+  });
 });
 
 describe("sabotage : retrait d'invariant (fixtures)", () => {
@@ -151,6 +241,45 @@ describe("sabotage : retrait d'invariant (fixtures)", () => {
   test("un ID retiré qui réapparaît comme entrée active est rouge", () => {
     const fixtures = parseInvariantEntries(`${entry(1)}\n${entry(2)}`);
     expect(numberingErrors(fixtures, ["I2"])).toEqual(["I2 est réutilisé alors qu'il figure dans ## Retirés"]);
+  });
+});
+
+describe("sabotage : fichiers cités (fixtures)", () => {
+  const entry = (n: number, testLine: string) =>
+    `## I${n} — Règle de test\n- Test : ${testLine}\n- Commande : c\n- Emplacement : e\n`;
+  const check = (body: string) =>
+    citationErrors([{ id: "I1", paths: citedPaths(body, "") }], isFile, globMatchCount);
+
+  test("un chemin inventé est rouge", () => {
+    expect(check(entry(1, "`tests/unit/inexistant.test.ts`"))).toEqual([
+      "I1 : le fichier `tests/unit/inexistant.test.ts` n'existe pas",
+    ]);
+  });
+
+  test("un glob sans correspondance est rouge", () => {
+    expect(check(entry(1, "`tests/unit/inexistant-*.test.ts`"))).toEqual([
+      "I1 : le glob `tests/unit/inexistant-*.test.ts` ne matche aucun fichier",
+    ]);
+  });
+
+  test("un chemin réel est vert", () => {
+    expect(check(entry(1, "`tests/architecture/docs.test.ts`"))).toEqual([]);
+  });
+
+  test("un chemin inventé dans le registre est rouge aussi", () => {
+    const row = "`tests/architecture/registre-inexistant.test.ts`";
+    const fixtures = citationErrors([{ id: "I1", paths: citedPaths(entry(1, "`t`"), row) }], isFile, globMatchCount);
+    expect(fixtures).toEqual(["I1 : le fichier `tests/architecture/registre-inexistant.test.ts` n'existe pas"]);
+  });
+
+  test("la prose entre backticks est ignorée", () => {
+    expect(citedTestPaths(entry(1, "`Foo.bar` et `un mot`"))).toEqual([]);
+  });
+
+  test("une entrée sans fichier cité est rouge", () => {
+    expect(citationErrors([{ id: "I1", paths: [] }], isFile, globMatchCount)).toEqual([
+      "I1 ne cite aucun fichier de vérification",
+    ]);
   });
 });
 
