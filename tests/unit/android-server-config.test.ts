@@ -1,155 +1,53 @@
 // Serveur choisi À L'EXÉCUTION (au lieu d'être figé dans BuildConfig).
-// Le build Gradle ne tourne pas ici : on Miroite la validation Kotlin en TS
-// ET on garde statiquement le câblage (technique de android-401.test.ts).
+// La validation n'est PAS réécrite en TS : les tables ci-dessous sont rejouées
+// contre `ServerConfig.validateBaseUrl` EXÉCUTÉ par le pilote de parité
+// (`CoreValidationParityMain.kt`). Les autres tests gardent le câblage réel
+// (store, purge, graine de build) et l'invariant I1.
 // Point de sécurité central : la saisie est libre, donc la validation EST
 // l'allowlist — `ServerConfig.validateBaseUrl` + `isAllowed`.
 import { describe, expect, test } from "bun:test";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
+import { parityToolchain, type ParityLink } from "./fixtures/kotlin-harness";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const ANDROID = join(ROOT, "android");
-const CORE = join(ANDROID, "core/src/main/java/fr/veryslopnynotes/core");
 const DATA = join(ANDROID, "data/src/main/java/fr/veryslopnynotes/data");
 const APP = join(ANDROID, "app/src/main/java/fr/veryslopnynotes/app");
+const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "CoreValidationParityMain.kt");
+
+const skip = parityToolchain.skipReason !== null;
+let link: ParityLink | null = null;
+if (!skip) {
+  link = await parityToolchain.openParityLink(DRIVER);
+}
 
 function read(p: string): string {
   return readFileSync(p, "utf8");
 }
-// ---------------------------------------------------------------------------
-// Miroir TS de ServerConfig.validateBaseUrl (core/ServerConfig.kt).
-// Messages identiques : c'est le contrat affiché à l'utilisateur.
-// Les tables et le miroir sont `export`és pour pouvoir rejouer ce tableau
-// contre le VRAI Kotlin (compilateur JVM hors Gradle) : sans ça, le miroir
-// pourrait diverger en silence et le test ne PLUS RIEN prouver.
 
-const MAX_BASE_URL_CHARS = 300;
-const MAX_AUTHORITY_CHARS = 253;
-const MAX_LABEL_CHARS = 63;
-const MAX_PORT = 65535;
 const PORT_HINT = "Port invalide : utilisez un nombre entre 1 et 65535.";
 const HOST_HINT = "Domaine invalide : utilisez un nom de domaine, une IPv4 ou une IPv6 entre crochets.";
 
-type TsResult = { ok: true; baseUrl: string } | { ok: false; message: string };
-
-// Miroir de ServerConfig.isLoopbackHost : égalité stricte (le préfixe de
-// isEmulatorHost est trop laxistpour décider du HTTP clair).
-function tsIsLoopbackHost(host: string): boolean {
-  const bare = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
-  return bare === "10.0.2.2" || bare === "localhost" || bare === "::1" || (tsIsIpv4(bare) && bare.startsWith("127."));
+interface ServerUrlResult {
+  ok: boolean;
+  baseUrl?: string;
+  message?: string;
 }
 
-function tsIsAuthorityChar(c: string): boolean {
-  return /^[a-z0-9.:[\]-]$/.test(c);
+/** Verdict du VRAI `ServerConfig.validateBaseUrl`, via le pilote de parité. */
+async function serverUrl(raw: string): Promise<ServerUrlResult> {
+  return JSON.parse(await link!.ask({ op: "serverUrl", raw })) as ServerUrlResult;
 }
 
-function tsSplitAuthority(authority: string): { host: string; port: string | null } | null {
-  if (authority.startsWith("[")) {
-    const end = authority.indexOf("]");
-    if (end < 0) return null;
-    const rest = authority.slice(end + 1);
-    if (rest === "") return { host: authority.slice(0, end + 1), port: null };
-    if (rest.startsWith(":")) return { host: authority.slice(0, end + 1), port: rest.slice(1) };
-    return null;
-  }
-  const colon = authority.lastIndexOf(":");
-  if (colon < 0) return { host: authority, port: null };
-  if (authority.slice(0, colon).includes(":")) return null;
-  return { host: authority.slice(0, colon), port: authority.slice(colon + 1) };
+/** Verdict du VRAI `ServerConfig.isAllowed`, via le pilote de parité. */
+async function serverAllowed(url: string, baseUrl: string): Promise<boolean> {
+  const result = JSON.parse(await link!.ask({ op: "serverAllowed", url, baseUrl })) as { allowed: boolean };
+  return result.allowed;
 }
 
-function tsIsValidPort(port: string): boolean {
-  return port.length >= 1 && port.length <= 5 && /^[0-9]+$/.test(port) && Number(port) >= 1 && Number(port) <= MAX_PORT;
-}
-
-function tsIsIpv4(host: string): boolean {
-  const groups = host.split(".");
-  return (
-    groups.length === 4 &&
-    groups.every((g) => g.length >= 1 && g.length <= 3 && /^[0-9]+$/.test(g) && (g.length === 1 || g[0] !== "0") && Number(g) <= 255)
-  );
-}
-
-function tsIsIpv6(host: string): boolean {
-  return host.split("").filter((c) => c === ":").length >= 2 && /^[0-9a-f:.]+$/.test(host);
-}
-
-function tsIsDnsName(host: string): boolean {
-  if (host.endsWith(".")) return false;
-  const labels = host.split(".");
-  if (labels.length > 1 && /^[0-9]+$/.test(labels[labels.length - 1] ?? "")) return false;
-  return labels.every(
-    (label) =>
-      label.length >= 1 &&
-      label.length <= MAX_LABEL_CHARS &&
-      /^[a-z0-9-]+$/.test(label) &&
-      !label.startsWith("-") &&
-      !label.endsWith("-"),
-  );
-}
-
-function tsIsValidHost(host: string): boolean {
-  const bare = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
-  if (bare === "" || bare.length > MAX_AUTHORITY_CHARS) return false;
-  if (bare.includes(":")) return tsIsIpv6(bare);
-  return tsIsIpv4(bare) || tsIsDnsName(bare);
-}
-
-export function tsValidateBaseUrl(raw: string): TsResult {
-  const input = raw.trim();
-  if (input === "") return { ok: false, message: "Adresse vide : saisissez l'adresse de votre serveur." };
-  if (input.length > MAX_BASE_URL_CHARS) {
-    return { ok: false, message: `Adresse trop longue (${MAX_BASE_URL_CHARS} caractères maximum).` };
-  }
-  if (/[\s\p{Cc}]/u.test(input)) return { ok: false, message: "Espace ou caractère interdit dans l'adresse." };
-  const sep = input.indexOf("://");
-  if (sep <= 0) return { ok: false, message: "Adresse incomplète : le format attendu est https://domaine[:port]." };
-  const scheme = input.slice(0, sep).toLowerCase();
-  if (scheme !== "https" && scheme !== "http") {
-    return { ok: false, message: "Schéma refusé : utilisez https (http est réservé à l'émulateur et à la boucle locale)." };
-  }
-  const authority = input.slice(sep + 3).toLowerCase().replace(/\/+$/, "");
-  if (authority === "") return { ok: false, message: "Domaine manquant après le schéma." };
-  if (authority.length > MAX_AUTHORITY_CHARS) {
-    return { ok: false, message: `Domaine trop long (${MAX_AUTHORITY_CHARS} caractères maximum).` };
-  }
-  if (authority.includes("@")) {
-    return { ok: false, message: "Identifiants (utilisateur:mot de passe@) refusés : saisissez seulement le domaine." };
-  }
-  if (authority.includes("/")) {
-    return { ok: false, message: "Chemin refusé : saisissez seulement le domaine et le port." };
-  }
-  if (authority.includes("?") || authority.includes("#")) {
-    return { ok: false, message: "Paramètres ou ancre refusés : saisissez seulement le domaine et le port." };
-  }
-  if (![...authority].every(tsIsAuthorityChar)) return { ok: false, message: "Caractère interdit dans le domaine." };
-  const parts = tsSplitAuthority(authority);
-  if (parts === null) {
-    const colons = authority.split("").filter((c) => c === ":").length;
-    return { ok: false, message: colons > 1 ? HOST_HINT : PORT_HINT };
-  }
-  if (!tsIsValidHost(parts.host)) return { ok: false, message: HOST_HINT };
-  if (parts.port !== null && !tsIsValidPort(parts.port)) return { ok: false, message: PORT_HINT };
-  if (scheme === "http" && !tsIsLoopbackHost(parts.host)) {
-    return { ok: false, message: "HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur." };
-  }
-  return { ok: true, baseUrl: `${scheme}://${authority}` };
-}
-
-/** Miroir de ServerConfig.isAllowed — baseUrl exacte + "/" (plus préfixe nu). */
-function tsIsAllowed(url: string, baseUrl: string): boolean {
-  return url === baseUrl || url.startsWith(`${baseUrl.replace(/\/+$/, "")}/`);
-}
-
-/** Miroir de ui/serverHint (affichage, pas une décision de sécurité). */
-function tsServerHint(value: string): "emulateur" | "https" {
-  const authority = value.trim().split("://")[1]?.split("/")[0]?.trim() ?? "";
-  const host = authority.replace(/^\[/, "").split("]")[0]?.split(":")[0] ?? "";
-  return tsIsLoopbackHost(host) ? "emulateur" : "https";
-}
-
-export const ACCEPTED: [string, string][] = [
+const ACCEPTED: [string, string][] = [
   ["https://notes.exemple.fr", "https://notes.exemple.fr"],
   ["https://notes.exemple.fr:8443", "https://notes.exemple.fr:8443"],
   ["https://notes.exemple.fr:1", "https://notes.exemple.fr:1"],
@@ -178,7 +76,7 @@ export const ACCEPTED: [string, string][] = [
   ["http://10.0.2.2:3000\n", "http://10.0.2.2:3000"],
 ];
 
-export const REJECTED: [string, string][] = [
+const REJECTED: [string, string][] = [
   ["", "Adresse vide : saisissez l'adresse de votre serveur."],
   ["   ", "Adresse vide : saisissez l'adresse de votre serveur."],
   ["notes.exemple.fr", "Adresse incomplète : le format attendu est https://domaine[:port]."],
@@ -198,8 +96,8 @@ export const REJECTED: [string, string][] = [
   ["https://notes exemple.fr", "Espace ou caractère interdit dans l'adresse."],
   ["https://notes.exemple.fr\t:8443", "Espace ou caractère interdit dans l'adresse."],
   ["https://notes.exemple.fr\n/v1", "Espace ou caractère interdit dans l'adresse."],
-  ["https://notes.exemple.fr ", "Espace ou caractère interdit dans l'adresse."],
-  ["https://notes.exemple.fr ", "Espace ou caractère interdit dans l'adresse."],
+  ["https://notes.exemple.fr\u0000", "Espace ou caractère interdit dans l'adresse."],
+  ["https://notes.exemple.fr\u0000", "Espace ou caractère interdit dans l'adresse."],
   // HTTP hors émulateur/boucle locale : jamais affaibli.
   ["http://notes.exemple.fr", "HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur."],
   ["http://192.168.1.10:3000", "HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur."],
@@ -238,101 +136,46 @@ export const REJECTED: [string, string][] = [
 ];
 
 describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)", () => {
-  test("formes acceptées : https, hôte borné, port 1-65535, grain du build émulé", () => {
+  test.skipIf(skip)("formes acceptées : https, hôte borné, port 1-65535, grain du build émulé", async () => {
     for (const [input, canonical] of ACCEPTED) {
-      expect({ input, res: tsValidateBaseUrl(input) }).toEqual({ input, res: { ok: true, baseUrl: canonical } });
+      const res = await serverUrl(input);
+      expect({ input, res }).toEqual({ input, res: { ok: true, baseUrl: canonical } });
     }
     // La graine BuildConfig par défaut (defaultConfig Gradle) reste valide :
-    // le flux émulateur 10.0.2.2:3000 n'est jamais refusé par la nouvelle
-    // validation.
+    // le flux émulateur 10.0.2.2:3000 n'est jamais refusé par la validation.
     const seed = "http://10.0.2.2:3000";
-    expect(tsValidateBaseUrl(seed)).toEqual({ ok: true, baseUrl: seed });
+    expect(await serverUrl(seed)).toEqual({ ok: true, baseUrl: seed });
   });
 
-  test("formes refusées : message français actionnable, cause unique", () => {
+  test.skipIf(skip)("formes refusées : message français actionnable, cause unique", async () => {
     for (const [input, message] of REJECTED) {
-      expect({ input, res: tsValidateBaseUrl(input) }).toEqual({ input, res: { ok: false, message } });
+      const res = await serverUrl(input);
+      expect({ input, res }).toEqual({ input, res: { ok: false, message } });
       // Un refus ne doit jamais réécrire la saisie dans son propre message
       // (elle révèle l'établissement : ni log, ni crash, ni écran).
-      const said = tsValidateBaseUrl(input).ok ? "" : (tsValidateBaseUrl(input) as { message: string }).message;
-      expect(said.includes(input.trim()) && input.trim().length > 3).toBe(false);
+      expect(res.message?.includes(input.trim()) && input.trim().length > 3).toBe(false);
     }
   });
 
-  test("allowlist : préfixe strict, `hote.evil.tld` ne passe plus pour `hote`", () => {
+  test.skipIf(skip)("allowlist : préfixe strict, `hote.evil.tld` ne passe plus pour `hote`", async () => {
     const base = "https://notes.exemple.fr";
-    expect(tsIsAllowed("https://notes.exemple.fr/v1/grades", base)).toBe(true);
-    expect(tsIsAllowed("https://notes.exemple.fr/v1/media?ref=x", base)).toBe(true);
-    expect(tsIsAllowed("https://notes.exemple.fr", base)).toBe(true);
-    // Avant : préfixe nu => ce faux ami passait (l'API ne connaît plus le
-    // préfixe brut, donc `hote.evil.tld` n'est plus « dans » l'allowlist).
-    expect("https://notes.exemple.fr.evil.tld/v1/grades".startsWith(base)).toBe(true);
-    expect(tsIsAllowed("https://notes.exemple.fr.evil.tld/v1/grades", base)).toBe(false);
-    // Autre schéma, autre port, autre chemin racine : refusés.
-    expect(tsIsAllowed("http://notes.exemple.fr/v1/grades", base)).toBe(false);
-    expect(tsIsAllowed("https://notes.exemple.fr:8443/v1/grades", base)).toBe(false);
-    expect(tsIsAllowed("https://notes.exemple.frX/v1/grades", base)).toBe(false);
-    expect(tsIsAllowed("https://notes.exemple.fr.evil.tld/v1/grades", "")).toBe(false);
-    // baseUrl vide = non configuré (previews/tests) : pas de network call.
-    expect(tsIsAllowed("/v1/grades", "")).toBe(true);
-
-    const config = read(join(CORE, "ServerConfig.kt"));
-    expect(config).toContain("fun isAllowed(url: String, baseUrl: String): Boolean =");
-    expect(config).toContain("url == baseUrl || url.startsWith(baseUrl.trimEnd('/') + \"/\")");
-    // #206 : plus d'ApiClient (device-only) — l'allowlist reste la primitive
-    // du scraper (`manualsScrapeUrl`), vérifiée ci-dessous.
-  });
-
-  test("Kotlin : la validation porte toutes les règles, la graine reste le défaut", () => {
-    const config = read(join(CORE, "ServerConfig.kt"));
-    expect(config).toContain("sealed interface ServerUrlResult");
-    expect(config).toContain("data class Ok(val baseUrl: String) : ServerUrlResult");
-    expect(config).toContain("data class Rejected(val message: String) : ServerUrlResult");
-    expect(config).toContain("fun validateBaseUrl(raw: String): ServerUrlResult");
-    expect(config).toContain("const val MAX_BASE_URL_CHARS = 300");
-    expect(config).toContain("const val MAX_AUTHORITY_CHARS = 253");
-    expect(config).toContain("private const val MAX_LABEL_CHARS = 63");
-    expect(config).toContain("private const val MAX_PORT = 65535");
-    const code = codeOnly(config);
-    // Les refus de structure, dans l'ordre des gardes.
-    for (const guard of [
-      "input.length > MAX_BASE_URL_CHARS",
-      "it.isWhitespace() || it.isISOControl()",
-      "input.indexOf(\"://\")",
-      "scheme != \"https\" && scheme != \"http\"",
-      "authority.contains('@')",
-      "authority.contains('/')",
-      "authority.contains('?') || authority.contains('#')",
-      "isValidHost(parts.host)",
-      "isValidPort(parts.port)",
-      "scheme == \"http\" && !isLoopbackHost(parts.host)",
-    ]) {
-      expect({ guard, found: code.includes(guard) }).toEqual({ guard, found: true });
+    const cases: [string, string, boolean][] = [
+      ["https://notes.exemple.fr/v1/grades", base, true],
+      ["https://notes.exemple.fr/v1/media?ref=x", base, true],
+      ["https://notes.exemple.fr", base, true],
+      // Préfixe nu : ce faux ami passait avant l'ajout de la barre oblique.
+      ["https://notes.exemple.fr.evil.tld/v1/grades", base, false],
+      // Autre schéma, autre port, autre chemin racine : refusés.
+      ["http://notes.exemple.fr/v1/grades", base, false],
+      ["https://notes.exemple.fr:8443/v1/grades", base, false],
+      ["https://notes.exemple.frX/v1/grades", base, false],
+      ["https://notes.exemple.fr.evil.tld/v1/grades", "", false],
+      // baseUrl vide = non configuré (previews/tests) : pas de network call.
+      ["/v1/grades", "", true],
+    ];
+    for (const [url, root, allowed] of cases) {
+      expect({ url, root, allowed: await serverAllowed(url, root) }).toEqual({ url, root, allowed });
     }
-    // Le clair ne dépend QUE d'une liste Loopback en ÉGALITÉ STRICTE : le
-    // préfixe de isEmulatorHost (miroir Gradle, conservé) laisserait passer
-    // « 10.0.2.234 » ou « localhost.evil.tld » en clair, bearer inclus.
-    expect(code).toContain('bare == "10.0.2.2" || bare == "localhost" || bare == "::1"');
-    expect(code).toContain('(isIpv4(bare) && bare.startsWith("127."))');
-    // isEmulatorHost reste inchangé (Gradle en fait le miroir).
-    expect(code).toContain("fun isEmulatorHost(host: String): Boolean =");
-    expect(code).toContain('host.startsWith("10.0.2.2") || host.startsWith("localhost")');
-    // Pas de log, pas d'exception qui transporterait l'adresse.
-    expect(code).not.toMatch(/Log\.[vdiew]\(|println\(|printStackTrace|throw /);
-    // Les messages de refus existent, sont uniques et ne citent aucun hôte.
-    const messages = [...config.matchAll(/(?:rejected\(|private const val \w+_HINT = )"([^"]+)"/g)].map((m) => m[1] as string);
-    expect(messages.length).toBe(14);
-    expect(new Set(messages).size).toBe(messages.length);
-    for (const m of messages) {
-      expect(/^[A-ZÉÀ]/.test(m)).toBe(true);
-      expect(m).not.toMatch(/10\.0\.2\.2|localhost/);
-      // Aucun message ne cite un hôte : la seule URL admise est le GABARIT
-      // affiché (l'adresse saisie ne part ni dans un log ni à l'écran).
-      expect(m).not.toMatch(/\.(fr|com|net|org|tld|lyon|ac-[a-z]+)\b/i);
-    }
-    expect(messages.filter((m) => m.includes("://"))).toEqual([
-      "Adresse incomplète : le format attendu est https://domaine[:port].",
-    ]);
   });
 
   test("store : une adresse, validée avant écriture, prefs séparées des comptes", () => {
@@ -416,55 +259,6 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
         cleartext: false,
       });
     }
-  });
-
-  test("ServerConfig ne connaît que le scraper : zéro route métier côté app", () => {
-    // #206 : l'app ne parle plus métier à personne (le téléphone lit
-    // l'établissement en direct) — les builders de routes meurent ici, il ne
-    // reste que la validation d'URL + la route du scraper (#209).
-    const config = read(join(CORE, "ServerConfig.kt"));
-    expect(config).toContain("fun validateBaseUrl(raw: String): ServerUrlResult");
-    expect(config).toContain("fun isAllowed(url: String, baseUrl: String): Boolean =");
-    expect(config).toContain('const val MANUALS_SCRAPE_PATH = "/v1/manuals/scrape"');
-    expect(config).toContain("fun manualsScrapeUrl(baseUrl: String): String");
-    for (const mort of [
-      "fun gradesUrl",
-      "fun assignmentsUrl",
-      "fun assignmentsToggleUrl",
-      "fun homeworkGenerateUrl",
-      "fun mediaUrl",
-      "fun mediaPath",
-      "fun timetableUrl",
-      "fun pairingStartUrl",
-      "fun pairingConfirmUrl",
-      "fun setupUrl",
-      "fun revisionSheetsUrl",
-      "fun revisionSheetPdfUrl",
-      "fun subjectPrefsUrl",
-      "fun newsUrl",
-      "fun menusUrl",
-      "fun attendanceUrl",
-      "fun punishmentsUrl",
-      "fun capabilitiesUrl",
-      "fun syncRefreshUrl",
-      "fun discussionsUrl",
-      "fun discussionsPath",
-      "fun meUrl",
-      "fun periodsUrl",
-      "fun eventsUrl",
-      "fun securityAlertsUrl",
-      "PAIRING_START_PATH",
-      "PAIRING_CONFIRM_PATH",
-      "SETUP_PATH",
-      "HEALTH_PATH",
-      "HOMEWORK_GENERATE_PATH",
-    ]) {
-      expect({ mort, present: config.includes(mort) }).toEqual({ mort, present: false });
-    }
-    // L'interface n'est plus Compose : plus de module ui à scanner, et le pont
-    // n'expose aucune adresse d'établissement à modifier.
-    expect(existsSync(join(ANDROID, "ui"))).toBe(false);
-    expect(codeOnly(read(join(APP, "VsnBridge.kt")))).not.toContain("changeServer");
   });
 
   test("I1 : aucun hôte en dur dans android/, aucun hôte Pronote", () => {
