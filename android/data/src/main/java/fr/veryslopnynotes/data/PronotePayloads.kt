@@ -12,6 +12,8 @@ import fr.veryslopnynotes.core.ProvidedAverages
 import fr.veryslopnynotes.core.SecurityAlert
 import fr.veryslopnynotes.core.UserProfileRules
 import fr.veryslopnynotes.core.computeAverages
+import fr.veryslopnynotes.core.dedupe
+import fr.veryslopnynotes.core.eventKey
 import fr.veryslopnynotes.core.subjectKey
 import fr.veryslopnynotes.pronote.Client
 import fr.veryslopnynotes.pronote.JVal
@@ -418,15 +420,15 @@ internal fun assignmentsPayload(client: Client, query: Map<String, String>, now:
     // #570 : un devoir = UNE ligne publiée. Le même devoir (même `N`) peut
     // revenir dans la liste brute : il est publié UNE fois (le web
     // déduplique par identifiant, mais le NATIF est la source de vérité).
-    val seen = HashSet<String>()
     // La fenêtre servie : le repli d'identifiant est unique par fenêtre
     // (deux fenêtres = deux entrées de cache, #477).
     val scope = "${from.toLocalDate()}-${to.toLocalDate()}"
-    raws.forEachIndexed { i, hw ->
+    val rows = raws.mapIndexedNotNull { i, hw ->
         val dueMs = hw.date.atZone(PARIS).toInstant().toEpochMilli()
-        if (win != null && (dueMs < fromMs || dueMs > toMs)) return@forEachIndexed
-        val id = homeworkIdOf(hw, i, scope)
-        if (!seen.add(id)) return@forEachIndexed
+        if (win != null && (dueMs < fromMs || dueMs > toMs)) return@mapIndexedNotNull null
+        Triple(homeworkIdOf(hw, i, scope), i, hw)
+    }
+    for ((id, i, hw) in dedupe(rows) { eventKey("assignment", it.first) }) {
         val key = lessonKeyOf(hw.subject.name, parisDay(hw.date))
         assignmentJson(hw, id, i, key?.let { lessons[it] })?.let { arr.put(it) }
     }
@@ -586,68 +588,63 @@ internal fun attendancePayload(client: Client): String {
     // (`listeAbsences`, filtrée sur `G` 13 ou 14) — une absence `N = 12` et
     // un retard `N = 12` sont deux enregistrements DIFFÉRENTS. Un ensemble
     // partagé les confondrait : le second disparaîtrait de l'écran.
-    val seen = HashSet<String>()
+    val rows = mutableListOf<Pair<JSONObject, String?>>()
     for ((periodIndex, p) in client.periods.withIndex()) {
         val pid = p.id.ifBlank { null }
         if (pid != null) names[pid] = p.name
-        val rows: List<Pair<JSONObject, String?>> = mutableListOf<Pair<JSONObject, String?>>().apply {
-            val ab = try {
-                p.absences()
-            } catch (e: Exception) {
-                if (mustPropagateReadFailure(e)) throw e
-                emptyList()
-            }
-            for ((i, a) in ab.withIndex()) {
-                // Le repli est UNIQUE dans le payload : deux périodes ne
-                // forgent jamais le même identifiant pour deux absences
-                // DIFFÉRENTES (le web déduplique par (kind, id)).
-                val id = a.id.ifBlank { "abs-$periodIndex-$i" }
-                if (!seen.add("absence:$id")) continue
-                add(JSONObject().apply {
-                    put("id", id)
-                    put("kind", "absence")
-                    put("date", a.fromDate.parisIso())
-                    val to = a.toDate.parisIso()
-                    if (to != a.fromDate.parisIso()) put("dateEnd", to)
-                    putIf("motif", joinReasons(a.reasons, 500))
-                    putIf("periodId", pid?.take(64))
-                    hoursToMinutes(a.hours)?.let { put("durationMinutes", it) }
-                    if (a.justified) put("justified", true)
-                } to pid)
-            }
-            val dl = try {
-                p.delays()
-            } catch (e: Exception) {
-                if (mustPropagateReadFailure(e)) throw e
-                emptyList()
-            }
-            for ((i, d) in dl.withIndex()) {
-                val id = d.id.ifBlank { "late-$periodIndex-$i" }
-                if (!seen.add("late:$id")) continue
-                add(JSONObject().apply {
-                    put("id", id)
-                    put("kind", "late")
-                    put("date", d.date.parisIso())
-                    putIf("motif", joinReasons(d.reasons, 500))
-                    putIf("periodId", pid?.take(64))
-                    if (d.minutes.isFinite() && d.minutes >= 0) put("durationMinutes", d.minutes)
-                    if (d.justified) put("justified", true)
-                } to pid)
-            }
+        val ab = try {
+            p.absences()
+        } catch (e: Exception) {
+            if (mustPropagateReadFailure(e)) throw e
+            emptyList()
         }
-        // Les compteurs sont calculés depuis les lignes DÉDUPLIQUÉES : une
-        // absence parue dans deux périodes ne compte qu'une fois.
-        for ((obj, id) in rows) {
-            absences.put(obj)
-            if (id != null) {
-                val cur = counters.getOrPut(id) {
-                    JSONObject().put("periodId", id).put("absences", 0).put("late", 0).put("missingMinutes", 0)
-                }
-                if (obj.optString("kind") == "late") cur.put("late", cur.optInt("late") + 1)
-                else cur.put("absences", cur.optInt("absences") + 1)
-                val mins = if (obj.isNull("durationMinutes")) 0 else obj.optDouble("durationMinutes", 0.0).toInt()
-                cur.put("missingMinutes", cur.optInt("missingMinutes") + mins)
+        for ((i, a) in ab.withIndex()) {
+            // Le repli est UNIQUE dans le payload : deux périodes ne forgent
+            // jamais le même identifiant pour deux absences DIFFÉRENTES.
+            val id = a.id.ifBlank { "abs-$periodIndex-$i" }
+            rows.add(JSONObject().apply {
+                put("id", id)
+                put("kind", "absence")
+                put("date", a.fromDate.parisIso())
+                val to = a.toDate.parisIso()
+                if (to != a.fromDate.parisIso()) put("dateEnd", to)
+                putIf("motif", joinReasons(a.reasons, 500))
+                putIf("periodId", pid?.take(64))
+                hoursToMinutes(a.hours)?.let { put("durationMinutes", it) }
+                if (a.justified) put("justified", true)
+            } to pid)
+        }
+        val dl = try {
+            p.delays()
+        } catch (e: Exception) {
+            if (mustPropagateReadFailure(e)) throw e
+            emptyList()
+        }
+        for ((i, d) in dl.withIndex()) {
+            val id = d.id.ifBlank { "late-$periodIndex-$i" }
+            rows.add(JSONObject().apply {
+                put("id", id)
+                put("kind", "late")
+                put("date", d.date.parisIso())
+                putIf("motif", joinReasons(d.reasons, 500))
+                putIf("periodId", pid?.take(64))
+                if (d.minutes.isFinite() && d.minutes >= 0) put("durationMinutes", d.minutes)
+                if (d.justified) put("justified", true)
+            } to pid)
+        }
+    }
+    // Les compteurs sont calculés depuis les lignes DÉDUPLIQUÉES : une
+    // absence parue dans deux périodes ne compte qu'une fois.
+    for ((obj, id) in dedupe(rows) { eventKey(it.first.optString("kind"), it.first.optString("id")) }) {
+        absences.put(obj)
+        if (id != null) {
+            val cur = counters.getOrPut(id) {
+                JSONObject().put("periodId", id).put("absences", 0).put("late", 0).put("missingMinutes", 0)
             }
+            if (obj.optString("kind") == "late") cur.put("late", cur.optInt("late") + 1)
+            else cur.put("absences", cur.optInt("absences") + 1)
+            val mins = if (obj.isNull("durationMinutes")) 0 else obj.optDouble("durationMinutes", 0.0).toInt()
+            cur.put("missingMinutes", cur.optInt("missingMinutes") + mins)
         }
     }
     val periods = JSONArray()

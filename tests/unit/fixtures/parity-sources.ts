@@ -69,6 +69,9 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "Capabilities.kt"),
   join(CORE, "CapabilityProbe.kt"),
   join(CORE, "ExamDetect.kt"),
+  // #645 : la clé de déduplication (kind, id) et la fusion, PURES. Le harnais
+  // les EXÉCUTE au lieu de lire la forme de `PronotePayloads.kt` (`org.json`).
+  join(CORE, "EventDedupe.kt"),
   join(CORE, "GradeDiff.kt"),
   // `core/Homework.kt` + `core/HomeworkAi.kt` : le contrat du corrige et son
   // schema. Ils sont ici depuis #411 : la CHAINE COMPLETE (JSON du
