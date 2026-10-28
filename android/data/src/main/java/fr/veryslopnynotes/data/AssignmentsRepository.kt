@@ -5,6 +5,8 @@ import android.os.Looper
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.AssignmentAttachment
 import fr.veryslopnynotes.core.AssignmentLessonContent
+import fr.veryslopnynotes.core.dedupe
+import fr.veryslopnynotes.core.eventKey
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -135,15 +137,13 @@ class AssignmentsRepository(
             val out = mutableListOf<Assignment>()
             // #570 : un devoir = UNE entrée. Le même identifiant publié deux
             // fois (deux fenêtres de cache, #477) n'est lu qu'une fois.
-            val seen = HashSet<String>()
             for (i in 0 until arr.length()) {
                 val o: JSONObject = arr.optJSONObject(i) ?: continue
                 val a = fromJson(o) ?: continue
                 if (!Assignment.isValid(a)) continue
-                if (!seen.add(a.id)) continue
                 out.add(a)
             }
-            return out
+            return dedupe(out) { eventKey("assignment", it.id) }
         }
 
         fun fromJson(o: JSONObject): Assignment? {

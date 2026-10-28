@@ -786,22 +786,22 @@ page de login n'écrase pas la session du serveur (#526 et I28).
   compteurs de vie scolaire sont calculés depuis la liste DÉDUPLIQUÉE, jamais
   depuis la liste brute. Côté web, la défense est redondante : un lecteur
   écarte l'événement déjà vu, kind par kind (#570).
-- Test : `tests/unit/kotlin-payload-dedupe.test.ts` (câblage natif, par
-  LECTURE DE SOURCE : `PronotePayloads.kt` lit `org.json` et ne compile pas
-  hors Gradle ; la clé de déduplication porte le kind, jamais l'id seul) +
-  `tests/web/social.test.ts` (une absence parue deux fois = une ligne,
-  comptée une fois ; une absence et un retard de MÊME identifiant = deux
-  lignes, comptées deux fois ; une ligne hors contrat ne fait pas d'ombre à
-  une ligne valide ; deux absences distinctes ne sont jamais confondues) +
-  `tests/web/home.test.ts` (devoir et cours publiés deux fois = une ligne ;
-  deux devoirs distincts ne sont jamais confondus) +
-  `tests/web/tasks.test.ts` (la déduplication par id de l'écran Tâches
-  tient, et ne confond pas deux devoirs distincts).
+- Test : `tests/unit/kotlin-payload-dedupe.test.ts` (clé et fusion EXÉCUTÉES
+  depuis le Kotlin pur `core/EventDedupe.kt` : même id avec des kinds
+  DIFFÉRENTS = deux entrées ; doublon exact = une entrée ; compteurs calculés
+  depuis la liste dédupliquée) + `tests/web/social.test.ts` (une absence
+  parue deux fois = une ligne, comptée une fois ; une absence et un retard de
+  MÊME identifiant = deux lignes, comptées deux fois ; une ligne hors contrat
+  ne fait pas d'ombre à une ligne valide ; deux absences distinctes ne sont
+  jamais confondues) + `tests/web/home.test.ts` (devoir et cours publiés deux
+  fois = une ligne ; deux devoirs distincts ne sont jamais confondus) +
+  `tests/web/tasks.test.ts` (la déduplication par id de l'écran Tâches tient,
+  et ne confond pas deux devoirs distincts).
 - Commande : `make check`.
-- Emplacement : `android/data/PronotePayloads.kt`,
-  `android/data/AssignmentsRepository.kt`, `android/app/VsnBridge.kt`,
-  `web/src/features/attendance/model.ts`, `web/src/features/home/parse.ts`,
-  `web/src/features/tasks/assignments.ts`.
+- Emplacement : `android/core/EventDedupe.kt`,
+  `android/data/PronotePayloads.kt`, `android/data/AssignmentsRepository.kt`,
+  `android/app/VsnBridge.kt`, `web/src/features/attendance/model.ts`,
+  `web/src/features/home/parse.ts`, `web/src/features/tasks/assignments.ts`.
 
 ## I32 — Une photo ne part que sur geste explicite, ré-encodée et bornée
 - Invariant : aucune photo n'est capturée ni envoyée automatiquement. Une
