@@ -1,9 +1,10 @@
-// check.ts — `make check` : les 11 étapes tournent EN MÊME TEMPS, une sortie par étape.
+// check.ts — `make check` : les 10 étapes tournent EN MÊME TEMPS, une sortie par étape.
 //
 // Avant : 7 cibles en séquence = 168 s (unit 70 s + Gradle 95 s + 2 s de tsc).
 // Chaque étape est indépendante (lint / typecheck / tests / architecture /
-// contrats / garde-fou Kotlin / compilation Gradle / typecheck web / tests web /
-// build Vite) : la seule limite est le cœur, et il y en a 16.
+// contrats / garde-fou Kotlin / compilation Gradle / typecheck web / tests web
+// — le build Vite est tiré par `architecture`, cf. Makefile) : la seule limite
+// est le cœur, et il y en a 16.
 //
 // SOURCE UNIQUE : chaque étape est une cible du Makefile, invoquée `make -s`,
 // donc une recette écrite une fois, jamais dupliquée ici (sinon `make unit`
@@ -23,7 +24,7 @@
 // explicite `CHECK_HARNESS=1` est posé (usage interne : `make check-fast`,
 // harnais de test). Sans opt-in, la variable est REFUSÉE et signalée : un
 // `CHECK_TARGETS=lint` glissé dans l'environnement (shell, CI, `agents/ship.sh`
-// qui en hérite) ne peut pas remplacer les 11 étapes par un scan de secrets et
+// qui en hérite) ne peut pas remplacer les 10 étapes par un scan de secrets et
 // faire passer le gate en vert (#368).
 // `--plan` : affiche le plan résolu et sort SANS lancer les étapes (lecture du
 // plan, jamais un gate).
@@ -39,7 +40,10 @@ const ROOT = process.argv[2] ? resolve(process.argv[2]) : join(import.meta.dir, 
 
 /** Ordre de départ : le plus long d'abord, pour que le dernier fini soit bref.
  *  `web` était une cible unique qui sérialisait typecheck + tests + build
- *  (5,2 s à elle seule) : ses trois composants sont maintenant des étapes. */
+ *  (5,2 s à elle seule) : ses trois composants sont maintenant des étapes.
+ *  #654 : plus de `web-build` ici — `architecture` le tire dans le Makefile
+ *  (un seul Vite par gate, l'artefact construit une fois puis vérifié in
+ *  situ par web-mock). */
 export const DEFAULT_TARGETS = [
   "android-compile",
   "unit",
@@ -51,7 +55,6 @@ export const DEFAULT_TARGETS = [
   "audit",
   "web-typecheck",
   "web-test",
-  "web-build",
 ];
 
 /** Plan d'étapes : ce qui va RÉELLEMENT tourner. */

@@ -4,7 +4,7 @@
 # une seule implémentation, sinon une des trois finit par oublier la borne 17-21.
 ANDROID_ENV = . agents/runtime/android-env.sh
 
-# Le gate de merge : 11 étapes, TOUJOURS. `CHECK_HARNESS=` vide l'opt-in
+# Le gate de merge : 10 étapes, TOUJOURS. `CHECK_HARNESS=` vide l'opt-in
 # même si le shell en exporte un : personne ne rétrécit le gate par
 # l'environnement (agents/ship.sh hérite de l'env du shell). Un `CHECK_TARGETS`
 # resté dans l'environnement est REFUSÉ et signalé par check.ts.
@@ -50,13 +50,14 @@ check: check-run
 	$(if $(filter 0,$(shell cat $(GATE_STATUS))),,$(error gate ROUGE : code de sortie $(shell cat $(GATE_STATUS))))
 
 # Boucle interne : tout sauf la compilation Gradle (~2,1 s à chaud). Le build
-# Vite est inclus ; ce n'est PAS le gate de merge — `make check` ajoute
-# android-compile, le seul contrôle des symboles Kotlin.
+# Vite est inclus (tiré par `architecture`, cf. plus bas) ; ce n'est PAS le
+# gate de merge — `make check` ajoute android-compile, le seul contrôle des
+# symboles Kotlin.
 # CHECK_HARNESS=1 : opt-in EXPLICITE qui autorise `check.ts` à remplacer sa
 # liste d'étapes par `CHECK_TARGETS` (usage interne du harnais). Sans lui,
-# `CHECK_TARGETS` est refusé et les 11 étapes par défaut s'imposent (#368).
+# `CHECK_TARGETS` est refusé et les étapes par défaut s'imposent (#368).
 check-fast:
-	CHECK_HARNESS=1 CHECK_TARGETS="lint typecheck unit architecture contracts check-kotlin web-typecheck web-test web-build" bun run agents/runtime/check.ts
+	CHECK_HARNESS=1 CHECK_TARGETS="lint typecheck unit architecture contracts check-kotlin web-typecheck web-test" bun run agents/runtime/check.ts
 
 # TDD : relance les tests au moindre changement. `make watch T=tests/unit/foo.test.ts`
 # cible un fichier ; par défaut unitaires + web (~7 s, SÉQUENTIEL : `--parallel`
@@ -86,6 +87,8 @@ web-typecheck:
 
 web-build:
 	bun run build:web
+# #654 : le gate n'appelle plus web-build comme ÉTAPE autonome — `architecture`
+# le tire (ci-dessus) et web-mock vérifie l'artefact réellement produit.
 
 web-test:
 	bun test tests/web tests/architecture/web.test.ts
@@ -102,7 +105,13 @@ web-smoke: web-build
 unit:
 	bun test tests/unit --parallel
 
-architecture: architecture-test
+# #654 : le bundle Vite est construit UNE fois par le gate. `architecture`
+# tire `web-build` AVANT `architecture-test` : le test web-mock vérifie
+# l'ARTEFACT RÉEL qui part dans l'APK (`android/app/src/main/assets/web/`),
+# pas une copie rejouée dans un dossier jetable — un seul Vite par `make
+# check`, les autres étapes restent en parallèle. Seul ce couple est
+# sérialisé : le bundle doit être complet avant d'être contrôlé.
+architecture: web-build architecture-test
 
 architecture-test:
 	bun run agents/runtime/check-architecture.ts
@@ -144,8 +153,9 @@ check-kotlin:
 # absent — la compilation doit TOURNER, pas être servie par un cache.
 #
 # -x buildWebUi : `:app:compileDebugKotlin` tire `preBuild`, donc Gradle lançait
-# un Vite complet. `make check` exécute déjà `web-build` en parallèle : deux Vite
-# concurrents sur le même outDir (emptyOutDir) pouvaient se marcher dessus.
+# un Vite complet. Le gate construit déjà le bundle (`architecture` tire
+# `web-build`) : deux Vite concurrents sur le même outDir (emptyOutDir)
+# pouvaient se marcher dessus.
 android-compile:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \

@@ -7,22 +7,31 @@
 // Deux garde-fous, tous deux automatiques :
 //  1. le client n'importe le factice que dans une branche de développement
 //     (pas d'import statique : le module n'entre jamais dans le graphe) ;
-//  2. le bundle réellement produit par Vite ne contient AUCUN marqueur du
-//     factice (le build est rejoué ici, dans un dossier jetable).
+//  2. le bundle livré à l'APK ne contient AUCUN marqueur du factice.
 //
-// #516 : ce build est un VRAI build Vite, donc un processus qui peut MOURIR
-// (le binding natif Rolldown se fait tuer) ou TUÉ par le runner. Le build
-// passe par `agents/runtime/build-web.ts` : plafond de durée + UN réessai si
-// le processus meurt, et un diagnostic qui NOMME la cause. Le plafond du
-// test est explicite : le défaut de `bun test` (5 s) TUERAIT le build au
-// milieu — c'est exactement le rouge par intermittence du #516.
+// #654 : le build n'est plus REJOUÉ ici dans un dossier jetable — le gate
+// construit le bundle UNE fois (`web-build`, tiré par `architecture` AVANT
+// `architecture-test`), et ce test vérifie l'artefact RÉEL qui part dans
+// l'APK (`android/app/src/main/assets/web/`). Un seul Vite par `make check`,
+// et la preuve porte sur le fichier livré, pas sur une copie. Sabotage
+// vérifié en PR #654 : un marqueur du factice injecté dans le bundle fait
+// échouer `make check`. L'artefact est généré (gitignoré) mais STABLE pendant
+// l'étape architecture — web-build est terminé, personne d'autre ne touche le
+// dossier — donc un parcours local ne subit plus la course #418.
+//
+// #516 : le build passe par `agents/runtime/build-web.ts` (plafond de durée +
+// UN réessai si le processus meurt) — ce filet vit dans le HELPER, éprouvé
+// par `tests/unit/build-web.test.ts` ; ce test n'en dépend plus, il lit le
+// résultat.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { buildWeb, describeOutcome } from "../../agents/runtime/build-web";
 
 const CLIENT = join(import.meta.dir, "..", "..", "web", "src", "bridge", "client.ts");
+
+/** Le bundle RÉEL de l'APK : la sortie du build Vite (défaut de
+ *  `web/vite.config.ts`), celui que Gradle embarque. */
+const BUNDLE = join(import.meta.dir, "..", "..", "android", "app", "src", "main", "assets", "web");
 
 /**
  * Marqueurs du module factice : des CHAÎNES du code source, donc présentes
@@ -58,30 +67,33 @@ describe("le pont factice reste un artefact de développement", () => {
   });
 
   test(
-    "le bundle de production n'embarque aucun marqueur du factice",
+    "le bundle livré à l'APK n'embarque aucun marqueur du factice",
     () => {
-      // Le VRAI build (pas une relecture de source) : c'est l'artefact livré
-      // dans l'APK qui est contrôlé, dossier jetable pour ne pas marcher sur
-      // les assets de l'APK pendant qu'un autre build tourne.
-      const sortie = mkdtempSync(join(tmpdir(), "vsn-web-423-"));
-      try {
-        const r = buildWeb({ outDir: sortie });
-        if (!r.ok) throw new Error(`build web ÉCHOUÉ :\n${describeOutcome(r)}`);
-        const produits = fichiers(sortie);
-        expect(produits.length).toBeGreaterThan(0);
-        for (const fichier of produits) {
-          const contenu = readFileSync(fichier, "utf8");
-          for (const marqueur of MARQUEURS) {
-            expect(contenu).not.toContain(marqueur);
-          }
+      // L'artefact RÉEL, construit UNE fois par le gate (`make architecture`
+      // → web-build puis ce test). Absent ou vide = rien de vérifié : ÉCHEC
+      // explicite qui nomme la commande, jamais un vert vacuement vrai
+      // (même règle que #532 pour les scanners).
+      if (!existsSync(BUNDLE)) {
+        throw new Error(
+          `bundle web ABSENT (${BUNDLE}) — lancer « make web-build » avant le test d'architecture.`,
+        );
+      }
+      const produits = fichiers(BUNDLE);
+      if (produits.length === 0) {
+        throw new Error(
+          `bundle web VIDE (${BUNDLE}) — « make web-build » n'a rien produit.`,
+        );
+      }
+      for (const fichier of produits) {
+        const contenu = readFileSync(fichier, "utf8");
+        for (const marqueur of MARQUEURS) {
+          expect(contenu).not.toContain(marqueur);
         }
-      } finally {
-        rmSync(sortie, { recursive: true, force: true });
       }
     },
-    // LENT : un build Vite complet (+ son réessai si le processus meurt).
-    // Le défaut de 5 s de `bun test` tuerait le build en plein milieu — le
-    // gate rougissait alors pour un bundle intact (#516).
-    300_000,
+    // Le bundle peut être gros : la lecture complète reste bien sous le
+    // défaut de 5 s de `bun test`, mais le plafond explicite garde un
+    // respirateur (le build lui-même est hors de ce test depuis #654).
+    60_000,
   );
 });

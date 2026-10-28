@@ -5,7 +5,7 @@
 # (push direct, merge MCP, humain) n'était vérifiée par RIEN — la PR #481 a
 # ainsi cassé la compilation Kotlin de `main` (#483).
 #
-# Ce workflow joue le MÊME gate que le poste : `make check` (11 étapes, dont
+# Ce workflow joue le MÊME gate que le poste : `make check` (10 étapes, dont
 # la compilation Kotlin Gradle, la parité TS <-> Kotlin exécutée, les scans
 # d'architecture et l'audit des dépendances). Pas de version « light » : un
 # gate qui ne rejoue pas les étapes locales ne prouve rien.
