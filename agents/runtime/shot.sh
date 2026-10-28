@@ -405,7 +405,7 @@ is_locked() {
 #
 #     shot : la route « grades » NON PROUVÉE (« Moyennes par matière » absent).
 #
-# Le même critère a été repassé sur les seize : `calendar` (« semaine du »),
+# Le même critère a été repassé sur les dix-sept : `calendar` (« semaine du »),
 # `tasks` (« Devoirs de la semaine »), `profile` (« Détecter les onglets »),
 # `settings`, `canteen`, `attendance`, `sanctions`, `messages`, `pairing` et `alerts`
 # portent un titre de section ou un bouton rendu HORS de la branche de donnée,
@@ -470,7 +470,7 @@ course-notes|Cahier de cours|Cahier de cours;Ajouter un cours;Aucun cours enregi
 cahier|Cahier de cours|Cahier de cours;Ajouter un cours;Aucun cours enregistré
 '
 
-# Ligne de la table d'une route. Vide = route inconnue (donc absente des 16).
+# Ligne de la table d'une route. Vide = route inconnue (donc absente des 17).
 #
 # #536 : la route est comparée LITTÉRALEMENT (le premier champ `|`, `=`
 # exact), jamais par une EXPRESSION RÉGULIÈRE. Interpolée dans un `grep -E`,

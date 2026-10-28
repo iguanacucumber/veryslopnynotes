@@ -75,9 +75,9 @@ private fun driver(op: JsonValue.Obj): JsonValue = when (op.str("op")) {
         val id = op.str("id") ?: "answer-key-1"
         val raw = op.str("answerKey") ?: throw IllegalArgumentException("pilote: answerKey absent")
         val rendered = Humanize.renderAnswerKey(Humanize.validateAnswerKeyForRender(parseJsonValue(raw)))
-        Humanize.saveRenderedAnswerKey(answerKeys, id, rendered)
+        val key = Humanize.saveRenderedAnswerKey(answerKeys, id, rendered)
         obj(
-            "key" to JsonValue.Str(answerKeys.values.keys.last()),
+            "key" to JsonValue.Str(key),
             "text" to JsonValue.Str(rendered.text),
         )
     }

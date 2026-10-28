@@ -128,7 +128,7 @@ describe("contracts", () => {
       expect(isHomeworkAttachmentRef(att(ref))).toBe(false);
     }
     // Un devoir dont la `ref` n'est pas au schéma est refusé par le contrat.
-    const devoir = {
+    const assignment = {
       id: "a1",
       accountId: "e1",
       subject: "Maths",
@@ -136,7 +136,7 @@ describe("contracts", () => {
       dueDate: "2026-10-23T18:00:00.000Z",
       done: false,
     };
-    expect(isAssignment({ ...devoir, attachments: [att("homework:0:file:0:att1")] })).toBe(true);
-    expect(isAssignment({ ...devoir, attachments: [att("12 34")] })).toBe(false);
+    expect(isAssignment({ ...assignment, attachments: [att("homework:0:file:0:att1")] })).toBe(true);
+    expect(isAssignment({ ...assignment, attachments: [att("12 34")] })).toBe(false);
   });
 });

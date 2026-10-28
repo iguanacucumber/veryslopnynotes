@@ -1,6 +1,6 @@
 # SCREEN-REVIEW.md — passage en revue des écrans (#148)
 
-Recette **des 16 routes ensemble**, pas écran par écran : les défauts ci-dessous
+Recette **des 17 routes ensemble**, pas écran par écran : les défauts ci-dessous
 n'étaient visibles qu'en comparant deux écrans, deux thèmes ou deux états du
 même écran.
 
@@ -20,7 +20,7 @@ verrouillent les défauts trouvés ; les images se rejouent avec `make shot`.
 
 | jeu | où | quoi |
 |---|---|---|
-| clair / sombre | `shots/<date>/<route>.{light,dark}.png` | les 16 routes, 32 captures |
+| clair / sombre | `shots/<date>/<route>.{light,dark}.png` | les 17 routes, 34 captures |
 | très grande police | `shots/<date>/police-1.3/` | `font_scale = 1.3` (pas le pas d'accessibilité, le maximum du système) |
 | hors ligne (mode avion) | `shots/<date>/etat-avion/` | `cmd connectivity airplane-mode enable` |
 | cache vide à froid | `shots/<date>/etat-cache-vide/` | cache des notes retiré de l'appareil, puis remis |
@@ -52,7 +52,7 @@ de la référence). « Papillon » = l'application de référence.
 | **Notes** | le grand nombre est collé au tracé de la courbe | mesuré sur la référence (le `Canvas` déborde sous le corps, `paddingTop: 0`). |
 | **Tâches** | « Semaine 41 » + « Devoirs de la semaine », puis la plage `05/10 – 11/10` | le numéro ISO est l'en-tête de la référence ; la plage est dans le navigateur. Deux informations, une seule fois chacune. |
 | **Profil** | écran à sections (Compte / Comptes liés / Ressources / Réglages) au lieu d'une liste continue | l'en-tête de la référence est un avatar ; les sections servent le survol. « Se déconnecter » vit dans Compte, atteignable sans défiler (cf. #135), et les comptes liés sont en lecture seule : changer de compte passe par un nouvel appairage. |
-| **Profil** | flèche de retour dans la barre, comme les 12 autres routes secondaires | standard : c'est l'appairage qui n'en a pas (ligne suivante). |
+| **Profil** | flèche de retour dans la barre, comme les 13 autres routes secondaires | standard : c'est l'appairage qui n'en a pas (ligne suivante). |
 | **Appairage** | retour sous forme de `TextButton` dans le corps, pas de flèche dans la barre | au premier lancement l'assistant est la route de départ : une flèche ne pourrait que sortir de l'app. Le retour quitte l'écran — la page unique (#299) n'a plus d'étape à remonter. |
 | **Messages** | « 0 discussion » et la barre de recherche avant l'état d'erreur | le compteur et la recherche sont du chrome d'écran, pas des filtres de contenu ; les retirer au vide ferait perdre le point d'entrée « Nouvelle ». Écart assumé, contrairement à `Tâches` où les filtres ne filtrent RIENT (#148). |
 | **Cantine / Vie scolaire / Sanctions / Actualités / Fiches révision / Alertes sécurité** | ligne de titre fixe au-dessus de l'état (« Menus de la semaine », « Absences indisponibles. »…) | ces lignes ont été ajoutées en #172/#178 pour que la capture hors ligne PROUVE la route (le titre de la barre d'onglets se lit partout, « Réessayer » est partagé par sept écrans). Elles nomment ce que l'écran cherche, jamais la donnée. |
@@ -70,10 +70,10 @@ de la référence). « Papillon » = l'application de référence.
 
 ## États vérifiés
 
-- **Sombre** (`--theme dark`) : les 16 routes. Aucun fond blanc, aucun texte
+- **Sombre** (`--theme dark`) : les 17 routes. Aucun fond blanc, aucun texte
   blanc sur blanc, aucune couleur de matière illisible. Le rouge d'erreur passe
   par `errorTextColor()` (le rouge de marque vaut 3.70:1 sur la surface sombre).
-- **Très grande police** (`font_scale 1.3`) : les 16 routes. Aucun texte coupé
+- **Très grande police** (`font_scale 1.3`) : les 17 routes. Aucun texte coupé
   net. Les seules troncatures sont les ellipses voulues (ligne d'état des accès
   rapides, libellé de champ `singleLine`) : une troncature annoncée n'est pas
   une coupure.

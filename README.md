@@ -261,7 +261,7 @@ ni vers le fournisseur LLM.
 | `make architecture-test` | Scans d'architecture + invariants. |
 | `make check-kotlin` | Garde-fou structurel Kotlin, sans SDK ni réseau. |
 | `make android-compile` | Vraie compilation Kotlin (le seul contrôle des symboles et surcharges). Sans JDK/SDK, elle ÉCHOUE (`ALLOW_SKIP_ANDROID=1` assume le saut, hors merge). |
-| `make web-smoke` | Test navigateur du frontend (Chromium requis), hors `make check` : les 15 routes, les deux parcours d'appairage (téléphone neuf, session expirée) et le parcours de déconnexion. |
+| `make web-smoke` | Test navigateur du frontend (Chromium requis), hors `make check` : les 17 routes (15 écrans + 2 alias), les deux parcours d'appairage (téléphone neuf, session expirée) et le parcours de déconnexion. |
 | `make buildDebugApk` / `make buildRelApk` | APK debug / APK + AAB release. |
 | `make updateApkToPhone` | APK debug puis `adb install -r` (données conservées). |
 | `make shot ROUTE=grades` | Capture vérifiée sur téléphone réel (`SHOT_ARGS="--theme dark"` pour le thème). |
@@ -329,7 +329,7 @@ pas dans ce flux. Règles détaillées :
   WebView locale, règles et architecture ([ADR-005](docs/adr/005-rules-and-architecture.md)).
 - [`docs/RELEASE.md`](docs/RELEASE.md) — versions épinglées, build, signature,
   livrable.
-- [`docs/SCREEN-REVIEW.md`](docs/SCREEN-REVIEW.md) — recette des 16 routes, thèmes, grande
+- [`docs/SCREEN-REVIEW.md`](docs/SCREEN-REVIEW.md) — recette des 17 routes (15 écrans + 2 alias), thèmes, grande
   police, hors-ligne.
 - [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md) — ce qui doit être fourni à la
   main, sans valeur secrète.

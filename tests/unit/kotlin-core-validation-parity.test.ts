@@ -176,8 +176,12 @@ describe("capabilities (#413) — un contrat invalide vaut « inconnu », pas «
 
 describe("answer-key storage migration", () => {
   test.skipIf(skip)("new writes use homework:answer-key, not the old prefix", async () => {
-    const r = await askDriver({ op: "saveAnswerKey", id: "hw-1", answerKey: JSON.stringify({ answer: "Une réponse" }) });
-    expect(r.key).toBe("homework:answer-key:hw-1");
+    const first = await askDriver({ op: "saveAnswerKey", id: "hw-1", answerKey: JSON.stringify({ answer: "Une réponse" }) });
+    expect(first.key).toBe("homework:answer-key:hw-1");
+    // Re-saving an existing id must report THAT id, not the last inserted key.
+    await askDriver({ op: "saveAnswerKey", id: "hw-9", answerKey: JSON.stringify({ answer: "Autre" }) });
+    const again = await askDriver({ op: "saveAnswerKey", id: "hw-1", answerKey: JSON.stringify({ answer: "Encore" }) });
+    expect(again.key).toBe("homework:answer-key:hw-1");
   });
 
   test.skipIf(skip)("legacy homework:corrige refs stay readable", async () => {

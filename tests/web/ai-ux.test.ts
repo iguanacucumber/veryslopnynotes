@@ -122,11 +122,11 @@ describe("IA — aide devoirs", () => {
 });
 
 describe("IA — fiches de révision", () => {
-  const fiches = source("features/revisions/RevisionSheets.tsx");
+  const sheets = source("features/revisions/RevisionSheets.tsx");
 
   test("l'état vide mène aux devoirs au lieu de promettre une génération automatique", () => {
-    expect(fiches).not.toContain("générée automatiquement");
-    expect(fiches).toContain('navigate("/tasks")');
-    expect(fiches).toContain("PageHeading");
+    expect(sheets).not.toContain("générée automatiquement");
+    expect(sheets).toContain('navigate("/tasks")');
+    expect(sheets).toContain("PageHeading");
   });
 });

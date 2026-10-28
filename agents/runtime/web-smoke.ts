@@ -29,6 +29,9 @@ const ROUTES = [
   ["alerts", "/alerts"],
   ["revision-sheets", "/revision-sheets"],
   ["course-notes", "/course-notes"],
+  // Compatibility aliases: old links must still land on a real screen.
+  ["fiches", "/fiches"],
+  ["cahier", "/cahier"],
   ["pairing", "/pairing"],
 ] as const;
 

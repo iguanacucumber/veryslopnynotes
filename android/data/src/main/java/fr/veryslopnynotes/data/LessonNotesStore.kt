@@ -50,15 +50,13 @@ class FileLessonNotesStore(
         return written
     }
 
-    private fun read(): List<LessonNote> = try {
-        when {
-            file.isFile -> parseLessonNotes(file.readText())
-            // Read the pre-rename file until the next successful write moves it.
-            legacyFile?.isFile == true -> parseLessonNotes(legacyFile.readText())
-            else -> emptyList()
-        }
-    } catch (_: Exception) {
-        emptyList()
+    private fun read(): List<LessonNote> {
+        // A truncated new file (writeText is truncate-then-write) must not
+        // shadow intact legacy notes: parse failure falls through to it.
+        val current = file.takeIf { it.isFile }?.let { parseLessonNotesOrNull(it.readText()) }
+        if (current != null) return current
+        // Read the pre-rename file until the next successful write moves it.
+        return legacyFile?.takeIf { it.isFile }?.let { parseLessonNotesOrNull(it.readText()) } ?: emptyList()
     }
 }
 
@@ -172,7 +170,8 @@ fun lessonNotesJson(notes: List<LessonNote>): String {
     return arr.toString()
 }
 
-fun parseLessonNotes(raw: String): List<LessonNote> = try {
+/** `null` = JSON illisible (à distinguer d'une liste vide valide). */
+internal fun parseLessonNotesOrNull(raw: String): List<LessonNote>? = try {
     val arr = JSONArray(raw)
     val out = mutableListOf<LessonNote>()
     for (i in 0 until arr.length()) {
@@ -189,5 +188,5 @@ fun parseLessonNotes(raw: String): List<LessonNote> = try {
     }
     out.sortedByDescending { it.createdAt }
 } catch (_: Exception) {
-    emptyList()
+    null
 }

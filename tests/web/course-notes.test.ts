@@ -158,6 +158,10 @@ describe("course notes — bridge and screen (#586)", () => {
   test("the screen is routed and linked from the profile", () => {
     expect(source("App.tsx")).toContain('path="/course-notes"');
     expect(source("App.tsx")).toContain('path="/cahier"');
+    // Alias routes redirect to the canonical route (old links still work).
+    expect(source("App.tsx")).toContain('<Route path="/cahier" element={<Navigate to="/course-notes" replace />} />');
+    expect(source("App.tsx")).toContain('<Route path="/fiches" element={<Navigate to="/revision-sheets" replace />} />');
+    expect(source("App.tsx")).toContain('path="/revision-sheets"');
     expect(source("ui/AppShell.tsx")).toContain('"/course-notes"');
     expect(source("features/profile/ProfileScreen.tsx")).toContain('navigate("/course-notes")');
     const screen = source("features/course-notes/CourseNotesScreen.tsx");

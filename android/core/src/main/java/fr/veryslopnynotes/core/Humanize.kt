@@ -109,7 +109,7 @@ object Humanize {
     }
 
     // Version stockee par corrige : JSON {text, templateVersion}, octets UTF-8.
-    fun saveRenderedAnswerKey(store: AnswerKeyStore, id: String, rendered: RenderedAnswerKey) {
+    fun saveRenderedAnswerKey(store: AnswerKeyStore, id: String, rendered: RenderedAnswerKey): String {
         if (!isNonEmptyString(rendered.text)) throw AiError("rendu vide")
         if (rendered.templateVersion != HUMANIZE_TEMPLATE_VERSION) {
             throw AiError("gabarit inconnu : " + rendered.templateVersion)
@@ -117,7 +117,9 @@ object Humanize {
         val fields = LinkedHashMap<String, JsonValue>()
         fields["text"] = JsonValue.Str(rendered.text)
         fields["templateVersion"] = JsonValue.Str(rendered.templateVersion)
-        store.set(answerKeyStorageKey(id), stringifyJson(JsonValue.Obj(fields)).toByteArray(Charsets.UTF_8))
+        val key = answerKeyStorageKey(id)
+        store.set(key, stringifyJson(JsonValue.Obj(fields)).toByteArray(Charsets.UTF_8))
+        return key
     }
 
     fun loadRenderedAnswerKey(store: AnswerKeyStore, id: String): RenderedAnswerKey? {

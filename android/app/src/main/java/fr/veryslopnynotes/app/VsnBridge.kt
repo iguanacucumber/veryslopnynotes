@@ -1465,7 +1465,7 @@ class VsnBridge(
             // un seul endroit decide du prompt et du schema.
             // #594 : même délai que l'aide photo — la fiche (manuel + consigne)
             // prend souvent plus de 20 s sur un modèle gratuit.
-            val fiche = RevisionAi.requestRevisionSheet(OpenRouterLlm(timeoutMs = AWAIT_LLM_MS), exam, chunks, apiKey)
+            val sheet = RevisionAi.requestRevisionSheet(OpenRouterLlm(timeoutMs = AWAIT_LLM_MS), exam, chunks, apiKey)
             val candidate = ExamCandidate(
                 source = "assignment",
                 id = assignment.id,
@@ -1482,7 +1482,7 @@ class VsnBridge(
             // reste pas sur le disque).
             val saved = saveRevisionSheet(
                 store,
-                assembleRevisionSheet(candidate, fiche, chunks.map { it.source }),
+                assembleRevisionSheet(candidate, sheet, chunks.map { it.source }),
                 epoch,
             )
             if (!saved) {

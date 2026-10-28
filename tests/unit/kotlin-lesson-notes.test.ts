@@ -74,8 +74,13 @@ describe("course notes — executed rules (#586)", () => {
     expect(store).toContain("OfflineArtifacts.writeText(file, lessonNotesJson(notes), epoch)");
     // A corrupt entry is ignored, never served to the assistant.
     expect(store).toContain("if (LessonNote.isValid(note)) out.add(note)");
+    // Parsing distinguishes "empty list" from "unreadable JSON".
+    expect(store).toContain("internal fun parseLessonNotesOrNull(raw: String): List<LessonNote>? = try {");
+    // A corrupt/partial new file falls through to intact legacy notes.
+    expect(store).toContain("val current = file.takeIf { it.isFile }?.let { parseLessonNotesOrNull(it.readText()) }");
+    expect(store).toContain("if (current != null) return current");
     // Pre-rename file is read until the first successful write migrates it.
-    expect(store).toContain("legacyFile?.isFile == true -> parseLessonNotes(legacyFile.readText())");
+    expect(store).toContain("return legacyFile?.takeIf { it.isFile }?.let { parseLessonNotesOrNull(it.readText()) } ?: emptyList()");
     // The old file is deleted only AFTER the new one is written.
     expect(store).toContain("if (written) legacyFile?.takeIf { it.isFile }?.delete()");
     // The file lives in offline/: account purge deletes it wholesale.
