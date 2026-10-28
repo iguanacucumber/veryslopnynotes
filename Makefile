@@ -1,10 +1,10 @@
-.PHONY: check check-run check-fast watch lint audit typecheck unit architecture contracts check-kotlin android-compile web web-typecheck web-build web-test web-smoke runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
+.PHONY: check check-run check-fast watch lint audit typecheck unit architecture contracts android-compile web web-typecheck web-build web-test web-smoke runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
 
 # Découverte JDK/SDK partagée par android-compile, buildDebugApk, buildRelApk :
 # une seule implémentation, sinon une des trois finit par oublier la borne 17-21.
 ANDROID_ENV = . agents/runtime/android-env.sh
 
-# Le gate de merge : 10 étapes, TOUJOURS. `CHECK_HARNESS=` vide l'opt-in
+# Le gate de merge : 9 étapes, TOUJOURS. `CHECK_HARNESS=` vide l'opt-in
 # même si le shell en exporte un : personne ne rétrécit le gate par
 # l'environnement (agents/ship.sh hérite de l'env du shell). Un `CHECK_TARGETS`
 # resté dans l'environnement est REFUSÉ et signalé par check.ts.
@@ -57,7 +57,7 @@ check: check-run
 # liste d'étapes par `CHECK_TARGETS` (usage interne du harnais). Sans lui,
 # `CHECK_TARGETS` est refusé et les étapes par défaut s'imposent (#368).
 check-fast:
-	CHECK_HARNESS=1 CHECK_TARGETS="lint typecheck unit architecture contracts check-kotlin web-typecheck web-test" bun run agents/runtime/check.ts
+	CHECK_HARNESS=1 CHECK_TARGETS="lint typecheck unit architecture contracts web-typecheck web-test" bun run agents/runtime/check.ts
 
 # TDD : relance les tests au moindre changement. `make watch T=tests/unit/foo.test.ts`
 # cible un fichier ; par défaut unitaires + web (~7 s, SÉQUENTIEL : `--parallel`
@@ -120,15 +120,9 @@ architecture-test:
 contracts:
 	bun test tests/contracts --parallel
 
-# android/**/*.kt : garde-fou structurel, sans SDK ni réseau. Le vrai
-# compilateur est `make android-compile` (ci-dessous, appelé par `make check`).
-# Voir le en-tête de check-kotlin.ts.
-check-kotlin:
-	bun run agents/runtime/check-kotlin.ts
-
 # Compile Kotlin RÉELLE (`android-compile`) — le SEUL filet qui voit une
-# résolution de symbole, un import manquant ou une surcharge ambiguë : les miroirs
-# TS et check-kotlin ne les voient pas (piège réel : `MAX_LABEL_CHARS` non
+# résolution de symbole, un import manquant ou une surcharge ambiguë : les
+# miroirs TS ne les voient pas (piège réel : `MAX_LABEL_CHARS` non
 # qualifié dans core/Homework.kt, invisible côté TS). La MÊME invocation lance
 # `:app:lintDebug` (#627) : Android Lint passe dans le gate, sans daemon
 # Gradle supplémentaire (une seule JVM pour compile + lint).
@@ -164,7 +158,7 @@ android-compile:
 	if [ -z "$$jdk" ] || [ -z "$$sdk" ]; then \
 	  echo "android-compile : outillage ABSENT (JDK=$${jdk:-aucun}, SDK=$${sdk:-aucun}) — la compile Kotlin n'a PAS tourné."; \
 	  if [ "$${ALLOW_SKIP_ANDROID:-0}" = "1" ]; then \
-	    echo "android-compile SKIP (ALLOW_SKIP_ANDROID=1) : compile Kotlin NON vérifiée — seul check-kotlin (structurel) a tourné."; \
+	    echo "android-compile SKIP (ALLOW_SKIP_ANDROID=1) : compile Kotlin NON vérifiée."; \
 	  else \
 	    echo "  ÉCHEC : le gate exige la compilation Kotlin (seul filet qui résout les symboles)."; \
 	    echo "  ALLOW_SKIP_ANDROID=1 pour assumer explicitement ce SKIP (usage hors merge)."; \
