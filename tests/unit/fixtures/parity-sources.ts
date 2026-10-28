@@ -103,6 +103,10 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "ServerConfig.kt"),
   join(CORE, "Untrusted.kt"),
   join(CORE, "UserProfile.kt"),
+  // #634 : validation de l'URL d'une page web + source citable « Web : titre ».
+  // Fichier PUR : le harnais EXÉCUTE les verdicts et le libellé, au lieu d'un
+  // miroir TS.
+  join(CORE, "WebPage.kt"),
   // `data` — cache, file d'attente locale, issue de synchronisation.
   join(DATA, "CachePolicy.kt"),
   join(DATA, "CacheScope.kt"),

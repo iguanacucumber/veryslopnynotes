@@ -38,6 +38,9 @@
 //  porte. Et une PAGE DE CONNEXION (le portail la renvoie en HTTP 200 quand
 //  la session n'est plus valable) n'est JAMAIS ingérée comme un manuel : elle
 //  deviendrait une source citée par l'assistant (« Se connecter »).
+// #634 : le MOTEUR est partagé avec une page web publique (`scrapePage`),
+//  mais une page web ne monte AUCUN jar (`useSession: false`) et refuse le
+//  contenu non textuel (`textOnly: true`).
 import { join } from "node:path";
 import { load } from "cheerio";
 import { truncateManualText } from "./manuals";
@@ -55,6 +58,8 @@ export type ScrapeRefusal =
   | "unresolved_host"
   | "timeout"
   | "login_required"
+  | "too_large"
+  | "not_text"
   | "generic";
 
 export class ScrapeManualsError extends Error {
@@ -98,6 +103,23 @@ export interface ScrapeOptions {
    * et garderait le Chromium vivant au-delà du délai HTTP.
    */
   readonly contentTimeoutMs?: number;
+  /**
+   * Monter le jar de session du serveur ? Défaut = oui (manuel). La page web
+   * (#634) passe `false` : aucune authentification, aucun cookie.
+   */
+  readonly useSession?: boolean;
+  /**
+   * Refuser un contenu non textuel (page web) ? Défaut = non (manuel). Le
+   * `content-type` est lu sur la réponse de navigation ; absent = inconnu,
+   * donc on laisse la lecture bornée trancher.
+   */
+  readonly textOnly?: boolean;
+}
+
+/** Page lue par le moteur commun : titre + texte déjà borné. */
+export interface ScrapedPage {
+  readonly title: string;
+  readonly text: string;
 }
 
 /** Répertoire des jars, côté serveur (gitignoré). */
@@ -164,7 +186,12 @@ async function assertPublicHost(hostname: string, label: string, resolve: HostRe
  * Le message ne contient jamais l'URL : les logs du serveur ne doivent rien
  * laisser filtrer (cf. I8).
  */
-async function assertPublicUrl(raw: string, label: string, resolve: HostResolver): Promise<void> {
+async function assertPublicUrl(
+  raw: string,
+  label: string,
+  resolve: HostResolver,
+  rejectCredentials = false,
+): Promise<void> {
   let u: URL;
   try {
     u = new URL(raw);
@@ -173,6 +200,12 @@ async function assertPublicUrl(raw: string, label: string, resolve: HostResolver
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") {
     throw new ScrapeManualsError(`${label} http(s) requise (jamais journalisee)`);
+  }
+  // Une page web n'a aucune raison de porter des identifiants : le scraper ne
+  // s'authentifie pas. Le userinfo ne doit pas servir de leurre (même refus
+  // que `ManualUrl.kt`).
+  if (rejectCredentials && (u.username !== "" || u.password !== "")) {
+    throw new ScrapeManualsError(`${label} avec identifiants refusee (jamais journalisee)`);
   }
   await assertPublicHost(u.hostname, label, resolve);
 }
@@ -219,11 +252,12 @@ export async function assertPublicRedirectChain(
   startUrl: string,
   timeoutMs = REDIRECT_CHECK_TIMEOUT_MS,
   resolve: HostResolver = systemResolver,
+  rejectCredentials = false,
 ): Promise<void> {
   const signal = AbortSignal.timeout(timeoutMs);
   let current = startUrl;
   for (let hop = 0; hop <= MAX_REDIRECT_HOPS; hop += 1) {
-    await assertPublicUrl(current, "redirection", resolve);
+    await assertPublicUrl(current, "redirection", resolve, rejectCredentials);
     let res: Response;
     try {
       res = await fetch(current, { redirect: "manual", signal });
@@ -246,7 +280,7 @@ export async function assertPublicRedirectChain(
     } catch {
       return;
     }
-    await assertPublicUrl(target, "redirection", resolve);
+    await assertPublicUrl(target, "redirection", resolve, rejectCredentials);
     current = target;
     if (hop === MAX_REDIRECT_HOPS) {
       // Le navigateur dépasserait son propre plafond : la cible suivante n'est
@@ -307,18 +341,35 @@ export function isLoginPage(html: string): boolean {
  * sans construire la page. Une réponse en morceaux (pas d'en-tête) donne 0 :
  * c'est alors la lecture BORNÉE qui s'applique.
  */
-function contentLengthOf(response: unknown): number {
+function responseHeadersOf(response: unknown): Record<string, string> {
   const res = response as { headers?: () => Record<string, string> } | null;
-  if (!res || typeof res.headers !== "function") return 0;
-  let headers: Record<string, string>;
+  if (!res || typeof res.headers !== "function") return {};
   try {
-    headers = res.headers() ?? {};
+    return res.headers() ?? {};
   } catch {
-    return 0;
+    return {};
   }
+}
+
+function contentLengthOf(response: unknown): number {
+  const headers = responseHeadersOf(response);
   const raw = headers["content-length"] ?? headers["Content-Length"];
   const size = Number(raw);
   return Number.isFinite(size) && size > 0 ? size : 0;
+}
+
+/** Types textuels acceptés pour une page web ; absent = inconnu (on lit). */
+function isTextContentType(value: string): boolean {
+  const type = value.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  if (type === "") return true;
+  if (type.startsWith("text/")) return true;
+  return type === "application/xhtml+xml" || type === "application/xml";
+}
+
+/** `content-type` de la réponse de navigation (vide si absent). */
+function contentTypeOf(response: unknown): string {
+  const headers = responseHeadersOf(response);
+  return headers["content-type"] ?? headers["Content-Type"] ?? "";
 }
 
 /**
@@ -397,18 +448,45 @@ async function readHtml(page: HtmlPage, timeoutMs: number, log: (message: string
   }
 }
 
-// Scrape générique v1 : une page -> un ManualDoc (titre + texte).
-// Lève ScrapeManualsError si config incomplète, URL invalide ou navigateur absent.
-// Ne logue jamais l'URL ni aucun credential : seulement plateforme + compteurs.
-export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOptions): Promise<ManualDoc[]> {
-  if (!config) throw new ScrapeManualsError("manuels non configurés (plateforme absente)");
+/** Réglages du moteur commun : libellé + session + refus de contenu non textuel. */
+export interface ScrapePageConfig {
+  /** Nom symbolique (jamais une URL) : plateforme ou « web ». */
+  readonly label: string;
+  /** Monter le jar du SERVEUR ? Manuel = oui ; page web = non. */
+  readonly useSession: boolean;
+  /** Refuser un `content-type` non textuel ? Page web = oui. */
+  readonly textOnly: boolean;
+  /**
+   * Refuser les identifiants userinfo dans l'URL ? Page web = oui. Les deux
+   * formes sont acceptées : `credentials: "none"` (appel web) ou le drapeau
+   * explicite (appel manuel).
+   */
+  readonly rejectCredentials?: boolean;
+  /** `"none"` = aucune authentification : identifiants userinfo REFUSÉS. */
+  readonly credentials?: "none";
+}
+
+/**
+ * Moteur commun page -> titre + texte borné (#209, #634).
+ *
+ * Le manuel et la page web partagent TOUT le chemin risqué : garde SSRF
+ * littérale + résolution DNS + chaîne de redirections, statut HTTP, taille
+ * mesurée avant lecture, HTML borné dans le navigateur, page de login. Seuls
+ * changent le libellé, le jar de session et le refus du contenu non textuel.
+ * Lève `ScrapeManualsError` (motif typé) ; ne logue jamais l'URL.
+ */
+export async function scrapePage(
+  config: ScrapePageConfig,
+  opts: ScrapeOptions,
+): Promise<ScrapedPage | null> {
   // Annulation AVANT toute résolution DNS : un client parti ne doit pas
   // déclencher de requête réseau.
   if (opts.signal?.aborted) throw new ScrapeManualsError("scrape annulé");
   const resolve = opts.resolveHost ?? systemResolver;
+  const rejectCredentials = config.rejectCredentials ?? config.credentials === "none";
   // Le nom de l'hôte est RÉSOLU (#419) : un nom public qui pointe vers une
   // IP interne est refusé ici, AVANT la navigation.
-  await assertPublicUrl(opts.startUrl, "startUrl", resolve);
+  await assertPublicUrl(opts.startUrl, "startUrl", resolve, rejectCredentials);
   // La chaîne de redirections est vérifiée AVANT le navigateur : Chromium
   // suit un 302 sans repasser par le route handler, la cible interne serait
   // donc atteinte (requête à l'aveugle) si on attendait la navigation.
@@ -416,11 +494,12 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     opts.startUrl,
     Math.min(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, REDIRECT_CHECK_TIMEOUT_MS),
     resolve,
+    rejectCredentials,
   );
   // Le jar est celui du SERVEUR, et lui seul (#538) : il n'y a plus de nom
   // de jar à résoudre, donc plus rien à refuser ici — le navigateur ne
-  // monte jamais la session d'un autre tenant.
-  const jar = opts.defaultAuthFile ?? DEFAULT_AUTH_FILE;
+  // monte jamais la session d'un autre tenant. La page web n'en monte AUCUN.
+  const jar = config.useSession ? opts.defaultAuthFile ?? DEFAULT_AUTH_FILE : null;
   const log = opts.logger ?? (() => {});
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const signal = opts.signal;
@@ -451,10 +530,12 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
   let context: any = null;
   try {
     context =
-      (await browser.newContext({ ...(jar ? { storageState: jar } : {}) }).catch(
-        // Premier run : pas de fichier local, contexte frais pour login interactif.
-        async () => browser.newContext(),
-      )) ?? null;
+      (jar
+        ? await browser.newContext({ storageState: jar }).catch(
+            // Premier run : pas de fichier local, contexte frais pour login interactif.
+            async () => browser.newContext(),
+          )
+        : await browser.newContext()) ?? null;
     const page = await context.newPage();
     // #362 : le navigateur suit les redirections. Une URL publique qui
     // répond 302 vers http://169.254.169.254/… est donc atteinte si on ne
@@ -486,9 +567,9 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
       }
       await route.continue().catch(() => {});
     });
-    log(`scrape ${config.platform} -> 1 page`);
+    log(`scrape ${config.label} -> 1 page`);
     // Statut HTTP vérifié AVANT toute extraction : une page d'erreur (404/500)
-    // ou un mur de connexion ne doit jamais devenir un ManualDoc (le corpus
+    // ou un mur de connexion ne doit jamais devenir une source (le corpus
     // citerait sinon « Page introuvable » comme source de corrigé).
     const response = await page.goto(opts.startUrl, { timeout: timeoutMs }).catch(() => null);
     if (blockedTarget) {
@@ -498,14 +579,29 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     const ok = typeof response?.ok === "function" ? response.ok() : status < 400;
     if (!response || !ok || status >= 400) {
       throw new ScrapeManualsError(
-        `réponse HTTP ${status || "inconnue"} sur ${config.platform} — page non ingérée`,
+        `réponse HTTP ${status || "inconnue"} sur ${config.label} — page non ingérée`,
       );
     }
     // URL FINALE (redirections suivies) : re-vérifiée AVANT toute extraction.
     // Sans cette re-vérification, une redirection vers une cible interne
     // ferait entrer le corps du service interne dans l'extrait.
-    await assertPublicUrl(typeof page.url === "function" ? page.url() : opts.startUrl, "cible finale", resolve);
-    const title = (await page.title().catch(() => config.platform)) || config.platform;
+    await assertPublicUrl(
+      typeof page.url === "function" ? page.url() : opts.startUrl,
+      "cible finale",
+      resolve,
+      rejectCredentials,
+    );
+    // #634 : une page web NON TEXTUELLE (PDF, image, binaire) est refusée
+    // avant extraction. Le `content-type` absent reste inconnu : la lecture
+    // bornée tranche (une réponse en morceaux n'a pas toujours l'en-tête).
+    const contentType = contentTypeOf(response);
+    if (config.textOnly && !isTextContentType(contentType)) {
+      throw new ScrapeManualsError("contenu non textuel refuse", "not_text");
+    }
+    const title = truncateManualText(
+      ((await page.title().catch(() => config.label)) || config.label).trim(),
+      200,
+    );
     // #525 : la TAILLE est mesurée AVANT la lecture (en-tête `content-length`) :
     // une page de plusieurs centaines de Mo est REFUSÉE sans être sérialisée
     // ni transférée — elle serait de toute façon tronquée au plafond de
@@ -515,6 +611,7 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     if (contentLength > MAX_HTML_BYTES) {
       throw new ScrapeManualsError(
         `page trop volumineuse (${contentLength} octets, maximum ${MAX_HTML_BYTES}) — scrape refuse`,
+        config.textOnly ? "too_large" : "generic",
       );
     }
     // #422 : HTML borné (plafond de caractères) et lecture à DÉLAI : sans
@@ -525,7 +622,7 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     // chaîne qui traverse le pont est bornée, donc le processus ne
     // matérialise jamais une page de plusieurs centaines de Mo.
     const html = await readHtml(page, opts.contentTimeoutMs ?? CONTENT_TIMEOUT_MS, log);
-    // #526 : une PAGE DE CONNEXION (HTTP 200) n'est JAMAIS un manuel. Avant,
+    // #526 : une PAGE DE CONNEXION (HTTP 200) n'est JAMAIS une source. Avant,
     // le mur de connexion passait le test HTTP (`ok = status < 400`) et
     // devenait un ManualDoc — l'assistant le citait comme source. Le refus
     // arrive AVANT l'extraction ET avant l'écriture du jar : une page de
@@ -537,24 +634,17 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
       );
     }
     const text = truncateManualText(stripTags(html), 4000);
-    await context.storageState({ path: jar }).catch(() => {
-      log(`scrape ${config.platform} -> jar non persiste`);
-    });
+    if (jar) {
+      await context.storageState({ path: jar }).catch(() => {
+        log(`scrape ${config.label} -> jar non persiste`);
+      });
+    }
     await context.close().catch(() => {
-      log(`scrape ${config.platform} -> contexte non ferme`);
+      log(`scrape ${config.label} -> contexte non ferme`);
     });
     context = null;
-    if (!text) return [];
-    return [
-      {
-        id: `scrape-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
-        platform: config.platform,
-        title,
-        subject: title,
-        page: 1,
-        excerpt: text,
-      },
-    ];
+    if (!text) return null;
+    return { title, text };
   } finally {
     signal?.removeEventListener("abort", abortBrowser);
     if (context !== null) {
@@ -562,4 +652,31 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
     }
     await browser.close().catch(() => {});
   }
+}
+
+// Scrape manuel v1 : une page -> un ManualDoc (titre + texte).
+// Lève ScrapeManualsError si config incomplète, URL invalide ou navigateur absent.
+// Ne logue jamais l'URL ni aucun credential : seulement plateforme + compteurs.
+export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOptions): Promise<ManualDoc[]> {
+  if (!config) throw new ScrapeManualsError("manuels non configurés (plateforme absente)");
+  const page = await scrapePage(
+    {
+      label: config.platform,
+      useSession: opts.useSession ?? true,
+      textOnly: opts.textOnly ?? false,
+      rejectCredentials: false,
+    },
+    opts,
+  );
+  if (!page) return [];
+  return [
+    {
+      id: `scrape-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
+      platform: config.platform,
+      title: page.title,
+      subject: page.title,
+      page: 1,
+      excerpt: page.text,
+    },
+  ];
 }

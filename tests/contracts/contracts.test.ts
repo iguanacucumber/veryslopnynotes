@@ -17,6 +17,7 @@ describe("contracts", () => {
     expect(API_ROUTES).toEqual([
       { method: "GET", path: "/v1/health" },
       { method: "POST", path: "/v1/manuals/scrape" },
+      { method: "POST", path: "/v1/web/scrape" },
     ]);
   });
 

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: veryslopnynotes scraper
-  version: 0.9.0
+  version: 0.10.0
   description: >-
     Contrats du scraper manuels (#209, #210). Source de vérité : phase 1,
     issue #4. Miroir de shared/contracts/*.ts. Le serveur applicatif est mort
@@ -65,6 +65,51 @@ paths:
           description: >-
             delai de scrape depasse (30 s) ou lecture de la page trop longue
             (le HTML recupere est borne a 1 Mo de caracteres)
+  /v1/web/scrape:
+    post:
+      operationId: scrapeWebPage
+      description: >-
+        Scrape d'une page web publique choisie par l'eleve (#634) vers titre +
+        texte. Meme garde SSRF que le scrape de manuel (hote prive/loopback/
+        link-local/metadata et redirections refuses, nom resolu avant
+        navigation), SANS jar de session : aucune authentification, aucun
+        cookie de l'eleve. Le contenu non textuel est refuse. La reponse ne
+        contient jamais l'URL demandee.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebScrapeRequest'
+      responses:
+        '200':
+          description: page scrapee (liste vide si page sans texte)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebScrapeResponse'
+        '400':
+          description: >-
+            corps hors contrat ou URL non http(s), avec identifiants, ou hote
+            prive/interne litteral
+        '403':
+          description: hote prive/interne refuse (garde SSRF : nom resolu vers une IP interne)
+        '413':
+          description: page trop volumineuse (contenu non lu)
+        '415':
+          description: contenu non textuel refuse (content-type non texte)
+        '501':
+          description: Playwright indisponible sur le scraper
+        '502':
+          description: scrape impossible (page d'erreur, nom d'hote introuvable)
+        '503':
+          description: >-
+            scraper occupe (plafond de concurrence : 2 scrapes en vol, les
+            suivants sont refuses avec un en-tete Retry-After)
+        '504':
+          description: >-
+            delai de scrape depasse (30 s) ou lecture de la page trop longue
+            (le HTML recupere est borne a 1 Mo de caracteres)
 components:
   schemas:
     HealthResponse:
@@ -110,3 +155,25 @@ components:
       required: [docs]
       properties:
         docs: { type: array, items: { $ref: '#/components/schemas/ManualDoc' } }
+    WebScrapeRequest:
+      type: object
+      required: [url]
+      description: >-
+        URL d'une page web publique saisie par l'eleve. Write-only : jamais
+        journalisee, jamais renvoyee, jamais transmise a l'etablissement.
+      properties:
+        url: { type: string, maxLength: 2000 }
+    WebDoc:
+      type: object
+      required: [title, excerpt]
+      description: >-
+        Page web scrapee (#634). Contenu brut = donnee, jamais instruction
+        (marquage Untrusted avant tout usage IA).
+      properties:
+        title: { type: string, maxLength: 200 }
+        excerpt: { type: string, maxLength: 8000 }
+    WebScrapeResponse:
+      type: object
+      required: [docs]
+      properties:
+        docs: { type: array, items: { $ref: '#/components/schemas/WebDoc' } }

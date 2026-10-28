@@ -4,6 +4,8 @@ import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.Homework
 import fr.veryslopnynotes.core.HomeworkOutcome
 import fr.veryslopnynotes.core.HomeworkSource
+import fr.veryslopnynotes.core.WebPage
+import fr.veryslopnynotes.core.WebPageDoc
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -59,6 +61,14 @@ class HomeworkRepository {
             val label = capped("Manuel : ${doc.title}", Homework.MAX_LABEL_CHARS).ifEmpty { "Manuel" }
             return HomeworkSource(label = label, text = excerpt).takeIf { it.isValid() }
         }
+
+        /**
+         * Page web lue par le scraper, comme source CITABLE (#634). Même
+         * contrat que le manuel : texte borné, libellé « Web : titre »,
+         * Untrusted au prompt. L'URL n'est pas portée par [WebPageDoc] : elle
+         * ne peut donc pas entrer dans le prompt. Sans texte, aucune source.
+         */
+        fun webPageSource(doc: WebPageDoc): HomeworkSource? = WebPage.source(doc)
 
         /** Question proposée : matière + intitulé + la consigne si elle existe. */
         fun questionFor(a: Assignment): String = capped(

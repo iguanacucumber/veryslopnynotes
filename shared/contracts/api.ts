@@ -1,6 +1,6 @@
-// Contrats v1 — scraper manuels + validateurs de données (source de vérité, issue #4).
-// Table de routes : le process ne sert plus que GET /v1/health et
-// POST /v1/manuals/scrape (#209, #210). Les 31 routes métier du serveur
+// Contrats v1 — scraper manuels/pages web + validateurs de données (source de vérité, issue #4).
+// Table de routes : le process ne sert plus que GET /v1/health,
+// POST /v1/manuals/scrape (#209, #210) et POST /v1/web/scrape (#634). Les 31 routes métier du serveur
 // applicatif (appairage, lectures, écritures, médias, sync, messagerie, IA)
 // sont supprimées avec leurs handlers : l'app est device-only (ADR-003).
 // Les garde-fous de RÉPONSE (`isGradesResponse`, `isDiscussionsResponse`, …)
@@ -11,7 +11,7 @@
 
 import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, Discussion, Grade, Message, NewsItem, Period, Punishment, Recipient, SubjectPrefs, TimetableEntry } from "./models";
 import { isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isDiscussion, isGrade, isMessage, isNewsItem, isPeriod, isPunishment, isRecipient, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT } from "./models";
-import { isPublicHttpUrl } from "./net";
+import { isPublicHttpUrl, isPublicPageUrl } from "./net";
 
 
 export interface ApiRoute {
@@ -30,6 +30,10 @@ export const API_ROUTES: readonly ApiRoute[] = [
   // Les 31 routes métier du serveur applicatif sont supprimées en #210
   // (app device-only, ADR-003).
   { method: "POST", path: "/v1/manuals/scrape" },
+  // #634 : une page web choisie par l'élève devient une source citée. Même
+  // garde SSRF que le scrape de manuel, SANS jar de session (aucune
+  // authentification, aucun cookie de l'élève).
+  { method: "POST", path: "/v1/web/scrape" },
 ] as const;
 
 export interface HealthResponse {
@@ -366,4 +370,47 @@ export function isManualsScrapeResponse(v: unknown): v is ManualsScrapeResponse 
   if (typeof v !== "object" || v === null) return false;
   const d = (v as Record<string, unknown>)["docs"];
   return Array.isArray(d) && d.every(isManualsScrapeDoc);
+}
+
+// --- #634 page web comme source IA (même garde SSRF que le manuel) ---
+// L'URL complète ne revient JAMAIS dans la réponse : l'app construit le
+// libellé citable « Web : titre » et le serveur n'expose que titre + texte.
+export const WEB_SCRAPE_PATH = "/v1/web/scrape";
+export const WEB_SCRAPE_MAX_BODY_CHARS = 4096;
+export const WEB_SCRAPE_URL_MAX_CHARS = 2000;
+
+export interface WebScrapeRequest {
+  /** URL de la page choisie par l'élève (http/https, sans identifiants). */
+  readonly url: string;
+}
+
+/** Miroir du document rendu par `server/infrastructure/web-scrape.ts`. */
+export interface WebScrapeDoc {
+  readonly title: string;
+  readonly excerpt: string;
+}
+
+export interface WebScrapeResponse {
+  readonly docs: WebScrapeDoc[];
+}
+
+export function isWebScrapeRequest(v: unknown): v is WebScrapeRequest {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  if (!isBoundedNonEmptyString(r["url"], WEB_SCRAPE_URL_MAX_CHARS)) return false;
+  // Mêmes refus que `ManualUrl.kt` : schéma, identifiants, espaces/contrôle,
+  // hôte privé littéral. Le serveur RÉSOUT ensuite le nom (SSRF).
+  return isPublicPageUrl(r["url"] as string);
+}
+
+export function isWebScrapeDoc(v: unknown): v is WebScrapeDoc {
+  if (typeof v !== "object" || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return isBoundedNonEmptyString(r["title"], 200) && isBoundedNonEmptyString(r["excerpt"], 8000);
+}
+
+export function isWebScrapeResponse(v: unknown): v is WebScrapeResponse {
+  if (typeof v !== "object" || v === null) return false;
+  const d = (v as Record<string, unknown>)["docs"];
+  return Array.isArray(d) && d.every(isWebScrapeDoc);
 }

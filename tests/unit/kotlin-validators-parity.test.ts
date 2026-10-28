@@ -253,6 +253,128 @@ describe("validateurs du noyau (#366) — parité avec le contrat TS", () => {
   });
 });
 
+/** Miroir TS de `core/WebPage.kt` : mêmes règles, messages propres à la page. */
+function tsWebUrl(raw: string): { ok: true; url: string } | { ok: false; message: string } {
+  const input = raw.trim();
+  if (input === "") return { ok: false, message: "Adresse vide : colle l'adresse de la page web." };
+  if (input.length > 2000) {
+    return { ok: false, message: "Adresse trop longue (2000 caractères maximum)." };
+  }
+  if (/[\s\p{Cc}]/u.test(input)) {
+    return { ok: false, message: "Espace ou caractère interdit dans l'adresse." };
+  }
+  const sep = input.indexOf("://");
+  if (sep <= 0) return { ok: false, message: "Adresse incomplète : commence par http ou https." };
+  const scheme = input.slice(0, sep).toLowerCase();
+  if (scheme !== "http" && scheme !== "https") {
+    return { ok: false, message: "Schéma refusé : utilisez http ou https." };
+  }
+  const authority = input.slice(sep + 3).split(/[/?#]/, 1)[0] ?? "";
+  if (authority === "") return { ok: false, message: "Domaine manquant après le schéma." };
+  if (authority.includes("@")) {
+    return {
+      ok: false,
+      message: "Identifiants dans l'adresse refusés : le scraper ne s'authentifie pas.",
+    };
+  }
+  if (authority.includes("\\")) return { ok: false, message: "Caractère interdit dans le domaine." };
+  return { ok: true, url: input };
+}
+
+const WEB_ACCEPTED = [
+  "https://encyclopedie.example.fr/article/3",
+  "https://exercices.example.fr/exo?page=12",
+  "https://page.example.fr:8443/a/b#partie",
+  "http://page.example.fr",
+  "  https://page.example.fr  ",
+];
+
+const WEB_REJECTED: [string, string][] = [
+  ["", "Adresse vide : colle l'adresse de la page web."],
+  ["   ", "Adresse vide : colle l'adresse de la page web."],
+  [`https://page.example.fr/${"a".repeat(2000)}`, "Adresse trop longue (2000 caractères maximum)."],
+  ["https://page exemple.fr", "Espace ou caractère interdit dans l'adresse."],
+  ["https://page.example.fr/a\nb", "Espace ou caractère interdit dans l'adresse."],
+  ["page.example.fr", "Adresse incomplète : commence par http ou https."],
+  ["ftp://page.example.fr", "Schéma refusé : utilisez http ou https."],
+  ["https://", "Domaine manquant après le schéma."],
+  ["https://user:pass@page.example.fr", "Identifiants dans l'adresse refusés : le scraper ne s'authentifie pas."],
+  ["https://page.example.fr\\a", "Caractère interdit dans le domaine."],
+];
+
+describe("adresse de la page web — parité avec l'app (#634)", () => {
+  test.skipIf(skip)("mêmes formes acceptées, mêmes refus et mêmes messages", async () => {
+    for (const input of WEB_ACCEPTED) {
+      const kotlin = JSON.parse(await ask({ op: "webUrl", text: input })) as {
+        ok: boolean;
+        url?: string;
+      };
+      expect({ input, kotlin }).toEqual({ input, kotlin: tsWebUrl(input) });
+      expect(kotlin.url).toBe(input.trim());
+    }
+    for (const [input, message] of WEB_REJECTED) {
+      const kotlin = JSON.parse(await ask({ op: "webUrl", text: input })) as {
+        ok: boolean;
+        message?: string;
+      };
+      expect({ input, kotlin }).toEqual({ input, kotlin: tsWebUrl(input) });
+      expect(kotlin.message).toBe(message);
+    }
+  });
+
+  test.skipIf(skip)("une source « Web : titre » est citable, sans URL, seulement avec texte", async () => {
+    const source = JSON.parse(
+      await ask({
+        op: "webSource",
+        title: "Théorème de Pythagore",
+        excerpt: "Dans un triangle rectangle, le carré de l'hypoténuse…",
+      }),
+    ) as { label: string | null; text: string | null };
+    expect(source.label).toBe("Web : Théorème de Pythagore");
+    expect(source.text).toContain("hypoténuse");
+    // Un titre-URL ne met pas l'adresse dans le libellé.
+    const urlTitle = JSON.parse(
+      await ask({ op: "webSource", title: "https://secret.example.fr/page", excerpt: "Texte" }),
+    ) as { label: string | null };
+    expect(urlTitle.label).toBe("Web : Page web");
+    // Sans texte, aucune source : jamais une page inventée.
+    const empty = JSON.parse(await ask({ op: "webSource", title: "Titre", excerpt: "   " })) as {
+      label: string | null;
+    };
+    expect(empty.label).toBeNull();
+  });
+
+  test.skipIf(skip)("le prompt marque la page web Untrusted et ne porte pas l'URL", async () => {
+    const r = JSON.parse(
+      await ask({
+        op: "webPrompt",
+        question: "Explique le théorème.",
+        title: "Théorème de Pythagore",
+        excerpt: "Dans un triangle rectangle…",
+      }),
+    ) as { label: string | null; body: string };
+    expect(r.label).toBe("Web : Théorème de Pythagore");
+    // I6 : le contenu est encadré par les délimiteurs Untrusted, déclaré DONNÉE.
+    expect(r.body).toContain("UNTRUSTED_DATA");
+    expect(r.body).toContain("Libelle citable : Web : Théorème de Pythagore");
+    expect(r.body).toContain("Dans un triangle rectangle");
+    // L'URL demandée n'est jamais dans le prompt (le document ne la porte pas).
+    expect(r.body).not.toContain("http://");
+    expect(r.body).not.toContain("https://");
+    expect(r.body).not.toContain("page.example");
+  });
+
+  test("câblage : la page web réutilise le contrat de source du manuel", () => {
+    const web = readFileSync(join(CORE, "WebPage.kt"), "utf8");
+    expect(web).toContain("HomeworkSource(");
+    expect(web).toContain('"Web : $title"');
+    // La source ne porte que libellé + texte : aucune URL dans le prompt.
+    expect(web).not.toContain("HomeworkSource(label = label, text = excerpt, url");
+    const repository = readFileSync(join(DATA, "HomeworkRepository.kt"), "utf8");
+    expect(repository).toContain("WebPage.source(");
+  });
+});
+
 describe("adresse du manuel — parité avec l'app", () => {
   test.skipIf(skip)("mêmes formes acceptées, mêmes refus et mêmes messages", async () => {
     for (const input of MANUAL_ACCEPTED) {

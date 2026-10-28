@@ -1,7 +1,8 @@
 # Shared contracts
 
-`api.ts` and `api.openapi.yaml` describe the two server routes:
-`GET /v1/health` and `POST /v1/manuals/scrape`.
+`api.ts` and `api.openapi.yaml` describe the three server routes:
+`GET /v1/health`, `POST /v1/manuals/scrape` and `POST /v1/web/scrape`
+(page web publique, sans jar de session, #634).
 
 The remaining models, events, cache rules, and response validators are retained
 as test mirrors for the Android app. The server does not emit SSE events; the

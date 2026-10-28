@@ -46,7 +46,10 @@
 // dont la `ref` n'est pas au schéma est refusé par le contrat (il l'était
 // déjà par l'app et par le web, qui perdaient le devoir entier). `isIsoDate`
 // sort en export (garde de date partagée, réalignée sur le port Kotlin).
-export const CONTRACTS_VERSION = "0.9.0" as const;
+// 0.10.0 (#634) : nouvelle route ADD-ONLY `POST /v1/web/scrape` (page web
+// publique -> titre + texte, sans jar de session). Aucun contrat existant ne
+// change de forme.
+export const CONTRACTS_VERSION = "0.10.0" as const;
 
 /** Version gabarit fiches révision (issue #30, phase 10). Stockée par fiche. */
 export const REVISION_TEMPLATE_VERSION = "fiche-v1" as const;

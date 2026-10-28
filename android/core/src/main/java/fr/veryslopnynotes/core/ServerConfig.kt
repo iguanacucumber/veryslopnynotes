@@ -218,6 +218,11 @@ object ServerConfig {
     const val MANUALS_SCRAPE_PATH = "/v1/manuals/scrape"
     fun manualsScrapeUrl(baseUrl: String): String = baseUrl + MANUALS_SCRAPE_PATH
 
+    // #634 : même scraper facultatif, même allowlist, route distincte (aucun
+    // jar de session côté serveur pour une page web publique).
+    const val WEB_SCRAPE_PATH = "/v1/web/scrape"
+    fun webScrapeUrl(baseUrl: String): String = baseUrl + WEB_SCRAPE_PATH
+
     // ponytail: allowlist = baseUrl + "/" (le préfixe nu laissait passer
     // `https://hote.evil.tld` quand baseUrl vaut `https://hote`, et baseUrl est
     // désormais une saisie utilisateur). Upgrade: pinning cert phase 10.

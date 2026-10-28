@@ -152,6 +152,7 @@ describe("scraper-only (#209)", () => {
     expect(API_ROUTES).toEqual([
       { method: "GET", path: "/v1/health" },
       { method: "POST", path: "/v1/manuals/scrape" },
+      { method: "POST", path: "/v1/web/scrape" },
     ]);
     const olds = [
       "/v1/pairing/start",

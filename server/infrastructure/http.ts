@@ -8,9 +8,10 @@
 // loopback + reverse-proxy avec auth devant le scraper. Cette issue construit
 // le HTTPS nu spécifié, rien de plus.
 //
-// Routes : GET /v1/health (sonde), POST /v1/manuals/scrape (page -> ManualDoc).
+// Routes : GET /v1/health (sonde), POST /v1/manuals/scrape (page -> ManualDoc),
+// POST /v1/web/scrape (page web publique -> titre + texte, sans jar, #634).
 // Tout le reste = 404 : les anciennes routes métier et le chemin de capture TS
-// sont supprimés. Le processus sert uniquement les deux routes du scraper.
+// sont supprimés. Le processus ne sert que ces routes de scraper.
 //
 // Credentials portail (platform/startUrl) injectés par l'appelant dans le
 // corps (writeOnly) : jamais en env, jamais commités, jamais journalisés —
@@ -30,12 +31,18 @@ import { CONTRACTS_VERSION } from "../../shared/contracts/models";
 import {
   MANUALS_SCRAPE_MAX_BODY_CHARS,
   MANUALS_SCRAPE_PATH,
+  WEB_SCRAPE_MAX_BODY_CHARS,
+  WEB_SCRAPE_PATH,
   isManualsScrapeDoc,
   isManualsScrapeRequest,
+  isWebScrapeDoc,
+  isWebScrapeRequest,
 } from "../../shared/contracts/api";
 import type { ManualDoc } from "./manuals";
 import { DEFAULT_AUTH_FILE, ScrapeManualsError, scrapeManuals } from "./manuals-scrape";
 import type { HostResolver } from "./ssrf";
+import { scrapeWebPage } from "./web-scrape";
+import type { WebDoc } from "./web-scrape";
 
 const DEFAULT_PORT = 3000;
 
@@ -60,6 +67,18 @@ export interface ScraperDeps {
       readonly resolveHost?: HostResolver;
     },
   ) => Promise<ManualDoc[]>;
+  /**
+   * Scrape d'une PAGE WEB (#634) : même moteur, SANS jar de session. Défaut =
+   * vrai `scrapeWebPage` ; tests = fake pur.
+   */
+  readonly scrapeWeb?: (
+    opts: {
+      readonly startUrl: string;
+      readonly headless?: boolean;
+      readonly signal?: AbortSignal;
+      readonly resolveHost?: HostResolver;
+    },
+  ) => Promise<WebDoc[]>;
   /**
    * Jar de session du serveur : le seul jar monté par le navigateur, choisi
    * par l'exploitant (jamais par l'appelant de l'API, #538).
@@ -103,6 +122,7 @@ interface ScrapeState {
 export function createApp(deps: ScraperDeps = {}): App {
   const log = (message: string) => console.log(`[server] ${message}`);
   const runScrape = deps.scrape ?? scrapeManuals;
+  const runWebScrape = deps.scrapeWeb ?? scrapeWebPage;
   const defaultJar = deps.authFile ?? DEFAULT_AUTH_FILE;
   const timeoutMs = deps.timeoutMs ?? SCRAPE_TIMEOUT_MS;
   // Compteur PAR APP : un test qui laisse un scrape en vol n'empoisonne pas
@@ -121,7 +141,10 @@ export function createApp(deps: ScraperDeps = {}): App {
         if (path === MANUALS_SCRAPE_PATH && req.method === "POST") {
           return await handleScrape(req, runScrape, defaultJar, log, state, timeoutMs, deps.resolveHost);
         }
-        if (path === "/v1/health" || path === MANUALS_SCRAPE_PATH) {
+        if (path === WEB_SCRAPE_PATH && req.method === "POST") {
+          return await handleWebScrape(req, runWebScrape, log, state, timeoutMs, deps.resolveHost);
+        }
+        if (path === "/v1/health" || path === MANUALS_SCRAPE_PATH || path === WEB_SCRAPE_PATH) {
           return error("method_not_allowed", 405, `${req.method} not allowed on ${path}`, {
             allow: path === "/v1/health" ? "GET" : "POST",
           });
@@ -315,6 +338,107 @@ async function handleScrape(
 }
 
 /**
+ * POST /v1/web/scrape : même garde SSRF, même plafond de concurrence, SANS
+ * jar de session (#634). Le corps est borné AVANT parse et validé par le
+ * contrat partagé ; la réponse ne contient jamais l'URL demandée.
+ */
+async function handleWebScrape(
+  req: Request,
+  runScrape: NonNullable<ScraperDeps["scrapeWeb"]>,
+  log: (message: string) => void,
+  state: ScrapeState,
+  timeoutMs: number,
+  resolveHost?: HostResolver,
+): Promise<Response> {
+  if (state.inFlight >= MAX_CONCURRENT_SCRAPES) {
+    return error("busy", 503, "scraper occupe, reessayer plus tard", { "retry-after": "5" });
+  }
+  state.inFlight += 1;
+  const controller = new AbortController();
+  let done = false;
+  try {
+    let text: string;
+    try {
+      text = await req.text();
+    } catch {
+      return error("bad_request", 400, "invalid JSON body");
+    }
+    if (text.length > WEB_SCRAPE_MAX_BODY_CHARS) return error("bad_request", 400, "invalid body");
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return error("bad_request", 400, "invalid JSON body");
+    }
+    if (!isWebScrapeRequest(body)) return error("bad_request", 400, "invalid web scrape request");
+    if (req.signal?.aborted) return error("school_unreachable", 502, "scrape impossible");
+    let docs: WebDoc[];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onClientAbort: (() => void) | undefined;
+    try {
+      const scrapeP = runScrape({
+        startUrl: body.url,
+        headless: true,
+        resolveHost,
+        signal: controller.signal,
+      });
+      scrapeP.catch(() => {});
+      const timeoutP = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(timeoutError(timeoutMs));
+          controller.abort();
+        }, timeoutMs);
+      });
+      const abortP = new Promise<never>((_, reject) => {
+        if (!req.signal) return;
+        onClientAbort = () => {
+          reject(new ScrapeManualsError("client aborte"));
+          controller.abort();
+        };
+        if (req.signal.aborted) {
+          onClientAbort();
+          return;
+        }
+        req.signal.addEventListener("abort", onClientAbort, { once: true });
+      });
+      try {
+        docs = await Promise.race([scrapeP, timeoutP, abortP]);
+        done = true;
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (onClientAbort) req.signal?.removeEventListener("abort", onClientAbort);
+      }
+    } catch (err) {
+      if (isMissingBrowserError(err)) {
+        return error("not_implemented", 501, "scraper sans navigateur");
+      }
+      if (err instanceof ScrapeManualsError) {
+        if (err.reason === "private_host") return error("private_host", 403, "hote prive refuse");
+        if (err.reason === "unresolved_host") return error("unresolved_host", 502, "nom d'hote introuvable");
+        if (err.reason === "timeout") return error("timeout", 504, "delai de scrape depasse");
+        if (err.reason === "too_large") return error("too_large", 413, "page trop volumineuse");
+        if (err.reason === "not_text") return error("not_text", 415, "contenu non textuel refuse");
+        // Une page de connexion n'a aucun sens pour une page web publique :
+        // elle reste refusée, avec un code générique (aucun cookie monté).
+        if (err.reason === "login_required") {
+          return error("login_required", 502, "page de connexion detectee");
+        }
+        return error("school_unreachable", 502, "scrape impossible");
+      }
+      if (req.signal?.aborted) return error("school_unreachable", 502, "scrape impossible");
+      return error("internal", 500, "unexpected failure");
+    }
+    log(`scrape web -> ${docs.length} doc(s)`);
+    const payload = { docs };
+    if (!Array.isArray(docs) || !docs.every(isWebScrapeDoc)) return error("internal", 500, "invalid payload");
+    return Response.json(payload);
+  } finally {
+    state.inFlight = Math.max(0, state.inFlight - 1);
+    if (!done) controller.abort();
+  }
+}
+
+/**
  * Navigateur Playwright ABSENT = capability manquante (501 franc), pas un
  * faux 500 « unexpected failure ». Le message réel de Playwright change selon
  * la version et la cause (« Executable doesn't exist at … », « Please run the
@@ -417,7 +541,7 @@ export function start(
     ...(tls ? { tls } : {}),
     error: () => Response.json({ error: { code: "bad_request", message: "invalid body" } }, { status: 413 }),
   });
-  console.log(`[server] scraper manuels sur ${tls ? "https" : "http"}://${hostname}:${server.port}`);
+  console.log(`[server] scraper (manuels + pages web) sur ${tls ? "https" : "http"}://${hostname}:${server.port}`);
   const shutdown = (signal: string) => {
     console.log(`[server] ${signal} -> arret`);
     try {
