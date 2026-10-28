@@ -78,7 +78,7 @@ jobs:
       # condition de verdeur. Une panne du service de cache ne doit pas
       # rougir une PR sans rapport avec son code — au pire, le run est lent.
       - name: Cache Gradle
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         continue-on-error: true
         with:
           path: |
@@ -145,7 +145,7 @@ jobs:
       # compile, pas celle de l'image) et le cache porte sur un dossier qui
       # EXISTE. Un binaire corrompu se répare au lieu de faire échouer le gate.
       - name: Cache compilateur Kotlin
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         continue-on-error: true
         with:
           path: node_modules/.cache/kotlinc-${{ env.KOTLIN_VERSION }}
@@ -201,7 +201,7 @@ jobs:
           echo "empreinte=${digest}" >> "$GITHUB_OUTPUT"
 
       - name: Cache du jar de parité
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         continue-on-error: true
         with:
           path: node_modules/.cache/kotlin-parity
@@ -235,7 +235,7 @@ jobs:
       # repart d'un téléchargement propre. `continue-on-error` : un cache est
       # une optimisation, jamais une condition de verdeur.
       - name: Cache des navigateurs Playwright
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         continue-on-error: true
         with:
           path: ~/.cache/ms-playwright
