@@ -215,8 +215,10 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
 
   test("deps : deux ajoutées, épinglées (security-crypto, work-runtime)", () => {
     const dataGradle = read(join(ROOT, "android/data/build.gradle.kts"));
-    expect(dataGradle).toContain("com.squareup.okhttp3:okhttp:5.5.0");
-    expect(dataGradle).toContain("androidx.security:security-crypto:1.1.0");
+    // #624 : les versions vivent au catalogue, les modules n'utilisent que les
+    // alias `libs.*` (aucune version en dur dans un build.gradle.kts).
+    expect(dataGradle).toContain("libs.okhttp");
+    expect(dataGradle).toContain("libs.security.crypto");
     // #208 : sync périodique sans serveur = WorkManager, version épinglée au
     // catalogue, sans client SSE.
     expect(dataGradle).toContain("libs.work.runtime.ktx");
@@ -226,10 +228,11 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     const catalog = read(join(ROOT, "android/gradle/libs.versions.toml"));
     expect(catalog).toContain('work = "2.12.0"');
     expect(catalog).toContain("work-runtime-ktx");
+    expect(catalog).toContain('security-crypto = "1.1.0"');
     // Le frontend est la WebView locale : plus de module Compose.
     expect(existsSync(join(ROOT, "android/ui"))).toBe(false);
     const appGradle = read(join(ROOT, "android/app/build.gradle.kts"));
-    expect(appGradle).toContain("com.journeyapps:zxing-android-embedded:4.3.0");
+    expect(appGradle).toContain("libs.zxing.android.embedded");
     expect(appGradle).not.toContain("compose");
   });
 });

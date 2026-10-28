@@ -1,11 +1,17 @@
 # Dépendances Gradle versionnées (issue #13, ADR-001).
 # Catalogue seul : versions figées, licences MIT-compatibles.
+# #624 : AUCUN build.gradle.kts ne déclare de version de dépendance. Les modules
+# consomment les alias `libs.*`, le classpath racine lit `kotlin`, la CI compare
+# son littéral à `kotlin` (tests/architecture/gradle-versions.test.ts).
 [versions]
 agp = "9.4.1"
 kotlin = "2.4.21"
 core-ktx = "1.19.1"
 activity-ktx = "1.13.0"
 okhttp = "5.5.0"
+# #15 : jeton de session chiffré (EncryptedSharedPreferences). Apache-2.0
+# (compatible MIT).
+security-crypto = "1.1.0"
 # #127 : scan du QR de l'établissement. Décodeur DANS l'APK, permission CAMERA
 # demandée par l'activité de scan : ça marche sans Google Play Services (donc
 # sur l'émulateur et sur un téléphone sans GMS), ce que ne faisait pas le module
@@ -25,4 +31,9 @@ core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
 activity-ktx = { module = "androidx.activity:activity-ktx", version.ref = "activity-ktx" }
 work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+security-crypto = { module = "androidx.security:security-crypto", version.ref = "security-crypto" }
 zxing-android-embedded = { module = "com.journeyapps:zxing-android-embedded", version.ref = "zxing-android-embedded" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }

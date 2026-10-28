@@ -26,10 +26,10 @@ dependencies {
     // #212 : `api` et non `implementation` — le constructeur public
     // OpenRouterLlm(..., client: OkHttpClient) expose le type à l'appelant
     // (app/VsnBridge.kt), qui doit le voir sur sa classe de chemin.
-    api("com.squareup.okhttp3:okhttp:5.5.0")
+    api(libs.okhttp)
     // #15 : stockage token sécurisé (EncryptedSharedPreferences, Apache-2.0).
-    // Version épinglée, licence MIT-compatible, justifiée en PR.
-    implementation("androidx.security:security-crypto:1.1.0")
+    // Version épinglée au catalogue, licence MIT-compatible, justifiée en PR.
+    implementation(libs.security.crypto)
     // #208 : sync périodique de fond SANS serveur (ni SSE, ni push, ni cron).
     // Version épinglée au catalogue (libs.versions.toml), Apache-2.0
     // MIT-compatible, justification en PR. Manifest : aucun composant exporté.

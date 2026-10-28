@@ -295,7 +295,9 @@ exit "\${FAKE_BUN_CODE:-0}"
     expect(paths).toContain("~/.gradle/caches/modules-2");
     expect(paths).toContain("~/.gradle/caches/9.8.1");
     // Le compilateur Kotlin (90 Mo d'archive, 9-17 s de téléchargement).
-    expect(paths).toContain("node_modules/.cache/kotlinc-2.4.21");
+    // #624 : la version vient de `env.KOTLIN_VERSION`, comparée au catalogue
+    // par tests/architecture/gradle-versions.test.ts.
+    expect(paths).toContain("node_modules/.cache/kotlinc-${{ env.KOTLIN_VERSION }}");
     // La clé vient de l'empreinte, pas d'un nom figé.
     expect(ci).toContain("parity-digest");
     expect(ci).toContain("kotlin-parity-${{ steps.port-kotlin.outputs.empreinte }}");
@@ -316,11 +318,11 @@ exit "\${FAKE_BUN_CODE:-0}"
     expect(ci).toContain('root="$GITHUB_WORKSPACE/node_modules/.cache/kotlinc-${version}"');
     // ...et le binaire, DEDANS (l'archive contient `kotlinc/`).
     expect(ci).toContain('home="$root/kotlinc"');
-    // Le cache porte sur ce dossier-là — et sur la MÊME version qu'on installe.
-    const version = /version=([\d.]+)/.exec(ci)?.[1];
-    expect(version).toBeTruthy();
-    expect(cachedPaths(ci)).toContain(`node_modules/.cache/kotlinc-${version}`);
-    expect(ci).toContain(`key: kotlinc-${version}-`);
+    // Le cache porte sur ce dossier-là — et sur la MÊME version qu'on installe
+    // (#624 : une seule variable, `env.KOTLIN_VERSION`, plus de littéral).
+    expect(ci).toContain('version="$KOTLIN_VERSION"');
+    expect(cachedPaths(ci)).toContain("node_modules/.cache/kotlinc-${{ env.KOTLIN_VERSION }}");
+    expect(ci).toContain("key: kotlinc-${{ env.KOTLIN_VERSION }}-");
   });
 
   // #513 : aucun chemin ABSOLU. Hors du workspace, le cache n'a jamais
