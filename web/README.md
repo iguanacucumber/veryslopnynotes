@@ -35,6 +35,7 @@ production ne l'embarque pas, et un pont natif absent y est un échec bruyant
 ## Structure
 
 - `src/App.tsx` : routes (HashRouter), porte de session.
+- `src/smoke-routes.ts` : liste PURE des routes visitées par `make web-smoke` ; un test d'architecture la compare aux `<Route>` de `App.tsx` (#622).
 - `src/ui/AppShell.tsx` : barre du haut, onglets, titres/retours.
 - `src/ui/AppContext.tsx` : thème, palette, rafraîchissement global, notices, ressources.
 - `src/ui/components.tsx` : cartes, états vides, erreurs, avatar.
