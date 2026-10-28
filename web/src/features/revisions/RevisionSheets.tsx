@@ -13,6 +13,7 @@ import {
 } from "../../ui/components";
 import { IconBook, IconDownload } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
+import { MarkdownBody } from "./MarkdownBody";
 import { revisionDateLabel, parseRevisionSheet, parseRevisionSheets, type RevisionSheet } from "./sheets";
 
 type Selected = {
@@ -270,7 +271,7 @@ function previewOf(body: string): string {
 function SheetBody({ sheet }: { sheet: RevisionSheet }) {
   return (
     <div className="revision-card__body-wrap">
-      <p className="revision-card__body">{sheet.body}</p>
+      <MarkdownBody text={sheet.body} />
       {sheet.sources.length > 0 ? (
         <div>
           <strong className="t-caption">Sources</strong>

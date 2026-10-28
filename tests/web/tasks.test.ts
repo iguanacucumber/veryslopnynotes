@@ -608,8 +608,11 @@ describe("web fiches — parsing défensif", () => {
     expect(open).toBeGreaterThan(-1);
     expect(pdf).toBeGreaterThan(open);
     expect(source).toContain("Exporter en PDF la fiche");
-    // Corps en texte brut : jamais de HTML ni de markdown injecté.
-    expect(source).toContain("{sheet.body}");
+    // L'aperçu fermé reste du texte aplati (`previewOf`), pas du markdown.
+    expect(source).toContain("previewOf(sheet.body)");
+    // Corps ouvert : parseur markdown borné rendu en éléments React, jamais
+    // de HTML brut injecté.
+    expect(source).toContain("<MarkdownBody text={sheet.body} />");
     expect(source).not.toContain("innerHTML");
     expect(source).not.toContain("dangerouslySetInnerHTML");
   });

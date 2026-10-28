@@ -587,6 +587,48 @@ const val REVISION_PDF_MAX_LINES = 400
 const val REVISION_PDF_WRAP = 90
 
 /**
+ * Ligne markdown -> ligne de texte dessinable. Le PDF n'a qu'une police de
+ * corps : on retire les marqueurs (titres, gras/italique, code, liens,
+ * tableaux) en gardant le contenu et les puces lisibles. Les liens sont
+ * désactivés : seul le libellé reste.
+ */
+private fun revisionPlainLine(line: String): String {
+    var s = line.trim()
+    if (s.isEmpty()) return " "
+    // Bloc de code / règle horizontale : rien de lisible à dessiner.
+    if (s.startsWith("```")) return " "
+    if (Regex("^([-*_])(?:\\s*\\1){2,}$").matches(s)) return " "
+    // Titre : « ## Titre ### » -> « Titre ».
+    s = Regex("^#{1,6}\\s+").replaceFirst(s, "")
+    s = Regex("\\s+#+\\s*$").replace(s, "")
+    // Citation : les marqueurs > sont aplatis.
+    s = Regex("^(?:>\\s*)+").replaceFirst(s, "")
+    // Puce non ordonnée : « * texte » / « + texte » -> « - texte » (puce
+    // texte, comme les sources). Les listes ordonnées gardent leur numéro,
+    // déjà lisible en texte.
+    s = Regex("^[-*+]\\s+").replaceFirst(s, "- ")
+    // Tableau : la ligne de séparation disparaît, les cellules deviennent
+    // « a — b ». Aucun « | » ne doit atteindre le dessin.
+    if (s.contains("|")) {
+        val cells = s.trim('|').split("|").map { it.trim() }
+        if (cells.isNotEmpty() && cells.all { Regex("^:?-{1,}:?$").matches(it) }) return " "
+        s = cells.joinToString(" — ")
+    }
+    // Lien/image : libellé seul, URL jetée (aucun schéma dangereux dessiné).
+    s = Regex("!?\\[([^\\]]*)\\]\\([^)]*\\)").replace(s, "\$1")
+    // Code inline : contenu seul.
+    s = Regex("`([^`]*)`").replace(s, "\$1")
+    // Gras puis italique.
+    s = Regex("\\*\\*(.+?)\\*\\*").replace(s, "\$1")
+    s = Regex("__(.+?)__").replace(s, "\$1")
+    s = Regex("(?<!\\*)\\*([^*]+)\\*(?!\\*)").replace(s, "\$1")
+    s = Regex("(?<![\\p{L}\\p{N}_])_([^_]+)_(?![\\p{L}\\p{N}_])").replace(s, "\$1")
+    // Échappements markdown : « \* » -> « * ».
+    s = Regex("\\\\([\\\\`*_{}\\[\\]()#+.!|>-])").replace(s, "\$1")
+    return s.trim().ifEmpty { " " }
+}
+
+/**
  * Corps découpé en lignes affichables : ce que `RevisionPdf` dessine.
  *
  * Le corps est rendu ENTIER : `RevisionPdf` pagine, la fiche exportée porte
@@ -602,7 +644,8 @@ fun revisionPdfLines(sheet: RevisionSheet): List<String> {
     val truncated = content.length > MAX_OUTPUT_CHARS
     val body = if (truncated) content.take(MAX_OUTPUT_CHARS) else content
     val bodyLines = body.split("\n").flatMap { l ->
-        if (l.trim().isEmpty()) listOf(" ") else splitRevisionLine(l, REVISION_PDF_WRAP)
+        val plain = revisionPlainLine(l)
+        if (plain.isBlank()) listOf(" ") else splitRevisionLine(plain, REVISION_PDF_WRAP)
     }
     // Filet de sécurité : le PDF pagine, mais la fiche ne doit pas déborder.
     val capped = if (bodyLines.size > REVISION_PDF_MAX_LINES) {

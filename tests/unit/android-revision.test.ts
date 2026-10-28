@@ -45,6 +45,9 @@ describe("fiche de revision — le prompt demande le JSON attendu (#367)", () =>
     expect(prompt.system).not.toContain("reponds en texte simple");
     // Le corps porte le schema : c'est lui qui est envoye au fournisseur.
     expect(prompt.body).toContain("{\"fiche\":string}");
+    // #630 : le sous-ensemble markdown est demandé explicitement, sans HTML.
+    expect(prompt.system).toContain("markdown simple");
+    expect(prompt.system).toContain("AUCUNE balise HTML");
   });
 
   test.skipIf(skip)("les sources restent des DONNEES delimitees par nonce (I6)", async () => {
@@ -168,6 +171,9 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
     expect(prompts).toContain("SYSTEM_REVISION_JSON");
     expect(prompts).not.toContain("SYSTEM_REVISION =");
     expect(prompts).not.toContain("reponds en texte simple");
+    // #630 : la consigne décrit le markdown supporté et interdit le HTML.
+    expect(prompts).toContain("markdown simple");
+    expect(prompts).toContain("AUCUNE balise HTML");
     // Les deux chemins de revision (pont et jobs) partagent la meme consigne.
     expect(prompts).toMatch(/buildSafePrompt\(SYSTEM_REVISION_JSON/);
     expect(revision).toMatch(/generateGuardedJson\(provider, SYSTEM_REVISION_JSON/);
