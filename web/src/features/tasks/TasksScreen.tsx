@@ -326,7 +326,7 @@ function TasksWeek({ week }: { week: string }) {
       const result = await bridge.generateRevision(assignment.id, week);
       if (!result.ok) throw new Error(result.message || "La fiche n'a pas pu être créée.");
       notify("Fiche de révision créée.");
-      navigate("/fiches");
+      navigate("/revision-sheets");
     } catch (e) {
       notify(e instanceof Error ? e.message : "La fiche n'a pas pu être créée.", "error");
     } finally {
@@ -464,7 +464,7 @@ function TasksWeek({ week }: { week: string }) {
                       onPhoto={(source) => void askPhoto(assignment, source)}
                       onOpenPhotoChooser={() => setPhotoChooser(assignment)}
                       onCloseHelp={closeHelp}
-                      onAddCourse={() => navigate("/cahier")}
+                      onAddCourse={() => navigate("/course-notes")}
                       onGenerateSheet={() => void generateSheet(assignment)}
                     />
                   ))}

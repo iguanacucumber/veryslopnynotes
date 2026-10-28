@@ -84,7 +84,7 @@ object RevisionAi {
     // l'adaptateur refuse l'appel — c'etait le defaut de #428, ou la cle
     // n'etait pas transmise et le point d'entree public ne pouvait produire
     // AUCUNE fiche.
-    fun requestRevisionFiche(
+    fun requestRevisionSheet(
         provider: SafePromptProvider,
         exam: RevisionExam,
         chunks: List<RevisionChunk>,

@@ -274,14 +274,14 @@ export default function ProfileScreen() {
             title="Cahier de cours"
             subtitle="Tes cours, sources de l’assistant"
             leading={<IconBook size={22} />}
-            onClick={() => navigate("/cahier")}
+            onClick={() => navigate("/course-notes")}
           />
           <Divider />
           <ListRow
             title="Fiches de révision"
             subtitle="Générées depuis un devoir"
             leading={<IconSparkles size={22} />}
-            onClick={() => navigate("/fiches")}
+            onClick={() => navigate("/revision-sheets")}
           />
         </Rows>
       </Section>

@@ -34,7 +34,7 @@ async function ask(op: unknown): Promise<string> {
 
 type Prompt = { system: string; body: string; nonce: string };
 type Parse = { ok: boolean; fiche?: string; error?: string };
-type Fiche = { ok: boolean; fiche?: string; error?: string; apiKey?: string | null; calls?: number };
+type SheetResult = { ok: boolean; fiche?: string; error?: string; apiKey?: string | null; calls?: number };
 
 describe("fiche de revision — le prompt demande le JSON attendu (#367)", () => {
   test.skipIf(skip)("la consigne systeme exige un JSON {\"fiche\"}", async () => {
@@ -96,11 +96,11 @@ describe("fiche de revision — le prompt demande le JSON attendu (#367)", () =>
 });
 
 describe("fiche de revision — le point d'entree public relaie la cle (#428)", () => {
-  // Avant #428, `requestRevisionFiche` OUBLIAIT la clé : l'appel partait
+  // Avant #428, `requestRevisionSheet` OUBLIAIT la clé : l'appel partait
   // sans, et `OpenRouterLlm` levait « clé LLM absente » AVANT tout appel
   // HTTP. Le point d'entrée documenté ne pouvait donc jamais produire de fiche.
   test.skipIf(skip)("avec une cle, le fournisseur est appele et la fiche est rendue", async () => {
-    const res = JSON.parse(await ask({ op: "fiche", key: "cle-de-test-1234" })) as Fiche;
+    const res = JSON.parse(await ask({ op: "fiche", key: "cle-de-test-1234" })) as SheetResult;
     expect(res.ok).toBe(true);
     // La fiche PARSEE : le core garde la main sur le schema {"fiche"}.
     expect(res.fiche).toBe("Rappel : derivé de x^2 = 2x.");
@@ -110,7 +110,7 @@ describe("fiche de revision — le point d'entree public relaie la cle (#428)", 
   });
 
   test.skipIf(skip)("sans cle, l'appel est refuse net (aucune fiche en promenade)", async () => {
-    const res = JSON.parse(await ask({ op: "fiche" })) as Fiche;
+    const res = JSON.parse(await ask({ op: "fiche" })) as SheetResult;
     expect(res.ok).toBe(false);
     expect(res.error).toContain("clé");
     // Le fournisseur a bien ete appele, SANS cle : le core n'invente pas de
@@ -122,7 +122,7 @@ describe("fiche de revision — le point d'entree public relaie la cle (#428)", 
   test.skipIf(skip)("une sortie hors schema reste refusee (garde I5)", async () => {
     const res = JSON.parse(
       await ask({ op: "fiche", key: "cle-de-test-1234", body: "Voici ta fiche en texte simple." }),
-    ) as Fiche;
+    ) as SheetResult;
     expect(res.ok).toBe(false);
     expect(res.error).toContain("I5");
   });
@@ -153,7 +153,7 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
   test("le fournisseur porte le délai du pont, pas le défaut 20 s (#594)", () => {
     // Un modèle gratuit lent est tué à 20 s par le défaut OkHttp alors que
     // le pont attend AWAIT_LLM_MS (45 s) : même délai que l'aide photo.
-    expect(bridge).toMatch(/requestRevisionFiche\(OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\)/);
+    expect(bridge).toMatch(/requestRevisionSheet\(OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\)/);
   });
 
   test("la fiche cherche le devoir dans la semaine AFFICHÉE (#369, #596)", () => {
@@ -198,7 +198,7 @@ describe("fiche de revision — l'id du devoir ne part pas dans le prompt (#606)
       const r = JSON.parse(
         await ask({ op: "promptFor", id, subject: "MATHEMATIQUES", date: "2026-10-26", matched: "Exercices n°2 à 4" }),
       ) as PromptFor;
-      // Le vrai chemin public (requestRevisionFiche → garde I4 → parse I5) passe.
+      // Le vrai chemin public (requestRevisionSheet → garde I4 → parse I5) passe.
       expect(r.ok).toBe(true);
       expect(r.body).toContain("MATHEMATIQUES");
       expect(r.body).toContain("2026-10-26");

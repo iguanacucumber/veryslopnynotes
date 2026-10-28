@@ -91,7 +91,7 @@ describe("IA — aide devoirs", () => {
 
   test("un refus mène au cahier, jamais au corps brut (#610)", () => {
     expect(tasks).toContain("Ajouter un cours au cahier");
-    expect(tasks).toContain('onAddCourse={() => navigate("/cahier")}');
+    expect(tasks).toContain('onAddCourse={() => navigate("/course-notes")}');
     const panel = between(tasks, 'className="task-help__panel"', "</details>");
     expect(panel).toContain("{help.refusal}");
     expect(panel).toContain("Ajouter un cours au cahier");
@@ -116,17 +116,17 @@ describe("IA — aide devoirs", () => {
 
   test("un devoir peut générer sa fiche par le pont existant, semaine affichée incluse (#369, #596)", () => {
     expect(tasks).toContain("bridge.generateRevision(assignment.id, week)");
-    expect(tasks).toContain('navigate("/fiches")');
+    expect(tasks).toContain('navigate("/revision-sheets")');
     expect(tasks).toContain("Fiche de révision");
   });
 });
 
 describe("IA — fiches de révision", () => {
-  const fiches = source("features/revisions/RevisionSheets.tsx");
+  const sheets = source("features/revisions/RevisionSheets.tsx");
 
   test("l'état vide mène aux devoirs au lieu de promettre une génération automatique", () => {
-    expect(fiches).not.toContain("générée automatiquement");
-    expect(fiches).toContain('navigate("/tasks")');
-    expect(fiches).toContain("PageHeading");
+    expect(sheets).not.toContain("générée automatiquement");
+    expect(sheets).toContain('navigate("/tasks")');
+    expect(sheets).toContain("PageHeading");
   });
 });

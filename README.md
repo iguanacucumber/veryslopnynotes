@@ -63,11 +63,13 @@ Pronote et l'assistant IA fonctionnent sans lui.
 | `/messages` | Messagerie | Discussions, recherche, non-lus, réponse, création et suppression. |
 | `/news` | Actualités | Fils par catégorie, lecture développée, état lu conservé localement. |
 | `/canteen` | Cantine | Menus de la semaine et allergènes. |
-| `/fiches` | Fiches de révision | Fiches générées depuis un devoir, sources citées, consultation et export PDF. |
-| `/cahier` | Cahier de cours | Cours mémorisés par matière (texte ou photo transcrite), réutilisés comme sources par l’assistant, avec manuel activable matière par matière. |
+| `/revision-sheets` | Fiches de révision | Fiches générées depuis un devoir, sources citées, consultation et export PDF. |
+| `/course-notes` | Cahier de cours | Cours mémorisés par matière (texte ou photo transcrite), réutilisés comme sources par l’assistant, avec manuel activable matière par matière. |
 | `/alerts` | Alertes | Contenus hostiles détectés puis neutralisés, affichés en texte brut, avec l'état de la dernière vérification. |
 | `/profile` | Profil | Compte actif, comptes liés publiés par l'établissement, changement d'appairage et déconnexion qui purge session et caches. |
 | `/settings` | Réglages | Thème clair / sombre / système, 21 palettes, matières personnalisées (couleur, emoji, libellé), adresse du scraper, adresse du manuel, clé de l'assistant. |
+
+Les anciennes routes `/fiches` et `/cahier` restent des alias.
 
 En plus des écrans :
 
@@ -259,7 +261,7 @@ ni vers le fournisseur LLM.
 | `make architecture-test` | Scans d'architecture + invariants. |
 | `make check-kotlin` | Garde-fou structurel Kotlin, sans SDK ni réseau. |
 | `make android-compile` | Vraie compilation Kotlin (le seul contrôle des symboles et surcharges). Sans JDK/SDK, elle ÉCHOUE (`ALLOW_SKIP_ANDROID=1` assume le saut, hors merge). |
-| `make web-smoke` | Test navigateur du frontend (Chromium requis), hors `make check` : les 14 routes, les deux parcours d'appairage (téléphone neuf, session expirée) et le parcours de déconnexion. |
+| `make web-smoke` | Test navigateur du frontend (Chromium requis), hors `make check` : les 17 routes (15 écrans + 2 alias), les deux parcours d'appairage (téléphone neuf, session expirée) et le parcours de déconnexion. |
 | `make buildDebugApk` / `make buildRelApk` | APK debug / APK + AAB release. |
 | `make updateApkToPhone` | APK debug puis `adb install -r` (données conservées). |
 | `make shot ROUTE=grades` | Capture vérifiée sur téléphone réel (`SHOT_ARGS="--theme dark"` pour le thème). |
@@ -324,10 +326,10 @@ pas dans ce flux. Règles détaillées :
 - [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) — registre
   des invariants (I1–I32) et tests qui les pinent.
 - [`docs/adr/`](docs/adr/) — décisions d'architecture : stack, client direct,
-  WebView locale, règles et architecture ([ADR-005](docs/adr/005-regles-et-architecture.md)).
+  WebView locale, règles et architecture ([ADR-005](docs/adr/005-rules-and-architecture.md)).
 - [`docs/RELEASE.md`](docs/RELEASE.md) — versions épinglées, build, signature,
   livrable.
-- [`docs/RECETTE.md`](docs/RECETTE.md) — recette des 14 routes, thèmes, grande
+- [`docs/SCREEN-REVIEW.md`](docs/SCREEN-REVIEW.md) — recette des 17 routes (15 écrans + 2 alias), thèmes, grande
   police, hors-ligne.
 - [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md) — ce qui doit être fourni à la
   main, sans valeur secrète.

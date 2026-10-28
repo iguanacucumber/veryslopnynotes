@@ -47,6 +47,9 @@
                 <data android:host="messages" />
                 <data android:host="pairing" />
                 <data android:host="alerts" />
+                <data android:host="revision-sheets" />
+                <data android:host="course-notes" />
+                <!-- Aliases: old links still open the canonical route. -->
                 <data android:host="fiches" />
                 <data android:host="cahier" />
                 <data android:host="sanctions" />

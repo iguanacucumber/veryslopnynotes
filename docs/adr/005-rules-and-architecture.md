@@ -3,7 +3,7 @@
 - Statut : accepté (issue #635)
 - Complète : [ADR-001](001-stack.md), [ADR-003](003-client-direct.md),
   [ADR-004](004-webview.md). Aucun de ces ADR n'est remplacé.
-- Revue : [`docs/architecture/REVUE-2026-10.md`](../architecture/REVUE-2026-10.md)
+- Revue : [`docs/architecture/REVIEW-2026-10.md`](../architecture/REVIEW-2026-10.md)
 
 ## Contexte
 

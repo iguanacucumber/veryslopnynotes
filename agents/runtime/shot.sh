@@ -58,7 +58,8 @@ usage : shot.sh <route> [--theme <t>] [--wait <secondes>] [--no-build]
 
   <route>               route de l'app : index, calendar, grades, tasks,
                         profile, settings, news, canteen, attendance,
-                        messages, pairing, alerts, fiches, sanctions.
+                        messages, pairing, alerts, revision-sheets,
+                        course-notes, sanctions.
   --theme <dark|light|system>
                         force le thème de l'APPAREIL avant la capture (#179) :
                         le pas d'encre de matière est sensible au thème, donc
@@ -386,7 +387,7 @@ is_locked() {
 # l'onglet Notes propose « Réglages », « Appairage QR+PIN » et « Alertes
 # sécurité », l'accueil des cartes « Actualités », « Cantine », « Vie scolaire »,
 # « Messages », le profil les mêmes. Deux exceptions : `news`
-# et `fiches`, dont le corps ne dépend que de la donnée, donc sans libellé fixe :
+# et `revision-sheets`, dont le corps ne dépend que de la donnée, donc sans libellé fixe :
 # leur titre EST le témoin.
 #
 # Format : `route|titre|fragment`, `;` entre fragments ALTERNATIFS (un seul
@@ -404,11 +405,11 @@ is_locked() {
 #
 #     shot : la route « grades » NON PROUVÉE (« Moyennes par matière » absent).
 #
-# Le même critère a été repassé sur les quatorze : `calendar` (« semaine du »),
+# Le même critère a été repassé sur les dix-sept : `calendar` (« semaine du »),
 # `tasks` (« Devoirs de la semaine »), `profile` (« Détecter les onglets »),
 # `settings`, `canteen`, `attendance`, `sanctions`, `messages`, `pairing` et `alerts`
 # portent un titre de section ou un bouton rendu HORS de la branche de donnée,
-# donc ils tiennent sans donnée. `news` et `fiches` ont
+# donc ils tiennent sans donnée. `news` et `revision-sheets` ont
 # un titre de barre du haut unique, ce qui suffit (cf. le test de condition).
 #
 # #172 — LA BRANCHE D'ERREUR, ÉTAT LE PLUS AVEUGLE. `PapErrorState` ne rend que
@@ -463,11 +464,13 @@ sanctions|Sanctions|Sanctions déclarées;Aucune sanction publiée
 messages|Messagerie|Rechercher une discussion;discussion;Aucune discussion
 pairing|Connecte ton établissement|Retour;Code PIN du QR
 alerts|Alertes|Contenus hostiles;Aucune alerte de sécurité
+revision-sheets|Fiches de révision|Fiches disponibles;Aucune fiche
 fiches|Fiches de révision|Fiches disponibles;Aucune fiche
+course-notes|Cahier de cours|Cahier de cours;Ajouter un cours;Aucun cours enregistré
 cahier|Cahier de cours|Cahier de cours;Ajouter un cours;Aucun cours enregistré
 '
 
-# Ligne de la table d'une route. Vide = route inconnue (donc absente des 14).
+# Ligne de la table d'une route. Vide = route inconnue (donc absente des 17).
 #
 # #536 : la route est comparée LITTÉRALEMENT (le premier champ `|`, `=`
 # exact), jamais par une EXPRESSION RÉGULIÈRE. Interpolée dans un `grep -E`,

@@ -120,7 +120,7 @@ private fun <T> tolerantRows(rows: List<JVal>, make: (JVal) -> T): List<T> {
 }
 
 /** `funcOptions.dataSec.data.General.<key>.V` brut (tranches horaires ; `null` si illisible). */
-private fun heuresV(client: PronoteClientLike, key: String): JVal? {
+private fun hoursValue(client: PronoteClientLike, key: String): JVal? {
     val root = client.funcOptions as? JVal.Obj ?: return null
     val data = ((root.fields["dataSec"] as? JVal.Obj)?.fields?.get("data") as? JVal.Obj) ?: return null
     val general = data.fields["General"] as? JVal.Obj ?: return null
@@ -244,7 +244,7 @@ class Punishment(private val client: PronoteClientLike, json: JVal?) : PronoteOb
             val place = r(::optNum, listOf("placeExecution"), ResolveOpts.lenient())
             if (place != null) {
                 try {
-                    val (h, m) = place2time(heuresV(client, "ListeHeures"), place)
+                    val (h, m) = place2time(hoursValue(client, "ListeHeures"), place)
                     date.withHour(h).withMinute(m).withSecond(0).withNano(0)
                 } catch (e: Exception) {
                     throw DataError(e.toString())
@@ -261,7 +261,7 @@ class Punishment(private val client: PronoteClientLike, json: JVal?) : PronoteOb
         if (during_lesson) {
             val place = r(::numOf, listOf("placeDemande"))
             try {
-                val (h, m) = place2time(heuresV(client, "ListeHeures"), place)
+                val (h, m) = place2time(hoursValue(client, "ListeHeures"), place)
                 date.withHour(h).withMinute(m).withSecond(0).withNano(0)
             } catch (e: Exception) {
                 throw DataError(e.toString())
@@ -417,7 +417,7 @@ class Lesson(private val client: PronoteClientLike, json: JVal?) : PronoteObject
         r<LocalDateTime?>(::datetimeParse, listOf("DateDuCoursFin", "V"), ResolveOpts.lenient())
             ?: run {
                 val raw = (json as? JVal.Obj)?.fields
-                val endTimes = heuresV(client, "ListeHeuresFin")
+                val endTimes = hoursValue(client, "ListeHeuresFin")
                 val size = (endTimes as? JVal.Arr)?.items?.size ?: 0
                 // Absent = `NaN` (`undefined` en arithmétique) ; `null` présent = `0`
                 // (`Number(null)`), comme côté TS.

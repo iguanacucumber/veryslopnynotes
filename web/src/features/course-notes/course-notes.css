@@ -1,16 +1,16 @@
 /* Cahier de cours — confidentialité repliable, cartes de matière et
    relecture d'une photo transcrite. */
 
-.cahier-privacy {
+.course-notes-privacy {
   padding: 0;
   overflow: hidden;
 }
 
-.cahier-privacy__details {
+.course-notes-privacy__details {
   display: block;
 }
 
-.cahier-privacy__summary {
+.course-notes-privacy__summary {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -20,22 +20,22 @@
   list-style: none;
 }
 
-.cahier-privacy__summary::-webkit-details-marker {
+.course-notes-privacy__summary::-webkit-details-marker {
   display: none;
 }
 
-.cahier-privacy__summary::marker {
+.course-notes-privacy__summary::marker {
   content: "";
 }
 
-.cahier-privacy__summary .grow {
+.course-notes-privacy__summary .grow {
   display: flex;
   flex-direction: column;
   gap: 1px;
   min-width: 0;
 }
 
-.cahier-privacy__icon {
+.course-notes-privacy__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -47,39 +47,39 @@
   color: var(--brand-deep);
 }
 
-.cahier-privacy__chevron {
+.course-notes-privacy__chevron {
   display: inline-flex;
   flex: 0 0 auto;
   color: var(--muted);
   transition: transform var(--duration) var(--ease-out);
 }
 
-.cahier-privacy__details[open] .cahier-privacy__chevron {
+.course-notes-privacy__details[open] .course-notes-privacy__chevron {
   transform: rotate(90deg);
 }
 
-.cahier-privacy__body {
+.course-notes-privacy__body {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 0 14px 14px 56px;
 }
 
-.cahier-privacy__body p {
+.course-notes-privacy__body p {
   margin: 0;
 }
 
-.cahier-subject {
+.course-notes-subject {
   padding: 14px;
 }
 
-.cahier-subject__head {
+.course-notes-subject__head {
   display: flex;
   align-items: flex-start;
   gap: 11px;
 }
 
-.cahier-subject__title {
+.course-notes-subject__title {
   margin: 0;
   font-size: 17px;
   line-height: 24px;
@@ -87,7 +87,7 @@
   letter-spacing: -0.01em;
 }
 
-.cahier-subject__meta {
+.course-notes-subject__meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -95,7 +95,7 @@
   margin-top: 3px;
 }
 
-.cahier-manual {
+.course-notes-manual {
   display: flex;
   align-items: center;
   min-height: 44px;
@@ -104,21 +104,21 @@
   border-top: 1px solid var(--border-soft);
 }
 
-.cahier-manual__label {
+.course-notes-manual__label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
 }
 
-.cahier-manual__label input {
+.course-notes-manual__label input {
   width: 18px;
   height: 18px;
   margin: 0;
   accent-color: var(--brand-solid);
 }
 
-.cahier-status {
+.course-notes-status {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -129,28 +129,28 @@
   font-weight: 700;
 }
 
-.cahier-status--on {
+.course-notes-status--on {
   background: var(--brand-pale);
   color: var(--brand-deep);
 }
 
-.cahier-status--off {
+.course-notes-status--off {
   background: var(--surface-variant);
   color: var(--muted);
 }
 
 /* L'absence de manuel est un état normal, pas une erreur : même teinte neutre
    que « Cahier seul », jamais le rouge réservé aux échecs. */
-.cahier-status--none {
+.course-notes-status--none {
   background: var(--surface-variant);
   color: var(--muted);
 }
 
-.cahier-subject__notes {
+.course-notes-subject__notes {
   padding: 2px 0 0;
 }
 
-.cahier-note-icon {
+.course-notes-note-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -161,23 +161,23 @@
   color: var(--muted);
 }
 
-.cahier-subject__actions {
+.course-notes-subject__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
 }
 
-.cahier-empty-hint {
+.course-notes-empty-hint {
   margin: 0 4px 8px;
 }
 
-.cahier-empty-list {
+.course-notes-empty-list {
   display: flex;
   flex-direction: column;
 }
 
-.cahier-empty-row {
+.course-notes-empty-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -185,28 +185,28 @@
   padding: 2px 0;
 }
 
-.cahier-empty-row + .cahier-empty-row {
+.course-notes-empty-row + .course-notes-empty-row {
   border-top: 1px solid var(--border-soft);
 }
 
-.cahier-empty-row__name {
+.course-notes-empty-row__name {
   font-weight: 600;
 }
 
-.cahier-empty-row__actions {
+.course-notes-empty-row__actions {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
   color: var(--muted);
 }
 
-.cahier-empty-row__actions .icon-btn:last-child {
+.course-notes-empty-row__actions .icon-btn:last-child {
   color: var(--brand-deep);
 }
 
 /* --- Relecture d'une photo ------------------------------------------------ */
 
-.cahier-photo {
+.course-notes-photo {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -217,12 +217,12 @@
   background: var(--brand-pale);
 }
 
-.cahier-photo--busy {
+.course-notes-photo--busy {
   border-color: var(--border-soft);
   background: var(--surface-variant);
 }
 
-.cahier-photo__icon {
+.course-notes-photo__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -234,30 +234,30 @@
   color: var(--brand-deep);
 }
 
-.cahier-photo__icon .spinner {
+.course-notes-photo__icon .spinner {
   width: 18px;
   height: 18px;
 }
 
-.cahier-photo__status {
+.course-notes-photo__status {
   display: flex;
   flex-direction: column;
   gap: 2px;
   margin: 0;
 }
 
-.cahier-photo__actions {
+.course-notes-photo__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
 }
 
-.cahier-photo__actions .chip {
+.course-notes-photo__actions .chip {
   background: var(--surface);
 }
 
-.cahier-photo-progress {
+.course-notes-photo-progress {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -267,7 +267,7 @@
   line-height: 20px;
 }
 
-.cahier-photo-progress .spinner {
+.course-notes-photo-progress .spinner {
   width: 18px;
   height: 18px;
   flex: 0 0 auto;

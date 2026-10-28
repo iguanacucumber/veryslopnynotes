@@ -24,7 +24,7 @@ enum class LessonNotesWrite {
 }
 
 /**
- * Cahier de cours sur disque : UN fichier JSON dans `filesDir/offline/`.
+ * Course notes on disk: ONE JSON file in `filesDir/offline/`.
  *
  * Pourquoi un fichier et pas une base : le volume est minuscule (64 notes
  * bornées), le dépôt n'a ni Room ni DataStore, et la purge de compte efface
@@ -35,18 +35,28 @@ enum class LessonNotesWrite {
  * `@Synchronized` : le pont peut écrire depuis plusieurs fils, et le fichier
  * est relu avant chaque fusion. Pas de perte silencieuse entre deux ajouts.
  */
-class FileLessonNotesStore(private val file: File) : LessonNotesLocalStore {
+class FileLessonNotesStore(
+    private val file: File,
+    private val legacyFile: File? = null,
+) : LessonNotesLocalStore {
     @Synchronized
-    override fun load(): List<LessonNote> = read(file)
+    override fun load(): List<LessonNote> = read()
 
     @Synchronized
-    override fun save(notes: List<LessonNote>, epoch: Long): Boolean =
-        OfflineArtifacts.writeText(file, lessonNotesJson(notes), epoch)
+    override fun save(notes: List<LessonNote>, epoch: Long): Boolean {
+        val written = OfflineArtifacts.writeText(file, lessonNotesJson(notes), epoch)
+        // Migrate old `cahier.json` only after the new file is safely written.
+        if (written) legacyFile?.takeIf { it.isFile }?.delete()
+        return written
+    }
 
-    private fun read(file: File): List<LessonNote> = try {
-        if (file.isFile) parseLessonNotes(file.readText()) else emptyList()
-    } catch (_: Exception) {
-        emptyList()
+    private fun read(): List<LessonNote> {
+        // A truncated new file (writeText is truncate-then-write) must not
+        // shadow intact legacy notes: parse failure falls through to it.
+        val current = file.takeIf { it.isFile }?.let { parseLessonNotesOrNull(it.readText()) }
+        if (current != null) return current
+        // Read the pre-rename file until the next successful write moves it.
+        return legacyFile?.takeIf { it.isFile }?.let { parseLessonNotesOrNull(it.readText()) } ?: emptyList()
     }
 }
 
@@ -160,7 +170,8 @@ fun lessonNotesJson(notes: List<LessonNote>): String {
     return arr.toString()
 }
 
-fun parseLessonNotes(raw: String): List<LessonNote> = try {
+/** `null` = JSON illisible (à distinguer d'une liste vide valide). */
+internal fun parseLessonNotesOrNull(raw: String): List<LessonNote>? = try {
     val arr = JSONArray(raw)
     val out = mutableListOf<LessonNote>()
     for (i in 0 until arr.length()) {
@@ -177,5 +188,5 @@ fun parseLessonNotes(raw: String): List<LessonNote> = try {
     }
     out.sortedByDescending { it.createdAt }
 } catch (_: Exception) {
-    emptyList()
+    null
 }

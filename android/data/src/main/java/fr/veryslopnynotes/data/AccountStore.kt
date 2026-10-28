@@ -41,7 +41,7 @@ class AccountStore(
     /**
      * Comptes appairés CONNUS, jamais moins que la session elle-même.
      *
-     * #148 (recette des 14 écrans) : hors ligne, le client local ne répond pas, donc
+     * #148 (recette des 15 écrans) : hors ligne, le client local ne répond pas, donc
      * [add] n'est jamais appelé et la liste reste vide — l'écran Profil
      * affichait « 0 compte appairé » sur un appareil APPAIRÉ (session
      * persistée), pendant que Réglages affichait « 1 compte ». Deux

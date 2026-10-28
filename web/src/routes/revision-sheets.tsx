@@ -1,5 +1,5 @@
 import { RevisionSheetsScreen } from "../features/revisions/RevisionSheets";
 
-export default function FichesRoute() {
+export default function RevisionSheetsRoute() {
   return <RevisionSheetsScreen />;
 }
