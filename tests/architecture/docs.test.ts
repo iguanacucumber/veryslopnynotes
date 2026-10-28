@@ -39,6 +39,16 @@ export function referencedIds(text: string): string[] {
   return [...text.matchAll(/\bI(\d+)( bis)?\b/g)].map((m) => `I${m[1]}${m[2] ?? ""}`);
 }
 
+/** IDs inscrits dans la section `## Retirés` du registre (un par ligne de table). */
+export function parseRetiredIds(md: string): string[] {
+  const lines = md.split("\n");
+  const start = lines.indexOf("## Retirés");
+  if (start === -1) return [];
+  const end = lines.findIndex((l, i) => i > start && /^## /.test(l));
+  const body = lines.slice(start + 1, end === -1 ? lines.length : end);
+  return body.flatMap((l) => (l.startsWith("| I") ? [l.split("|")[1]!.trim()] : []));
+}
+
 /** Cibles déclarées dans le Makefile (hors variables `:=`). */
 export function makeTargets(makefile: string): Set<string> {
   const targets = new Set<string>();
@@ -49,12 +59,42 @@ export function makeTargets(makefile: string): Set<string> {
   return targets;
 }
 
+/**
+ * Erreurs de numérotation : un trou entre I1 et la dernière entrée active n'est
+ * toléré que si l'ID figure dans `## Retirés`, et un ID retiré ne réapparaît
+ * jamais comme entrée active.
+ */
+export function numberingErrors(entries: Entry[], retired: string[]): string[] {
+  const errors: string[] = [];
+  const active = new Set(entries.map((e) => e.id));
+  for (const id of retired) {
+    if (active.has(id)) errors.push(`${id} est réutilisé alors qu'il figure dans ## Retirés`);
+  }
+  const nums = activeNumericIds(entries);
+  const max = Math.max(...nums, 0);
+  for (let n = 1; n <= max; n++) {
+    if (nums.has(n)) continue;
+    if (!retired.includes(`I${n}`)) errors.push(`trou non documenté : I${n} n'est ni une entrée ni dans ## Retirés`);
+  }
+  return errors;
+}
+
+/** Numéros `I<n>` (hors `bis`) des entrées actives. */
+function activeNumericIds(entries: Entry[]): Set<number> {
+  return new Set(
+    entries
+      .filter((e) => !e.id.endsWith(" bis"))
+      .map((e) => Number(e.id.slice(1))),
+  );
+}
+
 const entries = parseInvariantEntries(INVARIANTS);
 const ids = entries.map((e) => e.id);
 const numeric = ids
   .filter((id) => !id.endsWith(" bis"))
   .map((id) => Number(id.slice(1)))
   .sort((a, b) => a - b);
+const retired = parseRetiredIds(INVARIANTS);
 
 describe("registre d'invariants", () => {
   test("les identifiants sont uniques", () => {
@@ -62,9 +102,9 @@ describe("registre d'invariants", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  test("la numérotation est consécutive à partir de I1", () => {
+  test("la numérotation est consécutive à partir de I1, sauf retrait documenté", () => {
     expect(numeric.length).toBeGreaterThan(0);
-    expect(numeric).toEqual(Array.from({ length: numeric.length }, (_, i) => i + 1));
+    expect(numberingErrors(entries, retired)).toEqual([]);
   });
 
   test("chaque entrée porte test, commande et portée", () => {
@@ -80,7 +120,7 @@ describe("registre d'invariants", () => {
   });
 
   test("les références de AGENTS.md et README.md existent", () => {
-    const known = new Set(ids);
+    const known = new Set([...ids, ...retired]);
     for (const [name, text] of [["AGENTS.md", AGENTS], ["README.md", README]] as const) {
       for (const id of referencedIds(text)) {
         expect({ name, id, known: known.has(id) }).toEqual({ name, id, known: true });
@@ -91,6 +131,26 @@ describe("registre d'invariants", () => {
   test("README annonce la plage réelle du registre", () => {
     const max = Math.max(...numeric);
     expect(README).toContain(`I1–I${max}`);
+  });
+});
+
+describe("sabotage : retrait d'invariant (fixtures)", () => {
+  const entry = (n: number) =>
+    `## I${n} — Règle de test\n- Test : t\n- Commande : c\n- Emplacement : e\n`;
+
+  test("un trou non documenté est rouge", () => {
+    const fixtures = parseInvariantEntries(`${entry(1)}\n${entry(3)}`);
+    expect(numberingErrors(fixtures, [])).toEqual(["trou non documenté : I2 n'est ni une entrée ni dans ## Retirés"]);
+  });
+
+  test("un trou documenté dans ## Retirés est vert", () => {
+    const fixtures = parseInvariantEntries(`${entry(1)}\n${entry(3)}`);
+    expect(numberingErrors(fixtures, ["I2"])).toEqual([]);
+  });
+
+  test("un ID retiré qui réapparaît comme entrée active est rouge", () => {
+    const fixtures = parseInvariantEntries(`${entry(1)}\n${entry(2)}`);
+    expect(numberingErrors(fixtures, ["I2"])).toEqual(["I2 est réutilisé alors qu'il figure dans ## Retirés"]);
   });
 });
 
