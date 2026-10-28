@@ -9,31 +9,12 @@
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 import { mockCall } from "../../web/src/bridge/mock";
+import { SMOKE_ROUTES } from "../../web/src/smoke-routes";
 
 const ROOT = new URL("../..", import.meta.url).pathname;
 const PORT = 4173;
 const URL_BASE = `http://127.0.0.1:${PORT}/`;
 const SHOTS = "/tmp/opencode/web-shots";
-const ROUTES = [
-  ["index", "/"],
-  ["calendar", "/calendar"],
-  ["grades", "/grades"],
-  ["tasks", "/tasks"],
-  ["profile", "/profile"],
-  ["settings", "/settings"],
-  ["messages", "/messages"],
-  ["attendance", "/attendance"],
-  ["sanctions", "/sanctions"],
-  ["news", "/news"],
-  ["canteen", "/canteen"],
-  ["alerts", "/alerts"],
-  ["revision-sheets", "/revision-sheets"],
-  ["course-notes", "/course-notes"],
-  // Compatibility aliases: old links must still land on a real screen.
-  ["fiches", "/fiches"],
-  ["cahier", "/cahier"],
-  ["pairing", "/pairing"],
-] as const;
 
 /**
  * Pont factice injecté dans la page : il parle le protocole natif
@@ -87,7 +68,7 @@ try {
   });
   page.on("pageerror", (err) => errors.push(err.message));
 
-  for (const [name, route] of ROUTES) {
+  for (const [name, route] of SMOKE_ROUTES) {
     await page.goto(`${URL_BASE}#${route}`, { waitUntil: "networkidle" });
     await page.locator("h1, h2, strong").first().waitFor();
     // Les écrans chargent via le pont factice : attendre la fin des spinners
@@ -313,7 +294,7 @@ try {
     console.error("erreurs console :", errors);
     code = 1;
   } else if (code === 0) {
-    console.log(`web-smoke : OK (${ROUTES.length} routes, 0 erreur console, pas de débordement)`);
+    console.log(`web-smoke : OK (${SMOKE_ROUTES.length} routes, 0 erreur console, pas de débordement)`);
   }
   await browser.close();
 } catch (e) {
