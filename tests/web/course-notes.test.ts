@@ -141,8 +141,10 @@ describe("course notes — bridge and screen (#586)", () => {
       join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
       "utf8",
     );
-    expect(bridge).toContain("LessonNotes.sources(lessons.notes(), assignment.subject)");
-    expect(bridge).toContain("LessonNotes.sources(lessons.notes(), a.subject)");
+    // #628 : le cahier alimente l'assembleur unique via les notes BRUTES
+    // (AiContext signale la coupe), pas une fabrique qui tronque en silence.
+    expect(bridge).toContain("LessonNotes.forSubject(lessons.notes(), assignment.subject)");
+    expect(bridge).toContain("AiContext.assembleFor(entry, items)");
     expect(bridge).toContain("manualAvailableForSubject");
     expect(bridge).toContain("if (!manuals.isEnabled(subject)) return null");
     // Course notes live in offline/: account purge removes them.

@@ -13,6 +13,10 @@ import androidx.activity.ComponentActivity
 import androidx.core.content.FileProvider
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import fr.veryslopnynotes.core.AiContext
+import fr.veryslopnynotes.core.AiContextEntry
+import fr.veryslopnynotes.core.AiContextItem
+import fr.veryslopnynotes.core.AiContextResult
 import fr.veryslopnynotes.core.AiError
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.AssignmentAttachment
@@ -23,7 +27,6 @@ import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.ExamCandidate
 import fr.veryslopnynotes.core.HomeworkAi
 import fr.veryslopnynotes.core.HomeworkOutcome
-import fr.veryslopnynotes.core.HomeworkSource
 import fr.veryslopnynotes.core.LessonNote
 import fr.veryslopnynotes.core.LessonNotes
 import fr.veryslopnynotes.core.ManualCatalog
@@ -1306,7 +1309,14 @@ class VsnBridge(
         val week = bounded(p.string("weekStart"), 10)
         val assignment = loadAssignments(id, week).firstOrNull { it.id == id }
             ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
-        val sources = homeworkSourcesFor(assignment)
+        val context = aiContextFor(assignment, AiContextEntry.HOMEWORK)
+        // #628 : corpus vide = refus DÉTERMINISTE avec CTA, AVANT tout appel
+        // payant. L'ancien chemin payait un aller-retour pour lire « aucune
+        // source » et n'offrait aucune action.
+        if (context.sources.isEmpty()) {
+            return refusalJson(context)
+        }
+        val sources = context.sources.map { it.toHomeworkSource() }
         val question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment)
         val result = await<fr.veryslopnynotes.data.HomeworkResult>(AWAIT_LLM_MS) { cb ->
             // Même délai que les chemins photo (#594) : un modèle gratuit lent
@@ -1314,11 +1324,14 @@ class VsnBridge(
             // l'attente du pont couvre 45 s.
             OpenRouterHomework(OpenRouterLlm(timeoutMs = AWAIT_LLM_MS), llmKeys).generate(question, sources, cb)
         } ?: return JSONObject().put("ok", false).put("message", "L'assistant n'a pas répondu.")
+            .withAiContext(context)
         val outcome = result.outcome
             ?: return JSONObject().put("ok", false)
                 .put("message", result.error ?: OpenRouterHomework.GENERIC_ERROR_MESSAGE)
+                .withAiContext(context)
         return when (outcome) {
             is HomeworkOutcome.Answer -> JSONObject().put("ok", true).put("body", outcome.answer)
+                .withAiContext(context)
             // #416 : le motif du modèle est un texte LIBRE (echo de la consigne
             // possible) : il ne franchit JAMAIS le pont. Le pont rend une
             // phrase française bornée, dans le champ `message` que l'UI lit.
@@ -1326,24 +1339,68 @@ class VsnBridge(
                 .put("ok", true)
                 .put("refused", true)
                 .put("message", homeworkRefusalMessage(outcome.reason))
+                .withAiContext(context)
         }
     }
 
     /**
-     * Sources texte d'un devoir : consigne, cours Pronote, manuel (si activé)
-     * et cahier local. UNE seule fabrique, utilisée par l'aide texte ET la
-     * photo d'énoncé : les deux chemins citent le même corpus.
+     * Contexte IA unique pour un devoir (#628). TOUS les points d'entrée
+     * (aide texte, photo, fiche, futur chat) partent d'ici : consigne, cours
+     * Pronote, pièces jointes lisibles, cahier, manuel, web, historique.
+     *
+     * Les pièces jointes et pages web ne sont admises que si leur TEXTE est
+     * disponible : une `ref` opaque ou une URL ne devient jamais une source
+     * inventée. #631/#634 fourniront ces textes via les paramètres.
      */
-    private fun homeworkSourcesFor(assignment: Assignment): MutableList<HomeworkSource> {
-        val sources = fr.veryslopnynotes.data.HomeworkRepository.sourcesFor(assignment).toMutableList()
+    private fun aiContextFor(
+        assignment: Assignment,
+        entry: AiContextEntry,
+        attachments: List<AiContextItem> = emptyList(),
+        webPages: List<AiContextItem> = emptyList(),
+        history: List<AiContextItem> = emptyList(),
+    ): AiContextResult {
+        val items = mutableListOf<AiContextItem>()
+        items.addAll(fr.veryslopnynotes.data.HomeworkRepository.contextItems(assignment))
+        items.addAll(attachments)
+        for (note in LessonNotes.forSubject(lessons.notes(), assignment.subject)) {
+            items.add(AiContext.note(note.title, note.text))
+        }
         manualDocFor(assignment.subject)?.let { doc ->
-            fr.veryslopnynotes.data.HomeworkRepository.manualSource(doc)?.let { sources.add(it) }
+            items.add(AiContext.manual(doc.title, doc.excerpt))
         }
-        for (source in LessonNotes.sources(lessons.notes(), assignment.subject)) {
-            if (sources.size >= fr.veryslopnynotes.core.Homework.MAX_SOURCES) break
-            if (sources.none { it.label == source.label }) sources.add(source)
+        items.addAll(webPages)
+        items.addAll(history)
+        return AiContext.assembleFor(entry, items)
+    }
+
+    /** Métadonnées « Ce qui est envoyé » : type, libellé, taille, troncature. */
+    private fun aiContextJson(context: AiContextResult): JSONArray = JSONArray().apply {
+        for (source in context.sources) {
+            put(
+                JSONObject()
+                    .put("type", source.type.wire)
+                    .put("label", source.label)
+                    .put("chars", source.text.length)
+                    .put("truncated", source.truncated),
+            )
         }
-        return sources
+    }
+
+    private fun JSONObject.withAiContext(context: AiContextResult): JSONObject =
+        put("context", aiContextJson(context))
+            .put("contextChars", context.totalChars)
+            .put("contextOmitted", context.omitted.size)
+
+    /** Refus déterministe du corpus vide, avec CTA stables (jamais de motif libre). */
+    private fun refusalJson(context: AiContextResult, ok: Boolean = true): JSONObject {
+        val refusal = context.refusal
+        return JSONObject()
+            .put("ok", ok)
+            .put("refused", true)
+            .put("message", refusal?.message ?: AiContext.REFUSAL_MESSAGE)
+            .put("refusal", refusal?.code ?: AiContext.REFUSAL_CODE)
+            .put("actions", JSONArray(refusal?.actions ?: AiContext.REFUSAL_ACTIONS))
+            .withAiContext(context)
     }
 
     /**
@@ -1364,9 +1421,14 @@ class VsnBridge(
             return JSONObject().put("ok", false)
                 .put("message", "Clé LLM trop courte : renseigne-la dans Réglages.")
         }
+        // Même corpus que l'aide texte. Une photo est une source à part entière :
+        // un corpus texte vide reste valide pour ce chemin (allowEmpty).
+        val context = aiContextFor(assignment, AiContextEntry.PHOTO)
         return when (val shot = awaitPhoto(bounded(p.string("source"), 16).ifEmpty { "camera" })) {
             is PhotoCapture.Result.Cancelled -> JSONObject().put("ok", false).put("cancelled", true)
+                .withAiContext(context)
             is PhotoCapture.Result.Error -> JSONObject().put("ok", false).put("message", shot.message)
+                .withAiContext(context)
             is PhotoCapture.Result.Ok -> {
                 val bytes = try {
                     PhotoPrep.prepare(shot.file)
@@ -1376,12 +1438,13 @@ class VsnBridge(
                 if (bytes == null) {
                     return JSONObject().put("ok", false)
                         .put("message", "Photo illisible ou trop lourde : reprends-la.")
+                        .withAiContext(context)
                 }
                 try {
                     val outcome = HomeworkAi.generateHomeworkFromPhoto(
                         provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
                         question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment),
-                        sources = homeworkSourcesFor(assignment),
+                        sources = context.sources.map { it.toHomeworkSource() },
                         image = VisionImage(
                             mime = "image/jpeg",
                             base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
@@ -1391,22 +1454,29 @@ class VsnBridge(
                     when (outcome) {
                         is HomeworkOutcome.Answer ->
                             JSONObject().put("ok", true).put("body", outcome.answer)
+                                .withAiContext(context)
                         is HomeworkOutcome.Refused -> JSONObject()
                             .put("ok", true)
                             .put("refused", true)
                             .put("message", homeworkRefusalMessage(outcome.reason))
+                            .withAiContext(context)
                     }
                 } catch (e: SecretDetectedException) {
                     JSONObject().put("ok", false).put("message", secretRefusalMessage(e.kind))
+                        .withAiContext(context)
                 } catch (e: OutputTooLongException) {
                     JSONObject().put("ok", false).put("message", e.userMessage)
+                        .withAiContext(context)
                 } catch (e: LlmError) {
                     JSONObject().put("ok", false).put("message", e.userMessage)
+                        .withAiContext(context)
                 } catch (_: AiError) {
                     JSONObject().put("ok", false)
                         .put("message", "Réponse de l'assistant hors format : réessaie avec une photo plus nette.")
+                        .withAiContext(context)
                 } catch (_: Exception) {
                     JSONObject().put("ok", false).put("message", "Aide photo indisponible : réessaie dans un instant.")
+                        .withAiContext(context)
                 }
             }
         }
@@ -1428,6 +1498,15 @@ class VsnBridge(
         val week = bounded(p.string("weekStart"), 10)
         val assignment = loadAssignments(id, week).firstOrNull { it.id == id }
             ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
+        // #628 : la fiche part du MÊME assembleur que l'aide texte et la photo.
+        // Le corpus est évalué AVANT la clé : un devoir sans source refuse avec
+        // CTA de façon déterministe, même sans clé configurée.
+        val context = aiContextFor(assignment, AiContextEntry.REVISION)
+        val chunks = context.sources.map { RevisionChunk(it.text, it.label) }
+        if (chunks.isEmpty()) {
+            // Corpus vide : refus déterministe + CTA, aucun appel payant.
+            return refusalJson(context, ok = false)
+        }
         val apiKey = llmKeys.apiKey()?.trim()
             ?: return JSONObject().put("ok", false)
                 .put("message", fr.veryslopnynotes.data.HomeworkRepository.NO_KEY_MESSAGE)
@@ -1437,13 +1516,10 @@ class VsnBridge(
             return JSONObject().put("ok", false)
                 .put("message", "Clé LLM trop courte : renseigne-la dans Réglages.")
         }
-        val chunks = revisionChunks(assignment)
-        if (chunks.isEmpty()) {
-            return JSONObject().put("ok", false).put("message", "Devoir sans contenu à réviser.")
-        }
         val date = assignment.dueDate.take(10)
         if (date.length != 10) {
             return JSONObject().put("ok", false).put("message", "Devoir sans date exploitable.")
+                .withAiContext(context)
         }
         val exam = RevisionExam(
             id = assignment.id,
@@ -1480,29 +1556,34 @@ class VsnBridge(
             if (!saved) {
                 return JSONObject().put("ok", false)
                     .put("message", "Session modifiée : fiche non enregistrée.")
+                    .withAiContext(context)
             }
-            JSONObject().put("ok", true)
+            JSONObject().put("ok", true).withAiContext(context)
         } catch (e: SecretDetectedException) {
             // #409 : un SECRET dans le cours (forme detectee par la garde I4).
             // On dit POURQUOI (le type), jamais le secret. Cette branche passe
             // AVANT le repli generique, sinon un secret serait affiche comme
             // une sortie hors format.
             JSONObject().put("ok", false).put("message", secretRefusalMessage(e.kind))
+                .withAiContext(context)
         } catch (e: OutputTooLongException) {
             // #411 : la sortie depasse la garde I5. « Format attendu » serait
             // un diagnostic FAUX (la fiche est bien formee, juste trop longue) :
             // on nomme la LIMITE REELLE.
             JSONObject().put("ok", false).put("message", e.userMessage)
+                .withAiContext(context)
         } catch (e: LlmError) {
             // Cause identifiée (clé, crédits, modèle, quota, réseau) : message
             // précis, distinct du repli « fiche non générée » (#359).
             JSONObject().put("ok", false).put("message", e.userMessage)
+                .withAiContext(context)
         } catch (e: Exception) {
             // La cause RÉELLE, en français et bornée : « Fiche non générée. »
             // avalait tout, sortie invalide comprise (#367). Jamais le message
             // brut de l'exception : il peut nommer un compte ou un hôte.
             JSONObject().put("ok", false)
                 .put("message", revisionFailureMessage(revisionFailure(e)))
+                .withAiContext(context)
         }
     }
 
@@ -1519,27 +1600,6 @@ class VsnBridge(
             else -> RevisionFailure.PROVIDER
         }
         else -> RevisionFailure.UNKNOWN
-    }
-
-    private fun revisionChunks(a: Assignment): List<RevisionChunk> {
-        val out = mutableListOf<RevisionChunk>()
-        if (a.description.isNotBlank()) out.add(RevisionChunk(a.description, "Consigne"))
-        a.lessonContent?.takeIf { it.excerpt.isNotBlank() }?.let {
-            out.add(RevisionChunk(it.excerpt, it.title.ifBlank { "Cours" }))
-        }
-        // Le manuel est choisi pour la matière du devoir, comme l'aide devoirs.
-        manualDocFor(a.subject)?.let { doc ->
-            val text = doc.excerpt.take(4000)
-            if (text.isNotBlank()) {
-                out.add(RevisionChunk(text, "Manuel : ${doc.title.ifBlank { "manuel" }}".take(200)))
-            }
-        }
-        // #586 : le cahier local est une source de la fiche, au même titre que
-        // le cours Pronote. Il est marqué Untrusted par le prompt.
-        for (source in LessonNotes.sources(lessons.notes(), a.subject)) {
-            out.add(RevisionChunk(source.text, source.label))
-        }
-        return out
     }
 
     /**

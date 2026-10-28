@@ -49,7 +49,10 @@
 // 0.10.0 (#634) : nouvelle route ADD-ONLY `POST /v1/web/scrape` (page web
 // publique -> titre + texte, sans jar de session). Aucun contrat existant ne
 // change de forme.
-export const CONTRACTS_VERSION = "0.10.0" as const;
+// 0.11.0 (#628) : le cours rattaché à un devoir peut porter 8 000 caractères
+// (au lieu de 500) pour alimenter le contexte IA unique. Add-only côté
+// producteur ; un client 0.10.0 qui refusait > 500 n'est plus la référence.
+export const CONTRACTS_VERSION = "0.11.0" as const;
 
 /** Version gabarit fiches révision (issue #30, phase 10). Stockée par fiche. */
 export const REVISION_TEMPLATE_VERSION = "fiche-v1" as const;
@@ -164,7 +167,10 @@ export const ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS = 200;
 export const ASSIGNMENT_MAX_ATTACHMENTS = 10;
 export const ASSIGNMENT_REF_MAX_CHARS = 200;
 export const ASSIGNMENT_LESSON_TITLE_MAX_CHARS = 200;
-export const ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS = 500;
+// #628 : le cours rattaché alimente le contexte IA (pas seulement la carte) :
+// 8 000 caractères, même borne que le manuel. La coupe du prompt est signalée
+// par `AiContext`.
+export const ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS = 8000;
 
 /** Pièce jointe d'un devoir : référence interne, jamais une URL (règle d'or média). */
 export interface AttachmentRef {

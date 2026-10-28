@@ -511,8 +511,10 @@ describe("catalogue de manuels — classe et spécialités", () => {
       "utf8",
     );
     expect(bridge).toContain("ManualCatalog.resolve(stored, classLabel, subjects, subject)");
+    // #628 : un SEUL point d'entrée (aiContextFor) choisit le manuel pour
+    // l'aide texte, la photo ET la fiche. Plus de collecte par chemin.
     expect(bridge).toContain("manualDocFor(assignment.subject)");
-    expect(bridge).toContain("manualDocFor(a.subject)");
+    expect(bridge).not.toContain("manualDocFor(a.subject)");
     expect(bridge).toContain("manuals.saveDoc(target, doc)");
     expect(bridge).toContain("private fun knownSubjects()");
     expect(bridge).toContain("private fun profileClassLabel()");

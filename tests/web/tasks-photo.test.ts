@@ -79,7 +79,10 @@ describe("devoirs — photo d'énoncé (#588)", () => {
       join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
       "utf8",
     );
-    expect(bridge).toContain("homeworkSourcesFor(assignment)");
+    // #628 : texte ET photo passent par le même assembleur, avec le même
+    // corpus (seul `allowEmpty` distingue la photo).
+    expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.HOMEWORK)");
+    expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.PHOTO)");
     expect(bridge).toContain("HomeworkAi.generateHomeworkFromPhoto(");
     expect(bridge).toContain("PhotoPrep.prepare(shot.file)");
     // Aucun enregistrement automatique du corrigé.

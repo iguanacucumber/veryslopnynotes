@@ -519,11 +519,23 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       return ok({
         ok: true,
         body: "Le corrigé attendu : relier chaque régime à ses caractéristiques (parti unique, terreur, propagande) puis comparer deux régimes.",
+        context: [
+          { type: "assignment", label: "Consigne", chars: 180, truncated: false },
+          { type: "course", label: "Cours : Chapitre 4", chars: 1200, truncated: false },
+        ],
+        contextChars: 1380,
+        contextOmitted: 0,
       }) as Promise<T>;
     case "llm.solvePhoto":
       return ok({
         ok: true,
         body: "Photo lue : le corrigé suit la méthode du cours. Commence par poser les données, puis applique la formule du chapitre.",
+        context: [
+          { type: "assignment", label: "Consigne", chars: 180, truncated: false },
+          { type: "course", label: "Cours : Chapitre 4", chars: 1200, truncated: false },
+        ],
+        contextChars: 1380,
+        contextOmitted: 0,
       }) as Promise<T>;
     case "llm.generateRevision": {
       const id = String(p["assignmentId"] ?? "");
@@ -542,7 +554,15 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
           body: `1. Relire la consigne : ${assignment.title}.\n2. Retenir les notions clés.\n3. S'entraîner sur un exercice.`,
         });
       }
-      return ok({ ok: true }) as Promise<T>;
+      return ok({
+        ok: true,
+        context: [
+          { type: "assignment", label: "Consigne", chars: 180, truncated: false },
+          { type: "course", label: "Cours : Chapitre 4", chars: 1200, truncated: false },
+        ],
+        contextChars: 1380,
+        contextOmitted: 0,
+      }) as Promise<T>;
     }
     case "revision.list":
       return ok({ sheets: revisions }) as Promise<T>;

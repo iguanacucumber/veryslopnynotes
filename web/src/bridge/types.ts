@@ -303,3 +303,17 @@ export interface PairResult {
   code?: string;
   message?: string;
 }
+
+/**
+ * Métadonnée d'une source IA (#628) : « Ce qui est envoyé » côté natif.
+ *
+ * `type` vient de `AiContextType.wire` (assignment, course, attachment, note,
+ * manual, web, history). `chars` = taille réellement envoyée, `truncated` =
+ * source coupée par le budget. Aucun identifiant Pronote, secret ou URL.
+ */
+export interface AiContextSourceMeta {
+  type: string;
+  label: string;
+  chars: number;
+  truncated: boolean;
+}

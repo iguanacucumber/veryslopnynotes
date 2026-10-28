@@ -58,9 +58,10 @@ describe("manuel — source de l'assistant", () => {
       join(WEB, "..", "..", "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
       "utf8",
     );
-    expect(bridge).toContain("HomeworkRepository.manualSource(doc)");
+    // #628 : le manuel brut entre dans l'assembleur unique (coupe signalée),
+    // au lieu d'une source déjà tronquée à 2 000 caractères.
+    expect(bridge).toContain("AiContext.manual(doc.title, doc.excerpt)");
     expect(bridge).toContain("manualDocFor(assignment.subject)");
-    expect(bridge).toContain("manualDocFor(a.subject)");
   });
 });
 

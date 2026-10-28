@@ -96,7 +96,16 @@ data class AssignmentLessonContent(
 ) {
     companion object {
         const val MAX_TITLE = 200
-        const val MAX_EXCERPT = 500
+
+        /**
+         * Borne de PAYLOAD du cours rattaché (#628) : 8 000 caractères, la même
+         * que le manuel. Avant, le cours était coupé à 500 — le contexte IA ne
+         * voyait donc qu'un fragment, quelle que soit la place disponible. Le
+         * prompt garde son budget propre (2 000 par source) et SIGNALE la coupe
+         * (`AiContextSource.truncated`) ; cette borne-ci évite seulement de
+         * garder un cours géant en cache.
+         */
+        const val MAX_EXCERPT = 8000
 
         fun isValid(c: AssignmentLessonContent): Boolean =
             c.title.isNotBlank() && c.title.length <= MAX_TITLE && c.excerpt.length <= MAX_EXCERPT
