@@ -8,6 +8,25 @@ export function Page({ children, className = "" }: { children: ReactNode; classN
   return <div className={`stack ${className}`}>{children}</div>;
 }
 
+/**
+ * Lien d’évitement clavier (#625). C’est un BOUTON, pas un `href="#main"` :
+ * le HashRouter possède déjà le hash de l’URL, un tel lien changerait de
+ * route. Il est le premier élément focalisable de la coquille, masqué tant
+ * qu’il n’a pas le focus (`.skip-link` dans app.css), et l’activation place
+ * le focus sur le `main` cible (`#main`, tabIndex -1).
+ */
+export function SkipLink() {
+  return (
+    <button
+      type="button"
+      className="skip-link"
+      onClick={() => document.getElementById("main")?.focus()}
+    >
+      Aller au contenu
+    </button>
+  );
+}
+
 /** Titre de route dans le corps : même niveau pour Tâches, Vie scolaire, etc. */
 export function PageHeading({
   title,

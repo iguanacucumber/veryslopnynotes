@@ -4,7 +4,7 @@ import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { bridge } from "../../bridge/client";
 import { BridgeCallError } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
-import { Card, Page } from "../../ui/components";
+import { Card, Page, SkipLink } from "../../ui/components";
 import { IconCamera, IconChevronLeft, IconLock } from "../../ui/icons";
 import { STORAGE_UNAVAILABLE_MESSAGE } from "../../lib/session";
 import {
@@ -172,7 +172,8 @@ export default function PairingScreen() {
 
   return (
     <div className="shell">
-      <main className="main" style={{ paddingBottom: 32 }}>
+      <SkipLink />
+      <main id="main" tabIndex={-1} className="main" style={{ paddingBottom: 32 }}>
         <div className="row" style={{ marginBottom: 10 }}>
           <button
             type="button"
