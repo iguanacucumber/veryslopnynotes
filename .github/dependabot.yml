@@ -1,0 +1,28 @@
+# Mises à jour automatisées (#626). Quatre écosystèmes seulement : les
+# dépendances bun du dépôt, les actions du workflow de gate, le catalogue
+# Gradle de l'app et l'image du serveur. Une PR par écosystème et par semaine.
+version: 2
+updates:
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
