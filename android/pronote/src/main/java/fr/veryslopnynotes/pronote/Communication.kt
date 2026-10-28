@@ -420,10 +420,9 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
  * [tickMs] est la PÉRIODE du fil de garde (1 000 ms en production). C'est un
  * paramètre, pas une constante : le harnais de parité (#202) pilote le VRAI
  * code et doit observer un tick RÉEL, or 1 s de attente réelle par test est
- * un luxe que la suite ne peut pas payer 30 fois. La valeur par défaut est
- * celle de production — un test la vérifie
- * (`tests/architecture/keepalive-ping.test.ts`) pour que personne ne la
- * change par accident.
+ * un luxe que la suite ne peut pas payer 30 fois. La valeur par défaut reste
+ * celle de production : convention de relecture, pas un invariant (le ticker
+ * est un paramètre, et son comportement est couvert par la parité).
  */
 class KeepAlive(
     private val shouldPing: () -> Boolean,
