@@ -167,7 +167,7 @@ export function newsBodyLoading(state: NewsBodyState): NewsBodyState {
 }
 
 /** Corps reçu (vide = l'établissement n'a rien publié). */
-export function newsBodyLoaded(state: NewsBodyState, body: string): NewsBodyState {
+export function newsBodyLoaded(_state: NewsBodyState, body: string): NewsBodyState {
   return { status: "loaded", body, error: "" };
 }
 

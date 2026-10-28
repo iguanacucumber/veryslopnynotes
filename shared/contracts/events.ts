@@ -3,7 +3,7 @@
 // sur données structurées uniquement (I7), jamais sur sortie libre LLM.
 
 import { CONTRACTS_VERSION, isAssignment, isGrade, isIsoDate, isNewsItem, isTimetableEntry } from "./models";
-import type { Assignment, Grade, NewsItem, TimetableEntry } from "./models";
+import type { NewsItem, TimetableEntry } from "./models";
 import { isCacheableResource } from "./cache";
 import type { CacheableResource } from "./cache";
 

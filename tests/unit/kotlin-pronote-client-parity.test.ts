@@ -34,15 +34,6 @@ function portError(line: string): { name: string; message: string } {
   return { name: body.error, message: body.message };
 }
 
-function tsErrorOf(fn: () => unknown): { name: string; message: string } | null {
-  try {
-    fn();
-    return null;
-  } catch (e) {
-    return { name: (e as Error).name, message: (e as Error).message };
-  }
-}
-
 async function tsErrorOfAsync(fn: () => Promise<unknown>): Promise<{ name: string; message: string } | null> {
   try {
     await fn();
@@ -927,7 +918,10 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
     const tsRewrite = (raw: string): string => {
       const url = new URL(raw);
       const parts = url.pathname.split("/");
-      if (!parts[parts.length - 1].startsWith("mobile.")) parts[parts.length - 1] = "mobile." + parts[parts.length - 1];
+      const lastIndex = parts.length - 1;
+      const last = parts[lastIndex];
+      if (last === undefined) throw new Error("URL sans segment de chemin");
+      if (!last.startsWith("mobile.")) parts[lastIndex] = "mobile." + last;
       url.pathname = parts.join("/");
       url.search = "?fd=1&bydlg=A6ABB224-12DD-4E31-AD3E-8A39A1C2C335&login=true";
       url.hash = "";
@@ -1454,12 +1448,14 @@ describe("parité TS <-> Kotlin du client + données (#201/#202)", () => {
       const ktAtt = JSON.parse(
         await ask({ op: "attachmentProbe", cid: ktCid, from: "2026-09-20T00:00:00.000Z", to: "2026-09-30T00:00:00.000Z" }),
       ) as { url: string; dataHex: string; name: string };
-      const tsUrl = tsFiles[0]?.url ?? "";
+      const [tsFile] = tsFiles;
+      if (tsFile === undefined) throw new Error("pièce jointe TS absente");
+      const tsUrl = tsFile.url;
       checkMagic(tsa, tsUrl, "t2-f-2");
       checkMagic(kta, ktAtt.url, "t2-f-2");
       expect(normMagicUrl(ktAtt.url)).toBe(normMagicUrl(tsUrl));
-      expect(ktAtt.name).toBe(tsFiles[0]?.name);
-      expect(ktAtt.dataHex).toBe((await tsFiles[0]?.data())?.toString("hex"));
+      expect(ktAtt.name).toBe(tsFile.name);
+      expect(ktAtt.dataHex).toBe((await tsFile.data()).toString("hex"));
     } finally {
       tsa.close();
       kta.close();
