@@ -202,6 +202,27 @@ export function scanArchitecture(root: string = ROOT): string[] {
   // recopie plus les types du port : une arête non déclarée suffit à échouer.
   for (const erreur of moduleBoundaryErrors(root)) fail.push(erreur);
 
+  // I2 surface : hors `android/pronote/`, aucun module n'implémente le
+  // transport (le port expose `Client`, ses types et ses erreurs) ; le module
+  // direct déclare UN SEUL `Client` (ADR-003).
+  const transports: string[] = [];
+  for (const mod of ["app", "core", "data"]) {
+    for (const f of listFiles(join(root, "android", mod))) {
+      if (!f.endsWith(".kt")) continue;
+      const c = readCode(f);
+      if (c !== null && /\b(HttpSession|CookieJar|ClientBase)\b/.test(c)) transports.push(f);
+    }
+  }
+  if (transports.length) fail.push(`I2: transport direct hors pronote: ${transports.join(", ")}`);
+
+  const clients = listFiles(join(root, "android", "pronote")).filter((f) => {
+    const c = readCode(f);
+    return c !== null && /^(?:open )?class Client\(/m.test(c);
+  });
+  if (clients.length !== 1) {
+    fail.push(`I2: android/pronote doit déclarer UN SEUL Client (trouvé ${clients.length})`);
+  }
+
   // I3 : android/core sans import de plateforme que Gradle ne voit pas.
   const i3 = androidCoreFiles.filter((f) => {
     const c = readCode(f);
@@ -217,6 +238,12 @@ export function scanArchitecture(root: string = ROOT): string[] {
     (f) => join(root, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core", f),
   );
   llmFiles.push(...ANDROID_AI);
+  // Liste STATIQUE de fichiers IA : un fichier renommé ne doit pas rendre
+  // I4/I5 vacuement vrais. Absent = invariant non vérifiable, donc ÉCHEC.
+  const aiAbsents = ANDROID_AI.filter((f) => !existsSync(f));
+  if (aiAbsents.length) {
+    fail.push(`I4/I5: fichier IA absent (invariant non vérifiable) : ${aiAbsents.join(", ")}`);
+  }
   const secretRe = /sk-or-v1-|OPENROUTER_API_KEY|MASTER_KEY|PRONOTE_PASSWORD|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/;
   const i4 = llmFiles.filter((f) => {
     const c = readCode(f);

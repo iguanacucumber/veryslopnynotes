@@ -24,31 +24,6 @@ const ROOT = join(import.meta.dir, "..", "..");
 // entrée illisible faisait abandonner tout le répertoire en silence.
 
 describe("invariants", () => {
-  // I1 repointé #200 puis #205 : seul `android/pronote/` parle Pronote en
-  // direct ; depuis #205, `data`/`app` manipulent les TYPES du client local
-  // (dépendance `project(":pronote")`, ADR-003) — câblage sanctionné, pas un
-  // hôte. Le mot reste interdit partout ailleurs dans `android/` ; la
-  // déclaration du module dans `settings.gradle.kts` est l'unique mention
-  // tolérée hors module. Prose (INVARIANTS, AGENTS.md) en #211.
-  test("I1: android sans hote Pronote", () => {
-    const files = listFiles(join(ROOT, "android")).filter((f) => {
-      if (f.endsWith(".md")) return false;
-      if (f.includes("/android/pronote/")) return false;
-      try {
-        let code = codeOnly(readFileSync(f, "utf8"));
-        if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
-        code = code
-          .replace(/project\(":pronote"\)/g, "")
-          .replace(/PronoteSession|PronoteClientProvider|PronoteAPIError|pronoteErrorCode/g, "")
-          .replace(/fr\.veryslopnynotes\.pronote/g, "");
-        return pronoteHost.test(code);
-      } catch {
-        return false;
-      }
-    });
-    expect({ files }).toEqual({ files: [] });
-  });
-
   test("I1: le module direct est déclaré une fois, et il existe", () => {
     const settings = readFileSync(join(ROOT, "android", "settings.gradle.kts"), "utf8");
     expect(settings).toContain('include(":app", ":core", ":data", ":pronote")');
@@ -77,14 +52,6 @@ describe("invariants", () => {
     ).toBe(true);
   });
 
-  test("I3: android/core sans sqlite ni framework HTTP", () => {
-    const files = listFiles(join(ROOT, "android/core")).filter((f) => {
-      const code = codeOnly(readFileSync(f, "utf8"));
-      return sqliteRe.test(code) || httpRe.test(code);
-    });
-    expect(files).toEqual([]);
-  });
-
   test("I3 FP: block/javadoc ignorés, multi-lignes détecté", () => {
     expect(sqliteRe.test(codeOnly("/* import sqlite */\nconst a = 1;"))).toBe(false);
     expect(sqliteRe.test(codeOnly("* import sqlite\nconst a = 1;"))).toBe(false);
@@ -102,20 +69,6 @@ describe("invariants", () => {
     expect(platformRe.test(codeOnly('import androidx.room.Room'))).toBe(true);
     expect(platformRe.test(codeOnly('// import java.net.URL\nval a = 1'))).toBe(false);
     expect(platformRe.test(codeOnly('/* import androidx.room.Room */\nval a = 1'))).toBe(false);
-  });
-
-  test("I2: serveur sans accès Pronote + un seul Client android", () => {
-    const server = listFiles(join(ROOT, "server"));
-    const directFetch = server.filter((f) => hasDirectFetch(codeOnly(readFileSync(f, "utf8"))));
-    expect(directFetch).toEqual([]);
-    // Côté app, tout accès réseau Pronote passe par l'unique `Client` dans
-    // `android/pronote/` (ADR-003) ; aucun autre module ne fait de réseau.
-    const pronote = listFiles(join(ROOT, "android", "pronote"));
-    expect(pronote.filter((f) => f.endsWith(".kt")).length).toBeGreaterThan(0);
-    // `Client` est `open` depuis #475 (le harnais de parité en dérive un
-    // client au stub) : le compte reste UN SEUL client Android.
-    const clients = pronote.filter((f) => /^(?:open )?class Client\(/m.test(codeOnly(readFileSync(f, "utf8"))));
-    expect(clients.map((f) => f.replace(ROOT, ""))).toHaveLength(1);
   });
 
   test("I2: la frontière des modules est celle de Gradle", () => {
@@ -164,27 +117,6 @@ describe("invariants", () => {
     expect(hasDirectFetch(codeOnly('const h = "index-education.net";\nconst a = 1;'))).toBe(false);
     // FP préservé : aucune mention d'hôte → rien à signaler.
     expect(hasDirectFetch(codeOnly("const p = apiProvider;\nawait fetch(apiUrl);"))).toBe(false);
-  });
-
-  test("I4/I5: IA android sans reseau/secrets/outils (server/ai supprimé en #210)", () => {
-    // #210 : `server/ai/` est supprimé (module porté sur le téléphone, #204).
-    // Mêmes scans sur le module IA Kotlin (`android/core/`, sans dépendance).
-    // L'appel HTTP fournisseur (`data/OpenRouterLlm.kt`) est hors scan ici :
-    // piné par tests/unit/android-homework.test.ts.
-    expect(existsSync(join(ROOT, "server", "ai"))).toBe(false);
-    const ANDROID_AI = ["Untrusted.kt", "LlmGuard.kt", "AiPrompts.kt", "HomeworkAi.kt", "RevisionAi.kt", "Humanize.kt"].map(
-      (f) => join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core", f),
-    );
-    for (const f of ANDROID_AI) expect(existsSync(f)).toBe(true);
-    const secretRe =
-      /sk-or-v1-|OPENROUTER_API_KEY|MASTER_KEY|PRONOTE_PASSWORD|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/;
-    for (const f of ANDROID_AI) {
-      const c = codeOnly(readFileSync(f, "utf8"));
-      expect(c).not.toMatch(secretRe);
-      expect(c).not.toMatch(/Bun\.env|process\.env/);
-      expect(c).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|Bun\.serve/);
-      expect(c).not.toMatch(/tools\s*[:=]\s*\[[^\]]*[^\s\]]/);
-    }
   });
 
   test("I8 (0.7.0): le serveur ne lit AUCUN credential dans l'environnement", () => {
@@ -295,12 +227,6 @@ describe("invariants", () => {
     expect([...keys].sort()).toEqual([...allowed].sort());
   });
 
-  test("I3 Kotlin (#242): core sans OkHttp/Room/SQLite plateforme", () => {
-    const extra = /okhttp3|HttpURLConnection|URL\s*\(\s*"https?|android\.net\.|androidx\.room|Room\.databaseBuilder|@Entity|@Dao|SQLiteOpenHelper|android\.database\.sqlite/i;
-    const files = listFiles(join(ROOT, "android/core")).filter((f) => extra.test(codeOnly(readFileSync(f, "utf8"))));
-    expect({ files }).toEqual({ files: [] });
-  });
-
   // #428 : UN SEUL endroit decide du prompt et du schema de la fiche. Le pont
   // appelle le point d'entree PUBLIC du core ; il ne forge plus son propre
   // appel fournisseur (la cle n'y etait pas transmise : l'appel echouait
@@ -327,21 +253,5 @@ describe("invariants", () => {
       ),
     );
     expect(core).toMatch(/generateGuardedJson\(provider, SYSTEM_REVISION_JSON/);
-  });
-
-  // La surface du port n'est plus une liste de types recopiée : une arête
-  // Gradle non déclarée échoue (I2, frontière), et renommer un type du port
-  // ne demande plus d'éditer le scanner. Reste le transport : hors
-  // `pronote/`, aucun module n'implémente le client.
-  test("I2 surface (#242): hors pronote/, aucun transport direct", () => {
-    const bad: string[] = [];
-    for (const mod of ["app", "core", "data"]) {
-      for (const f of listFiles(join(ROOT, "android", mod))) {
-        if (!f.endsWith(".kt")) continue;
-        const src = codeOnly(readFileSync(f, "utf8"));
-        if (/\b(HttpSession|CookieJar|ClientBase)\b/.test(src)) bad.push(`${f.replace(ROOT, "")}: transport direct`);
-      }
-    }
-    expect({ bad }).toEqual({ bad: [] });
   });
 });
