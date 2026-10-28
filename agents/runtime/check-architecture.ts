@@ -1,7 +1,7 @@
 // check-architecture.ts — garde-fous I1/I2/I3/I5 (+I4 secrets LLM). I6/I7 = tests/review, pas scannables en regex.
 // I1 android sans hôte Pronote — FP: .md ignorés, commentaires /* */ et // ignorés. ponytail: plafond regex, upgrade dependency-cruiser phase 1.
-// I2 serveur sans client Pronote ; le scanner interdit tout accès réseau Pronote côté serveur.
-// I3 android/core sans sqlite/HTTP — FP: block comments, javadoc *, imports multi-lignes ([^;]* couvre \n). ponytail: plafond regex, upgrade AST/dependency-cruiser.
+// I2 serveur sans client Pronote + frontière des modules lue dans les build.gradle.kts ; un seul Client Android.
+// I3 android/core sans import plateforme interdit (java.net/android.database/androidx.room) — FP: block comments, javadoc *, imports multi-lignes ([^;]* couvre \n). ponytail: plafond regex, upgrade AST/dependency-cruiser.
 // I4 secrets dans l'IA refusés (`server/ai/` supprimé en #210, reste `android/core/`) — commentaires ignorés. ponytail: doublon volontaire avec check-secrets, upgrade gitleaks.
 // I5 LLM sans outils/réseau/secrets — FP: commentaires ignorés, tools: [] vide autorisé. ponytail: plafond regex sur android/core (`server/ai/` supprimé en #210), upgrade AST.
 //
@@ -19,7 +19,7 @@
 //     non vérifiable ≠ invariant respecté).
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
-import { codeOnly, hasDirectFetch, httpRe, pronoteHost, sqliteRe } from "./source-guards";
+import { codeOnly, hasDirectFetch, platformRe, pronoteHost } from "./source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
 
@@ -104,6 +104,47 @@ function repertoiresManquants(root: string, sousDossiers: string[]): string[] {
   return manquants;
 }
 
+/** Arêtes inter-modules AUTORISÉES par la frontière (ADR-003) : la vérité est
+ *  dans Gradle, pas dans une liste de types. `core` et `pronote` restent purs
+ *  (aucun bloc `dependencies`) ; `data` consomme le port, `app` l'interface. */
+export const MODULE_EDGES: Readonly<Record<string, readonly string[]>> = {
+  core: [],
+  pronote: [],
+  data: ["core", "pronote"],
+  app: ["core", "data"],
+};
+
+/** Modules référencés par `project(":x")` dans un build.gradle.kts (commentaires
+ *  retirés : une arête commentée n'existe pas). */
+export function gradleProjectDeps(source: string): string[] {
+  return [...codeOnly(source).matchAll(/project\(\s*["']:([\w.-]+)["']\s*\)/g)].map((m) => m[1]!);
+}
+
+/** Erreurs de frontière lues dans les quatre fichiers `build.gradle.kts`.
+ *  Une arête non déclarée est un échec ; un module absent aussi (invariant
+ *  non vérifiable). */
+export function moduleBoundaryErrors(root: string): string[] {
+  const errors: string[] = [];
+  for (const [module, allowed] of Object.entries(MODULE_EDGES)) {
+    const file = join(root, "android", module, "build.gradle.kts");
+    let source: string;
+    try {
+      source = readFileSync(file, "utf8");
+    } catch {
+      errors.push(`I2: frontière Gradle: ${module}/build.gradle.kts manquant (invariant non vérifiable)`);
+      continue;
+    }
+    const interdites = gradleProjectDeps(source).filter((dep) => !allowed.includes(dep));
+    if (interdites.length) {
+      errors.push(`I2: frontière Gradle: ${module} dépend de ${interdites.join(", ")} (arête non déclarée)`);
+    }
+    if (allowed.length === 0 && /^\s*dependencies\s*\{/m.test(codeOnly(source))) {
+      errors.push(`I2: frontière Gradle: ${module} déclare un bloc dependencies (module pur)`);
+    }
+  }
+  return errors;
+}
+
 /** Scan des invariants. `root` = racine du dépôt (surchargeable pour les
  *  tests : un fixture temporaire). */
 export function scanArchitecture(root: string = ROOT): string[] {
@@ -157,13 +198,16 @@ export function scanArchitecture(root: string = ROOT): string[] {
   });
   if (directFetch.length) fail.push(`I2: accès réseau Pronote hors client: ${directFetch.join(", ")}`);
 
-  // I3 : android/core sans sqlite ni framework HTTP (imports/usage réel, pas commentaires).
-  // ponytail: strip block //ligne avant match. Upgrade: vrai AST/dependency-cruiser phase 1.
+  // I2 : la frontière réelle est déclarée dans Gradle. Le scan de source ne
+  // recopie plus les types du port : une arête non déclarée suffit à échouer.
+  for (const erreur of moduleBoundaryErrors(root)) fail.push(erreur);
+
+  // I3 : android/core sans import de plateforme que Gradle ne voit pas.
   const i3 = androidCoreFiles.filter((f) => {
     const c = readCode(f);
-    return c !== null && (sqliteRe.test(c) || httpRe.test(c));
+    return c !== null && platformRe.test(c);
   });
-  if (i3.length) fail.push(`I3: android/core dépend sqlite/HTTP: ${i3.join(", ")}`);
+  if (i3.length) fail.push(`I3: android/core importe une plateforme interdite: ${i3.join(", ")}`);
 
   // I5 + I4 : LLM sans outils/réseau/secrets (I6/I7 non scannables ici — voir miroirs unitaires Android + review).
   // Port #204 : l'IA vit dans `android/core/`; `server/ai/` a été supprimé en #210.
