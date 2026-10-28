@@ -1,9 +1,9 @@
-// check.ts — `make check` : les 10 étapes tournent EN MÊME TEMPS, une sortie par étape.
+// check.ts — `make check` : les 9 étapes tournent EN MÊME TEMPS, une sortie par étape.
 //
 // Avant : 7 cibles en séquence = 168 s (unit 70 s + Gradle 95 s + 2 s de tsc).
 // Chaque étape est indépendante (lint / typecheck / tests / architecture /
-// contrats / garde-fou Kotlin / compilation Gradle + Android Lint / typecheck
-// web / tests web — le build Vite est tiré par `architecture`, cf. Makefile) :
+// contrats / compilation Gradle + Android Lint / typecheck web / tests web —
+// le build Vite est tiré par `architecture`, cf. Makefile) :
 // la seule limite est le cœur, et il y en a 16.
 //
 // SOURCE UNIQUE : chaque étape est une cible du Makefile, invoquée `make -s`,
@@ -24,7 +24,7 @@
 // explicite `CHECK_HARNESS=1` est posé (usage interne : `make check-fast`,
 // harnais de test). Sans opt-in, la variable est REFUSÉE et signalée : un
 // `CHECK_TARGETS=lint` glissé dans l'environnement (shell, CI, `agents/ship.sh`
-// qui en hérite) ne peut pas remplacer les 10 étapes par un scan de secrets et
+// qui en hérite) ne peut pas remplacer les 9 étapes par un scan de secrets et
 // faire passer le gate en vert (#368).
 // `--plan` : affiche le plan résolu et sort SANS lancer les étapes (lecture du
 // plan, jamais un gate).
@@ -50,7 +50,6 @@ export const DEFAULT_TARGETS = [
   "typecheck",
   "architecture",
   "contracts",
-  "check-kotlin",
   "lint",
   "audit",
   "web-typecheck",

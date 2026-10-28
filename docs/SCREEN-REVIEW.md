@@ -132,5 +132,5 @@ WebView (`localStorage`), il n'est pas envoyé au natif.
   autre palette et que la barre d'onglets garde une ombre visible.
 
 `make check` (dont `android-compile`) passe, et c'est le seul filet qui
-compile réellement le Kotlin : les miroirs TS et `check-kotlin` ne voient pas
-une résolution de symbole ni une surcharge ambiguë.
+compile réellement le Kotlin : les miroirs TS ne voient pas une résolution de
+symbole ni une surcharge ambiguë.

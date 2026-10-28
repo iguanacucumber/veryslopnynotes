@@ -51,7 +51,7 @@ saute `android-compile` seulement.
 
 ## Gate et invariants
 
-- `make check` est le gate de merge : 10 étapes, dont la compilation Kotlin ET
+- `make check` est le gate de merge : 9 étapes, dont la compilation Kotlin ET
   Android Lint (`:app:lintDebug`, même invocation Gradle — #627), la
   parité TS ↔ Kotlin exécutée, les scans d'architecture, les contrats et
   `bun audit`. La CI (`.github/workflows/ci.yml`) rejoue exactement ce gate sur

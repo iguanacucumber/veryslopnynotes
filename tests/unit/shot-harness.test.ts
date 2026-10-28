@@ -172,7 +172,7 @@ describe("shot.sh (#133)", () => {
 // ---------------------------------------------------------------------------
 // #151 : la capture doit montrer l'ARBRE DE TRAVAIL, pas un APK d'hier.
 //
-// Fixture façon check-kotlin.ts (kotlin-check.test.ts) : le VRAI shot.sh est
+// Fixture : le VRAI shot.sh est
 // recopié dans un tmpdir avec un faux `gradlew` et un faux `adb`, donc aucun
 // téléphone, aucun SDK, aucun APK commité. Le faux gradlew « compile » en
 // recopiant `apk-content` : changer le code source du test change donc le sha
