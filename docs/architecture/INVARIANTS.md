@@ -852,7 +852,7 @@ page de login n'écrase pas la session du serveur (#526 et I28).
   de compte efface `cacheDir/photos/`.
 - Test : `tests/unit/kotlin-vision.test.ts` (Kotlin EXÉCUTÉ : types bitmap
   bornés, taille décodée, schéma de transcription, prompt Untrusted) +
-  `tests/web/cahier.test.ts` (le pont ne renvoie que du texte, l'écran exige
+  `tests/web/course-notes.test.ts` (le pont ne renvoie que du texte, l'écran exige
   un geste explicite) + `tests/unit/kotlin-vision.test.ts` (source :
   `PhotoPrep` ré-encode/borne, `LocalDataStore` purge les photos).
 - Commande : `make check`.
@@ -860,5 +860,5 @@ page de login n'écrase pas la session du serveur (#526 et I28).
   `android/app/VsnBridge.kt`, `android/core/Vision.kt`,
   `android/core/LessonAi.kt`, `android/core/HomeworkAi.kt`,
   `android/data/OpenRouterLlm.kt`, `android/data/LocalDataStore.kt`,
-  `web/src/features/cahier/CahierScreen.tsx`,
+  `web/src/features/course-notes/CourseNotesScreen.tsx`,
   `web/src/features/tasks/TasksScreen.tsx`.

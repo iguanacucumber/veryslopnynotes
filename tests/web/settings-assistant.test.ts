@@ -47,8 +47,8 @@ describe("réglages — une seule section Assistant (#612)", () => {
   test("Cahier et Fiches sont atteignables depuis Assistant", () => {
     const assistant = between(settings, '<Section title="Assistant">', '<Section title="Avancé">');
     expect(settings).toContain("useViewNavigate");
-    expect(assistant).toContain('navigate("/cahier")');
-    expect(assistant).toContain('navigate("/fiches")');
+    expect(assistant).toContain('navigate("/course-notes")');
+    expect(assistant).toContain('navigate("/revision-sheets")');
   });
 
   test("oublier la clé passe par une confirmation destructive", () => {
@@ -101,8 +101,8 @@ describe("profil — assistant découvrable (#612)", () => {
     expect(assistant).toContain("Générées depuis un devoir");
     expect(assistant).toContain("<IconBook");
     expect(assistant).toContain("<IconSparkles");
-    expect(assistant).toContain('navigate("/cahier")');
-    expect(assistant).toContain('navigate("/fiches")');
+    expect(assistant).toContain('navigate("/course-notes")');
+    expect(assistant).toContain('navigate("/revision-sheets")');
   });
 
   test("Ressources garde les quatre entrées scolaires, sans doublon assistant", () => {
@@ -111,7 +111,7 @@ describe("profil — assistant découvrable (#612)", () => {
     expect(resources).toContain('navigate("/news")');
     expect(resources).toContain('navigate("/canteen")');
     expect(resources).toContain('navigate("/attendance")');
-    expect(resources).not.toContain('navigate("/cahier")');
-    expect(resources).not.toContain('navigate("/fiches")');
+    expect(resources).not.toContain('navigate("/course-notes")');
+    expect(resources).not.toContain('navigate("/revision-sheets")');
   });
 });

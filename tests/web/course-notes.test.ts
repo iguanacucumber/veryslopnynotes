@@ -17,8 +17,8 @@ function source(path: string): string {
   return readFileSync(join(WEB, path), "utf8");
 }
 
-describe("cahier de cours — pont et écran (#586)", () => {
-  test("le pont factice expose les matières, les notes et le manuel", async () => {
+describe("course notes — bridge and screen (#586)", () => {
+  test("the mock bridge exposes subjects, notes and manual settings", async () => {
     const snapshot = await mockCall<LessonsSnapshot>("lessons.list", {});
     expect(Array.isArray(snapshot.subjects)).toBe(true);
     expect(snapshot.maxTextChars).toBe(4000);
@@ -27,7 +27,7 @@ describe("cahier de cours — pont et écran (#586)", () => {
     expect(math?.notes.length).toBeGreaterThan(0);
   });
 
-  test("une note est créée, relue, modifiée puis supprimée", async () => {
+  test("a note is created, read back, edited and deleted", async () => {
     const saved = await mockCall<LessonSaveResult>("lessons.save", {
       subject: "NSI",
       title: "Bases SQL",
@@ -58,7 +58,7 @@ describe("cahier de cours — pont et écran (#586)", () => {
     expect(after.subjects.flatMap((item) => item.notes).some((item) => item.id === summary!.id)).toBe(false);
   });
 
-  test("le réglage du manuel est par matière", async () => {
+  test("the manual toggle is per subject", async () => {
     const disabled = await mockCall<LessonSaveResult>("lessons.setManual", {
       subject: "MATHEMATIQUES",
       enabled: false,
@@ -69,7 +69,7 @@ describe("cahier de cours — pont et écran (#586)", () => {
     await mockCall<LessonSaveResult>("lessons.setManual", { subject: "MATHEMATIQUES", enabled: true });
   });
 
-  test("une photo de cours revient en brouillon, jamais en image dans le pont", async () => {
+  test("a course photo comes back as a draft, never as an image on the bridge", async () => {
     const result = await mockCall<LessonPhotoResult>("lessons.addPhoto", {
       subject: "MATHEMATIQUES",
       source: "camera",
@@ -77,66 +77,66 @@ describe("cahier de cours — pont et écran (#586)", () => {
     expect(result.ok).toBe(true);
     expect(result.title).toBeTruthy();
     expect(result.text).toContain("transcrit");
-    // Le contrat ne transporte que du texte : aucun champ base64/data URL.
+    // The contract only carries text: no base64/data URL field.
     expect(JSON.stringify(result)).not.toContain("base64");
-    const screen = source("features/cahier/CahierScreen.tsx");
+    const screen = source("features/course-notes/CourseNotesScreen.tsx");
     expect(screen).toContain("bridge.addLessonPhoto");
     expect(screen).toContain("Prendre une photo");
     expect(screen).toContain("Choisir une image");
     expect(screen).toContain("puis elle est supprimée");
   });
 
-  test("les matières sans cours sont des lignes compactes, pas des cartes", () => {
-    const screen = source("features/cahier/CahierScreen.tsx");
-    // Une carte complète seulement quand la matière a des cours.
+  test("subjects without notes are compact rows, not cards", () => {
+    const screen = source("features/course-notes/CourseNotesScreen.tsx");
+    // A full card only when the subject has notes.
     expect(screen).toContain("item.notes.length > 0");
     expect(screen).toContain("item.notes.length === 0");
     expect(screen).toContain('title="Sans cours"');
-    expect(screen).toContain("cahier-empty-row");
-    const card = screen.indexOf('className="cahier-subject"');
+    expect(screen).toContain("course-notes-empty-row");
+    const card = screen.indexOf('className="course-notes-subject"');
     expect(card).toBeGreaterThan(screen.indexOf("{withNotes.map((subject) =>"));
     expect(card).toBeLessThan(screen.indexOf("{withoutNotes.length > 0"));
   });
 
-  test("une seule note de confidentialité, un seul sélecteur photo", () => {
-    const screen = source("features/cahier/CahierScreen.tsx");
-    // La note de confidentialité est globale : une seule occurrence.
+  test("one privacy note, one photo picker", () => {
+    const screen = source("features/course-notes/CourseNotesScreen.tsx");
+    // The privacy note is global: one occurrence only.
     expect(screen.match(/puis elle est supprimée/g)).toHaveLength(1);
     expect(screen).not.toContain("La photo part directement");
-    // Le choix caméra/galerie est un dialogue unique, au niveau de l'écran.
+    // The camera/gallery choice is one dialog at screen level.
     expect(screen.match(/Prendre une photo/g)).toHaveLength(1);
     expect(screen.match(/Choisir une image/g)).toHaveLength(1);
     expect(screen).toContain("open={photoTarget !== null}");
     expect(screen.match(/bridge\.addLessonPhoto/g)).toHaveLength(1);
-    // Statut du manuel court, pas un paragraphe par matière.
+    // Short manual status, not one paragraph per subject.
     expect(screen).toContain("Cahier seul");
     expect(screen).toContain("Sans manuel");
-    expect(screen).toContain("cahier-status");
+    expect(screen).toContain("course-notes-status");
     expect(screen).not.toContain("Manuel ignoré");
-    // Aucun HTML injecté.
+    // No injected HTML.
     expect(screen).not.toContain("innerHTML");
     expect(screen).not.toContain("dangerouslySetInnerHTML");
   });
 
-  test("après une photo, le brouillon demande une relecture explicite", () => {
-    const screen = source("features/cahier/CahierScreen.tsx");
-    // Le dialogue n'est plus celui d'une saisie manuelle.
+  test("after a photo, the draft asks for an explicit review", () => {
+    const screen = source("features/course-notes/CourseNotesScreen.tsx");
+    // The dialog is no longer the manual entry one.
     expect(screen).toContain("Vérifier la photo");
     expect(screen).toContain("Photo transcrite");
     expect(screen).toContain("La photo a été effacée");
-    // Reprendre sans perdre le brouillon tant que la capture n'a pas abouti.
+    // Retake without losing the draft until capture succeeds.
     expect(screen).toContain("retakePhoto");
     expect(screen).toContain("Reprendre");
     expect(screen).toContain("Galerie");
     expect(screen).toContain("Ce brouillon sera remplacé");
-    // Attente et échec ont leur propre surface, pas une notification fugace.
+    // Loading and failure have their own surface, not a fleeting toast.
     expect(screen).toContain("Transcription de la photo");
-    expect(screen).toContain("cahier-photo-progress");
+    expect(screen).toContain("course-notes-photo-progress");
     expect(screen).toContain("Photo non transcrite");
     expect(screen).toContain("retryPhoto");
   });
 
-  test("le cahier est une source des devoirs et des fiches, jamais un miroir UI", () => {
+  test("course notes feed homework and revision sheets, never a UI mirror", () => {
     const bridge = readFileSync(
       join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
       "utf8",
@@ -145,26 +145,29 @@ describe("cahier de cours — pont et écran (#586)", () => {
     expect(bridge).toContain("LessonNotes.sources(lessons.notes(), a.subject)");
     expect(bridge).toContain("manualAvailableForSubject");
     expect(bridge).toContain("if (!manuals.isEnabled(subject)) return null");
-    // Le cahier est dans offline/ : la purge de compte l'emporte.
-    expect(bridge).toContain('File(ctx.filesDir, "offline/cahier.json")');
+    // Course notes live in offline/: account purge removes them.
+    expect(bridge).toContain('File(ctx.filesDir, "offline/course-notes.json")');
+    // Pre-rename file is read until the first successful write migrates it.
+    expect(bridge).toContain('legacyFile = File(ctx.filesDir, "offline/cahier.json")');
     // La matière du devoir décide : pas un drapeau global.
     const tasks = source("features/tasks/TasksScreen.tsx");
     expect(tasks).toContain("lessonSubjects.includes(assignment.subject)");
     expect(tasks).toContain("manualSubjects.includes(assignment.subject)");
   });
 
-  test("l'écran est routé et relié au profil", () => {
+  test("the screen is routed and linked from the profile", () => {
+    expect(source("App.tsx")).toContain('path="/course-notes"');
     expect(source("App.tsx")).toContain('path="/cahier"');
-    expect(source("ui/AppShell.tsx")).toContain('"/cahier"');
-    expect(source("features/profile/ProfileScreen.tsx")).toContain('navigate("/cahier")');
-    const screen = source("features/cahier/CahierScreen.tsx");
+    expect(source("ui/AppShell.tsx")).toContain('"/course-notes"');
+    expect(source("features/profile/ProfileScreen.tsx")).toContain('navigate("/course-notes")');
+    const screen = source("features/course-notes/CourseNotesScreen.tsx");
     expect(screen).toContain(".lessons()");
     expect(screen).toContain("bridge.saveLesson");
     expect(screen).toContain("bridge.setLessonManual");
     expect(screen).toContain("Supprimer");
   });
 
-  test("le réglage d'assistant texte connaît les matières sources", async () => {
+  test("the text assistant settings know the source subjects", async () => {
     const settings = await mockCall<SettingsSnapshot>("settings.get", {});
     expect(Array.isArray(settings.lessonSubjects)).toBe(true);
     expect(Array.isArray(settings.manualSubjects)).toBe(true);

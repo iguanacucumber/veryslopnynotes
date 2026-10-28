@@ -27,7 +27,8 @@ const ROUTES = [
   ["news", "/news"],
   ["canteen", "/canteen"],
   ["alerts", "/alerts"],
-  ["fiches", "/fiches"],
+  ["revision-sheets", "/revision-sheets"],
+  ["course-notes", "/course-notes"],
   ["pairing", "/pairing"],
 ] as const;
 

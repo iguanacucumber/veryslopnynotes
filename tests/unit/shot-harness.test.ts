@@ -55,13 +55,13 @@ const WITNESSES = new Map<string, { title: string; fragments: string[] }>(
 
 describe("deep links de debug (#133)", () => {
   test("chaque route WEB est un hôte du manifest DEBUG (sinon am start échoue)", () => {
-    expect(ROUTES.length).toBeGreaterThanOrEqual(14);
+    expect(ROUTES.length).toBeGreaterThanOrEqual(16);
     for (const route of ROUTES) {
       expect(DEBUG_MANIFEST).toContain(`<data android:host="${route}" />`);
     }
     // Un hôte de trop ouvrirait une route qui n'existe pas : l'URL est alors
     // muette et l'app s'ouvre sur son écran de départ.
-    const hosts = [...DEBUG_MANIFEST.matchAll(/android:host="([a-z]+)"/g)].map(m => m[1]!);
+    const hosts = [...DEBUG_MANIFEST.matchAll(/android:host="([a-z-]+)"/g)].map(m => m[1]!);
     expect(hosts.sort()).toEqual([...ROUTES].sort());
   });
 

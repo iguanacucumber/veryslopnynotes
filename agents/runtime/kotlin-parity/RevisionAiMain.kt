@@ -99,7 +99,7 @@ private class Driver {
                 }
             }
             try {
-                val fiche = RevisionAi.requestRevisionFiche(
+                val fiche = RevisionAi.requestRevisionSheet(
                     provider,
                     exam(),
                     chunks(),
@@ -143,7 +143,7 @@ private class Driver {
                 }
             }
             try {
-                val fiche = RevisionAi.requestRevisionFiche(provider, exam, chunks, apiKey = "k".repeat(32), nonce = NONCE)
+                val fiche = RevisionAi.requestRevisionSheet(provider, exam, chunks, apiKey = "k".repeat(32), nonce = NONCE)
                 ok(
                     "ok" to JVal.Bool(true),
                     "fiche" to JVal.Str(fiche),

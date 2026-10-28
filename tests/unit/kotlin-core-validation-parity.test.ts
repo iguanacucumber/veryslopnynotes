@@ -7,7 +7,7 @@
 // portent donc sur le code exécuté.
 //
 // Les deux défauts couverts :
-// 1. `Humanize.validateCorrigeForRender` : un champ `sources` MAL FORMÉ
+// 1. `Humanize.validateAnswerKeyForRender` : un champ `sources` MAL FORMÉ
 //    ("abc", {}) devenait une liste VIDE — la source invalide était confondue
 //    avec « aucune source », et le texte sortait comme un corrigé validé sans
 //    sources. Fail-closed : c'est un REFUS, pas une liste vide.
@@ -47,10 +47,14 @@ interface CapabilitiesResult {
   disabled: string[];
 }
 
-async function validate(corrige: unknown): Promise<HumanizeResult> {
+async function validate(answerKey: unknown): Promise<HumanizeResult> {
   return JSON.parse(
-    await link!.ask({ op: "humanize", corrige: JSON.stringify(corrige) }, { allowError: true }),
+    await link!.ask({ op: "humanize", answerKey: JSON.stringify(answerKey) }, { allowError: true }),
   ) as HumanizeResult;
+}
+
+async function askDriver(op: unknown): Promise<any> {
+  return JSON.parse(await link!.ask(op, { allowError: true }));
 }
 
 async function probe(
@@ -167,5 +171,19 @@ describe("capabilities (#413) — un contrat invalide vaut « inconnu », pas «
     expect(block).toContain("?: JSONObject.NULL");
     // Et aucune liste d'onglets vide n'est publiée (elle=blackouterait).
     expect(block).not.toMatch(/put\(\s*"tabs"\s*,\s*JSONArray\(\s*emptyList\(\)/);
+  });
+});
+
+describe("answer-key storage migration", () => {
+  test.skipIf(skip)("new writes use homework:answer-key, not the old prefix", async () => {
+    const r = await askDriver({ op: "saveAnswerKey", id: "hw-1", answerKey: JSON.stringify({ answer: "Une réponse" }) });
+    expect(r.key).toBe("homework:answer-key:hw-1");
+  });
+
+  test.skipIf(skip)("legacy homework:corrige refs stay readable", async () => {
+    await askDriver({ op: "seedLegacyAnswerKey", id: "hw-2" });
+    const r = await askDriver({ op: "loadAnswerKey", id: "hw-2" });
+    expect(r.found).toBe(true);
+    expect(r.text).toContain("legacy rendered");
   });
 });

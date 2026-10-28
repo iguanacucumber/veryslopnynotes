@@ -25,7 +25,7 @@ import {
   IconTrash,
   IconWarning,
 } from "../../ui/icons";
-import "./cahier.css";
+import "./course-notes.css";
 
 function messageOf(error: unknown, fallback: string): string {
   if (error instanceof BridgeCallError) {
@@ -69,7 +69,7 @@ type PhotoIssue = {
 };
 
 /** Cahier de cours local (#586) : la mémoire de l'assistant par matière. */
-export function CahierScreen() {
+export function CourseNotesScreen() {
   const { notify, refreshTick, dark } = useApp();
   const [snapshot, setSnapshot] = useState<LessonsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -332,21 +332,21 @@ export function CahierScreen() {
         }
       />
 
-      <Card className="card--flat cahier-privacy">
-        <details className="cahier-privacy__details">
-          <summary className="cahier-privacy__summary">
-            <span className="cahier-privacy__icon" aria-hidden="true">
+      <Card className="card--flat course-notes-privacy">
+        <details className="course-notes-privacy__details">
+          <summary className="course-notes-privacy__summary">
+            <span className="course-notes-privacy__icon" aria-hidden="true">
               <IconShield size={18} />
             </span>
             <span className="grow">
               <strong className="t-body-m">Tes cours restent sur ton téléphone</strong>
               <span className="tiny muted">Sources privées, utilisées seulement quand tu demandes de l’aide.</span>
             </span>
-            <span className="cahier-privacy__chevron" aria-hidden="true">
+            <span className="course-notes-privacy__chevron" aria-hidden="true">
               <IconChevronRight size={16} />
             </span>
           </summary>
-          <div className="cahier-privacy__body">
+          <div className="course-notes-privacy__body">
             <p className="t-body-m">
               Garde ici les cours de tes matières. L’assistant les utilise comme sources pour l’aide
               devoirs et les fiches de révision, même quand tu n’as pas de manuel.
@@ -378,13 +378,13 @@ export function CahierScreen() {
       {withNotes.map((subject) => {
         const status = manualStatus(subject);
         return (
-          <Card key={subject.subject} as="article" className="cahier-subject">
-            <div className="cahier-subject__head">
+          <Card key={subject.subject} as="article" className="course-notes-subject">
+            <div className="course-notes-subject__head">
               <SubjectAvatar subject={subject.subject} size={42} dark={dark} />
               <div className="grow">
-                <h2 className="cahier-subject__title">{subject.subject}</h2>
-                <span className="cahier-subject__meta">
-                  <span className={`cahier-status cahier-status--${status.tone}`}>{status.label}</span>
+                <h2 className="course-notes-subject__title">{subject.subject}</h2>
+                <span className="course-notes-subject__meta">
+                  <span className={`course-notes-status course-notes-status--${status.tone}`}>{status.label}</span>
                   <span className="t-caption muted">
                     {subject.notes.length} cours
                   </span>
@@ -392,8 +392,8 @@ export function CahierScreen() {
               </div>
             </div>
 
-            <div className="cahier-manual">
-              <label className="cahier-manual__label">
+            <div className="course-notes-manual">
+              <label className="course-notes-manual__label">
                 <input
                   type="checkbox"
                   checked={subject.manualEnabled}
@@ -404,12 +404,12 @@ export function CahierScreen() {
               </label>
             </div>
 
-            <div className="rows cahier-subject__notes">
+            <div className="rows course-notes-subject__notes">
               {subject.notes.map((note) => (
                 <ListRow
                   key={note.id}
                   leading={
-                    <span className="cahier-note-icon" aria-hidden="true">
+                    <span className="course-notes-note-icon" aria-hidden="true">
                       <IconBook size={16} />
                     </span>
                   }
@@ -420,7 +420,7 @@ export function CahierScreen() {
               ))}
             </div>
 
-            <div className="cahier-subject__actions">
+            <div className="course-notes-subject__actions">
               <button type="button" className="btn btn--small" onClick={() => newNote(subject.subject)}>
                 <IconPlus size={16} />
                 Ajouter un cours
@@ -445,14 +445,14 @@ export function CahierScreen() {
           title="Sans cours"
           action={<span className="tiny muted">{withoutNotes.length}</span>}
         >
-          <p className="tiny muted cahier-empty-hint">Une photo ou un cours écrit pour démarrer.</p>
+          <p className="tiny muted course-notes-empty-hint">Une photo ou un cours écrit pour démarrer.</p>
           <Card className="card--flat">
-            <div className="cahier-empty-list">
+            <div className="course-notes-empty-list">
               {withoutNotes.map((subject) => (
-                <div key={subject.subject} className="cahier-empty-row">
+                <div key={subject.subject} className="course-notes-empty-row">
                   <SubjectAvatar subject={subject.subject} size={30} dark={dark} />
-                  <span className="grow cahier-empty-row__name">{subject.subject}</span>
-                  <div className="cahier-empty-row__actions">
+                  <span className="grow course-notes-empty-row__name">{subject.subject}</span>
+                  <div className="course-notes-empty-row__actions">
                     <button
                       type="button"
                       className="icon-btn"
@@ -544,7 +544,7 @@ export function CahierScreen() {
         onClose={() => undefined}
         actions={null}
       >
-        <p className="cahier-photo-progress" role="status">
+        <p className="course-notes-photo-progress" role="status">
           <span className="spinner" aria-hidden="true" />
           <span>Lecture de la photo…</span>
         </p>
@@ -633,12 +633,12 @@ export function CahierScreen() {
         {editor ? (
           <>
             {editor.fromPhoto ? (
-              <div className={`cahier-photo${photoBusy !== null ? " cahier-photo--busy" : ""}`}>
-                <span className="cahier-photo__icon" aria-hidden="true">
+              <div className={`course-notes-photo${photoBusy !== null ? " course-notes-photo--busy" : ""}`}>
+                <span className="course-notes-photo__icon" aria-hidden="true">
                   {photoBusy !== null ? <span className="spinner" /> : <IconCheck size={18} />}
                 </span>
                 <div className="grow">
-                  <p className="cahier-photo__status" role="status">
+                  <p className="course-notes-photo__status" role="status">
                     <strong className="t-body">
                       {photoBusy !== null ? "Nouvelle lecture en cours…" : "Photo transcrite"}
                     </strong>
@@ -649,7 +649,7 @@ export function CahierScreen() {
                     </span>
                   </p>
                   {photoBusy === null ? (
-                    <div className="cahier-photo__actions">
+                    <div className="course-notes-photo__actions">
                       <button
                         type="button"
                         className="chip"

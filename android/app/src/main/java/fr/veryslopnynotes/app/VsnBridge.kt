@@ -146,7 +146,10 @@ class VsnBridge(
     // du compte). Le fichier est relu avant chaque fusion par le dépôt.
     private val lessons = LessonNotesRepository(
         try {
-            FileLessonNotesStore(File(ctx.filesDir, "offline/cahier.json"))
+            FileLessonNotesStore(
+                File(ctx.filesDir, "offline/course-notes.json"),
+                legacyFile = File(ctx.filesDir, "offline/cahier.json"),
+            )
         } catch (_: Exception) {
             InMemoryLessonNotesStore()
         },
@@ -1419,7 +1422,7 @@ class VsnBridge(
 
     /**
      * Fiche de révision locale : même pipeline validé que le reste de l'app
-     * (`RevisionAi.requestRevisionFiche` + `assembleRevisionSheet`), clé lue à
+     * (`RevisionAi.requestRevisionSheet` + `assembleRevisionSheet`), clé lue à
      * l'appel, sortie contrôlée par core (I4/I5). Aucune donnée du devoir ne
      * sort de l'appareil ailleurs que dans ce prompt OpenRouter déclaré comme
      * donnée (I6).
@@ -1462,7 +1465,7 @@ class VsnBridge(
             // un seul endroit decide du prompt et du schema.
             // #594 : même délai que l'aide photo — la fiche (manuel + consigne)
             // prend souvent plus de 20 s sur un modèle gratuit.
-            val fiche = RevisionAi.requestRevisionFiche(OpenRouterLlm(timeoutMs = AWAIT_LLM_MS), exam, chunks, apiKey)
+            val fiche = RevisionAi.requestRevisionSheet(OpenRouterLlm(timeoutMs = AWAIT_LLM_MS), exam, chunks, apiKey)
             val candidate = ExamCandidate(
                 source = "assignment",
                 id = assignment.id,

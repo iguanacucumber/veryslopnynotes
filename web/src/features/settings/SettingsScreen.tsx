@@ -490,11 +490,11 @@ export default function SettingsScreen() {
             Sources de l’assistant
           </p>
           <div className="row row--wrap">
-            <button type="button" className="btn btn--ghost btn--small" onClick={() => navigate("/cahier")}>
+            <button type="button" className="btn btn--ghost btn--small" onClick={() => navigate("/course-notes")}>
               <IconBook size={16} />
               Cahier de cours
             </button>
-            <button type="button" className="btn btn--ghost btn--small" onClick={() => navigate("/fiches")}>
+            <button type="button" className="btn btn--ghost btn--small" onClick={() => navigate("/revision-sheets")}>
               <IconSparkles size={16} />
               Fiches de révision
             </button>

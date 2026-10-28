@@ -393,7 +393,7 @@ describe("invariants", () => {
       const c = codeOnly(readFileSync(f, "utf8"));
       return (
         /generate\w*\s*\(/.test(c) ||
-        /requestRevisionFiche\s*\(/.test(c) ||
+        /requestRevisionSheet\s*\(/.test(c) ||
         /fetch\s*\(|XMLHttpRequest|WebSocket|okhttp3|HttpURLConnection|newCall\s*\(/.test(c)
       );
     });
@@ -416,9 +416,9 @@ describe("invariants", () => {
       ),
     );
     // Le point d'entree canonique…
-    expect(bridge).toMatch(/RevisionAi\.requestRevisionFiche\(/);
+    expect(bridge).toMatch(/RevisionAi\.requestRevisionSheet\(/);
     // …avec la cle de l'app relayee…
-    expect(bridge).toMatch(/requestRevisionFiche\([^\n]*apiKey/);
+    expect(bridge).toMatch(/requestRevisionSheet\([^\n]*apiKey/);
     // …et plus AUCUN appel fournisseur a la main pour la fiche.
     expect(bridge).not.toMatch(/generateSafe\(/);
     expect(bridge).not.toMatch(/revisionPromptFor\(/);

@@ -96,7 +96,7 @@ describe("fiche de revision — le prompt demande le JSON attendu (#367)", () =>
 });
 
 describe("fiche de revision — le point d'entree public relaie la cle (#428)", () => {
-  // Avant #428, `requestRevisionFiche` OUBLIAIT la clé : l'appel partait
+  // Avant #428, `requestRevisionSheet` OUBLIAIT la clé : l'appel partait
   // sans, et `OpenRouterLlm` levait « clé LLM absente » AVANT tout appel
   // HTTP. Le point d'entrée documenté ne pouvait donc jamais produire de fiche.
   test.skipIf(skip)("avec une cle, le fournisseur est appele et la fiche est rendue", async () => {
@@ -153,7 +153,7 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
   test("le fournisseur porte le délai du pont, pas le défaut 20 s (#594)", () => {
     // Un modèle gratuit lent est tué à 20 s par le défaut OkHttp alors que
     // le pont attend AWAIT_LLM_MS (45 s) : même délai que l'aide photo.
-    expect(bridge).toMatch(/requestRevisionFiche\(OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\)/);
+    expect(bridge).toMatch(/requestRevisionSheet\(OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\)/);
   });
 
   test("la fiche cherche le devoir dans la semaine AFFICHÉE (#369, #596)", () => {
@@ -198,7 +198,7 @@ describe("fiche de revision — l'id du devoir ne part pas dans le prompt (#606)
       const r = JSON.parse(
         await ask({ op: "promptFor", id, subject: "MATHEMATIQUES", date: "2026-10-26", matched: "Exercices n°2 à 4" }),
       ) as PromptFor;
-      // Le vrai chemin public (requestRevisionFiche → garde I4 → parse I5) passe.
+      // Le vrai chemin public (requestRevisionSheet → garde I4 → parse I5) passe.
       expect(r.ok).toBe(true);
       expect(r.body).toContain("MATHEMATIQUES");
       expect(r.body).toContain("2026-10-26");

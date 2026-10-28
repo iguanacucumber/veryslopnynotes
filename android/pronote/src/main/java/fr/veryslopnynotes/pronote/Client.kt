@@ -102,7 +102,7 @@ open class ClientBase(
     override var attributes: Map<String, String> = emptyMap()
     @Volatile
     override var funcOptions: JVal = JVal.Obj(LinkedHashMap())
-    var parametresUtilisateur: JVal = JVal.Obj(LinkedHashMap())
+    var userSettings: JVal = JVal.Obj(LinkedHashMap())
     lateinit var info: ClientInfo
     override val infoId: String? get() = info.id
     lateinit var startDay: LocalDateTime
@@ -248,12 +248,12 @@ open class ClientBase(
         if ((loginMode == "qr_code" || loginMode == "token") && jsTruthy(authData.fields["jetonConnexionAppliMobile"])) {
             password = strOf(authData.fields["jetonConnexionAppliMobile"])
         }
-        parametresUtilisateur = post("ParametresUtilisateur", null, null)
-        val ressource = (((parametresUtilisateur as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
+        userSettings = post("ParametresUtilisateur", null, null)
+        val ressource = (((userSettings as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
             ?.fields?.get("data") as? JVal.Obj)?.fields?.get("ressource")
         info = ClientInfo(this, ressource)
         communication.authorizedOnglets =
-            prepareOnglets((((parametresUtilisateur as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
+            prepareOnglets((((userSettings as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
                 ?.fields?.get("data") as? JVal.Obj)?.fields?.get("listeOnglets"))
         return true.also { logged_in = true }
     }
@@ -686,7 +686,7 @@ open class Client(
     private fun objStr(obj: JVal?, key: String): JVal? = (obj as? JVal.Obj)?.fields?.get(key)
 
     private fun userResource(): JVal? =
-        ((((parametresUtilisateur as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
+        ((((userSettings as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
             ?.fields?.get("data") as? JVal.Obj)?.fields?.get("ressource"))
 
     /** Destinataires (enseignants `G:3` + vie sco `G:34`, concaténés dans l'ordre). */

@@ -89,8 +89,8 @@ saute `android-compile` seulement.
   passe par cette règle.
 
 Décisions : [`docs/adr/`](docs/adr/), à commencer par
-[ADR-005](docs/adr/005-regles-et-architecture.md) et la revue
-[`docs/architecture/REVUE-2026-10.md`](docs/architecture/REVUE-2026-10.md).
+[ADR-005](docs/adr/005-rules-and-architecture.md) et la revue
+[`docs/architecture/REVIEW-2026-10.md`](docs/architecture/REVIEW-2026-10.md).
 Build/release : [`docs/RELEASE.md`](docs/RELEASE.md). Modules :
 [`android/README.md`](android/README.md), [`web/README.md`](web/README.md),
 [`server/README.md`](server/README.md).

@@ -1,14 +1,14 @@
-// #586 : le cahier de cours est une mémoire LOCALE par matière.
+// #586: course notes are a LOCAL memory per subject.
 //
-// VRAI Kotlin exécuté : `core/LessonNote.kt` est compilé par le harnais puis
-// piloté par `agents/runtime/kotlin-parity/LessonNotesMain.kt`. Les règles
-// testées sont celles qui décident ce que l'assistant peut citer : validation,
-// sélection par matière, bornes des sources.
+// Real Kotlin runs here: `core/LessonNote.kt` is compiled by the harness and
+// driven by `agents/runtime/kotlin-parity/LessonNotesMain.kt`. The rules under
+// test decide what the assistant may cite: validation, per-subject selection,
+// source bounds.
 //
-// Le stockage disque (`data/LessonNotesStore.kt`) importe `org.json` (API
-// Android, absente hors Gradle) : il est couvert par un test de source qui
-// vérifie qu'il écrit via `OfflineArtifacts` (garde d'époque), plus le test
-// Kotlin exécuté de #404 pour la garde elle-même.
+// The disk store (`data/LessonNotesStore.kt`) imports `org.json` (Android API,
+// absent outside Gradle): it is covered by a source test checking that it
+// writes through `OfflineArtifacts` (epoch guard), plus the executed Kotlin
+// test from #404 for the guard itself.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -33,11 +33,11 @@ function note(id: string, subject: string, title: string, text: string, createdA
   return { id, subject, title, text, createdAt };
 }
 
-describe("cahier de cours — règles exécutées (#586)", () => {
-  test.skipIf(skip)("une note conforme est acceptée, une note hors contrat est refusée", async () => {
+describe("course notes — executed rules (#586)", () => {
+  test.skipIf(skip)("a conforming note is accepted, an out-of-contract note is refused", async () => {
     expect((await ask({ op: "valid", ...note("n1", "Mathématiques", "Chapitre 4", "f'(x)=2x") })).valid).toBe(true);
-    // Identifiant hors schéma : il finirait dans un nom de fichier ou une
-    // réponse JSON, donc il est refusé AVANT le stockage.
+    // Out-of-schema id: it would end up in a file name or JSON response, so it
+    // is refused BEFORE storage.
     expect((await ask({ op: "valid", ...note("../x", "Maths", "T", "texte") })).valid).toBe(false);
     expect((await ask({ op: "valid", ...note("n1", "", "T", "texte") })).valid).toBe(false);
     expect((await ask({ op: "valid", ...note("n1", "Maths", "", "texte") })).valid).toBe(false);
@@ -46,7 +46,7 @@ describe("cahier de cours — règles exécutées (#586)", () => {
     expect((await ask({ op: "valid", ...note("n1", "Maths", "T", "texte", "pas une date") })).valid).toBe(false);
   });
 
-  test.skipIf(skip)("une matière ne reçoit que SES cours, les plus récents d'abord", async () => {
+  test.skipIf(skip)("a subject receives only ITS notes, newest first", async () => {
     const notes = [
       note("n1", "Mathématiques", "Ancien", "a", "2026-10-01T08:00:00Z"),
       note("n2", "Mathématiques", "Récent", "b", "2026-10-20T08:00:00Z"),
@@ -56,29 +56,34 @@ describe("cahier de cours — règles exécutées (#586)", () => {
     expect(res.ids).toEqual(["n2", "n1"]);
   });
 
-  test.skipIf(skip)("les sources du cahier sont bornées et étiquetées pour la citation", async () => {
+  test.skipIf(skip)("course note sources are bounded and labelled for citation", async () => {
     const notes = Array.from({ length: 6 }, (_, i) =>
       note(`n${i}`, "Maths", `Cours ${i}`, "x".repeat(4000), `2026-10-2${i}T08:00:00Z`),
     );
     const res = await ask({ op: "sources", subject: "Maths", notes });
-    // 3 sources maximum, chacune bornée à la borne d'une source devoirs.
+    // At most 3 sources, each bounded like a homework source.
     expect(res.count).toBe(3);
     expect(res.labels).toEqual(["Cours : Cours 5", "Cours : Cours 4", "Cours : Cours 3"]);
     for (const text of res.texts as string[]) expect(text.length).toBeLessThanOrEqual(2000);
   });
 
-  test("le stockage disque passe par la garde d'époque et relit des notes valides", () => {
+  test("the disk store goes through the epoch guard and reads valid notes", () => {
     const store = readFileSync(STORE, "utf8");
-    // Une écriture pendant une déconnexion est ABANDONNÉE : le fichier n'est
-    // pas créé et le dossier purgé n'est pas ressuscité (I16/#404).
+    // A write during logout is ABANDONED: the file is not created and the
+    // purged directory is not resurrected (I16/#404).
     expect(store).toContain("OfflineArtifacts.writeText(file, lessonNotesJson(notes), epoch)");
-    // Une entrée corrompue est ignorée, jamais servie à l'assistant.
+    // A corrupt entry is ignored, never served to the assistant.
     expect(store).toContain("if (LessonNote.isValid(note)) out.add(note)");
-    // Le fichier vit dans offline/ : la purge de compte le supprime en bloc.
+    // Pre-rename file is read until the first successful write migrates it.
+    expect(store).toContain("legacyFile?.isFile == true -> parseLessonNotes(legacyFile.readText())");
+    // The old file is deleted only AFTER the new one is written.
+    expect(store).toContain("if (written) legacyFile?.takeIf { it.isFile }?.delete()");
+    // The file lives in offline/: account purge deletes it wholesale.
     const bridge = readFileSync(
       join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
       "utf8",
     );
-    expect(bridge).toContain('File(ctx.filesDir, "offline/cahier.json")');
+    expect(bridge).toContain('File(ctx.filesDir, "offline/course-notes.json")');
+    expect(bridge).toContain('legacyFile = File(ctx.filesDir, "offline/cahier.json")');
   });
 });

@@ -8,7 +8,7 @@
 // miroir réécrit en TypeScript.
 //
 // DEUX DÉFAUTS COUVERTS (#413) :
-// 1. `Humanize.validateCorrigeForRender` confondait un champ `sources`
+// 1. `Humanize.validateAnswerKeyForRender` confondait un champ `sources`
 //    MAL FORMÉ ("abc", {}) avec une liste VIDE : la source invalide passait
 //    pour « aucune source » et le texte sortait comme un corrigé validé.
 // 2. `CapabilityProbe.fromProbe` renvoyait des capacités NON nulles mais
@@ -44,17 +44,56 @@ private fun JsonValue.Obj.boolMap(key: String): Map<String, Boolean> {
 private fun tabsValue(tabs: List<String>): JsonValue =
     JsonValue.Arr(tabs.map { JsonValue.Str(it) })
 
+/** In-memory store for the answer-key persistence ops (test-only). */
+private class MemoryAnswerKeyStore : AnswerKeyStore {
+    val values = LinkedHashMap<String, ByteArray>()
+
+    override fun set(key: String, value: ByteArray) {
+        values[key] = value
+    }
+
+    override fun get(key: String): ByteArray? = values[key]
+}
+
+private val answerKeys = MemoryAnswerKeyStore()
+
 /** Opérations : le verdict des validateurs du noyau, tel que l'app les applique. */
 private fun driver(op: JsonValue.Obj): JsonValue = when (op.str("op")) {
     // VALIDATE du corrigé : sources valides (liste) ou refus.
     "humanize" -> {
-        val raw = op.str("corrige")
+        val raw = op.str("answerKey")
             ?: throw IllegalArgumentException("pilote: corrigé absent")
-        val corrige = Humanize.validateCorrigeForRender(parseJsonValue(raw))
+        val answerKey = Humanize.validateAnswerKeyForRender(parseJsonValue(raw))
         obj(
             "ok" to JsonValue.Bool(true),
-            "answer" to JsonValue.Str(corrige.answer),
-            "sources" to tabsValue(corrige.sources),
+            "answer" to JsonValue.Str(answerKey.answer),
+            "sources" to tabsValue(answerKey.sources),
+        )
+    }
+    // Persistance de la clé de réponse : nouveau préfixe, ancien encore lu.
+    "saveAnswerKey" -> {
+        val id = op.str("id") ?: "answer-key-1"
+        val raw = op.str("answerKey") ?: throw IllegalArgumentException("pilote: answerKey absent")
+        val rendered = Humanize.renderAnswerKey(Humanize.validateAnswerKeyForRender(parseJsonValue(raw)))
+        Humanize.saveRenderedAnswerKey(answerKeys, id, rendered)
+        obj(
+            "key" to JsonValue.Str(answerKeys.values.keys.last()),
+            "text" to JsonValue.Str(rendered.text),
+        )
+    }
+    "seedLegacyAnswerKey" -> {
+        val id = op.str("id") ?: "answer-key-1"
+        val payload = "{\"text\":\"legacy rendered\",\"templateVersion\":\"" +
+            HUMANIZE_TEMPLATE_VERSION + "\"}"
+        answerKeys.set("homework:corrige:" + id, payload.toByteArray(Charsets.UTF_8))
+        obj("seeded" to JsonValue.Bool(true))
+    }
+    "loadAnswerKey" -> {
+        val id = op.str("id") ?: "answer-key-1"
+        val loaded = Humanize.loadRenderedAnswerKey(answerKeys, id)
+        obj(
+            "found" to JsonValue.Bool(loaded != null),
+            "text" to JsonValue.Str(loaded?.text ?: ""),
         )
     }
     // Sonde -> capacités : un contrat invalide vaut « rien n'est affirmé ».

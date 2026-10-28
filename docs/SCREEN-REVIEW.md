@@ -1,6 +1,6 @@
-# RECETTE.md — passage en revue des écrans (#148)
+# SCREEN-REVIEW.md — passage en revue des écrans (#148)
 
-Recette **des 14 routes ensemble**, pas écran par écran : les défauts ci-dessous
+Recette **des 16 routes ensemble**, pas écran par écran : les défauts ci-dessous
 n'étaient visibles qu'en comparant deux écrans, deux thèmes ou deux états du
 même écran.
 
@@ -20,7 +20,7 @@ verrouillent les défauts trouvés ; les images se rejouent avec `make shot`.
 
 | jeu | où | quoi |
 |---|---|---|
-| clair / sombre | `shots/<date>/<route>.{light,dark}.png` | les 14 routes, 28 captures |
+| clair / sombre | `shots/<date>/<route>.{light,dark}.png` | les 16 routes, 32 captures |
 | très grande police | `shots/<date>/police-1.3/` | `font_scale = 1.3` (pas le pas d'accessibilité, le maximum du système) |
 | hors ligne (mode avion) | `shots/<date>/etat-avion/` | `cmd connectivity airplane-mode enable` |
 | cache vide à froid | `shots/<date>/etat-cache-vide/` | cache des notes retiré de l'appareil, puis remis |
@@ -70,10 +70,10 @@ de la référence). « Papillon » = l'application de référence.
 
 ## États vérifiés
 
-- **Sombre** (`--theme dark`) : les 14 routes. Aucun fond blanc, aucun texte
+- **Sombre** (`--theme dark`) : les 16 routes. Aucun fond blanc, aucun texte
   blanc sur blanc, aucune couleur de matière illisible. Le rouge d'erreur passe
   par `errorTextColor()` (le rouge de marque vaut 3.70:1 sur la surface sombre).
-- **Très grande police** (`font_scale 1.3`) : les 14 routes. Aucun texte coupé
+- **Très grande police** (`font_scale 1.3`) : les 16 routes. Aucun texte coupé
   net. Les seules troncatures sont les ellipses voulues (ligne d'état des accès
   rapides, libellé de champ `singleLine`) : une troncature annoncée n'est pas
   une coupure.
