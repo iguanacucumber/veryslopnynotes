@@ -143,8 +143,11 @@ describe("check-architecture : parcours des fichiers", () => {
     }
   });
 
+  const AI_FILES = ["Untrusted.kt", "LlmGuard.kt", "AiPrompts.kt", "HomeworkAi.kt", "RevisionAi.kt", "Humanize.kt"];
+
   /** Fixture minimale : quatre modules Android + une source, arêtes Gradle
-   *  déclarées. `scanArchitecture` doit alors rendre un verdict vide. */
+   *  déclarées, un `Client` et les fichiers IA. `scanArchitecture` doit alors
+   *  rendre un verdict vide. */
   function fixtureModules(dir: string): void {
     const edges: Record<string, string[]> = { core: [], pronote: [], data: ["core", "pronote"], app: ["core", "data"] };
     for (const [module, deps] of Object.entries(edges)) {
@@ -157,9 +160,108 @@ describe("check-architecture : parcours des fichiers", () => {
     }
     mkdirSync(join(dir, "android", "core"), { recursive: true });
     writeFileSync(join(dir, "android", "core", "Core.kt"), "class Core\n");
+    const pronote = join(dir, "android", "pronote", "src", "main", "java");
+    mkdirSync(pronote, { recursive: true });
+    writeFileSync(join(pronote, "Client.kt"), "open class ClientBase()\nopen class Client()\n");
+    const ai = join(dir, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
+    mkdirSync(ai, { recursive: true });
+    for (const f of AI_FILES) writeFileSync(join(ai, f), "// fixture IA\n");
     mkdirSync(join(dir, "server"), { recursive: true });
     writeFileSync(join(dir, "server", "index.ts"), "export const a = 1;\n");
   }
+
+  test("une URL Pronote dans android/data est signalée (I1)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-arch-i1-"));
+    try {
+      fixtureModules(dir);
+      expect(scanArchitecture(dir)).toEqual([]);
+      const data = join(dir, "android", "data", "src", "main", "java");
+      mkdirSync(data, { recursive: true });
+      writeFileSync(join(data, "Data.kt"), 'val base = "https://demo.index-education.net/eleve"\n');
+      const fails = scanArchitecture(dir).join("\n");
+      expect(fails).toContain("I1");
+      expect(fails).toContain("Data.kt");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("un accès réseau Pronote dans le serveur est signalé (I2)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-arch-i2-server-"));
+    try {
+      fixtureModules(dir);
+      expect(scanArchitecture(dir)).toEqual([]);
+      writeFileSync(
+        join(dir, "server", "scrape.ts"),
+        'const u = "https://pronote.example.fr/eleve";\nawait fetch(u);\n',
+      );
+      const fails = scanArchitecture(dir).join("\n");
+      expect(fails).toContain("I2");
+      expect(fails).toContain("scrape.ts");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("un transport direct hors pronote est signalé (I2 surface)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-arch-transport-"));
+    try {
+      fixtureModules(dir);
+      expect(scanArchitecture(dir)).toEqual([]);
+      const app = join(dir, "android", "app", "src", "main", "java");
+      mkdirSync(app, { recursive: true });
+      writeFileSync(join(app, "Transport.kt"), "class Transport(val session: HttpSession)\n");
+      const fails = scanArchitecture(dir).join("\n");
+      expect(fails).toContain("I2");
+      expect(fails).toContain("transport direct");
+      expect(fails).toContain("Transport.kt");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("un second Client Android est signalé (I2 surface)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-arch-client-"));
+    try {
+      fixtureModules(dir);
+      expect(scanArchitecture(dir)).toEqual([]);
+      writeFileSync(join(dir, "android", "pronote", "src", "main", "java", "Other.kt"), "open class Client()\n");
+      const fails = scanArchitecture(dir).join("\n");
+      expect(fails).toContain("I2");
+      expect(fails).toContain("UN SEUL Client");
+      expect(fails).toContain("trouvé 2");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("un fichier IA absent est signalé (I4/I5, invariant non vérifiable)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-arch-ai-absent-"));
+    try {
+      fixtureModules(dir);
+      rmSync(join(dir, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core", "Humanize.kt"));
+      const fails = scanArchitecture(dir).join("\n");
+      expect(fails).toContain("I4/I5");
+      expect(fails).toContain("Humanize.kt");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("un secret ou du réseau dans l'IA est signalé (I4/I5)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-arch-ai-"));
+    try {
+      fixtureModules(dir);
+      expect(scanArchitecture(dir)).toEqual([]);
+      const ai = join(dir, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
+      writeFileSync(join(ai, "LlmGuard.kt"), 'val key = "OPENROUTER_API_KEY"\n');
+      expect(scanArchitecture(dir).join("\n")).toContain("I4");
+      writeFileSync(join(ai, "Humanize.kt"), "val u = fetch(url)\n");
+      expect(scanArchitecture(dir).join("\n")).toContain("I5");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 
   test("une arête Gradle non déclarée est signalée (core -> pronote)", () => {
     const dir = mkdtempSync(join(tmpdir(), "check-arch-gradle-"));
