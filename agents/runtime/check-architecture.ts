@@ -81,7 +81,7 @@ export function listFiles(dir: string, out: string[] = []): string[] {
  *
  * #532 : les scanners passaient au VERT quand ils n'avaient rien à scanner.
  * `listFiles` renvoyait une liste VIDE pour un répertoire absent (renommé,
- * déplacé), donc I1, I2, I3 et I9 devenaient **vacuement vrais** : chaque
+ * déplacé), donc I1, I2 et I3 devenaient **vacuement vrais** : chaque
  * étape du gate annonçait « OK » sans avoir rien vérifié. Un invariant non
  * vérifiable n'est pas un invariant respecté — donc c'est un ÉCHEC, bruyant.
  *

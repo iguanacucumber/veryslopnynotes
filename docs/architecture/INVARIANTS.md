@@ -53,7 +53,6 @@ références et les commandes citées.
 | I6 | Tout contenu externe est marqué `Untrusted` ; aucun MIME exécutable. | `tests/unit/android-untrusted.test.ts` |
 | I7 | Aucun effet métier déclenché par une sortie LLM libre. | `tests/architecture/invariants.test.ts` |
 | I8 | Session Pronote et clé LLM hors serveur ; scraper sans auth = local seulement. | `tests/unit/scraper-*.test.ts` |
-| I9 | Aucun code Kotlin mort. | `agents/runtime/check-kotlin.ts` |
 | I10 | WebView sans réseau ni secret ; pont borné, une réponse par entrée. | `tests/architecture/web.test.ts` |
 | I11 | `.agents/` est verrouillé, scanné et sans fuite. | `tests/architecture/skills-lock.test.ts` |
 | I12 | Le job de fond restaure la session avant de lire, sinon `retry`. | `tests/architecture/sync-session.test.ts` |
@@ -81,10 +80,11 @@ références et les commandes citées.
 
 ## Retirés
 
-Aucun retrait à ce jour. Une ligne par ID retiré : ID, date, issue, remplacement éventuel.
+Une ligne par ID retiré : ID, date, issue, remplacement éventuel.
 
 | ID | Date | Issue | Remplacement |
 |---|---|---|---|
+| I9 | 2026-10-28 | #638 | Android Lint (#627, dans le gate) et detekt — les appelants réels, pas le nom. Aucun retrait de code de production ici : les candidats morts partent dans une issue dédiée. |
 
 ## Détail
 
@@ -216,26 +216,6 @@ page de login n'écrase pas la session du serveur (#526 et I28).
 - Test : `tests/architecture/invariants.test.ts` (I8), `tests/unit/android-homework.test.ts`, `tests/unit/scraper-only.test.ts` et `tests/unit/scraper-concurrency.test.ts` ; garde SSRF (littérale + résolution DNS) et jar : `tests/unit/scraper-ssrf.test.ts` ; bornes du HTML lu et délai de lecture : `tests/unit/scraper-limits.test.ts`.
 - Commande : `make check`.
 - Emplacement : `server/`, `Dockerfile.server`, `shared/contracts/`, `android/data/SessionStore.kt`, `android/data/LlmKeyStore.kt`.
-
-## I9 — Pas de code mort dans `android/`
-- Invariant : aucun `fun`/`class` de premier niveau sans appelant dans le code
-  Kotlin. Liste de tolérance = points d'entrée du port encore rejoués par les
-  miroirs (`core/`, `data/`), surface `pronote/`, jobs et IA : c'est la liste
-  qui est gardée, pas du code oublié. Les noms qui n'existaient que pour
-  l'interface Compose ont disparu avec `android/ui/`.
-- **Un scanner sans fichiers à scanner est un ÉCHEC, pas un « OK »** (#532) :
-  les scanners passaient au VERT quand ils n'avaient rien à vérifier (un
-  répertoire absent ou renommé rendait `listFiles` vide) — I1, I2, I3 et I9
-  devenaient **vacuement vrais**, et chaque étape du gate annonçait « OK »
-  sans avoir lu une seule ligne. `check-architecture.ts` exige `android/`,
-  `android/core/` et `server/` présents ET peuplés ; `check-kotlin.ts` refuse
-  un répertoire absent ou vide.
-- Test : `tests/architecture/invariants.test.ts` (I9) +
-  `tests/unit/check-architecture-scan.test.ts` (racine vide / répertoire
-  renommé / répertoire vide = ÉCHEC) +
-  `tests/architecture/kotlin-check.test.ts` (répertoire absent ou vide = FAIL).
-- Commande : `make architecture-test`.
-- Emplacement : `android/**/*`.
 
 ## I10 — WebView sans réseau et sans secret (ADR-004)
 - Invariant : `web/` ne contient ni `fetch`, XHR, WebSocket, EventSource, ni
