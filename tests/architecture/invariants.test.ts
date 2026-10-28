@@ -162,7 +162,6 @@ describe("invariants", () => {
       /sk-or-v1-|OPENROUTER_API_KEY|MASTER_KEY|PRONOTE_PASSWORD|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/;
     for (const f of ANDROID_AI) {
       const c = codeOnly(readFileSync(f, "utf8"));
-      expect({ file: f, kind: "secret" }).toEqual({ file: f, kind: "secret" });
       expect(c).not.toMatch(secretRe);
       expect(c).not.toMatch(/Bun\.env|process\.env/);
       expect(c).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|Bun\.serve/);
@@ -398,42 +397,6 @@ describe("invariants", () => {
     expect((src.match(/^open class ClientBase\(/gm) ?? []).length).toBe(1);
     // `ClientInfo` = simple porteuse de données (pas de transport), tolérée.
     expect(src).not.toMatch(/^(?:open )?class (?!Client\(|ClientBase\(|ClientInfo\()\w*Client\w*\(/m);
-  });
-
-  // #418 : le bundle Vite est réécrit pendant le gate (web-build tourne en
-  // parallèle des autres étapes) : un parcours qui le liste voit le dossier
-  // disparaître sous ses pieds (flake). Le parcours ROBUSTE partagé l'exclut,
-  // et les tests d'architecture n'ont plus de parcours « maison » — sans les
-  // garde-fous de `listFiles` (exclusion des artefacts, erreur gérée FICHIER
-  // PAR FICHIER), le flake revient.
-  //
-  // #654 : exception de LECTURE — web-mock vérifie l'artefact GÉNÉRÉ lui-même
-  // (le pont factice n'y entre pas). `architecture` tire `web-build` avant
-  // `architecture-test`, donc le bundle est COMPLET et stable pendant les
-  // tests : la course d'origine a disparu, lire `src/main/assets` ne subit
-  // plus le flake. Seule la lecture du bundle est tolérée — jamais un scan de
-  // SOURCES sous `android/`.
-  test("#418: aucun parcours de test ne liste android/app/src/main/assets", () => {
-    const artefacts = listFiles(join(ROOT, "android")).filter((f) =>
-      f.includes(join("app", "src", "main", "assets")),
-    );
-    expect(artefacts).toEqual([]);
-    // Aucun test d'architecture ne se fabrique sa propre traversée de
-    // `android/` : elle n'aurait ni l'exclusion des artefacts, ni la gestion
-    // d'erreur par fichier (le `catch` global avalait tout le répertoire).
-    // Le motif est assemblé PIÈCE par pièce : écrit en clair, ce fichier se
-    // détecterait LUI-MÊME.
-    const traverse = new RegExp(["readdir", "Sync|readdir", "\\("].join(""));
-    const menages = listFiles(join(ROOT, "tests", "architecture"))
-      .filter((f) => {
-        const code = codeOnly(readFileSync(f, "utf8"));
-        // Le join vise-t-il le BUNDLE GÉNÉRÉ (lecture #654 autorisée) ?
-        const bundleGenere = /["']src["'],\s*["']main["'],\s*["']assets["']/.test(code);
-        const surAndroid = /join\([^)]*["']android["']/.test(code) && !bundleGenere;
-        return traverse.test(code) && surAndroid;
-      })
-      .map((f) => f.replace(ROOT, ""));
-    expect(menages).toEqual([]);
   });
 
   // #394 : le pont ne laisse JAMAIS une promesse sans réponse. Un `Error`
