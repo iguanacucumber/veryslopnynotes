@@ -6,15 +6,13 @@ import java.math.RoundingMode
 import kotlin.math.abs
 import kotlin.math.floor
 
-// Diff structurée des notes (port Kotlin #207).
+// Empreinte stable des notes et rendu JSON (port Kotlin #207).
 //
 // Porté de `server/jobs/grades.ts` (supprimé en #210 : ce port est la source
-// de vérité, rejoué par les miroirs `tests/unit/android-*.test.ts`). Données structurées uniquement :
-// aucun appel LLM, aucune sortie libre ne déclenche d'événement (I7).
-// Correction de note = événement dédié (nouvelle information à notifier).
-// Les champs de contexte (bonus/facultatif, moyennes de classe, libellé,
-// enseignant) entrent dans l'empreinte — repasser une note en facultatif est
-// une correction.
+// de vérité). Données structurées uniquement : aucun appel LLM, aucune sortie
+// libre ne déclenche d'événement (I7). Les champs de contexte
+// (bonus/facultatif, moyennes de classe, libellé, enseignant) entrent dans
+// l'empreinte — repasser une note en facultatif change l'empreinte.
 //
 // Pur : aucun réseau, aucun SQLite, aucun Android (I3). `Grade` est réutilisé
 // tel quel (`Averages.kt`, contrat 0.7.0).
@@ -22,14 +20,6 @@ import kotlin.math.floor
 // ponytail: `fingerprint` rend du JSON à la main (stdlib seule, zéro
 // dépendance, même sur le téléphone). Upgrade: sérialiseur partagé si un
 // troisième module en a besoin.
-
-/** Notes ajoutées / corrigées / supprimées depuis le dernier snapshot. */
-data class GradeDiff(
-    val added: List<Grade>,
-    /** Même id, contenu différent (correction prof) : à notifier aussi. */
-    val changed: List<Grade>,
-    val removed: List<String>,
-)
 
 /**
  * Rendu d'un `Double` à la `JSON.stringify` : la plus courte décimale qui
@@ -149,25 +139,4 @@ fun fingerprint(g: Grade): String {
         g.teacher?.let { jsonStr(it) } ?: "null",
     )
     return "[${parts.joinToString(",")}]"
-}
-
-/** Diff contre empreintes persistées (moteur sync, snapshot versionné). */
-fun diffAgainstPrints(previous: Map<String, String>, current: List<Grade>): GradeDiff {
-    val added = mutableListOf<Grade>()
-    val changed = mutableListOf<Grade>()
-    val seen = mutableSetOf<String>()
-    for (g in current) {
-        seen.add(g.id)
-        val print = previous[g.id]
-        if (print == null) added.add(g)
-        else if (print != fingerprint(g)) changed.add(g)
-    }
-    val removed = previous.keys.filter { !seen.contains(it) }
-    return GradeDiff(added = added, changed = changed, removed = removed)
-}
-
-fun diffGrades(previous: List<Grade>, current: List<Grade>): GradeDiff {
-    val prints = mutableMapOf<String, String>()
-    for (g in previous) prints[g.id] = fingerprint(g)
-    return diffAgainstPrints(prints, current)
 }

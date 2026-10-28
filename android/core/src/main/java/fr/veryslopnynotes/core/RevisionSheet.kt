@@ -8,11 +8,9 @@ import java.time.Instant
 // le writer PDF-1.4 maison que `RevisionPdf.kt` remplace par `PdfDocument` natif :
 // ce port est la source de vérité). Données
 // structurées uniquement : `ExamCandidate` issu de `detectExams`. Aucun appel
-// modèle ici, aucune sortie libre ne déclenche d'envoi (I7). `high` seul pousse
-// en auto ; `needs_confirm` = confirmation app obligatoire, aucun effet auto.
+// modèle ici, aucune sortie libre ne déclenche d'effet (I7).
 // Contenu assemblé depuis texte validé + sources citées, gabarit versionné
-// stocké par fiche. Push = payload structuré (sujet/date), jamais texte modèle.
-// Logs = compteurs seuls, jamais de token en clair.
+// stocké par fiche. Logs = compteurs seuls, jamais de token en clair.
 //
 // L'export PDF rend le corps ENTIER (il pagine) et la liste CANONIQUE des
 // sources : le bloc « Sources : » écrit par le modèle est validé puis
@@ -54,18 +52,6 @@ fun isRevisionSheetValid(s: RevisionSheet): Boolean {
     if (s.templateVersion != REVISION_TEMPLATE_VERSION) return false
     return true
 }
-
-/** Envoi structuré : décidé par `ExamCandidate` high, pas par texte modèle. */
-interface RevisionPushSender {
-    fun send(deviceTokenHash: String, title: String, body: String)
-}
-
-data class RevisionNotifyResult(
-    val sent: Int,
-    val failed: Int,
-    val sheets: Int,
-    val devices: Int,
-)
 
 /**
  * Stockage kv minimal (miroir du provider de stockage, autres lanes actives dessus).
@@ -121,16 +107,6 @@ fun buildRevisionTitle(exam: ExamCandidate): String {
     return cleanRevision("Fiche révision $subject — ${exam.matched} ${localDay(exam.date)}", 120)
 }
 
-// Seule confiance haute pousse en auto (I7). Incertain = app confirme.
-fun shouldPushForExam(exam: ExamCandidate): Boolean = exam.confidence == EXAM_CONFIDENCE_HIGH
-
-fun formatRevisionPush(exam: ExamCandidate): GradePush {
-    val subject = exam.subject.trim().ifEmpty { "matière" }
-    val title = cleanRevision("Fiche révision dispo en $subject", 120)
-    val body = cleanRevision("DS ${exam.matched} le ${localDay(exam.date)} en $subject : fiche prête", 1000)
-    return GradePush(title = title, body = body)
-}
-
 private fun dedupeRevisionSources(sources: List<String>): List<String> {
     val out = mutableListOf<String>()
     for (s in sources) {
@@ -169,36 +145,6 @@ fun assembleRevisionSheet(
     )
     if (!isRevisionSheetValid(sheet)) throw IllegalArgumentException("fiche invalide (contrat)")
     return sheet
-}
-
-fun notifyRevisionSheets(
-    sheets: List<RevisionSheet>,
-    examsById: Map<String, ExamCandidate>,
-    devices: List<PushDevice>,
-    sender: RevisionPushSender,
-    logger: (String) -> Unit = {},
-): RevisionNotifyResult {
-    val targets = devices.filter { isTokenHash(it.tokenHash) }
-    var sent = 0
-    var failed = 0
-    var pushed = 0
-    for (sheet in sheets) {
-        if (!isRevisionSheetValid(sheet)) continue
-        val exam = examsById[sheet.examId] ?: continue
-        if (!shouldPushForExam(exam)) continue
-        val payload = formatRevisionPush(exam)
-        pushed += 1
-        for (d in targets) {
-            try {
-                sender.send(d.tokenHash, payload.title, payload.body)
-                sent += 1
-            } catch (_: Exception) {
-                failed += 1
-            }
-        }
-    }
-    logger("notify revision sheets=$pushed devices=${targets.size} sent=$sent failed=$failed")
-    return RevisionNotifyResult(sent = sent, failed = failed, sheets = pushed, devices = targets.size)
 }
 
 // --- Stockage kv -------------------------------------------------------------
