@@ -266,38 +266,16 @@ page de login n'écrase pas la session du serveur (#526 et I28).
   `android/core/src/main/java/fr/veryslopnynotes/core/RevisionSheet.kt`.
 
 ## I11 — Contenu vendorisé `.agents/` : docs, pas de passoire
-- Invariant : `.agents/` (skills d'agents copiés depuis des dépôts tiers,
-  verrouillés par `skills-lock.json`) n'est jamais un vecteur de fuite : un
-  VRAI secret y échoue au scan anti-secrets, seuls les exemples de
-  documentation passent. Le jeu de motifs strict du dépôt s'applique partout
-  ailleurs. Aucun secret, domaine, IP ni donnée perso dans ce dossier.
-  **Tous les matchs d'un motif sont inspectés** (#521) : le motif ne passe que
-  si AUCUN match n'est un secret réel. Avant, seul le PREMIER match était
-  inspecté — un placeholder en tête de fichier excusait le fichier **entier**,
-  secret compris.
-  **Le jeu de motifs VENDORED COUVRE toutes les formes du jeu du dépôt**
-  (#522) : le carve-out peut être plus STRICT (exiger une preuve plus
-  forte), jamais plus LARGE. Le jeu vendorisé ne couvrait ni le JWT ni les
-  identifiants dans une URL, le jeu du dépôt si — le dossier tiers, le moins
-  contrôlé, était donc le moins surveillé sur les deux formes les plus
-  répandues. La preuve exigée par I11 s'applique : pour le JWT, les trois
-  segments de longueur plausible ; pour une URL à identifiants, un mot de
-  passe de 12 caractères ou plus.
-  Le contenu vendorisé est VERROUILLÉ de façon vérifiable
-  (#505) : le
-  `computedHash` de `skills-lock.json` vient de l'outil `npx skills`, dont
-  l'algorithme n'est pas documenté dans le dépôt — il n'est donc pas
-  recalculable ici, et le lock amont ne prouve rien tout seul. Le test
-  `skills-lock.test.ts` recalcule un sha256 de chaque ARBRE de skill
-  (chemins + contenu) et le compare à une table : une édition manuelle d'une
-  skill échoue le gate.
-  **La PROVENANCE du lock amont est ÉPINGLÉE** (#534) : le test comparait les
-  NOMS du lock au disque, sans `source`, `sourceType`, `skillPath` ni
-  `computedHash` — éditer `source` vers un autre dépôt laissait le test VERT
-  (le lock était décoratif côté provenance, et `npx skills update` irait
-  chercher le contenu ailleurs). Le verrou vérifiable protège le CONTENU sur
-  disque ; il ne dit pas d'où il vient. Une seule table porte les deux
-  (empreinte + provenance), mise à jour dans la MÊME PR que le lock amont.
+- Invariant : `.agents/` (skills tiers verrouillés par `skills-lock.json`) n'est
+  jamais un vecteur de fuite : un VRAI secret y échoue au scan anti-secrets,
+  seuls les exemples de documentation passent. Le jeu strict s'applique
+  ailleurs ; aucun secret, domaine, IP ni donnée perso. Tous les matchs d'un
+  motif sont inspectés, et le jeu vendorisé couvre toutes les formes du jeu du
+  dépôt : plus STRICT (preuve plus forte), jamais plus LARGE. Le contenu est
+  VERROUILLÉ : sha256 recalculé par ARBRE de skill, comparé à une
+  table (une édition manuelle échoue le gate), et le lock doit porter les MÊMES
+  skills que le disque ; `computedHash` amont n'est pas recalculable. Provenance
+  non vérifiée : l'interroger demanderait le réseau, hors du gate.
 - Test : `tests/architecture/secret-scan.test.ts` (carve-out étroit) +
   `tests/architecture/skills-lock.test.ts` (l'empreinte de chaque arbre
   vendorisé) +
