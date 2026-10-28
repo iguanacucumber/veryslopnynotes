@@ -36,6 +36,8 @@ références, l'existence des fichiers cités et les commandes citées.
 ## Architecture actuelle
 
 - `android/` est l'appareil client ; seul `android/pronote/` parle à Pronote.
+- Les arêtes de modules sont celles de Gradle : `core` et `pronote` sans
+  dépendance, `data` → `core`+`pronote`, `app` → `core`+`data`.
 - `web/` est l'interface React embarquée dans la WebView ; elle ne parle à
   aucun réseau et passe par le pont natif (`android/app/.../VsnBridge.kt`).
 - `server/` sert uniquement le scraper de manuels, un sidecar optionnel.
@@ -46,8 +48,8 @@ références, l'existence des fichiers cités et les commandes citées.
 | ID | Règle | Vérification principale |
 |---|---|---|
 | I1 | Seul `android/pronote/` (et le scraper) parle réseau ; aucun hôte scolaire hors module. | `tests/architecture/invariants.test.ts` |
-| I2 | Le serveur ne contacte jamais Pronote ; un seul `Client` Android. | `tests/architecture/invariants.test.ts` |
-| I3 | `android/core/` reste pur : ni SQLite ni HTTP. | `tests/architecture/invariants.test.ts` |
+| I2 | Le serveur ne contacte jamais Pronote ; la frontière Gradle borne les arêtes ; un seul `Client` Android. | `tests/architecture/invariants.test.ts` |
+| I3 | `android/core/` n'importe ni `java.net`, ni `android.database`, ni `androidx.room`. | `tests/architecture/invariants.test.ts` |
 | I4 | Aucun secret dans un prompt LLM ; le prompt vérifié est le prompt envoyé. | `tests/unit/kotlin-llm-guard.test.ts` |
 | I5 | L'IA n'a ni outils ni secrets ; le budget de sortie est déduit de la garde. | `tests/unit/kotlin-llm-budget.test.ts` |
 | I6 | Tout contenu externe est marqué `Untrusted` ; aucun MIME exécutable. | `tests/unit/android-untrusted.test.ts` |
@@ -107,16 +109,15 @@ Une ligne par ID retiré : ID, date, issue, remplacement éventuel.
 - Commande : `make architecture-test`.
 - Emplacement : `android/**/*` (tolérances : `android/pronote/**` + ligne `include(...)` de `settings.gradle.kts`). Réf : `docs/adr/003-client-direct.md`.
 
-## I2 — Aucun accès Pronote côté serveur ; un seul client Android (ADR-003)
-- Invariant : le serveur ne contacte jamais Pronote. Dans l'app, tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; aucun autre module Android (`app`, `core`, `data`) ne contacte Pronote (pinné par I1).
-- **Le scan d'hôte ne se fie plus à un littéral COMPLET** (#535) : le mot `pronote`/`index-education` **et** un appel réseau dans le **même fichier** suffisent, quelle que soit la forme de l'URL (assemblée à l'exécution, sur une ou plusieurs lignes). Avant, il fallait le mot ET l'appel réseau sur la MÊME ligne, ou une URL littérale entière : `const h = "index-education" + ".net"; await fetch("https://" + h);` passait. Le signal est déjà là — le mot est interdit hors module (I1).
-- Test : `tests/architecture/invariants.test.ts` (aucun accès réseau serveur + un `Client` Android + la surface importée hors `pronote/` : `Client` et les types protocoles, dont `ExpiredObject` (G=22) et `PronoteAPIError` (le code `G` de la décision « session morte », #520) — l'hôte assemblé à l'exécution détecté) + `agents/runtime/check-architecture.ts`.
+## I2 — Aucun accès Pronote côté serveur ; frontière Gradle, un seul Client (ADR-003)
+- Invariant : le serveur ne contacte jamais Pronote. La frontière des modules est déclarée dans Gradle : `core` et `pronote` sans dépendance, `data` → `core`+`pronote`, `app` → `core`+`data` ; toute autre arête échoue. Tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; les autres modules consomment le port. Le scan d'hôte (#535) détecte le mot `pronote`/`index-education` avec un appel réseau, même URL assemblée.
+- Test : `tests/architecture/invariants.test.ts` (frontière Gradle, aucun accès réseau serveur, un `Client`) + `agents/runtime/check-architecture.ts` + `tests/unit/check-architecture-scan.test.ts` (fixtures d'arête, de type renommé et d'import plateforme).
 - Commande : `make architecture-test`.
-- Emplacement : `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
+- Emplacement : `android/*/build.gradle.kts`, `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
 
-## I3 — Cœur Android sans SQLite ni HTTP
-- Invariant : `android/core/` dépend seulement de la stdlib Kotlin et de la plateforme, sans SQLite ni framework HTTP.
-- Test : `tests/architecture/invariants.test.ts` (I3, `android/core/`).
+## I3 — Cœur Android sans réseau, SQLite ni Room
+- Invariant : `android/core/` n'importe ni `java.net`, ni `android.database`, ni `androidx.room` — des plateformes que Gradle ne voit pas ; ses dépendances de module sont déjà bornées par I2 (aucune arête).
+- Test : `tests/architecture/invariants.test.ts` (I3, `android/core/`) + `agents/runtime/check-architecture.ts` + `tests/unit/check-architecture-scan.test.ts`.
 - Commande : `make architecture-test`.
 - Emplacement : `android/core/`.
 

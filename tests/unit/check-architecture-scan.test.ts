@@ -142,4 +142,70 @@ describe("check-architecture : parcours des fichiers", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  /** Fixture minimale : quatre modules Android + une source, arêtes Gradle
+   *  déclarées. `scanArchitecture` doit alors rendre un verdict vide. */
+  function fixtureModules(dir: string): void {
+    const edges: Record<string, string[]> = { core: [], pronote: [], data: ["core", "pronote"], app: ["core", "data"] };
+    for (const [module, deps] of Object.entries(edges)) {
+      const dirModule = join(dir, "android", module);
+      mkdirSync(dirModule, { recursive: true });
+      const bloc = deps.length
+        ? `dependencies {\n${deps.map((d) => `    implementation(project(":${d}"))`).join("\n")}\n}\n`
+        : "";
+      writeFileSync(join(dirModule, "build.gradle.kts"), bloc);
+    }
+    mkdirSync(join(dir, "android", "core"), { recursive: true });
+    writeFileSync(join(dir, "android", "core", "Core.kt"), "class Core\n");
+    mkdirSync(join(dir, "server"), { recursive: true });
+    writeFileSync(join(dir, "server", "index.ts"), "export const a = 1;\n");
+  }
+
+  test("une arête Gradle non déclarée est signalée (core -> pronote)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-arch-gradle-"));
+    try {
+      fixtureModules(dir);
+      expect(scanArchitecture(dir)).toEqual([]); // la frontière déclarée passe
+      // La source reste valide : c'est l'ARÊTE qui viole la frontière.
+      writeFileSync(
+        join(dir, "android", "core", "build.gradle.kts"),
+        'dependencies {\n    implementation(project(":pronote"))\n}\n',
+      );
+      const fails = scanArchitecture(dir).join("\n");
+      expect(fails).toContain("frontière Gradle");
+      expect(fails).toContain("core");
+      expect(fails).toContain("pronote");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("un type du port renommé ne fait pas échouer le scan", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-arch-port-"));
+    try {
+      fixtureModules(dir);
+      // Un type du port au nom arbitraire (aucune liste recopiée) : seule
+      // l'arête Gradle compte, le scan d'hôte ne voit aucune URL.
+      const data = join(dir, "android", "data", "src", "main", "java");
+      mkdirSync(data, { recursive: true });
+      writeFileSync(
+        join(data, "Data.kt"),
+        "import fr.veryslopnynotes.pronote.SessionState\nclass Data(val state: SessionState)\n",
+      );
+      expect(scanArchitecture(dir)).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("un import plateforme dans core est signalé (I3)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-arch-platform-"));
+    try {
+      fixtureModules(dir);
+      writeFileSync(join(dir, "android", "core", "Core.kt"), "import java.net.URL\nclass Core\n");
+      expect(scanArchitecture(dir).join("\n")).toContain("I3");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

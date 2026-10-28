@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { listFiles } from "../../agents/runtime/check-architecture";
+import { listFiles, moduleBoundaryErrors } from "../../agents/runtime/check-architecture";
 import {
   codeOnly,
   hasDirectFetch,
   httpRe,
+  platformRe,
   pronoteHost,
   sqliteRe,
   EXECUTABLE_MIME_TYPES,
@@ -93,6 +94,16 @@ describe("invariants", () => {
     expect(sqliteRe.test(codeOnly('const a = 1; // sqlite'))).toBe(false);
   });
 
+  test("I3 plateforme: java.net, android.database et androidx.room interdits dans core", () => {
+    // Gradle ne voit pas ces imports (pas des dépendances de module) : c'est
+    // le scan étroit qui les refuse. Un commentaire n'est pas un import.
+    expect(platformRe.test(codeOnly('import java.net.URL'))).toBe(true);
+    expect(platformRe.test(codeOnly('import android.database.sqlite.SQLiteDatabase'))).toBe(true);
+    expect(platformRe.test(codeOnly('import androidx.room.Room'))).toBe(true);
+    expect(platformRe.test(codeOnly('// import java.net.URL\nval a = 1'))).toBe(false);
+    expect(platformRe.test(codeOnly('/* import androidx.room.Room */\nval a = 1'))).toBe(false);
+  });
+
   test("I2: serveur sans accès Pronote + un seul Client android", () => {
     const server = listFiles(join(ROOT, "server"));
     const directFetch = server.filter((f) => hasDirectFetch(codeOnly(readFileSync(f, "utf8"))));
@@ -105,6 +116,13 @@ describe("invariants", () => {
     // client au stub) : le compte reste UN SEUL client Android.
     const clients = pronote.filter((f) => /^(?:open )?class Client\(/m.test(codeOnly(readFileSync(f, "utf8"))));
     expect(clients.map((f) => f.replace(ROOT, ""))).toHaveLength(1);
+  });
+
+  test("I2: la frontière des modules est celle de Gradle", () => {
+    // La vérité est dans les quatre `build.gradle.kts` : core/pronote sans
+    // dépendance, data -> core+pronote, app -> core+data. Toute autre arête
+    // échoue sans qu'il faille recopier les types du port dans un scanner.
+    expect(moduleBoundaryErrors(ROOT)).toEqual([]);
   });
 
   test("I2 FP: fetch hors Pronote ignoré, accès direct détecté", () => {
@@ -311,56 +329,20 @@ describe("invariants", () => {
     expect(core).toMatch(/generateGuardedJson\(provider, SYSTEM_REVISION_JSON/);
   });
 
-  test("I2 surface (#242): hors pronote/, Client et types protocoles seuls", () => {
-    const allowedImports = new Set([
-      "Client",
-      "ClientOptions",
-      "ClientLike",
-      "PronoteClientLike",
-      "JVal",
-      "MFAError",
-      // G=22 : l'objet d'une session précédente. `data/` doit savoir le
-      // distinguer d'une session MORTE (par TYPE, pas par motif : le message
-      // de G=22 contient le mot « session ») — même nature que `MFAError` et
-      // `QRCodeDecryptError`, des erreurs de protocole.
-      "ExpiredObject",
-      // L'erreur de protocole qui porte le CODE `G` et le statut HTTP : la
-      // décision « session morte » tranche par eux, jamais par un mot du
-      // message (#520).
-      "PronoteAPIError",
-      // La limitation de débit (`G=25` / HTTP 429) est un TYPE à part : le
-      // dépôt doit la distinguer d'un compte refusé et d'une session morte
-      // (et ne jamais la publier comme un trimestre vide).
-      "RateLimitedError",
-      // Snapshot de période (notes + moyennes + moyenne générale en UN POST) :
-      // un simple porteur de données, comme `Client`/`JVal`.
-      "PeriodNotes",
-      "QrCode",
-      "QRCodeDecryptError",
-      "QrLoginOptions",
-    ]);
+  // La surface du port n'est plus une liste de types recopiée : une arête
+  // Gradle non déclarée échoue (I2, frontière), et renommer un type du port
+  // ne demande plus d'éditer le scanner. Reste le transport : hors
+  // `pronote/`, aucun module n'implémente le client.
+  test("I2 surface (#242): hors pronote/, aucun transport direct", () => {
     const bad: string[] = [];
     for (const mod of ["app", "core", "data"]) {
       for (const f of listFiles(join(ROOT, "android", mod))) {
         if (!f.endsWith(".kt")) continue;
         const src = codeOnly(readFileSync(f, "utf8"));
         if (/\b(HttpSession|CookieJar|ClientBase)\b/.test(src)) bad.push(`${f.replace(ROOT, "")}: transport direct`);
-        for (const m of src.matchAll(/import fr\.veryslopnynotes\.pronote\.([A-Za-z]+)/g)) {
-          if (!allowedImports.has(m[1]!)) bad.push(`${f.replace(ROOT, "")}: import ${m[1]}`);
-        }
       }
     }
     expect({ bad }).toEqual({ bad: [] });
-    // Un seul transport : `class Client(` + sa base `open class ClientBase(`.
-    // Un `class Client2(` ou `object XClient(` passerait l'ancien compteur.
-    // `Client` est `open` depuis #475 : le harnais de parité en dérive un
-    // client dont l'envoi est un stub (aucun réseau).
-    const pronote = listFiles(join(ROOT, "android", "pronote")).filter((f) => f.endsWith(".kt"));
-    const src = pronote.map((f) => codeOnly(readFileSync(f, "utf8"))).join("\n");
-    expect((src.match(/^(?:open )?class Client\(/gm) ?? []).length).toBe(1);
-    expect((src.match(/^open class ClientBase\(/gm) ?? []).length).toBe(1);
-    // `ClientInfo` = simple porteuse de données (pas de transport), tolérée.
-    expect(src).not.toMatch(/^(?:open )?class (?!Client\(|ClientBase\(|ClientInfo\()\w*Client\w*\(/m);
   });
 
   // #394 : le pont ne laisse JAMAIS une promesse sans réponse. Un `Error`

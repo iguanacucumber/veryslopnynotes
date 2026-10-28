@@ -11,6 +11,13 @@ export const sqliteRe =
   /import\s+[^;]*sqlite|from\s+['"][^'"]*sqlite|require\s*\([^)]*sqlite|bun:sqlite|better-sqlite3/i;
 export const httpRe = /from\s+['"]hono|from\s+['"]express|require\s*\([^)]*(hono|express|fastify)|Bun\.serve/;
 
+/**
+ * Imports de PLATEFORME que Gradle ne voit pas : ils ne figurent dans aucun
+ * `build.gradle.kts`, donc la frontière des modules ne peut pas les refuser.
+ * `android/core/` les interdit (I3) : réseau Java, SQLite Android, Room.
+ */
+export const platformRe = /\bimport\s+(?:static\s+)?(?:java\.net|android\.database|androidx\.room)\b/;
+
 const netRe = /fetch\(|axios|got\(|https?\.(get|request)|Bun\.serve|XMLHttpRequest|WebSocket/;
 
 // ponytail: two source-text heuristics; upgrade to AST/dataflow if server gains more outbound routes.
