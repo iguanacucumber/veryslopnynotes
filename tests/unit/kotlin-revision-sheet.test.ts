@@ -93,6 +93,43 @@ describe("export PDF de fiche : le corps entier et ses sources (#412)", () => {
   });
 });
 
+// #630 : le corps peut être du markdown (le prompt le demande). Le PDF ne doit
+// pas dessiner les marqueurs : il garde le contenu, les titres et les puces.
+describe("export PDF de fiche : le markdown ne dessine pas ses marqueurs (#630)", () => {
+  test.skipIf(skip)("titres, gras, listes, citation et tableau sortent en texte lisible", async () => {
+    const body = [
+      "## Titre de section",
+      "",
+      "Un **gras**, une *italique* et du `code`.",
+      "",
+      "- puce un",
+      "- puce deux",
+      "",
+      "1. etape un",
+      "2. etape deux",
+      "",
+      "> citation",
+      "",
+      "| Colonne A | Colonne B |",
+      "| --- | --- |",
+      "| 1 | 2 |",
+    ].join("\n");
+    const res = JSON.parse(await ask({ op: "pdfLines", body, sources: CANONICAL })) as Lines;
+    const text = res.lines.join("\n");
+
+    // Le contenu survit, les marqueurs non.
+    expect(text).toContain("Titre de section");
+    expect(text).toContain("Un gras, une italique et du code.");
+    expect(text).toContain("- puce un");
+    expect(text).toContain("1. etape un");
+    expect(text).toContain("citation");
+    expect(text).toContain("Colonne A — Colonne B");
+    for (const marker of ["#", "**", "|", "`", "> "]) {
+      expect({ marker, present: text.includes(marker) }).toEqual({ marker, present: false });
+    }
+  });
+});
+
 describe("export PDF de fiche : la liste CANONIQUE des sources fait foi (#412)", () => {
   test.skipIf(skip)("un corps qui contient « Sources : » ne remplace pas la liste canonique", async () => {
     // Le corps porte un bloc « Sources : » libre (le modèle l'écrit) : la
