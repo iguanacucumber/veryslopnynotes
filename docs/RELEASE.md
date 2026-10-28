@@ -35,7 +35,9 @@ Builds require JDK 17–21 and Android SDK 37 (`platforms;android-37.0`,
 `build-tools;36.0.0`, `platform-tools`). Set `ANDROID_HOME` or `sdk.dir` in
 `android/local.properties`; JDK detection accepts `ANDROID_JDK_HOME`.
 
-`make check` runs `android-compile` in parallel with other checks. If JDK or SDK
+`make check` runs `android-compile` in parallel with other checks: one Gradle
+invocation compiles all modules and runs `:app:lintDebug` (Android Lint — a
+lint error fails the gate). If JDK or SDK
 is missing, it fails: the Kotlin compile is the only check that resolves
 symbols and overloads, so skipping it silently would be a false green. Set
 `ALLOW_SKIP_ANDROID=1` to assume that skip explicitly (outside merges); APK

@@ -129,7 +129,9 @@ check-kotlin:
 # Compile Kotlin RÉELLE (`android-compile`) — le SEUL filet qui voit une
 # résolution de symbole, un import manquant ou une surcharge ambiguë : les miroirs
 # TS et check-kotlin ne les voient pas (piège réel : `MAX_LABEL_CHARS` non
-# qualifié dans core/Homework.kt, invisible côté TS).
+# qualifié dans core/Homework.kt, invisible côté TS). La MÊME invocation lance
+# `:app:lintDebug` (#627) : Android Lint passe dans le gate, sans daemon
+# Gradle supplémentaire (une seule JVM pour compile + lint).
 #
 # Outillage absent = ÉCHEC, pas un SKIP silencieux (#368) : la compilation
 # Kotlin est la SEULE vérification du gate qui résout les symboles, donc un
@@ -172,10 +174,10 @@ android-compile:
 	  echo "android-compile : JDK $$jdk, SDK $$sdk"; \
 	  cd android && { \
 	    JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --offline --console=plain -x buildWebUi \
-	      :core:compileDebugKotlin :data:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin || \
+	      :core:compileDebugKotlin :data:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin :app:lintDebug || \
 	    { echo "android-compile : REPLI EN LIGNE (cache Gradle incomplet — hors-ligne refusé)."; \
 	      JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain -x buildWebUi \
-	        :core:compileDebugKotlin :data:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin; }; \
+	        :core:compileDebugKotlin :data:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin :app:lintDebug; }; \
 	  }; \
 	fi
 

@@ -2,9 +2,9 @@
 //
 // Avant : 7 cibles en séquence = 168 s (unit 70 s + Gradle 95 s + 2 s de tsc).
 // Chaque étape est indépendante (lint / typecheck / tests / architecture /
-// contrats / garde-fou Kotlin / compilation Gradle / typecheck web / tests web
-// — le build Vite est tiré par `architecture`, cf. Makefile) : la seule limite
-// est le cœur, et il y en a 16.
+// contrats / garde-fou Kotlin / compilation Gradle + Android Lint / typecheck
+// web / tests web — le build Vite est tiré par `architecture`, cf. Makefile) :
+// la seule limite est le cœur, et il y en a 16.
 //
 // SOURCE UNIQUE : chaque étape est une cible du Makefile, invoquée `make -s`,
 // donc une recette écrite une fois, jamais dupliquée ici (sinon `make unit`
