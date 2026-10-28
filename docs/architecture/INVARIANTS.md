@@ -9,6 +9,15 @@ Format d'une entrée : règle → test → commande → portée. Un identifiant 
 unique et n'est jamais réutilisé. Une entrée tient en 120 mots ; au-delà, le
 détail va dans un lien.
 
+## Comment retirer un invariant
+
+Une règle obsolète ou absorbée se **retire** sans renuméroter : supprimer son
+entrée détaillée et sa ligne du registre, puis l'inscrire sous `## Retirés`
+(ID, date, issue, remplacement éventuel). Retirer ≠ renuméroter — l'identifiant
+n'est jamais réutilisé. Un trou entre I1 et la dernière entrée active n'est
+toléré que si l'ID figure dans `## Retirés` ; un ID retiré qui réapparaît comme
+entrée active échoue au gate.
+
 ## Comment ajouter ou réviser un invariant
 
 1. Un incident réel ou une menace identifiée. Pas de règle spéculative.
@@ -69,6 +78,13 @@ références et les commandes citées.
 | I30 | Le plafond HTML s'applique avant la matérialisation. | `tests/unit/scraper-limits.test.ts` |
 | I31 | Un enregistrement publié = une ligne (clé kind + id). | `tests/unit/kotlin-payload-dedupe.test.ts` |
 | I32 | Une photo ne part que sur geste explicite, ré-encodée et bornée. | `tests/unit/kotlin-vision.test.ts` |
+
+## Retirés
+
+Aucun retrait à ce jour. Une ligne par ID retiré : ID, date, issue, remplacement éventuel.
+
+| ID | Date | Issue | Remplacement |
+|---|---|---|---|
 
 ## Détail
 
