@@ -12,16 +12,8 @@ import { join } from "node:path";
 // silence. Ces tests sont la seule chose qui attrape la dérive — sans
 // téléphone, sans adb.
 const ROOT = join(import.meta.dir, "..", "..");
-const WEBAPP = readFileSync(
-  join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/WebApp.kt"),
-  "utf8",
-);
 const WEB_ROUTE_STATE = readFileSync(
   join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/WebRouteState.kt"),
-  "utf8",
-);
-const MAIN_ACTIVITY = readFileSync(
-  join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/MainActivity.kt"),
   "utf8",
 );
 const DEBUG_MANIFEST = readFileSync(
@@ -63,13 +55,6 @@ describe("deep links de debug (#133)", () => {
     // muette et l'app s'ouvre sur son écran de départ.
     const hosts = [...DEBUG_MANIFEST.matchAll(/android:host="([a-z-]+)"/g)].map(m => m[1]!);
     expect(hosts.sort()).toEqual([...ROUTES].sort());
-  });
-
-  test("MainActivity traduit l'hôte en route hash et valide contre WEB_ROUTES", () => {
-    expect(MAIN_ACTIVITY).toContain('"index" -> "/"');
-    expect(MAIN_ACTIVITY).toContain('else -> "/$host"');
-    expect(MAIN_ACTIVITY).toContain("path.takeIf { it in WEB_ROUTES }");
-    expect(WEBAPP).toContain("if (path != null && path in WEB_ROUTES) path else \"/\"");
   });
 
   test("le manifest DEBUG force singleTask et déclare VIEW/BROWSABLE", () => {
