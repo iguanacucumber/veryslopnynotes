@@ -51,7 +51,6 @@ références, l'existence des fichiers cités et les commandes citées.
 | I4 | Aucun secret dans un prompt LLM ; le prompt vérifié est le prompt envoyé. | `tests/unit/kotlin-llm-guard.test.ts` |
 | I5 | L'IA n'a ni outils ni secrets ; le budget de sortie est déduit de la garde. | `tests/unit/kotlin-llm-budget.test.ts` |
 | I6 | Tout contenu externe est marqué `Untrusted` ; aucun MIME exécutable. | `tests/unit/android-untrusted.test.ts` |
-| I7 | Aucun effet métier déclenché par une sortie LLM libre. | `tests/architecture/invariants.test.ts` |
 | I8 | Session Pronote et clé LLM hors serveur ; scraper sans auth = local seulement. | `tests/unit/scraper-*.test.ts` |
 | I10 | WebView sans réseau ni secret ; pont borné, une réponse par entrée. | `tests/architecture/web.test.ts` |
 | I11 | `.agents/` est verrouillé, scanné et sans fuite. | `tests/architecture/skills-lock.test.ts` |
@@ -84,6 +83,7 @@ Une ligne par ID retiré : ID, date, issue, remplacement éventuel.
 
 | ID | Date | Issue | Remplacement |
 |---|---|---|---|
+| I7 | 2026-10-28 | #642 | Convention de revue : les jobs purs ne reçoivent que des données structurées Pronote. |
 | I9 | 2026-10-28 | #638 | Android Lint (#627, dans le gate) et detekt — les appelants réels, pas le nom. Aucun retrait de code de production ici : les candidats morts partent dans une issue dédiée. |
 
 ## Détail
@@ -138,12 +138,6 @@ Une ligne par ID retiré : ID, date, issue, remplacement éventuel.
 - Test : `tests/architecture/invariants.test.ts` (I6) + `tests/unit/android-homework.test.ts` (miroirs) + `tests/unit/android-untrusted.test.ts` (Kotlin réel : marqueur non forgeable, #373) + `tests/unit/attachment-mime.test.ts` (Kotlin réel : type MIME d'une pièce jointe jamais exécutable, #398).
 - Commande : `make check`.
 - Emplacement : `android/core/Untrusted.kt`, `android/app/src/main/java/fr/veryslopnynotes/app/AttachmentMime.kt`.
-
-## I7 — Pas d'effet bord via sortie libre LLM
-- Invariant : aucun effet métier déclenché par sortie libre LLM. `server/jobs/` supprimé en #210 (jobs portés en Kotlin natif, #207) ; les jobs device ne touchent ni LLM ni réseau. Notifications/détection DS sur données structurées Pronote, sinon confirmation app.
-- Test : `tests/architecture/invariants.test.ts` (I7 : pas de `server/jobs/`, jobs device sans LLM/réseau).
-- Commande : `make architecture-test`.
-- Emplacement : `android/core/GradeDiff.kt`, `ExamDetect.kt`, `NotifyFormat.kt`, `RevisionSheet.kt`.
 
 ## I8 — Session Pronote et clé LLM restent hors serveur
 

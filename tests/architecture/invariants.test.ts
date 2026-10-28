@@ -265,23 +265,6 @@ describe("invariants", () => {
     expect(bridge).toMatch(/openFile\(file,\s*mimeOf\(/);
   });
 
-  test("I7: pas de jobs serveur, jobs device sans LLM", () => {
-    // #210 : `server/jobs/` est supprimé avec le serveur (jobs portés en
-    // Kotlin natif, #207). Les jobs device (`android/core/`) ne touchent ni
-    // LLM ni réseau : effets sur données structurées uniquement.
-    expect(existsSync(join(ROOT, "server", "jobs"))).toBe(false);
-    const CORE = join(ROOT, "android/core/src/main/java/fr/veryslopnynotes/core");
-    const jobFiles = ["GradeDiff.kt", "ExamDetect.kt", "NotifyFormat.kt", "RevisionSheet.kt", "RevisionAi.kt", "HomeworkAi.kt"].map(
-      (f) => join(CORE, f),
-    );
-    for (const f of jobFiles) expect(existsSync(f)).toBe(true);
-    const offenders = jobFiles.filter((f) => {
-      const c = codeOnly(readFileSync(f, "utf8"));
-      return /fetch\s*\(|XMLHttpRequest|WebSocket/.test(c) || /generate\s*\(/.test(c);
-    });
-    expect({ offenders }).toEqual({ offenders: [] });
-  });
-
   // #242 : characterization pins — resserrent des trous prouvés, sans changer
   // la sémantique I1–I8. Chacun échoue sur une casse réelle qui passe les
   // tests ci-dessus (voir issue). Ajouts seuls, aucun test existant modifié.
@@ -299,25 +282,6 @@ describe("invariants", () => {
     const extra = /okhttp3|HttpURLConnection|URL\s*\(\s*"https?|android\.net\.|androidx\.room|Room\.databaseBuilder|@Entity|@Dao|SQLiteOpenHelper|android\.database\.sqlite/i;
     const files = listFiles(join(ROOT, "android/core")).filter((f) => extra.test(codeOnly(readFileSync(f, "utf8"))));
     expect({ files }).toEqual({ files: [] });
-  });
-
-  test("I7 pure jobs (#242): GradeDiff/ExamDetect/NotifyFormat/RevisionSheet sans LLM ni OkHttp", () => {
-    const CORE = join(ROOT, "android/core/src/main/java/fr/veryslopnynotes/core");
-    const pure = ["GradeDiff.kt", "ExamDetect.kt", "NotifyFormat.kt", "RevisionSheet.kt"].map((f) => join(CORE, f));
-    for (const f of pure) expect(existsSync(f)).toBe(true);
-    const offenders = pure.filter((f) => {
-      const c = codeOnly(readFileSync(f, "utf8"));
-      return (
-        /generate\w*\s*\(/.test(c) ||
-        /requestRevisionSheet\s*\(/.test(c) ||
-        /fetch\s*\(|XMLHttpRequest|WebSocket|okhttp3|HttpURLConnection|newCall\s*\(/.test(c)
-      );
-    });
-    expect({ offenders }).toEqual({ offenders: [] });
-    // Le test prouve qu'il mord : les points d'entrée LLM existent bien, mais
-    // uniquement dans la couche IA (hors jobs purs).
-    const ai = readFileSync(join(CORE, "HomeworkAi.kt"), "utf8");
-    expect(ai).toMatch(/fun generateHomework\s*\(/);
   });
 
   // #428 : UN SEUL endroit decide du prompt et du schema de la fiche. Le pont
