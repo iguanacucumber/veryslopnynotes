@@ -338,7 +338,9 @@ page de login n'écrase pas la session du serveur (#526 et I28).
   build : un `NODE_ENV=development` ambiant ne peut pas fabriquer un bundle de
   développement embarqué dans l'APK.
 - Test : `tests/architecture/web-mock.test.ts` (pas d'import statique + analyse
-  du bundle Vite réellement produit) + `tests/web/bridge.test.ts` (hors mode
+  du bundle Vite RÉELLEMENT livré à l'APK — #654 : construit UNE fois par le
+  gate, `make architecture` tire `web-build` avant le test, aucun second
+  build jetable) + `tests/web/bridge.test.ts` (hors mode
   dev : le pont absent échoue ; en mode dev : le factice répond ; un pont
   natif présent ne retombe jamais sur le factice) +
   `tests/unit/build-web.test.ts` (le build Vite passe par
@@ -347,7 +349,9 @@ page de login n'écrase pas la session du serveur (#526 et I28).
   le build de l'APK passe par le même helper, donc la même protection —
   #516 : le binding natif de Vite peut mourir sans message et rougissait le
   gate pour un bundle intact).
-- Commande : `make architecture-test` (ou `make check`).
+- Commande : `make architecture-test` (ou `make check` ; #654 :
+  `make architecture-test` tire `web-build` — un bundle absent est un ÉCHEC
+  explicite, jamais un vert vacuement vrai).
 - Emplacement : `web/src/bridge/client.ts`, `web/src/bridge/mock.ts`,
   `web/vite.config.ts`, `agents/runtime/build-web.ts`.
 

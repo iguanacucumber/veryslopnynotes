@@ -484,13 +484,19 @@ describe("invariants", () => {
     expect(src).not.toMatch(/^(?:open )?class (?!Client\(|ClientBase\(|ClientInfo\()\w*Client\w*\(/m);
   });
 
-  // #418 : le bundle Vite est écrit PENDANT le gate (`web-build` écrit dans
-  // `android/app/src/main/assets/web/`, et `check.ts` lance les étapes en
-  // parallèle) : un parcours qui le liste voit le dossier disparaître sous
-  // ses pieds (flake). Le parcours ROBUSTE partagé l'exclut, et les tests
-  // d'architecture n'ont plus de parcours « maison » — sans les garde-fous de
-  // `listFiles` (exclusion des artefacts, erreur gérée FICHIER PAR FICHIER),
-  // le flake revient.
+  // #418 : le bundle Vite est réécrit pendant le gate (web-build tourne en
+  // parallèle des autres étapes) : un parcours qui le liste voit le dossier
+  // disparaître sous ses pieds (flake). Le parcours ROBUSTE partagé l'exclut,
+  // et les tests d'architecture n'ont plus de parcours « maison » — sans les
+  // garde-fous de `listFiles` (exclusion des artefacts, erreur gérée FICHIER
+  // PAR FICHIER), le flake revient.
+  //
+  // #654 : exception de LECTURE — web-mock vérifie l'artefact GÉNÉRÉ lui-même
+  // (le pont factice n'y entre pas). `architecture` tire `web-build` avant
+  // `architecture-test`, donc le bundle est COMPLET et stable pendant les
+  // tests : la course d'origine a disparu, lire `src/main/assets` ne subit
+  // plus le flake. Seule la lecture du bundle est tolérée — jamais un scan de
+  // SOURCES sous `android/`.
   test("#418: aucun parcours de test ne liste android/app/src/main/assets", () => {
     const artefacts = listFiles(join(ROOT, "android")).filter((f) =>
       f.includes(join("app", "src", "main", "assets")),
@@ -505,7 +511,9 @@ describe("invariants", () => {
     const menages = listFiles(join(ROOT, "tests", "architecture"))
       .filter((f) => {
         const code = codeOnly(readFileSync(f, "utf8"));
-        const surAndroid = /join\([^)]*["']android["']/.test(code);
+        // Le join vise-t-il le BUNDLE GÉNÉRÉ (lecture #654 autorisée) ?
+        const bundleGenere = /["']src["'],\s*["']main["'],\s*["']assets["']/.test(code);
+        const surAndroid = /join\([^)]*["']android["']/.test(code) && !bundleGenere;
         return traverse.test(code) && surAndroid;
       })
       .map((f) => f.replace(ROOT, ""));

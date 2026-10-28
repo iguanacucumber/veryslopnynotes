@@ -8,9 +8,8 @@ import { listFiles, scanArchitecture } from "../../agents/runtime/check-architec
 //
 // #368 : deux défauts de parcours, tous deux des « faux verts » :
 //   1. le scan parcourait `android/app/src/main/assets/web/assets/*.js`, le
-//      bundle Vite GÉNÉRÉ (gitignoré) que la cible `web-build` réécrit dans le
-//      MÊME run (`check.ts` lance les étapes en parallèle) → le verdict de I1
-//      dépendait de l'ordre d'exécution ;
+//      bundle Vite GÉNÉRÉ (gitignoré, réécrit par `web-build`) → le verdict
+//      de I1 dépendait de l'ordre d'exécution des étapes ;
 //   2. le `catch` global autour du parcours avalait TOUT le répertoire (un
 //      fichier supprimé entre `readdir` et `stat` → rien n'était scanné, en
 //      vert). Erreur fichier par fichier maintenant, et un fichier ILLISIBLE
