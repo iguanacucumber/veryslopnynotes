@@ -12,7 +12,6 @@ import {
 } from "../../lib/format";
 import { useApp, useResource } from "../../ui/AppContext";
 import {
-  Card,
   EmptyState,
   ErrorBox,
   Loading,

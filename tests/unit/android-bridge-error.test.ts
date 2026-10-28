@@ -17,7 +17,6 @@ import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 
-const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "BridgeErrorsParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;

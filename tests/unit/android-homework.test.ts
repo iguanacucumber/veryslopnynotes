@@ -19,7 +19,6 @@ import { codeOnly } from "../../agents/runtime/source-guards";
 // ces miroirs sont le seul filet sur la logique pure (bornes, citations, refus).
 
 const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/veryslopnynotes/data");
-const CORE = join(import.meta.dir, "..", "..", "android/core/src/main/java/fr/veryslopnynotes/core");
 const APP = join(import.meta.dir, "..", "..", "android/app/src/main/java/fr/veryslopnynotes/app");
 
 const src = (dir: string, file: string) => readFileSync(join(dir, file), "utf8");

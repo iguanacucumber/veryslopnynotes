@@ -777,7 +777,7 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
     try {
       const k1 = createHash("md5").update(Buffer.from([10, 20, 30])).digest("hex");
       behaviorKeys(stub, k1, IV1_HEX);
-      stub.behavior.answer = (id, inner) => ({ bienRecu: inner });
+      stub.behavior.answer = (_id, inner) => ({ bienRecu: inner });
       const tsComm = tsSeededComm(stub);
       await tsComm.initialise("ident-test");
       // `afterAuth` pose `authKey` D'ABORD puis déchiffre `cle` SOUS ELLE (pas
@@ -810,7 +810,7 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
     const stub = startStub(`h: '123456', a: 'abcdef', CoA: '1'`);
     try {
       behaviorKeys(stub, K0_HEX, IV1_HEX);
-      stub.behavior.answer = (id, inner) => ({ bienRecu: inner });
+      stub.behavior.answer = (_id, inner) => ({ bienRecu: inner });
       const big = { grand: "x".repeat(500), accents: "Éléonore — 妥当性" };
       const tsComm = tsSeededComm(stub);
       await tsComm.initialise("ident-test");
