@@ -64,7 +64,7 @@ références, l'existence des fichiers cités et les commandes citées.
 | I17 | Un seul rafraîchissement de session à la fois ; rate-limit ≠ session morte. | `tests/unit/kotlin-refresh-gate.test.ts` |
 | I18 | Keystore indisponible = état `UNAVAILABLE` signalé, jamais un secret en clair. | `tests/unit/kotlin-store-health.test.ts` |
 | I19 | Interface et job de fond lisent par la même file partagée. | `tests/architecture/shared-queue.test.ts` |
-| I20 | Le pont ne sature pas : un fil par appel, file LLM séparée et bornée. | `tests/unit/kotlin-bridge-executors.test.ts` |
+| I20 | Le pont ne sature pas : un appel court répond pendant des appels longs, file LLM séparée et bornée. | `tests/unit/kotlin-bridge-executors.test.ts` |
 | I21 | Session morte = purge session + cache, décidée par type/code, jamais par message. | `tests/unit/kotlin-session-repair.test.ts` |
 | I22 | Le gate ne peut pas être neutralisé par l'environnement. | `tests/unit/check-runner.test.ts` |
 | I23 | Image scraper non-root, TLS obligatoire, pas de `HOST` forcé. | `tests/unit/server-image-playwright.test.ts` |
@@ -532,32 +532,23 @@ page de login n'écrase pas la session du serveur (#526 et I28).
   `android/data/SyncedRepository.kt`, `android/data/PeriodicSyncWorker.kt`,
   `android/data/SyncJobOutcome.kt`, `android/data/SessionFailure.kt`.
 
-## I20 — Le pont ne sature pas : un fil par appel, le LLM à part
-- Invariant : le pont natif ne fait JAMAIS la queue. Un appel JS repart sur son
-  PROPRE fil (`BridgeExecutors.calls()`, pool non borné) : `app.back` (le bouton
-  retour) répond même avec cinq lectures de l'accueil et deux appels LLM en
-  vol. Avant #393, un pool fixe de DEUX fils était immobilisé par l'attente de
-  chaque lecture (le `await` du pont bloque jusqu'à 20 s, 45 s pour le LLM) :
-  le retour était mort 20 s, et deux appels LLM gelaient le pont. Les
-  opérations LLM ont leur PROPRE file, bornée à deux fils
-  (`BridgeExecutors.llm()`) : elles ne prennent plus les fils des appels
-  ordinaires.
-  Côté interface, les LECTURES sont sérialisées (`MAX_PARALLEL_READS = 1` dans
-  `web/src/bridge/types.ts`) : le natif les sérialise déjà (une file locale
-  partagée avec le job de fond, #403) et son délai d'appel ne couvre QUE le
-  travail — en parallèle, la N-ième lecture attend son tour et son délai expire
-  AVANT lui (« Lecture indisponible. », puis « le téléphone n'a pas répondu »
-  côté JS). Une lecture en vol = le budget d'une lecture (délai HTTP de
-  l'établissement) tient dans le délai natif d'un appel.
-  Les délais restent HIÉRARCHISÉS : le plafond natif (20 s + 45 s) reste sous
-  le délai JS (90 s) — inégalité inchangée, miroir TS ↔ Kotlin compris.
+## I20 — Le pont ne sature pas : un appel court passe pendant les appels longs
+- Invariant : le pont natif n'impose AUCUNE sérialisation aux appels ordinaires :
+  cinq appels longs en vol et bloqués ne retardent pas un appel court (`app.back`,
+  le bouton retour), qui démarre en moins de 3 s. Les opérations LLM ont leur
+  PROPRE file, bornée : deux appels LLM simultanés au plus, le suivant attend un
+  créneau sans retarder les appels ordinaires. Côté interface, les lectures en
+  vol sont plafonnées : ce plafond × le budget d'une lecture (le délai HTTP de
+  l'établissement) tient dans le délai natif d'un appel — sinon la N-ième
+  lecture verrait son délai expirer avant son travail. Les délais restent
+  HIÉRARCHISÉS : le plafond natif (20 s + 45 s) reste sous le délai JS (90 s),
+  miroir TS ↔ Kotlin compris.
 - Test : `tests/unit/kotlin-bridge-executors.test.ts` (Kotlin EXÉCUTÉ : cinq
   appels longs en vol n'immobilisent pas un appel court ; la file LLM est à part
-  et bornée à deux fils ; plus de pool fixe dans le pont) +
-  `tests/web/bridge.test.ts` (les cinq lectures de l'accueil : une seule en
-  vol, les cinq aboutissent ; le bouton retour ne fait pas la queue ; le
-  nombre de lectures en vol tient dans le délai natif, relation vérifiée sur
-  le Kotlin de production).
+  et bornée, un troisième appel attend) + `tests/web/bridge.test.ts` (les cinq
+  lectures de l'accueil : une seule en vol, les cinq aboutissent ; le bouton
+  retour ne fait pas la queue ; le plafond de lectures × le budget d'une lecture
+  tient dans le délai natif, relation vérifiée sur le Kotlin de production).
 - Commande : `make check`.
 - Emplacement : `android/app/src/main/java/fr/veryslopnynotes/app/BridgeExecutors.kt`,
   `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`,
