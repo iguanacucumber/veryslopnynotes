@@ -68,6 +68,7 @@ try {
   });
   page.on("pageerror", (err) => errors.push(err.message));
 
+  let firstRoute = true;
   for (const [name, route] of SMOKE_ROUTES) {
     await page.goto(`${URL_BASE}#${route}`, { waitUntil: "networkidle" });
     await page.locator("h1, h2, strong").first().waitFor();
@@ -77,6 +78,82 @@ try {
       .waitForFunction(() => !document.querySelector(".spinner"), null, { timeout: 5000 })
       .catch(() => undefined);
     await page.waitForTimeout(120);
+    // Accessibilité (#625) : une seule cible `main`, langue déclarée, et le
+    // lien d'évitement réellement atteint par le PREMIER Tab puis activé au
+    // clavier. Au tout premier chargement, le document démarre sans focus
+    // déplacé : on tabule tel quel. Après une navigation SPA, le titre de la
+    // coquille reprend le focus pour annoncer la page ; on le retire avant de
+    // tabuler pour mesurer l'ordre de tabulation DEPUIS LE DÉBUT DU DOCUMENT,
+    // comme au chargement.
+    const mainCount = await page.locator("main").count();
+    const mainTarget =
+      mainCount === 1
+        ? await page.locator("main").first().evaluate((element) => ({
+            id: element.id,
+            tabIndex: element.getAttribute("tabindex"),
+          }))
+        : { id: "", tabIndex: null };
+    if (mainCount !== 1 || mainTarget.id !== "main" || mainTarget.tabIndex !== "-1") {
+      console.error(
+        `web-smoke : cible main invalide sur ${route} (${mainCount} main, id="${mainTarget.id}", tabindex="${mainTarget.tabIndex}")`,
+      );
+      code = 1;
+    }
+    const lang = await page.evaluate(() => document.documentElement.lang);
+    if (lang !== "fr") {
+      console.error(`web-smoke : langue du document "${lang}" sur ${route}, attendu "fr"`);
+      code = 1;
+    }
+    if (!firstRoute) {
+      await page.evaluate(() => {
+        const active = document.activeElement;
+        if (active instanceof HTMLElement) active.blur();
+        // Le point de départ de la tabulation reste sinon sur le titre qui
+        // vient d'être focalisé : on le ramène au corps du document (comme
+        // après un chargement), sans l'ajouter à l'ordre de tabulation.
+        document.body.tabIndex = -1;
+        document.body.focus();
+      });
+    }
+    firstRoute = false;
+    await page.keyboard.press("Tab");
+    const skipReached = await page
+      .waitForFunction(
+        () => {
+          const element = document.querySelector<HTMLElement>(".skip-link");
+          if (!element || document.activeElement !== element) return false;
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return (
+            style.display !== "none" &&
+            style.visibility !== "hidden" &&
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.top >= 0 &&
+            rect.bottom <= window.innerHeight + 1
+          );
+        },
+        null,
+        { timeout: 2000 },
+      )
+      .then(() => true)
+      .catch(() => false);
+    if (!skipReached) {
+      console.error(`web-smoke : le lien d'évitement n'est pas le premier Tab visible sur ${route}`);
+      code = 1;
+    } else {
+      // Le bouton doit rendre le focus au main. On presse Entrée seulement
+      // quand il a bien reçu le focus (sinon on ne teste pas ce qu'on croit).
+      await page.keyboard.press("Enter");
+      const focused = await page
+        .waitForFunction(() => document.activeElement?.id === "main", null, { timeout: 2000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!focused) {
+        console.error(`web-smoke : l'activation du lien d'évitement ne focalise pas #main sur ${route}`);
+        code = 1;
+      }
+    }
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth + 1,
     );
@@ -258,7 +335,42 @@ try {
     // l'appairage doit rester dans l'app, pas sortir vers une page vide.
     await flow.getByRole("button", { name: "Profil" }).click();
     await flow.waitForURL(/#\/profile$/, { timeout: 5000 }).catch(() => undefined);
-    await flow.getByRole("button", { name: "Se déconnecter" }).first().click();
+    const logoutTrigger = flow.getByRole("button", { name: "Se déconnecter" }).first();
+    await logoutTrigger.click();
+    // Clavier (#625) : Échap ferme le dialogue de déconnexion ET rend le focus
+    // au déclencheur. On rouvre ensuite pour jouer le parcours de déconnexion
+    // existant, inchangé.
+    const logoutDialog = flow.getByRole("alertdialog");
+    await logoutDialog.waitFor({ timeout: 5000 });
+    await flow.keyboard.press("Escape");
+    const dialogClosed = await logoutDialog
+      .waitFor({ state: "detached", timeout: 3000 })
+      .then(() => true)
+      .catch(() => false);
+    const focusReturned = dialogClosed
+      ? await flow
+          .waitForFunction(
+            () => {
+              const element = document.activeElement as HTMLElement | null;
+              return (
+                element?.tagName === "BUTTON" &&
+                (element.textContent ?? "").includes("Se déconnecter") &&
+                element.closest(".dialog") === null
+              );
+            },
+            null,
+            { timeout: 2000 },
+          )
+          .then(() => true)
+          .catch(() => false)
+      : false;
+    if (!dialogClosed || !focusReturned) {
+      console.error(
+        `web-smoke : Échap ne ferme pas le dialogue de déconnexion ou ne rend pas le focus (fermé=${dialogClosed}, focus=${focusReturned})`,
+      );
+      code = 1;
+    }
+    await logoutTrigger.click();
     await flow.getByRole("alertdialog").getByRole("button", { name: "Se déconnecter" }).click();
     await flow.waitForURL(/#\/pairing$/, { timeout: 5000 }).catch(() => undefined);
     if (!flow.url().endsWith("#/pairing")) {
