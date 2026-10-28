@@ -94,6 +94,10 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "RevisionAi.kt"),
   join(CORE, "RevisionSheet.kt"),
   join(CORE, "SecurityAlert.kt"),
+  // `core/ServerConfig.kt` : validation de l'adresse du serveur choisie à
+  // l'exécution. Fichier PUR (aucun import) : le harnais EXÉCUTE ses verdicts
+  // (#655), au lieu d'un miroir TS.
+  join(CORE, "ServerConfig.kt"),
   join(CORE, "Untrusted.kt"),
   join(CORE, "UserProfile.kt"),
   // `data` — cache, file d'attente locale, issue de synchronisation.

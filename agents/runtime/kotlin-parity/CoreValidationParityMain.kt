@@ -1,11 +1,12 @@
 // CoreValidationParityMain.kt — pilote JSON des validations du noyau (#413).
 //
 // OUTIL DE TEST uniquement : compilé par
-// `tests/unit/kotlin-core-validation-parity.test.ts` (jamais par Gradle, jamais
-// dans l'APK). Le test compile les VRAIS fichiers de production
-// (`core/Humanize.kt`, `core/CapabilityProbe.kt`, `core/Capabilities.kt`) et
-// les pilote ici : les verdicts comparés sont ceux du code EXÉCUTÉ, pas un
-// miroir réécrit en TypeScript.
+// `tests/unit/kotlin-core-validation-parity.test.ts` et
+// `tests/unit/android-server-config.test.ts` (jamais par Gradle, jamais dans
+// l'APK). Les tests compilent les VRAIS fichiers de production
+// (`core/Humanize.kt`, `core/CapabilityProbe.kt`, `core/Capabilities.kt`,
+// `core/ServerConfig.kt`) et les pilotent ici : les verdicts comparés sont
+// ceux du code EXÉCUTÉ, pas un miroir réécrit en TypeScript.
 //
 // DEUX DÉFAUTS COUVERTS (#413) :
 // 1. `Humanize.validateAnswerKeyForRender` confondait un champ `sources`
@@ -118,6 +119,29 @@ private fun driver(op: JsonValue.Obj): JsonValue = when (op.str("op")) {
             // sont INCONNUES (fail-open), la liste des absents sinon.
             "disabled" to tabsValue(CapabilityProbe.disabled(caps)),
         )
+    }
+    // Adresse de serveur saisie : le verdict de `ServerConfig.validateBaseUrl`,
+    // messages français compris (le contrat affiché à l'utilisateur).
+    "serverUrl" -> {
+        val raw = op.str("raw") ?: throw IllegalArgumentException("pilote: adresse absente")
+        val result = ServerConfig.validateBaseUrl(raw)
+        if (result is ServerUrlResult.Ok) {
+            obj(
+                "ok" to JsonValue.Bool(true),
+                "baseUrl" to JsonValue.Str(result.baseUrl),
+            )
+        } else {
+            obj(
+                "ok" to JsonValue.Bool(false),
+                "message" to JsonValue.Str((result as ServerUrlResult.Rejected).message),
+            )
+        }
+    }
+    // Allowlist du scraper : même préfixe strict que `ServerConfig.isAllowed`.
+    "serverAllowed" -> {
+        val url = op.str("url") ?: throw IllegalArgumentException("pilote: url absente")
+        val baseUrl = op.str("baseUrl") ?: ""
+        obj("allowed" to JsonValue.Bool(ServerConfig.isAllowed(url, baseUrl)))
     }
     else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")
 }
