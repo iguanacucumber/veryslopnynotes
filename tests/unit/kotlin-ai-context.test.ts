@@ -236,11 +236,12 @@ describe("contexte IA — parité des points d'entrée (#628)", () => {
       ITEM("manual", "Manuel : Maths", "manuel"),
       ITEM("web", "Page web : Article", "web"),
     ];
-    const results = await Promise.all(
-      ["homework", "photo", "revision", "chat"].map((entry) =>
-        ask<Assembled>({ op: "assemble", entry, items }),
-      ),
-    );
+    // Le pilote lit stdin ligne par ligne : des `ask` concurrents se disputent
+    // le flux et peuvent perdre une réponse. La parité se rejoue donc en série.
+    const results: Assembled[] = [];
+    for (const entry of ["homework", "photo", "revision", "chat"]) {
+      results.push(await ask<Assembled>({ op: "assemble", entry, items }));
+    }
     const corpus = results.map((r) => r.sources.map((s) => ({ type: s.type, label: s.label, text: s.text })));
     const reference = corpus[0] ?? [];
     expect(reference.length).toBeGreaterThan(0);
