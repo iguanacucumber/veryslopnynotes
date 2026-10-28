@@ -85,6 +85,9 @@ describe("versions Gradle : catalogue seul (#624)", () => {
 
   test("la version Kotlin est la MÊME au catalogue, au classpath racine et en CI", () => {
     const catalogue = catalog.versions.kotlin;
+    // `noUncheckedIndexedAccess` type l'entrée `Record<string, string>` en
+    // `string | undefined` : on nomme l'absence au lieu de propager le type.
+    if (catalogue === undefined) throw new Error(`${CATALOG} : version Kotlin absente`);
     const racine = rootKotlinVersion(read(ROOT_BUILD));
     const ci = ciKotlinVersion(read(CI));
     expect({
