@@ -8,7 +8,7 @@ agp = "9.4.1"
 kotlin = "2.4.21"
 core-ktx = "1.19.1"
 activity-ktx = "1.13.0"
-okhttp = "5.5.0"
+okhttp = "5.5.1"
 # #15 : jeton de session chiffré (EncryptedSharedPreferences). Apache-2.0
 # (compatible MIT).
 security-crypto = "1.1.0"
