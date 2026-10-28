@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "./AppContext";
+import { SkipLink } from "./components";
 import { IconBack, IconBell, IconCalendar, IconGrades, IconHome, IconRefresh, IconTasks, IconUser } from "./icons";
 import { useViewNavigate } from "./viewTransition";
 
@@ -42,13 +43,22 @@ export function Shell() {
   const { refresh, notify, authLost, sessionClosed } = useApp();
   const [spinning, setSpinning] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const titleFocusedOnce = useRef(false);
   const meta = ROUTE_META[location.pathname] ?? { title: "VerySlopyNyNotes" };
   const activeTab = TABS.findIndex((tab) => tab.to === location.pathname);
 
   // Le titre suit l'écran et le focus passe au titre : un lecteur d'écran
   // annonce la nouvelle page au lieu de laisser le focus sur le lien d'onglet.
+  // Au PREMIER rendu, on ne déplace pas le focus : le document est déjà
+  // annoncé au chargement, et le lien d'évitement doit rester le premier
+  // arrêt du premier Tab (#625). Les navigations suivantes, elles, déplacent
+  // bien le focus vers le titre.
   useEffect(() => {
     document.title = `${meta.title} · VerySlopyNyNotes`;
+    if (!titleFocusedOnce.current) {
+      titleFocusedOnce.current = true;
+      return;
+    }
     titleRef.current?.focus({ preventScroll: true });
   }, [location.pathname, meta.title]);
 
@@ -65,6 +75,7 @@ export function Shell() {
 
   return (
     <div className="shell">
+      <SkipLink />
       <header className="topbar">
         {meta.back ? (
           <button
@@ -118,7 +129,7 @@ export function Shell() {
         </div>
       </header>
 
-      <main className="main">
+      <main id="main" tabIndex={-1} className="main">
         <Outlet />
       </main>
 

@@ -93,6 +93,29 @@ a {
   outline-offset: 2px;
 }
 
+/* Lien d'évitement (#625) : premier élément focalisable de la coquille,
+   masqué tant qu'il n'a pas le focus. Il est FIXE et hors écran par
+   translation, jamais display:none — sinon il quitterait l'ordre de tabulation
+   et le clavier ne pourrait plus l'atteindre. */
+.skip-link {
+  position: fixed;
+  top: calc(8px + var(--safe-top));
+  left: 16px;
+  z-index: 40;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--brand-solid);
+  color: var(--on-brand);
+  font-weight: 600;
+  transform: translateY(calc(-100% - 24px));
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
 /* La coquille occupe la hauteur UTILE (celle qu'on peut lire) : elle est
    publiée par le JS d'après le viewport visuel, donc elle rétrécit quand le
    clavier s'ouvre. Une hauteur de viewport figée la laisserait dépasser sous
@@ -195,6 +218,13 @@ a {
   max-width: 760px;
   margin: 0 auto;
   padding: 16px 16px calc(108px + var(--keyboard-bottom));
+}
+
+/* Cible du lien d'évitement : le focus y est programmatique, l'anneau serait
+   du bruit visuel (même choix que le titre de la coquille). */
+.main:focus,
+.main:focus-visible {
+  outline: none;
 }
 
 .main--flush {
