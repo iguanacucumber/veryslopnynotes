@@ -244,8 +244,9 @@ page de login n'écrase pas la session du serveur (#526 et I28).
   `tests/unit/android-subject-pref.test.ts` (matière hors contrat : refus
   `ok:false` AVANT toute écriture, entrées bornées, règles du dépôt et du
   pont partagées : Kotlin exécuté) +
-  `tests/architecture/invariants.test.ts` (les blocs `catch` qui RÉPONDENT
-  capturent `Throwable` ; aucune sortie de `runCall` sans réponse) +
+  `tests/unit/android-bridge-call.test.ts` (Kotlin EXÉCUTÉ : identifiant
+  d'appel mal formé, méthode inconnue, requête trop volumineuse, abandon et
+  pont fermé répondent EXACTEMENT une fois ; aucun retour muet) +
   `tests/web/bridge.test.ts` (un rejet natif règle toujours la promesse,
   message non vide ; une méthode SANS timeout se règle quand le natif répond) +
   `tests/web/profile.test.ts` (un
@@ -255,6 +256,7 @@ page de login n'écrase pas la session du serveur (#526 et I28).
   avoir écrit, #528).
 - Commande : `make web` (ou `make architecture-test`).
 - Emplacement : `web/**`, `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`,
+  `android/app/src/main/java/fr/veryslopnynotes/app/BridgeCall.kt`,
   `android/app/src/main/java/fr/veryslopnynotes/app/HomeworkMessages.kt`,
   `android/app/src/main/java/fr/veryslopnynotes/app/BridgeErrors.kt`,
   `android/app/src/main/java/fr/veryslopnynotes/app/SubjectPrefMessages.kt`,

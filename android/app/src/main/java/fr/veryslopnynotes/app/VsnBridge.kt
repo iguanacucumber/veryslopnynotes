@@ -280,39 +280,31 @@ class VsnBridge(
         }
     }
 
+    /** Réponse précoce : le pont a déjà répondu, l'appel ne part pas sur un fil. */
+    private val earlySink = object : BridgeEarlySink {
+        override fun reject(requestId: String, code: String, message: String) {
+            this@VsnBridge.reject(requestId, code, message)
+        }
+
+        override fun resolveOk(requestId: String) {
+            resolve(requestId, JSONObject().put("ok", true))
+        }
+
+        override fun cancel(requestId: String, paramsJson: String) {
+            cancelled.remove(requestId)
+            cancelRequest(paramsJson)
+        }
+    }
+
     private fun runCall(requestId: String, method: String, paramsJson: String) {
-        if (!validId(requestId)) {
-            // #539 : la réponse ne manque JAMAIS (I10). Un identifiant mal
-            // formé était IGNORÉ : la promesse pendait (pour `pairing.scanQr`,
-            // dont le délai JS est 0, elle pendait POUR TOUJOURS). On le
-            // refuse donc — l'identifiant est renvoyé TEL QUEL, sinon le JS
-            // ne retrouverait pas sa promesse.
-            reject(requestId, "bad_request", "Identifiant d'appel invalide.")
-            return
-        }
-        if (method.length > MAX_METHOD_CHARS || method !in METHODS) {
-            reject(requestId, "bad_request", "Méthode inconnue.")
-            return
-        }
-        if (paramsJson.length > MAX_PARAMS_CHARS) {
-            reject(requestId, "bad_request", "Requête trop volumineuse.")
+        // #539 : la réponse ne manque JAMAIS (I10). L'admission est PURE et
+        // EXÉCUTÉE par le harnais de parité : identifiant mal formé, méthode
+        // inconnue, requête trop volumineuse, abandon et pont fermé répondent
+        // exactement une fois, sans sortie muette.
+        if (handleBridgeEarly(requestId, method, paramsJson, executors.isShutdown, earlySink)) {
             return
         }
         cancelled.remove(requestId)
-        // Annulation : traitée ICI, jamais dans la file. C'est un signal
-        // d'arrêt : il ne doit pas attendre le tour des appels en cours.
-        if (method == CANCEL_METHOD) {
-            cancelRequest(paramsJson)
-            resolve(requestId, JSONObject().put("ok", true))
-            return
-        }
-        if (executors.isShutdown) {
-            // #539 : pont fermé (WebView détruite) — l'appel tardif reçoit un
-            // REJET borné, pas le silence : une promesse pendrait pour toujours
-            // sur une méthode sans délai JS.
-            reject(requestId, "unavailable", "Pont fermé.")
-            return
-        }
         inFlight.add(requestId)
         // #404 : l'époque de session est capturée À L'ARRIVÉE de l'appel, pas
         // à son exécution : le travail part sur un autre fil, donc une écriture
@@ -363,7 +355,7 @@ class VsnBridge(
             // pas). Un abandon malformé n'est qu'un abandon raté.
             ""
         }
-        if (validId(target) && inFlight.contains(target)) cancelled.add(target)
+        if (validBridgeId(target) && inFlight.contains(target)) cancelled.add(target)
     }
 
     /** Fin de vie de la WebView : aucun fil ne survit à la rotation. */
@@ -1898,9 +1890,6 @@ class VsnBridge(
         }
     }
 
-    private fun validId(id: String): Boolean =
-        id.length in 1..64 && id.all { it.isLetterOrDigit() || it == '_' || it == '-' }
-
     /** Session morte = code dédié, seule façon de déclencher la porte JS. */
     private fun sessionOrThrow(error: String?) {
         if (error == DeviceAuth.REJECTED_MESSAGE) {
@@ -1918,16 +1907,11 @@ class VsnBridge(
         if (isNull(key)) "" else optString(key, "")
 
     companion object {
-        private const val MAX_METHOD_CHARS = 64
-        private const val MAX_PARAMS_CHARS = 256 * 1024
         private const val THEME_PREFS = "settings"
         private const val THEME_KEY = "theme"
 
         /** Journal du pont (jamais de secret : cf. le `init` de la classe). */
         private const val TAG = "vsn-bridge"
-
-        /** Méthode d'abandon d'un appel (allowlistée, comme toute autre). */
-        private const val CANCEL_METHOD = "bridge.cancel"
 
         /** Attente par défaut d'un dépôt (`await`). */
         const val AWAIT_DEFAULT_MS = 20_000L
@@ -1959,27 +1943,5 @@ class VsnBridge(
          * la perd définitivement (#371). Miroir : `web/src/bridge/types.ts`.
          */
         const val MAX_NATIVE_WAIT_MS = AWAIT_DEFAULT_MS + AWAIT_MANUAL_MS + AWAIT_LLM_MS
-
-        /** Miroir exact de `web/src/bridge/types.ts`. Aucun autre nom n'entre. */
-        private val METHODS = setOf(
-            "app.ready", "app.theme", "app.setTheme", "app.back",
-            "session.status", "session.restore", "session.logout", "session.accounts",
-            "pairing.scanQr", "pairing.pair", "pairing.pairDemo", "pairing.cancel",
-            "resources.cached", "resources.load", "resources.invalidate", "resources.sync",
-            "capabilities.load", "capabilities.refresh",
-            "news.item",
-            "assignments.toggle", "assignments.attachment",
-            "messages.list", "messages.thread", "messages.reply", "messages.create",
-            "messages.setRead", "messages.delete", "messages.recipients",
-            "settings.get", "settings.saveServer", "settings.subjectPrefs", "settings.saveSubject",
-            "settings.saveManualUrl", "settings.dismissManualPrompt",
-            "lessons.list", "lessons.load", "lessons.save", "lessons.delete", "lessons.setManual",
-            "lessons.addPhoto",
-            "llm.status", "llm.saveKey", "llm.forgetKey", "llm.askHomework",
-            "llm.solvePhoto", "llm.generateRevision",
-            "revision.list", "revision.load", "revision.exportPdf",
-            "profile.me", "profile.photo",
-            "bridge.cancel",
-        )
     }
 }
