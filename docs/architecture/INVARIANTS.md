@@ -76,6 +76,7 @@ références, l'existence des fichiers cités et les commandes citées.
 | I30 | Le plafond HTML s'applique avant la matérialisation. | `tests/unit/scraper-limits.test.ts` |
 | I31 | Un enregistrement publié = une ligne (clé kind + id). | `tests/unit/kotlin-payload-dedupe.test.ts` |
 | I32 | Une photo ne part que sur geste explicite, ré-encodée et bornée. | `tests/unit/kotlin-vision.test.ts` |
+| I33 | La sauvegarde Android n'emporte jamais les payloads en clair. | `tests/architecture/backup.test.ts` |
 
 ## Retirés
 
@@ -825,3 +826,19 @@ page de login n'écrase pas la session du serveur (#526 et I28).
   `android/data/OpenRouterLlm.kt`, `android/data/LocalDataStore.kt`,
   `web/src/features/course-notes/CourseNotesScreen.tsx`,
   `web/src/features/tasks/TasksScreen.tsx`.
+
+## I33 — La sauvegarde Android n'emporte jamais les payloads en clair
+- Invariant : les payloads Pronote écrits en clair dans `filesDir/offline/`
+  (notes, absences, sanctions, messages) ne partent ni dans la sauvegarde cloud
+  ni dans le transfert appareil-à-appareil. Le manifeste refuse la sauvegarde
+  (`allowBackup="false"`) ou exclut `files/`, le variant debug ne la réactive
+  pas, et l'app n'utilise aucune infrastructure de sauvegarde (ni `BackupAgent`,
+  ni `BackupManager`, ni permission `BACKUP`). Une copie cloud échapperait à
+  `AccountStore.logout()`.
+- Test : `tests/architecture/backup.test.ts` (manifeste réel et règles XML
+  réelles : exclusion `file`/`root` en cloud-backup et device-transfer, variant
+  debug fermé, aucun usage de l'infrastructure de sauvegarde).
+- Commande : `make check`.
+- Emplacement : `android/app/src/main/AndroidManifest.xml`,
+  `android/app/src/debug/AndroidManifest.xml`,
+  `android/app/src/main/res/xml/`.

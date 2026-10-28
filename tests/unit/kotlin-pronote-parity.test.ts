@@ -1009,8 +1009,8 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
     // Kotlin : vrai thread de garde, un tick RÉEL — mais une PÉRIODE courte
     // (25 ms) au lieu des 1 000 ms de production. Ce qui est testé, c'est le
     // SEUIL (110 s) et le fait que le fil pinge quand il est dû : la
-    // période n'en est qu'un détail. La période de production (1 000 ms)
-    // est vérifiée par source dans `tests/architecture/keepalive-ping.test.ts`.
+    // période n'en est qu'un détail. La période de production (1 000 ms) reste
+    // une convention de relecture, pas un invariant.
     // TS : horloge factice, aucun temps réel, mêmes 1 s d'intervalle.
     // Le seuil « frais » passe par `keepAliveTick` : pas besoin d'un second thread.
     const TICK_MS = 25;
