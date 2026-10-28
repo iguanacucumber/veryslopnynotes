@@ -330,6 +330,15 @@
   margin: 6px 0 0;
 }
 
+.task-help__context {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.task-help__context li + li {
+  margin-top: 2px;
+}
+
 /* Choix de la source photo : styles partagés dans `styles/app.css`
    (`.photo-choice`), utilisés aussi par le cahier. */
 

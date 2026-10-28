@@ -41,14 +41,19 @@ data class LessonNote(
 /**
  * Règles du cahier : bornes du lot et fabrique de sources citables.
  *
- * Une note devient une source `HomeworkSource` (étiquette « Cours : titre »),
+ * Une note devient une source `HomeworkSource` (étiquette « Cahier : titre »),
  * exactement comme l'extrait de cours Pronote ou le manuel. Le prompt la
  * marque Untrusted, et le modèle ne peut citer que les étiquettes fournies.
+ *
+ * #628 : plus de plafond artificiel à 3 notes. Toutes les notes valides de la
+ * matière (≤ [MAX_PER_SUBJECT]) sont candidates ; l'assembleur unique
+ * [AiContext] décide ensuite de la place réelle dans le budget du prompt et
+ * signale les coupes. Le préfixe « Cahier : » évite qu'une note homonyme d'un
+ * cours Pronote soit dédupliquée par erreur.
  */
 object LessonNotes {
     const val MAX_NOTES = 64
     const val MAX_PER_SUBJECT = 8
-    const val MAX_SOURCES = 3
     const val MAX_SOURCE_LABEL_CHARS = 200
 
     /** Notes d'une matière, les plus récentes d'abord, bornées au lot. */
@@ -63,14 +68,18 @@ object LessonNotes {
             .toList()
     }
 
-    /** Sources citables : au plus [MAX_SOURCES], texte borné comme une source. */
+    /**
+     * Sources citables (contrat historique, sans métadonnées) : toutes les
+     * notes valides de la matière, texte borné comme une source. La coupe à
+     * [Homework.MAX_SOURCE_CHARS] n'est pas signalée ici : pour le contexte IA,
+     * partir des notes brutes via [AiContext.note] afin d'exposer `truncated`.
+     */
     fun sources(notes: List<LessonNote>, subject: String): List<HomeworkSource> =
         forSubject(notes, subject)
-            .take(MAX_SOURCES)
             .mapNotNull { note ->
                 val text = note.text.trim().take(Homework.MAX_SOURCE_CHARS)
                 if (text.isEmpty()) return@mapNotNull null
-                val rawLabel = "Cours : " + note.title.trim().ifEmpty { "cours" }
+                val rawLabel = "Cahier : " + note.title.trim().ifEmpty { "cours" }
                 val label = rawLabel.take(MAX_SOURCE_LABEL_CHARS)
                 HomeworkSource(label = label, text = text).takeIf { it.isValid() }
             }

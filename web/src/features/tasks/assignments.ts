@@ -1,6 +1,7 @@
 // Logique pure de l'écran Tâches, portée de `AssignmentsSections.kt` et
 // `AssignmentsRepository.kt`. Aucun React, aucun réseau : les parsers et les
 // regroupements sont testables avec un `now` injecté.
+import type { AiContextSourceMeta } from "../../bridge/types";
 import { addDays, frDate, frTime, isoDay, parseDate, startOfWeek, weeksBetween } from "../../lib/format";
 
 export interface AssignmentAttachment {
@@ -51,7 +52,9 @@ const MAX_ATTACHMENTS = 10;
 const MAX_LABEL = 200;
 const MAX_REF = 200;
 const MAX_LESSON_TITLE = 200;
-const MAX_LESSON_EXCERPT = 500;
+// #628 : le cours rattaché alimente le contexte IA, pas seulement la carte :
+// même borne de payload que le manuel (8 000), alignée sur le contrat.
+const MAX_LESSON_EXCERPT = 8000;
 
 // Une `ref` est une clé interne, jamais une URL : même règle que
 // `AssignmentAttachment.isValid` (I1). Seul le schéma `homework:` est accepté ;
@@ -489,7 +492,7 @@ export function subjectInitial(subject: string): string {
 /**
  * Le devoir a-t-il du texte exploitable par l'assistant ?
  *
- * Le natif refuse AVANT l'appel quand ni la consigne ni l'extrait de cours
+ * Le natif refuse AVANT l'appel quand ni la consigne ni le cours
  * n'existent : proposer « Aide devoirs » ou « Fiche de révision » ne mènerait
  * qu'à une erreur. Le titre seul ne suffit pas. Un manuel utilisable ou un
  * cours du cahier pour CETTE matière est une source supplémentaire : il
@@ -519,4 +522,55 @@ export function assignmentHasAssistantMaterial(
 export function homeworkRefusalText(message: string | undefined): string {
   const texte = (message ?? "").trim();
   return texte !== "" ? texte : "L'assistant a refusé de répondre à cette question.";
+}
+
+// --- #628 : métadonnées « Ce qui est envoyé » --------------------------------
+
+const AI_CONTEXT_TYPES = new Set([
+  "assignment",
+  "course",
+  "attachment",
+  "note",
+  "manual",
+  "web",
+  "history",
+]);
+
+const AI_CONTEXT_TYPE_LABELS: Record<string, string> = {
+  assignment: "Consigne",
+  course: "Cours",
+  attachment: "Pièce jointe",
+  note: "Cahier",
+  manual: "Manuel",
+  web: "Page web",
+  history: "Historique",
+};
+
+/** Libellé français d'un type de source IA ; inconnu = « Source ». */
+export function aiContextTypeFr(type: string): string {
+  return AI_CONTEXT_TYPE_LABELS[type] ?? "Source";
+}
+
+/**
+ * Lit les métadonnées du pont (jamais un secret : type/libellé/taille/drapeau).
+ *
+ * Le natif les produit depuis `AiContext` ; on ne fait ici que borner et
+ * écarter une entrée hors contrat. Aucun texte de source n'est renvoyé à l'UI.
+ */
+export function parseAiContext(raw: unknown): AiContextSourceMeta[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AiContextSourceMeta[] = [];
+  for (const item of raw) {
+    if (typeof item !== "object" || item === null) continue;
+    const value = item as Record<string, unknown>;
+    const type = typeof value["type"] === "string" && AI_CONTEXT_TYPES.has(value["type"]) ? value["type"] : "";
+    const label = typeof value["label"] === "string" ? value["label"].trim().slice(0, 200) : "";
+    const chars =
+      typeof value["chars"] === "number" && Number.isFinite(value["chars"])
+        ? Math.max(0, Math.floor(value["chars"]))
+        : 0;
+    if (!type || !label) continue;
+    out.push({ type, label, chars, truncated: value["truncated"] === true });
+  }
+  return out;
 }

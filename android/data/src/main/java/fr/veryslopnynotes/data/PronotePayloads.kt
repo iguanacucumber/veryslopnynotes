@@ -3,6 +3,7 @@ package fr.veryslopnynotes.data
 import fr.veryslopnynotes.core.ALGORITHM_SUBJECT
 import fr.veryslopnynotes.core.AVERAGE_ALGORITHMS
 import fr.veryslopnynotes.core.AssignmentAttachment
+import fr.veryslopnynotes.core.AssignmentLessonContent
 import fr.veryslopnynotes.core.AveragesReport
 import fr.veryslopnynotes.core.Capabilities
 import fr.veryslopnynotes.core.CapabilityProbe
@@ -326,7 +327,10 @@ private fun lessonContents(client: Client, from: LocalDateTime, to: LocalDateTim
         try {
             val c = l.content() ?: continue
             val title = boundedCp(c.title, 200)
-            val excerpt = boundedCp(c.description, 500)
+            // #628 : le cours entier (dans la borne de PAYLOAD) alimente le
+            // contexte IA, au lieu d'un extrait de 500 caractères. Le budget du
+            // prompt (AiContext) coupe et SIGNALE ce qui dépasse.
+            val excerpt = boundedCp(c.description, AssignmentLessonContent.MAX_EXCERPT)
             if (title.isEmpty() && excerpt.isEmpty()) continue
             out[key] = (if (title.isEmpty()) "Contenu de cours" else title) to excerpt
         } catch (e: Exception) {

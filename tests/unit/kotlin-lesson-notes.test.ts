@@ -56,14 +56,22 @@ describe("course notes — executed rules (#586)", () => {
     expect(res.ids).toEqual(["n2", "n1"]);
   });
 
-  test.skipIf(skip)("course note sources are bounded and labelled for citation", async () => {
+  test.skipIf(skip)("course note sources are labelled for citation and bounded like a source", async () => {
     const notes = Array.from({ length: 6 }, (_, i) =>
       note(`n${i}`, "Maths", `Cours ${i}`, "x".repeat(4000), `2026-10-2${i}T08:00:00Z`),
     );
     const res = await ask({ op: "sources", subject: "Maths", notes });
-    // At most 3 sources, each bounded like a homework source.
-    expect(res.count).toBe(3);
-    expect(res.labels).toEqual(["Cours : Cours 5", "Cours : Cours 4", "Cours : Cours 3"]);
+    // #628 : plus de plafond artificiel à 3 notes. Chaque note reste bornée
+    // comme une source ; l'assembleur IA décide ensuite de la place réelle.
+    expect(res.count).toBe(6);
+    expect(res.labels).toEqual([
+      "Cahier : Cours 5",
+      "Cahier : Cours 4",
+      "Cahier : Cours 3",
+      "Cahier : Cours 2",
+      "Cahier : Cours 1",
+      "Cahier : Cours 0",
+    ]);
     for (const text of res.texts as string[]) expect(text.length).toBeLessThanOrEqual(2000);
   });
 

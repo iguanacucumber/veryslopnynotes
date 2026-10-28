@@ -62,6 +62,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // (`core/Capabilities.kt`) et la SONDE (`core/CapabilityProbe.kt`) sont,
   // eux, compilés ici : le verdict « contrat invalide = inconnu » est donc
   // testé sur le VRAI code exécuté (#413).
+  // #628 : l'assembleur de contexte unique (priorité, budgets, dédup,
+  // troncature signalée, refus vide). Fichier PUR : le harnais l'EXÉCUTE.
+  join(CORE, "AiContext.kt"),
   join(CORE, "AiPrompts.kt"),
   join(CORE, "Assignment.kt"),
   join(CORE, "Attendance.kt"),

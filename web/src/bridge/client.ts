@@ -3,6 +3,7 @@ import {
   BridgeCallError,
   DEFAULT_TIMEOUT_MS,
   MAX_PARALLEL_READS,
+  type AiContextSourceMeta,
   type BridgeError,
   type BridgeMethod,
   type LessonLoadResult,
@@ -262,15 +263,41 @@ export const bridge = {
   saveLlmKey: (key: string) => call<{ ok: boolean; message?: string }>("llm.saveKey", { key }),
   forgetLlmKey: () => call<{ ok: true }>("llm.forgetKey"),
   askHomework: (assignmentId: string, weekStart: string) =>
-    call<{ ok: boolean; body?: string; refused?: boolean; message?: string }>("llm.askHomework", { assignmentId, weekStart }),
+    call<{
+      ok: boolean;
+      body?: string;
+      refused?: boolean;
+      message?: string;
+      refusal?: string;
+      actions?: string[];
+      context?: AiContextSourceMeta[];
+      contextChars?: number;
+      contextOmitted?: number;
+    }>("llm.askHomework", { assignmentId, weekStart }),
   solveHomeworkPhoto: (assignmentId: string, weekStart: string, source: "camera" | "gallery") =>
-    call<{ ok: boolean; body?: string; refused?: boolean; cancelled?: boolean; message?: string }>(
-      "llm.solvePhoto",
-      { assignmentId, weekStart, source },
-      BRIDGE_TIMEOUTS["llm.solvePhoto"],
-    ),
+    call<{
+      ok: boolean;
+      body?: string;
+      refused?: boolean;
+      cancelled?: boolean;
+      message?: string;
+      refusal?: string;
+      actions?: string[];
+      context?: AiContextSourceMeta[];
+      contextChars?: number;
+      contextOmitted?: number;
+    }>("llm.solvePhoto", { assignmentId, weekStart, source }, BRIDGE_TIMEOUTS["llm.solvePhoto"]),
   generateRevision: (assignmentId: string, weekStart: string) =>
-    call<{ ok: boolean; message?: string }>("llm.generateRevision", { assignmentId, weekStart }),
+    call<{
+      ok: boolean;
+      refused?: boolean;
+      message?: string;
+      refusal?: string;
+      actions?: string[];
+      context?: AiContextSourceMeta[];
+      contextChars?: number;
+      contextOmitted?: number;
+    }>("llm.generateRevision", { assignmentId, weekStart }),
   revisions: () => call<{ sheets: unknown[] }>("revision.list"),
   revision: (id: string) => call<{ sheet: unknown | null }>("revision.load", { id }),
   exportRevision: (id: string) => call<{ ok: boolean; message?: string }>("revision.exportPdf", { id }),

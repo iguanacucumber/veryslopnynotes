@@ -27,13 +27,16 @@ import {
   IconSparkles,
 } from "../../ui/icons";
 import { parseDate } from "../../lib/format";
+import type { AiContextSourceMeta } from "../../bridge/types";
 import {
+  aiContextTypeFr,
   assignmentCardText,
   assignmentHasAssistantMaterial,
   assignmentSections,
   assignmentsInWeek,
   dueLabel,
   homeworkRefusalText,
+  parseAiContext,
   parseAssignmentsPayload,
   shiftWeek,
   subjectDisplayFr,
@@ -56,6 +59,8 @@ type HelpState = {
   /** true = corrigé obtenu depuis une photo d'énoncé. */
   photo?: boolean;
   photoSource?: "camera" | "gallery";
+  /** #628 : sources réellement envoyées (type, libellé, taille, troncature). */
+  context?: AiContextSourceMeta[];
 };
 
 type LlmState = { configured: boolean | null; error: string | null };
@@ -193,6 +198,7 @@ function TasksWeek({ week }: { week: string }) {
     try {
       const result = await bridge.askHomework(assignment.id, week);
       if (seq !== helpSeq.current) return;
+      const context = parseAiContext(result.context);
       if (result.refused) {
         // #416 : la phrase du pont fait foi (le motif libre du modèle ne
         // franchit jamais la frontière) ; le repli est générique, jamais le
@@ -203,6 +209,7 @@ function TasksWeek({ week }: { week: string }) {
           answer: null,
           refusal: homeworkRefusalText(result.message),
           error: null,
+          context,
         });
       } else if (!result.ok) {
         setHelp({
@@ -211,6 +218,7 @@ function TasksWeek({ week }: { week: string }) {
           answer: null,
           refusal: null,
           error: result.message || "L'assistant n'a pas répondu.",
+          context,
         });
       } else {
         setHelp({
@@ -219,6 +227,7 @@ function TasksWeek({ week }: { week: string }) {
           answer: result.body || "Réponse vide.",
           refusal: null,
           error: null,
+          context,
         });
       }
     } catch (e) {
@@ -247,6 +256,7 @@ function TasksWeek({ week }: { week: string }) {
     try {
       const result = await bridge.solveHomeworkPhoto(assignment.id, week, source);
       if (seq !== helpSeq.current) return;
+      const context = parseAiContext(result.context);
       if (result.cancelled) {
         setHelp(null);
         return;
@@ -260,6 +270,7 @@ function TasksWeek({ week }: { week: string }) {
           error: null,
           photo: true,
           photoSource: source,
+          context,
         });
       } else if (!result.ok) {
         setHelp({
@@ -270,6 +281,7 @@ function TasksWeek({ week }: { week: string }) {
           error: result.message || "L'assistant n'a pas répondu.",
           photo: true,
           photoSource: source,
+          context,
         });
       } else {
         setHelp({
@@ -280,6 +292,7 @@ function TasksWeek({ week }: { week: string }) {
           error: null,
           photo: true,
           photoSource: source,
+          context,
         });
       }
     } catch (e) {
@@ -570,7 +583,7 @@ function AssignmentCard({
   const text = assignmentCardText(assignment);
   const due = dueLabel(assignment.dueDate);
   const tone = dueTone(assignment.dueDate);
-  // Sans consigne ni extrait de cours, l'aide TEXTE refuserait avant le
+  // Sans consigne ni cours, l'aide TEXTE refuserait avant le
   // modèle. La photo, elle, est une source à part entière : elle reste
   // disponible même sans manuel ni cahier. Un manuel utilisable ou un cours
   // du cahier pour CETTE matière compte comme source pour le texte.
@@ -746,18 +759,28 @@ function AssignmentCard({
             <summary>Ce qui est envoyé</summary>
             <p className="tiny muted">
               {help.photo
-                ? "La photo de l’énoncé, la consigne, l’extrait de cours" +
+                ? "La photo de l’énoncé, la consigne, le cours" +
                   (lessonReady ? ", ton cours mémorisé" : "") +
                   (manualReady ? " et le texte du manuel" : "") +
                   " sont envoyés directement au fournisseur, avec ta clé. La photo est supprimée après lecture."
                 : manualReady && lessonReady
-                  ? "Le sujet, la consigne, l’extrait de cours, ton cahier et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
+                  ? "Le sujet, la consigne, le cours, ton cahier et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
                   : lessonReady
-                    ? "Le sujet, la consigne, l’extrait de cours et ton cours mémorisé sont envoyés directement au fournisseur, avec ta clé."
+                    ? "Le sujet, la consigne, le cours et ton cours mémorisé sont envoyés directement au fournisseur, avec ta clé."
                     : manualReady
-                      ? "Le sujet, la consigne, l’extrait de cours et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
-                      : "Le sujet, la consigne et l’extrait de cours de ce devoir sont envoyés directement au fournisseur, avec ta clé."}
+                      ? "Le sujet, la consigne, le cours et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
+                      : "Le sujet, la consigne et le cours de ce devoir sont envoyés directement au fournisseur, avec ta clé."}
             </p>
+            {help.context && help.context.length > 0 ? (
+              <ul className="task-help__context tiny muted">
+                {help.context.map((source, index) => (
+                  <li key={`${source.type}:${source.label}:${index}`}>
+                    {aiContextTypeFr(source.type)} — {source.label} ({source.chars} caractères
+                    {source.truncated ? ", tronquée" : ""})
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </details>
         </div>
       ) : null}

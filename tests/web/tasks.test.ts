@@ -116,11 +116,11 @@ describe("web tâches — parsing défensif", () => {
     const parsed = parseAssignment({
       ...VALID,
       attachments,
-      lessonContent: { title: "t".repeat(300), excerpt: "e".repeat(6000) },
+      lessonContent: { title: "t".repeat(300), excerpt: "e".repeat(9000) },
     });
     expect(parsed?.attachments).toHaveLength(10);
     expect(parsed?.lessonContent?.title).toHaveLength(200);
-    expect(parsed?.lessonContent?.excerpt).toHaveLength(500);
+    expect(parsed?.lessonContent?.excerpt).toHaveLength(8000);
   });
 
   test("nettoie les caractères de contrôle et garde le texte comme donnée", () => {

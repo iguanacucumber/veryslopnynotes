@@ -1,5 +1,8 @@
 package fr.veryslopnynotes.data
 
+import fr.veryslopnynotes.core.AiContext
+import fr.veryslopnynotes.core.AiContextEntry
+import fr.veryslopnynotes.core.AiContextItem
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.Homework
 import fr.veryslopnynotes.core.HomeworkOutcome
@@ -31,29 +34,44 @@ class HomeworkRepository {
         }
 
         /**
-         * Sources d'un devoir : ce que le serveur peut CITER, donc ce que
-         * l'élève a réellement sous les yeux. Les pièces jointes n'en sont pas
-         * (une `ref` n'a pas de texte : il faudrait aller le chercher côté
-         * serveur, hors périmètre de l'assistant) — d'où le refus honnête quand
-         * le devoir n'a ni consigne ni contenu de cours.
+         * Candidates brutes d'un devoir : consigne + cours Pronote. Aucune
+         * troncature ici : [AiContext] porte les budgets et signale la coupe
+         * (`truncated`), sinon une source coupée serait silencieuse (#628).
+         *
+         * Les pièces jointes n'y sont pas : une `ref` n'a pas de texte. Une
+         * pièce jointe LISIBLE sera ajoutée par l'appelant via
+         * [AiContext.attachment] quand #631/#634 fourniront son texte.
          */
-        fun sourcesFor(a: Assignment): List<HomeworkSource> {
-            val out = mutableListOf<HomeworkSource>()
+        fun contextItems(a: Assignment): List<AiContextItem> {
+            val out = mutableListOf<AiContextItem>()
             if (a.description.isNotBlank()) {
-                out.add(HomeworkSource(label = "Consigne", text = capped(a.description, Homework.MAX_SOURCE_CHARS)))
+                out.add(AiContext.assignment(a.description))
             }
             val lc = a.lessonContent
             if (lc != null && lc.excerpt.isNotBlank()) {
-                val label = capped("Cours : ${lc.title}", Homework.MAX_LABEL_CHARS).ifEmpty { "Cours" }
-                out.add(HomeworkSource(label = label, text = capped(lc.excerpt, Homework.MAX_SOURCE_CHARS)))
+                out.add(AiContext.course(lc.title, lc.excerpt))
             }
-            return out.filter { it.isValid() }.take(Homework.MAX_SOURCES)
+            return out
         }
 
         /**
+         * Sources d'un devoir (contrat historique, sans métadonnées) : ce que
+         * l'assistant peut CITER. Passe par l'assembleur unique, comme tous les
+         * points d'entrée IA (#628). Les appelants qui affichent « Ce qui est
+         * envoyé » utilisent [AiContext.assembleFor] pour garder les drapeaux
+         * de troncature.
+         */
+        fun sourcesFor(a: Assignment): List<HomeworkSource> =
+            AiContext.assembleFor(AiContextEntry.HOMEWORK, contextItems(a))
+                .sources.map { it.toHomeworkSource() }
+
+        /**
          * Extrait du manuel enregistré, comme source CITABLE. Le contenu vient
-         * du scraper : il est déjà borné (4 000 caractères) et sera marqué
-         * Untrusted par le prompt. Sans texte, aucune source n'est ajoutée.
+         * du scraper : il est borné (8 000 caractères) et sera marqué Untrusted
+         * par le prompt. Sans texte, aucune source n'est ajoutée.
+         *
+         * Pour le contexte IA unique, préférer [AiContext.manual] : la coupe à
+         * 2 000 caractères y est SIGNALÉE, pas silencieuse.
          */
         fun manualSource(doc: ManualDoc): HomeworkSource? {
             val excerpt = capped(doc.excerpt, Homework.MAX_SOURCE_CHARS)
