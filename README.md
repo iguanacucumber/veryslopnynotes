@@ -252,7 +252,7 @@ ni vers le fournisseur LLM.
 
 | Commande | Rôle |
 |---|---|
-| `make check` | Secrets, typecheck, tests unitaires, architecture, contrats, garde-fou Kotlin, compilation Kotlin réelle et frontend — en parallèle. |
+| `make check` | Secrets, typecheck, tests unitaires, architecture, contrats, garde-fou Kotlin, compilation Kotlin réelle + Android Lint et frontend — en parallèle. |
 | `make check-fast` | Boucle interne (~2,1 s à chaud) sans Gradle ; le build Vite est inclus, jamais le gate de merge. |
 | `make watch` | Relance les tests unitaires + web à chaque changement (`T=tests/unit/foo.test.ts` pour cibler). |
 | `make web` | Typecheck + tests + build de l'interface React. |
@@ -260,7 +260,7 @@ ni vers le fournisseur LLM.
 | `make contracts` | Tests des contrats partagés. |
 | `make architecture-test` | Scans d'architecture + invariants. |
 | `make check-kotlin` | Garde-fou structurel Kotlin, sans SDK ni réseau. |
-| `make android-compile` | Vraie compilation Kotlin (le seul contrôle des symboles et surcharges). Sans JDK/SDK, elle ÉCHOUE (`ALLOW_SKIP_ANDROID=1` assume le saut, hors merge). |
+| `make android-compile` | Vraie compilation Kotlin (le seul contrôle des symboles et surcharges) + Android Lint (`:app:lintDebug`, même invocation Gradle). Sans JDK/SDK, elle ÉCHOUE (`ALLOW_SKIP_ANDROID=1` assume le saut, hors merge). |
 | `make web-smoke` | Test navigateur du frontend (Chromium requis), hors `make check` : les 17 routes (15 écrans + 2 alias), les deux parcours d'appairage (téléphone neuf, session expirée) et le parcours de déconnexion. |
 | `make buildDebugApk` / `make buildRelApk` | APK debug / APK + AAB release. |
 | `make updateApkToPhone` | APK debug puis `adb install -r` (données conservées). |
