@@ -157,9 +157,11 @@ clé OpenRouter reste chiffrée dans l'app et part directement au fournisseur da
 un en-tête HTTPS `Authorization`. Aucun `.env*`, jeton de session ou clé LLM dans
 le dépôt, les variables serveur ou les logs.
 
-**Exception de sécurité :** `POST /v1/manuals/scrape` est volontairement sans
-authentification. Il reçoit une plateforme et une URL dans le corps de la
-requête, sans les journaliser ; Playwright réutilise un cookie jar local
+**Exception de sécurité :** `POST /v1/manuals/scrape` et `POST /v1/web/scrape`
+(#634) sont volontairement sans authentification. Ils reçoivent une URL dans le
+corps de la requête, sans la journaliser ni la renvoyer. La page web ne monte
+AUCUN cookie jar (aucun cookie de l'élève) et refuse les identifiants userinfo ;
+le scrape de manuel réutilise un cookie jar local
 gitignoré (`playwright/.auth/manuals.json`) **choisi par le serveur** : le corps
 ne peut plus en demander le nom — un nom de jar suffisait à appeler la
 session d'un autre tenant (le répertoire était imposé, pas l'isolation, #538

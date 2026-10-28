@@ -91,6 +91,48 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
         )
     }
     "manualIsCatalog" -> ok("ok" to JVal.Bool(ManualCatalog.isCatalog(op.str("text") ?: "")))
+    // #634 : adresse d'une page web. Mêmes règles que ManualUrl, messages
+    // propres à la page web ; le serveur refait la garde SSRF (DNS inclus).
+    "webUrl" -> when (val result = WebUrl.validate(op.str("text") ?: "")) {
+        is WebUrlResult.Ok -> ok("ok" to JVal.Bool(true), "url" to JVal.Str(result.url))
+        is WebUrlResult.Rejected -> ok("ok" to JVal.Bool(false), "message" to JVal.Str(result.message))
+    }
+    // #634 : source citable d'une page web. Aucune URL dans le document ;
+    // sans texte, aucune source (jamais une page inventée).
+    "webSource" -> {
+        val doc = WebPageDoc(
+            title = op.str("title") ?: "",
+            excerpt = op.str("excerpt") ?: "",
+        )
+        val source = WebPage.source(doc)
+        ok(
+            "label" to (source?.label?.let { JVal.Str(it) } ?: JVal.Null),
+            "text" to (source?.text?.let { JVal.Str(it) } ?: JVal.Null),
+        )
+    }
+    // #634 : la source web passe dans le VRAI pipeline de prompt : contenu
+    // marque Untrusted, libelle citable tel quel, URL absente.
+    "webPrompt" -> {
+        val doc = WebPageDoc(
+            title = op.str("title") ?: "",
+            excerpt = op.str("excerpt") ?: "",
+        )
+        val source = WebPage.source(doc)
+        val body = if (source == null) {
+            ""
+        } else {
+            // Vrai pipeline I6 : les blocs DONNEE sont encadres Untrusted.
+            buildSafePrompt(
+                "Consigne fixe de test.",
+                HomeworkAi.homeworkData(op.str("question") ?: "Question", listOf(source)),
+                "nonceweb634test0001",
+            ).body
+        }
+        ok(
+            "label" to (source?.label?.let { JVal.Str(it) } ?: JVal.Null),
+            "body" to JVal.Str(body),
+        )
+    }
     else -> throw IllegalArgumentException("pilote: opération inconnue : ${op.str("op")}")
 }
 

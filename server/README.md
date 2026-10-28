@@ -1,10 +1,15 @@
 # server/ — scraper de manuels
 
 L'app parle directement à Pronote et à OpenRouter ; ce serveur ne participe pas
-à ces flux (ADR-003). Il ne sert que deux routes :
+à ces flux (ADR-003). Il ne sert que trois routes :
 
 - `GET /v1/health` pour la sonde.
 - `POST /v1/manuals/scrape` pour extraire une page de manuel.
+- `POST /v1/web/scrape` pour extraire une page web publique choisie par
+  l'élève (#634). Même moteur et même garde SSRF, mais AUCUN cookie jar :
+  une page web ne s'authentifie pas et ne porte aucun cookie de l'élève.
+  Le contenu non textuel est refusé (`415 not_text`) et une page trop
+  volumineuse est refusée avant lecture (`413 too_large`).
 
 Le scraper est sans authentification et n'exige que la plateforme et l'URL de
 départ dans le corps de requête. Les identifiants de portail (`username` /

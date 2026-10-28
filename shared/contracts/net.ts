@@ -215,3 +215,26 @@ export function isPublicHttpUrl(raw: string): boolean {
   if (u.protocol !== "http:" && u.protocol !== "https:") return false;
   return !isBlockedHost(u.hostname);
 }
+
+/** Longueur maximale d'une URL de page saisie (miroir de `ManualUrl.MAX_CHARS`). */
+export const PAGE_URL_MAX_CHARS = 2000;
+
+/**
+ * URL de page saisie par l'élève : mêmes règles que `ManualUrl.kt` (schéma
+ * http(s), hôte public littéral, pas d'identifiants, pas d'espace ni de
+ * caractère de contrôle, bornes). La résolution DNS d'un nom est faite par le
+ * SERVEUR (`server/infrastructure/ssrf.ts`) : ce validateur est synchrone et
+ * LITTÉRAL, comme `isPublicHttpUrl`.
+ */
+export function isPublicPageUrl(raw: string): boolean {
+  const input = raw.trim();
+  if (input === "" || input.length > PAGE_URL_MAX_CHARS) return false;
+  if (/[\s\p{Cc}]/u.test(input)) return false;
+  const sep = input.indexOf("://");
+  if (sep <= 0) return false;
+  const scheme = input.slice(0, sep).toLowerCase();
+  if (scheme !== "http" && scheme !== "https") return false;
+  const authority = input.slice(sep + 3).split(/[/?#]/, 1)[0] ?? "";
+  if (authority === "" || authority.includes("@") || authority.includes("\\")) return false;
+  return isPublicHttpUrl(input);
+}
