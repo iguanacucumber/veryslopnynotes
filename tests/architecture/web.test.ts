@@ -11,6 +11,7 @@ import {
 const ROOT = join(import.meta.dir, "..", "..");
 const WEB = join(ROOT, "web");
 const BRIDGE = join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt");
+const BRIDGE_CALL = join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/BridgeCall.kt");
 
 function list(dir: string): string[] {
   const out: string[] = [];
@@ -159,7 +160,7 @@ describe("contrat du pont natif", () => {
     // Parité 1:1 : une méthode présente d'un seul côté est un trou (le JS
     // l'appellera et le natif refusera, ou l'inverse : une méthode
     // appelable hors contrat).
-    const kotlin = readFileSync(BRIDGE, "utf8");
+    const kotlin = readFileSync(BRIDGE_CALL, "utf8");
     const allowlist = kotlinMethods(kotlin);
     expect(new Set(allowlist)).toEqual(new Set(BRIDGE_METHODS));
     expect(allowlist.length).toBe(BRIDGE_METHODS.length);

@@ -149,6 +149,11 @@ export const PRODUCTION_SOURCES: string[] = [
   // route de l'interface web (le chemin porté par le HASH de l'URL, #400).
   join(APP, "AttachmentMime.kt"),
   join(APP, "BridgeErrors.kt"),
+  // #646 : l'admission d'un appel AVANT tout fil (#539) — identifiant mal
+  // formé, méthode inconnue, requête trop volumineuse, abandon et pont fermé.
+  // Fichier PUR : le harnais l'EXÉCUTE, donc chaque sortie précoce répond
+  // exactement une fois (aucun parseur d'accolades dans le gate).
+  join(APP, "BridgeCall.kt"),
   // `app` — les EXÉCUTEURS du pont (#393) : un fil par appel et une file LLM
   // à part. Logique pure (`java.util.concurrent` seul) : le harnais les
   // EXÉCUTE, donc le test porte sur du code de production, pas sur un miroir.
