@@ -26,6 +26,8 @@ import fr.veryslopnynotes.core.CapabilitiesJson
 import fr.veryslopnynotes.core.ChildAccount
 import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.ExamCandidate
+import fr.veryslopnynotes.core.ExerciseHelpMode
+import fr.veryslopnynotes.core.Exercises
 import fr.veryslopnynotes.core.Homework
 import fr.veryslopnynotes.core.HomeworkAi
 import fr.veryslopnynotes.core.HomeworkOutcome
@@ -443,6 +445,8 @@ class VsnBridge(
             "llm.solvePhoto" -> solveHomeworkPhoto(p, epoch)
             "llm.generateRevision" -> generateRevision(p, epoch)
             "llm.teacherTurn" -> teacherTurn(p)
+            "exercises.propose" -> exercisesPropose(p)
+            "exercises.help" -> exercisesHelp(p)
             "teacher.load" -> teacherLoad()
             "teacher.save" -> teacherSave(p, epoch)
             "teacher.delete" -> teacherDelete(epoch)
@@ -1766,6 +1770,205 @@ class VsnBridge(
             // brut de l'exception : il peut nommer un compte ou un hôte.
             JSONObject().put("ok", false)
                 .put("message", revisionFailureMessage(revisionFailure(e)))
+                .withAiContext(context)
+        }
+    }
+
+    /**
+     * Exercices du manuel (#632) : proposition LOCALE, sans appel payant.
+     *
+     * Le texte vient du manuel déjà extrait par le scraper (ou du cahier de
+     * cours). On ne fabrique jamais un énoncé : sans marqueur numéroté, la
+     * liste est vide et l'UI propose d'ajouter une source. `hint` (page ou
+     * chapitre libre) ne fait que FILTRER les énoncés déjà extraits.
+     */
+    private fun exercisesPropose(p: JSONObject): JSONObject {
+        val subject = bounded(p.string("subject"), TeacherChat.MAX_SUBJECT_CHARS)
+        if (subject.isEmpty()) {
+            return JSONObject().put("ok", false).put("message", "Choisis une matière.")
+        }
+        val hint = bounded(p.string("hint"), Exercises.MAX_HINT_CHARS)
+        val doc = manualDocFor(subject)
+        val subjects = knownSubjects()
+        val manualReady = manualAvailableForSubject(subject, subjects)
+        val found = mutableListOf<fr.veryslopnynotes.core.Exercise>()
+        doc?.let { manual ->
+            found.addAll(
+                Exercises.extract(
+                    text = manual.excerpt,
+                    page = manual.page,
+                    source = "Manuel : ${manual.title}",
+                    max = Exercises.MAX_EXERCISES,
+                ),
+            )
+        }
+        for (note in LessonNotes.forSubject(lessons.notes(), subject)) {
+            found.addAll(
+                Exercises.extract(
+                    text = note.text,
+                    page = 0,
+                    source = "Cahier : ${note.title}",
+                    max = Exercises.MAX_EXERCISES,
+                ),
+            )
+        }
+        val unique = found.distinctBy { it.statement.lowercase() }
+        val items = Exercises.filter(unique, hint).take(Exercises.MAX_EXERCISES)
+        val json = JSONObject()
+            .put("ok", true)
+            .put("manual", doc != null)
+            .put("manualReady", manualReady)
+            .put("manualTitle", doc?.title ?: "")
+            .put("manualPage", doc?.page ?: 0)
+            .put("exercises", JSONArray().apply {
+                for (item in items) {
+                    put(
+                        JSONObject()
+                            .put("number", item.number)
+                            .put("statement", item.statement)
+                            .put("page", item.page)
+                            .put("difficulty", item.difficulty)
+                            .put("source", item.source),
+                    )
+                }
+            })
+        if (items.isEmpty()) {
+            json.put(
+                "message",
+                if (hint.isNotEmpty()) {
+                    "Aucun exercice ne correspond à « $hint » dans le manuel ou le cahier."
+                } else {
+                    "Aucun exercice numéroté lisible dans le manuel ou le cahier de cette matière."
+                },
+            )
+            val actions = mutableListOf("add_course")
+            if (!manualReady) actions.add(0, "enable_manual")
+            json.put("actions", JSONArray(actions))
+        }
+        return json
+    }
+
+    /**
+     * Aide progressive sur UN exercice (#632) : indice, méthode ou correction
+     * complète (choix explicite du web). La réponse de l'élève (texte ou photo)
+     * est une DONNÉE Untrusted. Aucun effet Pronote, aucune écriture.
+     */
+    private fun exercisesHelp(p: JSONObject): JSONObject {
+        val subject = bounded(p.string("subject"), TeacherChat.MAX_SUBJECT_CHARS)
+        if (subject.isEmpty()) {
+            return JSONObject().put("ok", false).put("message", "Choisis une matière.")
+        }
+        val number = bounded(p.string("number"), Exercises.MAX_NUMBER_CHARS)
+        val statement = bounded(p.string("statement"), Exercises.MAX_STATEMENT_CHARS)
+        if (statement.isEmpty()) {
+            return JSONObject().put("ok", false).put("message", "Choisis un exercice.")
+        }
+        val mode = ExerciseHelpMode.fromWire(p.string("mode")) ?: ExerciseHelpMode.HINT
+        val apiKey = llmKeys.apiKey()?.trim()
+            ?: return JSONObject().put("ok", false)
+                .put("code", "key")
+                .put("message", fr.veryslopnynotes.data.HomeworkRepository.NO_KEY_MESSAGE)
+        if (apiKey.length < OpenRouterLlm.MIN_API_KEY_CHARS) {
+            return JSONObject().put("ok", false)
+                .put("code", "key")
+                .put("message", "Clé LLM trop courte : renseigne-la dans Réglages.")
+        }
+        var studentAnswer = bounded(p.string("answer"), Exercises.MAX_ANSWER_CHARS)
+        val photoSource = bounded(p.string("photoSource"), 16)
+        if (photoSource == "camera" || photoSource == "gallery") {
+            when (val shot = awaitPhoto(photoSource)) {
+                is PhotoCapture.Result.Cancelled -> return JSONObject().put("ok", false).put("cancelled", true)
+                is PhotoCapture.Result.Error ->
+                    return JSONObject().put("ok", false).put("message", shot.message)
+                is PhotoCapture.Result.Ok -> {
+                    val bytes = try {
+                        PhotoPrep.prepare(shot.file)
+                    } finally {
+                        photos.discard(shot.file)
+                    }
+                    if (bytes == null) {
+                        return JSONObject().put("ok", false)
+                            .put("message", "Photo illisible ou trop lourde : reprends-la.")
+                    }
+                    studentAnswer = try {
+                        transcribeLesson(
+                            provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
+                            image = VisionImage(
+                                mime = "image/jpeg",
+                                base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
+                            ),
+                            apiKey = apiKey,
+                        ).text
+                    } catch (e: SecretDetectedException) {
+                        return JSONObject().put("ok", false).put("code", "secret")
+                            .put("message", secretRefusalMessage(e.kind))
+                    } catch (e: OutputTooLongException) {
+                        return JSONObject().put("ok", false).put("code", "format").put("message", e.userMessage)
+                    } catch (_: Exception) {
+                        return JSONObject().put("ok", false).put("code", "format")
+                            .put("message", "Photo illisible : reprends-la ou écris ta réponse.")
+                    }
+                    if (studentAnswer.isBlank()) {
+                        return JSONObject().put("ok", false).put("code", "format")
+                            .put("message", "Aucune réponse lisible sur la photo : reprends-la ou écris ta réponse.")
+                    }
+                }
+            }
+        }
+        // L'énoncé est la source la PLUS prioritaire : il vient de la page que
+        // l'élève a choisie, pas d'une reconstitution du modèle.
+        val label = "Exercice ${number.ifEmpty { "?" }}"
+        val items = mutableListOf(
+            AiContextItem(AiContextType.ASSIGNMENT, label, statement),
+        )
+        for (source in aiContextForSubject(subject, emptyList()).sources) {
+            items.add(
+                AiContextItem(
+                    type = source.type,
+                    label = source.label,
+                    text = source.text,
+                    truncated = source.truncated,
+                    originalChars = source.originalChars,
+                ),
+            )
+        }
+        val context = AiContext.assembleFor(AiContextEntry.REVISION, items)
+        if (context.sources.isEmpty()) return refusalJson(context, ok = false)
+        return try {
+            val reply = Exercises.requestHelp(
+                provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
+                mode = mode,
+                context = context,
+                exerciseNumber = number,
+                statement = statement,
+                studentAnswer = studentAnswer,
+                apiKey = apiKey,
+            )
+            JSONObject()
+                .put("ok", true)
+                .put("answer", reply.answer)
+                .put("sources", JSONArray(reply.sources))
+                .put("unsourced", reply.unsourced)
+                .put("mode", mode.wire)
+                .withAiContext(context)
+        } catch (e: SecretDetectedException) {
+            JSONObject().put("ok", false).put("code", "secret").put("message", secretRefusalMessage(e.kind))
+                .withAiContext(context)
+        } catch (e: OutputTooLongException) {
+            JSONObject().put("ok", false).put("code", "format").put("message", e.userMessage)
+                .withAiContext(context)
+        } catch (e: LlmError) {
+            JSONObject().put("ok", false).put("code", teacherFailureCode(e)).put("message", e.userMessage)
+                .withAiContext(context)
+        } catch (e: AiError) {
+            JSONObject().put("ok", false)
+                .put("code", teacherFailureCode(e))
+                .put("message", "Réponse du professeur illisible ou vide : réessaie.")
+                .withAiContext(context)
+        } catch (_: Exception) {
+            JSONObject().put("ok", false)
+                .put("code", "network")
+                .put("message", "Le professeur est indisponible : réessaie dans un instant.")
                 .withAiContext(context)
         }
     }

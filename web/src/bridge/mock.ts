@@ -612,6 +612,58 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
     case "teacher.delete":
       teacherThread = { subject: "", messages: [] };
       return ok({ ok: true }) as Promise<T>;
+    case "exercises.propose": {
+      const subject = String(p["subject"] ?? "").trim();
+      const hint = String(p["hint"] ?? "").trim();
+      const exercises = [
+        {
+          number: "12",
+          statement: "Calculer la somme des termes d'une suite arithmétique de raison 3 et de premier terme 5.",
+          page: 84,
+          difficulty: "facile",
+          source: "Manuel : Mathématiques 1re",
+        },
+        {
+          number: "13",
+          statement: "Démontrer par récurrence que la suite définie par u0 = 1 et un+1 = 2un + 1 est croissante.",
+          page: 84,
+          difficulty: "moyen",
+          source: "Manuel : Mathématiques 1re",
+        },
+      ].filter((item) => hint === "" || `${item.number} ${item.statement}`.toLowerCase().includes(hint.toLowerCase()));
+      return ok({
+        ok: true,
+        exercises: subject ? exercises : [],
+        manual: Boolean(subject),
+        manualReady: Boolean(subject),
+        manualTitle: subject ? "Mathématiques 1re" : "",
+        manualPage: 84,
+        ...(subject && exercises.length === 0
+          ? { message: `Aucun exercice ne correspond à « ${hint} ».`, actions: ["add_course"] }
+          : {}),
+      }) as Promise<T>;
+    }
+    case "exercises.help": {
+      const subject = String(p["subject"] ?? "").trim();
+      const number = String(p["number"] ?? "").trim();
+      const mode = String(p["mode"] ?? "hint");
+      const answer =
+        mode === "correction"
+          ? `Correction de l’exercice ${number} : reprends d’abord la formule du cours, puis vérifie chaque étape.`
+          : mode === "method"
+            ? `Méthode pour l’exercice ${number} : 1. Repère les données. 2. Applique la formule. 3. Vérifie l’unité.`
+            : `Indice pour l’exercice ${number} : commence par écrire ce que tu cherches.`;
+      return ok({
+        ok: true,
+        answer: subject ? answer : "Choisis une matière.",
+        sources: ["Manuel : Mathématiques 1re"],
+        unsourced: false,
+        mode,
+        context: [{ type: "manual", label: "Manuel : Mathématiques 1re", chars: 1200, truncated: false }],
+        contextChars: 1200,
+        contextOmitted: 0,
+      }) as Promise<T>;
+    }
     case "revision.list":
       return ok({ sheets: revisions }) as Promise<T>;
     case "revision.load":

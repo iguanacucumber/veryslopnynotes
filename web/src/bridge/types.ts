@@ -58,6 +58,8 @@ export const BRIDGE_METHODS = [
   "llm.solvePhoto",
   "llm.generateRevision",
   "llm.teacherTurn",
+  "exercises.propose",
+  "exercises.help",
   "teacher.load",
   "teacher.save",
   "teacher.delete",
@@ -126,6 +128,7 @@ export const BRIDGE_TIMEOUTS: Partial<Record<BridgeMethod, number>> = {
   // son propre plafond (AWAIT_PHOTO_MS) pour ne pas pendre un fil.
   "lessons.addPhoto": 0,
   "llm.solvePhoto": 0,
+  "exercises.help": 0,
   "pairing.pair": 120_000,
   // La connexion de démonstration ouvre une session sur l'établissement de
   // démonstration : c'est un aller-retour de login, comme l'appairage.
@@ -375,4 +378,49 @@ export interface TeacherSaveResult {
   ok: boolean;
   message?: string;
   count?: number;
+}
+
+/** Niveau d'aide d'un exercice (#632) : jamais choisi par le modèle. */
+export type ExerciseHelpMode = "hint" | "method" | "correction";
+
+/** Énoncé verbatim extrait du manuel ou du cahier. */
+export interface ExerciseItem {
+  number: string;
+  statement: string;
+  /** Page du manuel ; 0 quand la source est le cahier (pas de pagination). */
+  page: number;
+  /** « facile », « moyen », « difficile » ou "" quand le manuel ne le dit pas. */
+  difficulty: string;
+  /** Libellé citable exact (« Manuel : … » ou « Cahier : … »). */
+  source: string;
+}
+
+export interface ExerciseProposal {
+  ok: boolean;
+  exercises: ExerciseItem[];
+  /** true = un extrait de manuel a effectivement alimenté la liste. */
+  manual: boolean;
+  /** true = un manuel est configuré pour cette matière. */
+  manualReady: boolean;
+  manualTitle?: string;
+  manualPage?: number;
+  message?: string;
+  actions?: string[];
+}
+
+export interface ExerciseProposeParams {
+  subject: string;
+  /** Page ou chapitre libre : FILTRE les énoncés déjà extraits. */
+  hint?: string;
+}
+
+export interface ExerciseHelpParams {
+  subject: string;
+  number: string;
+  statement: string;
+  mode: ExerciseHelpMode;
+  /** Réponse de l'élève, texte (vide pour « corrige l'énoncé »). */
+  answer?: string;
+  /** Capture une photo de la réponse : transcrite avant l'appel. */
+  photoSource?: "camera" | "gallery";
 }

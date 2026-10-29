@@ -18,6 +18,7 @@ import {
   type TeacherTurnError,
 } from "./teacher";
 import { TeacherView } from "./TeacherScreen";
+import { ExercisesRoute } from "./ExercisesRoute";
 import "./teacher.css";
 
 function messageOf(error: unknown, fallback: string): string {
@@ -237,6 +238,9 @@ export function TeacherRoute() {
         focusTick={focusTick}
         tab={tab}
         onTabChange={setTab}
+        exercisesPanel={
+          <ExercisesRoute subjects={subjects} subject={subject} onSubjectChange={changeSubject} embedded />
+        }
         busy={loading || deleting}
         threadLoaded={threadLoaded}
         onSubjectChange={changeSubject}
