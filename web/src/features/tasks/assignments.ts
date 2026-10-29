@@ -13,6 +13,11 @@ export interface AssignmentAttachment {
 export interface AssignmentLessonContent {
   title: string;
   excerpt: string;
+  /**
+   * #631 : pièces jointes du cours. Elles n'ouvrent pas encore de viewer côté
+   * web, mais elles alimentent le contexte IA natif.
+   */
+  attachments?: AssignmentAttachment[];
 }
 
 export interface Assignment {
@@ -23,6 +28,9 @@ export interface Assignment {
   done: boolean;
   description: string;
   lessonContent: AssignmentLessonContent | null;
+  /** #631 : TOUS les cours de la même matière + jour (le premier est aussi
+   *  `lessonContent`, pour les lecteurs antérieurs). */
+  lessonContents: AssignmentLessonContent[];
   attachments: AssignmentAttachment[];
   periodId: string | null;
   weekId: string | null;
@@ -49,6 +57,7 @@ export const ASSIGNMENTS_MAX_ITEMS = 500;
 export const ASSIGNMENTS_MAX_SCAN = 500;
 const MAX_DESCRIPTION = 2000;
 const MAX_ATTACHMENTS = 10;
+const MAX_LESSONS = 10;
 const MAX_LABEL = 200;
 const MAX_REF = 200;
 const MAX_LESSON_TITLE = 200;
@@ -187,9 +196,17 @@ function parseLesson(raw: unknown): AssignmentLessonContent | null {
   if (!o) return null;
   // Les textes sont tronqués, jamais rejetés : une fiche de cours bavarde ne
   // doit pas faire disparaître le devoir entier.
+  const attachments: AssignmentAttachment[] = [];
+  const rawAttachments = Array.isArray(o["attachments"]) ? o["attachments"] : [];
+  for (const rawAttachment of rawAttachments.slice(0, MAX_ATTACHMENTS)) {
+    const attachment = parseAttachment(rawAttachment);
+    if (!attachment) return null;
+    attachments.push(attachment);
+  }
   const lesson: AssignmentLessonContent = {
     title: text(o["title"], MAX_LESSON_TITLE),
     excerpt: text(o["excerpt"], MAX_LESSON_EXCERPT),
+    attachments,
   };
   if (!lesson.title) return null;
   return lesson;
@@ -215,10 +232,20 @@ export function parseAssignment(raw: unknown): Assignment | null {
   }
 
   let lessonContent: AssignmentLessonContent | null = null;
-  if (o["lessonContent"] != null) {
-    lessonContent = parseLesson(o["lessonContent"]);
-    if (!lessonContent) return null;
+  let lessonContents: AssignmentLessonContent[] = [];
+  const rawLessons = Array.isArray(o["lessonContents"]) ? o["lessonContents"] : [];
+  if (rawLessons.length > 0) {
+    for (const rawLesson of rawLessons.slice(0, MAX_LESSONS)) {
+      const lesson = parseLesson(rawLesson);
+      if (!lesson) return null;
+      lessonContents.push(lesson);
+    }
+  } else if (o["lessonContent"] != null) {
+    const lesson = parseLesson(o["lessonContent"]);
+    if (!lesson) return null;
+    lessonContents = [lesson];
   }
+  lessonContent = lessonContents[0] ?? null;
 
   const dueDate = text(o["dueDate"], 64);
   return {
@@ -229,6 +256,7 @@ export function parseAssignment(raw: unknown): Assignment | null {
     done: o["done"] === true,
     description,
     lessonContent,
+    lessonContents,
     attachments,
     periodId: optionalText(o["periodId"]),
     weekId: optionalText(o["weekId"]),
@@ -499,7 +527,11 @@ export function subjectInitial(subject: string): string {
  * suffit à lui seul.
  */
 export function assignmentHasAssistantMaterial(
-  assignment: Pick<Assignment, "description" | "lessonContent">,
+  assignment: Pick<Assignment, "description" | "lessonContent"> & {
+    /** #631 : plusieurs cours et leurs pièces jointes sont des sources. */
+    readonly lessonContents?: Assignment["lessonContents"];
+    readonly attachments?: Assignment["attachments"];
+  },
   manualReady = false,
   lessonReady = false,
 ): boolean {
@@ -507,7 +539,10 @@ export function assignmentHasAssistantMaterial(
     manualReady ||
     lessonReady ||
     assignment.description.trim() !== "" ||
-    (assignment.lessonContent?.excerpt.trim() ?? "") !== ""
+    (assignment.lessonContents ?? []).some((lesson) => lesson.excerpt.trim() !== "") ||
+    (assignment.lessonContents ?? []).some((lesson) => (lesson.attachments?.length ?? 0) > 0) ||
+    (assignment.lessonContent?.excerpt.trim() ?? "") !== "" ||
+    (assignment.attachments?.length ?? 0) > 0
   );
 }
 

@@ -66,7 +66,7 @@ class AssignmentsRepository(
                 // ressert plus l'état d'avant (la case se décochait au retour).
                 // `setDone` lève si l'écriture échoue : rien n'est purgé alors.
                 writeAndInvalidate(cache, CachePolicy.ASSIGNMENTS) { found.setDone(done) }
-                val payload = JSONObject().put("assignment", assignmentJson(found, found.id.ifBlank { "a-0" }, 0, null)).toString()
+                val payload = JSONObject().put("assignment", assignmentJson(found, found.id.ifBlank { "a-0" }, 0)).toString()
                 val updated = parseToggle(payload)?.copy(done = done)
                 if (updated == null) {
                     post { onDone(ToggleOutcome(null, "Réponse illisible.")) }
@@ -104,13 +104,19 @@ class AssignmentsRepository(
             val data = try {
                 val client = provider() ?: return@Thread post { onDone(null) }
                 val (from, to) = assignmentWindow(weekStart)
-                val hw = client.homework(from, to)
-                    .firstOrNull { it.id == homeworkId } ?: return@Thread post { onDone(null) }
-                val file = try {
-                    hw.files()
-                } catch (_: Exception) {
-                    emptyList()
-                }.firstOrNull { it.id == attachmentId } ?: return@Thread post { onDone(null) }
+                val hw = client.homework(from, to).firstOrNull { it.id == homeworkId }
+                // #631 : une pièce jointe de COURS n'est pas dans le devoir ;
+                // on la cherche dans les contenus de la même fenêtre. La `ref`
+                // reste une clé interne, jamais une URL d'établissement (I1).
+                val file = hw?.let { h ->
+                    try {
+                        h.files()
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                }.orEmpty().firstOrNull { it.id == attachmentId }
+                    ?: lessonFiles(client, from, to).firstOrNull { it.id == attachmentId }
+                    ?: return@Thread post { onDone(null) }
                 val bytes = file.data()
                 val name = file.name.trim().take(200).ifEmpty { "piece-jointe" }
                 AttachmentData(name, bytes)
@@ -119,6 +125,32 @@ class AssignmentsRepository(
             }
             post { onDone(data) }
         }.start()
+    }
+
+    /**
+     * Fichiers des contenus de cours de la fenêtre, bornés. Sert de repli
+     * quand l'identifiant n'appartient pas au devoir : les pièces jointes de
+     * cours vivent dans `LessonContent`, pas dans `Homework`.
+     */
+    private fun lessonFiles(
+        client: fr.veryslopnynotes.pronote.Client,
+        from: java.time.LocalDateTime,
+        to: java.time.LocalDateTime,
+    ): List<fr.veryslopnynotes.pronote.Attachment> {
+        val out = mutableListOf<fr.veryslopnynotes.pronote.Attachment>()
+        try {
+            for (lesson in client.lessons(from, to).take(20)) {
+                try {
+                    lesson.content()?.files()?.let { out.addAll(it.take(Assignment.MAX_ATTACHMENTS)) }
+                } catch (e: Exception) {
+                    if (mustPropagateReadFailure(e)) throw e
+                }
+                if (out.size >= Assignment.MAX_ATTACHMENTS * 2) break
+            }
+        } catch (e: Exception) {
+            if (mustPropagateReadFailure(e)) throw e
+        }
+        return out
     }
 
     private fun post(block: () -> Unit) {
@@ -151,20 +183,20 @@ class AssignmentsRepository(
             val atts = mutableListOf<AssignmentAttachment>()
             val arr = o.optJSONArray("attachments")
             for (i in 0 until (arr?.length() ?: 0)) {
-                val a = arr?.optJSONObject(i) ?: continue
-                val att = AssignmentAttachment(
-                    id = a.optString("id", ""),
-                    label = a.optString("label", ""),
-                    ref = a.optString("ref", ""),
-                )
-                if (!AssignmentAttachment.isValid(att)) return null
+                val att = parseAttachment(arr?.optJSONObject(i) ?: continue) ?: return null
                 atts.add(att)
             }
-            val lc = o.optJSONObject("lessonContent")?.let {
-                AssignmentLessonContent(
-                    title = it.optString("title", ""),
-                    excerpt = it.optString("excerpt", ""),
-                )
+            // #631 : `lessonContents` porte TOUS les cours ; le champ singulier
+            // reste lu pour les caches antérieurs (et pour le premier cours).
+            val lessons = mutableListOf<AssignmentLessonContent>()
+            val lessonArr = o.optJSONArray("lessonContents")
+            if (lessonArr != null) {
+                for (i in 0 until lessonArr.length()) {
+                    val lesson = parseLesson(lessonArr.optJSONObject(i) ?: continue) ?: return null
+                    lessons.add(lesson)
+                }
+            } else {
+                o.optJSONObject("lessonContent")?.let { lessons.add(parseLesson(it) ?: return null) }
             }
             Assignment(
                 id = o.optString("id", ""),
@@ -173,14 +205,38 @@ class AssignmentsRepository(
                 dueDate = o.optString("dueDate", ""),
                 done = o.optBoolean("done", false),
                 description = o.optString("description", ""),
-                lessonContent = lc,
+                lessonContent = lessons.firstOrNull(),
                 attachments = atts,
                 periodId = o.optString("periodId", "").takeIf { it.isNotEmpty() },
                 weekId = o.optString("weekId", "").takeIf { it.isNotEmpty() },
+                lessonContents = lessons,
             )
             } catch (_: Exception) {
                 null
             }
+        }
+
+        private fun parseAttachment(o: JSONObject): AssignmentAttachment? {
+            val att = AssignmentAttachment(
+                id = o.optString("id", ""),
+                label = o.optString("label", ""),
+                ref = o.optString("ref", ""),
+            )
+            return att.takeIf { AssignmentAttachment.isValid(it) }
+        }
+
+        private fun parseLesson(o: JSONObject): AssignmentLessonContent? {
+            val atts = mutableListOf<AssignmentAttachment>()
+            val arr = o.optJSONArray("attachments")
+            for (i in 0 until (arr?.length() ?: 0)) {
+                atts.add(parseAttachment(arr?.optJSONObject(i) ?: continue) ?: return null)
+            }
+            val lesson = AssignmentLessonContent(
+                title = o.optString("title", ""),
+                excerpt = o.optString("excerpt", ""),
+                attachments = atts,
+            )
+            return lesson.takeIf { AssignmentLessonContent.isValid(it) }
         }
 
         /** Réponse du toggle : {assignment}. */

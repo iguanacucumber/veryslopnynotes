@@ -67,6 +67,9 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "AiContext.kt"),
   join(CORE, "AiPrompts.kt"),
   join(CORE, "Assignment.kt"),
+  // #631 : ordre des sources d'un devoir (consigne, TOUS les cours, pièces
+  // jointes déjà extraites). Fichier PUR : le harnais l'EXÉCUTE.
+  join(CORE, "AssignmentContext.kt"),
   join(CORE, "Attendance.kt"),
   join(CORE, "Averages.kt"),
   join(CORE, "Capabilities.kt"),
@@ -119,6 +122,10 @@ export const PRODUCTION_SOURCES: string[] = [
   // exécuté (deux pièces du même libellé -> deux fichiers distincts).
   join(DATA, "DownloadedFiles.kt"),
   join(DATA, "LocalDataStore.kt"),
+  // #631 : extraction LOCALE du texte d'une pièce jointe (texte/markdown/HTML
+  // désinfecté, PDF texte, format inconnu = « illisible »). Fichier PUR
+  // (`java.*` seul) : le harnais l'EXÉCUTE sur des fixtures synthétiques.
+  join(DATA, "AttachmentText.kt"),
   // `ClientQueue.kt` : LA file PARTAGÉE du client local (#403) — c'est elle
   // qui sérialise les lectures de l'interface ET celles du job de fond.
   join(DATA, "ClientQueue.kt"),

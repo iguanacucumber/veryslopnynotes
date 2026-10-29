@@ -39,7 +39,7 @@ describe("devoirs — photo d'énoncé (#588)", () => {
       "utf8",
     );
     expect(bridge).toContain("AWAIT_PHOTO_MS = 180_000L");
-    expect(bridge).toContain('"llm.solvePhoto" -> solveHomeworkPhoto(p)');
+    expect(bridge).toContain('"llm.solvePhoto" -> solveHomeworkPhoto(p, epoch)');
   });
 
   test("l'écran propose la photo même sans consigne ni manuel", () => {
@@ -80,9 +80,11 @@ describe("devoirs — photo d'énoncé (#588)", () => {
       "utf8",
     );
     // #628 : texte ET photo passent par le même assembleur, avec le même
-    // corpus (seul `allowEmpty` distingue la photo).
-    expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.HOMEWORK)");
-    expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.PHOTO)");
+    // corpus (seul `allowEmpty` distingue la photo). #631 : la semaine et
+    // l'époque passent aussi, pour télécharger/écrire les pièces jointes dans
+    // le cache du compte.
+    expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.HOMEWORK, week, epoch)");
+    expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.PHOTO, week, epoch)");
     expect(bridge).toContain("HomeworkAi.generateHomeworkFromPhoto(");
     expect(bridge).toContain("PhotoPrep.prepare(shot.file)");
     // Aucun enregistrement automatique du corrigé.

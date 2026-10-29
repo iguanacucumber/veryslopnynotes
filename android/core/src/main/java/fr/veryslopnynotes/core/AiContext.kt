@@ -38,11 +38,19 @@ enum class AiContextType(val wire: String, val priority: Int, val prefix: String
     HISTORY("history", 6, "Historique"),
 }
 
-/** Une source candidate, avant ordonnancement, déduplication et budget. */
+/**
+ * Une source candidate, avant ordonnancement, déduplication et budget.
+ *
+ * `truncated`/`originalChars` portent une coupe déjà faite par la frontière
+ * (extraction d'une pièce jointe bornée, par exemple) : [AiContext] la CONSERVE
+ * et la signale, au lieu de laisser croire que la source est entière.
+ */
 data class AiContextItem(
     val type: AiContextType,
     val label: String,
     val text: String,
+    val truncated: Boolean = false,
+    val originalChars: Int = text.length,
 )
 
 /** Une source réellement envoyée, avec sa taille d'origine et son drapeau de troncature. */
@@ -141,8 +149,31 @@ object AiContext {
         AiContextItem(AiContextType.COURSE, labelFor(AiContextType.COURSE, title), text)
 
     /** Pièce jointe LISIBLE (texte déjà extrait) ; sans texte, elle sera écartée. */
-    fun attachment(label: String, text: String): AiContextItem =
-        AiContextItem(AiContextType.ATTACHMENT, labelFor(AiContextType.ATTACHMENT, label), text)
+    fun attachment(
+        label: String,
+        text: String,
+        truncated: Boolean = false,
+        originalChars: Int = text.length,
+    ): AiContextItem =
+        AiContextItem(
+            AiContextType.ATTACHMENT,
+            labelFor(AiContextType.ATTACHMENT, label),
+            text,
+            truncated = truncated,
+            originalChars = originalChars,
+        )
+
+    /**
+     * Pièce jointe NON LISIBLE : une source NOMMÉE, jamais une exception. Le
+     * libellé dit « illisible » et le texte explique pourquoi (format, taille,
+     * PDF sans texte…). Le modèle sait ainsi ce qui manque au lieu d'inventer.
+     */
+    fun attachmentUnreadable(label: String, reason: String): AiContextItem =
+        AiContextItem(
+            AiContextType.ATTACHMENT,
+            labelFor(AiContextType.ATTACHMENT, "$label (illisible)"),
+            reason,
+        )
 
     /** Note du cahier local de la matière. */
     fun note(title: String, text: String): AiContextItem =
@@ -228,8 +259,11 @@ object AiContext {
                 continue
             }
             val cap = minOf(MAX_SOURCE_CHARS, remaining)
-            val truncated = text.length > cap
-            val kept = if (truncated) text.take(cap).trimEnd() else text
+            // Une coupe déjà faite en amont (extraction bornée) reste SIGNALÉE :
+            // le drapeau de l'item et sa taille d'origine ne sont jamais perdus.
+            val truncated = item.truncated || text.length > cap
+            val originalChars = maxOf(item.originalChars, text.length)
+            val kept = if (text.length > cap) text.take(cap).trimEnd() else text
             if (kept.isEmpty()) {
                 omitted.add(AiContextOmitted(item.type, sourceLabel, AiContextOmitReason.EMPTY))
                 continue
@@ -243,7 +277,7 @@ object AiContext {
                     type = item.type,
                     label = sourceLabel,
                     text = kept,
-                    originalChars = text.length,
+                    originalChars = originalChars,
                     truncated = truncated,
                 ),
             )

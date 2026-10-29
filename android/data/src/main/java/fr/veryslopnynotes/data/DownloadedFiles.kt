@@ -73,6 +73,29 @@ object DownloadedFiles {
         File(root, clean(homeworkId, 64).ifEmpty { "devoir" })
 
     /**
+     * Fichier DÉJÀ téléchargé d'une pièce jointe, ou `null`. Sert de cache au
+     * contexte IA (#631) : une pièce déjà ouverte par le viewer n'est pas
+     * re-téléchargée.
+     *
+     * Deux noms sont possibles pour la MÊME pièce : celui dérivé de son
+     * libellé de payload, et celui dérivé du nom SERVEUR écrit par le viewer.
+     * On essaie le nom exact, puis on accepte l'unique fichier du dossier dont
+     * le préfixe est l'identifiant de la pièce ; deux candidats = ambigu, donc
+     * `null` (le fichier sera re-téléchargé sous le nom exact, jamais deviné).
+     */
+    fun cachedFor(root: File, homeworkId: String, attachmentId: String, label: String): File? {
+        val dir = dirFor(root, homeworkId)
+        if (!dir.isDirectory) return null
+        val exact = File(dir, fileName(attachmentId, label))
+        if (exact.isFile && exact.length() in 1..MAX_BYTES.toLong()) return exact
+        val id = clean(attachmentId, ID_MAX).ifEmpty { "piece" }
+        val prefix = "$id-"
+        val matches = dir.listFiles()?.filter { it.isFile && it.name.startsWith(prefix) }.orEmpty()
+        val found = matches.singleOrNull() ?: return null
+        return found.takeIf { it.length() in 1..MAX_BYTES.toLong() }
+    }
+
+    /**
      * Écrit un fichier téléchargé et renvoie le fichier écrit.
      *
      * `null` = écriture REFUSÉE : la session a changé depuis [epoch] (une
