@@ -94,7 +94,7 @@ data class AveragesReport(
     val influences: List<GradeInfluence>,
 )
 
-/** Les moyennes publiées par l'établissement, pour une période (`providedAveragesFor`). */
+/** Les moyennes publiées par l'établissement, pour une période. */
 data class ProvidedAverages(
     val periodId: String? = null,
     val general: Double? = null,
@@ -194,12 +194,6 @@ private fun subjectAverageInner(grades: List<Grade>, loop: Boolean): Double {
     return ratioTo20(sum)
 }
 
-/** Papillon getSubjectAverage (point d'entrée) : null si matière vide. */
-fun subjectAverage(grades: List<Grade>): Double? {
-    val value = subjectAverageInner(grades, false)
-    return if (value == NO_DATA) null else value
-}
-
 /** Groupement par `subjectKey`, ordre d'insertion conservé (miroir de la Map TS). */
 private fun groupBySubject(grades: List<Grade>): List<Pair<String, List<Grade>>> {
     val groups = LinkedHashMap<String, MutableList<Grade>>()
@@ -263,21 +257,6 @@ fun averageWith(algorithm: String?, grades: List<Grade>): Double? = when (algori
     ALGORITHM_WEIGHTED -> weightedAlgorithmAverage(grades)
     ALGORITHM_MEDIAN -> medianAlgorithmAverage(grades)
     else -> subjectAlgorithmAverage(grades)
-}
-
-/**
- * Les fournies du périmètre demandé, `null` sinon (estimation).
- * Le TS passe par `Object.hasOwn` pour que `__proto__` ne résolve jamais via
- * `Object.prototype` ; une `Map` Kotlin n'a pas de prototype, la garantie y est
- * structurelle.
- */
-fun providedAveragesFor(
-    byPeriod: Map<String, ProvidedAverages?>?,
-    periodId: String?,
-): ProvidedAverages? {
-    val key = (periodId ?: "").trim()
-    if (byPeriod == null || key.isEmpty()) return null
-    return if (byPeriod.containsKey(key)) byPeriod[key] else null
 }
 
 /** Les fournies ne servent que si leur périmètre == celui demandé. */

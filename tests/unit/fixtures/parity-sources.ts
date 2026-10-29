@@ -74,6 +74,8 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "Averages.kt"),
   join(CORE, "Capabilities.kt"),
   join(CORE, "CapabilityProbe.kt"),
+  // #651 : le MODÈLE du candidat DS/interro (la détection heuristique est
+  // supprimée avec la chaîne de notifications).
   join(CORE, "ExamDetect.kt"),
   // #632 : extraction VERBATIM des exercices numérotés + trois niveaux d'aide.
   // Fichier PUR : le harnais l'EXÉCUTE (extraction, filtre, prompt, validation).
@@ -81,7 +83,6 @@ export const PRODUCTION_SOURCES: string[] = [
   // #645 : la clé de déduplication (kind, id) et la fusion, PURES. Le harnais
   // les EXÉCUTE au lieu de lire la forme de `PronotePayloads.kt` (`org.json`).
   join(CORE, "EventDedupe.kt"),
-  join(CORE, "GradeDiff.kt"),
   // `core/Homework.kt` + `core/HomeworkAi.kt` : le contrat du corrige et son
   // schema. Ils sont ici depuis #411 : la CHAINE COMPLETE (JSON du
   // fournisseur → `parseJsonOutput` → `parseHomeworkResponse`) est rejouee
@@ -102,7 +103,6 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "LlmGuard.kt"),
   join(CORE, "ManualUrl.kt"),
   join(CORE, "ManualCatalog.kt"),
-  join(CORE, "NotifyFormat.kt"),
   join(CORE, "RevisionAi.kt"),
   join(CORE, "RevisionSheet.kt"),
   join(CORE, "SecurityAlert.kt"),

@@ -14,7 +14,7 @@
 package fr.veryslopnynotes.untrusted
 
 import fr.veryslopnynotes.core.JsonValue
-import fr.veryslopnynotes.core.buildHomeworkPrompt
+import fr.veryslopnynotes.core.buildRevisionPrompt
 import fr.veryslopnynotes.core.markExternal
 import fr.veryslopnynotes.core.parseJsonValue
 import fr.veryslopnynotes.core.stringifyJson
@@ -43,7 +43,7 @@ fun main() {
             val res = when (op.str("op")) {
                 // Prompt complet : la voie de production (AiPrompts -> buildSafePrompt).
                 "prompt" -> {
-                    val safe = buildHomeworkPrompt(listOf(content), nonce)
+                    val safe = buildRevisionPrompt(listOf(content), nonce)
                     obj(
                         "ok" to JsonValue.Bool(true),
                         "body" to JsonValue.Str(safe.body),

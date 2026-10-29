@@ -43,20 +43,6 @@ internal fun jsTrim(s: String): String = s.trim { isJsSpace(it) }
 internal fun jsTrimStart(s: String): String = s.trimStart { isJsSpace(it) }
 
 /**
- * Supprime l'entrelacement de caractères de PRONOTE sur certains champs
- * encodés (un caractère sur deux, en unités UTF-16 comme `text[i]` côté TS).
- */
-fun enleverAlea(text: String): String {
-    val out = StringBuilder(text.length / 2 + 1)
-    var i = 0
-    while (i < text.length) {
-        out.append(text[i])
-        i += 2
-    }
-    return out.toString()
-}
-
-/**
  * Recompose une liste de valeurs d'octets séparées par des virgules (telle que
  * produite par le JS de PRONOTE). `parseInt(s, 10)` : préfixe décimal signé
  * après espaces, `NaN` → 0 — puis `& 0xFF` comme `Buffer.from`.

@@ -578,19 +578,6 @@ private fun callProvider(
 // apiKey = credential de l'APP, relayee telle quelle vers l'adaptateur. Elle
 // n'entre JAMAIS dans le prompt (donc jamais dans assertNoSecretsInPrompt) et
 // n'est jamais journalisee ici.
-fun generateGuarded(
-    provider: SafePromptProvider,
-    system: String,
-    data: List<Untrusted<String>>,
-    nonce: String? = null,
-    apiKey: String? = null,
-): String {
-    val safe = buildSafePrompt(system, data, nonce)
-    assertNoSecretsInPrompt(safe, data)
-    val out = callProvider(provider, safe, apiKey)
-    return validateTextOutput(out)
-}
-
 fun generateGuardedJson(
     provider: SafePromptProvider,
     system: String,

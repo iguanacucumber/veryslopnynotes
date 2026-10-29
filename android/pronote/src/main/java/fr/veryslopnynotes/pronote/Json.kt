@@ -349,9 +349,9 @@ object Json {
  * le MÊME nombre pour `1e19` et `5e19` : deux moyennes de classe
  * différentes, une seule empreinte de note.
  *
- * COPIE de `core/GradeDiff.kt` (`jsNum`) : `pronote` et `core` sont deux
- * modules Gradle SANS dépendance entre eux (`core` = stdlib seule, I3) — la
- * duplication est structurelle, et les deux rendus doivent rester identiques.
+ * `pronote` et `core` sont deux modules Gradle SANS dépendance entre eux
+ * (`core` = stdlib seule, I3) : `core` n'a plus de copie de ce rendu (#651),
+ * celui-ci reste la seule référence.
  */
 internal fun jsNumber(d: Double): String {
     if (d.isNaN() || d.isInfinite()) return "null"
