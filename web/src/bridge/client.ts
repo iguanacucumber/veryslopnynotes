@@ -6,6 +6,9 @@ import {
   type AiContextSourceMeta,
   type BridgeError,
   type BridgeMethod,
+  type ExerciseHelpParams,
+  type ExerciseProposal,
+  type ExerciseProposeParams,
   type LessonLoadResult,
   type LessonPhotoResult,
   type LessonsSnapshot,
@@ -313,6 +316,12 @@ export const bridge = {
   saveTeacherThread: (thread: TeacherThread) =>
     call<TeacherSaveResult>("teacher.save", thread),
   deleteTeacherThread: () => call<TeacherSaveResult>("teacher.delete"),
+  /** Exercices du manuel (#632) : proposition locale, sans appel payant. */
+  proposeExercises: (params: ExerciseProposeParams) =>
+    call<ExerciseProposal>("exercises.propose", params),
+  /** Aide progressive sur un exercice ; `photoSource` capture la réponse. */
+  helpExercise: (params: ExerciseHelpParams) =>
+    call<TeacherTurnResult>("exercises.help", params, BRIDGE_TIMEOUTS["exercises.help"]),
   revisions: () => call<{ sheets: unknown[] }>("revision.list"),
   revision: (id: string) => call<{ sheet: unknown | null }>("revision.load", { id }),
   exportRevision: (id: string) => call<{ ok: boolean; message?: string }>("revision.exportPdf", { id }),

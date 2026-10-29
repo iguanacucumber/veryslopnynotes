@@ -75,6 +75,9 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "Capabilities.kt"),
   join(CORE, "CapabilityProbe.kt"),
   join(CORE, "ExamDetect.kt"),
+  // #632 : extraction VERBATIM des exercices numérotés + trois niveaux d'aide.
+  // Fichier PUR : le harnais l'EXÉCUTE (extraction, filtre, prompt, validation).
+  join(CORE, "Exercises.kt"),
   // #645 : la clé de déduplication (kind, id) et la fusion, PURES. Le harnais
   // les EXÉCUTE au lieu de lire la forme de `PronotePayloads.kt` (`org.json`).
   join(CORE, "EventDedupe.kt"),

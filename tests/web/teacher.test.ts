@@ -232,6 +232,11 @@ describe("écran Prof — rendu (#633)", () => {
     expect(exercises).toContain("Les exercices arrivent bientôt");
     // La coquille ne fabrique pas un faux écran de discussion.
     expect(exercises).not.toContain("Matière du cours");
+    // Branché au pont (#632), l'onglet rend le panneau réel.
+    const wired = renderView({ tab: "exercises", exercisesPanel: createElement("p", null, "Liste d’exercices réelle") });
+    expect(wired).toContain("Liste d’exercices réelle");
+    expect(wired).toContain('id="teacher-panel-exercises"');
+    expect(wired).not.toContain("Les exercices arrivent bientôt");
   });
 
   test("le sélecteur de matière et les deux modes sont accessibles", () => {

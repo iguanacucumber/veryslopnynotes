@@ -270,3 +270,80 @@
     justify-content: center;
   }
 }
+
+/* Exercices du manuel (#632) : liste courte, carte = bouton, détail lisible. */
+.exercise-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exercise-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  text-align: left;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.exercise-item--active {
+  border-color: var(--accent);
+}
+
+.exercise-item__number {
+  font-weight: 600;
+}
+
+.exercise-item__statement {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  /* Un énoncé long ne pousse jamais les boutons hors de l'écran. */
+  overflow-wrap: anywhere;
+}
+
+.exercise-item__meta:empty {
+  display: none;
+}
+
+.exercise-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
+}
+
+.exercise-detail__title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.exercise-detail__statement {
+  margin: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.exercise-photo,
+.exercise-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exercise-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

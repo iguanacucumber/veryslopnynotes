@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import type { AiContextSourceMeta, TeacherMessage, TeacherMode } from "../../bridge/types";
 import {
   Card,
@@ -37,9 +37,11 @@ export interface TeacherViewProps {
   refusal: { message: string; actions: string[] } | null;
   /** Compteur de tours : force le focus sur la réponse après succès. */
   focusTick: number;
-  /** Onglet interne : discussion ou coquille Exercices (livrée par un autre ticket). */
+  /** Onglet interne : discussion ou exercices du manuel (#632). */
   tab: "chat" | "exercises";
   onTabChange: (tab: "chat" | "exercises") => void;
+  /** Panneau Exercices branché au pont (#632), rendu DANS l'onglet. */
+  exercisesPanel?: ReactNode;
   busy: boolean;
   threadLoaded: boolean;
   onSubjectChange: (subject: string) => void;
@@ -72,6 +74,7 @@ export function TeacherView({
   focusTick,
   tab,
   onTabChange,
+  exercisesPanel,
   busy,
   threadLoaded,
   onSubjectChange,
@@ -345,6 +348,10 @@ export function TeacherView({
           </form>
         </Card>
       </Section>
+        </div>
+      ) : exercisesPanel ? (
+        <div id="teacher-panel-exercises" role="tabpanel" aria-labelledby="teacher-tab-exercises" className="stack">
+          {exercisesPanel}
         </div>
       ) : (
         <Section title="Exercices">
