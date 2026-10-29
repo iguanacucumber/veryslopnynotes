@@ -16,6 +16,7 @@ import type {
   SessionStatus,
   SettingsSnapshot,
   SubjectPref,
+  TeacherThread,
 } from "./types";
 
 const now = Date.now();
@@ -254,6 +255,9 @@ const revisions: unknown[] = [
     body: "1. Définir le totalitarisme.\n2. Comparer les régimes soviétique, fasciste et nazi.\n3. Préparer un plan en trois parties.",
   },
 ];
+
+/** Fil local de démonstration (#633) : vide au démarrage, rempli par les tours. */
+let teacherThread: TeacherThread = { subject: "", messages: [] };
 
 const sessions: SessionStatus = { state: "restored" };
 
@@ -564,6 +568,46 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
         contextOmitted: 0,
       }) as Promise<T>;
     }
+    case "llm.teacherTurn": {
+      const subject = String(p["subject"] ?? "").trim();
+      const question = String(p["message"] ?? "").trim();
+      const history = Array.isArray(p["history"]) ? p["history"] : [];
+      const sources = [
+        { type: "note", label: "Cahier : Chapitre 1 — suites", chars: 120, truncated: false },
+        { type: "history", label: "Historique : 1 — eleve", chars: 40, truncated: false },
+      ];
+      return ok({
+        ok: true,
+        answer:
+          subject && question
+            ? `Bonne question sur « ${question.slice(0, 80)} ». Commence par relire la définition, puis essaie de calculer le terme suivant.`
+            : "Commence par choisir une matière, puis pose ta question.",
+        sources: ["Cahier : Chapitre 1 — suites"],
+        unsourced: false,
+        context: sources,
+        contextChars: sources.reduce((sum, source) => sum + source.chars, 0),
+        contextOmitted: 0,
+        historyCount: Array.isArray(history) ? history.length : 0,
+        historyChars: Array.isArray(history)
+          ? history.reduce((sum, item) => {
+              const text = typeof item === "object" && item !== null ? String((item as { text?: unknown }).text ?? "") : "";
+              return sum + text.length;
+            }, 0)
+          : 0,
+        summaryChars: 0,
+      }) as Promise<T>;
+    }
+    case "teacher.load":
+      return ok({ subject: teacherThread.subject, messages: teacherThread.messages }) as Promise<T>;
+    case "teacher.save": {
+      const subject = String(p["subject"] ?? "").trim();
+      const messages = Array.isArray(p["messages"]) ? p["messages"] : [];
+      teacherThread = { subject, messages: messages.slice(-40) as TeacherThread["messages"] };
+      return ok({ ok: true, count: teacherThread.messages.length }) as Promise<T>;
+    }
+    case "teacher.delete":
+      teacherThread = { subject: "", messages: [] };
+      return ok({ ok: true }) as Promise<T>;
     case "revision.list":
       return ok({ sheets: revisions }) as Promise<T>;
     case "revision.load":

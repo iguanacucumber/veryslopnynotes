@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "./AppContext";
 import { SkipLink } from "./components";
-import { IconBack, IconBell, IconCalendar, IconGrades, IconHome, IconRefresh, IconTasks, IconUser } from "./icons";
+import { IconBack, IconBell, IconCalendar, IconGrades, IconHome, IconRefresh, IconSparkles, IconTasks, IconUser } from "./icons";
 import { useViewNavigate } from "./viewTransition";
 
 interface RouteMeta {
@@ -27,6 +27,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/alerts": { title: "Alertes", back: "/" },
   "/revision-sheets": { title: "Fiches de révision", back: "/profile" },
   "/course-notes": { title: "Cahier de cours", back: "/profile" },
+  "/prof": { title: "Prof", tab: true },
 };
 
 const TABS = [
@@ -34,6 +35,7 @@ const TABS = [
   { to: "/calendar", label: "Cours", Icon: IconCalendar },
   { to: "/tasks", label: "Tâches", Icon: IconTasks },
   { to: "/grades", label: "Notes", Icon: IconGrades },
+  { to: "/prof", label: "Prof", Icon: IconSparkles },
 ];
 
 export function Shell() {

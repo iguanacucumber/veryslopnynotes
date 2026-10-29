@@ -271,6 +271,13 @@ export default function ProfileScreen() {
       <Section title="Assistant">
         <Rows>
           <ListRow
+            title="Professeur"
+            subtitle="Répond à partir de tes cours, par matière"
+            leading={<IconSparkles size={22} />}
+            onClick={() => navigate("/prof")}
+          />
+          <Divider />
+          <ListRow
             title="Cahier de cours"
             subtitle="Tes cours, sources de l’assistant"
             leading={<IconBook size={22} />}

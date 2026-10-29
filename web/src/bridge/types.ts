@@ -57,6 +57,10 @@ export const BRIDGE_METHODS = [
   "llm.askHomework",
   "llm.solvePhoto",
   "llm.generateRevision",
+  "llm.teacherTurn",
+  "teacher.load",
+  "teacher.save",
+  "teacher.delete",
   "revision.list",
   "revision.load",
   "revision.exportPdf",
@@ -316,4 +320,59 @@ export interface AiContextSourceMeta {
   label: string;
   chars: number;
   truncated: boolean;
+}
+
+/** Mode du professeur IA (#633) : explication (défaut) ou correction explicite. */
+export type TeacherMode = "explain" | "correct";
+
+/** Tour de conversation local, miroir de `TeacherChatMessage` (core). */
+export interface TeacherMessage {
+  role: "student" | "teacher";
+  text: string;
+  /** Libellés réellement cités par le professeur (sources fournies). */
+  sources: string[];
+  /** Aucun libellé cité : la réponse est marquée « non sourcée ». */
+  unsourced: boolean;
+  /** Métadonnées « Ce qui est envoyé » pour ce tour. */
+  context?: AiContextSourceMeta[];
+  /** Taille du résumé local envoyé avec ce tour (0 = aucun). */
+  summaryChars?: number;
+}
+
+export interface TeacherThread {
+  subject: string;
+  messages: TeacherMessage[];
+}
+
+export interface TeacherTurnParams {
+  subject: string;
+  message: string;
+  mode: TeacherMode;
+  /** Derniers tours de la conversation, bornés par le natif. */
+  history: Array<Pick<TeacherMessage, "role" | "text">>;
+}
+
+export interface TeacherTurnResult {
+  ok: boolean;
+  answer?: string;
+  sources?: string[];
+  unsourced?: boolean;
+  refused?: boolean;
+  message?: string;
+  /** Cause stable du natif : key, quota, timeout, empty, format, network. */
+  code?: string;
+  refusal?: string;
+  actions?: string[];
+  context?: AiContextSourceMeta[];
+  contextChars?: number;
+  contextOmitted?: number;
+  historyCount?: number;
+  historyChars?: number;
+  summaryChars?: number;
+}
+
+export interface TeacherSaveResult {
+  ok: boolean;
+  message?: string;
+  count?: number;
 }

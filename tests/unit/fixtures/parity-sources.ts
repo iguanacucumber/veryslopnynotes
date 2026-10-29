@@ -103,6 +103,9 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "RevisionAi.kt"),
   join(CORE, "RevisionSheet.kt"),
   join(CORE, "SecurityAlert.kt"),
+  // #633 : professeur IA contextualisé (prompt + validation + historique
+  // borné). Fichier PUR : le harnais l'EXÉCUTE au lieu d'un miroir TS.
+  join(CORE, "TeacherChat.kt"),
   // `core/ServerConfig.kt` : validation de l'adresse du serveur choisie à
   // l'exécution. Fichier PUR (aucun import) : le harnais EXÉCUTE ses verdicts
   // (#655), au lieu d'un miroir TS.

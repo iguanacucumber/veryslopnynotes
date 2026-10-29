@@ -19,6 +19,10 @@ import {
   type ResourceResult,
   type SubjectPref,
   type SubjectSaveResult,
+  type TeacherSaveResult,
+  type TeacherThread,
+  type TeacherTurnParams,
+  type TeacherTurnResult,
 } from "./types";
 
 /** Surface exposée au JS : UNE seule méthode (miroir de `VsnBridge`). */
@@ -298,6 +302,13 @@ export const bridge = {
       contextChars?: number;
       contextOmitted?: number;
     }>("llm.generateRevision", { assignmentId, weekStart }),
+  /** Professeur IA contextualisé (#633) : un tour borné, sources citées. */
+  teacherTurn: (params: TeacherTurnParams) =>
+    call<TeacherTurnResult>("llm.teacherTurn", params),
+  teacherThread: () => call<TeacherThread>("teacher.load"),
+  saveTeacherThread: (thread: TeacherThread) =>
+    call<TeacherSaveResult>("teacher.save", thread),
+  deleteTeacherThread: () => call<TeacherSaveResult>("teacher.delete"),
   revisions: () => call<{ sheets: unknown[] }>("revision.list"),
   revision: (id: string) => call<{ sheet: unknown | null }>("revision.load", { id }),
   exportRevision: (id: string) => call<{ ok: boolean; message?: string }>("revision.exportPdf", { id }),
