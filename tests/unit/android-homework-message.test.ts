@@ -102,9 +102,15 @@ describe("message de refus de l'assistant (#416)", () => {
     const debut = bridge.indexOf("is HomeworkOutcome.Refused ->");
     expect(debut).toBeGreaterThan(-1);
     const corps = bridge.slice(debut, bridge.indexOf("\n        }", debut));
-    expect(corps).toContain('homeworkRefusalMessage(outcome.reason)');
-    expect(corps).toContain('.put("message"');
+    // #629 : la construction du refus vit dans un helper borné, appelé par la
+    // branche ; c'est lui qui porte la phrase et les CTA.
+    expect(corps).toContain("homeworkRefusalJson(outcome, context)");
+    const helperDebut = bridge.indexOf("private fun homeworkRefusalJson");
+    expect(helperDebut).toBeGreaterThan(-1);
+    const helper = bridge.slice(helperDebut, bridge.indexOf("\n    /**", helperDebut));
+    expect(helper).toContain('homeworkRefusalMessage(outcome.reason)');
+    expect(helper).toContain('.put("message"');
     // Le motif libre ne doit plus sortir dans `body`.
-    expect(corps).not.toContain('put("body", outcome.reason)');
+    expect(helper).not.toContain('put("body", outcome.reason)');
   });
 });

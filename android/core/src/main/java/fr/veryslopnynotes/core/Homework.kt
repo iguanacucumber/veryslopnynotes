@@ -67,6 +67,15 @@ object Homework {
      * restent coherents quand le plafond de sortie bouge.
      */
     const val MAX_ANSWER_CHARS = MAX_OUTPUT_CHARS - JSON_ENVELOPE_RESERVE_CHARS
+
+    /**
+     * Affichage d'un corrigé (#629) : miroir de `HOMEWORK_MAX_STEPS` /
+     * `HOMEWORK_MAX_STEP_CHARS` (`shared/contracts/api.ts`). Bornes de RENDU,
+     * pas de validation : le pont tronque pour l'UI, il ne jette pas un
+     * corrigé valide dont le modèle a rendu trop d'étapes.
+     */
+    const val MAX_STEPS = 12
+    const val MAX_STEP_CHARS = 400
     const val REFUSAL_SOURCES_INSUFFICIENT = "sources_insuffisantes"
 
     /** Le refus déterministe du serveur quand aucune source n'est fournie. */

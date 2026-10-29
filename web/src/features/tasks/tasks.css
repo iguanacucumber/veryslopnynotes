@@ -293,6 +293,33 @@
   overflow-wrap: anywhere;
 }
 
+.task-help__steps {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.task-help__steps li + li {
+  margin-top: 4px;
+}
+
+.task-help__sources {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.task-help__sources p {
+  margin: 0;
+}
+
+.task-help__sources ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
 .task-help__panel-refusal,
 .task-help__panel-error {
   display: flex;

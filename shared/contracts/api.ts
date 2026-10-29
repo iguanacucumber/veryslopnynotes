@@ -91,6 +91,14 @@ export const HOMEWORK_MAX_API_KEY_CHARS = 512;
  * l'une de l'autre (#411 — le test `kotlin-llm-budget.test.ts` les compare).
  */
 export const HOMEWORK_MAX_ANSWER_CHARS = 8000;
+/**
+ * Affichage d'un corrigé (#629) : nombre d'étapes et longueur d'une étape.
+ * Miroir de `Homework.MAX_STEPS` / `MAX_STEP_CHARS`. Ce ne sont pas des bornes
+ * de VALIDATION (un modèle peut rendre plus d'étapes) : le pont et l'UI
+ * TRONQUENT pour l'affichage, sans jeter un corrigé valide.
+ */
+export const HOMEWORK_MAX_STEPS = 12;
+export const HOMEWORK_MAX_STEP_CHARS = 400;
 
 export interface HomeworkOkResponse {
   readonly status: "ok";

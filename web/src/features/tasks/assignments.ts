@@ -2,6 +2,13 @@
 // `AssignmentsRepository.kt`. Aucun React, aucun réseau : les parsers et les
 // regroupements sont testables avec un `now` injecté.
 import type { AiContextSourceMeta } from "../../bridge/types";
+import {
+  HOMEWORK_MAX_ANSWER_CHARS,
+  HOMEWORK_MAX_SOURCE_LABEL_CHARS,
+  HOMEWORK_MAX_SOURCES,
+  HOMEWORK_MAX_STEPS,
+  HOMEWORK_MAX_STEP_CHARS,
+} from "../../../../shared/contracts/api";
 import { addDays, frDate, frTime, isoDay, parseDate, startOfWeek, weeksBetween } from "../../lib/format";
 
 export interface AssignmentAttachment {
@@ -557,6 +564,64 @@ export function assignmentHasAssistantMaterial(
 export function homeworkRefusalText(message: string | undefined): string {
   const texte = (message ?? "").trim();
   return texte !== "" ? texte : "L'assistant a refusé de répondre à cette question.";
+}
+
+/** CTA stables proposés avec un refus (#629) : clés machine, jamais du texte. */
+export type HomeworkAction = "add_course" | "enable_manual" | "open_attachment";
+
+const HOMEWORK_ACTIONS = new Set<string>(["add_course", "enable_manual", "open_attachment"]);
+
+/**
+ * Lit les CTA d'un refus : clés INCONNUES écartées, doublons retirés. Un refus
+ * sans action reste un refus (aucun bouton inventé).
+ */
+export function parseHomeworkActions(raw: unknown): HomeworkAction[] {
+  if (!Array.isArray(raw)) return [];
+  const out: HomeworkAction[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string" || !HOMEWORK_ACTIONS.has(item)) continue;
+    if (!out.includes(item as HomeworkAction)) out.push(item as HomeworkAction);
+  }
+  return out;
+}
+
+/** Corrigé affichable : phrase, étapes ordonnées, sources réellement citées. */
+export interface HomeworkAnswer {
+  answer: string;
+  steps: string[];
+  sources: string[];
+}
+
+/**
+ * Lit le corrigé du pont (#629). `answer` est obligatoire ; étapes et sources
+ * sont bornées pour le RENDU (mêmes constantes que le contrat partagé), pas
+ * rejetées : un corrigé valide avec 20 étapes s'affiche, tronqué.
+ */
+export function parseHomeworkAnswer(raw: unknown): HomeworkAnswer | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const value = raw as Record<string, unknown>;
+  const answer =
+    typeof value["answer"] === "string" ? value["answer"].trim().slice(0, HOMEWORK_MAX_ANSWER_CHARS) : "";
+  if (answer === "") return null;
+  const steps = Array.isArray(value["steps"])
+    ? value["steps"]
+        .filter((step): step is string => typeof step === "string")
+        .map((step) => step.trim())
+        .filter((step) => step !== "")
+        .slice(0, HOMEWORK_MAX_STEPS)
+        .map((step) => step.slice(0, HOMEWORK_MAX_STEP_CHARS))
+    : [];
+  const sources = Array.isArray(value["sources"])
+    ? Array.from(
+        new Set(
+          value["sources"]
+            .filter((source): source is string => typeof source === "string")
+            .map((source) => source.trim().slice(0, HOMEWORK_MAX_SOURCE_LABEL_CHARS))
+            .filter((source) => source !== ""),
+        ),
+      ).slice(0, HOMEWORK_MAX_SOURCES)
+    : [];
+  return { answer, steps, sources };
 }
 
 // --- #628 : métadonnées « Ce qui est envoyé » --------------------------------
