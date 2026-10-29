@@ -167,6 +167,8 @@ export const ASSIGNMENT_ATTACHMENT_LABEL_MAX_CHARS = 200;
 export const ASSIGNMENT_MAX_ATTACHMENTS = 10;
 export const ASSIGNMENT_REF_MAX_CHARS = 200;
 export const ASSIGNMENT_LESSON_TITLE_MAX_CHARS = 200;
+// #631 : plusieurs cours peuvent partager la même matière + jour.
+export const ASSIGNMENT_MAX_LESSONS = 10;
 // #628 : le cours rattaché alimente le contexte IA (pas seulement la carte) :
 // 8 000 caractères, même borne que le manuel. La coupe du prompt est signalée
 // par `AiContext`.
@@ -184,6 +186,8 @@ export interface AttachmentRef {
 export interface AssignmentLessonContent {
   readonly title: string;
   readonly excerpt: string;
+  /** #631 : pièces jointes du cours, même contrat que celles du devoir. */
+  readonly attachments?: readonly AttachmentRef[];
 }
 
 export interface Assignment {
@@ -198,6 +202,8 @@ export interface Assignment {
   readonly description?: string;
   /** Contenu de cours associé (titre + extrait), absent si non publié. */
   readonly lessonContent?: AssignmentLessonContent;
+  /** #631 : TOUS les cours rattachés à la même matière + jour. */
+  readonly lessonContents?: readonly AssignmentLessonContent[];
   /** Pièces jointes via proxy serveur (aucune URL Pronote côté app, I1). */
   readonly attachments?: AttachmentRef[];
   /** Regroupement scolaire publié par Pronote (non deviné). */
@@ -379,6 +385,11 @@ export function isAssignmentLessonContent(v: unknown): v is AssignmentLessonCont
   if (!isRecord(v)) return false;
   if (!isBoundedString(v["title"], ASSIGNMENT_LESSON_TITLE_MAX_CHARS)) return false;
   if (!isOptionalBoundedString(v["excerpt"], ASSIGNMENT_LESSON_EXCERPT_MAX_CHARS)) return false;
+  const att = v["attachments"];
+  if (att !== undefined) {
+    if (!Array.isArray(att) || att.length > ASSIGNMENT_MAX_ATTACHMENTS) return false;
+    if (!att.every(isHomeworkAttachmentRef)) return false;
+  }
   return true;
 }
 
@@ -391,6 +402,11 @@ export function isAssignment(v: unknown): v is Assignment {
   // #75 : champs add-only, absents = établissement qui ne publie pas.
   if (v["description"] !== undefined && !isOptionalBoundedString(v["description"], ASSIGNMENT_DESCRIPTION_MAX_CHARS)) return false;
   if (v["lessonContent"] !== undefined && !isAssignmentLessonContent(v["lessonContent"])) return false;
+  const lessons = v["lessonContents"];
+  if (lessons !== undefined) {
+    if (!Array.isArray(lessons) || lessons.length > ASSIGNMENT_MAX_LESSONS) return false;
+    if (!lessons.every(isAssignmentLessonContent)) return false;
+  }
   const att = v["attachments"];
   if (att !== undefined) {
     if (!Array.isArray(att) || att.length > ASSIGNMENT_MAX_ATTACHMENTS) return false;

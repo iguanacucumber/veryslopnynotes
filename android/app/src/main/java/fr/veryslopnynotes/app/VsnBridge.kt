@@ -52,6 +52,8 @@ import fr.veryslopnynotes.core.secretRefusalMessage
 import fr.veryslopnynotes.core.transcribeLesson
 import fr.veryslopnynotes.data.AccountStore
 import fr.veryslopnynotes.data.AssignmentsRepository
+import fr.veryslopnynotes.data.AttachmentText
+import fr.veryslopnynotes.data.AttachmentTextResult
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.DeviceAuth
 import fr.veryslopnynotes.data.DiscussionsRepository
@@ -420,8 +422,8 @@ class VsnBridge(
                 llmKeys.clear()
                 JSONObject().put("ok", true)
             }
-            "llm.askHomework" -> askHomework(p)
-            "llm.solvePhoto" -> solveHomeworkPhoto(p)
+            "llm.askHomework" -> askHomework(p, epoch)
+            "llm.solvePhoto" -> solveHomeworkPhoto(p, epoch)
             "llm.generateRevision" -> generateRevision(p, epoch)
             "revision.list" -> revisionList()
             "revision.load" -> revisionLoad(p)
@@ -1301,7 +1303,7 @@ class VsnBridge(
         }
     }
 
-    private fun askHomework(p: JSONObject): JSONObject {
+    private fun askHomework(p: JSONObject, epoch: Long): JSONObject {
         val id = bounded(p.string("assignmentId"), 128)
         if (id.isEmpty()) throw BridgeFailure("bad_request", "Devoir introuvable.")
         // #369 : la semaine AFFICHÉE : le devoir demandé peut venir d'une
@@ -1309,7 +1311,7 @@ class VsnBridge(
         val week = bounded(p.string("weekStart"), 10)
         val assignment = loadAssignments(id, week).firstOrNull { it.id == id }
             ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
-        val context = aiContextFor(assignment, AiContextEntry.HOMEWORK)
+        val context = aiContextFor(assignment, AiContextEntry.HOMEWORK, week, epoch)
         // #628 : corpus vide = refus DÉTERMINISTE avec CTA, AVANT tout appel
         // payant. L'ancien chemin payait un aller-retour pour lire « aucune
         // source » et n'offrait aucune action.
@@ -1344,24 +1346,35 @@ class VsnBridge(
     }
 
     /**
-     * Contexte IA unique pour un devoir (#628). TOUS les points d'entrée
-     * (aide texte, photo, fiche, futur chat) partent d'ici : consigne, cours
-     * Pronote, pièces jointes lisibles, cahier, manuel, web, historique.
+     * Contexte IA unique pour un devoir (#628/#631). TOUS les points d'entrée
+     * (aide texte, photo, fiche, futur chat) partent d'ici : consigne, TOUS
+     * les cours Pronote, pièces jointes lisibles, cahier, manuel, web,
+     * historique.
      *
-     * Les pièces jointes et pages web ne sont admises que si leur TEXTE est
-     * disponible : une `ref` opaque ou une URL ne devient jamais une source
-     * inventée. #631/#634 fourniront ces textes via les paramètres.
+     * #631 : les pièces jointes du devoir ET de ses cours sont téléchargées
+     * avec le client local (I1), bornées, puis extraites LOCALEMENT en texte
+     * (I6 : Untrusted au prompt). Une pièce jointe illisible reste une source
+     * NOMMÉE, jamais une exception. Le cache passe par [DownloadedFiles] : il
+     * est borné et purgé avec le compte (I26).
+     *
+     * Les pages web ne sont admises que si leur TEXTE est déjà disponible : une
+     * URL ne devient jamais une source inventée (#634).
      */
     private fun aiContextFor(
         assignment: Assignment,
         entry: AiContextEntry,
-        attachments: List<AiContextItem> = emptyList(),
+        week: String = "",
+        epoch: Long = SessionEpoch.current(),
         webPages: List<AiContextItem> = emptyList(),
         history: List<AiContextItem> = emptyList(),
     ): AiContextResult {
         val items = mutableListOf<AiContextItem>()
-        items.addAll(fr.veryslopnynotes.data.HomeworkRepository.contextItems(assignment))
-        items.addAll(attachments)
+        items.addAll(
+            fr.veryslopnynotes.data.HomeworkRepository.contextItems(
+                assignment,
+                attachmentContextItems(assignment, week, epoch),
+            ),
+        )
         for (note in LessonNotes.forSubject(lessons.notes(), assignment.subject)) {
             items.add(AiContext.note(note.title, note.text))
         }
@@ -1371,6 +1384,121 @@ class VsnBridge(
         items.addAll(webPages)
         items.addAll(history)
         return AiContext.assembleFor(entry, items)
+    }
+
+    /**
+     * Sources des pièces jointes d'un devoir, dans l'ordre du payload. Le
+     * téléchargement est BORNÉ (nombre, taille) et passe par le cache du
+     * compte : une pièce déjà ouverte n'est pas re-téléchargée. Chaque coupe ou
+     * échec devient une source nommée, jamais un crash.
+     */
+    private fun attachmentContextItems(
+        assignment: Assignment,
+        week: String,
+        epoch: Long,
+    ): List<AiContextItem> {
+        val attachments = assignment.allAttachments()
+        if (attachments.isEmpty()) return emptyList()
+        val out = mutableListOf<AiContextItem>()
+        var visionCalls = 0
+        // Budget TOTAL : le plafond d'attente natif (100 s) ne doit pas être
+        // dépassé par une pile de téléchargements. Passé le budget, les pièces
+        // restantes sont NOMMÉES « délai », jamais perdues en silence.
+        val deadline = System.nanoTime() + ATTACHMENT_BUDGET_MS * 1_000_000L
+        for ((index, att) in attachments.withIndex()) {
+            if (index >= AttachmentText.MAX_ATTACHMENTS || System.nanoTime() > deadline) {
+                val remaining = attachments.size - index
+                out.add(
+                    AiContext.attachmentUnreadable(
+                        "$remaining pièces jointes non lues",
+                        if (index >= AttachmentText.MAX_ATTACHMENTS) {
+                            "Limite de ${AttachmentText.MAX_ATTACHMENTS} pièces jointes par envoi."
+                        } else {
+                            "Délai de lecture des pièces jointes dépassé : elles n'ont pas été lues."
+                        },
+                    ),
+                )
+                break
+            }
+            val file = attachmentFile(assignment, att, week, epoch)
+            if (file == null) {
+                out.add(
+                    AiContext.attachmentUnreadable(
+                        att.label,
+                        "Téléchargement indisponible : la pièce jointe n'a pas été lue.",
+                    ),
+                )
+                continue
+            }
+            val mime = mimeOf(att.label)
+            val result = try {
+                if (mime.startsWith("image/")) {
+                    if (visionCalls >= AttachmentText.MAX_VISION_ATTACHMENTS) {
+                        AttachmentTextResult.Unreadable("image_vision")
+                    } else {
+                        visionCalls += 1
+                        imageAttachmentText(file)
+                    }
+                } else {
+                    AttachmentText.extract(att.label, mime, file.readBytes())
+                }
+            } catch (_: Exception) {
+                AttachmentTextResult.Unreadable("extraction_impossible")
+            }
+            out.add(AttachmentText.toAiContextItem(att.label, result))
+        }
+        return out
+    }
+
+    /**
+     * Fichier de pièce jointe dans le cache du compte, ou téléchargé puis écrit
+     * sous la garde d'époque. `null` = session changée ou téléchargement refusé :
+     * aucun texte n'est ajouté, donc le cache purgé ne ressuscite pas.
+     */
+    private fun attachmentFile(
+        assignment: Assignment,
+        att: AssignmentAttachment,
+        week: String,
+        epoch: Long,
+    ): File? {
+        val root = File(ctx.cacheDir, DownloadedFiles.ATTACHMENTS)
+        DownloadedFiles.cachedFor(root, assignment.id, att.id, att.label)?.let { return it }
+        val data = await<fr.veryslopnynotes.data.AttachmentData?> { cb ->
+            assignments.fetchAttachment(assignment.id, att.id, week, cb)
+        } ?: return null
+        if (data.bytes.isEmpty() || data.bytes.size > DownloadedFiles.MAX_BYTES) return null
+        return DownloadedFiles.write(root, assignment.id, att.id, att.label, data.bytes, epoch)
+    }
+
+    /**
+     * Image de pièce jointe -> texte par le MÊME chemin vision que la photo de
+     * cours (#587) : ré-encodage JPEG borné (métadonnées retirées), prompt
+     * gardé, sortie validée. Aucune clé = source illisible explicite.
+     */
+    private fun imageAttachmentText(file: File): AttachmentTextResult {
+        val apiKey = llmKeys.apiKey()?.trim().orEmpty()
+        if (apiKey.length < OpenRouterLlm.MIN_API_KEY_CHARS) {
+            return AttachmentTextResult.Unreadable("image_vision_indisponible")
+        }
+        val bytes = PhotoPrep.prepare(file)
+            ?: return AttachmentTextResult.Unreadable("image_vision")
+        return try {
+            val draft = transcribeLesson(
+                provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
+                image = VisionImage(
+                    mime = "image/jpeg",
+                    base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
+                ),
+                apiKey = apiKey,
+            )
+            if (draft.text.isBlank()) {
+                AttachmentTextResult.Unreadable("image_vision")
+            } else {
+                AttachmentTextResult.Readable(draft.text, false)
+            }
+        } catch (_: Exception) {
+            AttachmentTextResult.Unreadable("image_vision")
+        }
     }
 
     /** Métadonnées « Ce qui est envoyé » : type, libellé, taille, troncature. */
@@ -1408,7 +1536,7 @@ class VsnBridge(
      * l'aide texte ; la photo est une source citable supplémentaire. Aucun
      * enregistrement du corrigé, aucun effet métier (I7).
      */
-    private fun solveHomeworkPhoto(p: JSONObject): JSONObject {
+    private fun solveHomeworkPhoto(p: JSONObject, epoch: Long): JSONObject {
         val id = bounded(p.string("assignmentId"), 128)
         if (id.isEmpty()) throw BridgeFailure("bad_request", "Devoir introuvable.")
         val week = bounded(p.string("weekStart"), 10)
@@ -1423,7 +1551,7 @@ class VsnBridge(
         }
         // Même corpus que l'aide texte. Une photo est une source à part entière :
         // un corpus texte vide reste valide pour ce chemin (allowEmpty).
-        val context = aiContextFor(assignment, AiContextEntry.PHOTO)
+        val context = aiContextFor(assignment, AiContextEntry.PHOTO, week, epoch)
         return when (val shot = awaitPhoto(bounded(p.string("source"), 16).ifEmpty { "camera" })) {
             is PhotoCapture.Result.Cancelled -> JSONObject().put("ok", false).put("cancelled", true)
                 .withAiContext(context)
@@ -1501,7 +1629,7 @@ class VsnBridge(
         // #628 : la fiche part du MÊME assembleur que l'aide texte et la photo.
         // Le corpus est évalué AVANT la clé : un devoir sans source refuse avec
         // CTA de façon déterministe, même sans clé configurée.
-        val context = aiContextFor(assignment, AiContextEntry.REVISION)
+        val context = aiContextFor(assignment, AiContextEntry.REVISION, week, epoch)
         val chunks = context.sources.map { RevisionChunk(it.text, it.label) }
         if (chunks.isEmpty()) {
             // Corpus vide : refus déterministe + CTA, aucun appel payant.
@@ -1995,6 +2123,14 @@ class VsnBridge(
 
         /** Après un échec de scrape, on ne réessaie pas à chaque question. */
         private const val MANUAL_RETRY_MS = 10 * 60 * 1000L
+
+        /**
+         * Budget TOTAL de lecture des pièces jointes (#631) : il tient dans le
+         * plafond d'attente natif (défaut + manuel + LLM) pour que le JS ne
+         * perde jamais la réponse. Passé ce délai, les pièces restantes sont
+         * nommées « délai dépassé », jamais abandonnées en silence.
+         */
+        private const val ATTACHMENT_BUDGET_MS = 20_000L
 
         /**
          * Plafond d'attente natif : le chemin le plus long (chargement des

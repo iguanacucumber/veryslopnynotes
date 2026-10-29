@@ -36,10 +36,19 @@ loggée ou mise en URL. L'app l'envoie directement à OpenRouter dans l'en-tête
 `Authorization` ; la requête ne passe pas par le serveur de manuels.
 
 Onglet Tâches → bouton « Aide devoirs » sur un devoir : les sources sont la consigne,
-l'extrait de cours de ce devoir et, s'il est enregistré, un extrait du manuel,
-la réponse est un corrigé sourcé ou un refus motivé. Sans clé,
-l'assistant reste inactif (aucun appel). Le serveur de manuels ne reçoit pas cette clé ; elle
-reste une credential stockée sur l'appareil.
+TOUS les cours rattachés (matière + jour) dans leur borne de payload, les pièces
+jointes lisibles et, s'il est enregistré, un extrait du manuel. La réponse est un
+corrigé sourcé ou un refus motivé. Sans clé, l'assistant reste inactif (aucun
+appel). Le serveur de manuels ne reçoit pas cette clé ; elle reste une credential
+stockée sur l'appareil.
+
+Les pièces jointes (#631) sont téléchargées avec le client local (jamais une URL
+d'établissement côté web), bornées (taille, nombre), mises en cache dans
+`cacheDir/attachments/` (borné, purgé avec le compte) puis extraites **sur
+l'appareil** : texte/markdown/HTML désinfecté, PDF texte, image par le chemin
+vision existant. Un format non lisible devient une source nommée « illisible »
+avec sa raison — l'OCR d'un PDF scanné n'est pas disponible et le dit. Tout le
+texte reste une donnée externe (Untrusted) : aucun HTML n'est rendu.
 
 ## Assistant de connexion (une page, device-only, #206/#299)
 

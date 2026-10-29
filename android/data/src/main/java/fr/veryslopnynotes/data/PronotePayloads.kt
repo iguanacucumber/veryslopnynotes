@@ -2,6 +2,7 @@ package fr.veryslopnynotes.data
 
 import fr.veryslopnynotes.core.ALGORITHM_SUBJECT
 import fr.veryslopnynotes.core.AVERAGE_ALGORITHMS
+import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.AssignmentAttachment
 import fr.veryslopnynotes.core.AssignmentLessonContent
 import fr.veryslopnynotes.core.AveragesReport
@@ -303,15 +304,37 @@ internal fun periodsPayload(client: Client): String {
 
 private const val LESSON_FETCH_LIMIT = 10
 
+/** Pièces jointes d'un cours publiées dans le payload (même plafond que le devoir). */
+private const val LESSON_ATTACHMENTS_LIMIT = Assignment.MAX_ATTACHMENTS
+
+/** Un cours rattaché : titre, description DÉJÀ nettoyée, pièces jointes. */
+internal data class LessonPayload(
+    val title: String,
+    val text: String,
+    val files: List<Pair<String, String>>,
+)
+
 private fun lessonKeyOf(subject: String, day: String?): String? {
     if (subject.isEmpty() || day == null) return null
     return "$subject|$day"
 }
 
-/** Contenus de cours rattachés aux devoirs (matière + jour, plafond 10, miroir serveur). */
-private fun lessonContents(client: Client, from: LocalDateTime, to: LocalDateTime, wanted: Set<String>): Map<String, Pair<String, String>> {
+/**
+ * Contenus de cours rattachés aux devoirs (matière + jour, plafond 10, miroir
+ * serveur). #631 : PLUSIEURS cours peuvent partager la même clé ; ils sont
+ * tous conservés pour que chacun devienne une source citable. Le cours est
+ * publié dans sa borne de PAYLOAD (8 000 caractères) ; le prompt applique
+ * ensuite son budget propre et signale la coupe.
+ */
+private fun lessonContents(
+    client: Client,
+    from: LocalDateTime,
+    to: LocalDateTime,
+    wanted: Set<String>,
+): Map<String, List<LessonPayload>> {
     if (wanted.isEmpty()) return emptyMap()
-    val out = LinkedHashMap<String, Pair<String, String>>()
+    val out = LinkedHashMap<String, MutableList<LessonPayload>>()
+    val seen = HashSet<String>()
     val lessons = try {
         client.lessons(from, to)
     } catch (e: Exception) {
@@ -322,22 +345,63 @@ private fun lessonContents(client: Client, from: LocalDateTime, to: LocalDateTim
     for (l in lessons) {
         if (fetched >= LESSON_FETCH_LIMIT) break
         val key = lessonKeyOf(l.subject?.name ?: "", parisDay(l.start))
-        if (key == null || key !in wanted || key in out) continue
+        if (key == null || key !in wanted) continue
+        if (l.id.isNotBlank() && !seen.add(l.id)) continue
         fetched += 1
         try {
             val c = l.content() ?: continue
-            val title = boundedCp(c.title, 200)
-            // #628 : le cours entier (dans la borne de PAYLOAD) alimente le
-            // contexte IA, au lieu d'un extrait de 500 caractères. Le budget du
-            // prompt (AiContext) coupe et SIGNALE ce qui dépasse.
+            val title = boundedCp(c.title, AssignmentLessonContent.MAX_TITLE)
             val excerpt = boundedCp(c.description, AssignmentLessonContent.MAX_EXCERPT)
-            if (title.isEmpty() && excerpt.isEmpty()) continue
-            out[key] = (if (title.isEmpty()) "Contenu de cours" else title) to excerpt
+            val files = c.files().take(LESSON_ATTACHMENTS_LIMIT).mapNotNull { f ->
+                val id = boundedCp(f.id, 200)
+                val name = boundedCp(f.name, AssignmentAttachment.MAX_LABEL)
+                if (id.isEmpty() || name.isEmpty()) null else id to name
+            }
+            if (title.isEmpty() && excerpt.isEmpty() && files.isEmpty()) continue
+            out.getOrPut(key) { mutableListOf() }.add(
+                LessonPayload(
+                    title = title.ifEmpty { "Contenu de cours" },
+                    text = excerpt,
+                    files = files,
+                ),
+            )
         } catch (e: Exception) {
             if (mustPropagateReadFailure(e)) throw e
         }
     }
     return out
+}
+
+/** Objet `lessonContent` (un cours complet) avec ses pièces jointes. */
+private fun lessonJson(
+    lesson: LessonPayload,
+    homeworkIndex: Int,
+    lessonIndex: Int,
+): JSONObject? {
+    val title = boundedCp(lesson.title, AssignmentLessonContent.MAX_TITLE)
+    val excerpt = boundedCp(lesson.text, AssignmentLessonContent.MAX_EXCERPT)
+    if (title.isEmpty() && excerpt.isEmpty() && lesson.files.isEmpty()) return null
+    return JSONObject().apply {
+        put("title", title.ifEmpty { "Contenu de cours" })
+        put("excerpt", excerpt)
+        if (lesson.files.isNotEmpty()) {
+            put("attachments", JSONArray().apply {
+                lesson.files.forEachIndexed { fi, (fileId, label) ->
+                    val ref = AssignmentAttachment.lessonAttachmentRef(
+                        homeworkIndex,
+                        lessonIndex,
+                        fi,
+                        fileId,
+                    ) ?: return@forEachIndexed
+                    put(JSONObject().apply {
+                        put("id", fileId)
+                        put("label", label)
+                        put("ref", ref)
+                    })
+                }
+            })
+        }
+    }
 }
 
 /**
@@ -360,7 +424,7 @@ internal fun assignmentJson(
     hw: fr.veryslopnynotes.pronote.Homework,
     id: String,
     index: Int,
-    lesson: Pair<String, String>?,
+    lessons: List<LessonPayload> = emptyList(),
 ): JSONObject? {
     val description = boundedCp(hw.description, 2000)
     val files = try {
@@ -394,11 +458,16 @@ internal fun assignmentJson(
         put("dueDate", hw.date.parisIso())
         put("done", hw.done)
         putIf("description", description.ifEmpty { null })
-        if (lesson != null) {
-            put("lessonContent", JSONObject().apply {
-                put("title", lesson.first)
-                put("excerpt", lesson.second)
-            })
+        // #631 : tous les cours de la même matière + jour, chacun avec ses PJ.
+        // `lessonContent` reste le premier pour les lecteurs existants ;
+        // `lessonContents` n'apparaît qu'au-delà d'un cours (payload borné).
+        val lessonObjects = JSONArray()
+        lessons.forEachIndexed { li, lesson ->
+            lessonJson(lesson, index, li)?.let { lessonObjects.put(it) }
+        }
+        if (lessonObjects.length() > 0) {
+            put("lessonContent", lessonObjects.getJSONObject(0))
+            if (lessonObjects.length() > 1) put("lessonContents", lessonObjects)
         }
         if (atts.length() > 0) put("attachments", atts)
     }
@@ -434,7 +503,7 @@ internal fun assignmentsPayload(client: Client, query: Map<String, String>, now:
     }
     for ((id, i, hw) in dedupe(rows) { eventKey("assignment", it.first) }) {
         val key = lessonKeyOf(hw.subject.name, parisDay(hw.date))
-        assignmentJson(hw, id, i, key?.let { lessons[it] })?.let { arr.put(it) }
+        assignmentJson(hw, id, i, key?.let { lessons[it] }.orEmpty())?.let { arr.put(it) }
     }
     return JSONObject().put("assignments", arr).toString()
 }

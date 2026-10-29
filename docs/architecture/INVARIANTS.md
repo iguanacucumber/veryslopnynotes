@@ -80,6 +80,7 @@ références, l'existence des fichiers cités et les commandes citées.
 | I32 | Une photo ne part que sur geste explicite, ré-encodée et bornée. | `tests/unit/kotlin-vision.test.ts` |
 | I33 | La sauvegarde Android n'emporte jamais les payloads en clair. | `tests/architecture/backup.test.ts` |
 | I34 | Une seule version Kotlin : catalogue = classpath racine = CI. | `tests/architecture/gradle-versions.test.ts` |
+| I35 | Cours complet et pièces jointes extraites localement, bornées, sans HTML rendu. | `tests/unit/attachment-text.test.ts` |
 
 ## Retirés
 
@@ -862,3 +863,25 @@ page de login n'écrase pas la session du serveur (#526 et I28).
 - Commande : `make architecture`.
 - Emplacement : `android/gradle/libs.versions.toml`, `android/build.gradle.kts`,
   `android/*/build.gradle.kts`, `.github/workflows/ci.yml`.
+
+## I35 — Le cours complet et les pièces jointes arrivent à l'IA, bornés et sans HTML rendu
+- Invariant : les sources IA d'un devoir sont la consigne, tous les cours de
+  la même matière + jour (borne signalée) et les pièces jointes extraites
+  localement. Une pièce est résolue par le client local (jamais
+  une URL d'établissement côté web), téléchargée dans le cache du compte
+  (borné, purgé avec lui), puis lue sans réseau : texte/markdown, HTML
+  désinfecté (balises et blocs actifs retirés, aucun rendu), PDF texte, image
+  via le chemin vision. Les bornes (octets, pages, caractères, nombre) sont
+  déclarées et toute coupe est signalée. Un format illisible ou un MIME
+  exécutable devient une source nommée « (illisible) » avec sa raison ; l'OCR
+  d'un PDF scanné n'est pas disponible et le dit. Le texte reste Untrusted (I6).
+- Test : `tests/unit/attachment-text.test.ts` (Kotlin EXÉCUTÉ sur fixtures
+  synthétiques : texte, markdown, HTML désinfecté, PDF texte, PDF scanné, format
+  inconnu, MIME exécutable, coupes de caractères et de pages ; un devoir avec un
+  cours long et une PJ texte produit des sources > 500 caractères, la PJ y
+  figure ; câblage du pont vérifié).
+- Commande : `make check`.
+- Emplacement : `android/data/AttachmentText.kt`,
+  `android/core/AssignmentContext.kt`, `android/core/Assignment.kt`,
+  `android/data/PronotePayloads.kt`, `android/data/AssignmentsRepository.kt`,
+  `android/app/VsnBridge.kt`.

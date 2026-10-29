@@ -58,10 +58,28 @@ data class AssignmentAttachment(
          * ponytail: la `ref` est une CLÉ (la pièce est résolue par son `id`),
          * pas une URL : la sanitisation n'a donc pas à être réversible.
          */
-        fun homeworkRef(homeworkIndex: Int, fileIndex: Int, fileId: String): String? {
+        fun homeworkRef(homeworkIndex: Int, fileIndex: Int, fileId: String): String? =
+            refOf("homework:$homeworkIndex:file:$fileIndex:", fileId)
+
+        /**
+         * `ref` d'une pièce jointe de COURS : `homework:<devoir>:lesson:<cours>:file:<piece>:<id>`.
+         *
+         * Même préfixe `homework:` que les pièces du devoir pour rester lisible
+         * par les contrats existants (web + TS), mais le segment `lesson:`
+         * distingue un fichier de cours d'un fichier de devoir : deux pièces
+         * du même devoir ne peuvent pas partager la même `ref`.
+         */
+        fun lessonAttachmentRef(
+            homeworkIndex: Int,
+            lessonIndex: Int,
+            fileIndex: Int,
+            fileId: String,
+        ): String? =
+            refOf("homework:$homeworkIndex:lesson:$lessonIndex:file:$fileIndex:", fileId)
+
+        private fun refOf(prefix: String, fileId: String): String? {
             val clean = sanitizeRefPart(fileId)
             if (clean.isEmpty()) return null
-            val prefix = "homework:$homeworkIndex:file:$fileIndex:"
             val room = MAX_REF - prefix.length
             if (room <= 0) return null
             val ref = prefix + clean.take(room)
@@ -93,6 +111,8 @@ data class AssignmentAttachment(
 data class AssignmentLessonContent(
     val title: String,
     val excerpt: String,
+    /** Pièces jointes du cours (#631), bornées comme celles du devoir. */
+    val attachments: List<AssignmentAttachment> = emptyList(),
 ) {
     companion object {
         const val MAX_TITLE = 200
@@ -108,7 +128,11 @@ data class AssignmentLessonContent(
         const val MAX_EXCERPT = 8000
 
         fun isValid(c: AssignmentLessonContent): Boolean =
-            c.title.isNotBlank() && c.title.length <= MAX_TITLE && c.excerpt.length <= MAX_EXCERPT
+            c.title.isNotBlank() &&
+                c.title.length <= MAX_TITLE &&
+                c.excerpt.length <= MAX_EXCERPT &&
+                c.attachments.size <= Assignment.MAX_ATTACHMENTS &&
+                c.attachments.all { AssignmentAttachment.isValid(it) }
     }
 }
 
@@ -123,10 +147,28 @@ data class Assignment(
     val attachments: List<AssignmentAttachment> = emptyList(),
     val periodId: String? = null,
     val weekId: String? = null,
+    /**
+     * TOUS les cours rattachés à la même matière + jour (#631). `lessonContent`
+     * reste le premier, pour les lecteurs qui ne connaissent que le champ
+     * singulier (web, caches antérieurs).
+     */
+    val lessonContents: List<AssignmentLessonContent> = emptyList(),
 ) {
+    /** Cours publiés, sans doublon, dans l'ordre du payload. */
+    fun allLessonContents(): List<AssignmentLessonContent> {
+        val listed = if (lessonContents.isNotEmpty()) lessonContents else listOfNotNull(lessonContent)
+        if (lessonContent == null || lessonContent in listed) return listed
+        return listOf(lessonContent) + listed
+    }
+
+    /** Pièces jointes du devoir ET de ses cours, une seule fois par `ref`. */
+    fun allAttachments(): List<AssignmentAttachment> =
+        (attachments + allLessonContents().flatMap { it.attachments }).distinctBy { it.ref }
+
     companion object {
         const val MAX_DESCRIPTION = 2000
         const val MAX_ATTACHMENTS = 10
+        const val MAX_LESSONS = 10
 
         fun isValid(a: Assignment): Boolean {
             if (a.id.isBlank() || a.subject.isBlank() || a.title.isBlank()) return false
@@ -134,6 +176,8 @@ data class Assignment(
             if (a.attachments.size > MAX_ATTACHMENTS) return false
             if (a.attachments.any { !AssignmentAttachment.isValid(it) }) return false
             if (a.lessonContent != null && !AssignmentLessonContent.isValid(a.lessonContent)) return false
+            if (a.lessonContents.size > MAX_LESSONS) return false
+            if (a.lessonContents.any { !AssignmentLessonContent.isValid(it) }) return false
             return true
         }
 

@@ -123,8 +123,27 @@ describe("web tâches — parsing défensif", () => {
     expect(parsed?.lessonContent?.excerpt).toHaveLength(8000);
   });
 
-  test("nettoie les caractères de contrôle et garde le texte comme donnée", () => {
-    const parsed = parseAssignment({ ...VALID, description: "  <img src=x onerror=alert(1)>\u0007  " });
+  // #631 : le payload peut porter PLUSIEURS cours (matière + jour) et leurs
+  // pièces jointes. Le premier reste `lessonContent` pour les anciens lecteurs.
+  test("lit les cours multiples et leurs pièces jointes", () => {
+    const parsed = parseAssignment({
+      ...VALID,
+      lessonContent: { title: "Chapitre 4", excerpt: "Cours principal." },
+      lessonContents: [
+        { title: "Chapitre 4", excerpt: "Cours principal." },
+        {
+          title: "Chapitre 4 — exercices",
+          excerpt: "Exercices.",
+          attachments: [{ id: "f1", label: "td.pdf", ref: "homework:0:lesson:1:file:0:f1" }],
+        },
+      ],
+    });
+    expect(parsed?.lessonContents).toHaveLength(2);
+    expect(parsed?.lessonContent?.title).toBe("Chapitre 4");
+    expect(parsed?.lessonContents[1]?.attachments?.[0]?.label).toBe("td.pdf");
+  });
+
+  test("nettoie les caractères de contrôle et garde le texte comme donnée", () => {    const parsed = parseAssignment({ ...VALID, description: "  <img src=x onerror=alert(1)>\u0007  " });
     expect(parsed?.description).toBe("<img src=x onerror=alert(1)>");
     expect(parsed?.done).toBe(false);
   });
@@ -471,6 +490,15 @@ describe("web tâches — matière de l'assistant", () => {
     expect(assignmentHasAssistantMaterial({ description: "Relire le II.", lessonContent: null })).toBe(true);
     expect(
       assignmentHasAssistantMaterial({ description: "", lessonContent: { title: "Cours", excerpt: "Extrait" } }),
+    ).toBe(true);
+    // #631 : une pièce jointe est désormais une source lisible (texte extrait
+    // par le natif), donc elle suffit à proposer l'assistant.
+    expect(
+      assignmentHasAssistantMaterial({
+        description: "",
+        lessonContent: null,
+        attachments: [{ id: "f1", label: "consigne.txt", ref: "homework:0:file:0:f1" }],
+      }),
     ).toBe(true);
   });
 });

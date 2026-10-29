@@ -64,6 +64,8 @@ private val MIME_BY_EXTENSION: Map<String, String> = mapOf(
     // Texte
     "txt" to "text/plain",
     "csv" to "text/csv",
+    "md" to "text/markdown",
+    "markdown" to "text/markdown",
     // Audio / vidéo
     "mp3" to "audio/mpeg",
     "m4a" to "audio/mp4",

@@ -4,6 +4,7 @@ import fr.veryslopnynotes.core.AiContext
 import fr.veryslopnynotes.core.AiContextEntry
 import fr.veryslopnynotes.core.AiContextItem
 import fr.veryslopnynotes.core.Assignment
+import fr.veryslopnynotes.core.assignmentContextItems
 import fr.veryslopnynotes.core.Homework
 import fr.veryslopnynotes.core.HomeworkOutcome
 import fr.veryslopnynotes.core.HomeworkSource
@@ -34,25 +35,19 @@ class HomeworkRepository {
         }
 
         /**
-         * Candidates brutes d'un devoir : consigne + cours Pronote. Aucune
-         * troncature ici : [AiContext] porte les budgets et signale la coupe
-         * (`truncated`), sinon une source coupée serait silencieuse (#628).
+         * Candidates brutes d'un devoir : consigne + TOUS ses cours Pronote.
+         * Aucune troncature ici : [AiContext] porte les budgets et signale la
+         * coupe (`truncated`), sinon une source coupée serait silencieuse
+         * (#628).
          *
-         * Les pièces jointes n'y sont pas : une `ref` n'a pas de texte. Une
-         * pièce jointe LISIBLE sera ajoutée par l'appelant via
-         * [AiContext.attachment] quand #631/#634 fourniront son texte.
+         * [attachments] contient les pièces jointes DÉJÀ extraites par la
+         * frontière (#631) : une `ref` seule n'a pas de texte. Une pièce jointe
+         * illisible arrive comme source nommée « illisible ».
          */
-        fun contextItems(a: Assignment): List<AiContextItem> {
-            val out = mutableListOf<AiContextItem>()
-            if (a.description.isNotBlank()) {
-                out.add(AiContext.assignment(a.description))
-            }
-            val lc = a.lessonContent
-            if (lc != null && lc.excerpt.isNotBlank()) {
-                out.add(AiContext.course(lc.title, lc.excerpt))
-            }
-            return out
-        }
+        fun contextItems(
+            a: Assignment,
+            attachments: List<AiContextItem> = emptyList(),
+        ): List<AiContextItem> = assignmentContextItems(a, attachments)
 
         /**
          * Sources d'un devoir (contrat historique, sans métadonnées) : ce que
@@ -61,8 +56,11 @@ class HomeworkRepository {
          * envoyé » utilisent [AiContext.assembleFor] pour garder les drapeaux
          * de troncature.
          */
-        fun sourcesFor(a: Assignment): List<HomeworkSource> =
-            AiContext.assembleFor(AiContextEntry.HOMEWORK, contextItems(a))
+        fun sourcesFor(
+            a: Assignment,
+            attachments: List<AiContextItem> = emptyList(),
+        ): List<HomeworkSource> =
+            AiContext.assembleFor(AiContextEntry.HOMEWORK, contextItems(a, attachments))
                 .sources.map { it.toHomeworkSource() }
 
         /**

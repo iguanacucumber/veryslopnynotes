@@ -254,9 +254,12 @@ describe("contexte IA — câblage unique du pont (#628)", () => {
 
   test("les quatre chemins passent par AiContext.assembleFor", () => {
     expect(bridge).toContain("AiContext.assembleFor(entry, items)");
-    expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.HOMEWORK)");
-    expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.PHOTO)");
-    expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.REVISION)");
+    // #631 : les trois chemins qui lisent un devoir passent la SEMAINE affichée
+    // et l'époque de session, parce que les pièces jointes se téléchargent et
+    // s'écrivent dans le cache du compte (I26).
+    expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.HOMEWORK, week, epoch)");
+    expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.PHOTO, week, epoch)");
+    expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.REVISION, week, epoch)");
     // Plus de collecte parallèle par chemin.
     expect(bridge).not.toContain("homeworkSourcesFor");
     expect(bridge).not.toContain("revisionChunks");
