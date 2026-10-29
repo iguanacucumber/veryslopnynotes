@@ -59,7 +59,7 @@ usage : shot.sh <route> [--theme <t>] [--wait <secondes>] [--no-build]
   <route>               route de l'app : index, calendar, grades, tasks,
                         profile, settings, news, canteen, attendance,
                         messages, pairing, alerts, revision-sheets,
-                        course-notes, sanctions.
+                        course-notes, prof, sanctions.
   --theme <dark|light|system>
                         force le thème de l'APPAREIL avant la capture (#179) :
                         le pas d'encre de matière est sensible au thème, donc
@@ -468,6 +468,7 @@ revision-sheets|Fiches de révision|Fiches disponibles;Aucune fiche
 fiches|Fiches de révision|Fiches disponibles;Aucune fiche
 course-notes|Cahier de cours|Cahier de cours;Ajouter un cours;Aucun cours enregistré
 cahier|Cahier de cours|Cahier de cours;Ajouter un cours;Aucun cours enregistré
+prof|Prof|Ton professeur IA;Pose ta première question;Conversation
 '
 
 # Ligne de la table d'une route. Vide = route inconnue (donc absente des 17).

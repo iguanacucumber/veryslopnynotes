@@ -23,6 +23,7 @@ import {
   IconMessage,
   IconSettings,
   IconShield,
+  IconSparkles,
   IconTasks,
   IconWarning,
 } from "../../ui/icons";
@@ -278,6 +279,7 @@ const QUICK_ACTIONS: QuickAction[] = [
   { to: "/canteen", label: "Cantine", status: "Menus", icon: IconFood, tab: "menus" },
   { to: "/attendance", label: "Vie scolaire", status: "Absences", icon: IconWarning, tab: "attendance" },
   { to: "/messages", label: "Messagerie", status: "Discussions", icon: IconMessage, tab: "discussions" },
+  { to: "/prof", label: "Prof", status: "Assistant IA", icon: IconSparkles },
   { to: "/revision-sheets", label: "Fiches", status: "Révisions", icon: IconBook },
   { to: "/settings", label: "Réglages", status: "Compte", icon: IconSettings },
 ];

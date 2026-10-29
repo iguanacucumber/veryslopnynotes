@@ -1,0 +1,272 @@
+/* Professeur IA (#633) — conversation lisible à 360 px, clavier compris.
+   Aucune largeur fixe : les bulles se bornent au conteneur, jamais à l'écran. */
+
+.teacher-subject {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.teacher-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface-variant);
+}
+
+.teacher-tab {
+  flex: 1;
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.teacher-tab--active {
+  background: var(--brand-solid);
+  color: var(--on-brand);
+}
+
+.teacher-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.teacher-modes legend {
+  padding: 0;
+  margin-bottom: 2px;
+}
+
+.teacher-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.teacher-mode input {
+  width: 20px;
+  height: 20px;
+}
+
+.teacher-mode__hint {
+  margin: 0;
+}
+
+.teacher-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.teacher-chat__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.teacher-chat__delete {
+  color: var(--danger-ink);
+}
+
+.teacher-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 120px;
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px;
+  scroll-behavior: smooth;
+}
+
+.teacher-bubble {
+  max-width: min(100%, 560px);
+  border-radius: 14px;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+}
+
+.teacher-bubble:focus,
+.teacher-bubble:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.teacher-bubble--student {
+  align-self: flex-end;
+  background: var(--brand-pale);
+  border: 1px solid var(--border-soft);
+}
+
+.teacher-bubble--teacher {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.teacher-bubble__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.teacher-bubble__who {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.teacher-bubble__text {
+  margin: 4px 0 0;
+}
+
+.teacher-bubble__answer {
+  min-width: 0;
+}
+
+/* Le markdown réutilise `.revision-markdown` (#630) : on resserre seulement. */
+.teacher-bubble__answer .revision-markdown {
+  font-size: inherit;
+}
+
+.teacher-bubble__answer > :first-child {
+  margin-top: 0;
+}
+
+.teacher-bubble__answer > :last-child {
+  margin-bottom: 0;
+}
+
+.teacher-bubble__citations {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.teacher-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.teacher-source {
+  max-width: 100%;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  background: var(--surface-variant);
+  overflow-wrap: anywhere;
+}
+
+.teacher-unsourced {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.teacher-unsourced__badge {
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.teacher-sent summary {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.teacher-sent p {
+  margin: 0 0 6px;
+}
+
+.teacher-sent__list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.teacher-sent__list li {
+  margin: 2px 0;
+}
+
+.teacher-refusal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--surface-variant);
+}
+
+.teacher-refusal p {
+  margin: 0;
+}
+
+.teacher-refusal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.teacher-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.teacher-composer__input {
+  width: 100%;
+  resize: vertical;
+  /* Le clavier mobile recouvre le bas : garder le champ au-dessus. */
+  scroll-margin-bottom: calc(120px + var(--keyboard-bottom));
+}
+
+.teacher-composer__send {
+  align-self: flex-end;
+  min-height: 44px;
+}
+
+.teacher-footnote {
+  margin: 4px 2px 0;
+}
+
+/* Très petits écrans (360 px) : les actions ne se chevauchent jamais. */
+@media (max-width: 380px) {
+  .teacher-chat__actions {
+    flex-direction: column;
+  }
+
+  .teacher-chat__actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

@@ -20,6 +20,7 @@ import CanteenRoute from "./routes/canteen";
 import AlertsRoute from "./routes/alerts";
 import RevisionSheetsRoute from "./routes/revision-sheets";
 import CourseNotesRoute from "./routes/course-notes";
+import ProfRoute from "./routes/prof";
 
 /**
  * Écran de secours du boundary : message borné (aucune pile, aucun texte
@@ -134,6 +135,7 @@ export function App() {
               <Route path="/alerts" element={<AlertsRoute />} />
               <Route path="/revision-sheets" element={<RevisionSheetsRoute />} />
               <Route path="/course-notes" element={<CourseNotesRoute />} />
+              <Route path="/prof" element={<ProfRoute />} />
               {/* Aliases kept so saved routes and old deep links still resolve. */}
               <Route path="/fiches" element={<Navigate to="/revision-sheets" replace />} />
               <Route path="/cahier" element={<Navigate to="/course-notes" replace />} />

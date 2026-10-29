@@ -49,6 +49,7 @@
                 <data android:host="alerts" />
                 <data android:host="revision-sheets" />
                 <data android:host="course-notes" />
+                <data android:host="prof" />
                 <!-- Aliases: old links still open the canonical route. -->
                 <data android:host="fiches" />
                 <data android:host="cahier" />

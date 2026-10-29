@@ -21,6 +21,7 @@ export const SMOKE_ROUTES: readonly SmokeRoute[] = [
   ["alerts", "/alerts"],
   ["revision-sheets", "/revision-sheets"],
   ["course-notes", "/course-notes"],
+  ["prof", "/prof"],
   // Compatibility aliases: old links must still land on a real screen.
   ["fiches", "/fiches"],
   ["cahier", "/cahier"],
