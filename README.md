@@ -248,60 +248,19 @@ ni vers le fournisseur LLM.
 > sur la boucle locale ou un réseau de confiance, ou place un proxy authentifié
 > devant. Voir [I8](docs/architecture/INVARIANTS.md).
 
-## Commandes
+## Tests, workflow et commandes
 
-| Commande | Rôle |
-|---|---|
-| `make check` | Secrets, typecheck, tests unitaires, architecture, contrats, compilation Kotlin réelle + Android Lint et frontend — en parallèle. |
-| `make check-fast` | Boucle interne (~2,1 s à chaud) sans Gradle ; le build Vite est inclus, jamais le gate de merge. |
-| `make watch` | Relance les tests unitaires + web à chaque changement (`T=tests/unit/foo.test.ts` pour cibler). |
-| `make web` | Typecheck + tests + build de l'interface React. |
-| `make unit` | Tests unitaires (`tests/unit`). |
-| `make contracts` | Tests des contrats partagés. |
-| `make architecture-test` | Scans d'architecture + invariants. |
-| `make android-compile` | Vraie compilation Kotlin (le seul contrôle des symboles et surcharges) + Android Lint (`:app:lintDebug`, même invocation Gradle). Sans JDK/SDK, elle ÉCHOUE (`ALLOW_SKIP_ANDROID=1` assume le saut, hors merge). |
-| `make web-smoke` | Test navigateur du frontend (Chromium requis), hors `make check` et rejoué en CI sur chaque PR : les 17 routes (15 écrans + 2 alias), les deux parcours d'appairage (téléphone neuf, session expirée) et le parcours de déconnexion. |
-| `make buildDebugApk` / `make buildRelApk` | APK debug / APK + AAB release. |
-| `make updateApkToPhone` | APK debug puis `adb install -r` (données conservées). |
-| `make shot ROUTE=grades` | Capture vérifiée sur téléphone réel (`SHOT_ARGS="--theme dark"` pour le thème). |
-| `make runServer` | Scraper de manuels HTTPS sur `:8080` (boucle locale par défaut). |
-| `make build` | Vérification des secrets + image Docker du serveur (skip si Docker est absent). |
-
-## Tests et qualité
-
-```bash
-make check
-make unit
-make contracts
-make architecture-test
-bun audit
-```
-
-Les tests Bun par défaut utilisent des **fixtures synthétiques** et ne font aucun
-accès réseau. Le corpus Pronote de `tests/fixtures/pronote/` est gitignoré : s'il
-existe localement, il contient des données personnelles et ne doit jamais être
-publié. Les captures de `shots/` sont également gitignorées (elles montrent le
-vrai nom et les vraies notes d'un élève) ; `make shot` les rejoue et vérifie que
-l'écran demandé a bien été atteint.
-
-Un changement qui casse un invariant est **bloquant**, même s'il passe
-fonctionnellement. Les captures et les tests de bout en bout sur un compte réel
-ne font pas partie de la suite par défaut.
+Une seule source : [`AGENTS.md`](AGENTS.md). Il porte les 5 lois, le workflow
+issue → branche → PR, le gate (`make check`), les commandes `make` et les règles
+de dépendance. Rien n'est recopié ici ; le catalogue exhaustif des cibles est le
+`Makefile`.
 
 ## Configuration
 
-**Pas de `.env` ni de secret côté serveur.** Le QR contient l'adresse de
-l'établissement ; le PIN et la session restent sur le téléphone.
-
-| Variable | Usage | Secrète ? |
-|---|---|---|
-| `PORT`, `HOST` | Écoute du scraper. `make runServer` prend `8080` et `127.0.0.1` par défaut, surchargeables (`PORT=9090 make runServer`) ; sans `HOST`, le binaire écoute sur la boucle locale. | Non |
-| `TLS_CERT_FILE`, `TLS_KEY_FILE` | Certificat et clé du scraper. | Non (chemins) |
-| `SERVER_HOST` ou `server.host` dans `android/local.properties` | Graine de l'adresse du scraper ; l'adresse se change ensuite dans l'app. | Non |
-| `STORE_FILE`, `STORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` | Signature release, toujours hors du dépôt. | **Oui** |
-| `ANDROID_HOME`, `ANDROID_JDK_HOME` | Découverte du SDK et du JDK. | Non |
-
-Variables et apports humains : [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md).
+Variables d'environnement, signature release, corpus d'outillage et apports
+humains (QR, clé OpenRouter, manuel, page web) :
+[`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md). Une seule source, sans valeur
+secrète.
 
 ## Structure du dépôt
 
@@ -312,7 +271,7 @@ Variables et apports humains : [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md).
 ├─ shared/contracts/ routes du scraper, OpenAPI et validateurs gardés pour les tests
 ├─ agents/           vérifications, captures et harnais de test locaux
 ├─ tests/            tests unitaires, contrats et architecture
-└─ docs/             ADR, invariants, recette, release, apports humains
+└─ docs/             ADR, invariants, release, configuration
 ```
 
 Flux Pronote : `web (pont) → android/pronote/ → établissement`. Le serveur n'est
@@ -327,10 +286,8 @@ pas dans ce flux. Règles détaillées :
   WebView locale, règles et architecture ([ADR-005](docs/adr/005-rules-and-architecture.md)).
 - [`docs/RELEASE.md`](docs/RELEASE.md) — versions épinglées, build, signature,
   livrable.
-- [`docs/SCREEN-REVIEW.md`](docs/SCREEN-REVIEW.md) — recette des 17 routes (15 écrans + 2 alias), thèmes, grande
-  police, hors-ligne.
-- [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md) — ce qui doit être fourni à la
-  main, sans valeur secrète.
+- [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md) — configuration et apports
+  humains, sans valeur secrète.
 - [`android/README.md`](android/README.md) — modules, appairage QR, certificat
   de développement, build.
 - [`web/README.md`](web/README.md) — contrat du pont, budget, structure.
@@ -338,23 +295,8 @@ pas dans ce flux. Règles détaillées :
 
 ## Contribuer
 
-Le circuit du dépôt est **une issue = une branche = une PR**
-(`agent/<n>-<slug>`), sans commit direct sur `main`. PR via MCP GitHub
-uniquement (`gh` CLI interdit), relecture du diff et `make check` avant merge.
-Un invariant cassé rend la PR bloquante.
-
-```bash
-./agents/launch.sh 343 faster-flow   # worktree depuis origin/main, deps, claim
-make watch                            # boucle TDD
-./agents/ship.sh 343 "agents: ..."   # rebase + check + push + corps de PR
-```
-
-- [`AGENTS.md`](AGENTS.md) — workflow, garde-fous, règles d'or.
-- [`docs/adr/`](docs/adr/) — contexte des choix d'architecture.
-
-Toute nouvelle dépendance doit être justifiée dans la PR, épinglée, auditée avec
-`bun audit` et compatible MIT. Aucun secret, aucune donnée personnelle, aucune
-capture réelle dans le dépôt.
+Workflow, branches, gate, commandes et règles de dépendance :
+[`AGENTS.md`](AGENTS.md). Décisions : [`docs/adr/`](docs/adr/).
 
 ## État et limites
 
@@ -366,8 +308,8 @@ publiée à ce jour. Les limites connues sont documentées et assumées :
 - l'assistant IA est inactif sans clé OpenRouter ;
 - le scraper de manuels n'a pas d'authentification par conception et ne doit pas
   être exposé publiquement ;
-- la suite par défaut ne teste pas de compte Pronote réel ; la recette hors-ligne
-  et les fixtures synthétiques couvrent les états reproductibles.
+- la suite par défaut ne teste pas de compte Pronote réel ; les fixtures
+  synthétiques et les états hors-ligne rejoués par les tests couvrent le reste.
 
 ## License
 
