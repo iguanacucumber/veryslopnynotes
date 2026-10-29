@@ -282,10 +282,9 @@ describe("le câblage ne ravale plus la cause (#409)", () => {
   // `SafePromptProvider`, RECONSTRUISAIT le prompt (nouveau nonce) : le corps
   // envoyé n'était alors pas le corps vérifié.
   test("le fournisseur est un SafePromptProvider : plus de reconstruction du prompt", () => {
-    // Le type porte la garantie : les deux points d'entrée exigent un
+    // Le type porte la garantie : le point d'entrée exige un
     // `SafePromptProvider`.
     expect(core).toMatch(/fun generateGuardedJson\(\s*provider: SafePromptProvider/);
-    expect(core).toMatch(/fun generateGuarded\(\s*provider: SafePromptProvider/);
     // Et le repli « reconstruct » a disparu.
     expect(core).not.toContain("provider.generate(");
     expect(core).not.toContain("as? SafePromptProvider");

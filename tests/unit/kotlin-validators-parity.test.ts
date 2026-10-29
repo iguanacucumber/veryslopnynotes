@@ -11,13 +11,13 @@
 // Les deux défauts couverts :
 // 1. `isoMillis` refusait une date-heure locale sans décalage
 //    (`2026-10-02T10:00:00`) alors que le contrat (`Date.parse`) et le parseur
-//    frère (`NotifyFormat.isIsoDateLike`) l'acceptaient : absence exclue du
-//    calcul (aucune notification) et note triée en dernier (courbe décalée) ;
+//    frère l'acceptaient : absence exclue du calcul (aucune notification) et
+//    note triée en dernier (courbe décalée) ;
 // 2. `AssignmentAttachment.isValid` acceptait n'importe quelle `ref` relative
 //    alors que le web exige `^homework:[A-Za-z0-9._:-]+$` : un identifiant de
 //    fichier Pronote avec un espace faisait DISPARAÎTRE le devoir entier.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isHomeworkAttachmentRef, isIsoDate } from "../../shared/contracts/models";
 import { parseAssignment } from "../../web/src/features/tasks/assignments";
@@ -244,12 +244,12 @@ describe("validateurs du noyau (#366) — parité avec le contrat TS", () => {
     const core = readFileSync(join(CORE, "IsoDates.kt"), "utf8");
     expect(core).toContain("internal fun isoMillis(");
     expect(core).toContain("internal fun isIsoDateLike(");
-    // Les deux parseurs d'avant (Averages.kt, NotifyFormat.kt) ont disparu.
-    for (const file of ["Averages.kt", "NotifyFormat.kt"]) {
-      const src = readFileSync(join(CORE, file), "utf8");
-      expect(src).not.toContain("fun isoMillis(");
-      expect(src).not.toContain("fun isIsoDateLike(");
-    }
+    // L'ancien parseur de `Averages.kt` a disparu, et le fichier de
+    // notifications qui en portait un second aussi (#651).
+    const averages = readFileSync(join(CORE, "Averages.kt"), "utf8");
+    expect(averages).not.toContain("fun isoMillis(");
+    expect(averages).not.toContain("fun isIsoDateLike(");
+    expect(existsSync(join(CORE, "NotifyFormat.kt"))).toBe(false);
   });
 });
 

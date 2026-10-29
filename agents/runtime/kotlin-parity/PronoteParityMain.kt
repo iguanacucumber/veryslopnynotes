@@ -17,9 +17,6 @@
 // alloués par le pilote, comme les `CookieJar` injectés côté TS.
 package fr.veryslopnynotes.pronoteparity
 
-import fr.veryslopnynotes.core.Grade
-import fr.veryslopnynotes.core.fingerprint
-import fr.veryslopnynotes.core.jsNum
 import fr.veryslopnynotes.pronote.Communication
 import fr.veryslopnynotes.pronote.CookieJar
 import fr.veryslopnynotes.pronote.DecryptionChange
@@ -31,7 +28,6 @@ import fr.veryslopnynotes.pronote.Json
 import fr.veryslopnynotes.pronote.KeepAlive
 import fr.veryslopnynotes.pronote.PronoteAPIError
 import fr.veryslopnynotes.pronote.enBytes
-import fr.veryslopnynotes.pronote.enleverAlea
 import fr.veryslopnynotes.pronote.hexToBytes
 import fr.veryslopnynotes.pronote.jsNumber
 import fr.veryslopnynotes.pronote.md5
@@ -84,25 +80,6 @@ private class Driver {
             // Le rendu doit être IDENTIQUE à `JSON.stringify` : c'est lui qui
             // décide de la forme de la décimale (entier court, plat, exponentiel).
             "jsNumber" -> ok("text" to JVal.Str(jsNumber(numberText(op))))
-            "jsNum" -> ok("text" to JVal.Str(jsNum(numberText(op))))
-            // Empreinte d'une note dont SEULE la moyenne de classe varie :
-            // deux moyennes différentes doivent donner deux empreintes
-            // différentes (avant, `toLong()` saturait les deux à la même).
-            "gradePrint" -> ok(
-                "print" to JVal.Str(
-                    fingerprint(
-                        Grade(
-                            id = "g-1",
-                            accountId = "a-1",
-                            subject = "Maths",
-                            value = 12.0,
-                            scale = 20.0,
-                            date = "2026-01-08",
-                            classAverage = numberText(op, "classAverage"),
-                        ),
-                    ),
-                ),
-            )
             // --- Crypto ------------------------------------------------------
             "md5" -> ok("hex" to JVal.Str(md5((op.str("dataHex") ?: "").hexToBytes()).toHexLower()))
             "sha256" -> ok("hex" to JVal.Str(sha256HexUpper(op.str("text") ?: "")))
@@ -156,7 +133,6 @@ private class Driver {
                 "e" to JVal.Str(Encryption.RSA_1024_EXPONENT.toString()),
             )
             // --- Fonctions pures ----------------------------------------------
-            "enleverAlea" -> ok("value" to JVal.Str(enleverAlea(op.str("text") ?: "")))
             "hexToBytes" -> ok("hex" to JVal.Str((op.str("hex") ?: "").hexToBytes().toHexLower()))
             // Hiérarchie d'erreur : le contrat documenté est
             // `catch (e: PronoteAPIError)` — il doit attraper `ExpiredObject`

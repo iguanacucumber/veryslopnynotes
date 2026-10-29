@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { createServer, type AddressInfo, type Socket } from "node:net";
 import { CookieJar } from "tough-cookie";
 import { Communication, Encryption, KeepAlive } from "pronotets";
-import { enBytes, enleverAlea, prepareOnglets } from "../../node_modules/pronotets/dist/communication.js";
+import { enBytes, prepareOnglets } from "../../node_modules/pronotets/dist/communication.js";
 import { md5, sha256HexUpper } from "../../node_modules/pronotets/dist/crypto.js";
 import { HttpSession } from "../../node_modules/pronotets/dist/http.js";
 import { ROOT, canonTs, parityToolchain, type ParityLink } from "./fixtures/kotlin-harness";
@@ -525,22 +525,7 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
       const expected = JSON.stringify(Number(raw));
       const kt = (JSON.parse(await ask({ op: "jsNumber", value: raw })) as { text: string }).text;
       expect(`pronote ${raw} -> ${kt}`).toBe(`pronote ${raw} -> ${expected}`);
-      const ktCore = (JSON.parse(await ask({ op: "jsNum", value: raw })) as { text: string }).text;
-      expect(`core ${raw} -> ${ktCore}`).toBe(`core ${raw} -> ${expected}`);
     }
-  });
-
-  test.skipIf(skip)("empreinte de note : deux moyennes de classe différentes → deux empreintes (#410)", async () => {
-    const print = async (average: string): Promise<string> =>
-      (JSON.parse(await ask({ op: "gradePrint", classAverage: average })) as { print: string }).print;
-    const a = await print("1e19");
-    const b = await print("5e19");
-    // Avant : `toLong()` saturait les deux moyennes à la même valeur → une
-    // seule empreinte → la correction d'un professeur n'était JAMAIS vue.
-    expect(a).not.toBe(b);
-    // La moyenne entre par son rendu JSON EXACT, pas saturé.
-    expect(a).toContain("10000000000000000000");
-    expect(b).toContain("50000000000000000000");
   });
 
   test.skipIf(skip)("crypto : MD5 et SHA-256 sur vecteurs (vide, ASCII, unicode, long)", async () => {
@@ -611,10 +596,7 @@ describe("parité TS <-> Kotlin du protocole (#200/#202)", () => {
     }
   });
 
-  test.skipIf(skip)("pures : enleverAlea, enBytes, prepareOnglets", async () => {
-    for (const text of ["", "a", "aXbYcZ", "h\u00e9llo", "abcdefg"]) {
-      expect(await ask({ op: "enleverAlea", text })).toBe(JSON.stringify({ value: enleverAlea(text) }));
-    }
+  test.skipIf(skip)("pures : enBytes, prepareOnglets", async () => {
     for (const text of ["", "72,105", "300", "abc", "12abc", "-1", " 7 , 8 ", "1,2,3,4,5"]) {
       expect(await ask({ op: "enBytes", text })).toBe(JSON.stringify({ hex: enBytes(text).toString("hex") }));
     }

@@ -7,8 +7,8 @@ import java.time.Instant
 // Porté de `server/jobs/revision.ts` (supprimé en #210, hors `renderRevisionPdf`,
 // le writer PDF-1.4 maison que `RevisionPdf.kt` remplace par `PdfDocument` natif :
 // ce port est la source de vérité). Données
-// structurées uniquement : `ExamCandidate` issu de `detectExams`. Aucun appel
-// modèle ici, aucune sortie libre ne déclenche d'effet (I7).
+// structurées uniquement : `ExamCandidate` (devoir choisi par l'élève). Aucun
+// appel modèle ici, aucune sortie libre ne déclenche d'effet (I7).
 // Contenu assemblé depuis texte validé + sources citées, gabarit versionné
 // stocké par fiche. Logs = compteurs seuls, jamais de token en clair.
 //
@@ -148,6 +148,40 @@ fun assembleRevisionSheet(
 }
 
 // --- Stockage kv -------------------------------------------------------------
+
+/** Chaîne entre guillemets à la `JSON.stringify` (échappées + paires valides brutes). */
+private fun jsonStr(s: String): String {
+    val out = StringBuilder()
+    out.append('"')
+    var i = 0
+    while (i < s.length) {
+        val c = s[i]
+        when (c) {
+            '"' -> out.append("\\\"")
+            '\\' -> out.append("\\\\")
+            '\n' -> out.append("\\n")
+            '\r' -> out.append("\\r")
+            '\t' -> out.append("\\t")
+            '\b' -> out.append("\\b")
+            '\u000C' -> out.append("\\f")
+            in '\uD800'..'\uDBFF' -> {
+                val lo = if (i + 1 < s.length) s[i + 1] else '\u0000'
+                if (lo in '\uDC00'..'\uDFFF') {
+                    out.append(c)
+                    out.append(lo)
+                    i++
+                } else {
+                    out.append("\\u%04x".format(c.code))
+                }
+            }
+            in '\uDC00'..'\uDFFF' -> out.append("\\u%04x".format(c.code))
+            else -> if (c < ' ') out.append("\\u%04x".format(c.code)) else out.append(c)
+        }
+        i++
+    }
+    out.append('"')
+    return out.toString()
+}
 
 fun revisionSheetJson(sheet: RevisionSheet): String {
     val sources = sheet.sources.joinToString(",") { jsonStr(it) }
