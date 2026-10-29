@@ -84,14 +84,15 @@ saute `android-compile` seulement.
   `tests/architecture/skills-lock.test.ts` se mettent à jour dans la MÊME PR.
 - Pas de secret commité ni de variable de secret côté serveur, pas d'IP, de
   domaine, d'URL Pronote, de donnée personnelle, de manuel/cours ni de session
-  Playwright. Secret commité ⇒ rotation immédiate.
+  Playwright. Secret commité ⇒ rotation immédiate. Le corpus
+  `tests/fixtures/pronote/` et les captures `shots/` sont gitignorés : données
+  personnelles, jamais publiées.
 - Le scraper est sans authentification (I8) : boucle locale ou proxy
   authentifié, jamais public. Toute extension de son rôle (issue #634 comprise)
   passe par cette règle.
 
 Décisions : [`docs/adr/`](docs/adr/), à commencer par
-[ADR-005](docs/adr/005-rules-and-architecture.md) et la revue
-[`docs/architecture/REVIEW-2026-10.md`](docs/architecture/REVIEW-2026-10.md).
+[ADR-005](docs/adr/005-rules-and-architecture.md).
 Build/release : [`docs/RELEASE.md`](docs/RELEASE.md). Modules :
 [`android/README.md`](android/README.md), [`web/README.md`](web/README.md),
 [`server/README.md`](server/README.md).

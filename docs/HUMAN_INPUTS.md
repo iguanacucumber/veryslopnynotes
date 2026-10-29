@@ -1,4 +1,21 @@
-# HUMAN_INPUTS.md — apports humains, sans valeurs secrètes
+# HUMAN_INPUTS.md — configuration et apports humains, sans valeurs secrètes
+
+Seule source de la configuration du dépôt : le README y renvoie.
+
+## Configuration
+
+**Pas de `.env` ni de secret côté serveur.** Le QR contient l'adresse de
+l'établissement ; le PIN et la session restent sur le téléphone.
+
+| Variable | Usage | Secrète ? |
+|---|---|---|
+| `PORT`, `HOST` | Écoute du scraper. `make runServer` prend `8080` et `127.0.0.1` par défaut, surchargeables (`PORT=9090 make runServer`) ; sans `HOST`, le binaire écoute sur la boucle locale. | Non |
+| `TLS_CERT_FILE`, `TLS_KEY_FILE` | Certificat et clé du scraper. | Non (chemins) |
+| `SERVER_HOST` ou `server.host` dans `android/local.properties` | Graine de l'adresse du scraper ; l'adresse se change ensuite dans l'app. | Non |
+| `STORE_FILE`, `STORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` | Signature release, toujours hors du dépôt. | **Oui** |
+| `ANDROID_HOME`, `ANDROID_JDK_HOME` | Découverte du SDK et du JDK. | Non |
+
+## Apports humains
 
 - **Compte Pronote** : l'utilisateur scanne le QR de l'application Pronote (il porte l'adresse de l'établissement) et saisit son PIN dans l'app. La session ne quitte pas le téléphone.
 - **Clé OpenRouter** : saisie dans les réglages de l'app, stockée chiffrée et envoyée directement à OpenRouter. Aucun modèle ni secret à configurer côté serveur.
