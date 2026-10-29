@@ -38,6 +38,8 @@ import {
   homeworkRefusalText,
   parseAiContext,
   parseAssignmentsPayload,
+  parseHomeworkActions,
+  parseHomeworkAnswer,
   shiftWeek,
   subjectDisplayFr,
   weekEndOf,
@@ -47,6 +49,7 @@ import {
   weekStartOf,
   type Assignment,
   type AssignmentAttachment,
+  type HomeworkAction,
 } from "./assignments";
 import "./tasks.css";
 
@@ -54,7 +57,12 @@ type HelpState = {
   id: string;
   loading: boolean;
   answer: string | null;
+  /** #629 : étapes ordonnées et sources citées du corrigé. */
+  steps: string[];
+  sources: string[];
   refusal: string | null;
+  /** CTA stables renvoyés par un refus (`add_course`, `enable_manual`…). */
+  actions: HomeworkAction[];
   error: string | null;
   /** true = corrigé obtenu depuis une photo d'énoncé. */
   photo?: boolean;
@@ -194,7 +202,7 @@ function TasksWeek({ week }: { week: string }) {
 
   async function askHelp(assignment: Assignment) {
     const seq = ++helpSeq.current;
-    setHelp({ id: assignment.id, loading: true, answer: null, refusal: null, error: null });
+    setHelp({ id: assignment.id, loading: true, answer: null, steps: [], sources: [], refusal: null, actions: [], error: null });
     try {
       const result = await bridge.askHomework(assignment.id, week);
       if (seq !== helpSeq.current) return;
@@ -207,7 +215,10 @@ function TasksWeek({ week }: { week: string }) {
           id: assignment.id,
           loading: false,
           answer: null,
+          steps: [],
+          sources: [],
           refusal: homeworkRefusalText(result.message),
+          actions: parseHomeworkActions(result.actions),
           error: null,
           context,
         });
@@ -216,17 +227,24 @@ function TasksWeek({ week }: { week: string }) {
           id: assignment.id,
           loading: false,
           answer: null,
+          steps: [],
+          sources: [],
           refusal: null,
+          actions: [],
           error: result.message || "L'assistant n'a pas répondu.",
           context,
         });
       } else {
+        const answer = parseHomeworkAnswer(result);
         setHelp({
           id: assignment.id,
           loading: false,
-          answer: result.body || "Réponse vide.",
+          answer: answer?.answer ?? null,
+          steps: answer?.steps ?? [],
+          sources: answer?.sources ?? [],
           refusal: null,
-          error: null,
+          actions: [],
+          error: answer ? null : "Réponse vide.",
           context,
         });
       }
@@ -236,7 +254,10 @@ function TasksWeek({ week }: { week: string }) {
         id: assignment.id,
         loading: false,
         answer: null,
+        steps: [],
+        sources: [],
         refusal: null,
+        actions: [],
         error: e instanceof Error ? e.message : "Aide devoirs indisponible.",
       });
     }
@@ -248,7 +269,10 @@ function TasksWeek({ week }: { week: string }) {
       id: assignment.id,
       loading: true,
       answer: null,
+      steps: [],
+      sources: [],
       refusal: null,
+      actions: [],
       error: null,
       photo: true,
       photoSource: source,
@@ -266,7 +290,10 @@ function TasksWeek({ week }: { week: string }) {
           id: assignment.id,
           loading: false,
           answer: null,
+          steps: [],
+          sources: [],
           refusal: homeworkRefusalText(result.message),
+          actions: parseHomeworkActions(result.actions),
           error: null,
           photo: true,
           photoSource: source,
@@ -277,19 +304,26 @@ function TasksWeek({ week }: { week: string }) {
           id: assignment.id,
           loading: false,
           answer: null,
+          steps: [],
+          sources: [],
           refusal: null,
+          actions: [],
           error: result.message || "L'assistant n'a pas répondu.",
           photo: true,
           photoSource: source,
           context,
         });
       } else {
+        const answer = parseHomeworkAnswer(result);
         setHelp({
           id: assignment.id,
           loading: false,
-          answer: result.body || "Réponse vide.",
+          answer: answer?.answer ?? null,
+          steps: answer?.steps ?? [],
+          sources: answer?.sources ?? [],
           refusal: null,
-          error: null,
+          actions: [],
+          error: answer ? null : "Réponse vide.",
           photo: true,
           photoSource: source,
           context,
@@ -301,7 +335,10 @@ function TasksWeek({ week }: { week: string }) {
         id: assignment.id,
         loading: false,
         answer: null,
+        steps: [],
+        sources: [],
         refusal: null,
+        actions: [],
         error: e instanceof Error ? e.message : "Aide photo indisponible.",
         photo: true,
         photoSource: source,
@@ -478,6 +515,7 @@ function TasksWeek({ week }: { week: string }) {
                       onOpenPhotoChooser={() => setPhotoChooser(assignment)}
                       onCloseHelp={closeHelp}
                       onAddCourse={() => navigate("/course-notes")}
+                      onEnableManual={() => navigate("/settings")}
                       onGenerateSheet={() => void generateSheet(assignment)}
                     />
                   ))}
@@ -556,6 +594,7 @@ function AssignmentCard({
   onOpenPhotoChooser,
   onCloseHelp,
   onAddCourse,
+  onEnableManual,
   onGenerateSheet,
 }: {
   assignment: Assignment;
@@ -573,6 +612,7 @@ function AssignmentCard({
   onOpenPhotoChooser: () => void;
   onCloseHelp: () => void;
   onAddCourse: () => void;
+  onEnableManual: () => void;
   onGenerateSheet: () => void;
 }) {
   const { dark } = useApp();
@@ -735,12 +775,45 @@ function AssignmentCard({
             </p>
           ) : null}
           {help.answer ? <p className="task-help__panel-answer">{help.answer}</p> : null}
+          {help.steps.length > 0 ? (
+            <ol className="task-help__steps">
+              {help.steps.map((step, index) => (
+                <li key={`${index}:${step.slice(0, 40)}`}>{step}</li>
+              ))}
+            </ol>
+          ) : null}
+          {help.sources.length > 0 ? (
+            <div className="task-help__sources">
+              <p className="tiny muted">Sources citées</p>
+              <ul>
+                {help.sources.map((source, index) => (
+                  <li key={`${index}:${source}`}>{source}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {help.refusal ? (
             <div className="task-help__panel-refusal">
               <p>{help.refusal}</p>
-              <button type="button" className="btn btn--ghost btn--small" onClick={onAddCourse}>
-                Ajouter un cours au cahier
-              </button>
+              {help.actions.includes("add_course") ? (
+                <button type="button" className="btn btn--ghost btn--small" onClick={onAddCourse}>
+                  Ajouter un cours au cahier
+                </button>
+              ) : null}
+              {help.actions.includes("enable_manual") ? (
+                <button type="button" className="btn btn--ghost btn--small" onClick={onEnableManual}>
+                  Enregistrer mon manuel
+                </button>
+              ) : null}
+              {help.actions.includes("open_attachment") && assignment.attachments[0] ? (
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small"
+                  onClick={() => onOpenAttachment(assignment.attachments[0]!)}
+                >
+                  Ouvrir la pièce jointe
+                </button>
+              ) : null}
             </div>
           ) : null}
           {help.error ? (

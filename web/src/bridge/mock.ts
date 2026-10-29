@@ -518,7 +518,13 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
     case "llm.askHomework":
       return ok({
         ok: true,
-        body: "Le corrigé attendu : relier chaque régime à ses caractéristiques (parti unique, terreur, propagande) puis comparer deux régimes.",
+        answer: "Le corrigé attendu : relier chaque régime à ses caractéristiques (parti unique, terreur, propagande) puis comparer deux régimes.",
+        steps: [
+          "Repère les trois régimes cités dans la consigne.",
+          "Relie chaque régime à deux caractéristiques du cours.",
+          "Compare deux régimes en une phrase de synthèse.",
+        ],
+        sources: ["Consigne", "Cours : Chapitre 4"],
         context: [
           { type: "assignment", label: "Consigne", chars: 180, truncated: false },
           { type: "course", label: "Cours : Chapitre 4", chars: 1200, truncated: false },
@@ -529,11 +535,9 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
     case "llm.solvePhoto":
       return ok({
         ok: true,
-        body: "Photo lue : le corrigé suit la méthode du cours. Commence par poser les données, puis applique la formule du chapitre.",
-        context: [
-          { type: "assignment", label: "Consigne", chars: 180, truncated: false },
-          { type: "course", label: "Cours : Chapitre 4", chars: 1200, truncated: false },
-        ],
+        answer: "Photo lue : le corrigé suit la méthode du cours. Commence par poser les données, puis applique la formule du chapitre.",
+        steps: ["Pose les données de l'énoncé.", "Applique la formule du chapitre.", "Vérifie l'unité du résultat."],
+        sources: ["Photo de l'énoncé", "Cours : Chapitre 4"],
         contextChars: 1380,
         contextOmitted: 0,
       }) as Promise<T>;

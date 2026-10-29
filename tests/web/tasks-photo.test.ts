@@ -21,13 +21,18 @@ function between(text: string, start: string, end: string): string {
 
 describe("devoirs — photo d'énoncé (#588)", () => {
   test("le pont factice rend un corrigé, jamais une image", async () => {
-    const result = await mockCall<{ ok: boolean; body?: string }>("llm.solvePhoto", {
-      assignmentId: "a1",
-      weekStart: "2026-10-19",
-      source: "camera",
-    });
+    const result = await mockCall<{ ok: boolean; answer?: string; steps?: string[]; sources?: string[] }>(
+      "llm.solvePhoto",
+      {
+        assignmentId: "a1",
+        weekStart: "2026-10-19",
+        source: "camera",
+      },
+    );
     expect(result.ok).toBe(true);
-    expect(result.body).toContain("Photo lue");
+    expect(result.answer).toContain("Photo lue");
+    expect(result.steps?.length).toBeGreaterThan(0);
+    expect(result.sources).toContain("Photo de l'énoncé");
     expect(JSON.stringify(result)).not.toContain("base64");
   });
 

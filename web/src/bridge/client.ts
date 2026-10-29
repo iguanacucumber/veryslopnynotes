@@ -265,7 +265,9 @@ export const bridge = {
   askHomework: (assignmentId: string, weekStart: string) =>
     call<{
       ok: boolean;
-      body?: string;
+      answer?: string;
+      steps?: string[];
+      sources?: string[];
       refused?: boolean;
       message?: string;
       refusal?: string;
@@ -277,7 +279,9 @@ export const bridge = {
   solveHomeworkPhoto: (assignmentId: string, weekStart: string, source: "camera" | "gallery") =>
     call<{
       ok: boolean;
-      body?: string;
+      answer?: string;
+      steps?: string[];
+      sources?: string[];
       refused?: boolean;
       cancelled?: boolean;
       message?: string;

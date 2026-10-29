@@ -25,6 +25,7 @@ import fr.veryslopnynotes.core.CapabilitiesJson
 import fr.veryslopnynotes.core.ChildAccount
 import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.ExamCandidate
+import fr.veryslopnynotes.core.Homework
 import fr.veryslopnynotes.core.HomeworkAi
 import fr.veryslopnynotes.core.HomeworkOutcome
 import fr.veryslopnynotes.core.LessonNote
@@ -1332,17 +1333,55 @@ class VsnBridge(
                 .put("message", result.error ?: OpenRouterHomework.GENERIC_ERROR_MESSAGE)
                 .withAiContext(context)
         return when (outcome) {
-            is HomeworkOutcome.Answer -> JSONObject().put("ok", true).put("body", outcome.answer)
-                .withAiContext(context)
+            is HomeworkOutcome.Answer -> homeworkAnswerJson(outcome).withAiContext(context)
             // #416 : le motif du modèle est un texte LIBRE (echo de la consigne
             // possible) : il ne franchit JAMAIS le pont. Le pont rend une
             // phrase française bornée, dans le champ `message` que l'UI lit.
-            is HomeworkOutcome.Refused -> JSONObject()
-                .put("ok", true)
-                .put("refused", true)
-                .put("message", homeworkRefusalMessage(outcome.reason))
-                .withAiContext(context)
+            is HomeworkOutcome.Refused -> homeworkRefusalJson(outcome, context)
         }
+    }
+
+    /**
+     * Corrigé validé -> réponse de pont BORNÉE (#629) : le texte, les étapes
+     * ordonnées et les sources réellement citées traversent la frontière. Le
+     * schéma est déjà validé par `HomeworkAi` ; on borne ici ce que l'UI
+     * affiche pour qu'un lot de citations ne fasse pas grossir la réponse.
+     */
+    private fun homeworkAnswerJson(outcome: HomeworkOutcome.Answer): JSONObject =
+        JSONObject()
+            .put("ok", true)
+            .put("answer", outcome.answer.trim().take(Homework.MAX_ANSWER_CHARS))
+            .put("steps", JSONArray().apply {
+                outcome.steps.take(Homework.MAX_STEPS).forEach {
+                    put(it.trim().take(Homework.MAX_STEP_CHARS))
+                }
+            })
+            .put("sources", JSONArray().apply {
+                outcome.sources.map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinct()
+                    .take(Homework.MAX_SOURCES)
+                    .forEach { put(it.take(Homework.MAX_LABEL_CHARS)) }
+            })
+
+    /**
+     * Refus du modèle : la phrase bornée du pont, jamais le motif libre. Les
+     * CTA ne sont proposés que pour le refus « sources insuffisantes » ; les
+     * autres causes ne reçoivent pas un faux diagnostic.
+     */
+    private fun homeworkRefusalJson(
+        outcome: HomeworkOutcome.Refused,
+        context: AiContextResult,
+    ): JSONObject {
+        val json = JSONObject()
+            .put("ok", true)
+            .put("refused", true)
+            .put("message", homeworkRefusalMessage(outcome.reason))
+            .withAiContext(context)
+        if (outcome.reason.trim() == Homework.REFUSAL_SOURCES_INSUFFICIENT) {
+            json.put("actions", JSONArray(AiContext.REFUSAL_ACTIONS))
+        }
+        return json
     }
 
     /**
@@ -1581,13 +1620,9 @@ class VsnBridge(
                     )
                     when (outcome) {
                         is HomeworkOutcome.Answer ->
-                            JSONObject().put("ok", true).put("body", outcome.answer)
-                                .withAiContext(context)
-                        is HomeworkOutcome.Refused -> JSONObject()
-                            .put("ok", true)
-                            .put("refused", true)
-                            .put("message", homeworkRefusalMessage(outcome.reason))
-                            .withAiContext(context)
+                            homeworkAnswerJson(outcome).withAiContext(context)
+                        is HomeworkOutcome.Refused ->
+                            homeworkRefusalJson(outcome, context)
                     }
                 } catch (e: SecretDetectedException) {
                     JSONObject().put("ok", false).put("message", secretRefusalMessage(e.kind))
