@@ -47,35 +47,21 @@ références, l'existence des fichiers cités et les commandes citées.
 
 | ID | Règle | Vérification principale |
 |---|---|---|
-| I1 | Seul `android/pronote/` (et le scraper) parle réseau ; aucun hôte scolaire hors module. | `tests/architecture/invariants.test.ts` |
-| I2 | Le serveur ne contacte jamais Pronote ; la frontière Gradle borne les arêtes ; un seul `Client` Android. | `tests/architecture/invariants.test.ts` |
-| I3 | `android/core/` n'importe ni `java.net`, ni `android.database`, ni `androidx.room`. | `tests/architecture/invariants.test.ts` |
-| I4 | Aucun secret dans un prompt LLM ; le prompt vérifié est le prompt envoyé. | `tests/unit/kotlin-llm-guard.test.ts` |
-| I5 | L'IA n'a ni outils ni secrets ; le budget de sortie est déduit de la garde. | `tests/unit/kotlin-llm-budget.test.ts` |
+| I1 | Seul `android/pronote/` (et le scraper) parle réseau ; frontière Gradle, un seul `Client`, serveur jamais Pronote. | `tests/architecture/invariants.test.ts` |
+| I4 | Le prompt LLM est vérifié et borné : secret refusé, prompt vérifié = envoyé, budget déduit, sortie validée. | `tests/unit/kotlin-llm-guard.test.ts` |
 | I6 | Tout contenu externe est marqué `Untrusted` ; aucun MIME exécutable. | `tests/unit/android-untrusted.test.ts` |
-| I8 | Session Pronote et clé LLM hors serveur ; scraper sans auth = local seulement. | `tests/unit/scraper-*.test.ts` |
-| I10 | WebView sans réseau ni secret ; pont borné, une réponse par entrée. | `tests/architecture/web.test.ts` |
+| I8 | Le scraper est un sidecar local, sans auth, borné et sans SSRF ; jar choisi par le serveur, login jamais ingéré. | `tests/unit/scraper-ssrf.test.ts` |
+| I10 | WebView sans réseau ni secret ; pont borné, une réponse par entrée, jamais saturé. | `tests/architecture/web.test.ts` |
 | I11 | `.agents/` est verrouillé, scanné et sans fuite. | `tests/architecture/skills-lock.test.ts` |
-| I12 | Le job de fond restaure la session avant de lire, sinon `retry`. | `tests/architecture/sync-session.test.ts` |
 | I13 | Le pont factice n'existe qu'en dev ; absent en prod = échec. | `tests/architecture/web-mock.test.ts` |
 | I14 | « Invalide » n'est jamais « vide » (fail-closed, sauf capabilities). | `tests/unit/kotlin-core-validation-parity.test.ts` |
 | I15 | Export PDF = corps entier + sources canoniques ; troncature signalée. | `tests/unit/kotlin-revision-sheet.test.ts` |
-| I16 | La donnée d'un compte n'est jamais servie à un autre. | `tests/unit/kotlin-cache-scope.test.ts` |
-| I16 bis | Toute écriture dans `offline/` respecte la purge de déconnexion. | `tests/unit/kotlin-offline-artifacts.test.ts` |
+| I16 | La donnée d'un compte n'est servie qu'à ce compte et purgée avec lui (cache, offline, téléchargements, session morte). | `tests/unit/kotlin-cache-scope.test.ts` |
 | I17 | Un seul rafraîchissement de session à la fois ; rate-limit ≠ session morte. | `tests/unit/kotlin-refresh-gate.test.ts` |
 | I18 | Keystore indisponible = état `UNAVAILABLE` signalé, jamais un secret en clair. | `tests/unit/kotlin-store-health.test.ts` |
-| I19 | Interface et job de fond lisent par la même file partagée. | `tests/architecture/shared-queue.test.ts` |
-| I20 | Le pont ne sature pas : un appel court répond pendant des appels longs, file LLM séparée et bornée. | `tests/unit/kotlin-bridge-executors.test.ts` |
-| I21 | Session morte = purge session + cache, décidée par type/code, jamais par message. | `tests/unit/kotlin-session-repair.test.ts` |
+| I19 | Le job et l'interface lisent par la même file ; session restaurée d'abord, résultat toujours livré. | `tests/architecture/shared-queue.test.ts` |
 | I22 | Le gate ne peut pas être neutralisé par l'environnement. | `tests/unit/check-runner.test.ts` |
-| I23 | Image scraper non-root, TLS obligatoire, pas de `HOST` forcé. | `tests/unit/server-image-playwright.test.ts` |
-| I24 | Le jar de session du scraper est choisi par le serveur. | `tests/unit/scraper-ssrf.test.ts` |
-| I25 | Un payload n'est affiché que pour sa requête. | `tests/web/grades.test.ts` |
-| I26 | Téléchargements : noms portant l'ID, cache borné, purgés avec le compte. | `tests/unit/downloaded-files.test.ts` |
-| I27 | Une réponse tardive n'écrit que dans le fil qui l'attend. | `tests/web/messages.test.ts` |
-| I28 | La file locale livre toujours un résultat, jamais une promesse pendante. | `tests/unit/kotlin-local-queue.test.ts` |
-| I29 | Le scraper ne s'authentifie pas ; une page de login n'est jamais un manuel. | `tests/unit/scraper-only.test.ts` |
-| I30 | Le plafond HTML s'applique avant la matérialisation. | `tests/unit/scraper-limits.test.ts` |
+| I25 | Une réponse périmée n'écrit pas dans l'écran : payload lié à sa requête, réponse tardive ignorée. | `tests/web/grades.test.ts` |
 | I31 | Un enregistrement publié = une ligne (clé kind + id). | `tests/unit/kotlin-payload-dedupe.test.ts` |
 | I32 | Une photo ne part que sur geste explicite, ré-encodée et bornée. | `tests/unit/kotlin-vision.test.ts` |
 | I33 | La sauvegarde Android n'emporte jamais les payloads en clair. | `tests/architecture/backup.test.ts` |
@@ -88,54 +74,59 @@ Une ligne par ID retiré : ID, date, issue, remplacement éventuel.
 
 | ID | Date | Issue | Remplacement |
 |---|---|---|---|
+| I2 | 2026-10-29 | #649 | Fusionné dans I1 (frontière Gradle, un seul `Client`). |
+| I5 | 2026-10-29 | #649 | Fusionné dans I4 (prompt borné, budget déduit, sortie validée). |
+| I3 | 2026-10-29 | #649 | Fusionné dans I1 (frontière des modules : core pur, sans réseau ni SQLite/Room). |
 | I7 | 2026-10-28 | #642 | Convention de revue : les jobs purs ne reçoivent que des données structurées Pronote. |
 | I9 | 2026-10-28 | #638 | Android Lint (#627, dans le gate) et detekt — les appelants réels, pas le nom. Aucun retrait de code de production ici : les candidats morts partent dans une issue dédiée. |
+| I12 | 2026-10-29 | #649 | Fusionné dans I19 (même file, session restaurée avant lecture). |
+| I16 bis | 2026-10-29 | #649 | Fusionné dans I16 (donnée de compte purgée avec lui). |
+| I20 | 2026-10-29 | #649 | Fusionné dans I10 (pont borné, jamais saturé). |
+| I21 | 2026-10-29 | #649 | Fusionné dans I16 (session morte = purge, par type/code). |
+| I23 | 2026-10-29 | #649 | Fusionné dans I8 (sidecar local : non-root, TLS). |
+| I24 | 2026-10-29 | #649 | Fusionné dans I8 (jar choisi par le serveur). |
+| I26 | 2026-10-29 | #649 | Fusionné dans I16 (téléchargements purgés avec le compte). |
+| I27 | 2026-10-29 | #649 | Fusionné dans I25 (réponse périmée ignorée). |
+| I28 | 2026-10-29 | #649 | Fusionné dans I19 (résultat toujours livré). |
+| I29 | 2026-10-29 | #649 | Fusionné dans I8 (sans auth, page de login refusée). |
+| I30 | 2026-10-29 | #649 | Fusionné dans I8 (plafond HTML avant matérialisation). |
 
 ## Détail
 
-## I1 — Seuls `android/pronote/` et le scraper parlent réseau (ADR-003)
-- Invariant : hors `android/pronote/`, `android/` ne contient aucune URL/référence hôte Pronote — **le mot du produit ET le domaine réel de l'éditeur** (`index-education.net`, cf. la référence `pronotets`) : `/pronote/i` seul laissait passer un hôte PRONOTE glissé dans `android/data/` (#489). Le module du port (zéro dépendance) est le seul à parler Pronote en direct ; la déclaration du module dans `settings.gradle.kts` est l'unique mention tolérée hors module. Côté app, PLUS AUCUN client HTTP vers un serveur applicatif (`ApiClient` supprimé en #206 : appairage, lectures et médias sont device-only) ; côté process, seul le scraper Playwright parle réseau (portail éditeur, `server/infrastructure/http.ts`).
-- Hôte auxiliaire (le scraper) choisi à l'exécution : l'allowlist n'est plus une
-  constante de build mais `ServerConfig.validateBaseUrl` (https, sauf émulateur/
-  boucle locale en http ; hôte et port bornés ; identifiants, chemin, query,
-  fragment, espaces et caractères de contrôle refusés) + `isAllowed` en préfixe
-  strict. `BuildConfig.SERVER_HOST` n'est plus qu'une graine. Une déconnexion
-  purge la session et les caches (`AccountStore.logout()`).
-- **Établissement de DÉMONSTRATION** : le site public de démonstration de
-  l'éditeur est le seul hôte public du dépôt (le compte est public lui aussi :
-  l'éditeur publie ses identifiants). Son adresse et ses identifiants ne
-  vivent que dans `android/pronote/DemoSchool.kt` ; le web n'a qu'un bouton
-  (« Connexion démo ») et le dépôt ne connaît que le mode de réouverture de la
-  session (`SessionMode`). Test : `tests/architecture/demo-school.test.ts`.
-- Test : `tests/architecture/invariants.test.ts` (I1 : zéro mention hors module + déclaration unique) + `agents/runtime/check-architecture.ts` (I1) + `tests/unit/android-server-config.test.ts`.
+## I1 — La frontière des modules est étanche : seul `android/pronote/` parle réseau (ADR-003)
+- Invariant : hors `android/pronote/`, `android/` ne contient aucune URL ni
+  référence d'hôte Pronote (`pronote`, `index-education`), la déclaration du
+  module exceptée ; le serveur ne contacte jamais Pronote. La frontière Gradle
+  (ADR-003) : `core`/`pronote` sans arête, `data` →
+  `core`+`pronote`, `app` → `core`+`data` ; tout accès Pronote passe par
+  l'unique `Client`. `android/core/` n'importe ni `java.net`, ni
+  `android.database`, ni `androidx.room`. L'hôte auxiliaire (scraper) est validé
+  à l'exécution (`ServerConfig.validateBaseUrl` : https, sauf boucle locale,
+  préfixe strict) ; seul le site de démonstration public vit dans `DemoSchool.kt`.
+- Test : `tests/architecture/invariants.test.ts`,
+  `tests/unit/check-architecture-scan.test.ts`,
+  `tests/unit/android-server-config.test.ts`,
+  `tests/architecture/demo-school.test.ts`.
 - Commande : `make architecture-test`.
-- Emplacement : `android/**/*` (tolérances : `android/pronote/**` + ligne `include(...)` de `settings.gradle.kts`). Réf : `docs/adr/003-client-direct.md`.
+- Emplacement : `android/**/*`, `android/core/`, `server/`,
+  `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
 
-## I2 — Aucun accès Pronote côté serveur ; frontière Gradle, un seul Client (ADR-003)
-- Invariant : le serveur ne contacte jamais Pronote. La frontière des modules est déclarée dans Gradle : `core` et `pronote` sans dépendance, `data` → `core`+`pronote`, `app` → `core`+`data` ; toute autre arête échoue. Tout accès réseau Pronote passe par l'unique `Client` de `android/pronote/` ; les autres modules consomment le port. Le scan d'hôte (#535) détecte le mot `pronote`/`index-education` avec un appel réseau, même URL assemblée.
-- Test : `tests/unit/check-architecture-scan.test.ts` (scan : frontière Gradle, accès réseau serveur, un seul `Client`, surface ; fixtures d'arête, de type renommé, d'import plateforme et de transport) + `agents/runtime/check-architecture.ts` + `tests/architecture/invariants.test.ts` (fixtures des gardes d'hôte et frontière Gradle).
-- Commande : `make architecture-test`.
-- Emplacement : `android/*/build.gradle.kts`, `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.
-
-## I3 — Cœur Android sans réseau, SQLite ni Room
-- Invariant : `android/core/` n'importe ni `java.net`, ni `android.database`, ni `androidx.room` — des plateformes que Gradle ne voit pas ; ses dépendances de module sont déjà bornées par I2 (aucune arête).
-- Test : `tests/unit/check-architecture-scan.test.ts` (scan + fixture d'import plateforme) + `agents/runtime/check-architecture.ts` + `tests/architecture/invariants.test.ts` (fixtures de la garde `platformRe`).
-- Commande : `make architecture-test`.
-- Emplacement : `android/core/`.
-
-## I4 — Pas de secrets dans prompts LLM
-- Invariant : aucun secret/token/credential dans prompt LLM (`server/ai/` supprimé en #210, module porté dans `android/core/`, #204). La garde porte sur des **FORMES** de secret (#409), pas sur des mots : préfixe de clé connu, en-tête d'autorisation, JWT, affectation d'une variable sensible (en début de ligne **ou en milieu de ligne**, #493), cookie de session, bloc de clé privée, chaîne à forte entropie. Un cours qui *mentionne* « BEGIN PRIVATE KEY » n'est pas un secret ; un vrai JWT, lui, est refusé. Le refus dit **pourquoi** (le type) et ne recopie **jamais** le secret : la cause remonte jusqu'à l'élève (`SecretDetectedException` + `secretRefusalMessage`), au lieu du « Échec de l'assistant. » avalé.
-- **Le prompt VÉRIFIÉ est le prompt ENVOYÉ** (#493) : le fournisseur est un `SafePromptProvider` — le type porte la garantie. Avant, `callProvider` acceptait un `LlmProvider` et, pour un fournisseur qui ne l'était pas, **reconstruisait** le prompt (nouveau nonce) : le corps contrôlé par `assertNoSecretsInPrompt` n'était alors pas le corps transmis. Ce chemin de reconstruction n'existe plus.
-- Test : `agents/runtime/check-architecture.ts` (scan I4) + `tests/unit/check-architecture-scan.test.ts` (fixture secret) + `agents/runtime/check-secrets.ts` + `tests/unit/kotlin-llm-guard.test.ts` (Kotlin **exécuté** : `assertNoSecretsInPrompt` / `validateTextOutput` — cours légitime accepté, JWT et `Bearer …` refusés, affectation sensible en milieu de ligne refusée, message de refus sans le secret) + `tests/unit/android-llm-catalogue.test.ts` (le refus de secret n'est plus avalé en « hors format »).
-- Commande : `make check` (architecture-test + lint).
-- Emplacement : `android/core/*Ai*.kt`, `android/core/AiPrompts.kt`, `android/core/LlmGuard.kt` (garde I4), `android/data/OpenRouterLlm.kt` + `android/app/VsnBridge.kt` (remontée de la cause).
-
-## I5 — LLM sans outils/secrets dans le prompt
-- Invariant : le prompt ne contient aucun secret ; sortie texte/JSON validée (une sortie MAL FORMÉE est refusée, jamais réinterprétée — voir I14). L'app appelle OpenRouter directement en HTTPS et transmet la clé dans l'en-tête `Authorization`, jamais au serveur applicatif (voir I8).
-- **Les deux plafonds de sortie TENIR ENSEMBLE (#411)** : le fournisseur compte en tokens, la garde en caractères. Le budget de tokens est **déduit** du plafond de caractères de la garde (`MAX_OUTPUT_CHARS` 12 000 ÷ `CHARS_PER_TOKEN` 4 = 3 000 tokens, une seule constante dans `core`, importée par `data` — jamais recopiée) : le fournisseur ne peut pas produire une sortie que la garde jetterait. Avant, un budget de 4 000 tokens (justifié par un faux « ~2 caractères/token », alors que le français et le JSON sont à ~3-4) produisait ~12-16 k caractères pour une garde à 8 000 : une réponse **valide** de 9 000 caractères était payée au fournisseur puis jetée (« sortie LLM trop longue (I5) » → « Échec de l'assistant. »). Le corrigé maximal (`Homework.MAX_ANSWER_CHARS` 8 000) reste **atteignable** : il laisse la place de l'enveloppe JSON dans le plafond de sortie. Un refus de longueur nomme la **limite réelle**, jamais « hors format ».
-- Test : `agents/runtime/check-architecture.ts` (scan `android/core/`) + `tests/unit/check-architecture-scan.test.ts` (fixture réseau/outils) + `tests/unit/android-homework.test.ts` (miroirs) + `tests/unit/android-revision.test.ts` (Kotlin compilé : consigne JSON de la fiche + garde I5) + `tests/unit/kotlin-llm-budget.test.ts` (Kotlin **exécuté** : la relation tokens/caractères, une réponse de 9 000 caractères acceptée, le refus qui nomme la limite, la chaîne complète fournisseur → garde → schéma).
+## I4 — Le prompt LLM est vérifié, borné, et c'est celui qui part (ADR-003)
+- Invariant : aucun secret dans un prompt — garde sur des FORMES (clé, JWT,
+  en-tête, cookie, clé privée, entropie) — et le prompt VÉRIFIÉ est celui
+  ENVOYÉ (`SafePromptProvider`). Une sortie texte/JSON mal formée est refusée,
+  jamais réinterprétée. Le budget de tokens est DÉDUIT du plafond de caractères
+  (`MAX_OUTPUT_CHARS` ÷ `CHARS_PER_TOKEN`, une constante) : le fournisseur ne
+  produit pas ce que la garde jetterait. L'app appelle OpenRouter en HTTPS, clé
+  dans `Authorization`, jamais le serveur. Un refus nomme la limite réelle, sans
+  le secret.
+- Test : `tests/unit/kotlin-llm-guard.test.ts`,
+  `tests/unit/kotlin-llm-budget.test.ts`,
+  `tests/unit/check-architecture-scan.test.ts`,
+  `tests/unit/android-llm-catalogue.test.ts`,
+  `tests/unit/android-homework.test.ts`, `tests/unit/android-revision.test.ts`.
 - Commande : `make check`.
-- Emplacement : `android/core/` (IA) + `android/data/` (store de clé, dépôt devoirs). Réf : `docs/adr/003-client-direct.md`.
+- Emplacement : `android/core/LlmGuard.kt`, `android/data/OpenRouterLlm.kt`.
 
 ## I6 — Contenu externe = UNTRUSTED_DATA
 - Invariant : tout contenu externe marqué `Untrusted` avant traitement IA, entre délimiteurs à nonce, déclaré donnée (`server/ai/` supprimé en #210 ; le marquage vit dans `android/core/Untrusted.kt`). Une pièce jointe nommée par le serveur ne sort jamais en type MIME **exécutable** (`text/html`, `image/svg+xml`, `application/xhtml+xml`…) : son type vient d'une table blanche bornée, le reste sort en `text/plain` ou `application/octet-stream` (#398).
@@ -143,129 +134,42 @@ Une ligne par ID retiré : ID, date, issue, remplacement éventuel.
 - Commande : `make check`.
 - Emplacement : `android/core/Untrusted.kt`, `android/app/src/main/java/fr/veryslopnynotes/app/AttachmentMime.kt`.
 
-## I8 — Session Pronote et clé LLM restent hors serveur
-
-- Invariant : la session Pronote et la clé LLM ne quittent jamais le téléphone ;
-  le scraper, sans authentification, reste un outil local.
-
-Le serveur ne lit que `PORT`, `HOST` et les chemins TLS `TLS_CERT_FILE` /
-`TLS_KEY_FILE`. L'image Docker déclare en plus `PLAYWRIGHT_BROWSERS_PATH` :
-c'est le chemin des navigateurs téléchargés au build (un chemin, pas un
-credential — le paquet `playwright` n'a aucun script d'installation, le
-navigateur ne vient donc pas de `bun install`). La session Pronote est ouverte
-et stockée sur le téléphone ; la
-clé OpenRouter reste chiffrée dans l'app et part directement au fournisseur dans
-un en-tête HTTPS `Authorization`. Aucun `.env*`, jeton de session ou clé LLM dans
-le dépôt, les variables serveur ou les logs.
-
-**Exception de sécurité :** `POST /v1/manuals/scrape` et `POST /v1/web/scrape`
-(#634) sont volontairement sans authentification. Ils reçoivent une URL dans le
-corps de la requête, sans la journaliser ni la renvoyer. La page web ne monte
-AUCUN cookie jar (aucun cookie de l'élève) et refuse les identifiants userinfo ;
-le scrape de manuel réutilise un cookie jar local
-gitignoré (`playwright/.auth/manuals.json`) **choisi par le serveur** : le corps
-ne peut plus en demander le nom — un nom de jar suffisait à appeler la
-session d'un autre tenant (le répertoire était imposé, pas l'isolation, #538
-et I24). Les identifiants de portail (`username`/`password`) sont **REFUSÉS**
-(400, message dédié) : le scraper ne s'authentifie pas, la session est celle
-du serveur — les exiger au contrat reviendrait à annoncer une authentification
-qui n'existe pas (#526 et I28). La navigation est gardée
-(`shared/contracts/net.ts` + `server/infrastructure/ssrf.ts` +
-`server/infrastructure/manuals-scrape.ts`) :
-hôte privé/interne refusé (IP littérale, entière, hexadécimale, IPv4-mapped
-IPv6, ULA, link-local, métadonnées, **NAT64 local-use `64:ff9b:1::/48`
-(RFC 8215) : préfixe non global, fail-closed — tout le préfixe est refusé**),
-**nom d'hôte RÉSOLU avant la navigation**
-(chaque adresse obtenue est testée contre les plages privées : un nom public
-qui pointe vers une IP interne — rebinding — est refusé, motif explicite
-`403 private_host` ; un nom introuvable est refusé aussi, `502
-unresolved_host` ; jamais un échec muet), **chaîne de redirections vérifiée
-avant le navigateur — autant de sauts que Chromium en suit (20)** : sous ce
-plafond, le dernier saut partait vers une cible privée sans être vérifié ; au
-delà, la chaîne est refusée (fail-closed) — et **URL finale re-vérifiée après
-navigation**. Restent
-résolus par le réseau : la fenêtre TOCTOU entre la résolution vérifiée et la
-connexion (le navigateur résout de son côté, au moment de connecter) et
-l'épuisement du compte. Toute personne pouvant joindre ce serveur peut donc
-encore piloter une navigation Playwright (risque SSRF résiduel) et consommer ce
-compte. Garder le serveur sur loopback/réseau de confiance ; pour l'exposer,
-placer un proxy authentifié devant lui.
-
-**Plafond de concurrence :** l'endpoint étant public, il borne les navigateurs
-vivants : 2 scrapes simultanés (les autres = 503) et 30 s de délai — délai
-auquel le Chromium est réellement fermé, pas seulement la promesse rejetée
-(empilement de Chromium = épuisement mémoire, cf. #363). Le délai dépassé
-répond **504** (le code exact), pas 502 : le portail n'est pas en cause.
-
-**Volume lu :** le HTML récupéré est borné (1 Mo de caractères) DÈS LA
-LECTURE : la borne est demandée AU navigateur (la chaîne qui traverse le pont
-est bornée) et la TAILLE est mesurée AVANT la lecture (en-tête
-`content-length` : au-delà de 4 Mo, la page est REFUSÉE sans être lue). Le
-plafond s'applique donc à l'ALLOCATION, pas seulement au reparse ; la lecture
-a en outre son propre délai (10 s) : sans ça, une page de 50 Mo était reparsée
-par cheerio (plusieurs fois sa taille) et une page qui ne finit pas de streamer
-survivait au délai HTTP en gardant le Chromium vivant (cf. #422, I30).
-
-**Page de connexion :** un portail qui ne reconnaît pas la session renvoie sa
-page de login en **HTTP 200** — le test HTTP (`ok = status < 400`) la laissait
-passer, et elle devenait un `ManualDoc` que l'assistant pouvait citer comme
-source (« Se connecter »). Elle est maintenant refusée (motif `login_required`,
-HTTP 502 `login_required`) AVANT extraction et AVANT écriture du jar : une
-page de login n'écrase pas la session du serveur (#526 et I28).
-
-- Test : `tests/architecture/invariants.test.ts` (I8), `tests/unit/android-homework.test.ts`, `tests/unit/scraper-only.test.ts` et `tests/unit/scraper-concurrency.test.ts` ; garde SSRF (littérale + résolution DNS) et jar : `tests/unit/scraper-ssrf.test.ts` ; bornes du HTML lu et délai de lecture : `tests/unit/scraper-limits.test.ts`.
+## I8 — Le scraper est un sidecar local, sans auth, borné et sans SSRF
+- Invariant : session et clé LLM restent locales ; le scraper, sans auth, n'est
+  joignable qu'en local ou derrière un proxy authentifié. Identifiants refusés
+  (400), login jamais ingéré (`login_required`), jar choisi par le SERVEUR,
+  `authFile` refusé. Navigation : hôtes privés et IP internes refusés, plus de
+  20 redirections refusées, URL finale re-vérifiée. Le HTML est borné AVANT
+  lecture (4 Mo `content-length`, 1 Mo lu), 2 scrapes simultanés, 30 s, 504 au
+  délai. Image non-root, TLS obligatoire, pas de `HOST` forcé.
+- Test : `tests/unit/scraper-ssrf.test.ts`, `tests/unit/scraper-only.test.ts`,
+  `tests/unit/scraper-limits.test.ts`,
+  `tests/unit/scraper-concurrency.test.ts`,
+  `tests/unit/server-image-playwright.test.ts`,
+  `tests/contracts/contracts.test.ts`,
+  `tests/architecture/invariants.test.ts`.
 - Commande : `make check`.
-- Emplacement : `server/`, `Dockerfile.server`, `shared/contracts/`, `android/data/SessionStore.kt`, `android/data/LlmKeyStore.kt`.
+- Emplacement : `server/infrastructure/`, `Dockerfile.server`,
+  `shared/contracts/`, `android/data/SessionStore.kt`.
 
-## I10 — WebView sans réseau et sans secret (ADR-004)
-- Invariant : `web/` ne contient ni `fetch`, XHR, WebSocket, EventSource, ni
-  URL distante. La CSP de `web/index.html` impose `connect-src 'none'`. Aucun
-  jeton de session ni clé LLM n'est exposé au JS ; le pont natif n'expose que
-  des méthodes allowlistées, jamais un proxy d'URL. Le pont ne laisse JAMAIS
-  une promesse sans réponse : tout échec natif — un `Error` compris, pas
-  seulement une `Exception` — devient un rejet borné `{code,message}` (#394).
-  **Toute ENTRÉE du pont répond EXACTEMENT une fois** (#539) : un identifiant
-  d'appel mal formé et un pont fermé (WebView détruite) sont REFUSÉS, jamais
-  ignorés — sinon la promesse pendait, pour TOUJOURS sur `pairing.scanQr`
-  dont le délai JS est 0.
-  **Toute ENTRÉE du pont est BORNÉE, et le pont ne répond JAMAIS « ok » sans
-  avoir écrit** (#395) : les préférences matière sont lues par les règles
-  partagées (`data/SubjectPrefRules.kt` — la source UNIQUE, que le dépôt
-  applique aussi), donc une couleur, un emoji ou un libellé hors contrat sont
-  REFUSÉS avec une phrase bornée, au lieu d'un « enregistré » suivi d'une
-  écriture abandonnée. Une fiche de révision suit la MÊME règle (#528) :
-  l'enregistrement n'est « ok » que si la fiche ET son index (le journal qui
-  la liste) ont été écrits — un index REFUSÉ (l'époque de session a basculé
-  entre deux écritures) fait répondre `ok:false`, jamais « fiche enregistrée »
-  pour une fiche que `revision.list` ne verra pas.
-- Test : `tests/architecture/web.test.ts` (réseau, CSP, HTML injecté, hôte
-  Pronote, secrets persistés, message d'appairage borné) +
-  `tests/unit/android-pairing-message.test.ts` (table de messages du pont,
-  Kotlin exécuté) + `tests/unit/android-homework-message.test.ts` (message de
-  refus du devoir : le motif libre du modèle ne sort pas, Kotlin exécuté) +
-  `tests/unit/android-bridge-error.test.ts` (un `Error` natif devient un rejet,
-  pas une promesse pendante : Kotlin exécuté) +
-  `tests/unit/android-subject-pref.test.ts` (matière hors contrat : refus
-  `ok:false` AVANT toute écriture, entrées bornées, règles du dépôt et du
-  pont partagées : Kotlin exécuté) +
-  `tests/unit/android-bridge-call.test.ts` (Kotlin EXÉCUTÉ : identifiant
-  d'appel mal formé, méthode inconnue, requête trop volumineuse, abandon et
-  pont fermé répondent EXACTEMENT une fois ; aucun retour muet) +
-  `tests/web/bridge.test.ts` (un rejet natif règle toujours la promesse,
-  message non vide ; une méthode SANS timeout se règle quand le natif répond) +
-  `tests/web/profile.test.ts` (un
-  refus du natif est affiché, jamais avalé en « Matière enregistrée. ») +
-  `tests/unit/kotlin-offline-artifacts.test.ts` (Kotlin EXÉCUTÉ : une fiche
-  dont l'index est REFUSÉ fait ÉCHOUER l'enregistrement — aucun « ok » sans
-  avoir écrit, #528).
-- Commande : `make web` (ou `make architecture-test`).
-- Emplacement : `web/**`, `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`,
-  `android/app/src/main/java/fr/veryslopnynotes/app/BridgeCall.kt`,
-  `android/app/src/main/java/fr/veryslopnynotes/app/HomeworkMessages.kt`,
-  `android/app/src/main/java/fr/veryslopnynotes/app/BridgeErrors.kt`,
-  `android/app/src/main/java/fr/veryslopnynotes/app/SubjectPrefMessages.kt`,
-  `android/data/src/main/java/fr/veryslopnynotes/data/SubjectPrefRules.kt`,
-  `android/core/src/main/java/fr/veryslopnynotes/core/RevisionSheet.kt`.
+## I10 — Le pont est sans réseau, borné, et ne sature pas (ADR-004)
+- Invariant : `web/` ne contient ni `fetch`, XHR, WebSocket, EventSource ni URL
+  distante, et la CSP impose `connect-src 'none'`. Aucun jeton ni clé LLM au JS ;
+  seules des méthodes allowlistées sont exposées, jamais un proxy d'URL. Toute
+  entrée répond EXACTEMENT une fois (échec compris) ; aucun « ok » sans
+  écriture. Un appel court ne fait pas la queue derrière cinq appels longs ; les
+  opérations LLM ont leur file bornée à deux ; délais hiérarchisés : natif < JS.
+- Test : `tests/architecture/web.test.ts`,
+  `tests/unit/kotlin-bridge-executors.test.ts`, `tests/web/bridge.test.ts`,
+  `tests/unit/android-bridge-call.test.ts`,
+  `tests/unit/android-pairing-message.test.ts`,
+  `tests/unit/android-homework-message.test.ts`,
+  `tests/unit/android-bridge-error.test.ts`,
+  `tests/unit/android-subject-pref.test.ts`, `tests/web/profile.test.ts`,
+  `tests/unit/kotlin-offline-artifacts.test.ts`.
+- Commande : `make check`.
+- Emplacement : `web/**`, `android/app/VsnBridge.kt`,
+  `android/app/BridgeExecutors.kt`.
 
 ## I11 — Contenu vendorisé `.agents/` : docs, pas de passoire
 - Invariant : `.agents/` (skills tiers verrouillés par `skills-lock.json`) n'est
@@ -284,24 +188,6 @@ page de login n'écrase pas la session du serveur (#526 et I28).
   `make lint` (scan réel du dépôt, `.agents/` inclus une fois tracké).
 - Commande : `make lint` (scan) et `make architecture-test` (m invariants).
 - Emplacement : `.agents/**/*`, motifs dans `agents/runtime/secret-patterns.ts`.
-
-## I12 — Le job de fond restore la session AVANT de lire
-- Invariant : le job WorkManager restore la session par le MÊME chemin que le
-  pont (`PairingRepository.restoreBlocking` : store chiffré -> `Client.tokenLogin`
-  -> `PronoteSession`) AVANT toute lecture, et renvoie `Result.retry()` — jamais
-  `Result.success()` — quand aucune session n'est lisible (un succès sans rien
-  faire = un sync de fond no-op, sans réessai). Une restauration n'est jamais
-  simultanée avec une autre dans le process (deux `tokenLogin` sur le même compte
-  = erreur 25 « Exceeded max authorization requests », l'établissement limite
-  le compte).
-- Test : `tests/architecture/sync-session.test.ts` (ordre restauration -> lecture,
-  réessai sans session, verrou de restauration partagé) +
-  `tests/unit/kotlin-sync-worker.test.ts` (Kotlin réel : la décision
-  réessai/lecture).
-- Commande : `make check`.
-- Emplacement : `android/data/src/main/java/fr/veryslopnynotes/data/PeriodicSyncWorker.kt`,
-  `android/data/src/main/java/fr/veryslopnynotes/data/SyncJobOutcome.kt`,
-  `android/data/src/main/java/fr/veryslopnynotes/data/PairingRepository.kt`.
 
 ## I13 — Le pont factice est un artefact de développement
 - Invariant : le pont factice (`web/src/bridge/mock.ts`) n'existe qu'en
@@ -381,68 +267,25 @@ page de login n'écrase pas la session du serveur (#526 et I28).
 - Emplacement : `android/core/src/main/java/fr/veryslopnynotes/core/RevisionSheet.kt`,
   `android/core/src/main/java/fr/veryslopnynotes/core/RevisionPdf.kt`.
 
-## I16 — Le cache ne sert jamais les données d'un autre compte
-- Invariant : le cache est la DONNÉE D'UN COMPTE. Les clés de cache sont
-  globales (`cache_grades_<empreinte de la requête>.txt`, sans compte — une
-  entrée par requête depuis #477) et les TTL vont jusqu'à 24 h
-  (capacités) : le cache est donc PURGÉ quand le compte change (appairage d'un
-  autre compte) et quand la session est déclarée MORTE (jeton tourné). Purge et
-  invalidation d'époque sont dans la MÊME section critique (#364) : une lecture
-  en vol abandonne son payload, donc un cache purgé ne ressuscite pas. Une
-  identité de compte INCONNUE purge aussi (fail-closed) ; l'identité vient de
-  la session PERSISTÉE (endpoint + login), jamais de `AccountStore.current()`
-  (qui vaut `null` tant que #397 est ouvert). Le login ne sort jamais (ni log,
-  ni rapport de crash).
-  **La purge est déclenchée par le TYPE et le CODE `G` de l'erreur, jamais par
-  un mot de son message** (#520) : le `Titre` de l'établissement («
-  Confirmation de connexion requise », « Erreur de session ») ne peut pas
-  vider le cache de l'élève.
-  #529 : la BASCULE de compte (purge du cache précédent + PUBLICATION du
-  nouveau client) est ATOMIQUE et ORDONNÉE — la purge précède la publication,
-  les deux dans la section critique d'époque. Publier d'abord laissait une
-  fenêtre où `resources.cached` servait le payload du compte précédent au
-  nouveau compte, et une lecture qui y démarrait lisait le client du nouveau
-  compte mais écrivait dans le cache de l'ancien. Le pont ne sert pas
-  non plus une entrée d'un autre compte : il compare l'époque capturée à
-  l'ARRIVÉE de l'appel (une purge depuis = plus rien à servir).
-- Test : `tests/unit/kotlin-cache-scope.test.ts` (Kotlin EXÉCUTÉ : appairage
-  d'un autre compte → le cache du précédent n'est plus servi ; appairage du
-  MÊME compte → le cache est conservé ; session morte → purge ; lecture en vol
-  → écriture refusée ; bascule → la purge est EXÉCUTÉE AVANT la publication,
-  le pilote observant l'époque ET le cache au moment exact de la publication ;
-  + le câblage `PairingRepository` (l'ordre dans `pairBlocking`) / pont / job
-  de fond) + `tests/unit/kotlin-cache-epoch.test.ts` (la purge reste sous la
-  garde d'époque).
+## I16 — La donnée d'un compte n'est servie qu'à ce compte, et purgée avec lui
+- Invariant : cache, téléchargements, fiches, préférences et photos sont la
+  donnée d'UN compte. Purgés au changement de compte et à la session morte — par
+  TYPE et code `G`, jamais un mot. Purge, invalidation et bascule
+  sont atomiques et ORDONNÉES : la purge précède la publication, une écriture en
+  vol est abandonnée. `offline/` ne contient que de la donnée de compte ; la
+  déconnexion l'efface. Téléchargements : nom portant l'ID, bornés et purgés
+  avec lui. Identité inconnue : purge (fail-closed).
+- Test : `tests/unit/kotlin-cache-scope.test.ts`,
+  `tests/unit/kotlin-cache-epoch.test.ts`,
+  `tests/unit/kotlin-offline-artifacts.test.ts`,
+  `tests/unit/kotlin-session-repair.test.ts`,
+  `tests/architecture/session-repair.test.ts`,
+  `tests/unit/kotlin-sync-worker.test.ts`,
+  `tests/unit/downloaded-files.test.ts`.
 - Commande : `make check`.
-- Emplacement : `android/data/CacheScope.kt`, `android/data/PairingRepository.kt`,
-  `android/data/AccountStore.kt`, `android/data/PeriodicSyncWorker.kt`,
-  `android/app/VsnBridge.kt`.
-
-## I16 bis — Toute écriture dans `filesDir/offline/` respecte la purge de déconnexion
-- Invariant : `filesDir/offline/` ne contient QUE de la donnée de compte, donc
-  la purge de déconnexion l'efface EN TOUT (#404). Le cache n'est pas le seul
-  à y écrire : les fiches de révision (`revisions/`) et les préférences
-  matière (`subject_prefs.json`) y écrivent aussi — sous la MÊME garde
-  d'époque que le cache (#364), donc une écriture EN VOL (une fiche générée
-  pendant la déconnexion, une préférence enregistrée) est ABANDONNÉE : elle ne
-  ressuscite pas le dossier purgé et n'y laisse pas le contenu scolaire ni les
-  préférences du compte déconnecté. L'époque est capturée au DÉBUT de
-  l'opération (une fiche passe par un appel LLM de plusieurs secondes) ; hors
-  déconnexion, les écritures se font normalement. Les écritures d'UNE fiche
-  (la fiche, son index, son journal) forment UNE tentative : si l'index ou le
-  journal est REFUSÉ (l'époque a basculé entre deux écritures),
-  l'enregistrement ÉCHOUE — le pont ne répond JAMAIS « ok » sans avoir écrit
-  (I10, #528). L'état partiel ne laisse rien derrière : l'invalidation
-  d'époque et la purge sont dans la MÊME section critique, donc le
-  basculement qui refuse l'index a déjà purgé la fiche.
-- Test : `tests/unit/kotlin-offline-artifacts.test.ts` (Kotlin EXÉCUTÉ : une
-  écriture de fiche ou de préférences pendant un logout ne laisse AUCUN
-  fichier ; hors déconnexion, les deux s'écrivent ; une écriture qui précède la
-  purge est effacée par elle ; une déconnexion ENTRE la fiche et son index fait
-  ÉCHOUER l'enregistrement ; + le câblage du pont et des stores).
-- Commande : `make check`.
-- Emplacement : `android/data/OfflineArtifacts.kt`, `android/data/SubjectPrefs.kt`,
-  `android/core/RevisionSheet.kt`, `android/app/VsnBridge.kt`.
+- Emplacement : `android/data/CacheScope.kt`,
+  `android/data/OfflineArtifacts.kt`, `android/data/DownloadedFiles.kt`,
+  `android/data/SessionRepair.kt`.
 
 ## I17 — Le rafraîchissement de session est atomique
 - Invariant : le client PRONOTE ne fait JAMAIS deux rafraîchissements en même
@@ -500,102 +343,21 @@ page de login n'écrase pas la session du serveur (#526 et I28).
   `android/data/LlmKeyStore.kt`, `android/app/VsnBridge.kt`,
   `web/src/lib/session.ts`, `web/src/ui/AppContext.tsx`.
 
-## I19 — Le job de fond lit par la file PARTAGÉE
-- Invariant : toute lecture de l'interface (ressources cachées) ET toute lecture
-  du job de fond passent par LA MÊME file partagée (`ClientQueue`), jamais en
-  direct sur le client. Le `Client` est MUTABLE (`refresh()` réassigne
-  `communication`, `attributes` et la clé AES) : une lecture de l'écran et une
-  du job en parallèle = deux authentifications sur le même compte = « Exceeded
-  max authorization requests » (erreur 25) → l'établissement LIMITE le compte.
-  UNE SEULE instance de file (une file par dépôt ne partagerait pas les
-  requêtes EN VOL, donc le dédoublonnage ne vaudrait pas pour tous) ; les clés
-  sont NAMESPACÉES par producteur (`ressource|query` pour les écrans,
-  `job|ressource|` pour le job) : un résultat n'est jamais livré à un
-  producteur d'un autre type. Le job de fond est BLOQUANT (`Worker.doWork`) : il
-  pose sa lecture dans la file et ATTEND, avec un délai BORNÉ (au-delà :
-  `Result.retry()` — il ne bloque jamais WorkManager indéfiniment). La
-  sémantique de résultat est INCHANGÉE : session MORTE = appairage
-  (`DeviceAuth.reject()` + succès), autre échec = réessai, absence de session =
-  réessai. Un travail qui JETTE est un ÉCHEC LIVRÉ (I28), pas une attente.
-- Périmètre : les lectures de RESSOURCES CACHÉES (celles que le job relit). Les
-  dépôts à usage ponctuel (profil, bascule de devoir, messagerie) gardent leur
-  propre `Thread` : hors périmètre ici (le verrou de session atomique, I17,
-  borne déjà leur impact).
-- Test : `tests/architecture/shared-queue.test.ts` (une file pour tous ; le job
-  ne lit plus le client en direct ; les ressources du job n'ont qu'une porte
-  d'entrée) + `tests/unit/kotlin-local-queue.test.ts` (Kotlin EXÉCUTÉ :
-  l'interface et le job ne se croisent pas, l'attente du job est bornée, une
-  seule instance, un travail qui jette livre son échec à tous les callbacks —
-  I28) + `tests/unit/kotlin-sync-worker.test.ts` (Kotlin EXÉCUTÉ :
-  la décision session morte / réessai, la lecture qui jette devient un
-  résultat).
+## I19 — Le job et l'interface lisent par la même file, sans promesse pendante
+- Invariant : les lectures de ressources cachées (écran, job) passent par LA
+  MÊME file partagée (`ClientQueue`), jamais en direct sur le `Client` mutable ;
+  les clés sont namespacées par producteur. Le job restaure la session AVANT de
+  lire, avec le verrou de restauration unique, et attend sa lecture avec un
+  délai borné (au-delà : `Result.retry()`). Un travail qui JETTE livre son échec
+  à TOUS les callbacks (`QueueOutcome.Failed`) : l'échec est une valeur, jamais
+  une promesse pendante. La décision session morte / réessai reste inchangée.
+- Test : `tests/architecture/shared-queue.test.ts`,
+  `tests/unit/kotlin-local-queue.test.ts`,
+  `tests/unit/kotlin-sync-worker.test.ts`,
+  `tests/architecture/sync-session.test.ts`.
 - Commande : `make check`.
-- Emplacement : `android/data/ClientQueue.kt`, `android/data/CachedReads.kt`,
-  `android/data/SyncedRepository.kt`, `android/data/PeriodicSyncWorker.kt`,
-  `android/data/SyncJobOutcome.kt`, `android/data/SessionFailure.kt`.
-
-## I20 — Le pont ne sature pas : un appel court passe pendant les appels longs
-- Invariant : le pont natif n'impose AUCUNE sérialisation aux appels ordinaires :
-  cinq appels longs en vol et bloqués ne retardent pas un appel court (`app.back`,
-  le bouton retour), qui démarre en moins de 3 s. Les opérations LLM ont leur
-  PROPRE file, bornée : deux appels LLM simultanés au plus, le suivant attend un
-  créneau sans retarder les appels ordinaires. Côté interface, les lectures en
-  vol sont plafonnées : ce plafond × le budget d'une lecture (le délai HTTP de
-  l'établissement) tient dans le délai natif d'un appel — sinon la N-ième
-  lecture verrait son délai expirer avant son travail. Les délais restent
-  HIÉRARCHISÉS : le plafond natif (20 s + 45 s) reste sous le délai JS (90 s),
-  miroir TS ↔ Kotlin compris.
-- Test : `tests/unit/kotlin-bridge-executors.test.ts` (Kotlin EXÉCUTÉ : cinq
-  appels longs en vol n'immobilisent pas un appel court ; la file LLM est à part
-  et bornée, un troisième appel attend) + `tests/web/bridge.test.ts` (les cinq
-  lectures de l'accueil : une seule en vol, les cinq aboutissent ; le bouton
-  retour ne fait pas la queue ; le plafond de lectures × le budget d'une lecture
-  tient dans le délai natif, relation vérifiée sur le Kotlin de production).
-- Commande : `make check`.
-- Emplacement : `android/app/src/main/java/fr/veryslopnynotes/app/BridgeExecutors.kt`,
-  `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`,
-  `web/src/bridge/client.ts`, `web/src/bridge/types.ts`.
-## I21 — Une session morte purge la session ET le cache
-- Invariant : le signal « session morte » (`DeviceAuth.reject()`) a UN abonné —
-  l'app (le pont). Le rejet invalide la session PERSISTÉE, abandonne la session
-  en mémoire et PURGE le cache, par le chemin EXISTANT (`AccountStore.logout()`
-  -> `SessionRepair.purge` -> `CacheScope.purge`, donc sous la garde d'époque).
-  Sans ça, le natif gardait le jeton mort et servait un cache périmé comme
-  frais. La purge ne lève jamais le signal (pas de boucle) et n'échoue jamais
-  celui qui le lève. Le compte appairé est ENREGISTRÉ à l'appairage
-  (`accounts.add`) : le magasin multi-compte n'est plus vide.
-  **Un objet d'une session PRÉCÉDENTE n'est pas une session morte** (G=22,
-  `ExpiredObject`) : son message contient le mot « session », donc la décision
-  tranche par TYPE, pas par motif (#485) — sinon un simple objet périmé
-  déconnectait l'élève ET purgeait le cache hors ligne.
-  **La décision tranche par TYPE et par CODE `G`, JAMAIS par un mot du
-  message** (#520). Le message d'une erreur de PRONOTE est en partie ÉCRIT par
-  l'ÉTABLISSEMENT (`Erreur.Titre`) : « Confirmation de connexion requise »,
-  « Erreur de session »… un seul mot suffisait à détruire la session ET tout
-  le cache hors ligne (notes, devoirs, absences, sanctions, messagerie,
-  fiches, préférences) et à renvoyer l'élève vers l'appairage. Ce qui
-  décide, c'est le TYPE de l'exception et le code `G` (`pronoteErrorCode`,
-  `G=10` : « Session has expired… ») ou le statut HTTP (`401` : le jeton
-  n'est plus accepté) ; tout le reste se RÉESSAIE (le cache reste : mieux
-  vaut une donnée périmée qu'un cache vidé). Le `Titre` de l'établissement ne
-  peut donc jamais purger le cache.
-- Test : `tests/unit/kotlin-sync-worker.test.ts` (Kotlin réel : G=22 = réessai,
-  pas « session morte » ; le vrai message de production est utilisé ; un
-  message d'établissement = réessai, une VRAIE session morte (G=10) reste
-  détectée ; plus aucun motif dans la décision) +
-  `tests/unit/kotlin-session-repair.test.ts` (Kotlin réel : le rejet
-  purge la session et le cache ; un `Titre` d'établissement NE purge rien —
-  la session survit ; G=10 purge TOUJOURS) +
-  `tests/architecture/session-repair.test.ts`
-  (câblage : l'abonné, le chemin de purge, l'enregistrement du compte).
-- Commande : `make check`.
-- Emplacement : `android/data/src/main/java/fr/veryslopnynotes/data/DeviceAuth.kt`,
-  `android/data/src/main/java/fr/veryslopnynotes/data/SessionRepair.kt`,
-  `android/data/src/main/java/fr/veryslopnynotes/data/SessionFailure.kt`,
-  `android/data/src/main/java/fr/veryslopnynotes/data/AccountStore.kt`,
-  `android/data/src/main/java/fr/veryslopnynotes/data/PairingRepository.kt`,
-  `android/pronote/src/main/java/fr/veryslopnynotes/pronote/Errors.kt`,
-  `android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt`.
+- Emplacement : `android/data/LocalRequestQueue.kt`,
+  `android/data/ClientQueue.kt`, `android/data/PeriodicSyncWorker.kt`.
 
 ## I22 — Le gate ne peut pas être neutralisé par l'environnement
 - Invariant : `make check` sort NON-ZÉRO dès qu'une étape échoue, QUEL QUE SOIT
@@ -615,169 +377,18 @@ page de login n'écrase pas la session du serveur (#526 et I28).
 - Emplacement : `Makefile` (cibles `check-run` / `check`),
   `agents/runtime/check.ts` (environnement des make enfants).
 
-## I23 — L'image du scraper n'est ni root ni en clair
-- Invariant : l'image Docker du scraper tourne sous un utilisateur NON
-  PRIVILÉGIÉ (le jar de session lui appartient, pas à root) et REFUSE de
-  démarrer sans `TLS_CERT_FILE`/`TLS_KEY_FILE` : le service est sans
-  authentification (I8), il ne doit jamais être joignable en CLAIR. Elle ne
-  force pas `HOST` : l'exposition hors du conteneur est une décision EXPLICITE
-  de l'opérateur, comme pour `make runServer` (boucle locale par défaut).
-  L'image est donc alignée sur `make runServer` : TLS obligatoire, exposition
-  décidée, jamais de repli silencieux en clair (#533).
-- Test : `tests/unit/server-image-playwright.test.ts` (USER non root, jar
-  appartenant à cet utilisateur, TLS obligatoire dans le CMD, pas de `HOST`
-  forcé, `HOME` de l'utilisateur).
+## I25 — Une réponse périmée n'écrit pas dans l'écran
+- Invariant : le payload d'une ressource est rattaché à sa requête (clé +
+  query) ; changer de requête ou échouer invalide le payload précédent, jamais
+  affiché sous le nouveau sélecteur. Une réponse qui arrive après un changement
+  d'écran est PÉRIMÉE et n'écrit rien : un envoi de message ne peut écrire que
+  dans le fil ouvert au départ, et un rechargement dépassé est ignoré. Le
+  brouillon tapé pendant l'attente reste ; seul le brouillon envoyé part.
+  Rafraîchir la MÊME requête garde le cache affiché (offline-first).
+- Test : `tests/web/grades.test.ts`, `tests/web/messages.test.ts`.
 - Commande : `make check`.
-- Emplacement : `Dockerfile.server`, `server/README.md`, `docs/RELEASE.md`.
-
-## I24 — Le jar de session est choisi par le serveur
-- Invariant : le cookie jar Playwright monté par le navigateur est celui du
-  SERVEUR. Le corps de la requête ne peut plus en demander le NOM : le
-  répertoire était imposé (#362), mais pas l'isolation — un nom de jar
-  suffisait à appeler la session d'un AUTRE tenant (le nom ne se déduisait pas
-  du contenu de la session, il l'appelait). Le champ `authFile` a donc
-  disparu du contrat, et un corps qui le porte est REFUSÉ (400, message
-  dédié) : le jar n'est pas un paramètre de requête.
-- Test : `tests/unit/scraper-ssrf.test.ts` (un corps qui demande un jar est
-  refusé — ni navigateur, ni jar monté, rien d'écrit ; le seul jar monté est
-  celui du serveur) + `tests/unit/scraper-only.test.ts` (le scrape part avec
-  le jar du serveur) + `tests/contracts/contracts.test.ts` (le contrat ne
-  déclare plus le champ).
-- Commande : `make check`.
-- Emplacement : `shared/contracts/api.ts`, `shared/contracts/api.openapi.yaml`,
-  `server/infrastructure/http.ts`, `server/infrastructure/manuals-scrape.ts`.
-
-
-## I25 — Un payload n'est affiché que pour SA requête
-- Invariant : le payload d'une ressource est RATTACHÉ à sa requête (clé +
-  query). Changer de requête (période, algorithme, semaine) INVALIDE le
-  payload précédent : l'écran montre un chargement, JAMAIS les chiffres d'une
-  autre requête. Un chargement en échec n'affiche JAMAIS le payload d'une
-  autre requête non plus (l'ancien rapport resterait affiché indéfiniment
-  sous le nouveau sélecteur, avec la ligne d'erreur en dessous) — #527. Même
-  esprit que I14 : une donnée qui ne vaut pas pour ce qu'on demande n'est
-  jamais présentée comme si elle valait. Le rafraîchissement d'une MÊME
-  requête (geste « Actualiser ») garde le cache affiché : c'est le
-  offline-first, pas une invalidation.
-- Test : `tests/web/grades.test.ts` (écran RENDU : changer de période → le
-  héros ne montre plus la moyenne de la période précédente ; le chargement en
-  échec n'affiche aucun payload ; le rafraîchissement de la même requête garde
-  le cache) + le câblage vérifié dans le même fichier.
-- Commande : `make check`.
-- Emplacement : `web/src/lib/resource.ts` (règles pures), `web/src/ui/AppContext.tsx`
-  (`useResource`), `web/src/features/grades/components.tsx` (écran pur
-  `GradesScreen`), `web/src/routes/grades.tsx`.
-
-## I26 — Les fichiers téléchargés ne se chevauchent pas et ne s'accumulent pas
-- Invariant : une pièce jointe téléchargée est écrite dans le cache sous un nom
-  qui porte son IDENTIFIANT (`42-consigne.pdf`), jamais son seul LIBELLÉ :
-  deux pièces distinctes du même devoir ne peuvent donc pas viser le même
-  chemin (la seconde n'écrase plus la première, le viewer n'ouvre plus le
-  mauvais document). Le cache des téléchargements est BORNÉ (24 fichiers, les
-  plus anciens partent) et PURGÉ avec le cache du compte (déconnexion,
-  changement de compte, session morte) : un fichier téléchargé est la DONNÉE
-  DU COMPTE, comme le cache. L'écriture passe par la garde d'époque : une
-  pièce téléchargée pendant une déconnexion n'est PAS écrite, donc le cache
-  purgé ne ressuscite pas.
-- Test : `tests/unit/downloaded-files.test.ts` (Kotlin EXÉCUTÉ : deux pièces du
-  même devoir portant le même libellé donnent deux fichiers distincts, chacun
-  avec son contenu ; le nom porte l'identifiant ; le cache est borné ; la purge
-  de déconnexion ET le changement de compte effacent les pièces jointes ; une
-  écriture pendant une déconnexion est refusée ; + le câblage du pont et du
-  job de fond).
-- Commande : `make check`.
-- Emplacement : `android/data/DownloadedFiles.kt`, `android/data/LocalDataStore.kt`,
-  `android/app/Attachments.kt`, `android/app/VsnBridge.kt`,
-  `android/data/PeriodicSyncWorker.kt`.
-
-
-## I27 — Une réponse tardive n'écrit que dans le fil qui l'attend
-- Invariant : une réponse qui arrive APRÈS un changement d'écran est
-  PÉRIMÉE : elle n'écrit rien dans l'écran. Dans la messagerie (#524), la
-  réponse d'un ENVOI ne peut écrire que dans le fil qui était OUVERT au
-  moment de l'envoi : sinon les messages du fil A s'affichaient sous
-  l'en-tête du fil B, et le brouillon tapé dans B disparaissait. Pendant un
-  envoi, le fil ne change pas (bouton Retour désactivé) ; seul le brouillon
-  ENVOYÉ est effacé (un brouillon tapé pendant l'attente reste). Le
-  rechargement d'un fil suit la même règle depuis #501 : une réponse de
-  chargement dépassée n'écrit pas dans l'écran.
-- Test : `tests/web/messages.test.ts` (garde PURE
-  `web/src/features/messages/reply.ts` : la réponse d'un envoi est ignorée
-  dès que le fil affiché a changé — le fil B garde SES messages et SON
-  brouillon ; la réponse d'un envoi s'applique à son propre fil ; revenir au
-  fil d'origine ne ressuscite pas une réponse périmée ; le bouton Retour est
-  désactivé pendant l'envoi) + `tests/web/messages.test.ts` (#501 : la
-  séquence ignore la réponse d'une demande dépassée).
-- Commande : `make check`.
-- Emplacement : `web/src/features/messages/reply.ts`,
-  `web/src/routes/messages.tsx`, `web/src/features/messages/MessagesScreen.tsx`,
-  `web/src/lib/seq.ts`.
-
-
-
-## I28 — La file locale livre TOUJOURS un résultat (jamais de promesse pendante)
-- Invariant : un travail de la file locale (`LocalRequestQueue`, partagée par
-  `ClientQueue`) qui JETTE livre son ÉCHEC à TOUS les callbacks de la clé
-  (`QueueOutcome.Failed`) : l'échec est une VALEUR, pas une exception. Avant,
-  l'exception était RELANCÉE : les callbacks n'étaient jamais appelés — la
-  promesse JS attendait le délai natif complet (20 s), le job de fond brûlait
-  ses 120 s, et les co-demandeurs de la même clé n'étaient jamais servis.
-  `Throwable` et non `Exception` : un `Error` (OOM) est un échec comme un
-  autre, il ne laisse pas les callbacks en attente non plus. Le cast interne de
-  `ClientQueue` est VÉRIFIÉ (`reified`) : une collision de clés (deux types
-  pour une même clé) livre l'échec au callback fautif au lieu de l'avaler en
-  silence. Un callback qui JETTE n'affame pas les autres de la volée — il est
-  SIGNALÉ, jamais avalé en silence.
-- Test : `tests/unit/kotlin-local-queue.test.ts` (Kotlin EXÉCUTÉ : une
-  exception → tous les callbacks de la clé reçoivent l'échec ; un `Error`
-  aussi ; la file PARTAGÉE réveille l'attente du job de fond ; une collision de
-  clés livre l'échec du cast) + `tests/architecture/shared-queue.test.ts` (le
-  câblage de la file partagée).
-- Commande : `make check`.
-- Emplacement : `android/data/LocalRequestQueue.kt`, `android/data/ClientQueue.kt`,
-  `android/data/SyncedRepository.kt`, `android/data/PeriodicSyncWorker.kt`.
-
-## I29 — Le scraper ne s'authentifie pas, une page de connexion n'est pas un manuel
-- Invariant : deux promesses que le contrat faisait mais que le code ne
-  tenait pas.
-  1. **Aucun identifiant n'est collecté pour rien.** Le contrat exigeait
-     `username`/`password`, le serveur les recevait et les transmettait — mais
-     AUCUN chemin de code ne les lisait : le navigateur monte le jar de
-     session du SERVEUR (I24). Les deux champs ne sont donc PLUS REQUIS par le
-     contrat (optionnels, pour que les appelants existants compilent), et le
-     serveur REFUSE un corps qui les porte (400, message dédié qui NOMME les
-     champs). Le scraper ne reçoit que la plateforme.
-  2. **Une page de connexion n'est jamais ingérée.** Un portail qui ne
-     reconnaît pas la session renvoie sa page de login en HTTP 200 : le test
-     HTTP (`ok = status < 400`) la laissait passer, et elle devenait un
-     `ManualDoc` — donc une SOURCE que l'assistant pouvait citer (« Se
-     connecter »). Elle est refusée (motif `login_required`, HTTP 502
-     `login_required`) AVANT extraction et AVANT écriture du jar (une page de
-     login n'écrase pas la session du serveur). Le signal : un champ MOT DE
-     PASSE (le formulaire d'authentification en a toujours un, une page de
-     manuel jamais).
-- Test : `tests/unit/scraper-only.test.ts` (le contrat n'exige plus
-  d'identifiants ; un corps qui les porte = 400 dédié, aucun scrape, aucun
-  log ; une page de login en 200 = refus, jamais un `ManualDoc` ; une vraie
-  page de manuel reste ingérée) + `tests/contracts/contracts.test.ts` (le
-  contrat reflète l'usage réel : `required: [platform, startUrl]`).
-- Commande : `make check`.
-- Emplacement : `shared/contracts/api.ts`, `shared/contracts/api.openapi.yaml`,
-  `server/infrastructure/http.ts`, `server/infrastructure/manuals-scrape.ts`.
-
-## I30 — Le plafond de HTML s'applique AVANT la matérialisation
-- Invariant : le HTML lu par le scraper ne dépasse jamais 1 Mo de caractères,
-  et il ne coûte JAMAIS plus : la borne est demandée AU navigateur (la chaîne
-  qui traverse le pont est bornée) et la TAILLE est MESURÉE avant la lecture
-  (en-tête `content-length` : au-delà de 4 Mo, la page est REFUSÉE sans être
-  lue). Avant, `page.content()` lisait TOUTE la page en mémoire : le plafond
-  ne protégeait que le REPARSE, pas l'ALLOCATION — une page de plusieurs
-  centaines de Mo vivait x2 avec le plafond de concurrence (#525).
-- Test : `tests/unit/scraper-limits.test.ts` (la borne est demandée au
-  navigateur ; une page trop volumineuse est refusée SANS lecture ; une
-  réponse sans `content-length` reste bornée par la lecture).
-- Commande : `make check`.
-- Emplacement : `server/infrastructure/manuals-scrape.ts`.
+- Emplacement : `web/src/lib/resource.ts`,
+  `web/src/features/messages/reply.ts`, `web/src/lib/seq.ts`.
 
 ## I31 — Un enregistrement publié = UNE ligne
 - Invariant : une absence, un retard, un devoir est publié UNE fois, et

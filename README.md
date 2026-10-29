@@ -113,9 +113,9 @@ flowchart TB
     UI["Interface React<br/>React 19 · TypeScript · Vite<br/>WebView Android · zéro réseau (I10)"]
     BRIDGE["Pont natif<br/>Kotlin · JSON allowlisté<br/>aucun secret au JS (I10)"]
     APP["Cœur applicatif Kotlin<br/>Android · WorkManager<br/>cache offline-first (I16)<br/>file série (I19)"]
-    IA["Assistant IA<br/>sans outils · sans secret (I4/I5)<br/>contenu externe = donnée (I6)"]
+    IA["Assistant IA<br/>sans outils · sans secret (I4)<br/>contenu externe = donnée (I6)"]
     STORE["Stockage local<br/>Android Keystore<br/>session + clé chiffrées (I18)<br/>cache · fiches"]
-    PORT["Client Pronote<br/>Kotlin · HTTPS direct (I1/I2)<br/>QR + PIN · session locale"]
+    PORT["Client Pronote<br/>Kotlin · HTTPS direct (I1)<br/>QR + PIN · session locale"]
 
     UI -->|"appels métier"| BRIDGE --> APP
     APP <-->|"lit · écrit"| STORE
