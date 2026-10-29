@@ -312,7 +312,6 @@ Variables et apports humains : [`docs/HUMAN_INPUTS.md`](docs/HUMAN_INPUTS.md).
 ├─ shared/contracts/ routes du scraper, OpenAPI et validateurs gardés pour les tests
 ├─ agents/           vérifications, captures et harnais de test locaux
 ├─ tests/            tests unitaires, contrats et architecture
-├─ site/             page de présentation animée (vanilla, hors ligne)
 └─ docs/             ADR, invariants, recette, release, apports humains
 ```
 
