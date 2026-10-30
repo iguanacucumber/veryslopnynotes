@@ -48,6 +48,27 @@ fun readBounded(stream: InputStream, maxBytes: Int = MAX_RESPONSE_BYTES): String
 /** Octets lus par `read` : borne la sur-lecture au-delà du plafond. */
 private const val TAMPON_OCTETS = 8 * 1024
 
+/**
+ * Plafond du corps d'une requête REJOUABLE : 256 Kio.
+ *
+ * Une panne de transport ne justifie une reprise que pour un petit prompt
+ * texte (quelques dizaines de Kio). Un corps vision porte une photo en data
+ * URL (plusieurs Mio) : le ré-envoyer coûte bande passante, batterie et une
+ * seconde attente, pour un fournisseur qui a peut-être déjà reçu le premier.
+ * Au-delà, l'appel échoue avec sa cause, sans reprise.
+ */
+const val MAX_RETRY_BODY_BYTES = 256 * 1024
+
+/**
+ * Une reprise est permise seulement si le corps reste sous
+ * [MAX_RETRY_BODY_BYTES] ET qu'aucun octet du corps 2xx n'a été consommé.
+ *
+ * Un 2xx dont la lecture a commencé a peut-être déjà produit (et facturé) une
+ * complétion : re-POSTer en créerait une seconde.
+ */
+fun retryAllowed(bodyBytes: Int, responseConsumed: Boolean): Boolean =
+    bodyBytes in 0..MAX_RETRY_BODY_BYTES && !responseConsumed
+
 /** Panne de transport distinguée pour que l'élève sache quoi réessayer. */
 enum class TransportFault { TIMEOUT, NETWORK }
 

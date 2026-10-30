@@ -83,7 +83,9 @@ class OpenRouterLlm(
     private val timeout = normalizeTimeoutMs(timeoutMs)
 
     // Budget TOTAL de l'appel réparti sur les DEUX tentatives : une reprise ne
-    // double donc jamais l'attente de l'appelant (le pont attend 45 s).
+    // double donc jamais l'attente de l'appelant. Le pont attend STRICTEMENT
+    // plus (`AWAIT_LLM_MS`) pour que la réponse de la reprise arrive avant
+    // l'abandon.
     private val perAttemptMs = (timeout / MAX_ATTEMPTS).coerceAtLeast(1L)
     private val http: OkHttpClient = client.newBuilder()
         // Aucune redirection suivie : un 307/308 re-POSTERAIT le prompt entier
@@ -176,6 +178,9 @@ class OpenRouterLlm(
 
     /** Envoi HTTPS + cause d'erreur bornée. Seule la clé est interpolée (Bearer). */
     private fun send(payload: JSONObject, key: String): String {
+        // Corps sérialisé UNE fois : sa taille décide de la reprise, et un
+        // second POST identique ne doit pas re-encoder un corps de plusieurs Mio.
+        val bodyBytes = payload.toString().toByteArray(Charsets.UTF_8)
         // Le build de la requête est DANS le try (#595) : OkHttp refuse un
         // caractère d'en-tête hors ASCII imprimable AVANT tout réseau — la
         // cause est alors la CLÉ, et le message la nomme (jamais sa valeur).
@@ -183,7 +188,7 @@ class OpenRouterLlm(
             Request.Builder()
                 .url(OPENROUTER_URL)
                 .header("Authorization", "Bearer $key")
-                .post(payload.toString().toRequestBody(JSON))
+                .post(bodyBytes.toRequestBody(JSON))
                 .build()
         } catch (_: IllegalArgumentException) {
             throw LlmError(INVALID_KEY_MESSAGE)
@@ -191,10 +196,14 @@ class OpenRouterLlm(
         var attempt = 0
         while (true) {
             attempt++
+            // Tout octet d'un corps 2xx consommé interdit la reprise : la
+            // complétion est peut-être déjà produite (et facturée).
+            var responseConsumed = false
             try {
                 http.newCall(request).execute().use { res ->
                     if (!res.isSuccessful) throw LlmError.forStatus(res.code)
                     val body = res.body ?: return ""
+                    responseConsumed = true
                     // Corps LU BORNÉ : un 2xx démesuré est refusé avant de
                     // remplir le tas, jamais avalé en entier.
                     return try {
@@ -208,8 +217,12 @@ class OpenRouterLlm(
                 throw e
             } catch (e: Exception) {
                 // UNE SEULE reprise, et seulement pour une panne de TRANSPORT
-                // (le prompt est peut-être parti : la réponse manque).
-                if (attempt >= MAX_ATTEMPTS) throw transportError(e)
+                // d'un petit corps (le prompt est peut-être parti : la réponse
+                // manque). Un corps vision de plusieurs Mio ou une réponse
+                // entamée ne sont jamais re-POSTés.
+                if (attempt >= MAX_ATTEMPTS || !retryAllowed(bodyBytes.size, responseConsumed)) {
+                    throw transportError(e)
+                }
             }
         }
     }
@@ -218,20 +231,28 @@ class OpenRouterLlm(
     private fun transportError(e: Exception): LlmError =
         LlmError(transportFaultMessage(classifyTransportError(e)))
 
+    /**
+     * Décode l'enveloppe `choices` puis délègue le verdict à la règle PURE
+     * [readCompletion] (parité Kotlin). `optString` seul est piégeux sur
+     * Android : il rend la chaîne `"null"` pour un JSON `null`, et un
+     * `content` en tableau n'est pas un texte. On lit donc la valeur BRUTE
+     * (`opt`) et on n'accepte qu'une `String`.
+     */
     private fun parseCompletion(bodyText: String): String {
-        val choice = try {
-            JSONObject(bodyText).optJSONArray("choices")?.optJSONObject(0)
+        val root = try {
+            JSONObject(bodyText)
         } catch (_: Exception) {
-            throw LlmError("Réponse LLM illisible (JSON invalide).")
-        } ?: throw LlmError("Réponse LLM illisible (JSON invalide).")
-        // finish_reason "length" = budget tokens atteint => sortie INCOMPLETE : jamais
-        // renvoyee comme une reponse complete (I5).
-        if (choice.optString("finish_reason", "") == "length") {
-            throw LlmError("Réponse LLM tronquée (limite de longueur atteinte).")
+            throw LlmError(LlmCompletionFault.UNREADABLE.message)
         }
-        val content = choice.optJSONObject("message")?.optString("content", "")
-        if (content.isNullOrBlank()) throw LlmError("Réponse LLM vide.")
-        return content
+        val choice = root.optJSONArray("choices")?.optJSONObject(0)
+        val message = choice?.optJSONObject("message")
+        // Un tableau (ou un objet) n'est pas une réponse : traité comme absent.
+        val content = message?.opt("content") as? String
+        val finishReason = (choice?.opt("finish_reason") as? String)?.takeIf { it.isNotBlank() }
+        return when (val verdict = readCompletion(if (choice == null) 0 else 1, finishReason, content)) {
+            is LlmCompletion.Text -> verdict.value
+            is LlmCompletion.Refused -> throw LlmError(verdict.fault.message)
+        }
     }
 
     companion object {
@@ -268,9 +289,14 @@ class OpenRouterLlm(
 
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
-        // Env hors bornes = delai recale sur le defaut : jamais d'exception brute.
-        fun normalizeTimeoutMs(value: Long): Long =
-            if (value <= 0 || value > MAX_TIMEOUT_MS) DEFAULT_TIMEOUT_MS else value
+        // Hors bornes : non positif ou invalide = defaut ; une valeur TROP
+        // GRANDE est PLAFONNEE, jamais ramenee au defaut (un appelant qui
+        // demande 130 s ne doit pas se retrouver avec 20 s en silence).
+        fun normalizeTimeoutMs(value: Long): Long = when {
+            value <= 0 -> DEFAULT_TIMEOUT_MS
+            value > MAX_TIMEOUT_MS -> MAX_TIMEOUT_MS
+            else -> value
+        }
     }
 }
 

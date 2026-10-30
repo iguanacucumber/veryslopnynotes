@@ -1,7 +1,7 @@
 // Contrat du pont côté web (#371).
 //
 // Deux fautes se sontompées : le timeout JS (30 s) était PLUS COURT que
-// l'attente native (45 s pour `llm.askHomework`), donc la réponse native
+// l'attente native (40 s pour `llm.askHomework`), donc la réponse native
 // arrivait après l'abandon et se perdait ; et l'abandon ne informait pas le
 // natif, qui continuait de tourner en gardant le verrou d'appairage.
 import { afterEach, describe, expect, test } from "bun:test";
@@ -68,10 +68,25 @@ describe("pont : délais", () => {
       native += constants.get(term) ?? Number(term);
     }
     expect(native).toBe(MAX_NATIVE_WAIT_MS);
-    expect(native).toBe(NATIVE_WAIT_MS.default + NATIVE_WAIT_MS.manual + NATIVE_WAIT_MS.llm);
+    expect(native).toBe(
+      NATIVE_WAIT_MS.default +
+        NATIVE_WAIT_MS.manual +
+        NATIVE_WAIT_MS.attachment +
+        NATIVE_WAIT_MS.llm,
+    );
     // Strictement au-dessus : sinon la réponse native arrive après l'abandon
     // et se perd (plus d'entrée dans `pending`).
     expect(DEFAULT_TIMEOUT_MS).toBeGreaterThan(MAX_NATIVE_WAIT_MS);
+  });
+
+  test("le budget JS réel de llm.askHomework dépasse le plafond natif", () => {
+    // Le budget appliqué est celui de la méthode, à défaut le timeout global :
+    // aucun nombre recopié ici, donc un budget par méthode ajouté plus tard ne
+    // peut pas passer sous le plafond sans que ce test le voie.
+    const budget = BRIDGE_TIMEOUTS["llm.askHomework"] ?? DEFAULT_TIMEOUT_MS;
+    expect(budget).toBeGreaterThan(0);
+    // 115 s (natif) < 120 s (JS) : la marge couvre l'abandon, pas une égalité.
+    expect(budget).toBeGreaterThan(MAX_NATIVE_WAIT_MS);
   });
 
   test("aucun timeout par méthode ne passe sous son plafond natif", () => {
