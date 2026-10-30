@@ -114,6 +114,12 @@ class OpenRouterLlm(
             // sortie doit aller a la reponse, et l'attente du pont (45 s)
             // couvrait mal 23-42 s de raisonnement. Coupe : 1,2 s.
             .put("reasoning", JSONObject().put("enabled", false))
+            // Sortie JSON imposee par le fournisseur (#708) : en recette live,
+            // le modele rendait des chaines a backslash LaTeX ou un objet
+            // concatene, et la garde I5 jetait une reponse complete. Le prompt
+            // demande deja du JSON ; ce champ le rend contraignant. Les deux
+            // modeles par defaut le supportent (verifie live).
+            .put("response_format", JSONObject().put("type", "json_object"))
         return parseCompletion(send(payload, key))
     }
 
@@ -153,6 +159,8 @@ class OpenRouterLlm(
             // Meme raison que le chemin texte (#604) : un modele multimodal qui
             // raisonne mangerait le budget avant d'ecrire le JSON.
             .put("reasoning", JSONObject().put("enabled", false))
+            // Meme contrainte de sortie que le texte (#708).
+            .put("response_format", JSONObject().put("type", "json_object"))
         return parseCompletion(send(payload, key))
     }
 

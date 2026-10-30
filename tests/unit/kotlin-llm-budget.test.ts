@@ -269,4 +269,14 @@ describe("le raisonnement ne mange plus le budget de sortie (#604)", () => {
     expect(data).toContain("Réponse LLM tronquée");
     expect(data).toContain("Réponse LLM vide.");
   });
+
+  test("les DEUX payloads imposent une sortie JSON au fournisseur (#708)", () => {
+    // Recette live : sans ce champ, le modele rendait un backslash LaTeX ou
+    // deux objets concatenes, et la garde I5 jetait une reponse complete.
+    const forced = [...data.matchAll(/\.put\("response_format", JSONObject\(\)\.put\("type", "json_object"\)\)/g)];
+    expect(forced.length).toBe(2);
+    // Le champ suit la coupure du raisonnement dans le même corps.
+    const ordered = [...data.matchAll(/\.put\("reasoning", JSONObject\(\)\.put\("enabled", false\)\)[\s\S]{0,300}?\.put\("response_format"/g)];
+    expect(ordered.length).toBe(2);
+  });
 });
