@@ -453,34 +453,66 @@ export function assignmentSections(
   return sections;
 }
 
+/** Jour civil `AAAA-MM-JJ` d'une échéance, à l'heure de Paris.
+ *
+ *  Le natif publie un INSTANT (`dueDate` avec offset) et borne ses semaines en
+ *  `Europe/Paris` (`WeekWindow.kt`). Comparer cet instant à des bornes UTC
+ *  rangeait un devoir dû lundi 00:00 Paris dans la semaine précédente (dimanche
+ *  22:00 UTC). On ramène donc tout à un JOUR civil de l'établissement, jamais
+ *  à une arithmétique de millisecondes : le fuseau explicite rend le calcul
+ *  indépendant de la machine, et les semaines de 167/169 h passent sans code
+ *  dédié. Une date seule est déjà un jour civil. */
+const PARIS_DAY = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Paris",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function parisDayKey(value: string): string | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  if (DATE_ONLY.test(raw)) return raw;
+  const date = assignmentDate(raw);
+  if (!date) return null;
+  const parts = PARIS_DAY.formatToParts(date);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  const year = part("year");
+  const month = part("month");
+  const day = part("day");
+  return year && month && day ? `${year}-${month}-${day}` : null;
+}
+
+/** Décalage en jours d'un jour civil (`AAAA-MM-JJ`), en UTC pour ne pas
+ *  dépendre du fuseau de la machine : ces clés ne sont que des étiquettes. */
+function dayKeyShift(dayKey: string, days: number): string | null {
+  const [year, month, day] = dayKey.split("-").map((part) => Number.parseInt(part, 10));
+  if (!year || !month || !day) return null;
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  if (Number.isNaN(date.getTime())) return null;
+  const out = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    date.getUTCDate(),
+  ).padStart(2, "0")}`;
+  return out;
+}
+
 /** Devoirs dont l'échéance tombe dans la semaine commençant à `weekStart`.
  *  La fenêtre est celle du producteur natif : lundi 00:00 Paris → dimanche
- *  23:59:59 Paris (`weekWindow`). Une date seule est lue en UTC, comme le
- *  contrat qui ne publie que des instants complets. Sert à ignorer un payload
- *  en cache qui appartient à une autre semaine (`useResource` met en cache par
- *  ressource, pas par requête). */
+ *  23:59:59 Paris (`WeekWindow.kt`), comparée en JOURS civils de Paris. Sert à
+ *  ignorer un payload en cache qui appartient à une autre semaine
+ *  (`useResource` met en cache par ressource, pas par requête). */
 export function assignmentsInWeek(items: Assignment[], weekStart: string): Assignment[] {
-  if (!DATE_ONLY.test(weekStart)) return [];
-  const [year, month, day] = weekStart.split("-").map((part) => Number.parseInt(part, 10));
-  if (!year || !month || !day) return [];
-  const start = Date.UTC(year, month - 1, day);
-  const end = start + 7 * 86_400_000;
+  const start = weekStart.trim();
+  if (!DATE_ONLY.test(start)) return [];
+  const end = dayKeyShift(start, 6);
+  if (!end) return [];
   return items.filter((item) => {
-    const value = item.dueDate.trim();
     // Sans échéance lisible : la carte vit dans « Sans échéance », jamais
     // rattachée de force à une semaine.
-    if (!value) return true;
-    let millis: number;
-    if (DATE_ONLY.test(value)) {
-      const [y, m, d] = value.split("-").map((part) => Number.parseInt(part, 10));
-      if (!y || !m || !d) return true;
-      millis = Date.UTC(y, m - 1, d);
-    } else {
-      const date = assignmentDate(value);
-      if (!date) return true;
-      millis = date.getTime();
-    }
-    return millis >= start && millis < end;
+    const day = parisDayKey(item.dueDate);
+    if (!day) return true;
+    // Clés ISO : l'ordre lexicographique est l'ordre chronologique.
+    return day >= start && day <= end;
   });
 }
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { llmSaveError } from "../../web/src/features/settings/model";
+import { cardActionFlags } from "../../web/src/features/tasks/actions";
 
 const WEB = join(import.meta.dir, "..", "..", "web", "src");
 
@@ -50,19 +51,60 @@ describe("IA — aide devoirs", () => {
     expect(close).toContain("setHelp(null)");
   });
 
-  test("un seul assistant en vol : les boutons croisés sont fermés (#597)", () => {
+  test("un seul assistant en vol : les boutons croisés sont fermés (#597, #749)", () => {
     // Pendant une photo, « Aide devoirs » ne lance pas un 2e appel LLM ;
     // pendant l'aide texte, « Photo de l'énoncé » n'ouvre pas la caméra.
     // Chaque panneau reste fermable : le bouton actif garde son « Fermer ».
-    expect(tasks).toContain("const helpLoading = help?.loading === true;");
-    expect(tasks).toContain(
-      "const textOffWhilePhoto = textOff || (helpLoading && help?.photo === true);",
-    );
-    expect(tasks).toContain(
-      "const photoOffWhileText = photoOff || (helpLoading && help?.photo !== true);",
-    );
-    expect(tasks).toContain("disabled={textOffWhilePhoto}");
-    expect(tasks).toContain("disabled={photoOffWhileText}");
+    expect(tasks).toContain("const assistantBusy = help?.loading === true || revisionBusy;");
+    expect(tasks).toContain("assistantBusy={assistantBusy}");
+    expect(tasks).toContain("disabled={textOff}");
+    expect(tasks).toContain("disabled={photoOff}");
+    expect(tasks).toContain("disabled={sheetOff}");
+  });
+
+  test("une demande en vol ferme TOUTES les cartes, pas seulement la sienne (#749)", () => {
+    // Le bug : `help` est nul pour les autres cartes, donc leur bouton restait
+    // actif et lançait un 2e appel LLM payé dont la 1re réponse était jetée.
+    const other = cardActionFlags({
+      assistantDisabled: false,
+      hasMaterial: true,
+      hasPanel: false,
+      helpLoading: false,
+      helpPhoto: false,
+      assistantBusy: true,
+    });
+    expect(other).toEqual({ textOff: true, photoOff: true, sheetOff: true });
+    // La carte en vol garde son bouton « Fermer » : la demande reste annulable.
+    const loading = cardActionFlags({
+      assistantDisabled: false,
+      hasMaterial: true,
+      hasPanel: true,
+      helpLoading: true,
+      helpPhoto: false,
+      assistantBusy: true,
+    });
+    expect(loading).toEqual({ textOff: false, photoOff: true, sheetOff: true });
+    // Une photo en vol ferme « Aide devoirs » (un 2e appel partirait) ;
+    // « Photo de l’énoncé » reste le bouton « Fermer ».
+    const loadingPhoto = cardActionFlags({
+      assistantDisabled: false,
+      hasMaterial: true,
+      hasPanel: true,
+      helpLoading: true,
+      helpPhoto: true,
+      assistantBusy: true,
+    });
+    expect(loadingPhoto).toEqual({ textOff: true, photoOff: false, sheetOff: true });
+    // Retombé (réponse, erreur, annulation) : plus rien n'est bloqué.
+    const idle = cardActionFlags({
+      assistantDisabled: false,
+      hasMaterial: true,
+      hasPanel: false,
+      helpLoading: false,
+      helpPhoto: false,
+      assistantBusy: false,
+    });
+    expect(idle).toEqual({ textOff: false, photoOff: false, sheetOff: false });
   });
 
   test("le choix photo est un dialogue unique, annulable sans appel (#610)", () => {

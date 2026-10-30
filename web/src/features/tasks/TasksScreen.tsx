@@ -51,6 +51,7 @@ import {
   type AssignmentAttachment,
   type HomeworkAction,
 } from "./assignments";
+import { cardActionFlags } from "./actions";
 import "./tasks.css";
 
 type HelpState = {
@@ -120,6 +121,10 @@ function TasksWeek({ week }: { week: string }) {
   const [lessonSubjects, setLessonSubjects] = useState<string[]>([]);
   const helpSeq = useRef(0);
   const toggleSeq = useRef(new Map<string, number>());
+  // L'assistant est UNE ressource payante pour tout l'écran : un second
+  // appel simultané jetterait la première réponse tout en la payant.
+  const revisionBusy = Object.keys(revisionPending).length > 0;
+  const assistantBusy = help?.loading === true || revisionBusy;
 
   // Le payload fait foi : un rafraîchissement remplace l'état optimiste.
   useEffect(() => {
@@ -201,6 +206,9 @@ function TasksWeek({ week }: { week: string }) {
   }
 
   async function askHelp(assignment: Assignment) {
+    // Un seul assistant en vol pour TOUT l'écran : le bouton d'une autre
+    // carte ne voit pas la demande en cours.
+    if (assistantBusy) return;
     const seq = ++helpSeq.current;
     setHelp({ id: assignment.id, loading: true, answer: null, steps: [], sources: [], refusal: null, actions: [], error: null });
     try {
@@ -264,6 +272,7 @@ function TasksWeek({ week }: { week: string }) {
   }
 
   async function askPhoto(assignment: Assignment, source: "camera" | "gallery") {
+    if (assistantBusy) return;
     const seq = ++helpSeq.current;
     setHelp({
       id: assignment.id,
@@ -368,7 +377,7 @@ function TasksWeek({ week }: { week: string }) {
   }
 
   async function generateSheet(assignment: Assignment) {
-    if (revisionPending[assignment.id]) return;
+    if (assistantBusy) return;
     setRevisionPending((state) => ({ ...state, [assignment.id]: true }));
     try {
       // La semaine AFFICHÉE, comme l'aide devoirs (#369, #596) : le devoir peut
@@ -508,6 +517,7 @@ function TasksWeek({ week }: { week: string }) {
                       lessonReady={lessonSubjects.includes(assignment.subject)}
                       help={help?.id === assignment.id ? help : null}
                       revisionBusy={Boolean(revisionPending[assignment.id])}
+                      assistantBusy={assistantBusy}
                       onToggle={(next) => void toggle(assignment, next)}
                       onOpenAttachment={(attachment) => void openAttachment(assignment, attachment)}
                       onHelp={() => void askHelp(assignment)}
@@ -587,6 +597,7 @@ function AssignmentCard({
   lessonReady,
   help,
   revisionBusy,
+  assistantBusy,
   onToggle,
   onOpenAttachment,
   onHelp,
@@ -605,6 +616,7 @@ function AssignmentCard({
   lessonReady: boolean;
   help: HelpState | null;
   revisionBusy: boolean;
+  assistantBusy: boolean;
   onToggle: (next: boolean) => void;
   onOpenAttachment: (attachment: AssignmentAttachment) => void;
   onHelp: () => void;
@@ -628,16 +640,16 @@ function AssignmentCard({
   // disponible même sans manuel ni cahier. Un manuel utilisable ou un cours
   // du cahier pour CETTE matière compte comme source pour le texte.
   const hasMaterial = assignmentHasAssistantMaterial(assignment, manualReady, lessonReady);
-  const textOff = assistantDisabled || !hasMaterial;
-  const photoOff = assistantDisabled || revisionBusy;
-  // #597 : un SEUL assistant en vol. Pendant l'aide texte, « Photo de
-  // l'énoncé » est fermée ; pendant une photo, « Aide devoirs » l'est —
-  // sinon un 2e appel LLM payé part pendant que le panneau change d'état
-  // (la seq jetterait sa réponse). Chaque panneau reste fermable : le bouton
-  // actif garde son rôle « Fermer ».
   const helpLoading = help?.loading === true;
-  const textOffWhilePhoto = textOff || (helpLoading && help?.photo === true);
-  const photoOffWhileText = photoOff || (helpLoading && help?.photo !== true);
+  const hasPanel = help !== null;
+  const { textOff, photoOff, sheetOff } = cardActionFlags({
+    assistantDisabled,
+    hasMaterial,
+    hasPanel,
+    helpLoading,
+    helpPhoto: help?.photo === true,
+    assistantBusy,
+  });
   const offReason = assistantDisabled ? assistantReasonId : hasMaterial ? undefined : noMaterialId;
 
   /** Le bouton du panneau disparaît en le fermant : le focus revient au
@@ -698,7 +710,7 @@ function AssignmentCard({
         <button
           type="button"
           className="task-help"
-          disabled={textOff || revisionBusy}
+          disabled={sheetOff}
           aria-describedby={offReason}
           aria-label={`Créer une fiche de révision pour ${assignment.title}`}
           onClick={onGenerateSheet}
@@ -710,7 +722,7 @@ function AssignmentCard({
           ref={textTriggerRef}
           type="button"
           className={`task-help${help && !help.photo ? " task-help--open" : ""}`}
-          disabled={textOffWhilePhoto}
+          disabled={textOff}
           aria-describedby={offReason}
           aria-expanded={help !== null && !help.photo}
           aria-controls={help && !help.photo ? helpPanelId : undefined}
@@ -724,7 +736,7 @@ function AssignmentCard({
           ref={photoTriggerRef}
           type="button"
           className={`task-help task-help--photo${help?.photo ? " task-help--open" : ""}`}
-          disabled={photoOffWhileText}
+          disabled={photoOff}
           aria-describedby={assistantDisabled ? assistantReasonId : undefined}
           aria-expanded={help?.photo === true}
           aria-controls={help?.photo ? helpPanelId : undefined}
