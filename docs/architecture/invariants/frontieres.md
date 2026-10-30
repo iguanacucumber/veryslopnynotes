@@ -9,10 +9,10 @@
 - Invariant : hors `android/pronote/`, `android/` ne contient aucune URL ni
   référence d'hôte Pronote (`pronote`, `index-education`), la déclaration du
   module exceptée ; le serveur ne contacte jamais Pronote. La frontière Gradle
-  (ADR-003) : `core`/`pronote` sans arête, `data` →
+  : `core`/`pronote` sans arête, `data` →
   `core`+`pronote`, `app` → `core`+`data` ; tout accès Pronote passe par
   l'unique `Client`. `android/core/` n'importe ni `java.net`, ni
-  `android.database`, ni `androidx.room`. L'hôte auxiliaire (scraper) est validé
+  `android.database`, . L'hôte auxiliaire (scraper) est validé
   à l'exécution (`ServerConfig.validateBaseUrl` : https, sauf boucle locale,
   préfixe strict) ; seul le site de démonstration public vit dans `DemoSchool.kt`.
 - Test : `tests/architecture/invariants.test.ts`,
@@ -49,7 +49,7 @@
 - Invariant : `web/` ne contient ni `fetch`, XHR, WebSocket, EventSource ni URL
   distante, et la CSP impose `connect-src 'none'`. Aucun jeton ni clé LLM au JS ;
   seules des méthodes allowlistées sont exposées, jamais un proxy d'URL. Toute
-  entrée répond EXACTEMENT une fois (échec compris) ; aucun « ok » sans
+  entrée répond EXACTEMENT une fois ; aucun « ok » sans
   écriture. Un appel court ne fait pas la queue derrière cinq appels longs ; les
   opérations LLM ont leur file bornée à deux ; délais hiérarchisés : natif < JS.
 - Test : `tests/architecture/web.test.ts`,
@@ -67,19 +67,7 @@
 <a id="i22"></a>
 
 ## I22 — Le gate ne peut pas être neutralisé par l'environnement
-- Invariant : `make check` sort NON-ZÉRO dès qu'une étape échoue, QUEL QUE SOIT
-  l'environnement (`MAKEFLAGS`, `make -i`, `make -k`). `make -i` fait IGNORER
-  l'échec d'une RECETTE : un gate ROUGE devenait VERT, et `agents/ship.sh`
-  (lui-même en `set -e`) écrivait « `make check` : OK » dans le corps de PR
-  (#523). Le gate est donc en DEUX phases : `check-run` lance le harnais et
-  ÉCRIT son code de sortie, `check` REFUSE tout code ≠ 0 par `$(error)` — une
-  erreur de MAKE, que `-i` n'ignore pas. Sans statut, le gate n'A PAS
-  TOURNÉ : c'est un ÉCHEC, jamais un vert. Même règle côté harnais : les make
-  ENFANTS (un par étape) sont lancés SANS `MAKEFLAGS`, sinon une étape rouge
-  passait pour verte.
-- Test : `tests/unit/check-runner.test.ts` (le harnais neutralise `MAKEFLAGS`
-  pour ses enfants ; `make check` reste rouge sous `MAKEFLAGS=-i` ; le verdict
-  refuse par `$(error)`).
+- Invariant : `make check` sort NON-ZÉRO dès qu'une étape échoue, quel que soit l'environnement (`MAKEFLAGS`, `make -i`). Le gate est en DEUX phases : `check-run` écrit le code de sortie ; `check` refuse tout code ≠ 0 par `$(error)` (erreur de MAKE). Sans statut, le gate n'a pas tourné : échec. Les make enfants sont lancés sans `MAKEFLAGS`.
+- Test : `tests/unit/check-runner.test.ts`.
 - Commande : `make check`.
-- Emplacement : `Makefile` (cibles `check-run` / `check`),
-  `agents/runtime/check.ts` (environnement des make enfants).
+- Emplacement : `Makefile` (`check-run` / `check`), `agents/runtime/check.ts`.

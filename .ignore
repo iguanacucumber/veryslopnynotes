@@ -1,0 +1,10 @@
+# Fichiers exclus des recherches par ripgrep (lecture agent, pas le build).
+.agents/
+android/**/build/
+android/.gradle/
+android/.kotlin/
+node_modules/
+docs/architecture/REVIEW-*.md
+shots/
+ref-papillon/
+tests/fixtures/pronote/
