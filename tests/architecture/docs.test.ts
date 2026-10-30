@@ -252,6 +252,36 @@ describe("registre d'invariants", () => {
     }
   });
 
+  test("les surfaces de lecture agent restent sous leur budget d'octets", () => {
+    // Budgets de CONTEXTE : un agent qui relit ces fichiers les garde jusqu'à
+    // la compaction. Dépasser = revenir à la lecture intégrale à chaque tour.
+    expect({ fichier: "AGENTS.md", sousBudget: AGENTS.length <= 5_000 }).toEqual({
+      fichier: "AGENTS.md",
+      sousBudget: true,
+    });
+    expect({ fichier: "Makefile", sousBudget: MAKEFILE.length <= 9_000 }).toEqual({
+      fichier: "Makefile",
+      sousBudget: true,
+    });
+    expect({ fichier: "README.md", sousBudget: README.length <= 10_000 }).toEqual({
+      fichier: "README.md",
+      sousBudget: true,
+    });
+  });
+
+  test("chaque entrée d'invariant tient en 120 mots maximum", () => {
+    // Une entrée au-delà force l'agent à relire le détail à chaque tour ;
+    // le détail appartient à l'issue, au commit ou à l'ADR.
+    for (const { id, body } of entries) {
+      const words = body.split(/\s+/).filter(Boolean).length;
+      expect({ id, words, sousBudget: words <= 120 }).toEqual({
+        id,
+        words,
+        sousBudget: true,
+      });
+    }
+  });
+
   test("la numérotation est consécutive à partir de I1, sauf retrait documenté", () => {
     expect(numeric.length).toBeGreaterThan(0);
     expect(numberingErrors(entries, retired)).toEqual([]);
