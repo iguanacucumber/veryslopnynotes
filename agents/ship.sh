@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Termine une branche agent : rebase sur origin/main, check complet, push,
-# corps de PR prêt pour les outils MCP. Usage: ./agents/ship.sh <issue-n> ["titre"]
+# corps de PR prêt pour `gh`. Usage: ./agents/ship.sh <issue-n> ["titre"]
 set -euo pipefail
 
 N="${1:?issue requise}"; shift
@@ -54,5 +54,5 @@ BODY="$GIT_DIR/vsn-pr-body.md"
 } > "$BODY"
 
 printf 'ship: OK\n  branche : %s\n  titre   : %s\n  corps   : %s\n' "$BRANCH" "$TITLE" "$BODY"
-printf 'MCP : create_pull_request(base=main, head=%s), merge_pull_request(merge_method=merge), issue_write(close #%s)\n' \
-  "$BRANCH" "$N"
+printf 'gh : pr create --base main --head %s --title "%s" --body-file %s, pr merge --merge --delete-branch, issue close %s\n' \
+  "$BRANCH" "$TITLE" "$BODY" "$N"

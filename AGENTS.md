@@ -26,13 +26,12 @@ Une loi ne change que par ADR. Une PR qui la viole est refusée.
 
 1. **Plan.** Une issue, un périmètre, des critères d'acceptation avant le code.
 2. **Branche.** `./agents/launch.sh <n> <slug>` depuis `origin/main`. Une issue =
-   une branche `agent/<n>-<slug>`. Zéro commit direct sur `main`. PR via MCP
-   GitHub uniquement ; `gh` CLI interdit.
+   une branche `agent/<n>-<slug>`. Zéro commit direct sur `main`. PR via `gh`
+   (MCP GitHub retiré : ses schémas coûtaient plus cher que la commande).
 3. **Build et review.** `make watch`, diff court, puis `make check`.
 4. **Merge auto.** `./agents/ship.sh <n> "<titre>"` (fetch, rebase, check,
-   push, corps de PR), puis `create_pull_request`,
-   `merge_pull_request` (`merge_method: "merge"`) et fermeture de l'issue.
-   Enfin `git fetch --prune`, suppression du worktree et de la branche.
+   push, corps de PR), puis `gh pr create`, `gh pr merge --merge
+   --delete-branch` et `gh issue close`. Enfin `git fetch --prune`.
 5. **Incident.** Même échec trois fois ⇒ issue incident.
 
 `make check-fast` (~2,1 s à chaud) saute `android-compile` seulement. Détail
