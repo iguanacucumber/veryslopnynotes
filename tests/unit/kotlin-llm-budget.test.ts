@@ -252,6 +252,23 @@ describe("les libellés citables sont envoyés TELS QUELS (#604)", () => {
   });
 });
 
+describe("les deux consignes devoirs portent la règle de citation (#701)", () => {
+  // Sans la règle partagée, le modèle citait les blocs DONNEE eux-mêmes
+  // (« Question eleve (DONNEE) », « Photo de l'énoncé ci-jointe ») : la liste
+  // fermée les refusait et jetait une réponse valide.
+  const RULE = "Seuls les blocs precedes de « Libelle citable : » sont des sources";
+
+  test.skipIf(skip)("texte et photo reçoivent la MÊME règle (constante partagée)", async () => {
+    const r = (await ask({ op: "homeworkSystem" })) as unknown as { text: string; photo: string };
+    for (const system of [r.text, r.photo]) {
+      expect(system).toContain(RULE);
+      expect(system).toContain("Ne fabrique jamais une source.");
+      // La règle n'est écrite qu'une fois : c'est la constante, pas un copie.
+      expect(system.split(RULE).length - 1).toBe(1);
+    }
+  });
+});
+
 describe("le raisonnement ne mange plus le budget de sortie (#604)", () => {
   const data = codeOnly(readFileSync(join(DATA, "OpenRouterLlm.kt"), "utf8"));
 
@@ -266,8 +283,11 @@ describe("le raisonnement ne mange plus le budget de sortie (#604)", () => {
 
   test("l'analyse ne se fie pas au raisonnement pour produire la réponse", () => {
     // Une réponse vide ou tronquée reste une ERREUR nommée, jamais un succès.
-    expect(data).toContain("Réponse LLM tronquée");
-    expect(data).toContain("Réponse LLM vide.");
+    // Les messages vivent dans la règle PURE de complétion (`LlmCompletion.kt`),
+    // pas dans le client : c'est elle qu'il faut lire.
+    const completion = codeOnly(readFileSync(join(DATA, "LlmCompletion.kt"), "utf8"));
+    expect(completion).toContain("Réponse LLM tronquée");
+    expect(completion).toContain("Réponse LLM vide.");
   });
 
   test("les DEUX payloads imposent une sortie JSON au fournisseur (#708)", () => {

@@ -6,9 +6,11 @@
 // et la pilote ici : les assertions portent donc sur du code EXÉCUTÉ, pas sur
 // un miroir TS.
 //
-// Trois opérations :
+// Opérations :
 //   - `budget` : les bornes du plafond (caractères, densité, tokens, corrigé) ;
 //   - `output` : la garde de sortie (`validateTextOutput`) sur un texte ;
+//   - `homeworkData` : les blocs DONNEE des libellés citables ;
+//   - `homeworkSystem` : les consignes fixes des deux chemins (texte, photo) ;
 //   - `homework` : la CHAÎNE COMPLÈTE (JSON du fournisseur → `parseJsonOutput`
 //     → `HomeworkAi.parseHomeworkResponse`), pour prouver que le corrigé
 //     maximal reste productible et accepté.
@@ -25,6 +27,8 @@ import fr.veryslopnynotes.core.HomeworkSource
 import fr.veryslopnynotes.core.JsonValue
 import fr.veryslopnynotes.core.MAX_OUTPUT_CHARS
 import fr.veryslopnynotes.core.MAX_OUTPUT_TOKENS
+import fr.veryslopnynotes.core.SYSTEM_HOMEWORK_JSON
+import fr.veryslopnynotes.core.SYSTEM_HOMEWORK_PHOTO_JSON
 import fr.veryslopnynotes.core.parseJsonOutput
 import fr.veryslopnynotes.core.parseJsonValue
 import fr.veryslopnynotes.core.stringifyJson
@@ -78,6 +82,12 @@ private fun driver(op: JsonValue.Obj): JsonValue = when (op.str("op")) {
         val blocks = HomeworkAi.homeworkData(question, sources)
         obj("blocks" to JsonValue.Arr(blocks.map { JsonValue.Str(it.value) }))
     }
+    "homeworkSystem" -> obj(
+        // Consignes fixes RÉELLEMENT envoyées au modèle : la règle de citation
+        // partagée doit être dans les DEUX entrées (texte et photo).
+        "text" to JsonValue.Str(SYSTEM_HOMEWORK_JSON),
+        "photo" to JsonValue.Str(SYSTEM_HOMEWORK_PHOTO_JSON),
+    )
     "homework" -> {
         val raw = op.str("raw") ?: throw IllegalArgumentException("pilote: raw absent")
         val labels = (op.fields["labels"] as? JsonValue.Arr)?.items
