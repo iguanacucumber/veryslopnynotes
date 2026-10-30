@@ -23,27 +23,31 @@ fun <T> untrusted(value: T): Untrusted<T> = Untrusted(value)
 const val UNTRUSTED_TAG = "UNTRUSTED_DATA"
 private val NONCE_RE = Regex("^[A-Za-z0-9_-]{16,64}$")
 
-// Motifs qui COMPOSENT un marqueur de delimitation (#373). Un contenu externe
+// Motifs qui COMPOSENT un marqueur de delimitation. Un contenu externe
 // qui les contient peut FORGER un marqueur : le modele lit alors la suite
 // comme une consigne sortie de la zone DONNEE (I6 casse).
 //   - UNTRUSTED_DATA : le nom de balise de tous les delimiteurs ;
-//   - DONNEES : le mot du marqueur de fin `--- fin DONNEES nonce="..." ---` ;
+//   - la FORME du marqueur de fin `--- fin DONNEES nonce="..." ---`, nonce
+//     inclus ou non (tout marqueur authentique en porte un, mais une donnee
+//     qui omet l'attribut ne doit pas passer pour autant) ;
 //   - nonce="..." : l'attribut qui lie un delimiteur a son nonce.
-// Les trois sont neutralises : le nonce suffirait a interdire un marqueur
-// VALIDE (tout marqueur authentique en porte un), les deux autres font
-// qu'aucune suite de caracteres ne ressemble meme a un delimiteur.
+// Les trois sont neutralises : aucune suite de caracteres ne ressemble meme
+// a un delimiteur.
 private val MARKER_TAG_RE = Regex(UNTRUSTED_TAG, RegexOption.IGNORE_CASE)
-private val MARKER_END_RE = Regex("DONNEES", RegexOption.IGNORE_CASE)
+private val MARKER_END_RE = Regex(
+    "---\\s*fin\\s+donnees(?:\\s+nonce\\s*=\\s*(\"[^\"]*\"|'[^']*'))?\\s*---",
+    RegexOption.IGNORE_CASE,
+)
 private val MARKER_NONCE_RE = Regex("nonce\\s*=\\s*(\"[^\"]*\"|'[^']*')", RegexOption.IGNORE_CASE)
 
-// Neutralise les marqueurs dans une donnee externe (#373).
+// Neutralise les marqueurs dans une donnee externe.
 //
-// Regle volontairement CIBLEE : seuls les trois mots-cles ci-dessus sont
-// touches, et chaque occurrence est remplacee par UNE espace. Un cours de
-// maths qui parle de "jeu de donnees" (mot accentue, minuscule) n'est PAS
-// touche : le marqueur est l'ASCII MAJUSCULE, sans accent. La donnee reste
-// lisible. Effacer le contenu ou le noyer de bruit le massacrerait pour un
-// risque qui n'existe pas : seuls les mots-cles sautent, pas les phrases.
+// Regle volontairement CIBLEE sur la FORME du delimiteur, jamais sur un mot
+// isole : "donnees" est un mot courant en NSI (structures de donnees, base
+// de donnees, libelle de cours), et l'effacer rend la donnee illisible : le
+// modele cite alors un libelle corrompu, que la validation rejette. Chaque
+// occurrence d'un motif est remplacee par UNE espace ; le reste de la phrase
+// est intact.
 private fun neutralizeMarkers(raw: String): String {
     var out = MARKER_TAG_RE.replace(raw, " ")
     out = MARKER_END_RE.replace(out, " ")

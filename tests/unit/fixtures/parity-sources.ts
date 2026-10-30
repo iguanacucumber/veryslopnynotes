@@ -140,6 +140,10 @@ export const PRODUCTION_SOURCES: string[] = [
   join(DATA, "AttachmentText.kt"),
   // `ClientQueue.kt` : LA file PARTAGÉE du client local (#403) — c'est elle
   // qui sérialise les lectures de l'interface ET celles du job de fond.
+  // `data/LlmTransport.kt` : les deux règles PURES de l'appel au fournisseur
+  // LLM (corps lu BORNÉ, panne de transport classée délai ≠ réseau). Fichier
+  // `java.*` seul : le harnais l'EXÉCUTE, sans réseau ni OkHttp.
+  join(DATA, "LlmTransport.kt"),
   join(DATA, "ClientQueue.kt"),
   // `data` — le signal « session morte » et sa RÉPARATION (#397) : le rejet
   // invalide la session ET purge le cache. Fichiers PURS (aucun import
@@ -160,6 +164,11 @@ export const PRODUCTION_SOURCES: string[] = [
   // hors Gradle ; l'appel Keystore lui-même ne l'est pas, il reste dans le
   // `catch` des stores (un source guard le vérifie).
   join(DATA, "StoreHealth.kt"),
+  // `data/LlmKeyFallback.kt` : le contrat de la clé LLM et son repli mémoire
+  // (I18). Pur : le harnais EXÉCUTE « Oublier » en mode dégradé (la clé
+  // ne doit pas ressusciter au lancement suivant). L'accès Keystore reste dans
+  // `LlmKeyStore.kt`, hors Gradle.
+  join(DATA, "LlmKeyFallback.kt"),
   // `SessionFailure.kt` : la décision « session morte » du job de fond, Pure
   // (déménagée de `PronotePayloads.kt`, qui lit `org.json` et ne compile
   // donc pas hors Gradle).

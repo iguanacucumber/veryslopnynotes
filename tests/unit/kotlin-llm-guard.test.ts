@@ -77,6 +77,24 @@ const FAKE_COOKIE = ["Cookie: sessionid=", "aB3dE5fG7hJ9kL1mN3pQ5rS7"].join("");
 const FAKE_OPAQUE = "aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3z5A7b9C1d3E5f7G9h1J3k5L7m9N0p2Q4r";
 
 /**
+ * Contenu EMBARQUÉ d'un cours HTML/NSI : le base64 d'une image a la FORME
+ * d'une chaîne opaque (trois classes, entropie haute) mais c'est une donnée.
+ */
+const FAKE_IMAGE_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAYAAAByDd+UAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJ";
+const DATA_URI_IMAGE = '<img src="data:image/png;base64,' + FAKE_IMAGE_BASE64 + '">';
+
+/** Caractères de FORMAT Unicode, invisibles : ils coupent une forme contiguë. */
+const ZWSP = "\u200B";
+const ZWNJ = "\u200C";
+
+/** JWT court : aucun segment n'atteint 40 caractères (donc pas d'OPAQUE). */
+const FAKE_SHORT_JWT = [
+  ["ey", "JhbGciOiJIUzI1NiJ9"].join(""),
+  ["ey", "JzdWIiOiIxMjM0NTY3ODkwIn0"].join(""),
+  "c2lnbmF0dXJlMTIzNDU2Nzg5MA",
+].join(".");
+
+/**
  * Contenus LÉGITIMES : un cours, une question d'élève, un exemple de shell.
  *
  * Aucun n'a la FORME d'un secret : ils doivent tous passer.
@@ -203,6 +221,73 @@ describe("garde I4 : des FORMES de secret, pas des mots (#409)", () => {
     expect(r.kind).toBe("JWT");
     // Une sortie normale passe.
     expect((await ask("output", "Voici la correction : 3x = 6, donc x = 2.")).ok).toBe(true);
+  });
+});
+
+describe("le contenu embarqué et les caractères invisibles (I4)", () => {
+  test.skipIf(skip)("une image de cours en data: URI est acceptée", async () => {
+    // Faux positif vécu : le base64 d'une image a la forme d'une chaîne
+    // opaque, l'élève était invité à retirer un secret qu'il n'avait pas.
+    const r = await ask("prompt", DATA_URI_IMAGE);
+    expect(r.error).toBeUndefined();
+    expect(r.ok).toBe(true);
+    // Le marqueur se lit sans tenir compte de la casse.
+    const majuscules = await ask("prompt", '<img src="data:image/png;BASE64,' + FAKE_IMAGE_BASE64 + '">');
+    expect(majuscules.ok).toBe(true);
+  });
+
+  test.skipIf(skip)("un opaque arbitraire après data:...;base64, reste refusé", async () => {
+    // `data:` n'est pas un laissez-passer : sans signature de format connu,
+    // le run garde la forme d'un identifiant secret.
+    const r = await ask("prompt", '<img src="data:image/png;base64,' + FAKE_OPAQUE + '">');
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("OPAQUE");
+  });
+
+  test.skipIf(skip)("le même base64 hors data: URI reste refusé", async () => {
+    // L'exemption tient au CONTEXTE (`data:` + `base64,`), pas au contenu :
+    // un identifiant opaque collé seul reste un secret.
+    const r = await ask("prompt", FAKE_IMAGE_BASE64);
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("OPAQUE");
+  });
+
+  test.skipIf(skip)("un en-tête d'autorisation coupé par un invisible est refusé", async () => {
+    // Jeton court : sans cela `RE_OPAQUE` verrait le jeton seul (≥ 40) et le
+    // verdict serait OPAQUE, pas AUTHORIZATION.
+    const r = await ask("prompt", "Authorization: Bear" + ZWSP + "er " + "aB3dE5fG7hJ9kL1mN3pQ5rS7");
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("AUTHORIZATION");
+  });
+
+  test.skipIf(skip)("une clé de préfixe connu coupée par un invisible est refusée", async () => {
+    const r = await ask("prompt", "ma clé c'est " + KEY_PREFIX + ZWSP + FAKE_KEY.slice(KEY_PREFIX.length));
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("API_KEY");
+  });
+
+  test.skipIf(skip)("une affectation sensible coupée par un invisible est refusée", async () => {
+    // L'invisible est DANS le nom : le brut ne voit pas de variable sensible,
+    // la copie normalisée si.
+    const r = await ask("prompt", "PRONOTE_PASS" + ZWSP + "WORD=" + "aB3dE5fG7hJ9kL1mN3pQ5rS7");
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("ENV_ASSIGN");
+  });
+
+  test.skipIf(skip)("un JWT coupé par un invisible est refusé (prompt et sortie)", async () => {
+    const pieces = FAKE_SHORT_JWT.split(".");
+    const casse = [pieces[0], pieces[1] + ZWNJ, pieces[2]].join(".");
+    const r = await ask("prompt", "mon jeton : " + casse);
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("JWT");
+    const out = await ask("output", "Voici ton jeton : " + casse);
+    expect(out.ok).toBe(false);
+    expect(out.kind).toBe("JWT");
+  });
+
+  test.skipIf(skip)("un invisible dans un texte anodin ne déclenche rien", async () => {
+    const r = await ask("prompt", "Bonjour" + ZWSP + ", explique la photosynthèse.");
+    expect(r.ok).toBe(true);
   });
 });
 

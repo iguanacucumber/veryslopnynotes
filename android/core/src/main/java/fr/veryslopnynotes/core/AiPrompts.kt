@@ -36,6 +36,31 @@ const val SYSTEM_CITATION_RULE =
         "sans recopier le preambule « Libelle citable : ». " +
         "Ne fabrique jamais une source. "
 
+/**
+ * Préambule d'un bloc citable. Le modèle le recopie parfois dans `sources`
+ * (recette live) : sans normalisation, une réponse pourtant sourcée est jetée.
+ */
+private val CITABLE_PREAMBLE = Regex("""^Libelle\s+citable\s*:\s*""", RegexOption.IGNORE_CASE)
+
+/**
+ * Libellé comparable d'une citation : espaces de bord retirés, puis UN
+ * préambule « Libelle citable : » retiré s'il ouvre la citation. Le préambule
+ * est reconnu sans tenir compte de la casse ni du nombre d'espaces internes
+ * (« Libelle  citable: »). Seul le préambule est retiré : le libellé reste
+ * comparé à l'identique, casse et accents compris.
+ *
+ * Rend `null` pour une citation vide ou réduite au seul préambule : jamais un
+ * libellé accepté par accident. Un libellé FOURNI qui commence lui-même par le
+ * préambule reste intact.
+ */
+internal fun canonicalCitedLabel(raw: String, allowedLabels: Set<String>): String? {
+    val cited = raw.trim()
+    if (cited.isEmpty()) return null
+    if (allowedLabels.contains(cited)) return cited
+    val match = CITABLE_PREAMBLE.find(cited) ?: return cited
+    return cited.substring(match.range.last + 1).trim().ifEmpty { null }
+}
+
 // rawDocs = bruts externes (cours, enonces, manuels). Marques Untrusted ici,
 // delimiteurs nonce via buildSafePrompt. nonce optionnel pour tests (rejeu).
 fun buildRevisionPrompt(rawDocs: List<String>, nonce: String? = null): SafePrompt {

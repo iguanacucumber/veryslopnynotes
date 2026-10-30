@@ -38,9 +38,11 @@ data class ManualDoc(
 }
 
 /**
- * Une adresse + des extraits, dans des préférences PROPRES (comme le serveur,
- * elles survivent à une déconnexion : ce sont des réglages, pas des données
- * de compte).
+ * Une adresse + des extraits, dans des préférences PROPRES (comme le serveur).
+ *
+ * Les RÉGLAGES d'usage (invitation déjà vue) survivent à une déconnexion ; le
+ * CONTENU (adresse, extraits, classe, matières), lui, est la donnée d'UN compte
+ * et part avec lui (I16) : [clearAccountData].
  */
 class ManualStore(context: Context) {
     private val prefs: SharedPreferences? = try {
@@ -180,6 +182,33 @@ class ManualStore(context: Context) {
                 ?.remove(KEY_SUBJECTS)
                 ?.remove(KEY_DISABLED_SUBJECTS)
                 ?.putBoolean(KEY_PROMPT_SEEN, true)
+                ?.apply()
+        } catch (_: Exception) {
+            // Préfs indisponibles : rien n'était de toute façon lisible.
+        }
+    }
+
+    /**
+     * Purge de COMPTE (I16) : déconnexion, session morte, appairage d'un AUTRE
+     * compte. Tout ce qui décrit le compte précédent part — adresse du manuel,
+     * extraits récupérés (qui citent son livre), classe, matières vues et
+     * matières désactivées.
+     *
+     * Sans elle, le compte B recevait le manuel, la classe et les extraits du
+     * compte A dans `aiContextFor` / `manualDocFor`.
+     *
+     * `prompt_seen` RESTE : c'est un réglage d'interface (une invitation déjà
+     * montrée), jamais une donnée du compte — et un rappel intempestif à chaque
+     * bascule serait un défaut.
+     */
+    fun clearAccountData() {
+        try {
+            prefs?.edit()
+                ?.remove(KEY_URL)
+                ?.remove(KEY_DOCS)
+                ?.remove(KEY_CLASS_LABEL)
+                ?.remove(KEY_SUBJECTS)
+                ?.remove(KEY_DISABLED_SUBJECTS)
                 ?.apply()
         } catch (_: Exception) {
             // Préfs indisponibles : rien n'était de toute façon lisible.

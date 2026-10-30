@@ -93,11 +93,15 @@ private fun driver(op: JsonValue.Obj): JsonValue = when (op.str("op")) {
                     "answerChars" to JsonValue.Num(outcome.answer.length.toDouble()),
                     "steps" to JsonValue.Num(outcome.steps.size.toDouble()),
                     "sources" to JsonValue.Num(outcome.sources.size.toDouble()),
+                    // Libellés CANONIQUES rendus par le port : la parité vérifie
+                    // qu'une citation préfixée est bien ramenée au libellé fourni.
+                    "cited" to JsonValue.Arr(outcome.sources.map { JsonValue.Str(it) }),
                 )
                 is HomeworkOutcome.Refused -> obj(
                     "ok" to JsonValue.Bool(true),
                     "status" to JsonValue.Str("refused"),
                     "reason" to JsonValue.Str(outcome.reason),
+                    "cited" to JsonValue.Arr(outcome.sources.map { JsonValue.Str(it) }),
                 )
             }
         } catch (e: Exception) {

@@ -416,6 +416,61 @@ describe("web tâches — navigation de semaine", () => {
     expect(assignmentsInWeek(items, "illisible")).toEqual([]);
   });
 
+  test("la fenêtre de semaine est en jours de PARIS, pas en millisecondes UTC (#749)", () => {
+    // Le natif publie un INSTANT : lundi 00:00 Paris = dimanche 22:00 UTC.
+    // Des bornes UTC rangeaient ce devoir dans la semaine PRÉCÉDENTE (bug).
+    const items = parseAssignmentsPayload(
+      payload([
+        {
+          ...VALID,
+          id: "monday-midnight",
+          dueDate: "2026-10-19T00:00:00+02:00",
+        },
+        {
+          ...VALID,
+          id: "sunday-late",
+          dueDate: "2026-10-25T23:30:00+01:00",
+        },
+        {
+          ...VALID,
+          id: "next-monday-early",
+          dueDate: "2026-10-26T00:30:00+01:00",
+        },
+      ]),
+    ).items;
+    expect(assignmentsInWeek(items, "2026-10-19").map((item) => item.id)).toEqual([
+      "monday-midnight",
+      "sunday-late",
+    ]);
+    expect(assignmentsInWeek(items, "2026-10-12").map((item) => item.id)).toEqual([]);
+    // Lundi 00:30 Paris appartient à la semaine SUIVANTE.
+    expect(assignmentsInWeek(items, "2026-10-26").map((item) => item.id)).toEqual([
+      "next-monday-early",
+    ]);
+  });
+
+  test("une semaine de changement d'heure garde ses bornes (167/169 h, #749)", () => {
+    // 25 octobre 2026 : passage à l'heure d'hiver. La semaine 19→25 dure 169 h :
+    // une fenêtre fixe de 7 × 24 h décalerait la borne.
+    const items = parseAssignmentsPayload(
+      payload([
+        { ...VALID, id: "sun-evening", dueDate: "2026-10-25T23:59:00+01:00" },
+        { ...VALID, id: "mon-early", dueDate: "2026-10-26T00:01:00+01:00" },
+      ]),
+    ).items;
+    expect(assignmentsInWeek(items, "2026-10-19").map((item) => item.id)).toEqual(["sun-evening"]);
+    expect(assignmentsInWeek(items, "2026-10-26").map((item) => item.id)).toEqual(["mon-early"]);
+    // La semaine de printemps (29 mars 2026, 167 h) reste bornée pareil.
+    const spring = parseAssignmentsPayload(
+      payload([
+        { ...VALID, id: "sun", dueDate: "2026-03-29T23:30:00+02:00" },
+        { ...VALID, id: "mon", dueDate: "2026-03-30T00:30:00+02:00" },
+      ]),
+    ).items;
+    expect(assignmentsInWeek(spring, "2026-03-23").map((item) => item.id)).toEqual(["sun"]);
+    expect(assignmentsInWeek(spring, "2026-03-30").map((item) => item.id)).toEqual(["mon"]);
+  });
+
   test("la navigation est rendue même sans weekStart dans le payload", () => {
     const source = readFileSync(
       join(import.meta.dir, "..", "..", "web", "src", "features", "tasks", "TasksScreen.tsx"),

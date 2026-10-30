@@ -53,11 +53,14 @@ describe("devoirs — photo d'énoncé (#588)", () => {
     expect(tasks).toContain("Choisir une image");
     // Plus de pastille « Galerie » concurrente : un seul bouton photo.
     expect(tasks).not.toContain("Galerie");
-    expect(tasks).toContain("const photoOff = assistantDisabled || revisionBusy");
+    expect(tasks).toContain("const { textOff, photoOff, sheetOff } = cardActionFlags(");
     expect(tasks).toContain("Photographie l’énoncé ci-dessus");
     expect(tasks).toContain("La photo est supprimée après lecture");
-    // Le texte reste bloqué sans source ; la photo a sa propre condition.
-    expect(tasks).toContain("const textOff = assistantDisabled || !hasMaterial");
+    // Le texte reste bloqué sans source ; la photo a sa propre condition
+    // (`assistantDisabled` seul : elle ne dépend ni du manuel ni du cahier).
+    expect(source("features/tasks/actions.ts")).toContain(
+      "state.assistantDisabled || !state.hasMaterial",
+    );
   });
 
   test("un seul bouton photo ouvre le dialogue de source (#610)", () => {

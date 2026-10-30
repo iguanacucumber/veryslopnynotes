@@ -71,6 +71,29 @@ function pdf(body: string, pages = 1): string {
   return `%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n2 0 obj << /Type /Pages /Count ${pages} >> endobj\n${pageObjects}${streams}%%EOF\n`;
 }
 
+/**
+ * PDF à trois pages de texte séparées par [images] flux IMAGE : de quoi
+ * atteindre `MAX_PDF_STREAMS` avant la dernière page.
+ */
+function pdfWithImages(first: string, images: number, last: string): string {
+  const objects = [
+    "1 0 obj << /Type /Catalog >> endobj",
+    "2 0 obj << /Type /Pages /Count 3 >> endobj",
+    "3 0 obj << /Type /Page /Parent 2 0 R /Contents 4 0 R >> endobj",
+    `4 0 obj << /Length ${first.length} >>\nstream\n${first}\nendstream\nendobj`,
+  ];
+  for (let i = 0; i < images; i += 1) {
+    objects.push(
+      `${5 + i} 0 obj << /Type /XObject /Subtype /Image /Width 1 /Height 1 /Length 4 >>\n` +
+        "stream\nXXXX\nendstream\nendobj",
+    );
+  }
+  objects.push(
+    `${5 + images} 0 obj << /Length ${last.length} >>\nstream\n${last}\nendstream\nendobj`,
+  );
+  return `%PDF-1.4\n${objects.join("\n")}\n%%EOF\n`;
+}
+
 describe("extraction locale d'une pièce jointe (#631)", () => {
   test.skipIf(skip)("les bornes déclarées sont celles du cache et de l'assembleur", async () => {
     const limits = await ask<{
@@ -119,10 +142,12 @@ describe("extraction locale d'une pièce jointe (#631)", () => {
       name: "consigne.html",
       // mimeOf neutralise text/html en text/plain : l'extension décide ici.
       mime: "text/plain",
+      // Une balise DÉCODÉE (`&lt;script&gt;`) reste du texte, jamais relue
+      // comme du balisage : voir le test des entités mathématiques.
       text:
         '<html><head><style>p{color:red}</style><script>alert("x")</script></head>' +
         "<body><h1>DM&nbsp;3</h1><p>Lire &amp; r&eacute;sumer.</p><img src=x onerror=alert(1)>" +
-        "&lt;script&gt;alert(2)&lt;/script&gt;</body></html>",
+        "</body></html>",
     });
     expect(out.kind).toBe("readable");
     if (out.kind !== "readable") return;
@@ -133,6 +158,61 @@ describe("extraction locale d'une pièce jointe (#631)", () => {
     expect(out.text).not.toContain(">");
     expect(out.text).not.toContain("alert");
     expect(out.text).not.toContain("onerror");
+  });
+
+  test.skipIf(skip)("les entités mathématiques restent du TEXTE, jamais des balises", async () => {
+    // Régression : décoder AVANT de retirer les balises faisait de
+    // `< 3 et y >` une balise, et « Résoudre x &lt; 3 et y &gt; 2. » devenait
+    // « Résoudre x   2. ».
+    const out = await ask<Extracted>({
+      op: "extract",
+      name: "maths.html",
+      mime: "text/plain",
+      text: "<p>Résoudre x &lt; 3 et y &gt; 2.</p>",
+    });
+    expect(out.kind).toBe("readable");
+    if (out.kind !== "readable") return;
+    expect(out.text).toContain("x < 3 et y > 2");
+    expect(out.text).toContain("Résoudre");
+  });
+
+  test.skipIf(skip)("un HTML malformé reste LINÉAIRE (pas de balayage par `<`)", async () => {
+    // 56 Ko de `<script` sans `>` : une entrée pareille prenait ~16 s quand
+    // chaque `<` déclenchait un balayage jusqu'à la fin.
+    const started = performance.now();
+    const out = await ask<Extracted>({
+      op: "extract",
+      name: "casse.html",
+      mime: "text/plain",
+      text: "<script".repeat(8000),
+    });
+    const elapsed = performance.now() - started;
+    expect(out.kind).toBe("readable");
+    if (out.kind !== "readable") return;
+    // Une entrée bornée, et un délai LARGE : on prouve l'ordre de grandeur,
+    // pas la milliseconde (aucun test serré sur une machine chargée).
+    expect(out.truncated).toBe(true);
+    expect(elapsed).toBeLessThan(5000);
+  });
+
+  test.skipIf(skip)("un .mhtml / .hta passe par la désinfection HTML", async () => {
+    // `AttachmentMime` sert ces extensions en text/plain : sans cette route,
+    // `<script>` arrivait brut dans l'invite (I6/I35).
+    for (const name of ["page.mhtml", "page.mht", "page.hta"]) {
+      const out = await ask<Extracted>({
+        op: "extract",
+        name,
+        mime: "text/plain",
+        text:
+          'Content-Type: multipart/related; boundary="x"\n\n--x\nContent-Type: text/html\n\n' +
+          "<html><script>alert(1)</script><p>Consigne&nbsp;: lire.</p></html>\n--x--",
+      });
+      expect(out.kind).toBe("readable");
+      if (out.kind !== "readable") return;
+      expect(out.text).toContain("Consigne");
+      expect(out.text).not.toContain("<");
+      expect(out.text).not.toContain("alert");
+    }
   });
 
   test.skipIf(skip)("un texte sans extension mais lisible reste lu", async () => {
@@ -206,6 +286,22 @@ describe("extraction locale d'une pièce jointe (#631)", () => {
     if (out.kind !== "unreadable") return;
     expect(out.reason).toBe("pdf_sans_texte");
     expect(out.message).toContain("OCR");
+  });
+
+  test.skipIf(skip)("un PDF coupé par la borne de FLUX est SIGNALÉ tronqué", async () => {
+    // Page 1 lue, 200 flux image, puis page 3 : `MAX_PDF_STREAMS` est atteint
+    // avant la dernière page. Sauter sans le dire ferait passer une extraction
+    // partielle pour complète (I35).
+    const out = await ask<Extracted>({
+      op: "extract",
+      name: "balaye.pdf",
+      mime: "application/pdf",
+      text: pdfWithImages("BT (Page un texte) Tj ET", 200, "BT (Page trois texte) Tj ET"),
+    });
+    expect(out.kind).toBe("readable");
+    if (out.kind !== "readable") return;
+    expect(out.text).toContain("Page un");
+    expect(out.truncated).toBe(true);
   });
 
   test.skipIf(skip)("les coupes de CARACTÈRES et de PAGES sont signalées", async () => {

@@ -126,6 +126,10 @@ describe("photo de cours — garde d'image exécutée (#587)", () => {
     const capture = readFileSync(join(APP, "PhotoCapture.kt"), "utf8");
     expect(capture).toContain("cacheDir, \"photos\"");
     expect(capture).toContain("MAX_GALLERY_BYTES");
+    // #749 : la déconnexion supprime `cacheDir/photos` ; le `lazy` ne repasse
+    // jamais, donc chaque entrée refait le dossier (sinon photo muette
+    // jusqu'au redémarrage du process).
+    expect(capture.match(/dir\.mkdirs\(\)/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     const bridge = readBridgeSource();
     expect(bridge).toContain("PhotoPrep.prepare(shot.file)");
     expect(bridge).toContain("photos.discard(shot.file)");

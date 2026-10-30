@@ -11,11 +11,12 @@
   TYPE et code `G`, jamais un mot. Purge, invalidation et bascule
   sont atomiques et ORDONNÉES : la purge précède la publication, une écriture en
   vol est abandonnée. `offline/` ne contient que de la donnée de compte ; la
-  déconnexion l'efface. Téléchargements : nom portant l'ID, bornés et purgés
+  déconnexion l'efface. Téléchargements : nom portant l'ID, bornés, purgés
   avec lui. Identité inconnue : purge.
 - Test : `tests/unit/kotlin-cache-scope.test.ts`,
   `tests/unit/kotlin-cache-epoch.test.ts`,
   `tests/unit/kotlin-offline-artifacts.test.ts`,
+  `tests/unit/kotlin-manual-account-purge.test.ts`,
   `tests/unit/kotlin-session-repair.test.ts`,
   `tests/architecture/session-repair.test.ts`,
   `tests/unit/kotlin-sync-worker.test.ts`,
@@ -39,10 +40,12 @@
 
 ## I18 — L'échec du Keystore est un ÉTAT, pas un silence
 - Invariant : Keystore indisponible → repli MÉMOIRE, jamais de secret en clair, mais le repli est SIGNALÉ : état `UNAVAILABLE` marqué (`SecureStorage`), publié par le pont (`session.status` / `session.restore`, champ `storage`), affiché par l'interface. Les stores ne journalisent jamais (jeton et clé) : le journal est dans le pont, borné, sans secret ni chemin.
-- Test : `tests/unit/kotlin-store-health.test.ts` + `tests/web/session.test.ts`.
+- Test : `tests/unit/kotlin-store-health.test.ts`,
+  `tests/unit/kotlin-llm-key-fallback.test.ts` + `tests/web/session.test.ts`.
 - Commande : `make check`.
 - Emplacement : `android/data/StoreHealth.kt`, `android/data/SessionStore.kt`,
-  `android/data/LlmKeyStore.kt`, `android/app/VsnBridge.kt`,
+  `android/data/LlmKeyStore.kt`, `android/data/LlmKeyFallback.kt`,
+  `android/app/VsnBridge.kt`,
   `web/src/lib/session.ts`, `web/src/ui/AppContext.tsx`.
 
 <a id="i19"></a>

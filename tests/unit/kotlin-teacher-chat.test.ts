@@ -146,6 +146,47 @@ describe("professeur IA — sortie validée (#633)", () => {
     expect(res.sources).toEqual([]);
   });
 
+  test.skipIf(skip)("une citation préfixée est ramenée au libellé fourni", async () => {
+    // Recette live : le modèle recopie la ligne « Libelle citable : X », avec
+    // une casse et des espaces variables. Le préambule est un artefact du
+    // prompt, pas une source inventée.
+    const res = await ask<Parsed>({
+      op: "parse",
+      text: JSON.stringify({
+        answer: "Observe d'abord l'angle droit.",
+        sources: ["  libelle   citable: Cours : chapitre 4  "],
+      }),
+      allowed: ALLOWED,
+    });
+    expect(res.ok).toBe(true);
+    expect(res.sources).toEqual(["Cours : chapitre 4"]);
+    expect(res.unsourced).toBe(false);
+  });
+
+  test.skipIf(skip)("le libellé reste comparé à l'identique (casse, accents)", async () => {
+    const res = await ask<Parsed>({
+      op: "parse",
+      text: JSON.stringify({
+        answer: "Voir le cours.",
+        sources: ["Libelle citable : cours : chapitre 4"],
+      }),
+      allowed: ALLOWED,
+    }, true);
+    expect(res.ok).toBeUndefined();
+    expect(res.message).toContain("source non fournie");
+  });
+
+  test.skipIf(skip)("un préambule seul ou une citation vide est refusé", async () => {
+    for (const sources of [["Libelle citable :"], ["Libelle citable :   "], [""], ["   "]]) {
+      const res = await ask<Parsed>(
+        { op: "parse", text: JSON.stringify({ answer: "Voir le cours.", sources }), allowed: ALLOWED },
+        true,
+      );
+      expect({ sources, ok: res.ok }).toEqual({ sources, ok: undefined });
+      expect(res.message).toContain("schema");
+    }
+  });
+
   test.skipIf(skip)("une source INVENTÉE est refusée (I5)", async () => {
     const res = await ask<Parsed>({
       op: "parse",

@@ -12,6 +12,7 @@ import {
 } from "../../shared/contracts/api";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { readBridgeSource } from "./fixtures/bridge-source";
+import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 
 // Miroir des helpers Kotlin de l'assistant devoirs (0.7.0) — ils doivent rester
 // en sync : core/Homework.kt, data/HomeworkRepository.kt. Le pont WebView
@@ -20,6 +21,13 @@ import { readBridgeSource } from "./fixtures/bridge-source";
 // ces miroirs sont le seul filet sur la logique pure (bornes, citations, refus).
 
 const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/veryslopnynotes/data");
+
+// VRAI Kotlin exécuté : `core/HomeworkAi.kt` est compilé par le harnais et
+// piloté par `agents/runtime/kotlin-parity/LlmBudgetMain.kt` (op `homework`).
+const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "LlmBudgetMain.kt");
+const skip = parityToolchain.skipReason !== null;
+let link: ParityLink | null = null;
+if (!skip) link = await parityToolchain.openParityLink(DRIVER);
 
 const src = (dir: string, file: string) => readFileSync(join(dir, file), "utf8");
 
@@ -91,6 +99,21 @@ function strings(raw: unknown): string[] {
   return raw.filter((s): s is string => typeof s === "string" && s.trim().length > 0);
 }
 
+// Miroir de `canonicalCitedLabel` (core/AiPrompts.kt) : espaces de bord, puis
+// UN préambule « Libelle citable : », casse et espaces internes libres. Le
+// libellé lui-même reste comparé à l'identique.
+const CITABLE_PREAMBLE = /^Libelle\s+citable\s*:\s*/i;
+
+function tsCanonicalCitedLabel(cited: string, allowedLabels: string[]): string | null {
+  const trimmed = cited.trim();
+  if (trimmed.length === 0) return null;
+  if (allowedLabels.includes(trimmed)) return trimmed;
+  const match = CITABLE_PREAMBLE.exec(trimmed);
+  if (!match) return trimmed;
+  const label = trimmed.slice(match[0].length).trim();
+  return label.length === 0 ? null : label;
+}
+
 type Outcome =
   | { status: "ok"; answer: string; steps: string[]; sources: string[] }
   | { status: "refused"; reason: string; sources: string[] };
@@ -101,17 +124,30 @@ function tsParse(body: unknown, allowedLabels: string[]): Outcome | null {
   if (r["status"] === "ok") {
     const answer = typeof r["answer"] === "string" ? r["answer"].trim() : "";
     const steps = strings(r["steps"]);
-    const sources = strings(r["sources"]);
+    const raw = strings(r["sources"]);
     if (answer.length === 0 || answer.length > HOMEWORK_MAX_ANSWER_CHARS) return null;
-    if (sources.length === 0) return null;
-    // Citation hors étiquettes fournies = réponse inventée : on jette tout.
-    if (!sources.every((s) => allowedLabels.includes(s))) return null;
+    if (raw.length === 0) return null;
+    const sources: string[] = [];
+    for (const cited of raw) {
+      const label = tsCanonicalCitedLabel(cited, allowedLabels);
+      // Citation vide, réduite au préambule, ou hors étiquettes = réponse
+      // inventée : on jette tout.
+      if (label === null || !allowedLabels.includes(label)) return null;
+      sources.push(label);
+    }
     return { status: "ok", answer, steps, sources };
   }
   if (r["status"] === "refused") {
     const reason = typeof r["reason"] === "string" ? r["reason"].trim() : "";
     if (reason.length === 0) return null;
-    return { status: "refused", reason, sources: strings(r["sources"]) };
+    const cited = strings(r["sources"]);
+    const sources: string[] = [];
+    for (const item of cited) {
+      const label = tsCanonicalCitedLabel(item, allowedLabels);
+      if (label === null) return null;
+      sources.push(label);
+    }
+    return { status: "refused", reason, sources };
   }
   return null;
 }
@@ -169,6 +205,104 @@ describe("android homework — client de /v1/homework/generate (0.7.0)", () => {
     expect(tsParse({ status: "unknown" }, labels)).toBeNull();
     expect(tsParse(null, labels)).toBeNull();
   });
+
+  test("parse : le préambule « Libelle citable : » est retiré avant comparaison", () => {
+    const labels = tsUniqueLabels(tsSourcesFor(assignment));
+    const exact = tsParse({ status: "ok", answer: "a", steps: [], sources: ["Consigne"] }, labels);
+    expect(exact?.status).toBe("ok");
+    const prefixed = tsParse(
+      { status: "ok", answer: "a", steps: [], sources: ["  Libelle  citable: Cours : Chapitre 4  "] },
+      labels,
+    );
+    expect(prefixed).toEqual({ status: "ok", answer: "a", steps: [], sources: ["Cours : Chapitre 4"] });
+    // Le libellé reste comparé tel quel : casse et accents ne sont pas repliés.
+    expect(
+      tsParse({ status: "ok", answer: "a", steps: [], sources: ["Libelle citable : cours : chapitre 4"] }, labels),
+    ).toBeNull();
+    // Préambule seul ou citation vide : jamais un libellé accepté par accident.
+    expect(tsParse({ status: "ok", answer: "a", steps: [], sources: ["Libelle citable :"] }, labels)).toBeNull();
+    expect(tsParse({ status: "ok", answer: "a", steps: [], sources: [" "] }, labels)).toBeNull();
+  });
+});
+
+type HomeworkParse = {
+  ok?: boolean;
+  status?: string;
+  cited?: string[];
+  error?: string;
+  message?: string;
+};
+
+async function parseHomework(body: unknown, labels: string[]): Promise<HomeworkParse> {
+  return JSON.parse(
+    await link!.ask({ op: "homework", raw: JSON.stringify(body), labels }, { allowError: true }),
+  ) as HomeworkParse;
+}
+
+describe("android homework — citations préfixées (vrai Kotlin)", () => {
+  const LABELS = ["Consigne", "Cours : Mitose"];
+
+  test.skipIf(skip)("une citation préfixée est ramenée au libellé fourni", async () => {
+    const r = await parseHomework({
+      status: "ok",
+      answer: "La mitose se déroule en quatre phases.",
+      steps: ["lire le cours"],
+      sources: [" Libelle  citable: Cours : Mitose "],
+    }, LABELS);
+    expect(r.ok).toBe(true);
+    expect(r.status).toBe("ok");
+    expect(r.cited).toEqual(["Cours : Mitose"]);
+  });
+
+  test.skipIf(skip)("une citation exacte reste acceptée", async () => {
+    const r = await parseHomework({
+      status: "ok",
+      answer: "La mitose se déroule en quatre phases.",
+      steps: ["lire le cours"],
+      sources: ["Cours : Mitose"],
+    }, LABELS);
+    expect(r.ok).toBe(true);
+    expect(r.cited).toEqual(["Cours : Mitose"]);
+  });
+
+  test.skipIf(skip)("un libellé inconnu reste rejeté, préfixe ou pas", async () => {
+    for (const sources of [["Cours : Autre"], ["Libelle citable : Cours : Autre"]]) {
+      const r = await parseHomework(
+        { status: "ok", answer: "a", steps: [], sources },
+        LABELS,
+      );
+      expect({ sources, ok: r.ok, message: r.message }).toEqual({
+        sources,
+        ok: false,
+        message: "réponse devoirs invalide (source non fournie)",
+      });
+    }
+  });
+
+  test.skipIf(skip)("un préambule seul ou une citation vide est rejeté", async () => {
+    for (const sources of [["Libelle citable :"], ["Libelle citable :   "], [""]]) {
+      const r = await parseHomework({ status: "ok", answer: "a", steps: [], sources }, LABELS);
+      expect({ sources, ok: r.ok }).toEqual({ sources, ok: false });
+      expect(r.message).toContain("schéma");
+    }
+  });
+
+  test.skipIf(skip)("le refus applique la même normalisation", async () => {
+    const prefixed = await parseHomework({
+      status: "refused",
+      reason: "sources_insuffisantes",
+      sources: ["libelle citable : Consigne"],
+    }, LABELS);
+    expect(prefixed.ok).toBe(true);
+    expect(prefixed.status).toBe("refused");
+    expect(prefixed.cited).toEqual(["Consigne"]);
+    const empty = await parseHomework({
+      status: "refused",
+      reason: "sources_insuffisantes",
+      sources: ["Libelle citable :"],
+    }, LABELS);
+    expect(empty.ok).toBe(false);
+  });
 });
 
 describe("android homework — le credential reste dans l'app", () => {
@@ -212,9 +346,14 @@ describe("android homework — le credential reste dans l'app", () => {
     expect(sessions).toMatch(/internal fun encryptedPrefs\(context: Context, name: String\)/);
     // #206 : plus de repli en clair — un Keystore KO jette, il n'écrit pas.
     expect(sessions).not.toMatch(/MODE_PRIVATE/);
-    // Bornes de credential + messages d'erreur sans la clé.
-    expect(store).toMatch(/require\(secret\.length <= Homework\.MAX_API_KEY_CHARS\)/);
+    // Bornes de credential + messages d'erreur sans la clé. Depuis #749 le
+    // contrat et sa validation vivent dans un fichier PUR (exécuté par la
+    // parité) : une seule définition des bornes, jamais deux copies.
+    const policy = codeOnly(src(DATA, "LlmKeyFallback.kt"));
+    expect(policy).toMatch(/require\(isValidLlmKey\(secret\)\)/);
+    expect(policy).toContain("Homework.MAX_API_KEY_CHARS");
     expect(store).not.toMatch(/Log\.|println/);
+    expect(policy).not.toMatch(/Log\.|println/);
     // Un store unique pour tout le process, comme la session.
     expect(store).toMatch(/object LlmKeys/);
     expect(store).toMatch(/@Volatile/);

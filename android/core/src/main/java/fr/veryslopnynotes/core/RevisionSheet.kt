@@ -479,97 +479,129 @@ const val REVISION_PDF_TRUNCATED = "(suite tronquée)"
 /** Puces admises pour une entrée de source (« - x », « • x »…). */
 private val REVISION_SOURCE_BULLETS = charArrayOf('-', '•', '*', '–')
 
+/** Marqueur d'énumération d'une citation (« [1] x », « (1) x », « 1. x »). */
+private val REVISION_CITATION_MARKER = Regex("^(?:\\[\\d+\\]|\\(\\d+\\)|\\d+[.)])\\s*(.+)$")
+
+/** Décorations markdown retirées devant un en-tête (« > ## **Sources** »). */
+private val REVISION_HEADING_MARK = Regex("^#{1,6}(?:\\s+|$)")
+private val REVISION_QUOTE_MARK = Regex("^(?:>\\s*)+")
+private val REVISION_EMPHASIS_OPEN = Regex("^(?:\\*\\*|__)\\s*")
+private val REVISION_EMPHASIS_CLOSE = Regex("\\s*(?:\\*\\*|__)$")
+
+/** « Sources », « Sources : », « Sources : A, B » (casse libre, titre exclu). */
+private val REVISION_SOURCES_HEADING_RE = Regex("^sources\\s*(?::\\s*(.*))?$", RegexOption.IGNORE_CASE)
+
 /** La ligne est-elle une entrée de source (« - x ») ? */
 private fun isRevisionSourceEntry(line: String): Boolean {
     val t = line.trim()
     return t.length > 1 && REVISION_SOURCE_BULLETS.contains(t[0])
 }
 
-/** L'en-tête du bloc de sources ? (casse et espace avant le colon tolérés) */
-private fun isRevisionSourcesHeading(line: String): Boolean {
-    val t = line.trim().lowercase()
-    return t == REVISION_SOURCES_HEADING.lowercase() || t == "sources:"
-}
-
-/** Index de la DERNIÈRE ligne d'en-tête « Sources : », ou -1. */
-private fun revisionSourcesHeading(lines: List<String>): Int {
-    var found = -1
-    for (i in lines.indices) {
-        if (isRevisionSourcesHeading(lines[i])) found = i
+/**
+ * Ce que l'en-tête « Sources » porte SUR SA LIGNE : `""` pour un en-tête
+ * seul (« Sources », « **Sources** »), le texte restant pour une attribution
+ * en ligne (« Sources : A, B »), `null` si la ligne n'est pas un en-tête.
+ *
+ * Le modèle écrit librement : `## Sources :`, `> **Sources**`, `sources:`,
+ * `Sources`, `Sources : A, B`… On retire donc les décorations markdown
+ * successives (titres, citation, gras). Un titre ordinaire qui COMMENCE par
+ * le mot (« Sources historiques ») n'est pas un en-tête : il faut la fin de
+ * ligne ou un deux-points après « Sources ».
+ */
+private fun revisionSourcesHeadingInline(line: String): String? {
+    var s = line.trim()
+    while (true) {
+        val before = s
+        s = REVISION_HEADING_MARK.replaceFirst(s, "")
+        s = REVISION_QUOTE_MARK.replaceFirst(s, "")
+        s = REVISION_EMPHASIS_OPEN.replaceFirst(s, "")
+        s = REVISION_EMPHASIS_CLOSE.replaceFirst(s, "")
+        s = s.trim()
+        if (s == before) break
     }
-    return found
+    val m = REVISION_SOURCES_HEADING_RE.matchEntire(s) ?: return null
+    return (m.groupValues.getOrNull(1) ?: "").trim()
 }
 
-/** Fin (exclusive) du bloc « Sources : » : l'en-tête plus ses entrées à puce. */
-private fun revisionSourcesBlockEnd(lines: List<String>, heading: Int): Int {
+/**
+ * Fin (exclusive) d'un bloc de sources : la ligne d'en-tête, puis — pour un
+ * en-tête seul — les lignes jusqu'à la PREMIÈRE ligne vide.
+ *
+ * Une attribution en ligne (`Sources : A, B`) ne dure qu'une ligne. Une ligne
+ * vide TERMINE le bloc : le cours qui suit n'est jamais avalé (I15 : le corps
+ * est entier).
+ */
+private fun revisionSourcesBlockEnd(lines: List<String>, heading: Int, inline: String): Int {
+    if (inline.isNotEmpty()) return heading + 1
     var i = heading + 1
-    while (i < lines.size) {
-        val t = lines[i].trim()
-        if (t.isEmpty() || isRevisionSourceEntry(t)) {
-            i++
-            continue
-        }
-        break
-    }
+    while (i < lines.size && lines[i].trim().isNotEmpty()) i++
     return i
 }
 
-/**
- * Citations écrites par le modèle sous « Sources : » (liste vide s'il n'en a
- * pas écrit) : les entrées à puce, sans leur puce.
- */
-private fun revisionModelCitations(text: String): List<String> {
-    val lines = text.split("\n")
-    val heading = revisionSourcesHeading(lines)
-    if (heading < 0) return emptyList()
-    val end = revisionSourcesBlockEnd(lines, heading)
-    val out = mutableListOf<String>()
-    for (i in heading + 1 until end) {
-        val t = lines[i].trim()
-        if (isRevisionSourceEntry(t)) out.add(t.substring(1).trim())
+/** Blocs de sources écrits par le modèle : (index de l'en-tête, fin exclusive). */
+private fun revisionSourcesBlocks(lines: List<String>): List<Pair<Int, Int>> {
+    val out = mutableListOf<Pair<Int, Int>>()
+    var i = 0
+    while (i < lines.size) {
+        val inline = revisionSourcesHeadingInline(lines[i])
+        if (inline == null) {
+            i++
+        } else {
+            val end = revisionSourcesBlockEnd(lines, i, inline)
+            out.add(i to end)
+            i = end
+        }
     }
-    return out.filter { it.isNotEmpty() }
+    return out
+}
+
+/** Texte d'une citation (sans puce ni marqueur d'énumération), ou null. */
+private fun revisionCitationText(line: String): String? {
+    val t = line.trim()
+    if (t.isEmpty()) return null
+    if (isRevisionSourceEntry(t)) return t.substring(1).trim().ifEmpty { null }
+    return REVISION_CITATION_MARKER.matchEntire(t)?.groupValues?.get(1)?.trim()?.ifEmpty { null }
 }
 
 /**
- * Texte SANS son bloc « Sources : » : ce que l'export dessine.
- *
- * Le bloc du modèle ne part que s'il est le DERNIER bloc du corps (#499) :
- * sinon il effacerait le contenu du cours. Avant, le bloc était retiré en
- * bloc, jusqu'à la fin du corps : une fiche dont le texte contenait
- * « Sources : » AU MILIEU perdait toutes les lignes suivantes — du corps ET
- * de l'export PDF, silencieusement (I15 : le corps est ENTIER).
- *
- * Dans le cas d'un bloc AU MILIEU, seules les puces qui sont des CITATIONS
- * (une source canonique) sont retirées : une puce qui n'est pas une source
- * est du contenu, elle reste.
+ * Citations écrites par le modèle dans ses blocs « Sources » (liste vide s'il
+ * n'en a pas écrit) : puces et entrées numérotées, sans leur marqueur.
  */
-private fun revisionContent(text: String, allowed: Set<String>): String {
+private fun revisionModelCitations(text: String): List<String> {
     val lines = text.split("\n")
-    val heading = revisionSourcesHeading(lines)
-    if (heading < 0) return text.trim()
-    val end = revisionSourcesBlockEnd(lines, heading)
-    // Le bloc est-il le dernier ? (rien de non vide après)
-    var last = true
-    for (i in end until lines.size) {
-        if (lines[i].trim().isNotEmpty()) {
-            last = false
-            break
+    val out = mutableListOf<String>()
+    for ((heading, end) in revisionSourcesBlocks(lines)) {
+        val inline = revisionSourcesHeadingInline(lines[heading]).orEmpty()
+        if (inline.isNotEmpty()) {
+            for (part in inline.split(",", ";")) {
+                val c = part.trim()
+                if (c.isNotEmpty()) out.add(c)
+            }
+        }
+        for (i in heading + 1 until end) {
+            revisionCitationText(lines[i])?.let { out.add(it) }
         }
     }
-    val kept = mutableListOf<String>()
-    for (i in lines.indices) {
-        if (i == heading) continue
-        if (i > heading && i < end) {
-            val t = lines[i].trim()
-            if (t.isEmpty()) continue
-            if (last) continue // bloc final : il est REMPLACÉ par la liste canonique
-            // Bloc au milieu : seule une citation (une source canonique) part.
-            if (isRevisionSourceEntry(t) && t.substring(1).trim() in allowed) continue
-        }
-        kept.add(lines[i])
+    return out
+}
+
+/**
+ * Texte SANS aucun bloc « Sources » écrit par le modèle : ce que l'export
+ * dessine, et ce que le corps stocké garde.
+ *
+ * TOUT bloc de sources du modèle part, qu'il soit final ou AU MILIEU : un
+ * bloc final serait recopié comme attribution, un bloc au milieu laisserait
+ * une fausse source au cœur du cours. Le bloc s'arrête à la première ligne
+ * vide, donc le contenu qui suit est conservé (I15 : le corps est ENTIER et
+ * seule la liste canonique fait foi).
+ */
+private fun revisionContent(text: String): String {
+    val lines = text.split("\n")
+    val drop = BooleanArray(lines.size)
+    for ((start, end) in revisionSourcesBlocks(lines)) {
+        for (i in start until end) drop[i] = true
     }
-    return kept.joinToString("\n").trim()
+    return lines.indices.filterNot { drop[it] }.joinToString("\n") { lines[it] }.trim()
 }
 
 /**
@@ -602,7 +634,7 @@ fun revisionSheetSources(modelText: String, canonicalSources: List<String>): Lis
  */
 fun revisionSheetBody(modelText: String, canonicalSources: List<String>): String {
     val sources = revisionSheetSources(modelText, canonicalSources)
-    val content = revisionContent(modelText, sources.toSet())
+    val content = revisionContent(modelText)
     val block = (listOf(REVISION_SOURCES_HEADING) + sources.map { "- $it" }).joinToString("\n")
     return if (content.isEmpty()) block else "$content\n\n$block"
 }
@@ -672,7 +704,7 @@ private fun revisionPlainLine(line: String): String {
  */
 fun revisionPdfLines(sheet: RevisionSheet): List<String> {
     if (!isRevisionSheetValid(sheet)) throw IllegalArgumentException("fiche invalide (contrat)")
-    val content = revisionContent(sheet.body, sheet.sources.toSet())
+    val content = revisionContent(sheet.body)
     // Garde I5 : le corps du modèle est borné (MAX_OUTPUT_CHARS). Un corps
     // plus long (magasin altéré) est tronqué — et SIGNALÉ, jamais en silence.
     val truncated = content.length > MAX_OUTPUT_CHARS

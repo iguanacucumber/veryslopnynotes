@@ -36,7 +36,8 @@ import java.util.concurrent.TimeUnit
 // Aucun secret sur le fil sauf Authorization Bearer, jamais dans logs/erreurs.
 // Appels BLOQUANTS (pas de coroutines sans dependance) : jamais sur le thread
 // UI — OpenRouterHomework file l'aller-retour en tache de fond.
-// ponytail: OkHttp deja dependance du module, aucune ajoutee. Upgrade: retry/backoff si quotas.
+// ponytail: OkHttp deja dependance du module, aucune ajoutee. Upgrade: backoff
+// progressif si le fournisseur limite durablement.
 
 // Erreur LLM : le message est DEJA affichable (borné, français, sans clé ni
 // URL). `status` = code HTTP du fournisseur quand la cause est HTTP
@@ -80,10 +81,19 @@ class OpenRouterLlm(
     private val visionModel: String = LLM_VISION_MODEL,
 ) : SafePromptProvider, SafeVisionPromptProvider {
     private val timeout = normalizeTimeoutMs(timeoutMs)
+
+    // Budget TOTAL de l'appel réparti sur les DEUX tentatives : une reprise ne
+    // double donc jamais l'attente de l'appelant (le pont attend 45 s).
+    private val perAttemptMs = (timeout / MAX_ATTEMPTS).coerceAtLeast(1L)
     private val http: OkHttpClient = client.newBuilder()
-        .connectTimeout(timeout, TimeUnit.MILLISECONDS)
-        .readTimeout(timeout, TimeUnit.MILLISECONDS)
-        .callTimeout(timeout, TimeUnit.MILLISECONDS)
+        // Aucune redirection suivie : un 307/308 re-POSTERAIT le prompt entier
+        // (cours, pièces jointes, nonce) vers une cible arbitraire, peut-être en
+        // clair. Un appel légitime au fournisseur ne redirige pas.
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .connectTimeout(perAttemptMs, TimeUnit.MILLISECONDS)
+        .readTimeout(perAttemptMs, TimeUnit.MILLISECONDS)
+        .callTimeout(perAttemptMs, TimeUnit.MILLISECONDS)
         .build()
 
     init {
@@ -169,24 +179,44 @@ class OpenRouterLlm(
         // Le build de la requête est DANS le try (#595) : OkHttp refuse un
         // caractère d'en-tête hors ASCII imprimable AVANT tout réseau — la
         // cause est alors la CLÉ, et le message la nomme (jamais sa valeur).
-        return try {
-            val request = Request.Builder()
+        val request = try {
+            Request.Builder()
                 .url(OPENROUTER_URL)
                 .header("Authorization", "Bearer $key")
                 .post(payload.toString().toRequestBody(JSON))
                 .build()
-            http.newCall(request).execute().use { res ->
-                if (!res.isSuccessful) throw LlmError.forStatus(res.code)
-                res.body?.string().orEmpty()
-            }
-        } catch (e: LlmError) {
-            throw e
         } catch (_: IllegalArgumentException) {
-            throw LlmError("Clé LLM invalide : corrige-la dans Réglages.")
-        } catch (_: Exception) {
-            throw LlmError("Erreur réseau LLM : réessaie dans un instant.")
+            throw LlmError(INVALID_KEY_MESSAGE)
+        }
+        var attempt = 0
+        while (true) {
+            attempt++
+            try {
+                http.newCall(request).execute().use { res ->
+                    if (!res.isSuccessful) throw LlmError.forStatus(res.code)
+                    val body = res.body ?: return ""
+                    // Corps LU BORNÉ : un 2xx démesuré est refusé avant de
+                    // remplir le tas, jamais avalé en entier.
+                    return try {
+                        readBounded(body.byteStream(), MAX_RESPONSE_BYTES)
+                    } catch (e: ResponseTooLargeException) {
+                        throw LlmError(responseTooLargeMessage(e.maxBytes))
+                    }
+                }
+            } catch (e: LlmError) {
+                // Statut HTTP, corps démesuré, garde locale : JAMAIS rejoués.
+                throw e
+            } catch (e: Exception) {
+                // UNE SEULE reprise, et seulement pour une panne de TRANSPORT
+                // (le prompt est peut-être parti : la réponse manque).
+                if (attempt >= MAX_ATTEMPTS) throw transportError(e)
+            }
         }
     }
+
+    /** Panne de transport -> erreur affichable : un délai n'est pas un réseau coupé. */
+    private fun transportError(e: Exception): LlmError =
+        LlmError(transportFaultMessage(classifyTransportError(e)))
 
     private fun parseCompletion(bodyText: String): String {
         val choice = try {
@@ -224,6 +254,14 @@ class OpenRouterLlm(
         const val OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
         const val DEFAULT_TIMEOUT_MS = 20_000L
         const val MAX_TIMEOUT_MS = 120_000L
+
+        // Deux tentatives MAXIMUM (une reprise de transport) : le délai total
+        // reste `timeoutMs`, chaque tentative recevant la moitié.
+        const val MAX_ATTEMPTS = 2
+
+        // Une clé refusée par le validateur d'en-tête d'OkHttp est un défaut de
+        // la clé, pas du réseau : le message le dit (jamais sa valeur).
+        const val INVALID_KEY_MESSAGE = "Clé LLM invalide : corrige-la dans Réglages."
 
         // Longueur plausible d'une cle de fournisseur : borne l'appel comme le reste.
         const val MIN_API_KEY_CHARS = 8

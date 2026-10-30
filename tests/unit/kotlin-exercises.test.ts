@@ -212,6 +212,30 @@ describe("exercices — sortie validée (#632)", () => {
     expect(res.unsourced).toBe(false);
   });
 
+  test.skipIf(skip)("le préambule est reconnu avec une casse et des espaces libres", async () => {
+    const res = await ask<Parsed>({
+      op: "parse",
+      text: JSON.stringify({
+        answer: "Commence par la formule de la somme.",
+        sources: ["  LIBELLE   citable : Manuel : Mathematiques 1re  "],
+      }),
+      allowed: ALLOWED,
+    });
+    expect(res.ok).toBe(true);
+    expect(res.sources).toEqual([MANUAL]);
+  });
+
+  test.skipIf(skip)("un préambule seul ou une citation vide est refusé", async () => {
+    for (const sources of [["Libelle citable :"], ["Libelle citable :  "], [""], ["  "]]) {
+      const res = await ask<Parsed>(
+        { op: "parse", text: JSON.stringify({ answer: "Voir le manuel.", sources }), allowed: ALLOWED },
+        true,
+      );
+      expect({ sources, ok: res.ok }).toEqual({ sources, ok: undefined });
+      expect(res.message).toContain("schema");
+    }
+  });
+
   test.skipIf(skip)("un préambule ne blanchit pas une source inventée", async () => {
     const res = await ask<Parsed>(
       {

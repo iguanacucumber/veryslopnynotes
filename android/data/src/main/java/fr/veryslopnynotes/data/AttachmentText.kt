@@ -38,6 +38,14 @@ object AttachmentText {
     /** Borne de texte extrait, alignée sur la borne de payload d'un cours. */
     const val MAX_CHARS = 8000
 
+    /**
+     * Entrée HTML bornée AVANT désinfection. Le retrait des balises est
+     * linéaire, mais la sortie est plafonnée à [MAX_CHARS] : désinfecter 10 Mo
+     * de balisage pour n'en garder que 8 000 caractères ne sert à rien. La
+     * coupe d'entrée est SIGNALÉE comme les autres (I35).
+     */
+    const val MAX_HTML_INPUT_CHARS = MAX_CHARS * 4
+
     /** Pages PDF lues au plus (une page scannée n'est pas OCR-isée ici). */
     const val MAX_PDF_PAGES = 20
 
@@ -73,7 +81,28 @@ object AttachmentText {
 
     private val TEXT_EXTENSIONS = setOf(
         "txt", "md", "markdown", "csv", "html", "htm", "xhtml", "xht", "shtml",
-        "xml", "xsl", "xslt", "svg", "svgz", "js", "mjs", "vbs",
+        "mhtml", "mht", "hta", "xml", "xsl", "xslt", "svg", "svgz", "js", "mjs", "vbs",
+    )
+
+    /**
+     * Extensions qui contiennent du BALISAGE : elles passent par [sanitizeHtml],
+     * même quand le type MIME (table blanche d'`AttachmentMime`) les sert en
+     * `text/plain` — c'est le cas de `.mhtml`, `.mht` et `.hta`, dont le script
+     * ne doit jamais arriver brut dans l'invite.
+     */
+    private val HTML_EXTENSIONS = setOf(
+        "html", "htm", "xhtml", "xht", "shtml", "mhtml", "mht", "hta",
+    )
+
+    /** Blocs dont le CONTENU est retiré avec la balise : rien d'actif ne reste. */
+    private val HTML_ACTIVE_BLOCKS = setOf(
+        "script", "style", "template", "noscript", "iframe", "object", "embed", "svg",
+    )
+
+    /** Balises de bloc : elles valent une fin de ligne, jamais du vide. */
+    private val HTML_BLOCK_TAGS = setOf(
+        "p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6",
+        "section", "article", "blockquote", "pre", "table", "ul", "ol",
     )
 
     /**
@@ -180,11 +209,24 @@ object AttachmentText {
             .removePrefix("\uFEFF")
             .replace("\r\n", "\n")
             .replace('\r', '\n')
-        val isHtml = mime == "text/html" ||
-            name.trim().substringAfterLast('.', "").lowercase() in setOf("html", "htm", "xhtml", "xht", "shtml")
-        val text = if (isHtml) sanitizeHtml(raw) else sanitizeText(raw)
+        val ext = name.trim().substringAfterLast('.', "").lowercase()
+        // Le balisage est décidé par le TYPE et par l'EXTENSION : `.mhtml`,
+        // `.mht` et `.hta` sortent en `text/plain` mais restent du HTML.
+        val isHtml = mime == "text/html" || ext in HTML_EXTENSIONS
+        val head = if (isHtml && raw.length > MAX_HTML_INPUT_CHARS) {
+            raw.substring(0, MAX_HTML_INPUT_CHARS)
+        } else {
+            raw
+        }
+        val text = if (isHtml) sanitizeHtml(head) else sanitizeText(raw)
         if (text.isBlank()) return AttachmentTextResult.Unreadable("format_non_lisible")
-        return bounded(text, maxChars)
+        val result = bounded(text, maxChars)
+        // Une coupe d'ENTRÉE est une coupe : la taille d'avant reste publiée,
+        // pour que « Ce qui est envoyé » dise ce qui a été retiré (I35).
+        if (head.length < raw.length && result is AttachmentTextResult.Readable) {
+            return AttachmentTextResult.Readable(result.text, true, maxOf(raw.length, result.originalChars))
+        }
+        return result
     }
 
     private fun sanitizeText(raw: String): String {
@@ -200,23 +242,81 @@ object AttachmentText {
     }
 
     /**
-     * Retire les blocs actifs AVANT les balises, puis décode les entités. Aucun
-     * parseur HTML, aucun rendu : seuls les nœuds texte restent.
+     * Retire le balisage RÉEL, puis décode les entités UNE SEULE FOIS. Un `<`
+     * décodé est du TEXTE : `x &lt; 3 et y &gt; 2` devient `x < 3 et y > 2` et
+     * n'est jamais relu comme une balise — décoder d'abord ferait de
+     * `< 3 et y >` une balise et effacerait les maths. Aucun parseur, aucun
+     * rendu : seuls les nœuds texte restent.
+     *
+     * Balayage LINÉAIRE (`indexOf`) : un `<` sans `>` suivant est du texte, donc
+     * une entrée pleine de `<` malformés coûte un balayage, pas un par `<`.
      */
     private fun sanitizeHtml(raw: String): String {
-        var s = Regex("(?is)<(script|style|template|noscript|iframe|object|embed|svg)[^>]*>.*?</\\1\\s*>")
-            .replace(raw, " ")
-        s = Regex("(?is)<!--.*?-->").replace(s, " ")
-        s = Regex("(?i)<br\\s*/?>").replace(s, "\n")
-        s = Regex("(?i)</(p|div|li|tr|h[1-6]|section|article|blockquote|pre|table|ul|ol)>")
-            .replace(s, "\n")
-        s = Regex("(?i)<li[^>]*>").replace(s, "• ")
-        s = Regex("<[^>]*>", RegexOption.DOT_MATCHES_ALL).replace(s, " ")
-        // Deuxième passe APRÈS décodage : `&lt;script&gt;` ne doit pas
-        // réapparaître comme une balise ni laisser son contenu actif.
-        val decoded = Regex("(?is)<(script|style|template|noscript|iframe|object|embed|svg)[^>]*>.*?</\\1\\s*>")
-            .replace(decodeEntities(s), " ")
-        return sanitizeText(Regex("<[^>]*>", RegexOption.DOT_MATCHES_ALL).replace(decoded, " "))
+        val out = StringBuilder(raw.length)
+        var i = 0
+        while (i < raw.length) {
+            val lt = raw.indexOf('<', i)
+            if (lt < 0) {
+                out.append(raw, i, raw.length)
+                break
+            }
+            out.append(raw, i, lt)
+            // Commentaire : retiré, ou tout ce qui suit s'il n'est pas fermé.
+            if (raw.startsWith("<!--", lt)) {
+                val end = raw.indexOf("-->", lt + 4)
+                if (end < 0) break
+                out.append(' ')
+                i = end + 3
+                continue
+            }
+            val gt = raw.indexOf('>', lt + 1)
+            if (gt < 0) {
+                // Pas de `>` : ce n'est pas une balise, c'est du texte.
+                out.append(raw, lt, raw.length)
+                break
+            }
+            val closing = raw[lt + 1] == '/'
+            val name = tagNameAt(raw, if (closing) lt + 2 else lt + 1)
+            val selfClosing = raw[gt - 1] == '/'
+            when {
+                name in HTML_ACTIVE_BLOCKS && !closing && !selfClosing -> {
+                    // Bloc actif : son CONTENU part avec la balise.
+                    out.append(' ')
+                    i = skipActiveBlock(raw, name, gt + 1)
+                    continue
+                }
+                name == "br" -> out.append('\n')
+                name == "li" && !closing -> out.append("• ")
+                name in HTML_BLOCK_TAGS -> out.append('\n')
+                else -> out.append(' ')
+            }
+            i = gt + 1
+        }
+        // Un SEUL décodage, APRÈS le retrait du balisage : jamais de re-strip.
+        return sanitizeText(decodeEntities(out.toString()))
+    }
+
+    /** Nom de balise en minuscules à partir de [from] (`""` si aucun). */
+    private fun tagNameAt(raw: String, from: Int): String {
+        var end = from
+        while (end < raw.length && raw[end].isLetterOrDigit()) end += 1
+        return raw.substring(from, end).lowercase()
+    }
+
+    /**
+     * Index juste après la balise fermante de [name], ou [String.length] si le
+     * bloc n'est jamais fermé : un `<script>` ouvert ne laisse rien passer.
+     */
+    private fun skipActiveBlock(raw: String, name: String, from: Int): Int {
+        var i = from
+        while (true) {
+            val open = raw.indexOf("</", i)
+            if (open < 0) return raw.length
+            val gt = raw.indexOf('>', open)
+            if (gt < 0) return raw.length
+            if (tagNameAt(raw, open + 2) == name) return gt + 1
+            i = gt + 1
+        }
     }
 
     private fun decodeEntities(raw: String): String {
@@ -267,7 +367,12 @@ object AttachmentText {
             val dict = raw.substring(if (dictStart >= 0) dictStart else 0, start)
             if (isTextStream(dict)) {
                 val encoded = raw.substring(body, end).toByteArray(StandardCharsets.ISO_8859_1)
-                val decoded = if (dict.contains("/FlateDecode")) inflate(encoded) else encoded
+                val inflated = if (dict.contains("/FlateDecode")) inflate(encoded) else Inflated(encoded, false)
+                // Une COUPE de décompression est signalée (I35) ; une vraie
+                // corruption reste une corruption : le flux est sauté, sans
+                // faire croire que l'extraction a été bornée.
+                if (inflated.capped) truncated = true
+                val decoded = inflated.bytes
                 if (decoded != null) {
                     decodedTotal += decoded.size
                     if (decodedTotal > MAX_PDF_TOTAL_DECODED_BYTES) {
@@ -289,6 +394,8 @@ object AttachmentText {
             }
             cursor = end + "endstream".length
         }
+        // Flux restants NON parcourus : la coupe est SIGNALÉE (I35).
+        if (streams >= MAX_PDF_STREAMS && hasStreamAfter(raw, cursor)) truncated = true
         if (out.isBlank()) return AttachmentTextResult.Unreadable("pdf_sans_texte")
         return bounded(sanitizeText(out.toString()), maxChars).let {
             when (it) {
@@ -304,8 +411,21 @@ object AttachmentText {
         !Regex("/Subtype\\s*/(Image|Type1|TrueType|Type0|CIDFont|Metadata)").containsMatchIn(dict) &&
             !Regex("/Type\\s*/(XObject|Font|Metadata)").containsMatchIn(dict)
 
-    private fun inflate(raw: ByteArray): ByteArray? {
-        if (raw.isEmpty()) return null
+    /** Un début de flux existe-t-il après [from] ? (`endstream` en contient un.) */
+    private fun hasStreamAfter(raw: String, from: Int): Boolean {
+        var i = raw.indexOf("stream", from)
+        while (i >= 0) {
+            if (i < 3 || !raw.regionMatches(i - 3, "end", 0, 3)) return true
+            i = raw.indexOf("stream", i + "stream".length)
+        }
+        return false
+    }
+
+    /** Résultat d'une décompression : `capped` distingue une COUPE d'une corruption. */
+    private class Inflated(val bytes: ByteArray?, val capped: Boolean)
+
+    private fun inflate(raw: ByteArray): Inflated {
+        if (raw.isEmpty()) return Inflated(null, false)
         val inflater = Inflater()
         return try {
             inflater.setInput(raw)
@@ -319,12 +439,12 @@ object AttachmentText {
                     continue
                 }
                 total += n
-                if (total > MAX_PDF_DECODED_BYTES) return null
+                if (total > MAX_PDF_DECODED_BYTES) return Inflated(null, true)
                 out.write(buffer, 0, n)
             }
-            out.toByteArray().takeIf { it.isNotEmpty() }
+            Inflated(out.toByteArray().takeIf { it.isNotEmpty() }, false)
         } catch (_: Exception) {
-            null
+            Inflated(null, false)
         } finally {
             inflater.end()
         }

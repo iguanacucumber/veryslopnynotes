@@ -121,6 +121,10 @@ class PhotoCapture(private val activity: ComponentActivity) {
     }
 
     private fun launchCamera() {
+        // La déconnexion purge `cacheDir/photos` ENTIÈREMENT (donnée du compte,
+        // I4) : le `lazy` ne repasse jamais et son dossier a disparu. Sans ce
+        // rappel, l'appareil photo échouerait en silence jusqu'au redémarrage.
+        dir.mkdirs()
         val file = File(dir, "capture-" + UUID.randomUUID().toString().replace("-", "") + ".jpg")
         val uri = try {
             FileProvider.getUriForFile(activity, ATTACHMENT_PROVIDER_AUTHORITY, file)
@@ -152,6 +156,8 @@ class PhotoCapture(private val activity: ComponentActivity) {
 
     /** Copie bornée (10 Mo lus au maximum) : une URI peut venir d'un fournisseur tiers. */
     private fun copyToCache(uri: Uri): File? {
+        // Même raison que `launchCamera` : le dossier purge à la déconnexion.
+        dir.mkdirs()
         val target = File(dir, "gallery-" + UUID.randomUUID().toString().replace("-", "") + ".jpg")
         val resolver = activity.contentResolver
         val input = resolver.openInputStream(uri) ?: return null
