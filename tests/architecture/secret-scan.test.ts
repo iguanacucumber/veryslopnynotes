@@ -17,7 +17,7 @@ import { matchPatterns, PATTERNS, patternsFor, VENDORED_PATTERNS } from "../../a
 
 const ROOT = join(import.meta.dir, "..", "..");
 
-const VENDORED = patternsFor(".agents/skills/security-review/SKILL.md");
+const VENDORED = patternsFor(".agents/skills/code-review/SKILL.md");
 const REPO = patternsFor("web/src/App.tsx");
 
 // Fragments : un secret entier écrit en clair se ferait flaguer par le scan.
