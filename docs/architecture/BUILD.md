@@ -21,13 +21,11 @@ seul goulot est le CPU (16 cœurs). Chaque étape est une cible `make` invoquée
 | `web-typecheck` | `tsc -p web/tsconfig.json`. |
 | `web-test` | `bun test tests/web` + architecture web, même filtre. |
 
-### Sortie bornée des tests
+### Sortie bornée
 
-`unit` et `web-test` passent par `agents/runtime/test-output.ts` : l'échec
-garde fichier:ligne, la première erreur, Expected/Received et le PREMIER
-hunk, plafonne à 10 échecs, et le log complet va dans
-`node_modules/.cache/gate-logs/<cible>.log`. Le code de sortie de `bun test`
-est forwardé (jamais de vert fabriqué) ; SKIP BRUYANT passe intact.
+`unit` et `web-test` passent par `test-output.ts` : fichier:ligne, première
+erreur, Expected/Received, PREMIER hunk, 10 échecs max ; log complet dans
+`gate-logs/<cible>.log`. Code de sortie forwardé (jamais de vert fabriqué).
 
 ### Pourquoi le gate ne peut pas être allégé
 
