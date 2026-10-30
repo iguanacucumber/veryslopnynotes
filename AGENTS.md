@@ -52,9 +52,11 @@ du gate : [`docs/architecture/BUILD.md`](docs/architecture/BUILD.md).
 
 ## Lecture des gros fichiers
 
-- Fichier > ~400 lignes : `rg -n` la cible, puis `read` avec `offset`/`limit`
-  (≤ 300 lignes). Diff : `git diff --stat`, puis fichier par fichier.
-  `rg --files`, jamais de `find` récursif.
+- `rg -n` la cible, puis `read` avec `offset`/`limit` (≤ 120 lignes par appel).
+  Jamais `cat` ni `sed -n` pour lire un fichier du dépôt : `read` cache et tronque.
+- `git diff --stat` d'abord, le diff complet fichier par fichier ensuite.
+  `rg -l`/`rg -c` avant un `rg` de contenu ; `rg --files`, jamais `find`.
+- Après `edit`/`write`, ne relis pas : le diff rendu suffit.
 - Commentaire = contrainte durable (pourquoi, sécurité, invariant `I<n>`).
   L'historique (`#NNN`, « avant… ») va dans l'issue, le commit ou l'ADR.
 
