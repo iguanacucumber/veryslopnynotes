@@ -421,6 +421,8 @@ describe("gate : chaque étape a une vraie recette", () => {
 
   test("la recette unit lance bien les tests unitaires", () => {
     expect(hasRecipe("unit")).toBe(true);
-    expect(MAKEFILE.join("\n")).toMatch(/^unit:\n\tbun test tests\/unit --parallel$/m);
+    // Le filtre est dans la recette : un échec bun doit encore rougir le gate
+    // (le code de sortie est forwardé, cf. test-output.test.ts).
+    expect(MAKEFILE.join("\n")).toMatch(/^unit:\n\t\$\(TEST_OUTPUT\) unit tests\/unit --parallel$/m);
   });
 });

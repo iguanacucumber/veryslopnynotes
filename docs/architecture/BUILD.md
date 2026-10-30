@@ -12,14 +12,20 @@ seul goulot est le CPU (16 cœurs). Chaque étape est une cible `make` invoquée
 | Étape | Ce qu'elle vérifie |
 |---|---|
 | `android-compile` | Compilation Kotlin RÉELLE + Android Lint (`:app:lintDebug`) dans la même invocation Gradle. Seul filet qui résout les symboles (import manquant, surcharge ambiguë). |
-| `unit` | `bun test tests/unit --parallel`. |
+| `unit` | `bun test tests/unit --parallel`, filtré par `agents/runtime/test-output.ts`. |
 | `typecheck` | `tsc --noEmit` (racine). |
 | `architecture` | Construit le bundle Vite une fois, puis scans d'architecture + tests `tests/architecture`. |
 | `contracts` | `bun test tests/contracts`. |
 | `lint` | `agents/runtime/check-secrets.ts` (scan anti-secrets). |
 | `audit` | `bun audit` (dépendances, réseau requis). |
 | `web-typecheck` | `tsc -p web/tsconfig.json`. |
-| `web-test` | `bun test tests/web` + web architecture. |
+| `web-test` | `bun test tests/web` + architecture web, même filtre. |
+
+### Sortie bornée
+
+`unit` et `web-test` passent par `test-output.ts` : fichier:ligne, première
+erreur, Expected/Received, PREMIER hunk, 10 échecs max ; log complet dans
+`gate-logs/<cible>.log`. Code de sortie forwardé (jamais de vert fabriqué).
 
 `android-compile` journalise Gradle dans `gate-logs/android-compile.log` ;
 `kotlin-errors.ts` n'affiche que les `e:` (relatifs, dédoublonnés, 10 max).

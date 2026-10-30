@@ -1,0 +1,13 @@
+bun test v1.4.4 (38afee6c8)
+
+green.test.ts:
+
+  SKIP BRUYANT — corpus absent.
+  La parité n'est PAS vérifiée.
+  Le corpus doit être présent.
+
+
+ 1 pass
+ 0 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [1.00ms]
