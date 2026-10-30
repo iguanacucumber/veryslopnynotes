@@ -36,6 +36,10 @@ audit:
 typecheck:
 	bun run typecheck
 
+# Tests unitaires + parité Kotlin. `--parallel` : un isolat par fichier.
+unit:
+	bun test tests/unit --parallel
+
 # Frontend React. Le build écrit dans android/app/src/main/assets/web/ (gitignoré).
 web-typecheck:
 	bun run typecheck:web

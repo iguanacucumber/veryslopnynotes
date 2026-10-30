@@ -390,3 +390,37 @@ exit "\${FAKE_BUN_CODE:-0}"
     expect(digestOf(PARITY_SOURCES)).toBe(parityDigest());
   });
 });
+
+describe("gate : chaque étape a une vraie recette", () => {
+  // #714 a supprimé la recette `unit:` en gardant l'entrée `.PHONY` : make
+  // répondait « Nothing to be done » et le gate restait vert sans exécuter un
+  // seul test unitaire. Une cible déclarée ne prouve rien ; une RECETTE si.
+  const MAKEFILE = readFileSync(join(ROOT, "Makefile"), "utf8").split("\n");
+
+  function hasRecipe(target: string, seen = new Set<string>()): boolean {
+    if (seen.has(target)) return false;
+    seen.add(target);
+    const start = MAKEFILE.findIndex((l) => new RegExp(`^${target}:(?!=)`).test(l));
+    if (start < 0) return false;
+    // Cible agrégat (`architecture: web-build architecture-test`) : sa recette
+    // est celle de ses prérequis, qui doivent eux-mêmes en avoir une.
+    const prereqs = /^[^:]+:(.*)$/.exec(MAKEFILE[start]!)?.[1]?.trim().split(/\s+/).filter(Boolean) ?? [];
+    if (prereqs.length > 0) return prereqs.every((p) => hasRecipe(p, seen));
+    for (let i = start + 1; i < MAKEFILE.length; i++) {
+      const line = MAKEFILE[i]!;
+      if (/^\t/.test(line)) return true;
+      // Une nouvelle cible/variable/section termine le bloc.
+      if (/^[^\t#\s]/.test(line)) return false;
+    }
+    return false;
+  }
+
+  test("chaque cible de DEFAULT_TARGETS possède une recette", () => {
+    expect(DEFAULT_TARGETS.filter((t) => !hasRecipe(t))).toEqual([]);
+  });
+
+  test("la recette unit lance bien les tests unitaires", () => {
+    expect(hasRecipe("unit")).toBe(true);
+    expect(MAKEFILE.join("\n")).toMatch(/^unit:\n\tbun test tests\/unit --parallel$/m);
+  });
+});
