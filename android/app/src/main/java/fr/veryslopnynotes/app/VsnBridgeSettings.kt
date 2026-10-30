@@ -14,6 +14,7 @@ import fr.veryslopnynotes.data.RefreshOutcome
 import fr.veryslopnynotes.data.SubjectPrefInput
 import fr.veryslopnynotes.data.SubjectPrefRules
 import fr.veryslopnynotes.data.SubjectPrefsWrite
+import fr.veryslopnynotes.data.manualMatchesSubject
 import org.json.JSONArray
 import org.json.JSONObject
 import fr.veryslopnynotes.app.VsnBridge.Companion.MANUAL_RETRY_MS
@@ -160,14 +161,16 @@ internal fun VsnBridge.saveSubject(p: JSONObject, epoch: Long): JSONObject {
 
 /**
  * Extrait du manuel pour `subject`. Catalogue = choix par classe/matière ;
- * ouvrage précis = adresse telle quelle. Un ouvrage inconnu de la table ne
- * produit AUCUNE source (jamais un manuel d'une autre matière).
+ * ouvrage précis = adresse telle quelle, mais SEULEMENT si sa fiche parle de
+ * cette matière (jamais un manuel d'une autre matière). Un ouvrage inconnu de
+ * la table ne produit AUCUNE source.
  */
 internal fun VsnBridge.manualDocFor(subject: String): ManualDoc? {
     // #586 : une matière peut explicitement ne pas utiliser le manuel.
     if (!manuals.isEnabled(subject)) return null
     val stored = manuals.url() ?: return null
-    val target = if (ManualCatalog.isCatalog(stored)) {
+    val catalog = ManualCatalog.isCatalog(stored)
+    val target = if (catalog) {
         val classLabel = cachedProfile?.classLabel?.takeIf { it.isNotBlank() } ?: manuals.classLabel()
         val known = manuals.subjects()
         val subjects = (if (known.isEmpty()) knownSubjects() else known + subject).distinct()
@@ -176,7 +179,10 @@ internal fun VsnBridge.manualDocFor(subject: String): ManualDoc? {
     } else {
         stored
     }
-    manuals.doc(target)?.let { return it }
+    // Le catalogue a déjà choisi l'ouvrage PAR matière ; une adresse précise ne
+    // dit rien de la sienne, donc seule la fiche tranche.
+    fun matches(doc: ManualDoc): Boolean = catalog || manualMatchesSubject(doc.subject, subject)
+    manuals.doc(target)?.let { doc -> return if (matches(doc)) doc else null }
     val now = System.currentTimeMillis()
     val lastFailure = manualFailures[target] ?: 0L
     if (now - lastFailure < MANUAL_RETRY_MS) return null
@@ -187,8 +193,10 @@ internal fun VsnBridge.manualDocFor(subject: String): ManualDoc? {
         return null
     }
     manualFailures.remove(target)
+    // Gardé même hors matière : l'adresse rendra toujours le même extrait, le
+    // redemander à chaque prompt ne changerait rien.
     manuals.saveDoc(target, doc)
-    return doc
+    return if (matches(doc)) doc else null
 }
 
 /**
