@@ -62,6 +62,8 @@ du gate : [`docs/architecture/BUILD.md`](docs/architecture/BUILD.md).
 - Fichier > ~400 lignes : `rg -n` la cible, puis `read` avec `offset`/`limit`
   (≤ 300 lignes). Diff : `git diff --stat`, puis fichier par fichier.
   `rg --files`, jamais de `find` récursif.
+- Commentaire = contrainte durable (pourquoi, sécurité, invariant `I<n>`).
+  L'historique (`#NNN`, « avant… ») va dans l'issue, le commit ou l'ADR.
 
 ## Dépendances, vendorisé, public
 

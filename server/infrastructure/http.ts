@@ -1,31 +1,13 @@
-// Scraper Playwright minimal (issue #209) : le process ne sert QUE des manuels.
-// Plain HTTPS, SANS auth (décision utilisateur du 2026-10-11 : "Plain HTTPS, no
-// auth at all").
-//
-// RISQUE ACCEPTÉ, documenté, hors périmètre : sans auth, quiconque connaît
-// l'URL pilote Playwright — SSRF vers le réseau du scraper + brûlage de
-// session portail (un tiers peut épuiser le compte éditeur). Suivi recommandé :
-// loopback + reverse-proxy avec auth devant le scraper. Cette issue construit
-// le HTTPS nu spécifié, rien de plus.
-//
-// Routes : GET /v1/health (sonde), POST /v1/manuals/scrape (page -> ManualDoc),
-// POST /v1/web/scrape (page web publique -> titre + texte, sans jar, #634).
-// Tout le reste = 404 : les anciennes routes métier et le chemin de capture TS
-// sont supprimés. Le processus ne sert que ces routes de scraper.
-//
-// Credentials portail (platform/startUrl) injectés par l'appelant dans le
-// corps (writeOnly) : jamais en env, jamais commités, jamais journalisés —
-// seuls compteurs et codes d'erreur sortent dans les logs. Les identifiants
-// de portail (`username`/`password`) sont REFUSÉS (#526) : le scraper ne
-// s'authentifie pas, la session est celle du serveur. Seul le cookie jar
-// Playwright vit sur disque (gitignoré, réutilisé entre runs) : son CHEMIN
-// n'est plus choisi par l'appelant, seulement son NOM (#362) — le serveur
-// impose le répertoire du jar. La navigation est gardée : hôte public
-// obligatoire, nom d'hôte RÉSOLU avant la navigation (#419 — un nom public
-// qui pointe vers une IP interne est refusé, 403 explicite), redirections et
-// URL finale re-vérifiées.
-// I8 inchangé : `PORT`/`HOST` + chemins TLS = seules variables lues,
-// uniquement dans `start()`.
+// Scraper Playwright minimal (#209) : GET /v1/health,
+// POST /v1/manuals/scrape, POST /v1/web/scrape ; tout le reste = 404.
+// Plain HTTPS, SANS auth : risque accepté et documenté (I8) — loopback ou
+// reverse-proxy authentifié, jamais exposé.
+// platform/startUrl viennent du corps (writeOnly), jamais d'env ni du dépôt ;
+// username/password sont refusés (#526). Le jar est choisi par le serveur
+// (#538) : seul son nom vient de l'exploitant.
+// Navigation gardée : hôte public, nom résolu (#419), redirections et URL
+// finale re-vérifiées.
+// I8 : PORT/HOST + chemins TLS = seules variables lues, dans start().
 import { readFileSync } from "node:fs";
 import { CONTRACTS_VERSION } from "../../shared/contracts/models";
 import {

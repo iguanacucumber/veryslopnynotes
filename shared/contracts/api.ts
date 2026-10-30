@@ -1,13 +1,9 @@
-// Contrats v1 — scraper manuels/pages web + validateurs de données (source de vérité, issue #4).
-// Table de routes : le process ne sert plus que GET /v1/health,
-// POST /v1/manuals/scrape (#209, #210) et POST /v1/web/scrape (#634). Les 31 routes métier du serveur
-// applicatif (appairage, lectures, écritures, médias, sync, messagerie, IA)
-// sont supprimées avec leurs handlers : l'app est device-only (ADR-003).
-// Les garde-fous de RÉPONSE (`isGradesResponse`, `isDiscussionsResponse`, …)
-// restent : les miroirs `tests/unit/android-*.test.ts` s'en servent pour
-// valider la logique Kotlin rejouée en TS.
-// Doit rester en sync avec shared/contracts/api.openapi.yaml (test contracts
-// l'impose).
+// Contrats v1 — scraper manuels/pages web + validateurs (source de vérité, #4).
+// Routes servies : GET /v1/health, POST /v1/manuals/scrape (#209/#210),
+// POST /v1/web/scrape (#634). L'app est device-only (ADR-003) : les routes
+// métier du serveur applicatif n'existent plus.
+// Les garde-fous de réponse restent : les miroirs Android s'en servent.
+// Doit rester en sync avec api.openapi.yaml (test contracts).
 
 import type { AbsenceRecord, Assignment, AttendancePeriod, AveragesReport, CanteenBalance, CanteenMenu, Discussion, Grade, Message, NewsItem, Period, Punishment, Recipient, SubjectPrefs, TimetableEntry } from "./models";
 import { isAbsenceRecord, isAssignment, isAttendancePeriod, isAveragesReport, isCanteenBalance, isCanteenMenu, isDiscussion, isGrade, isMessage, isNewsItem, isPeriod, isPunishment, isRecipient, isSubjectPrefs, isTimetableEntry, SUBJECT_PREFS_MAX_COUNT } from "./models";
@@ -280,26 +276,13 @@ export function isDiscussionRecipientsResponse(v: unknown): v is DiscussionRecip
 }
 
 // --- #209 scraper Playwright minimal (page -> ManualDoc) ---
-// Corps POST borné AVANT parse comme les autres routes ouvertes : sans borne,
-// un POST non authentifié de taille arbitraire est entièrement bufferisé.
-// `startUrl` est writeOnly : jamais journalisé, jamais persisté, jamais
-// renvoyé (seul le cookie jar Playwright vit sur disque, hors dépôt).
-//
-// LE JAR DE SESSION EST CHOISI PAR LE SERVEUR (#538). Il ne l'est plus par
-// l'appelant, même indirectement : `authFile` a d'abord été un CHEMIN (écriture
-// de fichier arbitraire, #362), puis un NOM de jar — mais le nom suffit à
-// demander la session d'un AUTRE tenant : le répertoire était imposé, pas
-// l'isolation. Le champ n'existe donc plus dans le contrat, et le serveur
-// REFUSE explicitement un corps qui le porte (message dédié, pas un 400
-// générique).
-//
-// #526 : LE SCRAPER NE S'AUTHENTIFIE PAS. Le navigateur monte le jar de
-// session du SERVEUR (#538/I24) : `username`/`password` n'étaient lus par
-// AUCUN chemin de code — exigés par le contrat, transmis par le serveur, puis
-// jetés. L'appelant croyait s'authentifier ; le serveur n'utilisait rien.
-// Les deux champs ne sont donc PLUS REQUIS (optionnels), et le serveur REFUSE
-// un corps qui les porte (message dédié) : un credential collecté pour rien
-// ne doit jamais passer pour une authentification.
+// Corps POST borné AVANT parse : un POST non authentifié ne bufferise jamais
+// une taille arbitraire. startUrl writeOnly : jamais journalisé/persisté.
+// Jar de session choisi par le SERVEUR (#538/I24) : `authFile` n'existe plus
+// dans le contrat et un corps qui le porte est refusé (message dédié).
+// Le scraper ne s'authentifie pas (#526) : username/password sont optionnels
+// pour la compilation, mais un corps qui les porte est refusé — un credential
+// collecté pour rien ne doit pas passer pour une authentification.
 export const MANUALS_SCRAPE_PATH = "/v1/manuals/scrape";
 export const MANUALS_SCRAPE_MAX_BODY_CHARS = 8192;
 export const MANUALS_SCRAPE_PLATFORM_MAX_CHARS = 100;
