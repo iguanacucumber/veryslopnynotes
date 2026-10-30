@@ -20,11 +20,10 @@
 // Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un
 // faux vert) ; un échec de compilation, lui, est un défaut (le test rougit).
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { payloadsSource } from "./fixtures/payload-sources";
 
-const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "CoreValidationParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
@@ -163,7 +162,7 @@ describe("capabilities (#413) — un contrat invalide vaut « inconnu », pas «
   // liste d'onglets vide. Le lecteur web fait de `null` un « rien n'est
   // affirmé ».
   test("l'inconnu est publié comme `capabilities: null`, jamais `tabs: []`", () => {
-    const src = readFileSync(join(DATA, "PronotePayloads.kt"), "utf8");
+    const src = payloadsSource();
     const start = src.indexOf("internal fun capabilitiesPayload");
     expect(start).toBeGreaterThan(-1);
     const block = src.slice(start, src.indexOf("\n}", start));

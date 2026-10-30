@@ -11,12 +11,11 @@
 // Outillage `kotlinc`/`java` absent = SKIP BRUYANT (jamais un faux vert) ; un
 // échec de compilation est un défaut (le test rougit).
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { payloadsSource } from "./fixtures/payload-sources";
 
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "NewsBodyParityMain.kt");
-const PAYLOADS = join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data/PronotePayloads.kt");
 
 const skip = parityToolchain.skipReason !== null;
 
@@ -56,7 +55,7 @@ describe("le corps d'une actualité à la demande (#475)", () => {
 
   test("la liste ne télécharge plus les corps", () => {
     // C'est l'appel qui coûtait 20 POST : il n'a plus sa place dans la liste.
-    const payloads = readFileSync(PAYLOADS, "utf8");
+    const payloads = payloadsSource();
     const start = payloads.indexOf("internal fun newsPayload(");
     expect(start).toBeGreaterThan(-1);
     const body = payloads.slice(start, payloads.indexOf("\n}", start));

@@ -71,7 +71,7 @@ describe("file partagée du client local (#403)", () => {
     // `cachedRead` est la SEULE porte : les trois ressources que le job relit
     // (notes, devoirs, EDT) ne sont lues que par elle.
     for (const f of dataFiles()) {
-      if (f === "PronotePayloads.kt" || f === "CachedReads.kt") continue;
+      if (f.endsWith("Payloads.kt") || f === "CachedReads.kt") continue;
       const src = codeOnly(readFileSync(join(DATA, f), "utf8"));
       for (const call of ["gradesPayload(", "assignmentsPayload(", "timetablePayload("]) {
         expect({ file: f, call, present: src.includes(call) }).toEqual({ file: f, call, present: false });

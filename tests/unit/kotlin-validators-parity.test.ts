@@ -23,6 +23,7 @@ import { isHomeworkAttachmentRef, isIsoDate } from "../../shared/contracts/model
 import { parseAssignment } from "../../web/src/features/tasks/assignments";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 import { readBridgeSource } from "./fixtures/bridge-source";
+import { payloadsSource } from "./fixtures/payload-sources";
 
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
@@ -234,7 +235,7 @@ describe("validateurs du noyau (#366) — parité avec le contrat TS", () => {
   });
 
   test("câblage : la charge utile construit la `ref` par le builder du noyau", () => {
-    const payloads = readFileSync(join(DATA, "PronotePayloads.kt"), "utf8");
+    const payloads = payloadsSource();
     // Le builder ASSAINIT l'identifiant Pronote : refuser une `ref` exotique
     // ferait perdre le devoir entier côté web.
     expect(payloads).toContain("AssignmentAttachment.homeworkRef(");

@@ -21,6 +21,7 @@ import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 import { readBridgeSource } from "./fixtures/bridge-source";
+import { payloadsSource } from "./fixtures/payload-sources";
 
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "AttachmentTextMain.kt");
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
@@ -341,7 +342,7 @@ describe("sources d'un devoir : cours complet et pièces jointes (#631)", () => 
 });
 
 describe("câblage du payload (#631)", () => {
-  const payloads = codeOnly(readFileSync(join(DATA, "PronotePayloads.kt"), "utf8"));
+  const payloads = codeOnly(payloadsSource());
   const repository = codeOnly(readFileSync(join(DATA, "AssignmentsRepository.kt"), "utf8"));
 
   test("le cours est publié en entier (pas 500) avec ses pièces jointes", () => {
