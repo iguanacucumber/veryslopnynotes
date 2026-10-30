@@ -18,8 +18,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isDiscussion } from "../../shared/contracts/models";
 import { ROOT } from "./fixtures/kotlin-harness";
+import { payloadsSource } from "./fixtures/payload-sources";
 
-const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
 
 const source = (path: string): string => readFileSync(path, "utf8");
@@ -33,7 +33,7 @@ function kotlinBody(src: string, signature: string): string {
   return src.slice(start, end);
 }
 
-const payloads = source(join(DATA, "PronotePayloads.kt"));
+const payloads = payloadsSource();
 const body = kotlinBody(payloads, "internal fun discussionsPayload");
 const core = source(join(CORE, "Discussion.kt"));
 
@@ -53,7 +53,7 @@ describe("fraîcheur des fils : jamais de date inventée (#427)", () => {
     expect(body).toContain('lastMessageAt?.let { put("lastMessageAt", it) }');
     // Le helper : une valeur nulle ou vide n'est PAS écrite.
     expect(payloads).toContain(
-      "private fun JSONObject.putIf(key: String, value: String?) {\n    if (!value.isNullOrEmpty()) put(key, value)\n}",
+      "internal fun JSONObject.putIf(key: String, value: String?) {\n    if (!value.isNullOrEmpty()) put(key, value)\n}",
     );
     // La borne d'enrichissement est inchangée (12 fils) : c'est la limite de
     // réseau, pas le correctif.

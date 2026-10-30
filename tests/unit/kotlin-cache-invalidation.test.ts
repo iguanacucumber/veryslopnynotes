@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 import { readBridgeSource } from "./fixtures/bridge-source";
+import { payloadsSource } from "./fixtures/payload-sources";
 
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 const WEB = join(ROOT, "web", "src");
@@ -188,7 +189,7 @@ describe("fenêtre EDT = lundi 00:00 Paris (#578)", () => {
 describe("câblage de l'invalidation et de la fenêtre (#369)", () => {
   const assignments = source(join(DATA, "AssignmentsRepository.kt"));
   const discussions = source(join(DATA, "DiscussionsRepository.kt"));
-  const payloads = source(join(DATA, "PronotePayloads.kt"));
+  const payloads = payloadsSource();
   const bridge = readBridgeSource();
   const tasks = source(join(WEB, "features", "tasks", "TasksScreen.tsx"));
   const client = source(join(WEB, "bridge", "client.ts"));

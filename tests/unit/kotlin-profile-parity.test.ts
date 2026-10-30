@@ -20,9 +20,9 @@ import { join } from "node:path";
 import { isUserInfo, USER_PERIOD_NAME_MAX_CHARS } from "../../shared/contracts/models";
 import { parseProfilePayload } from "../../web/src/features/profile/model";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { payloadsSource } from "./fixtures/payload-sources";
 
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
-const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "ProfileParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
@@ -79,7 +79,7 @@ describe("borne de periodName (#420) — contrat TS <-> natif <-> web", () => {
 
   test("une seule borne : le natif publie avec celle du noyau, le web avec celle du contrat", () => {
     // Le payload natif : la borne du noyau, pas un littéral qui pourrait diverger.
-    const payloads = readFileSync(join(DATA, "PronotePayloads.kt"), "utf8");
+    const payloads = payloadsSource();
     expect(payloads).toContain("boundedCp(it.name, UserProfileRules.MAX_PERIOD_NAME)");
     expect(payloads).not.toMatch(/periodName",\s*boundedCp\([^)]*,\s*\d+\)/);
     // Le web : la borne du contrat, importée — jamais une constante locale.

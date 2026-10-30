@@ -39,6 +39,7 @@ export const DRIVER_DIR = join(ROOT, "agents", "runtime", "kotlin-parity");
 export const PRODUCTION_SOURCES: string[] = [
   // `pronote` — le client, le transport, le JSON embarqué.
   join(PRONOTE, "Bytes.kt"),
+  join(PRONOTE, "CanteenModels.kt"),
   join(PRONOTE, "Client.kt"),
   join(PRONOTE, "ClientLike.kt"),
   join(PRONOTE, "Communication.kt"),
@@ -50,11 +51,16 @@ export const PRODUCTION_SOURCES: string[] = [
   join(PRONOTE, "DemoSchool.kt"),
   join(PRONOTE, "Errors.kt"),
   join(PRONOTE, "HttpSession.kt"),
+  join(PRONOTE, "HomeworkModels.kt"),
   join(PRONOTE, "Json.kt"),
+  join(PRONOTE, "LessonModels.kt"),
+  join(PRONOTE, "MessagingModels.kt"),
+  join(PRONOTE, "NotesModels.kt"),
   join(PRONOTE, "RateLimitGate.kt"),
   join(PRONOTE, "ReadMemo.kt"),
   join(PRONOTE, "RefreshGate.kt"),
   join(PRONOTE, "Resolver.kt"),
+  join(PRONOTE, "SchoolLifeModels.kt"),
   // `core` — les règles métier pures (dates, notes, IA, garde-fous).
   //
   // `core/CapabilitiesJson.kt` n'est PAS listé : il lit le contrat avec

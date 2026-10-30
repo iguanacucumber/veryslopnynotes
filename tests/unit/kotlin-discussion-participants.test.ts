@@ -11,12 +11,11 @@
 //
 // Outillage `kotlinc`/`java` absent = SKIP BRUYANT (jamais un faux vert).
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { payloadsSource } from "./fixtures/payload-sources";
 
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "DiscussionParticipantsParityMain.kt");
-const PAYLOADS = join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data/PronotePayloads.kt");
 
 const skip = parityToolchain.skipReason !== null;
 
@@ -67,7 +66,7 @@ describe("les participants d'un fil, à la demande (#476)", () => {
   });
 
   test("la liste ne télécharge plus les participants ; le fil ouvert les demande", () => {
-    const payloads = readFileSync(PAYLOADS, "utf8");
+    const payloads = payloadsSource();
     const list = slice(payloads, "internal fun discussionsPayload(");
     expect(list).not.toContain("participants()");
     // Les messages d'un fil, eux, les demandent (à l'ouverture).

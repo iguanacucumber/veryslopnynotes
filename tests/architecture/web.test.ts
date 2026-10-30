@@ -8,6 +8,7 @@ import {
   NATIVE_WAIT_MS,
 } from "../../web/src/bridge/types";
 import { readBridgeSource } from "../unit/fixtures/bridge-source";
+import { payloadsSource } from "../unit/fixtures/payload-sources";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const WEB = join(ROOT, "web");
@@ -182,12 +183,7 @@ describe("contrat du pont natif", () => {
     // web en faisait un « Niveau 120 » (deux heures de retenue) et la puce
     // « Durée » restait morte. Le champ publié et le champ lu doivent être
     // le même.
-    const payload = codeOnly(
-      readFileSync(
-        join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data/PronotePayloads.kt"),
-        "utf8",
-      ),
-    );
+    const payload = codeOnly(payloadsSource());
     expect(payload).toContain('put("durationMinutes"');
     expect(payload).not.toContain('put("gravity"');
     const model = codeOnly(readFileSync(join(WEB, "src/features/attendance/model.ts"), "utf8"));
