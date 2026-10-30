@@ -209,6 +209,47 @@ describe("contexte IA — refus déterministe sans source (#628)", () => {
   });
 });
 
+describe("contexte IA — historique : les derniers tours survivent", () => {
+  test.skipIf(skip)("slots libres limités : les tours les plus récents, en ordre chronologique", async () => {
+    const courses: Item[] = Array.from({ length: 5 }, (_, i) =>
+      ITEM("course", `Cours : S${i}`, `cours ${i}`),
+    );
+    const history: Item[] = Array.from({ length: 6 }, (_, i) =>
+      ITEM("history", `Historique : ${i + 1} — élève`, `tour ${i + 1}`),
+    );
+    const result = await ask<Assembled>({ op: "assemble", entry: "chat", items: [...courses, ...history] });
+    // 5 sources fixes + 3 slots : les tours 1..3 tombent, pas les derniers.
+    expect(result.sources.map((s) => s.label)).toEqual([
+      ...courses.map((c) => c.label),
+      "Historique : 4 — élève",
+      "Historique : 5 — élève",
+      "Historique : 6 — élève",
+    ]);
+    // Les tours écartés gardent leur libellé et disent pourquoi.
+    const dropped = result.omitted.filter((o) => o.reason === "max_sources");
+    expect(dropped.map((o) => o.label).sort()).toEqual([
+      "Historique : 1 — élève",
+      "Historique : 2 — élève",
+      "Historique : 3 — élève",
+    ]);
+    expect(result.totalChars).toBe(result.sources.reduce((n, s) => n + s.chars, 0));
+  });
+
+  test.skipIf(skip)("un tour identique répété n'est pas un doublon", async () => {
+    const items: Item[] = [
+      ITEM("assignment", "Consigne", "consigne"),
+      ITEM("history", "Historique : 1 — élève", "question"),
+      ITEM("history", "Historique : 2 — élève", "oui"),
+      ITEM("history", "Historique : 3 — élève", "oui"),
+      ITEM("history", "Historique : 4 — élève", "non"),
+    ];
+    const result = await ask<Assembled>({ op: "assemble", entry: "chat", items });
+    const turns = result.sources.filter((s) => s.type === "history");
+    expect(turns.map((s) => s.text)).toEqual(["question", "oui", "oui", "non"]);
+    expect(result.omitted.filter((o) => o.reason === "duplicate")).toHaveLength(0);
+  });
+});
+
 describe("contexte IA — libellés citables stables (#628)", () => {
   test.skipIf(skip)("préfixe stable, blancs normalisés, URL et identifiants exclus", async () => {
     expect((await ask<{ label: string }>({ op: "label", type: "course", title: "Chapitre 4" })).label).toBe(
@@ -223,6 +264,30 @@ describe("contexte IA — libellés citables stables (#628)", () => {
     }
     const long = await ask<{ label: string }>({ op: "label", type: "course", title: "t".repeat(500) });
     expect(long.label.length).toBe(200);
+  });
+
+  test.skipIf(skip)("espaces Unicode et caractères de format ne survivent pas dans un libellé", async () => {
+    const raw = "Chapitre\u00A04\u202F: \u200Blimites\u2060\uFEFF";
+    const label = (await ask<{ label: string }>({ op: "label", type: "course", title: raw })).label;
+    expect(label).toBe("Cours : Chapitre 4 : limites");
+    expect(label).not.toMatch(/[\u00a0\u202f\u200b\u2060\ufeff]/);
+    // Le libellé formé puis ré-assaini par `assemble` reste citable tel quel.
+    const assembled = await ask<Assembled>({
+      op: "assemble",
+      entry: "chat",
+      items: [ITEM("history", "Historique\u00A0:\u00A01\u00A0— élève", "tour")],
+    });
+    expect(assembled.sources[0]?.label).toBe("Historique : 1 — élève");
+  });
+
+  test.skipIf(skip)("une coupe à 200 ne laisse pas de demi-paire de substitution", async () => {
+    // Le préfixe « Cours : » fait 8 unités : l'émoji tombe pile sur la coupe.
+    const title = "t".repeat(191) + "😀" + "fin";
+    const label = (await ask<{ label: string }>({ op: "label", type: "course", title })).label;
+    expect(label.length).toBeLessThanOrEqual(200);
+    expect(/[\uD800-\uDBFF]$/.test(label)).toBe(false);
+    expect(/^[\uDC00-\uDFFF]/.test(label)).toBe(false);
+    expect(label.endsWith("t")).toBe(true);
   });
 });
 
@@ -266,7 +331,7 @@ describe("contexte IA — câblage unique du pont (#628)", () => {
 
   test("le corpus vide refuse AVANT l'appel payant", () => {
     const refusal = bridge.indexOf("if (context.sources.isEmpty())");
-    const call = bridge.indexOf("OpenRouterHomework(OpenRouterLlm(timeoutMs = AWAIT_LLM_MS), llmKeys).generate");
+    const call = bridge.indexOf("OpenRouterHomework(OpenRouterLlm(timeoutMs = HOMEWORK_LLM_TIMEOUT_MS), llmKeys)");
     expect(refusal).toBeGreaterThan(-1);
     expect(call).toBeGreaterThan(refusal);
     expect(bridge).toContain("refusalJson(context)");

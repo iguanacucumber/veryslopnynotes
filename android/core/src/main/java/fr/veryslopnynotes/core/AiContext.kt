@@ -136,6 +136,10 @@ object AiContext {
     private val CONTROL_CHARS = Regex("[\\u0000-\\u001f\\u007f]")
     private val SPACES = Regex("\\s+")
 
+    // Espaces Unicode et caractères de format : invisibles à l'écran, mais
+    // copiables dans un libellé. `\s` (Java) ne les couvre pas.
+    private val INVISIBLE_SPACES = Regex("[\\u00a0\\u202f\\u200b\\u2060\\ufeff]")
+
     // Une URL ou une `ref` opaque n'a rien à faire dans un libellé citable (I4).
     private val URL_LIKE = Regex("://|^//|data:|\\\\", RegexOption.IGNORE_CASE)
     private val REF_LIKE = Regex("^[a-z]+:[A-Za-z0-9._:-]+$")
@@ -208,18 +212,26 @@ object AiContext {
      *
      * L'historique n'est admis que pour CHAT, et seulement les derniers tours :
      * les autres points d'entrée (texte, photo, fiche) voient le même corpus.
+     * Il passe APRÈS les autres sources, du plus récent au plus ancien : quand
+     * le lot ou le budget manque, ce sont les vieux tours qui tombent, jamais
+     * les derniers échanges. Les tours retenus sont ensuite remis dans l'ordre
+     * chronologique pour que le prompt se lise naturellement.
      */
     fun assemble(entry: AiContextEntry, items: List<AiContextItem>): AiContextResult {
         val history = items.filter { it.type == AiContextType.HISTORY }
-        val admitted = if (entry == AiContextEntry.CHAT) {
-            items.filterNot { it.type == AiContextType.HISTORY } + history.takeLast(MAX_HISTORY_ITEMS)
-        } else {
-            items.filterNot { it.type == AiContextType.HISTORY }
-        }
-        val ordered = admitted.withIndex()
+        val ordered = items.filterNot { it.type == AiContextType.HISTORY }.withIndex()
             .sortedWith(compareBy({ it.value.type.priority }, { it.index }))
         val sources = ArrayList<AiContextSource>()
         val omitted = ArrayList<AiContextOmitted>()
+        val seenLabels = HashSet<String>()
+        val seenContents = HashSet<String>()
+        var total = 0
+
+        for ((_, item) in ordered) {
+            val kept = admit(item, sources, omitted, seenLabels, seenContents, MAX_TOTAL_CHARS - total, true)
+            if (kept != null) total += kept.text.length
+        }
+
         if (entry == AiContextEntry.CHAT) {
             // Les tours au-delà du plafond sont ÉCARTÉS, et le disent : une
             // coupe silencieuse ferait croire que tout l'historique est parti.
@@ -228,60 +240,16 @@ object AiContext {
                     AiContextOmitted(old.type, sanitizeLabel(old.type, old.label), AiContextOmitReason.BUDGET),
                 )
             }
-        }
-        val seenLabels = HashSet<String>()
-        val seenContents = HashSet<String>()
-        var total = 0
-
-        for ((_, item) in ordered) {
-            val sourceLabel = sanitizeLabel(item.type, item.label)
-            val text = item.text.trim()
-            if (text.isEmpty()) {
-                omitted.add(AiContextOmitted(item.type, sourceLabel, AiContextOmitReason.EMPTY))
-                continue
+            val historyStart = sources.size
+            for (item in history.takeLast(MAX_HISTORY_ITEMS).asReversed()) {
+                // Un tour de chat n'est JAMAIS un doublon de contenu : « oui »
+                // répété reste une réponse distincte. Seul le libellé (unique
+                // par index) déduplique.
+                val kept = admit(item, sources, omitted, seenLabels, seenContents, MAX_TOTAL_CHARS - total, false)
+                if (kept != null) total += kept.text.length
             }
-            val labelKey = sourceLabel.lowercase()
-            // Contenu : casse CONSERVÉE (une formule change de sens en changeant
-            // de casse) ; seuls les blancs sont normalisés.
-            val contentKey = text.replace(SPACES, " ")
-            if (labelKey in seenLabels || contentKey in seenContents) {
-                omitted.add(AiContextOmitted(item.type, sourceLabel, AiContextOmitReason.DUPLICATE))
-                continue
-            }
-
-            if (sources.size >= MAX_SOURCES) {
-                omitted.add(AiContextOmitted(item.type, sourceLabel, AiContextOmitReason.MAX_SOURCES))
-                continue
-            }
-            val remaining = MAX_TOTAL_CHARS - total
-            if (remaining <= 0) {
-                omitted.add(AiContextOmitted(item.type, sourceLabel, AiContextOmitReason.BUDGET))
-                continue
-            }
-            val cap = minOf(MAX_SOURCE_CHARS, remaining)
-            // Une coupe déjà faite en amont (extraction bornée) reste SIGNALÉE :
-            // le drapeau de l'item et sa taille d'origine ne sont jamais perdus.
-            val truncated = item.truncated || text.length > cap
-            val originalChars = maxOf(item.originalChars, text.length)
-            val kept = if (text.length > cap) text.take(cap).trimEnd() else text
-            if (kept.isEmpty()) {
-                omitted.add(AiContextOmitted(item.type, sourceLabel, AiContextOmitReason.EMPTY))
-                continue
-            }
-            // Le premier candidat RETENU gagne : un doublon d'une source écartée
-            // (budget, plafond) n'est pas un doublon de ce qui part vraiment.
-            seenLabels.add(labelKey)
-            seenContents.add(contentKey)
-            sources.add(
-                AiContextSource(
-                    type = item.type,
-                    label = sourceLabel,
-                    text = kept,
-                    originalChars = originalChars,
-                    truncated = truncated,
-                ),
-            )
-            total += kept.length
+            // Chronologie : le plus ancien tour retenu part en premier.
+            sources.subList(historyStart, sources.size).reverse()
         }
 
         val refusal = if (sources.isEmpty() && !entry.allowEmpty) {
@@ -298,10 +266,94 @@ object AiContext {
         )
     }
 
+    /**
+     * Tente d'admettre une candidate dans le lot : vide, doublon, plafond de
+     * sources puis budget, dans cet ordre. Retourne la source réellement
+     * retenue, ou `null` avec une raison dans `omitted`.
+     *
+     * `dedupeContent = false` pour l'historique : un tour de chat répété
+     * (« oui », « oui ») est une réponse distincte, pas un doublon.
+     */
+    private fun admit(
+        item: AiContextItem,
+        sources: MutableList<AiContextSource>,
+        omitted: MutableList<AiContextOmitted>,
+        seenLabels: MutableSet<String>,
+        seenContents: MutableSet<String>,
+        remaining: Int,
+        dedupeContent: Boolean,
+    ): AiContextSource? {
+        val sourceLabel = sanitizeLabel(item.type, item.label)
+        val text = item.text.trim()
+        if (text.isEmpty()) {
+            omitted.add(AiContextOmitted(item.type, sourceLabel, AiContextOmitReason.EMPTY))
+            return null
+        }
+        val labelKey = sourceLabel.lowercase()
+        // Contenu : casse CONSERVÉE (une formule change de sens en changeant
+        // de casse) ; seuls les blancs sont normalisés.
+        val contentKey = text.replace(SPACES, " ")
+        if (labelKey in seenLabels || (dedupeContent && contentKey in seenContents)) {
+            omitted.add(AiContextOmitted(item.type, sourceLabel, AiContextOmitReason.DUPLICATE))
+            return null
+        }
+        if (sources.size >= MAX_SOURCES) {
+            omitted.add(AiContextOmitted(item.type, sourceLabel, AiContextOmitReason.MAX_SOURCES))
+            return null
+        }
+        if (remaining <= 0) {
+            omitted.add(AiContextOmitted(item.type, sourceLabel, AiContextOmitReason.BUDGET))
+            return null
+        }
+        val cap = minOf(MAX_SOURCE_CHARS, remaining)
+        // Une coupe déjà faite en amont (extraction bornée) reste SIGNALÉE :
+        // le drapeau de l'item et sa taille d'origine ne sont jamais perdus.
+        val truncated = item.truncated || text.length > cap
+        val originalChars = maxOf(item.originalChars, text.length)
+        val kept = if (text.length > cap) text.take(cap).trimEnd() else text
+        if (kept.isEmpty()) {
+            omitted.add(AiContextOmitted(item.type, sourceLabel, AiContextOmitReason.EMPTY))
+            return null
+        }
+        // Le premier candidat RETENU gagne : un doublon d'une source écartée
+        // (budget, plafond) n'est pas un doublon de ce qui part vraiment.
+        seenLabels.add(labelKey)
+        if (dedupeContent) seenContents.add(contentKey)
+        val source = AiContextSource(
+            type = item.type,
+            label = sourceLabel,
+            text = kept,
+            originalChars = originalChars,
+            truncated = truncated,
+        )
+        sources.add(source)
+        return source
+    }
+
+    /**
+     * Assainit un titre : invisibles (espaces Unicode et caractères de format)
+     * deviennent une espace normale avant le repli des blancs. Aucun caractère
+     * invisible ne doit survivre dans un libellé citable.
+     */
     private fun sanitizeTitle(raw: String): String =
-        raw.replace(CONTROL_CHARS, " ")
+        raw.replace(INVISIBLE_SPACES, " ")
+            .replace(CONTROL_CHARS, " ")
             .replace(SPACES, " ")
             .trim()
+
+    /**
+     * Borne un libellé à [MAX_LABEL_CHARS] sans couper une paire de
+     * substitution : un demi-caractère échapperait au rendu et à la citation.
+     */
+    private fun clampLabel(label: String): String {
+        if (label.length <= MAX_LABEL_CHARS) return label
+        val cut = if (Character.isHighSurrogate(label[MAX_LABEL_CHARS - 1])) {
+            MAX_LABEL_CHARS - 1
+        } else {
+            MAX_LABEL_CHARS
+        }
+        return label.substring(0, cut)
+    }
 
     /**
      * Construit un libellé citable STABLE : préfixe de type + titre assaini.
@@ -312,7 +364,7 @@ object AiContext {
         val clean = sanitizeTitle(title)
         val unsafe = clean.isEmpty() || URL_LIKE.containsMatchIn(clean) || REF_LIKE.matches(clean)
         val safe = if (unsafe) type.prefix else "${type.prefix} : $clean"
-        return safe.take(MAX_LABEL_CHARS).trim()
+        return clampLabel(safe).trim()
     }
 
     /**
@@ -324,6 +376,6 @@ object AiContext {
         val clean = sanitizeTitle(raw)
         val unsafe = clean.isEmpty() || URL_LIKE.containsMatchIn(clean) || REF_LIKE.matches(clean)
         val safe = if (unsafe) type.prefix else clean
-        return safe.take(MAX_LABEL_CHARS).trim()
+        return clampLabel(safe).trim()
     }
 }
