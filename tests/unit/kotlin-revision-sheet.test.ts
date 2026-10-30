@@ -38,6 +38,11 @@ type Sources = { sources: string[] };
 /** Sources canoniques d'une fiche (le corpus fourni au modèle). */
 const CANONICAL = ["Consigne", "Cours : chapitre 4"];
 
+/** Nombre de blocs « Sources : » d'un texte : la fiche n'en porte qu'UN. */
+function countSources(text: string): number {
+  return (text.match(/Sources\s*:/gi) ?? []).length;
+}
+
 /** Un corps de ~6 000 caractères, dont la FIN est repérable. */
 const LONG_BODY = `${"Rappel : derivee de x^2 = 2x. ".repeat(180)}\nFIN-DE-LA-FICHE`;
 
@@ -147,10 +152,9 @@ describe("export PDF de fiche : la liste CANONIQUE des sources fait foi (#412)",
     expect(text).toContain("Suite du corps.");
   });
 
-  // #499 : un « Sources : » AU MILIEU du corps (le cours le contient, ou le
-  // modèle en cite un) ne doit pas MANGER le contenu qui suit : avant, le
-  // bloc était retiré en bloc, jusqu'à la fin du corps — les puces de contenu
-  // disparaissaient du corps ET de l'export, silencieusement.
+  // #499 / I15 : un « Sources : » AU MILIEU du corps (le cours le contient, ou
+  // le modèle en cite un) ne doit pas MANGER le contenu qui suit. Le bloc
+  // s'arrête à la première LIGNE VIDE : au-delà, c'est du cours, il reste.
   test.skipIf(skip)("un « Sources : » au milieu du corps ne mange pas le contenu qui suit", async () => {
     const body = [
       "Rappel : derivee de x^2 = 2x.",
@@ -163,15 +167,17 @@ describe("export PDF de fiche : la liste CANONIQUE des sources fait foi (#412)",
     ].join("\n");
     const res = JSON.parse(await ask({ op: "pdfLines", body, sources: CANONICAL })) as Lines;
     const text = res.lines.join("\n");
-    // Le CONTENU est entier : la puce qui n'est pas une source canonique
-    // reste (c'est du cours, pas une attribution).
-    expect(text).toContain("- Methode : poser f(3) = 9 et verifier");
+    // Le contenu APRÈS la ligne vide est entier : le bloc ne l'avale pas.
     expect(text).toContain("Rappel : derivee de x^2 = 2x.");
     expect(text).toContain("Suite du corps.");
     // La CITATION canonique du modèle, elle, est remplacée par la liste
     // canonique (une seule fois).
     expect(text).toContain("- Consigne");
     expect(text).toContain("- Cours : chapitre 4");
+    // Le bloc du modèle — même une puce qui ressemble à du cours — part : il
+    // n'est pas la source de vérité (la liste canonique l'est).
+    expect(text).not.toContain("Methode : poser f(3) = 9 et verifier");
+    expect(countSources(text)).toBe(1);
   });
 
   test.skipIf(skip)("une citation libre n'entre JAMAIS dans la liste des sources", async () => {
@@ -247,6 +253,134 @@ describe("export PDF de fiche : la liste CANONIQUE des sources fait foi (#412)",
     expect(text).toContain("- Consigne");
     expect(text).toContain("- Cours : chapitre 4");
     expect(text).not.toContain("Source inventee");
+  });
+});
+
+describe("en-têtes de sources du modèle : tous retirés, jamais recopiés (I15)", () => {
+  // Le modèle écrit librement : titres markdown, gras, citation, attributions
+  // en ligne, puces de fausse métadonnée. AUCUNE de ces formes n'est une
+  // source : la fiche garde le corps entier, PLUS un seul bloc canonique.
+
+  test.skipIf(skip)("« **Sources** » suivi de « [1] … » ne survit ni au corps ni au PDF", async () => {
+    const fiche = ["Rappel du cours.", "", "**Sources**", "[1] Données sur un site inconnu."].join("\n");
+    const res = JSON.parse(await ask({ op: "assemble", fiche, sources: CANONICAL })) as Sheet;
+    expect(res.body).not.toContain("Données sur un site inconnu");
+    expect(res.body).not.toContain("**Sources**");
+    expect(countSources(res.body)).toBe(1);
+
+    const pdf = JSON.parse(await ask({ op: "pdfLines", body: res.body, sources: res.sources })) as Lines;
+    const text = pdf.lines.join("\n");
+    expect(text).not.toContain("Données sur un site inconnu");
+    expect(countSources(text)).toBe(1);
+    expect(text).toContain("- Consigne");
+    expect(text).toContain("- Cours : chapitre 4");
+  });
+
+  test.skipIf(skip)("« ## Sources : » et sa puce inventée partent, le cours reste", async () => {
+    const fiche = [
+      "## Dérivées",
+      "La dérivée de x^2 est 2x.",
+      "",
+      "## Sources :",
+      "- Source inventee",
+      "",
+      "## Limites",
+      "Une limite se calcule.",
+    ].join("\n");
+    const res = JSON.parse(await ask({ op: "assemble", fiche, sources: CANONICAL })) as Sheet;
+    expect(res.body).not.toContain("Source inventee");
+    expect(res.body).toContain("La dérivée de x^2 est 2x.");
+    expect(res.body).toContain("Une limite se calcule.");
+    expect(countSources(res.body)).toBe(1);
+
+    const pdf = JSON.parse(await ask({ op: "pdfLines", body: res.body, sources: res.sources })) as Lines;
+    const text = pdf.lines.join("\n");
+    expect(text).not.toContain("Source inventee");
+    expect(text).toContain("Dérivées");
+    expect(text).toContain("Limites");
+    expect(countSources(text)).toBe(1);
+  });
+
+  test.skipIf(skip)("une attribution en ligne « Sources : A, B » est retirée", async () => {
+    const fiche = "Rappel du cours.\n\nSources : Wikipedia, ChatGPT\n\nSuite du cours.";
+    const res = JSON.parse(await ask({ op: "assemble", fiche, sources: CANONICAL })) as Sheet;
+    expect(res.body).not.toContain("Wikipedia");
+    expect(res.body).not.toContain("ChatGPT");
+    expect(res.body).toContain("Rappel du cours.");
+    expect(res.body).toContain("Suite du cours.");
+    expect(countSources(res.body)).toBe(1);
+
+    const pdf = JSON.parse(await ask({ op: "pdfLines", body: res.body, sources: res.sources })) as Lines;
+    const text = pdf.lines.join("\n");
+    expect(text).not.toContain("Wikipedia");
+    expect(text).not.toContain("ChatGPT");
+    expect(countSources(text)).toBe(1);
+  });
+
+  test.skipIf(skip)("les puces de fausse métadonnée ne sont pas des sources, le cours qui suit reste", async () => {
+    const fiche = [
+      "Rappel du cours.",
+      "",
+      "Sources :",
+      "- Matière : NSI",
+      "- Date : 2026-10-19",
+      "- Niveau : Terminale",
+      "",
+      "- Chapitre 1 : les dérivées",
+      "- Chapitre 2 : les limites",
+    ].join("\n");
+    const res = JSON.parse(await ask({ op: "assemble", fiche, sources: CANONICAL })) as Sheet;
+    // La fausse métadonnée n'est pas une source : elle part.
+    expect(res.body).not.toContain("Matière : NSI");
+    expect(res.body).not.toContain("Date : 2026-10-19");
+    expect(res.body).not.toContain("Niveau : Terminale");
+    // Après la ligne vide, c'est du COURS : il reste.
+    expect(res.body).toContain("- Chapitre 1 : les dérivées");
+    expect(res.body).toContain("- Chapitre 2 : les limites");
+    expect(countSources(res.body)).toBe(1);
+    expect(res.sources).toEqual(expect.arrayContaining(CANONICAL));
+
+    const pdf = JSON.parse(await ask({ op: "pdfLines", body: res.body, sources: res.sources })) as Lines;
+    const text = pdf.lines.join("\n");
+    expect(text).not.toContain("Matière : NSI");
+    expect(text).not.toContain("Date : 2026-10-19");
+    expect(text).toContain("- Chapitre 1 : les dérivées");
+    expect(countSources(text)).toBe(1);
+  });
+
+  test.skipIf(skip)("un bloc fake AU MILIEU (citation markdown) ne coupe pas le corps", async () => {
+    const fiche = [
+      "## Dérivées",
+      "La dérivée de x^2 est 2x.",
+      "",
+      "> **Sources**",
+      "> [1] Faux site",
+      "> [2] Autre faux site",
+      "",
+      "## Limites",
+      "Une limite se calcule.",
+      "FIN-DU-CORPS",
+    ].join("\n");
+    const res = JSON.parse(await ask({ op: "assemble", fiche, sources: CANONICAL })) as Sheet;
+    expect(res.body).not.toContain("Faux site");
+    expect(countSources(res.body)).toBe(1);
+    expect(res.body).toContain("FIN-DU-CORPS");
+
+    const pdf = JSON.parse(await ask({ op: "pdfLines", body: res.body, sources: res.sources })) as Lines;
+    const text = pdf.lines.join("\n");
+    expect(text).not.toContain("Faux site");
+    expect(text).toContain("La dérivée de x^2 est 2x.");
+    expect(text).toContain("Une limite se calcule.");
+    expect(text).toContain("FIN-DU-CORPS");
+    expect(countSources(text)).toBe(1);
+  });
+
+  test.skipIf(skip)("un titre ordinaire « Sources historiques » n'est pas un en-tête", async () => {
+    const fiche = "Rappel.\n\n## Sources historiques\n\nLe texte latin date de 1960.";
+    const res = JSON.parse(await ask({ op: "assemble", fiche, sources: CANONICAL })) as Sheet;
+    expect(res.body).toContain("Sources historiques");
+    expect(res.body).toContain("Le texte latin date de 1960.");
+    expect(countSources(res.body)).toBe(1);
   });
 });
 
