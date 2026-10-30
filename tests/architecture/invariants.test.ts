@@ -14,6 +14,11 @@ import {
   parseMimeTable,
 } from "../../agents/runtime/source-guards";
 import { readBridgeSource } from "../unit/fixtures/bridge-source";
+import {
+  expectSourceContains,
+  expectSourceMatch,
+  expectSourceNotMatch,
+} from "../unit/fixtures/source-assert";
 
 const ROOT = join(import.meta.dir, "..", "..");
 
@@ -156,13 +161,13 @@ describe("invariants", () => {
 
   test("I6: contenu externe marqué UNTRUSTED_DATA dans le port Kotlin", () => {
     // Le marquage est exécuté sur l'appareil, près du prompt qui le consomme.
-    const kt = readFileSync(
-      join(ROOT, "android/core/src/main/java/fr/veryslopnynotes/core/Untrusted.kt"),
-      "utf8",
+    const untrusted = join(
+      ROOT,
+      "android/core/src/main/java/fr/veryslopnynotes/core/Untrusted.kt",
     );
-    expect(kt).toContain("UNTRUSTED_DATA");
-    expect(kt).toContain("nonce");
-    expect(kt).toContain("createNonce");
+    expectSourceContains(readFileSync(untrusted, "utf8"), "UNTRUSTED_DATA", untrusted);
+    expectSourceContains(readFileSync(untrusted, "utf8"), "nonce", untrusted);
+    expectSourceContains(readFileSync(untrusted, "utf8"), "createNonce", untrusted);
   });
 
   // #398 : I6 — le contenu externe est une DONNÉE, jamais un programme. Le
@@ -212,7 +217,11 @@ describe("invariants", () => {
     // 4. Le pont sert le type de `mimeOf` — jamais un type écrit en dur pour
     //    une pièce jointe nommée par le serveur.
     const bridge = codeOnly(readBridgeSource());
-    expect(bridge).toMatch(/openFile\(file,\s*mimeOf\(/);
+    expectSourceMatch(
+      bridge,
+      /openFile\(file,\s*mimeOf\(/,
+      join(APP, "VsnBridge.kt"),
+    );
   });
 
   // #242 : characterization pins — resserrent des trous prouvés, sans changer
@@ -234,13 +243,25 @@ describe("invariants", () => {
   // toujours, avant meme le reseau).
   test("I5: la fiche de revision passe par le point d'entree public du core", () => {
     const bridge = codeOnly(readBridgeSource());
+    const pont = join(
+      ROOT,
+      "android",
+      "app",
+      "src",
+      "main",
+      "java",
+      "fr",
+      "veryslopnynotes",
+      "app",
+      "VsnBridge.kt",
+    );
     // Le point d'entree canonique…
-    expect(bridge).toMatch(/RevisionAi\.requestRevisionSheet\(/);
+    expectSourceMatch(bridge, /RevisionAi\.requestRevisionSheet\(/, pont);
     // …avec la cle de l'app relayee…
-    expect(bridge).toMatch(/requestRevisionSheet\([^\n]*apiKey/);
+    expectSourceMatch(bridge, /requestRevisionSheet\([^\n]*apiKey/, pont);
     // …et plus AUCUN appel fournisseur a la main pour la fiche.
-    expect(bridge).not.toMatch(/generateSafe\(/);
-    expect(bridge).not.toMatch(/revisionPromptFor\(/);
+    expectSourceNotMatch(bridge, /generateSafe\(/, pont);
+    expectSourceNotMatch(bridge, /revisionPromptFor\(/, pont);
     // Le prompt et le schema sont decideds par le core, pas par le pont.
     const core = codeOnly(
       readFileSync(
