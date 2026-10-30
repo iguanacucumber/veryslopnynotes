@@ -138,15 +138,26 @@ function indent(out: string): string {
 
 /** Lignes d'un log d'échec affichées dans le terminal. Le reste part dans un
  *  fichier : une compilation Gradle ratée ou une suite qui casse en série
- *  jette des milliers de lignes, et la cause est dans la fin. */
-const FAIL_TAIL_LINES = 120;
+ *  jette des milliers de lignes, et la cause est dans la fin. 24 lignes ≈ 400
+ *  tokens : au-delà, l'agent lit sa propre sortie au lieu du code. */
+const FAIL_TAIL_LINES = 24;
 
-function failedLog(target: string, out: string): string {
-  const lines = out.replace(/\s+$/, "").split("\n");
-  if (lines.length <= FAIL_TAIL_LINES) return indent(out);
+/** Plafond de lignes bruitées (SKIP/REPLI) affichées en succès. */
+const MAX_LOUD_LINES = 12;
+
+/** Écrit le log complet hors contexte. Un fichier par étape : `make <cible>`
+ *  reste la commande de relecture, le chemin ne sert qu'au cas où. */
+function dumpLog(target: string, out: string): string {
   const dir = mkdtempSync(join(tmpdir(), "vsn-check-"));
   const path = join(dir, `${target.replace(/[^\w.-]+/g, "_")}.log`);
   writeFileSync(path, out, { mode: 0o600 });
+  return path;
+}
+
+function failedLog(target: string, out: string): string {
+  const lines = out.replace(/\s+$/, "").split("\n");
+  const path = dumpLog(target, out);
+  if (lines.length <= FAIL_TAIL_LINES) return indent(lines.join("\n"));
   const hidden = lines.length - FAIL_TAIL_LINES;
   return (
     `    … ${hidden} ligne(s) masquée(s) — log complet : ${path}\n` +
@@ -157,14 +168,28 @@ function failedLog(target: string, out: string): string {
 /** SKIP BRUYANT / REPLI + les 2 lignes suivantes (le message tient en 3 lignes).
  *  Afficher le log entier à chaque run parce que le corpus Pronote saute ferait
  *  du bruit de fond, pas du signal : c'est le saut qui doit se voir, pas tout le
- *  reste. Casse-SENSIBLE : « 1 skip » d'un résumé bun n'est pas un saut d'étape. */
+ *  reste. Casse-SENSIBLE : « 1 skip » d'un résumé bun n'est pas un saut d'étape.
+ *  Un même bloc répété par N fichiers de test (kotlinc absent) est replié en
+ *  `(×N)` : 144 lignes identiques valent une ligne. */
 function loudLines(out: string): string[] {
   const lines = out.split("\n");
-  const keep = new Set<number>();
+  const blocks: string[][] = [];
   lines.forEach((l, i) => {
-    if (/\b(SKIP|REPLI)\b/.test(l)) for (let j = i; j <= Math.min(i + 2, lines.length - 1); j++) keep.add(j);
+    if (/\b(SKIP|REPLI)\b/.test(l)) blocks.push(lines.slice(i, Math.min(i + 3, lines.length)));
   });
-  return [...keep].sort((a, b) => a - b).map((i) => lines[i]!);
+  const kept: string[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    let n = 1;
+    const block = blocks[i]!;
+    while (i + 1 < blocks.length && blocks[i + 1]!.join("\n") === block.join("\n")) {
+      n++;
+      i++;
+    }
+    const first = n > 1 ? `${block[0]} (×${n})` : block[0]!;
+    kept.push(first, ...block.slice(1));
+  }
+  if (kept.length <= MAX_LOUD_LINES) return kept;
+  return [...kept.slice(0, MAX_LOUD_LINES), `… ${kept.length - MAX_LOUD_LINES} ligne(s) de plus (log : make <cible>)`];
 }
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(2)}s`;
@@ -195,8 +220,14 @@ async function main(): Promise<void> {
     // Une étape verte ne montre que son résumé SAUF signal de niveau étape :
     // SKIP bruyant (jamais de faux vert) ou repli offline→online. En échec, la
     // fin du log (le complet part dans un fichier, cf. `failedLog`).
-    if (!ok) console.log(failedLog(r.target, out));
-    else {
+    //
+    // Une seule étape rouge détaille : une régression partagée fait tomber 5
+    // étapes, et 5 queues de 120 lignes = ~16 k tokens pour la même cause. Les
+    // suivantes renvoient à `make <cible>` (une étape se rejoue seule).
+    if (!ok) {
+      const first = failed.length === 1;
+      console.log(first ? failedLog(r.target, out) : `    … détail : make ${r.target}`);
+    } else {
       const loud = loudLines(out);
       if (loud.length) console.log(indent(loud.join("\n")));
     }
