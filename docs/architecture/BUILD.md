@@ -21,6 +21,11 @@ seul goulot est le CPU (16 cœurs). Chaque étape est une cible `make` invoquée
 | `web-typecheck` | `tsc -p web/tsconfig.json`. |
 | `web-test` | `bun test tests/web` + web architecture. |
 
+`android-compile` écrit le journal Gradle complet dans
+`node_modules/.cache/gate-logs/android-compile.log` ;
+`agents/runtime/kotlin-errors.ts` n'affiche que les `e:` (chemins relatifs,
+dédoublonnés, 10 lignes max), sans toucher au code de sortie (I5).
+
 ### Pourquoi le gate ne peut pas être allégé
 
 - **Android Lint et la compilation Kotlin** (#627) : les miroirs TS ne voient pas une surcharge ambiguë ou un import manquant côté Kotlin (piège réel : `MAX_LABEL_CHARS` non qualifié). Sans `kotlinc` + `java`, toute la parité TS ↔ Kotlin saute → faux vert. `REQUIRE_KOTLIN_TOOLCHAIN=1` est donc posé par le gate.

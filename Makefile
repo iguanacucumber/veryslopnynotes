@@ -69,6 +69,7 @@ contracts:
 # Compile Kotlin RÉELLE + Android Lint dans la même invocation Gradle. Seul
 # filet qui résout les symboles. Outillage absent = ÉCHEC, pas de skip silencieux.
 # Détail (offline d'abord, repli en ligne, -x buildWebUi) : docs/architecture/BUILD.md.
+# Le journal part dans un fichier fixe ; seul `kotlin-errors.ts` l'affiche.
 android-compile:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
@@ -82,14 +83,19 @@ android-compile:
 	    exit 1; \
 	  fi; \
 	else \
+	  log="$(CURDIR)/node_modules/.cache/gate-logs/android-compile.log"; \
+	  mkdir -p "$$(dirname "$$log")"; \
 	  echo "android-compile : JDK $$jdk, SDK $$sdk"; \
 	  cd android && { \
 	    JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --offline --console=plain -x buildWebUi \
-	      :core:compileDebugKotlin :data:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin :app:lintDebug || \
+	      :core:compileDebugKotlin :data:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin :app:lintDebug >"$$log" 2>&1 || \
 	    { echo "android-compile : REPLI EN LIGNE (cache Gradle incomplet — hors-ligne refusé)."; \
 	      JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain -x buildWebUi \
-	        :core:compileDebugKotlin :data:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin :app:lintDebug; }; \
-	  }; \
+	        :core:compileDebugKotlin :data:compileDebugKotlin :pronote:compileDebugKotlin :app:compileDebugKotlin :app:lintDebug >>"$$log" 2>&1; }; \
+	  }; code=$$?; \
+	  bun run "$(CURDIR)/agents/runtime/kotlin-errors.ts" "$$log" "$$code"; s=$$?; \
+	  [ "$$code" -eq 0 ] || exit "$$code"; \
+	  exit "$$s"; \
 	fi
 
 # Capture d'écran sur téléphone réel (`make shot ROUTE=grades`).
