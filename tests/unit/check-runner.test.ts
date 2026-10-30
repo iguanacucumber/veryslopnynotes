@@ -11,7 +11,8 @@ import { digestOf, PARITY_SOURCES, parityDigest } from "./fixtures/parity-source
 // Deux chemins à prouver, parce qu'un pilote qui rend toujours vert ne sert à
 // rien :
 //   1. cible verte → ✔ + résumé + code 0 ;
-//   2. cible cassée → ✘ + log de l'étape AFFICHÉ EN ENTIER + code 1.
+//   2. cible cassée → ✘ + log de l'étape + code 1. Au-delà de la borne, seule
+//      la fin s'affiche ; le log complet est écrit et son chemin imprimé.
 // Le 2e est le défaut que ce script est censé attraper : un recipe cassé ne doit
 // jamais se terminer par « check : OK ».
 //
@@ -96,13 +97,43 @@ describe("check.ts : pilote de `make check`", () => {
     expect(r.out).not.toContain("\n    check-secrets OK");
   });
 
-  test("cible inexistante : ✘, log complet, code 1", () => {
+  test("cible inexistante : ✘, log affiché, code 1", () => {
     const r = drive("cible-qui-nexiste-pas");
     expect(r.code).toBe(1);
     expect(r.out).toContain("✘ cible-qui-nexiste-pas");
     expect(r.out).toContain("check : ÉCHEC — cible-qui-nexiste-pas");
     // Le détail de l'étape est affiché, pas avalé.
     expect(r.out).toMatch(/make(\[\d+\])?: \*\*\*/);
+    // Log court : rien n'est masqué, aucun fichier n'est annoncé.
+    expect(r.out).not.toContain("ligne(s) masquée(s)");
+  });
+
+  test("échec long : la fin s'affiche, le fichier complet est écrit", () => {
+    const dir = mkdtempSync(join(tmpdir(), "check-710-long-"));
+    try {
+      // 300 lignes : seul le tail doit apparaître dans la sortie du harnais.
+      writeFileSync(join(dir, "Makefile"), "long:\n\t@seq 1 300\n\t@exit 1\n");
+      const p = Bun.spawnSync(["bun", DRIVER, dir], {
+        cwd: ROOT,
+        env: { ...process.env, CHECK_HARNESS: "1", CHECK_TARGETS: "long" },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const dec = new TextDecoder();
+      const out = dec.decode(p.stdout) + dec.decode(p.stderr);
+      expect(p.exitCode).toBe(1);
+      const path = /log complet : (\S+)/.exec(out)?.[1] ?? "";
+      expect(path).not.toBe("");
+      // Le début est masqué, la fin est là.
+      expect(out).not.toContain("\n    1\n");
+      expect(out).toContain("\n    300");
+      const full = readFileSync(path, "utf8");
+      expect(full).toMatch(/^1\n/);
+      expect(full).toContain("300");
+      rmSync(path, { force: true });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   // #368 : le défaut qui faisait passer le gate en vert à tort.
