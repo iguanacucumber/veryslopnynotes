@@ -3,7 +3,7 @@
 // de `ServerConfig.validateBaseUrl` et `SubjectPrefs` (Kotlin) : aucune règle
 // réseau ici, seulement ce qui peut être dit à l'utilisateur avant l'écriture.
 
-import type { SubjectPref, SubjectSaveResult } from "../../bridge/types";
+import type { ManualSaveResult, SubjectPref, SubjectSaveResult } from "../../bridge/types";
 
 export type Theme = "SYSTEM" | "LIGHT" | "DARK";
 
@@ -38,6 +38,38 @@ export function llmSaveError(response: { ok: boolean; message?: string }): strin
   if (response.ok) return "";
   const message = (response.message ?? "").trim();
   return message !== "" ? message : "Clé refusée : vérifie qu'elle est complète.";
+}
+
+export interface ManualSaveNotice {
+  notice: string;
+  kind: "info" | "error";
+}
+
+/**
+ * Phrase et gravité après un enregistrement de manuel : catalogue (choix
+ * automatique) ou ouvrage précis, récupéré ou non. Le message natif fait foi
+ * quand il existe ; la gravité suit le succès réel du scraper.
+ */
+export function manualSaveNotice(response: ManualSaveResult): ManualSaveNotice {
+  if (response.auto === true) {
+    const guess = [response.level ?? "", (response.specialties ?? []).join(", ")]
+      .map((part) => part.trim())
+      .filter((part) => part !== "")
+      .join(" · ");
+    return {
+      notice:
+        guess === ""
+          ? "Manuel automatique activé : l’ouvrage suivra la matière du devoir."
+          : `Manuel automatique activé (${guess}).`,
+      kind: "info",
+    };
+  }
+  return {
+    notice: response.ready
+      ? "Manuel récupéré : l'assistant peut le citer."
+      : response.message || "Adresse enregistrée, mais le manuel n'a pas pu être récupéré.",
+    kind: response.ready ? "info" : "error",
+  };
 }
 
 const MAX_LABEL_PART = 63;

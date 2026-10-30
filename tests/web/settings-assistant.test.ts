@@ -18,6 +18,10 @@ function between(text: string, start: string, end: string): string {
 
 describe("réglages — une seule section Assistant (#612)", () => {
   const settings = source("features/settings/SettingsScreen.tsx");
+  const overview = source("features/settings/AssistantOverviewCard.tsx");
+  const keyCard = source("features/settings/AssistantCards.tsx");
+  const manual = source("features/settings/ManualCard.tsx");
+  const server = source("features/settings/ServerCard.tsx");
 
   test("l'ordre Apparence, Matières, Assistant, Avancé remplace la section Sécurité", () => {
     expect(settings).not.toContain('title="Sécurité"');
@@ -32,34 +36,38 @@ describe("réglages — une seule section Assistant (#612)", () => {
 
   test("clé et manuel vivent dans Assistant, le scraper reste sous Avancé", () => {
     const assistant = between(settings, '<Section title="Assistant">', '<Section title="Avancé">');
-    expect(assistant).toContain('id="llm-key"');
-    expect(assistant).toContain('id="manual-url"');
-    expect(assistant).not.toContain('id="server-host"');
-    expect(assistant).toContain("Assistant actif");
-    expect(assistant).toContain("Aucune clé");
+    expect(assistant).toContain("<AssistantCards");
+    expect(assistant).toContain("<ManualCard");
+    expect(assistant).not.toContain("<ServerCard");
+    expect(keyCard).toContain('id="llm-key"');
+    expect(manual).toContain('id="manual-url"');
+    expect(manual).not.toContain('id="server-host"');
+    expect(overview).toContain("Assistant actif");
+    expect(overview).toContain("Aucune clé");
 
-    const advanced = between(settings, '<Section title="Avancé">', "<Dialog");
-    expect(advanced).toContain('id="server-host"');
-    expect(advanced).toContain("Scraper de manuels (facultatif)");
-    expect(advanced).not.toContain('id="manual-url"');
+    const advanced = settings.slice(settings.indexOf('<Section title="Avancé">'));
+    expect(advanced).toContain("<ServerCard");
+    expect(advanced).not.toContain("<ManualCard");
+    expect(server).toContain('id="server-host"');
+    expect(server).toContain("Scraper de manuels (facultatif)");
+    expect(server).not.toContain('id="manual-url"');
   });
 
   test("Cahier et Fiches sont atteignables depuis Assistant", () => {
-    const assistant = between(settings, '<Section title="Assistant">', '<Section title="Avancé">');
-    expect(settings).toContain("useViewNavigate");
-    expect(assistant).toContain('navigate("/course-notes")');
-    expect(assistant).toContain('navigate("/revision-sheets")');
+    expect(overview).toContain("useViewNavigate");
+    expect(overview).toContain('navigate("/course-notes")');
+    expect(overview).toContain('navigate("/revision-sheets")');
   });
 
   test("oublier la clé passe par une confirmation destructive", () => {
-    const forget = between(settings, "async function forgetKey()", "async function saveSubject");
+    const forget = keyCard.slice(keyCard.indexOf("async function forgetKey()"));
     expect(forget).toContain("bridge.forgetLlmKey()");
     expect(forget).toContain("setForgetAsk(false)");
     // Le bouton de la carte ouvre le dialogue ; il n'appelle jamais le pont.
-    expect(settings).toContain("onClick={() => setForgetAsk(true)}");
-    expect(settings.match(/void forgetKey\(\)/g)).toHaveLength(1);
+    expect(keyCard).toContain("onClick={() => setForgetAsk(true)}");
+    expect(keyCard.match(/void forgetKey\(\)/g)).toHaveLength(1);
 
-    const dialog = between(settings, "<Dialog", "/>");
+    const dialog = between(keyCard, "<Dialog", "/>");
     expect(dialog).toContain('role="alertdialog"');
     expect(dialog).toContain("void forgetKey()");
     expect(dialog).toContain("btn--danger");
@@ -67,21 +75,21 @@ describe("réglages — une seule section Assistant (#612)", () => {
   });
 
   test("la copie dit où part la clé sans promettre le contraire", () => {
-    expect(settings).toContain("Clé OpenRouter");
-    expect(settings).toContain("llmSaveError(response)");
-    expect(settings).toContain("MAX_API_KEY_CHARS");
-    expect(settings).toContain("directement au");
-    expect(settings).not.toContain("ne quitte jamais cet appareil");
+    expect(keyCard).toContain("Clé OpenRouter");
+    expect(keyCard).toContain("llmSaveError(response)");
+    expect(keyCard).toContain("MAX_API_KEY_CHARS");
+    expect(keyCard).toContain("directement au");
+    expect(keyCard).not.toContain("ne quitte jamais cet appareil");
   });
 
   test("le manuel garde son pont et affiche une puce de statut", () => {
-    expect(settings).toContain("Automatique");
-    expect(settings).toContain("Prêt");
-    expect(settings).toContain("Non récupéré");
-    expect(settings).toContain("bridge.saveManualUrl(value)");
-    expect(settings).toContain('bridge.saveManualUrl("")');
-    expect(settings).toContain("DEFAULT_MANUAL_URL");
-    expect(settings).toContain("MAX_MANUAL_URL_CHARS");
+    expect(manual).toContain("Automatique");
+    expect(manual).toContain("Prêt");
+    expect(manual).toContain("Non récupéré");
+    expect(manual).toContain("bridge.saveManualUrl(value)");
+    expect(manual).toContain('bridge.saveManualUrl("")');
+    expect(manual).toContain("DEFAULT_MANUAL_URL");
+    expect(manual).toContain("MAX_MANUAL_URL_CHARS");
   });
 });
 

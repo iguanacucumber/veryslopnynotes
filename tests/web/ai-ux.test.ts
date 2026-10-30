@@ -32,12 +32,12 @@ describe("IA — refus d'enregistrement de la clé", () => {
   });
 
   test("l'écran Réglages affiche ce message au lieu d'un diagnostic générique", () => {
-    const settings = source("features/settings/SettingsScreen.tsx");
-    expect(settings).toContain("llmSaveError(response)");
-    expect(settings).not.toContain('setLlmError("Clé refusée : vérifie');
+    const keyCard = source("features/settings/AssistantCards.tsx");
+    expect(keyCard).toContain("llmSaveError(response)");
+    expect(keyCard).not.toContain('setLlmError("Clé refusée : vérifie');
     // La clé part chez le fournisseur : l'écran ne peut pas dire l'inverse.
-    expect(settings).not.toContain("ne quitte jamais cet appareil");
-    expect(settings).toContain("directement au");
+    expect(keyCard).not.toContain("ne quitte jamais cet appareil");
+    expect(keyCard).toContain("directement au");
   });
 });
 
