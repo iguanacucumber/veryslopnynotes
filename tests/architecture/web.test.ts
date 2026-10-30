@@ -7,10 +7,10 @@ import {
   MAX_NATIVE_WAIT_MS,
   NATIVE_WAIT_MS,
 } from "../../web/src/bridge/types";
+import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const WEB = join(ROOT, "web");
-const BRIDGE = join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt");
 const BRIDGE_CALL = join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/BridgeCall.kt");
 
 function list(dir: string): string[] {
@@ -149,7 +149,7 @@ describe("contrat du pont natif", () => {
     // I10 / ADR-004 : UNE SEULE interface (`call`). Un second
     // `@JavascriptInterface` (l'ancien `cancel`) rendait une méthode
     // appelable par n'importe quel JS de la WebView, hors allowlist.
-    const kotlin = readFileSync(BRIDGE, "utf8");
+    const kotlin = readBridgeSource();
     expect(kotlinExposed(kotlin)).toEqual(["call"]);
     const client = readFileSync(join(WEB, "src/bridge/client.ts"), "utf8");
     const surface = /interface VsnNative \{([\s\S]*?)\n\}/.exec(client)?.[1] ?? "";
@@ -169,7 +169,7 @@ describe("contrat du pont natif", () => {
   });
 
   test("le plafond d'attente natif est le même des deux côtés", () => {
-    const kotlin = readFileSync(BRIDGE, "utf8");
+    const kotlin = readBridgeSource();
     const constants = kotlinConstants(kotlin);
     expect(constants.get("AWAIT_DEFAULT_MS")).toBe(NATIVE_WAIT_MS.default);
     expect(constants.get("AWAIT_MANUAL_MS")).toBe(NATIVE_WAIT_MS.manual);
@@ -199,7 +199,7 @@ describe("contrat du pont natif", () => {
     // Un message d'exception peut nommer l'hôte de l'établissement (adresse
     // interne, port) : il ne franchit pas la frontière native/JS (I10). Le
     // pont ne transmet que le CODE et rend une phrase choisie par lui.
-    const kotlin = readFileSync(BRIDGE, "utf8");
+    const kotlin = readBridgeSource();
     const debut = kotlin.indexOf("private fun pair(");
     expect(debut).toBeGreaterThan(-1);
     const corps = kotlin.slice(debut, kotlin.indexOf("private fun cancelPairing(", debut));

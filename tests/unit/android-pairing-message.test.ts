@@ -16,6 +16,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const MESSAGES = join(APP, "PairingMessages.kt");
@@ -105,7 +106,7 @@ describe("message d'appairage borné (#396)", () => {
   });
 
   test("le pont ne transmet que le code de l'échec", () => {
-    const bridge = readFileSync(join(APP, "VsnBridge.kt"), "utf8");
+    const bridge = readBridgeSource();
     const debut = bridge.indexOf("private fun pair(");
     expect(debut).toBeGreaterThan(-1);
     const corps = bridge.slice(debut, bridge.indexOf("private fun cancelPairing(", debut));

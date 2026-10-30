@@ -16,9 +16,9 @@ import {
   NATIVE_WAIT_MS,
   type SessionStatus,
 } from "../../web/src/bridge/types";
+import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const ROOT = join(import.meta.dir, "..", "..");
-const BRIDGE = join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt");
 const HTTP = join(ROOT, "android/pronote/src/main/java/fr/veryslopnynotes/pronote/HttpSession.kt");
 
 interface NativeCall {
@@ -57,7 +57,7 @@ describe("pont : délais", () => {
   test("le timeout JS par défaut dépasse le plafond d'attente natif", () => {
     // Le plafond natif est lu dans le Kotlin : le miroir TS ne peut pas
     // mentir sans que le test ne le voie.
-    const kotlin = readFileSync(BRIDGE, "utf8");
+    const kotlin = readBridgeSource();
     const constants = new Map<string, number>();
     for (const m of kotlin.matchAll(/const\s+val\s+(\w+)\s*=\s*([\d_]+)L?/g)) {
       constants.set(m[1]!, Number(m[2]!.replace(/_/g, "")));

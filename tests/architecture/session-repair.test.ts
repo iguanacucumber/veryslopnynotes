@@ -17,16 +17,15 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
+import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const DATA = join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data");
-const APP = join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app");
 const DEVICE_AUTH = join(DATA, "DeviceAuth.kt");
 const REPAIR = join(DATA, "SessionRepair.kt");
 const ACCOUNT = join(DATA, "AccountStore.kt");
 const PAIRING = join(DATA, "PairingRepository.kt");
 const WORKER = join(DATA, "PeriodicSyncWorker.kt");
-const BRIDGE = join(APP, "VsnBridge.kt");
 const APP_CONTEXT = join(ROOT, "web/src/ui/AppContext.tsx");
 
 /** Corps d'une fonction Kotlin (jusqu'à la déclaration suivante). */
@@ -39,7 +38,7 @@ function body(src: string, signature: string): string {
 
 describe("réparation d'une session morte (#397)", () => {
   test("le signal a un ABONNÉ : l'app branche la réparation", () => {
-    const bridge = readFileSync(BRIDGE, "utf8");
+    const bridge = readBridgeSource();
     // `setOnRejected` n'a plus ZERO appelant : c'était le cœur du défaut.
     expect(bridge).toContain("DeviceAuth.setOnRejected");
     // Branché UNE fois, au démarrage (dans le `init` du pont).
@@ -52,7 +51,7 @@ describe("réparation d'une session morte (#397)", () => {
   });
 
   test("l'abonné répare par le chemin EXISTANT (accounts.logout())", () => {
-    const bridge = readFileSync(BRIDGE, "utf8");
+    const bridge = readBridgeSource();
     const rejected = body(bridge, "private fun onSessionRejected()");
     expect(rejected).toContain("accounts.logout()");
     // La session du pont tombe aussi : `session.status` ne doit pas dire
@@ -92,7 +91,7 @@ describe("réparation d'une session morte (#397)", () => {
   });
 
   test("le compte appairé est ENREGISTRÉ à l'appairage", () => {
-    const bridge = readFileSync(BRIDGE, "utf8");
+    const bridge = readBridgeSource();
     const pairing = readFileSync(PAIRING, "utf8");
     // `accounts.add` est appelé sur le chemin `pairing.pair`.
     expect(bridge).toContain("accounts.add(");
@@ -110,7 +109,7 @@ describe("réparation d'une session morte (#397)", () => {
   });
 
   test("l'interface renvoie vers l'appairage (le refus 401 est bien publié)", () => {
-    const bridge = readFileSync(BRIDGE, "utf8");
+    const bridge = readBridgeSource();
     // Le rejet devient un refus `auth_required` : c'est ce code que l'interface
     // écoute pour renvoyer vers l'appairage.
     expect(bridge).toContain('throw BridgeFailure("auth_required", error)');

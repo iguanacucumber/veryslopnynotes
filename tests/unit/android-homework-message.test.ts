@@ -16,10 +16,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const MESSAGES = join(APP, "HomeworkMessages.kt");
-const BRIDGE = join(APP, "VsnBridge.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "HomeworkMessagesParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
@@ -98,16 +98,16 @@ describe("message de refus de l'assistant (#416)", () => {
   });
 
   test("le pont envoie la phrase choisie, jamais le motif du modèle", () => {
-    const bridge = readFileSync(BRIDGE, "utf8");
+    const bridge = readBridgeSource();
     const debut = bridge.indexOf("is HomeworkOutcome.Refused ->");
     expect(debut).toBeGreaterThan(-1);
     const corps = bridge.slice(debut, bridge.indexOf("\n        }", debut));
     // #629 : la construction du refus vit dans un helper borné, appelé par la
     // branche ; c'est lui qui porte la phrase et les CTA.
     expect(corps).toContain("homeworkRefusalJson(outcome, context)");
-    const helperDebut = bridge.indexOf("private fun homeworkRefusalJson");
+    const helperDebut = bridge.indexOf("internal fun VsnBridge.homeworkRefusalJson");
     expect(helperDebut).toBeGreaterThan(-1);
-    const helper = bridge.slice(helperDebut, bridge.indexOf("\n    /**", helperDebut));
+    const helper = bridge.slice(helperDebut, bridge.indexOf("\n/**", helperDebut));
     expect(helper).toContain('homeworkRefusalMessage(outcome.reason)');
     expect(helper).toContain('.put("message"');
     // Le motif libre ne doit plus sortir dans `body`.

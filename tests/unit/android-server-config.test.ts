@@ -10,11 +10,11 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { parityToolchain, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const ANDROID = join(ROOT, "android");
 const DATA = join(ANDROID, "data/src/main/java/fr/veryslopnynotes/data");
-const APP = join(ANDROID, "app/src/main/java/fr/veryslopnynotes/app");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "CoreValidationParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
@@ -209,11 +209,11 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
   test("adresse du scraper : état + store, déconnexion purge par logout()", () => {
     // Depuis le cutover WebView, le pont natif porte la graine et l'état ;
     // l'écran React n'a plus aucune saisie d'adresse serveur.
-    const bridge = read(join(APP, "VsnBridge.kt"));
+    const bridge = readBridgeSource();
     const bridgeCode = codeOnly(bridge);
     expect(bridge).toContain("private val baseUrlSeed: String = fr.veryslopnynotes.core.ServerConfig.baseUrl(");
-    expect(bridge).toContain("private val serverStore = ServerStore(ctx)");
-    expect(bridge).toContain("private fun currentBaseUrl(): String = serverStore.baseUrl(baseUrlSeed)");
+    expect(bridge).toContain("internal val serverStore = ServerStore(ctx)");
+    expect(bridge).toContain("internal fun currentBaseUrl(): String = serverStore.baseUrl(baseUrlSeed)");
     expect(bridge).toContain("serverStore.save(host)");
     // Aucune purge parallèle : tout passe par AccountStore.logout().
     expect(bridgeCode).not.toContain("clearAll(");
@@ -227,7 +227,7 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
   });
 
   test("grain de build : plus de valeur figée côté app, et pas de cleartext ajouté", () => {
-    const bridge = read(join(APP, "VsnBridge.kt"));
+    const bridge = readBridgeSource();
     expect(bridge).toContain("private val baseUrlSeed: String = fr.veryslopnynotes.core.ServerConfig.baseUrl(");
     expect(bridge).toContain("BuildConfig.SERVER_SCHEME");
     expect(bridge).toContain("BuildConfig.SERVER_HOST");

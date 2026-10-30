@@ -13,6 +13,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "LessonNotesMain.kt");
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
@@ -92,10 +93,7 @@ describe("course notes — executed rules (#586)", () => {
     // The old file is deleted only AFTER the new one is written.
     expect(store).toContain("if (written) legacyFile?.takeIf { it.isFile }?.delete()");
     // The file lives in offline/: account purge deletes it wholesale.
-    const bridge = readFileSync(
-      join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
-      "utf8",
-    );
+    const bridge = readBridgeSource();
     expect(bridge).toContain('File(ctx.filesDir, "offline/course-notes.json")');
     expect(bridge).toContain('legacyFile = File(ctx.filesDir, "offline/cahier.json")');
   });

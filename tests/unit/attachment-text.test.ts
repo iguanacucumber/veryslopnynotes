@@ -20,9 +20,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "AttachmentTextMain.kt");
-const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 
 const skip = parityToolchain.skipReason !== null;
@@ -366,7 +366,7 @@ describe("câblage du payload (#631)", () => {
 });
 
 describe("câblage du pont (#631)", () => {
-  const bridge = codeOnly(readFileSync(join(APP, "VsnBridge.kt"), "utf8"));
+  const bridge = codeOnly(readBridgeSource());
   const text = readFileSync(join(DATA, "AttachmentText.kt"), "utf8");
 
   test("le contexte IA télécharge puis extrait les pièces jointes, bornées", () => {

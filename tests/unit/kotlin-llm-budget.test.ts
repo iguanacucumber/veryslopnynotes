@@ -22,6 +22,7 @@ import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { HOMEWORK_MAX_ANSWER_CHARS } from "../../shared/contracts/api";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
@@ -192,12 +193,7 @@ describe("câblage : un seul endroit pour le budget (#411)", () => {
     expect(data.indexOf("catch (e: OutputTooLongException)")).toBeLessThan(
       data.indexOf("catch (_: AiError)"),
     );
-    const bridge = codeOnly(
-      readFileSync(
-        join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
-        "utf8",
-      ),
-    );
+    const bridge = codeOnly(readBridgeSource());
     expect(bridge).toContain("catch (e: OutputTooLongException)");
   });
 });

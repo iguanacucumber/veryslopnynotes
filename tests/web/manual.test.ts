@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { mockCall } from "../../web/src/bridge/mock";
 import { assignmentHasAssistantMaterial } from "../../web/src/features/tasks/assignments";
+import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const WEB = join(import.meta.dir, "..", "..", "web", "src");
 
@@ -54,10 +55,7 @@ describe("manuel — source de l'assistant", () => {
     expect(tasks).toContain("<summary>Ce qui est envoyé</summary>");
     expect(tasks).toContain("le texte du manuel sont envoyés");
     // Le natif ajoute l'extrait aux DEUX pipelines IA.
-    const bridge = readFileSync(
-      join(WEB, "..", "..", "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
-      "utf8",
-    );
+    const bridge = readBridgeSource();
     // #628 : le manuel brut entre dans l'assembleur unique (coupe signalée),
     // au lieu d'une source déjà tronquée à 2 000 caractères.
     expect(bridge).toContain("AiContext.manual(doc.title, doc.excerpt)");

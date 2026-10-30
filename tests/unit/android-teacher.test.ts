@@ -4,12 +4,13 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
-const BRIDGE = readFileSync(join(APP, "VsnBridge.kt"), "utf8");
+const BRIDGE = readBridgeSource();
 const ALLOWLIST = readFileSync(join(APP, "BridgeCall.kt"), "utf8");
 const STORE = readFileSync(join(DATA, "TeacherChatStore.kt"), "utf8");
 const CORE_CHAT = readFileSync(join(CORE, "TeacherChat.kt"), "utf8");
@@ -30,7 +31,7 @@ describe("pont professeur IA — méthode bornée et validée (#633)", () => {
   });
 
   test("le tour est borné AVANT l'appel et validé par le core", () => {
-    const turn = between(BRIDGE, "private fun teacherTurn(", "private fun teacherFailureCode(");
+    const turn = between(BRIDGE, "internal fun VsnBridge.teacherTurn(", "internal fun VsnBridge.teacherFailureCode(");
     expect(turn).toContain('bounded(p.string("subject"), TeacherChat.MAX_SUBJECT_CHARS)');
     expect(turn).toContain('bounded(p.string("message"), TeacherChat.MAX_MESSAGE_CHARS)');
     expect(turn).toContain("TeacherMode.fromWire(");
@@ -42,14 +43,14 @@ describe("pont professeur IA — méthode bornée et validée (#633)", () => {
   });
 
   test("aucune source = aucun appel payant", () => {
-    const turn = between(BRIDGE, "private fun teacherTurn(", "private fun teacherFailureCode(");
+    const turn = between(BRIDGE, "internal fun VsnBridge.teacherTurn(", "internal fun VsnBridge.teacherFailureCode(");
     expect(turn).toContain("context.sources.isEmpty()");
     expect(turn).toContain("AiContextType.HISTORY");
     expect(turn.indexOf("context.sources.isEmpty()")).toBeLessThan(turn.indexOf("TeacherChat.requestTurn("));
   });
 
   test("la clé reste native et n'entre jamais dans le prompt", () => {
-    const turn = between(BRIDGE, "private fun teacherTurn(", "private fun teacherFailureCode(");
+    const turn = between(BRIDGE, "internal fun VsnBridge.teacherTurn(", "internal fun VsnBridge.teacherFailureCode(");
     expect(turn).toContain("llmKeys.apiKey()");
     expect(turn).toContain("apiKey = apiKey");
     // Le prompt est construit dans TeacherChat à partir des DONNEES seules.
@@ -60,7 +61,7 @@ describe("pont professeur IA — méthode bornée et validée (#633)", () => {
   });
 
   test("les causes d'échec sont bornées : clé, quota, timeout, vide, réseau", () => {
-    const code = between(BRIDGE, "private fun teacherFailureCode(", "private fun aiContextForSubject(");
+    const code = between(BRIDGE, "internal fun VsnBridge.teacherFailureCode(", "internal fun VsnBridge.aiContextForSubject(");
     for (const wire of ['"key"', '"quota"', '"timeout"', '"empty"', '"network"']) {
       expect(code).toContain(wire);
     }
@@ -70,7 +71,7 @@ describe("pont professeur IA — méthode bornée et validée (#633)", () => {
   });
 
   test("la réponse ne transporte que du texte : aucun champ HTML", () => {
-    const turn = between(BRIDGE, "private fun teacherTurn(", "private fun teacherFailureCode(");
+    const turn = between(BRIDGE, "internal fun VsnBridge.teacherTurn(", "internal fun VsnBridge.teacherFailureCode(");
     expect(turn).toContain('put("answer", reply.answer)');
     expect(turn).not.toMatch(/put\("html"/);
     expect(turn).not.toContain("dangerouslySetInnerHTML");
@@ -86,11 +87,11 @@ describe("fil local du professeur — offline et purge (#633)", () => {
   });
 
   test("l'écriture et la suppression portent l'époque de l'opération", () => {
-    const save = between(BRIDGE, "private fun teacherSave(", "private fun teacherDelete(");
+    const save = between(BRIDGE, "internal fun VsnBridge.teacherSave(", "internal fun VsnBridge.teacherDelete(");
     expect(save).toContain("teacherChat.save(bounded, epoch)");
     // Jamais « ok » quand l'écriture a été abandonnée.
     expect(save).toContain('"Session modifiée : discussion non enregistrée."');
-    const remove = between(BRIDGE, "private fun teacherDelete(", "private fun revisionFailure(");
+    const remove = between(BRIDGE, "internal fun VsnBridge.teacherDelete(", "internal fun VsnBridge.revisionFailure(");
     expect(remove).toContain("teacherChat.delete(epoch)");
     // Dispatch : l'époque est capturée à l'ARRIVÉE de l'appel.
     expect(BRIDGE).toContain('"teacher.save" -> teacherSave(p, epoch)');

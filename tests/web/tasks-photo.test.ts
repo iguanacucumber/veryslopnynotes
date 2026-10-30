@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { mockCall } from "../../web/src/bridge/mock";
 import { BRIDGE_TIMEOUTS } from "../../web/src/bridge/types";
+import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const WEB = join(ROOT, "web", "src");
@@ -39,10 +40,7 @@ describe("devoirs — photo d'énoncé (#588)", () => {
   test("la photo inclut le cadrage : aucun timeout JS, comme le scan QR", () => {
     expect(BRIDGE_TIMEOUTS["llm.solvePhoto"]).toBe(0);
     // La constante native existe : le fil du pont ne pend pas pour toujours.
-    const bridge = readFileSync(
-      join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
-      "utf8",
-    );
+    const bridge = readBridgeSource();
     expect(bridge).toContain("AWAIT_PHOTO_MS = 180_000L");
     expect(bridge).toContain('"llm.solvePhoto" -> solveHomeworkPhoto(p, epoch)');
   });
@@ -80,10 +78,7 @@ describe("devoirs — photo d'énoncé (#588)", () => {
   });
 
   test("le natif réutilise les MÊMES sources que l'aide texte", () => {
-    const bridge = readFileSync(
-      join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
-      "utf8",
-    );
+    const bridge = readBridgeSource();
     // #628 : texte ET photo passent par le même assembleur, avec le même
     // corpus (seul `allowEmpty` distingue la photo). #631 : la semaine et
     // l'époque passent aussi, pour télécharger/écrire les pièces jointes dans
