@@ -20,6 +20,14 @@
 # Aucun secret : le dépôt est public, le job ne lit ni `.env`, ni token, ni
 # corpus Pronote (celui-ci est gitignoré : la parité sur données réelles est
 # donc SKIPpée, bruyamment, comme sur le poste).
+#
+# Les logs complets par étape (`node_modules/.cache/gate-logs/`, écrits
+# par `agents/runtime/output.ts`) partent en artefact 7 jours, et la sortie de
+# `check.ts` — quelques lignes — est recopiée dans le RÉSUMÉ d'étape : un agent
+# lit cette étape, pas un log de job de plusieurs milliers de lignes. Le résumé
+# est un MIROIR, jamais un verdict : seul le code de sortie de `make check`
+# décide (I5).
+
 name: gate
 
 on:
@@ -96,6 +104,10 @@ jobs:
       - name: SDK Android
         run: |
           set -euo pipefail
+          # `::group::` (UI seule) : l'installation du SDK est du décor — un
+          # agent qui lit ce log n'a pas à payer 20 lignes de `curl`/`unzip`.
+          # Seul le `ls` final (les dossiers VUS) reste hors du groupe.
+          echo "::group::SDK Android (téléchargement + licences)"
           sdk="$RUNNER_TEMP/android-sdk"
           base=https://dl.google.com/android/repository
           mkdir -p "$sdk/platforms" "$sdk/build-tools" "$RUNNER_TEMP/dl"
@@ -122,10 +134,17 @@ jobs:
           printf '\n84831b9409646a918e30573bab4c9c91346d8abd\n' > "$sdk/licenses/android-sdk-preview-license"
           echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+          echo "::endgroup::"
           ls "$sdk/platforms" "$sdk/build-tools"
 
+      # `--silent` : l'installation réussie est du décor, pas un résultat de
+      # gate. Elle SUPPRIME aussi le message d'erreur en cas d'échec : on
+      # rejoue alors sans `--silent` pour garder la cause lisible. Le code de
+      # sortie reste celui de `bun` — aucun vert fabriqué.
       - name: Dépendances
-        run: bun install --frozen-lockfile
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile --silent || bun install --frozen-lockfile
 
       # La parité TS <-> Kotlin compile et EXÉCUTE le port Kotlin : sans
       # `kotlinc` + `java`, toute la suite saute et le gate est vert sans une
@@ -154,6 +173,7 @@ jobs:
       - name: Compilateur Kotlin
         run: |
           set -euo pipefail
+          echo "::group::Compilateur Kotlin (cache + archive)"
           version="$KOTLIN_VERSION"
           root="$GITHUB_WORKSPACE/node_modules/.cache/kotlinc-${version}"
           home="$root/kotlinc"
@@ -175,6 +195,7 @@ jobs:
             echo "kotlinc hors du chemin épinglé : $(command -v kotlinc)" >&2
             exit 1
           fi
+          echo "::endgroup::"
           kotlinc -version
 
       # LE CACHE DU JAR DE PARITÉ (6,5 Mo). Le harnais compile le port Kotlin
@@ -207,8 +228,42 @@ jobs:
           path: node_modules/.cache/kotlin-parity
           key: kotlin-parity-${{ steps.port-kotlin.outputs.empreinte }}
 
+      # LE GATE. Une seule invocation, exactement celle du poste. Sa sortie
+      # (`check.ts` : une ligne par étape + la queue du premier échec) est
+      # recopiée dans le résumé d'étape — le log de job, lui, garde tout.
+      #
+      # `set +e` est NÉCESSAIRE : le shell GitHub tourne en `bash -e`, donc un
+      # gate ROUGE sortirait du script avant d'écrire le résumé. Le code de
+      # `make` est capturé par `PIPESTATUS[0]` (jamais celui de `tee`) puis
+      # rendu par `exit` : le verdict reste celui du gate (I5).
       - name: Gate
-        run: make check
+        run: |
+          set +e
+          set -o pipefail
+          resume="$RUNNER_TEMP/gate-summary.txt"
+          make check 2>&1 | tee "$resume"
+          code=${PIPESTATUS[0]}
+          if [ "$code" -eq 0 ]; then verdict=OK; else verdict=ÉCHEC; fi
+          {
+            printf '### Gate — %s\n\n```\n' "$verdict"
+            cat "$resume"
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$code"
+
+      # Les logs complets bornés (`gate-logs/<cible>.log`). `if: always()` :
+      # un gate ROUGE est précisément le run dont on veut les logs. Artefact
+      # et résumé sont des MIROIRS : l'absence de fichier ne fait pas échouer
+      # le job (une étape verte qui déborde n'écrit rien), et rien ici ne peut
+      # verdir un gate rouge.
+      - name: Logs du gate
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gate-logs
+          path: node_modules/.cache/gate-logs
+          retention-days: 7
+          if-no-files-found: ignore
 
   # #622 : le smoke navigateur, hors `make check` (le gate local n'exige pas
   # Chromium), rejoué ici sur chaque PR. Job indépendant : son verdict arrive
