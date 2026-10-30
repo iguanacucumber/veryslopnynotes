@@ -128,27 +128,30 @@ export function buildWeb(opts: {
 }
 
 /**
- * Le diagnostic d'une suite d'essais : la CAUSE de chaque essai (pas un
- * code nu), puis le journal. Un échec qui ne dit pas pourquoi est un échec
+ * Le diagnostic d'une suite d'essais : la CAUSE de chaque essai (pas un code
+ * nu). Le journal, lui, est écrit UNE fois par l'appelant — le recopier ici le
+ * faisait afficher deux fois. Un échec qui ne dit pas pourquoi est un échec
  * qu'on ne peut pas corriger (#516).
  */
 export function describeOutcome(r: BuildOutcome): string {
-  const lignes = r.attempts.map((a, i) => {
-    const cause =
-      a.code === 0
-        ? "OK"
-        : a.timedOut
-          ? `TUÉ par le plafond de durée`
-          : a.dead
-            ? `MORT (${a.signal ?? "code 128+n°"})`
-            : `ÉCHEC (code ${a.code})`;
-    return `essai ${i + 1}/${r.attempts.length} : ${cause} en ${(a.ms / 1000).toFixed(1)} s`;
-  });
-  const journaux = r.attempts
-    .map((a, i) => ({ a, i }))
-    .filter(({ a }) => a.journal.trim() !== "")
-    .map(({ a, i }) => `--- journal (essai ${i + 1}) ---\n${a.journal}`);
-  return [...lignes, ...journaux].join("\n");
+  return r.attempts
+    .map((a, i) => {
+      const cause =
+        a.code === 0
+          ? "OK"
+          : a.timedOut
+            ? `TUÉ par le plafond de durée`
+            : a.dead
+              ? `MORT (${a.signal ?? "code 128+n°"})`
+              : `ÉCHEC (code ${a.code})`;
+      return `essai ${i + 1}/${r.attempts.length} : ${cause} en ${(a.ms / 1000).toFixed(1)} s`;
+    })
+    .join("\n");
+}
+
+/** Journal sans séquences ANSI hors terminal : un log de CI n'est pas coloré. */
+function sansAnsi(s: string): string {
+  return process.stdout.isTTY ? s : s.replace(/\u001b\[[0-9;]*m/g, "");
 }
 
 // Point d'entrée seulement : le module reste importable (tests) SANS lancer
@@ -157,7 +160,7 @@ export function describeOutcome(r: BuildOutcome): string {
 if (import.meta.main) {
   const outDir = process.argv[2];
   const r = buildWeb(outDir ? { outDir } : {});
-  for (const a of r.attempts) process.stdout.write(a.journal);
+  for (const a of r.attempts) process.stdout.write(sansAnsi(a.journal));
   if (!r.ok) {
     console.error(`\nbuild web ÉCHOUÉ :\n${describeOutcome(r)}`);
     process.exitCode = 1;
