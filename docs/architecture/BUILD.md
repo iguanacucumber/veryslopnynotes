@@ -21,10 +21,8 @@ seul goulot est le CPU (16 cœurs). Chaque étape est une cible `make` invoquée
 | `web-typecheck` | `tsc -p web/tsconfig.json`. |
 | `web-test` | `bun test tests/web` + web architecture. |
 
-`android-compile` écrit le journal Gradle complet dans
-`node_modules/.cache/gate-logs/android-compile.log` ;
-`agents/runtime/kotlin-errors.ts` n'affiche que les `e:` (chemins relatifs,
-dédoublonnés, 10 lignes max), sans toucher au code de sortie (I5).
+`android-compile` journalise Gradle dans `gate-logs/android-compile.log` ;
+`kotlin-errors.ts` n'affiche que les `e:` (relatifs, dédoublonnés, 10 max).
 
 ### Pourquoi le gate ne peut pas être allégé
 
