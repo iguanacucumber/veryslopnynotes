@@ -20,15 +20,28 @@ import android.content.SharedPreferences
 class EncryptedLlmKeyStore(context: Context) : LlmKeyStore {
     private val prefs: SharedPreferences by lazy { encryptedPrefs(context, PREFS) }
 
+    // `commit()`, PAS `apply()` : synchrone, il rend la main une fois l'écriture
+    // sur disque, et il rend `false` en cas d'échec. `apply()` ne rendait pas
+    // la main au disque : un force-stop juste après « clé enregistrée » la
+    // perdait, et un force-stop juste après « Oublier » la LAISSAIT revenir au
+    // lancement suivant — la résurrection que le repli doit empêcher.
     override fun save(apiKey: String) {
-        prefs.edit().putString(KEY_API_KEY, validatedLlmKey(apiKey)).apply()
+        // `false` = stockage en échec : on JETTE (message sans la clé). Le repli
+        // dégrade alors vers la mémoire et efface le chiffré, donc l'ancienne
+        // clé ne reste jamais l'autorité.
+        check(prefs.edit().putString(KEY_API_KEY, validatedLlmKey(apiKey)).commit()) {
+            "clé LLM non enregistrée"
+        }
     }
 
     override fun apiKey(): String? =
         prefs.getString(KEY_API_KEY, null)?.takeIf { isValidLlmKey(it) }
 
     override fun clear() {
-        prefs.edit().remove(KEY_API_KEY).apply()
+        // Même raison : sans `commit()`, l'effacement pouvait ne jamais
+        // atteindre le disque. Un échec JETTE, et le repli passe alors par
+        // l'effacement DUR du fichier (`discard`) : la clé ne ressuscite pas.
+        check(prefs.edit().remove(KEY_API_KEY).commit()) { "clé LLM non effacée" }
     }
 
     companion object {

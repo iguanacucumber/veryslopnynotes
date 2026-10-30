@@ -98,6 +98,40 @@ describe("clé LLM — « Oublier » survit à un Keystore mort (#749)", () => {
     expect(res.health).toBe("UNAVAILABLE");
   });
 
+  test.skipIf(skip)("un commit() qui rend false n'enregistre pas en douce : repli mémoire + chiffré effacé", async () => {
+    const res = await ask<{
+      threw: boolean;
+      apiKey: string | null;
+      discards: number;
+      nextLaunch: string | null;
+      health: string;
+    }>({ op: "save-commit-false" });
+    expect(res.threw).toBe(false);
+    // La clé saisie reste utilisable pour la session en cours…
+    expect(res.apiKey).toBe("cle-1");
+    // …et l'ancienne entrée du disque ne reste pas l'autorité.
+    expect(res.discards).toBe(1);
+    expect(res.nextLaunch).toBeNull();
+    expect(res.health).toBe("UNAVAILABLE");
+  });
+
+  test.skipIf(skip)("un commit() qui rend false sur « Oublier » efface quand même le fichier", async () => {
+    const res = await ask<{
+      threw: boolean;
+      apiKey: string | null;
+      discards: number;
+      nextLaunch: string | null;
+      health: string;
+    }>({ op: "clear-commit-false" });
+    expect(res.threw).toBe(false);
+    expect(res.apiKey).toBeNull();
+    // L'écriture synchrone a échoué : l'effacement dur est le seul recours.
+    expect(res.discards).toBe(1);
+    // La preuve qui compte : rien ne ressuscite au lancement suivant.
+    expect(res.nextLaunch).toBeNull();
+    expect(res.health).toBe("UNAVAILABLE");
+  });
+
   test.skipIf(skip)("Keystore sain : l'effacement chiffré suffit, pas d'effacement dur", async () => {
     const res = await ask<{ apiKey: string | null; discards: number; nextLaunch: string | null }>({
       op: "healthy-clear",
@@ -136,6 +170,19 @@ describe("clé LLM — câblage Android (#749)", () => {
     // Toujours AUCUNE prefs simple : la clé ne doit jamais être en clair.
     expect(store).not.toMatch(/getSharedPreferences/);
     expect(store).not.toMatch(/Log\.|println|printStackTrace/);
+  });
+
+  test("enregistrer et oublier sont DURABLES : commit() vérifié, jamais apply()", () => {
+    const store = source("LlmKeyStore.kt");
+    // `apply()` rend la main AVANT le disque : un force-stop juste après
+    // « clé enregistrée » la perdait, et juste après « Oublier » la laissait
+    // ressusciter au lancement suivant. Les deux écritures chiffrées sont donc
+    // synchrones.
+    expect(store).not.toMatch(/\.apply\(\)/);
+    expect(store.match(/\.commit\(\)/g)).toHaveLength(2);
+    // `commit()` rend un Boolean : les deux appels en font un échec dur, que le
+    // repli traduit en dégradation + effacement du fichier.
+    expect(store.match(/check\(\s*prefs\.edit\(\)[\s\S]*?\.commit\(\)\s*\)/g)).toHaveLength(2);
   });
 
   test("le repli est PUR (exécuté par la parité) et ne journalise rien", () => {

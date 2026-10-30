@@ -46,11 +46,26 @@ private fun discardDisk() {
 /**
  * Un Keystore qui répond… sauf sur `throwOn` (« save » / « read » / « clear »).
  * C'est l'échec APRÈS l'init : la panne que l'app rencontrait en plein usage.
+ *
+ * `commitFails` modélise l'autre panne RÉELLE d'Android : un `commit()`
+ * synchrone qui rend `false` (écriture jamais posée sur le disque). La
+ * production en fait une exception (`EncryptedLlmKeyStore`), donc la politique
+ * du repli se teste ici sans SDK.
  */
-private class FakeSecureStore(private val throwOn: String = "") : LlmKeyStore {
+private class FakeSecureStore(
+    private val throwOn: String = "",
+    private val commitFails: Boolean = false,
+) : LlmKeyStore {
+    /** Même sémantique que le store chiffré : `false` devient un échec dur. */
+    private fun commit() {
+        check(!commitFails) { "stockage en échec" }
+    }
+
     override fun save(apiKey: String) {
         if (throwOn == "save") error("Keystore indisponible")
-        disk = validatedLlmKey(apiKey)
+        val secret = validatedLlmKey(apiKey)
+        commit()
+        disk = secret
     }
 
     override fun apiKey(): String? {
@@ -60,6 +75,7 @@ private class FakeSecureStore(private val throwOn: String = "") : LlmKeyStore {
 
     override fun clear() {
         if (throwOn == "clear") error("Keystore indisponible")
+        commit()
         disk = null
     }
 }
@@ -115,6 +131,27 @@ private class Driver {
                 "health" to health(),
             )
         }
+        // `commit()` qui rend `false` à l'enregistrement : l'ancienne clé est
+        // encore sur le disque, elle ne doit PAS rester l'autorité. La nouvelle
+        // reste utilisable en mémoire et le fichier est effacé.
+        "save-commit-false" -> {
+            disk = "cle-ancienne"
+            discards = 0
+            val store = ResilientLlmKeyStore(FakeSecureStore(commitFails = true)) { discardDisk() }
+            var threw = false
+            try {
+                store.save("cle-1")
+            } catch (_: Exception) {
+                threw = true
+            }
+            ok(
+                "threw" to JVal.Bool(threw),
+                "apiKey" to text(store.apiKey()),
+                "discards" to count(discards),
+                "nextLaunch" to text(FakeSecureStore().apiKey()),
+                "health" to health(),
+            )
+        }
         // Échec APRÈS l'init sur `apiKey` : la lecture ne jette pas, elle
         // retombe sur la mémoire (la clé écrite ensuite).
         "read-throws" -> {
@@ -136,6 +173,27 @@ private class Driver {
             disk = "cle-a"
             discards = 0
             val store = ResilientLlmKeyStore(FakeSecureStore(throwOn = "clear")) { discardDisk() }
+            var threw = false
+            try {
+                store.clear()
+            } catch (_: Exception) {
+                threw = true
+            }
+            ok(
+                "threw" to JVal.Bool(threw),
+                "apiKey" to text(store.apiKey()),
+                "discards" to count(discards),
+                "nextLaunch" to text(FakeSecureStore().apiKey()),
+                "health" to health(),
+            )
+        }
+        // `commit()` qui rend `false` sur « Oublier » : le chiffré est encore
+        // là, donc l'effacement DUR doit passer. Sans lui, la clé oubliée
+        // reviendrait au lancement suivant (le défaut `apply()`).
+        "clear-commit-false" -> {
+            disk = "cle-a"
+            discards = 0
+            val store = ResilientLlmKeyStore(FakeSecureStore(commitFails = true)) { discardDisk() }
             var threw = false
             try {
                 store.clear()
