@@ -108,11 +108,24 @@ export function trimTeacherMessages(messages: TeacherMessage[]): TeacherMessage[
   return messages.filter((message) => parseTeacherMessage(message) !== null).slice(-TEACHER_MAX_MESSAGES);
 }
 
-/** Derniers tours envoyés au pont : N messages, jamais plus. */
-export function teacherHistory(messages: TeacherMessage[]): Array<Pick<TeacherMessage, "role" | "text">> {
-  return trimTeacherMessages(messages)
-    .slice(-TEACHER_MAX_HISTORY)
-    .map((message) => ({ role: message.role, text: message.text }));
+/**
+ * Tours d'historique envoyés au pont : le fil borné (≤ 40), pas seulement les
+ * 6 derniers. Le natif garde les 6 récents pour le prompt et résume les plus
+ * anciens (`TeacherChat.summaryOf`) ; couper ici rendait ce résumé inatteignable.
+ *
+ * `sources`/`unsourced` sont OBLIGATOIRES : sans eux, `parseTeacherThreadOrNull`
+ * rejette chaque tour professeur (`unsourced == sources.isEmpty()`) et le
+ * modèle perd ses réponses précédentes (#706).
+ */
+export function teacherHistory(
+  messages: TeacherMessage[],
+): Array<Pick<TeacherMessage, "role" | "text" | "sources" | "unsourced">> {
+  return trimTeacherMessages(messages).map((message) => ({
+    role: message.role,
+    text: message.text,
+    sources: [...message.sources],
+    unsourced: message.unsourced,
+  }));
 }
 
 /** Payload d'un tour : borné AVANT le pont (qui revalide). */
@@ -121,7 +134,12 @@ export function buildTeacherTurn(
   message: string,
   mode: TeacherMode,
   messages: TeacherMessage[],
-): { subject: string; message: string; mode: TeacherMode; history: Array<Pick<TeacherMessage, "role" | "text">> } | null {
+): {
+  subject: string;
+  message: string;
+  mode: TeacherMode;
+  history: Array<Pick<TeacherMessage, "role" | "text" | "sources" | "unsourced">>;
+} | null {
   const cleanSubject = boundedString(subject, TEACHER_MAX_SUBJECT);
   const cleanMessage = boundedString(message, TEACHER_MAX_MESSAGE);
   if (!cleanSubject || !cleanMessage) return null;
