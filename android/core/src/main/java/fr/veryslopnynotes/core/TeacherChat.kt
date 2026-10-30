@@ -106,9 +106,6 @@ object TeacherChat {
     const val ROLE_STUDENT = "student"
     const val ROLE_TEACHER = "teacher"
 
-    /** Préambule des blocs citables ; le modèle le recopie parfois (#701). */
-    private const val CITABLE_PREFIX = "Libelle citable :"
-
     /** Bornes partagées : contrat devoirs, contexte #628, carnet de notes. */
     const val MAX_SUBJECT_CHARS = LessonNote.MAX_SUBJECT_CHARS
     const val MAX_MESSAGE_CHARS = Homework.MAX_QUESTION_CHARS
@@ -224,10 +221,12 @@ object TeacherChat {
             ?: throw AiError("reponse professeur invalide (schema)")
         val sources = ArrayList<String>(sourcesRaw.items.size)
         for (item in sourcesRaw.items) {
-            var cited = (item as? JsonValue.Str)?.value?.trim()
+            val raw = (item as? JsonValue.Str)?.value
                 ?: throw AiError("reponse professeur invalide (schema)")
-            if (cited.isEmpty()) throw AiError("reponse professeur invalide (schema)")
-            cited = citableLabel(cited, allowedLabels)
+            // Le préambule est retiré avant comparaison, une seule fois ; le
+            // libellé reste comparé à l'identique (casse et accents).
+            val cited = canonicalCitedLabel(raw, allowedLabels)
+                ?: throw AiError("reponse professeur invalide (schema)")
             if (!allowedLabels.contains(cited)) {
                 throw AiError("reponse professeur invalide (source non fournie)")
             }
@@ -235,22 +234,6 @@ object TeacherChat {
         }
         if (sources.size > MAX_CITED_SOURCES) throw AiError("reponse professeur invalide (trop de sources)")
         return TeacherChatReply(answer = answer, sources = sources)
-    }
-
-    /**
-     * Libellé canonique d'une citation. Le prompt présente chaque source sous
-     * la forme « Libelle citable : X » ; en recette live (#701), le modèle
-     * recopiait parfois la ligne ENTIÈRE, et le validateur jetait une réponse
-     * pourtant sourcée. On retire donc ce préambule, et SEULEMENT lui : un
-     * libellé inconnu reste refusé (#604), préfixe ou pas.
-     */
-    private fun citableLabel(cited: String, allowedLabels: Set<String>): String {
-        if (allowedLabels.contains(cited)) return cited
-        if (cited.startsWith(CITABLE_PREFIX, ignoreCase = true)) {
-            val stripped = cited.substring(CITABLE_PREFIX.length).trim()
-            if (allowedLabels.contains(stripped)) return stripped
-        }
-        return cited
     }
 
     /**

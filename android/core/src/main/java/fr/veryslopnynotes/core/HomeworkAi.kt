@@ -103,13 +103,19 @@ object HomeworkAi {
             // déjà length > 0, donc sa branche "(sources manquantes)" est inatteignable
             // (défense en profondeur morte) — même observable, pas de branche morte ici.
             if (sources.isEmpty()) throw AiError("réponse devoirs invalide (schéma)")
+            // Le préambule « Libelle citable : » est un artefact du prompt : le
+            // modèle le recopie parfois. On le retire AVANT de comparer, mais le
+            // libellé lui-même reste comparé à l'identique.
+            val citedLabels = ArrayList<String>(sources.size)
             for (cited in sources) {
-                if (cited.trim().isEmpty()) throw AiError("réponse devoirs invalide (schéma)")
+                val label = canonicalCitedLabel(cited, allowedLabels)
+                    ?: throw AiError("réponse devoirs invalide (schéma)")
+                if (!allowedLabels.contains(label)) {
+                    throw AiError("réponse devoirs invalide (source non fournie)")
+                }
+                citedLabels.add(label)
             }
-            for (cited in sources) {
-                if (!allowedLabels.contains(cited)) throw AiError("réponse devoirs invalide (source non fournie)")
-            }
-            return HomeworkOutcome.Answer(answer = answer, steps = steps, sources = sources)
+            return HomeworkOutcome.Answer(answer = answer, steps = steps, sources = citedLabels)
         }
         if (status == "refused") {
             val reason = jsonStrOf(obj, "reason")
@@ -118,10 +124,16 @@ object HomeworkAi {
             }
             val sourcesRaw = obj.fields["sources"] as? JsonValue.Arr
                 ?: throw AiError("réponse devoirs invalide (schéma)")
-            val sources = ArrayList<String>()
+            val sources = ArrayList<String>(sourcesRaw.items.size)
             for (item in sourcesRaw.items) {
                 val s = item as? JsonValue.Str ?: throw AiError("réponse devoirs invalide (schéma)")
-                sources.add(s.value)
+                // Même normalisation que la branche ok : le refus cite les mêmes
+                // libellés, et une citation vide ou réduite au préambule reste
+                // invalide.
+                sources.add(
+                    canonicalCitedLabel(s.value, allowedLabels)
+                        ?: throw AiError("réponse devoirs invalide (schéma)"),
+                )
             }
             return HomeworkOutcome.Refused(reason = reason, sources = sources)
         }

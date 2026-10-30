@@ -1,5 +1,7 @@
 package fr.veryslopnynotes.core
 
+import java.text.Normalizer
+
 // Garde LLM I4/I5 : sans outils, sans reseau, sans secrets. Sortie texte/JSON validee.
 // Port fidele de server/ai/guard.ts (supprimé en #210 : ce port est la source
 // de vérité). Aucun acces reseau/env/outil ici (scan
@@ -147,6 +149,48 @@ private val RE_COOKIE = Regex("(?i)\\b(?:set-)?cookie[ \\t]*:[ \\t]*([A-Za-z0-9_
 private val RE_OPAQUE = Regex("[A-Za-z0-9+/=_-]{40,}")
 private val RE_PLACEHOLDER = Regex("(?i)your|example|placeholder|dummy|change-?me|x{3,}|todo")
 
+// Marqueur d'un contenu embarque : dans une URI `data:`, le base64 suit
+// `base64,`.
+private const val EMBEDDED_BASE64_MARK = "base64,"
+
+// Signatures base64 des formats de cours courants. L'exemption ne vise QUE
+// ces contenus : un opaque arbitraire colle apres `data:...;base64,` reste un
+// secret (sinon le prefixe `data:` deviendrait un contournement de la garde).
+private val EMBEDDED_BASE64_SIGNATURES = listOf(
+    "iVBORw0KGgo", // PNG
+    "/9j/", // JPEG
+    "R0lGOD", // GIF
+    "UklGR", // WebP
+    "JVBERi0", // PDF
+    "UEsDB", // ZIP (docx, odt)
+    "d09GRg", // WOFF
+    "PHN2Zy", // SVG
+)
+
+/**
+ * Ce run opaque est-il le contenu d'une URI `data:` (image, fichier) ?
+ *
+ * Un cours HTML/NSI qui montre `<img src="data:image/png;base64,…">` porte un
+ * base64 de plusieurs centaines de caracteres : trois classes, entropie haute,
+ * exactement la FORME d'une chaine opaque — mais c'est une donnee, pas un
+ * identifiant. On remonte le jeton qui precede le run (guillemets, espaces,
+ * crochets et balises l'arretent) et on n'exempte que si ce jeton porte a la
+ * fois `data:` et `base64,`, sans tenir compte de la casse : un base64
+ * orphelin, ou un secret colle ailleurs dans la phrase, reste refuse.
+ *
+ * ponytail: un base64 coupe par un saut de ligne n'est pas reconnu (le jeton
+ * s'arrete a l'espace) : plafond assume, un exemple de cours tient sur une
+ * ligne. Upgrade: suivre l'etat « dans une URI data » sur plusieurs lignes.
+ */
+private fun isEmbeddedDataPayload(text: String, start: Int): Boolean {
+    var i = start - 1
+    while (i >= 0 && !text[i].isWhitespace() && text[i] !in "\"'<>()") i--
+    val head = text.substring(i + 1, start).lowercase()
+    if (!head.contains("data:") || !head.contains(EMBEDDED_BASE64_MARK)) return false
+    val payload = text.substring(start, minOf(text.length, start + 12))
+    return EMBEDDED_BASE64_SIGNATURES.any { payload.startsWith(it) }
+}
+
 // Noms de variables dont la valeur est un secret. Comparaison par MORCEAUX
 // (« MASTER_KEY » -> [master, key]) : « MONKEY » ou « KEYBOARD » ne sont pas
 // des variables sensibles.
@@ -284,10 +328,35 @@ private fun detectSecret(text: String): SecretKind? {
         }
     }
     for (m in RE_OPAQUE.findAll(text)) {
+        if (isEmbeddedDataPayload(text, m.range.first)) continue
         if (looksLikeOpaqueSecret(m.value)) return SecretKind.OPAQUE
     }
     return null
 }
+
+// Un caractere de FORMAT Unicode (U+200B, U+2060, U+FEFF…) glisse dans un
+// jeton et coupe la FORME en deux : « Bear<U+200B>er sk-… », « password=<U+200B>… »
+// ou un point de JWT precede d'un invisible ne sont plus des formes pour les
+// motifs, et le prompt passait. La garde scanne donc AUSSI une copie
+// NORMALISEE (NFKC, caracteres de format retires) ; le prompt envoye, lui,
+// reste byte pour byte celui de l'eleve : on ne modifie que le SCAN.
+private fun stripFormatChars(text: String): String {
+    if (text.none { it.category == CharCategory.FORMAT }) return text
+    return text.filterNot { it.category == CharCategory.FORMAT }
+}
+
+/** Secret trouve dans la copie normalisee, ou null. */
+private fun detectSecretNormalized(text: String): SecretKind? {
+    val nfkc = Normalizer.normalize(text, Normalizer.Form.NFKC)
+    val stripped = stripFormatChars(nfkc)
+    // Rien a voir de plus : la copie est identique au brut.
+    if (stripped == text) return null
+    return detectSecret(stripped)
+}
+
+/** Secret present dans le texte brut OU dans sa copie normalisee. */
+private fun detectSecretAnywhere(text: String): SecretKind? =
+    detectSecret(text) ?: detectSecretNormalized(text)
 
 // JSON minimal pour les sorties LLM validees (I5) : objets, tableaux, chaines,
 // nombres, booleens, null. Suffisant pour les schemas devoirs/fiches/corriges.
@@ -506,7 +575,7 @@ private fun StringBuilder.appendJson(value: JsonValue) {
 // Le refus dit POURQUOI (le type) et JAMAIS le secret.
 fun assertNoSecretsInPrompt(safe: SafePrompt, data: List<Untrusted<String>> = emptyList()) {
     val hay = (listOf(safe.system, safe.body) + data.map { it.value }).joinToString("\n")
-    val kind = detectSecret(hay) ?: return
+    val kind = detectSecretAnywhere(hay) ?: return
     throw SecretDetectedException(kind)
 }
 
@@ -532,7 +601,7 @@ class OutputTooLongException(val maxChars: Int) :
 fun validateTextOutput(out: String): String {
     if (out.trim().isEmpty()) throw AiError("sortie LLM vide (I5)")
     if (out.length > MAX_OUTPUT_CHARS) throw OutputTooLongException(MAX_OUTPUT_CHARS)
-    val kind = detectSecret(out) ?: return out
+    val kind = detectSecretAnywhere(out) ?: return out
     throw SecretDetectedException(kind)
 }
 
