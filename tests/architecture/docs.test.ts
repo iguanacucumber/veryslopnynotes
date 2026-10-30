@@ -255,7 +255,9 @@ describe("registre d'invariants", () => {
   test("les surfaces de lecture agent restent sous leur budget d'octets", () => {
     // Budgets de CONTEXTE : un agent qui relit ces fichiers les garde jusqu'à
     // la compaction. Dépasser = revenir à la lecture intégrale à chaque tour.
-    expect({ fichier: "AGENTS.md", sousBudget: AGENTS.length <= 5_000 }).toEqual({
+    // Les plafonds serrent au-dessus du réel (~20 %) : les relever est un diff
+    // visible, pas une dérive silencieuse.
+    expect({ fichier: "AGENTS.md", sousBudget: AGENTS.length <= 4_500 }).toEqual({
       fichier: "AGENTS.md",
       sousBudget: true,
     });
@@ -263,10 +265,32 @@ describe("registre d'invariants", () => {
       fichier: "Makefile",
       sousBudget: true,
     });
-    expect({ fichier: "README.md", sousBudget: README.length <= 10_000 }).toEqual({
+    expect({ fichier: "README.md", sousBudget: README.length <= 5_500 }).toEqual({
       fichier: "README.md",
       sousBudget: true,
     });
+  });
+
+  test("le reste du chemin de lecture reste borné", () => {
+    const ceilings: [string, number][] = [
+      ["docs/architecture/BUILD.md", 4_000],
+      ["android/README.md", 9_500],
+      ["web/README.md", 4_000],
+      ["server/README.md", 4_500],
+      ["shared/contracts/README.md", 1_000],
+      ["docs/RELEASE.md", 7_000],
+      ["docs/HUMAN_INPUTS.md", 4_500],
+      ["docs/PRODUCT.md", 7_500],
+    ];
+    for (const [file, max] of ceilings) {
+      expect({ file, sousBudget: read(file).length <= max }).toEqual({ file, sousBudget: true });
+    }
+    for (const file of readdirSync(join(ROOT, "docs/adr")).filter((f) => f.endsWith(".md"))) {
+      expect({ file, sousBudget: readFileSync(join(ROOT, "docs/adr", file), "utf8").length <= 9_000 }).toEqual({
+        file,
+        sousBudget: true,
+      });
+    }
   });
 
   test("chaque entrée d'invariant tient en 120 mots maximum", () => {
