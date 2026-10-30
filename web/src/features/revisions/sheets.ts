@@ -96,3 +96,30 @@ export function parseRevisionSheets(raw: unknown): RevisionSheet[] {
 export function revisionDateLabel(sheet: RevisionSheet): string {
   return frDate(sheet.date);
 }
+
+/** En-tête du bloc canonique que le corps assemblé porte en fin de texte. */
+const CANONICAL_SOURCES_HEADING = /^\s*sources\s*:\s*$/i;
+const CANONICAL_SOURCE_ENTRY = /^\s*-\s+\S/;
+
+/** Bloc « Sources : » final du corps, s'il y en a un. */
+function canonicalSourcesSplit(body: string): { content: string; found: boolean } {
+  const lines = body.split(/\r\n?|\n/);
+  for (let index = lines.length - 1; index >= 0; index--) {
+    if (!CANONICAL_SOURCES_HEADING.test(lines[index] ?? "")) continue;
+    const tail = lines.slice(index + 1).filter((line) => line.trim() !== "");
+    if (tail.length === 0 || !tail.every((line) => CANONICAL_SOURCE_ENTRY.test(line))) continue;
+    return { content: lines.slice(0, index).join("\n").trimEnd(), found: true };
+  }
+  return { content: body.trimEnd(), found: false };
+}
+
+/** Corps sans son bloc « Sources : » : l'aperçu ne montre pas la bibliographie. */
+export function bodyWithoutSources(body: string): string {
+  return canonicalSourcesSplit(body).content;
+}
+
+/** Le corps porte-t-il déjà la liste des sources ? Elle n'est alors rendue
+ *  qu'UNE fois : le markdown du corps la contient (I15, liste canonique). */
+export function bodyCarriesSources(body: string): boolean {
+  return canonicalSourcesSplit(body).found;
+}

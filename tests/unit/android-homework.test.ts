@@ -144,7 +144,9 @@ function tsParse(body: unknown, allowedLabels: string[]): Outcome | null {
     const sources: string[] = [];
     for (const item of cited) {
       const label = tsCanonicalCitedLabel(item, allowedLabels);
-      if (label === null) return null;
+      // Même liste fermée que la branche ok : un refus non plus n'invente pas
+      // sa source.
+      if (label === null || !allowedLabels.includes(label)) return null;
       sources.push(label);
     }
     return { status: "refused", reason, sources };
@@ -201,6 +203,16 @@ describe("android homework — client de /v1/homework/generate (0.7.0)", () => {
     expect(tsParse({ status: "refused", reason: "sources_insuffisantes", sources: [] }, labels)?.status).toBe(
       "refused",
     );
+    // Un refus cite une source fournie, ou rien — jamais une source inventée.
+    expect(
+      tsParse({ status: "refused", reason: "sources_insuffisantes", sources: ["Cours : Chapitre 4"] }, labels),
+    ).toEqual({ status: "refused", reason: "sources_insuffisantes", sources: ["Cours : Chapitre 4"] });
+    expect(
+      tsParse({ status: "refused", reason: "sources_insuffisantes", sources: ["Manuel X"] }, labels),
+    ).toBeNull();
+    expect(
+      tsParse({ status: "refused", reason: "sources_insuffisantes", sources: ["Libelle citable : Manuel X"] }, labels),
+    ).toBeNull();
     expect(tsParse({ status: "refused", reason: "", sources: [] }, labels)).toBeNull();
     expect(tsParse({ status: "unknown" }, labels)).toBeNull();
     expect(tsParse(null, labels)).toBeNull();
@@ -296,12 +308,43 @@ describe("android homework — citations préfixées (vrai Kotlin)", () => {
     expect(prefixed.ok).toBe(true);
     expect(prefixed.status).toBe("refused");
     expect(prefixed.cited).toEqual(["Consigne"]);
-    const empty = await parseHomework({
+    for (const sources of [["Libelle citable :"], ["Libelle citable :   "], [""]]) {
+      const empty = await parseHomework({
+        status: "refused",
+        reason: "sources_insuffisantes",
+        sources,
+      }, LABELS);
+      expect({ sources, ok: empty.ok }).toEqual({ sources, ok: false });
+      expect(empty.message).toContain("schéma");
+    }
+  });
+
+  test.skipIf(skip)("un refus citant une source fournie reste accepté", async () => {
+    const r = await parseHomework({
       status: "refused",
       reason: "sources_insuffisantes",
-      sources: ["Libelle citable :"],
+      sources: ["Cours : Mitose"],
     }, LABELS);
-    expect(empty.ok).toBe(false);
+    expect(r.ok).toBe(true);
+    expect(r.status).toBe("refused");
+    expect(r.cited).toEqual(["Cours : Mitose"]);
+  });
+
+  test.skipIf(skip)("un refus ne cite pas une source non fournie", async () => {
+    // Le refus n'est pas une porte dérobée : la liste fermée de la branche ok
+    // s'applique aussi, préfixe ou pas.
+    for (const sources of [["Cours : Autre"], ["Libelle citable : Cours : Autre"], ["Manuel X"]]) {
+      const r = await parseHomework({
+        status: "refused",
+        reason: "sources_insuffisantes",
+        sources,
+      }, LABELS);
+      expect({ sources, ok: r.ok, message: r.message }).toEqual({
+        sources,
+        ok: false,
+        message: "réponse devoirs invalide (source non fournie)",
+      });
+    }
   });
 });
 
@@ -370,8 +413,11 @@ describe("android homework — le credential reste dans l'app", () => {
   test("l'aide texte porte le délai du pont (#594), comme les chemins photo", () => {
     const bridge = codeOnly(readBridgeSource());
     // Le défaut OkHttp (20 s) tuait un modèle lent alors que le pont attend
-    // AWAIT_LLM_MS (45 s) : le constructeur porte désormais ce délai.
-    expect(bridge).toMatch(/OpenRouterHomework\(OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\), llmKeys\)/);
+    // AWAIT_LLM_MS : le constructeur porte le budget fournisseur, STRICTEMENT
+    // sous l'attente native pour qu'une réponse reprise ne soit pas jetée.
+    expect(bridge).toMatch(
+      /OpenRouterHomework\(OpenRouterLlm\(timeoutMs = HOMEWORK_LLM_TIMEOUT_MS\), llmKeys\)/,
+    );
     // Les trois chemins LLM sont alignés : la photo l'était déjà (#588).
     expect(bridge).toMatch(/provider = OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\)/);
   });

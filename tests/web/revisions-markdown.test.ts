@@ -143,6 +143,38 @@ describe("parseur markdown borné (#630)", () => {
     expect(blocks).toHaveLength(1);
     expect(blocks[0]).toMatchObject({ type: "paragraph" });
   });
+
+  test("un corps CRLF (Windows) se parse comme un corps LF", () => {
+    // Les expressions sont ancrées en `$` et `.` ne franchit pas `\r` : sans
+    // normalisation à l'entrée, `## Titre\r` restait un paragraphe littéral.
+    const lines = [
+      "## Titre",
+      "",
+      "- puce un",
+      "- puce deux",
+      "",
+      "1. étape un",
+      "2. étape deux",
+      "",
+      "> citation",
+      "",
+      "| a | b |",
+      "| --- | --- |",
+      "| 1 | 2 |",
+    ];
+    const crlf = parseMarkdown(lines.join("\r\n"));
+    const lf = parseMarkdown(lines.join("\n"));
+    expect(crlf.map((block) => block.type)).toEqual(["heading", "list", "list", "quote", "table"]);
+    expect(crlf).toEqual(lf);
+    // Et le rendu ne laisse aucun marqueur littéral.
+    const html = render(lines.join("\r\n"));
+    expect(html).toContain("<h4");
+    expect(html).toContain("<ul");
+    expect(html).toContain("<ol");
+    expect(html).not.toContain("## Titre");
+    // Un `\r` seul (vieux Mac) est normalisé de la même façon.
+    expect(parseMarkdown("## Titre\r- puce").map((block) => block.type)).toEqual(["heading", "list"]);
+  });
 });
 
 describe("rendu markdown de fiche : lisible et sûr (#630)", () => {

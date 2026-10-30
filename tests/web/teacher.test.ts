@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { TeacherMessage } from "../../web/src/bridge/types";
 import { TeacherView, type TeacherViewProps } from "../../web/src/features/teacher/TeacherScreen";
 import {
+  appendTeacherAnswer,
   buildTeacherTurn,
   classifyTeacherFailure,
   historySources,
@@ -18,6 +19,7 @@ import {
   studentMessage,
   teacherHistory,
   teacherThreadPayload,
+  teacherWriteQueue,
   turnSources,
 } from "../../web/src/features/teacher/teacher";
 
@@ -194,6 +196,55 @@ describe("professeur IA — modèle local (#633)", () => {
     expect(classifyTeacherFailure({ ok: false, code: "empty", message: "" }).kind).toBe("empty");
     expect(classifyTeacherFailure({ ok: false, refused: true, message: "Aucune source" }).kind).toBe("refused");
     expect(classifyTeacherFailure({ ok: false, message: "boom" }).kind).toBe("unavailable");
+  });
+
+  test("rejeter pendant le vol : la réponse ne ressuscite pas le tour rejeté (#751)", () => {
+    const rejected = teacher({ text: "réponse non sourcée", sources: [], unsourced: true });
+    // L'envoi a capturé ce fil AVANT la réponse ; l'élève rejette le tour non
+    // sourcé pendant que le professeur rédige.
+    const inFlight = [studentMessage("Question 1")!, rejected, studentMessage("Question 2")!];
+    const current = rejectTeacherAnswer(inFlight, 1);
+    const after = appendTeacherAnswer(current, teacher({ text: "Nouvelle réponse" }));
+    expect(after.map((message) => message.text)).not.toContain("réponse non sourcée");
+    expect(after[after.length - 1]?.text).toBe("Nouvelle réponse");
+    // L'instantané d'avant le rejet, lui, l'aurait ramené à l'écran et sur le disque.
+    expect(appendTeacherAnswer(inFlight, teacher({ text: "Nouvelle réponse" })).map((m) => m.text)).toContain(
+      "réponse non sourcée",
+    );
+  });
+
+  test("les écritures du fil passent l'une après l'autre (#751)", async () => {
+    const write = teacherWriteQueue();
+    const log: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const save = write(async () => {
+      log.push("enregistrement:début");
+      await gate;
+      log.push("enregistrement:fin");
+    });
+    const remove = write(async () => {
+      log.push("suppression");
+    });
+    await Promise.resolve();
+    // La suppression n'a pas doublé l'enregistrement encore en cours.
+    expect(log).toEqual(["enregistrement:début"]);
+    release();
+    await save;
+    await remove;
+    expect(log).toEqual(["enregistrement:début", "enregistrement:fin", "suppression"]);
+  });
+
+  test("une écriture en échec n'arrête pas la file (erreurs non fatales)", async () => {
+    const write = teacherWriteQueue();
+    await expect(
+      write(async () => {
+        throw new Error("disque plein");
+      }),
+    ).rejects.toThrow("disque plein");
+    await expect(write(async () => "ok")).resolves.toBe("ok");
   });
 });
 

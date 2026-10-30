@@ -36,6 +36,7 @@ import org.json.JSONObject
 import java.io.File
 import fr.veryslopnynotes.app.VsnBridge.Companion.AWAIT_LLM_MS
 import fr.veryslopnynotes.app.VsnBridge.Companion.ATTACHMENT_BUDGET_MS
+import fr.veryslopnynotes.app.VsnBridge.Companion.HOMEWORK_LLM_TIMEOUT_MS
 
 // --- LLM -------------------------------------------------------------------
 
@@ -81,10 +82,11 @@ internal fun VsnBridge.askHomework(p: JSONObject, epoch: Long): JSONObject {
     val sources = context.sources.map { it.toHomeworkSource() }
     val question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment)
     val result = await<fr.veryslopnynotes.data.HomeworkResult>(AWAIT_LLM_MS) { cb ->
-        // Même délai que les chemins photo (#594) : un modèle gratuit lent
-        // ne doit pas mourir à 20 s (« Erreur réseau LLM ») alors que
-        // l'attente du pont couvre 45 s.
-        OpenRouterHomework(OpenRouterLlm(timeoutMs = AWAIT_LLM_MS), llmKeys).generate(question, sources, cb)
+        // Budget fournisseur STRICTEMENT sous l'attente du pont : à budget
+        // égal, une réponse produite par la reprise arrive quand `await`
+        // abandonne déjà (« L'assistant n'a pas répondu »).
+        OpenRouterHomework(OpenRouterLlm(timeoutMs = HOMEWORK_LLM_TIMEOUT_MS), llmKeys)
+            .generate(question, sources, cb)
     } ?: return JSONObject().put("ok", false).put("message", "L'assistant n'a pas répondu.")
         .withAiContext(context)
     val outcome = result.outcome
@@ -137,7 +139,7 @@ internal fun VsnBridge.homeworkRefusalJson(
         .put("refused", true)
         .put("message", homeworkRefusalMessage(outcome.reason))
         .withAiContext(context)
-    if (outcome.reason.trim() == Homework.REFUSAL_SOURCES_INSUFFICIENT) {
+    if (outcome.reason.trim().equals(Homework.REFUSAL_SOURCES_INSUFFICIENT, ignoreCase = true)) {
         json.put("actions", JSONArray(AiContext.REFUSAL_ACTIONS))
     }
     return json

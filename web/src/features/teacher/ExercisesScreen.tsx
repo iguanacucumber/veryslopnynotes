@@ -29,6 +29,19 @@ export interface ExerciseHelpState {
   answer: string;
 }
 
+/**
+ * Une réponse d'aide ne s'applique qu'à la demande COURANTE et à l'exercice
+ * encore sélectionné. Un clic sur un autre énoncé pendant le vol jette la
+ * réponse tardive (correction et sources comprises) au lieu de l'afficher sous
+ * le nouvel exercice ; l'exercice choisi reste donc vide.
+ */
+export function helpAnswerApplies(
+  request: { seq: number; number: string },
+  current: { seq: number; number: string | null },
+): boolean {
+  return request.seq === current.seq && request.number === current.number;
+}
+
 export interface ExercisesViewProps {
   subjects: string[];
   subject: string;

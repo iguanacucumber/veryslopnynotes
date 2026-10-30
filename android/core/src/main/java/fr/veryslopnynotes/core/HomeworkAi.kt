@@ -20,6 +20,7 @@ const val SYSTEM_HOMEWORK_JSON =
     "Schema ok : {\"status\":\"ok\",\"answer\":string,\"steps\":string[],\"sources\":string[]}. " +
     "Schema refus : {\"status\":\"refused\",\"reason\":string,\"sources\":string[]}. " +
     "Si les DONNEES sont insuffisantes pour repondre de facon sourcee, reponds refused avec reason=sources_insuffisantes. " +
+    SYSTEM_CITATION_RULE +
     "Chaque source citee doit reprendre exactement un libelle fourni dans les DONNEES."
 
 /**
@@ -38,6 +39,7 @@ const val SYSTEM_HOMEWORK_PHOTO_JSON =
         "Schema ok : {\"status\":\"ok\",\"answer\":string,\"steps\":string[],\"sources\":string[]}. " +
         "Schema refus : {\"status\":\"refused\",\"reason\":string,\"sources\":string[]}. " +
         "Si les DONNEES sont insuffisantes pour repondre de facon sourcee, reponds refused avec reason=sources_insuffisantes. " +
+        SYSTEM_CITATION_RULE +
         "Chaque source citee doit reprendre exactement un libelle fourni, ou \"" + "Photo de l'énoncé" + "\"."
 
 /** Étiquette citable de la photo elle-même (aucun texte de source). */
@@ -130,10 +132,14 @@ object HomeworkAi {
                 // Même normalisation que la branche ok : le refus cite les mêmes
                 // libellés, et une citation vide ou réduite au préambule reste
                 // invalide.
-                sources.add(
-                    canonicalCitedLabel(s.value, allowedLabels)
-                        ?: throw AiError("réponse devoirs invalide (schéma)"),
-                )
+                val label = canonicalCitedLabel(s.value, allowedLabels)
+                    ?: throw AiError("réponse devoirs invalide (schéma)")
+                // Un refus peut arguer d'un manque, jamais inventer sa source :
+                // la même liste fermée que la branche ok s'applique.
+                if (!allowedLabels.contains(label)) {
+                    throw AiError("réponse devoirs invalide (source non fournie)")
+                }
+                sources.add(label)
             }
             return HomeworkOutcome.Refused(reason = reason, sources = sources)
         }

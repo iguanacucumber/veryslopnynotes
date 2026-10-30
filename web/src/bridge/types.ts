@@ -89,12 +89,18 @@ export const NATIVE_WAIT_MS = {
   default: 20_000,
   /** Récupération d'un extrait de manuel via le scraper, avant le LLM. */
   manual: 35_000,
-  /** Attente de l'appel LLM : le plus long du pont. */
-  llm: 45_000,
+  /** Lecture bornée des pièces jointes d'un devoir, avant l'appel LLM. */
+  attachment: 20_000,
+  /** Attente de l'appel LLM (`await`) : strictement plus que le fournisseur. */
+  llm: 40_000,
 } as const;
 
-/** Plafond d'attente natif : chargement (20 s) + manuel (35 s) + LLM (45 s). */
-export const MAX_NATIVE_WAIT_MS = NATIVE_WAIT_MS.default + NATIVE_WAIT_MS.manual + NATIVE_WAIT_MS.llm;
+/**
+ * Plafond d'attente natif : chargement (20 s) + manuel (35 s) + pièces
+ * jointes (20 s) + LLM (40 s) = 115 s, sous le timeout JS par défaut (120 s).
+ */
+export const MAX_NATIVE_WAIT_MS =
+  NATIVE_WAIT_MS.default + NATIVE_WAIT_MS.manual + NATIVE_WAIT_MS.attachment + NATIVE_WAIT_MS.llm;
 
 /** Timeout JS par défaut : au-dessus du plafond natif, sinon réponse perdue. */
 export const DEFAULT_TIMEOUT_MS = 120_000;

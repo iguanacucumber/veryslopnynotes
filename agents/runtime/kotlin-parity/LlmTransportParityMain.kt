@@ -11,14 +11,23 @@
 //       → {"ok":false,"error":"ResponseTooLargeException","max":524288,"pulled":…}
 //   - {"op":"fault","error":"call_timeout"} → {"fault":"TIMEOUT","message":"…"}
 //   - {"op":"tooLargeMessage","max":524288} → {"message":"…"}
-//   - {"op":"constants"} → {"maxResponseBytes":524288}
+//   - {"op":"constants"} → {"maxResponseBytes":524288,"maxRetryBodyBytes":262144}
+//   - {"op":"completion","choices":1,"finish":"stop","content":"…"}
+//       → {"ok":true,"text":"…"} ou {"ok":false,"fault":"EMPTY","message":"…"}
+//   - {"op":"completionMessages"} → les messages de refus (bornés, français)
+//   - {"op":"retry","bytes":2700000,"consumed":false} → {"allowed":false,"max":…}
 package fr.veryslopnynotes.llmtransport
 
+import fr.veryslopnynotes.data.LlmCompletion
+import fr.veryslopnynotes.data.LlmCompletionFault
 import fr.veryslopnynotes.data.MAX_RESPONSE_BYTES
+import fr.veryslopnynotes.data.MAX_RETRY_BODY_BYTES
 import fr.veryslopnynotes.data.ResponseTooLargeException
 import fr.veryslopnynotes.data.classifyTransportError
 import fr.veryslopnynotes.data.readBounded
+import fr.veryslopnynotes.data.readCompletion
 import fr.veryslopnynotes.data.responseTooLargeMessage
+import fr.veryslopnynotes.data.retryAllowed
 import fr.veryslopnynotes.data.transportFaultMessage
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
@@ -75,7 +84,39 @@ private fun faultOf(kind: String): Throwable = when (kind) {
 }
 
 private fun handle(op: JVal.Obj): String = when (val name = op.requireStr("op")) {
-    "constants" -> ok("maxResponseBytes" to JVal.Num(MAX_RESPONSE_BYTES.toDouble()))
+    "constants" -> ok(
+        "maxResponseBytes" to JVal.Num(MAX_RESPONSE_BYTES.toDouble()),
+        "maxRetryBodyBytes" to JVal.Num(MAX_RETRY_BODY_BYTES.toDouble()),
+    )
+
+    "completion" -> {
+        val choices = op.num("choices")?.toInt() ?: 0
+        val finish = op.str("finish")
+        val content = op.str("content")
+        when (val verdict = readCompletion(choices, finish, content)) {
+            is LlmCompletion.Text -> ok(
+                "ok" to JVal.Bool(true),
+                "text" to JVal.Str(verdict.value),
+            )
+            is LlmCompletion.Refused -> ko(
+                "fault" to JVal.Str(verdict.fault.name),
+                "message" to JVal.Str(verdict.fault.message),
+            )
+        }
+    }
+
+    "completionMessages" -> ok(
+        "messages" to JVal.Arr(LlmCompletionFault.values().map { JVal.Str(it.message) }),
+    )
+
+    "retry" -> {
+        val bytes = op.num("bytes")?.toInt() ?: throw IllegalArgumentException("pilote: bytes absent")
+        val consumed = (op.fields["consumed"] as? JVal.Bool)?.value ?: false
+        ok(
+            "allowed" to JVal.Bool(retryAllowed(bytes, consumed)),
+            "max" to JVal.Num(MAX_RETRY_BODY_BYTES.toDouble()),
+        )
+    }
 
     "read" -> {
         val bytes = op.num("bytes")?.toInt() ?: throw IllegalArgumentException("pilote: bytes absent")

@@ -771,8 +771,20 @@ class VsnBridge(
         /** Attente par défaut d'un dépôt (`await`). */
         const val AWAIT_DEFAULT_MS = 20_000L
 
-        /** Attente de l'appel LLM : le plus long du pont. */
-        const val AWAIT_LLM_MS = 45_000L
+        /**
+         * Attente native d'un appel LLM : STRICTEMENT plus longue que le
+         * budget fournisseur de l'aide aux devoirs ([HOMEWORK_LLM_TIMEOUT_MS]).
+         * À budget égal, la réponse produite par la reprise arrive au même
+         * instant que l'abandon et est perdue.
+         */
+        const val AWAIT_LLM_MS = 40_000L
+
+        /**
+         * Budget fournisseur de `llm.askHomework` : le client le répartit sur
+         * deux tentatives, donc l'appel se termine avant [AWAIT_LLM_MS] et la
+         * réponse de la reprise a le temps d'arriver.
+         */
+        const val HOMEWORK_LLM_TIMEOUT_MS = 35_000L
 
         /**
          * Attente d'une photo : l'élève cadre, l'appareil écrit, puis la
@@ -792,19 +804,22 @@ class VsnBridge(
         internal const val MANUAL_RETRY_MS = 10 * 60 * 1000L
 
         /**
-         * Budget TOTAL de lecture des pièces jointes (#631) : il tient dans le
-         * plafond d'attente natif (défaut + manuel + LLM) pour que le JS ne
-         * perde jamais la réponse. Passé ce délai, les pièces restantes sont
-         * nommées « délai dépassé », jamais abandonnées en silence.
+         * Budget TOTAL de lecture des pièces jointes (#631) : il est COMPTÉ
+         * dans le plafond d'attente natif (défaut + manuel + pièces jointes +
+         * LLM) pour que le JS ne perde jamais la réponse. Passé ce délai, les
+         * pièces restantes sont nommées « délai dépassé », jamais abandonnées
+         * en silence.
          */
         internal const val ATTACHMENT_BUDGET_MS = 20_000L
 
         /**
-         * Plafond d'attente natif : le chemin le plus long (chargement des
-         * devoirs 20 s + manuel 35 s + appel LLM 45 s). Le JS doit attendre
-         * PLUS que ce plafond, sinon il abandonne avant la réponse native et
-         * la perd définitivement (#371). Miroir : `web/src/bridge/types.ts`.
+         * Plafond d'attente natif : le chemin le plus long d'un devoir
+         * (chargement des devoirs 20 s + manuel 35 s + pièces jointes 20 s +
+         * attente LLM 40 s = 115 s). Le JS doit attendre PLUS que ce plafond,
+         * sinon il abandonne avant la réponse native et la perd définitivement
+         * (#371). Miroir : `web/src/bridge/types.ts`.
          */
-        const val MAX_NATIVE_WAIT_MS = AWAIT_DEFAULT_MS + AWAIT_MANUAL_MS + AWAIT_LLM_MS
+        const val MAX_NATIVE_WAIT_MS =
+            AWAIT_DEFAULT_MS + AWAIT_MANUAL_MS + ATTACHMENT_BUDGET_MS + AWAIT_LLM_MS
     }
 }

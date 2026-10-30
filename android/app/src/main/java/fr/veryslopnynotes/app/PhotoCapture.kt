@@ -154,30 +154,40 @@ class PhotoCapture(private val activity: ComponentActivity) {
         }
     }
 
-    /** Copie bornée (10 Mo lus au maximum) : une URI peut venir d'un fournisseur tiers. */
+    /**
+     * Copie bornée (10 Mo lus au maximum) : une URI peut venir d'un
+     * fournisseur tiers.
+     *
+     * `finally` UNIQUE : tant que la cible n'est pas déclarée UTILISABLE
+     * (exception, flux vide, resolver nul, dépassement), elle est supprimée.
+     * L'original porte l'EXIF/GPS et ne doit pas survivre dans
+     * `cacheDir/photos/` jusqu'à la prochaine création d'activité (I32).
+     */
     private fun copyToCache(uri: Uri): File? {
         // Même raison que `launchCamera` : le dossier purge à la déconnexion.
         dir.mkdirs()
         val target = File(dir, "gallery-" + UUID.randomUUID().toString().replace("-", "") + ".jpg")
-        val resolver = activity.contentResolver
-        val input = resolver.openInputStream(uri) ?: return null
-        input.use { stream ->
-            target.outputStream().use { out ->
-                val buffer = ByteArray(16 * 1024)
-                var total = 0L
-                while (true) {
-                    val read = stream.read(buffer)
-                    if (read < 0) break
-                    total += read
-                    if (total > MAX_GALLERY_BYTES) {
-                        target.delete()
-                        return null
+        var usable = false
+        return try {
+            val input = activity.contentResolver.openInputStream(uri) ?: return null
+            input.use { stream ->
+                target.outputStream().use { out ->
+                    val buffer = ByteArray(16 * 1024)
+                    var total = 0L
+                    while (true) {
+                        val read = stream.read(buffer)
+                        if (read < 0) break
+                        total += read
+                        if (total > MAX_GALLERY_BYTES) return null
+                        out.write(buffer, 0, read)
                     }
-                    out.write(buffer, 0, read)
                 }
             }
+            usable = target.length() > 0
+            if (usable) target else null
+        } finally {
+            if (!usable) target.delete()
         }
-        return target.takeIf { it.length() > 0 }
     }
 
     private fun finish(result: Result) {

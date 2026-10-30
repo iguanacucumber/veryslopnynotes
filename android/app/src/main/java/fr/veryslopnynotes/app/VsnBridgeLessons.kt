@@ -14,6 +14,7 @@ import fr.veryslopnynotes.data.LessonNotesWrite
 import fr.veryslopnynotes.data.LlmError
 import fr.veryslopnynotes.data.OpenRouterLlm
 import fr.veryslopnynotes.data.SubjectPrefs
+import fr.veryslopnynotes.data.manualMatchesSubject
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.CountDownLatch
@@ -205,7 +206,14 @@ internal fun VsnBridge.manualAvailableForSubject(
 ): Boolean {
     val url = manuals.url() ?: return false
     if (!manuals.isEnabled(subject)) return false
-    if (!ManualCatalog.isCatalog(url)) return true
+    if (!ManualCatalog.isCatalog(url)) {
+        // Ouvrage PRÉCIS : la fiche déjà récupérée dit sa matière, et elle
+        // seule — une matière sans extrait ne doit pas s'annoncer servie.
+        // Sans extrait en cache, la récolte donnera cette matière : l'annoncer
+        // vrai est la seule réponse qui ne mente pas avant le premier scrape.
+        val doc = manuals.doc(url) ?: return true
+        return manualMatchesSubject(doc.subject, subject)
+    }
     val classLabel = manuals.classLabel().ifEmpty { cachedProfile?.classLabel.orEmpty() }
     val subjects = (known + subject).distinct()
     return ManualCatalog.resolve(url, classLabel, subjects, subject) != null

@@ -132,6 +132,10 @@ fun assembleRevisionSheet(
     if (text.isEmpty()) throw IllegalArgumentException("fiche vide (refus)")
     val deduped = dedupeRevisionSources(sources)
     if (deduped.isEmpty()) throw IllegalArgumentException("sources insuffisantes (refus)")
+    // Le corps est ce qui RESTE après retrait du bloc « Sources » du modèle :
+    // une sortie qui n'est qu'une bibliographie est une fiche VIDE, jamais
+    // stockée ni exportée (I15 : la fiche garde un cours entier).
+    if (revisionContent(text).isEmpty()) throw IllegalArgumentException("fiche vide (refus)")
     val sheet = RevisionSheet(
         id = revisionIdForExam(exam.id),
         examId = exam.id,
@@ -525,17 +529,30 @@ private fun revisionSourcesHeadingInline(line: String): String? {
 
 /**
  * Fin (exclusive) d'un bloc de sources : la ligne d'en-tête, puis — pour un
- * en-tête seul — les lignes jusqu'à la PREMIÈRE ligne vide.
+ * en-tête seul — les lignes de citation qui le suivent.
  *
  * Une attribution en ligne (`Sources : A, B`) ne dure qu'une ligne. Une ligne
- * vide TERMINE le bloc : le cours qui suit n'est jamais avalé (I15 : le corps
- * est entier).
+ * VIDE termine le bloc, et la PREMIÈRE ligne qui n'est pas une entrée de
+ * citation (`## Analyse`, une prose) rend le corps au cours : le modèle qui
+ * oublie la ligne vide n'avale pas la suite de la fiche (I15 : corps entier).
  */
 private fun revisionSourcesBlockEnd(lines: List<String>, heading: Int, inline: String): Int {
     if (inline.isNotEmpty()) return heading + 1
     var i = heading + 1
-    while (i < lines.size && lines[i].trim().isNotEmpty()) i++
+    while (i < lines.size) {
+        if (lines[i].trim().isEmpty()) break
+        if (!isRevisionCitationLine(lines[i])) break
+        i++
+    }
     return i
+}
+
+/** Une ligne de citation, même dans un bloc cité (`> [1] x`). */
+private fun isRevisionCitationLine(line: String): Boolean {
+    val t = REVISION_QUOTE_MARK.replaceFirst(line.trim(), "").trim()
+    if (t.isEmpty()) return false
+    if (isRevisionSourceEntry(t)) return true
+    return REVISION_CITATION_MARKER.matchEntire(t) != null
 }
 
 /** Blocs de sources écrits par le modèle : (index de l'en-tête, fin exclusive). */
@@ -592,8 +609,9 @@ private fun revisionModelCitations(text: String): List<String> {
  * TOUT bloc de sources du modèle part, qu'il soit final ou AU MILIEU : un
  * bloc final serait recopié comme attribution, un bloc au milieu laisserait
  * une fausse source au cœur du cours. Le bloc s'arrête à la première ligne
- * vide, donc le contenu qui suit est conservé (I15 : le corps est ENTIER et
- * seule la liste canonique fait foi).
+ * vide OU à la première ligne qui n'est pas une citation, donc le contenu qui
+ * suit est conservé (I15 : le corps est ENTIER et seule la liste canonique
+ * fait foi).
  */
 private fun revisionContent(text: String): String {
     val lines = text.split("\n")
@@ -654,9 +672,10 @@ const val REVISION_PDF_WRAP = 90
 
 /**
  * Ligne markdown -> ligne de texte dessinable. Le PDF n'a qu'une police de
- * corps : on retire les marqueurs (titres, gras/italique, code, liens,
- * tableaux) en gardant le contenu et les puces lisibles. Les liens sont
- * désactivés : seul le libellé reste.
+ * corps : on retire les marqueurs (titres, gras/italique, code, liens) en
+ * gardant le contenu et les puces lisibles. Les liens sont désactivés : seul
+ * le libellé reste. Les `|` ne sont PAS traités ici : un tableau se reconnaît
+ * à son séparateur, cf. [revisionPlainLines].
  */
 private fun revisionPlainLine(line: String): String {
     var s = line.trim()
@@ -673,13 +692,6 @@ private fun revisionPlainLine(line: String): String {
     // texte, comme les sources). Les listes ordonnées gardent leur numéro,
     // déjà lisible en texte.
     s = Regex("^[-*+]\\s+").replaceFirst(s, "- ")
-    // Tableau : la ligne de séparation disparaît, les cellules deviennent
-    // « a — b ». Aucun « | » ne doit atteindre le dessin.
-    if (s.contains("|")) {
-        val cells = s.trim('|').split("|").map { it.trim() }
-        if (cells.isNotEmpty() && cells.all { Regex("^:?-{1,}:?$").matches(it) }) return " "
-        s = cells.joinToString(" — ")
-    }
     // Lien/image : libellé seul, URL jetée (aucun schéma dangereux dessiné).
     s = Regex("!?\\[([^\\]]*)\\]\\([^)]*\\)").replace(s, "\$1")
     // Code inline : contenu seul.
@@ -694,6 +706,74 @@ private fun revisionPlainLine(line: String): String {
     return s.trim().ifEmpty { " " }
 }
 
+/** Cellules d'une ligne de tableau potentielle (2 au moins), ou null. */
+private fun revisionTableCells(line: String): List<String>? {
+    val t = line.trim()
+    if (!t.contains("|")) return null
+    var inner = t
+    if (inner.startsWith("|")) inner = inner.substring(1)
+    if (inner.endsWith("|")) inner = inner.dropLast(1)
+    val cells = inner.split("|").map { it.trim() }
+    return if (cells.size >= 2) cells else null
+}
+
+/** Cellule de séparation (`---`, `:---:`) d'un tableau markdown. */
+private fun isRevisionTableSeparatorCell(cell: String): Boolean =
+    Regex("^:?-{1,}:?$").matches(cell)
+
+/** Une ligne n'est un tableau que si un séparateur du même nombre de cellules
+ *  la suit : `|x| ≤ 1` (maths) et le code gardent leur barre. */
+private fun revisionTableSeparator(line: String?, columns: Int): Boolean {
+    val cells = revisionTableCells(line ?: "") ?: return false
+    return cells.size == columns && cells.all { isRevisionTableSeparatorCell(it) }
+}
+
+/** Une ligne de tableau dessinable : ses cellules en texte, jointes par « — ». */
+private fun revisionTablePlainLine(cells: List<String>): String =
+    cells.map { revisionPlainLine(it).trim() }.joinToString(" — ").ifEmpty { " " }
+
+/**
+ * Corps -> lignes dessinables, tableaux reconnus.
+ *
+ * Un `|` seul n'est PAS un tableau : `|x|`, `|x| ≤ 1` et le contenu d'un bloc
+ * de code restent du texte (les maths ne deviennent pas « x — ≤ 1 »). Seule
+ * une suite en-tête + séparateur ouvre un tableau ; ses lignes deviennent
+ * « a — b » et le séparateur disparaît.
+ */
+private fun revisionPlainLines(lines: List<String>): List<String> {
+    val out = mutableListOf<String>()
+    var inFence = false
+    var i = 0
+    while (i < lines.size) {
+        val line = lines[i]
+        // Un bloc de code n'est jamais un tableau : son contenu est brut.
+        if (line.trim().startsWith("```")) {
+            inFence = !inFence
+            out.add(" ")
+            i++
+            continue
+        }
+        if (!inFence) {
+            val header = revisionTableCells(line)
+            if (header != null && revisionTableSeparator(lines.getOrNull(i + 1), header.size)) {
+                out.add(revisionTablePlainLine(header))
+                i += 2
+                while (i < lines.size) {
+                    val row = revisionTableCells(lines[i]) ?: break
+                    if (row.size != header.size) break
+                    if (row.all { isRevisionTableSeparatorCell(it) }) break
+                    out.add(revisionTablePlainLine(row))
+                    i++
+                }
+                continue
+            }
+        }
+        out.add(revisionPlainLine(line))
+        i++
+    }
+    return out
+}
+
 /**
  * Corps découpé en lignes affichables : ce que `RevisionPdf` dessine.
  *
@@ -705,12 +785,14 @@ private fun revisionPlainLine(line: String): String {
 fun revisionPdfLines(sheet: RevisionSheet): List<String> {
     if (!isRevisionSheetValid(sheet)) throw IllegalArgumentException("fiche invalide (contrat)")
     val content = revisionContent(sheet.body)
+    // Une fiche qui ne porte qu'un bloc « Sources » est VIDE : jamais
+    // exportée comme une simple bibliographie (I15).
+    if (content.isEmpty()) throw IllegalArgumentException("fiche vide (refus)")
     // Garde I5 : le corps du modèle est borné (MAX_OUTPUT_CHARS). Un corps
     // plus long (magasin altéré) est tronqué — et SIGNALÉ, jamais en silence.
     val truncated = content.length > MAX_OUTPUT_CHARS
     val body = if (truncated) content.take(MAX_OUTPUT_CHARS) else content
-    val bodyLines = body.split("\n").flatMap { l ->
-        val plain = revisionPlainLine(l)
+    val bodyLines = revisionPlainLines(body.split("\n")).flatMap { plain ->
         if (plain.isBlank()) listOf(" ") else splitRevisionLine(plain, REVISION_PDF_WRAP)
     }
     // Filet de sécurité : le PDF pagine, mais la fiche ne doit pas déborder.

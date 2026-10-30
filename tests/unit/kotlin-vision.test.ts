@@ -142,3 +142,49 @@ describe("photo de cours — garde d'image exécutée (#587)", () => {
     expect(store).toContain('File(cacheRoot, "photos").deleteRecursively()');
   });
 });
+
+describe("préparation photo — bornes et transparence (source épinglée)", () => {
+  // `PhotoPrep`/`PhotoCapture` tirent `android.*` : ils ne compilent pas hors
+  // Gradle. On épingle donc la STRUCTURE qui porte l'invariant, pas un miroir
+  // du calcul.
+  const prep = readFileSync(join(APP, "PhotoPrep.kt"), "utf8");
+  const capture = readFileSync(join(APP, "PhotoCapture.kt"), "utf8");
+
+  test("un budget de pixels est vérifié AVANT tout décodage", () => {
+    expect(prep).toContain("MAX_PIXELS = 24_000_000");
+    expect(prep).toContain("fun withinPixelBudget(width: Int, height: Int): Boolean");
+    // Multiplication en Long : Int × Int déborderait sur une image déclarée énorme.
+    expect(prep).toContain("width.toLong() * height.toLong() <= MAX_PIXELS");
+    // Les dimensions viennent de l'en-tête seul, et le refus précède le décodage.
+    expect(prep).toContain("inJustDecodeBounds = true");
+    const budget = prep.indexOf("withinPixelBudget(bounds.outWidth, bounds.outHeight)");
+    const decode = prep.indexOf("BitmapFactory.decodeFile(file.absolutePath, options)");
+    expect(budget).toBeGreaterThan(0);
+    expect(decode).toBeGreaterThan(budget);
+    // Un OOM devient « photo illisible ou trop lourde », jamais un crash natif.
+    expect(prep).toContain("catch (_: OutOfMemoryError)");
+  });
+
+  test("une image transparente est aplatie sur BLANC avant le JPEG", () => {
+    // Sans aplatissement, les pixels transparents sortent noirs en JPEG.
+    expect(prep).toContain("drawColor(Color.WHITE)");
+    expect(prep).toContain("fun flatten(bitmap: Bitmap): Bitmap");
+    expect(prep).toContain("if (!bitmap.hasAlpha()) return bitmap");
+    // L'aplatissement est appliqué APRÈS le redimensionnement et AVANT le JPEG.
+    const flat = prep.indexOf("val opaque = flatten(scaled)");
+    const encode = prep.indexOf("encode(opaque, JPEG_QUALITY)");
+    expect(flat).toBeGreaterThan(0);
+    expect(encode).toBeGreaterThan(flat);
+    // Les bornes et l'orientation ne changent pas : mêmes dimensions source.
+    expect(prep).toContain("Bitmap.createBitmap(bitmap.width, bitmap.height,");
+  });
+
+  test("un échec de copie galerie ne laisse JAMAIS l'original dans le cache", () => {
+    // Une seule suppression, dans le `finally` : exception, flux vide, resolver
+    // nul et dépassement passent tous par là. L'original porte l'EXIF/GPS (I32).
+    expect(capture).toMatch(/finally \{\s*if \(!usable\) target\.delete\(\)\s*\}/);
+    expect(capture).toMatch(/usable = target\.length\(\) > 0/);
+    expect(capture.match(/target\.delete\(\)/g)?.length ?? 0).toBe(1);
+    expect(capture).toContain("if (total > MAX_GALLERY_BYTES) return null");
+  });
+});

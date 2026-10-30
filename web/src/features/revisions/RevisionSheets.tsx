@@ -14,7 +14,14 @@ import {
 import { IconBook, IconDownload } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
 import { MarkdownBody } from "./MarkdownBody";
-import { revisionDateLabel, parseRevisionSheet, parseRevisionSheets, type RevisionSheet } from "./sheets";
+import {
+  revisionDateLabel,
+  bodyCarriesSources,
+  bodyWithoutSources,
+  parseRevisionSheet,
+  parseRevisionSheets,
+  type RevisionSheet,
+} from "./sheets";
 
 type Selected = {
   id: string;
@@ -262,17 +269,22 @@ function sourceLabel(count: number): string {
   return `${count} source${count > 1 ? "s" : ""}`;
 }
 
-/** Aperçu texte : deux lignes au plus, jamais de balisage. */
+/** Aperçu texte : deux lignes au plus, jamais de balisage ni la bibliographie. */
 function previewOf(body: string): string {
-  const flat = body.replace(/\s+/g, " ").trim();
+  const flat = bodyWithoutSources(body).replace(/\s+/g, " ").trim();
   return flat.length > 180 ? `${flat.slice(0, 179).trimEnd()}…` : flat;
 }
 
-function SheetBody({ sheet }: { sheet: RevisionSheet }) {
+/**
+ * Corps d'une fiche ouverte. Le corps assemblé porte DÉJÀ le bloc canonique
+ * « Sources : » : la liste n'est rendue séparément que si le corps n'en a pas
+ * (une fiche du pont antérieure), jamais deux fois.
+ */
+export function SheetBody({ sheet }: { sheet: RevisionSheet }) {
   return (
     <div className="revision-card__body-wrap">
       <MarkdownBody text={sheet.body} />
-      {sheet.sources.length > 0 ? (
+      {sheet.sources.length > 0 && !bodyCarriesSources(sheet.body) ? (
         <div>
           <strong className="t-caption">Sources</strong>
           <ul className="revision-card__sources">

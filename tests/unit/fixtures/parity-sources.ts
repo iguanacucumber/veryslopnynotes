@@ -144,6 +144,10 @@ export const PRODUCTION_SOURCES: string[] = [
   // LLM (corps lu BORNÉ, panne de transport classée délai ≠ réseau). Fichier
   // `java.*` seul : le harnais l'EXÉCUTE, sans réseau ni OkHttp.
   join(DATA, "LlmTransport.kt"),
+  // `data/LlmCompletion.kt` : le verdict d'une complétion (`finish_reason` +
+  // contenu -> texte ou refus nommé). Fichier `java.*` seul : le harnais
+  // l'EXÉCUTE, sans `org.json`, pour que « coupé » ≠ « vide » ≠ « illisible ».
+  join(DATA, "LlmCompletion.kt"),
   join(DATA, "ClientQueue.kt"),
   // `data` — le signal « session morte » et sa RÉPARATION (#397) : le rejet
   // invalide la session ET purge le cache. Fichiers PURS (aucun import

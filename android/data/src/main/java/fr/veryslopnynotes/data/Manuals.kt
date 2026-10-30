@@ -2,6 +2,7 @@ package fr.veryslopnynotes.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import fr.veryslopnynotes.core.ManualCatalog
 import fr.veryslopnynotes.core.ManualUrl
 import fr.veryslopnynotes.core.ManualUrlResult
 import fr.veryslopnynotes.core.ServerConfig
@@ -35,6 +36,23 @@ data class ManualDoc(
             subject.isNotBlank() && subject.length <= 100 &&
             page >= 1 &&
             excerpt.isNotBlank() && excerpt.length <= 8000
+}
+
+/**
+ * L'extrait gardé parle-t-il de la matière demandée ?
+ *
+ * Une adresse d'ouvrage PRÉCIS ne dit pas sa matière : seule la fiche le dit.
+ * La comparaison passe par la clé du catalogue (`ManualCatalog.subjectKey` :
+ * casse, accents, « MATHS » et « Mathématiques ») — une seule règle de matière
+ * dans l'app.
+ *
+ * Matière vide ou absente de la table : refus (fail-closed), comme le catalogue
+ * (« mieux vaut pas de source qu'un mauvais ouvrage »). Ainsi un extrait de
+ * maths ne part jamais dans un devoir d'histoire.
+ */
+fun manualMatchesSubject(docSubject: String, requested: String): Boolean {
+    val wanted = ManualCatalog.subjectKey(requested) ?: return false
+    return ManualCatalog.subjectKey(docSubject) == wanted
 }
 
 /**

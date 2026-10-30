@@ -325,7 +325,10 @@ export function countMarkdownNodes(blocks: MarkdownBlock[]): number {
  * jamais de HTML : le rendu React échappe le texte.
  */
 export function parseMarkdown(markdown: string): MarkdownBlock[] {
-  const source = boundSource(markdown);
+  // Un corps Windows (CRLF) ou vieux Mac (CR) rendrait ses marqueurs : les
+  // expressions sont ancrées en `$` et `.` ne franchit pas `\r`. Normalisation
+  // en UN seul point d'entrée, avant toute analyse.
+  const source = boundSource(markdown.replace(/\r\n?/g, "\n"));
   const blocks = parseBlocks(source);
   if (countMarkdownNodes(blocks) <= MAX_MARKDOWN_NODES) return blocks;
   // Trop de nœuds : repli en texte plat, borné par la taille source. Mieux

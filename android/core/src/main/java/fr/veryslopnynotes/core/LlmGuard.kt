@@ -1,6 +1,11 @@
 package fr.veryslopnynotes.core
 
+import java.nio.ByteBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
+import java.nio.charset.StandardCharsets
 import java.text.Normalizer
+import java.util.Base64
 
 // Garde LLM I4/I5 : sans outils, sans reseau, sans secrets. Sortie texte/JSON validee.
 // Port fidele de server/ai/guard.ts (supprimé en #210 : ce port est la source
@@ -144,7 +149,10 @@ private val RE_PEM = Regex(
 //     un `?`/`&` ;
 //   - un paramètre de URL (`?token=…`) n'est PAS une affectation : c'est la
 //     forme d'un exemple de documentation.
-private val RE_ENV = Regex("(?<![?\\w-])([A-Za-z_][A-Za-z0-9_]*)[ \\t]*[:=][ \\t]*(\\S+)")
+//
+// Le nom peut porter un tiret (`github-token`, `x-api-key`) : le nom d'une
+// variable sensible est aussi souvent écrit en kebab-case qu'en snake_case.
+private val RE_ENV = Regex("(?<![?\\w-])([A-Za-z_][A-Za-z0-9_-]*)[ \\t]*[:=][ \\t]*(\\S+)")
 private val RE_COOKIE = Regex("(?i)\\b(?:set-)?cookie[ \\t]*:[ \\t]*([A-Za-z0-9_.$-]+)=([^;\\s]{8,})")
 private val RE_OPAQUE = Regex("[A-Za-z0-9+/=_-]{40,}")
 private val RE_PLACEHOLDER = Regex("(?i)your|example|placeholder|dummy|change-?me|x{3,}|todo")
@@ -156,6 +164,10 @@ private const val EMBEDDED_BASE64_MARK = "base64,"
 // Signatures base64 des formats de cours courants. L'exemption ne vise QUE
 // ces contenus : un opaque arbitraire colle apres `data:...;base64,` reste un
 // secret (sinon le prefixe `data:` deviendrait un contournement de la garde).
+//
+// La signature est celle des PREMIERS octets du fichier decode (magic bytes) :
+// une URI `data:` legitime porte toujours l'un de ces prefixes. Ajouter un
+// format = ajouter sa signature, jamais relacher la regle.
 private val EMBEDDED_BASE64_SIGNATURES = listOf(
     "iVBORw0KGgo", // PNG
     "/9j/", // JPEG
@@ -164,8 +176,18 @@ private val EMBEDDED_BASE64_SIGNATURES = listOf(
     "JVBERi0", // PDF
     "UEsDB", // ZIP (docx, odt)
     "d09GRg", // WOFF
+    "d09GMg", // WOFF2
+    "wOF2", // WOFF2 (magic ASCII)
     "PHN2Zy", // SVG
+    "AAAAIGZ0eXBhdmlm", // AVIF (ftypavif)
+    "AAAAIGZ0eXBpc29t", // MP4 (ftypisom)
+    "T2dnUw", // OGG (OggS)
+    "SUQz", // MP3 (ID3)
+    "//u", // MP3 (trame MPEG sans tag ID3)
 )
+
+/** Longueur de la plus longue signature : fenetre de comparaison. */
+private val EMBEDDED_SIGNATURE_MAX = EMBEDDED_BASE64_SIGNATURES.maxOf { it.length }
 
 /**
  * Ce run opaque est-il le contenu d'une URI `data:` (image, fichier) ?
@@ -178,6 +200,12 @@ private val EMBEDDED_BASE64_SIGNATURES = listOf(
  * fois `data:` et `base64,`, sans tenir compte de la casse : un base64
  * orphelin, ou un secret colle ailleurs dans la phrase, reste refuse.
  *
+ * Deux preuves acceptees, jamais une simple etiquette `data:` :
+ *   - la signature binaire d'un format connu (image, audio, police, PDF…) ;
+ *   - pour un media `text/…`, un contenu qui se decode en TEXTE imprimable et
+ *     contient un blanc (une phrase, pas un identifiant encode).
+ * Un opaque arbitraire apres `data:image/…;base64,` reste donc un secret.
+ *
  * ponytail: un base64 coupe par un saut de ligne n'est pas reconnu (le jeton
  * s'arrete a l'espace) : plafond assume, un exemple de cours tient sur une
  * ligne. Upgrade: suivre l'etat « dans une URI data » sur plusieurs lignes.
@@ -187,9 +215,49 @@ private fun isEmbeddedDataPayload(text: String, start: Int): Boolean {
     while (i >= 0 && !text[i].isWhitespace() && text[i] !in "\"'<>()") i--
     val head = text.substring(i + 1, start).lowercase()
     if (!head.contains("data:") || !head.contains(EMBEDDED_BASE64_MARK)) return false
-    val payload = text.substring(start, minOf(text.length, start + 12))
-    return EMBEDDED_BASE64_SIGNATURES.any { payload.startsWith(it) }
+    val payload = text.substring(start, minOf(text.length, start + EMBEDDED_SIGNATURE_MAX))
+    if (EMBEDDED_BASE64_SIGNATURES.any { payload.startsWith(it) }) return true
+    return head.contains("data:text/") && isEmbeddedTextPayload(text, start)
 }
+
+/**
+ * Le payload d'une URI `data:text/…;base64,` decode-t-il en TEXTE lisible ?
+ *
+ * Un identifiant secret, lui, decode en octets binaires : UTF-8 invalide, ou
+ * texte sans blanc. Exiger un blanc ecarte le cas « une phrase d'un seul mot »
+ * seulement s'il n'y a aucun espace — un secret COLLE dans une URI textuelle
+ * aurait la forme d'un texte, donc la garde s'appuie sur le fait qu'un vrai
+ * texte de cours est phrase. Lecture bornee a 1 024 caracteres.
+ */
+private fun isEmbeddedTextPayload(text: String, start: Int): Boolean {
+    // Le run base64 s'arrete au premier caractere hors alphabet : sans cela
+    // le decodeur MIME avalerait la suite du document (`">cours</a>`).
+    var end = start
+    while (end < text.length && isBase64Char(text[end])) end++
+    val sample = text.substring(start, minOf(end, start + 1024))
+    val bytes = try {
+        Base64.getMimeDecoder().decode(sample)
+    } catch (_: IllegalArgumentException) {
+        return false
+    }
+    if (bytes.isEmpty()) return false
+    val decoded = try {
+        StandardCharsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes))
+            .toString()
+    } catch (_: CharacterCodingException) {
+        return false
+    }
+    if (decoded.none { it.isWhitespace() }) return false
+    return decoded.none { it.isISOControl() && it != '\n' && it != '\r' && it != '\t' }
+}
+
+/** Caractere de l'alphabet base64 (les deux variantes : + / et - _). */
+private fun isBase64Char(c: Char): Boolean =
+    c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c == '+' || c == '/' ||
+        c == '-' || c == '_' || c == '='
 
 // Noms de variables dont la valeur est un secret. Comparaison par MORCEAUX
 // (« MASTER_KEY » -> [master, key]) : « MONKEY » ou « KEYBOARD » ne sont pas
@@ -235,16 +303,31 @@ private fun characterClasses(s: String): Int {
  * Refuse les valeurs manifestement factices (« your-api-key », `<TOKEN>`),
  * les references a une variable (`$KEY`) et les valeurs courtes : un cours qui
  * ecrit `export TOKEN=abc` n'est pas un leak.
+ *
+ * Une EXPRESSION n'est pas un litteral secret : `token = secrets.token_hex(16)`,
+ * `session = requests.Session()`, `auth = OAuth2Session(client_id, …)` sont du
+ * code legitime (faux positif vecu), pas la VALEUR d'un secret. Un appel se
+ * reconnait a ses parentheses, un attribut pointe a ses points
+ * (`apiKey = config.apiKey`). Un secret COLLE (`API_KEY=…`, `GITHUB_TOKEN=…`,
+ * `password = "<valeur>"`) n'a ni parentheses ni forme d'attribut : il reste
+ * refuse.
  */
 private fun looksLikeSecretValue(raw: String): Boolean {
     val v = raw.trim().trim('"', '\'', '`')
     if (v.length < 12) return false
     if (v.startsWith("\$")) return false
     if (v.contains("://")) return false
+    if (v.contains('(') || v.contains(')')) return false
+    if (RE_DOTTED_IDENTIFIER.matches(v)) return false
     if (RE_PLACEHOLDER.containsMatchIn(v)) return false
     if (characterClasses(v) < 2) return false
     return shannonEntropy(v) >= 3.0
 }
+
+// Attribut pointe : `config.apiKey`, `os.environ`, `auth.token` — un nom, pas
+// une valeur. Les cles reelles qui contiennent des points (`sk.live.…`) ne
+// sont pas des identifiants purement alphabetiques et restent refusees.
+private val RE_DOTTED_IDENTIFIER = Regex("^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)+$")
 
 /**
  * Une chaine longue est-elle un secret ?
@@ -264,11 +347,17 @@ private fun looksLikeOpaqueSecret(v: String): Boolean {
     return shannonEntropy(v) >= 4.0
 }
 
+// Frontiere camelCase / PascalCase : `dbPassword` -> [db, Password],
+// `APIKey` -> [API, Key]. Le nom d'une variable sensible s'ecrit aussi sans
+// separateur explicite ; sans cette coupure `dbPassword` n'etait pas vu.
+private val RE_CAMEL_BOUNDARY = Regex("(?<=[a-z0-9])(?=[A-Z])")
+
 /** Le nom de la variable designe-t-il une valeur secrete ? */
 private fun isSensitiveName(name: String): Boolean {
     val n = name.lowercase()
     if (n in SENSITIVE_NAME_TOKENS) return true
-    return n.split('_', '-', '.').any { it in SENSITIVE_NAME_TOKENS }
+    if (n.split('_', '-', '.').any { it in SENSITIVE_NAME_TOKENS }) return true
+    return RE_CAMEL_BOUNDARY.split(name).any { it.lowercase() in SENSITIVE_NAME_TOKENS }
 }
 
 /** Le nom du cookie designe-t-il une session ? */
@@ -334,29 +423,140 @@ private fun detectSecret(text: String): SecretKind? {
     return null
 }
 
-// Un caractere de FORMAT Unicode (U+200B, U+2060, U+FEFF…) glisse dans un
-// jeton et coupe la FORME en deux : « Bear<U+200B>er sk-… », « password=<U+200B>… »
-// ou un point de JWT precede d'un invisible ne sont plus des formes pour les
-// motifs, et le prompt passait. La garde scanne donc AUSSI une copie
-// NORMALISEE (NFKC, caracteres de format retires) ; le prompt envoye, lui,
-// reste byte pour byte celui de l'eleve : on ne modifie que le SCAN.
-private fun stripFormatChars(text: String): String {
-    if (text.none { it.category == CharCategory.FORMAT }) return text
-    return text.filterNot { it.category == CharCategory.FORMAT }
+// --- Formes coupees par du BLANC (saut de ligne, espace) -------------------
+//
+// Un secret copie depuis un terminal arrive souvent coupe : « sk-or-v1- » puis
+// le corps sur la ligne suivante, `PASSWORD=` puis la valeur, un JWT dont le
+// premier segment est sur deux lignes. Aucun motif strict ne voit alors la
+// FORME contigue, et le prompt passait.
+//
+// On ne supprime JAMAIS tous les blancs du texte : une phrase entiere
+// deviendrait un seul run opaque, donc un faux positif. Chaque motif desserre
+// est ancre sur un marqueur a HAUTE confiance, borne ses coupures, puis sa
+// fenetre compactee est REVALIDEE par la forme stricte. Un cours qui parle de
+// « sk-or-v1- » sans corps n'a pas de corps compacte assez long.
+
+/** Retire les blancs d'une fenetre deja bornee par un motif desserre. */
+private fun compact(text: String): String = text.filterNot { it.isWhitespace() }
+
+// Prefixe de cle connu : le corps peut etre coupe par au plus deux blancs,
+// chaque morceau d'au moins 6 caracteres.
+private val RE_KEY_SPLIT = Regex(
+    Regex.escape(F_KEY_PREFIX) + "[A-Za-z0-9_-]*(?:\\s+[A-Za-z0-9_-]{6,}){1,2}",
+)
+
+// JWT : le premier segment peut commencer sur la ligne suivante (`eyJ` seul).
+private val RE_JWT_SPLIT = Regex(
+    F_JWT_HEAD + "[A-Za-z0-9_-]*(?:\\s+[A-Za-z0-9_.-]+){1,4}",
+)
+
+// En-tete d'autorisation : le JETON est coupe, le schema reste entier. Les
+// morceaux suivants font 6+ caracteres (filtre des mots de prose).
+private val RE_AUTH_SPLIT = Regex(
+    "(?i)\\b(?:" + F_BEARER + "|" + F_BASIC + ")\\s+" +
+        "([A-Za-z0-9+/=._~:-]*(?:\\s+[A-Za-z0-9+/=._~:-]{6,}){1,3})",
+)
+
+// Affectation sensible dont la valeur est sur la LIGNE SUIVANTE
+// (`PASSWORD=` puis la valeur) : seule la coupure par saut de ligne est
+// toleree, un blanc de prose resterait ambigu.
+private val RE_ENV_SPLIT = Regex(
+    "(?<![?\\w-])([A-Za-z_][A-Za-z0-9_-]*)[ \\t]*[:=][ \\t]*\\r?\\n[ \\t]*(\\S+)",
+)
+
+// En-tete PEM coupe par du blanc entre ses mots (`BEGIN PRIVATE\nKEY`).
+private val RE_PEM_SPLIT = Regex(
+    "-{5}\\s*BEGIN\\s+(?:[A-Z0-9]+\\s+)*PRIVATE\\s+KEY\\s*-{5}",
+    RegexOption.IGNORE_CASE,
+)
+
+/** Secret dont la FORME est coupee par du blanc, ou null. */
+private fun detectSplitSecret(text: String): SecretKind? {
+    for (m in RE_PEM_SPLIT.findAll(text)) {
+        if (pemBodyLength(text, m.range.last + 1) >= 16) return SecretKind.PRIVATE_KEY
+    }
+    for (m in RE_KEY_SPLIT.findAll(text)) {
+        if (RE_KEY_PREFIX.matches(compact(m.value))) return SecretKind.API_KEY
+    }
+    for (m in RE_JWT_SPLIT.findAll(text)) {
+        if (RE_JWT.matches(compact(m.value))) return SecretKind.JWT
+    }
+    for (m in RE_AUTH_SPLIT.findAll(text)) {
+        val token = compact(m.groupValues[1])
+        // Entropie plus stricte que la forme contigue : un jeton coupe peut
+        // n'etre que deux mots de prose (« Bearer OAuth2 Authentication »),
+        // qui ont la casse et la longueur d'un jeton mais pas son desordre.
+        if (token.length >= 16 && shannonEntropy(token) >= 3.8 &&
+            looksLikeSecretValue(token)
+        ) {
+            return SecretKind.AUTHORIZATION
+        }
+    }
+    for (m in RE_ENV_SPLIT.findAll(text)) {
+        if (isSensitiveName(m.groupValues[1]) && looksLikeSecretValue(m.groupValues[2])) {
+            return SecretKind.ENV_ASSIGN
+        }
+    }
+    return null
 }
 
-/** Secret trouve dans la copie normalisee, ou null. */
-private fun detectSecretNormalized(text: String): SecretKind? {
+// --- Copie de SCAN : marques invisibles, homoglyphes ------------------------
+//
+// Un caractere invisible glisse dans un jeton et coupe la FORME en deux :
+// « Bear<U+200B>er », « password=<U+200B>… ». Deux familles comptent :
+//   - FORMAT (U+200B, U+2060, U+FEFF…) ;
+//   - NON_SPACING_MARK : CGJ U+034F, selecteur de variation U+FE0F, accents
+//     combinants. NFKC compose d'abord `e` + accent aigu en `é`, donc une
+//     ecriture decomposee legitime ne perd pas sa lettre accentuee.
+//
+// Des lettres cyrilliques/grecques ont l'apparence d'une lettre ASCII
+// (`Веаrеr`, `ѕk-or-v1-`) : une table FERMEE les replie vers l'ASCII. Les
+// deux transformations ne touchent que la COPIE de scan ; le prompt envoye
+// reste byte pour byte celui de l'eleve.
+
+/** Lettres confondables -> ASCII, MEME casse (le `J` de `eyJ` en depend). */
+private val ASCII_CONFUSABLES: Map<Char, Char> = mapOf(
+    // cyrillique minuscule
+    'а' to 'a', 'в' to 'b', 'е' to 'e', 'к' to 'k', 'м' to 'm', 'н' to 'h',
+    'о' to 'o', 'р' to 'p', 'с' to 'c', 'т' to 't', 'у' to 'y', 'х' to 'x',
+    'ѕ' to 's', 'і' to 'i', 'ј' to 'j', 'ԁ' to 'd', 'ӏ' to 'l', 'ѵ' to 'v',
+    'ԝ' to 'w', 'ɡ' to 'g',
+    // cyrillique majuscule
+    'А' to 'A', 'В' to 'B', 'Е' to 'E', 'К' to 'K', 'М' to 'M', 'Н' to 'H',
+    'О' to 'O', 'Р' to 'P', 'С' to 'C', 'Т' to 'T', 'У' to 'Y', 'Х' to 'X',
+    'Ѕ' to 'S', 'І' to 'I', 'Ј' to 'J',
+    // grec
+    'α' to 'a', 'ε' to 'e', 'ι' to 'i', 'κ' to 'k', 'ν' to 'v', 'ο' to 'o',
+    'ρ' to 'p', 'τ' to 't', 'υ' to 'u', 'χ' to 'x',
+    'Α' to 'A', 'Β' to 'B', 'Ε' to 'E', 'Ζ' to 'Z', 'Η' to 'H', 'Ι' to 'I',
+    'Κ' to 'K', 'Μ' to 'M', 'Ν' to 'N', 'Ο' to 'O', 'Ρ' to 'P', 'Τ' to 'T',
+    'Υ' to 'Y', 'Χ' to 'X',
+)
+
+/** Copie de scan : NFKC, homoglyphes replies, marques invisibles retirees. */
+private fun normalizeForScan(text: String): String {
     val nfkc = Normalizer.normalize(text, Normalizer.Form.NFKC)
-    val stripped = stripFormatChars(nfkc)
-    // Rien a voir de plus : la copie est identique au brut.
-    if (stripped == text) return null
-    return detectSecret(stripped)
+    val folded = if (nfkc.none { it in ASCII_CONFUSABLES }) nfkc
+    else String(CharArray(nfkc.length) { ASCII_CONFUSABLES[nfkc[it]] ?: nfkc[it] })
+    if (folded.none { isInvisibleMark(it) }) return folded
+    return folded.filterNot { isInvisibleMark(it) }
 }
 
-/** Secret present dans le texte brut OU dans sa copie normalisee. */
-private fun detectSecretAnywhere(text: String): SecretKind? =
-    detectSecret(text) ?: detectSecretNormalized(text)
+/** Marque sans largeur propre : elle se retire de la copie de scan. */
+private fun isInvisibleMark(c: Char): Boolean =
+    c.category == CharCategory.FORMAT || c.category == CharCategory.NON_SPACING_MARK
+
+/**
+ * Secret present dans le texte brut, dans une forme coupee par du blanc, ou
+ * dans sa copie de scan. Seul le SCAN est normalise.
+ */
+private fun detectSecretAnywhere(text: String): SecretKind? {
+    detectSecret(text)?.let { return it }
+    detectSplitSecret(text)?.let { return it }
+    val scan = normalizeForScan(text)
+    if (scan == text) return null
+    return detectSecret(scan) ?: detectSplitSecret(scan)
+}
 
 // JSON minimal pour les sorties LLM validees (I5) : objets, tableaux, chaines,
 // nombres, booleens, null. Suffisant pour les schemas devoirs/fiches/corriges.

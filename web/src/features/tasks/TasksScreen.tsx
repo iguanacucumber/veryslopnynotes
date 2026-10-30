@@ -116,6 +116,10 @@ function TasksWeek({ week }: { week: string }) {
   const [help, setHelp] = useState<HelpState | null>(null);
   const [photoChooser, setPhotoChooser] = useState<Assignment | null>(null);
   const [revisionPending, setRevisionPending] = useState<Record<string, boolean>>({});
+  // Vols d'assistant en cours, indépendants du panneau : fermer l'aide
+  // n'arrête PAS l'appel payé. Tant que la promesse n'est pas réglée
+  // (réponse, erreur, annulation), les autres cartes restent fermées.
+  const [helpFlights, setHelpFlights] = useState(0);
   const [llm, setLlm] = useState<LlmState>({ configured: null, error: null });
   const [manualSubjects, setManualSubjects] = useState<string[]>([]);
   const [lessonSubjects, setLessonSubjects] = useState<string[]>([]);
@@ -124,7 +128,7 @@ function TasksWeek({ week }: { week: string }) {
   // L'assistant est UNE ressource payante pour tout l'écran : un second
   // appel simultané jetterait la première réponse tout en la payant.
   const revisionBusy = Object.keys(revisionPending).length > 0;
-  const assistantBusy = help?.loading === true || revisionBusy;
+  const assistantBusy = helpFlights > 0 || revisionBusy;
 
   // Le payload fait foi : un rafraîchissement remplace l'état optimiste.
   useEffect(() => {
@@ -210,6 +214,7 @@ function TasksWeek({ week }: { week: string }) {
     // carte ne voit pas la demande en cours.
     if (assistantBusy) return;
     const seq = ++helpSeq.current;
+    setHelpFlights((count) => count + 1);
     setHelp({ id: assignment.id, loading: true, answer: null, steps: [], sources: [], refusal: null, actions: [], error: null });
     try {
       const result = await bridge.askHomework(assignment.id, week);
@@ -268,12 +273,17 @@ function TasksWeek({ week }: { week: string }) {
         actions: [],
         error: e instanceof Error ? e.message : "Aide devoirs indisponible.",
       });
+    } finally {
+      // Le vol se règle toujours, même si le panneau a été fermé entre-temps
+      // ou si le pont a rejeté : jamais de blocage définitif.
+      setHelpFlights((count) => Math.max(0, count - 1));
     }
   }
 
   async function askPhoto(assignment: Assignment, source: "camera" | "gallery") {
     if (assistantBusy) return;
     const seq = ++helpSeq.current;
+    setHelpFlights((count) => count + 1);
     setHelp({
       id: assignment.id,
       loading: true,
@@ -352,6 +362,8 @@ function TasksWeek({ week }: { week: string }) {
         photo: true,
         photoSource: source,
       });
+    } finally {
+      setHelpFlights((count) => Math.max(0, count - 1));
     }
   }
 

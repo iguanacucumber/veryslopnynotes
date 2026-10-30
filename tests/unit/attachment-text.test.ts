@@ -94,6 +94,30 @@ function pdfWithImages(first: string, images: number, last: string): string {
   return `%PDF-1.4\n${objects.join("\n")}\n%%EOF\n`;
 }
 
+/** Octets UTF-16LE précédés du BOM `FF FE`, en hexadécimal (fixture `hex`). */
+function utf16leWithBom(text: string): string {
+  return Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, "utf16le")]).toString("hex");
+}
+
+/** Points de code CP1252 hors Latin-1 strict (0x80-0x9F), ceux des exports Word. */
+const CP1252_HIGH: Record<string, number> = { "€": 0x80, "…": 0x85, "’": 0x92, "“": 0x93, "”": 0x94 };
+
+/** Octets Windows-1252 : le cas des exports scolaires Latin-1. */
+function cp1252Hex(text: string): string {
+  const bytes: number[] = [];
+  for (const char of text) {
+    const high = CP1252_HIGH[char];
+    if (high !== undefined) {
+      bytes.push(high);
+      continue;
+    }
+    const code = char.codePointAt(0)!;
+    if (code > 0xff) throw new Error(`hors CP1252 : ${char}`);
+    bytes.push(code);
+  }
+  return Buffer.from(bytes).toString("hex");
+}
+
 describe("extraction locale d'une pièce jointe (#631)", () => {
   test.skipIf(skip)("les bornes déclarées sont celles du cache et de l'assembleur", async () => {
     const limits = await ask<{
@@ -123,8 +147,54 @@ describe("extraction locale d'une pièce jointe (#631)", () => {
     expect(out.truncated).toBe(false);
   });
 
-  test.skipIf(skip)("un markdown est du texte (aucun rendu)", async () => {
+  test.skipIf(skip)("un .txt UTF-16LE avec BOM est décodé, jamais mojibaké", async () => {
+    // Décodé en UTF-8, « Devoir » devenait « \uFFFD\uFFFDD e v o i r » avec
+    // des NUL transformés en espaces.
+    const text = "Devoir de mathématiques : exercice 3.";
     const out = await ask<Extracted>({
+      op: "extract",
+      name: "consigne.txt",
+      mime: "text/plain",
+      hex: utf16leWithBom(text),
+    });
+    expect(out.kind).toBe("readable");
+    if (out.kind !== "readable") return;
+    expect(out.text).toBe(text);
+    expect(out.text).not.toContain("\u0000");
+    expect(out.text).not.toContain("D e v o i r");
+  });
+
+  test.skipIf(skip)("un .csv Windows-1252 rend « élève », pas du mojibake", async () => {
+    // Latin-1 / CP1252 des exports scolaires : lu en UTF-8, « élève » sortait
+    // « Ã©lÃ¨ve ». 0x92 (apostrophe typographique) prouve CP1252 et non
+    // ISO-8859-1, qui en ferait un caractère de contrôle remplacé par un espace.
+    const out = await ask<Extracted>({
+      op: "extract",
+      name: "notes.csv",
+      mime: "text/plain",
+      hex: cp1252Hex("élève;note\nL’élève a rendu son devoir."),
+    });
+    expect(out.kind).toBe("readable");
+    if (out.kind !== "readable") return;
+    expect(out.text).toContain("élève");
+    expect(out.text).toContain("L’élève a rendu");
+    expect(out.text).not.toContain("Ã©lÃ¨ve");
+  });
+
+  test.skipIf(skip)("un UTF-8 valide reste intact (aucun repli parasite)", async () => {
+    const text = "Élève : « à rendre » – €";
+    const out = await ask<Extracted>({
+      op: "extract",
+      name: "consigne.txt",
+      mime: "text/plain",
+      text,
+    });
+    expect(out.kind).toBe("readable");
+    if (out.kind !== "readable") return;
+    expect(out.text).toBe(text);
+  });
+
+  test.skipIf(skip)("un markdown est du texte (aucun rendu)", async () => {    const out = await ask<Extracted>({
       op: "extract",
       name: "cours.md",
       mime: "text/markdown",

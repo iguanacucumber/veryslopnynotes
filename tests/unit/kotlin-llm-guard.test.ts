@@ -86,6 +86,23 @@ const DATA_URI_IMAGE = '<img src="data:image/png;base64,' + FAKE_IMAGE_BASE64 + 
 /** Caractères de FORMAT Unicode, invisibles : ils coupent une forme contiguë. */
 const ZWSP = "\u200B";
 const ZWNJ = "\u200C";
+/** Marques non-`Cf` : combinateur CGJ et sélecteur de variation VS16 (`Mn`). */
+const CGJ = "\u034F";
+const VS16 = "\uFE0F";
+
+/**
+ * Lettres cyrilliques/grecques qui ONT L'APPARENCE d'une lettre ASCII.
+ * Écrites en échappements : le fichier reste ASCII. Le `р` cyrillique est le
+ * sosie de `p` (pas de `r`) : « Веаrеr » mélange cyrillique et latin.
+ */
+const CYRILLIC_BEARER = ["\u0412", "\u0435", "\u0430", "r", "\u0435", "r"].join("");
+const CYRILLIC_S = "\u0455"; // ѕ : le `s` de `sk-or-v1-`.
+
+/** Valeur à la FORME d'un secret (3 classes, entropie haute), jamais réelle. */
+const SECRET_VALUE = ["aB3dE5", "fG7hJ9", "kL1mN3", "pQ5rS7", "tU9vW1", "xY3z5"].join("");
+
+/** Corps de clé assez long pour le préfixe, assez court pour rester < 40. */
+const KEY_BODY = ["aB3dE5", "fG7hJ9", "kL1mN3", "pQ5rS7"].join("");
 
 /** JWT court : aucun segment n'atteint 40 caractères (donc pas d'OPAQUE). */
 const FAKE_SHORT_JWT = [
@@ -288,6 +305,209 @@ describe("le contenu embarqué et les caractères invisibles (I4)", () => {
   test.skipIf(skip)("un invisible dans un texte anodin ne déclenche rien", async () => {
     const r = await ask("prompt", "Bonjour" + ZWSP + ", explique la photosynthèse.");
     expect(r.ok).toBe(true);
+  });
+});
+
+describe("noms sensibles camelCase et kebab-case (I4)", () => {
+  test.skipIf(skip)("un nom collé en camelCase est reconnu", async () => {
+    for (const nom of ["dbPassword", "refreshToken", "clientSecret", "apiKey"]) {
+      const r = await ask("prompt", nom + "=" + SECRET_VALUE);
+      expect({ nom, kind: r.kind }).toEqual({ nom, kind: "ENV_ASSIGN" });
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  test.skipIf(skip)("un nom kebab-case est reconnu", async () => {
+    const r = await ask("prompt", "github-token=" + SECRET_VALUE);
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("ENV_ASSIGN");
+  });
+
+  test.skipIf(skip)("les formes SNAKE_CASE restent refusées", async () => {
+    for (const nom of ["GITHUB_TOKEN", "DB_PASSWORD"]) {
+      const r = await ask("prompt", nom + "=" + SECRET_VALUE);
+      expect({ nom, kind: r.kind }).toEqual({ nom, kind: "ENV_ASSIGN" });
+    }
+  });
+
+  test.skipIf(skip)("un paramètre de URL reste un exemple de doc, pas une affectation", async () => {
+    const r = await ask("prompt", "Voir https://api.exemple.fr/eleves?token=" + KEY_BODY);
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("secrets coupés par du blanc (I4)", () => {
+  test.skipIf(skip)("une clé de préfixe connu coupée par des blancs est refusée", async () => {
+    for (const sep of ["\n", " "]) {
+      const coupee = [KEY_PREFIX, "a1B2c3D4e5F6g7H8", "i9J0k1L2m3N4o5P6"].join(sep);
+      const r = await ask("prompt", "ma clé :" + sep + coupee);
+      expect({ sep, kind: r.kind }).toEqual({ sep, kind: "API_KEY" });
+    }
+  });
+
+  test.skipIf(skip)("une affectation sensible dont la valeur est à la ligne est refusée", async () => {
+    const r = await ask("prompt", ["PRONOTE_", "PASSWORD=\n", SECRET_VALUE].join(""));
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("ENV_ASSIGN");
+  });
+
+  test.skipIf(skip)("un JWT dont le premier segment est à la ligne est refusé", async () => {
+    const segments = FAKE_SHORT_JWT.split(".");
+    const tete = segments[0]!;
+    const coupe = [tete.slice(0, 3), "\n" + tete.slice(3) + "." + segments.slice(1).join(".")].join("");
+    const r = await ask("prompt", "mon jeton : " + coupe);
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("JWT");
+  });
+
+  test.skipIf(skip)("un jeton Bearer coupé par un saut de ligne est refusé", async () => {
+    // Premier morceau sous 16 caractères : le motif strict ne peut pas le
+    // voir, seule la forme compactée est un jeton.
+    const r = await ask(
+      "prompt",
+      ["Authorization: Bear", "er ", "A1b2C3d4E", "\n", "F5g6H7i8J9k0L1mN2o3P4q5R6"].join(""),
+    );
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("AUTHORIZATION");
+  });
+
+  test.skipIf(skip)("une prose multiligne ne devient pas un run opaque", async () => {
+    for (const texte of [
+      "Le protocole HTTPS\nutilise le port 443\net TLS 1.3.",
+      "Les clés OpenRouter commencent par sk-or-v1- puis un corps opaque.",
+      "Le token\nde session reste\nsur le téléphone.",
+      "L'en-tête Bearer OAuth2 Authentication tokens décrit un schéma.",
+    ]) {
+      const r = await ask("prompt", texte);
+      expect({ texte, kind: r.kind }).toEqual({ texte, kind: undefined });
+      expect(r.ok).toBe(true);
+    }
+  });
+});
+
+describe("marques invisibles non-Cf et écriture décomposée (I4)", () => {
+  test.skipIf(skip)("un CGJ dans un schéma est retiré pour le scan", async () => {
+    const r = await ask("prompt", "Authorization: Bear" + CGJ + "er " + SECRET_VALUE);
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("AUTHORIZATION");
+  });
+
+  test.skipIf(skip)("un VS16 dans un préfixe de clé est retiré pour le scan", async () => {
+    const prefixe = KEY_PREFIX.slice(0, -1) + VS16 + "-";
+    const r = await ask("prompt", "ma clé " + prefixe + FAKE_KEY.slice(KEY_PREFIX.length));
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("API_KEY");
+  });
+
+  test.skipIf(skip)("un VS16 dans un nom de variable est retiré pour le scan", async () => {
+    const r = await ask("prompt", "PRONOTE_PASS" + VS16 + "WORD=" + KEY_BODY);
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("ENV_ASSIGN");
+  });
+
+  test.skipIf(skip)("un é décomposé reste du texte légitime", async () => {
+    // NFKC compose e + accent aigu : retirer les Mn ne doit pas produire un
+    // faux positif sur un cours accentué.
+    const r = await ask("prompt", "Le caf\u0065\u0301 et l'\u00e9l\u00e8ve : explique la photosynth\u0065\u0300se.");
+    expect(r.error).toBeUndefined();
+    expect(r.ok).toBe(true);
+  });
+
+  test.skipIf(skip)("un VS16 dans une phrase anodine ne déclenche rien", async () => {
+    const r = await ask("prompt", "Bonjour" + VS16 + ", explique la photosynthèse.");
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("homoglyphes cyrilliques/grecs (I4)", () => {
+  test.skipIf(skip)("un schéma Bearer en cyrillique est replié puis refusé", async () => {
+    const r = await ask("prompt", CYRILLIC_BEARER + " " + SECRET_VALUE);
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("AUTHORIZATION");
+  });
+
+  test.skipIf(skip)("un préfixe de clé dont le s est cyrillique est replié puis refusé", async () => {
+    const r = await ask(
+      "prompt",
+      "ma clé " + CYRILLIC_S + KEY_PREFIX.slice(1) + KEY_BODY,
+    );
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("API_KEY");
+  });
+
+  test.skipIf(skip)("du texte cyrillique ordinaire reste accepté", async () => {
+    const r = await ask("prompt", "Привет, объясни теорему Пифагора.");
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("du code légitime n'est pas une affectation de secret (I4)", () => {
+  test.skipIf(skip)("un appel ou un attribut pointé n'est pas un littéral secret", async () => {
+    for (const texte of [
+      "token = secrets.token_hex(16)",
+      "session = requests.Session()",
+      "auth = OAuth2Session(client_id, redirect_uri=url)",
+      "apiKey = config.apiKey",
+    ]) {
+      const r = await ask("prompt", texte);
+      expect({ texte, kind: r.kind }).toEqual({ texte, kind: undefined });
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  test.skipIf(skip)("un littéral affecté à un nom sensible reste refusé", async () => {
+    for (const texte of [
+      'password = "Xk9mQ2vB7nL4pR8s"',
+      "API_KEY=Xk9mQ2vB7nL4pR8sT1uV2wX3",
+      "GITHUB_TOKEN=" + SECRET_VALUE,
+    ]) {
+      const r = await ask("prompt", texte);
+      expect({ texte, kind: r.kind }).toEqual({ texte, kind: "ENV_ASSIGN" });
+    }
+  });
+});
+
+describe("URI data: des formats de cours non-PNG (I4)", () => {
+  const TAIL = SECRET_VALUE + "A7b9C1d3E"; // 40 caractères : forme opaque
+  const uri = (mime: string, signature: string) =>
+    '<img src="data:' + mime + ";base64," + signature + TAIL + '">';
+
+  const SIGNATURES: { mime: string; sig: string }[] = [
+    { mime: "image/avif", sig: "AAAAIGZ0eXBhdmlm" },
+    { mime: "audio/ogg", sig: "T2dnUw" },
+    { mime: "audio/mpeg", sig: "SUQz" },
+    { mime: "audio/mpeg", sig: "//u" },
+    { mime: "font/woff2", sig: "d09GMg" },
+    { mime: "font/woff2", sig: "wOF2" },
+    { mime: "video/mp4", sig: "AAAAIGZ0eXBpc29t" },
+  ];
+
+  test.skipIf(skip)("chaque signature connue est acceptée", async () => {
+    for (const { mime, sig } of SIGNATURES) {
+      const r = await ask("prompt", uri(mime, sig));
+      expect({ mime, sig, kind: r.kind }).toEqual({ mime, sig, kind: undefined });
+      expect(r.ok).toBe(true);
+    }
+  });
+
+  test.skipIf(skip)("un data:text/plain;base64, lisible est accepté", async () => {
+    const texte = "Le protocole HTTPS utilise le port 443 et TLS 1.3. Le réseau est en CIDR /24.";
+    const b64 = Buffer.from(texte, "utf8").toString("base64");
+    const r = await ask("prompt", '<a href="data:text/plain;base64,' + b64 + '">cours</a>');
+    expect(r.error).toBeUndefined();
+    expect(r.ok).toBe(true);
+  });
+
+  test.skipIf(skip)("un opaque illisible après data:text/plain;base64, reste refusé", async () => {
+    const r = await ask("prompt", '<a href="data:text/plain;base64,' + FAKE_OPAQUE + '">x</a>');
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("OPAQUE");
+  });
+
+  test.skipIf(skip)("une signature inconnue reste refusée", async () => {
+    const r = await ask("prompt", uri("image/png", "ZWxsaW5r"));
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe("OPAQUE");
   });
 });
 

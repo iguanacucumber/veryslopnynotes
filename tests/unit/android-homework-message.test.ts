@@ -67,6 +67,17 @@ describe("message de refus de l'assistant (#416)", () => {
     expect(m).toMatch(/ne suffisent pas/i);
   });
 
+  test.skipIf(skip)("le jeton est reconnu sans tenir compte de la casse", async () => {
+    // Le motif vient du modèle : « Sources_Insuffisantes » est la même cause.
+    // Message ET actions doivent suivre la même comparaison.
+    const m = await message("Sources_Insuffisantes");
+    expect(m).toMatch(/ne suffisent pas/i);
+    const bridge = readBridgeSource();
+    expect(bridge).toContain(
+      "outcome.reason.trim().equals(Homework.REFUSAL_SOURCES_INSUFFICIENT, ignoreCase = true)",
+    );
+  });
+
   test.skipIf(skip)("un motif libre ne ressort JAMAIS : la phrase est générique", async () => {
     for (const motif of MOTIFS) {
       const m = await message(motif);

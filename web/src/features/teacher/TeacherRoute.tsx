@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "../../bridge/client";
 import { BridgeCallError, type TeacherMessage, type TeacherMode } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
@@ -6,6 +6,7 @@ import { Dialog } from "../../ui/Dialog";
 import { IconTrash } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
 import {
+  appendTeacherAnswer,
   buildTeacherTurn,
   classifyTeacherFailure,
   parseTeacherThread,
@@ -14,6 +15,7 @@ import {
   studentMessage,
   teacherMessage,
   teacherThreadPayload,
+  teacherWriteQueue,
   trimTeacherMessages,
   type TeacherTurnError,
 } from "./teacher";
@@ -53,6 +55,17 @@ export function TeacherRoute() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const seq = useRef(0);
+  // Toutes les écritures du fil passent par cette file : un enregistrement ne
+  // peut pas doubler la suppression qui le suit (le fil ressusciterait).
+  const writes = useMemo(() => teacherWriteQueue(), []);
+  // Le fil courant, lisible après un `await` : `messages` capturé par l'envoi
+  // peut avoir changé (rejet pendant le vol).
+  const messagesRef = useRef<TeacherMessage[]>([]);
+
+  function applyMessages(next: TeacherMessage[]): void {
+    messagesRef.current = next;
+    setMessages(next);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -67,7 +80,7 @@ export function TeacherRoute() {
           .filter((item): item is string => typeof item === "string" && item.trim() !== "");
         const unique = [...new Set(known)].sort((a, b) => a.localeCompare(b, "fr"));
         setSubjects(unique);
-        setMessages(thread.messages);
+        applyMessages(thread.messages);
         setSubject((current) => {
           if (current) return current;
           if (thread.subject) return thread.subject;
@@ -88,7 +101,9 @@ export function TeacherRoute() {
 
   function persist(nextSubject: string, nextMessages: TeacherMessage[]): void {
     if (!nextSubject) return;
-    void bridge.saveTeacherThread(teacherThreadPayload(nextSubject, nextMessages)).catch((e: unknown) => {
+    // L'écriture attend les précédentes : un enregistrement tardif ne réécrit
+    // pas un fil que l'élève vient de supprimer.
+    void writes(() => bridge.saveTeacherThread(teacherThreadPayload(nextSubject, nextMessages))).catch((e: unknown) => {
       notify(messageOf(e, "Discussion non enregistrée : elle reste à l’écran."), "error");
     });
   }
@@ -98,7 +113,7 @@ export function TeacherRoute() {
     const params = buildTeacherTurn(subject, question, mode, history);
     if (!student || !params) return;
     const next = trimTeacherMessages([...history, student]);
-    setMessages(next);
+    applyMessages(next);
     setDraft("");
     setLoading(true);
     setError(null);
@@ -113,23 +128,25 @@ export function TeacherRoute() {
           message: result.message || "Aucune source exploitable pour cette matière.",
           actions: result.actions ?? [],
         });
-        persist(subject, next);
+        persist(subject, messagesRef.current);
         return;
       }
       if (!result.ok) {
         setError(classifyTeacherFailure(result));
         // La question reste affichée : « Réessayer » renvoie la MÊME demande.
-        persist(subject, next);
+        persist(subject, messagesRef.current);
         return;
       }
       const answer = teacherMessage(result);
       if (!answer) {
         setError({ kind: "empty", message: "Le professeur n’a pas répondu : réessaie." });
-        persist(subject, next);
+        persist(subject, messagesRef.current);
         return;
       }
-      const withAnswer = trimTeacherMessages([...next, answer]);
-      setMessages(withAnswer);
+      // La réponse rejoint le fil COURANT, pas l'instantané d'avant le vol :
+      // un tour rejeté entre-temps ne ressuscite ni à l'écran ni sur le disque.
+      const withAnswer = appendTeacherAnswer(messagesRef.current, answer);
+      applyMessages(withAnswer);
       setFocusTick((value) => value + 1);
       persist(subject, withAnswer);
     } catch (e) {
@@ -138,7 +155,7 @@ export function TeacherRoute() {
         kind: "unavailable",
         message: messageOf(e, "Le professeur est indisponible : réessaie dans un instant."),
       });
-      persist(subject, next);
+      persist(subject, messagesRef.current);
     } finally {
       if (id === seq.current) setLoading(false);
     }
@@ -164,8 +181,8 @@ export function TeacherRoute() {
   }
 
   function reject(index: number): void {
-    const next = rejectTeacherAnswer(messages, index);
-    setMessages(next);
+    const next = rejectTeacherAnswer(messagesRef.current, index);
+    applyMessages(next);
     setFocusTick(0);
     persist(subject, next);
   }
@@ -174,7 +191,7 @@ export function TeacherRoute() {
     if (next === subject) return;
     seq.current += 1;
     setSubject(next);
-    setMessages([]);
+    applyMessages([]);
     setDraft("");
     setLoading(false);
     setError(null);
@@ -182,16 +199,20 @@ export function TeacherRoute() {
     setFocusTick(0);
     // Changer de matière démarre une NOUVELLE discussion : l'ancienne est
     // supprimée du stockage local pour ne pas rejouer un contexte étranger.
-    void bridge.deleteTeacherThread().catch(() => {});
+    // La file garantit que cette suppression passe APRÈS les enregistrements
+    // déjà demandés.
+    void writes(() => bridge.deleteTeacherThread()).catch(() => {});
   }
 
   async function clearThread(): Promise<void> {
     setDeleting(true);
     seq.current += 1;
     try {
-      const result = await bridge.deleteTeacherThread();
+      // Suppression en file : elle attend les enregistrements en cours, donc
+      // aucun d'eux ne peut la doubler et ressusciter le fil.
+      const result = await writes(() => bridge.deleteTeacherThread());
       if (!result.ok) throw new Error(result.message || "Suppression impossible.");
-      setMessages([]);
+      applyMessages([]);
       setDraft("");
       setError(null);
       setRefusal(null);
