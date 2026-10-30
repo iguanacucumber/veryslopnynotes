@@ -94,9 +94,18 @@ describe("port de parité : un jar pour tous les pilotes", () => {
     // Un pilote compilé mais jamais lancé = du code mort qui grossit le
     // jar et le temps de compilation sans rien prouver. Chaque pilote doit
     // être piloté par au moins un test.
-    const sources = readdirSync(join(ROOT, "tests", "unit"))
-      .filter((f) => f.endsWith(".test.ts"))
-      .map((f) => readFileSync(join(ROOT, "tests", "unit", f), "utf8"))
+    // Les `DRIVER` vivent dans les fixtures partagées depuis #717 : scanner
+    // aussi `parity/` et `fixtures/`, sinon tous les pilotes paraissent orphelins.
+    const sources = [
+      join(ROOT, "tests", "unit"),
+      join(ROOT, "tests", "unit", "parity"),
+      join(ROOT, "tests", "unit", "fixtures"),
+    ]
+      .flatMap((dir) =>
+        readdirSync(dir)
+          .filter((f) => f.endsWith(".ts"))
+          .map((f) => readFileSync(join(dir, f), "utf8")),
+      )
       .join("\n");
     const orphans = DRIVERS.filter((d) => !sources.includes(d.split("/").pop()!));
     expect(orphans).toEqual([]);

@@ -400,3 +400,29 @@ describe("ADR", () => {
     }
   });
 });
+
+describe("parité : fichiers de test découpés", () => {
+  test("chaque fichier de parité reste sous son budget de lecture", () => {
+    // Un échec ne doit pas obliger à relire 56 Ko de tests : le runner reste
+    // mince, chaque thème vit dans son fichier, et les fixtures partagées
+    // restent bornées.
+    for (const file of new Glob("tests/unit/parity/*.ts").scanSync(ROOT)) {
+      expect({ file, sousBudget: statSync(join(ROOT, file)).size <= 30_000 }).toEqual({
+        file,
+        sousBudget: true,
+      });
+    }
+    for (const file of new Glob("tests/unit/fixtures/pronote-*.ts").scanSync(ROOT)) {
+      expect({ file, sousBudget: statSync(join(ROOT, file)).size <= 20_000 }).toEqual({
+        file,
+        sousBudget: true,
+      });
+    }
+    for (const file of new Glob("tests/unit/kotlin-pronote-*-parity.test.ts").scanSync(ROOT)) {
+      expect({ file, sousBudget: statSync(join(ROOT, file)).size <= 10_000 }).toEqual({
+        file,
+        sousBudget: true,
+      });
+    }
+  });
+});
