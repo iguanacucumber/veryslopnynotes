@@ -43,19 +43,12 @@ du gate : [`docs/architecture/BUILD.md`](docs/architecture/BUILD.md).
 - `make check` est le gate de merge : 9 étapes, dont la compilation Kotlin ET
   Android Lint, la parité TS ↔ Kotlin exécutée, les scans d'architecture,
   les contrats et `bun audit`. La CI rejoue exactement ce gate.
-- Le registre est [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) :
-  un INDEX ; le détail vit par thème dans
-  [`docs/architecture/invariants/`](docs/architecture/invariants/). Une entrée :
-  identifiant unique, règle en une phrase, test, commande, portée,
-  **120 mots maximum**. L'historique va dans l'issue, le commit ou l'ADR.
-- Un nouvel invariant exige un incident réel ou une menace identifiée, et un
-  test qui échoue avant le correctif. Un ajout qui chevauche une entrée
-  existante révise celle-ci au lieu d'en créer une seconde.
+- Le registre est un INDEX ([`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md)) ;
+  le détail vit par thème dans [`docs/architecture/invariants/`](docs/architecture/invariants/).
+  Format d'entrée, budget de 120 mots et règles d'ajout : `INVARIANTS.md`.
 - Comportement et types d'abord ; un scan de source est un dernier recours.
-- `tests/architecture/docs.test.ts` vérifie les identifiants, le format du
-  registre, les références `I<n>` et les cibles `make` citées. Budgets de lecture
-  : `AGENTS.md` ≤ 5 000 octets, `Makefile` ≤ 9 000, `README.md` ≤ 10 000,
-  chaque entrée d'invariant ≤ 120 mots.
+- Budgets de lecture et références `I<n>` vérifiés par
+  `tests/architecture/docs.test.ts`.
 
 ## Lecture des gros fichiers
 
@@ -76,8 +69,6 @@ du gate : [`docs/architecture/BUILD.md`](docs/architecture/BUILD.md).
 - Pas de secret commité ni de variable de secret côté serveur, pas d'IP, de
   domaine, d'URL Pronote, de donnée personnelle. Secret commité ⇒ rotation
   immédiate. `tests/fixtures/pronote/` et `shots/` sont gitignorés.
-- Le scraper est sans authentification (I8) : boucle locale ou proxy
-  authentifié, jamais public.
 
 Décisions : [`docs/adr/`](docs/adr/), à commencer par
 [ADR-005](docs/adr/005-rules-and-architecture.md).

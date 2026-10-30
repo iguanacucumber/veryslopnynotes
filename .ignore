@@ -1,4 +1,5 @@
 # Fichiers exclus des recherches par ripgrep (lecture agent, pas le build).
+# Un `rg` qui ne renvoie que du code utile vaut un `rg` qu'on filtre à la main.
 .agents/
 android/**/build/
 android/.gradle/
@@ -8,3 +9,8 @@ docs/architecture/REVIEW-*.md
 shots/
 ref-papillon/
 tests/fixtures/pronote/
+# Binaire et lock : jamais une cible de recherche, seulement du bruit.
+bun.lock
+*.jar
+*.ttf
+*.png
