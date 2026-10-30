@@ -280,8 +280,9 @@ pas dans ce flux. Règles détaillées :
 
 ## Documentation
 
-- [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) — registre
-  des invariants (I1–I35) et tests qui les pinent.
+- [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) — index
+  des invariants (I1–I35) et tests qui les pinent ; le détail est découpé par
+  thème dans [`docs/architecture/invariants/`](docs/architecture/invariants/).
 - [`docs/adr/`](docs/adr/) — décisions d'architecture : stack, client direct,
   WebView locale, règles et architecture ([ADR-005](docs/adr/005-rules-and-architecture.md)).
 - [`docs/RELEASE.md`](docs/RELEASE.md) — versions épinglées, build, signature,

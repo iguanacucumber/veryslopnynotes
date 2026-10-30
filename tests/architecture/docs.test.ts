@@ -13,6 +13,16 @@ const ROOT = join(import.meta.dir, "..", "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 const INVARIANTS = read("docs/architecture/INVARIANTS.md");
+const INVARIANTS_DIR = join(ROOT, "docs/architecture/invariants");
+// Le registre est un INDEX : les entrées détaillées vivent par thème, pour
+// qu'un agent ne lise que le fichier de l'invariant qu'il touche.
+const DETAIL_FILES = readdirSync(INVARIANTS_DIR)
+  .filter((f) => f.endsWith(".md"))
+  .sort();
+const DETAIL_BY_FILE = Object.fromEntries(
+  DETAIL_FILES.map((f) => [f, readFileSync(join(INVARIANTS_DIR, f), "utf8")]),
+);
+const DETAIL = DETAIL_FILES.map((f) => DETAIL_BY_FILE[f]!).join("\n");
 const AGENTS = read("AGENTS.md");
 const README = read("README.md");
 const MAKEFILE = read("Makefile");
@@ -93,6 +103,23 @@ export function registryCheckCells(md: string): Map<string, string> {
   return cells;
 }
 
+/** Liens de détail de la table du registre : ID → fichier + ancre. */
+export interface DetailLink {
+  id: string;
+  file: string;
+  anchor: string;
+}
+
+export function detailLinks(md: string): DetailLink[] {
+  const links: DetailLink[] = [];
+  const row = /^\| (I\d+(?: bis)?) \|.*\| \[[^\]]+\]\(invariants\/([\w-]+)\.md#([\w-]+)\) \|$/;
+  for (const line of md.split("\n")) {
+    const m = row.exec(line);
+    if (m) links.push({ id: m[1]!, file: m[2]!, anchor: m[3]! });
+  }
+  return links;
+}
+
 /** Blocs de code entre backticks d'un texte. */
 export function codeSpans(text: string): string[] {
   return [...text.matchAll(/`([^`]+)`/g)].map((m) => m[1]!);
@@ -163,7 +190,7 @@ function activeNumericIds(entries: Entry[]): Set<number> {
   );
 }
 
-const entries = parseInvariantEntries(INVARIANTS);
+const entries = parseInvariantEntries(DETAIL);
 const ids = entries.map((e) => e.id);
 const numeric = ids
   .filter((id) => !id.endsWith(" bis"))
@@ -186,6 +213,43 @@ describe("registre d'invariants", () => {
   test("les identifiants sont uniques", () => {
     expect(entries.length).toBeGreaterThan(0);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  test("le registre est un index : aucune entrée détaillée", () => {
+    // Un agent lit l'index + un seul thème ; une entrée recollée ici
+    // ramènerait les 33 Ko dans chaque lecture.
+    expect(INVARIANTS).not.toMatch(/^## I\d/m);
+  });
+
+  test("chaque ligne du registre pointe vers son entrée de détail", () => {
+    const links = detailLinks(INVARIANTS);
+    expect(links.map((l) => l.id).sort()).toEqual([...ids].sort());
+    for (const link of links) {
+      const file = `${link.file}.md`;
+      const body = DETAIL_BY_FILE[file];
+      expect({ id: link.id, file, exists: body !== undefined }).toEqual({ id: link.id, file, exists: true });
+      expect({ id: link.id, ancre: body!.includes(`<a id="${link.anchor}"></a>`) }).toEqual({
+        id: link.id,
+        ancre: true,
+      });
+    }
+    // Aucun fichier de détail orphelin (jamais atteint depuis l'index).
+    expect([...new Set(links.map((l) => `${l.file}.md`))].sort()).toEqual(DETAIL_FILES);
+  });
+
+  test("l'index et les détails restent sous leur budget de lecture", () => {
+    // Budgets de CONTEXTE, pas de style : un agent qui relit un fichier le
+    // garde jusqu'à la compaction. Dépasser = revenir au registre monolithique.
+    expect({ fichier: "INVARIANTS.md", sousBudget: INVARIANTS.length <= 8_000 }).toEqual({
+      fichier: "INVARIANTS.md",
+      sousBudget: true,
+    });
+    for (const file of DETAIL_FILES) {
+      expect({ file, sousBudget: DETAIL_BY_FILE[file]!.length <= 12_000 }).toEqual({
+        file,
+        sousBudget: true,
+      });
+    }
   });
 
   test("la numérotation est consécutive à partir de I1, sauf retrait documenté", () => {

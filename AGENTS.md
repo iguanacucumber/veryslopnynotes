@@ -61,10 +61,13 @@ saute `android-compile` seulement.
   échoue. `MAKEFLAGS`/`make -i` ne peuvent pas le verdir (I22). La CI cache les
   dépendances et le jar de parité, jamais le build cache Gradle.
 - Le registre est [`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md) :
-  un identifiant unique, une règle en une phrase, un test, une commande, une
-  portée, **120 mots maximum pour toute nouvelle entrée**. L'historique
-  (« avant #xxx ») va dans l'issue, le commit ou l'ADR. Une entrée existante se
-  met au budget quand on la révise.
+  un INDEX (une ligne par invariant) ; le détail vit dans
+  [`docs/architecture/invariants/`](docs/architecture/invariants/), découpé par
+  thème. Pour une règle, lire l'index puis **un seul** fichier de thème, jamais
+  les quatre. Une entrée : identifiant unique, règle en une phrase, test,
+  commande, portée, **120 mots maximum**. L'historique (« avant #xxx ») va dans
+  l'issue, le commit ou l'ADR. Une entrée existante se met au budget quand on la
+  révise.
 - Un nouvel invariant exige un incident réel ou une menace identifiée, et un
   test qui échoue avant le correctif. Un ajout qui chevauche une entrée
   existante révise celle-ci au lieu d'en créer une seconde.
