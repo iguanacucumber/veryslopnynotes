@@ -18,10 +18,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
-const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "LlmGuardParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
@@ -245,7 +245,7 @@ describe("refuser en expliquant (#409)", () => {
 
 describe("le câblage ne ravale plus la cause (#409)", () => {
   const data = codeOnly(readFileSync(join(DATA, "OpenRouterLlm.kt"), "utf8"));
-  const bridge = codeOnly(readFileSync(join(APP, "VsnBridge.kt"), "utf8"));
+  const bridge = codeOnly(readBridgeSource());
   const core = codeOnly(readFileSync(join(CORE, "LlmGuard.kt"), "utf8"));
 
   test("le module data remonte le refus de secret, pas « hors format »", () => {

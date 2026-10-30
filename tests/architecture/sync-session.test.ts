@@ -11,13 +11,12 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const DATA = join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data");
-const APP = join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app");
 const WORKER = join(DATA, "PeriodicSyncWorker.kt");
 const PAIRING = join(DATA, "PairingRepository.kt");
-const BRIDGE = join(APP, "VsnBridge.kt");
 
 /** Corps de `doWork()` (jusqu'à la fonction suivante). */
 function doWorkBody(src: string): string {
@@ -52,7 +51,7 @@ describe("session du job de fond (#406)", () => {
 
   test("même chemin de restauration que le pont (store chiffré -> tokenLogin)", () => {
     const worker = readFileSync(WORKER, "utf8");
-    const bridge = readFileSync(BRIDGE, "utf8");
+    const bridge = readBridgeSource();
     // Le worker : le MÊME chemin que le pont, pas une session lue sur le vif.
     expect(worker).toContain("val sessions = SessionStores.get(applicationContext)");
     // (#407 : le dépôt reçoit aussi le store de cache — il purge le cache si

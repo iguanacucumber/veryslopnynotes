@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 // #359 : le modèle LLM par défaut était absent du catalogue public OpenRouter
 // — chaque appel partait en HTTP 404, avalé en `null` : l'assistant était mort
@@ -11,7 +12,6 @@ import { codeOnly } from "../../agents/runtime/source-guards";
 // `make check` en vérifie la compilation) : pas de réseau, pas de doublon.
 
 const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/veryslopnynotes/data");
-const APP = join(import.meta.dir, "..", "..", "android/app/src/main/java/fr/veryslopnynotes/app");
 
 const src = (dir: string, file: string) => codeOnly(readFileSync(join(dir, file), "utf8"));
 
@@ -144,7 +144,7 @@ describe("android LLM — l'erreur remonte à l'appelant (#359)", () => {
   });
 
   test("le pont affiche la cause de l'échec LLM (devoirs et fiches)", () => {
-    const bridge = src(APP, "VsnBridge.kt");
+    const bridge = readBridgeSource();
     // Devoirs : le message de l'erreur (clé/crédits/modèle/quota) passe au web.
     expect(bridge).toMatch(/result\.error \?: OpenRouterHomework\.GENERIC_ERROR_MESSAGE/);
     // Fiches : idem, au lieu du « Fiche non générée. » unique.

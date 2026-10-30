@@ -19,6 +19,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
@@ -164,7 +165,7 @@ describe("les pièces jointes téléchargées ne s'accumulent pas (#540)", () =>
 });
 
 describe("câblage de la purge des téléchargements (#540)", () => {
-  const bridge = readFileSync(join(APP, "VsnBridge.kt"), "utf8");
+  const bridge = readBridgeSource();
   const attachments = readFileSync(join(APP, "Attachments.kt"), "utf8");
   const worker = readFileSync(join(DATA, "PeriodicSyncWorker.kt"), "utf8");
   const store = readFileSync(join(DATA, "LocalDataStore.kt"), "utf8");

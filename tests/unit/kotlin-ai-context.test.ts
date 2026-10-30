@@ -8,13 +8,12 @@
 // Le pont (`app/VsnBridge.kt`) ne compile pas hors Gradle : son câblage est
 // vérifié par lecture de source, comme les autres chemins IA.
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "AiContextMain.kt");
-const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 
 const skip = parityToolchain.skipReason !== null;
 
@@ -250,7 +249,7 @@ describe("contexte IA — parité des points d'entrée (#628)", () => {
 });
 
 describe("contexte IA — câblage unique du pont (#628)", () => {
-  const bridge = codeOnly(readFileSync(join(APP, "VsnBridge.kt"), "utf8"));
+  const bridge = codeOnly(readBridgeSource());
 
   test("les quatre chemins passent par AiContext.assembleFor", () => {
     expect(bridge).toContain("AiContext.assembleFor(entry, items)");

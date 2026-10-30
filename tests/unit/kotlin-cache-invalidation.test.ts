@@ -18,9 +18,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
-const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const WEB = join(ROOT, "web", "src");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "CacheInvalidationMain.kt");
 
@@ -189,7 +189,7 @@ describe("câblage de l'invalidation et de la fenêtre (#369)", () => {
   const assignments = source(join(DATA, "AssignmentsRepository.kt"));
   const discussions = source(join(DATA, "DiscussionsRepository.kt"));
   const payloads = source(join(DATA, "PronotePayloads.kt"));
-  const bridge = source(join(APP, "VsnBridge.kt"));
+  const bridge = readBridgeSource();
   const tasks = source(join(WEB, "features", "tasks", "TasksScreen.tsx"));
   const client = source(join(WEB, "bridge", "client.ts"));
 

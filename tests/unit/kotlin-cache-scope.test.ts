@@ -30,15 +30,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
-const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const SCOPE = join(DATA, "CacheScope.kt");
 const REPAIR = join(DATA, "SessionRepair.kt");
 const PAIRING = join(DATA, "PairingRepository.kt");
 const ACCOUNT = join(DATA, "AccountStore.kt");
 const WORKER = join(DATA, "PeriodicSyncWorker.kt");
-const BRIDGE = join(APP, "VsnBridge.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "CacheScopeParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
@@ -235,7 +234,7 @@ describe("câblage du scopage du cache (#407)", () => {
   const pairing = readFileSync(PAIRING, "utf8");
   const account = readFileSync(ACCOUNT, "utf8");
   const worker = readFileSync(WORKER, "utf8");
-  const bridge = readFileSync(BRIDGE, "utf8");
+  const bridge = readBridgeSource();
   const scope = readFileSync(SCOPE, "utf8");
   const repair = readFileSync(REPAIR, "utf8");
 

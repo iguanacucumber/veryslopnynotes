@@ -13,6 +13,7 @@ import {
   parseKotlinStringSet,
   parseMimeTable,
 } from "../../agents/runtime/source-guards";
+import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const ROOT = join(import.meta.dir, "..", "..");
 
@@ -210,7 +211,7 @@ describe("invariants", () => {
 
     // 4. Le pont sert le type de `mimeOf` — jamais un type écrit en dur pour
     //    une pièce jointe nommée par le serveur.
-    const bridge = codeOnly(readFileSync(join(APP, "VsnBridge.kt"), "utf8"));
+    const bridge = codeOnly(readBridgeSource());
     expect(bridge).toMatch(/openFile\(file,\s*mimeOf\(/);
   });
 
@@ -232,12 +233,7 @@ describe("invariants", () => {
   // appel fournisseur (la cle n'y etait pas transmise : l'appel echouait
   // toujours, avant meme le reseau).
   test("I5: la fiche de revision passe par le point d'entree public du core", () => {
-    const bridge = codeOnly(
-      readFileSync(
-        join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
-        "utf8",
-      ),
-    );
+    const bridge = codeOnly(readBridgeSource());
     // Le point d'entree canonique…
     expect(bridge).toMatch(/RevisionAi\.requestRevisionSheet\(/);
     // …avec la cle de l'app relayee…

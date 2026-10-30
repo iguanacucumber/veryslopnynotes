@@ -29,14 +29,13 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 const ARTIFACTS = join(DATA, "OfflineArtifacts.kt");
 const PREFS = join(DATA, "SubjectPrefs.kt");
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
 const REVISION = join(CORE, "RevisionSheet.kt");
-const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
-const BRIDGE = join(APP, "VsnBridge.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "OfflineArtifactsMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
@@ -89,7 +88,7 @@ describe("écritures hors CacheStore et purge de déconnexion (#404)", () => {
     // Le pont : l'époque est capturée à l'ARRIVÉE de l'appel (le travail part
     // sur un fil : une écriture demandée avant la purge peut être exécutée
     // après).
-    const bridge = readFileSync(BRIDGE, "utf8");
+    const bridge = readBridgeSource();
     const iCapture = bridge.indexOf("val epoch = SessionEpoch.current()");
     // Le MARQUEUR de dispatch reste générique (`.execute {`) : le nom de la file
     // peut changer (#393 : un fil par appel, le LLM à part), l'ordre, non.

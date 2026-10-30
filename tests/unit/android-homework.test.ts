@@ -11,6 +11,7 @@ import {
   isHomeworkGenerateResponse,
 } from "../../shared/contracts/api";
 import { codeOnly } from "../../agents/runtime/source-guards";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 // Miroir des helpers Kotlin de l'assistant devoirs (0.7.0) — ils doivent rester
 // en sync : core/Homework.kt, data/HomeworkRepository.kt. Le pont WebView
@@ -19,7 +20,6 @@ import { codeOnly } from "../../agents/runtime/source-guards";
 // ces miroirs sont le seul filet sur la logique pure (bornes, citations, refus).
 
 const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/veryslopnynotes/data");
-const APP = join(import.meta.dir, "..", "..", "android/app/src/main/java/fr/veryslopnynotes/app");
 
 const src = (dir: string, file: string) => readFileSync(join(dir, file), "utf8");
 
@@ -229,7 +229,7 @@ describe("android homework — le credential reste dans l'app", () => {
   });
 
   test("l'aide texte porte le délai du pont (#594), comme les chemins photo", () => {
-    const bridge = codeOnly(src(APP, "VsnBridge.kt"));
+    const bridge = codeOnly(readBridgeSource());
     // Le défaut OkHttp (20 s) tuait un modèle lent alors que le pont attend
     // AWAIT_LLM_MS (45 s) : le constructeur porte désormais ce délai.
     expect(bridge).toMatch(/OpenRouterHomework\(OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\), llmKeys\)/);
@@ -238,7 +238,7 @@ describe("android homework — le credential reste dans l'app", () => {
   });
 
   test("la clé enregistrée est bornée à l'ASCII imprimable (#595)", () => {
-    const bridge = codeOnly(src(APP, "VsnBridge.kt"));
+    const bridge = codeOnly(readBridgeSource());
     // OkHttp refuse tout caractère hors 0x20..0x7E dans un en-tête : une clé
     // collée avec NBSP (invisible, et isWhitespace ne le voit PAS) ou une
     // lettre accentuée passait l'ancien filtre puis cassait CHAQUE appel.

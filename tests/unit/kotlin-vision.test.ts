@@ -9,6 +9,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "VisionMain.kt");
 const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
@@ -125,7 +126,7 @@ describe("photo de cours — garde d'image exécutée (#587)", () => {
     const capture = readFileSync(join(APP, "PhotoCapture.kt"), "utf8");
     expect(capture).toContain("cacheDir, \"photos\"");
     expect(capture).toContain("MAX_GALLERY_BYTES");
-    const bridge = readFileSync(join(APP, "VsnBridge.kt"), "utf8");
+    const bridge = readBridgeSource();
     expect(bridge).toContain("PhotoPrep.prepare(shot.file)");
     expect(bridge).toContain("photos.discard(shot.file)");
     expect(bridge).toContain("Base64.encodeToString(bytes, Base64.NO_WRAP)");

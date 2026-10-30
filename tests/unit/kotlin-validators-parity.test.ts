@@ -22,6 +22,7 @@ import { join } from "node:path";
 import { isHomeworkAttachmentRef, isIsoDate } from "../../shared/contracts/models";
 import { parseAssignment } from "../../web/src/features/tasks/assignments";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
@@ -506,17 +507,14 @@ describe("catalogue de manuels — classe et spécialités", () => {
   });
 
   test("câblage : le pont choisit par matière et garde des extraits par adresse", () => {
-    const bridge = readFileSync(
-      join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/VsnBridge.kt"),
-      "utf8",
-    );
+    const bridge = readBridgeSource();
     expect(bridge).toContain("ManualCatalog.resolve(stored, classLabel, subjects, subject)");
     // #628 : un SEUL point d'entrée (aiContextFor) choisit le manuel pour
     // l'aide texte, la photo ET la fiche. Plus de collecte par chemin.
     expect(bridge).toContain("manualDocFor(assignment.subject)");
     expect(bridge).not.toContain("manualDocFor(a.subject)");
     expect(bridge).toContain("manuals.saveDoc(target, doc)");
-    expect(bridge).toContain("private fun knownSubjects()");
-    expect(bridge).toContain("private fun profileClassLabel()");
+    expect(bridge).toContain("internal fun VsnBridge.knownSubjects()");
+    expect(bridge).toContain("internal fun VsnBridge.profileClassLabel()");
   });
 });

@@ -20,8 +20,8 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
-const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "SubjectPrefParityMain.kt");
 
@@ -63,10 +63,10 @@ async function read(pref: {
 
 /** Le corps d'une méthode du pont (source), pour vérifier son ORDRE. */
 function bridgeMethod(source: string, name: string): string {
-  const start = source.indexOf(`private fun ${name}(`);
+  const start = source.indexOf(`internal fun VsnBridge.${name}(`);
   if (start < 0) return "";
   const rest = source.slice(start);
-  const end = rest.indexOf("\n    private ", 10);
+  const end = rest.indexOf("\ninternal fun ", 10);
   return end < 0 ? rest : rest.slice(0, end);
 }
 
@@ -162,7 +162,7 @@ describe("pont : une matière hors contrat est refusée, pas enregistrée (#395)
 });
 
 describe("câblage : le pont et le dépôt partagent la MÊME règle (#395)", () => {
-  const bridge = readFileSync(join(APP, "VsnBridge.kt"), "utf8");
+  const bridge = readBridgeSource();
   const prefs = readFileSync(join(DATA, "SubjectPrefs.kt"), "utf8");
   const save = bridgeMethod(bridge, "saveSubject");
 

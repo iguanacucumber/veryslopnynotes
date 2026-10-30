@@ -16,9 +16,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
-const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "RevisionAiMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
@@ -132,7 +132,7 @@ describe("fiche de revision — le point d'entree public relaie la cle (#428)", 
 });
 
 describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
-  const bridge = codeOnly(readFileSync(join(APP, "VsnBridge.kt"), "utf8"));
+  const bridge = codeOnly(readBridgeSource());
   const prompts = codeOnly(readFileSync(join(CORE, "AiPrompts.kt"), "utf8"));
   const revision = codeOnly(readFileSync(join(CORE, "RevisionAi.kt"), "utf8"));
 
@@ -163,7 +163,7 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
     // Sans weekStart, le repli réseau ne couvre que now−7 j / now+21 j :
     // un devoir affiché hors de cette fenêtre était « introuvable ».
     expect(bridge).toMatch(
-      /fun generateRevision\(p: JSONObject, epoch: Long\)[\s\S]*?val week = bounded\(p\.string\("weekStart"\), 10\)/,
+      /fun (VsnBridge\.)?generateRevision\(p: JSONObject, epoch: Long\)[\s\S]*?val week = bounded\(p\.string\("weekStart"\), 10\)/,
     );
   });
 

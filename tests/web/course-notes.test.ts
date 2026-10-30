@@ -9,6 +9,7 @@ import type {
   LessonSaveResult,
   SettingsSnapshot,
 } from "../../web/src/bridge/types";
+import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const WEB = join(ROOT, "web", "src");
@@ -137,10 +138,7 @@ describe("course notes — bridge and screen (#586)", () => {
   });
 
   test("course notes feed homework and revision sheets, never a UI mirror", () => {
-    const bridge = readFileSync(
-      join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
-      "utf8",
-    );
+    const bridge = readBridgeSource();
     // #628 : le cahier alimente l'assembleur unique via les notes BRUTES
     // (AiContext signale la coupe), pas une fabrique qui tronque en silence.
     expect(bridge).toContain("LessonNotes.forSubject(lessons.notes(), assignment.subject)");

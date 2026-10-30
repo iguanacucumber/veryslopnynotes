@@ -24,10 +24,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
+import { readBridgeSource } from "./fixtures/bridge-source";
 
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "StoreHealthMain.kt");
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
-const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 
 const skip = parityToolchain.skipReason !== null;
 
@@ -107,7 +107,7 @@ describe("stockage chiffré : l'échec du Keystore est signalé (#401)", () => {
       expect(source(join(DATA, file))).not.toMatch(/Log\.[vdiew]\(|println\(|printStackTrace/);
     }
     // Le pont, lui, journalise l'état — une fois, au démarrage.
-    const bridge = source(join(APP, "VsnBridge.kt"));
+    const bridge = codeOnly(readBridgeSource());
     expect(bridge).toMatch(/Log\.w\(TAG,/);
     // ...et seulement en cas de dégradation (pas à chaque démarrage).
     expect(bridge).toMatch(/if\s*\(SecureStorage\.health\(\)\s*==\s*StoreHealth\.UNAVAILABLE\)/);
@@ -118,7 +118,7 @@ describe("stockage chiffré : l'échec du Keystore est signalé (#401)", () => {
   });
 
   test("le pont PUBLIE l'état du stockage (l'interface peut l'afficher)", () => {
-    const bridge = source(join(APP, "VsnBridge.kt"));
+    const bridge = codeOnly(readBridgeSource());
     // L'état dégradé est publié avec le statut de session ET de restauration.
     expect(bridge).toMatch(/put\("storage", storageState\(\)\)/);
     // L'état vient bien de la décision Kotlin, pas d'un texte en dur côté pont.

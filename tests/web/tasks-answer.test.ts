@@ -13,6 +13,7 @@ import {
   parseHomeworkActions,
   parseHomeworkAnswer,
 } from "../../web/src/features/tasks/assignments";
+import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const WEB = join(ROOT, "web", "src");
@@ -102,10 +103,7 @@ describe("aide devoirs — pont et panneau (#629)", () => {
   });
 
   test("le natif borne le corrigé et propose les CTA du refus", () => {
-    const bridge = readFileSync(
-      join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app", "VsnBridge.kt"),
-      "utf8",
-    );
+    const bridge = readBridgeSource();
     expect(bridge).toContain("homeworkAnswerJson(outcome)");
     expect(bridge).toContain('put("answer", outcome.answer.trim().take(Homework.MAX_ANSWER_CHARS))');
     expect(bridge).toContain("outcome.steps.take(Homework.MAX_STEPS)");
