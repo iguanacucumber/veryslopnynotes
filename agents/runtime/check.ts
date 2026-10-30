@@ -13,8 +13,9 @@
 // l'étape : l'intercalage de 68 lignes Gradle au milieu des tests ne se lit
 // pas).
 //
-// Sortie : `✔`/`✘` + durée par étape, la dernière ligne utile en succès, le
-// log COMPLET en échec. Un log contenant « SKIP » est affiché entier même en
+// Sortie : `✔`/`✘` + durée par étape, la dernière ligne utile en succès, la
+// FIN du log en échec (le fichier complet est écrit et son chemin imprimé).
+// Un log contenant « SKIP » est affiché entier même en
 // succès : la règle du repo est le SKIP BRUYANT, jamais un faux vert (même
 // philosophie que `make android-compile` sans JDK/SDK).
 // ponytail: pas de timeout ni de retry (une étape lente n'est pas une étape
@@ -33,6 +34,8 @@
 // `MAKEFLAGS=-i`) fait IGNORER l'échec d'une recette : l'enfant rendrait une
 // étape ROUGE verte. Les enfants sont donc lancés SANS `MAKEFLAGS` — les
 // seules options sont celles qu'on passe en ligne de commande.
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 // ponytail: racine en argument pour le test (fixture temporaire), défaut dépôt.
@@ -133,6 +136,24 @@ function indent(out: string): string {
     .replace(/\s+$/, "");
 }
 
+/** Lignes d'un log d'échec affichées dans le terminal. Le reste part dans un
+ *  fichier : une compilation Gradle ratée ou une suite qui casse en série
+ *  jette des milliers de lignes, et la cause est dans la fin. */
+const FAIL_TAIL_LINES = 120;
+
+function failedLog(target: string, out: string): string {
+  const lines = out.replace(/\s+$/, "").split("\n");
+  if (lines.length <= FAIL_TAIL_LINES) return indent(out);
+  const dir = mkdtempSync(join(tmpdir(), "vsn-check-"));
+  const path = join(dir, `${target.replace(/[^\w.-]+/g, "_")}.log`);
+  writeFileSync(path, out, { mode: 0o600 });
+  const hidden = lines.length - FAIL_TAIL_LINES;
+  return (
+    `    … ${hidden} ligne(s) masquée(s) — log complet : ${path}\n` +
+    indent(lines.slice(-FAIL_TAIL_LINES).join("\n"))
+  );
+}
+
 /** SKIP BRUYANT / REPLI + les 2 lignes suivantes (le message tient en 3 lignes).
  *  Afficher le log entier à chaque run parce que le corpus Pronote saute ferait
  *  du bruit de fond, pas du signal : c'est le saut qui doit se voir, pas tout le
@@ -172,9 +193,9 @@ async function main(): Promise<void> {
     const out = r.stdout + r.stderr;
     console.log(`${ok ? "✔" : "✘"} ${label(r.target)} ${seconds(r.ms)}${ok ? summary(r) : ""}`);
     // Une étape verte ne montre que son résumé SAUF signal de niveau étape :
-    // SKIP bruyant (jamais de faux vert) ou repli offline→online. En échec, le
-    // log complet : c'est là qu'on lit, et il n'y a rien à filtrer.
-    if (!ok) console.log(indent(out));
+    // SKIP bruyant (jamais de faux vert) ou repli offline→online. En échec, la
+    // fin du log (le complet part dans un fichier, cf. `failedLog`).
+    if (!ok) console.log(failedLog(r.target, out));
     else {
       const loud = loudLines(out);
       if (loud.length) console.log(indent(loud.join("\n")));
