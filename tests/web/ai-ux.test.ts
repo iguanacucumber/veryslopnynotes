@@ -55,11 +55,26 @@ describe("IA — aide devoirs", () => {
     // Pendant une photo, « Aide devoirs » ne lance pas un 2e appel LLM ;
     // pendant l'aide texte, « Photo de l'énoncé » n'ouvre pas la caméra.
     // Chaque panneau reste fermable : le bouton actif garde son « Fermer ».
-    expect(tasks).toContain("const assistantBusy = help?.loading === true || revisionBusy;");
+    expect(tasks).toContain("const assistantBusy = helpFlights > 0 || revisionBusy;");
     expect(tasks).toContain("assistantBusy={assistantBusy}");
     expect(tasks).toContain("disabled={textOff}");
     expect(tasks).toContain("disabled={photoOff}");
     expect(tasks).toContain("disabled={sheetOff}");
+  });
+
+  test("fermer le panneau pendant le vol ne rouvre pas les cartes (#751)", () => {
+    // Le bug : `help` retombait à null, donc `assistantBusy` aussi, et un 2e
+    // appel payé partait pendant que le premier tournait encore.
+    expect(tasks).toContain("const [helpFlights, setHelpFlights] = useState(0);");
+    expect(tasks).not.toContain("const assistantBusy = help?.loading === true");
+    // Chaque vol se compte AVANT l'appel et se règle dans `finally` : réponse,
+    // erreur, annulation et rejet du pont retombent tous.
+    const ask = between(tasks, "async function askHelp", "async function askPhoto");
+    expect(ask).toContain("setHelpFlights((count) => count + 1)");
+    expect(ask).toContain("setHelpFlights((count) => Math.max(0, count - 1))");
+    const photo = between(tasks, "async function askPhoto", "function closeHelp");
+    expect(photo).toContain("setHelpFlights((count) => count + 1)");
+    expect(photo).toContain("setHelpFlights((count) => Math.max(0, count - 1))");
   });
 
   test("une demande en vol ferme TOUTES les cartes, pas seulement la sienne (#749)", () => {
@@ -95,7 +110,28 @@ describe("IA — aide devoirs", () => {
       assistantBusy: true,
     });
     expect(loadingPhoto).toEqual({ textOff: true, photoOff: false, sheetOff: true });
-    // Retombé (réponse, erreur, annulation) : plus rien n'est bloqué.
+    // Réponse reçue : le panneau reste ouvert, les cartes se rouvrent.
+    const answered = cardActionFlags({
+      assistantDisabled: false,
+      hasMaterial: true,
+      hasPanel: true,
+      helpLoading: false,
+      helpPhoto: false,
+      assistantBusy: false,
+    });
+    expect(answered).toEqual({ textOff: false, photoOff: false, sheetOff: false });
+    // Panneau fermé PENDANT le vol : `help` est nul, mais l'appel payé tourne
+    // encore — toutes les cartes restent fermées (#751).
+    const closedWhileFlying = cardActionFlags({
+      assistantDisabled: false,
+      hasMaterial: true,
+      hasPanel: false,
+      helpLoading: false,
+      helpPhoto: false,
+      assistantBusy: true,
+    });
+    expect(closedWhileFlying).toEqual({ textOff: true, photoOff: true, sheetOff: true });
+    // Vol réglé (erreur, annulation, pont rejeté) : plus rien n'est bloqué.
     const idle = cardActionFlags({
       assistantDisabled: false,
       hasMaterial: true,

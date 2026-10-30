@@ -253,6 +253,32 @@ export function rejectTeacherAnswer(messages: TeacherMessage[], index: number): 
   return messages.filter((_, position) => position !== index);
 }
 
+/**
+ * Fil après une réponse : elle s'ajoute à la DISCUSSION COURANTE, jamais à
+ * l'instantané capturé avant l'envoi. Un tour rejeté pendant le vol reste donc
+ * rejeté, et l'enregistrement qui suit ne le ressuscite pas.
+ */
+export function appendTeacherAnswer(thread: TeacherMessage[], answer: TeacherMessage): TeacherMessage[] {
+  return trimTeacherMessages([...thread, answer]);
+}
+
+export type TeacherWriteQueue = <T>(task: () => Promise<T>) => Promise<T>;
+
+/**
+ * Sérialise les écritures du fil local (enregistrement, suppression) : un
+ * enregistrement ne peut pas arriver APRÈS la suppression qui le suit, sinon
+ * le fil supprimé réapparaît sur le disque. Une tâche en échec n'arrête pas la
+ * file : l'erreur reste à l'appelant, la suivante s'exécute quand même.
+ */
+export function teacherWriteQueue(): TeacherWriteQueue {
+  let tail: Promise<unknown> = Promise.resolve();
+  return <T>(task: () => Promise<T>): Promise<T> => {
+    const run = tail.then(task, task);
+    tail = run.catch(() => undefined);
+    return run;
+  };
+}
+
 export function teacherThreadPayload(subject: string, messages: TeacherMessage[]): TeacherThread {
   return {
     subject: boundedString(subject, TEACHER_MAX_SUBJECT),

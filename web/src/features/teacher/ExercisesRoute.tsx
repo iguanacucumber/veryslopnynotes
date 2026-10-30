@@ -7,7 +7,7 @@ import {
   parseExerciseHelp,
   parseExerciseProposal,
 } from "./exercises";
-import { ExercisesView, type ExerciseHelpState, type ExerciseProposalState } from "./ExercisesScreen";
+import { ExercisesView, helpAnswerApplies, type ExerciseHelpState, type ExerciseProposalState } from "./ExercisesScreen";
 import { teacherMessage, type TeacherTurnError } from "./teacher";
 
 const EMPTY_PROPOSAL: ExerciseProposalState = { loading: false, error: "", data: null };
@@ -55,11 +55,19 @@ export function ExercisesRoute({
   const [help, setHelp] = useState<ExerciseHelpState>(EMPTY_HELP);
   const seq = useRef(0);
   const lastRequest = useRef<{ mode: ExerciseHelpMode; photoSource?: "camera" | "gallery" } | null>(null);
+  // La sélection courante, lisible après un `await` : le `selected` capturé
+  // par la demande peut avoir changé entre-temps.
+  const selectedRef = useRef<ExerciseItem | null>(null);
+
+  function applySelected(exercise: ExerciseItem | null): void {
+    selectedRef.current = exercise;
+    setSelected(exercise);
+  }
 
   useEffect(() => {
     seq.current += 1;
     setProposal(EMPTY_PROPOSAL);
-    setSelected(null);
+    applySelected(null);
     setHelp(EMPTY_HELP);
     setHint("");
     lastRequest.current = null;
@@ -69,7 +77,7 @@ export function ExercisesRoute({
     if (!subject || proposal.loading) return;
     const id = ++seq.current;
     setProposal({ loading: true, error: "", data: null });
-    setSelected(null);
+    applySelected(null);
     setHelp(EMPTY_HELP);
     try {
       const raw = await bridge.proposeExercises({ subject, hint: hint.trim() });
@@ -80,7 +88,7 @@ export function ExercisesRoute({
         return;
       }
       setProposal({ loading: false, error: "", data });
-      setSelected(data.exercises[0] ?? null);
+      applySelected(data.exercises[0] ?? null);
     } catch (e) {
       if (id !== seq.current) return;
       setProposal({
@@ -92,14 +100,18 @@ export function ExercisesRoute({
   }
 
   function select(exercise: ExerciseItem): void {
-    setSelected(exercise);
-    setHelp(EMPTY_HELP);
+    // Un clic sur un autre exercice INVALIDE l'aide en vol : sans bump de
+    // séquence, sa réponse tardive s'afficherait sous le nouvel énoncé (fausse
+    // correction, fausses sources) et « Réessayer » resterait mort.
+    seq.current += 1;
     lastRequest.current = null;
+    applySelected(exercise);
+    setHelp(EMPTY_HELP);
   }
 
   async function ask(mode: ExerciseHelpMode, photoSource?: "camera" | "gallery"): Promise<void> {
     if (!selected || help.loading) return;
-    const id = ++seq.current;
+    const request = { seq: ++seq.current, number: selected.number };
     lastRequest.current = { mode, photoSource };
     setHelp((state) => ({ ...state, loading: true, mode, error: null, refusal: null }));
     try {
@@ -111,7 +123,7 @@ export function ExercisesRoute({
         answer: help.answer.trim(),
         ...(photoSource ? { photoSource } : {}),
       });
-      if (id !== seq.current) return;
+      if (!helpAnswerApplies(request, { seq: seq.current, number: selectedRef.current?.number ?? null })) return;
       if (raw !== null && typeof raw === "object" && (raw as { cancelled?: unknown }).cancelled === true) {
         setHelp((state) => ({ ...state, loading: false, mode: null }));
         return;
@@ -145,7 +157,7 @@ export function ExercisesRoute({
       }
       setHelp((state) => ({ ...state, loading: false, message, error: null, refusal: null }));
     } catch (e) {
-      if (id !== seq.current) return;
+      if (!helpAnswerApplies(request, { seq: seq.current, number: selectedRef.current?.number ?? null })) return;
       const error: TeacherTurnError = {
         kind: "unavailable",
         message: messageOf(e, "Le professeur est indisponible : réessaie dans un instant."),

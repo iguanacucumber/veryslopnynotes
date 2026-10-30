@@ -3,16 +3,38 @@
 import { useParisTz } from "./setup";
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ExerciseItem, TeacherMessage } from "../../web/src/bridge/types";
 import {
   ExercisesView,
+  helpAnswerApplies,
   type ExerciseHelpState,
   type ExercisesViewProps,
 } from "../../web/src/features/teacher/ExercisesScreen";
 
 useParisTz();
+
+const ROUTE = join(
+  import.meta.dir,
+  "..",
+  "..",
+  "web",
+  "src",
+  "features",
+  "teacher",
+  "ExercisesRoute.tsx",
+);
+
+function between(text: string, start: string, end: string): string {
+  const from = text.indexOf(start);
+  expect(from).toBeGreaterThan(-1);
+  const to = text.indexOf(end, from + start.length);
+  expect(to).toBeGreaterThan(from);
+  return text.slice(from, to);
+}
 
 function exercise(over: Partial<ExerciseItem> = {}): ExerciseItem {
   return {
@@ -183,5 +205,30 @@ describe("exercices — aide progressive (#632)", () => {
     expect(html).toContain("Quota atteint.");
     expect(html).toContain("Réessayer");
     expect(html).not.toContain("exercise-answer");
+  });
+});
+
+describe("exercices — aide en vol (#751)", () => {
+  test("une réponse tardive d'un AUTRE exercice est jetée", () => {
+    const request = { seq: 3, number: "12" };
+    // Clic sur l'exercice 13 pendant le vol : séquence ET sélection changent.
+    expect(helpAnswerApplies(request, { seq: 4, number: "13" })).toBe(false);
+    // Même exercice, mais demande invalidée (fermeture, nouvelle proposition).
+    expect(helpAnswerApplies(request, { seq: 4, number: "12" })).toBe(false);
+    // Demande toujours courante : la réponse s'affiche.
+    expect(helpAnswerApplies(request, { seq: 3, number: "12" })).toBe(true);
+  });
+
+  test("le nouvel exercice reste vide : ni correction ni source héritée", () => {
+    const html = renderView({ selected: exercise({ number: "13" }), help: IDLE_HELP });
+    expect(html).toContain("Exercice 13");
+    expect(html).not.toContain("exercise-answer");
+  });
+
+  test("sélectionner un exercice invalide la demande en vol", () => {
+    const select = between(readFileSync(ROUTE, "utf8"), "function select(", "async function ask(");
+    expect(select).toContain("seq.current += 1");
+    expect(select).toContain("lastRequest.current = null");
+    expect(select).toContain("setHelp(EMPTY_HELP)");
   });
 });
