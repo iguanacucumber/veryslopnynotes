@@ -19,6 +19,7 @@
 //     non vérifiable ≠ invariant respecté).
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
+import { bound, repoPath } from "./output";
 import { codeOnly, hasDirectFetch, platformRe, pronoteHost } from "./source-guards";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -157,6 +158,14 @@ export function scanArchitecture(root: string = ROOT): string[] {
    *  ce n'est PAS un « respecté ». Ils sont signalés, pas avalés. */
   const unreadable = new Set<string>();
 
+  /** Bloc d'un invariant : le libellé, puis les chemins BORNÉS (10 max, le
+   *  reste dans le log complet). Le verdict, lui, porte TOUS les chemins. */
+  const bloc = (label: string, paths: readonly string[]): string =>
+    [
+      label,
+      ...bound(root, "check-architecture", paths.map((p) => `  ${repoPath(root, p)}`)),
+    ].join("\n");
+
   /** Source sans commentaires, ou null si le fichier n'a pas pu être lu.
    *  ENOENT = le fichier n'existe (plus) : rien à vérifier, on passe. Autre
    *  erreur (droits, EIO) = l'invariant n'est PAS vérifiable → signalé. */
@@ -189,14 +198,14 @@ export function scanArchitecture(root: string = ROOT): string[] {
       .replace(/fr\.veryslopnynotes\.pronote/g, "");
     return pronoteHost.test(code);
   });
-  if (i1.length) fail.push(`I1: android référence Pronote: ${i1.join(", ")}`);
+  if (i1.length) fail.push(bloc("I1: android référence Pronote:", i1));
 
   // I2 : aucun accès réseau Pronote dans le serveur (il ne sert que le scraper de manuels).
   const directFetch = serverFiles.filter((f) => {
     const code = readCode(f);
     return code !== null && hasDirectFetch(code);
   });
-  if (directFetch.length) fail.push(`I2: accès réseau Pronote hors client: ${directFetch.join(", ")}`);
+  if (directFetch.length) fail.push(bloc("I2: accès réseau Pronote hors client:", directFetch));
 
   // I2 : la frontière réelle est déclarée dans Gradle. Le scan de source ne
   // recopie plus les types du port : une arête non déclarée suffit à échouer.
@@ -213,7 +222,7 @@ export function scanArchitecture(root: string = ROOT): string[] {
       if (c !== null && /\b(HttpSession|CookieJar|ClientBase)\b/.test(c)) transports.push(f);
     }
   }
-  if (transports.length) fail.push(`I2: transport direct hors pronote: ${transports.join(", ")}`);
+  if (transports.length) fail.push(bloc("I2: transport direct hors pronote:", transports));
 
   const clients = listFiles(join(root, "android", "pronote")).filter((f) => {
     const c = readCode(f);
@@ -228,7 +237,7 @@ export function scanArchitecture(root: string = ROOT): string[] {
     const c = readCode(f);
     return c !== null && platformRe.test(c);
   });
-  if (i3.length) fail.push(`I3: android/core importe une plateforme interdite: ${i3.join(", ")}`);
+  if (i3.length) fail.push(bloc("I3: android/core importe une plateforme interdite:", i3));
 
   // I5 + I4 : LLM sans outils/réseau/secrets (I6/I7 non scannables ici — voir miroirs unitaires Android + review).
   // Port #204 : l'IA vit dans `android/core/`; `server/ai/` a été supprimé en #210.
@@ -242,14 +251,14 @@ export function scanArchitecture(root: string = ROOT): string[] {
   // I4/I5 vacuement vrais. Absent = invariant non vérifiable, donc ÉCHEC.
   const aiAbsents = ANDROID_AI.filter((f) => !existsSync(f));
   if (aiAbsents.length) {
-    fail.push(`I4/I5: fichier IA absent (invariant non vérifiable) : ${aiAbsents.join(", ")}`);
+    fail.push(bloc("I4/I5: fichier IA absent (invariant non vérifiable) :", aiAbsents));
   }
   const secretRe = /sk-or-v1-|OPENROUTER_API_KEY|MASTER_KEY|PRONOTE_PASSWORD|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY/;
   const i4 = llmFiles.filter((f) => {
     const c = readCode(f);
     return c !== null && secretRe.test(c);
   });
-  if (i4.length) fail.push(`I4: secret dans IA: ${i4.join(", ")}`);
+  if (i4.length) fail.push(bloc("I4: secret dans IA:", i4));
   const i5 = llmFiles.filter((f) => {
     const c = readCode(f);
     if (c === null) return false;
@@ -260,12 +269,12 @@ export function scanArchitecture(root: string = ROOT): string[] {
       secretRe.test(c)
     );
   });
-  if (i5.length) fail.push(`I5: LLM touche outils/réseau/secrets: ${i5.join(", ")}`);
+  if (i5.length) fail.push(bloc("I5: LLM touche outils/réseau/secrets:", i5));
 
   // Un fichier illisible = invariant NON vérifié : on le dit (faux vert
   // interdit), on ne le compte pas comme une violation d'invariant.
   if (unreadable.size) {
-    fail.push(`fichiers illisibles (invariant non vérifiable) : ${[...unreadable].join(", ")}`);
+    fail.push(bloc("fichiers illisibles (invariant non vérifiable) :", [...unreadable]));
   }
 
   // #532 : rien à scanner = rien de vérifié. Un répertoire renommé (ou une

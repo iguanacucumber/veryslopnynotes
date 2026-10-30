@@ -8,6 +8,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join, relative, resolve } from "node:path";
+import { bound } from "./output";
 import { matchPatterns, patternsFor } from "./secret-patterns";
 
 // ponytail: racine en argument pour le test (fixture temporaire), défaut dépôt.
@@ -65,7 +66,7 @@ function walk(dir: string) {
     // .env.local untracked requis pour intégration -> PASS (#85).
     if (/\.env(\.|$)/.test(e) || e.endsWith(".env") || e.endsWith(".env.local")) {
       const tracked = TRACKED ? TRACKED.has(rel) : true;
-      if (tracked) failures.push(`${p}: fichier .env* tracké (interdit sauf .env.example)`);
+      if (tracked) failures.push(`${rel}: fichier .env* tracké (interdit sauf .env.example)`);
       continue;
     }
     // Hors git (fallback) : scan contenu quand même ci-dessous.
@@ -78,7 +79,7 @@ function walk(dir: string) {
       continue; // binaire
     }
     for (const name of matchPatterns(content, patternsFor(rel))) {
-      failures.push(`${p}: motif suspect (${name})`);
+      failures.push(`${rel}: motif suspect (${name})`);
     }
   }
 }
@@ -87,7 +88,7 @@ walk(ROOT);
 
 if (failures.length > 0) {
   console.error("check-secrets FAIL:");
-  for (const f of failures) console.error(" - " + f);
+  for (const f of bound(ROOT, "check-secrets", failures)) console.error(" - " + f);
   process.exit(1);
 }
 console.log("check-secrets OK");
