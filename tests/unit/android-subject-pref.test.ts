@@ -213,7 +213,10 @@ describe("câblage : le pont et le dépôt partagent la MÊME règle (#395)", ()
   });
 
   test("les bornes du pont sont celles du contrat (miroir TypeScript)", () => {
-    const contracts = readFileSync(join(ROOT, "shared", "contracts", "models.ts"), "utf8");
+    const contracts = readFileSync(
+      join(ROOT, "shared", "contracts", "models", "subject-prefs.ts"),
+      "utf8",
+    );
     const web = readFileSync(join(ROOT, "web", "src", "features", "settings", "model.ts"), "utf8");
     expect(tsLimit(contracts, /SUBJECT_PREFS_MAX_SUBJECT_CHARS = (\d+)/)).toBe(64);
     expect(tsLimit(contracts, /SUBJECT_PREFS_MAX_EMOJI_CHARS = (\d+)/)).toBe(8);
