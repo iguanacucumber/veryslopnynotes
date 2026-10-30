@@ -135,10 +135,11 @@ describe("panne du transport : le délai n'est pas le réseau", () => {
   test.skipIf(skip)("les messages sont français, bornés, sans URL ni clé", async () => {
     // Même plafond que `LlmError.MAX_ERROR_CHARS` : le message part à l'UI.
     const MAX_ERROR_CHARS = 120;
-    const messages = [
-      ...(await Promise.all(["socket_timeout", "ssl"].map(async (k) => (await fault(k)).message!))),
-      await tooLargeMessage((await constants()).maxResponseBytes),
-    ];
+    // Le lien de parité est SÉRIEL (un seul stdout) : deux `ask` en vol
+    // croisent les réponses et l'un attend indéfiniment.
+    const messages: string[] = [];
+    for (const kind of ["socket_timeout", "ssl"]) messages.push((await fault(kind)).message!);
+    messages.push(await tooLargeMessage((await constants()).maxResponseBytes));
     for (const msg of messages) {
       expect(msg.length).toBeGreaterThan(0);
       expect(msg.length).toBeLessThanOrEqual(MAX_ERROR_CHARS);
