@@ -91,7 +91,7 @@ describe("stockage chiffré indisponible (#401)", () => {
     expect(pairing).toContain("STORAGE_UNAVAILABLE_MESSAGE");
     expect(pairing).toContain("storageUnavailable");
     // Les réglages : la clé de l'assistant ne sera pas conservée non plus.
-    const settings = readFileSync(join(ROOT, "web/src/features/settings/SettingsScreen.tsx"), "utf8");
+    const settings = readFileSync(join(ROOT, "web/src/features/settings/AssistantCards.tsx"), "utf8");
     expect(settings).toContain("STORAGE_UNAVAILABLE_MESSAGE");
     // L'état lu au démarrage est PROPAGÉ jusqu'à l'interface.
     const app = readFileSync(join(ROOT, "web/src/App.tsx"), "utf8");

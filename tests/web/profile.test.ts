@@ -320,7 +320,18 @@ describe("appairage : hôte affichable, PIN et codes d'échec", () => {
 
   test("aucun secret persisté ni journalisé dans les écrans", () => {
     const root = join(import.meta.dir, "..", "..", "web", "src", "features");
-    const files = ["pairing/PairingScreen.tsx", "profile/ProfileScreen.tsx", "settings/SettingsScreen.tsx"];
+    const files = [
+      "pairing/PairingScreen.tsx",
+      "profile/ProfileScreen.tsx",
+      "settings/SettingsScreen.tsx",
+      "settings/AppearanceCard.tsx",
+      "settings/AssistantCards.tsx",
+      "settings/AssistantOverviewCard.tsx",
+      "settings/ManualCard.tsx",
+      "settings/ServerCard.tsx",
+      "settings/SubjectPrefsCard.tsx",
+      "settings/action.ts",
+    ];
     for (const file of files) {
       const source = readFileSync(join(root, file), "utf8");
       expect({ file, localStorage: source.includes("localStorage") }).toEqual({ file, localStorage: false });

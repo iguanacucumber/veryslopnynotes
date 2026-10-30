@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { mockCall } from "../../web/src/bridge/mock";
 import { assignmentHasAssistantMaterial } from "../../web/src/features/tasks/assignments";
+import { manualSaveNotice } from "../../web/src/features/settings/model";
 import { readBridgeSource } from "../unit/fixtures/bridge-source";
 
 const WEB = join(import.meta.dir, "..", "..", "web", "src");
@@ -32,7 +33,7 @@ describe("manuel — invitation UNE seule fois", () => {
     expect(source("features/home/HomeScreen.tsx")).toContain("<ManualPrompt />");
     const prompt = source("features/settings/ManualPrompt.tsx");
     expect(prompt).toContain("useState(DEFAULT_MANUAL_URL)");
-    const settings = source("features/settings/SettingsScreen.tsx");
+    const settings = source("features/settings/ManualCard.tsx");
     expect(settings).toContain("bridge.saveManualUrl(value)");
     expect(settings).toContain("bridge.saveManualUrl(\"\")");
     expect(settings).toContain("MAX_MANUAL_URL_CHARS");
@@ -60,6 +61,22 @@ describe("manuel — source de l'assistant", () => {
     // au lieu d'une source déjà tronquée à 2 000 caractères.
     expect(bridge).toContain("AiContext.manual(doc.title, doc.excerpt)");
     expect(bridge).toContain("manualDocFor(assignment.subject)");
+  });
+});
+
+describe("manuel — phrases d'enregistrement", () => {
+  test("le message natif fait foi et la gravité suit le scraper", () => {
+    expect(manualSaveNotice({ ok: true, auto: true, level: "Terminale", specialties: ["NSI"] })).toEqual({
+      notice: "Manuel automatique activé (Terminale · NSI).",
+      kind: "info",
+    });
+    expect(manualSaveNotice({ ok: true, auto: true }).notice).toContain("l’ouvrage suivra");
+    expect(manualSaveNotice({ ok: true, ready: true }).kind).toBe("info");
+    expect(manualSaveNotice({ ok: true })).toEqual({
+      notice: "Adresse enregistrée, mais le manuel n'a pas pu être récupéré.",
+      kind: "error",
+    });
+    expect(manualSaveNotice({ ok: true, message: "Adresse incomplète." }).notice).toBe("Adresse incomplète.");
   });
 });
 
