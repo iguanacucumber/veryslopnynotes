@@ -3,6 +3,10 @@
 # Découverte JDK/SDK partagée (borne 17–21, une seule implémentation).
 ANDROID_ENV = . agents/runtime/android-env.sh
 
+# Tests filtrés : cause gardée, bruit borné, code de sortie de bun conservé.
+# Détail : docs/architecture/BUILD.md.
+TEST_OUTPUT = bun run agents/runtime/test-output.ts
+
 # `make check` = 9 étapes en parallèle. Détail : docs/architecture/BUILD.md.
 # Le gate est strict (CHECK_HARNESS / ALLOW_SKIP_ANDROID neutralisés,
 # REQUIRE_KOTLIN_TOOLCHAIN=1, MAKEFLAGS ignoré, deux phases). Pas de version
@@ -38,7 +42,7 @@ typecheck:
 
 # Tests unitaires + parité Kotlin. `--parallel` : un isolat par fichier.
 unit:
-	bun test tests/unit --parallel
+	$(TEST_OUTPUT) unit tests/unit --parallel
 
 # Frontend React. Le build écrit dans android/app/src/main/assets/web/ (gitignoré).
 web-typecheck:
@@ -48,7 +52,7 @@ web-build:
 	bun run build:web
 
 web-test:
-	bun test tests/web tests/architecture/web.test.ts
+	$(TEST_OUTPUT) web-test tests/web tests/architecture/web.test.ts
 
 web: web-typecheck web-test web-build
 
