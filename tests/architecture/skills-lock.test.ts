@@ -72,4 +72,23 @@ describe("skills vendorisées : le contenu est verrouillé", () => {
   test("le lock amont et le dépôt vendorisé portent les MÊMES skills", () => {
     expect(Object.keys(LOCK.skills).sort()).toEqual(readdirSync(SKILLS).sort());
   });
+
+  test("une skill vendorisée reste petite", () => {
+    // Un `npx skills add <source>` sans `@skill` a déjà ramené 3,3 Mo de
+    // collection (#718). Son arbre part en contexte dès l'invocation : le
+    // plafond rend l'ajout visible dans le diff au lieu de la facture.
+    for (const skill of readdirSync(SKILLS)) {
+      let total = 0;
+      const walk = (dir: string): void => {
+        for (const entry of readdirSync(dir)) {
+          const full = join(dir, entry);
+          const stat = statSync(full);
+          if (stat.isDirectory()) walk(full);
+          else total += stat.size;
+        }
+      };
+      walk(join(SKILLS, skill));
+      expect({ skill, sousBudget: total <= 24_576 }).toEqual({ skill, sousBudget: true });
+    }
+  });
 });
