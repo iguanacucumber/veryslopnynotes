@@ -27,8 +27,8 @@ if (!skip) {
   link = await parityToolchain.openParityLink(DRIVER);
 }
 
-async function ask(op: unknown): Promise<string> {
-  return link!.ask(op);
+async function ask(op: unknown, opts?: { allowError?: boolean }): Promise<string> {
+  return link!.ask(op, opts);
 }
 
 type Lines = { lines: string[] };
@@ -132,6 +132,43 @@ describe("export PDF de fiche : le markdown ne dessine pas ses marqueurs (#630)"
     for (const marker of ["#", "**", "|", "`", "> "]) {
       expect({ marker, present: text.includes(marker) }).toEqual({ marker, present: false });
     }
+  });
+
+  test.skipIf(skip)("les barres de valeur absolue restent du texte, pas un tableau", async () => {
+    // Un `|` n'ouvre un tableau que suivi d'un séparateur : `|x|` et
+    // `|x| ≤ 1` gardent leur barre (sinon « x — ≤ 1 », les maths perdues).
+    const body = ["Valeur absolue :", "", "|x|", "", "|x| ≤ 1"].join("\n");
+    const res = JSON.parse(await ask({ op: "pdfLines", body, sources: CANONICAL })) as Lines;
+    const text = res.lines.join("\n");
+    expect(text).toContain("|x|");
+    expect(text).toContain("|x| ≤ 1");
+    expect(text).not.toContain("x — ≤ 1");
+  });
+
+  test.skipIf(skip)("un tableau n'est reconnu qu'avec sa ligne de séparation", async () => {
+    const body = [
+      "| Colonne A | Colonne B |",
+      "| --- | --- |",
+      "| 1 | 2 |",
+      "",
+      "| pas | un tableau |",
+    ].join("\n");
+    const res = JSON.parse(await ask({ op: "pdfLines", body, sources: CANONICAL })) as Lines;
+    const text = res.lines.join("\n");
+    expect(text).toContain("Colonne A — Colonne B");
+    expect(text).toContain("1 — 2");
+    // Sans séparateur, la ligne reste du texte, barres comprises.
+    expect(text).toContain("| pas | un tableau |");
+  });
+
+  test.skipIf(skip)("un bloc de code n'est jamais traité comme un tableau", async () => {
+    const body = ["```", "| a | b |", "| --- | --- |", "| 1 | 2 |", "```"].join("\n");
+    const res = JSON.parse(await ask({ op: "pdfLines", body, sources: CANONICAL })) as Lines;
+    const text = res.lines.join("\n");
+    expect(text).toContain("| a | b |");
+    expect(text).toContain("| --- | --- |");
+    expect(text).toContain("| 1 | 2 |");
+    expect(text).not.toContain("a — b");
   });
 });
 
@@ -381,6 +418,54 @@ describe("en-têtes de sources du modèle : tous retirés, jamais recopiés (I15
     expect(res.body).toContain("Sources historiques");
     expect(res.body).toContain("Le texte latin date de 1960.");
     expect(countSources(res.body)).toBe(1);
+  });
+
+  test.skipIf(skip)("un bloc « Sources » sans ligne vide ne mange pas la section suivante", async () => {
+    // Le modèle oublie la ligne vide : le bloc s'arrête à la première ligne
+    // qui n'est pas une citation, donc `## Analyse` et son cours restent
+    // (I15 : le corps est entier, jamais de perte silencieuse).
+    const fiche = [
+      "## Sources",
+      "- Discours",
+      "## Analyse",
+      "Le régime parlementaire se caractérise par la responsabilité du gouvernement.",
+    ].join("\n");
+    const res = JSON.parse(await ask({ op: "assemble", fiche, sources: CANONICAL })) as Sheet;
+    expect(res.body).toContain("## Analyse");
+    expect(res.body).toContain("Le régime parlementaire se caractérise");
+    // L'entrée du bloc du modèle, elle, part : seule la liste canonique reste.
+    expect(res.body).not.toContain("Discours");
+    expect(countSources(res.body)).toBe(1);
+
+    const pdf = JSON.parse(await ask({ op: "pdfLines", body: res.body, sources: res.sources })) as Lines;
+    const text = pdf.lines.join("\n");
+    expect(text).toContain("Analyse");
+    expect(text).toContain("Le régime parlementaire se caractérise");
+    expect(text).not.toContain("Discours");
+    expect(countSources(text)).toBe(1);
+  });
+});
+
+describe("fiche vide : une simple bibliographie ne s'assemble pas (I15)", () => {
+  test.skipIf(skip)("un texte réduit au bloc « Sources » est refusé comme fiche vide", async () => {
+    // La validation porte sur le corps APRÈS retrait du bloc du modèle : sinon
+    // une fiche sans cours passait pour valide et n'était qu'une bibliographie.
+    const res = JSON.parse(
+      await ask(
+        { op: "assemble", fiche: "Sources :\n- Consigne", sources: CANONICAL },
+        { allowError: true },
+      ),
+    ) as { error?: string; message?: string };
+    expect(res.error).toBe("IllegalArgumentException");
+    expect(res.message).toContain("fiche vide");
+  });
+
+  test.skipIf(skip)("un corps réduit au bloc « Sources » n'est pas exporté", async () => {
+    const res = JSON.parse(
+      await ask({ op: "pdfLines", body: "Sources :\n- Consigne", sources: CANONICAL }, { allowError: true }),
+    ) as { error?: string; message?: string };
+    expect(res.error).toBe("IllegalArgumentException");
+    expect(res.message).toContain("fiche vide");
   });
 });
 
