@@ -87,23 +87,33 @@ describe("stockage chiffré : l'échec du Keystore est signalé (#401)", () => {
     expect(await kotlinHealth({ op: "state" })).toBe("UNAVAILABLE");
   });
 
-  test("les deux `catch` de store MARQUENT l'échec (ils ne l'avalent plus)", () => {
-    for (const file of ["SessionStore.kt", "LlmKeyStore.kt"]) {
-      const body = catchBody(source(join(DATA, file)));
-      expect(body.length).toBeGreaterThan(0);
-      // Le cœur du correctif : l'échec est transformé en état.
-      expect(body).toContain("SecureStorage.markUnavailable()");
-      // Le repli mémoire reste (jamais un secret en clair) : l'app continue
-      // de fonctionner, elle ne perd que la CONSERVATION.
-      expect(body).toContain("InMemory");
-    }
+  test("les deux replis de store MARQUENT l'échec (ils ne l'avalent plus)", () => {
+    // Session : le `catch` construit le repli mémoire et marque l'état.
+    const session = catchBody(source(join(DATA, "SessionStore.kt")));
+    expect(session.length).toBeGreaterThan(0);
+    // Le cœur du correctif : l'échec est transformé en état.
+    expect(session).toContain("SecureStorage.markUnavailable()");
+    // Le repli mémoire reste (jamais un secret en clair) : l'app continue
+    // de fonctionner, elle ne perd que la CONSERVATION.
+    expect(session).toContain("InMemory");
+    // Clé LLM (#749) : le repli a DEUX étages — le `catch` de construction
+    // laisse `secure = null`, et le repli PUR (`LlmKeyFallback.kt`, exécuté par
+    // la parité) pose l'état dès qu'il n'a pas de chiffré. La marque ne peut
+    // donc pas être orpheline.
+    const key = source(join(DATA, "LlmKeyStore.kt"));
+    const construction = catchBody(key);
+    expect(construction.length).toBeGreaterThan(0);
+    expect(construction).toContain("null");
+    const policy = source(join(DATA, "LlmKeyFallback.kt"));
+    expect(policy).toContain("SecureStorage.markUnavailable()");
+    expect(policy).toContain("class InMemoryLlmKeyStore");
   });
 
   test("le journal est dans le PONT (jamais à côté d'un secret) et il est borné", () => {
     // Les stores ne journalisent PAS : ils tiennent le jeton et la clé, la
     // règle du dépôt est « jamais de log à côté d'un secret » (pin sur
     // `SessionStore.kt`). Le diagnostic, c'est l'ÉTAT publié.
-    for (const file of ["SessionStore.kt", "LlmKeyStore.kt"]) {
+    for (const file of ["SessionStore.kt", "LlmKeyStore.kt", "LlmKeyFallback.kt"]) {
       expect(source(join(DATA, file))).not.toMatch(/Log\.[vdiew]\(|println\(|printStackTrace/);
     }
     // Le pont, lui, journalise l'état — une fois, au démarrage.
