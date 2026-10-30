@@ -189,6 +189,24 @@ describe("professeur IA — historique borné + résumé local (#633)", () => {
     expect(res.summary).toContain("tour-1");
   });
 
+  test.skipIf(skip)("un tour professeur tronqué est écarté, le tour complet reste (#706)", async () => {
+    // Le web n'envoyait que {role, text} : sources=[] + unsourced=false rendait
+    // chaque réponse du professeur invalide, donc absente de l'historique.
+    const partial = await ask<History>({
+      op: "history",
+      messages: [{ role: "teacher", text: "reponse partielle" }],
+    });
+    expect(partial.texts).toEqual([]);
+    const complete = await ask<History>({
+      op: "history",
+      messages: [
+        { role: "teacher", text: "reponse complete", sources: ["Cours : chapitre 4"], unsourced: false },
+        { role: "teacher", text: "reponse libre", sources: [], unsourced: true },
+      ],
+    });
+    expect(complete.texts).toEqual(["reponse complete", "reponse libre"]);
+  });
+
   test.skipIf(skip)("un fil local est borné à 40 tours et les invalides tombent", async () => {
     const valid = Array.from({ length: 50 }, (_, index) => ({
       role: index % 2 === 0 ? "student" : "teacher",

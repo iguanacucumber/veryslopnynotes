@@ -95,12 +95,17 @@ describe("professeur IA — modèle local (#633)", () => {
     expect(thread.messages[39]?.text).toBe("réponse-49");
   });
 
-  test("le payload d'un tour borne la question et n'envoie que 6 tours", () => {
+  test("le payload d'un tour borne la question et envoie le fil borné", () => {
     const messages = Array.from({ length: 9 }, (_, index) => teacher({ text: `tour-${index}` }));
     const payload = buildTeacherTurn("MATHEMATIQUES", "  Ma question  ", "explain", messages);
     expect(payload?.message).toBe("Ma question");
-    expect(payload?.history).toHaveLength(6);
+    // #706 : le natif garde les 6 récents et résume les anciens ; couper ici
+    // rendait le résumé local inatteignable.
+    expect(payload?.history).toHaveLength(9);
     expect(payload?.history.map((item) => item.text)).toEqual([
+      "tour-0",
+      "tour-1",
+      "tour-2",
       "tour-3",
       "tour-4",
       "tour-5",
@@ -113,17 +118,33 @@ describe("professeur IA — modèle local (#633)", () => {
     expect(buildTeacherTurn("MATHEMATIQUES", "q".repeat(2500), "explain", [])?.message).toHaveLength(2000);
   });
 
-  test("l'historique envoyé ne garde que les 6 derniers messages", () => {
-    const messages = Array.from({ length: 10 }, (_, index) => studentMessage(`question-${index}`)!);
-    expect(teacherHistory(messages).map((item) => item.text)).toEqual([
-      "question-4",
-      "question-5",
-      "question-6",
-      "question-7",
-      "question-8",
-      "question-9",
-    ]);
-    expect(teacherThreadPayload("MATHEMATIQUES", messages).messages).toHaveLength(10);
+  test("l'historique garde sources et unsourced des tours professeur (#706)", () => {
+    const sourced = teacher({ text: "réponse sourcée" });
+    const unsourced = teacher({ text: "réponse libre", sources: [], unsourced: true });
+    const history = teacherHistory([studentMessage("question")!, sourced, unsourced]);
+    expect(history).toHaveLength(3);
+    expect(history[1]).toEqual({
+      role: "teacher",
+      text: "réponse sourcée",
+      sources: ["Cours : chapitre 4"],
+      unsourced: false,
+    });
+    expect(history[2]).toEqual({
+      role: "teacher",
+      text: "réponse libre",
+      sources: [],
+      unsourced: true,
+    });
+  });
+
+  test("l'historique envoyé porte le fil borné à 40 tours, pas 6", () => {
+    const messages = Array.from({ length: 46 }, (_, index) =>
+      index % 2 === 0 ? studentMessage(`question-${index}`)! : teacher({ text: `réponse-${index}` }),
+    );
+    const history = teacherHistory(messages);
+    expect(history).toHaveLength(40);
+    expect(history[history.length - 1]?.text).toBe("réponse-45");
+    expect(teacherThreadPayload("MATHEMATIQUES", messages).messages).toHaveLength(40);
   });
 
   test("une réponse ok sans texte devient une erreur, jamais un tour vide", () => {
