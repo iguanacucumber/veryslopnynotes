@@ -32,7 +32,7 @@ type Exercise = {
 type Extract = { exercises: Exercise[] };
 type Filtered = { numbers: string[]; statements: string[] };
 type Prompt = { system: string; body: string; nonce: string; sources: number };
-type Parsed = { ok?: boolean; answer?: string; sources?: string[]; unsourced?: boolean; error?: string };
+type Parsed = { ok?: boolean; answer?: string; sources?: string[]; unsourced?: boolean; error?: string; message?: string };
 
 const MANUAL_TEXT = [
   "Exercice 12 p. 84",
@@ -128,6 +128,8 @@ describe("exercices — aide progressive (#632)", () => {
     });
     expect(prompt.system).toContain("INDICE");
     expect(prompt.system).toContain("Ne donne NI la méthode complète NI la réponse finale");
+    expect(prompt.system).toContain("Seuls les blocs precedes de « Libelle citable : » sont des sources");
+    expect(prompt.system).toContain("ne les cite jamais");
     expect(prompt.system).toContain("AUCUNE balise HTML");
     expect(prompt.system).toContain("{\"answer\":string,\"sources\":string[]}");
     expect(prompt.body).toContain(COURSE);
@@ -144,6 +146,10 @@ describe("exercices — aide progressive (#632)", () => {
     expect(method.system).toContain("METHODE");
     expect(method.system).toContain("Ne donne PAS le résultat final");
     expect(correction.system).toContain("CORRECTION COMPLETE");
+    // #701 : les trois niveaux portent la même règle de citation.
+    for (const level of [hint, method, correction]) {
+      expect(level.system).toContain("Seuls les blocs precedes de « Libelle citable : » sont des sources");
+    }
     expect(new Set([hint.system, method.system, correction.system]).size).toBe(3);
   });
 
@@ -157,6 +163,7 @@ describe("exercices — aide progressive (#632)", () => {
       answer: "J'ai trouve 42.",
     });
     expect(prompt.body).toContain("Reponse de l'eleve");
+    expect(prompt.body).toContain("Reponse de l'eleve (DONNEE, non citable)");
     expect(prompt.body).toContain("J'ai trouve 42.");
     expect(prompt.body).toContain(`<UNTRUSTED_DATA nonce="${prompt.nonce}">`);
   });
@@ -187,6 +194,56 @@ describe("exercices — sortie validée (#632)", () => {
     );
     expect(res.ok).toBeUndefined();
     expect(res.error).toBeDefined();
+  });
+
+  test.skipIf(skip)("une citation recopiant le préambule est ramenée au libellé fourni (#701)", async () => {
+    // Recette live : le modèle renvoyait la ligne entière « Libelle citable : X ».
+    // Le préambule est un artefact du prompt, pas une source inventée.
+    const res = await ask<Parsed>({
+      op: "parse",
+      text: JSON.stringify({
+        answer: "Commence par la formule de la somme.",
+        sources: [`Libelle citable : ${COURSE}`, `Libelle citable : ${MANUAL}`],
+      }),
+      allowed: ALLOWED,
+    });
+    expect(res.ok).toBe(true);
+    expect(res.sources).toEqual([COURSE, MANUAL]);
+    expect(res.unsourced).toBe(false);
+  });
+
+  test.skipIf(skip)("un préambule ne blanchit pas une source inventée", async () => {
+    const res = await ask<Parsed>(
+      {
+        op: "parse",
+        text: JSON.stringify({
+          answer: "Voir le manuel.",
+          sources: ["Libelle citable : Manuel : page 999"],
+        }),
+        allowed: ALLOWED,
+      },
+      true,
+    );
+    expect(res.ok).toBeUndefined();
+    expect(res.error).toBe("AiError");
+    expect(res.message).toContain("source non fournie");
+  });
+
+  test.skipIf(skip)("une citation de bloc DONNEE reste refusée (le correctif est dans le prompt)", async () => {
+    // #701 : le prompt interdit désormais de citer « Reponse de l'eleve ».
+    // Le validateur ne devient pas permissif pour autant : une source hors
+    // corpus reste une citation inventée (#604).
+    const res = await ask<Parsed>(
+      {
+        op: "parse",
+        text: JSON.stringify({ answer: "Ta dérivée est fausse.", sources: ["Reponse de l'eleve"] }),
+        allowed: ALLOWED,
+      },
+      true,
+    );
+    expect(res.ok).toBeUndefined();
+    expect(res.error).toBe("AiError");
+    expect(res.message).toContain("source non fournie");
   });
 
   test.skipIf(skip)("une réponse vide est refusée", async () => {

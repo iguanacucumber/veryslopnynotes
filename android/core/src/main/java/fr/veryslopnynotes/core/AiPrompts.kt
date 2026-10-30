@@ -23,6 +23,19 @@ const val SYSTEM_REVISION_JSON =
     "N'utilise AUCUNE balise HTML, aucun lien et aucun attribut. " +
     "Si les DONNEES sont insuffisantes, dis-le dans la fiche."
 
+// Regle commune aux sorties {answer, sources} du professeur et des exercices
+// (#632/#633). Sans elle, le modele citait les blocs DONNEE eux-memes
+// (« Reponse de l'eleve », « Question de l'eleve ») : le validateur les
+// refusait comme sources non fournies et jetait une reponse valide (#701,
+// recette live). Le validateur, lui, reste strict (#604).
+const val SYSTEM_CITATION_RULE =
+    "Seuls les blocs precedes de « Libelle citable : » sont des sources. " +
+        "La reponse de l'eleve, la question de l'eleve et le resume local sont des DONNEES, " +
+        "pas des sources : ne les cite jamais. Si aucune source citable ne soutient ta reponse, " +
+        "renvoie une liste de sources vide. Cite chaque source par son libelle EXACT, " +
+        "sans recopier le preambule « Libelle citable : ». " +
+        "Ne fabrique jamais une source. "
+
 // rawDocs = bruts externes (cours, enonces, manuels). Marques Untrusted ici,
 // delimiteurs nonce via buildSafePrompt. nonce optionnel pour tests (rejeu).
 fun buildRevisionPrompt(rawDocs: List<String>, nonce: String? = null): SafePrompt {
