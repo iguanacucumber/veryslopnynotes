@@ -51,7 +51,7 @@ private const val REFUSAL_GENERIQUE = "L'assistant a refusé de répondre à cet
  */
 fun homeworkRefusalMessage(reason: String): String {
     val phrase =
-        if (reason.trim().lowercase() == SOURCES_INSUFFISANTES) REFUSAL_SOURCES else REFUSAL_GENERIQUE
+        if (reason.trim().equals(SOURCES_INSUFFISANTES, ignoreCase = true)) REFUSAL_SOURCES else REFUSAL_GENERIQUE
     // Bornée par construction : la phrase sort d'une table fermée, jamais du modèle.
     return phrase.take(HOMEWORK_REFUSAL_MESSAGE_MAX_CHARS)
 }
