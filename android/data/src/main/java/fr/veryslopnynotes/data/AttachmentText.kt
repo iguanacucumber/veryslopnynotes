@@ -3,6 +3,9 @@ package fr.veryslopnynotes.data
 import fr.veryslopnynotes.core.AiContext
 import fr.veryslopnynotes.core.AiContextItem
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.charset.Charset
+import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.zip.Inflater
 
@@ -63,6 +66,13 @@ object AttachmentText {
 
     /** Images envoyées au chemin vision au plus (coût borné). */
     const val MAX_VISION_ATTACHMENTS = 2
+
+    /**
+     * Charset de repli d'un texte non-UTF-8. Fermé par défaut sur ISO-8859-1
+     * si la JVM n'expose pas Windows-1252 (le JVM standard, lui, l'expose).
+     */
+    private val WINDOWS_1252: Charset =
+        runCatching { Charset.forName("windows-1252") }.getOrDefault(StandardCharsets.ISO_8859_1)
 
     /**
      * Entités NOMMÉES usuelles (français + ponctuation). Liste BORNÉE : une
@@ -182,21 +192,65 @@ object AttachmentText {
      * image, exécutable) échoue à l'un des trois.
      */
     private fun looksLikeText(bytes: ByteArray): Boolean {
-        if (bytes.isEmpty() || bytes.any { it == 0.toByte() }) return false
-        val text = try {
-            val decoder = StandardCharsets.UTF_8.newDecoder()
-                .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
-                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
-            val buffer = decoder.decode(java.nio.ByteBuffer.wrap(bytes))
-            val chars = CharArray(buffer.remaining())
-            buffer.get(chars)
-            String(chars)
-        } catch (_: Exception) {
-            return false
-        }
+        if (bytes.isEmpty()) return false
+        // Un BOM valide est du texte PAR DÉCLARATION : un `.txt` UTF-16 sans
+        // extension est plein d'octets NUL et serait refusé sans cette ligne.
+        if (bomOf(bytes) != null) return true
+        if (bytes.any { it == 0.toByte() }) return false
+        val text = strictUtf8(bytes) ?: return false
         if (text.isBlank()) return false
         val controls = text.count { it.isISOControl() && it != '\n' && it != '\t' && it != '\r' }
         return controls * 20 <= text.length
+    }
+
+    /** BOM déclaré par les premiers octets : charset et longueur à sauter. */
+    private class Bom(val charset: Charset, val length: Int)
+
+    /**
+     * BOM en tête, UTF-32 d'abord (`FF FE 00 00` commence comme UTF-16LE), puis
+     * UTF-16, puis UTF-8. Un BOM valide est une DÉCLARATION de l'émetteur : il
+     * décide du décodage, jamais l'heuristique, donc jamais de mojibake quand
+     * il existe.
+     */
+    private fun bomOf(bytes: ByteArray): Bom? {
+        fun isAt(index: Int, value: Int): Boolean = index < bytes.size && bytes[index] == value.toByte()
+        fun charsetOrNull(name: String): Charset? = runCatching { Charset.forName(name) }.getOrNull()
+
+        return when {
+            isAt(0, 0x00) && isAt(1, 0x00) && isAt(2, 0xFE) && isAt(3, 0xFF) ->
+                charsetOrNull("UTF-32BE")?.let { Bom(it, 4) }
+            isAt(0, 0xFF) && isAt(1, 0xFE) && isAt(2, 0x00) && isAt(3, 0x00) ->
+                charsetOrNull("UTF-32LE")?.let { Bom(it, 4) }
+            isAt(0, 0xEF) && isAt(1, 0xBB) && isAt(2, 0xBF) -> Bom(StandardCharsets.UTF_8, 3)
+            isAt(0, 0xFF) && isAt(1, 0xFE) -> Bom(StandardCharsets.UTF_16LE, 2)
+            isAt(0, 0xFE) && isAt(1, 0xFF) -> Bom(StandardCharsets.UTF_16BE, 2)
+            else -> null
+        }
+    }
+
+    /** Décodage UTF-8 STRICT : `null` dès qu'un octet est invalide. */
+    private fun strictUtf8(bytes: ByteArray): String? = try {
+        StandardCharsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes))
+            .toString()
+    } catch (_: Exception) {
+        null
+    }
+
+    /**
+     * Décode un fichier texte : BOM PRIORITAIRE, sinon UTF-8 STRICT, sinon
+     * Windows-1252. Le repli existe pour les exports scolaires (tableurs,
+     * vieux ENT, Pronote) qui sortent en Latin-1 : les lire en UTF-8 donnait
+     * « Ã©lÃ¨ve ». Il ne s'applique qu'à des octets NON-UTF-8, donc un vrai
+     * UTF-8 n'est jamais altéré ; Windows-1252 plutôt qu'ISO-8859-1 parce que
+     * la plage 0x80-0x9F y porte « ’ », « € » et « … » des exports Word.
+     */
+    private fun decodeText(bytes: ByteArray): String {
+        val bom = bomOf(bytes)
+        if (bom != null) return String(bytes, bom.length, bytes.size - bom.length, bom.charset)
+        return strictUtf8(bytes) ?: String(bytes, WINDOWS_1252)
     }
 
     private fun readText(
@@ -205,7 +259,7 @@ object AttachmentText {
         mime: String,
         maxChars: Int,
     ): AttachmentTextResult {
-        val raw = String(bytes, StandardCharsets.UTF_8)
+        val raw = decodeText(bytes)
             .removePrefix("\uFEFF")
             .replace("\r\n", "\n")
             .replace('\r', '\n')

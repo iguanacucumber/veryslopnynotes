@@ -2,6 +2,8 @@ package fr.veryslopnynotes.app
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Matrix
 import android.media.ExifInterface
 import java.io.ByteArrayOutputStream
@@ -24,17 +26,39 @@ object PhotoPrep {
     const val FALLBACK_QUALITY = 60
 
     /**
+     * Budget de PIXELS DÉCLARÉS par l'en-tête (~24 Mpx, soit ~96 Mo en
+     * ARGB_8888) : refusé AVANT tout décodage, sinon une bombe de
+     * décompression (20000×20000 annoncés dans un petit fichier) ferait
+     * allouer l'image entière avant d'être rejetée. Un appareil photo de
+     * téléphone reste largement sous ce plafond.
+     */
+    const val MAX_PIXELS = 24_000_000
+
+    /**
      * Décode, redresse (EXIF), redimensionne et ré-encode en JPEG.
      *
-     * `null` = image illisible ou impossible à ramener sous [MAX_BYTES].
+     * `null` = image illisible, hors budget ou impossible à ramener sous
+     * [MAX_BYTES]. `OutOfMemoryError` suit la MÊME issue : sans ce filet,
+     * l'erreur remontait au pont en « Erreur native » au lieu de « photo
+     * illisible ou trop lourde ». Les erreurs de PROGRAMMATION, elles, ne sont
+     * pas avalées.
+     *
      * Le fichier source n'est jamais supprimé ici : l'appelant le fait dans
      * un `finally`, même en cas d'échec.
      */
     fun prepare(file: File): ByteArray? {
         if (!file.isFile || file.length() <= 0L) return null
+        return try {
+            prepareImage(file)
+        } catch (_: OutOfMemoryError) {
+            null
+        }
+    }
+
+    private fun prepareImage(file: File): ByteArray? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        if (!withinPixelBudget(bounds.outWidth, bounds.outHeight)) return null
 
         val options = BitmapFactory.Options().apply {
             inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight)
@@ -58,12 +82,21 @@ object PhotoPrep {
         if (rotated !== decoded) decoded.recycle()
         val scaled = scaleDown(rotated, MAX_DIMENSION)
         if (scaled !== rotated) rotated.recycle()
+        val opaque = flatten(scaled)
+        if (opaque !== scaled) scaled.recycle()
         return try {
-            encode(scaled, JPEG_QUALITY) ?: encode(scaled, FALLBACK_QUALITY)
+            encode(opaque, JPEG_QUALITY) ?: encode(opaque, FALLBACK_QUALITY)
         } finally {
-            scaled.recycle()
+            opaque.recycle()
         }
     }
+
+    /**
+     * Le budget se lit sur les dimensions DÉCLARÉES (`inJustDecodeBounds`) :
+     * aucune allocation n'est faite pour un fichier refusé.
+     */
+    fun withinPixelBudget(width: Int, height: Int): Boolean =
+        width > 0 && height > 0 && width.toLong() * height.toLong() <= MAX_PIXELS
 
     /** Facteur d'échantillonnage puissance de deux : jamais un bitmap inutilement énorme. */
     fun sampleSize(width: Int, height: Int): Int {
@@ -121,6 +154,32 @@ object PhotoPrep {
         return try {
             Bitmap.createScaledBitmap(bitmap, width, height, true)
         } catch (_: Exception) {
+            bitmap
+        }
+    }
+
+    /**
+     * Aplatit la transparence sur du BLANC avant le JPEG : le compresseur JPEG
+     * n'a pas de canal alpha, donc un PNG/WebP transparent (capture d'écran,
+     * schéma, texte clair sur fond transparent) sortait avec des pixels NOIRS,
+     * illisibles. Mêmes dimensions, même orientation. Un bitmap déjà opaque
+     * est rendu tel quel : aucune allocation inutile sur une photo de cours.
+     */
+    private fun flatten(bitmap: Bitmap): Bitmap {
+        if (!bitmap.hasAlpha()) return bitmap
+        val flat = try {
+            Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        } catch (_: Exception) {
+            return bitmap
+        }
+        return try {
+            Canvas(flat).apply {
+                drawColor(Color.WHITE)
+                drawBitmap(bitmap, 0f, 0f, null)
+            }
+            flat
+        } catch (_: Exception) {
+            flat.recycle()
             bitmap
         }
     }
