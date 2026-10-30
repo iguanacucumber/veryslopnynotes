@@ -1,46 +1,18 @@
-// Scrape manuels via Playwright (issue #25, phase 8).
-// 0.7.0 : le compte éditeur n'est PLUS lu dans l'environnement (le serveur ne
-// détient aucun credential). Aucune URL/credential en dur : startUrl fourni par
-// l'appelant (humain, jamais commité), plateforme = nom symbolique.
-// Playwright en import dynamique optionnel : zéro dépendance ajoutée, e2e
-// skippé sans navigateur.
-// Contenu retourné = brut à marquer Untrusted (markManualsUntrusted) avant IA.
-// ponytail: squelette extraction texte générique, pas de sélecteurs par éditeur.
-// Upgrade: sélecteurs par plateforme + pagination + PDF-detect si corpus réel.
+// Scrape manuels via Playwright (#25, #634) : page -> ManualDoc.
+// Aucun credential : startUrl vient de l'appelant, jamais d'env ni du dépôt.
+// Playwright en import dynamique : e2e skippé sans navigateur.
+// Contenu brut = Untrusted avant l'IA.
 //
-// #362 : deux garde-fous ajoutés, tous deux testés (tests/unit/scraper-ssrf.test.ts).
-//  1. SSRF, trois couches : hôte analysé APRÈS normalisation WHATWG (IPv4-mapped
-//     IPv6, entiers, hex), chaîne de redirections vérifiée AVANT le navigateur
-//     (Chromium suit un 302 sans repasser par le route handler), URL FINALE
-//     re-vérifiée après navigation, sous-ressources privées coupées.
-//  2. le jar de session n'est plus choisi par l'appelant : d'abord un chemin
-//     (écriture de fichier arbitraire), puis un NOM de jar — mais le nom
-//     suffit à appeler la session d'un autre tenant.
-// #538 : le jar est celui du SERVEUR, et lui seul. Plus de nom de jar à
-//  résoudre : le navigateur ne monte jamais la session d'un autre tenant,
-//  et le corps qui demande un jar est refusé par le serveur (message dédié).
-// #419 : la garde ne s'arrête plus au NOM — le nom est RÉSOLU
-//  (server/infrastructure/ssrf.ts) et chaque adresse obtenue est testée
-//  contre les plages privées : un nom public qui pointe vers une IP interne
-//  (rebinding) est refusé AVANT la navigation, avec un motif explicite.
-//  Il reste la fenêtre TOCTOU : le navigateur résout de son côté, au moment
-//  de la connexion (cf. ssrf.ts) — un nom rebindé entre la vérification et la
-//  connexion peut donc encore partir vers une IP interne.
-// #422 : le HTML RÉCUPÉRÉ est borné (plafond de caractères AVANT le reparse
-//  cheerio) et la lecture a un DÉLAI : `page.content()` lit TOUTE la page en
-//  mémoire (50 Mo => des centaines de Mo au reparse, x2 scrapes simultanés)
-//  et n'a aucun délai natif (une page qui ne finit pas de streamer survit au
-//  délai HTTP et garde le Chromium vivant).
-// #526 : le scraper NE S'AUTHENTIFIE PAS. Le navigateur monte le jar de
-//  session du SERVEUR (#538/I24) : `username`/`password` n'étaient lus par
-//  AUCUN chemin de code (exigés par le contrat, transmis, puis jetés). Le
-//  contrat ne les exige donc plus, et le serveur REFUSE un corps qui les
-//  porte. Et une PAGE DE CONNEXION (le portail la renvoie en HTTP 200 quand
-//  la session n'est plus valable) n'est JAMAIS ingérée comme un manuel : elle
-//  deviendrait une source citée par l'assistant (« Se connecter »).
-// #634 : le MOTEUR est partagé avec une page web publique (`scrapePage`),
-//  mais une page web ne monte AUCUN jar (`useSession: false`) et refuse le
-//  contenu non textuel (`textOnly: true`).
+// Garde SSRF (I8, #362/#419/#487) : hôte normalisé WHATWG, résolu avant la
+// navigation, chaîne de redirections suivie à la main (autant que Chromium),
+// URL finale re-vérifiée, sous-ressources privées coupées. Reste la fenêtre
+// TOCTOU de la résolution côté navigateur (cf. ssrf.ts).
+// Jar de session : celui du SERVEUR uniquement (#538/I24) ; un corps qui
+// demande `authFile` est refusé.
+// Le scraper ne s'authentifie pas : `username`/`password` sont refusés (#526),
+// et une page de connexion (HTTP 200) n'est jamais ingérée.
+// HTML borné en caractères AVANT reparse et en octets avant lecture, avec
+// délai (#422/#525) : jamais `page.content()` entier.
 import { join } from "node:path";
 import { load } from "cheerio";
 import { truncateManualText } from "./manuals";
