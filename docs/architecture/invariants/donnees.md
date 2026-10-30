@@ -32,8 +32,6 @@
 - Un refus de débit (`G=25` ou 429) n'est jamais une session morte : `RateLimitedError` arme `RateLimitGate` (2 min), aucun refresh n'est tenté. La porte se lève seule à l'échéance.
 - Test : `tests/unit/kotlin-refresh-gate.test.ts`, `tests/unit/kotlin-pronote-client-parity.test.ts`, `tests/unit/kotlin-rate-limit.test.ts`, `tests/architecture/pronote-refresh.test.ts`.
 - Commande : `make check`.
-- Emplacement : `android/pronote/src/main/java/fr/veryslopnynotes/pronote/Client.kt`, `android/pronote/src/main/java/fr/veryslopnynotes/pronote/RefreshGate.kt`.
-- Commande : `make check`.
 - Emplacement : `android/pronote/src/main/java/fr/veryslopnynotes/pronote/Client.kt`,
   `android/pronote/src/main/java/fr/veryslopnynotes/pronote/RefreshGate.kt`.
 

@@ -13,11 +13,14 @@ const ROOT = join(import.meta.dir, "..", "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 const INVARIANTS = read("docs/architecture/INVARIANTS.md");
+const CONTEXT = read("docs/CONTEXT.md");
 const INVARIANTS_DIR = join(ROOT, "docs/architecture/invariants");
 // Le registre est un INDEX : les entrées détaillées vivent par thème, pour
-// qu'un agent ne lise que le fichier de l'invariant qu'il touche.
+// qu'un agent ne lise que le fichier de l'invariant qu'il touche. La procédure
+// (`OPERATING.md`) n'est pas un thème : elle ne porte aucune entrée.
+const OPERATING = "OPERATING.md";
 const DETAIL_FILES = readdirSync(INVARIANTS_DIR)
-  .filter((f) => f.endsWith(".md"))
+  .filter((f) => f.endsWith(".md") && f !== OPERATING)
   .sort();
 const DETAIL_BY_FILE = Object.fromEntries(
   DETAIL_FILES.map((f) => [f, readFileSync(join(INVARIANTS_DIR, f), "utf8")]),
@@ -108,6 +111,32 @@ export interface DetailLink {
   id: string;
   file: string;
   anchor: string;
+}
+
+/** Pointeur `invariants/<fichier>.md#<ancre>` de la carte de contexte. */
+export interface ContextPointer {
+  file: string;
+  anchor: string;
+}
+
+export function contextPointers(text: string): ContextPointer[] {
+  return [...text.matchAll(/invariants\/([\w-]+)\.md#([\w-]+)/g)].map((m) => ({
+    file: `${m[1]}.md`,
+    anchor: m[2]!,
+  }));
+}
+
+/** Erreurs de pointeur : le thème existe et porte l'ancre `<a id="…">`. */
+export function pointerErrors(
+  pointers: ContextPointer[],
+  files: Record<string, string | undefined>,
+): string[] {
+  return pointers.flatMap(({ file, anchor }) => {
+    const body = files[file];
+    if (body === undefined) return [`${file} n'existe pas`];
+    if (!body.includes(`<a id="${anchor}"></a>`)) return [`${file}#${anchor} : ancre absente`];
+    return [];
+  });
 }
 
 export function detailLinks(md: string): DetailLink[] {
@@ -240,7 +269,7 @@ describe("registre d'invariants", () => {
   test("l'index et les détails restent sous leur budget de lecture", () => {
     // Budgets de CONTEXTE, pas de style : un agent qui relit un fichier le
     // garde jusqu'à la compaction. Dépasser = revenir au registre monolithique.
-    expect({ fichier: "INVARIANTS.md", sousBudget: INVARIANTS.length <= 8_000 }).toEqual({
+    expect({ fichier: "INVARIANTS.md", sousBudget: INVARIANTS.length <= 5_500 }).toEqual({
       fichier: "INVARIANTS.md",
       sousBudget: true,
     });
@@ -339,6 +368,30 @@ describe("registre d'invariants", () => {
 
   test("chaque entrée pointe vers au moins un fichier existant", () => {
     expect({ bad: citationErrors(cited, isFile, globMatchCount) }).toEqual({ bad: [] });
+  });
+});
+
+describe("carte de contexte", () => {
+  test("CONTEXT.md reste sous son budget de lecture", () => {
+    // Une carte qu'on relit à chaque tâche coûte plus qu'elle ne rapporte.
+    expect({ fichier: "docs/CONTEXT.md", sousBudget: CONTEXT.length <= 2_500 }).toEqual({
+      fichier: "docs/CONTEXT.md",
+      sousBudget: true,
+    });
+  });
+
+  test("chaque invariant actif figure dans CONTEXT.md", () => {
+    // Un invariant absent de la carte est un invariant qu'aucun agent ne trouve.
+    for (const id of ids) {
+      expect({ id, carte: new RegExp(`\\b${id}\\b`).test(CONTEXT) }).toEqual({ id, carte: true });
+    }
+  });
+
+  test("chaque pointeur de CONTEXT.md résout vers une ancre réelle", () => {
+    // Éviter le lien mort : la carte doit mener à l'entrée, pas au thème.
+    const pointers = contextPointers(CONTEXT);
+    expect(pointers.length).toBeGreaterThan(0);
+    expect({ bad: pointerErrors(pointers, DETAIL_BY_FILE) }).toEqual({ bad: [] });
   });
 });
 

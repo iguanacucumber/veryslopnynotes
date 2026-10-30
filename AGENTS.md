@@ -45,7 +45,8 @@ du gate : [`docs/architecture/BUILD.md`](docs/architecture/BUILD.md).
   les contrats et `bun audit`. La CI rejoue exactement ce gate.
 - Le registre est un INDEX ([`docs/architecture/INVARIANTS.md`](docs/architecture/INVARIANTS.md)) ;
   le détail vit par thème dans [`docs/architecture/invariants/`](docs/architecture/invariants/).
-  Format d'entrée, budget de 120 mots et règles d'ajout : `INVARIANTS.md`.
+  Tâche → entrée : [`docs/CONTEXT.md`](docs/CONTEXT.md) ; format, budget de
+  120 mots, ajout et retrait : `OPERATING.md`.
 - Comportement et types d'abord ; un scan de source est un dernier recours.
 - Budgets de lecture et références `I<n>` vérifiés par
   `tests/architecture/docs.test.ts`.

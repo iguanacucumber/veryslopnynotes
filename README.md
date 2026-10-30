@@ -8,6 +8,7 @@
   <a href="server/README.md">Scraper</a> ·
   <a href="docs/RELEASE.md">Build & release</a> ·
   <a href="docs/architecture/INVARIANTS.md">Invariants (I1–I35)</a> ·
+  <a href="docs/CONTEXT.md">Carte de contexte</a> ·
   <a href="AGENTS.md">Contribuer</a>
 </p>
 
