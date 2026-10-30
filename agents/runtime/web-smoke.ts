@@ -10,11 +10,20 @@ import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 import { mockCall } from "../../web/src/bridge/mock";
 import { SMOKE_ROUTES } from "../../web/src/smoke-routes";
+import { bound } from "./output";
 
 const ROOT = new URL("../..", import.meta.url).pathname;
 const PORT = 4173;
 const URL_BASE = `http://127.0.0.1:${PORT}/`;
 const SHOTS = "/tmp/opencode/web-shots";
+
+/** Liste bornée : 10 lignes max, une par message, le reste dans le log
+ *  complet (`node_modules/.cache/gate-logs/<step>.log`). */
+function afficherErreurs(titre: string, step: string, messages: readonly string[]): void {
+  const lignes = messages.flatMap((m) => m.split("\n")).filter((l) => l.trim() !== "");
+  console.error(titre);
+  for (const l of bound(ROOT, step, lignes)) console.error("  " + l);
+}
 
 /**
  * Pont factice injecté dans la page : il parle le protocole natif
@@ -265,7 +274,7 @@ try {
       code = 1;
     }
     if (pageErrors.length) {
-      console.error(`erreurs console (${scenario.name}) :`, pageErrors);
+      afficherErreurs(`erreurs console (${scenario.name}) :`, "web-smoke-appairage", pageErrors);
       code = 1;
     }
     await flow.screenshot({ path: `${SHOTS}/${scenario.name}.png`, fullPage: true });
@@ -395,7 +404,7 @@ try {
       code = 1;
     }
     if (pageErrors.length) {
-      console.error("erreurs console (deconnexion) :", pageErrors);
+      afficherErreurs("erreurs console (deconnexion) :", "web-smoke-deconnexion", pageErrors);
       code = 1;
     }
     await flow.screenshot({ path: `${SHOTS}/deconnexion.png`, fullPage: true });
@@ -403,14 +412,19 @@ try {
   }
 
   if (errors.length) {
-    console.error("erreurs console :", errors);
+    afficherErreurs("erreurs console :", "web-smoke", errors);
     code = 1;
   } else if (code === 0) {
     console.log(`web-smoke : OK (${SMOKE_ROUTES.length} routes, 0 erreur console, pas de débordement)`);
   }
   await browser.close();
 } catch (e) {
-  console.error("web-smoke : ÉCHEC", e);
+  // Premier item seulement (le message), le reste (pile) dans le log : une
+  // pile Playwright fait des centaines de lignes.
+  const dump = e instanceof Error ? (e.stack ?? e.message) : String(e);
+  const lignes = dump.split("\n").filter((l) => l.trim() !== "");
+  console.error("web-smoke : ÉCHEC");
+  for (const l of bound(ROOT, "web-smoke-echec", lignes, 1)) console.error("  " + l);
   code = 1;
 } finally {
   preview.kill();
