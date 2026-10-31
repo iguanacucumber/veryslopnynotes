@@ -7,6 +7,20 @@ export function Page({ children, className = "" }: { children: ReactNode; classN
   return <div className={`stack ${className}`}>{children}</div>;
 }
 
+/** Un BOUTON, pas un `href="#main"` : le HashRouter possède déjà le hash de
+ *  l'URL, un tel lien changerait de route. Masqué tant qu'il n'a pas le focus. */
+export function SkipLink() {
+  return (
+    <button
+      type="button"
+      className="skip-link"
+      onClick={() => document.getElementById("main")?.focus()}
+    >
+      Aller au contenu
+    </button>
+  );
+}
+
 export function PageHeading({
   title,
   eyebrow,

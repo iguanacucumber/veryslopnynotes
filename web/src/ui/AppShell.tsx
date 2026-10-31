@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "./AppContext";
 import { bridge } from "../bridge/client";
-import { Avatar } from "./components";
+import { Avatar, SkipLink } from "./components";
 import { HomeWallpaper } from "./HomeWallpaper";
 import {
   isSafePhotoDataUrl,
@@ -131,6 +131,7 @@ export function Shell() {
 
   return (
     <div className={isHome ? "shell shell--home" : "shell"}>
+      <SkipLink />
       {isHome ? <HomeWallpaper /> : null}
       <header className={isHome ? "topbar topbar--home" : "topbar"}>
         <div className="topbar__inner">
