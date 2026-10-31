@@ -11,7 +11,7 @@ import {
   Section,
   SubjectMark,
 } from "../../ui/components";
-import { IconBook, IconDownload } from "../../ui/icons";
+import { IconBook, IconChevronRight, IconDownload } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
 import { MarkdownBody } from "./MarkdownBody";
 import {
@@ -145,7 +145,7 @@ export function RevisionSheetsScreen() {
   const hasSheets = list.length > 0;
 
   return (
-    <Page>
+    <Page className="ai revision-sheets">
       <PageHeading
         eyebrow="Assistant"
         title="Fiches de révision"
@@ -157,25 +157,30 @@ export function RevisionSheetsScreen() {
           ) : null
         }
       />
+      <p className="revision-sheets__lede">
+        Des fiches générées depuis tes devoirs, à relire ici ou à exporter en PDF.
+      </p>
 
       {error ? <ErrorBox message={error} /> : null}
 
       {sheets !== null && list.length === 0 ? (
-        <EmptyState
-          icon={<IconBook size={30} />}
-          title="Aucune fiche de révision"
-          body="Ouvre un devoir dans Tâches et touche « Fiche de révision » : elle apparaîtra ici."
-          action={
-            <div className="row" style={{ gap: 8, justifyContent: "center" }}>
-              <button type="button" className="btn btn--small" onClick={() => navigate("/tasks")}>
-                Voir les devoirs
-              </button>
-              <button type="button" className="btn btn--ghost btn--small" onClick={() => void load()}>
-                Actualiser
-              </button>
-            </div>
-          }
-        />
+        <div className="revision-empty">
+          <EmptyState
+            icon={<IconBook size={30} />}
+            title="Aucune fiche de révision"
+            body="Ouvre un devoir dans Tâches et touche « Fiche de révision » : elle apparaîtra ici."
+            action={
+              <div className="row" style={{ gap: 8, justifyContent: "center" }}>
+                <button type="button" className="btn btn--small" onClick={() => navigate("/tasks")}>
+                  Voir les devoirs
+                </button>
+                <button type="button" className="btn btn--ghost btn--small" onClick={() => void load()}>
+                  Actualiser
+                </button>
+              </div>
+            }
+          />
+        </div>
       ) : null}
 
       {hasSheets ? (
@@ -187,19 +192,22 @@ export function RevisionSheetsScreen() {
             </button>
           }
         >
-          <div className="list">
+          <div className="list revision-library">
             {list.map((sheet) => {
               const opened = selected?.id === sheet.id;
               const bodyId = `sheet-body-${sheet.id}`;
               return (
-                <Card key={sheet.id} as="article" className="revision-card">
+                <Card key={sheet.id} as="article" className="revision-card ai-doc">
                   <div className="revision-card__head">
+                    <span className="ai-doc__mark" aria-hidden="true">
+                      <IconBook size={17} />
+                    </span>
                     <div className="grow">
                       <div className="revision-card__title-row">
                         <SubjectMark subject={sheet.subject} size={12} />
                         <h3 className="revision-card__title">{sheet.title}</h3>
                       </div>
-                      <span className="tiny muted">{sheetMeta(sheet)}</span>
+                      <span className="revision-card__meta">{sheetMeta(sheet)}</span>
                     </div>
                   </div>
 
@@ -219,6 +227,10 @@ export function RevisionSheetsScreen() {
                       onClick={() => (opened ? close() : void open(sheet.id))}
                     >
                       {opened ? "Fermer" : "Ouvrir"}
+                      <IconChevronRight
+                        size={15}
+                        className={`revision-card__chevron${opened ? " revision-card__chevron--open" : ""}`}
+                      />
                     </button>
                     <button
                       type="button"

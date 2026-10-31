@@ -2,13 +2,15 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { Dialog } from "../../ui/Dialog";
 import { useApp } from "../../ui/AppContext";
 import {
+  IconArrowUp,
   IconBook,
   IconCamera,
   IconCheck,
   IconChevronRight,
-  IconSend,
+  IconRefresh,
   IconSparkles,
 } from "../../ui/icons";
+import { CopyTextButton } from "../../ui/CopyTextButton";
 import { MarkdownBody } from "../revisions/MarkdownBody";
 import { relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
@@ -98,7 +100,7 @@ function Activity({
   const elapsed = Math.max(0, Math.floor((now - (phases[0]?.at ?? now)) / 1000));
 
   return (
-    <div className="hw-activity" role="status" aria-live="polite">
+    <div className="hw-activity ai-thinking" role="status" aria-live="polite">
       <div className="hw-activity__head">
         <span className="hw-activity__pulse" aria-hidden="true" />
         <span className="hw-activity__title">L’assistant travaille</span>
@@ -170,19 +172,19 @@ function AssistantTurn({
 }) {
   const unsourced = !loading && turn.answer !== null && turn.sources.length === 0;
   return (
-    <div className="hw-assistant">
-      <div className="hw-assistant__head">
-        <span className="hw-assistant__avatar" aria-hidden="true">
+    <div className="hw-assistant ai-turn ai-turn--assistant">
+      <div className="hw-assistant__head ai-turn__head">
+        <span className="hw-assistant__avatar ai-mark" aria-hidden="true">
           <IconSparkles size={15} />
         </span>
-        <span className="hw-assistant__who">Assistant devoirs</span>
+        <span className="hw-assistant__who ai-turn__who">Assistant devoirs</span>
         {unsourced ? <span className="hw-assistant__badge">non sourcée</span> : null}
       </div>
 
       {loading ? <Activity phases={phases} loading photo={photo} /> : null}
 
       {turn.answer ? (
-        <div className="hw-assistant__answer">
+        <div className="hw-assistant__answer ai-turn__body">
           <MarkdownBody text={turn.answer} />
         </div>
       ) : null}
@@ -210,9 +212,11 @@ function AssistantTurn({
       {turn.sources.length > 0 ? (
         <div className="hw-sources">
           <span className="hw-sources__label">Sources citées</span>
-          <ul className="hw-sources__list">
+          <ul className="hw-sources__list ai-sources__list">
             {turn.sources.map((source, index) => (
-              <li key={`${index}:${source}`}>{source}</li>
+              <li key={`${index}:${source}`} className="ai-source">
+                {source}
+              </li>
             ))}
           </ul>
         </div>
@@ -222,47 +226,47 @@ function AssistantTurn({
         <div className="hw-refusal" role="status">
           <p>{turn.refusal}</p>
           {interactive ? (
-          <div className="hw-actions">
-            {turn.actions.map((action) => {
-              const label = actionLabel(action);
-              if (!label) return null;
-              if (action === "add_course") {
-                return (
-                  <button key={action} type="button" className="btn btn--ghost btn--small" onClick={onAddCourse}>
-                    <IconBook size={16} />
-                    {label}
-                  </button>
-                );
-              }
-              if (action === "enable_manual") {
-                return (
-                  <button key={action} type="button" className="btn btn--ghost btn--small" onClick={onEnableManual}>
-                    {label}
-                  </button>
-                );
-              }
-              if (action === "open_attachment" && attachment) {
-                return (
-                  <button
-                    key={action}
-                    type="button"
-                    className="btn btn--ghost btn--small"
-                    onClick={() => onOpenAttachment(attachment)}
-                  >
-                    {label}
-                  </button>
-                );
-              }
-              if (action === "proceed_anyway") {
-                return (
-                  <button key={action} type="button" className="btn btn--ghost btn--small" onClick={onProceed}>
-                    {label}
-                  </button>
-                );
-              }
-              return null;
-            })}
-          </div>
+            <div className="hw-actions">
+              {turn.actions.map((action) => {
+                const label = actionLabel(action);
+                if (!label) return null;
+                if (action === "add_course") {
+                  return (
+                    <button key={action} type="button" className="btn btn--ghost btn--small" onClick={onAddCourse}>
+                      <IconBook size={16} />
+                      {label}
+                    </button>
+                  );
+                }
+                if (action === "enable_manual") {
+                  return (
+                    <button key={action} type="button" className="btn btn--ghost btn--small" onClick={onEnableManual}>
+                      {label}
+                    </button>
+                  );
+                }
+                if (action === "open_attachment" && attachment) {
+                  return (
+                    <button
+                      key={action}
+                      type="button"
+                      className="btn btn--ghost btn--small"
+                      onClick={() => onOpenAttachment(attachment)}
+                    >
+                      {label}
+                    </button>
+                  );
+                }
+                if (action === "proceed_anyway") {
+                  return (
+                    <button key={action} type="button" className="btn btn--ghost btn--small" onClick={onProceed}>
+                      {label}
+                    </button>
+                  );
+                }
+                return null;
+              })}
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -272,6 +276,18 @@ function AssistantTurn({
           <p>{turn.error}</p>
           {interactive ? (
             <button type="button" className="btn btn--small" onClick={onRetry}>
+              Réessayer
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {turn.answer ? (
+        <div className="hw-turn-actions ai-actions">
+          <CopyTextButton text={turn.answer} />
+          {interactive ? (
+            <button type="button" className="ai-action" onClick={onRetry}>
+              <IconRefresh size={16} />
               Réessayer
             </button>
           ) : null}
@@ -357,10 +373,10 @@ export function HomeworkChat({
       onClose={onClose}
       actions={null}
     >
-      <div className="hw-chat" style={{ "--hw-tint": tinted } as CSSProperties}>
+      <div className="hw-chat ai" style={{ "--hw-tint": tinted } as CSSProperties}>
         <div
           ref={logRef}
-          className="hw-log"
+          className="hw-log ai-log"
           role="log"
           aria-live="polite"
           aria-relevant="additions text"
@@ -378,6 +394,13 @@ export function HomeworkChat({
             </span>
             <span className="hw-context__subject">{subjectDisplayFr(assignment.subject)}</span>
             {due ? <span className="hw-context__due">{due}</span> : null}
+            {lessonReady ? (
+              <span className="hw-context__chip">
+                <IconBook size={13} />
+                Cahier
+              </span>
+            ) : null}
+            {manualReady ? <span className="hw-context__chip">Manuel</span> : null}
             {state.photo ? (
               <span className="hw-context__chip">
                 <IconCamera size={13} />
@@ -386,7 +409,7 @@ export function HomeworkChat({
             ) : null}
           </div>
 
-          <div className="hw-user">
+          <div className="hw-user hw-user--assignment">
             <span className="hw-user__who">Ton devoir</span>
             <div className="hw-user__bubble">
               {assignment.title ? <p className="hw-user__title">{assignment.title}</p> : null}
@@ -440,11 +463,33 @@ export function HomeworkChat({
           </div>
 
           {!state.loading && !last.answer && !last.refusal && !last.error ? (
-            <p className="hw-empty tiny muted">Pose une question pour continuer l’explication.</p>
+            <div className="hw-starters">
+              <p className="hw-empty tiny muted">Pose une question pour démarrer l’explication.</p>
+              <div className="ai-prompts">
+                {[
+                  "Explique-moi la consigne",
+                  "Donne-moi juste un indice",
+                  "Aide-moi à commencer",
+                ].map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    className="ai-prompt"
+                    onClick={() => {
+                      stickRef.current = true;
+                      onSend(suggestion);
+                    }}
+                  >
+                    {suggestion}
+                    <IconChevronRight size={16} />
+                  </button>
+                ))}
+              </div>
+            </div>
           ) : null}
         </div>
 
-        <div className="hw-foot">
+        <div className="hw-foot hw-foot--ai">
           {!state.loading && (last.answer || last.refusal) ? (
             <div className="hw-suggestions" aria-label="Questions rapides">
               {[
@@ -469,7 +514,7 @@ export function HomeworkChat({
           ) : null}
 
           <form
-            className="hw-composer"
+            className="hw-composer ai-composer"
             onSubmit={(event) => {
               event.preventDefault();
               send();
@@ -480,7 +525,7 @@ export function HomeworkChat({
             </label>
             <textarea
               id={composerId}
-              className="hw-composer__input"
+              className="hw-composer__input ai-composer__input"
               rows={1}
               maxLength={900}
               value={draft}
@@ -502,15 +547,15 @@ export function HomeworkChat({
             />
             <button
               type="submit"
-              className="hw-composer__send"
+              className="hw-composer__send ai-composer__send"
               disabled={!canSend}
               aria-label="Envoyer la question"
             >
-              <IconSend size={20} />
+              <IconArrowUp size={20} />
             </button>
           </form>
 
-          <div className="hw-foot__meta">
+          <div className="hw-foot__meta ai-meta">
             <details className="hw-privacy">
               <summary>Ce qui est envoyé</summary>
               <p className="tiny muted">{privacy}</p>

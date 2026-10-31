@@ -314,7 +314,7 @@ export function CourseNotesScreen() {
   const editorBusy = saving || (photoBusy !== null && editor?.fromPhoto === true);
 
   return (
-    <Page>
+    <Page className="course-notes">
       <PageHeading
         eyebrow="Mémoire de l'assistant"
         title="Cahier de cours"

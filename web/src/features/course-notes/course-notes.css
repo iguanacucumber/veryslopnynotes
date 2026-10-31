@@ -1,6 +1,10 @@
-.course-notes-privacy {
+/* Le cahier est une mémoire, pas un formulaire : des documents par matière,
+   une seule note de confidentialité, et le manuel en réglage discret. */
+.course-notes .course-notes-privacy {
   padding: 0;
   overflow: hidden;
+  border: 1px solid var(--ai-line, var(--border-soft));
+  border-radius: 20px;
 }
 
 .course-notes-privacy__details {
@@ -36,11 +40,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   flex: 0 0 auto;
-  border-radius: var(--radius-xs);
-  background: var(--panel-tint);
+  border-radius: 50%;
+  background: var(--brand-pale);
   color: var(--brand-deep);
 }
 
@@ -67,7 +71,8 @@
 }
 
 .course-notes-subject {
-  padding: 14px;
+  padding: 17px;
+  border-radius: 20px;
 }
 
 .course-notes-subject__head {
@@ -84,7 +89,7 @@
 
 .course-notes-subject__title {
   margin: 0;
-  font-size: 17px;
+  font-size: 18px;
   line-height: 24px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -102,9 +107,9 @@
   display: flex;
   align-items: center;
   min-height: 44px;
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px solid var(--rule);
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ai-line, var(--rule));
 }
 
 .course-notes-manual__label {
@@ -126,10 +131,10 @@
   align-items: center;
   min-height: 24px;
   padding: 1px 9px;
-  border-radius: var(--radius-xs);
+  border-radius: 100px;
   font-size: 12px;
   line-height: 16px;
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .course-notes-status--on {
@@ -156,11 +161,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-xs);
-  background: var(--surface-variant);
-  color: var(--muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--panel-tint);
+  color: var(--brand-deep);
+}
+
+@media (max-width: 420px) {
+  .course-notes-privacy__body {
+    padding-left: 14px;
+  }
 }
 
 .course-notes-subject__actions {

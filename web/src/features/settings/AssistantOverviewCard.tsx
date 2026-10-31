@@ -1,20 +1,22 @@
 import { useApp } from "../../ui/AppContext";
 import { Card, Divider } from "../../ui/components";
-import { IconBook, IconSparkles } from "../../ui/icons";
+import { IconBook, IconChevronRight, IconSparkles } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
 
 export function AssistantOverviewCard({ configured }: { configured: boolean }) {
   const { storageUnavailable } = useApp();
   const navigate = useViewNavigate();
   return (
-    <Card className="card--flat">
-      <div className="row" style={{ alignItems: "flex-start" }}>
-        <span className="settings-assistant__icon" aria-hidden="true">
-          <IconSparkles size={20} />
+    <Card className="card--flat assistant-overview ai">
+      <div className="assistant-overview__head">
+        <span className="ai-mark ai-mark--lg" aria-hidden="true">
+          <IconSparkles size={22} />
         </span>
         <div className="grow">
-          <strong style={{ display: "block" }}>{configured ? "Assistant actif" : "Aucune clé"}</strong>
-          <p className="tiny muted" style={{ margin: "2px 0 0" }}>
+          <strong className="assistant-overview__status">
+            {configured ? "Assistant actif" : "Aucune clé"}
+          </strong>
+          <p className="assistant-overview__body">
             {configured
               ? storageUnavailable
                 ? "Clé en mémoire seulement : elle sera oubliée à la fermeture de l'app."
@@ -26,17 +28,35 @@ export function AssistantOverviewCard({ configured }: { configured: boolean }) {
 
       <Divider />
 
-      <p className="tiny muted" style={{ margin: "10px 0 6px" }}>
-        Sources de l’assistant
-      </p>
-      <div className="row row--wrap">
-        <button type="button" className="btn btn--ghost btn--small" onClick={() => navigate("/course-notes")}>
-          <IconBook size={16} />
-          Cahier de cours
+      <p className="assistant-overview__label">Sources de l’assistant</p>
+      <div className="assistant-overview__links">
+        <button
+          type="button"
+          className="assistant-link"
+          onClick={() => navigate("/course-notes")}
+        >
+          <span className="assistant-link__icon" aria-hidden="true">
+            <IconBook size={17} />
+          </span>
+          <span className="grow">
+            <strong>Cahier de cours</strong>
+            <span className="tiny muted">La mémoire de tes matières</span>
+          </span>
+          <IconChevronRight size={16} />
         </button>
-        <button type="button" className="btn btn--ghost btn--small" onClick={() => navigate("/revision-sheets")}>
-          <IconSparkles size={16} />
-          Fiches de révision
+        <button
+          type="button"
+          className="assistant-link"
+          onClick={() => navigate("/revision-sheets")}
+        >
+          <span className="assistant-link__icon" aria-hidden="true">
+            <IconSparkles size={17} />
+          </span>
+          <span className="grow">
+            <strong>Fiches de révision</strong>
+            <span className="tiny muted">Générées depuis un devoir</span>
+          </span>
+          <IconChevronRight size={16} />
         </button>
       </div>
     </Card>

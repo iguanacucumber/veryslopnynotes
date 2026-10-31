@@ -70,9 +70,13 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
     <>
       <AssistantOverviewCard configured={llmConfigured} />
 
-      <Card className="card--flat">
-        <strong style={{ display: "block" }}>Connexion OpenRouter</strong>
-        <label className="tiny muted" htmlFor="llm-key" style={{ display: "block", marginTop: 12 }}>
+      <Card className="card--flat assistant-key ai">
+        <strong className="assistant-key__title">Connexion OpenRouter</strong>
+        <p className="assistant-key__body">
+          L’assistant utilise ton compte OpenRouter. La clé est enregistrée sur cet appareil ;
+          elle part directement au fournisseur avec chaque demande.
+        </p>
+        <label className="assistant-key__label" htmlFor="llm-key">
           Clé OpenRouter
         </label>
         <div className="row">
