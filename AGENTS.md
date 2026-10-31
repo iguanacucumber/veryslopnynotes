@@ -38,6 +38,9 @@ Une loi ne change que par ADR. Une PR qui la viole est refusée.
    push, corps de PR), puis `gh pr create`, `gh pr merge --merge
    --delete-branch` et `gh issue close`. Enfin `git fetch --prune`.
 5. **Incident.** Même échec trois fois ⇒ issue incident.
+6. **Livraison par défaut.** Gate vert ⇒ committer et pousser la branche sans
+   attendre une demande. Jamais de push direct sur `main` : le merge reste une
+   PR. Un push échoué se signale, il ne se masque pas.
 
 `make check-fast` (~2,1 s à chaud) saute `android-compile` seulement. Détail
 du gate : [`docs/architecture/BUILD.md`](docs/architecture/BUILD.md).
