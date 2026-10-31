@@ -19,7 +19,6 @@ import { relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
 import type { AiContextSourceMeta } from "../../bridge/types";
 import {
-  aiContextTypeFr,
   subjectDisplayFr,
   type Assignment,
   type AssignmentAttachment,
@@ -192,7 +191,6 @@ function AssistantTurn({
 
       {unsourced ? (
         <p className="hw-unsourced">
-          <span className="hw-unsourced__badge">non sourcée</span>
           Cette réponse vient des connaissances générales du modèle : aucun document ne la soutient.
         </p>
       ) : null}
@@ -276,7 +274,7 @@ function AssistantTurn({
           {interactive ? (
             <button type="button" className="ai-action" onClick={onRetry}>
               <IconRefresh size={16} />
-              Réessayer
+              Régénérer
             </button>
           ) : null}
         </div>
@@ -472,7 +470,7 @@ export function HomeworkChat({
               </div>
             ) : null}
 
-            {!state.loading && (last.answer || last.refusal) ? (
+            {!state.loading && last.answer ? (
               <div className="hw-suggestions" aria-label="Questions rapides">
                 {[
                   "Explique plus simplement",
@@ -551,14 +549,10 @@ export function HomeworkChat({
               <summary>Ce qui est envoyé</summary>
               <p className="tiny muted">{privacy}</p>
               {last.context && last.context.length > 0 ? (
-                <ul className="hw-privacy__list tiny muted">
-                  {last.context.map((source, index) => (
-                    <li key={`${source.type}:${source.label}:${index}`}>
-                      {aiContextTypeFr(source.type)} — {source.label} ({source.chars} caractères
-                      {source.truncated ? ", tronquée" : ""})
-                    </li>
-                  ))}
-                </ul>
+                <p className="tiny muted">
+                  Contexte : {last.context.length} source{last.context.length > 1 ? "s" : ""} —{" "}
+                  {last.context.reduce((sum, source) => sum + source.chars, 0)} caractères.
+                </p>
               ) : null}
             </details>
             <span className="tiny muted hw-foot__paid">1 question = 1 appel.</span>

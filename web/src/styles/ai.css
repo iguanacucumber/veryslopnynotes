@@ -393,8 +393,8 @@
   justify-content: space-between;
   gap: 4px 10px;
   color: var(--secondary);
-  font-size: 11px;
-  line-height: 15px;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .ai-meta details summary {

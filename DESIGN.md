@@ -276,17 +276,22 @@ pastilles sont à `999px`.
   actions d'icône de 44 px (nouvelle discussion, supprimer), puis les modes en
   capsules de 34 px. L'écran de discussion occupe la hauteur utile : seul le
   fil défile, le compositeur est épinglé au-dessus du dock, et le changement de
-  matière d'un fil existant demande confirmation.
+  matière d'un fil existant demande confirmation. Le mark du professeur prend
+  la teinte de la matière. Erreurs et refus vivent dans le fil, après la
+  question ; « Régénérer » et des puces de suivi compactes suivent la dernière
+  réponse. Les sources citées ne sont listées qu'une fois : le détail « Ce qui
+  est envoyé » donne des comptes, pas les libellés.
 - **Assistant** : mark circulaire pâle, réponse en texte pleine largeur
   16 / 26 (15 / 25 sur petit écran), question en bulle compacte à droite
   (rayon 22 px, coin bas droit à 8 px). Dans Aide devoirs, le contexte
   (matière, échéance, sources) reste collé en haut du fil. Sources en pastilles
-  de 12 px, actions Copier / Réessayer en texte secondaire de 44 px,
+  de 12 px, actions Copier / Régénérer en texte secondaire de 44 px,
   suggestions en lignes de 52 px bordées, placées après la dernière réponse.
-  Compositeur en capsule bordée, envoi circulaire plein encre de 38 px. Le
-  statut de réflexion commun est un pouls avec temps écoulé. Les fiches sont
-  des documents : mark, titre 18 / 700, aperçu sur deux lignes, corps markdown
-  mesuré.
+  Un seul badge « non sourcée » par réponse. Compositeur en capsule bordée,
+  envoi circulaire plein encre de 38 px. Le statut de réflexion commun est un
+  pouls avec temps écoulé. Les métadonnées ne descendent pas sous 12 px. Les
+  fiches sont des documents : mark, titre 18 / 700, aperçu sur deux lignes,
+  corps markdown mesuré.
 - **Suivi du fil** : le journal ne recolle au bas que si l'élève y était déjà ;
   sinon une pastille « Dernière réponse » de 44 px y ramène. Le fil fermé
   d'Aide devoirs reste en mémoire de l'écran : le rouvrir ne relance pas

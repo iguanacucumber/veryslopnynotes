@@ -189,6 +189,25 @@ export function TeacherRoute() {
     void sendCurrent(pending.text, history, proceedAnyway);
   }
 
+  /** Même question que la dernière réponse, sans empiler un faux tour : la
+   *  réponse remplacée disparaît de l'écran et du disque au prochain succès. */
+  function regenerate(): void {
+    if (loading) return;
+    const current = messagesRef.current;
+    const last = current[current.length - 1];
+    if (last?.role !== "teacher") return;
+    let index = -1;
+    for (let i = current.length - 1; i >= 0; i -= 1) {
+      if (current[i]?.role === "student") {
+        index = i;
+        break;
+      }
+    }
+    const question = index >= 0 ? current[index] : null;
+    if (!question || question.role !== "student") return;
+    void sendCurrent(question.text, current.slice(0, index));
+  }
+
   function reject(index: number): void {
     const next = rejectTeacherAnswer(messagesRef.current, index);
     applyMessages(next);
@@ -293,6 +312,7 @@ export function TeacherRoute() {
         onSend={send}
         onAsk={ask}
         onRetry={retry}
+        onRegenerate={regenerate}
         onReject={reject}
         onNewDiscussion={() => setConfirmAction("new")}
         onDelete={() => setConfirmAction("delete")}
