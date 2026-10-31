@@ -11,6 +11,77 @@
   --ai-reading-line: 26px;
 }
 
+.ai-log-wrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Pastille de retour : elle n'apparaît que si le fil a grandi pendant que
+   l'élève lisait plus haut. Cible tactile pleine, posée sur le fil. */
+.ai-jump {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--ai-line);
+  border-radius: 100px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  transform: translateX(-50%);
+}
+
+.ai-jump svg {
+  color: var(--secondary);
+}
+
+.ai-thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+}
+
+.ai-pulse {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 100px;
+  background: var(--brand);
+  animation: ai-pulse 1.4s var(--ease) infinite;
+}
+
+.ai-thinking__title {
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-thinking__time {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes ai-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
 .ai-mark {
   display: inline-flex;
   align-items: center;

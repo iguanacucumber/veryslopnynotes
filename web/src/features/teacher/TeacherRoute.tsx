@@ -3,7 +3,7 @@ import { bridge } from "../../bridge/client";
 import { BridgeCallError, type TeacherMessage, type TeacherMode } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
 import { Dialog } from "../../ui/Dialog";
-import { IconTrash } from "../../ui/icons";
+import { IconTrash, IconWarning } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
 import {
   appendTeacherAnswer,
@@ -50,6 +50,7 @@ export function TeacherRoute() {
   const [focusTick, setFocusTick] = useState(0);
   const [reload, setReload] = useState(0);
   const [confirmAction, setConfirmAction] = useState<null | "delete" | "new">(null);
+  const [subjectAsk, setSubjectAsk] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const seq = useRef(0);
   // Toutes les écritures du fil passent par cette file : un enregistrement ne
@@ -195,8 +196,7 @@ export function TeacherRoute() {
     persist(subject, next);
   }
 
-  function changeSubject(next: string): void {
-    if (next === subject) return;
+  function applySubject(next: string): void {
     seq.current += 1;
     setSubject(next);
     applyMessages([]);
@@ -210,6 +210,17 @@ export function TeacherRoute() {
     // La file garantit que cette suppression passe APRÈS les enregistrements
     // déjà demandés.
     void writes(() => bridge.deleteTeacherThread()).catch(() => {});
+  }
+
+  function changeSubject(next: string): void {
+    if (next === subject) return;
+    // Un fil existant ne disparaît pas sur un changement de sélecteur : la
+    // confirmation protège le seul exemplaire local de la discussion.
+    if (messagesRef.current.length > 0) {
+      setSubjectAsk(next);
+      return;
+    }
+    applySubject(next);
   }
 
   async function clearThread(): Promise<void> {
@@ -320,6 +331,35 @@ export function TeacherRoute() {
           </>
         }
         onClose={() => setConfirmAction(null)}
+      />
+      <Dialog
+        open={subjectAsk !== null}
+        title="Changer de matière ?"
+        description={
+          subjectAsk
+            ? `La discussion en cours sera effacée de cet appareil et une nouvelle commencera en ${subjectAsk}. Aucun envoi ne sera fait.`
+            : undefined
+        }
+        icon={<IconWarning size={20} />}
+        actions={
+          <>
+            <button type="button" className="btn btn--ghost" onClick={() => setSubjectAsk(null)}>
+              Annuler
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => {
+                const next = subjectAsk;
+                setSubjectAsk(null);
+                if (next) applySubject(next);
+              }}
+            >
+              Changer
+            </button>
+          </>
+        }
+        onClose={() => setSubjectAsk(null)}
       />
     </>
   );

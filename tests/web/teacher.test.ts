@@ -256,7 +256,7 @@ describe("écran Prof — rendu (#633)", () => {
   test("chargement : un statut explicite, jamais une bulle vide", () => {
     const html = renderView({ loading: true });
     expect(html).toContain("Le professeur réfléchit");
-    expect(html).toContain("spinner");
+    expect(html).toContain("ai-pulse");
     expect(html).toContain("role=\"status\"");
   });
 
@@ -344,6 +344,12 @@ describe("écran Prof — câblage (#633)", () => {
     expect(route).toContain("bridge.saveTeacherThread(");
     expect(route).toContain("bridge.deleteTeacherThread()");
     expect(route).not.toMatch(/\bfetch\(|WebSocket|EventSource/);
+  });
+
+  test("changer de matière avec un fil demande confirmation avant de l'effacer", () => {
+    expect(route).toContain("if (messagesRef.current.length > 0)");
+    expect(route).toContain("Changer de matière ?");
+    expect(route).toContain("setSubjectAsk(next)");
   });
 
   test("après une réponse, le focus va au dernier tour du professeur", () => {

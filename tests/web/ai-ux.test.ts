@@ -170,6 +170,12 @@ describe("IA — aide devoirs", () => {
     expect(choose).toContain("askPhoto(assignment, source)");
   });
 
+  test("rouvrir l'aide devoirs relit le fil gardé, sans nouvel appel", () => {
+    expect(tasks).toContain("threadsRef.current.get(assignment.id)");
+    expect(tasks).toContain("const kept = storedThread(help)");
+    expect(tasks).toContain("onHelp={() => openHelp(assignment)}");
+  });
+
   test("le chat est un dialogue modal qui rend le focus (#610)", () => {
     const dialog = source("ui/Dialog.tsx");
     expect(tasks).toContain("<HomeworkChat");

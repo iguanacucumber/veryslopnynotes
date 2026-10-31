@@ -6,6 +6,25 @@
   margin-top: 12px;
 }
 
+/* Le fil occupe la hauteur utile : en-tête et dock sont déjà soustraits par
+   la coquille. Sans cette hauteur, la page ET le journal défilaient ensemble. */
+.teacher--chat {
+  height: max(
+    240px,
+    calc(
+      var(--app-height) - 56px - var(--safe-top) - 8px - var(--tabbar-h) - 20px -
+        var(--safe-bottom) - var(--keyboard-bottom)
+    )
+  );
+  gap: 10px;
+}
+
+.teacher--chat .teacher-workspace {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
 .teacher-tabs {
   display: flex;
   gap: 4px;
@@ -41,43 +60,34 @@
 
 .teacher-chat {
   display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-width: 0;
-}
-
-/* Les réglages tiennent sur une ligne au-dessus du fil, séparés par un filet :
-   ils restent accessibles sans disputer la place à la conversation. */
-.teacher-controls {
-  display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 10px;
-  padding-bottom: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Les réglages tiennent sur deux lignes compactes au-dessus du fil :
+   matière + actions, puis modes. Le fil garde l'essentiel. */
+.teacher-controls {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--ai-line);
 }
 
 .teacher-controls__top {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px 12px;
+  align-items: center;
+  gap: 8px;
 }
 
 .teacher-subject {
   display: flex;
-  flex: 1 1 200px;
-  flex-direction: column;
-  gap: 5px;
+  flex: 1 1 auto;
   min-width: 0;
-}
-
-.teacher-subject__label {
-  color: var(--secondary);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
 }
 
 .teacher-subject__select {
@@ -85,7 +95,7 @@
   min-height: 44px;
   padding: 0 12px;
   border: 1px solid var(--ai-line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface);
   color: var(--ink);
   font-size: 15px;
@@ -100,24 +110,20 @@
 
 .teacher-chat__actions {
   display: flex;
-  flex-wrap: wrap;
   gap: 2px;
 }
 
 .teacher-action {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 0 10px;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   border: 0;
   border-radius: 100px;
   background: transparent;
   color: var(--secondary);
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 600;
-  white-space: nowrap;
   transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
@@ -138,9 +144,8 @@
 
 .teacher-modes {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 6px 8px;
+  gap: 6px;
   margin: 0;
   padding: 0;
   border: 0;
@@ -148,7 +153,6 @@
 
 .teacher-modes__options {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -173,7 +177,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
+  min-height: 34px;
   padding: 0 14px;
   border-radius: 100px;
   background: var(--ai-bubble);
@@ -204,14 +208,6 @@
   cursor: not-allowed;
 }
 
-.teacher-mode__hint {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--secondary);
-  font-size: 12px;
-  line-height: 17px;
-}
-
 .teacher-refusal {
   display: flex;
   flex-direction: column;
@@ -236,14 +232,17 @@
    place, même sur un fil de quarante tours. */
 .teacher-log {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 26px;
-  min-height: 180px;
-  max-height: min(58vh, 560px);
+  gap: 22px;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 2px 2px 8px;
-  scroll-behavior: smooth;
+}
+
+.teacher-log > * {
+  flex: 0 0 auto;
 }
 
 .teacher-log > .empty {
@@ -252,7 +251,24 @@
 
 .teacher-empty {
   margin: auto 0;
-  padding: 30px 8px 18px;
+  padding: 12px 8px 10px;
+}
+
+.teacher-empty .ai-hero__title {
+  font-size: 22px;
+  line-height: 28px;
+}
+
+.teacher-empty .ai-hero__body {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.teacher-empty .ai-prompt {
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 19px;
 }
 
 /* Une réponse n'est pas une bulle : elle occupe la largeur utile et se lit
@@ -411,15 +427,17 @@
   margin-left: -10px;
 }
 
-/* Le compositeur se colle au-dessus du dock : le geste principal reste visible
-   quand le fil défile, sans ajouter de barre pleine largeur. */
+/* Le compositeur reste au bas du fil, au-dessus du dock : le geste principal
+   ne dépend pas du défilement, sans ajouter de barre pleine largeur. */
+.teacher-composer-block {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .teacher-composer {
-  position: sticky;
-  z-index: 5;
-  bottom: calc(var(--tabbar-h) + 8px + var(--safe-bottom) + var(--keyboard-bottom));
   margin: 0;
-  padding: 10px 6px 10px 16px;
-  background: var(--surface);
 }
 
 .teacher-composer__input {
@@ -432,38 +450,25 @@
 }
 
 .teacher-thinking {
-  flex-direction: row;
+  padding: 2px 0;
+}
+
+.teacher-footnote summary {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  min-height: 28px;
   color: var(--secondary);
-  font-size: 15px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 17px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-.teacher-thinking .spinner {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
+.teacher-footnote p {
+  margin: 0 0 2px;
 }
 
-.teacher-footnote {
-  margin: 0 2px;
-}
-
-/* Très petits écrans (360 px) : les actions passent sous le sélecteur. */
 @media (max-width: 380px) {
-  .teacher-controls__top {
-    align-items: stretch;
-  }
-
-  .teacher-subject {
-    flex-basis: 100%;
-  }
-
-  .teacher-chat__actions {
-    justify-content: flex-start;
-  }
-
   .teacher-bubble--student {
     max-width: 92%;
   }
