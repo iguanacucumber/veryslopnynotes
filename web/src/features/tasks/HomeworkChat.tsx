@@ -154,6 +154,7 @@ function AssistantTurn({
   onEnableManual,
   onOpenAttachment,
   attachment,
+  interactive = true,
 }: {
   turn: HomeworkTurn;
   loading: boolean;
@@ -165,6 +166,7 @@ function AssistantTurn({
   onEnableManual: () => void;
   onOpenAttachment: (attachment: AssignmentAttachment) => void;
   attachment?: AssignmentAttachment;
+  interactive?: boolean;
 }) {
   const unsourced = !loading && turn.answer !== null && turn.sources.length === 0;
   return (
@@ -219,6 +221,7 @@ function AssistantTurn({
       {turn.refusal ? (
         <div className="hw-refusal" role="status">
           <p>{turn.refusal}</p>
+          {interactive ? (
           <div className="hw-actions">
             {turn.actions.map((action) => {
               const label = actionLabel(action);
@@ -260,15 +263,18 @@ function AssistantTurn({
               return null;
             })}
           </div>
+          ) : null}
         </div>
       ) : null}
 
       {turn.error ? (
         <div className="hw-error" role="alert">
           <p>{turn.error}</p>
-          <button type="button" className="btn btn--small" onClick={onRetry}>
-            Réessayer
-          </button>
+          {interactive ? (
+            <button type="button" className="btn btn--small" onClick={onRetry}>
+              Réessayer
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -327,18 +333,20 @@ export function HomeworkChat({
     onSend(question);
   }
 
-  const privacy = state.photo
-    ? "La photo de l’énoncé, la consigne, le cours" +
-      (lessonReady ? ", ton cours mémorisé" : "") +
-      (manualReady ? " et le texte du manuel" : "") +
-      " sont envoyés directement au fournisseur, avec ta clé. La photo est supprimée après lecture."
-    : manualReady && lessonReady
-      ? "Le sujet, la consigne, le cours, ton cahier et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
-      : lessonReady
-        ? "Le sujet, la consigne, le cours et ton cours mémorisé sont envoyés directement au fournisseur, avec ta clé."
-        : manualReady
-          ? "Le sujet, la consigne, le cours et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
-          : "Le sujet, la consigne et le cours de ce devoir sont envoyés directement au fournisseur, avec ta clé.";
+  const privacy =
+    (state.photo
+      ? "La photo de l’énoncé, la consigne, le cours" +
+        (lessonReady ? ", ton cours mémorisé" : "") +
+        (manualReady ? " et le texte du manuel" : "") +
+        " sont envoyés directement au fournisseur, avec ta clé. La photo est supprimée après lecture."
+      : manualReady && lessonReady
+        ? "Le sujet, la consigne, le cours, ton cahier et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
+        : lessonReady
+          ? "Le sujet, la consigne, le cours et ton cours mémorisé sont envoyés directement au fournisseur, avec ta clé."
+          : manualReady
+            ? "Le sujet, la consigne, le cours et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
+            : "Le sujet, la consigne et le cours de ce devoir sont envoyés directement au fournisseur, avec ta clé.") +
+    (state.turns.length > 0 ? " Le fil précédent est joint comme contexte." : "");
 
   return (
     <Dialog
@@ -405,6 +413,7 @@ export function HomeworkChat({
                 onEnableManual={onEnableManual}
                 onOpenAttachment={onOpenAttachment}
                 attachment={assignment.attachments[0]}
+                interactive={false}
               />
             </div>
           ))}
