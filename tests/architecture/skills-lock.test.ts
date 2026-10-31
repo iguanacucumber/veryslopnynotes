@@ -1,20 +1,14 @@
 // Le contenu vendorisé (`.agents/`) est contrôlé par une empreinte recalculable :
-// sha256 de l'ARBRE de chaque skill (chemins relatifs triés + contenu), comparé
-// à une table ci-dessous. Une édition manuelle d'une skill vendorisée échoue le
-// test. Une mise à jour (`npx skills update`) le fait échouer aussi : la table
-// est alors mise à jour dans la MÊME PR que le lock amont — le changement tiers
-// devient VISIBLE dans la PR, au lieu d'être silencieux.
+// sha256 de l'ARBRE de chaque skill, comparé à la table ci-dessous. Une édition
+// manuelle échoue ; `npx skills update` aussi, la table se met alors à jour dans
+// la MÊME PR — le changement tiers devient visible.
 //
-// La provenance du lock (`source`, `sourceType`, `skillPath`, `computedHash`)
-// n'est PAS vérifiée ici : le hash amont n'est pas recalculable (algorithme de
-// `npx skills` non documenté), et recopier ces champs dans le test ne prouverait
-// rien de plus que le fichier est égal à sa propre copie. Vérifier la provenance
-// demanderait d'interroger l'amont (réseau), hors du gate. Le test vérifie
-// seulement que le lock et le disque portent les MÊMES skills.
+// La provenance du lock (`computedHash` amont) n'est pas vérifiable ici :
+// l'algorithme de `npx skills` n'est pas documenté, et l'interroger demanderait
+// le réseau, hors du gate.
 //
-// ponytail: une table dans le test, pas un nouveau fichier de lock : le dépôt
-// n'a pas de format de lock maison, et un fichier de plus serait une source
-// de vérité de plus à garder en sync.
+// ponytail: une table dans le test, pas un nouveau fichier de lock : un fichier
+// de plus serait une source de vérité de plus à garder en sync.
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -24,7 +18,7 @@ import { ROOT } from "../unit/fixtures/kotlin-harness";
 const AGENTS = join(ROOT, ".agents");
 const SKILLS = join(AGENTS, "skills");
 
-/** sha256 de l'ARBRE d'une skill : chemins relatifs triés + contenu. */
+/** sha256 de l'arbre : chemins relatifs triés + contenu, séparés par `\0`. */
 function treeHash(dir: string): string {
   const files: string[] = [];
   const walk = (current: string): void => {
@@ -45,13 +39,19 @@ function treeHash(dir: string): string {
 }
 
 /**
- * Empreintes attendues des skills vendorisées, par nom de dossier.
- *
  * À mettre à jour SEULEMENT avec le lock amont (`npx skills update`), dans la
- * même PR : la PR montre alors le contenu tiers qui change.
+ * même PR.
  */
 const ATTENDU: Record<string, string> = {
   "code-review": "5c784252646f78647d682f1ed3a2f0a87e836723869d07b2587ef52d6fec6a91",
+  impeccable: "b2e58e101de25ac171189f29b9c79fd41c3ccb3d60330e660970b0a9dfb9b8e3",
+};
+
+/** Plafond PAR skill : le dépassement doit être un choix visible en PR. */
+const PLAFOND: Record<string, number> = {
+  "code-review": 24_576,
+  // Détecteur autonome + index de polices embarqués par la skill amont.
+  impeccable: 2_400_000,
 };
 
 const LOCK = JSON.parse(readFileSync(join(AGENTS, "..", "skills-lock.json"), "utf8")) as {
@@ -65,7 +65,6 @@ describe("skills vendorisées : le contenu est verrouillé", () => {
         .sort()
         .map((skill) => [skill, treeHash(join(SKILLS, skill))]),
     );
-    // Une skill éditée, ajoutée ou retirée sur le disque casse l'égalité.
     expect(vues).toEqual(ATTENDU);
   });
 
@@ -75,8 +74,7 @@ describe("skills vendorisées : le contenu est verrouillé", () => {
 
   test("une skill vendorisée reste petite", () => {
     // Un `npx skills add <source>` sans `@skill` a déjà ramené 3,3 Mo de
-    // collection (#718). Son arbre part en contexte dès l'invocation : le
-    // plafond rend l'ajout visible dans le diff au lieu de la facture.
+    // collection : le plafond rend l'ajout visible dans le diff.
     for (const skill of readdirSync(SKILLS)) {
       let total = 0;
       const walk = (dir: string): void => {
@@ -87,8 +85,13 @@ describe("skills vendorisées : le contenu est verrouillé", () => {
           else total += stat.size;
         }
       };
+      const plafond = PLAFOND[skill] ?? 0;
       walk(join(SKILLS, skill));
-      expect({ skill, sousBudget: total <= 24_576 }).toEqual({ skill, sousBudget: true });
+      expect({ skill, plafond, sousBudget: total <= plafond }).toEqual({
+        skill,
+        plafond,
+        sousBudget: true,
+      });
     }
   });
 });

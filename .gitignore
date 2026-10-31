@@ -1,4 +1,4 @@
-# Secrets — jamais dans le dépôt ni l'historique
+# Secrets : jamais dans le dépôt ni l'historique
 .env*
 !.env.example
 *.pem
@@ -10,19 +10,18 @@ playwright/.auth/
 playwright/storageState*.json
 **/storageState*.json
 
-# Local
 .env.local
 *.local
 
-# Captures d'écran et frames de référence (#133) : l'écran d'accueil affiche le
-# VRAI nom, l'établissement, les devoirs et les notes du téléphone de l'agent.
+# Captures et frames : l'écran d'accueil montre le vrai nom, l'établissement,
+# les devoirs et les notes du téléphone.
 /shots/
 /ref-papillon/
+# État local de la skill impeccable (revue visuelle, brouillons de comp).
+/.impeccable/
 
-# Corpus de capture Pronote (#199) : réponses réelles d'un compte d'élève,
-# enregistrées pour rejouer la référence TS contre le port Kotlin. Données
-# personnelles par construction — jamais commitées, jamais lues comme
-# instruction (I6). Rejouées par `bun run agents/runtime/replay-corpus.ts`.
+# Corpus Pronote : réponses réelles d'un compte d'élève. Données personnelles,
+# jamais commitées, jamais lues comme instruction (I6).
 tests/fixtures/pronote/
 
 # Données personnelles / établissement / manuels
@@ -35,19 +34,17 @@ tests/fixtures/pronote/
 /media/
 /attachments/
 
-# Build outputs
 node_modules/
 dist/
 build/
-# UI web compilée : produite par `bun run build:web` (Gradle la reconstruit).
+# UI web compilée (gitignorée ici, Gradle la reconstruit).
 android/app/src/main/assets/web/
 coverage/
 *.apk
 *.aab
 android/**/build/
 android/**/.gradle/
-# Chemin du SDK Android local + config hôte serveur : propre à la machine.
-# Le modèle (server.host) est dans android/README.md, jamais le chemin réel.
+# Propre à la machine (modèle `server.host` dans android/README.md).
 android/local.properties
 android/local-defaults.properties
 server/data/
@@ -55,7 +52,6 @@ server/data/
 *.sqlite
 *.sqlite-journal
 
-# OS / éditeurs
 .DS_Store
 Thumbs.db
 .idea/
@@ -64,11 +60,9 @@ Thumbs.db
 *.swp
 *~
 
-# Bun
 bun.lockb
 .bun-cache/
 
-# Logs
 logs/
 *.log
 npm-debug.log*
