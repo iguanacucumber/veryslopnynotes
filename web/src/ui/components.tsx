@@ -271,7 +271,7 @@ export function SubjectMark({ subject, size = 10 }: { subject: string; size?: nu
       style={{
         width: size,
         height: size,
-        borderRadius: "var(--radius-xs)",
+        borderRadius: 3,
         background: subjectColor(subject),
       }}
     />
@@ -305,7 +305,7 @@ export function Avatar({ name, size = 40, src }: { name: string; size?: number; 
       style={{
         width: size,
         height: size,
-        borderRadius: "var(--radius-xs)",
+        borderRadius: "var(--radius-sm)",
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",

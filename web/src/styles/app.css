@@ -236,6 +236,7 @@ a {
   left: 0;
   width: 20%;
   height: 3px;
+  border-radius: 3px;
   background: var(--brand-solid);
   transform: translateX(calc(var(--tab-index, 0) * 100%));
   transition: transform 300ms var(--ease-out);

@@ -114,7 +114,7 @@
   align-items: center;
   justify-content: center;
   height: 38px;
-  border-radius: 1px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
 }
 
@@ -124,13 +124,13 @@
   gap: 5px;
   width: 82%;
   padding: 5px 7px;
-  border-radius: 1px;
+  border-radius: 6px;
 }
 
 .scheme-card__dot {
   width: 9px;
   height: 9px;
-  border-radius: 1px;
+  border-radius: 3px;
   flex: 0 0 auto;
 }
 
@@ -180,7 +180,7 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  border-radius: 1px;
+  border-radius: 3px;
   background: var(--brand-solid);
   color: var(--on-brand);
   flex: 0 0 auto;

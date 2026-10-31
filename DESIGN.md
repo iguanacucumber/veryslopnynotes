@@ -104,12 +104,14 @@ typography:
     lineHeight: "18px"
 rounded:
   hairline: "1px"
-  xs: "2px"
-  sm: "4px"
-  md: "6px"
-  lg: "8px"
-  xl: "10px"
-  "2xl": "12px"
+  mark: "3px"
+  sheet: "6px"
+  xs: "8px"
+  sm: "12px"
+  md: "16px"
+  lg: "20px"
+  xl: "24px"
+  "2xl": "28px"
 spacing:
   xxs: "4px"
   xs: "6px"
@@ -273,10 +275,10 @@ unique `prefers-reduced-motion` dans `tokens.css`.
 
 ## Shapes
 
-Rayons de 1 px (aperçus de palette) à 12 px (`--radius-2xl`), avec un usage
-courant de 2 à 6 px. Les boutons, champs, cartes et dialogues sont francs, jamais
-des pastilles. Interdits : `border-radius: 999px`, les pilules, les bords
-colorés épais de 3 px sur une carte arrondie.
+Rayons de 3 px (marques de matière, aperçus) à 28 px (`--radius-2xl`), avec un
+usage courant de 8 à 16 px. Les boutons, champs, cartes et dialogues sont
+souplement arrondis, jamais des pastilles. Interdits : `border-radius: 999px`,
+les pilules, les bords colorés épais de 3 px sur une carte arrondie.
 
 Le filet est l'unité de forme : 1 px pour séparer, 3 px pour l'indicateur
 d'onglet actif, 2 px pour le soulignement d'un onglet de section. Les marques de
