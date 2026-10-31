@@ -133,6 +133,7 @@ object TeacherChat {
                 "donne un indice progressif, et laisse l'eleve avancer. Ne donne pas la solution complete. " +
                 "Si l'eleve demande explicitement une correction, utilise le mode corrige-moi. " +
                 SYSTEM_CITATION_RULE +
+                SYSTEM_OUTPUT_FORMAT_RULE +
                 "Ne fabrique jamais une source, un outil ou une action. " +
                 "N'utilise AUCUNE balise HTML. Reponds UNIQUEMENT en JSON valide, sans texte autour : " +
                 "{\"answer\":string,\"sources\":string[]}. " +
@@ -146,6 +147,7 @@ object TeacherChat {
                 "Mode corrige-moi : corrige le travail rendu, signale chaque erreur, explique la correction " +
                 "et propose une etape a refaire. Ne fais pas le travail entier a la place de l'eleve. " +
                 SYSTEM_CITATION_RULE +
+                SYSTEM_OUTPUT_FORMAT_RULE +
                 "Ne fabrique jamais une source, un outil ou une action. " +
                 "N'utilise AUCUNE balise HTML. Reponds UNIQUEMENT en JSON valide, sans texte autour : " +
                 "{\"answer\":string,\"sources\":string[]}. " +
@@ -214,8 +216,8 @@ object TeacherChat {
     /** Valide la sortie du modèle. `allowedLabels` = sources réellement fournies. */
     fun parseReply(raw: JsonValue, allowedLabels: Set<String>): TeacherChatReply {
         val obj = raw as? JsonValue.Obj ?: throw AiError("reponse professeur invalide (schema)")
-        val answer = jsonStrOf(obj, "answer")?.trim()
-        if (answer.isNullOrEmpty()) throw AiError("reponse professeur vide (I5)")
+        val answer = stripUntrustedTags(jsonStrOf(obj, "answer").orEmpty()).trim()
+        if (answer.isEmpty()) throw AiError("reponse professeur vide (I5)")
         if (answer.length > MAX_ANSWER_CHARS) throw OutputTooLongException(MAX_ANSWER_CHARS)
         val sourcesRaw = obj.fields["sources"] as? JsonValue.Arr
             ?: throw AiError("reponse professeur invalide (schema)")

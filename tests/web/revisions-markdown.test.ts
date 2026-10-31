@@ -177,6 +177,38 @@ describe("parseur markdown borné (#630)", () => {
   });
 });
 
+describe("formules LaTeX : normalisées en texte lisible (#759)", () => {
+  test("délimiteurs, fractions et symboles courants ne restent pas littéraux", () => {
+    const blocks = parseMarkdown(
+      "Le terme $u(0)$ vaut \\[ \\frac{n}{2} \\times 2 \\]. Puis \\sqrt{2} \\leq 3.",
+    );
+    const text = blockText(blocks);
+    expect(text).toContain("u(0)");
+    expect(text).toContain("n/2");
+    expect(text).toContain("×");
+    expect(text).toContain("√(2)");
+    expect(text).toContain("≤");
+    for (const raw of ["$", "\\frac", "\\times", "\\[", "\\]", "\\sqrt", "\\leq"]) {
+      expect(text).not.toContain(raw);
+    }
+  });
+
+  test("le rendu ne laisse aucune commande LaTeX visible", () => {
+    const html = render("\\[ \\frac{n}{2} \\times x \\] et $u(0)$");
+    expect(html).toContain("n/2");
+    expect(html).toContain("×");
+    expect(html).toContain("u(0)");
+    expect(html).not.toContain("\\frac");
+    expect(html).not.toContain("\\times");
+    expect(html).not.toContain("\\[");
+  });
+
+  test("le texte sans formule reste intact", () => {
+    const blocks = parseMarkdown("Un prix de 5 $ et un calcul x^2.");
+    expect(blockText(blocks)).toBe("Un prix de 5 $ et un calcul x^2.");
+  });
+});
+
 describe("rendu markdown de fiche : lisible et sûr (#630)", () => {
   test("titres, listes, gras, code et tableau deviennent des éléments réels", () => {
     const html = render(

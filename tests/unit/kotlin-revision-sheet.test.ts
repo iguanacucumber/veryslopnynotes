@@ -266,6 +266,20 @@ describe("export PDF de fiche : la liste CANONIQUE des sources fait foi (#412)",
     expect(res.sources).toEqual(expect.arrayContaining(CANONICAL));
   });
 
+  test.skipIf(skip)("les délimiteurs recopiés par le modèle ne sont jamais stockés (#759)", async () => {
+    const nonce = "revisionnonce000001";
+    const fiche = [
+      `<UNTRUSTED_DATA nonce="${nonce}">`,
+      "Rappel du cours.",
+      `</UNTRUSTED_DATA nonce="${nonce}">`,
+      `--- fin DONNEES nonce="${nonce}" ---`,
+    ].join("\n");
+    const res = JSON.parse(await ask({ op: "assemble", fiche, sources: CANONICAL })) as Sheet;
+    expect(res.body).toContain("Rappel du cours.");
+    expect(res.body).not.toContain("UNTRUSTED_DATA");
+    expect(res.body).not.toContain(nonce);
+  });
+
   test.skipIf(skip)("un libellé de source sur plusieurs lignes ne déferait pas le corps", async () => {
     // Un libellé de source est un LIBELLÉ : il tient sur une ligne. Sinon le
     // bloc « Sources : » déferait et laissait un bout de texte dans le corps.

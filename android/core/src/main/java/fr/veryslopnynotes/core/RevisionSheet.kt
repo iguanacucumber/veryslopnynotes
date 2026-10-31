@@ -128,7 +128,9 @@ fun assembleRevisionSheet(
     sources: List<String>,
     now: String = Instant.now().toString(),
 ): RevisionSheet {
-    val text = ficheText.trim()
+    // Un modèle peut recopier les délimiteurs du prompt : ils ne sont jamais
+    // stockés ni exportés, même si un appelant contourne `parseRevisionAnswer`.
+    val text = stripUntrustedTags(ficheText).trim()
     if (text.isEmpty()) throw IllegalArgumentException("fiche vide (refus)")
     val deduped = dedupeRevisionSources(sources)
     if (deduped.isEmpty()) throw IllegalArgumentException("sources insuffisantes (refus)")
