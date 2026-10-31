@@ -33,14 +33,13 @@ export interface TeacherViewProps {
   /** Erreur de chargement du fil local : recharger, jamais un faux fil vide. */
   loadError?: string;
   onReload?: () => void;
-  /** Refus déterministe du corpus vide (le pont a refusé AVANT tout appel). */
+  /** Refus déterministe du corpus vide : le pont a refusé AVANT tout appel. */
   refusal: { message: string; actions: string[] } | null;
-  /** Compteur de tours : force le focus sur la réponse après succès. */
   focusTick: number;
-  /** Onglet interne : discussion ou exercices du manuel (#632). */
+  /** Onglet interne : discussion ou exercices du manuel. */
   tab: "chat" | "exercises";
   onTabChange: (tab: "chat" | "exercises") => void;
-  /** Panneau Exercices branché au pont (#632), rendu DANS l'onglet. */
+  /** Panneau Exercices, rendu DANS l'onglet. */
   exercisesPanel?: ReactNode;
   busy: boolean;
   threadLoaded: boolean;
@@ -55,11 +54,7 @@ export interface TeacherViewProps {
   onAction: (action: string) => void;
 }
 
-/**
- * Écran Prof (#633) : composant PRÉSENTATIONNEL. Il ne parle pas au pont, ce
- * qui rend l'envoi, le chargement, la réponse, les sources, l'erreur, la
- * suppression et le focus testables en rendu statique.
- */
+/** Écran PRÉSENTATIONNEL : ne parle pas au pont, donc testable en rendu statique. */
 export function TeacherView({
   subjects,
   subject,
@@ -110,7 +105,7 @@ export function TeacherView({
 
   return (
     <Page>
-      <PageHeading title="Prof" eyebrow="Ton professeur IA, à partir de tes cours." />
+      <PageHeading title="Professeur" eyebrow="Ton professeur IA, à partir de tes cours." />
 
       <div className="teacher-tabs" role="tablist" aria-label="Professeur">
         <button
@@ -373,7 +368,6 @@ export function TeacherView({
   );
 }
 
-/** « Ce qui est envoyé » : sources du tour, historique, tailles, troncatures. */
 function SentDetails({ message }: { message: TeacherMessage }) {
   const tour = turnSources(message);
   const history = historySources(message);

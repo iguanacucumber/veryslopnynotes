@@ -1,31 +1,33 @@
-/* Emploi du temps — semaine, bandeau prochain cours, cartes de cours. */
-
 .tt {
   gap: 14px;
 }
-
-/* --- Barre de semaine ----------------------------------------------------- */
 
 .tt-status {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 0 2px;
+  padding: 0;
 }
 
-/* --- Bandeau prochain cours ----------------------------------------------- */
-
+/* Cours en cours / prochain : une fiche de registre, pas une carte teintée. */
 .tt-banner {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  gap: 12px;
+  padding: 13px 15px;
+  border: 1px solid var(--rule);
+  border-top: 1px solid var(--brand-solid);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
   overflow: hidden;
-  animation: tt-rise 360ms var(--ease) both;
+}
+
+.tt-banner__mark {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 1px;
 }
 
 .tt-banner__body {
@@ -36,12 +38,12 @@
 }
 
 .tt-banner__label {
-  font-size: 11px;
-  line-height: 15px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 14px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  opacity: 0.75;
 }
 
 .tt-banner__subject {
@@ -51,15 +53,16 @@
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  font-size: 20px;
-  line-height: 25px;
-  font-weight: 700;
+  font-size: 19px;
+  line-height: 24px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 .tt-banner__meta {
+  color: var(--muted);
   font-size: 12px;
   line-height: 17px;
-  opacity: 0.82;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -74,22 +77,25 @@
 }
 
 .tt-banner__when strong {
-  font-size: 15px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
 .tt-banner__when span {
-  font-size: 11px;
-  opacity: 0.8;
+  color: var(--muted);
+  font-size: 12px;
   white-space: nowrap;
 }
 
-/* --- Bande de semaine ----------------------------------------------------- */
-
+/* Semaine : sept cases d'un même registre, séparées par des filets. */
 .tt-week-strip {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
+  gap: 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--panel);
 }
 
 .tt-day-chip {
@@ -97,112 +103,116 @@
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  padding: 8px 2px 6px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: var(--surface-variant);
-  color: var(--ink);
   min-width: 0;
+  padding: 7px 2px 6px;
+  border-left: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+}
+
+.tt-day-chip:first-child {
+  border-left: 0;
 }
 
 .tt-day-chip--today {
   background: var(--brand-solid);
-  border-color: var(--brand-solid);
   color: var(--on-brand);
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--brand) 26%, transparent);
 }
 
 .tt-day-chip--empty {
-  opacity: 0.62;
+  color: var(--muted);
 }
 
 .tt-day-chip__day {
-  font-size: 10px;
-  line-height: 13px;
-  font-weight: 600;
   color: var(--muted);
+  font-size: 9px;
+  line-height: 12px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
 .tt-day-chip--today .tt-day-chip__day {
   color: var(--on-brand);
-  opacity: 0.78;
+  opacity: 0.8;
 }
 
 .tt-day-chip__date {
-  font-size: 15px;
-  line-height: 18px;
-  font-weight: 700;
+  font-size: 16px;
+  line-height: 19px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
 .tt-day-chip__count {
+  max-width: 100%;
+  color: var(--muted);
   font-size: 9px;
   line-height: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100%;
 }
 
-/* --- Jour ----------------------------------------------------------------- */
-
-.tt-day {
-  animation: tt-rise 380ms var(--ease) both;
+.tt-day-chip--today .tt-day-chip__count {
+  color: var(--on-brand);
+  opacity: 0.8;
 }
 
 .tt-day__header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
-  margin: 2px 2px 8px;
+  margin: 22px 0 0;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--ink);
   min-width: 0;
 }
 
 .tt-day__title {
   margin: 0;
-  font-size: 17px;
-  line-height: 22px;
-  font-weight: 700;
+  font-size: 21px;
+  line-height: 25px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .tt-day__pill {
   display: inline-flex;
   align-items: center;
-  padding: 2px 9px;
-  border-radius: 999px;
-  background: var(--surface-variant);
+  padding: 1px 6px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xs);
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  line-height: 15px;
+  font-weight: 650;
   white-space: nowrap;
 }
 
 .tt-day__pill--today {
-  background: var(--brand-pale);
+  border-color: var(--rule-brand);
   color: var(--brand-deep);
 }
 
 .tt-day__subtitle {
-  font-size: 12px;
   color: var(--muted);
+  font-size: 12px;
   white-space: nowrap;
 }
 
 .tt-day__lessons {
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
-/* Repère « maintenant » (#337) : aligné sur la colonne des cartes, il coupe la
-   journée au bon endroit et porte la seule information qui vieillit. */
+/* Repère « maintenant » : un filet, pas une pastille. */
 .tt-now {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 2px 0 2px 62px;
-  animation: tt-rise 360ms var(--ease) both;
+  margin: 10px 0 0 62px;
 }
 
 .tt-now::before,
@@ -210,34 +220,25 @@
   content: "";
   flex: 1;
   min-width: 12px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--brand);
-  opacity: 0.45;
+  height: 1px;
+  background: var(--brand-solid);
+  opacity: 0.5;
 }
 
 .tt-now__label {
-  font-size: 10px;
-  line-height: 14px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--brand-deep);
+  font-size: 9px;
+  line-height: 13px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
-@media (min-width: 700px) {
-  .tt-now {
-    margin-left: 70px;
-  }
-}
-
-/* --- Cours ---------------------------------------------------------------- */
-
 .tt-lesson {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 50px minmax(0, 1fr);
+  gap: 12px;
   align-items: stretch;
 }
 
@@ -245,55 +246,46 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 3px;
-  padding-top: 10px;
+  gap: 2px;
+  padding-top: 12px;
   font-variant-numeric: tabular-nums;
 }
 
 .tt-time strong {
-  font-size: 14px;
-  line-height: 18px;
-  font-weight: 700;
+  font-size: 13px;
+  line-height: 17px;
+  font-weight: 750;
 }
 
 .tt-time span {
+  color: var(--muted);
   font-size: 12px;
   line-height: 16px;
-  color: var(--muted);
 }
 
 .tt-card {
   position: relative;
   min-width: 0;
-  padding: 11px 13px 11px 18px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  box-shadow: 0 4px 14px color-mix(in srgb, currentColor 8%, transparent);
-  transition: border-color var(--duration) var(--ease), transform var(--duration) var(--ease),
-    box-shadow var(--duration) var(--ease);
+  padding: 10px 0 11px 14px;
+  border-bottom: 1px solid var(--rule);
+  transition: background var(--duration) var(--ease);
 }
 
 .tt-lesson--current .tt-card {
-  border-width: 2px;
-  box-shadow: 0 10px 26px color-mix(in srgb, currentColor 20%, transparent);
+  background: var(--panel-tint);
 }
 
 .tt-lesson--next .tt-card {
-  border-width: 1px;
+  border-bottom-color: var(--rule-strong);
 }
 
-.tt-lesson--current .tt-card {
-  animation: tt-pulse 2.4s var(--ease) infinite;
-}
-
-.tt-card__spine {
+.tt-card__mark {
   position: absolute;
-  left: 6px;
-  top: 10px;
-  bottom: 10px;
-  width: 5px;
-  border-radius: 999px;
+  left: 0;
+  top: 15px;
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
 }
 
 .tt-card__head {
@@ -303,31 +295,39 @@
   min-width: 0;
 }
 
-.tt-card__avatar--cancelled {
-  filter: grayscale(1);
-  opacity: 0.6;
-}
-
 .tt-card__subject {
   flex: 1;
   min-width: 0;
   margin: 0;
   font-size: 15px;
   line-height: 21px;
-  font-weight: 700;
+  font-weight: 750;
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
+}
+
+.tt-lesson--current .tt-card__subject {
+  color: var(--brand-deep);
 }
 
 .tt-pill {
   flex: 0 0 auto;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
-  font-size: 10px;
+  padding: 1px 6px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  font-size: 9px;
   line-height: 14px;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   white-space: nowrap;
+}
+
+.tt-lesson--current .tt-pill {
+  border-color: var(--brand-solid);
+  background: var(--brand-solid);
+  color: var(--on-brand);
 }
 
 .tt-card__meta {
@@ -335,10 +335,10 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 6px;
+  margin-top: 4px;
+  color: var(--muted);
   font-size: 12px;
-  line-height: 17px;
-  opacity: 0.88;
+  line-height: 16px;
 }
 
 .tt-card__meta-item {
@@ -350,13 +350,12 @@
 
 .tt-card__meta-item svg {
   flex: 0 0 auto;
-  opacity: 0.72;
+  opacity: 0.7;
 }
 
 .tt-card__dot {
   width: 3px;
   height: 3px;
-  border-radius: 999px;
   background: currentColor;
   opacity: 0.6;
 }
@@ -365,22 +364,22 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 3px;
-  font-size: 11px;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
   line-height: 15px;
-  opacity: 0.7;
 }
 
 .tt-cancelled {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   margin-bottom: 4px;
-  padding: 2px 8px 2px 6px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  padding: 1px 6px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-xs);
   color: var(--danger-ink);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 15px;
   font-weight: 700;
 }
@@ -388,40 +387,21 @@
 .tt-lesson--cancelled .tt-card__subject {
   text-decoration: line-through;
   text-decoration-thickness: 1px;
-  opacity: 0.8;
+  color: var(--muted);
 }
 
 .tt-footnote {
-  margin: 0 2px 4px;
+  margin: 0;
   text-align: center;
-}
-
-/* --- Animations ----------------------------------------------------------- */
-
-@keyframes tt-rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes tt-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.006);
-  }
 }
 
 @media (min-width: 700px) {
   .tt-lesson {
     grid-template-columns: 58px minmax(0, 1fr);
-    gap: 12px;
+    gap: 14px;
+  }
+
+  .tt-now {
+    margin-left: 72px;
   }
 }

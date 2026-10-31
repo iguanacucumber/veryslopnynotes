@@ -11,7 +11,7 @@ import {
   Page,
   PageHeading,
   Section,
-  SubjectAvatar,
+  SubjectMark,
 } from "../../ui/components";
 import { Dialog } from "../../ui/Dialog";
 import {
@@ -42,7 +42,7 @@ function dayLabel(iso: string): string {
   return date.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
-/** Statut court du manuel : une puce, jamais un paragraphe par matière. */
+/** Une puce de statut, jamais un paragraphe par matière. */
 function manualStatus(subject: LessonSubject): {
   label: string;
   tone: "on" | "off" | "none";
@@ -68,9 +68,9 @@ type PhotoIssue = {
   message: string;
 };
 
-/** Cahier de cours local (#586) : la mémoire de l'assistant par matière. */
+/** Cahier de cours local : la mémoire de l'assistant par matière. */
 export function CourseNotesScreen() {
-  const { notify, refreshTick, dark } = useApp();
+  const { notify, refreshTick } = useApp();
   const [snapshot, setSnapshot] = useState<LessonsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -234,17 +234,11 @@ export function CourseNotesScreen() {
     }
   }
 
-  /**
-   * Photo de cours -> brouillon. La photo ne passe jamais par la WebView :
-   * le natif l'envoie au fournisseur puis la supprime. L'élève relit le texte
-   * avant l'enregistrement.
-   *
-   * Une reprise garde le brouillon affiché : il n'est remplacé qu'une fois la
-   * nouvelle photo transcrite. Une annulation ne touche donc à rien.
-   */
+  /** Photo de cours -> brouillon. La photo ne passe jamais par la WebView : le
+   *  natif l'envoie au fournisseur puis la supprime. Une reprise garde le
+   *  brouillon jusqu'à la nouvelle transcription ; une annulation ne touche à rien. */
   async function addPhoto(subject: string, source: PhotoSource, retake = false) {
-    // Le ref ferme la course entre deux taps : l'état n'est pas encore rendu
-    // quand le second geste arrive.
+    // Le ref ferme la course entre deux taps : l'état n'est pas encore rendu.
     if (photoBusyRef.current) return;
     photoBusyRef.current = true;
     setPhotoBusy(subject);
@@ -380,9 +374,11 @@ export function CourseNotesScreen() {
         return (
           <Card key={subject.subject} as="article" className="course-notes-subject">
             <div className="course-notes-subject__head">
-              <SubjectAvatar subject={subject.subject} size={42} dark={dark} />
               <div className="grow">
-                <h2 className="course-notes-subject__title">{subject.subject}</h2>
+                <div className="course-notes-subject__title-row">
+                  <SubjectMark subject={subject.subject} size={12} />
+                  <h2 className="course-notes-subject__title">{subject.subject}</h2>
+                </div>
                 <span className="course-notes-subject__meta">
                   <span className={`course-notes-status course-notes-status--${status.tone}`}>{status.label}</span>
                   <span className="t-caption muted">
@@ -450,7 +446,7 @@ export function CourseNotesScreen() {
             <div className="course-notes-empty-list">
               {withoutNotes.map((subject) => (
                 <div key={subject.subject} className="course-notes-empty-row">
-                  <SubjectAvatar subject={subject.subject} size={30} dark={dark} />
+                  <SubjectMark subject={subject.subject} size={10} />
                   <span className="grow course-notes-empty-row__name">{subject.subject}</span>
                   <div className="course-notes-empty-row__actions">
                     <button

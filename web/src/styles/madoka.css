@@ -1,202 +1,40 @@
-/* Skin décoratif « Madoka Magica » (#620) : poussière d'étoiles dorée et halos
-   roses, superposés aux couches de fond existantes. Tout est scopé sur
-   `:root[data-scheme="madoka"]` : les autres palettes ne voient rien de ce
-   fichier. Mouvement réduit : aucune garde locale, la garde unique de
-   `tokens.css` coupe déjà toutes les animations. */
-
-/* --- Fond : poussière d'étoiles + orbe doré ------------------------------- */
-
-:root[data-scheme="madoka"] body::before {
-  /* Les deux halos d'origine sont conservés ; l'orbe doré s'ajoute par-dessus
-     et la dérive `page-drift-a` reste celle de `app.css`. */
-  background-image:
-    radial-gradient(46% 32% at 82% 10%, color-mix(in srgb, var(--brand-light) 22%, transparent), transparent 68%),
-    radial-gradient(110% 58% at 100% -8%, var(--page-glow-a), transparent 62%),
-    radial-gradient(80% 42% at 50% 112%, var(--page-glow-b), transparent 62%);
-}
-
-:root[data-scheme="madoka"] body::after {
-  /* Trois tuiles de poussière dorée (tailles premières entre elles : les
-     motifs ne se répètent pas visiblement) puis le halo de page existant. */
-  background-image:
-    radial-gradient(circle, color-mix(in srgb, var(--brand-light) 88%, transparent) 1.1px, transparent 1.9px),
-    radial-gradient(circle, color-mix(in srgb, var(--brand-light) 55%, transparent) 0.9px, transparent 1.6px),
-    radial-gradient(circle, color-mix(in srgb, var(--brand-light) 34%, transparent) 0.8px, transparent 1.4px),
-    radial-gradient(90% 46% at -12% 6%, var(--page-glow-b), transparent 58%);
-  background-size:
-    97px 89px,
-    151px 137px,
-    211px 193px,
-    auto;
-  background-position:
-    11px 17px,
-    53px 29px,
-    131px 71px,
-    center;
-  background-repeat: repeat, repeat, repeat, no-repeat;
-  animation:
-    page-drift-b 48s var(--ease) infinite alternate,
-    madoka-twinkle 11s var(--ease) infinite alternate;
-}
-
-/* --- Barres : bordure dorée, halo rose/or -------------------------------- */
+/* Skin « Madoka Magica » (#620) : la palette porte déjà le rose et l'or ;
+   le skin n'ajoute qu'un accent doré sur les filets, sans ombre ni dégradé.
+   Tout est scopé sur `:root[data-scheme="madoka"]`. */
 
 :root[data-scheme="madoka"] .topbar,
 :root[data-scheme="madoka"] .tabbar {
-  border-color: color-mix(in srgb, var(--brand-light) 48%, var(--border-soft));
-  box-shadow:
-    var(--shadow-card),
-    0 0 0 1px color-mix(in srgb, var(--brand-light) 18%, transparent),
-    0 8px 26px color-mix(in srgb, var(--brand) 18%, transparent),
-    0 0 22px color-mix(in srgb, var(--brand-light) 20%, transparent);
+  border-color: color-mix(in srgb, var(--brand-light) 62%, var(--rule));
 }
 
-/* La pastille active glisse toujours ; seule sa matière change. Dégradé
-   rose profond (jamais vers l'or : le libellé `--on-brand` doit rester
-   lisible), halo doré, et un semis d'étoiles en surimpression. */
+:root[data-scheme="madoka"] .topbar {
+  border-bottom-width: 2px;
+}
+
 :root[data-scheme="madoka"] .tabbar__pill {
-  overflow: hidden;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--brand) 25%, var(--brand-solid)),
-    var(--brand-deep)
-  );
-  box-shadow:
-    0 6px 18px color-mix(in srgb, var(--brand) 40%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--brand-light) 30%, transparent),
-    0 0 20px color-mix(in srgb, var(--brand-light) 26%, transparent);
+  background: var(--brand-light);
 }
-
-:root[data-scheme="madoka"] .tabbar__pill::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background-image:
-    radial-gradient(circle, color-mix(in srgb, var(--brand-light) 82%, transparent) 0.8px, transparent 1.5px),
-    radial-gradient(circle, color-mix(in srgb, var(--brand-light) 45%, transparent) 0.7px, transparent 1.3px);
-  background-size: 31px 27px, 43px 37px;
-  background-position: 5px 7px, 21px 15px;
-  background-repeat: repeat;
-  animation: madoka-twinkle 6s var(--ease) infinite alternate;
-}
-
-/* --- Boutons pleins : dégradé rose + reflet doré qui balaie -------------- */
-
-:root[data-scheme="madoka"] .btn:not(.btn--ghost):not(.btn--danger) {
-  position: relative;
-  z-index: 0;
-  overflow: hidden;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--brand) 45%, var(--brand-solid)),
-    var(--brand-deep)
-  );
-  box-shadow:
-    0 6px 16px color-mix(in srgb, var(--brand) 32%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--brand-light) 24%, transparent),
-    0 0 18px color-mix(in srgb, var(--brand-light) 22%, transparent);
-}
-
-:root[data-scheme="madoka"] .btn:not(.btn--ghost):not(.btn--danger)::after {
-  content: "";
-  position: absolute;
-  inset: -24% -70%;
-  z-index: -1;
-  pointer-events: none;
-  background: linear-gradient(
-    100deg,
-    transparent 34%,
-    color-mix(in srgb, var(--brand-light) 42%, transparent) 48%,
-    transparent 62%
-  );
-  animation: madoka-sheen 9s var(--ease) infinite;
-}
-
-/* --- Cartes : bord rose discret, halo au survol -------------------------- */
 
 :root[data-scheme="madoka"] .card:not(.card--danger) {
-  border-color: color-mix(in srgb, var(--brand) 26%, var(--border-soft));
+  border-color: color-mix(in srgb, var(--brand) 26%, var(--rule));
 }
 
 :root[data-scheme="madoka"] button.card:hover {
-  border-color: color-mix(in srgb, var(--brand-light) 60%, var(--brand));
-  box-shadow:
-    var(--shadow-card-hover),
-    0 0 18px color-mix(in srgb, var(--brand) 20%, transparent),
-    0 0 26px color-mix(in srgb, var(--brand-light) 18%, transparent);
-}
-
-/* Les héros gardent leur reflet existant (`::before`) ; une couche d'étoiles
-   flottantes s'ajoute dessous, en `z-index: -1`, donc jamais sur le texte. */
-:root[data-scheme="madoka"] .card--brand::after,
-:root[data-scheme="madoka"] .card.home-hero::after {
-  content: "";
-  position: absolute;
-  inset: -12%;
-  z-index: -1;
-  pointer-events: none;
-  background-image:
-    radial-gradient(circle, color-mix(in srgb, var(--brand-light) 90%, transparent) 1.3px, transparent 2.2px),
-    radial-gradient(circle, color-mix(in srgb, var(--brand-light) 55%, transparent) 0.9px, transparent 1.7px);
-  background-size: 63px 57px, 89px 83px;
-  background-position: 9px 13px, 41px 27px;
-  background-repeat: repeat;
-  animation: madoka-float 26s var(--ease) infinite alternate;
-}
-
-/* --- Sélections et focus : or lisible ------------------------------------ */
-
-:root[data-scheme="madoka"] .chip--active,
-:root[data-scheme="madoka"] .scheme-card--active {
   border-color: var(--brand-light);
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--brand-light) 55%, transparent),
-    0 0 16px color-mix(in srgb, var(--brand-light) 30%, transparent);
 }
 
-/* L'anneau de focus reste l'encre d'accent lisible ; l'or n'est qu'un halo. */
+/* L'or marque la sélection ; l'encre reste le texte lisible. */
+:root[data-scheme="madoka"] .chip--active,
+:root[data-scheme="madoka"] .scheme-card--active,
+:root[data-scheme="madoka"] .grades-chip--active {
+  border-color: var(--brand-light);
+}
+
 :root[data-scheme="madoka"] .field:focus {
   outline-color: var(--brand-deep);
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--brand-light) 34%, transparent),
-    0 0 18px color-mix(in srgb, var(--brand-light) 26%, transparent);
 }
 
 :root[data-scheme="madoka"] ::selection {
   background: var(--brand-pale);
   color: var(--brand-deep);
-}
-
-/* --- Animations : opacité et transform seulement, lentes ------------------ */
-
-@keyframes madoka-twinkle {
-  from {
-    opacity: 0.62;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes madoka-float {
-  from {
-    opacity: 0.55;
-    transform: translate3d(-2%, 1.5%, 0) rotate(-1.5deg) scale(1.02);
-  }
-  to {
-    opacity: 0.95;
-    transform: translate3d(2.5%, -2%, 0) rotate(1.5deg) scale(1.06);
-  }
-}
-
-@keyframes madoka-sheen {
-  from {
-    transform: translate3d(-150%, 0, 0) skewX(-14deg);
-  }
-  55%,
-  100% {
-    transform: translate3d(150%, 0, 0) skewX(-14deg);
-  }
 }

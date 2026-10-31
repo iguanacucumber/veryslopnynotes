@@ -25,8 +25,8 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/sanctions": { title: "Sanctions", back: "/attendance" },
   "/messages": { title: "Messagerie", back: "/profile" },
   "/alerts": { title: "Alertes", back: "/" },
-  "/revision-sheets": { title: "Fiches de révision", back: "/profile" },
-  "/course-notes": { title: "Cahier de cours", back: "/profile" },
+  "/revision-sheets": { title: "Révisions", back: "/profile" },
+  "/course-notes": { title: "Cahier", back: "/profile" },
   "/prof": { title: "Prof", tab: true },
 };
 
@@ -49,12 +49,8 @@ export function Shell() {
   const meta = ROUTE_META[location.pathname] ?? { title: "VerySlopyNyNotes" };
   const activeTab = TABS.findIndex((tab) => tab.to === location.pathname);
 
-  // Le titre suit l'écran et le focus passe au titre : un lecteur d'écran
-  // annonce la nouvelle page au lieu de laisser le focus sur le lien d'onglet.
-  // Au PREMIER rendu, on ne déplace pas le focus : le document est déjà
-  // annoncé au chargement, et le lien d'évitement doit rester le premier
-  // arrêt du premier Tab (#625). Les navigations suivantes, elles, déplacent
-  // bien le focus vers le titre.
+  // Le focus passe au titre pour qu'un lecteur d'écran annonce la page. Pas au
+  // PREMIER rendu : le lien d'évitement doit rester le premier arrêt du Tab.
   useEffect(() => {
     document.title = `${meta.title} · VerySlopyNyNotes`;
     if (!titleFocusedOnce.current) {
@@ -65,9 +61,8 @@ export function Shell() {
   }, [location.pathname, meta.title]);
 
   useEffect(() => {
-    // Une session fermée par l'utilisateur n'est pas une session expirée :
-    // le bandeau « session expirée » mentirait. Le garde-fou de `App.tsx`
-    // renvoie vers /pairing, là où il faut ré-appairer (#360).
+    // Session fermée par l'utilisateur ≠ session expirée : le bandeau
+    // « session expirée » mentirait.
     if (!authLost || sessionClosed) return;
     if (location.pathname !== "/pairing") {
       notify("Session expirée : rescanne le QR de l'établissement.", "error");

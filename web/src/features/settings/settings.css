@@ -1,27 +1,23 @@
-/* Réglages — sélecteur de palette (#335). */
-
-/* #612 : l'assistant a une section unique, identifiable d'un coup d'œil. */
 .settings-assistant__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 999px;
-  background: var(--brand-pale);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
   color: var(--brand-deep);
   flex: 0 0 auto;
 }
 
-/* Statut du manuel : même puce que les autres états, teinte d'alerte quand
-   l'ouvrage est enregistré mais pas encore récupéré. */
+/* Teinte d'alerte : l'ouvrage est enregistré mais pas encore récupéré. */
 .settings-manual__status--warn {
   border-color: color-mix(in srgb, var(--danger) 35%, var(--border-soft));
   background: color-mix(in srgb, var(--danger) 10%, var(--surface));
   color: var(--danger-ink);
 }
 
-/* L'éditeur de matière s'ouvre : il monte au lieu d'apparaître d'un coup. */
 .subject-editor {
   animation: rise-in 220ms var(--ease) both;
 }
@@ -52,10 +48,9 @@
   width: var(--tap);
   height: var(--tap);
   padding: 0;
-  border: 2px solid var(--surface);
-  border-radius: 999px;
-  box-shadow: var(--shadow-soft);
-  transition: transform var(--duration) var(--ease-out), border-color var(--duration) var(--ease);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xs);
+  transition: border-color var(--duration) var(--ease);
 }
 
 .subject-swatch:active,
@@ -69,14 +64,14 @@
 }
 
 .subject-emoji {
-  border-color: var(--border);
-  background: var(--surface);
+  border-color: var(--rule);
+  background: var(--panel);
   font-size: 20px;
   line-height: 1;
 }
 
 .subject-emoji[aria-pressed="true"] {
-  background: var(--brand-pale);
+  background: var(--panel-tint);
 }
 
 .scheme-grid {
@@ -97,17 +92,12 @@
   flex-direction: column;
   gap: 5px;
   padding: 6px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
   color: var(--ink);
   text-align: left;
-  transition: border-color var(--duration) var(--ease), background var(--duration) var(--ease),
-    transform var(--duration) var(--ease-out);
-}
-
-.scheme-card:active {
-  transform: scale(0.97);
+  transition: border-color var(--duration) var(--ease), background var(--duration) var(--ease);
 }
 
 .scheme-card:hover {
@@ -116,7 +106,7 @@
 
 .scheme-card--active {
   border-color: var(--brand);
-  background: var(--brand-pale);
+  background: var(--panel-tint);
 }
 
 .scheme-card__preview {
@@ -124,7 +114,7 @@
   align-items: center;
   justify-content: center;
   height: 38px;
-  border-radius: var(--radius-xs);
+  border-radius: 1px;
   overflow: hidden;
 }
 
@@ -134,13 +124,13 @@
   gap: 5px;
   width: 82%;
   padding: 5px 7px;
-  border-radius: 6px;
+  border-radius: 1px;
 }
 
 .scheme-card__dot {
   width: 9px;
   height: 9px;
-  border-radius: 999px;
+  border-radius: 1px;
   flex: 0 0 auto;
 }
 
@@ -154,9 +144,9 @@
 
 .scheme-card__row {
   display: block;
-  height: 4px;
+  height: 3px;
   width: 100%;
-  border-radius: 999px;
+  border-radius: 0;
 }
 
 .scheme-card__row--thin {
@@ -167,19 +157,21 @@
 
 .scheme-card__text {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 4px;
 }
 
 .scheme-card__label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 28px;
   font-size: 10px;
   line-height: 14px;
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .scheme-card__check {
@@ -188,7 +180,7 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  border-radius: 999px;
+  border-radius: 1px;
   background: var(--brand-solid);
   color: var(--on-brand);
   flex: 0 0 auto;

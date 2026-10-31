@@ -1,210 +1,123 @@
-/* Accueil — héros, widgets, accès rapides. Tout passe par les jetons. */
-
 .home {
   gap: 14px;
 }
 
-/* --- Héros ---------------------------------------------------------------- */
-
+/* Le héros est la première page du relevé : un titre, une date, deux chiffres
+   séparés par un filet. Pas de dégradé, pas d'orbes, pas d'anneau. */
 .card.home-hero {
-  position: relative;
-  overflow: hidden;
-  border: 0;
-  border-radius: var(--radius-2xl);
-  padding: 22px;
-  background: var(--hero-bg);
-  color: var(--hero-ink);
-  box-shadow: var(--shadow-card-hover);
-}
-
-.home-hero__body,
-.home-hero__stats {
-  position: relative;
-  z-index: 1;
+  padding: 22px 20px 0;
+  border-top: 1px solid var(--brand-solid);
+  background: var(--panel-tint);
 }
 
 .home-hero__body {
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  gap: 12px;
-}
-
-.home-hero__eyebrow {
-  display: inline-flex;
-  margin-bottom: 6px;
-  padding: 3px 9px;
-  border: 1px solid var(--hero-line);
-  border-radius: 999px;
-  background: var(--hero-veil);
-  color: var(--hero-soft);
-  font-size: 10px;
-  line-height: 14px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .home-hero__greeting {
   margin: 0;
-  font-size: 34px;
-  line-height: 38px;
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  font-size: 38px;
+  line-height: 40px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
 }
 
 .home-hero__day {
-  margin: 3px 0 0;
+  margin: 5px 0 20px;
+  color: var(--muted);
   font-size: 14px;
   line-height: 20px;
   font-weight: 500;
-  color: var(--hero-soft);
 }
 
 .home-hero__stats {
   display: grid;
   grid-template-columns: 1.25fr 1fr;
-  gap: 8px;
-  margin-top: 18px;
-  padding: 10px;
-  border: 1px solid var(--hero-line);
-  border-radius: var(--radius-md);
-  background: var(--hero-veil);
+  margin: 0 -20px;
+  border-top: 1px solid var(--rule-strong);
 }
 
 .home-hero__stat {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
-  padding: 2px 8px;
+  padding: 13px 20px 16px;
 }
 
 .home-hero__stat + .home-hero__stat {
-  border-left: 1px solid var(--hero-line);
+  border-left: 1px solid var(--rule);
 }
 
 .home-hero__stat > span {
-  color: var(--hero-soft);
+  color: var(--muted);
   font-size: 10px;
   line-height: 14px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .home-hero__stat > strong {
-  font-size: 21px;
-  line-height: 26px;
-  font-weight: 700;
+  font-size: 34px;
+  line-height: 36px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
 }
 
 .home-hero__stat small {
-  margin-left: 1px;
-  font-size: 11px;
+  margin-left: 2px;
+  color: var(--muted);
+  font-size: 13px;
   font-weight: 600;
-  color: var(--hero-soft);
+  letter-spacing: 0;
 }
 
-.home-hero__orb {
-  position: absolute;
-  border-radius: 999px;
-  background: var(--hero-veil);
-  pointer-events: none;
+.home-hero__stat em {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-style: normal;
+  font-weight: 500;
 }
-
-.home-hero__orb--one {
-  width: 190px;
-  height: 190px;
-  top: -104px;
-  right: -48px;
-  animation: home-orb-one 16s var(--ease) infinite alternate;
-}
-
-.home-hero__orb--two {
-  width: 120px;
-  height: 120px;
-  bottom: -74px;
-  right: 72px;
-  animation: home-orb-two 22s var(--ease) infinite alternate;
-}
-
-/* Les orbes flottent lentement, en phases opposées : le fond du héros
-   respire sans jamais occuper le texte. */
-@keyframes home-orb-one {
-  from {
-    transform: translate3d(-10px, 8px, 0);
-  }
-  to {
-    transform: translate3d(12px, -10px, 0);
-  }
-}
-
-@keyframes home-orb-two {
-  from {
-    transform: translate3d(8px, -6px, 0);
-  }
-  to {
-    transform: translate3d(-9px, 9px, 0);
-  }
-}
-
-.home-hero__glyph {
-  position: absolute;
-  right: -14px;
-  bottom: -22px;
-  z-index: 0;
-  color: var(--hero-hover);
-  transform: rotate(-9deg);
-  pointer-events: none;
-}
-
-/* --- Bandeau d'état ------------------------------------------------------- */
 
 .home-status {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 0 2px;
+  padding: 0;
 }
 
-/* --- Cartes widget -------------------------------------------------------- */
-
 .card.home-widget {
-  padding: 15px 16px 16px;
-  border-radius: var(--radius-lg);
+  padding: 16px 18px 18px;
 }
 
 .home-widget__header {
   display: flex;
   align-items: center;
-  gap: 9px;
-  margin-bottom: 12px;
-}
-
-.home-widget__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  border-radius: 12px;
-  background: var(--brand-pale);
-  color: var(--brand-deep);
+  gap: 10px;
+  margin-bottom: 4px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--rule);
 }
 
 .home-widget__title {
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: 16px;
-  line-height: 21px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
   color: var(--ink);
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 750;
+  letter-spacing: -0.015em;
 }
 
 .home-widget__more {
@@ -212,73 +125,48 @@
   align-items: center;
   gap: 1px;
   min-height: var(--tap);
-  padding: 0 6px 0 10px;
+  padding: 0 0 0 10px;
   border: 0;
-  border-radius: 999px;
   background: transparent;
   color: var(--brand-deep);
-  font-size: 12px;
-  font-weight: 700;
-  transition: background var(--duration) var(--ease), transform var(--duration) var(--ease);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  transition: color var(--duration) var(--ease);
 }
 
-.home-widget__more:hover,
-.home-widget__more:active {
-  background: var(--brand-pale);
+.home-widget__more:hover {
+  color: var(--brand-solid);
 }
-
-.home-widget__more:active {
-  transform: scale(0.96);
-}
-
-/* --- Moyenne -------------------------------------------------------------- */
 
 .home-average {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  padding: 4px 2px 14px;
-}
-
-.home-average__ring {
-  --ring-turn: 0deg;
-  position: relative;
-  width: 104px;
-  height: 104px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: conic-gradient(
-    var(--brand) var(--ring-turn),
-    color-mix(in srgb, var(--border) 55%, transparent) 0
-  );
   display: grid;
-  place-items: center;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  gap: 2px 16px;
+  padding: 12px 0 10px;
 }
 
-/* L'anneau entre AVEC sa carte : une moyenne qui arrive en retard n'a pas
-   de bague qui surgit seule une seconde après l'écran ouvert (#569). */
-.home-widget.home-rise .home-average__ring {
-  animation: home-ring-in 640ms var(--ease-out) both;
-}
-
-.home-average__ring-core {
+.home-average__figure {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 84px;
-  height: 84px;
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border-soft);
+  align-items: baseline;
+  gap: 3px;
 }
 
-.home-average__ring-core strong {
-  color: var(--brand-deep);
-  font-size: 27px;
-  line-height: 1;
-  font-weight: 700;
-  letter-spacing: -0.04em;
+.home-average__figure strong {
+  color: var(--ink);
+  font-size: 44px;
+  line-height: 44px;
+  font-weight: 800;
+  letter-spacing: -0.045em;
   font-variant-numeric: tabular-nums;
+}
+
+.home-average__figure span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .home-average__copy {
@@ -286,43 +174,54 @@
   flex-direction: column;
   gap: 3px;
   min-width: 0;
-}
-
-.home-average__eyebrow {
-  color: var(--ink);
-  font-size: 14px;
-  line-height: 19px;
-  font-weight: 700;
+  padding-bottom: 4px;
 }
 
 .home-average__origin {
   margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 17px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
 }
 
 .home-average__count {
-  display: inline-flex;
-  align-self: flex-start;
-  margin-top: 3px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface-variant);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 16px;
-  font-weight: 600;
+}
+
+.home-average__meter {
+  grid-column: 1 / -1;
+  display: block;
+  height: 3px;
+  margin-top: 10px;
+  background: var(--rule);
+}
+
+.home-average__meter > span {
+  display: block;
+  height: 100%;
+  background: var(--brand-solid);
 }
 
 .home-grade {
   display: flex;
   align-items: center;
   gap: 9px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-soft);
+  margin-top: 2px;
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--rule);
   min-width: 0;
+}
+
+.home-grade__mark,
+.home-task__mark,
+.home-course__mark {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
 }
 
 .home-grade__subject {
@@ -331,65 +230,48 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
 }
 
 .home-grade__note {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
 
 .home-grade__date {
-  font-size: 11px;
   color: var(--muted);
+  font-size: 12px;
   white-space: nowrap;
 }
-
-/* --- Cours ---------------------------------------------------------------- */
 
 .home-courses {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
 .home-course {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 60px;
-  padding: 9px 12px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  border: 1px solid transparent;
+  min-height: 58px;
+  padding: 10px 0;
+  border-top: 1px solid var(--rule);
+  min-width: 0;
+}
+
+.home-course:first-child {
+  border-top: 0;
+  padding-top: 8px;
 }
 
 .home-course--live {
-  border-color: currentColor;
-  box-shadow: 0 8px 20px color-mix(in srgb, currentColor 14%, transparent);
-}
-
-.home-course__spine {
-  width: 4px;
-  align-self: stretch;
-  flex: 0 0 auto;
-  border-radius: 999px;
-}
-
-.home-course__emoji {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface) 62%, transparent);
-  font-size: 18px;
-  line-height: 1;
+  margin: 0 -18px;
+  padding-left: 18px;
+  padding-right: 18px;
+  background: var(--panel-tint);
 }
 
 .home-course__subject,
@@ -401,21 +283,20 @@
 }
 
 .home-course__subject {
-  display: -webkit-box;
-  overflow: hidden;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   font-size: 15px;
   line-height: 20px;
-  font-weight: 700;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.home-course--live .home-course__subject {
+  color: var(--brand-deep);
 }
 
 .home-course__room {
+  color: var(--muted);
   font-size: 12px;
   line-height: 17px;
-  opacity: 0.8;
 }
 
 .home-course__when {
@@ -432,13 +313,11 @@
 }
 
 .home-course__when span {
-  font-size: 11px;
+  color: var(--muted);
+  font-size: 12px;
   font-weight: 600;
-  opacity: 0.82;
   white-space: nowrap;
 }
-
-/* --- Devoirs -------------------------------------------------------------- */
 
 .home-tasks {
   display: flex;
@@ -450,19 +329,21 @@
   align-items: center;
   gap: 10px;
   padding: 10px 0;
-  border-top: 1px solid var(--border-soft);
+  border-top: 1px solid var(--rule);
   min-width: 0;
 }
 
 .home-task:first-child {
   border-top: 0;
-  padding-top: 0;
+  padding-top: 8px;
 }
 
 .home-task__subject {
   font-size: 12px;
   line-height: 16px;
-  font-weight: 700;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -480,12 +361,13 @@
 .home-task__due {
   flex: 0 0 auto;
   max-width: 42%;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--surface-variant);
+  padding: 2px 6px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xs);
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  line-height: 15px;
+  font-weight: 650;
   text-align: right;
   white-space: nowrap;
   overflow: hidden;
@@ -493,16 +375,14 @@
 }
 
 .home-task__due--near {
-  background: var(--brand-pale);
+  border-color: var(--rule-brand);
   color: var(--brand-deep);
 }
 
 .home-task__due--soon {
-  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  border-color: var(--danger);
   color: var(--danger-ink);
 }
-
-/* --- Alertes -------------------------------------------------------------- */
 
 .home-alert {
   display: flex;
@@ -510,45 +390,34 @@
   gap: 10px;
   width: 100%;
   min-height: var(--tap);
-  padding: 10px 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  padding: 11px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
   color: var(--ink);
   text-align: left;
-  box-shadow: var(--shadow-card);
-  transition: border-color var(--duration) var(--ease), transform var(--duration) var(--ease),
-    box-shadow var(--duration) var(--ease);
+  transition: border-color var(--duration) var(--ease), background var(--duration) var(--ease);
 }
 
 .home-alert:hover {
-  border-color: var(--border-brand);
-  box-shadow: var(--shadow-card-hover);
-}
-
-.home-alert:active {
-  transform: scale(0.995);
+  border-color: var(--rule-strong);
+  background: var(--panel-tint);
 }
 
 .home-alert--active {
   border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+  background: color-mix(in srgb, var(--danger) 5%, var(--panel));
 }
 
 .home-alert__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
   flex: 0 0 auto;
-  border-radius: 14px;
-  background: var(--surface-variant);
   color: var(--muted);
 }
 
 .home-alert--active .home-alert__icon {
-  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
   color: var(--danger-ink);
 }
 
@@ -562,36 +431,35 @@
 .home-alert__title {
   font-size: 14px;
   line-height: 19px;
-  font-weight: 700;
+  font-weight: 750;
 }
 
 .home-alert__status {
+  color: var(--muted);
   font-size: 12px;
   line-height: 16px;
-  color: var(--muted);
 }
 
 .home-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 6px;
-  border-radius: 999px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: var(--radius-xs);
   background: var(--danger-solid);
   color: var(--on-danger);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
-
-/* --- Accès rapides -------------------------------------------------------- */
 
 .home-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 0 18px;
+  border-top: 1px solid var(--rule);
 }
 
 @media (min-width: 560px) {
@@ -600,47 +468,38 @@
   }
 }
 
-@media (max-width: 559px) {
-  .home-action > svg {
-    display: none;
+@media (max-width: 380px) {
+  .home-actions {
+    grid-template-columns: 1fr;
   }
 }
 
 .home-action {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 72px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(150deg, color-mix(in srgb, var(--surface) 94%, var(--brand) 6%), var(--surface));
+  gap: 9px;
+  min-height: 52px;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
   color: var(--ink);
   text-align: left;
-  box-shadow: var(--shadow-card);
-  transition: border-color var(--duration) var(--ease), transform var(--duration) var(--ease-out),
-    box-shadow var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease);
 }
 
 .home-action:hover {
-  border-color: var(--border-brand);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-card-hover);
-}
-
-.home-action:active {
-  transform: scale(0.99);
+  background: var(--panel-tint);
 }
 
 .home-action__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 22px;
   flex: 0 0 auto;
-  border-radius: 14px;
+  color: var(--brand-deep);
 }
 
 .home-action__text {
@@ -651,8 +510,8 @@
 }
 
 .home-action__label {
-  font-size: 14px;
-  line-height: 19px;
+  font-size: 13px;
+  line-height: 18px;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -660,64 +519,56 @@
 }
 
 .home-action__status {
-  font-size: 11px;
-  line-height: 15px;
   color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.home-footnote {
-  margin: 0 2px 4px;
-  text-align: center;
+.home-action > svg {
+  flex: 0 0 auto;
+  color: var(--muted);
 }
 
-/* --- Animation ------------------------------------------------------------ */
+.home-footnote {
+  margin: 0;
+  text-align: center;
+}
 
 @keyframes home-rise {
   from {
     opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes home-ring-in {
-  from {
-    opacity: 0;
-    transform: scale(0.86) rotate(-18deg);
+    transform: translateY(6px);
   }
 }
 
 .home-rise {
-  animation: home-rise 360ms var(--ease-out) both;
+  animation: home-rise 300ms var(--ease-out) both;
 }
 
 @media (max-width: 380px) {
   .home-hero {
-    padding: 18px;
+    padding: 18px 16px 0;
   }
 
   .home-hero__greeting {
+    font-size: 33px;
+    line-height: 36px;
+  }
+
+  .home-hero__stats {
+    margin: 0 -16px;
+  }
+
+  .home-hero__stat {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .home-hero__stat > strong {
     font-size: 30px;
-    line-height: 35px;
-  }
-
-  .home-average__ring {
-    width: 92px;
-    height: 92px;
-  }
-
-  .home-average__ring-core {
-    width: 72px;
-    height: 72px;
-  }
-
-  .home-average__ring-core strong {
-    font-size: 25px;
+    line-height: 32px;
   }
 }

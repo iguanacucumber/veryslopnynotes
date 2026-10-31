@@ -1,7 +1,7 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { IconChevronRight, IconGrades } from "../../ui/icons";
 import { frDateShort, subjectColor, tint } from "../../lib/format";
-import { EmptyState, ErrorBox, Loading, Page, StaleBadge, SubjectAvatar } from "../../ui/components";
+import { EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../../ui/components";
 import {
   algorithmChipLabel,
   algorithmHint,
@@ -34,21 +34,10 @@ import {
 } from "./model";
 
 const CHART_HEIGHT = 96;
-/** Largeur de repli, avant la première mesure : le tracé est déjà lisible,
- *  il est recalculé à la taille réelle dès que l'élément est mesuré. */
+/** Largeur de repli avant la première mesure ; recalculée à la taille réelle. */
 const CHART_FALLBACK_WIDTH = 320;
 
-/**
- * Écran SANS donnée : distingue trois états, jamais deux (#537, I14).
- *
- * - pas de payload du tout = « Notes indisponibles » (erreur + Réessayer) ;
- * - payload CORROMPU (JSON illisible) = ERREUR : le cache n'est pas vide, il
- *   est illisible — dire « aucune note » affirmerait un fait faux ;
- * - payload lisible mais sans note = « Aucune note en cache » (état vide).
- *
- * Composant PUR (aucun état interne) : l'écran est donc rendu tel quel par
- * les tests (`tests/web/grades.test.ts`).
- */
+/** Écran SANS donnée : un payload illisible est une ERREUR, jamais « aucune note » (I14). */
 export function GradesNoData({
   payload,
   loading,
@@ -121,7 +110,6 @@ function smoothPath(points: ChartPoint[]): string {
   return path;
 }
 
-/** Pastille de couleur de matière (fond teinté, encre foncée/éclaircie). */
 function subjectTint(hex: string, dark: boolean): { background: string; ink: string } {
   return {
     background: tint(hex, dark ? -0.62 : 0.86),
@@ -129,19 +117,8 @@ function subjectTint(hex: string, dark: boolean): { background: string; ink: str
   };
 }
 
-/**
- * Sparkline de l'historique, dessinée en SVG inline (aucune dépendance).
- * Décorative pour le lecteur d'écran : la phrase `aria-label` porte le sens,
- * et le point final reprend le geste de la référence.
- *
- * Géométrie ISOTROPE (#568) : le `viewBox` est exprimé en PIXELS RÉELS (la
- * largeur mesurée de l'élément), pas un cadre fixe étiré — un cadre étiré
- * (`preserveAspectRatio="none"`) déformait la courbe, la pastille et son halo
- * en ellipses, et aplatissait la tendance.
- *
- * `width` (px CSS) est la largeur mesurée : elle n'est passée à la main que
- * par les tests, qui n'ont pas de navigateur.
- */
+/** Géométrie ISOTROPE : `viewBox` en pixels réels, sinon un cadre étiré déforme
+ *  la courbe et la pastille en ellipses. */
 export function Sparkline({
   values,
   width,
@@ -154,8 +131,8 @@ export function Sparkline({
   const ref = useRef<SVGSVGElement | null>(null);
   const [measured, setMeasured] = useState(0);
 
-  // Largeur RÉELLE de l'élément : le `viewBox` suit le conteneur, l'échelle
-  // du dessin reste 1:1 et rien n'est déformé, du téléphone à la tablette.
+  // Largeur réelle : `viewBox` suit le conteneur, échelle 1:1 du téléphone à
+  // la tablette.
   useLayoutEffect(() => {
     const node = ref.current;
     if (!node || typeof ResizeObserver === "undefined") return;
@@ -198,15 +175,14 @@ export function Sparkline({
       ) : null}
       {points.length > 1 ? <path className="grades-chart__area" d={area} /> : null}
       {points.length > 1 ? <path className="grades-chart__line" d={path} pathLength={1} /> : null}
-      {/* Remplissages : `vector-effect` ne s'applique qu'aux traits, il ne les
-          garde donc pas ronds — ici l'échelle est uniforme, ils le sont. */}
+      {/* Remplissages : `vector-effect` ne s'applique qu'aux traits — ici
+          l'échelle est uniforme, les cercles restent ronds. */}
       <circle className="grades-chart__halo" cx={last.x} cy={last.y} r={8} />
       <circle className="grades-chart__dot" cx={last.x} cy={last.y} r={3.5} />
     </svg>
   );
 }
 
-/** Carte moyenne générale : chiffre, provenance, courbe, mention d'historique. */
 export function GradesHero({ report }: { report: AveragesReport }) {
   const titleId = useId();
   const value = report.generalValue;
@@ -244,7 +220,6 @@ export function GradesHero({ report }: { report: AveragesReport }) {
   );
 }
 
-/** Dernières notes : cartes horizontales, comme les « nouvelles notes » de Papillon. */
 export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boolean }) {
   const latest = groups
     .flatMap((group) => group.grades)
@@ -262,16 +237,13 @@ export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boo
           return (
             <article className="grades-latest__card" key={grade.id}>
               <div className="grades-latest__head">
-                <SubjectAvatar subject={grade.subject} size={28} dark={dark} />
+                <span className="grades-latest__mark" style={{ background: color }} aria-hidden="true" />
                 <span className="grades-latest__subject">{grade.subject}</span>
               </div>
               <p className="grades-latest__label">{gradeLabel(grade)}</p>
               <div className="grades-latest__foot">
                 <span className="grades-latest__date">{frDateShort(grade.date)}</span>
-                <span
-                  className="grades-pill grades-pill--small"
-                  style={{ background: palette.background, color: palette.ink }}
-                >
+                <span className="grades-pill grades-pill--small" style={{ color: palette.ink }}>
                   {gradeValueLabel(grade.value)}
                   {scaleSuffix(grade.scale)}
                 </span>
@@ -284,7 +256,6 @@ export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boo
   );
 }
 
-/** Sélecteur de période natif + puces d'algorithme. */
 export function GradesToolbar({
   algorithm,
   onAlgorithm,
@@ -399,9 +370,9 @@ function SubjectSection({
   const color = subjectColor(group.subject);
   const palette = subjectTint(color, dark);
   return (
-    <details className="card grades-subject">
+    <details className="grades-subject">
       <summary className="grades-subject__summary">
-        <SubjectAvatar subject={group.subject} size={40} dark={dark} />
+        <span className="grades-subject__mark" style={{ background: color }} aria-hidden="true" />
         <span className="grades-subject__name">
           <span className="grades-subject__title">{group.subject}</span>
           <span className="grades-subject__meter" aria-hidden="true">
@@ -446,7 +417,6 @@ function SubjectSection({
   );
 }
 
-/** Sections par matière, notes dépliables (élément natif `details`). */
 export function GradesSubjectSections({
   groups,
   report,
@@ -457,7 +427,7 @@ export function GradesSubjectSections({
   dark: boolean;
 }) {
   return (
-    <section className="stack" aria-label="Notes par matière">
+    <section className="grades-ledger" aria-label="Notes par matière">
       {groups.map((group) => (
         <SubjectSection key={group.subject} group={group} report={report} dark={dark} />
       ))}
@@ -465,14 +435,8 @@ export function GradesSubjectSections({
   );
 }
 
-/**
- * Onglet Notes, écran PUR (#527) : il ne lit que ce qu'on lui donne.
- *
- * La route ne fait que brancher la ressource et les sélecteurs ; l'écran est
- * donc RENDU par les tests (`tests/web/grades.test.ts`). Le payload reçu
- * porte déjà la requête à laquelle il appartient : un payload d'une autre
- * période n'arrive donc jamais ici (invalidé par `useResource`).
- */
+/** Écran PUR : il ne lit que ce qu'on lui donne. Le payload porte déjà la
+ *  requête à laquelle il appartient (invalidé par `useResource`). */
 export function GradesScreen({
   payload,
   loading,
@@ -509,10 +473,6 @@ export function GradesScreen({
 
   const hasData = data.report !== null || data.grades.length > 0;
 
-  // #537 : l'écran SANS donnée est un composant pur (`GradesNoData`) : il
-  // distingue « pas de cache », « cache ILLISIBLE » (erreur) et « aucune
-  // note » (vide). Un JSON corrompu n'est jamais présenté comme une absence
-  // de donnée.
   if (!hasData) {
     return (
       <Page>

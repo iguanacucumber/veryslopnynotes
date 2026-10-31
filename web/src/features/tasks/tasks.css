@@ -1,24 +1,24 @@
-/* Tâches — cartes de devoir, état terminé. */
-
 .tasks-assistant {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 11px;
   padding: 13px 14px;
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(150deg, color-mix(in srgb, var(--surface) 90%, var(--brand) 10%), var(--surface));
+  border: 1px solid var(--rule);
+  border-top: 1px solid var(--brand-solid);
+  border-radius: var(--radius-sm);
+  background: var(--panel-tint);
 }
 
 .tasks-assistant__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
-  border-radius: 12px;
-  background: var(--brand-pale);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
   color: var(--brand-deep);
 }
 
@@ -32,13 +32,12 @@
 
 .task-card {
   position: relative;
-  padding: 15px;
-  border-radius: var(--radius-lg);
-  transition: border-color var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
+  padding: 16px;
+  transition: border-color var(--duration) var(--ease);
 }
 
 .task-card--done {
-  opacity: 0.78;
+  opacity: 0.74;
 }
 
 .task-card__head {
@@ -47,21 +46,29 @@
   gap: 11px;
 }
 
+.task-card__mark {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 1px;
+}
+
 .task-card__main {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 3px;
 }
 
 .task-card__subject {
   color: var(--muted);
-  font-size: 11px;
-  line-height: 15px;
+  font-size: 10px;
+  line-height: 14px;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -74,7 +81,8 @@
   color: var(--ink);
   font-size: 17px;
   line-height: 23px;
-  font-weight: 700;
+  font-weight: 750;
+  letter-spacing: -0.01em;
   overflow-wrap: anywhere;
 }
 
@@ -87,22 +95,22 @@
 .task-card__due {
   display: inline-flex;
   margin-top: 2px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface-variant);
+  padding: 1px 6px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xs);
   color: var(--muted);
-  font-size: 11px;
-  line-height: 17px;
-  font-weight: 700;
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 650;
 }
 
 .task-card__due--near {
-  background: var(--brand-pale);
+  border-color: var(--rule-brand);
   color: var(--brand-deep);
 }
 
 .task-card__due--soon {
-  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  border-color: var(--danger);
   color: var(--danger-ink);
 }
 
@@ -110,23 +118,18 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--tap);
-  height: var(--tap);
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
-  border: 2px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
   color: var(--on-brand);
-  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease),
-    transform var(--duration) var(--ease-out);
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
 }
 
 .task-check:hover {
-  border-color: var(--brand);
-}
-
-.task-check:active {
-  transform: scale(0.9);
+  border-color: var(--brand-solid);
 }
 
 .task-check--done {
@@ -143,7 +146,7 @@
   margin: 10px 0 0;
   color: var(--ink);
   font-size: 14px;
-  line-height: 20px;
+  line-height: 21px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -153,13 +156,11 @@
   max-width: 100%;
 }
 
-/* Deux actions principales côte à côte, la photo seule sur sa ligne : à
-   360 px, trois pastilles de même poids ne tenaient pas sur deux rangées. */
 .task-card__foot {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  gap: 8px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 12px;
 }
 
 .task-help {
@@ -170,22 +171,22 @@
   min-width: 0;
   min-height: var(--tap);
   padding: 0 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
   color: var(--brand-deep);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 650;
   white-space: nowrap;
-  transition: background var(--duration) var(--ease), transform var(--duration) var(--ease-out);
+  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
 }
 
 .task-help:hover {
-  background: var(--brand-pale);
+  border-color: var(--rule-strong);
+  background: var(--panel-tint);
 }
 
-/* Action secondaire : elle reste accessible, mais ne dispute plus la
-   hiérarchie aux deux actions principales. */
+/* Action secondaire : accessible, hors de la hiérarchie des deux principales. */
 .task-help--photo {
   grid-column: 1 / -1;
   justify-self: start;
@@ -197,23 +198,20 @@
 }
 
 .task-help--photo:hover {
-  background: var(--surface-variant);
+  border-color: var(--rule);
+  background: var(--panel-tint);
   color: var(--brand-deep);
 }
 
 .task-help--photo.task-help--open {
-  border-color: var(--border-brand);
-  background: var(--brand-pale);
+  border-color: var(--rule-brand);
+  background: var(--panel-tint);
   color: var(--brand-deep);
 }
 
 .task-help--open {
-  background: var(--brand-pale);
-  border-color: var(--border-brand);
-}
-
-.task-help:active {
-  transform: scale(0.97);
+  background: var(--panel-tint);
+  border-color: var(--rule-brand);
 }
 
 .task-help:disabled {
@@ -230,10 +228,10 @@
   flex-direction: column;
   gap: 10px;
   margin-top: 10px;
-  padding: 12px;
-  border: 1px solid var(--border-soft);
+  padding: 13px;
+  border: 1px solid var(--rule);
   border-radius: var(--radius-sm);
-  background: var(--surface-variant);
+  background: var(--paper);
 }
 
 .task-help__panel-head {
@@ -249,8 +247,9 @@
   width: 30px;
   height: 30px;
   flex: 0 0 auto;
-  border-radius: 10px;
-  background: var(--brand-pale);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xs);
+  background: var(--panel);
   color: var(--brand-deep);
 }
 
@@ -260,6 +259,7 @@
   color: var(--ink);
   font-size: 15px;
   line-height: 20px;
+  font-weight: 700;
 }
 
 .task-help__panel-close {
@@ -288,7 +288,7 @@
   margin: 0;
   color: var(--ink);
   font-size: 14px;
-  line-height: 20px;
+  line-height: 21px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -342,7 +342,7 @@
 
 .task-help__privacy {
   padding-top: 8px;
-  border-top: 1px solid var(--border-soft);
+  border-top: 1px solid var(--rule);
 }
 
 .task-help__privacy summary {
@@ -366,18 +366,17 @@
   margin-top: 2px;
 }
 
-/* Choix de la source photo : styles partagés dans `styles/app.css`
-   (`.photo-choice`), utilisés aussi par le cahier. */
+/* Styles partagés dans `styles/app.css` (`.photo-choice`), aussi utilisés par le cahier. */
 
 @media (max-width: 380px) {
   .task-card {
-    padding: 13px;
+    padding: 14px;
   }
 
   .task-help {
     gap: 5px;
     padding: 0 10px;
-    font-size: 12.5px;
+    font-size: 12px;
   }
 
   .task-help--photo {

@@ -140,24 +140,20 @@ describe("web mouvement", () => {
     expect(rivals.filter((rival) => !rival.file.endsWith("styles/tokens.css"))).toEqual([]);
   });
 
-  test("fond : les halos dérivent derrière le contenu et ne captent aucun geste", () => {
+  test("barre d'onglets : pleine largeur, filet supérieur et indicateur de 3 px", () => {
     const css = readFileSync(join(ROOT, "web/src/styles/app.css"), "utf8");
-    // La couche de fond est fixe, transparente aux gestes, et sous le contenu.
-    expect(css).toMatch(/body::before,\s*body::after\s*\{[^}]*position:\s*fixed/);
-    expect(css).toMatch(/body::before,\s*body::after\s*\{[^}]*pointer-events:\s*none/);
-    expect(css).toMatch(/#root\s*\{[^}]*position:\s*relative[^}]*z-index:\s*1/);
-    // La dérive des halos est un `transform` : composée, sans repaint d'écran.
-    expect(css).toMatch(/@keyframes page-drift-a\s*\{[^}]*transform/);
-    expect(css).toMatch(/@keyframes page-drift-b\s*\{[^}]*transform/);
+    expect(css).toMatch(/\.tabbar\s*\{[^}]*position:\s*fixed/);
+    expect(css).toMatch(/\.tabbar\s*\{[^}]*left:\s*0[^}]*right:\s*0/);
+    expect(css).toMatch(/\.tabbar\s*\{[^}]*border-top:\s*1px solid var\(--rule-strong\)/);
+    expect(css).toMatch(/\.tabbar__pill\s*\{[^}]*height:\s*3px/);
   });
 
-  test("cartes héros : le reflet qui glisse passe sous le texte", () => {
+  test("en-tête : aplat de marque, aucun flou ni ombre", () => {
     const css = readFileSync(join(ROOT, "web/src/styles/app.css"), "utf8");
-    // La carte est son propre contexte d'empilement, le reflet est en
-    // `z-index: -1` : il reste entre le fond de la carte et son contenu.
-    expect(css).toMatch(/\.card--brand,\s*\.card\.home-hero\s*\{[^}]*z-index:\s*0/);
-    expect(css).toMatch(/\.card--brand::before,\s*\.card\.home-hero::before\s*\{[^}]*z-index:\s*-1/);
-    expect(css).toMatch(/@keyframes hero-sheen\s*\{[^}]*transform/);
+    expect(css).toMatch(/\.topbar\s*\{[^}]*background:\s*var\(--brand-solid\)/);
+    const topbar = css.match(/\.topbar\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(topbar).not.toContain("box-shadow");
+    expect(topbar).not.toContain("backdrop-filter");
   });
 
   test("politique : les animations restent sur transform/opacité", () => {

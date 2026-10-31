@@ -2,11 +2,7 @@ import { paletteOf, SCHEMES } from "../../lib/schemes";
 import { useApp } from "../../ui/AppContext";
 import { IconCheck } from "../../ui/icons";
 
-/**
- * Sélecteur de palette (#335). L'aperçu n'est pas une vignette figée : il
- * vient de la même table que les variables CSS, donc il montre exactement ce
- * que l'écran affichera (variante claire ou sombre selon le mode en cours).
- */
+/** L'aperçu vient de la même table que les variables CSS : il montre ce que l'écran affichera. */
 export function SchemePicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
   const { dark } = useApp();
   return (
@@ -26,11 +22,17 @@ export function SchemePicker({ value, onChange }: { value: string; onChange: (id
             <span
               className="scheme-card__preview"
               aria-hidden="true"
-              style={{ background: palette.page, boxShadow: `inset 0 0 0 1px ${palette.surfaceContainer}` }}
+              style={{
+                background: palette.page,
+                border: `1px solid ${palette.surfaceContainer}`,
+              }}
             >
               <span
                 className="scheme-card__sheet"
-                style={{ background: palette.surface, boxShadow: `0 1px 4px ${palette.surfaceContainer}` }}
+                style={{
+                  background: palette.surface,
+                  border: `1px solid ${palette.surfaceContainer}`,
+                }}
               >
                 <span className="scheme-card__dot" style={{ background: palette.brand }} />
                 <span className="scheme-card__rows">

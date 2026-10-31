@@ -96,8 +96,7 @@ export default function ProfileScreen() {
   }, [refreshTick, attempt]);
 
   const subtitle = profile ? profileSubtitle(profile) : "";
-  // Le compte de session vient en tête : les enfants publiés suivent, sans
-  // doublon. Aucun choix ici : l'appareil ne sert qu'une session à la fois.
+  // Le compte de session vient en tête, puis les enfants publiés, sans doublon.
   const linkedAccounts = switchableAccounts(profile);
 
   function openPairing(): void {
@@ -111,9 +110,8 @@ export default function ProfileScreen() {
     setLoggingOut(true);
     setLogoutError("");
     try {
-      // La session est invalidée côté natif (caches purgés) : l'interface
-      // se ferme dans la foulée, sinon l'accueil afficherait « aucune donnée
-      // en cache » pour un compte déconnecté (#360).
+      // La session est invalidée côté natif (caches purgés) : l'interface se ferme
+      // dans la foulée, sinon l'accueil afficherait « aucune donnée en cache ».
       await logoutSession({ logout: bridge.logout, closeSession });
       setLogoutAsk(false);
       setProfile(null);
@@ -173,7 +171,7 @@ export default function ProfileScreen() {
                 {profile.displayName}
               </h2>
               {subtitle ? (
-                <p className="t-body-m" style={{ margin: "2px 0 0", color: "var(--hero-soft)" }}>
+                <p className="t-body-m" style={{ margin: "2px 0 0", color: "var(--on-brand-soft)" }}>
                   {subtitle}
                 </p>
               ) : null}
@@ -187,9 +185,8 @@ export default function ProfileScreen() {
       ) : null}
 
       {storageUnavailable ? (
-        // #401 : même avertissement qu'à l'appairage. Un Keystore mort ne
-        // conserve ni la session ni la clé de l'assistant : le profil ne doit
-        // pas laisser croire que tout est enregistré.
+        // Un Keystore mort ne conserve ni la session ni la clé de l'assistant : le
+        // profil ne doit pas laisser croire que tout est enregistré.
         <div className="card card--danger" role="alert">
           <p className="t-body-m" style={{ margin: 0, color: "var(--danger-ink)" }}>
             {STORAGE_UNAVAILABLE_MESSAGE}
@@ -244,9 +241,8 @@ export default function ProfileScreen() {
       </Section>
 
       {linkedAccounts.length > 1 ? (
-        // Enfants publiés par /v1/me (#140) : lecture seule, car changer de
-        // compte exige un nouvel appairage — pas un sélecteur qui ne change
-        // aucune donnée.
+        // Enfants publiés par /v1/me : lecture seule, car changer de compte exige
+        // un nouvel appairage.
         <Section title="Comptes liés">
           <Rows>
             {linkedAccounts.map((account, index) => (

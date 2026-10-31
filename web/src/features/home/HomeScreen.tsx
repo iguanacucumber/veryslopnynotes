@@ -1,7 +1,6 @@
-import { useMemo, useState, type ComponentType, type CSSProperties, type ReactElement } from "react";
+import { useMemo, useState, type ComponentType, type ReactElement } from "react";
 import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { frDate, relativeFr, subjectColor, tint } from "../../lib/format";
-import { subjectEmoji } from "../../lib/subjectVisual";
 import { useApp, useResource } from "../../ui/AppContext";
 import {
   Card,
@@ -11,7 +10,6 @@ import {
   Page,
   Section,
   StaleBadge,
-  SubjectAvatar,
 } from "../../ui/components";
 import {
   IconBell,
@@ -19,12 +17,10 @@ import {
   IconCalendar,
   IconChevronRight,
   IconFood,
-  IconGrades,
   IconMessage,
   IconSettings,
   IconShield,
   IconSparkles,
-  IconTasks,
   IconWarning,
 } from "../../ui/icons";
 import {
@@ -60,14 +56,8 @@ import "./home.css";
 
 type IconComponent = ComponentType<{ size?: number }>;
 
-/**
- * Décision d'entrée, FIGÉE au montage (#569).
- *
- * Un élément entre UNE fois, à l'ouverture de l'écran : celui qui arrive plus
- * tard (données asynchrones, rafraîchissement) apparaît SANS entrée. La
- * décision ne bouge plus ensuite : retirer la classe en cours d'entrée
- * couperait l'animation au milieu.
- */
+/** Décision d'entrée FIGÉE au montage : celui qui arrive après la fenêtre de
+ *  fraîcheur apparaît SANS entrée, et la classe n'est jamais retirée. */
 function useEntrance(openedAt: number): boolean {
   const [animate] = useState(() => shouldAnimateOnMount(openedAt, Date.now()));
   return animate;
@@ -79,7 +69,7 @@ interface Palette {
   ink: string;
 }
 
-/** Pastel de matière + encre mesurée, adaptés au thème (mêmes pas que Compose). */
+/** Pastel de matière + encre mesurée, mêmes pas que Compose. */
 function paletteFor(subject: string, dark: boolean): Palette {
   const base = subjectColor(subject);
   return {
@@ -89,21 +79,9 @@ function paletteFor(subject: string, dark: boolean): Palette {
   };
 }
 
-function WidgetHeader({
-  icon,
-  title,
-  onMore,
-}: {
-  icon: IconComponent;
-  title: string;
-  onMore?: () => void;
-}) {
-  const Icon = icon;
+function WidgetHeader({ title, onMore }: { title: string; onMore?: () => void }) {
   return (
     <div className="home-widget__header">
-      <span className="home-widget__icon" aria-hidden="true">
-        <Icon size={18} />
-      </span>
       <h2 className="home-widget__title">{title}</h2>
       {onMore ? (
         <button type="button" className="home-widget__more" onClick={onMore} aria-label={`${title} — tout voir`}>
@@ -133,7 +111,7 @@ function AverageWidget({
   const fraction = value === null ? 0 : Math.max(0, Math.min(1, value / 20));
   return (
     <Card className={animate ? "home-widget home-rise" : "home-widget"}>
-      <WidgetHeader icon={IconGrades} title="Moyenne générale" onMore={onMore} />
+      <WidgetHeader title="Moyenne générale" onMore={onMore} />
       {value !== null ? (
         <div
           className="home-average"
@@ -141,31 +119,28 @@ function AverageWidget({
             average.provided ? "fournie par l’établissement" : "estimée"
           }`}
         >
-          <div
-            className="home-average__ring"
-            aria-hidden="true"
-            style={{ "--ring-turn": `${fraction * 360}deg` } as CSSProperties}
-          >
-            <div className="home-average__ring-core">
-              <strong>{formatAverage(value)}</strong>
-            </div>
+          <div className="home-average__figure" aria-hidden="true">
+            <strong>{formatAverage(value)}</strong>
+            <span>/20</span>
           </div>
           <div className="home-average__copy">
-            <span className="home-average__eyebrow">Sur 20</span>
-            <p className="home-average__origin">
-              {average.provided ? "Fournie par l’établissement" : "Estimée sur la période"}
-            </p>
+            <span className="home-average__origin">
+              {average.provided ? "Bulletin de l’établissement" : "Estimation sur la période"}
+            </span>
             {average.subjectCount > 0 ? (
               <span className="home-average__count">{average.subjectCount} matières suivies</span>
             ) : null}
           </div>
+          <span className="home-average__meter" aria-hidden="true">
+            <span style={{ width: `${fraction * 100}%` }} />
+          </span>
         </div>
       ) : null}
       {latest.map((grade) => {
         const palette = paletteFor(grade.subject, dark);
         return (
           <div className="home-grade" key={grade.id}>
-            <SubjectAvatar subject={grade.subject} size={32} dark={dark} />
+            <span className="home-grade__mark" style={{ background: palette.base }} aria-hidden="true" />
             <span className="home-grade__subject" style={{ color: palette.ink }}>
               {grade.subject}
             </span>
@@ -194,25 +169,18 @@ function CourseWidget({
   const animate = useEntrance(openedAt);
   return (
     <Card className={animate ? "home-widget home-rise" : "home-widget"}>
-      <WidgetHeader icon={IconCalendar} title={courseWidgetTitle(lessons[0], now)} onMore={onMore} />
+      <WidgetHeader title={courseWidgetTitle(lessons[0], now)} onMore={onMore} />
       <div className="home-courses">
         {lessons.map((lesson) => {
           const palette = paletteFor(lesson.subject, dark);
           const countdown = courseCountdown(lesson, now);
           const live = lesson.start <= now && now < lesson.end;
           return (
-            <div
-              className={`home-course${live ? " home-course--live" : ""}`}
-              key={lesson.id}
-              style={{ background: palette.background, color: palette.ink }}
-            >
-              <span className="home-course__spine" style={{ background: palette.base }} aria-hidden="true" />
-              <span className="home-course__emoji" aria-hidden="true">
-                {subjectEmoji(lesson.subject)}
-              </span>
+            <div className={`home-course${live ? " home-course--live" : ""}`} key={lesson.id}>
+              <span className="home-course__mark" style={{ background: palette.base }} aria-hidden="true" />
               <div className="grow">
                 <strong className="home-course__subject">{lesson.subject}</strong>
-                {lesson.room ? <span className="home-course__room">{lesson.room}</span> : null}
+                {lesson.room ? <span className="home-course__room">Salle {lesson.room}</span> : null}
               </div>
               <div className="home-course__when">
                 <strong>{timeRange(lesson)}</strong>
@@ -242,13 +210,13 @@ function TasksWidget({
   const animate = useEntrance(openedAt);
   return (
     <Card className={animate ? "home-widget home-rise" : "home-widget"}>
-      <WidgetHeader icon={IconTasks} title="Devoirs" onMore={onMore} />
+      <WidgetHeader title="Devoirs" onMore={onMore} />
       <div className="home-tasks">
         {tasks.map((task) => {
           const palette = paletteFor(task.subject, dark);
           return (
             <div className="home-task" key={task.id}>
-              <SubjectAvatar subject={task.subject} size={34} dark={dark} />
+              <span className="home-task__mark" style={{ background: palette.base }} aria-hidden="true" />
               <div className="grow">
                 <div className="home-task__subject" style={{ color: palette.ink }}>
                   {task.subject}
@@ -286,37 +254,30 @@ const QUICK_ACTIONS: QuickAction[] = [
 
 function QuickActions({ capabilities, openedAt }: { capabilities: string[] | null; openedAt: number }) {
   const navigate = useNavigate();
-  const dark = useApp().dark;
   const animate = useEntrance(openedAt);
   const actions = QUICK_ACTIONS.filter((action) => !action.tab || tabVisible(capabilities, action.tab));
   if (actions.length === 0) return null;
   return (
     <Section title="Accès rapides">
       <div className="home-actions">
-        {actions.map((action, index) => {
-          const palette = paletteFor(action.label, dark);
+        {actions.map((action) => {
           const Icon = action.icon;
           return (
             <button
               type="button"
               className={animate ? "home-action home-rise" : "home-action"}
               key={action.to}
-              style={animate ? { animationDelay: `${index * 35}ms` } : undefined}
               onClick={() => navigate(action.to)}
               aria-label={`${action.label} — ${action.status}`}
             >
-              <span
-                className="home-action__icon"
-                style={{ background: palette.background, color: palette.ink }}
-                aria-hidden="true"
-              >
-                <Icon size={21} />
+              <span className="home-action__icon" aria-hidden="true">
+                <Icon size={18} />
               </span>
               <span className="home-action__text">
                 <span className="home-action__label">{action.label}</span>
                 <span className="home-action__status">{action.status}</span>
               </span>
-              <IconChevronRight size={16} />
+              <IconChevronRight size={15} />
             </button>
           );
         })}
@@ -329,8 +290,8 @@ export default function HomeScreen() {
   const navigate = useNavigate();
   const { dark } = useApp();
   const now = useNow();
-  // Ouverture de l'écran : figée au montage. Tout élément monté après cette
-  // fenêtre de fraîcheur apparaît SANS entrée (#569).
+  // Ouverture de l'écran figée au montage : un élément monté après la fenêtre de
+  // fraîcheur apparaît SANS entrée.
   const [openedAt] = useState(() => Date.now());
   const entrance = useEntrance(openedAt);
 
@@ -345,8 +306,7 @@ export default function HomeScreen() {
   const latest = useMemo(() => latestGrades(grades, 1), [grades]);
   const lessons = useMemo(() => parseTimetable(timetableRes.payload), [timetableRes.payload]);
   // La liste des widgets reste BORNÉE (deux cours) ; le compteur est le nombre
-  // VRAI, sans plafond (#571). Depuis #566, il ne sert plus qu'à savoir si
-  // l'accueil a de quoi afficher : la tuile « À venir » a été retirée.
+  // VRAI, sans plafond.
   const upcoming = useMemo(() => upcomingLessons(lessons, now, 2), [lessons, now]);
   const upcomingTotal = useMemo(() => upcomingCount(lessons, now), [lessons, now]);
   const assignments = useMemo(
@@ -354,7 +314,7 @@ export default function HomeScreen() {
     [assignmentsRes.payload],
   );
   const tasks = useMemo(() => pendingAssignments(assignments, now, 2), [assignments, now]);
-  // Un devoir en retard reste un devoir À FAIRE : il compte (#571).
+  // Un devoir en retard reste un devoir À FAIRE : il compte.
   const tasksTotal = useMemo(() => pendingCount(assignments), [assignments]);
   const alertCount = useMemo(() => countAlerts(alertsRes.payload), [alertsRes.payload]);
   const capabilities = useMemo(
@@ -395,17 +355,9 @@ export default function HomeScreen() {
     <Page className="home">
       <ManualPrompt />
       <Card className="home-hero">
-        <span className="home-hero__orb home-hero__orb--one" aria-hidden="true" />
-        <span className="home-hero__orb home-hero__orb--two" aria-hidden="true" />
-        <span className="home-hero__glyph" aria-hidden="true">
-          <IconCalendar size={88} />
-        </span>
         <div className="home-hero__body">
-          <div className="grow">
-            <span className="home-hero__eyebrow">Aujourd’hui</span>
-            <h2 className="home-hero__greeting">{greeting}</h2>
-            <p className="home-hero__day">{frDate(new Date(now).toISOString())}</p>
-          </div>
+          <h2 className="home-hero__greeting">{greeting}.</h2>
+          <p className="home-hero__day">{frDate(new Date(now).toISOString())}</p>
         </div>
         <div className="home-hero__stats">
           <div className="home-hero__stat">
@@ -414,10 +366,12 @@ export default function HomeScreen() {
               {average.value !== null ? formatAverage(average.value) : "—"}
               {average.value !== null ? <small>/20</small> : null}
             </strong>
+            <em>{average.provided ? "bulletin" : "estimée"}</em>
           </div>
           <div className="home-hero__stat">
             <span>À faire</span>
             <strong>{tasksTotal}</strong>
+            <em>{tasksTotal > 1 ? "devoirs" : "devoir"}</em>
           </div>
         </div>
       </Card>
@@ -519,7 +473,6 @@ function dueTone(due: number, now: number): string {
   return "";
 }
 
-/** Petite ligne d'information quand un cours est en cours (sans widget dédié). */
 function scheduleHint(lesson: Lesson | undefined, now: number): ReactElement | null {
   if (!lesson || lesson.start > now || now >= lesson.end) return null;
   return (

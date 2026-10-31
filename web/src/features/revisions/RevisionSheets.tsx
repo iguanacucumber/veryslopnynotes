@@ -9,7 +9,7 @@ import {
   Page,
   PageHeading,
   Section,
-  SubjectAvatar,
+  SubjectMark,
 } from "../../ui/components";
 import { IconBook, IconDownload } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
@@ -31,7 +31,7 @@ type Selected = {
 };
 
 export function RevisionSheetsScreen() {
-  const { notify, refreshTick, dark } = useApp();
+  const { notify, refreshTick } = useApp();
   const navigate = useViewNavigate();
   const [sheets, setSheets] = useState<RevisionSheet[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +54,7 @@ export function RevisionSheetsScreen() {
       if (seq !== loadSeq.current) return;
       setError(e instanceof Error ? e.message : "Fiches illisibles.");
     } finally {
-      // Rien à nettoyer : la séquence rend le résultat périmé silencieux.
+      // Périmé silencieux via la séquence : rien à nettoyer.
     }
   }, []);
 
@@ -62,8 +62,8 @@ export function RevisionSheetsScreen() {
     void load();
   }, [load, refreshTick]);
 
-  // Le déclencheur devient « Fermer » à l'ouverture : il porte le focus, et le
-  // retour se fait au même endroit à la fermeture (#564, un seul « Fermer »).
+  // Le déclencheur devient « Fermer » à l'ouverture et garde le focus :
+  // le retour se fait au même endroit.
   useEffect(() => {
     if (selected) triggers.current.get(selected.id)?.focus();
   }, [selected?.id]);
@@ -194,10 +194,12 @@ export function RevisionSheetsScreen() {
               return (
                 <Card key={sheet.id} as="article" className="revision-card">
                   <div className="revision-card__head">
-                    <SubjectAvatar subject={sheet.subject} size={38} dark={dark} />
                     <div className="grow">
-                      <h3 className="revision-card__title">{sheet.title}</h3>
-                      <span className="t-caption muted">{sheetMeta(sheet)}</span>
+                      <div className="revision-card__title-row">
+                        <SubjectMark subject={sheet.subject} size={12} />
+                        <h3 className="revision-card__title">{sheet.title}</h3>
+                      </div>
+                      <span className="tiny muted">{sheetMeta(sheet)}</span>
                     </div>
                   </div>
 
