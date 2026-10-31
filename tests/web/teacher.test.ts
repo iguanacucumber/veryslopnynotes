@@ -260,16 +260,34 @@ describe("écran Prof — rendu (#633)", () => {
     expect(html).toContain("role=\"status\"");
   });
 
-  test("réponse : texte, sources citées et « Ce qui est envoyé »", () => {
+  test("réponse : texte, sources citées et « Ce qui est envoyé » en comptes", () => {
     const html = renderView({ messages: [studentMessage("Ma question")!, teacher()] });
     expect(html).toContain("Ma question");
     expect(html).toContain("Repère d&#x27;abord l&#x27;angle droit");
     expect(html).toContain("Cours : chapitre 4");
     expect(html).toContain("Sources :");
     expect(html).toContain("Ce qui est envoyé");
-    expect(html).toContain("120 caractères");
-    expect(html).toContain("Historique :");
+    expect(html).toContain("1 source de contexte");
+    expect(html).toContain("aucun tour");
+    expect(html).not.toContain("120 caractères");
     expect(html).not.toContain("non sourcée");
+  });
+
+  test("une réponse peut être régénérée et propose des questions de suivi", () => {
+    const html = renderView({
+      messages: [studentMessage("Ma question")!, teacher()],
+      onRegenerate: () => {},
+    });
+    expect(html).toContain("Régénérer");
+    expect(html).toContain("Questions de suivi");
+    expect(html).toContain("Plus simple");
+    const loading = renderView({
+      loading: true,
+      messages: [studentMessage("Ma question")!, teacher()],
+      onRegenerate: () => {},
+    });
+    expect(loading).not.toContain("Régénérer");
+    expect(loading).not.toContain("Questions de suivi");
   });
 
   test("réponse non sourcée : badge + rejet possible", () => {
@@ -278,19 +296,21 @@ describe("écran Prof — rendu (#633)", () => {
     expect(html).toContain("Rejeter la réponse");
   });
 
-  test("erreur : message + réessayer", () => {
+  test("erreur : message + réessayer, dans le journal", () => {
     const html = renderView({ error: { kind: "timeout", message: "Le professeur a mis trop de temps." } });
     expect(html).toContain("Le professeur a mis trop de temps.");
     expect(html).toContain("Réessayer");
     expect(html).toContain("role=\"alert\"");
+    expect(html.indexOf("teacher-log")).toBeLessThan(html.indexOf("Le professeur a mis trop de temps."));
   });
 
-  test("refus du corpus : message + action stable", () => {
+  test("refus du corpus : message + action stable, dans le journal", () => {
     const html = renderView({
       refusal: { message: "Aucune source exploitable : ajoute un cours au cahier.", actions: ["add_course"] },
     });
     expect(html).toContain("Aucune source exploitable");
     expect(html).toContain("Ajouter un cours au cahier");
+    expect(html.indexOf("teacher-log")).toBeLessThan(html.indexOf("Aucune source exploitable"));
     // La continuation explicite est le libellé EXACT demandé.
     expect(teacherActionLabel("proceed_anyway")).toBe("Procéder quand même");
   });
@@ -350,6 +370,12 @@ describe("écran Prof — câblage (#633)", () => {
     expect(route).toContain("if (messagesRef.current.length > 0)");
     expect(route).toContain("Changer de matière ?");
     expect(route).toContain("setSubjectAsk(next)");
+  });
+
+  test("régénérer renvoie la dernière question et remplace la réponse", () => {
+    expect(route).toContain("function regenerate(): void");
+    expect(route).toContain("void sendCurrent(question.text, current.slice(0, index))");
+    expect(route).toContain("onRegenerate={regenerate}");
   });
 
   test("après une réponse, le focus va au dernier tour du professeur", () => {

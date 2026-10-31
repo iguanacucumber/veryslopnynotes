@@ -228,6 +228,31 @@
   gap: 8px;
 }
 
+.teacher-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+}
+
+.teacher-error p {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.teacher-error svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--danger-ink);
+}
+
 /* Le journal défile seul : la barre de réglages et le compositeur restent en
    place, même sur un fil de quarante tours. */
 .teacher-log {
@@ -314,6 +339,28 @@
 .teacher-bubble__mark {
   width: 26px;
   height: 26px;
+  background: color-mix(in srgb, var(--teacher-tint, var(--brand)) 14%, var(--surface));
+  color: color-mix(in srgb, var(--teacher-tint, var(--brand-deep)) 70%, var(--ink));
+}
+
+/* Puces de suivi : compactes, dans le fil, après la dernière réponse. */
+.ai-prompts.teacher-followups {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+  margin-top: 2px;
+}
+
+.teacher-followups .ai-prompt {
+  width: auto;
+  min-height: 44px;
+  padding: 0 8px;
+  border-radius: 100px;
+  justify-content: flex-start;
+  gap: 3px;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 .teacher-bubble__who {
@@ -412,15 +459,6 @@
 
 .teacher-sent p {
   margin: 0 0 6px;
-}
-
-.teacher-sent__list {
-  margin: 0;
-  padding-left: 18px;
-}
-
-.teacher-sent__list li {
-  margin: 2px 0;
 }
 
 .teacher-bubble__actions {

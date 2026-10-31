@@ -382,7 +382,7 @@
   border: 1px solid var(--ai-line, var(--border));
   border-radius: 100px;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 17px;
   font-weight: 600;
 }
@@ -486,7 +486,7 @@
   border: 1px dashed var(--rule-strong);
   border-radius: 100px;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 17px;
   font-weight: 650;
 }
@@ -523,7 +523,7 @@
 .hw-steps__title {
   margin: 0 0 6px;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 16px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -571,13 +571,6 @@
   line-height: 18px;
 }
 
-.hw-unsourced__badge {
-  border: 1px dashed var(--rule-strong);
-  border-radius: 100px;
-  padding: 1px 8px;
-  font-weight: 650;
-}
-
 .hw-sources {
   display: flex;
   flex-direction: column;
@@ -586,7 +579,7 @@
 
 .hw-sources__label {
   color: var(--secondary);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 16px;
   font-weight: 650;
 }
@@ -607,7 +600,7 @@
   padding: 2px 9px;
   background: transparent;
   color: var(--secondary);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 17px;
   font-weight: 550;
   overflow-wrap: anywhere;
@@ -758,7 +751,7 @@
 
 .hw-foot__paid {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 15px;
 }
 
@@ -773,15 +766,6 @@
 
 .hw-privacy p {
   margin: 2px 0 0;
-}
-
-.hw-privacy__list {
-  margin: 5px 0 0;
-  padding-left: 17px;
-}
-
-.hw-privacy__list li + li {
-  margin-top: 2px;
 }
 
 .hw-starters {

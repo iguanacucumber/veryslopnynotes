@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
-import type { AiContextSourceMeta, TeacherMessage, TeacherMode } from "../../bridge/types";
+import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
+import type { TeacherMessage, TeacherMode } from "../../bridge/types";
 import { Card, EmptyState, ErrorBox, Loading, Page, Section } from "../../ui/components";
 import { CopyTextButton } from "../../ui/CopyTextButton";
 import { ThinkingLine } from "../../ui/ThinkingLine";
@@ -10,11 +10,13 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconMessage,
+  IconRefresh,
   IconSparkles,
   IconTrash,
+  IconWarning,
 } from "../../ui/icons";
+import { subjectColor } from "../../lib/format";
 import { MarkdownBody } from "../revisions/MarkdownBody";
-import { aiContextTypeFr } from "../tasks/assignments";
 import {
   historySources,
   teacherActionLabel,
@@ -53,6 +55,8 @@ export interface TeacherViewProps {
   /** Envoie directement une suggestion ; sans lui, elle remplit le brouillon. */
   onAsk?: (question: string) => void;
   onRetry: () => void;
+  /** Renvoie la dernière question et remplace la réponse. */
+  onRegenerate?: () => void;
   onReject: (index: number) => void;
   onNewDiscussion: () => void;
   onDelete: () => void;
@@ -72,6 +76,11 @@ const TEACHER_PROMPTS: Record<TeacherMode, readonly string[]> = {
     "Donne-moi un indice, pas la réponse",
     "Refais l’exercice avec moi",
   ],
+};
+
+const TEACHER_FOLLOW_UPS: Record<TeacherMode, readonly string[]> = {
+  explain: ["Plus simple", "Un exemple", "Me tester"],
+  correct: ["Étape suivante", "Mon erreur", "Refaire"],
 };
 
 /** Écran PRÉSENTATIONNEL : ne parle pas au pont, donc testable en rendu statique. */
@@ -98,6 +107,7 @@ export function TeacherView({
   onSend,
   onAsk,
   onRetry,
+  onRegenerate,
   onReject,
   onNewDiscussion,
   onDelete,
@@ -108,6 +118,9 @@ export function TeacherView({
   const { ref: logRef, onScroll, away, toBottom } = useStickToBottom([messages.length, loading]);
   const answerRef = useRef<HTMLDivElement | null>(null);
   const hasTeacher = messages.some((message) => message.role === "teacher");
+  // La teinte de matière ne change que l'identité du professeur : les
+  // couleurs de statut (erreur, refus, non sourcé) restent celles du thème.
+  const subjectTint = subject ? subjectColor(subject) : undefined;
 
   // Focus après réponse : on vise le DERNIER tour du professeur, jamais le
   // composer. Le `tabIndex=-1` rend le conteneur focusable par programme.
@@ -152,7 +165,13 @@ export function TeacherView({
       </div>
 
       {tab === "chat" ? (
-        <div id="teacher-panel-chat" role="tabpanel" aria-labelledby="teacher-tab-chat" className="teacher-workspace ai">
+        <div
+          id="teacher-panel-chat"
+          role="tabpanel"
+          aria-labelledby="teacher-tab-chat"
+          className="teacher-workspace ai"
+          style={subjectTint ? ({ "--teacher-tint": subjectTint } as CSSProperties) : undefined}
+        >
           <section aria-labelledby="teacher-chat-title" className="teacher-chat">
             <h2 id="teacher-chat-title" className="sr-only">
               Conversation
@@ -220,32 +239,6 @@ export function TeacherView({
                 </div>
               </fieldset>
             </div>
-
-            {refusal ? (
-              <div className="teacher-refusal" role="status">
-                <p>{refusal.message}</p>
-                <div className="teacher-refusal__actions">
-                  {refusal.actions.map((action) => (
-                    <button
-                      key={action}
-                      type="button"
-                      className="btn btn--ghost btn--small"
-                      onClick={() => onAction(action)}
-                    >
-                      {teacherActionLabel(action)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {error ? (
-              <ErrorBox message={error.message}>
-                <button type="button" className="btn btn--small" onClick={onRetry} disabled={busy}>
-                  Réessayer
-                </button>
-              </ErrorBox>
-            ) : null}
 
             <div className="ai-log-wrap">
               <div
@@ -348,6 +341,16 @@ export function TeacherView({
                           <SentDetails message={message} />
                           <div className="teacher-bubble__actions ai-actions">
                             <CopyTextButton text={message.text} />
+                            {onRegenerate &&
+                              !loading &&
+                              index === lastTeacher &&
+                              index === messages.length - 1 &&
+                              !busy ? (
+                              <button type="button" className="ai-action" onClick={onRegenerate}>
+                                <IconRefresh size={16} />
+                                Régénérer
+                              </button>
+                            ) : null}
                             {message.unsourced ? (
                               <button
                                 type="button"
@@ -364,9 +367,56 @@ export function TeacherView({
                     </div>
                   ))
                 )}
+                {!loading && !error && !refusal && lastTeacher >= 0 && lastTeacher === messages.length - 1 ? (
+                  <div className="ai-prompts teacher-followups" aria-label="Questions de suivi">
+                    {TEACHER_FOLLOW_UPS[mode].map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        className="ai-prompt"
+                        onClick={() => {
+                          toBottom();
+                          if (onAsk) onAsk(suggestion);
+                          else onDraftChange(suggestion);
+                        }}
+                      >
+                        {suggestion}
+                        <IconChevronRight size={16} />
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 {loading ? (
                   <div className="teacher-thinking" role="status">
                     <ThinkingLine title="Le professeur réfléchit…" />
+                  </div>
+                ) : null}
+                {refusal ? (
+                  <div className="teacher-refusal" role="status">
+                    <p>{refusal.message}</p>
+                    <div className="teacher-refusal__actions">
+                      {refusal.actions.map((action) => (
+                        <button
+                          key={action}
+                          type="button"
+                          className="btn btn--ghost btn--small"
+                          onClick={() => onAction(action)}
+                        >
+                          {teacherActionLabel(action)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {error ? (
+                  <div className="teacher-error" role="alert">
+                    <p>
+                      <IconWarning size={18} />
+                      {error.message}
+                    </p>
+                    <button type="button" className="btn btn--small" onClick={onRetry} disabled={busy}>
+                      Réessayer
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -447,8 +497,8 @@ export function TeacherView({
 }
 
 function SentDetails({ message }: { message: TeacherMessage }) {
-  const tour = turnSources(message);
-  const history = historySources(message);
+  const tourCount = turnSources(message).length;
+  const historyCount = historySources(message).length;
   const summary = message.summaryChars ?? 0;
   return (
     <details className="teacher-sent">
@@ -457,30 +507,15 @@ function SentDetails({ message }: { message: TeacherMessage }) {
         Ta question, les sources de cette matière et les derniers tours partent directement au
         fournisseur, avec ta clé. Aucun outil, aucun secret.
       </p>
-      {tour.length > 0 ? (
-        <ul className="teacher-sent__list tiny muted">
-          {tour.map((source, index) => (
-            <li key={`${source.type}:${source.label}:${index}`}>{sourceLine(source)}</li>
-          ))}
-        </ul>
-      ) : null}
       <p className="tiny muted">
-        Historique : {history.length > 0 ? `${history.length} source(s)` : "aucun tour"}
-        {summary > 0 ? ` + résumé local (${summary} caractères)` : ""}.
+        {tourCount > 0
+          ? `${tourCount} source${tourCount > 1 ? "s" : ""} de contexte`
+          : "Aucune source de contexte"}
+        {historyCount > 0
+          ? ` · ${historyCount} source${historyCount > 1 ? "s" : ""} d’historique`
+          : " · aucun tour"}
+        {summary > 0 ? ` · résumé local (${summary} caractères)` : ""}.
       </p>
-      {history.length > 0 ? (
-        <ul className="teacher-sent__list tiny muted">
-          {history.map((source, index) => (
-            <li key={`h:${source.label}:${index}`}>{sourceLine(source)}</li>
-          ))}
-        </ul>
-      ) : null}
     </details>
   );
-}
-
-function sourceLine(source: AiContextSourceMeta): string {
-  return `${aiContextTypeFr(source.type)} — ${source.label} (${source.chars} caractères${
-    source.truncated ? ", tronquée" : ""
-  })`;
 }

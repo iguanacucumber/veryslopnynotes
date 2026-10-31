@@ -176,6 +176,15 @@ describe("IA — aide devoirs", () => {
     expect(tasks).toContain("onHelp={() => openHelp(assignment)}");
   });
 
+  test("régénérer remplace la réponse, sans doubler badge ni sources", () => {
+    expect(chat).toContain("Régénérer");
+    expect(chat).toContain("{!state.loading && last.answer ? (");
+    const turn = between(chat, "function AssistantTurn", "export function HomeworkChat");
+    expect(turn).not.toContain("hw-unsourced__badge");
+    expect(chat).not.toContain("aiContextTypeFr(source.type)");
+    expect(chat).toContain("Contexte : {last.context.length}");
+  });
+
   test("le chat est un dialogue modal qui rend le focus (#610)", () => {
     const dialog = source("ui/Dialog.tsx");
     expect(tasks).toContain("<HomeworkChat");
