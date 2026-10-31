@@ -1,14 +1,7 @@
-// Lecteurs des payloads de l'accueil et de l'EDT.
-//
-// Port de `HomeWidgets.kt` / `TimetableWeek.kt` / `Averages.kt` (partie dont
-// l'accueil a besoin) vers TypeScript. Aucun accès réseau, aucun HTML construit
-// ici : un payload est une DONNÉE, les textes sont nettoyés et bornés, et React
-// échappe le rendu.
-//
-// Les ponts natifs publient les clés du contrat (`entries`, `assignments`,
-// `grades`, `alerts`, `capabilities`) ; le pont factice de `dev:web` enveloppe
-// la même liste dans `items`. Les deux formes sont acceptées, jamais devinées
-// champ par champ.
+// Lecteurs des payloads de l'accueil et de l'EDT : aucun réseau, aucun HTML
+// construit ici ; un payload est une DONNÉE. Les clés du contrat (`entries`,
+// `assignments`, `grades`, `alerts`, `capabilities`) ou l'enveloppe `items` du
+// pont factice sont acceptées, jamais devinées champ par champ.
 import {
   asNumber,
   cleanText,
@@ -23,7 +16,6 @@ import { subjectKey } from "../../lib/subject";
 /** Borne dure d'une liste lue dans un payload (anti-JSON géant). */
 export const MAX_ITEMS = 400;
 
-/** Longueur maximale d'un texte affiché (matière, salle, titre, …). */
 const MAX_TEXT = 200;
 
 type Obj = Record<string, unknown>;
@@ -57,11 +49,8 @@ function payloadRoot(payload: string | null): Obj | null {
   }
 }
 
-/**
- * Tableau d'une clé de contrat, sinon l'enveloppe `items` du pont factice.
- * Une clé absente rend une liste vide : l'écran affiche son état vide, jamais
- * une ligne inventée.
- */
+/** Clé de contrat, sinon l'enveloppe `items` du pont factice ; absente = liste
+ *  vide, jamais une ligne inventée. */
 function rowsOf(root: Obj, key: string, max = MAX_ITEMS): unknown[] {
   const direct = root[key];
   const items = Array.isArray(root["items"]) ? root["items"] : null;
@@ -91,8 +80,6 @@ function numberOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// --- EDT ---------------------------------------------------------------------
-
 export type LessonStatus = "normal" | "cancelled" | "moved" | null;
 
 export interface Lesson {
@@ -117,8 +104,8 @@ function optionalText(value: unknown): string | null {
   return text || null;
 }
 
-/** Cours lisibles, triés par début. Les cours annulés restent (l'EDT les montre).
- *  Un cours déjà vu (même identifiant) n'est affiché qu'UNE fois (#570). */
+/** Cours lisibles, triés par début. Les annulés restent ; un identifiant déjà
+ *  vu n'est affiché qu'une fois. */
 export function parseTimetable(payload: string | null): Lesson[] {
   const root = payloadRoot(payload);
   if (!root) return [];
@@ -159,29 +146,20 @@ export function isMoved(lesson: Lesson): boolean {
   return lesson.status === "moved";
 }
 
-/** Un cours est « à venir » s'il n'est pas annulé et pas encore terminé. */
 export function isUpcomingLesson(lesson: Lesson, now: number): boolean {
   return !isCancelled(lesson) && lesson.end > now;
 }
 
-/** Cours en cours ou à venir, annulés exclus, bornés (étage horloge). */
 export function upcomingLessons(lessons: Lesson[], now: number, limit = 3): Lesson[] {
   const max = boundedLimit(limit, 3);
   if (max === 0) return [];
   return lessons.filter((lesson) => isUpcomingLesson(lesson, now)).slice(0, max);
 }
 
-/**
- * Nombre de cours à venir, SANS plafond (#571).
- *
- * La LISTE des widgets est bornée (deux cours) : c'est un extrait. Le
- * COMPTEUR de l'accueil est le nombre vrai — un compteur plafonné ment.
- */
+/** Compteur SANS plafond : la liste est un extrait, un compteur plafonné ment. */
 export function upcomingCount(lessons: Lesson[], now: number): number {
   return lessons.filter((lesson) => isUpcomingLesson(lesson, now)).length;
 }
-
-// --- Devoirs -----------------------------------------------------------------
 
 export interface Assignment {
   id: string;
@@ -192,8 +170,7 @@ export interface Assignment {
   done: boolean;
 }
 
-/** Devoirs lisibles, triés par échéance. `done` est conservé pour filtrer.
- *  Un devoir déjà vu (même identifiant) n'est affiché qu'UNE fois (#570). */
+/** Devoirs lisibles, triés par échéance ; identifiant déjà vu = une seule fois. */
 export function parseAssignments(payload: string | null): Assignment[] {
   const root = payloadRoot(payload);
   if (!root) return [];
@@ -222,22 +199,15 @@ export function parseAssignments(payload: string | null): Assignment[] {
   return out.sort((a, b) => a.due - b.due);
 }
 
-/**
- * Un devoir reste À FAIRE tant qu'il n'est pas fait (#571).
- *
- * Son échéance est lisible par construction (le lecteur écarte les lignes
- * sans échéance). Un devoir EN RETARD reste à faire : il est compté.
- */
+/** Un devoir en retard reste à faire : il est compté. */
 export function isPendingTask(task: Assignment): boolean {
   return !task.done && Number.isFinite(task.due);
 }
 
-/** Un devoir non fait dont l'échéance n'est pas encore passée. */
 export function isUpcomingTask(task: Assignment, now: number): boolean {
   return isPendingTask(task) && task.due > now;
 }
 
-/** Devoirs non faits dont l'échéance n'est pas passée, bornés. */
 export function pendingAssignments(
   assignments: Assignment[],
   now: number,
@@ -248,18 +218,10 @@ export function pendingAssignments(
   return assignments.filter((task) => isUpcomingTask(task, now)).slice(0, max);
 }
 
-/**
- * Nombre de devoirs à faire, SANS plafond (#571).
- *
- * La LISTE des widgets est bornée (deux devoirs) : c'est un extrait. Le
- * COMPTEUR de l'accueil est le nombre vrai — un compteur plafonné ment, et
- * un devoir en retard reste un devoir à faire.
- */
+/** Compteur SANS plafond ; un devoir en retard reste un devoir à faire. */
 export function pendingCount(assignments: Assignment[]): number {
   return assignments.filter((task) => isPendingTask(task)).length;
 }
-
-// --- Notes et moyennes -------------------------------------------------------
 
 export interface Grade {
   id: string;
@@ -308,7 +270,6 @@ export function parseGrades(payload: string | null): Grade[] {
   return out.sort((a, b) => b.date - a.date);
 }
 
-/** Moyenne générale publiée par l'établissement (`averages.general.value`). */
 export function providedGeneralAverage(payload: string | null): number | null {
   const root = payloadRoot(payload);
   if (!root) return null;
@@ -334,7 +295,7 @@ function gradeUsable(grade: Grade): boolean {
   );
 }
 
-/** Ajout pondéré de `Averages.kt` (ramène sur /20 hors barème usuel). */
+/** Miroir d'`Averages.kt` : ramène sur /20 hors barème usuel. */
 function addWeighted(sum: Sum, grade: Grade): void {
   const coefficient = grade.coefficient ?? 1;
   const outOf = grade.scale;
@@ -391,7 +352,6 @@ export interface GeneralAverage {
   subjectCount: number;
 }
 
-/** Moyenne générale : fournie par l'établissement d'abord, sinon moyenne des matières. */
 export function generalAverage(
   payload: string | null,
   grades: Grade[] = parseGrades(payload),
@@ -420,7 +380,6 @@ export function generalAverage(
   };
 }
 
-/** "13,75" : la moyenne en grand, sans zéros inutiles. */
 export function formatAverage(value: number): string {
   if (!Number.isFinite(value)) return "";
   let fixed = value.toFixed(2);
@@ -429,7 +388,6 @@ export function formatAverage(value: number): string {
   return fixed.replace(".", ",");
 }
 
-/** "15,5/20" : note ramenée sur /20, comme la carte d'accueil. */
 export function formatGrade(value: number, scale = 20): string {
   const note = formatNote(value, scale);
   return note ? `${note.replace(".", ",")}/20` : "";
@@ -457,8 +415,6 @@ export function latestGrades(grades: Grade[], limit = 1): GradeSummary[] {
     }));
 }
 
-// --- Alertes et capacités ----------------------------------------------------
-
 export interface Alert {
   id: string;
   kind: string;
@@ -466,7 +422,6 @@ export interface Alert {
   source: string;
 }
 
-/** Alertes locales (scan des contenus en cache), bornées. */
 export function parseAlerts(payload: string | null): Alert[] {
   const root = payloadRoot(payload);
   if (!root) return [];
@@ -493,11 +448,8 @@ export function alertCountLabel(count: number): string {
   return count === 1 ? "1 alerte" : `${count} alertes`;
 }
 
-/**
- * Onglets servis par l'établissement, `null` si le payload est absent ou
- * illisible. `null` = inconnu, donc on montre tout (jamais une navigation
- * amputée sur une supposition).
- */
+/** `null` = inconnu, donc on montre tout : jamais une navigation amputée sur
+ *  une supposition. */
 export function parseCapabilities(payload: string | null): string[] | null {
   const root = payloadRoot(payload);
   if (!root) return null;
@@ -513,40 +465,19 @@ export function parseCapabilities(payload: string | null): string[] | null {
   return out;
 }
 
-/** Un lien vers un onglet est visible si la capacité est inconnue ou présente. */
 export function tabVisible(capabilities: string[] | null, tab: string): boolean {
   return capabilities === null || capabilities.includes(tab);
 }
 
-// --- Entrée des widgets (#569) ------------------------------------------------
-
-/**
- * Fenêtre de FRAÎCHEUR d'une entrée, en ms.
- *
- * L'entrée d'un widget appartient à l'OUVERTURE de l'écran : un widget monté
- * dans les fractions de seconde qui suivent l'ouverture entre avec le reste,
- * un widget monté plus tard (données asynchrones, rafraîchissement qui change
- * les conditions) apparaît SANS entrée — une entrée tardive est une faute
- * d'affichage, pas un effet.
- */
+/** Fenêtre de fraîcheur d'une entrée : un widget monté plus tard apparaît SANS
+ *  entrée (une entrée tardive est une faute d'affichage, pas un effet). */
 export const ENTRANCE_WINDOW_MS = 400;
 
-/**
- * L'élément joue-t-il son entrée ? Décision PURE, figée au montage.
- *
- * - `openedAt` : l'ouverture de l'écran (figée à son montage) ;
- * - `mountedAt` : le montage de l'élément.
- *
- * Vrai seulement si l'élément est monté dans la fenêtre de fraîcheur. La
- * décision ne se rejoue jamais : l'appelant la fige au montage (retirer la
- * classe en cours d'entrée couperait l'animation au milieu).
- */
+/** Décision pure, figée au montage : la rejouer couperait l'animation en cours. */
 export function shouldAnimateOnMount(openedAt: number, mountedAt: number): boolean {
   if (!Number.isFinite(openedAt) || !Number.isFinite(mountedAt)) return false;
   return mountedAt - openedAt <= ENTRANCE_WINDOW_MS;
 }
-
-// --- Dates et libellés -------------------------------------------------------
 
 /** Écart en JOURS locaux (pas en heures : le changement d'heure ne compte pas). */
 export function dayOffset(target: number, now: number): number {
@@ -557,14 +488,13 @@ export function dayOffset(target: number, now: number): number {
   return Math.round((utcA - utcB) / 86_400_000);
 }
 
-/** "08:00" dans la zone du téléphone, jamais l'heure brute du serveur. */
+/** Heure dans la zone du téléphone, jamais l'heure brute du serveur. */
 export function clockLabel(millis: number): string {
   const date = new Date(millis);
   if (Number.isNaN(date.getTime())) return "";
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
-/** "08:00–09:00", heure de début seule si la fin est illisible ou égale. */
 export function timeRange(lesson: Lesson): string {
   const range = frRange(lesson.startRaw, lesson.endRaw).replace(/\s*[–-]\s*/g, "–");
   if (range) return range;
@@ -573,7 +503,6 @@ export function timeRange(lesson: Lesson): string {
   return start && end && end !== start ? `${start}–${end}` : start;
 }
 
-/** "Aujourd’hui", "Demain", "Hier", sinon "lundi 05/10". */
 export function dayLabel(target: number, now: number): string {
   const offset = dayOffset(target, now);
   if (offset === 0) return "Aujourd’hui";
@@ -585,7 +514,6 @@ export function dayLabel(target: number, now: number): string {
   return `${frDay(date)} ${dd}/${mm}`;
 }
 
-/** Titre du widget cours : « Aujourd’hui », « Demain », sinon la date. */
 export function courseWidgetTitle(first: Lesson | undefined, now: number): string {
   if (!first) return "";
   const offset = dayOffset(first.start, now);
@@ -594,7 +522,6 @@ export function courseWidgetTitle(first: Lesson | undefined, now: number): strin
   return dayLabel(first.start, now);
 }
 
-/** « dans 12 min », « en cours », « demain 08:00 ». Vide = pas de compteur. */
 export function countdownFr(target: number, now: number): string {
   if (!Number.isFinite(target) || target <= now) return "";
   const minutes = Math.round((target - now) / 60_000);
@@ -612,7 +539,6 @@ export function courseCountdown(lesson: Lesson, now: number): string {
   return countdownFr(lesson.start, now);
 }
 
-/** Échéance d'un devoir : « aujourd’hui 20:00 », « demain 20:00 », « 25 oct. ». */
 export function dueLabel(due: number, now: number): string {
   const offset = dayOffset(due, now);
   if (offset < 0) return "en retard";
@@ -622,7 +548,6 @@ export function dueLabel(due: number, now: number): string {
   return frDateShort(new Date(due).toISOString());
 }
 
-/** « 55 mins », « 1h 50 mins », « 2h ». Vide sous la minute. */
 export function durationLabel(millis: number): string {
   const minutes = Math.max(0, Math.floor(millis / 60_000));
   if (minutes < 1) return "";
@@ -632,7 +557,6 @@ export function durationLabel(millis: number): string {
   return rest === 0 ? `${hours}h` : `${hours}h ${rest} mins`;
 }
 
-/** "départ 08:00" d'un cours déplacé dont l'horaire d'origine est publié. */
 export function movedHint(lesson: Lesson): string {
   if (!isMoved(lesson) || lesson.originalStart === null) return "";
   const label = clockLabel(lesson.originalStart);

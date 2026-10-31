@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import { bridge } from "../../bridge/client";
 import { useApp, useResource } from "../../ui/AppContext";
 import { useViewNavigate } from "../../ui/viewTransition";
@@ -8,10 +8,8 @@ import {
   ErrorBox,
   Loading,
   Page,
-  PageHeading,
   Section,
   StaleBadge,
-  SubjectAvatar,
   WeekNavigator,
 } from "../../ui/components";
 import { Dialog } from "../../ui/Dialog";
@@ -26,7 +24,8 @@ import {
   IconImage,
   IconSparkles,
 } from "../../ui/icons";
-import { parseDate } from "../../lib/format";
+import { relativeLongFr, subjectColor, tint } from "../../lib/format";
+import { subjectEmoji } from "../../lib/subjectVisual";
 import type { AiContextSourceMeta } from "../../bridge/types";
 import {
   aiContextTypeFr,
@@ -34,7 +33,6 @@ import {
   assignmentHasAssistantMaterial,
   assignmentSections,
   assignmentsInWeek,
-  dueLabel,
   homeworkRefusalText,
   parseAiContext,
   parseAssignmentsPayload,
@@ -58,25 +56,22 @@ type HelpState = {
   id: string;
   loading: boolean;
   answer: string | null;
-  /** #629 : étapes ordonnées et sources citées du corrigé. */
+  /** Étapes ordonnées et sources citées du corrigé. */
   steps: string[];
   sources: string[];
   refusal: string | null;
-  /** CTA stables renvoyés par un refus (`add_course`, `enable_manual`…). */
   actions: HomeworkAction[];
   error: string | null;
-  /** true = corrigé obtenu depuis une photo d'énoncé. */
   photo?: boolean;
   photoSource?: "camera" | "gallery";
-  /** #628 : sources réellement envoyées (type, libellé, taille, troncature). */
+  /** Sources réellement envoyées (type, libellé, taille, troncature). */
   context?: AiContextSourceMeta[];
 };
 
 type LlmState = { configured: boolean | null; error: string | null };
 
 /** La semaine est TOUJOURS bornée localement : sans elle, un payload sans
- *  `weekStart` rendrait la navigation impossible et l'écran piégerait
- *  l'utilisateur sur une semaine qu'il ne peut plus quitter. */
+ *  `weekStart` piégerait l'utilisateur sur une semaine qu'il ne peut quitter. */
 export function TasksScreen() {
   const [week, setWeek] = useState(() => weekStartOf(new Date()));
   const currentWeek = weekStartOf(new Date());
@@ -107,8 +102,7 @@ function TasksWeek({ week }: { week: string }) {
   const resource = useResource("assignments", query);
   const parsed = useMemo(() => parseAssignmentsPayload(resource.payload), [resource.payload]);
   // Un payload en cache peut appartenir à une autre semaine : on ne garde que
-  // les échéances de la semaine affichée. Une semaine sans devoir est un état
-  // vide, pas un chargement sans fin.
+  // la semaine affichée. Semaine sans devoir = état vide, pas chargement sans fin.
   const visible = useMemo(() => assignmentsInWeek(parsed.items, week), [parsed.items, week]);
   const [items, setItems] = useState<Assignment[]>(visible);
   const [pending, setPending] = useState<Record<string, boolean>>({});
@@ -169,9 +163,7 @@ function TasksWeek({ week }: { week: string }) {
     };
   }, [refreshTick]);
 
-  // Les sections suivent la semaine AFFICHÉE (#567) : « En retard »,
-  // « Aujourd'hui » et la section de semaine décrivent la semaine affichée,
-  // pas la semaine en cours quel que soit l'en-tête.
+  // Les sections suivent la semaine AFFICHÉE, pas la semaine en cours.
   const sections = useMemo(() => assignmentSections(items, week, new Date()), [items, week]);
 
   async function toggle(assignment: Assignment, next: boolean) {
@@ -221,9 +213,8 @@ function TasksWeek({ week }: { week: string }) {
       if (seq !== helpSeq.current) return;
       const context = parseAiContext(result.context);
       if (result.refused) {
-        // #416 : la phrase du pont fait foi (le motif libre du modèle ne
-        // franchit jamais la frontière) ; le repli est générique, jamais le
-        // faux diagnostic « pas assez de matière ».
+        // La phrase du pont fait foi (le motif libre du modèle ne franchit jamais
+        // la frontière) ; le repli est générique, jamais « pas assez de matière ».
         setHelp({
           id: assignment.id,
           loading: false,
@@ -368,15 +359,14 @@ function TasksWeek({ week }: { week: string }) {
   }
 
   /** Fermer ignore la demande en vol : une réponse tardive ne rouvre pas le
-   *  panneau que l'élève vient de fermer. L'appel natif, lui, finit — le pont
-   *  n'a pas d'annulation LLM ; on IGNORE la réponse, on ne l'annule pas. */
+   *  panneau. Le pont n'a pas d'annulation LLM : on ignore la réponse. */
   function closeHelp() {
     helpSeq.current += 1;
     setHelp(null);
   }
 
   /** Le choix de la source vit HORS des cartes : un seul dialogue pour la
-   *  semaine. Annuler ne touche ni au panneau ni à la demande en vol. */
+   *  semaine ; annuler ne touche ni au panneau ni à la demande en vol. */
   function closePhotoChooser() {
     setPhotoChooser(null);
   }
@@ -392,8 +382,8 @@ function TasksWeek({ week }: { week: string }) {
     if (assistantBusy) return;
     setRevisionPending((state) => ({ ...state, [assignment.id]: true }));
     try {
-      // La semaine AFFICHÉE, comme l'aide devoirs (#369, #596) : le devoir peut
-      // venir d'une autre semaine et le cache ne garde pas toutes les fenêtres.
+      // La semaine AFFICHÉE, comme l'aide devoirs : le devoir peut venir d'une
+      // autre semaine et le cache ne garde pas toutes les fenêtres.
       const result = await bridge.generateRevision(assignment.id, week);
       if (!result.ok) throw new Error(result.message || "La fiche n'a pas pu être créée.");
       notify("Fiche de révision créée.");
@@ -438,11 +428,14 @@ function TasksWeek({ week }: { week: string }) {
 
   return (
     <Page>
-      <PageHeading
-        eyebrow={week === currentWeek ? "Semaine en cours" : "Semaine sélectionnée"}
-        title="Devoirs"
-        action={resource.stale ? <StaleBadge /> : null}
-      />
+      {resource.stale ? (
+        <div className="tasks-status" role="status">
+          <StaleBadge />
+          <span className="tiny muted">
+            {week === currentWeek ? "Semaine en cours" : "Semaine sélectionnée"}
+          </span>
+        </div>
+      ) : null}
 
       {resource.error ? <ErrorBox message={resource.error} /> : null}
 
@@ -590,16 +583,6 @@ function TasksWeek({ week }: { week: string }) {
   );
 }
 
-/** Rouge sous 24 h, accent sous 72 h, neutre ensuite. */
-function dueTone(due: string | null): string {
-  const date = parseDate(due ?? "");
-  if (!date) return "";
-  const hours = (date.getTime() - Date.now()) / 3_600_000;
-  if (hours < 24) return "task-card__due--soon";
-  if (hours < 72) return "task-card__due--near";
-  return "";
-}
-
 function AssignmentCard({
   assignment,
   busy,
@@ -645,12 +628,11 @@ function AssignmentCard({
   const textTriggerRef = useRef<HTMLButtonElement>(null);
   const photoTriggerRef = useRef<HTMLButtonElement>(null);
   const text = assignmentCardText(assignment);
-  const due = dueLabel(assignment.dueDate);
-  const tone = dueTone(assignment.dueDate);
-  // Sans consigne ni cours, l'aide TEXTE refuserait avant le
-  // modèle. La photo, elle, est une source à part entière : elle reste
-  // disponible même sans manuel ni cahier. Un manuel utilisable ou un cours
-  // du cahier pour CETTE matière compte comme source pour le texte.
+  const subjectBase = subjectColor(assignment.subject);
+  const tinted = tint(subjectBase, dark ? 0.3 : -0.3);
+  const due = relativeLongFr(assignment.dueDate, Date.now());
+  // Sans consigne ni cours, l'aide TEXTE refuserait avant le modèle. La photo
+  // reste disponible : c'est une source à part entière.
   const hasMaterial = assignmentHasAssistantMaterial(assignment, manualReady, lessonReady);
   const helpLoading = help?.loading === true;
   const hasPanel = help !== null;
@@ -673,13 +655,90 @@ function AssignmentCard({
   }
 
   return (
-    <Card as="article" className={`task-card${assignment.done ? " task-card--done" : ""}`}>
-      <div className="task-card__head">
-        <SubjectAvatar subject={assignment.subject} size={42} dark={dark} />
-        <div className="task-card__main">
-          <span className="task-card__subject">{subjectDisplayFr(assignment.subject)}</span>
-          {text.title ? <h3 className="task-card__title">{text.title}</h3> : null}
-          {due ? <span className={`task-card__due ${tone}`}>{due}</span> : null}
+    <Card
+      as="article"
+      className={`task-card${assignment.done ? " task-card--done" : ""}`}
+      style={{ "--task-tint": tinted } as CSSProperties}
+    >
+      <div className="task-card__subject-row">
+        <span className="task-card__emoji" aria-hidden="true">
+          {subjectEmoji(assignment.subject)}
+        </span>
+        <span className="task-card__subject" style={{ color: tinted }}>
+          {subjectDisplayFr(assignment.subject)}
+          {assignment.attachments.length > 0 ? <IconAttach size={18} /> : null}
+        </span>
+        {due ? <span className="task-card__due">{due}</span> : null}
+      </div>
+
+      <div className="task-card__content">
+        {text.title ? <p className="task-card__title">{text.title}</p> : null}
+        {text.body ? <p className="task-card__body">{text.body}</p> : null}
+      </div>
+
+      {assignment.lessonContent ? (
+        <p className="chip task-card__lesson">Cours : {assignment.lessonContent.title}</p>
+      ) : null}
+
+      {assignment.attachments.length > 0 ? (
+        <div className="task-card__attachments">
+          {assignment.attachments.map((attachment) => (
+            <button
+              key={attachment.id}
+              type="button"
+              className="task-card__attachment"
+              aria-label={`Ouvrir la pièce jointe ${attachment.label}`}
+              onClick={() => onOpenAttachment(attachment)}
+            >
+              <IconAttach size={18} />
+              <span>{attachment.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="task-card__foot">
+        <div className="task-card__actions">
+          <button
+            type="button"
+            className="task-help"
+            disabled={sheetOff}
+            aria-describedby={offReason}
+            aria-label={`Créer une fiche de révision pour ${assignment.title}`}
+            onClick={onGenerateSheet}
+          >
+            <IconBook size={22} />
+            {revisionBusy ? "Création…" : "Fiche"}
+          </button>
+          <button
+            ref={textTriggerRef}
+            type="button"
+            className={`task-help${help && !help.photo ? " task-help--open" : ""}`}
+            disabled={textOff}
+            aria-describedby={offReason}
+            aria-expanded={help !== null && !help.photo}
+            aria-controls={help && !help.photo ? helpPanelId : undefined}
+            aria-label={`${help && !help.photo ? "Fermer" : "Ouvrir"} l'aide devoirs pour ${assignment.title}`}
+            onClick={help && !help.photo ? onCloseHelp : onHelp}
+          >
+            <IconSparkles size={22} />
+            {help && !help.photo ? "Fermer" : "Aide"}
+          </button>
+          <button
+            ref={photoTriggerRef}
+            type="button"
+            className={`task-help task-help--photo${help?.photo ? " task-help--open" : ""}`}
+            disabled={photoOff}
+            aria-describedby={assistantDisabled ? assistantReasonId : undefined}
+            aria-expanded={help?.photo === true}
+            aria-controls={help?.photo ? helpPanelId : undefined}
+            aria-haspopup="dialog"
+            aria-label={`${help?.photo ? "Fermer" : "Ouvrir"} la photo de l’énoncé pour ${assignment.title}`}
+            onClick={help?.photo ? onCloseHelp : onOpenPhotoChooser}
+          >
+            <IconCamera size={22} />
+            {help?.photo ? "Fermer" : "Photo"}
+          </button>
         </div>
         <button
           type="button"
@@ -689,75 +748,8 @@ function AssignmentCard({
           disabled={busy}
           onClick={() => onToggle(!assignment.done)}
         >
-          {assignment.done ? <IconCheck size={18} /> : null}
-        </button>
-      </div>
-
-      {text.body ? <p className="task-card__body">{text.body}</p> : null}
-
-      {assignment.lessonContent ? (
-        <p className="chip task-card__lesson">Cours : {assignment.lessonContent.title}</p>
-      ) : null}
-
-      {assignment.attachments.length > 0 ? (
-        <div className="row row--wrap" style={{ gap: 6, marginTop: 10 }}>
-          {assignment.attachments.map((attachment) => (
-            <button
-              key={attachment.id}
-              type="button"
-              className="chip"
-              aria-label={`Ouvrir la pièce jointe ${attachment.label}`}
-              onClick={() => onOpenAttachment(attachment)}
-            >
-              <IconAttach size={16} />
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>
-                {attachment.label}
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="task-card__foot">
-        <button
-          type="button"
-          className="task-help"
-          disabled={sheetOff}
-          aria-describedby={offReason}
-          aria-label={`Créer une fiche de révision pour ${assignment.title}`}
-          onClick={onGenerateSheet}
-        >
-          <IconBook size={16} />
-          {revisionBusy ? "Création…" : "Fiche de révision"}
-        </button>
-        <button
-          ref={textTriggerRef}
-          type="button"
-          className={`task-help${help && !help.photo ? " task-help--open" : ""}`}
-          disabled={textOff}
-          aria-describedby={offReason}
-          aria-expanded={help !== null && !help.photo}
-          aria-controls={help && !help.photo ? helpPanelId : undefined}
-          aria-label={`${help && !help.photo ? "Fermer" : "Ouvrir"} l'aide devoirs pour ${assignment.title}`}
-          onClick={help && !help.photo ? onCloseHelp : onHelp}
-        >
-          <IconSparkles size={16} />
-          {help && !help.photo ? "Fermer l’aide" : "Aide devoirs"}
-        </button>
-        <button
-          ref={photoTriggerRef}
-          type="button"
-          className={`task-help task-help--photo${help?.photo ? " task-help--open" : ""}`}
-          disabled={photoOff}
-          aria-describedby={assistantDisabled ? assistantReasonId : undefined}
-          aria-expanded={help?.photo === true}
-          aria-controls={help?.photo ? helpPanelId : undefined}
-          aria-haspopup="dialog"
-          aria-label={`${help?.photo ? "Fermer" : "Ouvrir"} la photo de l’énoncé pour ${assignment.title}`}
-          onClick={help?.photo ? onCloseHelp : onOpenPhotoChooser}
-        >
-          <IconCamera size={16} />
-          {help?.photo ? "Fermer la photo" : "Photo de l’énoncé"}
+          <IconCheck size={24} />
+          {assignment.done ? <span>Terminé</span> : null}
         </button>
       </div>
 

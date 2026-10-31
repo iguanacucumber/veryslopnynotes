@@ -1,19 +1,8 @@
-// SubjectPrefParityMain.kt — pilote JSON des règles de matière (#395).
+// SubjectPrefParityMain.kt — pilote JSON des règles de matière.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/android-subject-pref.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile les VRAIES sources de
-// production `data/SubjectPrefRules.kt` (règles pures : ni `org.json`, ni
-// `android.*`) et `app/SubjectPrefMessages.kt` (phrases du pont) — les
-// assertions portent donc sur du code EXÉCUTÉ, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/android-subject-pref.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Scénarios rejoués : une couleur hors contrat (`red`) est REFUSÉE et le pont
-// ne peut pas dire « ok » ; une matière conforme passe ; les entrées sont
-// BORNÉES (une couleur de 256 Ko ne passe pas) ; l'emoji est compté en POINTS
-// DE CODE (8 emoji = 8 points, pas 16).
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE (op inconnue) sont préfixées `pilote: ` et refusées.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.subjectpref
 
 import fr.veryslopnynotes.app.subjectPrefIssueMessage

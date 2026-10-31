@@ -27,12 +27,8 @@ import fr.veryslopnynotes.core.AiContextResult
 import fr.veryslopnynotes.app.VsnBridge.Companion.AWAIT_LLM_MS
 
 /**
- * Exercices du manuel (#632) : proposition LOCALE, sans appel payant.
- *
- * Le texte vient du manuel déjà extrait par le scraper (ou du cahier de
- * cours). On ne fabrique jamais un énoncé : sans marqueur numéroté, la
- * liste est vide et l'UI propose d'ajouter une source. `hint` (page ou
- * chapitre libre) ne fait que FILTRER les énoncés déjà extraits.
+ * Proposition LOCALE, sans appel payant : on ne fabrique jamais un énoncé, et
+ * `hint` ne fait que FILTRER les énoncés déjà extraits.
  */
 internal fun VsnBridge.exercisesPropose(p: JSONObject): JSONObject {
     val subject = bounded(p.string("subject"), TeacherChat.MAX_SUBJECT_CHARS)
@@ -101,9 +97,8 @@ internal fun VsnBridge.exercisesPropose(p: JSONObject): JSONObject {
 }
 
 /**
- * Aide progressive sur UN exercice (#632) : indice, méthode ou correction
- * complète (choix explicite du web). La réponse de l'élève (texte ou photo)
- * est une DONNÉE Untrusted. Aucun effet Pronote, aucune écriture.
+ * La réponse de l'élève (texte ou photo) est une DONNÉE Untrusted. Aucun effet
+ * Pronote, aucune écriture.
  */
 internal fun VsnBridge.exercisesHelp(p: JSONObject): JSONObject {
     val subject = bounded(p.string("subject"), TeacherChat.MAX_SUBJECT_CHARS)
@@ -226,13 +221,9 @@ internal fun VsnBridge.exercisesHelp(p: JSONObject): JSONObject {
 }
 
 /**
- * Professeur IA contextualisé (#633) : un tour de conversation sur le
- * corpus de la matière. Aucun outil, aucun secret dans le prompt, aucun
- * effet métier : le modèle rend un texte + des libellés cités.
- *
- * Le corpus vient de l'assembleur UNIQUE (#628), avec l'historique borné
- * (CHAT). Les tours anciens sont résumés localement, sans appel payant.
- * Une réponse sans citation est marquée `unsourced` (jamais masquée).
+ * Aucun outil, aucun secret dans le prompt, aucun effet métier : le modèle
+ * rend un texte + des libellés cités, et une réponse sans citation est
+ * marquée `unsourced` (jamais masquée).
  */
 internal fun VsnBridge.teacherTurn(p: JSONObject): JSONObject {
     val subject = bounded(p.string("subject"), TeacherChat.MAX_SUBJECT_CHARS)
@@ -301,10 +292,7 @@ internal fun VsnBridge.teacherTurn(p: JSONObject): JSONObject {
     }
 }
 
-/**
- * Code STABLE d'un échec de tour : l'UI choisit le message et le geste
- * (clé, quota, timeout, vide, réseau). Jamais un texte d'exception.
- */
+/** Code STABLE : l'UI choisit le message et le geste, jamais un texte d'exception. */
 internal fun VsnBridge.teacherFailureCode(e: Throwable): String = when (e) {
     is SecretDetectedException -> "secret"
     is OutputTooLongException -> "format"
@@ -324,9 +312,8 @@ internal fun VsnBridge.teacherFailureCode(e: Throwable): String = when (e) {
 }
 
 /**
- * Contexte IA d'une MATIÈRE (pas d'un devoir) : cahier de cours, manuel
- * enregistré, puis historique. Même assembleur et mêmes budgets que #628.
- * #631/#634 pourront ajouter pièces jointes/page web via les paramètres.
+ * Contexte IA d'une MATIÈRE : même assembleur et mêmes budgets que le contexte
+ * devoir.
  */
 internal fun VsnBridge.aiContextForSubject(
     subject: String,
@@ -362,7 +349,7 @@ internal fun JSONObject.withTeacherHistory(context: AiContextResult, summaryChar
         .put("summaryChars", summaryChars)
 }
 
-/** Fil local : lecture seule, aucune donnée scolaire hors de l'appareil. */
+/** Lecture seule, aucune donnée scolaire hors de l'appareil. */
 internal fun VsnBridge.teacherLoad(): JSONObject = try {
     JSONObject(teacherThreadJson(teacherChat.load()))
 } catch (_: Exception) {
@@ -370,9 +357,8 @@ internal fun VsnBridge.teacherLoad(): JSONObject = try {
 }
 
 /**
- * Sauvegarde du fil local. Le web envoie la matière + les tours ; le pont
- * borne, valide, puis écrit sous la garde d'époque. Un refus d'écriture
- * n'est JAMAIS un « ok » (I10) : le répertoire purgé ne ressuscite pas.
+ * Le web envoie la matière + les tours ; le pont borne, valide, puis écrit sous
+ * la garde d'époque. Un refus d'écriture n'est JAMAIS un « ok » (I10).
  */
 internal fun VsnBridge.teacherSave(p: JSONObject, epoch: Long): JSONObject {
     val rawCount = p.optJSONArray("messages")?.length() ?: 0
@@ -384,8 +370,7 @@ internal fun VsnBridge.teacherSave(p: JSONObject, epoch: Long): JSONObject {
     if (!TeacherChat.isThreadValid(thread)) {
         return JSONObject().put("ok", false).put("message", "Discussion invalide.")
     }
-    // Un tour invalide a été ÉCARTÉ par le parseur : ne pas l'enregistrer
-    // en silence (le web doit savoir que rien n'a été écrit tel quel).
+/** Un tour invalide a été ÉCARTÉ par le parseur : ne pas l'enregistrer en silence. */
     val expected = minOf(rawCount, TeacherChat.MAX_STORED_MESSAGES)
     if (thread.messages.size != expected) {
         return JSONObject().put("ok", false).put("message", "Discussion invalide.")
@@ -398,7 +383,6 @@ internal fun VsnBridge.teacherSave(p: JSONObject, epoch: Long): JSONObject {
     return JSONObject().put("ok", true).put("count", bounded.messages.size)
 }
 
-/** Suppression du fil local sous la garde d'époque. */
 internal fun VsnBridge.teacherDelete(epoch: Long): JSONObject =
     if (!teacherChat.delete(epoch)) {
         JSONObject().put("ok", false).put("message", "Session modifiée : discussion non supprimée.")

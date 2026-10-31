@@ -1,20 +1,7 @@
-// Parité TS <-> Kotlin sur le corpus RÉEL (#202).
-//
-// Le corpus local (`tests/fixtures/pronote/`, gitignoré) porte des formes que
-// les fixtures scriptées n'ont pas : libellés d'établissement, unicode,
-// tableaux imbriqués. Ce test fait passer les MÊMES octets des deux côtés —
-// canonique TS (`agents/runtime/replay-corpus.ts`) contre `Json` du port
-// (`agents/runtime/kotlin-parity/CorpusParityMain.kt`) — et compare à
-// l'octet près. Une divergence casse au domaine + champ près.
-//
-// Limite assumée : le corpus stocke la SORTIE des anciens readers TS, pas le fil
-// brut — ce test prouve la fidélité JSON sur données réelles, pas les mappers
-// (couverts par les cas scriptés des deux autres fichiers de parité).
-//
-// Sans corpus OU sans `kotlinc`/`java` : SKIP BRUYANT, `make check` vert
-// sans avoir prouvé de parité (jamais un faux vert). Le harnais lui-même
-// (canonique, déterminisme, refus) est testé sur fixtures synthétiques et
-// tourne TOUJOURS.
+// Parité TS <-> Kotlin sur le corpus RÉEL : mêmes octets des deux côtés,
+// canonique TS contre `Json` du port, comparés à l'octet près.
+// Limite : le corpus stocke la sortie des anciens readers TS, pas le fil brut.
+// Sans corpus ni `kotlinc`/`java` : SKIP BRUYANT (jamais un faux vert).
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

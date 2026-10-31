@@ -1,21 +1,7 @@
-// #406 : le job de fond ne faisait RIEN quand la session n'était pas en RAM.
-//
-// WorkManager démarre le process SANS interface : la session vit en RAM
-// (`PronoteSession`), donc le worker lisait un client nul et renvoyait
-// `Result.success()` — un succès sans rien avoir fait, et sans réessai. Le
-// sync de fond était un no-op dès que l'app était fermée depuis plus d'un
-// cycle de job.
-//
-// #403 : le job passe par la file PARTAGÉE (celle de l'interface) : le
-// `Client` est mutable, donc une lecture de l'écran et une du job en
-// parallèle = deux logins sur le même compte (erreur 25 côté établissement).
-//
-// VRAI Kotlin compilé : `SyncJobOutcome` (android/data, logique pure : aucun
-// import Android) est compilé par le harnais puis piloté par `SyncJobMain` —
-// ce n'est pas un miroir TS, c'est le code de production EXÉCUTÉ.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Le job de fond ne doit pas être un no-op quand la session n'est pas en RAM :
+// sans session il RÉESSAIE, et il passe par la file PARTAGÉE (le `Client` est
+// mutable : deux logins parallèles = erreur 25).
+// VRAI Kotlin compilé par le harnais ; outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -49,16 +35,14 @@ describe("job de fond : session absente = RÉESSAI (#406)", () => {
     const worker = readFileSync(WORKER, "utf8");
     // La branche « pas de session » est un RÉESSAI (backoff WorkManager).
     expect(worker).toContain("is SyncJobOutcome.Retry -> Result.retry()");
-    // Le vieux bug : un client absent renvoyait `Result.success()` (rien n'était
-    // fait, et le job ne réessayait jamais).
+    // Un client absent renvoyait `Result.success()` : rien fait, aucun réessai.
     expect(worker).not.toMatch(/PronoteSession\.client\s*\?:/);
     // La session du job vient de la RESTAURATION, pas d'une lecture directe.
     expect(worker).toContain("syncJobOutcome(restoreClient())");
   });
 });
 
-// #403 : le job passe par la file PARTAGÉE, et sa SEMANTIQUE de résultat
-// reste la même (session morte = appairage, autre échec = réessai).
+// Le job passe par la file PARTAGÉE ; la sémantique de résultat ne change pas.
 describe("job de fond : lecture par la file partagée (#403)", () => {
   test("câblage : le worker passe par la file, il ne lit plus le client en direct", () => {
     const worker = readFileSync(WORKER, "utf8");
@@ -67,8 +51,7 @@ describe("job de fond : lecture par la file partagée (#403)", () => {
     // Aucune lecture directe du client : ni payload, ni appel de méthode.
     expect(worker).not.toMatch(/Payload\(/);
     expect(worker).not.toMatch(/\bclient\./);
-    // La porte unique des lectures, et une clé namespacée (jamais celle d'un
-    // écran : un résultat étranger ne peut pas être livré au job).
+    // La porte unique des lectures, avec une clé namespacée (jamais celle d'un écran).
     expect(worker).toContain("cachedRead(client, resource,");
     expect(worker).toContain('"job|$resource|"');
     // L'attente est BORNÉE : le job ne bloque jamais WorkManager indéfiniment.
@@ -76,8 +59,7 @@ describe("job de fond : lecture par la file partagée (#403)", () => {
   });
 
   test.skipIf(skip)("la sémantique de résultat est PRÉSERVÉE : session morte = appairage, sinon réessai", async () => {
-    // Session morte = l'erreur RÉELLE de l'établissement (G=10), pas une
-    // exception dont le message contient le mot « session » (#520).
+    // Session morte = l'erreur RÉELLE de l'établissement (G=10), pas un mot du message.
     const dead = await ask({ op: "decision", kind: "deadSession" });
     expect(dead.decision).toBe("sessionDead");
     const other = await ask({ op: "decision", cause: "reseau injoignable" });
@@ -97,10 +79,8 @@ describe("job de fond : lecture par la file partagée (#403)", () => {
   });
 });
 
-// #485 : G=22 (« l'objet vient d'une session précédente ») n'est PAS une
-// session MORTE. Le message de l'établissement contient le mot « session »,
-// donc la détection par motif classait un objet périmé en session morte ->
-// logout + purge du cache hors ligne.
+// G=22 n'est PAS une session morte : le message contient « session », et la
+// détection par motif purgeait à tort le cache hors ligne.
 describe("session morte : G=22 n'en est PAS une", () => {
   test.skipIf(skip)("G=22 -> réessai, jamais « session morte »", async () => {
     const r = await ask({ op: "decision", kind: "expiredObject" });
@@ -117,18 +97,14 @@ describe("session morte : G=22 n'en est PAS une", () => {
     const m = comm.match(/22 to "([^"]+)"/);
     expect(m).not.toBeNull();
     expect(m![1]).toMatch(/session/i);
-    // Et la décision tranche par TYPE : `ExpiredObject` est exclu, pas son
-    // message.
+    // La décision tranche par TYPE : `ExpiredObject` est exclu, pas son message.
     const failure = readFileSync(join(DATA, "SessionFailure.kt"), "utf8");
     expect(failure).toContain("e is ExpiredObject");
   });
 });
 
-// #520 : la décision « session morte » ne doit PAS se fier à un MOT du
-// message. Le message d'une erreur de PRONOTE est en partie ÉCRIT par
-// l'établissement (`Erreur.Titre`) : « Confirmation de connexion requise »,
-// « Erreur de session »… un mot suffisait à détruire la session ET tout le
-// cache hors ligne, et à renvoyer l'élève vers l'appairage.
+// La décision « session morte » ne se fie pas à un MOT du message, en partie
+// écrit par l'établissement : un mot détruisait la session et tout le cache hors ligne.
 describe("session morte : la décision tranche par TYPE et par code G (#520)", () => {
   test.skipIf(skip)("un message d'ÉTABLISSEMENT (« Confirmation de connexion ») = RÉESSAI, pas « session morte »", async () => {
     const r = await ask({ op: "decision", kind: "establishmentError" });
@@ -152,8 +128,7 @@ describe("session morte : la décision tranche par TYPE et par code G (#520)", (
   });
 
   test("le statut HTTP d'un refus est un CHAMP de l'erreur (401 = session morte)", () => {
-    // Le port jette l'erreur HTTP avec son statut : la décision le lit sans
-    // jamais relire le message (« Bad request (http status: 401) »).
+    // Le port jette l'erreur avec son statut : la décision ne relit jamais le message.
     const comm = readFileSync(
       join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote", "Communication.kt"),
       "utf8",

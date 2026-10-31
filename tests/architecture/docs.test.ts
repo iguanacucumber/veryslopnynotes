@@ -1,9 +1,6 @@
-// tests/architecture/docs.test.ts — le registre et les règles ne dérivent pas.
-//
-// Ces vérifications portent sur la FORME de la documentation, pas sur son
-// contenu : IDs uniques, sections complètes, références valides, commandes
-// `make` existantes. Un lien mort ou un ID réutilisé doit rougir le gate, pas
-// attendre une relecture humaine.
+// Le registre et les règles ne dérivent pas : ces tests portent sur la FORME de
+// la documentation (IDs uniques, sections, liens, cibles `make`), pour qu'un ID
+// réutilisé ou un lien mort rougisse le gate sans relecture humaine.
 import { describe, expect, test } from "bun:test";
 import { Glob } from "bun";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -15,9 +12,9 @@ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 const INVARIANTS = read("docs/architecture/INVARIANTS.md");
 const CONTEXT = read("docs/CONTEXT.md");
 const INVARIANTS_DIR = join(ROOT, "docs/architecture/invariants");
-// Le registre est un INDEX : les entrées détaillées vivent par thème, pour
-// qu'un agent ne lise que le fichier de l'invariant qu'il touche. La procédure
-// (`OPERATING.md`) n'est pas un thème : elle ne porte aucune entrée.
+// Le registre est un INDEX : les entrées vivent par thème, pour qu'un agent ne
+// lise que le fichier de l'invariant qu'il touche. `OPERATING.md` est une
+// procédure, pas un thème.
 const OPERATING = "OPERATING.md";
 const DETAIL_FILES = readdirSync(INVARIANTS_DIR)
   .filter((f) => f.endsWith(".md") && f !== OPERATING)
@@ -37,7 +34,6 @@ interface Entry {
   body: string;
 }
 
-/** Sections détaillées du registre (`## I<n> — …`), dans l'ordre du fichier. */
 export function parseInvariantEntries(md: string): Entry[] {
   const lines = md.split("\n");
   const starts = lines.flatMap((line, i) => (ENTRY.test(line) ? [i] : []));
@@ -48,12 +44,10 @@ export function parseInvariantEntries(md: string): Entry[] {
   });
 }
 
-/** IDs `I<n>` cités dans un texte, avec la variante `I<n> bis`. */
 export function referencedIds(text: string): string[] {
   return [...text.matchAll(/\bI(\d+)( bis)?\b/g)].map((m) => `I${m[1]}${m[2] ?? ""}`);
 }
 
-/** IDs inscrits dans la section `## Retirés` du registre (un par ligne de table). */
 export function parseRetiredIds(md: string): string[] {
   const lines = md.split("\n");
   const start = lines.indexOf("## Retirés");
@@ -63,7 +57,7 @@ export function parseRetiredIds(md: string): string[] {
   return body.flatMap((l) => (l.startsWith("| I") ? [l.split("|")[1]!.trim()] : []));
 }
 
-/** Cibles déclarées dans le Makefile (hors variables `:=`). */
+/** Cibles Makefile (hors variables `:=`). */
 export function makeTargets(makefile: string): Set<string> {
   const targets = new Set<string>();
   for (const line of makefile.split("\n")) {
@@ -74,9 +68,8 @@ export function makeTargets(makefile: string): Set<string> {
 }
 
 /**
- * Erreurs de numérotation : un trou entre I1 et la dernière entrée active n'est
- * toléré que si l'ID figure dans `## Retirés`, et un ID retiré ne réapparaît
- * jamais comme entrée active.
+ * Un trou entre I1 et la dernière entrée active n'est toléré que si l'ID figure
+ * dans `## Retirés`, et un ID retiré ne réapparaît jamais comme entrée active.
  */
 export function numberingErrors(entries: Entry[], retired: string[]): string[] {
   const errors: string[] = [];
@@ -93,7 +86,7 @@ export function numberingErrors(entries: Entry[], retired: string[]): string[] {
   return errors;
 }
 
-/** Colonnes `Vérification principale` du registre, par ID (hors `## Retirés`). */
+/** Colonne `Vérification principale` (4e) par ID, hors `## Retirés`. */
 export function registryCheckCells(md: string): Map<string, string> {
   const cells = new Map<string, string>();
   let inRegistry = false;
@@ -106,14 +99,12 @@ export function registryCheckCells(md: string): Map<string, string> {
   return cells;
 }
 
-/** Liens de détail de la table du registre : ID → fichier + ancre. */
 export interface DetailLink {
   id: string;
   file: string;
   anchor: string;
 }
 
-/** Pointeur `invariants/<fichier>.md#<ancre>` de la carte de contexte. */
 export interface ContextPointer {
   file: string;
   anchor: string;
@@ -126,7 +117,6 @@ export function contextPointers(text: string): ContextPointer[] {
   }));
 }
 
-/** Erreurs de pointeur : le thème existe et porte l'ancre `<a id="…">`. */
 export function pointerErrors(
   pointers: ContextPointer[],
   files: Record<string, string | undefined>,
@@ -154,17 +144,15 @@ export function codeSpans(text: string): string[] {
   return [...text.matchAll(/`([^`]+)`/g)].map((m) => m[1]!);
 }
 
-/** Un backtick « ressemble à un chemin » : tests/ ou agents/ (glob permis). */
+/** Un backtick n'est un chemin que s'il commence par tests/ ou agents/. */
 export function isCitedPath(span: string): boolean {
   return /^(tests|agents)\//.test(span);
 }
 
-/** Un chemin cité est un glob : il contient un caractère de joker. */
 export function isGlobPattern(path: string): boolean {
   return /[*?[]/.test(path);
 }
 
-/** Le bloc `- Test :` d'une entrée, jusqu'à la ligne `- Commande :` suivante. */
 export function testBlock(body: string): string {
   const lines = body.split("\n");
   const start = lines.findIndex((l) => l.startsWith("- Test :"));
@@ -173,20 +161,18 @@ export function testBlock(body: string): string {
   return lines.slice(start, end === -1 ? lines.length : end).join("\n");
 }
 
-/** Chemins de vérification cités dans le bloc `- Test :` d'une entrée. */
 export function citedTestPaths(body: string): string[] {
   return codeSpans(testBlock(body)).filter(isCitedPath);
 }
 
-/** Chemins cités par une entrée : bloc `- Test :` + colonne du registre. */
 export function citedPaths(detailBody: string, registryRow: string): string[] {
   return [...citedTestPaths(detailBody), ...codeSpans(registryRow).filter(isCitedPath)];
 }
 
 /**
- * Erreurs de citation : un chemin littéral doit exister, un glob doit matcher
- * au moins un fichier, et une entrée doit citer au moins un fichier réel —
- * la prose entre backticks n'est jamais vérifiée.
+ * Un chemin littéral doit exister, un glob doit matcher au moins un fichier, et
+ * une entrée doit citer au moins un fichier réel : la prose entre backticks
+ * n'est jamais vérifiée.
  */
 export function citationErrors(
   entries: { id: string; paths: string[] }[],
@@ -210,7 +196,6 @@ export function citationErrors(
   return errors;
 }
 
-/** Numéros `I<n>` (hors `bis`) des entrées actives. */
 function activeNumericIds(entries: Entry[]): Set<number> {
   return new Set(
     entries
@@ -245,8 +230,8 @@ describe("registre d'invariants", () => {
   });
 
   test("le registre est un index : aucune entrée détaillée", () => {
-    // Un agent lit l'index + un seul thème ; une entrée recollée ici
-    // ramènerait les 33 Ko dans chaque lecture.
+    // Un agent lit l'index + un seul thème ; une entrée recollée ici ramènerait
+    // les 33 Ko dans chaque lecture.
     expect(INVARIANTS).not.toMatch(/^## I\d/m);
   });
 
@@ -262,13 +247,11 @@ describe("registre d'invariants", () => {
         ancre: true,
       });
     }
-    // Aucun fichier de détail orphelin (jamais atteint depuis l'index).
     expect([...new Set(links.map((l) => `${l.file}.md`))].sort()).toEqual(DETAIL_FILES);
   });
 
   test("l'index et les détails restent sous leur budget de lecture", () => {
-    // Budgets de CONTEXTE, pas de style : un agent qui relit un fichier le
-    // garde jusqu'à la compaction. Dépasser = revenir au registre monolithique.
+    // Budgets de CONTEXTE, pas de style : dépasser = revenir au registre monolithique.
     expect({ fichier: "INVARIANTS.md", sousBudget: INVARIANTS.length <= 5_500 }).toEqual({
       fichier: "INVARIANTS.md",
       sousBudget: true,
@@ -282,10 +265,8 @@ describe("registre d'invariants", () => {
   });
 
   test("les surfaces de lecture agent restent sous leur budget d'octets", () => {
-    // Budgets de CONTEXTE : un agent qui relit ces fichiers les garde jusqu'à
-    // la compaction. Dépasser = revenir à la lecture intégrale à chaque tour.
-    // Les plafonds serrent au-dessus du réel (~20 %) : les relever est un diff
-    // visible, pas une dérive silencieuse.
+    // Budgets de CONTEXTE. Les plafonds serrent ~20 % au-dessus du réel : les
+    // relever est un diff visible, pas une dérive silencieuse.
     expect({ fichier: "AGENTS.md", sousBudget: AGENTS.length <= 4_500 }).toEqual({
       fichier: "AGENTS.md",
       sousBudget: true,
@@ -323,8 +304,8 @@ describe("registre d'invariants", () => {
   });
 
   test("chaque entrée d'invariant tient en 120 mots maximum", () => {
-    // Une entrée au-delà force l'agent à relire le détail à chaque tour ;
-    // le détail appartient à l'issue, au commit ou à l'ADR.
+    // Une entrée au-delà force l'agent à relire le détail à chaque tour : le
+    // récit appartient à l'issue, au commit ou à l'ADR.
     for (const { id, body } of entries) {
       const words = body.split(/\s+/).filter(Boolean).length;
       expect({ id, words, sousBudget: words <= 120 }).toEqual({
@@ -388,7 +369,7 @@ describe("carte de contexte", () => {
   });
 
   test("chaque pointeur de CONTEXT.md résout vers une ancre réelle", () => {
-    // Éviter le lien mort : la carte doit mener à l'entrée, pas au thème.
+    // La carte doit mener à l'entrée, pas au thème.
     const pointers = contextPointers(CONTEXT);
     expect(pointers.length).toBeGreaterThan(0);
     expect({ bad: pointerErrors(pointers, DETAIL_BY_FILE) }).toEqual({ bad: [] });
@@ -480,9 +461,8 @@ describe("ADR", () => {
 
 describe("parité : fichiers de test découpés", () => {
   test("chaque fichier de parité reste sous son budget de lecture", () => {
-    // Un échec ne doit pas obliger à relire 56 Ko de tests : le runner reste
-    // mince, chaque thème vit dans son fichier, et les fixtures partagées
-    // restent bornées.
+    // Un échec ne doit pas obliger à relire 56 Ko de tests : runner mince,
+    // chaque thème dans son fichier, fixtures partagées bornées.
     for (const file of new Glob("tests/unit/parity/*.ts").scanSync(ROOT)) {
       expect({ file, sousBudget: statSync(join(ROOT, file)).size <= 30_000 }).toEqual({
         file,

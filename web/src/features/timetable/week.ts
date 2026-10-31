@@ -13,7 +13,6 @@ export interface DayGroup {
   lessons: Lesson[];
 }
 
-/** Lundi de la semaine décalée de `offset` semaines (0 = semaine courante). */
 export function weekStartFrom(offset: number, base: Date = new Date()): Date {
   return addDays(startOfWeek(base), offset * 7);
 }
@@ -28,18 +27,16 @@ export function isCurrentWeek(weekStart: Date, now: Date = new Date()): boolean 
   return isoDay(weekStart) === isoDay(startOfWeek(now));
 }
 
-/** Les sept jours de la semaine, lundi d'abord. */
 export function weekDays(weekStart: Date): Date[] {
   return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
 }
 
-/** Cours dont le jour local tombe dans la semaine affichée. */
 export function lessonsInWeek(lessons: Lesson[], weekStart: Date): Lesson[] {
   const keys = new Set(weekDays(weekStart).map((date) => isoDay(date)));
   return lessons.filter((lesson) => keys.has(isoDay(new Date(lesson.start))));
 }
 
-/** Sept groupes (jours vides compris) : la bande de semaine a toujours 7 cases. */
+/** Sept groupes, jours vides compris : la bande a toujours 7 cases. */
 export function groupDays(lessons: Lesson[], weekStart: Date): DayGroup[] {
   return weekDays(weekStart).map((date) => {
     const key = isoDay(date);
@@ -65,7 +62,6 @@ export function currentLesson(lessons: Lesson[], now: number): Lesson | null {
   return best;
 }
 
-/** Premier cours qui n'a pas encore commencé, annulés exclus. */
 export function nextLesson(lessons: Lesson[], now: number): Lesson | null {
   let best: Lesson | null = null;
   for (const lesson of lessons) {
@@ -78,9 +74,8 @@ export function nextLesson(lessons: Lesson[], now: number): Lesson | null {
 
 export type Highlight = "current" | "next" | null;
 
-/** Mise en avant : en cours > prochain > rien. Comparaison par IDENTITÉ, pas
- *  par heure de début : deux cours à 08:00 ne sont pas le même cours (et un
- *  cours terminé qui partage son début avec le cours courant n'est pas lui). */
+/** Mise en avant : en cours > prochain > rien. Comparaison par IDENTITÉ, pas par
+ *  heure de début : deux cours à 08:00 ne sont pas le même cours. */
 export function highlightOf(
   lesson: Lesson,
   current: Lesson | null,
@@ -91,15 +86,10 @@ export function highlightOf(
   return null;
 }
 
-/** Query de fenêtre du contrat : `weekStart=AAAA-MM-JJ`. */
 export function weekQuery(weekStart: Date): string {
   return `weekStart=${isoDay(weekStart)}`;
 }
 
-/**
- * « Semaine du 19 au 25 octobre 2026 » (mois écrit côté fin ; deux mois si la
- * semaine chevauche).
- */
 export function weekLabel(weekStart: Date): string {
   const end = addDays(weekStart, 6);
   const sameMonth = weekStart.getMonth() === end.getMonth();
@@ -111,12 +101,10 @@ export function weekLabel(weekStart: Date): string {
   return `Semaine du ${dayOfMonth(weekStart)} ${startMonth} au ${dayOfMonth(end)} ${month}`;
 }
 
-/** « 1er » au premier du mois, le nombre nu sinon (usage français). */
 function dayOfMonth(date: Date): string {
   return date.getDate() === 1 ? "1er" : String(date.getDate());
 }
 
-/** Étiquette courte d'une case de la bande de semaine : « lun. ». */
 export function shortDay(date: Date): string {
   return frDayShort(date);
 }

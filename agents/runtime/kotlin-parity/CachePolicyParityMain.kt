@@ -1,16 +1,8 @@
-// CachePolicyParityMain.kt — pilote JSON de la politique de fraîcheur (#372).
+// CachePolicyParityMain.kt — pilote JSON de la politique de fraîcheur.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-cache-policy.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile la VRAIE classe de
-// production `fr.veryslopnynotes.data.CachePolicy` (logique pure : ni Android
-// ni réseau) et la pilote ici — le verdict « périmé » (badge) et la décision
-// « relecture du client local » portent donc sur du code EXÉCUTÉ, pas sur un
-// miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-cache-policy.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`). Les
-// erreurs du PILOTE (op inconnue, champ absent) sont préfixées `pilote: ` et
-// refusées par le test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.cachepolicy
 
 import fr.veryslopnynotes.data.CachePolicy
@@ -47,7 +39,7 @@ private class Driver {
             val fetchedAt = (op.num("fetchedAt") ?: 0.0).toLong()
             val now = (op.num("now") ?: 0.0).toLong()
             val force = op.bool("force") ?: false
-            // #365 : la requête fait partie de l'identité de l'entrée.
+            // la requête fait partie de l'identité de l'entrée.
             val query = op.str("query") ?: ""
             val entry = if (op.bool("entry") ?: false) CachedEntry("payload", fetchedAt, query) else null
             ok("fetch" to JVal.Bool(CachePolicy.shouldFetch(entry, resource, query, now, force)))

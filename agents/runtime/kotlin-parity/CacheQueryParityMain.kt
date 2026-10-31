@@ -1,16 +1,8 @@
-// CacheQueryParityMain.kt — pilote JSON du cache par requête (#365).
+// CacheQueryParityMain.kt — pilote JSON du cache par requête.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-cache-query.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile les VRAIES classes de
-// production `fr.veryslopnynotes.data.CachePolicy` (règle de relecture) et
-// `fr.veryslopnynotes.data.OfflineCache` (entrée qui porte la requête) — de la
-// logique pure, sans import Android — et les pilote ici : les assertions
-// portent donc sur du code exécuté, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-cache-query.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE (op inconnue, champ absent) sont préfixées `pilote: ` et
-// refusées par le test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.cachequery
 
 import fr.veryslopnynotes.data.CachePolicy
@@ -76,7 +68,7 @@ private class Driver {
             val query = op.str("query") ?: ""
             ok("query" to JVal.Str(CachePolicy.normalizeQuery(query)))
         }
-        // La clé de dédoublonnage d'une lecture en vol (#509) : le fait
+        // La clé de dédoublonnage d'une lecture en vol : le fait
         // d'ÉCRIRE le cache en fait partie.
         "dedupKey" -> {
             val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
@@ -107,13 +99,13 @@ private class Driver {
                 )
             }
         }
-        // TOUS les payloads de la ressource (#477 : une entrée par requête).
+        // TOUS les payloads de la ressource (une entrée par requête).
         "payloads" -> {
             val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
             val payloads = store(op.str("store")).payloads(resource)
             ok("payloads" to JVal.Arr(payloads.map { JVal.Str(it) }))
         }
-        // Purge de la ressource : TOUTES ses entrées (#477).
+        // Purge de la ressource : TOUTES ses entrées.
         "clear" -> {
             val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
             store(op.str("store")).clear(resource)
@@ -124,8 +116,8 @@ private class Driver {
             store(op.str("store")).clearAll()
             ok("ok" to JVal.Bool(true))
         }
-        // Fichier écrit AVANT #365 (pas de requête dans l'en-tête) : l'entrée
-        // ne répond à aucune requête, elle doit être ignorée.
+        // Fichier sans requête dans l'en-tête : l'entrée ne répond à aucune
+        // requête, elle doit être ignorée.
         "writeLegacy" -> {
             val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
             val payload = op.str("payload") ?: ""

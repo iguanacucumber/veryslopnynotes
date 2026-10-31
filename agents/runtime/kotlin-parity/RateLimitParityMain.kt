@@ -1,28 +1,6 @@
 // RateLimitParityMain.kt — pilote JSON de la PORTE de limitation de débit.
 //
-// OUTIL DE TEST uniquement (jamais Gradle, jamais l'APK). Il pilote la VRAIE
-// source de production :
-//
-//   - `pronote/RateLimitGate.kt` (fenêtre de calme, horloge injectée) ;
-//   - `pronote/Client.kt` (`sendWithRefresh` : pas de refresh sur `G=25`,
-//     échec immédiat pendant la fenêtre) ;
-//   - `data/SessionFailure.kt` (`mustPropagateReadFailure`).
-//
-// Ce que le pilote prouve :
-//
-//   1. La porte s'arme, refuse TOUT de suite, puis se lève seule à la fin de
-//      la fenêtre (sans attendre deux vraies minutes : horloge injectée).
-//   2. Un `RateLimitedError` ne déclenche AUCUN refresh (le refresh = un login
-//      de plus = encore plus de limitation) et n'envoie rien de plus.
-//   3. Un rate-limit pendant le refresh ou pendant le rejeu arme la porte et
-//      remonte le TYPE, jamais une erreur générique.
-//   4. Une erreur GÉNÉRIQUE, elle, rafraîchit et rejoue toujours (pas de
-//      régression du comportement historique).
-//   5. `mustPropagateReadFailure` remonte rate-limit et session morte, mais
-//      laisse les lectures tolérantes avaler une erreur de parsing.
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`).
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.ratelimit
 
 import fr.veryslopnynotes.data.isSessionFailure

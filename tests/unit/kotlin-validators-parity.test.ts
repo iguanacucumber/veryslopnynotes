@@ -1,21 +1,7 @@
-// #366 : les validateurs Kotlin doivent rendre le MÊME verdict que le contrat
-// TS (et que le parseur web) — sinon l'app perd des données que le contrat
-// déclare valides.
-//
-// Le test compile les VRAIS fichiers du noyau (`core/IsoDates.kt`,
-// `core/Assignment.kt`) et les pilote via `ValidatorsParityMain` : ce ne sont
-// pas des miroirs TS, ce sont les validateurs exécutés. Outillage
-// `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux vert) ;
-// un échec de compilation, lui, est un défaut (le test rougit).
-//
-// Les deux défauts couverts :
-// 1. `isoMillis` refusait une date-heure locale sans décalage
-//    (`2026-10-02T10:00:00`) alors que le contrat (`Date.parse`) et le parseur
-//    frère l'acceptaient : absence exclue du calcul (aucune notification) et
-//    note triée en dernier (courbe décalée) ;
-// 2. `AssignmentAttachment.isValid` acceptait n'importe quelle `ref` relative
-//    alors que le web exige `^homework:[A-Za-z0-9._:-]+$` : un identifiant de
-//    fichier Pronote avec un espace faisait DISPARAÎTRE le devoir entier.
+// Les validateurs Kotlin doivent rendre le MÊME verdict que le contrat TS :
+// sinon l'app perd des données que le contrat déclare valides.
+// Les VRAIS fichiers du noyau sont compilés et pilotés ; outillage absent =
+// SKIP BRUYANT, jamais un faux vert.
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -54,12 +40,7 @@ const DATES = [
   "2026-13-02", // mois inexistant
 ];
 
-/**
- * Écarts CONNUS entre `Date.parse` (contrat TS) et le parseur ISO du noyau.
- * Le contrat est PLUS LAX : il accepte des formes hors ISO-8601. Le noyau les
- * refuse — l'écart joue dans le sens prudent (une date non ISO n'est pas
- * retenue) et il est listé ici pour qu'on ne le croie pas involontaire.
- */
+/** Écarts CONNUS : `Date.parse` (plus lax) accepte des formes hors ISO que le noyau refuse. */
 const DATES_TS_SEULES = [
   "2026-02-30", // jour inexistant : `Date.parse` bascule au 2 mars
   "2026-10-02 10:00:00", // séparateur espace au lieu de « T »
@@ -87,10 +68,7 @@ const REFS = [
   "autre:1:2", // autre schéma
 ];
 
-/**
- * Miroir TS de `core/ManualUrl.kt` : les messages sont ceux affichés à
- * l'utilisateur, donc la parité porte aussi sur eux.
- */
+/** Miroir TS de `core/ManualUrl.kt` : la parité porte aussi sur les messages affichés. */
 function tsManualUrl(raw: string): { ok: true; url: string } | { ok: false; message: string } {
   const input = raw.trim();
   if (input === "") return { ok: false, message: "Adresse vide : colle l'adresse de ton manuel." };
@@ -195,8 +173,7 @@ describe("validateurs du noyau (#366) — parité avec le contrat TS", () => {
       const valid = JSON.parse(await ask({ op: "refValid", ref })) as { ok: boolean };
       const ts = isHomeworkAttachmentRef({ id: "att", label: "sujet.pdf", ref });
       expect({ ref, kotlin: valid.ok }).toEqual({ ref, kotlin: ts });
-      // Le lecteur web refuse exactement les mêmes `ref` (sinon le devoir
-      // disparaît d'un côté et pas de l'autre).
+      // Le lecteur web refuse exactement les mêmes `ref`.
       expect({ ref, web: webAccepts(ref) }).toEqual({ ref, web: ts });
     }
   });
@@ -221,8 +198,7 @@ describe("validateurs du noyau (#366) — parité avec le contrat TS", () => {
   });
 
   test.skipIf(skip)("absence datée en heure locale : RETENUE (donc notifiable)", async () => {
-    // Avant #366, `isoMillis` refusait cette date : l'absence était exclue du
-    // calcul et AUCUNE notification n'était envoyée.
+    // Date locale sans fuseau : retenue, donc notifiable.
     const local = JSON.parse(
       await ask({ op: "absenceValid", id: "a-1", accountId: "e-1", kind: "absence", date: "2026-10-02T10:00:00" }),
     ) as { ok: boolean };
@@ -246,8 +222,6 @@ describe("validateurs du noyau (#366) — parité avec le contrat TS", () => {
     const core = readFileSync(join(CORE, "IsoDates.kt"), "utf8");
     expect(core).toContain("internal fun isoMillis(");
     expect(core).toContain("internal fun isIsoDateLike(");
-    // L'ancien parseur de `Averages.kt` a disparu, et le fichier de
-    // notifications qui en portait un second aussi (#651).
     const averages = readFileSync(join(CORE, "Averages.kt"), "utf8");
     expect(averages).not.toContain("fun isoMillis(");
     expect(averages).not.toContain("fun isIsoDateLike(");
@@ -510,8 +484,7 @@ describe("catalogue de manuels — classe et spécialités", () => {
   test("câblage : le pont choisit par matière et garde des extraits par adresse", () => {
     const bridge = readBridgeSource();
     expect(bridge).toContain("ManualCatalog.resolve(stored, classLabel, subjects, subject)");
-    // #628 : un SEUL point d'entrée (aiContextFor) choisit le manuel pour
-    // l'aide texte, la photo ET la fiche. Plus de collecte par chemin.
+    // Un SEUL point d'entrée (aiContextFor) choisit le manuel : aide, photo et fiche.
     expect(bridge).toContain("manualDocFor(assignment.subject)");
     expect(bridge).not.toContain("manualDocFor(a.subject)");
     expect(bridge).toContain("manuals.saveDoc(target, doc)");

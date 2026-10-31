@@ -1,9 +1,6 @@
-// Modèle du profil (#82/#140) : lecture défensive du payload `profile.me`,
-// comptes basculables et initiales. Aucun état, aucun accès au pont : les
-// règles restent testables sans React ni WebView.
-//
-// La borne du libellé de période vient du CONTRAT PARTAGÉ (#420) : le web ne
-// peut pas la réinventer, sinon il tronque ce que le natif publie.
+// Profil : lecture défensive du payload `profile.me`, comptes basculables et
+// initiales. Aucun état, aucun accès au pont. La borne du libellé de période
+// vient du contrat partagé : le web ne peut pas la réinventer.
 
 import { USER_PERIOD_NAME_MAX_CHARS } from "../../../../shared/contracts/models";
 
@@ -55,7 +52,6 @@ export function isValidPhotoRef(value: string): boolean {
   return value.length <= MAX_PHOTO_REF && PHOTO_REF_RE.test(value);
 }
 
-/** `{ user: … }` -> profil, ou `null` quand rien n'est publié / conforme. */
 export function parseProfilePayload(payload: string | null | undefined): Profile | null {
   if (!payload) return null;
   let root: unknown;
@@ -109,15 +105,10 @@ export function initialsOf(name: string): string {
   return letters.join("") || "?";
 }
 
-/** Classe + période, sans séparateur orphelin quand l'un des deux manque. */
 export function profileSubtitle(profile: Pick<Profile, "classLabel" | "periodName">): string {
   return [profile.classLabel, profile.periodName].filter((part) => part !== "").join(" · ");
 }
 
-/**
- * Comptes proposables : le compte de session d'abord, puis ses enfants, sans
- * doublon ni entrée sans nom, plafonné à MAX_KIDS + 1.
- */
 export function switchableAccounts(profile: Profile | null): SwitchableAccount[] {
   if (!profile) return [];
   const out = new Map<string, SwitchableAccount>();
@@ -135,24 +126,20 @@ export function switchableAccounts(profile: Profile | null): SwitchableAccount[]
   return [...out.values()];
 }
 
-/** Compte actif : l'id mémorisé s'il existe, sinon le premier (session). */
 export function activeAccount(accounts: SwitchableAccount[], currentId: string | null): SwitchableAccount | null {
   if (accounts.length === 0) return null;
   const id = (currentId ?? "").trim();
   return accounts.find((account) => account.accountId === id) ?? accounts[0] ?? null;
 }
 
-/** « 1 compte appairé » / « 3 comptes appairés » / « Aucun compte appairé ». */
 export function accountCountLabel(count: number): string {
   const safe = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
   if (safe === 0) return "Aucun compte appairé";
   return safe === 1 ? "1 compte appairé" : `${safe} comptes appairés`;
 }
 
-/**
- * Ce que le compteur ne dit pas : l'appareil ne sert qu'UN compte à la fois.
- * Changer de compte passe par un nouvel appairage, qui remplace la session.
- */
+/** L'appareil ne sert qu'UN compte à la fois : changer de compte passe par un
+ *  nouvel appairage, qui remplace la session. */
 export function accountCountHint(count: number): string {
   const safe = Number.isFinite(count) ? Math.max(0, Math.trunc(count)) : 0;
   if (safe === 0) return "Aucun compte n'est actif.";

@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
 import { parseMarkdown, type InlineNode, type MarkdownBlock } from "./markdown";
 
-// Rendu React du markdown des fiches (#630). Le parseur produit un AST borné ;
-// ce fichier ne crée que des éléments React. Aucun rendu HTML brut, aucune URL,
-// aucun attribut du modèle : une balise HTML reste du texte, que React échappe.
+// Aucun rendu HTML brut, aucune URL, aucun attribut du modèle : une balise
+// HTML reste du texte, échappé par React.
 
 function renderInline(nodes: InlineNode[], keyPrefix: string): ReactNode[] {
   return nodes.map((node, index) => {
@@ -22,9 +21,8 @@ function renderInline(nodes: InlineNode[], keyPrefix: string): ReactNode[] {
           </code>
         );
       case "link":
-        // Liens désactivés : libellé seul, jamais de href. Le pont pourra
-        // ouvrir un lien plus tard ; d'ici là aucun schéma (javascript:,
-        // data:) n'atteint le DOM.
+        // Liens désactivés : libellé seul, jamais de href, donc aucun schéma
+        // (javascript:, data:) n'atteint le DOM.
         return (
           <span key={key} className="revision-markdown__link">
             {renderInline(node.children, key)}
@@ -119,7 +117,6 @@ function renderBlock(block: MarkdownBlock, index: number): ReactNode {
   }
 }
 
-/** Corps d'une fiche ouverte : markdown borné, rendu en éléments React. */
 export function MarkdownBody({ text }: { text: string }) {
   const blocks = parseMarkdown(text);
   return <div className="revision-markdown">{blocks.map(renderBlock)}</div>;

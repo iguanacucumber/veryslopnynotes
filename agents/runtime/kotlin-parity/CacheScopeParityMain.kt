@@ -1,21 +1,8 @@
-// CacheScopeParityMain.kt — pilote JSON du scopage du cache par compte (#407).
+// CacheScopeParityMain.kt — pilote JSON du scopage du cache par compte.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-cache-scope.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile les VRAIES classes de
-// production `fr.veryslopnynotes.data.CacheScope`, `fr.veryslopnynotes.data.
-// AccountIdentity` et `fr.veryslopnynotes.data.FileCacheStore` (logique pure :
-// `java.io` seul, aucun import Android) et les pilote ici : les assertions
-// portent donc sur du code exécuté, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-cache-scope.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Scénarios rejoués : l'appairage d'un AUTRE compte purge le cache du compte
-// précédent, l'appairage du MÊME compte le conserve, la session MORTE purge
-// elle aussi, une lecture en vol ne ressuscite pas un cache purgé, et la
-// bascule de compte purge AVANT de publier le nouveau client (#529).
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE (op inconnue, sid absent) sont préfixées `pilote: ` et
-// refusées par le test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.cachescope
 
 import fr.veryslopnynotes.data.AccountIdentity
@@ -113,7 +100,7 @@ private class Driver {
                 )
             }
         }
-        // Bascule de compte (#529) : la purge du cache précédent précède la
+        // Bascule de compte : la purge du cache précédent précède la
         // publication du nouveau client, les deux dans la MÊME section
         // critique. Le pilote observe ce que voit un LECTEUR au moment EXACT
         // de la publication (époque + contenu du cache).

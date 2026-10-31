@@ -1,11 +1,6 @@
-// Pont factice pour Chromium (`bun run dev:web`) et Playwright. Les formes
-// imitent les payloads réels déjà lus par les écrans Compose. Aucun de ces
-// objets n'est une donnée personnelle : tout est fictif.
-//
-// DÉVELOPPEMENT SEULEMENT (#423) : `client.ts` ne l'importe que dans une
-// branche `import.meta.env.DEV`, donc le build de production ne l'embarque
-// pas (le bundle livré à l'APK ne contient aucune donnée scolaire fictice).
-// Hors mode dev, un pont natif absent est un ÉCHEC bruyant, jamais ce mock.
+// Pont factice pour Chromium (`bun run dev:web`) et Playwright. Tout est
+// fictif. DÉVELOPPEMENT SEULEMENT : `client.ts` ne l'importe que dans une
+// branche `import.meta.env.DEV`, donc le build de production ne l'embarque pas.
 import {
   ADD_PHOTO_REPLY,
   CLEARED_MANUAL,
@@ -55,7 +50,7 @@ let lessons: LessonNote[] = INITIAL_LESSONS;
 
 let prefs: SubjectPref[] = INITIAL_PREFS;
 
-/** Fil local de démonstration (#633) : vide au démarrage, rempli par les tours. */
+/** Fil local de démonstration, rempli par les tours. */
 let teacherThread: TeacherThread = { subject: "", messages: [] };
 
 const sessions: SessionStatus = { state: "restored" };
@@ -129,8 +124,8 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       return ok(result) as Promise<T>;
     }
     case "pairing.pairDemo": {
-      // Le pont factice n'a pas d'établissement : la connexion de
-      // démonstration ouvre la session factice (développement seulement).
+      // Le pont factice n'a pas d'établissement : la démo ouvre la session
+      // factice.
       sessions.state = "restored";
       return ok({ ok: true }) as Promise<T>;
     }
@@ -385,7 +380,7 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
     case "profile.photo":
       return ok({ dataUrl: null }) as Promise<T>;
     case "bridge.cancel":
-      // Abandon : le pont factice n'a rien à faire, l'appel est déjà lâché.
+      // Rien à faire côté factice : l'appel est déjà lâché.
       return ok({ ok: true }) as Promise<T>;
     default:
       return Promise.reject(new Error(`méthode factice inconnue: ${method}`));

@@ -13,37 +13,26 @@ interface AppContextValue {
   theme: Theme;
   dark: boolean;
   setTheme: (theme: Theme) => void;
-  /** Palette (#335) : id de `lib/schemes.ts`, variante donnée par `dark`. */
+  /** Id de palette de `lib/schemes.ts` ; la variante vient de `dark`. */
   scheme: string;
   setScheme: (scheme: string) => void;
   refreshTick: number;
   refresh: () => void;
   notify: (message: string, kind?: NoticeKind) => void;
   authLost: boolean;
-  /**
-   * Une session est ouverte (appairage réussi). Le statut lu au démarrage
-   * est alors périmé : sans ce drapeau, l'app renverrait vers l'écran
-   * d'appairage alors que la session native est ouverte (#357).
-   */
+  /** Session ouverte : le statut lu au démarrage est périmé, sinon retour à
+   *  l'écran d'appairage malgré une session native ouverte. */
   sessionOpen: boolean;
-  /**
-   * La session a été fermée (déconnexion) : le natif a invalidé la session
-   * et purgé les caches. Sans ce drapeau, l'app afficherait l'accueil d'un
-   * compte déconnecté (« aucune donnée en cache ») au lieu de renvoyer vers
-   * l'appairage (#360).
-   */
+  /** Session fermée : le natif a purgé les caches, sinon l'app montrerait
+   *  l'accueil vide d'un compte déconnecté. */
   sessionClosed: boolean;
-  /** Ouvre la session (appairage réussi) : annule aussi « session expirée ». */
+  /** Ouvre la session ; annule aussi « session expirée ». */
   openSession: () => void;
-  /** Ferme la session (déconnexion) : annule aussi « session expirée ». */
+  /** Ferme la session ; annule aussi « session expirée ». */
   closeSession: () => void;
-  /**
-   * Le stockage CHIFFRÉ est indisponible (Keystore mort) : la session et la
-   * clé de l'assistant ne sont PAS conservées sur l'appareil. Sans ce
-   * signal, l'app croyait ne pas être appairée, sans explication (#401).
-   */
+  /** Keystore indisponible : session et clé de l'assistant non conservées sur
+   *  l'appareil (repli mémoire). */
   storageUnavailable: boolean;
-  /** Signale l'état du stockage lu au démarrage. */
   reportStorage: (unavailable: boolean) => void;
 }
 
@@ -72,8 +61,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     document.documentElement.dataset["theme"] = dark ? "dark" : "light";
   }, [dark]);
 
-  // La palette est posée en variables CSS sur `<html>` : un seul point
-  // d'écriture, aucun re-rendu des écrans (elles lisent `var(--…)`).
+  // Palette posée en variables CSS sur `<html>` : un seul point d'écriture,
+  // aucun re-rendu des écrans (elles lisent `var(--…)`).
   useEffect(() => {
     const root = document.documentElement;
     for (const [name, value] of Object.entries(cssVarsOf(palette, dark))) {
@@ -81,9 +70,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [palette, dark]);
 
-  // La palette est aussi PUBLIÉE en `data-scheme` sur `<html>` : le skin
-  // décoratif (`styles/madoka.css`) cible `:root[data-scheme="madoka"]`, donc
-  // les autres palettes ne voient rien. Le natif n'a pas à connaître ce choix.
+  // Publiée en `data-scheme` : le skin décoratif (`styles/madoka.css`) cible
+  // `:root[data-scheme="madoka"]`, les autres palettes ne voient rien.
   useEffect(() => {
     document.documentElement.dataset["scheme"] = scheme;
   }, [scheme]);
@@ -95,47 +83,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
-  // #397 : c'est le NATIF qui répare, pas l'interface. Au moment du rejet
-  // (jeton tourné), le pont invalide la session ET purge les caches par le
-  // chemin EXISTANT (`accounts.logout()`), puis la réponse porte
-  // `auth_required` : l'interface n'a plus qu'à renvoyer vers l'appairage.
-  // Appeler `session.logout` depuis ici serait une SECONDE purge, en retard
-  // sur le rejeu — elle pourrait même effacer une session re-ouverte
-  // entre-temps (l'app se ré-appaire).
+  // C'est le NATIF qui répare : au rejet, il invalide la session et purge les
+  // caches ; l'interface ne fait que renvoyer vers l'appairage. Appeler
+  // `session.logout` ici serait une SECONDE purge, qui pourrait effacer une
+  // session re-ouverte entre-temps.
   useEffect(() => {
     const onAuth = () => setAuthLost(true);
     window.addEventListener("vsn:auth", onAuth);
     return () => window.removeEventListener("vsn:auth", onAuth);
   }, []);
 
-  // Une session rouverte (appairage) annule l'état « session expirée » : il
-  // n'est levé que sur 401, jamais reposté. Sans cette remise à zéro, le
-  // garde-fou renverrait vers /pairing pour toujours (#357).
+  // Une session rouverte annule « session expirée », levé seulement sur 401 :
+  // sinon le garde-fou renverrait vers /pairing pour toujours.
   const openSession = useCallback(() => {
     setSessionOpen(true);
     setSessionClosed(false);
     setAuthLost(false);
   }, []);
 
-  // Déconnexion : la session est fermée pour de vrai côté natif (session
-  // invalidée, caches purgés). L'interface doit le savoir : le statut lu au
-  // démarrage disait « session vivante », sinon l'accueil afficherait
-  // « aucune donnée en cache » pour un compte déconnecté (#360).
+  // Déconnexion : le natif a invalidé la session et purgé les caches. Sans ce
+  // drapeau, l'accueil afficherait « aucune donnée en cache ».
   const closeSession = useCallback(() => {
     setSessionOpen(false);
     setSessionClosed(true);
     setAuthLost(false);
   }, []);
 
-  // Le stockage chiffré est PUBLIE par le natif au démarrage (Keystore
-  // mort -> repli mémoire) : l'interface doit le dire, sinon l'app laisse
-  // croire que tout est enregistré alors que rien ne l'est (#401).
+  // Keystore mort = repli mémoire : l'interface doit le dire, sinon l'app
+  // laisse croire que tout est enregistré.
   const reportStorage = useCallback((unavailable: boolean) => {
     setStorageUnavailable(unavailable);
   }, []);
 
-  // Notice : entrée, temps de lecture, sortie animée (#336). La sortie est un
-  // état à part pour que la disparition soit animée au lieu d'un retrait sec.
+  // Notice : entrée, lecture, sortie animée. `leaving` est un état à part pour
+  // que la disparition soit animée au lieu d'un retrait sec.
   const notify = useCallback((message: string, kind: NoticeKind = "info") => {
     window.clearTimeout(noticeTimer.current);
     window.clearTimeout(leaveTimer.current);
@@ -160,8 +141,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void bridge.setTheme(next).catch(() => undefined);
   }, []);
 
-  // Le choix de palette reste local à la WebView (#335) : c'est une couleur,
-  // pas une donnée de session, et le natif n'a pas à la connaître.
+  // Le choix de palette reste local à la WebView : c'est une couleur, pas une
+  // donnée de session.
   const setScheme = useCallback((next: string) => {
     const id = parseScheme(next);
     setSchemeState(id);
@@ -238,13 +219,9 @@ export interface ResourceState {
   refresh: () => void;
 }
 
-/** Lecture offline-first : cache d'abord, puis réseau natif. Le cache est
- *  affiché sans spinner ; un échec garde le cache et expose `error`.
- *
- *  #527 : le payload est RATTACHÉ à sa requête. Changer de requête (période,
- *  algorithme, semaine) INVALIDE le payload précédent : l'écran montre un
- *  chargement, jamais les chiffres d'une autre requête — même si le
- *  chargement échoue. */
+/** Lecture offline-first : cache d'abord, puis natif. Le cache s'affiche sans
+ *  spinner ; un échec le garde et expose `error`. Le payload est RATTACHÉ à sa
+ *  requête : changer de requête l'invalide, même si le chargement échoue. */
 export function useResource(key: ResourceKey, query = ""): ResourceState {
   const { refreshTick } = useApp();
   const request = requestId(key, query);
@@ -258,11 +235,9 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
   });
   const [manual, setManual] = useState(0);
   const alive = useRef(true);
-  // #365 : le geste est un DELTA. On retient la signature du dernier
-  // chargement : forcer = le geste ou la requête a changé DEPUIS. Un compteur
-  // jamais remis à zéro forcerait à chaque ouverture d'écran (le compteur
-  // `manual`/`refreshTick` est monotone), et une requête nouvelle ne forcerait
-  // jamais.
+  // Le geste est un DELTA : on retient la signature du dernier chargement.
+  // Un compteur monotone forcerait à chaque ouverture d'écran, et une requête
+  // nouvelle ne forcerait jamais.
   const lastLoad = useRef<LoadSignature | null>(null);
 
   useEffect(() => {
@@ -279,15 +254,14 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
     const force = forceReload(lastLoad.current, signature);
     lastLoad.current = signature;
     const run = async () => {
-      // #527 : un changement de requête vide l'état (le payload de la
-      // requête précédente devient INVALIDE). Même requête : le cache reste
-      // affiché pendant la relecture.
+      // Changement de requête : l'état est vidé, le payload précédent devient
+      // invalide. Même requête : le cache reste affiché pendant la relecture.
       setStatus((s) => beginLoad(s, request));
       try {
         const cached = await bridge.cached(key, query);
         if (!cancelled && cached.payload) {
-          // Le cache frais ne doit pas faire clignoter « hors-ligne » : le
-          // natif dit déjà s'il est périmé (`stale`), on ne le devine pas.
+          // Le natif dit déjà si le cache est périmé (`stale`), on ne le
+          // devine pas.
           setStatus({
             request,
             payload: cached.payload,
@@ -298,7 +272,7 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
           });
         }
       } catch {
-        // cache indisponible : on tente le natif
+        // Cache indisponible : on tente le natif.
       }
       try {
         const result = await bridge.load({ key, query, force });
@@ -317,8 +291,8 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
           window.dispatchEvent(new Event("vsn:auth"));
         }
         setStatus((s) => ({
-          // L'échec porte sur la requête COURANTE : le cache de cette même
-          // requête reste affiché, celui d'une autre requête, jamais.
+          // L'échec porte sur la requête COURANTE : son cache reste affiché,
+          // celui d'une autre requête jamais.
           ...invalidateOnRequestChange(s, request),
           loading: false,
           error: e instanceof Error ? e.message : "lecture indisponible",
@@ -333,7 +307,7 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
 
   const refresh = useCallback(() => setManual((n) => n + 1), []);
   // La vue est PROJETÉE à chaque rendu : entre le changement de requête et
-  // l'effet qui recharge, l'ancien payload est déjà invisible (#527).
+  // l'effet qui recharge, l'ancien payload est déjà invisible.
   return { ...visibleResource(status, request), refresh };
 }
 

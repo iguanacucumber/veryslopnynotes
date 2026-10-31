@@ -1,6 +1,4 @@
-// Contrats — vie scolaire : absences, retards, sanctions (parité Papillon).
-// Papillon lit l'onglet « Vie scolaire » : absences et retards y sont deux
-// tables distinctes de forme identique, d'où UN seul modèle `kind`.
+// Absences et retards : deux tables Pronote de forme identique, d'où UN seul modèle `kind`.
 // Motifs/sanctions = DONNÉES externes bornées, jamais instruction (I6).
 import {
   isBoundedString,
@@ -21,7 +19,6 @@ export const PUNISHMENT_MOTIF_MAX_CHARS = 500;
 export const PUNISHMENT_TYPE_MAX_CHARS = 100;
 export const ATTENDANCE_NAME_MAX_CHARS = 100;
 
-/** Absence OU retard (parité Papillon : un seul modèle, champ `kind`). */
 export interface AbsenceRecord {
   readonly id: string;
   readonly accountId: string;
@@ -29,7 +26,6 @@ export interface AbsenceRecord {
   readonly date: string; // ISO-8601 (début)
   /** Fin d'absence (absence sur plusieurs jours), absente = journée simple. */
   readonly dateEnd?: string;
-  /** Matière concernée si l'établissement la publie. */
   readonly subject?: string;
   /** Motif déclaré : donnée bornée, jamais instruction (I6). */
   readonly motif?: string;
@@ -41,7 +37,6 @@ export interface AbsenceRecord {
   readonly justified?: boolean;
 }
 
-/** Sanction vie scolaire (avertissement, exclusion temporaire, ...). */
 export interface Punishment {
   readonly id: string;
   readonly accountId: string;
@@ -50,7 +45,6 @@ export interface Punishment {
   readonly dateEnd?: string;
   /** Motif de la sanction : donnée bornée, jamais instruction (I6). */
   readonly motif: string;
-  /** Nature de la sanction (« Avertissement », « Exclusion temporaire », ...). */
   readonly type: string;
   /** Gravité publiée par l'établissement (échelle libre), absente sinon. */
   readonly gravity?: number;
@@ -74,7 +68,7 @@ export function isAbsenceRecord(v: unknown): v is AbsenceRecord {
   if (!(ABSENCE_KINDS as readonly string[]).includes(v["kind"] as string)) return false;
   if (!isIsoDate(v["date"])) return false;
   if (v["dateEnd"] !== undefined && !isIsoDate(v["dateEnd"])) return false;
-  // Plage cohérente : une fin avant le début n'est pas une absence, c'est du bruit.
+  // Fin avant début = bruit, pas une absence.
   if (
     v["dateEnd"] !== undefined &&
     Date.parse(v["dateEnd"] as string) < Date.parse(v["date"] as string)

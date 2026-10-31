@@ -1,11 +1,8 @@
 // Smoke Playwright du frontend : sert le build local et vérifie toutes les
-// routes dans Chromium. Hors `make check` (un navigateur n'est pas requis pour
-// vérifier le code) ; `make web-smoke` le lance explicitement.
+// routes dans Chromium. Hors `make check` ; `make web-smoke` le lance.
 //
-// Le bundle de PRODUCTION n'embarque plus le pont factice (#423) : le smoke
-// le fournit lui-même, en exécutant le MÊME module `web/src/bridge/mock.ts`
-// côté Node (`page.exposeFunction`). Les écrans sont donc servis par les
-// données de démonstration, sans réintroduire le factice dans l'APK.
+// Le bundle de PRODUCTION n'embarque pas le pont factice : le smoke le fournit
+// lui-même en exécutant le MÊME module `web/src/bridge/mock.ts` côté Node.
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 import { mockCall } from "../../web/src/bridge/mock";
@@ -17,8 +14,7 @@ const PORT = 4173;
 const URL_BASE = `http://127.0.0.1:${PORT}/`;
 const SHOTS = "/tmp/opencode/web-shots";
 
-/** Liste bornée : 10 lignes max, une par message, le reste dans le log
- *  complet (`node_modules/.cache/gate-logs/<step>.log`). */
+/** Liste bornée : le reste part dans le log complet. */
 function afficherErreurs(titre: string, step: string, messages: readonly string[]): void {
   const lignes = messages.flatMap((m) => m.split("\n")).filter((l) => l.trim() !== "");
   console.error(titre);
@@ -68,7 +64,6 @@ try {
   await waitForServer();
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
-  // Le pont factice, servi par le module `web/src/bridge/mock.ts` (côté Node).
   await page.exposeFunction("__vsnMock", (method: string, params: unknown) => mockCall(method, params));
   await page.addInitScript(BRIDGE_FACTICE);
   const errors: string[] = [];
@@ -81,19 +76,15 @@ try {
   for (const [name, route] of SMOKE_ROUTES) {
     await page.goto(`${URL_BASE}#${route}`, { waitUntil: "networkidle" });
     await page.locator("h1, h2, strong").first().waitFor();
-    // Les écrans chargent via le pont factice : attendre la fin des spinners
-    // avant de capturer, sinon la preuve montre un état transitoire.
+    // Attendre la fin des spinners, sinon la preuve montre un état transitoire.
     await page
       .waitForFunction(() => !document.querySelector(".spinner"), null, { timeout: 5000 })
       .catch(() => undefined);
     await page.waitForTimeout(120);
-    // Accessibilité (#625) : une seule cible `main`, langue déclarée, et le
-    // lien d'évitement réellement atteint par le PREMIER Tab puis activé au
-    // clavier. Au tout premier chargement, le document démarre sans focus
-    // déplacé : on tabule tel quel. Après une navigation SPA, le titre de la
-    // coquille reprend le focus pour annoncer la page ; on le retire avant de
-    // tabuler pour mesurer l'ordre de tabulation DEPUIS LE DÉBUT DU DOCUMENT,
-    // comme au chargement.
+    // Accessibilité : une seule cible `main`, langue déclarée, et le lien
+    // d'évitement atteint par le PREMIER Tab puis activé au clavier. Après une
+    // navigation SPA, le titre reprend le focus : on le retire pour tabuler
+    // depuis le début du document, comme au chargement.
     const mainCount = await page.locator("main").count();
     const mainTarget =
       mainCount === 1
@@ -117,9 +108,8 @@ try {
       await page.evaluate(() => {
         const active = document.activeElement;
         if (active instanceof HTMLElement) active.blur();
-        // Le point de départ de la tabulation reste sinon sur le titre qui
-        // vient d'être focalisé : on le ramène au corps du document (comme
-        // après un chargement), sans l'ajouter à l'ordre de tabulation.
+        // Sinon la tabulation repart du titre focalisé : la ramener au corps du
+        // document, sans l'ajouter à l'ordre de tabulation.
         document.body.tabIndex = -1;
         document.body.focus();
       });
@@ -151,8 +141,7 @@ try {
       console.error(`web-smoke : le lien d'évitement n'est pas le premier Tab visible sur ${route}`);
       code = 1;
     } else {
-      // Le bouton doit rendre le focus au main. On presse Entrée seulement
-      // quand il a bien reçu le focus (sinon on ne teste pas ce qu'on croit).
+      // Entrée seulement si le focus est là (sinon on ne teste pas ce qu'on croit).
       await page.keyboard.press("Enter");
       const focused = await page
         .waitForFunction(() => document.activeElement?.id === "main", null, { timeout: 2000 })
@@ -182,8 +171,7 @@ try {
       const cards = await page.locator("main article.card").count();
       const text = await page.locator("main").innerText();
       const html = await page.content();
-      // L'extrait hostile doit rester du TEXTE : échappé dans le HTML et
-      // aucun nœud <img>/<a> fabriqué par son contenu.
+      // L'extrait hostile doit rester du TEXTE : échappé, aucun nœud créé.
       const injected = (await page.locator("main img").count()) > 0 ||
         (await page.locator("main a").count()) > 0;
       if (cards < 1 || !text.includes("<img src=x onerror=alert(1)>") || !html.includes("&lt;img")) {
@@ -198,11 +186,9 @@ try {
     await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
   }
 
-  // Deux parcours d'appairage, joués avec un pont natif factice : téléphone
-  // neuf (aucune session) et session expirée (401 sur les ressources). Dans
-  // les deux cas l'app doit atteindre le menu principal (barre d'onglets) sans
-  // redémarrage — sinon le garde-fou « pas de session », lu au démarrage,
-  // renvoie vers /pairing et l'utilisateur y reste prisonnier (#357).
+  // Deux parcours d'appairage : téléphone neuf (aucune session) et session
+  // expirée (401). Les deux doivent atteindre le menu principal sans
+  // redémarrage, sinon le garde-fou « pas de session » y enferme l'utilisateur.
   for (const scenario of [
     { name: "appairage-neuf", expired: false },
     { name: "appairage-expire", expired: true },
@@ -229,8 +215,8 @@ try {
           switch (method) {
             case "session.restore":
             case "session.status":
-              // Téléphone neuf : pas de session. Session expirée : le natif
-              // en a une, mais elle ne vaut plus rien (401 sur les ressources).
+              // Téléphone neuf : pas de session. Expirée : le natif en a une,
+              // mais elle ne vaut plus rien (401 sur les ressources).
               return resolve({ state: expired ? "restored" : paired ? "restored" : "no_session" });
             case "pairing.scanQr":
               return resolve({
@@ -263,8 +249,7 @@ try {
     await flow.getByRole("button", { name: "Terminer" }).click();
     await flow.waitForURL(/#\/$/, { timeout: 5000 }).catch(() => undefined);
     // Le garde-fou « pas de session » renverrait vers /pairing quelques
-    // millisecondes plus tard : on attend que l'app se stabilise avant de
-    // conclure, sinon on photographie le passage éclair vers l'accueil.
+    // millisecondes plus tard : laisser l'app se stabiliser avant de conclure.
     await flow.waitForTimeout(800);
     const tabs = await flow.locator(".tabbar .tab").count();
     if (!flow.url().endsWith("#/") || tabs < 4) {
@@ -281,10 +266,8 @@ try {
     await flow.close();
   }
 
-  // Parcours de déconnexion : le profil invalide la session, l'app renvoie
-  // vers l'appairage et n'affiche PLUS l'accueil d'un compte déconnecté
-  // (« aucune donnée en cache » pour toujours). Le « Retour » de l'écran
-  // d'appairage ne doit pas rouvrir un compte déconnecté (#360).
+  // Déconnexion : le profil invalide la session, l'app renvoie vers
+  // l'appairage, dont le « Retour » ne doit pas rouvrir le compte déconnecté.
   {
     const flow = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
     const pageErrors: string[] = [];
@@ -324,13 +307,12 @@ try {
             case "resources.load": {
               if (!loggedOut) return resolve({ payload: null, fetchedAt: 0, stale: false, error: null });
               if (key === "capabilities") {
-                // 401 tardif : il arrive APRÈS la déconnexion, ce n'est donc
-                // pas une « session expirée » à annoncer (#360).
+                // 401 tardif : il arrive APRÈS la déconnexion, donc ce n'est
+                // pas une « session expirée » à annoncer.
                 return reject(1200);
               }
-              // Échec ordinaire : plus de session, plus de cache. Le natif ne
-              // répond pas 401 (le compte n'existe plus) — l'accueil d'un
-              // compte déconnecté ne doit pas rester accessible (#360).
+              // Plus de session, plus de cache : l'accueil d'un compte
+              // déconnecté ne doit pas rester accessible.
               return resolve({ payload: null, fetchedAt: 0, stale: false, error: "Aucune donnée en cache." });
             }
             default:
@@ -346,9 +328,8 @@ try {
     await flow.waitForURL(/#\/profile$/, { timeout: 5000 }).catch(() => undefined);
     const logoutTrigger = flow.getByRole("button", { name: "Se déconnecter" }).first();
     await logoutTrigger.click();
-    // Clavier (#625) : Échap ferme le dialogue de déconnexion ET rend le focus
-    // au déclencheur. On rouvre ensuite pour jouer le parcours de déconnexion
-    // existant, inchangé.
+    // Clavier : Échap ferme le dialogue ET rend le focus au déclencheur ; on
+    // rouvre ensuite pour jouer la déconnexion.
     const logoutDialog = flow.getByRole("alertdialog");
     await logoutDialog.waitFor({ timeout: 5000 });
     await flow.keyboard.press("Escape");
@@ -395,8 +376,7 @@ try {
       console.error(`web-smoke : l'accueil d'un compte déconnecté reste accessible (${flow.url()}, ${tabs} onglets)`);
       code = 1;
     }
-    // Le 401 tardif ne doit pas être annoncé « session expirée » : c'est
-    // l'utilisateur qui a déconnecté le compte (#360).
+    // Le 401 tardif ne doit pas être annoncé « session expirée ».
     await flow.waitForTimeout(2000);
     const text = await flow.locator("body").innerText();
     if (text.includes("Session expirée")) {
@@ -419,8 +399,7 @@ try {
   }
   await browser.close();
 } catch (e) {
-  // Premier item seulement (le message), le reste (pile) dans le log : une
-  // pile Playwright fait des centaines de lignes.
+  // Le message seul : une pile Playwright fait des centaines de lignes.
   const dump = e instanceof Error ? (e.stack ?? e.message) : String(e);
   const lignes = dump.split("\n").filter((l) => l.trim() !== "");
   console.error("web-smoke : ÉCHEC");

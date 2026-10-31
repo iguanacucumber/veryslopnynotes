@@ -1,5 +1,3 @@
-// Chargement du corpus Pronote local (données personnelles, jamais commitées).
-//
 // Le corpus gitignoré contient des réponses réelles d'un compte d'élève.
 // Machine sans corpus ne doit pas afficher un faux vert : `hasCorpus()` fait
 // signaler un SKIP par le test de parité.
@@ -37,7 +35,7 @@ function loadDomain(domain: string, dir: string = CORPUS_DIR): unknown | null {
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
-/** Tous les domaines présents sur la machine, triés (ordre de comparaison stable). */
+/** Trié : ordre de comparaison stable. */
 function listDomains(dir: string = CORPUS_DIR): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
@@ -46,12 +44,7 @@ function listDomains(dir: string = CORPUS_DIR): string[] {
     .sort();
 }
 
-/**
- * Le corpus est-il rejouable ? Volontairement strict : la présence du
- * répertoire ne suffit pas, chaque domaine doit être lisible et marqué. Un
- * corpus à moitié écrit fait échouer le harnais de parité, pas son contrôle
- * d'amorçage.
- */
+/** Volontairement strict : chaque domaine doit être lisible et marqué. */
 export function hasCorpus(dir: string = CORPUS_DIR): boolean {
   const domains = listDomains(dir);
   if (domains.length === 0) return false;

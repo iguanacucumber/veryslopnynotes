@@ -1,5 +1,5 @@
-// #732 : le filtre de la frontière `android-compile` — chemins relatifs,
-// dédoublonnage par motif, plafond, et surtout AUCUN échec avalé (I5).
+// Filtre de la frontière `android-compile` : chemins relatifs, dédoublonnage
+// par motif, plafond, et surtout AUCUN échec avalé (I5).
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

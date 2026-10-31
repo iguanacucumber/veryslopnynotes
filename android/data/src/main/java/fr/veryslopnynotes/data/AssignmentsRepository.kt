@@ -10,13 +10,12 @@ import fr.veryslopnynotes.core.eventKey
 import org.json.JSONArray
 import org.json.JSONObject
 
-// Dépôt devoirs #75 : parse du payload local + écriture "fait" sur le client.
-// org.json = SDK Android (aucune dépendance ajoutée). Un devoir non conforme au
-// contrat (ref en URL absolue, description hors borne) est rejeté = jamais de
-// ligne affichée qui pointerait ailleurs (I1).
-// I7 : le toggle part d'un TAP utilisateur (action confirmée), jamais d'une
-// sortie LLM. Les pièces jointes se téléchargent sur le client local
-// (FileProvider côté UI) : plus de proxy serveur.
+// Dépôt devoirs : parse du payload local + écriture « fait » sur le client.
+// org.json = SDK Android (aucune dépendance ajoutée). Un devoir non conforme
+// (ref en URL absolue, description hors borne) est rejeté : jamais de ligne qui
+// pointerait ailleurs (I1).
+// I7 : le toggle part d'un TAP utilisateur, jamais d'une sortie LLM. Les pièces
+// jointes se téléchargent sur le client local (FileProvider côté UI).
 data class ToggleOutcome(val assignment: Assignment?, val error: String?)
 
 /** Pièce jointe téléchargée : nom pour l'ouvreur, octets à partager. */
@@ -29,9 +28,9 @@ class AssignmentsRepository(
     private val main: Handler = Handler(Looper.getMainLooper()),
 ) {
 
-    // Toggle Optimiste : l'UI bascule l'affichage d'abord, puis revert si échec.
-    // Fenêtre = la semaine AFFICHÉE (`weekStart` de l'écran) : la même que le
-    // payload affiché, sinon le devoir est visible mais « introuvable » (#369).
+    // Toggle optimiste : l'UI bascule d'abord, puis revert si échec. Fenêtre =
+    // la semaine AFFICHÉE (celle du payload), sinon le devoir est visible mais
+    // « introuvable ».
     fun toggle(
         baseUrl: String,
         assignmentId: String,
@@ -62,17 +61,14 @@ class AssignmentsRepository(
                     post { onDone(ToggleOutcome(null, "Toggle refusé (devoir introuvable).")) }
                     return@Thread
                 }
-                // #369 : écriture CONFIRMÉE -> l'entrée de cache des devoirs ne
-                // ressert plus l'état d'avant (la case se décochait au retour).
-                // `setDone` lève si l'écriture échoue : rien n'est purgé alors.
+                // Écriture CONFIRMÉE → cache invalidé. `setDone` lève si
+                // l'écriture échoue : rien n'est purgé alors.
                 writeAndInvalidate(cache, CachePolicy.ASSIGNMENTS) { found.setDone(done) }
                 val payload = JSONObject().put("assignment", assignmentJson(found, found.id.ifBlank { "a-0" }, 0)).toString()
                 val updated = parseToggle(payload)?.copy(done = done)
                 if (updated == null) {
                     post { onDone(ToggleOutcome(null, "Réponse illisible.")) }
                 } else {
-                    // Le cache local est invalidé : le payload complet sera
-                    // rechargé au pull-refresh.
                     post { onDone(ToggleOutcome(updated, null)) }
                 }
             } catch (e: Exception) {
@@ -87,12 +83,9 @@ class AssignmentsRepository(
     }
 
     /**
-     * Octets d'une PJ pour l'ouvreur externe (FileProvider côté UI) : la `ref`
-     * opaque `homework:<i>:file:<di>:<fileId>` est résolue sur le client local,
-     * jamais une URL d'établissement dans l'app (I1).
-     *
-     * La fenêtre est celle de la semaine AFFICHÉE (comme le toggle) : une PJ
-     * d'un devoir affiché s'ouvre (#369).
+     * Octets d'une PJ pour l'ouvreur externe : la `ref` opaque est résolue sur
+     * le client local, jamais une URL d'établissement dans l'app (I1). Fenêtre
+     * = semaine AFFICHÉE, comme le toggle.
      */
     fun fetchAttachment(
         homeworkId: String,
@@ -105,9 +98,9 @@ class AssignmentsRepository(
                 val client = provider() ?: return@Thread post { onDone(null) }
                 val (from, to) = assignmentWindow(weekStart)
                 val hw = client.homework(from, to).firstOrNull { it.id == homeworkId }
-                // #631 : une pièce jointe de COURS n'est pas dans le devoir ;
-                // on la cherche dans les contenus de la même fenêtre. La `ref`
-                // reste une clé interne, jamais une URL d'établissement (I1).
+                // Une pièce jointe de COURS n'est pas dans le devoir : on la
+                // cherche dans les contenus de la même fenêtre. La `ref` reste
+                // une clé interne, jamais une URL (I1).
                 val file = hw?.let { h ->
                     try {
                         h.files()
@@ -128,9 +121,9 @@ class AssignmentsRepository(
     }
 
     /**
-     * Fichiers des contenus de cours de la fenêtre, bornés. Sert de repli
-     * quand l'identifiant n'appartient pas au devoir : les pièces jointes de
-     * cours vivent dans `LessonContent`, pas dans `Homework`.
+     * Fichiers des contenus de cours de la fenêtre, bornés. Repli quand
+     * l'identifiant n'appartient pas au devoir : les PJ de cours vivent dans
+     * `LessonContent`, pas dans `Homework`.
      */
     private fun lessonFiles(
         client: fr.veryslopnynotes.pronote.Client,
@@ -167,8 +160,8 @@ class AssignmentsRepository(
             val root = JSONObject(body)
             val arr: JSONArray = root.optJSONArray("assignments") ?: JSONArray()
             val out = mutableListOf<Assignment>()
-            // #570 : un devoir = UNE entrée. Le même identifiant publié deux
-            // fois (deux fenêtres de cache, #477) n'est lu qu'une fois.
+            // Un devoir = UNE entrée : le même identifiant publié deux fois
+            // n'est lu qu'une fois.
             for (i in 0 until arr.length()) {
                 val o: JSONObject = arr.optJSONObject(i) ?: continue
                 val a = fromJson(o) ?: continue
@@ -186,8 +179,8 @@ class AssignmentsRepository(
                 val att = parseAttachment(arr?.optJSONObject(i) ?: continue) ?: return null
                 atts.add(att)
             }
-            // #631 : `lessonContents` porte TOUS les cours ; le champ singulier
-            // reste lu pour les caches antérieurs (et pour le premier cours).
+            // `lessonContents` porte TOUS les cours ; le champ singulier reste
+            // lu pour les caches antérieurs (et pour le premier cours).
             val lessons = mutableListOf<AssignmentLessonContent>()
             val lessonArr = o.optJSONArray("lessonContents")
             if (lessonArr != null) {
@@ -239,7 +232,6 @@ class AssignmentsRepository(
             return lesson.takeIf { AssignmentLessonContent.isValid(it) }
         }
 
-        /** Réponse du toggle : {assignment}. */
         fun parseToggle(body: String): Assignment? {
             return try {
                 val root = JSONObject(body)

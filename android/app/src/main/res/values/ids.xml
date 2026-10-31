@@ -1,12 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!--
-      Id STABLE de la WebView (#400).
-
-      L'état d'une vue est indexé par son identifiant : une WebView sans id
-      n'est pas retrouvée à la restauration, et un id régénéré à chaque
-      lancement ne survivrait pas à la mort du processus. La constante vient
-      donc d'ici, et jamais d'un `View.generateViewId()`.
-    -->
+    <!-- Id STABLE : une vue sans id n'est pas retrouvée à la restauration, et un
+         id régénéré ne survit pas à la mort du processus. Jamais `generateViewId()`. -->
     <item name="web_view" type="id" />
 </resources>

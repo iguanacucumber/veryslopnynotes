@@ -1,20 +1,16 @@
 package fr.veryslopnynotes.core
 
-// Exercices du manuel (#632) : extraction VERBATIM, aide progressive.
+// Exercices du manuel : extraction VERBATIM, aide progressive.
 //
 // Ce fichier est PUR : aucun réseau, aucun stockage, aucun outil. La frontière
-// `data` fournit le texte déjà extrait d'une page de manuel (`ManualDoc`) ou
-// d'une note du cahier ; ici, on ne fait que DÉCOUPER des énoncés numérotés et
-// construire un prompt.
+// `data` fournit le texte déjà extrait ; ici on DÉCOUPE des énoncés numérotés
+// et on construit un prompt.
 //
 // Règles du produit :
-//   - un énoncé n'est jamais INVENTÉ : sans marqueur numéroté lisible, la liste
-//     est vide et l'UI le dit ;
-//   - trois niveaux d'aide, du plus léger au plus complet : indice, méthode,
-//     correction. La correction complète n'arrive que sur un choix EXPLICITE ;
-//   - chaque réponse cite les libellés fournis, exactement (comme #633) ;
-//   - les données (manuel, cahier, énoncé, réponse de l'élève) restent
-//     Untrusted et délimitées par nonce (I6) ;
+//   - un énoncé n'est jamais INVENTÉ : sans marqueur lisible, la liste est vide ;
+//   - trois niveaux d'aide : indice, méthode, correction (sur choix EXPLICITE) ;
+//   - chaque réponse cite les libellés fournis, exactement ;
+//   - les données restent Untrusted et délimitées par nonce (I6) ;
 //   - aucun effet Pronote, aucune écriture (I7).
 
 /** Énoncé extrait d'une page, avec sa provenance citable. */
@@ -33,7 +29,6 @@ data class Exercise(
             source.trim().isNotEmpty() && source.length <= Homework.MAX_LABEL_CHARS
 }
 
-/** Niveau d'aide demandé par l'élève. */
 enum class ExerciseHelpMode(val wire: String) {
     HINT("hint"),
     METHOD("method"),
@@ -65,12 +60,11 @@ object Exercises {
     private val DIFFICULTY = Regex("""\b(facile|moyen(?:ne)?|difficile)\b""", RegexOption.IGNORE_CASE)
 
     /**
-     * Découpe un texte en énoncés numérotés. Les lignes de continuation sont
-     * conservées jusqu'au marqueur suivant (ou une ligne vide double) : le
-     * texte reste verbatim, seulement normalisé en espaces.
+     * Découpe un texte en énoncés numérotés ; les lignes de continuation sont
+     * conservées jusqu'au marqueur suivant ou une ligne vide.
      *
-     * Aucun marqueur = liste vide. C'est volontaire : deviner un « exercice »
-     * dans un paragraphe de cours produirait un faux énoncé.
+     * Aucun marqueur = liste vide : deviner un « exercice » dans un paragraphe
+     * produirait un faux énoncé.
      */
     fun extract(
         text: String,
@@ -95,8 +89,7 @@ object Exercises {
             while (cursor < lines.size && out.size < max) {
                 if (markerAt(lines[cursor]) != null) break
                 val line = lines[cursor].trim()
-                // Ligne vide = fin de l'énoncé : le paragraphe suivant n'est
-                // jamais aspiré dans un exercice qu'il ne décrit pas.
+                // Ligne vide = fin de l'énoncé : le paragraphe suivant n'est pas aspiré.
                 if (line.isEmpty()) break
                 if (body.isNotEmpty()) body.append(' ')
                 body.append(line)
@@ -122,9 +115,8 @@ object Exercises {
     }
 
     /**
-     * Filtre « chapitre/page » : un indice libre garde les énoncés qui le
-     * contiennent (chiffre ou mot du chapitre). Aucun indice = liste entière.
-     * L'indice ne CRÉE jamais un énoncé.
+     * Filtre « chapitre/page » : garde les énoncés qui contiennent l'indice.
+     * Aucun indice = liste entière. L'indice ne CRÉE jamais un énoncé.
      */
     fun filter(items: List<Exercise>, hint: String): List<Exercise> {
         val needle = normalize(hint)
@@ -139,8 +131,8 @@ object Exercises {
         }
         val numbered = NUMBERED.matchEntire(line.trim()) ?: return null
         val body = numbered.groupValues[2]
-        // Un nombre isolé de moins de 15 caractères est plus probablement une
-        // ligne de sommaire qu'un énoncé ; « Exercice N » n'a pas cette garde.
+        // Une ligne courte est plus probablement du sommaire qu'un énoncé ;
+        // « Exercice N » n'a pas cette garde.
         if (body.trim().length < 15) return null
         return numbered.groupValues[1] to body
     }
@@ -182,10 +174,6 @@ object Exercises {
             "markdown simple (gras **, listes - ou 1., formules en texte ou `code inline`)."
     }
 
-    /**
-     * Blocs DONNEE : sources du corpus, énoncé exact, réponse éventuelle.
-     * Tout est marqué Untrusted ici ; `buildSafePrompt` ajoute le nonce.
-     */
     fun dataFor(
         context: AiContextResult,
         exerciseNumber: String,
@@ -213,7 +201,6 @@ object Exercises {
         return blocks
     }
 
-    /** Prompt complet (système + données délimitées). */
     fun promptFor(
         mode: ExerciseHelpMode,
         context: AiContextResult,
@@ -225,9 +212,8 @@ object Exercises {
         buildSafePrompt(systemFor(mode), dataFor(context, exerciseNumber, statement, studentAnswer), nonce)
 
     /**
-     * Aide validée : JSON {answer, sources} du modèle, sources citées dans les
-     * libellés FOURNIS. Le schéma est celui du professeur (#633) : une réponse
-     * vide ou une source inventée est rejetée, jamais affichée.
+     * Aide validée : JSON {answer, sources}, sources citées dans les libellés
+     * FOURNIS. Une réponse vide ou une source inventée est rejetée.
      */
     fun requestHelp(
         provider: SafePromptProvider,

@@ -1,11 +1,9 @@
 package fr.veryslopnynotes.core
 
-// Transcription d'une photo de cours en texte (#587).
+// Transcription d'une photo de cours en texte.
 //
-// La consigne est FIXE : le modèle transcrit l'image, ne complète pas, et
-// répond en JSON. Une réponse mal formée est refusée (I5), jamais
-// réinterprétée en texte vide (I14). Le texte produit est une DONNÉE : il
-// reste dans le cahier local et sera marqué Untrusted au prochain prompt.
+// Consigne FIXE : le modèle transcrit, ne complète pas, répond en JSON. Une
+// réponse mal formée est refusée (I5), jamais réinterprétée en texte vide (I14).
 
 const val SYSTEM_LESSON_TRANSCRIBE =
     "Tu transcris le cours photographié. Utilise uniquement l'image fournie. " +

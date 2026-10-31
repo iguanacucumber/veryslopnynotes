@@ -32,8 +32,7 @@ function plural(count: number, one: string, many: string): string {
   return `${count} ${count > 1 ? many : one}`;
 }
 
-/** Couleur de la carte d'état : vert si tout est justifié, rouge si des
- *  heures sont injustifiées, neutre si la justification n'est pas publiée. */
+/** Vert si tout est justifié, rouge si des heures sont injustifiées, neutre sinon. */
 function statusColor(state: AttendanceState): string {
   if (state === "clean") return "var(--brand-deep)";
   if (state === "unjustified") return "var(--danger-ink)";
@@ -52,9 +51,8 @@ export function AttendanceScreen({
 }: AttendanceProps) {
   const filterId = useId();
   const status = attendanceStatus(rows);
-  // « À justifier » = ce dont la justification n'est pas affirmée : inconnue
-  // (le natif ne publie `justified` que pour les événements justifiés) ou
-  // refusée. Un événement sans information n'est pas un événement justifié.
+  // « À justifier » = justification non affirmée : le natif ne publie `justified`
+  // que pour les événements justifiés, donc l'absence n'est pas une justification.
   const shown = onlyPending ? rows.filter(needsJustification) : rows;
   const sections = attendanceSections(shown);
 

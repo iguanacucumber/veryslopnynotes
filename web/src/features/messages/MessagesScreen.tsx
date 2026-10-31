@@ -219,8 +219,7 @@ export function ThreadScreen({
   return (
     <div className="stack">
       <div className="row" style={{ alignItems: "center" }}>
-        {/* #524 : pendant l'envoi, on ne change PAS de fil — la réponse de
-            l'envoi ne doit pas pouvoir arriver dans un autre fil. */}
+        {/* Pendant l'envoi, le fil ne change pas : la réponse ne doit pas arriver ailleurs. */}
         <button
           type="button"
           className="icon-btn"
@@ -262,8 +261,7 @@ export function ThreadScreen({
       {loading ? (
         <Loading label="Chargement du fil…" />
       ) : messages.length === 0 ? (
-        // #537 : avec une erreur, on ne SAIT PAS que le fil est vide (le
-        // payload peut être illisible) : l'état vide serait un fait faux.
+        // Avec une erreur, le fil n'est pas connu comme vide : l'état vide serait un fait faux.
         error ? null : <EmptyState icon={<IconMessage size={30} />} title="Aucun message." body="Ce fil est vide." />
       ) : (
         <div className="list" aria-labelledby={titleId}>

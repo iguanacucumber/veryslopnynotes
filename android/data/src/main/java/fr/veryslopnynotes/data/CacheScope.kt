@@ -1,51 +1,28 @@
 package fr.veryslopnynotes.data
 
 /**
- * #407 : le cache est la DONNÉE D'UN COMPTE, jamais celle d'un autre.
+ * Le cache est la DONNÉE D'UN COMPTE, jamais celle d'un autre.
  *
- * Les clés de cache sont GLOBALES (`cache_grades.txt`, sans compte) et le TTL
- * va jusqu'à 24 h (capacités) : sans garde, l'appairage d'un AUTRE compte
- * servirait le payload du précédent — hors ligne, sans appel réseau — pendant
- * des heures (Notes, EDT, Cantine, Capacités).
+ * Clés globales (sans compte) et TTL jusqu'à 24 h : sans garde, l'appairage
+ * d'un AUTRE compte servirait le payload du précédent hors ligne. Deux
+ * événements purgent : le COMPTE change, ou la SESSION est MORTE.
  *
- * DEUX événements font partir le cache :
- * - le COMPTE change (appairage d'un autre compte) ;
- * - la SESSION est MORTE (jeton tourné : plus rien ne prouve que le compte
- *   appairé ensuite est le même).
+ * La purge passe par [SessionEpoch] : une lecture en vol ne peut pas réécrire
+ * le cache après la purge.
  *
- * La purge passe par [SessionEpoch] (#364) : une lecture EN VOL ne peut pas
- * réécrire le cache après la purge (elle perd la course d'époque et abandonne
- * son payload), donc le cache purgé ne ressuscite pas.
+ * La BASCULE de compte (purge + publication du nouveau client) est ATOMIQUE :
+ * la purge précède la publication, dans la même section critique, sinon un
+ * lecteur voit le nouveau client avec l'ancien cache.
  *
- * #529 : la BASCULE de compte (purge du cache précédent + publication du
- * nouveau client) est ATOMIQUE : la purge précède la publication, et les deux
- * sont dans la MÊME section critique. Publication d'abord, purge ensuite,
- * c'était une fenêtre : `resources.cached` y servait encore le payload du
- * compte précédent, et une lecture qui y démarrait lisait le client du
- * nouveau compte mais écrivait dans le cache de l'ancien.
- *
- * ponytail: PURGE, pas de clé scopée — la clé scopée (ressource+compte)
- *   toucherait tous les appels de `store.load/save` pour un gain nul : le
- *   cache ne contient qu'UN compte à la fois, il suffit de le purger quand ce
- *   compte change. Upgrade: plusieurs comptes SIMULTANÉMENT (sélecteur de
- *   compte, #397) ⇒ clé scopée par compte.
+ * ponytail: PURGE, pas de clé scopée — le cache ne contient qu'UN compte à la
+ *   fois. Upgrade: plusieurs comptes simultanés ⇒ clé scopée par compte.
  */
 object CacheScope {
     /**
-     * BASCULE DE COMPTE (#529) : le cache du compte précédent ne doit JAMAIS
-     * être servi au nouveau compte. Purge si les identités diffèrent — une
-     * identité INCONNUE purge aussi (fail-closed : sans identité prouvée, on
-     * ne sert rien).
-     *
-     * [publish] (la publication du nouveau client) s'exécute APRÈS la purge,
-     * dans la MÊME section critique : un lecteur concurrent ne peut donc pas
-     * voir le nouveau client avec le cache de l'ancien, ni écrire le payload
-     * de l'ancien dans le cache du nouveau.
-     *
-     * MÊME compte : le cache est encore le sien, il n'est pas purgé (le
-     * client neuf remplace l'ancien, sans changer de compte).
-     *
-     * Renvoie `true` si le cache a été purgé.
+     * Purge si les identités diffèrent — une identité INCONNUE purge aussi
+     * (fail-closed). [publish] s'exécute APRÈS la purge, dans la MÊME section
+     * critique : aucun lecteur ne voit le nouveau client avec l'ancien cache.
+     * MÊME compte : cache conservé. Renvoie `true` si le cache a été purgé.
      */
     fun switchAccount(
         store: CacheStore,
@@ -54,8 +31,6 @@ object CacheScope {
         publish: () -> Unit,
     ): Boolean {
         if (previous != null && current != null && previous.sameAccount(current)) {
-            // MÊME compte : le cache est encore le sien — ni purge ni
-            // invalidation d'époque (le client neuf remplace l'ancien).
             publish()
             return false
         }
@@ -64,12 +39,8 @@ object CacheScope {
     }
 
     /**
-     * Appairage SANS publication : le cache du compte précédent ne doit JAMAIS
-     * être servi au nouveau compte. Purge si les identités diffèrent — une
-     * identité INCONNUE purge aussi (fail-closed : sans identité prouvée, on
-     * ne sert rien).
-     *
-     * Renvoie `true` si le cache a été purgé.
+     * Appairage sans publication : même règle que [switchAccount], le cache
+     * d'un autre compte (ou d'une identité inconnue) est purgé.
      */
     fun onAccountPaired(
         store: CacheStore,
@@ -83,21 +54,16 @@ object CacheScope {
     }
 
     /**
-     * Purge TOTALE sous la garde d'époque : l'invalidation ET la purge sont
-     * dans la MÊME section critique (leur ordre est total), donc une écriture
-     * en vol ne ressuscite pas le cache purgé.
+     * Purge totale sous la garde d'époque : une écriture en vol ne ressuscite
+     * pas le cache purgé.
      */
     fun purge(store: CacheStore) {
         purgeWith(store) {}
     }
 
     /**
-     * Effacement du cache puis action, dans la MÊME section critique
-     * d'époque. L'action s'exécute APRÈS l'effacement : c'est ainsi que la
-     * bascule de compte publie le nouveau client sans laisser de fenêtre
-     * (#529).
-     *
-     * UN SEUL effacement dans tout l'objet : la purge passe par là aussi.
+     * Efface puis exécute l'action, dans la MÊME section critique d'époque :
+     * la bascule de compte publie le nouveau client sans fenêtre.
      */
     private fun purgeWith(store: CacheStore, after: () -> Unit) {
         SessionEpoch.invalidate {
@@ -108,24 +74,17 @@ object CacheScope {
 }
 
 /**
- * #407 : identité d'un compte = établissement (endpoint) + identifiant de
- * connexion. Deux appairages du MÊME compte donnent la MÊME identité ; deux
- * comptes différents, jamais (même login dans deux établissements ≠ même
- * compte).
+ * Identité d'un compte = établissement (endpoint) + identifiant de connexion.
+ * Même login dans deux établissements ≠ même compte.
  *
- * Source : la session PERSISTÉE (jamais `AccountStore.current()`, qui vaut
- * `null` tant que le magasin multi-compte n'est pas alimenté — #397). La
- * session est écrite à CHAQUE appairage, donc elle prouve toujours le compte
- * appairé.
- *
- * Le login ne sort JAMAIS (ni log, ni rapport de crash) : `toString()` est
- * rédigé, comme `StoredSession`.
+ * Source : la session PERSISTÉE (jamais `AccountStore.current()`, `null` tant
+ * que le magasin multi-compte n'est pas alimenté), écrite à chaque appairage.
+ * Le login ne sort jamais : `toString()` est rédigé.
  */
 class AccountIdentity private constructor(
     private val endpoint: String,
     private val username: String,
 ) {
-    /** Même compte (même établissement, même login) ? */
     fun sameAccount(other: AccountIdentity): Boolean =
         endpoint == other.endpoint && username == other.username
 
@@ -136,10 +95,7 @@ class AccountIdentity private constructor(
     override fun toString(): String = "AccountIdentity(***)"
 
     companion object {
-        /**
-         * `null` = identité INCONNUE (endpoint ou login vide) : le cache ne
-         * peut alors pas être réutilisé (fail-closed, cf. [CacheScope]).
-         */
+        /** `null` = identité INCONNUE (endpoint ou login vide) : fail-closed. */
         fun of(endpoint: String, username: String): AccountIdentity? {
             val school = endpoint.trim()
             val user = username.trim()

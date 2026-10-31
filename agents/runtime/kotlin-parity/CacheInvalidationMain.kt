@@ -1,20 +1,8 @@
-// CacheInvalidationMain.kt — pilote JSON de l'invalidation du cache (#369).
+// CacheInvalidationMain.kt — pilote JSON de l'invalidation du cache.
 //
-// OUTIL DE TEST uniquement : compilé par
-// `tests/unit/kotlin-cache-invalidation.test.ts` (jamais par Gradle, jamais
-// dans l'APK). Le test compile la VRAIE logique de production
-// (`fr.veryslopnynotes.data.CachePolicy`, `OfflineCache`, `WeekWindow` — pure,
-// sans Android ni org.json) et la pilote ici.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-cache-invalidation.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE sont préfixées `pilote: ` et refusées par le test.
-//
-// Ce que le test observe (le vrai comportement du code exécuté) :
-// - `invalidate` : l'entrée de cache d'une ressource cesse d'être servie
-//   comme fraîche après une écriture confirmée (donc relecture) ;
-// - `window` : la fenêtre de recherche du toggle ET de l'affichage (la même
-//   fonction) couvre la semaine demandée, et rien au-delà.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.cacheinvalid
 
 import fr.veryslopnynotes.data.CachePolicy

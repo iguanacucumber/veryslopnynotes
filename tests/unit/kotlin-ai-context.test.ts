@@ -1,12 +1,6 @@
-// #628 — le contexte IA est assemblé UNE fois pour tous les points d'entrée.
-//
-// VRAI Kotlin exécuté : `android/core/AiContext.kt` est compilé par le harnais
-// et piloté par `agents/runtime/kotlin-parity/AiContextMain.kt`. Les assertions
-// portent donc sur le code de production : priorité, budgets, déduplication,
-// troncature signalée, refus vide et parité texte/photo/fiche/chat.
-//
-// Le pont (`app/VsnBridge.kt`) ne compile pas hors Gradle : son câblage est
-// vérifié par lecture de source, comme les autres chemins IA.
+// Le contexte IA est assemblé UNE fois pour tous les points d'entrée : priorité,
+// budgets, déduplication, troncature signalée, parité texte/photo/fiche/chat.
+// `AiContext.kt` est EXÉCUTÉ ; le câblage du pont est lu en source.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
@@ -61,8 +55,7 @@ describe("contexte IA — priorité, budgets, dédup, troncature (#628)", () => 
     expect(budget.maxSources).toBe(8);
     expect(budget.maxSourceChars).toBe(2000);
     expect(budget.maxLabelChars).toBe(200);
-    // Le budget TOTAL est le plafond de la garde I5, plus petit que 8 x 2 000 :
-    // il borne réellement le prompt, pas seulement le nombre de sources.
+    // Le budget TOTAL est le plafond I5, plus petit que 8 × 2 000.
     expect(budget.maxTotalChars).toBe(12000);
     expect(budget.maxTotalChars).toBeLessThan(budget.maxSources * budget.maxSourceChars);
     expect(budget.maxHistoryItems).toBe(6);
@@ -164,8 +157,7 @@ describe("contexte IA — refus déterministe sans source (#628)", () => {
     expect(first.refusal?.code).toBe("aucune_source");
     expect(first.refusal?.actions).toEqual(["add_course", "enable_manual", "open_attachment"]);
     expect(first.refusal?.message).toContain("ajoute un cours");
-    // Déterministe : même corpus exploitable = même refus (l'élément vide est
-    // bien écarté, mais le refus et ses CTA ne changent pas).
+    // Déterministe : même corpus = même refus, CTA compris.
     expect(second.sources).toEqual([]);
     expect(second.refusal).toEqual(first.refusal);
   });
@@ -191,8 +183,7 @@ describe("contexte IA — refus déterministe sans source (#628)", () => {
     }
     const chat = await ask<Assembled>({ op: "assemble", entry: "chat", items: [...base, history] });
     expect(chat.sources.map((s) => s.type)).toEqual([...base.map((s) => s.type), "history"]);
-    // L'historique est BORNÉ : au plus 6 des derniers tours, et le budget total
-    // peut en couper davantage. Au-delà, le chat ne reçoit pas tout.
+    // L'historique est BORNÉ : au plus 6 tours, et le budget peut en couper plus.
     const longHistory = Array.from({ length: 10 }, (_, i) =>
       ITEM("history", `Historique : ${i + 1}`, `tour ${i + 1}`),
     );
@@ -300,8 +291,7 @@ describe("contexte IA — parité des points d'entrée (#628)", () => {
       ITEM("manual", "Manuel : Maths", "manuel"),
       ITEM("web", "Page web : Article", "web"),
     ];
-    // Le pilote lit stdin ligne par ligne : des `ask` concurrents se disputent
-    // le flux et peuvent perdre une réponse. La parité se rejoue donc en série.
+    // Des `ask` concurrents perdent des réponses : la parité se rejoue en série.
     const results: Assembled[] = [];
     for (const entry of ["homework", "photo", "revision", "chat"]) {
       results.push(await ask<Assembled>({ op: "assemble", entry, items }));
@@ -318,13 +308,10 @@ describe("contexte IA — câblage unique du pont (#628)", () => {
 
   test("les quatre chemins passent par AiContext.assembleFor", () => {
     expect(bridge).toContain("AiContext.assembleFor(entry, items)");
-    // #631 : les trois chemins qui lisent un devoir passent la SEMAINE affichée
-    // et l'époque de session, parce que les pièces jointes se téléchargent et
-    // s'écrivent dans le cache du compte (I26).
+    // Les chemins devoirs passent la SEMAINE et l'époque : les PJ s'écrivent dans le cache (I26).
     expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.HOMEWORK, week, epoch)");
     expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.PHOTO, week, epoch)");
     expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.REVISION, week, epoch)");
-    // Plus de collecte parallèle par chemin.
     expect(bridge).not.toContain("homeworkSourcesFor");
     expect(bridge).not.toContain("revisionChunks");
   });

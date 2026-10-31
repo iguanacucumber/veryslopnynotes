@@ -3,17 +3,12 @@ package fr.veryslopnynotes.data
 import fr.veryslopnynotes.pronote.Client
 
 /**
- * Les lectures du client local — la SEULE porte d'entrée (#403).
- *
- * Toute ressource lue sur le client passe par ici, et l'appelant pose la
- * lecture dans la file PARTAGÉE (`ClientQueue`) : UN appel client à la fois
- * dans le process. Le `Client` est mutable (`refresh()` réassigne
- * `communication`, `attributes` et la clé AES) : deux lectures simultanées =
- * deux authentifications sur le même compte = « Exceeded max authorization
- * requests » (erreur 25) → l'établissement limite le compte.
- *
- * Les écrans ET le job de fond passent par ce chemin : plus de lecture
- * « directe » du client, qui se croisait avec le job de fond.
+ * La SEULE porte d'entrée des lectures du client local : l'appelant pose la
+ * lecture dans la file PARTAGÉE (`ClientQueue`), un appel client à la fois.
+ * Le `Client` est mutable (`refresh()` réassigne `communication`, `attributes`
+ * et la clé AES) : deux lectures simultanées = deux authentifications sur le
+ * même compte = « Exceeded max authorization requests » (erreur 25), puis
+ * limitation du compte. Les écrans et le job de fond passent tous par ici.
  */
 internal fun cachedRead(client: Client, resource: String, query: String): String {
     val q = parseQuery(query)

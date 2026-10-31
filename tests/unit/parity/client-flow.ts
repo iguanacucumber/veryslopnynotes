@@ -44,9 +44,7 @@ export function registerClientFlow(): void {
       expect(tsa.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(2);
       expect(kta.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(2);
 
-      // `G` inconnu UNE fois : `refresh` + retry qui aboutit — aucune erreur ne
-      // remonte (le retry est brut, son résultat fait foi). Refresh prouvé par
-      // les handshakes, succès identiques ensuite.
+      // `G` inconnu UNE fois : refresh + retry qui aboutit, aucune erreur ne remonte.
       tsa.script.nextEnvelope = { Erreur: { G: 99, Titre: "Bizarre" } };
       kta.script.nextEnvelope = { Erreur: { G: 99, Titre: "Bizarre" } };
       const ts99 = await tsClient.post("TestEcho", 7, { data: { a: 1 } });
@@ -77,20 +75,9 @@ export function registerClientFlow(): void {
     }
   });
 
-  // #405 : le rafraîchissement est ATOMIQUE.
-  //
-  // `ClientBase._refreshing` était un `var Boolean` nu : le job de fond
-  // (`PeriodicSyncWorker`) et la lecture de l'interface tombant en erreur en
-  // MÊME temps, les deux lisaient `false` et déclenchaient DEUX
-  // rafraîchissements — deux `Communication` (deux cookies, deux compteurs de
-  // requêtes), le champ finissant sur celle qui avait fini la dernière, les
-  // requêtes entrelacées (clé AES mélangée) : le serveur répondait `G=25`
-  // « Exceeded max authorization requests » ou la session restait à moitié
-  // initialisée.
-  //
-  // La référence TS est MONO-THREAD (`await` : la session est rafraîchie
-  // avant le retour), donc la parité à prouver est COMPORTEMENTALE : le port
-  // fait les MÊMES requêtes, dans le MÊME ordre, et UN SEUL rafraîchissement.
+  // Le rafraîchissement est ATOMIQUE : job de fond et interface peuvent échouer
+  // en même temps, et deux rafraîchissements (deux `Communication`) donnent `G=25`.
+  // La parité est COMPORTEMENTALE : mêmes requêtes, même ordre, UN seul refresh.
 
   test.skipIf(skip)("refresh concurrent : UN SEUL refresh, les deux fils réussissent (#405)", async () => {
     const tsa = startStub();
@@ -99,10 +86,7 @@ export function registerClientFlow(): void {
       const tsClient = await tsLogin(tsa);
       const ktCid = await ktLogin(kta);
 
-      // Session fermée par l'établissement : elle rouvre au handshake suivant
-      // (le refresh). La référence TS poste DEUX fois (la première déclenche
-      // le refresh, la seconde passe sur la session neuve) ; le port poste
-      // les MÊMES deux requêtes, mais CONCURRENTEMENT.
+      // La référence poste DEUX fois ; le port poste les MÊMES deux requêtes, CONCURRENTEMENT.
       tsa.script.deadUntilHandshake = true;
       kta.script.deadUntilHandshake = true;
 
@@ -117,21 +101,16 @@ export function registerClientFlow(): void {
         data: { data: { a: 1 } },
       })) as { results: string[]; payloads: string[] };
 
-      // Les DEUX fils réussissent : le perdant de la course ATTEND le
-      // rafraîchissement et rejoue sa requête sur la session neuve (au lieu
-      // de remonter l'erreur à l'appelant).
+      // Le perdant ATTEND le rafraîchissement et rejoue sur la session neuve.
       expect(ktRes.results).toEqual(["ok", "ok"]);
 
-      // UN SEUL rafraîchissement : deux handshakes en tout (login + refresh),
-      // pas trois — deux refreshs = deux `Communication` = le bug.
+      // UN SEUL rafraîchissement : deux handshakes en tout, pas trois.
       expect(kta.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(2);
       expect(tsa.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(2);
-      // Une seule nouvelle `Communication` : une seule re-poignée de main.
       expect(kta.gets).toBe(2);
       expect(tsa.gets).toBe(2);
 
-      // PARITÉ : le FIL de requêtes est celui de la référence — mêmes
-      // fonctions, dans le même ordre (handshake, login, refresh, rejeu).
+      // PARITÉ : mêmes fonctions, dans le même ordre (handshake, login, refresh, rejeu).
       const fil = (stub: Stub): string[] => stub.posts.map((p) => p.id);
       expect(fil(kta)).toEqual(fil(tsa));
       // Et les RÉPONSES sont identiques des deux côtés.
@@ -145,18 +124,9 @@ export function registerClientFlow(): void {
     }
   });
 
-  // #408 : la RELECTURE MANUELLE doit forcer un aller-retour.
-  //
-  // `Communication.post` rafraîchit `lastPing` à chaque POST réussi : juste
-  // après une lecture, le seuil de 110 s n'est PAS atteint, donc
-  // `pingIfDue()` ne partait JAMAIS — la relecture rendait `Updated` sans
-  // rien vérifier de la session (une session morte passait pour vivante : ni
-  // `DeviceAuth.reject()`, ni invite à ré-appairer).
-  //
-  // Le ping MANUEL (`KeepAlive.ping()`) force la requête. C'est une
-  // EXTENSION du port (la référence n'a que le ping périodique), mais la
-  // requête émise est CELLE de la référence — `post("Navigation", 7, { onglet:
-  // 7, ongletPrec: 7 })` — et le fil est comparé des deux côtés.
+  // La RELECTURE MANUELLE force un aller-retour : `post` rafraîchit `lastPing`,
+  // donc `pingIfDue()` ne partait jamais et une session morte passait pour vivante.
+  // Le ping MANUEL émet la requête de la référence (`post("Navigation", 7, …)`).
 
   test.skipIf(skip)("keepAlive : le ping manuel force l'aller-retour (après une lecture) — #408", async () => {
     const tsa = startStub();
@@ -170,8 +140,7 @@ export function registerClientFlow(): void {
       const ktAvant = kta.posts.length;
       expect(ktAvant).toBeGreaterThan(0);
 
-      // Le ping « si dû » : AUCUNE requête (le bug #408 — la relecture ne
-      // vérifiait rien de la session).
+      // Le ping « si dû » : AUCUNE requête.
       await ask({ op: "clientPing", cid: ktCid, mode: "ifDue" });
       expect(kta.posts.length).toBe(ktAvant);
 
@@ -181,9 +150,7 @@ export function registerClientFlow(): void {
       const ktPing = kta.posts[ktAvant]!;
       expect(ktPing.id).toBe("Navigation");
 
-      // PARITÉ : la requête est CELLE de la référence (même fonction, même
-      // onglet, mêmes données) — le ping manuel n'est pas un protocole
-      // différent, et le fil est OCTET-pour-octet le même des deux côtés.
+      // PARITÉ : même requête que la référence — le fil est identique des deux côtés.
       await tsClient.post("Navigation", 7, { onglet: 7, ongletPrec: 7 });
       const tsPing = tsa.posts[tsa.posts.length - 1]!;
       expect(tsPing.id).toBe("Navigation");
@@ -192,9 +159,7 @@ export function registerClientFlow(): void {
         canonTs({ Signature: { onglet: 7 }, data: { onglet: 7, ongletPrec: 7 } }),
       );
 
-      // Session MORTE : le ping manuel remonte l'ERREUR de session (elle
-      // n'est pas avalée) — c'est ce que la couche data traduit en
-      // ré-appairage (`isSessionFailure` → `DeviceAuth.reject()`).
+      // Session MORTE : le ping manuel remonte l'ERREUR, traduite en ré-appairage.
       kta.script.deadSession = true;
       tsa.script.deadSession = true;
       const ktErr = portError(await ask({ op: "clientPing", cid: ktCid, mode: "manual" }, true));

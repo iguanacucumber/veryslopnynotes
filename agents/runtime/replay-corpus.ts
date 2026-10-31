@@ -1,19 +1,16 @@
-// replay-corpus.ts — rejoue le corpus local en JSON attendu (#202).
+// replay-corpus.ts — rejoue le corpus local en JSON attendu.
 //
 // Le corpus (`tests/fixtures/pronote/<domaine>.json`, gitignoré, données
-// d'élève) contient déjà la sortie des readers TS. Ce script n'y touche pas :
-// il la NORMALISE (clés triées, `undefined` omis — même forme que `canonTs`
-// du harnais, verrouillée par test) et vide un JSON attendu par domaine. Le
-// test de parité (`tests/unit/kotlin-corpus-parity.test.ts`) fait passer les
-// MÊMES octets dans le `Json` du port et compare : toute divergence de
-// parse/sérialisation sur données réelles casse au domaine + champ près.
+// d'élève) contient déjà la sortie des readers TS. Ce script la NORMALISE
+// (clés triées, `undefined` omis — même forme que `canonTs` du harnais,
+// verrouillée par test) ; le test de parité y fait passer les MÊMES octets dans
+// le `Json` du port et compare au domaine + champ près.
 //
-// Lecture seule, aucune écriture vers Pronote, aucune valeur hors du corpus.
-// Sans corpus : refus net (exit 2), jamais un faux attendu.
+// Lecture seule, aucune valeur hors du corpus. Sans corpus : refus net
+// (exit 2), jamais un faux attendu.
 //
 // Usage : `bun run agents/runtime/replay-corpus.ts [dir-sortie]`
-// (défaut : `node_modules/.cache/corpus-expected/`, jamais commité —
-// l'attendu dérive de données personnelles comme le corpus).
+// (défaut : `node_modules/.cache/corpus-expected/`, jamais commité).
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CORPUS_DIR } from "./corpus-path";
@@ -22,10 +19,9 @@ const ROOT = join(import.meta.dir, "..", "..");
 export const EXPECTED_DIR = join(ROOT, "node_modules", ".cache", "corpus-expected");
 
 /**
- * Canonique compact : clés triées, `undefined` omis, tableaux intacts.
- * Même forme que `canonTs` (`tests/unit/fixtures/kotlin-harness.ts`) :
- * l'équivalence est verrouillée par test, pas par import (le runtime
- * n'importe jamais depuis `tests/`).
+ * Canonique compact : clés triées, `undefined` omis, tableaux intacts. Même
+ * forme que `canonTs` — équivalence verrouillée par test, pas par import (le
+ * runtime n'importe jamais depuis `tests/`).
  */
 export function compactCanon(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(compactCanon).join(",")}]`;
@@ -38,7 +34,6 @@ export function compactCanon(value: unknown): string {
   return JSON.stringify(value) ?? "null";
 }
 
-/** Domaines présents sur disque, triés (ordre de comparaison stable). */
 export function replayDomains(dir: string = CORPUS_DIR): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
@@ -48,9 +43,9 @@ export function replayDomains(dir: string = CORPUS_DIR): string[] {
 }
 
 /**
- * Attendu canonique d'un domaine. Lève si la fixture est absente, illisible
- * ou non marquée `__untrusted` : un corpus à moitié écrit ne produit jamais
- * un attendu partiel silencieux (même porte stricte que `hasCorpus()`).
+ * Attendu canonique d'un domaine. Lève si la fixture est absente, illisible ou
+ * non marquée `__untrusted` : un corpus à moitié écrit ne produit jamais un
+ * attendu partiel silencieux.
  */
 export function replayDomain(domain: string, dir: string = CORPUS_DIR): string {
   const file = join(dir, `${domain}.json`);
@@ -66,7 +61,7 @@ export function replayDomain(domain: string, dir: string = CORPUS_DIR): string {
   return compactCanon(body);
 }
 
-/** Tout le corpus en canonique. Lève si vide : jamais d'attendu vide. */
+/** Tout le corpus ; lève si vide. */
 export function replayCorpus(dir: string = CORPUS_DIR): Record<string, string> {
   const domains = replayDomains(dir);
   if (domains.length === 0) {
@@ -79,7 +74,7 @@ export function replayCorpus(dir: string = CORPUS_DIR): Record<string, string> {
   return out;
 }
 
-/** Vide l'attendu sur disque (`<domaine>.expected.json`). `dir` injectable. */
+/** Vide `<domaine>.expected.json`. `dir` injectable. */
 export function writeExpected(corpus: Record<string, string>, dir: string = EXPECTED_DIR): string[] {
   mkdirSync(dir, { recursive: true });
   const written: string[] = [];

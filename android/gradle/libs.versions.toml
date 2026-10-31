@@ -1,29 +1,17 @@
-# Dépendances Gradle versionnées (issue #13, ADR-001).
-# Catalogue seul : versions figées, licences MIT-compatibles.
-# #624 : AUCUN build.gradle.kts ne déclare de version de dépendance. Les modules
-# consomment les alias `libs.*`, le classpath racine lit `kotlin`, la CI compare
-# son littéral à `kotlin` (tests/architecture/gradle-versions.test.ts).
+# Catalogue seul : aucun build.gradle.kts ne déclare de version de dépendance.
 [versions]
 agp = "9.5.0"
 kotlin = "2.4.21"
 core-ktx = "1.19.1"
 activity-ktx = "1.13.0"
 okhttp = "5.5.1"
-# #15 : jeton de session chiffré (EncryptedSharedPreferences). Apache-2.0
-# (compatible MIT).
+# Apache-2.0 (compatible MIT).
 security-crypto = "1.1.0"
-# #127 : scan du QR de l'établissement. Décodeur DANS l'APK, permission CAMERA
-# demandée par l'activité de scan : ça marche sans Google Play Services (donc
-# sur l'émulateur et sur un téléphone sans GMS), ce que ne faisait pas le module
-# Play Services de #122 — dont l'échec était SILENCIEUX (bouton inerte).
-# Apache-2.0 (compatible MIT), dépendance unique : com.google.zxing:core.
+# Décodeur zxing embarqué : fonctionne sans Google Play Services (émulateur, GMS
+# absent). Apache-2.0 (compatible MIT).
 zxing-android-embedded = "4.3.0"
-# #208 : sync périodique de fond SANS serveur (ni SSE, ni push, ni cron).
-# Seule solution de sync périodique sans serveur : WorkManager (contraintes
-# réseau connecté + batterie non faible, backoff exponentiel). Version
-# contemporaine du catalogue (AGP 9.4.1 / Kotlin 2.4.21). Apache-2.0
-# (compatible MIT). Manifest : aucun composant exporté (le provider
-# androidx.startup est interne, non exporté).
+# Sync périodique de fond SANS serveur (WorkManager : réseau + batterie, backoff
+# exponentiel). Apache-2.0 (compatible MIT).
 work = "2.12.0"
 
 [libraries]

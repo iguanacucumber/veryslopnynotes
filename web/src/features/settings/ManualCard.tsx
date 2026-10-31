@@ -6,10 +6,7 @@ import { Card } from "../../ui/components";
 import { actionMessage } from "./action";
 import { DEFAULT_MANUAL_URL, MAX_MANUAL_URL_CHARS, manualSaveNotice } from "./model";
 
-/**
- * Carte du manuel : l'adresse part au pont natif (scraper facultatif), jamais
- * au serveur de l'établissement, et rien n'est stocké dans la WebView.
- */
+/** L'adresse part au pont natif, jamais au serveur de l'établissement ; rien n'est stocké ici. */
 export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot | null; loading: boolean }) {
   const { notify } = useApp();
   const [manualUrl, setManualUrl] = useState(DEFAULT_MANUAL_URL);

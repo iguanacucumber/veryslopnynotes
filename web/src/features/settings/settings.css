@@ -1,27 +1,103 @@
-/* Réglages — sélecteur de palette (#335). */
+.settings-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 0 24px;
+  text-align: center;
+}
 
-/* #612 : l'assistant a une section unique, identifiable d'un coup d'œil. */
+.settings-profile__name {
+  margin: 8px 0 0;
+  font-size: 24px;
+  line-height: 30px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.settings-profile__sub {
+  color: var(--secondary);
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.settings-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 106px;
+  padding: 14px;
+  border: 0;
+  border-radius: 23px;
+  background: color-mix(in srgb, var(--tile-base, var(--brand)) 20%, #fff);
+  color: color-mix(in srgb, var(--tile-base, var(--brand)) 80%, #000);
+  text-align: left;
+  transition: transform var(--duration) var(--ease), filter var(--duration) var(--ease);
+}
+
+:root[data-theme="dark"] .settings-tile {
+  background: color-mix(in srgb, var(--tile-base, var(--brand)) 20%, #000);
+  color: color-mix(in srgb, var(--tile-base, var(--brand)) 80%, #fff);
+}
+
+.settings-tile--appearance { --tile-base: #17c300; }
+.settings-tile--subjects { --tile-base: #8500dd; }
+.settings-tile--assistant { --tile-base: #dd007d; }
+.settings-tile--device { --tile-base: #e05a00; }
+
+.settings-tile:hover {
+  filter: brightness(1.04);
+}
+
+.settings-tile:active {
+  transform: scale(0.98);
+}
+
+.settings-tile__icon {
+  display: inline-flex;
+  margin-bottom: auto;
+}
+
+.settings-tile__label {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 700;
+}
+
+.settings-tile__detail {
+  font-size: 15px;
+  line-height: 19px;
+  font-weight: 500;
+  opacity: 1;
+}
+
 .settings-assistant__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  background: var(--brand-pale);
-  color: var(--brand-deep);
+  width: auto;
+  height: auto;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
   flex: 0 0 auto;
 }
 
-/* Statut du manuel : même puce que les autres états, teinte d'alerte quand
-   l'ouvrage est enregistré mais pas encore récupéré. */
+/* Teinte d'alerte : l'ouvrage est enregistré mais pas encore récupéré. */
 .settings-manual__status--warn {
-  border-color: color-mix(in srgb, var(--danger) 35%, var(--border-soft));
-  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
   color: var(--danger-ink);
 }
 
-/* L'éditeur de matière s'ouvre : il monte au lieu d'apparaître d'un coup. */
 .subject-editor {
   animation: rise-in 220ms var(--ease) both;
 }
@@ -29,9 +105,9 @@
 .subject-editor__preview {
   margin-top: 12px;
   padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-variant);
+  border: 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 .subject-editor__preview-name {
@@ -52,10 +128,9 @@
   width: var(--tap);
   height: var(--tap);
   padding: 0;
-  border: 2px solid var(--surface);
-  border-radius: 999px;
-  box-shadow: var(--shadow-soft);
-  transition: transform var(--duration) var(--ease-out), border-color var(--duration) var(--ease);
+  border: 0;
+  border-radius: 12px;
+  transition: box-shadow var(--duration) var(--ease);
 }
 
 .subject-swatch:active,
@@ -65,24 +140,23 @@
 
 .subject-swatch[aria-pressed="true"],
 .subject-emoji[aria-pressed="true"] {
-  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--ink);
 }
 
 .subject-emoji {
-  border-color: var(--border);
-  background: var(--surface);
+  background: var(--item);
   font-size: 20px;
   line-height: 1;
 }
 
 .subject-emoji[aria-pressed="true"] {
-  background: var(--brand-pale);
+  background: var(--item);
 }
 
 .scheme-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 7px;
+  gap: 10px;
   margin-top: 10px;
 }
 
@@ -95,36 +169,31 @@
 .scheme-card {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 6px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  gap: 7px;
+  padding: 8px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--item);
+  box-shadow: none;
   color: var(--ink);
   text-align: left;
-  transition: border-color var(--duration) var(--ease), background var(--duration) var(--ease),
-    transform var(--duration) var(--ease-out);
-}
-
-.scheme-card:active {
-  transform: scale(0.97);
+  transition: background var(--duration) var(--ease), box-shadow var(--duration) var(--ease);
 }
 
 .scheme-card:hover {
-  background: var(--surface-variant);
+  filter: brightness(1.04);
 }
 
 .scheme-card--active {
-  border-color: var(--brand);
-  background: var(--brand-pale);
+  box-shadow: 0 0 0 2px var(--brand);
 }
 
 .scheme-card__preview {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 38px;
-  border-radius: var(--radius-xs);
+  height: 44px;
+  border-radius: 12px;
   overflow: hidden;
 }
 
@@ -140,7 +209,7 @@
 .scheme-card__dot {
   width: 9px;
   height: 9px;
-  border-radius: 999px;
+  border-radius: 3px;
   flex: 0 0 auto;
 }
 
@@ -154,9 +223,9 @@
 
 .scheme-card__row {
   display: block;
-  height: 4px;
+  height: 3px;
   width: 100%;
-  border-radius: 999px;
+  border-radius: 0;
 }
 
 .scheme-card__row--thin {
@@ -167,19 +236,21 @@
 
 .scheme-card__text {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 4px;
 }
 
 .scheme-card__label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 28px;
   font-size: 10px;
   line-height: 14px;
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .scheme-card__check {
@@ -188,7 +259,7 @@
   justify-content: center;
   width: 16px;
   height: 16px;
-  border-radius: 999px;
+  border-radius: 3px;
   background: var(--brand-solid);
   color: var(--on-brand);
   flex: 0 0 auto;

@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { bridge } from "../../bridge/client";
 import type { SettingsSnapshot } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
-import { ErrorBox, Loading, Page, Section } from "../../ui/components";
-import { IconSettings } from "../../ui/icons";
+import { Avatar, ErrorBox, Loading, Page, Section } from "../../ui/components";
+import { IconBook, IconSettings, IconShield, IconSparkles } from "../../ui/icons";
+import { parseProfilePayload, type Profile } from "../profile/model";
 import { AppearanceCard } from "./AppearanceCard";
 import { AssistantCards } from "./AssistantCards";
 import { ManualCard } from "./ManualCard";
@@ -12,17 +13,29 @@ import { SubjectPrefsCard } from "./SubjectPrefsCard";
 import { actionMessage } from "./action";
 import "./settings.css";
 
-/**
- * Conteneur des réglages : UNE lecture de l'instantané (le pont est local),
- * chaque carte tient ensuite son propre état de formulaire. Aucun contexte
- * React : rien n'est partagé hors de la carte qui l'écrit.
- */
+/** Une lecture d'instantané, puis chaque carte tient son propre état de formulaire. */
 export default function SettingsScreen() {
   const { refreshTick } = useApp();
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [settingsError, setSettingsError] = useState("");
   const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    void bridge
+      .me()
+      .then((result) => {
+        if (alive) setProfile(parseProfilePayload(result.payload));
+      })
+      .catch(() => {
+        if (alive) setProfile(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [refreshTick]);
 
   useEffect(() => {
     let alive = true;
@@ -43,8 +56,69 @@ export default function SettingsScreen() {
     };
   }, [refreshTick, reload]);
 
+  const tiles = [
+    {
+      target: "reglages-apparence",
+      label: "Apparence",
+      detail: "Thèmes, palettes",
+      tone: "appearance",
+      Icon: IconSettings,
+    },
+    {
+      target: "reglages-matieres",
+      label: "Matières",
+      detail: "Icônes, couleurs",
+      tone: "subjects",
+      Icon: IconBook,
+    },
+    {
+      target: "reglages-assistant",
+      label: "Assistant",
+      detail: "Clé, sources",
+      tone: "assistant",
+      Icon: IconSparkles,
+    },
+    {
+      target: "reglages-avance",
+      label: "Appareil",
+      detail: "Serveur, session",
+      tone: "device",
+      Icon: IconShield,
+    },
+  ];
+  const scrollTo = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "auto" });
+  };
+
   return (
     <Page>
+      <div className="settings-profile">
+        <Avatar name={profile?.displayName ?? "?"} size={72} />
+        <strong className="settings-profile__name">{profile?.displayName ?? "Mon compte"}</strong>
+        <span className="settings-profile__sub">
+          {profile
+            ? [profile.classLabel, profile.periodName].filter(Boolean).join(" · ")
+            : "Réglages de l’application"}
+        </span>
+      </div>
+
+      <div className="settings-tiles">
+        {tiles.map(({ target, label, detail, tone, Icon }) => (
+          <button
+            key={target}
+            type="button"
+            className={`settings-tile settings-tile--${tone}`}
+            onClick={() => scrollTo(target)}
+          >
+            <span className="settings-tile__icon" aria-hidden="true">
+              <Icon size={32} />
+            </span>
+            <span className="settings-tile__label">{label}</span>
+            <span className="settings-tile__detail">{detail}</span>
+          </button>
+        ))}
+      </div>
+
       {loading ? <Loading label="Lecture des réglages…" /> : null}
 
       {settingsError ? (
@@ -55,11 +129,11 @@ export default function SettingsScreen() {
         </ErrorBox>
       ) : null}
 
-      <Section title="Apparence">
+      <Section id="reglages-apparence" title="Apparence">
         <AppearanceCard />
       </Section>
 
-      <Section title="Matières">
+      <Section id="reglages-matieres" title="Matières">
         <SubjectPrefsCard
           loading={loading}
           reload={reload}
@@ -67,12 +141,12 @@ export default function SettingsScreen() {
         />
       </Section>
 
-      <Section title="Assistant">
+      <Section id="reglages-assistant" title="Assistant">
         <AssistantCards snapshot={snapshot} loading={loading} />
         <ManualCard snapshot={snapshot} loading={loading} />
       </Section>
 
-      <Section title="Avancé">
+      <Section id="reglages-avance" title="Avancé">
         <ServerCard snapshot={snapshot} loading={loading} />
       </Section>
 

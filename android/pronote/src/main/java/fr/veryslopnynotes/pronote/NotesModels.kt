@@ -2,8 +2,6 @@ package fr.veryslopnynotes.pronote
 
 import java.time.LocalDateTime
 
-// Notes : matière, moyenne de service et note (`dataClasses.js`).
-
 /** Matière (`N`/`L`, `groups` = `estServiceGroupe`, défaut `false`). */
 class Subject(json: JVal?) : PronoteObject(json) {
     val id: String = r(::strOf, listOf("N"))
@@ -11,7 +9,7 @@ class Subject(json: JVal?) : PronoteObject(json) {
     val groups: Boolean = r(::boolOf, listOf("estServiceGroupe"), ResolveOpts.withDefault(false))
 }
 
-/** Moyenne de service (`subject` reconstruit depuis le même dict ; `null` = code `|N` inconnu). */
+/** `subject` reconstruit depuis le même dict ; `null` = code `|N` inconnu. */
 class Average(json: JVal?) : PronoteObject(json) {
     val student: String? = r(::gradeParse, listOf("moyEleve", "V"))
     val outOf: String? = r(::gradeParse, listOf("baremeMoyEleve", "V"))
@@ -24,8 +22,8 @@ class Average(json: JVal?) : PronoteObject(json) {
 }
 
 /**
- * Note (`period` résolu via le registre `Period.instances`, `null` si inconnu ;
- * `isOptionnal` garde la coquille TS, `facultatif && !bonus`).
+ * `period` résolu via `Period.instances`, `null` si inconnu ; `isOptionnal` =
+ * `facultatif && !bonus`, comme la coquille TS.
  */
 class Grade(json: JVal?) : PronoteObject(json) {
     val id: String = r(::strOf, listOf("N"))

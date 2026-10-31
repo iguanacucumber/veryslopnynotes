@@ -1,72 +1,132 @@
-/* Professeur IA (#633) — conversation lisible à 360 px, clavier compris.
-   Aucune largeur fixe : les bulles se bornent au conteneur, jamais à l'écran. */
+/* Le réglage tient en deux lignes : matière puis mode. Les champs prennent le
+   fond de page pour se détacher de la carte item, comme les contrôles voisins. */
+.teacher .section-title {
+  margin-top: 12px;
+}
 
 .teacher-subject {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+}
+
+.teacher-subject__label {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 19px;
+  font-weight: 600;
+}
+
+.teacher-subject .field {
+  background: var(--page);
 }
 
 .teacher-tabs {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   padding: 4px;
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  background: var(--surface-variant);
+  border: 0;
+  border-radius: 100px;
+  background: var(--item);
 }
 
 .teacher-tab {
   flex: 1;
   min-height: 44px;
+  padding: 0 12px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 100px;
   background: transparent;
   color: var(--muted);
-  font-weight: 650;
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
 .teacher-tab--active {
   background: var(--brand-solid);
   color: var(--on-brand);
+  font-weight: 700;
 }
 
 .teacher-modes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  margin: 0;
+  margin: 2px 0 0;
   padding: 0;
   border: 0;
 }
 
 .teacher-modes legend {
   padding: 0;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
+.teacher-modes__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Radio natif masqué, capsule visible : le choix reste un vrai radio pour le
+   clavier et les lecteurs d'écran (flèches, nom, état coché). */
 .teacher-mode {
+  position: relative;
   display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 44px;
   cursor: pointer;
 }
 
 .teacher-mode input {
-  width: 20px;
-  height: 20px;
+  position: absolute;
+  inset: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.teacher-mode span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 100px;
+  background: var(--page);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
+}
+
+.teacher-mode:hover input:not(:checked) + span {
+  background: var(--brand-pale);
+  color: var(--brand-deep);
+}
+
+.teacher-mode input:checked + span {
+  background: var(--brand-solid);
+  color: var(--on-brand);
+}
+
+.teacher-mode input:focus-visible + span {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.teacher-mode input:disabled + span {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .teacher-mode__hint {
   margin: 0;
+  color: var(--muted);
 }
 
 .teacher-chat {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   padding: 12px;
 }
 
@@ -75,6 +135,7 @@
   flex-wrap: wrap;
   gap: 8px;
   justify-content: space-between;
+  padding: 0 2px;
 }
 
 .teacher-chat__delete {
@@ -86,21 +147,26 @@
   flex-direction: column;
   gap: 10px;
   min-height: 120px;
-  max-height: min(60vh, 520px);
+  max-height: min(52vh, 440px);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 2px;
   scroll-behavior: smooth;
 }
 
+/* L'accueil de la conversation reste compact : le compositeur doit apparaître
+   dans le premier écran, pas après une grande zone vide. */
+.teacher-log > .empty {
+  padding: 18px 10px;
+}
+
 .teacher-bubble {
   max-width: min(100%, 560px);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   overflow-wrap: anywhere;
 }
 
-.teacher-bubble:focus,
 .teacher-bubble:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
@@ -109,13 +175,13 @@
 .teacher-bubble--student {
   align-self: flex-end;
   background: var(--brand-pale);
-  border: 1px solid var(--border-soft);
+  border: 0;
 }
 
 .teacher-bubble--teacher {
   align-self: flex-start;
-  background: var(--surface);
-  border: 1px solid var(--border-soft);
+  background: var(--page);
+  border: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -141,7 +207,7 @@
   min-width: 0;
 }
 
-/* Le markdown réutilise `.revision-markdown` (#630) : on resserre seulement. */
+/* Le markdown réutilise `.revision-markdown` : on resserre seulement. */
 .teacher-bubble__answer .revision-markdown {
   font-size: inherit;
 }
@@ -172,11 +238,11 @@
 
 .teacher-source {
   max-width: 100%;
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-xs);
   padding: 2px 9px;
   font-size: 12px;
-  background: var(--surface-variant);
+  background: var(--panel-tint);
   overflow-wrap: anywhere;
 }
 
@@ -188,8 +254,8 @@
 }
 
 .teacher-unsourced__badge {
-  border: 1px dashed var(--border);
-  border-radius: 999px;
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius-xs);
   padding: 2px 9px;
   font-size: 12px;
   font-weight: 650;
@@ -221,10 +287,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
-  background: var(--surface-variant);
+  background: var(--panel-tint);
 }
 
 .teacher-refusal p {
@@ -237,22 +303,35 @@
   gap: 8px;
 }
 
+/* Le champ et l'envoi partagent une ligne : le geste principal reste visible
+   sans ajouter une barre de 44 px sous le texte. Une fois la conversation
+   lancée, le compositeur se colle au-dessus du dock au lieu de passer dessous. */
 .teacher-composer {
+  position: sticky;
+  z-index: 5;
+  bottom: calc(var(--tabbar-h) + 8px + var(--safe-bottom) + var(--keyboard-bottom));
   display: flex;
-  flex-direction: column;
+  align-items: flex-end;
   gap: 8px;
+  margin: 0 -12px -12px;
+  padding: 10px 12px 12px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background: var(--item);
 }
 
 .teacher-composer__input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
+  min-height: 84px;
   resize: vertical;
   /* Le clavier mobile recouvre le bas : garder le champ au-dessus. */
   scroll-margin-bottom: calc(120px + var(--keyboard-bottom));
 }
 
 .teacher-composer__send {
-  align-self: flex-end;
+  flex: 0 0 auto;
   min-height: 44px;
+  padding: 0 16px;
 }
 
 .teacher-footnote {
@@ -271,7 +350,7 @@
   }
 }
 
-/* Exercices du manuel (#632) : liste courte, carte = bouton, détail lisible. */
+/* Exercices du manuel : liste courte, carte = bouton. */
 .exercise-list {
   list-style: none;
   margin: 0 0 12px;
@@ -292,8 +371,8 @@
   text-align: left;
   color: inherit;
   background: var(--surface);
-  border: 1px solid var(--border-soft);
-  border-radius: 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -320,7 +399,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border-top: 1px solid var(--border-soft);
+  border-top: 1px solid var(--rule);
   padding-top: 12px;
 }
 

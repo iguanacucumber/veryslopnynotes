@@ -47,7 +47,8 @@ l'empreinte des **sources de production**.
 
 ### `make check-fast`
 
-Tout sauf `android-compile` (~2,1 s à chaud). Saute uniquement la compilation Gradle. Usage interne (`CHECK_HARNESS=1` + `CHECK_TARGETS`), jamais avant une PR.
+Tout sauf `android-compile` (~3,2 s à chaud) ; `architecture` teste `buildWebUi`
+sur vrai Gradle. Usage interne, jamais avant une PR.
 
 ## Autres cibles `make`
 

@@ -3,9 +3,8 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// agents/runtime/android-env.sh — la découverte JDK/SDK que Makefile, android-compile,
-// buildDebugApk et buildRelApk partagent. Une erreur ici = soit un `make check` qui
-// saute en silence, soit un JDK 25 qui fait échouer Gradle avec un message illisible.
+// `android-env.sh` : la découverte JDK/SDK partagée par Makefile, android-compile
+// et les builds APK. Une erreur ici = gate qui saute ou Gradle illisible.
 
 const SCRIPT = join(import.meta.dir, "..", "..", "agents/runtime/android-env.sh");
 
@@ -110,7 +109,7 @@ describe("android-env.sh", () => {
 
   test("les cibles Gradle partagent la découverte, sans la réécrire", () => {
     const makefile = readFileSync(join(import.meta.dir, "..", "..", "Makefile"), "utf8");
-    // `shot` (#133) construit l'APK debug pour la capture : même découverte.
+    // `shot` construit l'APK debug pour la capture : même découverte.
     for (const target of ["android-compile:", "buildDebugApk:", "buildRelApk:", "shot:"]) {
       expect(makefile).toContain(target);
     }

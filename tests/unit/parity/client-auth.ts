@@ -18,8 +18,7 @@ export function registerClientAuth(): void {
       expect(tsClient.password).toBe("mobile-token-abc");
       const ktState = JSON.parse(await ask({ op: "clientState", cid: ktCid })) as { password: string };
       expect(ktState.password).toBe("mobile-token-abc");
-      // `exportCredentials` suit la rotation des deux côtés (ports normalisés :
-      // deux stubs = deux ports, le reste de l'URL est identique).
+      // `exportCredentials` suit la rotation ; ports normalisés (deux stubs).
       const normUrl = (u: string): string => u.replace(/:\d+\/pronote/, ":PORT/pronote");
       const ktCreds = JSON.parse(await ask({ op: "exportCreds", cid: ktCid })) as Record<string, unknown>;
       const tsCreds = tsClient.exportCredentials() as unknown as Record<string, unknown>;
@@ -33,7 +32,6 @@ export function registerClientAuth(): void {
   });
 
   test.skipIf(skip)("QR : URL réécrite — hôte underscore, IDN, port, chemin vide (parité TS)", async () => {
-    // Référence TS : la transformation de `new URL()` faite par `qrcodeLogin`.
     const tsRewrite = (raw: string): string => {
       const url = new URL(raw);
       const parts = url.pathname.split("/");
@@ -46,8 +44,7 @@ export function registerClientAuth(): void {
       url.hash = "";
       return url.toString();
     };
-    // Hôtes « non serveur » : `URI.getHost()` y vaut NULL, le port Kotlin les
-    // REFUSAIT tous (appairage impossible sur ces établissements, #402).
+    // Hôtes « non serveur » (`URI.getHost()` vaut NULL) : le port les refusait tous.
     const urls = [
       "https://lycee_jean_moulin.example/pronote/eleve.html",
       "https://ecole_avec_accents.example/pronote/eleve.html",
@@ -64,22 +61,20 @@ export function registerClientAuth(): void {
     for (const raw of urls) {
       const kt = JSON.parse(await ask({ op: "rewriteQrUrl", url: raw })) as { url: string };
       expect(`rewriteQrUrl ${raw} -> ${kt.url}`).toBe(`rewriteQrUrl ${raw} -> ${tsRewrite(raw)}`);
-      // L'hôte est repris tel quel par l'appelant : jamais de « double slash ».
+      // Hôte repris tel quel : jamais de « double slash ».
       expect(kt.url.replace(/^https?:\/\//, "")).not.toContain("//");
     }
-    // Cas d'école : l'hôte underscore est celui attendu, pas un refus.
+    // L'hôte underscore est attendu, pas refusé.
     const kt = JSON.parse(await ask({ op: "rewriteQrUrl", url: "https://lycee_jean_moulin.example/pronote/eleve.html" })) as { url: string };
     expect(kt.url).toBe(
       "https://lycee_jean_moulin.example/pronote/mobile.eleve.html" +
         "?fd=1&bydlg=A6ABB224-12DD-4E31-AD3E-8A39A1C2C335&login=true",
     );
-    // IDN : punycode, comme `new URL()`.
     const idn = JSON.parse(await ask({ op: "rewriteQrUrl", url: "https://école.example/pronote/eleve.html" })) as { url: string };
     expect(idn.url).toBe(tsRewrite("https://école.example/pronote/eleve.html"));
-    // Hôte IDN : l'URL reste utilisable telle quelle (ASCII, un seul `/`).
+    // URL utilisable telle quelle : ASCII, un seul `/`.
     expect(idn.url.startsWith("https://xn--cole-9oa.example/pronote/mobile.eleve.html?")).toBe(true);
-    // Refus : autorité sans hôte ou port illisible (le TS jette un TypeError,
-    // le port un IllegalArgumentException — même refus des deux côtés).
+    // Refus : autorité sans hôte ou port illisible (TypeError / IllegalArgumentException).
     for (const raw of ["https://:8443/x", "https://ecole.example:abc/x", "https://ecole.example:8443:90/x", "https://ecole.example:99999/x"]) {
       const bad = portError(await ask({ op: "rewriteQrUrl", url: raw }, true));
       expect(`rewriteQrUrl ${raw} -> ${bad.name}`).toBe(`rewriteQrUrl ${raw} -> IllegalArgumentException`);
@@ -95,7 +90,6 @@ export function registerClientAuth(): void {
       kta.script.securisation = 1;
       const tsClient = await tsLogin(tsa);
       const ktCid = await ktLogin(kta);
-      // Deux handshakes (FP) de chaque côté, mode final `token`.
       expect(tsa.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(2);
       expect(kta.posts.filter((p) => p.id === "FonctionParametres")).toHaveLength(2);
       // Temp FRAIS au second tour (pas de rejeu d'aléa), des deux côtés (C10).
@@ -153,7 +147,7 @@ export function registerClientAuth(): void {
       })) as { cid: number; loggedIn: boolean };
       expect(tsClient.logged_in).toBe(false);
       expect(ktLoginRes.loggedIn).toBe(false);
-      // Aucune sonde `PageInfosPerso` : le login raté ne poste rien de plus.
+      // Aucune sonde `PageInfosPerso` après un login raté.
       expect(tsa.posts.some((p) => p.id === "PageInfosPerso")).toBe(false);
       expect(kta.posts.some((p) => p.id === "PageInfosPerso")).toBe(false);
     } finally {
@@ -161,9 +155,8 @@ export function registerClientAuth(): void {
       kta.close();
     }
 
-    // Sans `cle` SANS `skip2fa` : la sonde tourne quand même (`logged_in` ignoré,
-    // upstream), la gate refuse (`onglets` vides), `refresh` rejoue, ça rejette
-    // pareil des deux côtés. Bizarrerie fidèlement portée, pas corrigée ici.
+    // Sans `cle` ni `skip2fa` : la sonde tourne quand même, la gate refuse
+    // (`onglets` vides), `refresh` rejoue. Bizarrerie portée fidèlement.
     const tsa3 = startStub();
     const kta3 = startStub();
     try {

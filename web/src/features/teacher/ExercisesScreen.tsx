@@ -62,14 +62,8 @@ export interface ExercisesViewProps {
   embedded?: boolean;
 }
 
-/**
- * Onglet Exercices (#632) : PRÉSENTATIONNEL. Il ne parle pas au pont, donc
- * l'absence de manuel, la liste, le choix, les trois niveaux d'aide, la photo
- * et les erreurs se testent en rendu statique.
- *
- * La correction complète n'est JAMAIS demandée automatiquement : elle n'existe
- * que derrière son bouton explicite.
- */
+/** PRÉSENTATIONNEL : ne parle pas au pont, donc testable en rendu statique.
+ *  La correction complète n'est JAMAIS demandée automatiquement. */
 export function ExercisesView({
   subjects,
   subject,
@@ -153,7 +147,7 @@ export function ExercisesView({
           {!proposal.loading && !proposal.error && !data ? (
             <EmptyState
               icon={<IconBook size={30} />}
-              title="Choisis une matière."
+              title={subject ? "Prêt à chercher un exercice." : "Choisis d’abord une matière."}
               body="Le manuel de la matière est lu sur ton appareil ; sans manuel, le cahier de cours prend le relais."
             />
           ) : null}

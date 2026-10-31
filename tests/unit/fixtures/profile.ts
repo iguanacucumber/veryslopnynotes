@@ -1,9 +1,7 @@
-// Fixtures 100 % synthétiques #82 (profil + accueil). Aucun secret, aucun hôte
-// réel, aucune URL Pronote, aucune donnée d'établissement : les ids sont des
-// jetons ("acc-fake-*") et la photo est une RÉF OPAQUE `photo:<id>`.
+// 100 % synthétique : aucun secret, aucun hôte réel, aucune URL Pronote, aucune
+// donnée d'établissement ; la photo est une RÉF OPAQUE `photo:<id>`.
 export const syntheticAccountId = "acc-fake-1";
 
-/** Périodes de l'année (contrat #74, déjà servies par /v1/periods). */
 export const syntheticPeriods = [
   { id: "per-fake-1", name: "Trimestre 1", start: "2026-09-01T00:00:00.000Z", end: "2026-11-30T23:59:59.000Z" },
   { id: "per-fake-2", name: "Trimestre 2", start: "2026-12-01T00:00:00.000Z", end: "2027-03-31T23:59:59.000Z" },
@@ -20,7 +18,6 @@ export const syntheticUserInfo = {
   periodName: "Trimestre 1",
 };
 
-/** Compte parent : deux enfants listés + photo de profil (réF opaque). */
 export const syntheticParentUserInfo = {
   accountId: "acc-fake-parent",
   displayName: "Parent Exemple",
@@ -32,7 +29,6 @@ export const syntheticParentUserInfo = {
   ],
 };
 
-// --- payload Reader#82 : faux client pronotets (info / children / periods) ---
 export function syntheticProfileClient(
   options: {
     name?: string | null;
@@ -65,7 +61,6 @@ export function syntheticProfileClient(
   return { info, children: kids, periods };
 }
 
-// --- payloads d'accueil (contrats notes / devoirs / EDT, caches existants) ---
 const H = (id: string, start: string, end: string, subject: string, room: string) => ({
   id,
   accountId: syntheticAccountId,

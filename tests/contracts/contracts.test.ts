@@ -30,7 +30,7 @@ describe("contracts", () => {
     for (const s of ["HealthResponse:", "ManualsScrapeRequest:", "ManualsScrapeResponse:", "ManualDoc:"]) {
       expect(raw).toContain(s);
     }
-    // Les 31 routes métier sont parties du contrat avec leurs schémas.
+    // Routes et schémas métier retirés du contrat.
     for (const dead of [
       "/v1/pairing/start",
       "/v1/setup",
@@ -44,19 +44,17 @@ describe("contracts", () => {
       "PairingStartRequest:",
       "SetupRequest:",
       "AssignmentsToggleRequest:",
-      // #538 : le jar de session est choisi par le serveur — le contrat ne
-      // déclare PLUS de champ pour le demander (l'appelant aurait pu
-      // appeler la session d'un autre tenant).
+      // Le jar de session est choisi par le serveur : le contrat ne déclare pas
+      // de champ pour le demander (l'appelant pourrait viser un autre tenant).
       "authFile:",
     ]) {
       expect(raw).not.toContain(dead);
     }
   });
 
-  // #422 : le contrat doit décrire les réponses que le scraper rend
-  // vraiment : 503 « scraper occupé » (plafond de concurrence) et 504 pour
-  // le délai dépassé (le code exact — un 502 ferait croire à une panne du
-  // portail).
+  // Le contrat décrit les réponses réelles du scraper : 503 « scraper occupé »
+  // (plafond de concurrence) et 504 délai dépassé — un 502 ferait croire à une
+  // panne du portail.
   test("openapi : le scrape déclare 503 (scraper occupé) et 504 (délai)", () => {
     const raw = readFileSync(OPENAPI, "utf8");
     const healthAt = raw.indexOf("/v1/health:");
@@ -66,15 +64,13 @@ describe("contracts", () => {
     const scrape = raw.slice(scrapeAt);
     expect(scrape).toContain("'503':");
     expect(scrape).toContain("'504':");
-    // Ces codes sont ceux du SCRAPE : la sonde ne les porte pas.
     const health = raw.slice(healthAt, scrapeAt);
     expect(health).not.toContain("'503':");
     expect(health).not.toContain("'504':");
   });
 
-  // #526 : le contrat reflète l'usage RÉEL des identifiants — le scraper ne
-  // s'authentifie pas (la session est celle du serveur) : les identifiants ne
-  // sont PLUS exigés, et le serveur refuse un corps qui les porte (400).
+  // Le scraper ne s'authentifie pas (la session est celle du serveur) : les
+  // identifiants ne sont pas requis, et le serveur refuse un corps qui les porte.
   test("openapi : les identifiants de portail ne sont plus requis", () => {
     const raw = readFileSync(OPENAPI, "utf8");
     expect(raw).toContain("required: [platform, startUrl]");
@@ -93,9 +89,6 @@ describe("contracts", () => {
       startUrl: "https://manuels.example.invalid/6e/maths",
     };
     expect(isManualsScrapeRequest(body)).toBe(true);
-    // #526 : les identifiants de portail ne sont PLUS exigés (le scraper ne
-    // s'authentifie pas : la session est celle du serveur). Le contrat les
-    // ignore ; c'est le SERVEUR qui refuse un corps qui les porte.
     expect(isManualsScrapeRequest({ ...body, username: "u", password: "p" })).toBe(true);
     expect(isManualsScrapeRequest({ ...body, startUrl: "ftp://hote.invalid/x" })).toBe(false);
     expect(isManualsScrapeRequest(null)).toBe(false);
@@ -112,19 +105,19 @@ describe("contracts", () => {
     expect(isManualsScrapeResponse({ docs: [{ ...doc, page: 0 }] })).toBe(false);
   });
 
-  // #366 : la `ref` d'une pièce jointe de devoir suit le schéma `homework:`,
-  // MÊME forme que l'app (`core/Assignment.kt`) et le parseur web.
+  // La `ref` d'une pièce jointe suit le schéma `homework:`, MÊME forme que
+  // `core/Assignment.kt` et le parseur web.
   test("`ref` de devoir : schéma `homework:` (miroir de l'app et du web)", () => {
     const att = (ref: string) => ({ id: "att1", label: "sujet.pdf", ref });
     expect(isHomeworkAttachmentRef(att("homework:0:file:0:att1"))).toBe(true);
     expect(isHomeworkAttachmentRef(att("homework:12:file:3:12-34"))).toBe(true);
     for (const ref of [
-      "homework:0:file:0:12 34", // espace (identifiant Pronote exotique)
-      "homework:0:file:0:a\u0001b", // caractère de contrôle
-      "DATA:application/pdf;base64,AA", // casse haute
-      "https://pronote/x", // URL
-      "homework:", // schéma sans identifiant
-      "autre:1:2", // autre schéma
+      "homework:0:file:0:12 34",
+      "homework:0:file:0:a\u0001b",
+      "DATA:application/pdf;base64,AA",
+      "https://pronote/x",
+      "homework:",
+      "autre:1:2",
     ]) {
       expect(isHomeworkAttachmentRef(att(ref))).toBe(false);
     }

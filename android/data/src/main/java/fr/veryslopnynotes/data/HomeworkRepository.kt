@@ -14,12 +14,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 // Dépôt « aide devoirs » : contrats partagés (question, sources, parse).
-// La GÉNÉRATION ne passe plus par le serveur (`POST /v1/homework/generate`)
-// mais par l'IA embarquée ([OpenRouterHomework] : prompt core I6 + OpenRouter
-// direct + validation core I4/I5, clé relue du store à CHAQUE appel).
+// La GÉNÉRATION passe par l'IA embarquée ([OpenRouterHomework] : prompt core I6
+// + OpenRouter direct + validation core I4/I5, clé relue à CHAQUE appel).
 //
-// POINT DE VIGILANCE : la réponse du modèle est de la DONNÉE (I6) : ce dépôt
-// ne fait que la valider, l'affichage se fait en Text() côté UI.
+// La réponse du modèle est de la DONNÉE (I6) : ce dépôt ne fait que la valider,
+// l'affichage se fait en Text() côté UI.
 data class HomeworkResult(val outcome: HomeworkOutcome?, val error: String?)
 
 // ponytail: dépôt sans état (la clé vit dans le store), pas de ViewModel avant besoin.
@@ -35,14 +34,13 @@ class HomeworkRepository {
         }
 
         /**
-         * Candidates brutes d'un devoir : consigne + TOUS ses cours Pronote.
-         * Aucune troncature ici : [AiContext] porte les budgets et signale la
-         * coupe (`truncated`), sinon une source coupée serait silencieuse
-         * (#628).
+         * Candidates brutes d'un devoir : consigne + TOUS ses cours. Aucune
+         * troncature ici : [AiContext] porte les budgets et signale la coupe,
+         * sinon une source coupée serait silencieuse.
          *
-         * [attachments] contient les pièces jointes DÉJÀ extraites par la
-         * frontière (#631) : une `ref` seule n'a pas de texte. Une pièce jointe
-         * illisible arrive comme source nommée « illisible ».
+         * [attachments] contient les pièces déjà extraites par la frontière :
+         * une `ref` seule n'a pas de texte. Une pièce illisible arrive comme
+         * source nommée « illisible ».
          */
         fun contextItems(
             a: Assignment,
@@ -50,11 +48,10 @@ class HomeworkRepository {
         ): List<AiContextItem> = assignmentContextItems(a, attachments)
 
         /**
-         * Sources d'un devoir (contrat historique, sans métadonnées) : ce que
-         * l'assistant peut CITER. Passe par l'assembleur unique, comme tous les
-         * points d'entrée IA (#628). Les appelants qui affichent « Ce qui est
-         * envoyé » utilisent [AiContext.assembleFor] pour garder les drapeaux
-         * de troncature.
+         * Sources d'un devoir : ce que l'assistant peut CITER. Passe par
+         * l'assembleur unique, comme tous les points d'entrée IA. Les appelants
+         * qui affichent « Ce qui est envoyé » utilisent [AiContext.assembleFor]
+         * pour garder les drapeaux de troncature.
          */
         fun sourcesFor(
             a: Assignment,
@@ -64,12 +61,10 @@ class HomeworkRepository {
                 .sources.map { it.toHomeworkSource() }
 
         /**
-         * Extrait du manuel enregistré, comme source CITABLE. Le contenu vient
-         * du scraper : il est borné (8 000 caractères) et sera marqué Untrusted
-         * par le prompt. Sans texte, aucune source n'est ajoutée.
-         *
-         * Pour le contexte IA unique, préférer [AiContext.manual] : la coupe à
-         * 2 000 caractères y est SIGNALÉE, pas silencieuse.
+         * Extrait du manuel enregistré, comme source CITABLE : contenu du
+         * scraper, borné (8 000 caractères) et marqué Untrusted par le prompt.
+         * Sans texte, aucune source. Pour le contexte IA unique, préférer
+         * [AiContext.manual] : la coupe à 2 000 y est SIGNALÉE.
          */
         fun manualSource(doc: ManualDoc): HomeworkSource? {
             val excerpt = capped(doc.excerpt, Homework.MAX_SOURCE_CHARS)
@@ -79,10 +74,10 @@ class HomeworkRepository {
         }
 
         /**
-         * Page web lue par le scraper, comme source CITABLE (#634). Même
-         * contrat que le manuel : texte borné, libellé « Web : titre »,
-         * Untrusted au prompt. L'URL n'est pas portée par [WebPageDoc] : elle
-         * ne peut donc pas entrer dans le prompt. Sans texte, aucune source.
+         * Page web lue par le scraper, comme source CITABLE : même contrat que
+         * le manuel (texte borné, libellé « Web : titre », Untrusted). L'URL
+         * n'est pas portée par [WebPageDoc] : elle ne peut pas entrer dans le
+         * prompt.
          */
         fun webPageSource(doc: WebPageDoc): HomeworkSource? = WebPage.source(doc)
 
@@ -101,8 +96,7 @@ class HomeworkRepository {
                     val answer = root.optString("answer").trim()
                     val steps = strings(root.optJSONArray("steps"))
                     val sources = strings(root.optJSONArray("sources"))
-                    // Le contrat exige answer non vide, stages et sources non vides
-                    // et des sources non vides ; on re-vérifie le subset des citations.
+                    // On re-vérifie que les citations sont parmi les libellés fournis.
                     val outcome = HomeworkOutcome.Answer(answer, steps, sources)
                     if (Homework.isOutcomeValid(outcome) && outcome.sources.all { it in allowedLabels }) {
                         outcome

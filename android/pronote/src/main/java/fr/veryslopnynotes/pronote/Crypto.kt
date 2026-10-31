@@ -10,29 +10,23 @@ import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Chiffrement de la session PRONOTE (#200, port de `pronotets` `crypto.js`).
- *
- * AES-128-CBC pour les données de session, RSA-1024 PKCS#1 v1.5 pour le
- * handshake initial — via `javax.crypto`, déjà sur API 26, aucune dépendance.
- * Port fidèle, y compris la clé publique RSA-1024 codée en dur (prise de
- * `eleve.js`, comme `pronotepy`/`pronotets`).
+ * AES-128-CBC pour la session, RSA-1024 PKCS#1 v1.5 pour le handshake — via
+ * `javax.crypto`, sur API 26. Clé publique RSA codée en dur, comme
+ * `pronotepy`/`pronotets`.
  */
 
-/** MD5 brut (clé/IV de session). */
 fun md5(data: ByteArray): ByteArray = MessageDigest.getInstance("MD5").digest(data)
 
 /**
- * Bourrage PKCS#7 manuel (comme `pkcs7Pad` côté TS) : complète au multiple de
- * `blockSize`, un bloc ENTIER si déjà aligné. Utilisé AVANT `aesEncrypt` (qui
- * bourre une seconde fois) pour les URL magiques `FichiersExternes` — les deux
- * couches font partie du protocole, pas d'un choix.
+ * Bourrage PKCS#7 manuel, un bloc ENTIER si déjà aligné. Utilisé AVANT
+ * `aesEncrypt` (qui bourre une seconde fois) pour les URL magiques
+ * `FichiersExternes` : les deux couches font partie du protocole.
  */
 fun pkcs7Pad(data: ByteArray, blockSize: Int = 16): ByteArray {
     val padLen = blockSize - (data.size % blockSize)
     return data + ByteArray(padLen) { padLen.toByte() }
 }
 
-/** SHA-256 hexadécimal MAJUSCULE d'une chaîne UTF-8 (mot de passe ENT, #201). */
 fun sha256HexUpper(data: String): String {
     val digest = MessageDigest.getInstance("SHA-256").digest(data.toByteArray(Charsets.UTF_8))
     return digest.toHexLower().uppercase()
@@ -77,7 +71,7 @@ class Encryption {
         if (key != null) aesKey = md5(key)
     }
 
-    /** RSA PKCS#1 v1.5 contre la clé publique codée en dur (aléatoire par conception). */
+    /** PKCS#1 v1.5 contre la clé publique codée en dur (aléatoire par conception). */
     fun rsaEncrypt(data: ByteArray): ByteArray {
         val spec = RSAPublicKeySpec(RSA_1024_MODULUS, RSA_1024_EXPONENT)
         val publicKey = KeyFactory.getInstance("RSA").generatePublic(spec)

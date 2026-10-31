@@ -1,6 +1,5 @@
-// #632 — le pont des exercices : proposition LOCALE, aide bornée, sortie
-// validée. Le pont ne compile pas hors Gradle : son câblage est vérifié par
-// lecture de source, comme les autres chemins IA.
+// Le pont des exercices : proposition LOCALE, aide bornée, sortie validée.
+// Le pont ne compile pas hors Gradle : câblage vérifié par lecture de source.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

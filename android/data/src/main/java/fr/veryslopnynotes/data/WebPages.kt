@@ -11,14 +11,12 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-// #634 : page web confiée au scraper FACULTATIF, jamais à l'établissement.
-// Même base allowlistée que le manuel (`ServerConfig`), route distincte sans
-// jar de session. L'URL ne revient JAMAIS dans la réponse : le serveur rend
-// seulement titre + texte, que [fr.veryslopnynotes.core.WebPage.source] borne
-// et transforme en source citable « Web : titre ».
+// Page web confiée au scraper FACULTATIF, jamais à l'établissement ; même base
+// allowlistée que le manuel, route distincte sans jar de session. L'URL ne
+// revient JAMAIS dans la réponse (titre + texte seulement).
 //
-// Aucune URL ni aucun contenu n'est journalisé : l'adresse peut révéler un
-// établissement, le texte est une DONNÉE externe (Untrusted avant IA).
+// Ni URL ni contenu journalisé : l'adresse peut révéler un établissement, le
+// texte est une donnée externe (Untrusted avant IA).
 class WebPagesClient(
     private val baseUrl: String,
     private val client: OkHttpClient = OkHttpClient(),

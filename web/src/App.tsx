@@ -22,12 +22,9 @@ import RevisionSheetsRoute from "./routes/revision-sheets";
 import CourseNotesRoute from "./routes/course-notes";
 import ProfRoute from "./routes/prof";
 
-/**
- * Écran de secours du boundary : message borné (aucune pile, aucun texte
- * d'exception — il peut contenir une donnée scolaire) et un seul recours
- * possible, recharger l'interface. Le `main` garde la cible d'évitement
- * (`#main`) même quand la coquille n'a pas pu se rendre.
- */
+/** Écran de secours : message borné (aucune pile, aucun texte d'exception qui
+ *  peut contenir une donnée scolaire), seul recours = recharger. `#main` reste
+ *  la cible d'évitement même sans coquille. */
 function ErrorFallback() {
   return (
     <div className="shell">
@@ -48,12 +45,9 @@ function ErrorFallback() {
   );
 }
 
-/**
- * Boundary global autour de l’arbre de routes (#625) : une exception de rendu
- * ne doit pas laisser la WebView blanche. L’état ne retient QUE « en échec » —
- * le message de l’exception n’est jamais rendu. En développement, le journal
- * reçoit une ligne bornée pour ne pas avaler l’erreur en silence.
- */
+/** Boundary global : jamais de WebView blanche, et le message de l'exception
+ *  n'est jamais rendu (il peut contenir une donnée scolaire). En DEV, une
+ *  ligne bornée au journal. */
 class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
 
@@ -85,9 +79,8 @@ function Gate({ children }: { children: ReactNode }) {
       .then((s) => {
         if (!alive) return;
         setSession(s);
-        // #401 : le statut porte l'état du stockage chiffré. Un Keystore
-        // mort est un état dégradé (rien n'est conservé) : l'interface
-        // l'affiche au lieu de croire en silence que tout va bien.
+        // Le statut porte l'état du stockage chiffré : Keystore mort = dégradé
+        // (rien n'est conservé), l'interface l'affiche.
         reportStorage(storageUnavailable(s));
       })
       .catch(() => {
@@ -98,12 +91,8 @@ function Gate({ children }: { children: ReactNode }) {
     };
   }, [reportStorage]);
 
-  // Un appairage réussi ouvre la session : le statut lu au démarrage
-  // (« pas de session ») est périmé. Sans cette information, le garde-fou
-  // ci-dessous renverrait l'utilisateur vers /pairing alors que la session
-  // native est ouverte — il faudrait redémarrer l'app pour sortir (#357).
-  // Symétriquement, une déconnexion ferme la session : le statut lu au
-  // démarrage (« session vivante ») est périmé, il faut ré-appairer (#360).
+  // Le statut lu au démarrage est périmé après appairage ou déconnexion :
+  // sans ces drapeaux, retour à /pairing à tort ou accueil d'un compte fermé.
   useEffect(() => {
     if (location.pathname === "/pairing") return;
     if (mustPair({ status: session, open: sessionOpen, expired: authLost, closed: sessionClosed })) {
@@ -136,7 +125,7 @@ export function App() {
               <Route path="/revision-sheets" element={<RevisionSheetsRoute />} />
               <Route path="/course-notes" element={<CourseNotesRoute />} />
               <Route path="/prof" element={<ProfRoute />} />
-              {/* Aliases kept so saved routes and old deep links still resolve. */}
+              {/* Alias : anciens liens profonds et routes enregistrées. */}
               <Route path="/fiches" element={<Navigate to="/revision-sheets" replace />} />
               <Route path="/cahier" element={<Navigate to="/course-notes" replace />} />
             </Route>

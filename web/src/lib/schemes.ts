@@ -1,13 +1,6 @@
-// Palettes de couleurs (#335). Source UNIQUE : l'aperçu des réglages et les
-// variables CSS appliquées sur `<html>` sortent du même objet, donc jamais de
-// dérive entre ce qui est montré et ce qui est rendu.
-//
-// Chaque palette porte une variante claire ET sombre : le mode (Système/Clair/
-// Sombre) choisit la variante, la palette choisit la famille. Les teintes
-// viennent des palettes officielles des projets cités (valeurs seules, aucun
-// asset copié) ; quelques variantes claires de thèmes sombres sont dérivées et
-// le disent. Les paires encre/surface et accent/fond sont tenues par
-// `tests/web/schemes.test.ts` (contraste ≥ 4.5:1).
+// Source UNIQUE des palettes : l'aperçu des réglages et les variables CSS
+// sortent du même objet. Le mode choisit la variante (claire/sombre), la
+// palette la famille ; les contrastes sont tenus par `tests/web/schemes.test.ts`.
 
 import {
   DEFAULT_SCHEME_ID,

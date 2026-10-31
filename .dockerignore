@@ -1,7 +1,5 @@
-# Contexte Docker serveur (issue #32) : jamais de secret/clé/.env*/donnée
-# perso dans l'image. `COPY` du Dockerfile est explicite (package.json,
-# bun.lock, tsconfig, server/, shared/) ; ce fichier ceinture le contexte
-# (défense en profondeur + build plus rapide).
+# Aucun secret/clé/.env*/donnée perso dans l'image : `COPY` est explicite,
+# ce fichier ceinture le contexte (défense en profondeur, build plus rapide).
 .env*
 !.env.example
 *.pem

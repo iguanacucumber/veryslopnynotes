@@ -1,17 +1,6 @@
-// #365 : la clé de cache ignore la requête — VRAI Kotlin compilé.
-//
-// `CachePolicy` (règle de relecture) et `OfflineCache` (entrée qui porte la
-// requête) sont de la logique PURE (aucun import Android) : le harnais les
-// compile pour de vrai, puis les pilote via `CacheQueryParityMain`. Les
-// assertions portent donc sur du code exécuté, pas sur un miroir TS.
-//
-// Ce que l'issue demandait :
-//   1. deux requêtes différentes pour la même ressource ne partagent PAS la
-//      même entrée fraîche (la seconde déclenche une relecture) ;
-//   2. la même requête servie depuis le cache ne déclenche PAS de relecture.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// La clé de cache ignore la requête : deux requêtes différentes pour la même
+// ressource ne partagent pas la même entrée fraîche. VRAI Kotlin compilé.
+// Outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -66,10 +55,7 @@ describe("la clé de cache porte la requête (#365)", () => {
     expect(repo).toContain("store.save(resource, payload, clock(), query)");
   });
 
-  // #509 : une lecture SANS écriture et une lecture AVEC écriture de la même
-  // requête ne doivent pas partager le même travail : sinon celle qui arrive
-  // en premier décide pour les deux, et l'entrée du cache n'est jamais
-  // enregistrée.
+  // Une lecture SANS écriture et une AVEC de la même requête ne partagent pas le même travail.
   test.skipIf(skip)("la clé de dédoublonnage distingue l'écriture", async () => {
     const write = await ask({ op: "dedupKey", resource: "assignments", query: "weekStart=2026-10-19", save: true });
     const read = await ask({ op: "dedupKey", resource: "assignments", query: "weekStart=2026-10-19", save: false });
@@ -262,8 +248,7 @@ describe("la clé de cache porte la requête (#365)", () => {
         fetchedAt: 1_000,
         query: "weekStart=2026-10-19",
       });
-      // L'écriture d'une AUTRE requête purge l'entrée périmée : une
-      // ressource a une entrée par requête, mais le cache ne vit pas.
+      // L'écriture d'une AUTRE requête purge l'entrée périmée : une entrée par requête.
       await ask({
         op: "save",
         store: kind,
@@ -290,8 +275,7 @@ describe("la clé de cache porte la requête (#365)", () => {
   });
 
   test.skipIf(skip)("un fichier écrit avant #365 (sans requête) est ignoré", async () => {
-    // Sa requête est inconnue : l'entrée ne répond à AUCUNE requête, donc on
-    // relit plutôt que de servir une semaine au hasard.
+    // Sa requête est inconnue : on relit plutôt que de servir une semaine au hasard.
     await ask({
       op: "writeLegacy",
       resource: "timetable",

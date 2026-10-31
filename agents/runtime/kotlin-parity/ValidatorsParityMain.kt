@@ -1,15 +1,8 @@
-// ValidatorsParityMain.kt — pilote JSON des validateurs du noyau (#366).
+// ValidatorsParityMain.kt — pilote JSON des validateurs du noyau.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-validators-parity.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile les VRAIS fichiers de
-// production (`core/IsoDates.kt`, `core/Assignment.kt`) et les pilote ici : les
-// verdicts comparés à ceux du contrat TS sont ceux du code EXÉCUTÉ, pas un
-// miroir reécrit en TypeScript.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-validators-parity.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE (op inconnue) sont préfixées `pilote: ` et refusées par le
-// test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.core
 
 import fr.veryslopnynotes.pronote.JVal
@@ -91,13 +84,13 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
         )
     }
     "manualIsCatalog" -> ok("ok" to JVal.Bool(ManualCatalog.isCatalog(op.str("text") ?: "")))
-    // #634 : adresse d'une page web. Mêmes règles que ManualUrl, messages
+    // adresse d'une page web. Mêmes règles que ManualUrl, messages
     // propres à la page web ; le serveur refait la garde SSRF (DNS inclus).
     "webUrl" -> when (val result = WebUrl.validate(op.str("text") ?: "")) {
         is WebUrlResult.Ok -> ok("ok" to JVal.Bool(true), "url" to JVal.Str(result.url))
         is WebUrlResult.Rejected -> ok("ok" to JVal.Bool(false), "message" to JVal.Str(result.message))
     }
-    // #634 : source citable d'une page web. Aucune URL dans le document ;
+    // source citable d'une page web. Aucune URL dans le document ;
     // sans texte, aucune source (jamais une page inventée).
     "webSource" -> {
         val doc = WebPageDoc(
@@ -110,7 +103,7 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
             "text" to (source?.text?.let { JVal.Str(it) } ?: JVal.Null),
         )
     }
-    // #634 : la source web passe dans le VRAI pipeline de prompt : contenu
+    // la source web passe dans le VRAI pipeline de prompt : contenu
     // marque Untrusted, libelle citable tel quel, URL absente.
     "webPrompt" -> {
         val doc = WebPageDoc(

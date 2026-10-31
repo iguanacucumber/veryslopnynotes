@@ -1,50 +1,39 @@
 // test-output.ts — borne ce qu'un `bun test` ROUGE imprime, sans cacher la
 // cause. Utilisé par `make unit` et `make web-test`.
 //
-// Bun 1.4.4 n'a pas de reporter programmable (`junit` exige un fichier,
-// `dots` masque la cause). Mesuré : un `expect(toEqual)` sur 400 objets =
-// 2 006 lignes / 38 KB ; trois échecs saturent le contexte et l'agent lit sa
-// propre sortie au lieu du code.
+// Bun n'a pas de reporter programmable (`junit` exige un fichier, `dots` masque
+// la cause) et un `expect(toEqual)` sur 400 objets écrit 2 006 lignes.
 //
 // On GARDE : fichier:ligne, la première ligne d'erreur, Expected/Received
 // (bornés), le PREMIER hunk. On JETTE : l'extrait numéroté, les frames
-// internes (bun, node_modules), les hunks suivants, au-delà de 10 échecs.
-// Le log complet reste sur disque, à chemin fixe.
+// internes, les hunks suivants, au-delà de 10 échecs. Le log complet reste sur
+// disque, à chemin fixe.
 //
-// Le code de sortie de `bun test` est FORWARDÉ : ce filtre ne peut pas
-// verdir un run rouge. Le succès n'imprime que le résumé de bun — plus les
-// blocs SKIP/REPLI, que le gate doit continuer à montrer (SKIP BRUYANT).
+// Le code de sortie de `bun test` est FORWARDÉ : ce filtre ne peut pas verdir
+// un run rouge. Le succès imprime le résumé de bun plus les blocs SKIP/REPLI.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "..", "..");
 const LOG_DIR = join(ROOT, "node_modules", ".cache", "gate-logs");
 
-/** Échecs détaillés par run ; au-delà, seule la ligne `… reste: N` parle.
- */
 const MAX_FAILS = 10;
-/** Corps du premier hunk : au-delà, `…` (la 1re différence suffit). */
 const MAX_HUNK_LINES = 12;
-/** Corps multi-ligne d'un Expected/Received : 2 lignes, puis `…`. */
 const MAX_VALUE_LINES = 2;
-/** Longueur d'une ligne gardée (valeur inline, chemin de build). */
 const MAX_LINE = 200;
-/** Résumé final / sortie hors échec (erreur de chargement…). */
 const MAX_TAIL_LINES = 40;
 
-/** Tronque une ligne trop longue. */
 function short(line: string): string {
   return line.length <= MAX_LINE ? line : `${line.slice(0, MAX_LINE)}…`;
 }
 
-/** Corps de hunk : contexte (espace), retrait (-) ou ajout (+). */
 function hunkBody(line: string): boolean {
   if (line === "" || line.startsWith("@@")) return false;
   if (/^[-+] (Expected|Received)/.test(line)) return false;
   return line.startsWith(" ") || line.startsWith("-") || line.startsWith("+");
 }
 
-/** Frame de pile INTERNE : ne dit rien de la cause. La frame du test reste. */
+/** Frame de pile INTERNE : ne dit rien de la cause, contrairement au test. */
 function internalFrame(line: string): boolean {
   return /(node_modules|bun:|\binternal\b|native)/.test(line);
 }
@@ -118,7 +107,6 @@ function filterBlock(lines: string[]): string[] {
   return out;
 }
 
-/** Lignes hors échec (résumé de bun, erreur de chargement) : bornées. */
 function tail(lines: string[]): string[] {
   const kept = filterBlock(lines);
   if (kept.length <= MAX_TAIL_LINES) return kept;
@@ -127,7 +115,6 @@ function tail(lines: string[]): string[] {
   return [...kept.slice(0, MAX_TAIL_LINES - 1), note];
 }
 
-/** Lignes vides consécutives repliées, blancs de fin retirés. */
 function collapse(lines: string[]): string[] {
   const out: string[] = [];
   for (const line of lines) {
@@ -139,7 +126,6 @@ function collapse(lines: string[]): string[] {
   return out;
 }
 
-/** Sortie d'un run ROUGE : cause gardée, bruit borné. */
 export function filterTestOutput(raw: string): string {
   const lines = raw.replace(/\s+$/, "").split("\n");
   // Bloc = ce qui précède un `(fail)` ; le reste est le résumé final.
@@ -161,8 +147,7 @@ export function filterTestOutput(raw: string): string {
   return collapse(out).join("\n");
 }
 
-/** Sortie d'un run VERT : le résumé de bun, inchangé — plus les blocs
- *  SKIP/REPLI, que le gate affiche (SKIP BRUYANT ; jamais de faux vert). */
+/** Run VERT : résumé de bun + blocs SKIP/REPLI (SKIP BRUYANT, jamais de faux vert). */
 export function greenOutput(raw: string): string {
   const lines = raw.replace(/\s+$/, "").split("\n");
   const summary = [...lines].reverse().find((line) => line.trim() !== "") ?? "";
@@ -201,8 +186,8 @@ async function main(): Promise<void> {
     new Response(p.stderr).text(),
     p.exited,
   ]);
-  // bun écrit l'en-tête sur stdout et les échecs sur stderr : même ordre
-  // que le terminal, donc la même concaténation que check.ts.
+  // bun écrit l'en-tête sur stdout et les échecs sur stderr : même ordre que
+  // le terminal, donc même concaténation que check.ts.
   const raw = stdout + stderr;
   writeFileSync(logPath, raw, { mode: 0o600 });
 

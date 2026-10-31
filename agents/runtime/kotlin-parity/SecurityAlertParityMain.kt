@@ -1,16 +1,8 @@
-// SecurityAlertParityMain.kt — pilote JSON du filtre anti-injection (#415).
+// SecurityAlertParityMain.kt — pilote JSON du filtre anti-injection.
 //
-// OUTIL DE TEST uniquement : compilé par
-// `tests/unit/android-security-alert.test.ts` (jamais par Gradle, jamais dans
-// l'APK). Le test compile la VRAIE source de production
-// (`core/SecurityAlert.kt`) et la pilote ici : les assertions portent donc sur
-// du code exécuté, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/android-security-alert.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une operation JSON par ligne sur stdin, une reponse par ligne sur
-// stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`). Une
-// erreur du PORT revient en `{"error":…}` : c'est un resultat attendu par le
-// test, pas une panne du pilote. Les erreurs du PILOTE sont prefixees
-// `pilote: ` et refusent par le harnais.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.securityalert
 
 import fr.veryslopnynotes.core.JsonValue

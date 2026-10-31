@@ -1,26 +1,8 @@
-// OfflineArtifactsMain.kt — pilote JSON des écritures HORS CacheStore (#404).
+// OfflineArtifactsMain.kt — pilote JSON des écritures HORS CacheStore.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-offline-artifacts.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile les VRAIES classes de
-// production (`fr.veryslopnynotes.data.OfflineArtifacts`,
-// `fr.veryslopnynotes.data.FileRevisionStore`, `fr.veryslopnynotes.data.CacheScope`
-// et le `core` des fiches) — logique pure, `java.io` seul, aucun import Android —
-// et les pilote ici : les assertions du critère #404 portent donc sur du code
-// exécuté, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-offline-artifacts.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Scénarios rejoués : une écriture de fiche ou de préférences PENDANT une
-// déconnexion (le disque ne doit contenir aucun fichier du compte déconnecté),
-// une écriture normale (elle s'écrit), et une écriture qui précède la purge
-// (la purge l'efface : l'ordre des deux est total).
-//
-// #528 : une déconnexion qui survient ENTRE l'écriture de la fiche et celle
-// de l'index : l'index et le journal sont REFUSÉS, donc l'enregistrement
-// ÉCHOUE (aucun « ok » sans avoir écrit, I10).
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE (op inconnue, sid absent) sont préfixées `pilote: ` et
-// refusées par le test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.offline
 
 import fr.veryslopnynotes.core.REVISION_TEMPLATE_VERSION
@@ -123,7 +105,7 @@ private fun listFiles(dir: File): List<String> {
 }
 
 /**
- * Store qui fait basculer l'époque AU MILIEU de l'enregistrement (#528) :
+ * Store qui fait basculer l'époque AU MILIEU de l'enregistrement :
  * la première écriture (la fiche) passe, puis la déconnexion survient
  * (invalidation d'époque ET purge dans la MÊME section critique). Les
  * écritures suivantes — l'index, le journal — sont donc REFUSÉES par la
@@ -172,7 +154,7 @@ private class Driver {
             val written = saveRevisionSheet(slot.revisions, sheetFrom(op), epoch)
             ok("written" to JVal.Bool(written))
         }
-        // Enregistrement d'une fiche avec une DÉCONNEXION au milieu (#528) :
+        // Enregistrement d'une fiche avec une DÉCONNEXION au milieu :
         // la coupure tombe ENTRE l'écriture de la fiche et celle de l'index.
         "writeSheetDisconnect" -> {
             val slot = bench.slot(op)

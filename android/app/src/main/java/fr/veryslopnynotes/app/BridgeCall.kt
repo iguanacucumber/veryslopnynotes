@@ -1,29 +1,13 @@
 package fr.veryslopnynotes.app
 
-/**
- * Admission d'un appel du pont, décidée AVANT tout fil (#539).
- *
- * `runCall` traversait ces refus en tête de fonction ; ils vivent ici, en
- * Kotlin PUR, pour que le harnais de parité les EXÉCUTE (aucun parseur de
- * source, donc un reformatage de `VsnBridge.kt` ne casse plus le gate).
- *
- * La règle : toute entrée du pont répond EXACTEMENT une fois. Un identifiant
- * mal formé et un pont fermé (WebView détruite) sont REFUSÉS — jamais ignorés,
- * sinon la promesse JS pend, pour TOUJOURS sur `pairing.scanQr` dont le délai
- * JS est 0. L'abandon (`bridge.cancel`) est traité ici, hors file.
- *
- * Fichier PUR (aucun import Android) : il se compile seul.
- */
+// Fichier PUR (aucun import Android) : le harnais de parité l'exécute.
 
-/** Les effets de réponse d'un appel précoce, injectés pour être exécutés hors Android. */
 interface BridgeEarlySink {
     /** Rejet borné : code de `web/src/bridge/types.ts`, message français. */
     fun reject(requestId: String, code: String, message: String)
 
-    /** Résolution immédiate `{ok:true}` (abandon d'appel). */
     fun resolveOk(requestId: String)
 
-    /** Marque l'appel visé par `bridge.cancel` (best-effort). */
     fun cancel(requestId: String, paramsJson: String)
 }
 
@@ -34,7 +18,6 @@ fun validBridgeId(id: String): Boolean =
 const val MAX_METHOD_CHARS = 64
 const val MAX_PARAMS_CHARS = 256 * 1024
 
-/** Méthode d'abandon d'un appel (allowlistée, comme toute autre). */
 const val CANCEL_METHOD = "bridge.cancel"
 
 /** Miroir exact de `web/src/bridge/types.ts`. Aucun autre nom n'entre. */
@@ -62,12 +45,9 @@ val BRIDGE_METHODS = setOf(
 )
 
 /**
- * Décide le sort d'un appel AVANT tout fil. Renvoie true si le pont a DÉJÀ
- * répondu (le sink a reçu exactement une réponse) ; false = l'appel part sur
- * un fil, qui répondra.
- *
- * Aucune branche ne sort sans réponse : c'est la règle #539, exécutée par
- * `tests/unit/android-bridge-call.test.ts`.
+ * true = le sink a déjà répondu ; false = un fil répondra.
+ * Aucune branche ne sort sans réponse : une promesse JS non répondue pend à
+ * jamais (`pairing.scanQr` a un délai JS de 0).
  */
 fun handleBridgeEarly(
     requestId: String,

@@ -1,18 +1,7 @@
-// #645 : I31 ne se vérifie plus en lisant la forme de `PronotePayloads.kt`.
-//
-// La clé de déduplication (kind, id) et la fusion vivent désormais dans
-// `android/core/EventDedupe.kt`, un fichier PUR (ni `org.json`, ni Android).
-// Ce test le COMPILE et l'EXÉCUTE via
-// `agents/runtime/kotlin-parity/EventDedupeParityMain.kt` : déplacer une ligne
-// ou renommer une variable dans le consommateur natif ne change plus le verdict,
-// et une régression de la CLÉ fait vraiment échouer le test.
-//
-// Le câblage web garde ses tests EXÉCUTÉS (`tests/web/social.test.ts`,
-// `tests/web/home.test.ts`, `tests/web/tasks.test.ts`) : la défense est
-// redondante côté interface.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// I31 ne se vérifie plus en lisant `PronotePayloads.kt` : la clé (kind, id) et
+// la fusion vivent dans `core/EventDedupe.kt`, fichier pur compilé et exécuté
+// ici via `EventDedupeParityMain.kt`. Le câblage web garde ses tests exécutés.
+// Outillage absent = SKIP BRUYANT ; échec de compilation = défaut.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -85,8 +74,7 @@ describe("I31 — un enregistrement publié = UNE ligne (#645)", () => {
     ]);
     expect(r.kept).toHaveLength(2);
     expect(r.keys).toEqual(["absence:12", "late:12"]);
-    // Les compteurs partent de la liste DÉDUPLIQUÉE : deux doublons exacts ne
-    // comptent pas deux fois.
+    // Les compteurs partent de la liste DÉDUPLIQUÉE : un doublon ne compte qu'une fois.
     expect(r.counts).toEqual({ absence: 1, late: 1 });
   });
 

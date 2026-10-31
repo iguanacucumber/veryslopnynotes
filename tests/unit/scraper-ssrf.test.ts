@@ -1,15 +1,6 @@
-// #362 : garde SSRF + `authFile` non piloté par l'appelant.
-// #419 : la garde résout le NOM (DNS) — un nom public qui pointe vers une IP
-//        privée est refusé avant la navigation.
-// #538 : le jar de session est choisi par le SERVEUR (le corps ne peut plus
-//        en demander le nom : il demandait la session d'un autre tenant).
-//
-// Fakes 100 % synthétiques : le module `playwright` est MOCKÉ (aucun
-// navigateur, aucun réseau), la résolution DNS est INJECTÉE (aucune requête
-// DNS réelle) et le jar est vérifié dans un répertoire temporaire. Le faux
-// navigateur simule une REDIRECTION : la cible finale est celle que
-// `page.url()` renvoie, et le route handler voit (ou non) le 302 — les deux
-// cas sont testés.
+// Garde SSRF, avec résolution du NOM (un nom public pointant vers une IP privée
+// est refusé avant navigation) et jar de session choisi par le SERVEUR.
+// Fakes synthétiques : `playwright` mocké, DNS injecté, jar en tmpdir.
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,11 +23,7 @@ const PUBLIC_URL = "https://manuels.example.invalid/6e";
 /** IP publique factice (aucune adresse réelle n'est contactée). */
 const PUBLIC_IP = "93.184.216.34";
 
-/**
- * Résolveur FACTICE : table hôte -> adresses. Aucune résolution DNS réelle,
- * aucun réseau : le test de la garde DNS (#419) reste hermétique. Un hôte
- * absent de la table = ENOTFOUND (comme le résolveur du système).
- */
+/** Résolveur FACTICE : table hôte -> adresses, aucune résolution réelle ; hôte absent = ENOTFOUND. */
 function fakeResolver(table: Record<string, readonly string[]>): HostResolver {
   return async (host: string) => {
     const found = table[host];
@@ -48,10 +35,7 @@ function fakeResolver(table: Record<string, readonly string[]>): HostResolver {
 /** Résolveur par défaut des tests : le seul hôte public du test résout. */
 const PUBLIC_RESOLVER = fakeResolver({ "manuels.example.invalid": [PUBLIC_IP] });
 
-/**
- * Motif de refus du scrape (le message seul ne dit pas tout : deux refus
- * SSRF portent des messages différents pour la même cause).
- */
+/** Motif de refus du scrape : deux refus SSRF portent des messages différents pour la même cause. */
 async function refusal(promise: Promise<unknown>): Promise<ScrapeManualsError> {
   try {
     await promise;
@@ -93,10 +77,7 @@ const state: FakeState = {
 let routeHandler: ((route: unknown) => Promise<void>) | null = null;
 let fetchSpy: { mockRestore: () => void } | null = null;
 
-/**
- * Stub du `fetch` global (vérification de la chaîne de redirections AVANT le
- * navigateur) : aucun réseau réel dans les tests.
- */
+/** Stub du `fetch` global : la chaîne de redirections est vérifiée AVANT le navigateur. */
 function stubFetch(handler: (url: string) => Response): void {
   fetchSpy?.mockRestore();
   const spy = spyOn(globalThis, "fetch");
@@ -131,15 +112,13 @@ mock.module("playwright", () => ({
       state.launched += 1;
       return {
         newContext: async (opts?: { storageState?: string }) => {
-          // Le jar MONTÉ par le navigateur : c'est lui qui dit quelle session
-          // est utilisée (#538).
+          // Le jar MONTÉ par le navigateur dit quelle session est utilisée.
           if (opts?.storageState) state.mountedStates.push(opts.storageState);
           return {
             newPage: async () => ({
               url: () => fake.finalUrl,
               title: async () => "Titre factice",
-              // #525 : la lecture passe par `evaluate` (la borne est appliquée
-              // DANS le navigateur) : le faux rend au plus `max` caractères.
+              // La borne est appliquée DANS le navigateur : le faux rend au plus `max` caractères.
               evaluate: async (_fn: unknown, max: number) => {
                 state.contentCalls += 1;
                 const html = "<html><body>SECRET-INTERNAL-SERVICE</body></html>";
@@ -207,9 +186,7 @@ describe("garde SSRF : hôte privé/interne refusé (#362)", () => {
   });
 
   test("la forme NORMALISÉE par new URL() est bien refusée (le trou de #362)", () => {
-    // new URL() transforme 127.0.0.1 en [::ffff:7f00:1] et 2130706433 en
-    // 127.0.0.1 : la garde doit porter sur la forme normalisée, pas sur la
-    // chaîne brute.
+    // `new URL()` normalise 127.0.0.1 et 2130706433 : la garde porte sur la forme normalisée.
     expect(new URL("http://[::ffff:127.0.0.1]:8080/x").hostname).toBe("[::ffff:7f00:1]");
     expect(isBlockedHost(new URL("http://[::ffff:127.0.0.1]:8080/x").hostname)).toBe(true);
     expect(new URL("http://2130706433/").hostname).toBe("127.0.0.1");
@@ -226,9 +203,7 @@ describe("garde SSRF : hôte privé/interne refusé (#362)", () => {
       "http://[::]/",
       "http://[0:0:0:0:0:ffff:127.0.0.1]/",
       "http://[64:ff9b::7f00:1]/",
-      // #531 : NAT64 « local-use » (RFC 8215) — le préfixe n'est pas global,
-      // il n'atteint qu'un réseau local : les deux formes d'embarquement de
-      // l'IPv4 y pointent le loopback du réseau.
+      // NAT64 « local-use » (RFC 8215) : le préfixe n'atteint qu'un réseau local.
       "http://[64:ff9b:1::7f00:1]/",
       "http://[64:ff9b:1:7f00:1::]/",
       "http://[64:ff9b:1::]/",
@@ -236,8 +211,7 @@ describe("garde SSRF : hôte privé/interne refusé (#362)", () => {
     ]) {
       expect(isPublicHttpUrl(url)).toBe(false);
     }
-    // Le NAT64 BIEN CONNU reste public si l'IPv4 embarqué l'est : un réseau
-    // NAT64 légitime doit pouvoir atteindre un site public.
+    // Le NAT64 bien connu reste public si l'IPv4 embarqué l'est.
     expect(isBlockedHost("64:ff9b::808:808")).toBe(false);
     expect(isBlockedHost("64:ff9b::7f00:1")).toBe(true);
     // Le userinfo ne doit pas servir de leurre : l'hôte reste le vrai.
@@ -264,8 +238,7 @@ describe("garde SSRF : hôte privé/interne refusé (#362)", () => {
 describe("redirection : l'URL finale est re-vérifiée (#362)", () => {
   test("chaîne de redirection vers une cible privée : refusée AVANT le navigateur", async () => {
     resetState();
-    // Chromium suit un 302 SANS repasser par le route handler (mesuré) :
-    // la chaîne est donc vérifiée avant que le navigateur ne parte.
+    // Chromium suit un 302 SANS repasser par le route handler : la chaîne est vérifiée avant.
     stubFetch(() =>
       new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data/" } }),
     );
@@ -280,8 +253,7 @@ describe("redirection : l'URL finale est re-vérifiée (#362)", () => {
     const seen: string[] = [];
     stubFetch((url) => {
       seen.push(url);
-      // Un seul saut, puis la chaîne se termine (200) : c'est une chaîne
-      // FINIE, donc le navigateur peut la suivre.
+      // Un seul saut puis 200 : chaîne FINIE, le navigateur peut la suivre.
       if (seen.length === 1) {
         return new Response(null, { status: 302, headers: { location: "https://manuels.example.invalid/6e/maths" } });
       }
@@ -297,8 +269,7 @@ describe("redirection : l'URL finale est re-vérifiée (#362)", () => {
     );
   });
 
-  // #487 : la garde suivait 3 sauts, le navigateur en suit 20 : le dernier
-  // saut partait vers une cible PRIVÉE sans jamais être vérifié.
+  // Le navigateur suit 20 sauts : la garde doit couvrir toute la chaîne.
   test("le dernier saut d'une chaîne longue vers une cible privée est REFUSÉ", async () => {
     const hops = [
       "https://manuels.example.invalid/a",
@@ -330,8 +301,7 @@ describe("redirection : l'URL finale est re-vérifiée (#362)", () => {
     await expect(assertPublicRedirectChain(PUBLIC_URL, undefined, PUBLIC_RESOLVER)).rejects.toThrow(
       ScrapeManualsError,
     );
-    // La garde a couvert TOUS les sauts que Chromium pourrait suivre (20) :
-    // au-delà, elle refuse au lieu de laisser partir une cible non vérifiée.
+    // Au-delà de 20 sauts, la garde refuse au lieu de laisser partir une cible non vérifiée.
     expect(n).toBe(21);
   });
 
@@ -378,8 +348,7 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
     );
     expect(err.reason).toBe("private_host");
     expect(err.message).toMatch(/hote prive/);
-    // Le refus arrive AVANT le navigateur : aucune requête vers l'interne,
-    // aucun extrait.
+    // Le refus arrive AVANT le navigateur : aucune requête vers l'interne.
     expect(state.launched).toBe(0);
     expect(state.contentCalls).toBe(0);
   });
@@ -462,8 +431,7 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
 
   test("l'URL FINALE (après navigation) est résolue : un nom privé est refusé", async () => {
     resetState();
-    // La redirection échappe au route handler (Chromium ne le rappelle pas) :
-    // seule la re-vérification de l'URL FINALE rattrape le nom rebindé.
+    // Seule la re-vérification de l'URL FINALE rattrape le nom rebindé.
     fake = { finalUrl: "https://interne.example.invalid/secret", routeSeesRedirect: false };
     const resolve = fakeResolver({
       "manuels.example.invalid": [PUBLIC_IP],
@@ -517,11 +485,8 @@ describe("garde SSRF : le NOM est résolu (#419)", () => {
   });
 });
 
-// #538 : le jar de session est CHOISI par le serveur. Avant, le corps pouvait
-// en demander le NOM : le répertoire était imposé (#362), mais pas
-// l'isolation — un appelant pouvait donc monter la session d'un autre tenant.
-// Le champ n'existe plus dans le contrat, et un corps qui le porte est
-// REFUSÉ par le serveur (message dédié, pas un 400 générique).
+// Le jar de session est CHOISI par le serveur : un corps qui en demande le NOM
+// est REFUSÉ (message dédié), sinon un appelant monterait la session d'un autre tenant.
 describe("jar de session : choisi par le serveur, jamais par l'appelant (#538)", () => {
   const base = { platform: "p", startUrl: PUBLIC_URL };
 
@@ -549,11 +514,10 @@ describe("jar de session : choisi par le serveur, jamais par l'appelant (#538)",
         expect(res.status).toBe(400);
         const json = (await res.json()) as { error?: { code?: string; message?: string } };
         expect(json.error?.code).toBe("bad_request");
-        // Le message NOMME le champ à retirer : l'appelant sait quoi enlever.
+        // Le message NOMME le champ à retirer.
         expect(json.error?.message).toContain("authFile");
       }
-      // Aucun navigateur lancé, aucun jar monté, aucun jar écrit, et le
-      // fichier d'un autre tenant est intact.
+      // Aucun navigateur lancé, et le fichier d'un autre tenant est intact.
       expect(state.launched).toBe(0);
       expect(state.mountedStates).toEqual([]);
       expect(state.storageStatePaths).toEqual([]);
@@ -573,8 +537,7 @@ describe("jar de session : choisi par le serveur, jamais par l'appelant (#538)",
 
   test("le contrat ne connaît plus de champ de jar (le jar n'est pas un paramètre de requête)", () => {
     expect(isManualsScrapeRequest(base)).toBe(true);
-    // Le contrat ignore les champs inconnus ; c'est le SERVEUR qui refuse le
-    // corps (message dédié) — le contrat ne valide plus de nom de jar.
+    // C'est le SERVEUR qui refuse le corps, pas le contrat.
     expect(isManualsScrapeRequest({ ...base, authFile: "manuel.json" })).toBe(true);
   });
 });

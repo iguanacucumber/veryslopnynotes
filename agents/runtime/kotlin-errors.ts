@@ -1,17 +1,15 @@
 // Filtre de la sortie Gradle à la frontière `android-compile`.
 //
-// Mesure : une cascade de visibilité produit 1 074 lignes
-// `e: file:///home/…:l:c message` (190 740 o, dont ~32 o de préfixe
-// absolu par ligne), plus 500–600 o de passe-partout Gradle par tâche,
-// répété par module et DEUX FOIS quand le build hors-ligne tombe en repli.
+// Une cascade de visibilité produit ~1 000 lignes `e:` plus le passe-partout
+// Gradle, répété par module et deux fois quand le build hors-ligne tombe en
+// repli.
 //
-// Ce filtre ne change NI le code de sortie NI la sémantique du gate (I5) :
-// une erreur Kotlin vue ici fait TOUJOURS échouer le build, même si Gradle
-// a rendu 0. Le journal entier reste dans le fichier fixe ci-dessous.
+// Ne change NI le code de sortie NI la sémantique du gate (I5) : une erreur
+// Kotlin vue ici fait TOUJOURS échouer le build, même si Gradle a rendu 0.
+// Le journal entier reste dans le fichier fixe ci-dessous.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** Racine du dépôt : un chemin absolu en est réécrit en relatif. */
 const ROOT = join(import.meta.dir, "..", "..");
 
 /** Journal complet, hors contexte : le filtre n'en montre que la cause. */
@@ -20,9 +18,8 @@ export const LOG_PATH = "node_modules/.cache/gate-logs/android-compile.log";
 /** Plafond de lignes d'erreur affichées (le reste est compté). */
 export const MAX_LINES = 10;
 
-/** Une erreur Kotlin extraite d'une ligne `e:`. */
 export interface KotlinError {
-  /** Chemin relatif au dépôt (absolu conservé s'il sort du dépôt). */
+  /** Relatif au dépôt (absolu conservé s'il sort du dépôt). */
   file: string;
   line: number;
   column: number;
@@ -32,13 +29,11 @@ export interface KotlinError {
 // `e: file:///…/Foo.kt:12:3 message` — le préfixe `file://` est optionnel.
 const E_LINE = /^e:\s+(?:file:\/\/)?(.+?):(\d+):(\d+)\s+(.*)$/;
 
-/** Réécrit un chemin absolu du dépôt en chemin relatif. */
 function repoRelative(path: string): string {
   const prefix = ROOT.endsWith("/") ? ROOT : `${ROOT}/`;
   return path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
-/** Extrait les lignes `e:` du journal, dans l'ordre. */
 export function parseKotlinErrors(text: string): KotlinError[] {
   const errors: KotlinError[] = [];
   for (const raw of text.split("\n")) {
@@ -56,15 +51,15 @@ export function parseKotlinErrors(text: string): KotlinError[] {
 
 /** Motif d'un message : noms cités et nombres masqués.
  *
- *  Dans une cascade, seule l'occurrence change (`'a'`, `'b'`, ligne 12, 40) :
- *  c'est le MOTIF qui identifie l'erreur, l'occurrence n'apporte rien. */
+ *  Dans une cascade, seule l'occurrence change : c'est le MOTIF qui identifie
+ *  l'erreur. */
 function motif(message: string): string {
   return message
     .replace(/`[^`]*`|'[^']*'|"[^"]*"/g, "…")
     .replace(/\d+/g, "N");
 }
 
-/** Lignes d'erreur : dédoublonnées par (fichier, motif), plafonnées. */
+/** Dédoublonnées par (fichier, motif), plafonnées. */
 function formatErrors(errors: KotlinError[], max: number): string[] {
   const groups = new Map<string, { first: KotlinError; n: number }>();
   for (const e of errors) {
@@ -84,8 +79,8 @@ function formatErrors(errors: KotlinError[], max: number): string[] {
 }
 
 /** Repli hors-ligne → en ligne : Gradle répète le MÊME bloc « What went
- *  wrong » (une fois par invocation). On n'en garde qu'un, sans la section
- *  `* Try:` qui dit comment relancer, pas ce qui a cassé. */
+ *  wrong » (un par invocation) ; on garde le premier, sans `* Try:` qui dit
+ *  comment relancer, pas ce qui a cassé. */
 function gradleFailure(text: string, max: number): string[] {
   const blocks = text.split(/^\* What went wrong:\s*$/m);
   const body = blocks.length > 1 ? blocks[1]! : text;
@@ -133,8 +128,7 @@ export function filterKotlinLog(
   ].join("\n");
 }
 
-// Point d'entrée seulement : le module reste importable (tests) sans lire
-// de journal. `-` (ou rien) lit stdin, pour rejouer une capture.
+// Module importable (tests) sans lire de journal. `-` (ou rien) lit stdin.
 if (import.meta.main) {
   const [file, rawCode] = process.argv.slice(2);
   const declared = Number.parseInt(rawCode ?? "0", 10) || 0;

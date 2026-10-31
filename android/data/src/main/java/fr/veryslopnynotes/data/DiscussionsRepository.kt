@@ -11,26 +11,21 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Messagerie #80 : lecture de la liste des fils (cache `discussions`), des
- * messages d'un fil et des destinataires, plus les 4 ÉCRITURES — le tout sur
- * le client local (#205, ADR-003).
+ * Messagerie : lecture de la liste des fils (cache `discussions`), des
+ * messages d'un fil et des destinataires, plus les 4 écritures — le tout sur
+ * le client local (ADR-003).
  *
- * I7 : une écriture ne part que d'un GESTE de l'utilisateur (répondre, créer,
- * marquer lu, supprimer) — aucun appel automatique, aucune donnée de messagerie
- * n'est réinjectée dans une requête d'IA.
- * I1 : aucune adresse d'établissement ici (seul `android/pronote/` parle au
- * serveur de l'établissement) ; les pièces jointes ne sont pas téléchargées
- * (l'écran affiche une notice, comme avant).
+ * I7 : une écriture ne part que d'un GESTE (répondre, créer, marquer lu,
+ * supprimer) ; aucune donnée de messagerie n'est réinjectée dans une IA.
+ * I1 : aucune adresse d'établissement ici ; les pièces jointes ne sont pas
+ * téléchargées (l'écran affiche une notice).
  * I6 : corps/sujets = DONNÉES affichées telles quelles, jamais exécutées.
  */
 data class DiscussionWriteOutcome(val ok: Boolean, val error: String?)
 
 /**
- * Un fil OUVERT : ses messages et ses participants (#476).
- *
- * Les participants ne sont plus téléchargés pour TOUTE la liste : ils sont
- * demandés à l'ouverture du fil (un POST de plus là, douze de moins dans la
- * liste).
+ * Un fil OUVERT : ses messages et ses participants, demandés à l'ouverture
+ * du fil (un POST de plus là, douze de moins dans la liste).
  */
 data class DiscussionThread(
     val messages: List<DiscussionMessage>,
@@ -44,18 +39,16 @@ class DiscussionsRepository(
 ) {
 
     /**
-     * Messages d'un fil : lus à la demande, JAMAIS en cache (donnée personnelle).
-     * Fil vide/illisible = liste vide, l'écran affiche son état vide propre.
-     *
-     * #476 : les PARTICIPANTS du fil voyagent avec ses messages (ils sont
-     * demandés à l'ouverture, plus pour toute la liste).
+     * Messages d'un fil : lus à la demande, JAMAIS en cache (donnée
+     * personnelle). Fil vide/illisible = liste vide, l'écran affiche son état
+     * vide propre. Les participants voyagent avec les messages.
      */
     fun fetchMessages(discussionId: String, cb: (DiscussionThread?, String?) -> Unit) {
         Thread {
             val client = provider()
             if (client == null) {
-                // Sans session : liste vide, état vide propre — pas d'écran
-                // d'erreur plein-écran pour l'absence de connexion (#260).
+                // Sans session : liste vide, état vide propre, pas d'écran
+                // d'erreur plein écran pour l'absence de connexion.
                 post { cb(null, null) }
                 return@Thread
             }
@@ -217,10 +210,8 @@ class DiscussionsRepository(
     /** Écriture locale : succès = pas d'exception ; fil fermé/session = message. */
     private fun writeLocal(failure: String, block: () -> Unit): DiscussionWriteOutcome {
         return try {
-            // #369 : écriture CONFIRMÉE -> l'entrée de cache de la messagerie ne
-            // ressert plus l'état d'avant (fil supprimé qui réapparaît, fil
-            // créé absent, compteur de non-lus figé). Une écriture refusée
-            // (exception) ne purge rien.
+            // Écriture CONFIRMÉE → invalide le cache : l'état d'avant ne
+            // ressort plus. Une écriture refusée (exception) ne purge rien.
             writeAndInvalidate(cache, CachePolicy.DISCUSSIONS) { block() }
             DiscussionWriteOutcome(true, null)
         } catch (e: Exception) {
@@ -294,10 +285,8 @@ class DiscussionsRepository(
         }
 
         /**
-         * Un fil ouvert : ses messages et ses participants (#476).
-         *
-         * Les participants sont Bornés (20) et ignorés s'ils sont vides : un
-         * nom de participant est une DONNÉE affichée telle quelle.
+         * Un fil ouvert : ses messages et ses participants, bornés (20) et
+         * ignorés s'ils sont vides — un nom est une DONNÉE affichée telle quelle.
          */
         fun parseThread(body: String): DiscussionThread {
             val root = JSONObject(body)
@@ -346,7 +335,6 @@ class DiscussionsRepository(
         private fun unreadOf(o: JSONObject): Int =
             if (o.isNull("unreadCount")) DiscussionRules.UNKNOWN_UNREAD else o.optInt("unreadCount", DiscussionRules.UNKNOWN_UNREAD)
 
-        /** Liste des fils depuis le cache : payload absent/illisible = vide. */
         fun discussionsFromPayload(payload: String?): List<Discussion> = try {
             if (payload == null) emptyList() else parse(payload)
         } catch (_: Exception) {

@@ -1,19 +1,8 @@
-// #420 : la borne de `periodName` doit être LA MÊME des trois côtés —
-//
-//   1. le CONTRAT TS (`shared/contracts/models.ts`, source de vérité),
-//   2. le NOYAU KOTLIN (`UserProfileRules`, validateur de l'app),
-//   3. le WEB (`web/src/features/profile/model.ts`, lecture du payload).
-//
-// Avant, le web bornait à 64 (`MAX_NAME`) alors que le natif PUBLIE jusqu'à
-// 100 : un libellé de période long (« Trimestre 1 — année scolaire
-// 2026-2027 ») faisait disparaître le profil côté interface, et le noyau
-// refusait le profil que le natif venait de publier. Le contrat n'avait donc
-// qu'une seule version, fausse.
-//
-// Le test compile le VRAI fichier de production (`core/UserProfile.kt`) et le
-// pilote : la borne comparée est celle du code EXÉCUTÉ, pas un miroir
-// réécrit en TypeScript. Outillage `kotlinc`/`java` absent = SKIP BRUYANT du
-// harnais (jamais un faux vert) ; un échec de compilation, lui, est un défaut.
+// La borne de `periodName` doit être la même dans le contrat TS (`models.ts`),
+// le noyau Kotlin (`UserProfileRules`) et le web (`profile/model.ts`) : le web
+// bornait à 64 quand le natif publiait jusqu'à 100, perdant le profil.
+// Le test compile le vrai `core/UserProfile.kt` ; outillage absent = SKIP
+// BRUYANT (jamais un faux vert), échec de compilation = défaut.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -39,12 +28,10 @@ async function ask(op: unknown): Promise<string> {
 /** Borne du contrat partagé : la référence des trois côtés. */
 const BOUND = USER_PERIOD_NAME_MAX_CHARS;
 
-/** Verdict du CONTRAT TS sur un profil réduit à son libellé de période. */
 function contractAccepts(periodName: string): boolean {
   return isUserInfo({ accountId: "acc-fake-1", displayName: "Nom Exemple", periodName });
 }
 
-/** Verdict du LECTEUR WEB (payload `profile.me`). */
 function webAccepts(periodName: string): boolean {
   const payload = JSON.stringify({
     user: { accountId: "acc-fake-1", displayName: "Nom Exemple", periodName },
@@ -70,7 +57,6 @@ describe("borne de periodName (#420) — contrat TS <-> natif <-> web", () => {
   });
 
   test("le libellé long du natif survit au web (pas de profil perdu)", () => {
-    // Le cas de l'issue : un libellé de période « long » mais courant.
     const periodName = "Trimestre 1 — année scolaire 2026-2027";
     expect(periodName.length).toBeLessThanOrEqual(BOUND);
     expect(webAccepts(periodName)).toBe(true);

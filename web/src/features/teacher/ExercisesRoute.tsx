@@ -29,14 +29,9 @@ function messageOf(error: unknown, fallback: string): string {
   return fallback;
 }
 
-/**
- * Onglet Exercices (#632) : l'état et le pont. Le rendu est dans
- * [ExercisesView], testable en rendu statique.
- *
- * Aucune aide n'est demandée sans exercice choisi ; la correction complète est
- * réservée à un clic explicite (ou à une photo de réponse, qui EST une demande
- * de correction).
- */
+/** État et pont ; le rendu vit dans [ExercisesView].
+ *  Aucune aide sans exercice choisi ; la correction complète exige un clic explicite
+ *  (une photo de réponse en est un). */
 export function ExercisesRoute({
   subjects,
   subject,

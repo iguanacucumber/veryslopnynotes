@@ -1,11 +1,6 @@
-// #374 : l'image Docker du scraper doit installer Chromium AU BUILD, et
-// l'absence de navigateur doit répondre 501 (« scraper sans navigateur »),
-// jamais 500 « unexpected failure ».
-//
-// Deux garanties distinctes, testées sans build d'image ni navigateur :
-// 1. le mapping d'erreur (handler HTTP) ;
-// 2. l'analyse STATIQUE du Dockerfile (test de régression : la ligne
-//    `playwright install` doit rester présente).
+// L'image Docker du scraper installe Chromium AU BUILD, et son absence répond
+// 501 (« scraper sans navigateur »), jamais 500.
+// Deux garanties : le mapping d'erreur et l'analyse statique du Dockerfile.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -101,8 +96,7 @@ describe("#374 — image Docker : le navigateur est installé au build", () => {
       (l) => /^\s*RUN\b/.test(l) && /playwright\s+install/.test(l),
     );
     if (envIndex < 0) return; // chemin par défaut : rien à partager.
-    // L'ENV doit précéder l'installation (le build écrit dans ce chemin) et
-    // rester dans l'image finale (le runtime relit le même chemin).
+    // L'ENV précède l'installation et reste dans l'image finale.
     expect(envIndex).toBeLessThan(installIndex);
     expect(dockerfile).toMatch(/PLAYWRIGHT_BROWSERS_PATH=/);
   });
@@ -120,13 +114,8 @@ describe("#374 — image Docker : le navigateur est installé au build", () => {
   });
 });
 
-// #533 : l'image Docker du scraper tournait en ROOT, en CLAIR, sur toutes les
-// interfaces — un point d'entrée sans authentification (I8) qui pilote
-// Chromium, joignable depuis tout le réseau du conteneur.
-//
-// L'image est alignée sur `make runServer` : TLS obligatoire (un échec de
-// préparation arrête le lancement, jamais de repli en clair), et exposition
-// décidée par l'opérateur (127.0.0.1 par défaut).
+// L'image tournait en ROOT, en clair, sur toutes les interfaces : point d'entrée
+// sans auth (I8). TLS obligatoire et exposition 127.0.0.1 par défaut, comme runServer.
 describe("#533 — l'image Docker n'est ni root ni en clair", () => {
   const dockerfile = readFileSync(join(ROOT, "Dockerfile.server"), "utf8");
   const lines = dockerfile.split("\n");
@@ -148,8 +137,7 @@ describe("#533 — l'image Docker n'est ni root ni en clair", () => {
 
   test("le jar de session appartient à cet utilisateur (pas de fichier root)", () => {
     const user = users.at(-1)!;
-    // Le jar est ÉCRIT par le scraper : son répertoire doit lui appartenir,
-    // sinon le scraper non-root ne peut pas persister la session.
+    // Le répertoire du jar appartient au scraper, sinon un non-root ne peut pas persister.
     expect(dockerfile).toContain("playwright/.auth");
     expect(dockerfile).toMatch(new RegExp(`chown[^\\n]*${user}`));
   });
@@ -162,16 +150,12 @@ describe("#533 — l'image Docker n'est ni root ni en clair", () => {
   });
 
   test("elle ne force pas HOST : l'exposition est une décision explicite", () => {
-    // `make runServer` écoute sur la boucle locale par défaut ; l'image
-    // fait pareil (le serveur boucle par défaut) : exposer le conteneur
-    // (`-e HOST=0.0.0.0`) reste un choix de l'opérateur, sur un réseau de
-    // confiance (le service est sans auth).
+    // Exposition = choix de l'opérateur, sur un réseau de confiance (le service est sans auth).
     expect(dockerfile).not.toMatch(/^\s*ENV\s+HOST\s*=/m);
   });
 
   test("le HOME est celui de l'utilisateur (sinon Chromium n'écrit rien)", () => {
-    // Sans HOME explicite, le process hériterait de /root : le profil
-    // Chromium et le jar de session seraient inaccessibles.
+    // Sans HOME explicite, le profil Chromium et le jar seraient inaccessibles.
     const home = /^\s*ENV\s+HOME=(\S+)/m.exec(dockerfile)?.[1];
     expect(home).toBeTruthy();
     expect(home).toMatch(/^\/home\//);

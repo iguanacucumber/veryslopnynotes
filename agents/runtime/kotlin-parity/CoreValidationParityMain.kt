@@ -1,27 +1,8 @@
-// CoreValidationParityMain.kt — pilote JSON des validations du noyau (#413).
+// CoreValidationParityMain.kt — pilote JSON des validations du noyau.
 //
-// OUTIL DE TEST uniquement : compilé par
-// `tests/unit/kotlin-core-validation-parity.test.ts` et
-// `tests/unit/android-server-config.test.ts` (jamais par Gradle, jamais dans
-// l'APK). Les tests compilent les VRAIS fichiers de production
-// (`core/Humanize.kt`, `core/CapabilityProbe.kt`, `core/Capabilities.kt`,
-// `core/ServerConfig.kt`) et les pilotent ici : les verdicts comparés sont
-// ceux du code EXÉCUTÉ, pas un miroir réécrit en TypeScript.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-core-validation-parity.test.ts` (jamais Gradle, jamais l'APK).
 //
-// DEUX DÉFAUTS COUVERTS (#413) :
-// 1. `Humanize.validateAnswerKeyForRender` confondait un champ `sources`
-//    MAL FORMÉ ("abc", {}) avec une liste VIDE : la source invalide passait
-//    pour « aucune source » et le texte sortait comme un corrigé validé.
-// 2. `CapabilityProbe.fromProbe` renvoyait des capacités NON nulles mais
-//    SANS onglet pour un contrat invalide : une liste vide signifie « tous
-//    les onglets désactivés » (blackout de la navigation), pas « rien n'est
-//    affirmé ».
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE sont préfixées `pilote: ` et refusées par le test ; un
-// REFUS du PORT (AiError) revient en `{"error":…}` : c'est un résultat
-// attendu, pas une panne.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.core
 
 import java.io.BufferedReader

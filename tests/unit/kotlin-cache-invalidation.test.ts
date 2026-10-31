@@ -1,18 +1,7 @@
-// #369 : une écriture CONFIRMÉE invalide le cache, et la fenêtre de recherche
-// du toggle suit la semaine AFFICHÉE.
-//
-// Le harnais compile la VRAIE logique de production (`CachePolicy`,
-// `OfflineCache`, `WeekWindow` — purs, sans Android ni org.json) et la pilote
-// (`agents/runtime/kotlin-parity/CacheInvalidationMain.kt`) : les assertions
-// portent sur du code EXÉCUTÉ, pas sur un miroir TS.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT (harnais partagé) ; un
-// échec de compilation, lui, est un défaut (le test rougit).
-//
-// Le câblage (le dépôt invalide APRÈS l'écriture, le pont transmet la
-// semaine affichée) est épinglé par lecture des sources : `AssignmentsRepository`
-// et `DiscussionsRepository` dépendent d'`org.json` et d'`android.os`, hors de
-// portée d'un harnais JVM — même limite que le miroir `android-homework`.
+// Une écriture CONFIRMÉE invalide le cache, et la fenêtre de recherche du toggle
+// suit la semaine AFFICHÉE. La VRAIE logique est compilée et pilotée ; le câblage
+// (dépôt, pont) est épinglé par lecture des sources.
+// Outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -70,8 +59,7 @@ describe("invalidation du cache après une écriture (#369)", () => {
     ) as InvalidationResult;
     // AVANT l'écriture : entrée fraîche servie telle quelle (pas de relecture).
     expect(result.before).toEqual({ served: true, stale: false, shouldFetch: false });
-    // APRÈS l'écriture confirmée : l'entrée part, l'écran RELIT (plus de
-    // « done=false » qui décoche la case pendant 15 minutes).
+    // Après l'écriture confirmée, l'entrée part : l'écran RELIT.
     expect(result.after).toEqual({ served: false, stale: false, shouldFetch: true });
     expect(result.error).toBe("");
   });
@@ -81,8 +69,7 @@ describe("invalidation du cache après une écriture (#369)", () => {
       await ask({ op: "write", resource: "discussions", now: 1_700_000_000_000 }),
     ) as InvalidationResult;
     expect(result.before).toEqual({ served: true, stale: false, shouldFetch: false });
-    // Fil supprimé qui réapparaît, fil créé absent, compteur figé : tous
-    // corrigés par la même invalidation.
+    // Fil supprimé qui réapparaît, fil créé absent, compteur figé : même invalidation.
     expect(result.after).toEqual({ served: false, stale: false, shouldFetch: true });
     expect(result.error).toBe("");
   });
@@ -121,11 +108,9 @@ describe("fenêtre de recherche = semaine affichée (#369)", () => {
         due: ["2026-11-18T08:00:00", "2026-10-20T08:00:00", "2026-11-25T08:00:00"],
       }),
     ) as WindowResult;
-    // Le 18 novembre est hors du repli −7/+21 jours (au 9 novembre) mais
-    // dans la semaine demandée : il doit être trouvable.
+    // Le 18 novembre est hors du repli −7/+21 j mais dans la semaine demandée.
     expect(result.inside).toEqual(["2026-11-18T08:00:00"]);
-    // Hors de la semaine demandée : introuvable (le toggle est refusé, comme
-    // avant pour un devoir qui n'existe pas).
+    // Hors de la semaine demandée : introuvable.
     expect(result.outside).toEqual(["2026-10-20T08:00:00", "2026-11-25T08:00:00"]);
   });
 
@@ -195,13 +180,11 @@ describe("câblage de l'invalidation et de la fenêtre (#369)", () => {
   const client = source(join(WEB, "bridge", "client.ts"));
 
   test("le toggle invalide le cache APRÈS l'écriture confirmée", () => {
-    // L'écriture passe par `writeAndInvalidate` : `setDone` (qui lève si
-    // l'écriture échoue) DANS le bloc, l'invalidation après.
+    // `setDone` (qui lève si l'écriture échoue) DANS le bloc, l'invalidation après.
     expect(assignments).toContain(
       "writeAndInvalidate(cache, CachePolicy.ASSIGNMENTS) { found.setDone(done) }",
     );
-    // `setDone` n'est appelé qu'à travers ce bloc (jamais seul : une écriture
-    // échouée ne doit rien purger).
+    // `setDone` n'est appelé que dans ce bloc : une écriture échouée ne purge rien.
     expect(assignments.match(/found\.setDone\(done\)/g)?.length).toBe(1);
     // Le dépôt reçoit le cache : l'invalidation native est possible.
     expect(bridge).toContain("AssignmentsRepository(cacheStore)");
@@ -215,8 +198,7 @@ describe("câblage de l'invalidation et de la fenêtre (#369)", () => {
   });
 
   test("l'affichage et la recherche partagent la MÊME fenêtre", () => {
-    // Le payload affiché et la recherche du toggle/pièce jointe sortent de la
-    // même fonction : un devoir affiché reste trouvable.
+    // Le payload affiché et la recherche du toggle sortent de la même fonction.
     expect(payloads).toContain('assignmentWindow(query["weekStart"], now)');
     expect(assignments.match(/assignmentWindow\(weekStart\)/g)?.length).toBe(2);
     // Toggle ET pièce jointe cherchent dans cette fenêtre (pas une autre).
@@ -243,8 +225,7 @@ describe("câblage de l'invalidation et de la fenêtre (#369)", () => {
   });
 
   test("une SEULE invalidation, côté natif (le web n'invalide pas)", () => {
-    // `bridge.invalidate` existe mais n'est JAMAIS appelé : l'invalidation suit
-    // l'écriture, dans le natif (source de vérité), pas dans l'écran.
+    // `bridge.invalidate` n'est jamais appelé : l'invalidation suit l'écriture, dans le natif.
     const offenders: string[] = [];
     const walk = (dir: string): void => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {

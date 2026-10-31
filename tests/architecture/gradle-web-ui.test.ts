@@ -1,20 +1,8 @@
-// #426 : le lockfile est une ENTRÉE de la tâche Gradle `buildWebUi`.
-//
-// Ce test éprouve le VRAI Gradle (pas une relecture du script) : une copie
-// jetable du projet Android, avec un `package.json` de harnais dont le script
-// `build:web` « construit » un bundle = une COPIE du lockfile. Le bundle
-// produit porte donc l'état résolu des dépendances : son sha suit `bun.lock`.
-//
-// LE SCÉNARIO (le bug) : une mise à jour de dépendance TRANSITIVE change
-// `bun.lock` et laisse `package.json` intact. Avant le correctif, Gradle
-// disait « UP-TO-DATE » : le bundle restait celui d'avant, et l'APK
-// embarquait une interface PÉRIMÉE, différente de celle que `make check`
-// avait construite.
-//
-// LENT (trois invocations Gradle, daemon partagé avec `make android-compile`) :
-// c'est le seul moyen de voir la décision « UP-TO-DATE » du vrai Gradle.
-// Outillage absent (JDK 17-21, SDK Android, bun) = SKIP BRUYANT, jamais un
-// faux vert.
+// Le lockfile est une ENTRÉE de la tâche Gradle `buildWebUi` : une mise à jour
+// transitive doit refaire le bundle, sinon l'APK embarque une interface périmée.
+// Éprouve le VRAI Gradle sur une copie jetable ; outillage absent = SKIP BRUYANT.
+// Ici et pas dans `tests/unit` : il lance un daemon Gradle, qui se battait avec
+// celui d'`android-compile` (mesuré : suite unitaire 2,9 s -> 8,1 s).
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -29,10 +17,7 @@ interface Toolchain {
   sdk: string;
 }
 
-/**
- * JDK 17-21 + SDK Android, via la découverte du dépôt
- * (`agents/runtime/android-env.sh`) : une seule implémentation.
- */
+/** JDK 17-21 + SDK Android, via la découverte du dépôt (`android-env.sh`). */
 function toolchain(): Toolchain | null {
   const p = Bun.spawnSync(
     ["sh", "-c", ". agents/runtime/android-env.sh; android_jdk; echo ---; android_sdk"],
@@ -64,10 +49,7 @@ if (SKIP) {
   );
 }
 
-/**
- * Copie jetable du projet + des entrées de la tâche, factices mais RÉELLES
- * pour Gradle (le fichier de lockfile existe, il est modifié par le test).
- */
+/** Copie jetable du projet et des entrées de la tâche, réelles pour Gradle. */
 function harness(sdk: string): string {
   const dir = mkdtempSync(join(tmpdir(), "vsn-web-ui-"));
   // Le projet Android tel quel (le script sous test), SANS les artefacts.
@@ -82,15 +64,13 @@ function harness(sdk: string): string {
     },
   });
   chmodSync(join(dir, "android", "gradlew"), 0o755);
-  // Le SDK est celui découvert par le harnais (et non celui d'un
-  // `local.properties` périmé copié depuis la machine).
+  // Le SDK est celui découvert par le harnais, pas un `local.properties` périmé.
   writeFileSync(join(dir, "android", "local.properties"), `sdk.dir=${sdk}\n`);
   // Les entrées de la tâche.
   mkdirSync(join(dir, "web", "src"), { recursive: true });
   writeFileSync(join(dir, "web", "src", "placeholder.ts"), "export const placeholder = 1;\n");
   writeFileSync(join(dir, "web", "vite.config.ts"), "export default {};\n");
-  // Le « build » du harnais : le bundle produit = une COPIE du lockfile
-  // (le bundle embarque l'état résolu des dépendances).
+  // Le « build » du harnais : le bundle produit est une COPIE du lockfile.
   writeFileSync(
     join(dir, "package.json"),
     JSON.stringify({
@@ -114,7 +94,9 @@ interface Run {
 /** Lance `:app:buildWebUi` dans le harnais. */
 function gradle(dir: string, tc: Toolchain): Run {
   const env = { ...process.env, JAVA_HOME: tc.jdk, ANDROID_HOME: tc.sdk, ANDROID_SDK_ROOT: tc.sdk };
-  const args = ["--console=plain", ":app:buildWebUi"];
+  // UN worker : le harnais a UNE tâche à exécuter. Avec 16, son daemon se bat
+  // pour les cœurs avec `android-compile` (mesuré : 7,4 s -> 2,7 s).
+  const args = ["--console=plain", "--max-workers=1", ":app:buildWebUi"];
   const dec = new TextDecoder();
   const run = (extra: string[]) => {
     const p = Bun.spawnSync(["./gradlew", ...extra, ...args], {
@@ -125,8 +107,7 @@ function gradle(dir: string, tc: Toolchain): Run {
     });
     return { code: p.exitCode ?? -1, out: dec.decode(p.stdout) + dec.decode(p.stderr) };
   };
-  // Hors ligne d'abord (cache local) ; le repli EN LIGNE couvre un cache
-  // Gradle incomplet — même séquence que `make android-compile`.
+  // Hors ligne d'abord ; le repli en ligne couvre un cache Gradle incomplet.
   const off = run(["--offline"]);
   if (off.code === 0) return off;
   const on = run([]);
@@ -161,14 +142,11 @@ describe("buildWebUi : le bundle suit bun.lock (#426)", () => {
         const pkg = join(dir, "package.json");
         const bundle = join(dir, "android", "app", "src", "main", "assets", "web", "bundle.lock");
 
-        // 1. Premier build : la tâche s'exécute.
         const r1 = gradle(dir, TOOLCHAIN!);
         assertOk(r1);
         expect(outcome(r1.out)).toBe("EXECUTEE");
 
-        // 2. Rien ne change : Gradle dit UP-TO-DATE. Sans ce contrôle,
-        //    « la tâche s'exécute » ne prouverait rien (elle s'exécuterait
-        //    toujours, fix ou pas).
+        // Sans ce contrôle, « la tâche s'exécute » ne prouverait rien.
         const r2 = gradle(dir, TOOLCHAIN!);
         assertOk(r2);
         expect(outcome(r2.out)).toBe("UP-TO-DATE");
@@ -179,8 +157,7 @@ describe("buildWebUi : le bundle suit bun.lock (#426)", () => {
         writeFileSync(lock, '{"lock":"v2"}\n');
         expect(sha(pkg)).toBe(shaPkg);
 
-        // 4. Le build refait le bundle : le sha du bundle produit suit le
-        //    lockfile. Avant le correctif : UP-TO-DATE, bundle périmé.
+        // Le sha du bundle suit le lockfile ; avant : UP-TO-DATE, bundle périmé.
         const r3 = gradle(dir, TOOLCHAIN!);
         assertOk(r3);
         expect(outcome(r3.out)).toBe("EXECUTEE");
@@ -190,8 +167,7 @@ describe("buildWebUi : le bundle suit bun.lock (#426)", () => {
         rmSync(dir, { recursive: true, force: true });
       }
     },
-    // LENT : trois builds Gradle. Le daemon froid (première machine) prend
-    // quelques dizaines de secondes — le défaut de 5 s serait un faux rouge.
+    // LENT : trois builds Gradle ; le daemon froid prend des dizaines de secondes.
     300_000,
   );
 });

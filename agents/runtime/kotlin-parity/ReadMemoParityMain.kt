@@ -1,15 +1,8 @@
-// ReadMemoParityMain.kt — pilote JSON de la mémo des lectures identiques (#473).
+// ReadMemoParityMain.kt — pilote JSON de la mémo des lectures identiques.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-read-memo.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile le VRAI client de
-// production (`fr.veryslopnynotes.pronote.ClientBase`) et le pilote ici.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-read-memo.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Le pilote provides un client dont l'ENVOI est un STUB qui compte les
-// requêtes : le vrai `post` (enveloppe, mémo, rejeu après `refresh`) est
-// rejoué, sans réseau et sans établissement.
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`).
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.readmemo
 
 import fr.veryslopnynotes.pronote.ClientBase

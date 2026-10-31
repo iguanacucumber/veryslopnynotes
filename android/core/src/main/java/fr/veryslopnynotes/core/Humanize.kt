@@ -1,12 +1,10 @@
 package fr.veryslopnynotes.core
 
 // Humanize devoirs : VALIDATE -> RENDER avec gabarit versionne.
-// Port fidele de server/ai/humanize.ts (supprimé en #210 : ce port est la
-// source de vérité). Contenu = donnee, jamais instruction
-// (I6/I7) : RENDER pur, sans eval, sans execution du contenu, sans
-// reseau/outils/secrets (I4/I5). Version gabarit stockee par corrige ->
-// reproductibilite. Stdlib uniquement (serialisation via LlmGuard, pas d'org.json
-// pour rester compilable avec kotlinc seul dans le harnais de parite).
+// Contenu = donnee, jamais instruction (I6/I7) : RENDER pur, sans eval, sans
+// execution du contenu, sans reseau/outils/secrets (I4/I5). Version gabarit
+// stockee par corrige -> reproductibilite. Stdlib uniquement, compilable avec
+// kotlinc seul dans le harnais de parite.
 
 // ponytail: version en constante, jamais depuis externe. Upgrade: registre v2 si gabarit evolue.
 const val HUMANIZE_TEMPLATE_VERSION = "humanize-v1"
@@ -26,9 +24,8 @@ data class RenderedAnswerKey(
     val templateVersion: String,
 )
 
-// Stockage cle-valeur des corriges rendus (le TS prend un StorageProvider du
-// domaine : meme forme, octets UTF-8, cle bornee). Jeteurs synchrones : l'appelant
-// file sur disque hors thread UI.
+// Stockage cle-valeur des corriges rendus : octets UTF-8, cle bornee. Jeteurs
+// synchrones : l'appelant file sur disque hors thread UI.
 interface AnswerKeyStore {
     fun set(key: String, value: ByteArray)
     fun get(key: String): ByteArray?
@@ -37,9 +34,8 @@ interface AnswerKeyStore {
 private fun isNonEmptyString(v: String): Boolean = v.trim().isNotEmpty()
 
 object Humanize {
-    // VALIDATE : JSON deja parse -> corrige type. Rejette vide/trop long/sources invalides.
-    // Refus propre : l'appelant refuse avant si sources insuffisantes ; ici sources
-    // vides autorisees (rendu "aucune") pour rester pur et reproductible.
+    // VALIDATE : JSON deja parse -> corrige type. Sources vides autorisees
+    // (rendu « aucune ») pour rester pur et reproductible.
     fun validateAnswerKeyForRender(input: JsonValue): ValidatedAnswerKey {
         val obj = input as? JsonValue.Obj ?: throw AiError("corrigé invalide (VALIDATE)")
         val answer = jsonStrOf(obj, "answer")
@@ -51,10 +47,9 @@ object Humanize {
             // Champ ABSENT = corpus vide : autorisé (rendu "aucune").
             null -> emptyList()
             is JsonValue.Arr -> rawSources.items
-            // Champ présent mais MAL FORMÉ (chaîne, nombre, objet, null) : on
-            // REFUSE (#413). Avant, ce cas devenait une liste vide — la source
-            // invalide était confondue avec « aucune source », et le texte
-            // était présenté comme un corrigé validé, sans sources.
+            // Champ présent mais MAL FORMÉ : on REFUSE. Sinon la source invalide
+            // serait confondue avec « aucune source » et le texte présenté comme
+            // un corrigé validé, sans sources.
             else -> throw AiError("corrigé invalide : sources (VALIDATE)")
         }
         if (src.size > MAX_SOURCES) throw AiError("corrigé invalide : trop de sources (VALIDATE)")
@@ -70,15 +65,12 @@ object Humanize {
     }
 
     // I6 : corrige valide re-marque donnee avant tout usage IA/affichage.
-    // Utilise buildSafePrompt cote appelant ; ici marquage seul (Untrusted).
     fun markAnswerKeyForHumanize(answerKey: ValidatedAnswerKey): List<Untrusted<String>> {
         return listOf(markExternal(answerKey.answer)) + answerKey.sources.map { markExternal(it) }
     }
 
-    // RENDER pur (I7) : gabarit fixe, contenu insere litteralement.
-    // Aucune interpolation du contenu comme gabarit : answer/sources ne sont
-    // jamais evalues. Consommateur doit afficher text comme texte brut,
-    // jamais comme HTML/code.
+    // RENDER pur (I7) : gabarit fixe, contenu insere litteralement, jamais evalue.
+    // Le consommateur affiche text comme texte brut, jamais comme HTML/code.
     private fun renderV1(answerKey: ValidatedAnswerKey): String {
         val head = "Corrigé (gabarit humanize-v1)"
         val srcBlock = if (answerKey.sources.isEmpty()) {
@@ -103,12 +95,10 @@ object Humanize {
         return RenderedAnswerKey(text = renderV1(answerKey), templateVersion = templateVersion)
     }
 
-    // VALIDATE -> RENDER en un appel (entree = JSON parse, ex. sortie GENERATE).
     fun humanizeAnswerKey(input: JsonValue, templateVersion: String = HUMANIZE_TEMPLATE_VERSION): RenderedAnswerKey {
         return renderAnswerKey(validateAnswerKeyForRender(input), templateVersion)
     }
 
-    // Version stockee par corrige : JSON {text, templateVersion}, octets UTF-8.
     fun saveRenderedAnswerKey(store: AnswerKeyStore, id: String, rendered: RenderedAnswerKey): String {
         if (!isNonEmptyString(rendered.text)) throw AiError("rendu vide")
         if (rendered.templateVersion != HUMANIZE_TEMPLATE_VERSION) {

@@ -3,14 +3,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// agents/runtime/shot.sh + deep links de debug (issue #133). La capture
-// déterministe repose sur DEUX listes qui doivent rester d'accord :
-//   1. les `WEB_ROUTES` de `WebRouteState.kt` (les routes hash servies à la
-//      WebView — #400 : la liste est dans le fichier PUR, hors `android.*`),
-//   2. les `<data android:host>` du manifest DEBUG (qui rend l'URL ouvrable).
-// Un oubli ne plante rien : `am start` échoue ou l'app ouvre l'accueil en
-// silence. Ces tests sont la seule chose qui attrape la dérive — sans
-// téléphone, sans adb.
+// Deux listes doivent rester d'accord : WEB_ROUTES et les hôtes du manifest DEBUG.
 const ROOT = join(import.meta.dir, "..", "..");
 const WEB_ROUTE_STATE = readFileSync(
   join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/WebRouteState.kt"),
@@ -31,11 +24,7 @@ const ROUTES = [.../val WEB_ROUTES: Set<String> = setOf\(([\s\S]*?)\)/.exec(WEB_
   .map((m) => m[1]!)
   .map((route) => (route === "/" ? "index" : route.replace(/^\//, "")));
 
-/**
- * La table `ROUTE_WITNESSES` de shot.sh (#160) : `route|titre|fragments`, les
- * fragments alternatifs étant séparés par `;`. Lue dans la SOURCE du script —
- * c'est elle qu'une refonte doit mettre à jour, donc c'est elle qu'on vérifie.
- */
+/** Table `ROUTE_WITNESSES` de shot.sh : `route|titre|fragments` séparés par `;`. */
 const WITNESSES = new Map<string, { title: string; fragments: string[] }>(
   (SHOT.match(/ROUTE_WITNESSES='\n([\s\S]*?)\n'/)![1]!)
     .split("\n")
@@ -51,15 +40,13 @@ describe("deep links de debug (#133)", () => {
     for (const route of ROUTES) {
       expect(DEBUG_MANIFEST).toContain(`<data android:host="${route}" />`);
     }
-    // Un hôte de trop ouvrirait une route qui n'existe pas : l'URL est alors
-    // muette et l'app s'ouvre sur son écran de départ.
+    // Un hôte de trop ouvre une route inexistante : seule la page de départ s'affiche.
     const hosts = [...DEBUG_MANIFEST.matchAll(/android:host="([a-z-]+)"/g)].map(m => m[1]!);
     expect(hosts.sort()).toEqual([...ROUTES].sort());
   });
 
   test("le manifest DEBUG force singleTask et déclare VIEW/BROWSABLE", () => {
-    // standard + URL = nouvelle instance au-dessus de la tâche courante :
-    // deux écrans superposés, la capture montre l'ancien.
+    // standard + URL = deux écrans superposés : la capture montre l'ancien.
     expect(DEBUG_MANIFEST).toContain('android:launchMode="singleTask"');
     expect(DEBUG_MANIFEST).toContain('android:scheme="veryslopnynotes"');
     expect(DEBUG_MANIFEST).toContain("android.intent.action.VIEW");
@@ -67,20 +54,16 @@ describe("deep links de debug (#133)", () => {
   });
 
   test("le manifeste MAIN (donc la release) n'a AUCUN deep link", () => {
-    // L'invariant derrière tout le reste : l'APK publiable ne répond à aucune
-    // URL extérieure. Un intent-filter VIEW ici ouvrirait l'app depuis un site.
+    // L'APK publiable ne répond à aucune URL extérieure.
     expect(MAIN_MANIFEST).not.toContain("android.intent.action.VIEW");
     expect(MAIN_MANIFEST).not.toContain("veryslopnynotes://");
     expect(MAIN_MANIFEST).not.toContain('android:launchMode="singleTask"');
-    // Seul le filtre LAUNCHER reste, comme avant #133.
     expect(MAIN_MANIFEST).toContain("android.intent.category.LAUNCHER");
     expect((MAIN_MANIFEST.match(/<intent-filter>/g) ?? []).length).toBe(1);
   });
 
   test("chaque route déclarée a un témoin, et la table ne connaît que ces routes", () => {
-    // `route_known` sert aussi de liste blanche : une route sans témoin est
-    // refusée AVANT toute écriture, sinon shot.sh capturerait l'écran de
-    // départ en annonçant une réussite.
+    // `route_known` est aussi une liste blanche : refus avant toute écriture.
     const sansTemoin = ROUTES.filter(r => !WITNESSES.get(r)?.title);
     expect(sansTemoin).toEqual([]);
     expect([...WITNESSES.keys()].sort()).toEqual([...ROUTES].sort());
@@ -92,18 +75,16 @@ describe("deep links de debug (#133)", () => {
 describe("shot.sh (#133)", () => {
   test("lance par deep link, force-stop d'abord, et échoue bruyamment", () => {
     expect(SHOT).toContain("set -euo pipefail");
-    // Sans arrêt forcé, onNewIntent est ignoré (le NavController ne se
-    // reconstruit pas) : la capture montre l'écran précédent, en silence.
+    // Sans force-stop, onNewIntent est ignoré : la capture montre l'écran précédent.
     expect(SHOT).toContain("am force-stop");
     expect(SHOT).toContain('"$SCHEME://$ROUTE"');
-    // Chaque refus nomme ce qui N'A PAS été fait, et sort non nul.
     for (const refusal of [
       "aucun appareil prêt", // pas d'appareil
       "route inconnue", // route fantôme
       "capture NOIRE", // écran éteint
       "VERROUILLÉ", // code d'appareil
       "APPAIRAGE", // session absente
-      "NON PROUVÉE", // #160 : témoin périmé, écran peut-être bon
+      "NON PROUVÉE", // témoin périmé
       "instal", // refus d'installation
     ]) {
       expect({ refus: refusal, present: SHOT.includes(refusal) }).toEqual({
@@ -114,11 +95,8 @@ describe("shot.sh (#133)", () => {
   });
 
   test("détecte l'image noire et réveille l'écran avant de conclure", () => {
-    // Une capture non contrôlée ne vaut rien : trois outils essayés dans
-    // l'ordre, et échec si aucun n'est là.
-    // Trois outils, un seul import : ImageMagick d'abord (lit le PNG), puis
-    // ffmpeg et enfin bun/node sur le tampon BRUT (ce ffmpeg ne décode pas le
-    // PNG). Aucun disponible = la capture est REFUSÉE, pas acceptée.
+    // ImageMagick lit le PNG, puis ffmpeg, puis bun/node sur le tampon brut.
+    // Aucun outil = capture refusée.
     const corps = SHOT.slice(SHOT.indexOf("blank_verdict()"));
     expect(corps.indexOf("command -v identify")).toBeLessThan(corps.indexOf("command -v ffmpeg"));
     expect(corps.indexOf("command -v ffmpeg")).toBeLessThan(corps.indexOf("for rt in bun node"));
@@ -129,16 +107,14 @@ describe("shot.sh (#133)", () => {
   });
 
   test("ne désinstalle jamais l'app (la session appairée vaut un QR)", () => {
-    // Une désinstallation effacerait la session appairée (QR à rescaner) : le
-    // script doit échouer et laisser l'utilisateur trancher.
+    // Une désinstallation effacerait la session appairée (QR à rescaner).
     expect(SHOT).not.toMatch(/^\s*(adb|a)\s+(shell\s+)?pm\s+(uninstall|clear)/m);
     expect(SHOT).not.toMatch(/^\s*(adb|a)\s+uninstall/m);
   });
 
   test("les captures et les frames de référence ne sont jamais commitées", () => {
     const gitignore = readFileSync(join(ROOT, ".gitignore"), "utf8");
-    // L'écran d'accueil de l'appareil affiche le vrai nom, l'établissement,
-    // les devoirs et les notes : jamais dans le dépôt.
+    // L'écran d'accueil affiche le vrai nom, l'établissement, les notes.
     expect(gitignore).toContain("/shots/");
     expect(gitignore).toContain("/ref-papillon/");
   });
@@ -154,19 +130,7 @@ describe("shot.sh (#133)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// #151 : la capture doit montrer l'ARBRE DE TRAVAIL, pas un APK d'hier.
-//
-// Fixture : le VRAI shot.sh est
-// recopié dans un tmpdir avec un faux `gradlew` et un faux `adb`, donc aucun
-// téléphone, aucun SDK, aucun APK commité. Le faux gradlew « compile » en
-// recopiant `apk-content` : changer le code source du test change donc le sha
-// de l'APK, et le faux adb ne fait semblant d'avoir installé que ce sha-là.
-//
-// Ce qui est vérifié, c'est le CONTRAT, pas le rendu : Gradle construit, et
-// l'appareil est comparé par empreinte. C'est exactement ce que le code d'avant
-// ratait — sa comparaison de mtimes annonçait « à jour » sur un APK plus vieux
-// que les sources, donc la capture montrait l'ancienne interface sans le dire.
+// Fixture : le VRAI shot.sh recopié, avec un faux gradlew et un faux adb.
 
 const SHOT_SH = join(ROOT, "agents/runtime/shot.sh");
 const ENV_SH = join(ROOT, "agents/runtime/android-env.sh");
@@ -186,9 +150,7 @@ function fakeJdk(): string {
 
 /** Faux adb : journal + appareil unique + ce que shot.sh demande, rien d'autre. */
 const FAKE_ADB = `#!/bin/sh
-# \`installed-sha\` = ce que l'appareil croit faire tourner (vide au départ).
-# Basculeurs : NO_SHA = appareil sans sha256sum, REFUSAL = installation rejetée,
-# UI_DUMP_FAIL = \`uiautomator dump\` illisible (arbre d'interface non lu).
+# \`installed-sha\` = sha que l'appareil croit avoir ; bascules NO_SHA, REFUSAL, UI_DUMP_FAIL.
 set -u
 H="\${HARNESS:?}"
 printf '%s\\n' "adb $*" >> "$H/adb.log"
@@ -198,8 +160,7 @@ done
 cmd="\${1:-}"
 shift 2>/dev/null || true
 frame() {
-  # identify lit le PNG ; sans ImageMagick, blank_verdict retombe sur le tampon
-  # BRUT (256 octets = 8x8 RGBA), que tout le monde sait lire.
+  # Sans ImageMagick, blank_verdict lit le tampon brut (256 octets).
   if command -v identify >/dev/null 2>&1; then cat "$H/capture.png"; else
     p='\\\\377\\\\055\\\\125\\\\377'; s=''; while [ \${#s} -lt 256 ]; do s="$s$p"; done; printf "$s"
   fi
@@ -214,20 +175,16 @@ shell() {
       printf '%s  %s\\n' "$sha" "\${2:-base.apk}" ;;
     wm) printf 'Physical size: 8x8\\n' ;;
     uiautomator)
-      # #418 : dump ILLISIBLE = la capture ne peut pas être vérifiée.
+      # Dump illisible = capture non vérifiable.
       [ "\${UI_DUMP_FAIL:-0}" = 1 ] && { printf 'ERROR: could not get idle state.\\n' >&2; exit 1; }
       printf 'UI hierchary dumped to: %s\\n' "\${2:-/sdcard/ui.xml}" ;;
-    # #179 : la bascule de thème passe par là ; un refus doit faire échouer la
-    # capture, donc on peut aussi le simuler (THEME_REFUSAL=1).
+    # Un refus (THEME_REFUSAL=1) doit faire échouer la capture.
     cmd)
       [ "\${2:-}" = uimode ] || return 0
       [ "\${THEME_REFUSAL:-0}" = 1 ] && { printf 'cmd: Permission denied\\n' >&2; exit 1; }
       printf '%s\\n' "$*" >> "$HARNESS/uimode.log" ;;
     cat)
-      # #160 : le dump ne porte QUE les libellés du témoin de l'accueil (le
-      # titre de barre du haut « Accueil » + « DEVOIRS » d'une carte widget).
-      # Un fichier \`texts\` présent le remplace ligne par ligne : c'est ainsi
-      # qu'on rejoue un écran dont le texte a changé.
+      # Un fichier \`texts\` remplace le dump ligne par ligne.
       if [ -f "$H/texts" ]; then
         while IFS= read -r t; do printf '<node text="%s"/>' "$t"; done < "$H/texts"
         printf '\\n'
@@ -278,7 +235,7 @@ function harness(): {
   run: (args: string[], env?: Record<string, string>) => Run;
   /** Nouveau code « compilé » par la suite : le sha de l'APK change. */
   setApkContent: (content: string) => void;
-  /** Source plus récente que l'APK : l'état « périmé » de #151. */
+  /** Source plus récente que l'APK : l'état « périmé ». */
   touchSource: () => void;
   installedSha: () => string;
   captured: () => Buffer;
@@ -299,13 +256,7 @@ function harness(): {
   copyFileSync(join(dir, "apk-content"), join(apkDir, "app-debug.apk"));
   writeFileSync(join(dir, "bin/adb"), FAKE_ADB);
   chmodSync(join(dir, "bin/adb"), 0o755);
-  // `sleep` factice : shot.sh dort 1 s après le force-stop (sur un VRAI
-  // téléphone, le temps que l'activité meure). Ici il n'y a rien à laisser
-  // redémarrer, et les ~60 exécutions du script coûtaient ~60 s de sommeil
-  // mort — 95 % du temps de `bun test tests/unit`. Le script recopié reste
-  // intact : seul l'EXÉCUTANT change, comme pour adb/gradlew juste au-dessus.
-  // Aucun test ne mesure un délai : le contrat vérifié est l'empreinte APK,
-  // la route atteinte et la capture, jamais la vitesse.
+  // `sleep` factice : seul l'EXÉCUTANT change, le script recopié reste intact.
   writeFileSync(join(dir, "bin/sleep"), "#!/bin/sh\nexit 0\n");
   chmodSync(join(dir, "bin/sleep"), 0o755);
   writeFileSync(join(dir, "android/gradlew"), FAKE_GRADLEW);
@@ -386,14 +337,11 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
     const r = h.run(["index", "--wait", "0"]);
     expect(r.code).toBe(0);
     expect(r.out).toContain("shot : construction de l'APK debug");
-    // Aucun APK installé avant : l'appareil ne peut pas faire tourner l'empreinte
-    // qu'on vient de construire, donc on installe — puis on relit sur l'appareil.
+    // Aucun APK installé : on installe, puis on relit l'empreinte sur l'appareil.
     expect(r.installs).toEqual([sha256("APK v1\n")]);
     expect(h.installedSha()).toBe(sha256("APK v1\n"));
     expect(r.out).toContain("shot : route vérifiée (« Accueil » + « DEVOIRS »).");
-    // Le fichier existe et n'est pas vide. Son OCTET exact dépend de la machine
-    // (PNG si ImageMagick est là, tampon brut sinon) : blank_verdict, lui, vient
-    // de décider que l'image est rendue — c'est ce verdict qui compte.
+    // Le contenu exact dépend de la machine ; seul le verdict de blank_verdict compte.
     expect(h.captured().length).toBeGreaterThan(0);
   });
 
@@ -401,8 +349,7 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
     const h = harness();
     h.run(["index", "--wait", "0"]);
     const r = h.run(["index", "--wait", "0"]);
-    // Gradle est TOUJOURS lancé : c'est lui qui dit si l'APK est périmé, pas une
-    // comparaison de mtimes (inversée en #151 : « à jour » sur un APK périmé).
+    // Gradle est toujours lancé : c'est lui qui dit si l'APK est périmé.
     expect(r.gradle).toBe(1);
     expect(r.installs).toEqual([]);
     expect(r.out).toContain("installation évitée");
@@ -416,8 +363,7 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
     h.touchSource();
 
     const r = h.run(["index", "--wait", "0"]);
-    // Le défaut : aucune reconstruction, « installation évitée », et la capture
-    // montrait l'ancienne interface sans jamais le dire.
+    // Le défaut : aucune reconstruction, et la capture montrait l'ancienne interface.
     expect(r.gradle).toBe(1);
     expect(r.out).toContain("shot : construction de l'APK debug");
     expect(r.out).not.toContain("installation évitée");
@@ -463,8 +409,6 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
     expect(r.out).toContain("interface périmée");
   });
 
-  // #179 : sans bascule de thème, la recette sombre n'était pas rejouable —
-  // il fallait écrire `shared_prefs/settings.xml` à la main avant la capture.
   test("--theme : la bascule passe par l'appareil, le thème entre dans le nom", () => {
     const h = harness();
     for (const theme of ["dark", "light", "system"]) {
@@ -474,8 +418,7 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
       expect(readdirSync(join(h.dir, "shots", readdirSync(join(h.dir, "shots"))[0]!)))
         .toContain(`index.${theme}.png`);
     }
-    // Le fond du système, pas les préférences de l'app : rien n'entre dans ses
-    // données (session appairée, cache, thème choisi par l'utilisateur).
+    // Le fond système change, pas les données de l'app (session, cache, thème).
     const nuit = readFileSync(join(h.dir, "uimode.log"), "utf8").trim().split("\n");
     expect(nuit).toEqual(["cmd uimode night yes", "cmd uimode night no", "cmd uimode night auto"]);
     // Sans --theme, AUCUNE bascule : le réglage du téléphone reste le sien.
@@ -488,8 +431,7 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
     expect(refuse.code).toBe(1);
     expect(refuse.out).toContain("--theme hors valeur");
     expect(refuse.out).not.toContain("route vérifiée");
-    // Appareil qui refuse la bascule : échec BRUYANT, pas une capture du thème
-    // courant présentée comme la preuve du thème demandé.
+    // Appareil qui refuse la bascule : échec bruyant, pas le thème courant.
     const muet = h.run(["index", "--wait", "0", "--theme", "dark"], { THEME_REFUSAL: "1" });
     expect(muet.code).toBe(1);
     expect(muet.out).toContain("thème NON");
@@ -506,38 +448,24 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
     expect(r.out).not.toContain("route vérifiée");
   });
 
-  // #418 : un arbre d'interface ILLISIBLE est un ÉCHEC. Avant, `screen_texts`
-  // sortait en 0 après six échecs de `uiautomator dump`, `verify_route`
-  // prévenait « route NON VÉRIFIÉE » et rendait la MAIN en 0 : le script
-  // annonçait le chemin du PNG comme une capture réussie, alors qu'aucun
-  // témoin n'avait été lu. Le contrat du fichier est « échec BRUYANT, jamais
-  // de succès silencieux ».
   test("arbre d'interface illisible : ÉCHEC bruyant, jamais de succès silencieux", () => {
     const h = harness();
     const r = h.run(["index", "--wait", "0"], { UI_DUMP_FAIL: "1" });
-    // Le code de sortie EST l'échec : c'est lui que la CI et le make regardent.
     expect(r.code).not.toBe(0);
-    // Le motif est nommé, et la route est dite NON VÉRIFIÉE.
     expect(r.out).toContain("ILLISIBLE");
     expect(r.out).toContain("NON VÉRIFIÉE");
-    // Et surtout : aucune réussite maquillée.
     expect(r.out).not.toContain("route vérifiée");
     expect(r.out).not.toContain("AVERTISSEMENT");
-    // La capture reste sur le disque (preuve partielle), mais le script ne la
-    // présente PAS comme la preuve de la route.
+    // La capture reste sur le disque, sans être présentée comme preuve de la route.
     expect(h.captured().length).toBeGreaterThan(0);
   });
 
   test("le script ne masque plus l'échec de lecture dans le source", () => {
-    // Le défaut exact : `return 0` en fin de `screen_texts` (six échecs de
-    // dump = succès) et `return 0` en fin de `verify_route` (arborescence
-    // illisible = avertissement). Les deux sont des succès silencieux.
+    // Le défaut : `return 0` en fin de `screen_texts` et de `verify_route`.
     const corps = SHOT.slice(SHOT.indexOf("screen_texts()"));
     const lecture = corps.slice(0, corps.indexOf("\n}\n"));
-    // La DERNIÈRE ligne de `screen_texts` est un échec, pas un succès.
     expect(lecture.trimEnd().split("\n").at(-1)!.trim()).toBe("return 1");
-    // Après la branche « illisible », `verify_route` SORT en erreur avant
-    // tout `return 0` (le `return 0` de la route vérifiée est plus loin).
+    // Après « illisible », `verify_route` sort en erreur avant tout `return 0`.
     const verify = corps.slice(corps.indexOf("verify_route()"));
     const apres = verify.slice(verify.toLowerCase().indexOf("illisible"));
     const sortie = apres.indexOf("exit 1");
@@ -548,15 +476,13 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
   });
 
   test("pas de comparaison de mtimes : Gradle est l'autorité, l'empreinte la preuve", () => {
-    // Le motif exact du défaut #151 : `-newer "$APK"` décidait du build, et son
-    // inversion annonçait « à jour » sur un APK plus vieux que les sources. Un
-    // objet plutôt qu'un `not.toMatch` : sinon l'échec reprinted tout le script.
+    // Défaut : `-newer "$APK"` annonçait « à jour » sur un APK périmé.
+    // Un objet plutôt qu'un `not.toMatch` : sinon l'échec reprinted tout le script.
     expect({
       compareDesMtimes: /-newer\s+"?\$\{?APK/.test(SHOT),
       fonctionApkIsStale: SHOT.includes("apk_is_stale"),
     }).toEqual({ compareDesMtimes: false, fonctionApkIsStale: false });
-    // L'état « périmé » est écrit dans le code ET dans son aide, sinon le même
-    // défaut revient avec une autre formulation.
+    // L'état « périmé » est écrit dans le code ET dans son aide.
     expect({
       perime: SHOT.includes("périmé"),
       empreinte: SHOT.includes("sha256sum"),
@@ -565,20 +491,13 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
     }).toEqual({ perime: true, empreinte: true, installR: true, noBuild: true });
   });
 
-  // #536 : la route était interpolée SANS ÉCHAPPEMENT dans un `grep -E` :
-  // `ROUTE='.*'` matchait la PREMIÈRE ligne de la table (`index|Accueil`),
-  // donc une route INCONNUE passait la liste blanche. La capture était rangée
-  // sous `.*.png` et la vérification de titre comparait l'accueil à l'accueil :
-  // le script annonçait une capture « VÉRIFIÉE » d'un écran qui n'est pas la
-  // route demandée. La route est désormais comparée LITTÉRALEMENT.
   test("une route contenant un métacaractère est refusée comme route inconnue", () => {
     const h = harness();
     for (const route of [".*", "index|Accueil", "grades|tasks", "^index$"]) {
       const r = h.run([route, "--wait", "0"]);
       expect({ route, code: r.code }).toEqual({ route, code: 1 });
       expect(r.out).toContain("route inconnue");
-      // Aucune capture produite : une route inconnue est refusée AVANT toute
-      // écriture (pas de `shots/`, pas d'APK construit, pas d'installation).
+      // Refus avant toute écriture : pas de shots/, pas de build, pas d'installation.
       expect(r.out).not.toContain("route vérifiée");
       expect(r.gradle).toBe(0);
       expect(r.installs).toEqual([]);
@@ -587,8 +506,7 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
   });
 
   test("la route n'est plus interpolée dans une expression régulière", () => {
-    // La forme du défaut : `grep -E "^$1[|]"` (motif) au lieu d'une
-    // comparaison LITTÉRALE du premier champ.
+    // Forme du défaut : `grep -E "^$1[|]"` au lieu d'un champ comparé littéralement.
     expect(SHOT).not.toMatch(/grep\s+(-[a-zA-Z]+\s+)*-E[^\n]*\$\{?1/);
     expect(SHOT).not.toMatch(/grep\s+(-[a-zA-Z]+\s+)*-E[^\n]*\$\{?ROUTE/);
   });
@@ -596,16 +514,12 @@ describe("shot.sh : l'APK capturé est celui des sources (#151)", () => {
   test("les routes RÉELLES passent toujours la liste blanche", () => {
     const h = harness();
     for (const route of ROUTES) {
-      // La liste blanche EST la table : chaque route de l'app a un témoin.
       expect({ route, connu: WITNESSES.get(route)?.title }).toEqual({
         route,
         connu: expect.any(String),
       });
     }
-    // Une route RÉELLE n'est jamais refusée comme inconnue : le script va
-    // jusqu'à la capture (l'écran factice ne porte que l'accueil, donc la
-    // vérification d'écran échoue — c'est le refus de LISTE BLANCHE qu'on
-    // surveille ici, pas la présence de la capture).
+    // L'écran factice ne porte que l'accueil : seul le refus de liste blanche est surveillé ici.
     const r = h.run(["grades", "--wait", "0"]);
     expect(r.out).not.toContain("route inconnue");
     expect(r.out).not.toContain("Rien capturé");

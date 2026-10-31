@@ -1,11 +1,6 @@
-// Validateurs partagés par les contrats de `shared/contracts/models`.
-// Déplacés ici depuis `models.ts` lors de son découpage par domaine
-// (issue #716) : un seul endroit, importé par chaque domaine.
-
 /** Formes d'URL interdites dans une `ref` interne. */
 const ABSOLUTE_REF_RE = /:\/\/|^\/\/|data:|\\\\/i;
 
-/** Objet littéral non nul, non tableau. */
 export function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -15,12 +10,11 @@ export function isNonEmptyString(v: unknown): v is string {
   return typeof v === "string" && v.trim().length > 0;
 }
 
-/** Date ISO lisible : `Date.parse` TS fait foi (#366). */
+/** Date ISO lisible : `Date.parse` TS fait foi. */
 export function isIsoDate(v: unknown): v is string {
   return typeof v === "string" && !Number.isNaN(Date.parse(v));
 }
 
-/** Nombre fini. */
 export function isFiniteNumber(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
 }
@@ -30,7 +24,7 @@ export function isBoundedString(v: unknown, max: number): v is string {
   return typeof v === "string" && v.trim().length > 0 && v.length <= max;
 }
 
-/** Tableau de chaînes non vides, bornées, sans doublon trimmé. */
+/** Tableau non vide, sans doublon après trim. */
 export function isBoundedStringArray(
   v: unknown,
   maxItems: number,
@@ -48,7 +42,7 @@ export function isBoundedStringArray(
   return true;
 }
 
-/** Chaîne optionnelle, bornée quand présente. */
+/** Bornée en UTF-16, repli sur les points de code. */
 export function isOptionalBoundedString(v: unknown, max: number): v is string {
   return typeof v === "string" && (v.length <= max ? true : [...v].length <= max);
 }
@@ -58,7 +52,6 @@ export function isBoundedText(v: unknown, max: number): v is string {
   return typeof v === "string" && v.trim().length > 0 && [...v].length <= max;
 }
 
-/** Nombre fini ou null. */
 export function isNullableNumberOrNull(v: unknown): v is number | null {
   return v === null || isFiniteNumber(v);
 }

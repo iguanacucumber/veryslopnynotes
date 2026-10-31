@@ -1,23 +1,8 @@
-// BridgeExecutorsMain.kt — pilote JSON des exécuteurs du pont (#393).
+// BridgeExecutorsMain.kt — pilote JSON des exécuteurs du pont.
 //
-// OUTIL DE TEST uniquement : compilé par
-// `tests/unit/kotlin-bridge-executors.test.ts` (jamais par Gradle, jamais dans
-// l'APK). Le test compile la VRAIE classe de production
-// `fr.veryslopnynotes.app.BridgeExecutors` (logique pure, sans Android) et la
-// pilote ici : les deux critères du #393 — le pont ne fait PAS la queue (un
-// appel court répond pendant que des appels longs sont en vol) ; les opérations
-// LLM ont leur PROPRE file, bornée — portent donc sur du code exécuté, pas
-// sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-bridge-executors.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE (op inconnue, `qid` absent) sont préfixées `pilote: ` et
-// refusées par le test.
-//
-// Les travaux « lents » sont GATED : ils ne finissent qu'après `execRelease`.
-// Les scénarios sont donc déterministes (aucun sleep de course) : on empile
-// les soumissions, on attend qu'elles soient DÉMARRÉES, on mesure l'appel
-// court, on libère.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.bridgeexec
 
 import fr.veryslopnynotes.app.BridgeExecutors

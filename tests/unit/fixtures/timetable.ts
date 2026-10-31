@@ -1,14 +1,11 @@
-// Fixtures 100 % synthétiques #76 (EDT semaine). Aucun secret, aucun hôte réel,
-// aucune donnée d'établissement : salles/profs/horaires inventés, matières
-// "-Fake". Les cours annulé/déplacé servent à tester l'affichage des statuts.
+// 100 % synthétique : salles/profs/horaires inventés, matières "-Fake".
 import type { TimetableEntry } from "../../../shared/contracts/models";
 
 export const syntheticTimetableAccountId = "acc-fake-1";
 
 /**
- * Cours d'une semaine type. 2026-10-05 = lundi. Les heures locales sont
  * 08:00 Paris = 06:00Z (UTC+2 été) : les bornes de semaine et l'heure
- * d'affichage sont donc testables sans dépendre de Date.now().
+ * d'affichage sont testables sans dépendre de Date.now().
  */
 export const syntheticTimetableEntries: TimetableEntry[] = [
   {
@@ -53,5 +50,4 @@ export const syntheticTimetableEntries: TimetableEntry[] = [
   },
 ];
 
-/** Payload /v1/timetable conforme au contrat (avec et sans champs #76). */
 export const syntheticTimetablePayload = { entries: syntheticTimetableEntries };

@@ -6,8 +6,6 @@ import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDateTime
 
-// Emploi du temps : payload `timetable`.
-
 private fun lessonStatusOf(l: fr.veryslopnynotes.pronote.Lesson): String? {
     if (l.canceled) return "cancelled"
     val raw = (l.status ?: "").trim().take(40)
@@ -19,7 +17,7 @@ private fun lessonStatusOf(l: fr.veryslopnynotes.pronote.Lesson): String? {
     return null
 }
 
-/** Semaine demandée ou -7/+7 jours (miroir `getTimetable`). */
+/** Semaine demandée, sinon -7/+7 jours. */
 internal fun timetablePayload(client: Client, query: Map<String, String>, now: LocalDateTime = LocalDateTime.now()): String {
     val win = weekWindow(query)
     val from = if (win != null) {

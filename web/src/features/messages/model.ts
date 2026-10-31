@@ -1,12 +1,6 @@
-// Logique affichable de la messagerie (miroir web de MessagesLogic.kt et de
-// DiscussionsRepository.kt). Pure : aucun état, aucun réseau, aucun React —
-// donc testable sans téléphone depuis tests/web/social.test.ts.
-//
-// Les payloads sont ceux du pont natif : `{"discussions":[]}`, `{"messages":[]}`,
-// `{"recipients":[]}`. Le pont factice de `web/src/bridge/mock.ts` publie la
-// même donnée sous `{"items":[]}` : on accepte les deux formes, jamais un
-// troisième schéma inventé. Tout texte reste une DONNÉE (React l'échappe) —
-// aucun HTML n'est construit ni interprété.
+// Messagerie pure : aucun état, aucun réseau, aucun React. Les payloads du pont
+// natif (`discussions`, `messages`, `recipients`) ou l'enveloppe `items` du pont
+// factice sont acceptés. Tout texte reste une DONNÉE (React l'échappe).
 import { cleanText, parseInstant } from "../../lib/format";
 import { subjectKey } from "../../lib/subject";
 
@@ -32,13 +26,10 @@ export interface Discussion {
   subject: string;
   participants: string[];
   unreadCount: number;
-  /** Date du dernier message : null = inconnue (jamais devinée). */
+  /** Date du dernier message : null = inconnue, jamais devinée. */
   lastMessageAt: string | null;
-  /**
-   * Fraîcheur du fil : null = INCONNUE (#427). Le producteur natif OMET le
-   * champ quand il n'a pas pu dater le fil : une date « maintenant » ferait
-   * remonter les plus anciens fils en tête de la liste.
-   */
+  /** null = fraîcheur INCONNUE : le natif omet le champ ; une date « maintenant »
+   *  ferait remonter les fils les plus anciens en tête. */
   updatedAt: string | null;
 }
 
@@ -97,9 +88,6 @@ function payloadRoot(payload: string | null): Record<string, unknown> | null {
   }
 }
 
-/** Instant d'un ISO du contrat, ou null s'il est illisible. Les deux formes
- *  sont admises : instant complet et date seule (minuit local). L'analyseur
- *  est partagé avec le reste du web. */
 export { parseInstant };
 
 export function parseDiscussions(payload: string | null): Discussion[] {
@@ -132,9 +120,8 @@ export function parseDiscussions(payload: string | null): Discussion[] {
       participants: participants.slice(0, MAX_PARTICIPANTS),
       unreadCount: unread,
       lastMessageAt,
-      // Fraîcheur INCONNUE = null (jamais « maintenant », jamais une date
-      // devinée) : le champ est absent du payload quand le natif n'a pas pu
-      // dater le fil. Repli sur le dernier message quand il est connu.
+      // Fraîcheur inconnue = null, jamais « maintenant » ; repli sur le dernier
+      // message quand il est connu.
       updatedAt: updatedAt || lastMessageAt,
     });
   }
@@ -149,17 +136,8 @@ function attachmentValid(a: MessageAttachment): boolean {
   return true;
 }
 
-/**
- * Le payload est-il LISIBLE ? (#537)
- *
- * Un JSON illisible n'est PAS un fil vide : l'écran doit le dire (erreur),
- * jamais « Ce fil est vide » (I14 : « invalide » n'est jamais « vide »). Le
- * parseur reste TOLÉRANT (aucun crash, aucun message) ; c'est l'écran qui
- * distingue « illisible » de « vide ».
- *
- * `null` = aucun payload : l'appelant le traite à part (« pas de cache » et
- * « cache illisible » ne sont pas la même chose).
- */
+/** Un JSON illisible n'est PAS un fil vide (I14 : « invalide » ≠ « vide »).
+ *  `null` = aucun payload, traité à part par l'appelant. */
 export function isMessagesPayloadReadable(payload: string | null): boolean {
   if (payload === null) return false;
   return payloadRoot(payload) !== null;
@@ -201,13 +179,8 @@ export function parseMessages(payload: string | null): DiscussionMessage[] {
   return out;
 }
 
-/**
- * Participants d'un fil OUVERT (#476) : ils arrivent avec ses messages.
- *
- * La LISTE ne les porte plus (les noms seraient douze requêtes de plus pour
- * un écran qui les affiche à peine) : une recherche par nom de participant ne
- * porte donc plus sur la liste, les noms arrivent à l'ouverture du fil.
- */
+/** Participants d'un fil OUVERT : la liste ne les porte plus, une recherche par
+ *  nom ne porte donc que sur la liste. */
 export function parseParticipants(payload: string | null): string[] {
   const root = payloadRoot(payload);
   if (!root) return [];
@@ -247,19 +220,9 @@ export function discussionMillis(d: Discussion): number | null {
   return parseInstant(d.lastMessageAt) ?? parseInstant(d.updatedAt);
 }
 
-/**
- * Tri du plus récent au plus ancien.
- *
- * Règle (#427) : un fil DATED est plus frais qu'un fil de fraîcheur INCONNUE
- * (il passe devant) ; deux fils de fraîcheur inconnue gardent l'ORDRE
- * D'ARRIVÉE — le comparateur renvoie 0 et le tri est stable, donc
- * l'établissement garde la main sur l'ordre qu'il a publié. (Trier ces fils
- * par `id` les mélangerait ; les dater de « maintenant » les ferait remonter
- * en tête, ce qui est pire encore.)
- *
- * Deux fils datés à la MÊME instant restent départagés par `id` (ordre
- * déterministe, indépendant de l'ordre d'arrivée).
- */
+/** Tri du plus récent au plus ancien. Un fil daté passe avant un fil de fraîcheur
+ *  inconnue ; deux fils inconnus gardent l'ordre d'arrivée (tri stable), deux fils
+ *  datés au même instant sont départagés par `id`. */
 export function sortDiscussions(list: Discussion[]): Discussion[] {
   return [...list].sort((a, b) => {
     const am = discussionMillis(a);
@@ -272,7 +235,6 @@ export function sortDiscussions(list: Discussion[]): Discussion[] {
   });
 }
 
-/** Minuscules, sans accents : même normalisation que la clé des matières. */
 export function foldForSearch(value: string): string {
   return subjectKey(value);
 }
@@ -287,7 +249,6 @@ export function searchDiscussions(list: Discussion[], query: string): Discussion
   return sortDiscussions(list.filter((d) => discussionMatches(d, query)));
 }
 
-/** Compteur affichable : jamais négatif, inconnu = aucun badge. */
 export function unreadBadgeCount(d: Discussion): number {
   return d.unreadCount > 0 ? d.unreadCount : 0;
 }
@@ -368,7 +329,6 @@ const DATE_TIME = new Intl.DateTimeFormat("fr-FR", {
   minute: "2-digit",
 });
 
-/** Date longue française, chaîne vide si la date est illisible. */
 export function formatLongDate(value: string | number | null | undefined): string {
   const ms = typeof value === "number" ? value : parseInstant(value);
   if (ms === null || !Number.isFinite(ms)) return "";
@@ -379,7 +339,6 @@ export function formatLongDate(value: string | number | null | undefined): strin
   }
 }
 
-/** Date et heure longues : l'horodatage d'un message. */
 export function formatDateTime(value: string | number | null | undefined): string {
   const ms = typeof value === "number" ? value : parseInstant(value);
   if (ms === null || !Number.isFinite(ms)) return "";

@@ -4,15 +4,9 @@ import fr.veryslopnynotes.data.SubjectPrefField
 import fr.veryslopnynotes.data.SubjectPrefRules
 
 /**
- * Phrases de refus d'une matière hors contrat (#395).
- *
- * Le pont traverse la frontière native/JS : ce qui sort ne peut être qu'une
- * phrase BORNÉE, choisie ici — jamais l'entrée brute (une couleur de 256 Ko
- * ne franchit pas la frontière) et jamais un message d'exception. La phrase
- * dit POURQUOI la matière est refusée, pour que l'élève corrige sa saisie.
- *
- * Fichier PUR (ni `android.*`, ni `org.json`) : le harnais de parité le
- * compile et l'EXÉCUTE, comme `PairingMessages.kt` et `HomeworkMessages.kt`.
+ * Ce qui traverse le pont est une phrase BORNÉE choisie ici : jamais l'entrée
+ * brute (une couleur de 256 Ko ne franchit pas la frontière) ni un message
+ * d'exception. Fichier PUR : le harnais de parité l'exécute.
  */
 fun subjectPrefIssueMessage(field: SubjectPrefField): String = when (field) {
     SubjectPrefField.SUBJECT ->

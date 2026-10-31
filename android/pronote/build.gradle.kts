@@ -1,13 +1,6 @@
-// Module pronote : protocole PRONOTE (port Kotlin #200, zéro dépendance).
-//
-// Parle au serveur de l'établissement EN DIRECT (handshake RSA-1024 +
-// AES-128-CBC, POST chiffrés/compressés, cookies, redirects manuelles) : c'est
-// le SEUL module Android autorisé à le faire (I1 repointé, cf. ADR-003 quand
-// elle existera). Aucune dépendance : stdlib Kotlin + plateforme Java
-// (`javax.crypto`, `java.util.zip`, `java.net`) déjà sur API 26.
-//
-// Les appels réseau sont BLOQUANTS (pas de coroutines sans dépendance) : ne
-// jamais appeler sur le thread UI, le client (#201) s'en charge.
+// Module pronote : SEUL module autorisé à parler au serveur de l'établissement
+// (I1). Zéro dépendance : stdlib Kotlin + plateforme Java sur API 26.
+// Les appels réseau sont BLOQUANTS : jamais sur le thread UI.
 plugins {
     id("com.android.library")
 }

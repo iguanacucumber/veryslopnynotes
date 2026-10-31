@@ -1,15 +1,11 @@
-// #400 : la route de l'interface survit à la recréation de l'activité.
+// La route de l'interface survit à la recréation de l'activité : rotation,
+// changement de configuration ou mort du process recréent la WebView. La route
+// vit dans le HASH de l'URL (`HashRouter`), donc sans état sauvegardé
+// l'utilisateur retombe sur l'accueil.
 //
-// Rotation de l'écran, changement de configuration, mort du processus : dans
-// les trois cas l'activité est RECRÉÉE, donc la WebView repart de zéro. Or la
-// route vit dans le HASH de l'URL (`web/src/main.tsx` : `HashRouter`) : sans
-// état sauvegardé, l'utilisateur retombait sur l'accueil.
-//
-// Ce test garde les CONTRATS structurels (identifiant stable, source pure
-// rejouée par la parité, routeur en hash). Le câblage de la sauvegarde et de la
-// restauration dans l'activité, comme l'unicité de la liste des routes, n'est
-// plus épinglé au texte des appels : un refactor à comportement identique doit
-// passer. Ces points restent des conventions de relecture.
+// Ce test garde les CONTRATS structurels (identifiant stable, source pure rejouée
+// par la parité, routeur en hash) ; le câblage exact reste une convention de
+// relecture, pour qu'un refactor à comportement identique passe.
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -22,35 +18,29 @@ const IDS = join(ROOT, "android/app/src/main/res/values/ids.xml");
 
 describe("la route survit à la recréation de l'activité (#400)", () => {
   test("la WebView a un identifiant STABLE", () => {
-    // L'état d'une vue est indexé par son identifiant : un id régénéré à
-    // chaque lancement ne survivrait pas à la recréation, et l'état de la
-    // WebView ne serait jamais retrouvé. L'identifiant est déclaré une fois
-    // dans les ressources ; son affectation à la vue reste une convention de
-    // relecture.
+    // L'état d'une vue est indexé par son identifiant : un id régénéré à chaque
+    // lancement ne survivrait pas à la recréation.
     const ids = readFileSync(IDS, "utf8");
     expect(ids).toContain('<item name="web_view" type="id" />');
   });
 
   test("la logique de route est PURE : elle est compilée et rejouée par la parité", () => {
-    // Aucun `android.*` : le fichier se compile seul sous `kotlinc`, donc le
-    // harnais de parité rejoue le VRAI code (et pas un miroir TS).
+    // Aucun `android.*` : le fichier se compile seul sous `kotlinc`, le harnais
+    // de parité rejoue donc le VRAI code.
     const route = readFileSync(ROUTE_STATE, "utf8");
     expect(route).not.toMatch(/^import\s+android\./m);
-    // Et il est bien dans les sources de production du port de parité.
     const sources = readFileSync(join(ROOT, "tests/unit/fixtures/parity-sources.ts"), "utf8");
     expect(sources).toContain('"WebRouteState.kt"');
   });
 
   test("la route de l'interface est dans le HASH de l'URL", () => {
-    // Le socle du correctif : le repli natif relit la route dans le
-    // FRAGMENT de l'URL. Si le routeur quittait le hash, la route deviendrait
-    // illisible et la rotation ramènerait l'utilisateur sur l'accueil — en
-    // silence, sans la moindre erreur.
+    // Le repli natif relit la route dans le FRAGMENT de l'URL : si le routeur
+    // quittait le hash, la rotation ramènerait l'utilisateur sur l'accueil.
     const main = readFileSync(join(ROOT, "web", "src", "main.tsx"), "utf8");
     expect(main).toContain("HashRouter");
     expect(main).not.toContain("BrowserRouter");
-    // Les routes sont des CHEMINS ABSOLUS : c'est le format que le natif lit.
-    // (« * » est le filet de sécurité du routeur, pas une route servie.)
+    // CHEMINS ABSOLUS : c'est le format que le natif lit (« * » est le filet du
+    // routeur, pas une route servie).
     const app = readFileSync(join(ROOT, "web", "src", "App.tsx"), "utf8");
     const routes = [...app.matchAll(/<Route path="([^"]+)"/g)]
       .map((m) => m[1]!)

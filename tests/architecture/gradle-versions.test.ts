@@ -1,11 +1,7 @@
-// tests/architecture/gradle-versions.test.ts — #624 : une seule version Kotlin.
-//
-// `android/gradle/libs.versions.toml` est la source unique des versions Gradle.
-// Trois endroits peuvent la contredire : un littéral de dépendance dans un
-// build.gradle.kts, un classpath Kotlin qui réintroduit sa propre version, ou la
-// CI qui télécharge un `kotlinc` d'une autre version. Chacun fait échouer ce
-// test en nommant le fichier et la valeur fautive : une version changée à UN
-// seul endroit ne peut pas passer le gate en silence.
+// Une seule version Kotlin : `android/gradle/libs.versions.toml` est la source
+// unique. Trois endroits peuvent la contredire — un littéral dans un
+// build.gradle.kts, un classpath Kotlin, la CI qui télécharge un `kotlinc` — et
+// chacun fait échouer ce test en nommant le fichier fautif.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -31,27 +27,23 @@ interface Catalog {
 
 const catalog = Bun.TOML.parse(read(CATALOG)) as Catalog;
 
-/** Dépendances `group:artifact:version` écrites en dur dans un build script. */
 function hardcodedDependencies(script: string): string[] {
   // La version doit être un LITTÉRAL : `:${libs.versions.x.get()}` n'a pas de
   // chiffre après le dernier `:` et ne matche donc pas.
   return [...script.matchAll(/["']([\w.-]+:[\w.-]+):([\d][^"']*)["']/g)].map((m) => `${m[1]}:${m[2]}`);
 }
 
-/** Versions de plugins écrites en dur (`id("…") version "1.2.3"`). */
 function hardcodedPluginVersions(script: string): string[] {
   return [...script.matchAll(/\bversion\s+"([\d][^"]*)"/g)].map((m) => m[1]!);
 }
 
-/** Version Kotlin que le classpath racine met sur le chemin de compilation. */
 function rootKotlinVersion(script: string): string | undefined {
-  // Le classpath lit le catalogue ; un littéral serait une seconde source et
-  // est déjà refusé par le test « aucun en dur ».
+  // Le classpath lit le catalogue ; un littéral serait une seconde source,
+  // déjà refusé par le test « aucun en dur ».
   const lit = /kotlin-gradle-plugin:\$\{libs\.versions\.kotlin\.get\(\)\}/.test(script);
   return lit ? catalog.versions.kotlin : undefined;
 }
 
-/** Version Kotlin que la CI télécharge (`env.KOTLIN_VERSION`). */
 function ciKotlinVersion(ci: string): string | undefined {
   return /^\s*KOTLIN_VERSION:\s*"?([\d][^"'\s]*)"?\s*$/m.exec(ci)?.[1];
 }
@@ -67,8 +59,7 @@ describe("versions Gradle : catalogue seul (#624)", () => {
       const ok = typeof version === "string" || (ref !== undefined && Boolean(catalog.versions[ref]));
       if (!ok) nonResolus.push(alias);
     }
-    // Un `version.ref` mort fait échouer Gradle avec un message obscur :
-    // on le nomme ici.
+    // Un `version.ref` mort fait échouer Gradle avec un message obscur.
     expect(nonResolus).toEqual([]);
   });
 
@@ -85,8 +76,8 @@ describe("versions Gradle : catalogue seul (#624)", () => {
 
   test("la version Kotlin est la MÊME au catalogue, au classpath racine et en CI", () => {
     const catalogue = catalog.versions.kotlin;
-    // `noUncheckedIndexedAccess` type l'entrée `Record<string, string>` en
-    // `string | undefined` : on nomme l'absence au lieu de propager le type.
+    // `noUncheckedIndexedAccess` type l'entrée en `string | undefined` : on
+    // nomme l'absence au lieu de propager le type.
     if (catalogue === undefined) throw new Error(`${CATALOG} : version Kotlin absente`);
     const racine = rootKotlinVersion(read(ROOT_BUILD));
     const ci = ciKotlinVersion(read(CI));
@@ -105,7 +96,6 @@ describe("versions Gradle : catalogue seul (#624)", () => {
     const ci = read(CI);
     expect(ci).toContain("kotlinc-${{ env.KOTLIN_VERSION }}");
     expect(ci).toContain('version="$KOTLIN_VERSION"');
-    // Un littéral recopié (2.4.21) ne suivrait plus le catalogue.
     expect(ci).not.toMatch(/kotlinc-\d/);
     expect(ci).not.toMatch(/^\s*version=\d/m);
   });

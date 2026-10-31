@@ -68,13 +68,6 @@ function grade(partial: Partial<Grade> & Pick<Grade, "subject" | "value" | "scal
   };
 }
 
-/** Le balisage de la carte d'accueil : du bloc de tuiles à la fin de la carte. */
-function heroStats(source: string): string {
-  const debut = source.indexOf('className="home-hero__stats"');
-  expect(debut).toBeGreaterThan(-1);
-  return source.slice(debut, source.indexOf("</Card>", debut));
-}
-
 describe("parseTimetable", () => {
   const payload = JSON.stringify({
     entries: [
@@ -322,49 +315,39 @@ describe("compteurs de l'accueil (#571)", () => {
     expect(upcomingCount(parseTimetable(null), now)).toBe(0);
   });
 
-  test("la carte d'accueil affiche les compteurs, pas la longueur des listes bornées", () => {
+  test("les compteurs viennent des listes complètes, pas des widgets bornés", () => {
     const source = readFileSync(
       join(import.meta.dir, "..", "..", "web", "src", "features", "home", "HomeScreen.tsx"),
       "utf8",
     );
-    // Les compteurs sont calculés sur TOUTES les données…
     expect(source).toContain("pendingCount(assignments)");
     expect(source).toContain("upcomingCount(lessons, now)");
-    // …et la carte affiche le compte VRAI, plus jamais la longueur d'une
-    // liste BORNÉE à deux.
-    const stats = heroStats(source);
-    expect(stats).toContain("tasksTotal");
-    expect(stats).not.toContain(".length");
-  });
-
-  // #566 : la tuile « À venir » quitte la carte d'accueil — elle doublait le
-  // widget « Devoirs » et l'onglet « Cours ».
-  test("la carte d'accueil ne montre plus la tuile « À venir » (#566)", () => {
-    const source = readFileSync(
-      join(import.meta.dir, "..", "..", "web", "src", "features", "home", "HomeScreen.tsx"),
-      "utf8",
-    );
-    const stats = heroStats(source);
-    // La tuile elle-même : ni le libellé, ni son compteur.
-    expect(stats).not.toContain("À venir");
-    expect(stats).not.toContain("upcomingTotal");
-    // Les deux tuiles qui restent : « Moyenne » et « À faire ».
-    expect(stats).toContain("Moyenne");
-    expect(stats).toContain("À faire");
-    expect(stats).toContain("tasksTotal");
-    // Le compteur des cours reste vivant : il décide si l'accueil a des données.
+    // Le compte VRAI des devoirs tient l'en-tête du widget, pas `tasks.length`.
+    expect(source).toContain("total={tasksTotal}");
+    expect(source).not.toContain("total={tasks.length}");
     expect(source).toContain("upcomingTotal > 0");
   });
 
-  // #566 : la grille des tuiles tient deux colonnes — pas de troisième vide.
-  test("la grille des tuiles de l'accueil tient deux colonnes (#566)", () => {
+  test("l'accueil suit la structure Papillon : tuiles, cours, moyenne, devoirs", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "features", "home", "HomeScreen.tsx"),
+      "utf8",
+    );
+    const ordre = ["<QuickActions", "<CourseWidget", "<AverageWidget", "<TasksWidget"].map((tag) =>
+      source.indexOf(tag),
+    );
+    expect(ordre.every((index) => index > -1)).toBe(true);
+    expect([...ordre].sort((a, b) => a - b)).toEqual(ordre);
+    expect(source).not.toContain("home-hero");
+  });
+
+  test("les raccourcis de l'accueil forment une grille de deux colonnes", () => {
     const css = readFileSync(
       join(import.meta.dir, "..", "..", "web", "src", "features", "home", "home.css"),
       "utf8",
     );
-    const regle = /\.home-hero__stats\s*\{\s*display:\s*grid;([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
-    expect(regle).toContain("grid-template-columns: 1.25fr 1fr;");
-    expect(regle).not.toContain("1fr 1fr 1fr");
+    const regle = /\.home-actions\s*\{\s*display:\s*grid;([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    expect(regle).toMatch(/grid-template-columns:\s*repeat\(2,/);
   });
 });
 

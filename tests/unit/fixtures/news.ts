@@ -1,6 +1,4 @@
-// Fixtures 100 % synthétiques #79 (actualités établissement).
-// Aucun secret, aucun hôte réel, aucune donnée perso. Le corps "injection"
-// est une DONNÉE à afficher (I6), jamais exécutée ni interprétée.
+// Corps "injection" = DONNÉE à afficher (I6), jamais exécutée ni interprétée.
 export const syntheticNewsAccountId = "acc-fake-1";
 
 export const syntheticNewsItem = {

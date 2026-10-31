@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- #135 : thème de la FENÊTRE, pas celui de l'interface.
-         Le frontend React (WebView) peint sa propre UI ; ce thème ne sert
-         qu'au fond de fenêtre et à la couleur du splash avant le premier
-         rendu. Il n'y a donc ni barre d'action, ni thème d'interface ici.
-         Variante claire ici, variante sombre dans `values-night/` : sinon une
-         app en thème sombre s'ouvre sur un fond de fenêtre clair. -->
+    <!-- Thème de FENÊTRE : la WebView peint sa propre UI, ceci ne sert qu'au fond
+         et au splash. Variante sombre dans `values-night/`. -->
     <style name="Theme.Veryslopynotes" parent="@android:style/Theme.Material.Light.NoActionBar" />
 </resources>

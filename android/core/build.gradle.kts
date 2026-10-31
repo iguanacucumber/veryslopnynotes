@@ -1,5 +1,4 @@
-// Module core : config hôte unique + garde allowlist (I1).
-// Aucune dépendance réseau ici, aucun hôte tiers.
+// Module core : config hôte unique + garde allowlist (I1), sans réseau.
 plugins {
     id("com.android.library")
 }

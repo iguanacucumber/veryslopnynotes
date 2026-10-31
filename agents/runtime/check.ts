@@ -1,39 +1,24 @@
-// check.ts — `make check` : les 9 étapes tournent EN MÊME TEMPS, une sortie par étape.
+// check.ts — `make check` : les 9 étapes tournent EN MÊME TEMPS.
 //
-// Avant : 7 cibles en séquence = 168 s (unit 70 s + Gradle 95 s + 2 s de tsc).
-// Chaque étape est indépendante (lint / typecheck / tests / architecture /
-// contrats / compilation Gradle + Android Lint / typecheck web / tests web —
-// le build Vite est tiré par `architecture`, cf. Makefile) :
-// la seule limite est le cœur, et il y en a 16.
+// SOURCE UNIQUE : chaque étape est une cible du Makefile invoquée `make -s`,
+// jamais dupliquée ici (sinon `make unit` divergerait de `make check`). Ce
+// script n'ajoute que le parallélisme et le résumé (log en mémoire, affiché à
+// la fin de l'étape).
 //
-// SOURCE UNIQUE : chaque étape est une cible du Makefile, invoquée `make -s`,
-// donc une recette écrite une fois, jamais dupliquée ici (sinon `make unit`
-// finirait par diverger de `make check`). Ce script n'ajoute que le
-// PARALLÉLISME + le RAPOINTI (log mémoire par étape, affiché à la fin de
-// l'étape : l'intercalage de 68 lignes Gradle au milieu des tests ne se lit
-// pas).
-//
-// Sortie : `✔`/`✘` + durée par étape, la dernière ligne utile en succès, la
-// FIN du log en échec (le fichier complet est écrit et son chemin imprimé).
-// Un log contenant « SKIP » est affiché entier même en
-// succès : la règle du repo est le SKIP BRUYANT, jamais un faux vert (même
-// philosophie que `make android-compile` sans JDK/SDK).
+// Sortie : `✔`/`✘` + durée, dernière ligne utile en succès, FIN du log en
+// échec (le fichier complet est écrit et son chemin imprimé). Un log contenant
+// « SKIP » est affiché entier même en succès : SKIP BRUYANT, jamais de faux
+// vert.
 // ponytail: pas de timeout ni de retry (une étape lente n'est pas une étape
-// fausse) ni de filtre par étape — `make <cible>` existe déjà pour ça.
+// fausse) ni de filtre par étape — `make <cible>` existe déjà.
 //
-// LISTE D'ÉTAPES FIXE. `CHECK_TARGETS` ne la remplace QUE si l'opt-in
-// explicite `CHECK_HARNESS=1` est posé (usage interne : `make check-fast`,
-// harnais de test). Sans opt-in, la variable est REFUSÉE et signalée : un
-// `CHECK_TARGETS=lint` glissé dans l'environnement (shell, CI, `agents/ship.sh`
-// qui en hérite) ne peut pas remplacer les 9 étapes par un scan de secrets et
-// faire passer le gate en vert (#368).
-// `--plan` : affiche le plan résolu et sort SANS lancer les étapes (lecture du
-// plan, jamais un gate).
+// LISTE D'ÉTAPES FIXE : `CHECK_TARGETS` n'est honoré qu'avec l'opt-in
+// `CHECK_HARNESS=1` (usage interne). Sinon il est REFUSÉ et signalé : un
+// `CHECK_TARGETS=lint` hérité de l'environnement ne peut pas réduire le gate à
+// un scan de secrets.
 //
-// MAKEFLAGS (#523) : chaque étape est un `make` ENFANT, et `make -i` (ou
-// `MAKEFLAGS=-i`) fait IGNORER l'échec d'une recette : l'enfant rendrait une
-// étape ROUGE verte. Les enfants sont donc lancés SANS `MAKEFLAGS` — les
-// seules options sont celles qu'on passe en ligne de commande.
+// MAKEFLAGS neutralisé : chaque étape est un `make` ENFANT, et `make -i` fait
+// IGNORER l'échec d'une recette — l'enfant rendrait une étape ROUGE verte.
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -42,11 +27,7 @@ import { join, resolve } from "node:path";
 const ROOT = process.argv[2] ? resolve(process.argv[2]) : join(import.meta.dir, "..", "..");
 
 /** Ordre de départ : le plus long d'abord, pour que le dernier fini soit bref.
- *  `web` était une cible unique qui sérialisait typecheck + tests + build
- *  (5,2 s à elle seule) : ses trois composants sont maintenant des étapes.
- *  #654 : plus de `web-build` ici — `architecture` le tire dans le Makefile
- *  (un seul Vite par gate, l'artefact construit une fois puis vérifié in
- *  situ par web-mock). */
+ *  `web-build` n'est pas une étape : `architecture` le tire dans le Makefile. */
 export const DEFAULT_TARGETS = [
   "android-compile",
   "unit",
@@ -59,17 +40,11 @@ export const DEFAULT_TARGETS = [
   "web-test",
 ];
 
-/** Plan d'étapes : ce qui va RÉELLEMENT tourner. */
 export interface Plan {
-  /** Étapes à lancer. */
   targets: string[];
-  /** `CHECK_TARGETS` demandé mais refusé (opt-in absent) — à signaler. */
   refused: string | null;
 }
 
-/** Résolution du plan : l'override n'est honoré qu'avec l'opt-in explicite
- *  `CHECK_HARNESS=1` (usage interne). Sinon la liste par défaut s'impose et
- *  l'override est signalé (#368). */
 export function resolveTargets(env: Record<string, string | undefined> = process.env): Plan {
   const raw = (env["CHECK_TARGETS"] ?? "").split(" ").filter(Boolean);
   if (raw.length === 0) return { targets: DEFAULT_TARGETS, refused: null };
@@ -85,12 +60,8 @@ interface Result {
   stderr: string;
 }
 
-/** Environnement des make ENFANTS : `MAKEFLAGS` NEUTRALISÉ.
- *
- *  `make -i` (ou `MAKEFLAGS=-i`) fait IGNORER l'échec d'une recette : sans
- *  cette neutralisation, une étape ROUGE passait pour verte (#523). On repart
- *  d'un environnement sans options make — les seules options sont celles
- *  qu'on passe en ligne de commande. `MFLAGS` (compat BSD) part avec. */
+/** Environnement des make ENFANTS : `MAKEFLAGS` NEUTRALISÉ, sinon `make -i`
+ *  ferait passer une étape ROUGE pour verte. `MFLAGS` (compat BSD) part aussi. */
 export function childEnv(env: Record<string, string | undefined> = process.env): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) if (v !== undefined) out[k] = v;
@@ -115,14 +86,13 @@ async function run(target: string): Promise<Result> {
   return { target, code, ms: performance.now() - start, stdout, stderr };
 }
 
-/** Dernière ligne non vide d'un flux. */
 function lastLine(out: string): string {
   const lines = out.split("\n").map((l) => l.trimEnd()).filter(Boolean);
   return lines.at(-1) ?? "";
 }
 
-/** Résumé d'une étape verte : `bun test` écrit SON résumé sur stderr, Gradle
- *  et les scripts TS sur stdout — on lit donc stderr d'abord. */
+/** `bun test` écrit SON résumé sur stderr, Gradle et les scripts TS sur
+ *  stdout — on lit donc stderr d'abord. */
 function summary(r: Result): string {
   const line = lastLine(r.stderr) || lastLine(r.stdout);
   return line ? `   ${line}` : "";
@@ -136,17 +106,13 @@ function indent(out: string): string {
     .replace(/\s+$/, "");
 }
 
-/** Lignes d'un log d'échec affichées dans le terminal. Le reste part dans un
- *  fichier : une compilation Gradle ratée ou une suite qui casse en série
- *  jette des milliers de lignes, et la cause est dans la fin. 24 lignes ≈ 400
- *  tokens : au-delà, l'agent lit sa propre sortie au lieu du code. */
+/** Lignes d'un log d'échec affichées au terminal (le reste part en fichier) :
+ *  la cause est dans la fin. 24 lignes ≈ 400 tokens. */
 const FAIL_TAIL_LINES = 24;
 
-/** Plafond de lignes bruitées (SKIP/REPLI) affichées en succès. */
 const MAX_LOUD_LINES = 12;
 
-/** Écrit le log complet hors contexte. Un fichier par étape : `make <cible>`
- *  reste la commande de relecture, le chemin ne sert qu'au cas où. */
+/** Log complet hors contexte : le chemin ne sert qu'au cas où. */
 function dumpLog(target: string, out: string): string {
   const dir = mkdtempSync(join(tmpdir(), "vsn-check-"));
   const path = join(dir, `${target.replace(/[^\w.-]+/g, "_")}.log`);
@@ -165,12 +131,9 @@ function failedLog(target: string, out: string): string {
   );
 }
 
-/** SKIP BRUYANT / REPLI + les 2 lignes suivantes (le message tient en 3 lignes).
- *  Afficher le log entier à chaque run parce que le corpus Pronote saute ferait
- *  du bruit de fond, pas du signal : c'est le saut qui doit se voir, pas tout le
- *  reste. Casse-SENSIBLE : « 1 skip » d'un résumé bun n'est pas un saut d'étape.
- *  Un même bloc répété par N fichiers de test (kotlinc absent) est replié en
- *  `(×N)` : 144 lignes identiques valent une ligne. */
+/** SKIP BRUYANT / REPLI + les 2 lignes suivantes. Casse-SENSIBLE : « 1 skip »
+ *  d'un résumé bun n'est pas un saut d'étape. Bloc identique répété N fois
+ *  replié en `(×N)`. */
 function loudLines(out: string): string[] {
   const lines = out.split("\n");
   const blocks: string[][] = [];
@@ -217,13 +180,9 @@ async function main(): Promise<void> {
     if (!ok) failed.push(r);
     const out = r.stdout + r.stderr;
     console.log(`${ok ? "✔" : "✘"} ${label(r.target)} ${seconds(r.ms)}${ok ? summary(r) : ""}`);
-    // Une étape verte ne montre que son résumé SAUF signal de niveau étape :
-    // SKIP bruyant (jamais de faux vert) ou repli offline→online. En échec, la
-    // fin du log (le complet part dans un fichier, cf. `failedLog`).
-    //
-    // Une seule étape rouge détaille : une régression partagée fait tomber 5
-    // étapes, et 5 queues de 120 lignes = ~16 k tokens pour la même cause. Les
-    // suivantes renvoient à `make <cible>` (une étape se rejoue seule).
+    // Une étape verte ne montre que son résumé, sauf signal de niveau étape
+    // (SKIP bruyant, repli offline→online). Une SEULE étape rouge détaille :
+    // une régression partagée ferait 5 queues identiques pour la même cause.
     if (!ok) {
       const first = failed.length === 1;
       console.log(first ? failedLog(r.target, out) : `    … détail : make ${r.target}`);
@@ -242,6 +201,5 @@ async function main(): Promise<void> {
   }
 }
 
-// Point d'entrée seulement : le module reste importable (tests) SANS lancer
-// les étapes.
+// Module importable par les tests sans lancer les étapes.
 if (import.meta.main) await main();

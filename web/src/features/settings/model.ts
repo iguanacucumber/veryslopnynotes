@@ -1,7 +1,6 @@
-// Modèle des réglages (#83/#140) : validation de l'adresse du serveur, bornes
-// des préférences matière et normalisation des couleurs/emoji. Miroir simplifié
-// de `ServerConfig.validateBaseUrl` et `SubjectPrefs` (Kotlin) : aucune règle
-// réseau ici, seulement ce qui peut être dit à l'utilisateur avant l'écriture.
+// Réglages : validation de l'adresse serveur, bornes des préférences, couleurs
+// et emoji. Aucune règle réseau ici, seulement ce qui peut être dit avant
+// l'écriture.
 
 import type { ManualSaveResult, SubjectPref, SubjectSaveResult } from "../../bridge/types";
 
@@ -23,17 +22,10 @@ export const MAX_API_KEY_CHARS = 512;
 /** Miroir de `ManualUrl.MAX_CHARS` (core Kotlin) et du contrat scraper. */
 export const MAX_MANUAL_URL_CHARS = 2000;
 
-/**
- * Adresse par défaut : catalogue de l'éditeur. L'app en déduit l'ouvrage
- * selon la classe et la matière du devoir ; l'élève peut la remplacer par
- * l'adresse d'un manuel précis.
- */
+/** Catalogue de l'éditeur ; l'élève peut le remplacer par un manuel précis. */
 export const DEFAULT_MANUAL_URL = "https://www.lelivrescolaire.fr/manuels";
 
-/**
- * Refus d'enregistrement de la clé LLM : le message NATIF fait foi quand il
- * existe (« trop courte », « caractère interdit »…). Le repli est générique.
- */
+/** Le message NATIF fait foi quand il existe ; le repli est générique. */
 export function llmSaveError(response: { ok: boolean; message?: string }): string {
   if (response.ok) return "";
   const message = (response.message ?? "").trim();
@@ -45,11 +37,7 @@ export interface ManualSaveNotice {
   kind: "info" | "error";
 }
 
-/**
- * Phrase et gravité après un enregistrement de manuel : catalogue (choix
- * automatique) ou ouvrage précis, récupéré ou non. Le message natif fait foi
- * quand il existe ; la gravité suit le succès réel du scraper.
- */
+/** Le message natif fait foi ; la gravité suit le succès réel du scraper. */
 export function manualSaveNotice(response: ManualSaveResult): ManualSaveNotice {
   if (response.auto === true) {
     const guess = [response.level ?? "", (response.specialties ?? []).join(", ")]
@@ -170,12 +158,8 @@ function isLoopbackHost(host: string): boolean {
   return bare === "10.0.2.2" || bare === "localhost" || bare === "::1" || (isIpv4(bare) && bare.startsWith("127."));
 }
 
-/**
- * Adresse acceptable : `domaine[:port]` ou `https://domaine[:port]`. `http`
- * n'est toléré que pour l'émulateur et la boucle locale, comme le natif.
- * La valeur rendue est celle à transmettre au bridge (sans schéma si la saisie
- * n'en avait pas : le mock et le contrat natif attendent un hôte).
- */
+/** `http` n'est toléré que pour l'émulateur et la boucle locale, comme le natif.
+ *  La valeur rendue est celle attendue par le bridge (hôte sans schéma). */
 export function validateServerHost(raw: string): ServerHostResult {
   const input = raw.trim();
   if (input === "") return rejected("Adresse vide : saisis l'adresse de ton serveur.");
@@ -218,7 +202,6 @@ export function validateServerHost(raw: string): ServerHostResult {
   return { ok: true, value: scheme === null ? authority : `${scheme}://${authority}` };
 }
 
-/** `" #aabbcc "` -> `"#AABBCC"` ; toute autre forme -> `null`. */
 export function normalizeColorHex(value: string | null | undefined): string | null {
   const trimmed = (value ?? "").trim();
   return COLOR_RE.test(trimmed) ? trimmed.toUpperCase() : null;
@@ -234,7 +217,6 @@ export function normalizeEmoji(value: string | null | undefined): string | null 
   return trimmed;
 }
 
-/** Message du champ « matière à personnaliser », `null` si rien à dire. */
 export function subjectNameError(name: string): string | null {
   const trimmed = name.trim();
   if (trimmed === "") return null;
@@ -251,7 +233,6 @@ export interface SubjectDraft {
   label: string;
 }
 
-/** Brouillon -> prefs valides ; `null` = sujet/libellé hors bornes. */
 export function buildSubjectPref(subject: string, draft: SubjectDraft): SubjectPref | null {
   const name = subject.trim();
   if (name === "" || name.length > MAX_SUBJECT_CHARS) return null;
@@ -265,7 +246,7 @@ export function buildSubjectPref(subject: string, draft: SubjectDraft): SubjectP
   };
 }
 
-/** Liste du bridge : formes inconnues ignorées, jamais rendues telles quelles. */
+/** Formes inconnues ignorées, jamais rendues telles quelles. */
 export function sanitizeSubjectPrefs(value: unknown): SubjectPref[] {
   const list = Array.isArray(value) ? value : [];
   const out: SubjectPref[] = [];
@@ -285,16 +266,10 @@ export function sanitizeSubjectPrefs(value: unknown): SubjectPref[] {
   return out;
 }
 
-/** Repli quand le natif refuse sans dire pourquoi. */
 export const SUBJECT_REFUSED_MESSAGE = "Matière refusée : corrige la couleur, l'emoji ou le libellé.";
 
-/**
- * Refus du natif (`ok:false`) : la phrase à afficher, ou `null` si la matière
- * a été enregistrée (#395).
- *
- * Le pont ne répond `ok:true` que s'il a vraiment écrit : un `ok:false` doit
- * donc être MONTRÉ, jamais avalé en « Matière enregistrée. ».
- */
+/** Le pont ne répond `ok:true` que s'il a vraiment écrit : un `ok:false` doit
+ *  être montré, jamais avalé en « Matière enregistrée. ». */
 export function subjectSaveRefusal(response: SubjectSaveResult): string | null {
   if (response.ok) return null;
   const message = response.message?.trim();

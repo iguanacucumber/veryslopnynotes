@@ -4,100 +4,69 @@ import java.time.LocalDateTime
 import kotlin.math.floor
 
 /**
- * Aides et périodes des objets métier PRONOTE (port fidèle de `pronotets` `dataClasses.js`).
+ * Aides et périodes des objets métier PRONOTE. Zéro dépendance (stdlib Kotlin +
+ * `java.time`) ; seules les méthodes listées font du réseau. Dates murales.
  *
- * Zéro dépendance (stdlib Kotlin + `java.time`) ; seules les méthodes listées
- * font du réseau (bloquant, sans coroutines). Dates = `LocalDateTime` mural.
- *
- * Non porté (uniligne chacun) :
- * - `ParentClient`/`VieScolaireClient` : appartiennent à `client.js`, pas aux données.
- * - `Student` : fiche élève (`FicheEleve`) encore servie par `client.js`, pas ici.
- * - `StudentClass` : seul son `students()` lisait `client.periods`, absent de `ClientLike`.
- * - `Identity` : grappe d'état-civil lue via `Student.ficheEleve`, non porté.
- * - `Guardian` : enveloppe de `Identity`, non porté.
- * - `TeachingStaff`/`TeachingSubject` : annuaire des profs (`ListeRessources`), non porté.
- * - `Report`/`ReportSubject` : bulletins (`PageBulletins`), non porté.
- * - `Evaluation`/`Acquisition` : évaluations par compétences (`DernieresEvaluations`), non porté.
- * - `Attachment.save` : écriture disque Node-only, sans objet sur Android.
- * - `Information.markAsRead` : accusé de lecture (`SaisieActualites`), non porté.
- * - `Period.report`/`evaluations`/`classOverallAverage` : dépendent des classes non portées.
- * - `ClientInfo.address`/`email`/`phone`/`ineNumber` : données perso (`PageInfosPerso`), non portées.
- * - `toDict` : sérialisation générique sans lecteur côté Android.
- * - `Util.get` : filtre générique sans lecteur côté Android.
+ * Non porté du TS (pas de lecteur Android) : `Student`, `StudentClass`,
+ * `Identity`, `Guardian`, `TeachingStaff`, `Report`, `Evaluation`, `toDict`,
+ * `Util.get`.
  */
 
-// ---------------------------------------------------------------------------
-// Aides privées (miroirs locaux des idiomes `resolver.js`/`dataClasses.js).
-// ---------------------------------------------------------------------------
-
-/** Construit un objet `JVal` (clés dans l'ordre d'insertion). */
 internal fun jobj(vararg ps: Pair<String, JVal>): JVal.Obj =
     JVal.Obj(LinkedHashMap<String, JVal>().also { m -> ps.forEach { m[it.first] = it.second } })
 
 /**
- * `String(v)` sur chemin optionnel : absent (`lenient`) → `null` (le convertisseur
- * ne voit jamais `null` Kotlin) ; `null` PRÉSENT → `"null"`, comme `String(null)`
- * côté TS (le serveur omet, il ne `null`-ifie jamais — la parité l'exige quand même).
+ * Chemin absent (`lenient`) → `null` ; `null` PRÉSENT → `"null"`, comme
+ * `String(null)` en TS (le serveur omet, il ne `null`-ifie jamais).
  */
 internal fun optStr(v: JVal?): String? = strOf(v)
 
-/** `Number(v)` nullable : chemin absent → `null`, `null` présent → `0` (comme `Number(null)`). */
+/** Chemin absent → `null`, `null` présent → `0` (comme `Number(null)`). */
 internal fun optNum(v: JVal?): Double? = v?.let { numOf(it) }
 
-/** `(l) => l.map((i) => i.L)` : `V` doit être un tableau (jeté → `ParsingError` via `r()`). */
-/**
- * Feuille brute (`.L`, `.url`, ...) : absente/`null` -> `null`, texte tel quel,
- * le reste stringifie. Le serveur envoie du texte (ou rien).
- */
+/** Feuille brute (`.L`, `.url`…) : absente/`null` → `null`, sinon stringifiée. */
 internal fun rawLeaf(v: JVal?): String? = when (v) {
     null, is JVal.Null -> null
     is JVal.Str -> v.value
     else -> strOf(v)
 }
 
-/**
- * `(l) => l.map((i) => i.L)` : elements BRUTS (`null` garde, comme
- * `undefined`/`null` cote TS — `JSON` les rend `null` des deux cotes).
- */
+/** Elements BRUTS : `null` gardé, comme `undefined`/`null` en TS. */
 internal fun rawList(v: JVal?): List<String?> {
     val items = (v as? JVal.Arr)?.items ?: throw IllegalStateException("liste attendue")
     return items.map { rawLeaf((it as? JVal.Obj)?.fields?.get("L")) }
 }
 
-/** Direct brut (`json.N`, `.L`) : absent = `undefined` (rendu omis par le pilote). */
+/** Absent = `undefined` (rendu omis par le pilote). */
 internal fun rawStrOrNull(v: JVal?): String? =
     v?.let { if (it is JVal.Null) "null" else strOf(it) }
 
-/** `(l) => l.map((i) => i.url)` : meme regle, cle `url`. */
 internal fun rawUrls(v: JVal?): List<String?> {
     val items = (v as? JVal.Arr)?.items ?: throw IllegalStateException("liste attendue")
     return items.map { rawLeaf((it as? JVal.Obj)?.fields?.get("url")) }
 }
 
-/** `(x) => x.map((a) => new Attachment(...))` sur un `V` tableau. */
 internal fun attachList(client: PronoteClientLike, v: JVal?): List<Attachment> {
     val items = (v as? JVal.Arr)?.items ?: throw IllegalStateException("liste de pièces jointes attendue")
     return items.map { Attachment(client, it) }
 }
 
-/** `resp.dataSec.data` : l'enveloppe utile d'un `post`. */
+/** Enveloppe utile (`dataSec.data`) d'un `post`. */
 internal fun dataOf(resp: JVal): JVal.Obj {
     val dataSec = (resp as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj
     return dataSec?.fields?.get("data") as? JVal.Obj
         ?: throw ParsingError("Enveloppe dataSec.data manquante", listOf("dataSec", "data"))
 }
 
-/** `resp.dataSec.data.<key>.V` en liste (absent/non-tableau = `ParsingError`). */
+/** `dataSec.data.<key>.V` en liste (absent/non-tableau = `ParsingError`). */
 internal fun dataList(resp: JVal, key: String): List<JVal> {
     val arr = (dataOf(resp).fields[key] as? JVal.Obj)?.fields?.get("V") as? JVal.Arr
     return arr?.items ?: throw ParsingError("Liste $key manquante", listOf("dataSec", "data", key, "V"))
 }
 
 /**
- * Comme [dataList], mais une LISTE absente vaut vide : le snapshot
- * `Period.notes()` ne jette pas un trimestre entier parce qu'une des deux
- * listes manque. L'ENVELOPPE (`dataSec.data`), elle, reste stricte — un
- * payload sans données ne doit pas être publié comme un trimestre vide.
+ * Une LISTE absente vaut vide (une des deux listes peut manquer), mais
+ * l'ENVELOPPE reste stricte : un payload vide n'est pas un trimestre vide.
  */
 internal fun tolerantDataList(resp: JVal, key: String): List<JVal> {
     val data = dataOf(resp)
@@ -112,14 +81,13 @@ internal fun <T> tolerantRows(rows: List<JVal>, make: (JVal) -> T): List<T> {
         try {
             out.add(make(row))
         } catch (_: Exception) {
-            // Une note/moyenne tordue ne doit pas jeter TOUT le trimestre :
-            // les autres lignes de la MÊME réponse restent affichables.
+            // Une ligne tordue ne doit pas jeter TOUT le trimestre.
         }
     }
     return out
 }
 
-/** `funcOptions.dataSec.data.General.<key>.V` brut (tranches horaires ; `null` si illisible). */
+/** `funcOptions.dataSec.data.General.<key>.V` brut, `null` si illisible. */
 internal fun hoursValue(client: PronoteClientLike, key: String): JVal? {
     val root = client.funcOptions as? JVal.Obj ?: return null
     val data = ((root.fields["dataSec"] as? JVal.Obj)?.fields?.get("data") as? JVal.Obj) ?: return null
@@ -127,7 +95,7 @@ internal fun hoursValue(client: PronoteClientLike, key: String): JVal? {
     return (general.fields[key] as? JVal.Obj)?.fields?.get("V")
 }
 
-/** `parseFloat` : espaces taillés, préfixe décimal/`Infinity`, sinon `NaN` (la moyenne manuelle en dépend). */
+/** `parseFloat` : espaces taillés, préfixe décimal/`Infinity`, sinon `NaN`. */
 private val FLOAT_PREFIX = Regex("^[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][+-]?\\d+)?")
 
 private fun parseFloatJs(s: String): Double {
@@ -137,7 +105,7 @@ private fun parseFloatJs(s: String): Double {
     return FLOAT_PREFIX.find(t)?.value?.toDoubleOrNull() ?: Double.NaN
 }
 
-/** `encodeURIComponent` : `A-Za-z0-9 -_.!~*'()` bruts, le reste en `%XX` (UTF-8, hex MAJUSCULE). */
+/** `encodeURIComponent` : `A-Za-z0-9 -_.!~*'()` bruts, sinon `%XX` (UTF-8). */
 internal fun encodeURIComponent(s: String): String {
     val kept = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()"
     val out = StringBuilder()
@@ -153,28 +121,15 @@ internal fun encodeURIComponent(s: String): String {
     return out.toString()
 }
 
-/**
- * `Math.round` : demis vers `+∞`, avec `-0.5 -> -0` (`floor` donnerait `+0`).
- * Les moyennes sont positives ; le cas ne survient que sur donnees tordues.
- */
+/** `Math.round` : demis vers `+∞`, `-0.5` → `-0` (`floor` donnerait `+0`). */
 private fun roundJs(x: Double): Double = if (x == -0.5) -0.0 else floor(x + 0.5)
 
-// ---------------------------------------------------------------------------
-// Trimestre + identité ressource.
-// ---------------------------------------------------------------------------
-
 /**
- * Lecture d'une période en UNE réponse `DernieresNotes`.
+ * Snapshot publié par l'app : notes, moyennes et moyenne générale du MÊME POST.
+ * Les lignes illisibles sont SAUTÉES une par une.
  *
- * C'est le snapshot que l'app publie : notes, moyennes et moyenne générale
- * viennent du MÊME POST (avant, `grades()` + `averages()` + `overallAverage()`
- * en faisaient trois pour une même période). Les lignes illisibles sont
- * SAUTÉES une par une : une note tordue ne fait plus disparaître toutes les
- * autres.
- *
- * `overallAverage` garde la forme de `Period.overallAverage()` (`moyGenerale.V`
- * publiée, sinon moyenne manuelle, `"-1"` si aucune moyenne exploitable) ;
- * `null` = liste de services absente, donc moyenne INCONNUE.
+ * `overallAverage` : `moyGenerale.V` publiée, sinon moyenne manuelle, `"-1"` si
+ * aucune moyenne exploitable ; `null` = moyenne INCONNUE.
  */
 data class PeriodNotes(
     val grades: List<Grade>,
@@ -183,18 +138,15 @@ data class PeriodNotes(
 )
 
 /**
- * Moyenne générale d'une réponse `DernieresNotes` : `moyGenerale.V` si
- * publiée, sinon moyenne manuelle des `moyEleve` (virgule→point, `NaN`
- * sautés, arrondi `x100/100`, `"-1"` si vide).
+ * `moyGenerale.V` si publiée, sinon moyenne manuelle des `moyEleve` (virgule→
+ * point, `NaN` sautés, arrondi `x100/100`, `"-1"` si vide).
  *
- * `tolerant` = les services illisibles sont SAUTÉS et une liste de services
- * absente vaut `null` (inconnue) ; sinon le comportement strict historique
- * (`UnsupportedOperation` / `ParsingError`) est conservé.
+ * `tolerant` : services illisibles SAUTÉS et liste absente = `null` ; sinon
+ * comportement strict (`UnsupportedOperation` / `ParsingError`).
  */
 private fun overallAverageOf(resp: JVal, tolerant: Boolean): JVal? {
     val data = dataOf(resp)
-    // Falsy (`null`, absent, `0`, `""`) = calcul manuel ; sinon `V` BRUT
-    // (même absent : `undefined` côté TS, rendu `null` par le pilote).
+    // Falsy = calcul manuel ; sinon `V` BRUT (`undefined` côté TS).
     val avg = data.fields["moyGenerale"]
     if (boolOf(avg)) return (avg as? JVal.Obj)?.fields?.get("V")
     val services = if (tolerant) {
@@ -230,8 +182,7 @@ private fun overallAverageOf(resp: JVal, tolerant: Boolean): JVal? {
 }
 
 /**
- * Trimestre (registre `instances` alimenté à la construction, avant parse —
- * comme le `Set` TS ; bornes `PagePresence` via `frDateTime`).
+ * Registre `instances` alimenté à la construction, avant parse, comme le `Set` TS.
  */
 class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
     companion object {
@@ -257,20 +208,15 @@ class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject
             "DateFin" to jobj("_T" to JVal.Num(7.0), "V" to JVal.Str(frDateTime(end))),
         )
 
-    /** Notes (`DernieresNotes` 198 ; réseau bloquant). */
+    /** `DernieresNotes` 198. */
     fun grades(): List<Grade> {
         val resp = client.post("DernieresNotes", 198.0, notesPayload())
         return dataList(resp, "listeDevoirs").map { Grade(it) }
     }
 
     /**
-     * Snapshot complet de la période en UN SEUL `DernieresNotes`.
-     *
-     * À préférer à `grades()` + `averages()` + `overallAverage()` pour
-     * l'affichage : un seul POST au lieu de trois. Les lignes tordues sont
-     * sautées (les autres notes/moyennes restent), mais l'enveloppe
-     * `dataSec.data` reste obligatoire : un payload vide ne doit pas être
-     * publié comme un trimestre sans notes.
+     * UN SEUL POST au lieu de trois ; lignes tordues sautées, enveloppe
+     * `dataSec.data` obligatoire.
      */
     fun notes(): PeriodNotes {
         val resp = client.post("DernieresNotes", 198.0, notesPayload())
@@ -281,10 +227,7 @@ class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject
         )
     }
 
-    /**
-     * Moyennes (`DernieresNotes` 198 ; `moyEleve` illisible =
-     * `UnsupportedOperation` ; réseau bloquant).
-     */
+    /** `moyEleve` illisible = `UnsupportedOperation`. */
     fun averages(): List<Average> {
         val resp = client.post("DernieresNotes", 198.0, notesPayload())
         val crs = dataList(resp, "listeServices")
@@ -296,17 +239,13 @@ class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject
         }
     }
 
-    /**
-     * Moyenne générale (`moyGenerale.V` si présente, sinon moyenne manuelle
-     * virgule→point, `NaN` sautés, arrondi `x100/100`, `"-1"` si vide ;
-     * `moyEleve` absent = `UnsupportedOperation` ; réseau bloquant).
-     */
+    /** `moyEleve` absent = `UnsupportedOperation`. */
     fun overallAverage(): JVal? {
         val resp = client.post("DernieresNotes", 198.0, notesPayload())
         return overallAverageOf(resp, tolerant = false)
     }
 
-    /** Absences (`PagePresence` 19, `G == 13` ; réseau bloquant). */
+    /** Absences (`PagePresence` 19, `G == 13`). */
     fun absences(): List<Absence> {
         val resp = client.post("PagePresence", 19.0, presencePayload())
         return dataList(resp, "listeAbsences")
@@ -314,7 +253,7 @@ class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject
             .map { Absence(it) }
     }
 
-    /** Retards (`PagePresence` 19, `G == 14` ; réseau bloquant). */
+    /** Retards (`PagePresence` 19, `G == 14`). */
     fun delays(): List<Delay> {
         val resp = client.post("PagePresence", 19.0, presencePayload())
         return dataList(resp, "listeAbsences")
@@ -322,7 +261,7 @@ class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject
             .map { Delay(it) }
     }
 
-    /** Punitions (`PagePresence` 19, `G == 41` ; réseau bloquant). */
+    /** Punitions (`PagePresence` 19, `G == 41`). */
     fun punishments(): List<Punishment> {
         val resp = client.post("PagePresence", 19.0, presencePayload())
         return dataList(resp, "listeAbsences")
@@ -332,12 +271,11 @@ class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject
 }
 
 /**
- * Identité d'une ressource (`name`/`delegue`/`className`/`establishment` en
- * getters bruts ; `profilePicture` = `Attachment` si `avecPhoto` ;
- * `cache()` poste `PageInfosPerso` sur `communication`, mis en cache).
+ * `profilePicture` = `Attachment` si `avecPhoto` ; `cache()` poste
+ * `PageInfosPerso` sur `communication` et le garde.
  */
 class ClientInfo(private val client: PronoteClientLike, json: JVal?) {
-    // `json.N` direct : `null`/`undefined` jette (comme `.N` cote TS).
+    // `json.N` direct : `null`/`undefined` jette (comme `.N` en TS).
     private val raw: JVal.Obj = json as JVal.Obj
     val id: String? = rawStrOrNull(raw.fields["N"])
     val rawResource: JVal = raw
@@ -348,8 +286,7 @@ class ClientInfo(private val client: PronoteClientLike, json: JVal?) {
 
     val profilePicture: Attachment? get() {
         if (!boolOf(raw.fields["avecPhoto"])) return null
-        // `N` brut transmis ; absent = `"undefined"` textuel (`String(undefined)`
-        // — l'`Attachment` ne jette jamais ici, des deux côtés.
+        // `N` brut ; absent = `"undefined"` textuel, comme `String(undefined)`.
         val payload = LinkedHashMap<String, JVal>()
         payload["L"] = JVal.Str("photo.jpg")
         payload["N"] = raw.fields["N"]?.let { if (it is JVal.Null) JVal.Str("null") else JVal.Str(strOf(it)) } ?: JVal.Str("undefined")
@@ -359,7 +296,7 @@ class ClientInfo(private val client: PronoteClientLike, json: JVal?) {
 
     val delegue: List<String?> get() {
         if (!boolOf(raw.fields["estDelegue"])) return emptyList()
-        // `.V` direct : absent = jete ; elements bruts (`.L` absent = `null`).
+        // `.V` direct : absent = jette ; éléments bruts (`.L` absent = `null`).
         val items = ((raw.fields["listeClassesDelegue"] as JVal.Obj).fields["V"] as JVal.Arr).items
         return items.map { rawLeaf((it as? JVal.Obj)?.fields?.get("L")) }
     }
@@ -372,12 +309,12 @@ class ClientInfo(private val client: PronoteClientLike, json: JVal?) {
 
     val establishment: String get() {
         val etab = raw.fields["Etablissement"] as? JVal.Obj ?: return ""
-        // `?.V?.L ?? ""` : `V` absent = `""` (pas d'exception), `L` absent = `""`.
+        // `V` absent = `""` (pas d'exception), `L` absent = `""`.
         val v = (etab.fields["V"] as? JVal.Obj)?.fields?.get("L") ?: return ""
         return if (v is JVal.Null) "" else strOf(v)
     }
 
-    /** Bloc `Informations` (`PageInfosPerso` via `communication`, mis en cache ; réseau bloquant). */
+    /** Bloc `Informations` (`PageInfosPerso` via `communication`), mis en cache. */
     fun cache(): JVal? {
         cacheValue?.let { return it }
         val resp = client.communication.post(
@@ -385,7 +322,7 @@ class ClientInfo(private val client: PronoteClientLike, json: JVal?) {
             mapOf(
                 "Signature" to JVal.Obj(LinkedHashMap<String, JVal>().also { sig ->
                     sig["onglet"] = JVal.Num(49.0)
-                    // `N` brut : absent = cle omise (comme `undefined` cote TS).
+                    // `N` brut : absent = clé omise (comme `undefined` en TS).
                     val res = LinkedHashMap<String, JVal>()
                     id?.let { res["N"] = JVal.Str(it) }
                     res["G"] = JVal.Num(4.0)
@@ -393,7 +330,7 @@ class ClientInfo(private val client: PronoteClientLike, json: JVal?) {
                 }),
             ),
         )
-        // Absent = `undefined` (pas d'erreur : `address()` & co. lisent dedans).
+        // Absent = `undefined`, pas d'erreur.
         val c = dataOf(resp).fields["Informations"]
         cacheValue = c
         return c

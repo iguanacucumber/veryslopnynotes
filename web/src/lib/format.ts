@@ -14,10 +14,9 @@ const FR_MONTHS_SHORT = [
 /** Une date seule (`YYYY-MM-DD`) est un jour civil : minuit LOCAL. */
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** Instant (ms) d'un ISO du contrat, ou null s'il est illisible. Les deux
- *  formes sont admises : instant complet et date seule. Une date SEULE est
- *  minuit LOCAL (comme le parseur natif), sinon elle glisserait d'un jour
- *  dans les fuseaux à l'ouest de Greenwich. */
+/** Instant (ms) d'un ISO du contrat, ou null s'il est illisible. Une date
+ *  SEULE est minuit LOCAL (comme le parseur natif), sinon elle glisse d'un
+ *  jour dans les fuseaux à l'ouest de Greenwich. */
 export function parseInstant(value: string | null | undefined): number | null {
   if (!value) return null;
   const raw = value.trim();
@@ -149,6 +148,30 @@ export function relativeFr(value: string, now: number = Date.now()): string {
   if (days === 1) return "hier";
   if (days < 7) return `il y a ${days} j`;
   return frDateShort(value);
+}
+
+/** « il y a 27 jours », « dans 2 heures » : la distance longue de Papillon,
+ *  au lieu de la date courte. */
+export function relativeLongFr(
+  value: string | number | Date | null | undefined,
+  now: number = Date.now(),
+): string {
+  const millis =
+    typeof value === "number"
+      ? value
+      : value instanceof Date
+        ? value.getTime()
+        : parseInstant(value);
+  if (millis === null || !Number.isFinite(millis)) return "";
+  const diff = millis - now;
+  const abs = Math.abs(diff);
+  const format = new Intl.RelativeTimeFormat("fr", { numeric: "always" });
+  if (abs < 60_000) return format.format(Math.round(diff / 1_000), "second");
+  if (abs < 3_600_000) return format.format(Math.round(diff / 60_000), "minute");
+  if (abs < 86_400_000) return format.format(Math.round(diff / 3_600_000), "hour");
+  if (abs < 2_592_000_000) return format.format(Math.round(diff / 86_400_000), "day");
+  if (abs < 31_536_000_000) return format.format(Math.round(diff / 2_592_000_000), "month");
+  return format.format(Math.round(diff / 31_536_000_000), "year");
 }
 
 /** Les payloads peuvent contenir des caractères de contrôle : jamais rendus

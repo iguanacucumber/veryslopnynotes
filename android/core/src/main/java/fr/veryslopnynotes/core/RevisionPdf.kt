@@ -5,21 +5,13 @@ import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import java.io.OutputStream
 
-// Export PDF d'une fiche de révision via `PdfDocument` natif (port Kotlin #207).
+// Export PDF d'une fiche de révision via `PdfDocument` natif.
 //
-// Remplace le writer PDF-1.4 maison du serveur (octets + xref assemblés à la
-// main, tombé sur les accents) : sur l'appareil, le système compose le PDF
-// lui-même. API 26 (minSdk), ZÉRO dépendance — c'est tout l'objet de ce fichier.
+// Remplace le writer PDF-1.4 maison du serveur (tombé sur les accents) : le
+// système compose le PDF lui-même. API 26 (minSdk), ZÉRO dépendance.
 //
-// Le CONTENU dessiné vient de `revisionPdfLines` (même découpage titre/date/
-// corps/sources/gabarit que l'ex-référence serveur, supprimée en #210) : ce
-// fichier ne fait que paginer et dessiner, aucune logique métier. Le corps
-// entier est dessiné (le PDF pagine) et les sources viennent de la liste
-// canonique de la fiche, jamais du texte du modèle (#412).
-//
-// Fichier non rejoué par le harnais `kotlinc` seul (`android.graphics` vient du
-// SDK) : vérifié par `check-kotlin` (structure) + `make android-compile` (le
-// compilateur, dès que le SDK est présent).
+// Le CONTENU dessiné vient de `revisionPdfLines` : ce fichier ne fait que
+// paginer et dessiner. Les sources viennent de la liste canonique de la fiche.
 //
 // ponytail: une passe, texte seul, police système. Upgrade: entête coloré /
 // numéros de page si la recette `make shot` le demande.
@@ -49,12 +41,8 @@ object RevisionPdf {
             textSize = TEXT_SIZE
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
         }
-        // #598 : la coupe à REVISION_PDF_WRAP (90 caractères) est une borne
-        // LOGIQUE (le harnais de parité la rejoue). À 12 pt Roboto, 90
-        // caractères ≈ 570 pt pour une largeur utile de 495 pt — le titre
-        // gras 16 pt débordait encore plus. La PRÉSENTATION tient dans la
-        // page : chaque ligne est remballée par MÉTRIQUE réelle, et chaque
-        // sous-ligne hérite de la peinture de sa ligne logique.
+        // La coupe à REVISION_PDF_WRAP est une borne LOGIQUE (rejouée en parité).
+        // La PRÉSENTATION se remballe par MÉTRIQUE réelle pour tenir dans la page.
         val maxWidth = (PAGE_WIDTH - 2 * MARGIN).toFloat()
         val draw = mutableListOf<Pair<String, Paint>>()
         for ((index, line) in lines.withIndex()) {
@@ -88,9 +76,7 @@ object RevisionPdf {
     }
 
     /**
-     * Emballe une ligne à la métrique réelle : d'abord aux espaces, sinon en
-     * dur. La ligne déjà courte passe telle quelle — une page tient ~75
-     * caractères à 12 pt, la borne logique (90) sert d'amont, pas d'affichage.
+     * Emballe une ligne à la métrique réelle : aux espaces, sinon en dur.
      */
     private fun fitLine(text: String, paint: Paint, maxWidth: Float): List<String> {
         if (paint.measureText(text) <= maxWidth) return listOf(text)

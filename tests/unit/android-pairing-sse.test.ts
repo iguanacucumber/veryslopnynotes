@@ -13,9 +13,7 @@ function read(p: string): string {
   return readFileSync(p, "utf8");
 }
 
-// Miroir TS de parseSchoolQr (PairingRepository.kt) : le QR de
-// l'établissement, JSON ou compact — `url` OBLIGATOIRE (#299). Doit rester en
-// sync avec le Kotlin.
+// Miroir TS de parseSchoolQr (PairingRepository.kt) : le QR, JSON ou compact, `url` OBLIGATOIRE.
 function tsParseSchoolQr(raw: string): { login: string; jeton: string; url: string } | null {
   const text = raw.trim();
   if (text === "") return null;
@@ -57,7 +55,7 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     ]) {
       expect(existsSync(f), `manquant: ${f}`).toBe(true);
     }
-    // #206 : appairage serveur supprimé — aucune résurrection partielle.
+    // Appairage serveur supprimé : aucune résurrection partielle.
     for (const f of [
       join(DATA, "QrPayload.kt"),
       join(DATA, "SetupRepository.kt"),
@@ -74,8 +72,7 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     const compact = "a1b2|c3d4|https://etab.exemple/eleve";
     expect(tsParseSchoolQr(json)).toEqual({ login: "a1b2", jeton: "c3d4", url: "https://etab.exemple/eleve" });
     expect(tsParseSchoolQr(compact)).toEqual(tsParseSchoolQr(json));
-    // #299 : l'URL est OBLIGATOIRE (elle vient du QR, plus de saisie) et bornée
-    // comme `SessionStore` (300) : sans elle, le QR est illisible.
+    // L'URL est OBLIGATOIRE (issue du QR) et bornée à 300 comme `SessionStore`.
     expect(tsParseSchoolQr('{"login":"a1b2","jeton":"c3d4"}')).toBeNull();
     expect(tsParseSchoolQr("a1b2|c3d4")).toBeNull();
     expect(tsParseSchoolQr(`{"login":"a1b2","jeton":"c3d4","url":"${"u".repeat(301)}"}`)).toBeNull();
@@ -88,15 +85,13 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     expect(kt).toContain("fun parseSchoolQr(raw: String): SchoolQr?");
     expect(kt).toContain("SCHOOL_QR_FIELD_MAX_CHARS = 1024");
     expect(kt).toContain("boundedSchoolUrl(url)");
-    // Le PIN est celui défini dans Pronote (arbitraire), pas un 6 chiffres :
-    // non vide et borné, jamais un motif de code serveur.
+    // Le PIN est arbitraire : non vide et borné, jamais un motif de code serveur.
     expect(kt).toContain("PIN_MAX_CHARS = 64");
     expect(kt).not.toContain("^[0-9]{6}$");
   });
 
   test("#208 : SSE supprimé, zéro référence morte, WorkManager planifié", () => {
-    // L'enveloppe contrat reste valide (la route serveur vit sa propre fin de
-    // vie ailleurs) : c'est le CLIENT Android qui ne la consomme plus.
+    // L'enveloppe contrat reste valide, mais le client Android ne la consomme plus.
     const evt = {
       v: CONTRACTS_VERSION,
       type: "SyncCompleted",
@@ -105,8 +100,7 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     };
     expect(isContractEvent(evt)).toBe(true);
 
-    // Aucune référence SSE dans le CODE Android (commentaires exclus) : ni
-    // client, ni états, ni ligne d'état, ni libellé, ni câblage d'écran.
+    // Aucune référence SSE dans le CODE Android (commentaires exclus).
     const ktFiles = [
       ...readdirSync(DATA).map((f) => join(DATA, f)),
       ...readdirSync(APP).map((f) => join(APP, f)),
@@ -121,10 +115,7 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
         });
       }
     }
-    // Le sync périodique est planifié au démarrage (travail unique, contraintes
-    // + backoff dans le worker). #249 : hors chemin critique du premier
-    // frame (thread daemon, contexte applicatif) — même planification KEEP,
-    // jamais deux, best-effort.
+    // Le sync périodique est planifié au démarrage, hors chemin critique du premier frame.
     const main = read(join(APP, "MainActivity.kt"));
     expect(main).toContain("PeriodicSyncWorker.schedule(applicationContext)");
     expect(main).toContain("periodic-sync-schedule");
@@ -146,10 +137,7 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
       join(DATA, "PeriodicSyncWorker.kt"),
     ].map((f) => ({ f, code: codeOnly(read(f)) }));
     for (const { f, code } of allKt) {
-      // Même tolérance que check-architecture.ts (I1 repointé #205 puis #206) :
-      // `data`/`ui` manipulent les TYPES du client local (dépendance
-      // `project(":pronote")`, ADR-003) — câblage sanctionné, pas un hôte.
-      // Plus aucune URL d'établissement en dur depuis #299 : elle vient du QR.
+      // `data`/`ui` manipulent les TYPES du client local : câblage sanctionné, pas un hôte.
       const sanctionne = code
         .replace(/project\(":pronote"\)/g, "")
         .replace(/PronoteSession|PronoteClientProvider|PronoteAPIError|pronoteErrorCode/g, "")
@@ -172,7 +160,7 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     expect(store).toContain("fun save(session: StoredSession)");
     expect(store).toContain("fun load(): StoredSession?");
     expect(store).toContain("fun clear()");
-    // #206 : plus de repli en clair — un Keystore KO jette, il n'écrit pas.
+    // Plus de repli en clair : un Keystore KO jette, il n'écrit pas.
     expect(codeOnly(store)).not.toContain("MODE_PRIVATE");
     expect(codeOnly(store)).not.toContain("getSharedPreferences(");
     expect(store).toContain("object SessionStores");
@@ -199,14 +187,11 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     expect(repo).toContain("RestoreResult.Dead");
     expect(repo).toContain("RestoreResult.Offline");
     expect(repo).toContain("sessions.clear()");
-    // `StoredSession` n'est pas une `data class` : pas de jeton en clair dans
-    // un toString() généré. `PairingInput`/`SchoolQr` rédigent le leur (le PIN
-    // en clair dans un rapport de crash, jamais).
+    // Pas de `data class` : jamais de jeton ou de PIN en clair dans un toString().
     expect(codeOnly(repo)).not.toContain("data class StoredSession");
     expect(repo).toContain("pin=***)");
     expect(repo).toContain("login=***, jeton=***");
-    // URL mal formée dans le QR : refus local actionnable (rescan), pas un
-    // « établissement muet ».
+    // URL mal formée dans le QR : refus local actionnable (rescan).
     expect(repo).toContain("QR sans adresse d'établissement valide");
     // Bloquant réseau, jamais de HTTP applicatif ici : ni OkHttp, ni URL.
     expect(codeOnly(repo)).not.toContain("OkHttpClient(");
@@ -215,12 +200,10 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
 
   test("deps : deux ajoutées, épinglées (security-crypto, work-runtime)", () => {
     const dataGradle = read(join(ROOT, "android/data/build.gradle.kts"));
-    // #624 : les versions vivent au catalogue, les modules n'utilisent que les
-    // alias `libs.*` (aucune version en dur dans un build.gradle.kts).
+    // Les versions vivent au catalogue, les modules n'utilisent que les alias `libs.*`.
     expect(dataGradle).toContain("libs.okhttp");
     expect(dataGradle).toContain("libs.security.crypto");
-    // #208 : sync périodique sans serveur = WorkManager, version épinglée au
-    // catalogue, sans client SSE.
+    // Sync périodique sans serveur = WorkManager, sans client SSE.
     expect(dataGradle).toContain("libs.work.runtime.ktx");
     expect(dataGradle).not.toContain("okhttp-sse");
     expect(dataGradle).not.toContain("mlkit");

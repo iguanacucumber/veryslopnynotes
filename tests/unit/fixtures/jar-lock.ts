@@ -1,18 +1,8 @@
-// Le VERROU À JAR de la parité Kotlin (#444).
-//
-// POURQUOI UN VERROU. `bun test --parallel` lance un worker par fichier, et
-// les 17 tests de parité visent le MÊME jar (un seul port, une seule
-// compilation). Sans verrou, chaque worker compilerait le port POUR SON
-// COMPTE : 17 JVM `kotlinc` d'un coup sur 16 cœurs, ~400 s de CPU.
-//
-// COMMENT. Un verrou = un fichier créé en O_EXCL (création atomique) qui
-// porte le pid du détenteur. Le premier qui le prend compile ; les autres
-// ATTENDENT le jar (au lieu de compiler aussi). Un worker mort en laisse un
-// verrou périmé : le pid mort le signale, on le récupère.
+// Le VERROU À JAR de la parité.
 //
 // Le verrou est un FICHIER, pas une promesse en mémoire : les workers de
-// `bun test --parallel` sont des PROCESSUS distincts, un sémaphore en
-// mémoire ne servirait à rien.
+// `bun test --parallel` sont des PROCESSUS distincts. Un verrou périmé (worker
+// mort) est récupéré via son pid.
 import {
   closeSync,
   existsSync,
@@ -57,28 +47,20 @@ export function lockIsStale(lock: string): boolean {
 }
 
 /**
- * Produce `jar` UNE SEULE FOIS, même quand plusieurs workers le demandent.
+ * Compile `jar` UNE SEULE FOIS, même quand plusieurs workers le demandent.
  *
- * `compile` n'est appelé que par le détenteur du verrou ; les autres
- * attendent le fichier. Si le jar existe déjà, `compile` n'est pas appelé du
- * tout (cache chaud).
- *
- * ÉCHEC DE COMPILATION. Le détenteur qui échoue écrit le message dans
- * `<jar>.error` puis relâche le verrou. Les workers en ATTENTE lisent ce
- * message et échouent eux aussi, au lieu de compiler à leur tour : sans ça,
- * un port cassé coûtait 17 compilations SÉQUENTIELLES (17 × 4 s). Un run
- * ULTÉRIEUR, lui, retente : le marqueur d'échec n'est pas collé au cache
- * (seule la compilation est ratée, pas les runs suivants).
+ * ÉCHEC DE COMPILATION : le détenteur écrit `<jar>.error` puis relâche. Les
+ * workers en ATTENTE échouent aussi au lieu de recompiler (sinon 17
+ * compilations séquentielles). Un run ultérieur retente.
  */
 export async function ensureSingleJar(
   jar: string,
   compile: () => void | Promise<void>,
   opts?: { waitMs?: number; pollMs?: number },
 ): Promise<string> {
-  // Les fichiers voisins s'appellent `parity.lock` / `parity.error`, PAS
-  // `parity.jar.lock` : un glob `*.jar*` (le test du harnais qui exige
-  // qu'aucun binaire ne reste après un échec) ne doit pas les prendre pour
-  // des binaires.
+  // `parity.lock` / `parity.error`, PAS `parity.jar.lock` : un glob `*.jar*`
+  // (test qu'aucun binaire ne reste après un échec) ne doit pas les prendre
+  // pour des binaires.
   const base = jar.replace(/\.jar$/, "");
   const lock = `${base}.lock`;
   const errorFile = `${base}.error`;

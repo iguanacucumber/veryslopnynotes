@@ -4,7 +4,7 @@ import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { bridge } from "../../bridge/client";
 import { BridgeCallError } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
-import { Card, Page, SkipLink } from "../../ui/components";
+import { Card, Page } from "../../ui/components";
 import { IconCamera, IconChevronLeft, IconLock } from "../../ui/icons";
 import { STORAGE_UNAVAILABLE_MESSAGE } from "../../lib/session";
 import {
@@ -120,9 +120,8 @@ export default function PairingScreen() {
         setQr(null);
         setPin("");
         notify("Appareil appairé.");
-        // La session native est ouverte : le web doit le savoir avant de
-        // quitter cet écran, sinon le garde-fou « pas de session » (lu au
-        // démarrage) nous renverrait ici — redémarrage obligatoire (#357).
+        // La session native est ouverte : le web doit le savoir avant de quitter
+        // cet écran, sinon le garde-fou « pas de session » nous renverrait ici.
         openSession();
         refresh();
         navigate("/", { replace: true });
@@ -140,12 +139,8 @@ export default function PairingScreen() {
     }
   }
 
-  /**
-   * Connexion à l'établissement de DÉMONSTRATION : un clic, sans QR ni PIN.
-   * Le native ouvre la session (le web ne parle jamais à l'établissement) ;
-   * le même câblage que l'appairage s'applique : session ouverte côté web,
-   * puis on quitte l'écran d'appairage.
-   */
+  /** Le natif ouvre la session (le web ne parle jamais à l'établissement), puis
+   *  le même câblage que l'appairage s'applique. */
   async function connectDemo(): Promise<void> {
     setDemoError("");
     setDemoing(true);
@@ -172,7 +167,6 @@ export default function PairingScreen() {
 
   return (
     <div className="shell">
-      <SkipLink />
       <main id="main" tabIndex={-1} className="main" style={{ paddingBottom: 32 }}>
         <div className="row" style={{ marginBottom: 10 }}>
           <button
@@ -195,7 +189,7 @@ export default function PairingScreen() {
                 <h1 className="t-headline" style={{ margin: 0 }}>
                   {replacing ? "Changer de compte" : "Connecte ton établissement"}
                 </h1>
-                <p className="t-body-m" style={{ margin: "6px 0 0", color: "var(--hero-soft)" }}>
+                <p className="t-body-m" style={{ margin: "6px 0 0", color: "var(--on-brand-soft)" }}>
                   {replacing
                     ? "Scanne le QR du compte à utiliser, puis son PIN. Le nouvel appairage remplace la session actuelle ; si le compte change, les données en cache du précédent sont purgées."
                     : "Scanne le QR de l'application de ton établissement, puis saisis son PIN. Ta session reste sur ce téléphone."}
@@ -206,7 +200,7 @@ export default function PairingScreen() {
                 style={{
                   width: 52,
                   height: 52,
-                  borderRadius: 999,
+                  borderRadius: "var(--radius-xs)",
                   background: "var(--on-brand-veil)",
                   display: "inline-flex",
                   alignItems: "center",
@@ -220,10 +214,9 @@ export default function PairingScreen() {
           </Card>
 
           {storageUnavailable ? (
-            // #401 : le stockage chiffré est mort. L'appairage va
-            // « marcher » mais la session ne sera PAS conservée : sans ce
-            // bandeau, l'utilisateur croit en silence que tout est
-            // enregistré.
+            // Stockage chiffré mort : l'appairage « marche » mais la session ne
+            // sera PAS conservée — sans ce bandeau, l'utilisateur croit le
+            // contraire.
             <div className="card card--danger" role="alert">
               <p className="t-body-m" style={{ margin: 0, color: "var(--danger-ink)" }}>
                 {STORAGE_UNAVAILABLE_MESSAGE}

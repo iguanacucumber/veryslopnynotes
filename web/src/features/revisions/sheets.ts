@@ -1,7 +1,6 @@
-// Logique pure de l'écran Fiches de révision, portée de `RevisionSheets.kt` et
-// `RevisionSheet.kt`. Le store local rend un tableau de fiches ; le pont peut
-// aussi envelopper la liste (`{sheets: []}` ou `{items: []}`). Une fiche non
-// conforme est ignorée, jamais affichée à moitié.
+// Logique pure des fiches de révision. Le store rend un tableau ; le pont peut
+// envelopper la liste (`{sheets}`, `{items}`). Une fiche non conforme est
+// ignorée, jamais affichée à moitié.
 import { cleanText, frDate, parseDate } from "../../lib/format";
 
 export interface RevisionSheet {
@@ -29,9 +28,8 @@ function text(value: unknown, max: number): string {
   return cleanText(value).slice(0, max);
 }
 
-/** Fiche affichable : `id` et `title` et `body` sont le minimum lisible. Les
- *  champs de contrat absents du pont (`examId`, `templateVersion`, `createdAt`)
- *  ne bloquent pas l'affichage. */
+/** `id`, `title` et `body` sont le minimum lisible ; les champs de contrat
+ *  absents du pont (`examId`, `createdAt`…) ne bloquent pas l'affichage. */
 export function parseRevisionSheet(raw: unknown): RevisionSheet | null {
   const o = record(raw);
   if (!o) return null;
@@ -92,7 +90,6 @@ export function parseRevisionSheets(raw: unknown): RevisionSheet[] {
   });
 }
 
-/** « lundi 18 octobre » ; vide si la date manque ou est illisible. */
 export function revisionDateLabel(sheet: RevisionSheet): string {
   return frDate(sheet.date);
 }

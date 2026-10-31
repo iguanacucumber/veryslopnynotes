@@ -12,14 +12,9 @@ import java.io.IOException
 import java.util.UUID
 import org.json.JSONObject
 
-// Payload du QR affiché par l'application Pronote (#120). `login` et
-// `jeton` sont des blocs chiffrés dont la clé est le PIN : il faut les deux
-// pour ouvrir la session, et le PIN est celui défini dans Pronote (pas un
-// code imposé par l'app). `url` est l'adresse de l'établissement portée par
-// le QR (#299) : c'est la SEULE source, il n'y a plus d'étape de saisie.
-//
-// `toString()` rédigé : `login`/`jeton` sont des chiffrés, mais ils n'ont
-// rien à faire dans un rapport de crash.
+// `login`/`jeton` sont chiffrés par le PIN ; `url` porte l'adresse de
+// l'établissement, seule source (aucune saisie).
+// `toString()` masque les champs chiffrés : rien dans un rapport de crash.
 data class SchoolQr(
     val login: String,
     val jeton: String,
@@ -28,13 +23,7 @@ data class SchoolQr(
     override fun toString(): String = "SchoolQr(login=***, jeton=***, url=$url)"
 }
 
-/**
- * Ce que l'utilisateur a rempli à l'écran, avant l'envoi. Le QR et son PIN
- * sont la preuve de détention ET la seule méthode — aucun identifiant n'est
- * saisi ni stocké. Le refus « QR/PIN manquant » est rendu tel quel par l'app.
- *
- * `toString()` rédigé : le PIN en clair dans un rapport de crash, jamais.
- */
+/** Saisie avant envoi : aucun identifiant n'est saisi ni stocké. `toString()` masque le PIN. */
 data class PairingInput(
     val qr: SchoolQr? = null,
     val pin: String = "",
@@ -44,71 +33,43 @@ data class PairingInput(
 
 /** Sortie de l'appairage local, avec un message prêt à afficher pour chaque refus. */
 sealed interface PairingResult {
-    /**
-     * Appairé. [accountId] identifie le compte (l'id de la ressource client) :
-     * c'est lui que le magasin multi-compte enregistre à l'appairage (#397).
-     * `null` = identifiant inconnu — l'appairage reste réussi, le compte n'est
-     * simplement pas nommé.
-     */
+    /** [accountId] = id de la ressource client (pas le login) ; `null` = inconnu. */
     data class Ok(val accountId: String?) : PairingResult
     data class Err(val code: String, val message: String) : PairingResult
 }
 
 /** Sortie de la restauration au démarrage (store chiffré → client local). */
 sealed interface RestoreResult {
-    /** Session reconstruite (`PronoteSession` remplie) : l'app lit le téléphone. */
     data object Restored : RestoreResult
-    /** Jamais appairé : l'écran d'appairage est la route de départ. */
     data object NoSession : RestoreResult
-    /** Jeton mort (tourné, révoqué) : le store est vidé, cap sur l'appairage. */
+    /** Jeton mort (tourné, révoqué) : le store est vidé. */
     data class Dead(val message: String) : RestoreResult
-    /** Réseau KO : le store est GARDÉ (la session n'est pas morte, juste
-     * injoignable), l'app lit ses caches. */
+    /** Réseau KO : le store est GARDÉ (session vivante), l'app lit ses caches. */
     data object Offline : RestoreResult
 }
 
-// Appairage 100 % sur l'appareil (#206, ADR-003) : le QR de l'établissement +
-// son PIN ouvrent la session Pronote DIRECTEMENT (`Client.qrcodeLogin`, le
-// port `android/pronote/`), sans serveur intermédiaire. C'est le QR qui porte
-// l'adresse de l'établissement (#299) : plus rien n'est saisi à l'écran. Le PIN
-// déchiffre `login`/`jeton` sur le téléphone et n'en sort jamais — il n'est ni
-// persisté (voir `SessionStore`), ni journalisé, ni dans un message d'erreur.
+// Appairage 100 % sur l'appareil (ADR-003) : QR + PIN ouvrent la session
+// directement via `android/pronote/`, sans serveur. Le PIN déchiffre
+// `login`/`jeton` sur le téléphone et n'est ni persisté, ni journalisé, ni
+// dans un message d'erreur. Bloquant : jamais sur le thread UI. I1 : seul
+// `android/pronote/` parle à l'établissement.
 //
-// Bloquant (réseau Pronote, jamais le thread UI : l'écran file en tâche de
-// fond). I1 : seul `android/pronote/` parle au serveur de l'établissement ;
-// ce dépôt ne fait que lui passer le QR et ranger la session qui en sort.
-// ponytail: pas de sérialisation locale du credential — le jeton va droit
-// dans le SessionStore chiffré, comme l'ancien bearer allait dans le TokenStore.
-//
-// #407 : le dépôt porte le STORE DE CACHE : le cache est la donnée d'UN
-// compte, donc un appairage d'un AUTRE compte (ou une session MORTE) purge
-// le cache — sinon les écrans Notes/EDT/Cantine/Capacités servent le payload
-// du compte précédent, hors ligne, jusqu'à 24 h (TTL des capacités).
-//
-// #529 : la purge précède la PUBLICATION du nouveau client (et les deux sont
-// atomiques) : publier d'abord laissait une fenêtre où le cache servait
-// encore l'ancien compte au nouveau.
+// Le cache appartient à UN compte : un appairage d'un AUTRE compte, ou une
+// session morte, purge le cache (sinon un écran hors ligne sert l'ancien
+// payload jusqu'à 24 h). La purge précède la publication du client, et les
+// deux sont atomiques : publier d'abord laissait une fenêtre où le cache
+// servait encore l'ancien compte.
 class PairingRepository(
     private val sessions: SessionStore,
     private val cacheStore: CacheStore,
     private val provider: PronoteClientProvider = { PronoteSession.client },
 ) {
-    /**
-     * Appaire : QR + PIN → session locale + session persistée. Le `uuid`
-     * identifie CET appareil auprès de l'établissement (2e tour 2FA) : un par
-     * appairage, persisté avec la session (le re-pair en régénère un).
-     */
+    /** Le `uuid` identifie CET appareil (2e tour 2FA), persisté avec la session. */
     fun pairBlocking(input: PairingInput, deviceName: String = "", uuid: String = newUuid()): PairingResult =
-        // MÊME VERROU que la restauration (#507) : l'appairage ouvre une
-        // session comme la restauration, donc il ne doit pas non plus courir
-        // en parallèle d'un restore (pont OU job de fond) — deux `tokenLogin`
-        // sur le même compte = erreur 25, et l'établissement LIMITE le compte.
-        //
-        // Le pont garde en plus son propre verrou (il protège `sessionReady`) :
-        // l'ordre est toujours pont -> dépôt, donc pas d'inversion.
+        // Même verrou que la restauration : deux `tokenLogin` en parallèle sur
+        // le même compte = erreur 25, et l'établissement LIMITE le compte.
+        // Ordre pont -> dépôt, jamais l'inverse.
         synchronized(restoreLock) {
-            // QR + PIN = la seule méthode : sans les deux, pas d'appel réseau (le
-            // téléphone refuserait comme l'établissement, en plus lent).
             val qr = input.qr
             val pin = input.pin.trim()
             if (qr == null || pin.isEmpty()) {
@@ -117,8 +78,6 @@ class PairingRepository(
             if (pin.length > PIN_MAX_CHARS) {
                 return@synchronized PairingResult.Err("bad_request", "PIN refusé : vérifie le code défini dans ton compte établissement.")
             }
-            // L'adresse vient du QR (#299) : `parseSchoolQr` refuse déjà un QR sans
-            // URL, donc elle est là et bornée. Le client la revalide.
             val schoolUrl = qr.url
             val client = try {
                 Client.qrcodeLogin(
@@ -127,14 +86,12 @@ class PairingRepository(
                     uuid,
                     QrLoginOptions(
                         deviceName = deviceName.trim().ifEmpty { null },
-                        // #473 : mémo des lectures identiques (60 s) — l'app redemande
-                        // moins souvent la même chose à l'établissement.
+                        // Mémo des lectures identiques (60 s) : moins d'appels.
                         memoizeReads = true,
                     ),
                 )
             } catch (e: IllegalArgumentException) {
-                // URL du QR illisible (URI malformée) : la faute est dans le code
-                // scanné, donc le seul geste utile est de le rescanner.
+                // URL du QR malformée : rescanner est le seul geste utile.
                 return@synchronized PairingResult.Err("bad_request", "QR sans adresse d'établissement valide : rescane le code affiché par son application.")
             } catch (e: Exception) {
                 return@synchronized failure(e)
@@ -143,40 +100,24 @@ class PairingRepository(
         }
 
     /**
-     * Connexion à l'établissement de DÉMONSTRATION : un clic, sans QR ni PIN.
-     *
-     * Le compte de démonstration est public (l'éditeur le publie sur son site
-     * de démonstration) : il s'ouvre par son identifiant, pas par un jeton
-     * d'appairage. La session obtenue est publiée comme une session QR —
-     * cache purgé, client en RAM, session persistée — donc l'app se rouvre
-     * dessus au redémarrage.
-     *
-     * Même verrou que l'appairage et la restauration : une seule session à la
-     * fois dans le process (deux ouvertures sur le même compte = erreur 25
-     * côté établissement).
+     * Connexion à l'établissement de DÉMONSTRATION : compte public, ouvert par
+     * identifiant (pas de jeton). Même verrou : une seule session à la fois.
      */
     fun pairDemoBlocking(): PairingResult = synchronized(restoreLock) {
         val client = try {
             Client.demoLogin()
         } catch (_: Exception) {
-            // Un seul code pour la démo : le geste à faire est le même
-            // partout (« réessaie »), et le pont ne reçoit JAMAIS le message
-            // brut d'une exception (il peut nommer l'hôte).
+            // Un seul code pour la démo, et jamais le message brut (il peut
+            // nommer l'hôte).
             return@synchronized PairingResult.Err("demo_failed", "Connexion à la démo impossible : réessaie dans un instant.")
         }
-        // Pas d'adresse d'établissement à la main : c'est celle du client
-        // (l'adresse de l'établissement de démonstration).
         publish(client, SessionMode.IDENTIFIANT)
     }
 
     /**
-     * Publication d'une session : purge du cache du compte précédent, client
-     * en RAM, session persistée. Partagée par l'appairage QR et la connexion
-     * de démonstration.
-     *
-     * #529 : la purge du cache du compte précédent précède la PUBLICATION du
-     * nouveau client. Les identifiants sont donc exportés AVANT : la purge a
-     * besoin de l'identité du nouveau compte.
+     * Purge du cache du compte précédent, client en RAM, session persistée.
+     * La purge précède la publication (`#529`) : les identifiants sont donc
+     * exportés avant, la purge ayant besoin de l'identité du nouveau compte.
      * Déstructuré, pas nommé : le champ du port s'appelle `pronoteUrl`
      * (I1 : ce mot ne figure dans aucun identifiant hors `android/pronote/`).
      */
@@ -184,44 +125,33 @@ class PairingRepository(
         val (endpoint, username, password, clientId, rebuiltUuid) = try {
             client.exportCredentials()
         } catch (_: Exception) {
-            // Le client n'est PAS encore publié : l'ancien compte reste en
-            // place, il n'y a rien à nettoyer.
+            // Client pas encore publié : l'ancien compte reste en place, rien
+            // à nettoyer.
             return PairingResult.Err("internal", "Session illisible : réessaie l'appairage.")
         }
-        // L'identifiant du compte : l'id de la ressource client — PAS le login,
-        // PAS le jeton (un accountId n'est pas un secret). Il devient connu à
-        // l'appairage : c'est le moment d'enregistrer le compte (#397).
+        // Id de la ressource client — pas le login, pas le jeton (pas un secret).
         val accountId = try {
             client.infoId?.trim()?.takeIf { it.isNotEmpty() }
         } catch (_: Exception) {
             null
         }
         try {
-            // #407 : le compte vient de changer ? Alors le cache du compte
-            // précédent part : il ne doit JAMAIS être servi au nouveau compte.
-            // L'identité vient de la session PERSISTÉE (toujours présente,
-            // contrairement à `AccountStore.current()`) et de celle qu'on
-            // appaire maintenant.
-            // La purge est AVANT `sessions.save` : si le process meurt entre
-            // les deux, la session restaurée est l'ANCIENNE (dont le cache
-            // vient d'être purgé), jamais le nouveau compte avec le cache de
-            // l'ancien.
+            // L'identité vient de la session PERSISTÉE (toujours présente, pas
+            // `AccountStore.current()`). La purge est AVANT `sessions.save` :
+            // si le process meurt entre les deux, la session restaurée est
+            // l'ANCIENNE, jamais le nouveau compte avec le cache de l'ancien.
             val previous = try {
                 sessions.load()?.let { AccountIdentity.of(it.endpointUrl, it.username) }
             } catch (_: Exception) {
                 null
             }
-            // #529 : la bascule est ATOMIQUE (purge + publication dans la
-            // MÊME section critique d'époque) : le client du nouveau compte
-            // ne devient visible qu'une fois le cache de l'ancien purgé.
+            // Bascule ATOMIQUE : le client du nouveau compte ne devient
+            // visible qu'une fois le cache de l'ancien purgé.
             CacheScope.switchAccount(
                 cacheStore,
                 previous,
                 AccountIdentity.of(endpoint, username),
             ) {
-                // La session vit en mémoire (lectures) ET sur disque
-                // chiffré (redémarrage) — la publication vient APRÈS la
-                // purge du cache du compte précédent.
                 PronoteSession.set(client)
             }
             sessions.save(
@@ -229,14 +159,10 @@ class PairingRepository(
                     endpointUrl = endpoint,
                     username = username,
                     password = password,
-                    // La session de DÉMONSTRATION s'ouvre par identifiant : elle
-                    // n'a pas d'UUID d'appareil. Un UUID tiré au sort occupe la
-                    // place (le store refuse une session sans UUID).
+                    // Démo : pas d'UUID d'appareil ; le store refuse une session
+                    // sans UUID, on en met un au hasard.
                     uuid = rebuiltUuid.ifEmpty { newUuid() },
                     clientIdentifier = clientId,
-                    // L'adresse de l'établissement : celle du QR quand il y en
-                    // a un, celle du client (l'établissement de démonstration)
-                    // sinon.
                     schoolUrl = schoolUrl.ifEmpty { endpoint },
                     mode = mode,
                 ),
@@ -249,21 +175,14 @@ class PairingRepository(
     }
 
     /**
-     * Restauration au démarrage : le jeton persisté rouvre la session SANS
-     * rescanner (`Client.tokenLogin`). La session de DÉMONSTRATION se rouvre
-     * par LOGIN (couple identifiant / mot de passe public) : elle n'a pas de
-     * jeton. Session morte = store vidé (un jeton
-     * mort ne ressuscitera pas) ET cache purgé (#407) ; réseau KO = store gardé
-     * (la session n'est pas morte, l'app lit ses caches).
+     * Restauration : le jeton persisté rouvre la session sans rescanner ; la
+     * démo se rouvre par LOGIN (compte public, pas de jeton).
      *
-     * #406 : UN SEUL `tokenLogin` à la fois dans le process. Depuis #406, le
-     * job de fond restaure la session lui aussi (process neuf, sans
-     * interface) : si le pont et le job restaurent EN PARALLÈLE, deux
-     * authentifications partent sur le même compte → « Exceeded max
-     * authorization requests » (erreur 25) → l'établissement LIMITE le
-     * compte. Le verrou est donc partagé : le second appelant attend, puis
-     * trouve la session déjà en RAM (`PronoteSession.client`) et ne refait
-     * pas de réseau.
+     * UN SEUL `tokenLogin` à la fois dans le process : le pont et le job de
+     * fond restaurent chacun, et deux authentifications parallèles sur le même
+     * compte déclenchent l'erreur 25 puis une LIMITE du compte. Le second
+     * appelant attend et trouve la session en RAM. Session morte = store vidé
+     * et cache purgé ; réseau KO = store gardé.
      */
     fun restoreBlocking(): RestoreResult = synchronized(restoreLock) {
         val stored = try {
@@ -274,14 +193,12 @@ class PairingRepository(
         if (provider() != null) return@synchronized RestoreResult.Restored
         try {
             val client = if (SessionMode.of(stored.mode) == SessionMode.IDENTIFIANT) {
-                // Session de DÉMONSTRATION : le compte est un couple
-                // identifiant / mot de passe PUBLIC, pas un jeton d'appairage.
-                // On le rouvre donc par login, comme il a été ouvert.
+                // Démo : couple identifiant / mot de passe public, pas de jeton.
                 Client.login(
                     stored.endpointUrl,
                     stored.username,
                     stored.password,
-                    // #473 : mémo des lectures identiques (60 s), comme à l'appairage.
+                    // Mémo des lectures identiques (60 s), comme à l'appairage.
                     ClientOptions(clientIdentifier = stored.clientIdentifier, memoizeReads = true),
                 )
             } else {
@@ -290,7 +207,7 @@ class PairingRepository(
                     stored.username,
                     stored.password,
                     stored.uuid,
-                    // #473 : mémo des lectures identiques (60 s), comme à l'appairage.
+                    // Mémo des lectures identiques (60 s), comme à l'appairage.
                     ClientOptions(clientIdentifier = stored.clientIdentifier, memoizeReads = true),
                 )
             }
@@ -304,10 +221,9 @@ class PairingRepository(
                     sessions.clear()
                 } catch (_: Exception) {
                 }
-                // #407 : la session est MORTE (jeton tourné) : le cache part
-                // avec elle. Sans cette purge, l'appairage suivant — un AUTRE
-                // compte — servirait le payload du compte mort, hors ligne,
-                // jusqu'à 24 h (TTL des capacités).
+                // Session MORTE : le cache part avec elle, sinon l'appairage
+                // suivant (un AUTRE compte) servirait ce payload hors ligne
+                // jusqu'à 24 h.
                 CacheScope.onSessionDead(cacheStore)
                 RestoreResult.Dead(DeviceAuth.REJECTED_MESSAGE)
             }
@@ -315,33 +231,26 @@ class PairingRepository(
     }
 
     /**
-     * Erreur d'appairage → phrase actionnable. On ne dit jamais « recommence »
-     * quand « rescane » est la bonne réponse, et jamais un diagnostic deviné :
-     * un message brut de la lib ne sort pas (I6, règle d'or).
+     * Erreur d'appairage → phrase actionnable. Jamais « recommence » quand
+     * « rescane » est la réponse, jamais un message brut de la lib (I6).
      */
     private fun failure(e: Exception): PairingResult.Err {
         if (e is IOException) {
-            // Jamais le message de l'exception : il peut nommer l'hôte de
-            // l'établissement (adresse interne, port) (#396). Le pont rend la
-            // phrase affichée à partir du code.
+            // Jamais le message de l'exception : il peut nommer l'hôte (#396).
             return PairingResult.Err("network", "Réseau indisponible : vérifie ta connexion, puis réessaie.")
         }
         val message = e.message.orEmpty()
         return when {
-            // L'établissement a limité les requêtes d'authentification : le
-            // compte n'est PAS refusé, le QR n'est PAS périmé. Le seul geste
-            // utile est d'attendre — rescanner tout de suite aggraverait la
-            // limite. Le TYPE est la voie normale ; le code brut reste couvert
-            // pour une erreur construite hors de `Communication`.
+            // Débit limité, pas un compte refusé ni un QR périmé : attendre.
+            // Le TYPE est la voie normale ; le code brut couvre une erreur
+            // construite hors de `Communication`.
             (e is RateLimitedError) || (e is PronoteAPIError && e.pronoteErrorCode == G_RATE_LIMIT) ->
                 PairingResult.Err("rate_limited", "L'établissement limite les connexions : attends une ou deux minutes, puis réessaie.")
             e is QRCodeDecryptError ->
                 PairingResult.Err("qr_rejected", "QR ou PIN refusé par l'établissement : rescane le code affiché par son application.")
             e is MFAError ->
                 PairingResult.Err("mfa_required", "Ce compte exige une vérification supplémentaire que l'app ne prend pas en charge.")
-            // L'établissement a RÉPONDU avec un code d'erreur : il a REFUSÉ.
-            // C'est le `G` qui le dit, pas un mot de son message (#520) — le
-            // rate-limit est un TYPE à part (ci-dessus), pas un refus de compte.
+            // Code d'erreur présent = refus ; le `G` le dit, pas le message.
             e is PronoteAPIError && e.pronoteErrorCode != null ->
                 PairingResult.Err("login_refused", "Compte refusé par l'établissement : régénère le QR dans son application, puis rescane-le.")
             isSessionFailure(e) || message.isNotBlank() && isLoginRefused(message) ->
@@ -356,8 +265,7 @@ class PairingRepository(
         const val PIN_MAX_CHARS = 64
 
         /**
-         * Verrou de restauration PARTAGÉ par tout le process (#406) : le pont
-         * et le job de fond ne doivent jamais ouvrir deux sessions en
+         * Verrou PARTAGÉ par tout le process : jamais deux sessions ouvertes en
          * parallèle (erreur 25 côté établissement).
          */
         private val restoreLock = Any()
@@ -371,24 +279,17 @@ private fun isLoginRefused(message: String): Boolean =
     Regex("login|credential|username|password|identifiant|refus", RegexOption.IGNORE_CASE)
         .containsMatchIn(message)
 
-/**
- * `G=25` : « Exceeded max authorization requests ». C'est la limitation de
- * débit, pas un refus de compte ni une session morte.
- */
+/** `G=25` : « Exceeded max authorization requests » = débit limité, pas un refus. */
 private const val G_RATE_LIMIT = 25
 
-// Miroir de SETUP_* (shared/contracts/api.ts). Bornes appliquées à la saisie :
-// l'établissement revalide de son côté.
+// Miroir de SETUP_* (shared/contracts/api.ts), bornes appliquées à la saisie.
 private const val SCHOOL_QR_FIELD_MAX_CHARS = 1024
 private const val SCHOOL_URL_MAX_CHARS = 300
 
 /**
- * Contenu scanné → payload du QR de l'établissement.
- * Deux formes acceptées : le JSON que produit l'application de l'établissement
- * (`{"login":…,"jeton":…,"url":…}`) et la forme compacte `login|jeton|url`.
- * L'`url` est OBLIGATOIRE (#299) : plus d'étape de saisie, donc un QR sans
- * adresse est un QR que l'app ne sait pas utiliser — `null`, l'appelant
- * affiche « QR illisible ». Renvoie `null` plutôt que de lever.
+ * Contenu scanné → payload du QR. Deux formes : JSON
+ * (`{"login":…,"jeton":…,"url":…}`) ou compacte `login|jeton|url`.
+ * L'`url` est obligatoire ; un QR sans adresse donne `null` (jamais d'exception).
  */
 fun parseSchoolQr(raw: String): SchoolQr? {
     val text = raw.trim()
@@ -417,6 +318,6 @@ fun parseSchoolQr(raw: String): SchoolQr? {
 private fun bounded(value: String): Boolean =
     value.isNotEmpty() && value.length <= SCHOOL_QR_FIELD_MAX_CHARS
 
-/** Adresse portée par le QR, bornée avant usage (le client revalide de son côté). */
+/** Adresse portée par le QR, bornée avant usage (le client revalide). */
 private fun boundedSchoolUrl(value: String): Boolean =
     value.isNotEmpty() && value.length <= SCHOOL_URL_MAX_CHARS

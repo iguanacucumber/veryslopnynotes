@@ -1,10 +1,7 @@
 /**
- * Hôte PRONOTE : le mot du produit ET le domaine de l'éditeur.
- *
- * `index-education.net` est le domaine RÉEL des établissements PRONOTE (cf. la
- * référence `pronotets` : `hubeduconnect.index-education.net`) : avec
- * `/pronote/i` seul, un hôte PRONOTE glissé dans `android/data/` passait la
- * garde I1 (#489).
+ * Hôte PRONOTE : le mot du produit ET le domaine de l'éditeur
+ * (`index-education.net`, le domaine RÉEL). Avec `/pronote/i` seul, un hôte
+ * glissé dans `android/data/` passait la garde I1.
  */
 export const pronoteHost = /pronote|index-education/i;
 export const sqliteRe =
@@ -12,9 +9,8 @@ export const sqliteRe =
 export const httpRe = /from\s+['"]hono|from\s+['"]express|require\s*\([^)]*(hono|express|fastify)|Bun\.serve/;
 
 /**
- * Imports de PLATEFORME que Gradle ne voit pas : ils ne figurent dans aucun
- * `build.gradle.kts`, donc la frontière des modules ne peut pas les refuser.
- * `android/core/` les interdit (I3) : réseau Java, SQLite Android, Room.
+ * Imports de PLATEFORME que Gradle ne voit pas (aucun `build.gradle.kts`) :
+ * `android/core/` les interdit (I3) — réseau Java, SQLite Android, Room.
  */
 export const platformRe = /\bimport\s+(?:static\s+)?(?:java\.net|android\.database|androidx\.room)\b/;
 
@@ -22,16 +18,10 @@ const netRe = /fetch\(|axios|got\(|https?\.(get|request)|Bun\.serve|XMLHttpReque
 
 // ponytail: two source-text heuristics; upgrade to AST/dataflow if server gains more outbound routes.
 //
-// #535 : le mot de l'hôte suffit, n'importe où dans le fichier. Avant, il
-// fallait que le mot ET l'appel réseau soient sur la MÊME ligne, ou que
-// l'URL soit un littéral COMPLET (`https://…index-education.net…`) : une URL
-// assemblée à l'exécution passait — `const h = "index-education" + ".net";
-// await fetch("https://" + h);` — alors que le mot est bien dans le fichier.
-//
-// Le signal est déjà là : le mot `pronote`/`index-education` est INTERDIT
-// hors du module `android/pronote/` (I1). Un fichier du serveur qui le
-// mentionne ET appelle le réseau est donc un accès PRONOTE direct, que la
-// forme de l'URL cache ou non. fail-closed : on refuse le fichier.
+// Le mot de l'hôte suffit, n'importe où dans le fichier : exiger le mot ET
+// l'appel réseau sur la MÊME ligne laissait passer une URL assemblée à
+// l'exécution (`"index-education" + ".net"`). Le mot est déjà interdit hors
+// `android/pronote/` (I1) : mention + réseau = accès direct, fail-closed.
 export function hasDirectFetch(code: string): boolean {
   if (!netRe.test(code)) return false;
   // Commentaires ignorés : une mention en prose n'est pas un accès.
@@ -39,10 +29,9 @@ export function hasDirectFetch(code: string): boolean {
 }
 
 /**
- * Types MIME EXÉCUTABLES : le lecteur qui les ouvre INTERPRÈTE le contenu
- * (script, balise, stylesheet). #398 — une pièce jointe nommée par le serveur
- * ne doit jamais en sortir : `consignes.html` partait vers un lecteur tiers
- * comme du HTML exécutable, au lieu d'octets inertes (I6).
+ * Types MIME EXÉCUTABLES : le lecteur qui les ouvre INTERPRÈTE le contenu. Une
+ * pièce jointe nommée par le serveur ne doit jamais en sortir — `consignes.html`
+ * partait comme du HTML exécutable au lieu d'octets inertes (I6).
  */
 export const EXECUTABLE_MIME_TYPES: ReadonlySet<string> = new Set([
   "text/html",
@@ -60,10 +49,9 @@ export const EXECUTABLE_MIME_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Contenu d'un appel Kotlin `setOf(...)` / `mapOf(...)` — le texte entre ses
- * parenthèses. `name` = le nom de la VALEUR déclarée (`MIME_BY_EXTENSION`,
- * `TEXT_ONLY_EXTENSIONS`…) : on lit la première parenthèse après la
- * déclaration, c'est-à-dire l'appel `setOf(`/`mapOf(` qui l'initialise.
+ * Contenu d'un appel Kotlin `setOf(...)` / `mapOf(...)` : `name` = la VALEUR
+ * déclarée (`MIME_BY_EXTENSION`, `TEXT_ONLY_EXTENSIONS`…), on lit l'appel qui
+ * l'initialise.
  */
 function kotlinCallBody(src: string, name: string): string {
   const i = src.indexOf(name);
@@ -89,7 +77,6 @@ export function parseKotlinStringSet(src: string, name: string): Set<string> {
   );
 }
 
-/** Source without comments, for lightweight architecture and Kotlin mirror tests. */
 export function codeOnly(content: string): string {
   return content
     .replace(/\/\*[\s\S]*?\*\//g, "\n")

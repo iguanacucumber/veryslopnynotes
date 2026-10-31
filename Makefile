@@ -1,16 +1,13 @@
 .PHONY: check check-run check-fast watch lint audit typecheck unit architecture contracts android-compile web web-typecheck web-build web-test web-smoke runServer buildDebugApk buildRelApk updateApkToPhone build shot papillonRef
 
-# Découverte JDK/SDK partagée (borne 17–21, une seule implémentation).
+# JDK/SDK partagé (borne 17–21).
 ANDROID_ENV = . agents/runtime/android-env.sh
 
-# Tests filtrés : cause gardée, bruit borné, code de sortie de bun conservé.
-# Détail : docs/architecture/BUILD.md.
+# Cause gardée, bruit borné, code de sortie de bun conservé.
 TEST_OUTPUT = bun run agents/runtime/test-output.ts
 
-# `make check` = 9 étapes en parallèle. Détail : docs/architecture/BUILD.md.
-# Le gate est strict (CHECK_HARNESS / ALLOW_SKIP_ANDROID neutralisés,
-# REQUIRE_KOTLIN_TOOLCHAIN=1, MAKEFLAGS ignoré, deux phases). Pas de version
-# allégée, pas de skip silencieux.
+# Gate strict : CHECK_HARNESS/ALLOW_SKIP_ANDROID neutralisés,
+# REQUIRE_KOTLIN_TOOLCHAIN=1, MAKEFLAGS ignoré. Pas de version allégée.
 GATE_STATUS = $(CURDIR)/node_modules/.cache/gate-status
 
 check-run:
@@ -22,29 +19,26 @@ check: check-run
 	$(if $(wildcard $(GATE_STATUS)),,$(error gate NON EXÉCUTÉ : aucun statut — le gate n'a pas tourné))
 	$(if $(filter 0,$(shell cat $(GATE_STATUS))),,$(error gate ROUGE : code de sortie $(shell cat $(GATE_STATUS))))
 
-# Tout sauf android-compile (~2,1 s à chaud). Saute uniquement la compilation Gradle.
 check-fast:
 	CHECK_HARNESS=1 CHECK_TARGETS="lint typecheck unit architecture contracts web-typecheck web-test" bun run agents/runtime/check.ts
 
-# `make watch T=tests/unit/foo.test.ts` cible un fichier. Séquentiel exprès.
+# `T=<fichier>` cible un test ; séquentiel exprès.
 watch:
 	bun test --watch $(if $(T),$(T),tests/unit tests/web)
 
 lint:
 	bun run agents/runtime/check-secrets.ts
 
-# `bun audit` (réseau requis : registre injoignable = échec).
+# Réseau requis : registre injoignable = échec.
 audit:
 	bun audit
 
 typecheck:
 	bun run --silent typecheck
 
-# Tests unitaires + parité Kotlin. `--parallel` : un isolat par fichier.
 unit:
 	$(TEST_OUTPUT) unit tests/unit --parallel
 
-# Frontend React. Le build écrit dans android/app/src/main/assets/web/ (gitignoré).
 web-typecheck:
 	bun run --silent typecheck:web
 
@@ -56,11 +50,10 @@ web-test:
 
 web: web-typecheck web-test web-build
 
-# Smoke navigateur (Chromium). Hors `make check`.
 web-smoke: web-build
 	bun run agents/runtime/web-smoke.ts
 
-# Bundle Vite construit UNE fois par le gate (`architecture` tire `web-build`).
+# `web-build` une seule fois par gate.
 architecture: web-build architecture-test
 
 architecture-test:
@@ -70,10 +63,8 @@ architecture-test:
 contracts:
 	bun test tests/contracts --parallel
 
-# Compile Kotlin RÉELLE + Android Lint dans la même invocation Gradle. Seul
-# filet qui résout les symboles. Outillage absent = ÉCHEC, pas de skip silencieux.
-# Détail (offline d'abord, repli en ligne, -x buildWebUi) : docs/architecture/BUILD.md.
-# Le journal part dans un fichier fixe ; seul `kotlin-errors.ts` l'affiche.
+# Outillage absent = ÉCHEC, pas de skip silencieux. Journal fixe, affiché par
+# kotlin-errors.ts uniquement.
 android-compile:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
@@ -102,8 +93,6 @@ android-compile:
 	  exit "$$s"; \
 	fi
 
-# Capture d'écran sur téléphone réel (`make shot ROUTE=grades`).
-# JDK/SDK via android-env.sh. Détail : docs/architecture/BUILD.md.
 shot:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
@@ -116,7 +105,7 @@ shot:
 	fi; \
 	JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" agents/runtime/shot.sh $(ROUTE) $(SHOT_ARGS)
 
-# APK debug. `preBuild` lance `bun run build:web` : l'APK embarque toujours web/ à jour.
+# `preBuild` lance `bun run build:web` : l'APK embarque le web à jour.
 buildDebugApk:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
@@ -127,7 +116,6 @@ buildDebugApk:
 	cd android && JAVA_HOME="$$jdk" ANDROID_HOME="$$sdk" ./gradlew --console=plain assembleDebug && \
 	echo "APK debug : android/app/build/outputs/apk/debug/app-debug.apk"
 
-# Construit l'APK debug puis l'installe (`adb install -r`, données conservées).
 # Un seul appareil prêt, sinon ANDROID_SERIAL=<série>. Jamais de désinstallation.
 updateApkToPhone: buildDebugApk
 	@command -v adb >/dev/null 2>&1 || { \
@@ -147,7 +135,6 @@ updateApkToPhone: buildDebugApk
 	echo "updateApkToPhone : installation sur $$serial (données conservées)…"; \
 	adb -s "$$serial" install -r android/app/build/outputs/apk/debug/app-debug.apk
 
-# APK release (signé custom si STORE_FILE, sinon debug #297) + AAB Play Store.
 buildRelApk:
 	@$(ANDROID_ENV); \
 	jdk=$$(android_jdk); sdk=$$(android_sdk); \
@@ -159,17 +146,16 @@ buildRelApk:
 	echo "APK release : android/app/build/outputs/apk/release/ (signé custom si STORE_FILE présent, sinon signé debug #297)" && \
 	echo "AAB release : android/app/build/outputs/bundle/release/app-release.aab (Play : upload key custom recommandée)"
 
-# Scraper de manuels : HTTPS, sans auth (I8), boucle locale ou proxy authentifié.
-# Détail (TLS, `&&`, PORT/HOST) : docs/architecture/BUILD.md.
+# HTTPS sans auth (I8) ; boucle locale par défaut.
 runServer:
 	@. agents/runtime/dev-tls.sh && dev_tls && \
 	PORT="$${PORT:-8080}" HOST="$${HOST:-127.0.0.1}" bun run server/infrastructure/http.ts
 
-# Frames de référence Papillon. Réseau = échec bruyant, hors `make check`.
+# Hors `make check` ; réseau absent = échec bruyant.
 papillonRef:
 	agents/runtime/papillon-ref.sh
 
-# Image serveur Docker + scan de secrets. Jamais de masquage d'échec.
+# Docker absent = SKIP explicite ; build Docker échoué = échec.
 build:
 	bun run agents/runtime/check-secrets.ts
 	@if ! command -v docker >/dev/null 2>&1; then \

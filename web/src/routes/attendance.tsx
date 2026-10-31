@@ -18,9 +18,8 @@ export default function AttendanceRoute() {
       error={attendance.error}
       stale={attendance.stale}
       onlyPending={onlyPending}
-      // Capacités INCONNUES (`null`) : rien n'est affirmé, donc la sanction
-      // reste visible. Seule une liste AFFIRMÉE qui n'a pas l'onglet la masque
-      // (#413 : une liste vide pour « inconnu » blackouterait l'écran).
+      // Capacités INCONNUES (`null`) : rien n'est affirmé, la sanction reste
+      // visible ; seule une liste AFFIRMÉE sans l'onglet la masque.
       canSeeSanctions={sanctionsVisible(tabs)}
       onOnlyPendingChange={setOnlyPending}
       onRefresh={attendance.refresh}

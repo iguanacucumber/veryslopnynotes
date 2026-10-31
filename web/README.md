@@ -41,7 +41,7 @@ production ne l'embarque pas, et un pont natif absent y est un échec bruyant
 - `src/ui/components.tsx` : cartes, états vides, erreurs, avatar.
 - `src/styles/tokens.css` : jetons de la palette par défaut (repli si le JS échoue).
 - `src/lib/schemes.ts` : les 21 palettes (claire + sombre), posées en variables CSS sur `<html>`.
-- `src/styles/madoka.css` : skin décoratif « Madoka Magica » (étoiles dorées, halos roses), actif seulement quand la palette `madoka` est choisie.
+- `src/styles/madoka.css` : accent doré « Madoka Magica » (filets et sélection), actif seulement quand la palette `madoka` est choisie.
 - `src/routes/*.tsx` : un écran par route.
 - `src/features/*` : logique/parsers par écran.
 

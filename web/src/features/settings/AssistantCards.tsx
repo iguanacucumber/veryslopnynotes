@@ -9,12 +9,6 @@ import { AssistantOverviewCard } from "./AssistantOverviewCard";
 import { actionMessage } from "./action";
 import { MAX_API_KEY_CHARS, llmSaveError } from "./model";
 
-/**
- * Section Assistant : l'aperçu et la clé partagent `llmConfigured` (le même
- * état décide du texte d'état, du bouton « Oublier » et du dialogue de
- * confirmation), donc une seule carte les porte. Le manuel, indépendant et
- * lu par le scraper, vit dans `ManualCard`.
- */
 export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapshot | null; loading: boolean }) {
   const { notify, storageUnavailable } = useApp();
   const [llmConfigured, setLlmConfigured] = useState(false);
@@ -57,7 +51,7 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
   }
 
   async function forgetKey(): Promise<void> {
-    // #612 : la suppression ne part que du dialogue de confirmation.
+    // La suppression ne part que du dialogue de confirmation.
     setLlmError("");
     setForgettingKey(true);
     try {
@@ -113,8 +107,7 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
           demande — jamais au serveur de l’établissement.
         </p>
         {storageUnavailable ? (
-          // #401 : la clé vit en MÉMOIRE (le Keystore est mort) : elle
-          // fonctionnera jusqu'à la fermeture de l'app, puis disparaîtra.
+          // La clé vit en MÉMOIRE (Keystore mort) : elle disparaît à la fermeture.
           // Sans ce message, l'utilisateur croit sa clé enregistrée.
           <p className="tiny" role="alert" style={{ color: "var(--danger-ink)", margin: "6px 0 0" }}>
             {STORAGE_UNAVAILABLE_MESSAGE}

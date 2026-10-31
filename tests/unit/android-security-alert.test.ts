@@ -1,23 +1,7 @@
-// #415 : le filtre anti-injection est une HEURISTIQUE — contournable, et trop
-// bavard sur du contenu légitime.
-//
-// Ce test ne Miroite pas la logique : il COMPILE la vraie source de
-// production (`core/SecurityAlert.kt`) et la pilote via
-// `agents/runtime/kotlin-parity/SecurityAlertParityMain.kt`. Les assertions
-// portent donc sur le code exécuté (même démarche que
-// `android-untrusted.test.ts` pour le marqueur de délimitation).
-//
-// Les trois défauts couverts par l'issue :
-//  1. contournements (faux négatifs) : « Ignorez les instructions »,
-//     « ignore  les instructions » (espaces multiples), « Ignore previous
-//     instructions », « Disregard the above », une charge encodée en base64 ;
-//  2. faux positifs : une note de cours qui contient « consigne système » ou
-//     « untrusted » ne déclenche AUCUNE alerte ;
-//  3. l'interface ne doit jamais qualifier le résultat de « vérifié »
-//     (voir `tests/web/misc.test.ts`).
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Le filtre anti-injection est une HEURISTIQUE : contournable et bavard sur du
+// contenu légitime. La VRAIE source est compilée et pilotée ; elle couvre les
+// faux négatifs, les faux positifs, et l'UI ne dit jamais « vérifié ».
+// Outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -149,16 +133,12 @@ describe("filtre anti-injection : heuristique honnête (#415)", () => {
     expect(await scanCount("Ignore les instructions", "   ")).toBe(0);
   });
 
-  // Pin statique : les marqueurs ISOLÉS qui déclenchaient des alertes sur du
-  // contenu légitime ont disparu de la liste. Ce filet tourne même quand la
-  // chaîne d'outils Kotlin est absente (SKIP bruyant du harnais).
+  // Pin statique : les marqueurs ISOLÉS ont disparu de la liste.
   test("plus aucun marqueur isolé dans la liste des formules", () => {
     const src = readFileSync(SECURITY_ALERT, "utf8");
-    // Littéraux exacts (guillemets droits) : un mot isolé ne peut plus
-    // être un marqueur, seul une FORMULE l'est.
+    // Un mot isolé n'est plus un marqueur, seule une FORMULE l'est.
     expect(src).not.toMatch(/"untrusted"/i);
     expect(src).not.toMatch(/"consigne syst[^"]*"/i);
-    // L'ancienne liste de sous-chaînes littérales a disparu.
     expect(src).not.toContain("INJECTION_MARKS");
   });
 });

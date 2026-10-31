@@ -1,17 +1,7 @@
-// #364 : la purge de déconnexion est annulée par une lecture en vol.
-//
-// VRAI Kotlin compilé : `SessionEpoch` et `FileCacheStore` (android/data,
-// logique pure : `java.io` seul, aucun import Android) sont compilés par le
-// harnais puis pilotés par `CacheEpochParityMain` — ce n'est pas un miroir TS,
-// c'est le code de production exécuté. Les trois critères du ticket portent
-// dessus :
-//   1. une déconnexion pendant une lecture en vol → le cache reste VIDE sur le
-//      disque et l'entrée n'est pas re-servie ;
-//   2. deux écrivains concurrents sur le même dossier → le fichier relu est
-//      TOUJOURS parsable (jamais tronqué, jamais entrelacé) ;
-//   3. une lecture normale (sans déconnexion) → le cache est bien écrit.
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// La purge de déconnexion ne doit pas être annulée par une lecture en vol :
+// le cache reste vide et n'est jamais re-servi. VRAI Kotlin compilé.
+// Deux écrivains concurrents laissent toujours un fichier parsable.
+// Outillage absent = SKIP BRUYANT, jamais un faux vert.
 import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -34,8 +24,7 @@ if (!skip) {
 
 afterAll(async () => {
   if (!link) return;
-  // Les dossiers temporaires du pilote sont supprimés (le processus est tué
-  // juste après, le hook de fermeture n'aurait pas tourné).
+  // Les dossiers temporaires du pilote sont supprimés (processus tué aussitôt).
   try {
     await link.ask({ op: "cleanup" });
   } catch {
@@ -70,24 +59,17 @@ describe("purge de déconnexion (#364)", () => {
     const acc = readFileSync(ACCOUNT, "utf8");
     const iLogout = acc.indexOf("fun logout(");
     expect(iLogout).toBeGreaterThan(-1);
-    // #407 : la purge est UN SEUL endroit (`CacheScope.purge`) — la
-    // déconnexion, l'appairage d'un autre compte et la session morte y
-    // passent tous, donc sous la même garde d'époque.
-    // #397 : la déconnexion ET la session morte partagent le même code de
-    // purge (`SessionRepair.purge`) — l'UNIQUE appel de `CacheScope.purge`
-    // hors `CacheScope` lui-même.
+    // La purge est UN SEUL endroit (`CacheScope.purge`), partagé par déconnexion, appairage et session morte.
     expect(acc).toContain("SessionRepair.purge(");
     expect(acc).not.toContain("SessionEpoch.invalidate");
     const repair = readFileSync(join(DATA, "SessionRepair.kt"), "utf8");
     expect(repair).toContain("CacheScope.purge(cacheStore)");
     expect(repair).not.toContain("SessionEpoch.invalidate");
-    // La purge est DANS la garde (une seule section critique) : l'invalidation
-    // de l'époque et l'effacement du cache sont dans le même bloc.
+    // La purge est DANS la garde : invalidation et effacement dans la même section critique.
     const scope = readFileSync(join(DATA, "CacheScope.kt"), "utf8");
     expect(scope).toMatch(/SessionEpoch\.invalidate \{[\s\S]*?store\.clearAll\(\)/);
     // La purge brute ne subsiste pas (elle passerait hors section critique).
-    // #529 : la bascule de compte purge ET publie dans la MÊME section
-    // critique — donc UN SEUL effacement, toujours gardé.
+    // La bascule purge ET publie dans la même section critique : un seul effacement, gardé.
     expect(scope.match(/store\.clearAll\(\)/g)?.length).toBe(1);
   });
 
@@ -101,14 +83,12 @@ describe("purge de déconnexion (#364)", () => {
 
   test("câblage : le contrat du cache ne bouge pas (ressources, TTL, clé, format disque)", () => {
     const policy = readFileSync(POLICY, "utf8");
-    // TTL et ressources cachables : inchangés (#365 traite la clé de requête,
-    // pas ce fichier).
+    // TTL et ressources cachables inchangés.
     expect(policy).toContain("const val TTL_GRADES_MS = 15L * 60L * 1000L");
     expect(policy).toContain("const val TTL_ASSIGNMENTS_MS = 15L * 60L * 1000L");
     expect(policy).toContain("const val TTL_TIMETABLE_MS = 60L * 60L * 1000L");
     expect(policy).toContain("const val GRADES = \"grades\"");
-    // Format sur disque : un fichier par ressource, en-tête (horodatage +
-    // requête, #365) puis payload.
+    // Format : un fichier par ressource, en-tête (horodatage + requête) puis payload.
     const cache = readFileSync(CACHE, "utf8");
     expect(cache).toContain("\"cache_$resource.txt\"");
     expect(cache).toContain("val head = \"$fetchedAt\\t${CachePolicy.normalizeQuery(query)}\"");
@@ -165,8 +145,7 @@ describe("purge de déconnexion (#364)", () => {
     expect(loaded.found).toBe(true);
     expect(loaded.payload).toBe('{"grades":[{"moyenne":12}]}');
     expect(loaded.fetchedAt).toBe(4242);
-    // Format sur disque inchangé : une ligne d'en-tête (horodatage + requête,
-    // #365), puis le payload brut.
+    // Format inchangé : une ligne d'en-tête, puis le payload brut.
     const raw = await ask({ op: "raw", sid, resource: "grades" });
     expect(raw.exists).toBe(true);
     expect(raw.content).toBe('4242\t\n{"grades":[{"moyenne":12}]}');
@@ -186,8 +165,7 @@ describe("purge de déconnexion (#364)", () => {
     });
     // Le lecteur a bien observé le fichier pendant les écritures.
     expect(res.reads).toBeGreaterThan(0);
-    // Jamais un fichier tronqué (timestamp illisible) ni entrelacé (payload
-    // qui n'est pas l'un des payloads écrits).
+    // Jamais un fichier tronqué ni entrelacé.
     expect(res.bad).toBe(0);
     expect(res.mixed).toBe(0);
   });

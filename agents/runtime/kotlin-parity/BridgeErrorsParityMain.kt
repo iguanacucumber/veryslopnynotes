@@ -1,21 +1,8 @@
 // BridgeErrorsParityMain.kt — pilote JSON de la traduction d'un échec natif
-// en REJET de pont (#394).
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/android-bridge-error.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile la VRAIE source de
-// production `app/BridgeErrors.kt` (logique pure : ni Android ni réseau) et la
-// pilote ici : les assertions portent donc sur du code EXÉCUTÉ, pas sur un
-// miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/android-bridge-error.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Le point du pilote : un `Error` (et non une `Exception`) levé pendant un
-// appel du pont. Le pont doit le transformer en REJET ; l'exception ne doit
-// JAMAIS s'échapper (elle tuerait le fil du worker SANS `resolve` ni
-// `reject` : la promesse JS resterait pendante).
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`). Les
-// erreurs du PILOTE (op inconnue, champ absent) sont préfixées `pilote: ` et
-// refusées par le harnais.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.bridgeerror
 
 import fr.veryslopnynotes.app.BridgeFailure

@@ -1,9 +1,6 @@
-// ExercisesMain.kt — pilote JSON des exercices du manuel (#632).
+// ExercisesMain.kt — pilote JSON des exercices du manuel.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-exercises.test.ts`.
-// Le test compile la VRAIE source `core/Exercises.kt` (pure) et la pilote :
-// extraction VERBATIM des énoncés numérotés, filtre page/chapitre, prompt des
-// trois niveaux d'aide, validation du JSON rendu. Aucun réseau.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-exercises.test.ts` (jamais Gradle, jamais l'APK).
 package fr.veryslopnynotes.exercises
 
 import fr.veryslopnynotes.core.AiContext

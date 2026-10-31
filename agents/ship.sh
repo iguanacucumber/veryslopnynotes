@@ -25,22 +25,19 @@ fi
 
 git fetch origin main --prune
 
-# Conflit = on rend la branche intacte : rien n'est poussé, rien n'est laissé
-# en cours de rebase.
+# Conflit = branche intacte : rien poussé, aucun rebase laissé en cours.
 if ! git rebase origin/main; then
   git rebase --abort 2>/dev/null || true
   echo "ship: rebase sur origin/main impossible (conflits) — rien poussé." >&2
   exit 1
 fi
 
-# Le rebase peut changer bun.lock ; 8 ms à chaud, donc on ne devine pas.
+# Le rebase peut changer bun.lock : on ne devine pas (8 ms à chaud).
 bun install --frozen-lockfile
 make check
 
-# --force-with-lease compare au dernier remote-tracking connu (le claim ou le
-# push précédent) : si un autre agent a poussé entre-temps, le push échoue au
-# lieu de l'écraser. Ne PAS fetcher la branche juste avant : ça armerait le lease
-# avec la valeur de l'autre agent.
+# --force-with-lease : échoue si un autre agent a poussé entre-temps. Ne PAS
+# fetcher la branche juste avant (armerait le lease avec SA valeur).
 git push --force-with-lease -u origin "$BRANCH"
 
 if [ -z "$TITLE" ]; then TITLE="$(git log -1 --format=%s)"; fi

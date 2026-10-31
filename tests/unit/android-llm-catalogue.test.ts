@@ -4,27 +4,16 @@ import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
 import { readBridgeSource } from "./fixtures/bridge-source";
 
-// #359 : le modèle LLM par défaut était absent du catalogue public OpenRouter
-// — chaque appel partait en HTTP 404, avalé en `null` : l'assistant était mort
-// (« Échec de l'assistant. » pour TOUT, clé invalide comprise).
-//
-// Ces tests lisent le code Kotlin livré (le vrai `android-compile` de
-// `make check` en vérifie la compilation) : pas de réseau, pas de doublon.
+// Le modèle LLM par défaut doit exister au catalogue public, sinon chaque appel
+// partait en 404 avalé en `null`. Tests hors réseau, sur le code Kotlin livré.
 
 const DATA = join(import.meta.dir, "..", "..", "android/data/src/main/java/fr/veryslopnynotes/data");
 
 const src = (dir: string, file: string) => codeOnly(readFileSync(join(dir, file), "utf8"));
 
-// Catalogue de RÉFÉRENCE : identifiants relevés dans le catalogue public
-// (`GET https://openrouter.ai/api/v1/models`, relevé du 2026-10-25 : les
-// modèles livrés y sont, avec leur modalité d'entrée). Liste EN DUR : un test
-// unitaire n'appelle jamais le réseau, et le catalogue bouge plus vite que la
-// suite de tests.
+// Catalogue de RÉFÉRENCE en dur (relevé du 2026-10-25, aucun réseau en test) :
+// un modèle doit aussi ACCEPTER les images, sinon chaque photo partait en 400.
 // Pour la rafraîchir : curl -s https://openrouter.ai/api/v1/models | jq -r '.data[].id'
-//
-// #604 : la liste porte aussi le fait qu'un modèle ACCEPTE les images
-// (`architecture.input_modalities`). Sans ça, un id « au catalogue » mais
-// texte seul passait le test alors que chaque photo partait en 400.
 const IMAGE_MODELS = new Set([
   "dots-studio/dots-3-note-preview:free",
   "google/gemma-4-31b-it:free",
@@ -67,13 +56,10 @@ describe("android LLM — modèle par défaut au catalogue (#359)", () => {
     const vision = /const val LLM_VISION_MODEL = "([^"]+)"/.exec(kotlin)?.[1];
     expect(vision).toBeTruthy();
     expect(KNOWN_MODELS).toContain(vision!);
-    // Le modèle texte demandé (Nemotron Lightning) n'accepte pas les images :
-    // les deux constantes ne doivent pas être confondues.
+    // Le modèle texte demandé n'accepte pas les images : constantes distinctes.
     expect(vision).not.toBe(text);
     expect(vision).toMatch(/^[a-z0-9][a-z0-9.-]*\/[a-z0-9][a-z0-9.:-]*$/);
-    // Et il accepte VRAIMENT les images : un modèle texte seul renverrait une
-    // erreur sur chaque photo (#604 : `google/gemma-4-31b-it:free` répondait
-    // 429 en permanence, le chemin photo était mort).
+    // Il accepte VRAIMENT les images : un modèle texte seul échoue sur chaque photo.
     expect(IMAGE_MODELS).toContain(vision!);
   });
 
@@ -149,9 +135,7 @@ describe("android LLM — l'erreur remonte à l'appelant (#359)", () => {
     expect(bridge).toMatch(/result\.error \?: OpenRouterHomework\.GENERIC_ERROR_MESSAGE/);
     // Fiches : idem, au lieu du « Fiche non générée. » unique.
     expect(bridge).toMatch(/catch \(e: LlmError\) \{\s*JSONObject\(\)\.put\("ok", false\)\.put\("message", e\.userMessage\)/);
-    // Repli : la cause est déduite, pas un message unique en dur (#367 : le
-    // repli vient de core, `revisionFailureMessage`, plus « Fiche non
-    // générée. » unique).
+    // Repli : la cause est déduite par `revisionFailureMessage`, pas un message en dur.
     expect(bridge).toMatch(/revisionFailureMessage\(revisionFailure\(e\)\)/);
   });
 

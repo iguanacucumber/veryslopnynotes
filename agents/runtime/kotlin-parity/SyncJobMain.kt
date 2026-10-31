@@ -1,15 +1,8 @@
-// SyncJobMain.kt — pilote JSON de la décision du job de fond (#406).
+// SyncJobMain.kt — pilote JSON de la décision du job de fond.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-sync-worker.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile la VRAIE classe de
-// production `fr.veryslopnynotes.data.SyncJobOutcome` (logique pure : aucun
-// import Android) et la pilote ici : « pas de session » doit valoir RÉESSAI,
-// jamais un succès qui n'a rien fait.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-sync-worker.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`). Les
-// erreurs du PILOTE (op inconnue, champ absent) sont préfixées `pilote: ` et
-// refusées par le test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.syncjob
 
 import fr.veryslopnynotes.data.SyncJobDecision
@@ -51,7 +44,7 @@ private class Driver {
                 )
             }
         }
-        // #403 : la décision sur le RÉSULTAT d'une lecture : session morte =
+        // la décision sur le RÉSULTAT d'une lecture : session morte =
         // appairage (le job « réussit »), autre échec = réessai.
         "decision" -> {
             val cause = op.str("cause")
@@ -65,13 +58,13 @@ private class Driver {
                     SyncJobRead.Failed(ExpiredObject(PRONOTE_ERROR_MESSAGES.getValue(22)))
                 // G=10 : la VRAIE session morte (« Session has expired… »).
                 // La décision tranche par CODE `G`, pas par un mot du
-                // message (#520).
+                // message.
                 kind == "deadSession" ->
                     SyncJobRead.Failed(PronoteAPIError(PRONOTE_ERROR_MESSAGES.getValue(10), 10, "session expirée"))
                 // L'ÉTABLISSEMENT refuse (G=3) avec un message qui contient un
                 // mot de session (« Confirmation de connexion requise ») :
                 // c'est un message de l'établissement, pas une session morte
-                // (#520).
+                //.
                 kind == "establishmentError" ->
                     SyncJobRead.Failed(
                         PronoteAPIError(

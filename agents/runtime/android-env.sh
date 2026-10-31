@@ -1,23 +1,13 @@
-# android-env.sh — source depuis le Makefile, ne JAMAIS exécuté directement.
+# android-env.sh — source depuis le Makefile, jamais exécuté directement.
 #
-# UN seul endroit qui sait trouver un JDK et un SDK utilisables par Gradle. Les
-# recipes s'en servent au lieu de dupliquer la découverte (3 cibles : compile,
-# APK debug, APK release). Sans ce fichier, chaque cible réinvente la logique et
-# l'une d'elles finit par oublier la borne de version du JDK.
-#
-# Fonctions (aucun effet de bord à part définir) :
-#   android_jdk  -> chemin d'un JDK 17-21, ou rien
-#   android_sdk  -> chemin d'un SDK Android existant, ou rien
-#
-# Pourquoi 17-21 : plage testée avec AGP 9.4.1 / Gradle 9.8.1. On choisit un JDK
-# compatible plutôt que de laisser l'utilisateur découvrir un échec de classe.
-# ponytail: pas de `sdkmanager --install` automatique ni de téléchargement ;
-# on lit ce qui est là, l'installation est documentée (android/README.md).
-# Upgrade: `org.gradle.java.installations.auto-download` si l'installation
-# automatique devient souhaitable.
+# UN seul endroit qui sait trouver un JDK (17-21, plage testée avec AGP 9.4.1 /
+# Gradle 9.8.1) et un SDK : sinon chaque cible réinvente la logique et l'une
+# oublie la borne.
+# Fonctions sans effet de bord : android_jdk / android_sdk -> chemin ou rien.
+# ponytail: pas de `sdkmanager --install` automatique (android/README.md).
+# Upgrade: `org.gradle.java.installations.auto-download`.
 
-# Repertoire du projet Android (celui qui contient local.properties), relatif a la
-# racine du repo : les recipes Make tournent de la racine. Surchargeable pour les
+# Relatif à la racine du repo (les recipes tournent de là) ; surchargé par les
 # tests, qui pointent sur un projet temporaire.
 ANDROID_PROJECT_DIR="${ANDROID_PROJECT_DIR:-android}"
 
@@ -51,8 +41,7 @@ android_sdk() {
             return 0
         fi
     done
-    # Repli sur la config locale (gitignorée) : c'est là que `local.properties`
-    # pointe après une installation manuelle du SDK.
+    # Repli sur local.properties (gitignoré), posé par une installation manuelle.
     if [ -f "$ANDROID_PROJECT_DIR/local.properties" ]; then
         cand=$(sed -n 's/^sdk\.dir=//p' "$ANDROID_PROJECT_DIR/local.properties" | head -1)
         if [ -n "$cand" ] && [ -d "$cand" ]; then
@@ -63,7 +52,7 @@ android_sdk() {
     return 0
 }
 
-# Message d'installation, une seule formulation pour les deux commandes APK.
+# Une seule formulation pour les deux commandes APK.
 android_toolchain_hint() {
     cat <<'HINT'
   JDK 17-21 : Adoptium 17 suffit (AGP 9.4.1).

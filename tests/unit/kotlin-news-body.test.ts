@@ -1,15 +1,7 @@
-// #475 : le corps d'une actualité se charge À LA DEMANDE (au dépliage).
-//
-// La liste des actus téléchargait le CORPS des 20 premières : 21 POST pour un
-// écran dont l'élève ne lit que 2-3 actus. Le corps est maintenant demandé au
-// cas par cas (1 POST par actualité déployee).
-//
-// Le VRAI `Client` est rejoué (enveloppe `{Signature, data}`, mémo des
-// lectures) avec un STUB qui compte les requêtes à la place de
-// l'établissement : le test porte sur du code de production exécuté.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT (jamais un faux vert) ; un
-// échec de compilation est un défaut (le test rougit).
+// Le corps d'une actualité se charge À LA DEMANDE : la liste téléchargeait le
+// corps des 20 premières (21 POST pour 2-3 actus lues). Un POST par actualité
+// dépliée. Le vrai `Client` est rejoué avec un stub qui compte les requêtes ;
+// outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -48,13 +40,12 @@ describe("le corps d'une actualité à la demande (#475)", () => {
     const res = await ask({ op: "body", id: "actu-1" });
     expect(res.sends).toBe(1);
     expect(res.functions).toEqual(["PageActualites"]);
-    // Le corps est un TEXTE (le HTML de l'établissement est retiré) : une
-    // DONNÉE, jamais du HTML (I6).
+    // Le corps est un TEXTE, jamais du HTML (I6).
     expect(res.body).toBe("Ordre du jour");
   });
 
   test("la liste ne télécharge plus les corps", () => {
-    // C'est l'appel qui coûtait 20 POST : il n'a plus sa place dans la liste.
+    // Plus aucun chargement de corps dans la liste.
     const payloads = payloadsSource();
     const start = payloads.indexOf("internal fun newsPayload(");
     expect(start).toBeGreaterThan(-1);

@@ -2,14 +2,8 @@ plugins {
     id("com.android.application")
 }
 
-// Graine serveur : défaut de l'app quand l'utilisateur n'a pas choisi
-// d'adresse à l'exécution (écran d'appairage -> data/ServerStore). Valeur
-// depuis local.properties `server.host` ou env SERVER_HOST ; aucun hôte tiers
-// ici (voir README + INVARIANTS I1). Règle HTTPS-only sauf
-// http://10.0.2.2 / localhost (émulateur), identique à
-// core/ServerConfig.validateBaseUrl qui borne et normalise toute saisie.
-// L'interface est l'app React locale (`web/`), embarquée dans les assets et
-// servie par la WebView (ADR-004) : plus de module Compose.
+// Graine serveur : HTTPS-only sauf émulateur/localhost, comme
+// core/ServerConfig.validateBaseUrl ; aucun hôte tiers (I1).
 android {
     namespace = "fr.veryslopnynotes.app"
     compileSdk = 37
@@ -33,9 +27,8 @@ android {
     }
 
     signingConfigs {
-        // Clé release hors repo (jamais commitée, voir docs/RELEASE.md).
-        // Config incomplète = bloc inutilisé (buildTypes ne l'assigne que si
-        // STORE_FILE présent), donc aucun secret en dur, aucun défaut.
+        // Clé release hors repo (jamais commitée, docs/RELEASE.md) : config
+        // incomplète = bloc inutilisé, aucun secret en dur.
         create("release") {
             val f = (project.findProperty("release.storeFile") as String?)
                 ?: System.getenv("STORE_FILE")
@@ -53,26 +46,15 @@ android {
 
     buildTypes {
         release {
-            // #313 : R8 sur la release (l'APK distribué, donc celui qui doit
-            // démarrer vite) — minification du code + rétrécissement des
-            // ressources. Les règles propres au module sont dans
-            // `android/app/proguard-rules.pro` (minimal : AGP agrège déjà les
-            // règles consommateur des AAR). `proguard-android-optimize.txt` et
-            // non `proguard-android.txt` : la release est l'artefact public, pas
-            // le variant de débogage.
+            // R8 sur la release (artefact public) : code minifié, ressources rétrécies.
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // Release signée (issue #32) : clé TOUJOURS hors repo.
-            // Vars : gradle.properties `release.storeFile/storePassword/keyAlias/
-            // keyPassword` ou env STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD.
-            // Présentes = signature release custom. Absentes = repli debug
-            // (#297 : APK public sideload installable sans cert custom, aucun
-            // secret en repo — clé debug auto Gradle). Ne pas publier ce repli
-            // comme mise à jour d'un APK signé custom (signature différente).
+            // Clé TOUJOURS hors repo ; absente = repli debug, à ne pas publier
+            // comme mise à jour d'un APK signé custom.
             val storeFileProp = (project.findProperty("release.storeFile") as String?)
                 ?: System.getenv("STORE_FILE")
             if (!storeFileProp.isNullOrBlank()) {
@@ -91,19 +73,16 @@ android {
     }
 }
 
-// Build de l'UI React dans les assets de l'APK. Toujours branché sur
-// `preBuild` : l'APK ne peut pas être construit sans `web/index.html`.
-// Sortie : android/app/src/main/assets/web/ (gitignorée).
+// Build de l'UI React dans les assets de l'APK, branché sur `preBuild` : l'APK
+// ne peut pas être construit sans `web/index.html`. Sortie gitignorée.
 val buildWebUi = tasks.register<Exec>("buildWebUi") {
     workingDir = rootProject.projectDir.parentFile
     commandLine("bun", "run", "build:web")
     inputs.dir(rootProject.projectDir.parentFile.resolve("web/src"))
     inputs.file(rootProject.projectDir.parentFile.resolve("web/vite.config.ts"))
     inputs.file(rootProject.projectDir.parentFile.resolve("package.json"))
-    // #426 : le lockfile décide des versions RÉSOLUES. Une mise à jour
-    // transitive change `bun.lock` SANS toucher `package.json` : sans cette
-    // entrée, Gradle disait UP-TO-DATE et l'APK embarquait un bundle
-    // périmé, différent de celui que `make check` avait construit.
+    // Le lockfile décide des versions RÉSOLUES : sans cette entrée, Gradle dit
+    // UP-TO-DATE et l'APK embarque un bundle périmé.
     inputs.file(rootProject.projectDir.parentFile.resolve("bun.lock"))
     outputs.dir(projectDir.resolve("src/main/assets/web"))
 }
@@ -113,11 +92,9 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":data"))
     implementation(libs.core.ktx)
-    // ComponentActivity + enableEdgeToEdge, sans Compose.
     implementation(libs.activity.ktx)
-    // #333 : le pont natif lance le scan du QR (ScanContract).
     implementation(libs.zxing.android.embedded)
     // ponytail: un seul client HTTP (OkHttp allowlist serveur).
-    // Upgrade: cache offline Room phase 4 (#14), SSE client #15.
+    // Upgrade: cache offline Room.
     implementation(libs.okhttp)
 }

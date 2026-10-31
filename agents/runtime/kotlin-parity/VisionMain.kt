@@ -1,9 +1,6 @@
-// VisionMain.kt — pilote JSON de la photo de cours (#587).
+// VisionMain.kt — pilote JSON de la photo de cours.
 //
-// OUTIL DE TEST uniquement : compilé par
-// `tests/unit/kotlin-vision.test.ts` (jamais par Gradle, jamais dans l'APK).
-// Il exécute les VRAIES règles de `core/Vision.kt` et `core/LessonAi.kt` :
-// bornes d'image, prompt nonce-bound, schéma de transcription.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-vision.test.ts` (jamais Gradle, jamais l'APK).
 package fr.veryslopnynotes.core
 
 import fr.veryslopnynotes.pronote.JVal

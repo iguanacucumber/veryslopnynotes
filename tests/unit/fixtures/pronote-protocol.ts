@@ -1,18 +1,12 @@
-// Parité TS <-> Kotlin du protocole (crypto + communication + HTTP, #200, #202).
+// Parité TS <-> Kotlin du protocole (crypto + communication + HTTP).
 //
-// Même principe que `kotlin-domain-parity.test.ts`, mais le « calcul » inclut le
-// FIL : un serveur PRONOTE factice (`Bun.serve` sur 127.0.0.1) parle aux DEUX
+// Un serveur PRONOTE factice (`Bun.serve` sur 127.0.0.1) parle aux DEUX
 // implémentations — la référence `pronotets` ET le port compilé — et le test
-// compare ce que le serveur a VU (octets normalisés de l'aléa documenté) et ce
-// que les clients ont COMPRIS (enveloppes, erreurs typées).
+// compare ce que le serveur a VU et ce que les clients ont COMPRIS.
 //
-// L'aléa est fixé là où le protocole l'exige aléatoire (`aesIvTemp` injecté des
-// deux côtés : champ public aussi côté TS) : tout le reste DOIT être
-// octet-identique. Seules exceptions, documentées cas par cas :
-// - `Uuid` RSA (`http` présent) : bourrage PKCS#1 aléatoire — longueur et
-//   structure vérifiées par exponentiation (`modPow`), pas les octets ;
-// - `deflate` : Java et zlib produisent deux flux valides différents — le
-//   contenu inflaté est comparé, pas le flux ;
+// L'aléa n'est fixé que là où le protocole l'exige ; exceptions documentées :
+// - `Uuid` RSA : bourrage PKCS#1 aléatoire, vérifié par exponentiation ;
+// - `deflate` : flux différents, contenu inflaté comparé ;
 // - `lastPing` : horloge murale, exclu.
 import { expect } from "bun:test";
 import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
@@ -70,8 +64,6 @@ export async function tsErrorOfAsync(fn: () => Promise<unknown>): Promise<{ name
   }
 }
 
-// --- Outillage crypto côté test (indépendant des deux implémentations) -------
-
 export const TEMP_HEX = "00112233445566778899aabbccddeeff";
 export const K0_HEX = createHash("md5").update(Buffer.alloc(0)).digest("hex");
 export const IV1_HEX = createHash("md5").update(Buffer.from(TEMP_HEX, "hex")).digest("hex");
@@ -102,15 +94,10 @@ export function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
 /**
  * RSA-1024 PKCS#1 v1.5 : ce qui est vérifiable SANS la clé privée.
  *
- * Le chiffré est opaque par conception (bourrage aléatoire) : on ne peut ni le
- * comparer ni y lire la structure sans l'exposant privé, que seul le serveur
- * PRONOTE détient. Trois preuves partielles, qui ensemble ferment le risque :
- * 1. `rsaKey` : le module et l'exposant sont exacts (une coquille = test rouge) ;
- * 2. `rsaNoPad` : le test construit un bloc EM DÉTERMINISTE (`00 02 FF…FF 00 || M`)
- *    et revérifie l'exponentiation par lui-même (`modPow` indépendant de JCE) —
- *    prouve la clé + le moteur JCE ;
- * 3. `rsa` : 128 octets (taille du module), comme la référence.
- * La preuve totale (le serveur déchiffre l'`Uuid`) n'existe qu'en ligne.
+ * Le chiffré est opaque (bourrage aléatoire). Trois preuves partielles :
+ * module/exposant exacts, bloc EM déterministe revérifié par `modPow`
+ * indépendant de JCE, et 128 octets de taille. La preuve totale (le serveur
+ * déchiffre l'`Uuid`) n'existe qu'en ligne.
  */
 export function checkRsaHeader(cipherHex: string, ctx: string): void {
   const raw = Buffer.from(cipherHex, "hex");
@@ -122,8 +109,6 @@ export function checkRsaHeader(cipherHex: string, ctx: string): void {
 // changement de clé doit être délibéré, jamais silencieux.
 export const RSA_N_DEC = "130337874517286041778445012253514395801341480334668979416920989365464528904618150245388048105865059387076357492684573172203245221386376405947824377827224846860699130638566643129067735803555082190977267155957271492183684665050351182476506458843580431717209261903043895605014125081521285387341454154194253026277";
 export const RSA_E_DEC = "65537";
-
-// --- Serveur PRONOTE factice --------------------------------------------------
 
 export interface RecordedReq {
   method: string;
@@ -168,7 +153,7 @@ export interface Stub {
   base: string;
   requests: RecordedReq[];
   /** Port distant vu par le serveur, un par requête (`null` si indisponible) —
-   *  c'est la preuve du keep-alive : un seul port pour N requêtes (#309). */
+   *  preuve du keep-alive : un seul port pour N requêtes. */
   remotePorts: (number | null)[];
   gets: number;
   behavior: StubBehavior;
@@ -186,8 +171,8 @@ export function startStub(htmlAttrs: string): Stub {
     fetch(req, srv) {
       const url = new URL(req.url);
       stub.remotePorts.push(srv.requestIP(req)?.port ?? null);
-      // La racine sert aussi de page PRONOTE : un site d'établissement SANS
-      // chemin (`https://host`) vise la racine, pas une page à nommer (#429).
+      // La racine sert aussi de page PRONOTE : un site SANS chemin
+      // (`https://host`) vise la racine.
       if (req.method === "GET" && (url.pathname.endsWith("/eleve.html") || url.pathname === "/")) {
         stub.gets++;
         const headers: Record<string, string | undefined> = {};
@@ -314,13 +299,12 @@ export function behaviorKeys(stub: Stub, postKeyHex: string, postIvHex: string):
 }
 
 /**
- * Serveur TCP BRUT : la seule façon de voir le socket se fermer (`Bun.serve`
+ * Serveur TCP BRUT : seule façon de voir le socket se fermer (`Bun.serve`
  * n'expose pas les connexions). Il répond 302 + une `Location` illisible.
  *
- * La réponse porte un CORPS : le client ne lit pas le corps d'une redirection,
- * donc son `disconnect()` ferme VRAIMENT le socket (un corps déjà lu retourne
- * au cache keep-alive de la JVM, et le serveur ne verrait aucun FIN). Le FIN
- * vu par le serveur est donc la preuve externe que la connexion n'a pas fuité.
+ * La réponse porte un CORPS que le client ne lit pas : son `disconnect()` ferme
+ * donc VRAIMENT le socket (un corps déjà lu retourne au cache keep-alive de la
+ * JVM et le serveur ne verrait aucun FIN).
  */
 export interface RawServer {
   port: number;
@@ -413,8 +397,6 @@ export function wireOf(
     body: normalizeBody(r.body, keys),
   }));
 }
-
-// --- Clients des deux côtés ---------------------------------------------------
 
 export function tsSeededComm(stub: Stub, mobile = false): Communication {
   const comm = new Communication(`${stub.base}/pronote/eleve.html`, undefined, mobile);

@@ -1,6 +1,5 @@
-// #633 — le pont du professeur IA : méthode bornée, sortie validée, fil local
-// purgé avec le compte. Le pont ne compile pas hors Gradle : son câblage est
-// vérifié par lecture de source (même filet que les autres chemins IA).
+// Le pont du professeur IA : méthode bornée, sortie validée, fil local purgé avec
+// le compte. Câblage vérifié par lecture de source (le pont ne compile pas hors Gradle).
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

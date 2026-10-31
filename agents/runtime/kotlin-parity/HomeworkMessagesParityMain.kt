@@ -1,16 +1,8 @@
 // HomeworkMessagesParityMain.kt — pilote JSON de la table des messages de
-// refus de l'assistant (#416).
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/android-homework-message.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile la VRAIE source de
-// production `app/HomeworkMessages.kt` (logique pure : ni Android ni réseau)
-// et la pilote ici : les assertions portent donc sur du code EXÉCUTÉ, pas sur
-// un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/android-homework-message.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`). Les
-// erreurs du PILOTE (op inconnue, champ absent) sont préfixées `pilote: ` et
-// refusées par le harnais.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.homeworkmessage
 
 import fr.veryslopnynotes.app.homeworkRefusalMessage

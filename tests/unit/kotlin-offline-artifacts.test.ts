@@ -1,30 +1,8 @@
-// #404 : les écritures HORS CacheStore respectent la purge de déconnexion.
-//
-// VRAI Kotlin compilé : `OfflineArtifacts` (writes gardés par l'époque),
-// `FileRevisionStore` (fiches de révision), `CacheScope` (la purge) et le
-// `core` des fiches sont compilés par le harnais puis pilotés par
-// `OfflineArtifactsMain` — ce n'est pas un miroir TS, c'est le code de
-// production exécuté.
-//
-// Le défaut que ce test traque : `filesDir/offline/` n'était PAS purgé que
-// par le `CacheStore`. Les fiches de révision (`revisions/`) et les
-// préférences matière (`subject_prefs.json`) y écrivaient à côté, sans la
-// garde d'époque : une écriture EN VOL (fiche générée pendant la
-// déconnexion, préférence enregistrée) recréait le répertoire purgé et y
-// laissait de la donnée du compte déconnecté.
-//
-// Les critères :
-//   1. une écriture de fiche ou de préférences pendant une déconnexion ne
-//      laisse AUCUN fichier sur le disque (le répertoire n'est pas ressuscité) ;
-//   2. hors déconnexion, les deux écritures se font normalement ;
-//   3. une écriture qui précède la purge est effacée par la purge (l'ordre
-//      des deux est total, comme pour le cache en #364) ;
-//   4. #528 : une déconnexion qui survient ENTRE l'écriture de la fiche et
-//      celle de l'index REFUSE l'index : l'enregistrement ÉCHOUE (aucun « ok »
-//      sans avoir écrit, I10).
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Les écritures HORS CacheStore (fiches de révision, préférences matière)
+// respectent la purge de déconnexion : une écriture en vol ne ressuscite pas
+// le répertoire purgé. VRAI Kotlin compilé par le harnais.
+// Une déconnexion entre écriture de fiche et d'index refuse l'index (I10).
+// Outillage absent = SKIP BRUYANT, jamais un faux vert.
 import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -65,11 +43,9 @@ describe("écritures hors CacheStore et purge de déconnexion (#404)", () => {
     // Les préférences matière : l'écriture passe par le store gardé.
     const prefs = readFileSync(PREFS, "utf8");
     expect(prefs).toContain("OfflineArtifacts.writeText(");
-    // `mkdirs()` seul ressusciterait le dossier purgé : il doit être DANS la
-    // garde (le store écrit sous `writeIfCurrent`).
+    // `mkdirs()` doit être DANS la garde, sinon il ressuscite le dossier purgé.
     const artifacts = readFileSync(ARTIFACTS, "utf8");
     expect(artifacts).toContain("SessionEpoch.writeIfCurrent(epoch)");
-    // Le dossier parent n'est créé qu'à l'intérieur de la garde.
     const iGuard = artifacts.indexOf("SessionEpoch.writeIfCurrent(epoch)");
     const iMkdir = artifacts.indexOf("it.mkdirs()");
     expect(iMkdir).toBeGreaterThan(-1);
@@ -80,33 +56,25 @@ describe("écritures hors CacheStore et purge de déconnexion (#404)", () => {
   });
 
   test("câblage : la fiche et les préférences portent l'époque de l'opération", () => {
-    // Le `core` : l'écriture d'une fiche porte l'époque (capturée au début
-    // de l'opération) et RENVOIE si elle est refusée.
+    // L'écriture d'une fiche porte l'époque et RENVOIE si elle est refusée.
     const core = readFileSync(REVISION, "utf8");
     expect(core).toContain("fun set(key: String, value: ByteArray, epoch: Long): Boolean");
     expect(core).toContain("fun saveRevisionSheet(store: RevisionKv, sheet: RevisionSheet, epoch: Long): Boolean");
-    // Le pont : l'époque est capturée à l'ARRIVÉE de l'appel (le travail part
-    // sur un fil : une écriture demandée avant la purge peut être exécutée
-    // après).
+    // Le pont capture l'époque à l'ARRIVÉE : une écriture demandée avant la purge peut partir après.
     const bridge = readBridgeSource();
     const iCapture = bridge.indexOf("val epoch = SessionEpoch.current()");
-    // Le MARQUEUR de dispatch reste générique (`.execute {`) : le nom de la file
-    // peut changer (#393 : un fil par appel, le LLM à part), l'ordre, non.
+    // Le MARQUEUR de dispatch reste générique : le nom de la file peut changer.
     const iDispatch = bridge.indexOf(".execute {");
     expect(iCapture).toBeGreaterThan(-1);
     expect(iDispatch).toBeGreaterThan(-1);
     expect(iCapture).toBeLessThan(iDispatch);
-    // Les deux écritures recoivent l'époque.
     expect(bridge).toContain("saveSubject(p, epoch)");
-    // #395 : les valeurs envoyées au dépôt sont les valeurs VALIDÉES (le pont
-    // les lit par `SubjectPrefRules`), pas la saisie brute.
+    // Les valeurs envoyées au dépôt sont les valeurs VALIDÉES, pas la saisie brute.
     expect(bridge).toMatch(/prefsRepo\.upsert\([^)]*epoch\)/);
     expect(bridge).toContain("generateRevision(p, epoch)");
     // Plus aucune écriture nue hors garde.
     expect(bridge).not.toContain("FileRevisionKv");
-    // #528 : l'index et le journal ne sont PLUS écrits « en best effort » : un
-    // refus fait ÉCHOUER l'enregistrement (le pont ne répond JAMAIS « ok »
-    // sans avoir écrit, I10).
+    // Un refus fait ÉCHOUER l'enregistrement : jamais « ok » sans écriture (I10).
     for (const key of ["INDEX_KEY", "INDEX_JOURNAL_KEY"]) {
       expect(core).toMatch(new RegExp(`if \\(!store\\.set\\(${key}[^)]*\\)\\)[\\s\\S]{0,80}return false`));
     }
@@ -127,8 +95,7 @@ describe("écritures hors CacheStore et purge de déconnexion (#404)", () => {
     const write = await ask({ op: "writePrefs", sid, epoch: begin.epoch, content: '[{"subject":"Maths"}]' });
     expect(write.written).toBe(false);
 
-    // Le disque est vide : plus aucune donnée du compte déconnecté, et le
-    // répertoire purgé n'a pas été ressuscité.
+    // Le répertoire purgé n'a pas été ressuscité.
     expect((await ask({ op: "files", sid })).files).toEqual([]);
   });
 
@@ -149,7 +116,6 @@ describe("écritures hors CacheStore et purge de déconnexion (#404)", () => {
     });
     expect(write.written).toBe(false);
 
-    // Aucun fichier : ni la fiche, ni l'index, ni le journal.
     expect((await ask({ op: "files", sid })).files).toEqual([]);
   });
 
@@ -158,14 +124,12 @@ describe("écritures hors CacheStore et purge de déconnexion (#404)", () => {
     const sid = store.sid as number;
     const epoch = (await ask({ op: "epoch" })).epoch as number;
 
-    // Les préférences s'écrivent.
     const prefs = await ask({ op: "writePrefs", sid, epoch, content: '[{"subject":"Maths"}]' });
     expect(prefs.written).toBe(true);
     expect((await ask({ op: "files", sid })).files).toEqual(["subject_prefs.json"]);
     expect((await ask({ op: "raw", sid, name: "subject_prefs.json" })).content).toBe('[{"subject":"Maths"}]');
 
-    // La fiche s'écrit (avec son index et son journal). Les noms sont
-    // assainis (les `:` du préfixe de clé deviennent des `_`).
+    // Les noms sont assainis : les `:` du préfixe deviennent des `_`.
     const sheet = await ask({ op: "writeSheet", sid, epoch, body: "Derivees de fonctions" });
     expect(sheet.written).toBe(true);
     const files = (await ask({ op: "files", sid })).files as string[];
@@ -179,18 +143,16 @@ describe("écritures hors CacheStore et purge de déconnexion (#404)", () => {
     const sid = store.sid as number;
     const epoch = (await ask({ op: "epoch" })).epoch as number;
 
-    // La fiche est écrite, puis la déconnexion survient (l'époque bascule et
-    // le dossier est purgé) : l'index et le journal sont REFUSÉS.
+    // La fiche est écrite, puis la déconnexion : l'index et le journal sont REFUSÉS.
     const write = await ask({
       op: "writeSheetDisconnect",
       sid,
       epoch,
       body: "Derivees de fonctions",
     });
-    // AUCUN « ok » : l'index a été refusé, donc la fiche n'est pas enregistrée
-    // (elle ne serait pas listable) — le pont doit répondre `ok:false`.
+    // L'index refusé, donc la fiche n'est pas enregistrée : le pont répond `ok:false`.
     expect(write.written).toBe(false);
-    // Et rien ne traîne : la purge a emporté la fiche déjà écrite.
+    // La purge a emporté la fiche déjà écrite.
     expect((await ask({ op: "files", sid })).files).toEqual([]);
   });
 

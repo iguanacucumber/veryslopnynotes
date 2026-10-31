@@ -1,33 +1,12 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { subjectColor, tint, weekStatusFr } from "../lib/format";
 import { subjectEmoji } from "../lib/subjectVisual";
-import { useApp } from "./AppContext";
 import { IconChevronLeft, IconChevronRight, IconWarning } from "./icons";
 
 export function Page({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`stack ${className}`}>{children}</div>;
 }
 
-/**
- * Lien d’évitement clavier (#625). C’est un BOUTON, pas un `href="#main"` :
- * le HashRouter possède déjà le hash de l’URL, un tel lien changerait de
- * route. Il est le premier élément focalisable de la coquille, masqué tant
- * qu’il n’a pas le focus (`.skip-link` dans app.css), et l’activation place
- * le focus sur le `main` cible (`#main`, tabIndex -1).
- */
-export function SkipLink() {
-  return (
-    <button
-      type="button"
-      className="skip-link"
-      onClick={() => document.getElementById("main")?.focus()}
-    >
-      Aller au contenu
-    </button>
-  );
-}
-
-/** Titre de route dans le corps : même niveau pour Tâches, Vie scolaire, etc. */
 export function PageHeading({
   title,
   eyebrow,
@@ -40,18 +19,16 @@ export function PageHeading({
   return (
     <div className="page-heading">
       <div className="page-heading__text">
-        {eyebrow ? <span className="page-heading__eyebrow">{eyebrow}</span> : null}
         <h2 className="page-heading__title">{title}</h2>
+        {eyebrow ? <span className="page-heading__eyebrow">{eyebrow}</span> : null}
       </div>
       {action ? <div className="page-heading__action">{action}</div> : null}
     </div>
   );
 }
 
-/** Semaine précédente / courante / suivante : un seul motif pour Tâches et Cours.
- *  `weeks` = écart avec la semaine de `now` (0 = courante) : le libellé dit
- *  d'où l'on vient, pas seulement que l'on est ailleurs. Le clic ramène à la
- *  semaine courante ; le nom accessible reprend le libellé visible. */
+/** `weeks` = écart avec la semaine de `now` (0 = courante) : le libellé dit
+ *  d'où l'on vient ; le clic ramène à la semaine courante. */
 export function WeekNavigator({
   label,
   detail,
@@ -71,10 +48,6 @@ export function WeekNavigator({
   const status = weekStatusFr(weeks);
   return (
     <Card className="week-nav">
-      <div className="week-nav__top">
-        <strong className="week-nav__label">{label}</strong>
-        {detail ? <span className="week-nav__detail">{detail}</span> : null}
-      </div>
       <div className="week-nav__row">
         <button type="button" className="week-nav__arrow" aria-label="Semaine précédente" onClick={onPrevious}>
           <IconChevronLeft />
@@ -84,9 +57,10 @@ export function WeekNavigator({
           className="week-nav__today"
           onClick={onToday}
           disabled={current}
-          aria-label={current ? "Revenir à la semaine courante" : `${status} — revenir à la semaine courante`}
+          aria-label={current ? "Semaine courante" : `${status} — revenir à la semaine courante`}
         >
-          {status}
+          <strong className="week-nav__label">{label}</strong>
+          {detail ? <span className="week-nav__detail">{detail}</span> : null}
         </button>
         <button type="button" className="week-nav__arrow" aria-label="Semaine suivante" onClick={onNext}>
           <IconChevronRight />
@@ -139,16 +113,18 @@ export function ListRow({
 }
 
 export function Section({
+  id,
   title,
   action,
   children,
 }: {
+  id?: string;
   title: string;
   action?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section>
+    <section id={id}>
       <div className="section-title">
         <h2 className="section-title__heading">{title}</h2>
         {action}
@@ -162,20 +138,36 @@ export function Card({
   children,
   className = "",
   as = "div",
+  style,
 }: {
   children: ReactNode;
   className?: string;
   as?: "div" | "article" | "button";
+  style?: CSSProperties;
 }) {
   if (as === "button") {
     return (
-      <button type="button" className={`card ${className}`} style={{ textAlign: "left", width: "100%" }}>
+      <button
+        type="button"
+        className={`card ${className}`}
+        style={{ textAlign: "left", width: "100%", ...style }}
+      >
         {children}
       </button>
     );
   }
-  if (as === "article") return <article className={`card ${className}`}>{children}</article>;
-  return <div className={`card ${className}`}>{children}</div>;
+  if (as === "article") {
+    return (
+      <article className={`card ${className}`} style={style}>
+        {children}
+      </article>
+    );
+  }
+  return (
+    <div className={`card ${className}`} style={style}>
+      {children}
+    </div>
+  );
 }
 
 export function EmptyState({
@@ -235,11 +227,8 @@ export function ErrorBox({ message, children }: { message: string; children?: Re
   );
 }
 
-/**
- * Pastille de matière : fond teinté + encre dérivée de la même couleur. Une
- * couleur personnalisée (Réglages) passe par le MÊME rendu que le reste de
- * l'app, jamais un aplat avec du texte blanc (#564).
- */
+/** Une couleur personnalisée passe par le MÊME rendu que le reste de l'app :
+ *  fond teinté + encre dérivée, jamais un aplat avec du texte blanc. */
 export function SubjectBadge({
   subject,
   color,
@@ -275,6 +264,21 @@ export function SubjectBadge({
   );
 }
 
+export function SubjectMark({ subject, size = 10 }: { subject: string; size?: number }) {
+  return (
+    <span
+      className="subject-mark"
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 3,
+        background: subjectColor(subject),
+      }}
+    />
+  );
+}
+
 export function SubjectAvatar({
   subject,
   size = 40,
@@ -290,14 +294,12 @@ export function SubjectAvatar({
 }
 
 export function Avatar({ name, size = 40, src }: { name: string; size?: number; src?: string | null }) {
-  const { dark } = useApp();
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
-  const color = subjectColor(name);
   return (
     <span
       aria-hidden="true"
@@ -308,10 +310,12 @@ export function Avatar({ name, size = 40, src }: { name: string; size?: number; 
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        background: src ? "transparent" : tint(color, dark ? -0.68 : 0.86),
-        color: src ? undefined : tint(color, dark ? 0.55 : -0.5),
+        border: 0,
+        background: src ? "transparent" : "var(--brand-solid)",
+        color: src ? "var(--ink-soft)" : "var(--on-brand)",
         fontWeight: 700,
-        fontSize: size * 0.34,
+        letterSpacing: "0.02em",
+        fontSize: size * 0.32,
         overflow: "hidden",
         flex: "0 0 auto",
       }}

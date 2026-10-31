@@ -1,9 +1,22 @@
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "./AppContext";
-import { SkipLink } from "./components";
-import { IconBack, IconBell, IconCalendar, IconGrades, IconHome, IconRefresh, IconSparkles, IconTasks, IconUser } from "./icons";
+import { bridge } from "../bridge/client";
+import { Avatar } from "./components";
+import { isSafePhotoDataUrl, parseProfilePayload, type Profile } from "../features/profile/model";
+import {
+  IconBack,
+  IconButterfly,
+  IconCalendar,
+  IconChevronDown,
+  IconGrades,
+  IconHome,
+  IconRefresh,
+  IconSettings,
+  IconSparkles,
+  IconTasks,
+  IconUser,
+} from "./icons";
 import { useViewNavigate } from "./viewTransition";
 
 interface RouteMeta {
@@ -25,9 +38,9 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/sanctions": { title: "Sanctions", back: "/attendance" },
   "/messages": { title: "Messagerie", back: "/profile" },
   "/alerts": { title: "Alertes", back: "/" },
-  "/revision-sheets": { title: "Fiches de révision", back: "/profile" },
-  "/course-notes": { title: "Cahier de cours", back: "/profile" },
-  "/prof": { title: "Prof", tab: true },
+  "/revision-sheets": { title: "Révisions", back: "/profile" },
+  "/course-notes": { title: "Cahier", back: "/profile" },
+  "/prof": { title: "Professeur", tab: true },
 };
 
 const TABS = [
@@ -42,19 +55,56 @@ export function Shell() {
   const location = useLocation();
   const navigate = useNavigate();
   const go = useViewNavigate();
-  const { refresh, notify, authLost, sessionClosed } = useApp();
+  const { refresh, refreshTick, notify, authLost, sessionClosed } = useApp();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [photo, setPhoto] = useState<string | null>(null);
   const [spinning, setSpinning] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const titleFocusedOnce = useRef(false);
+  const isHome = location.pathname === "/";
   const meta = ROUTE_META[location.pathname] ?? { title: "VerySlopyNyNotes" };
-  const activeTab = TABS.findIndex((tab) => tab.to === location.pathname);
+  // Papillon nomme l'en-tête par son contenu : la date pour le calendrier, la
+  // période pour les notes. Le reste garde le libellé de la route.
+  const now = new Date();
+  const calendarTitle = now.toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  const headerTitle =
+    location.pathname === "/calendar"
+      ? calendarTitle.charAt(0).toUpperCase() + calendarTitle.slice(1)
+      : location.pathname === "/grades"
+        ? profile?.periodName || meta.title
+        : meta.title;
+  const headerSubtitle =
+    location.pathname === "/calendar" ? "Aujourd’hui" : undefined;
 
-  // Le titre suit l'écran et le focus passe au titre : un lecteur d'écran
-  // annonce la nouvelle page au lieu de laisser le focus sur le lien d'onglet.
-  // Au PREMIER rendu, on ne déplace pas le focus : le document est déjà
-  // annoncé au chargement, et le lien d'évitement doit rester le premier
-  // arrêt du premier Tab (#625). Les navigations suivantes, elles, déplacent
-  // bien le focus vers le titre.
+  // Le focus passe au titre pour qu'un lecteur d'écran annonce la page, sauf
+  // au premier rendu.
+  useEffect(() => {
+    let alive = true;
+    void bridge
+      .me()
+      .then((result) => {
+        if (alive) setProfile(parseProfilePayload(result.payload));
+      })
+      .catch(() => {
+        if (alive) setProfile(null);
+      });
+    void bridge
+      .photo()
+      .then((result) => {
+        if (alive) setPhoto(isSafePhotoDataUrl(result.dataUrl) ? result.dataUrl : null);
+      })
+      .catch(() => {
+        if (alive) setPhoto(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [refreshTick]);
+
   useEffect(() => {
     document.title = `${meta.title} · VerySlopyNyNotes`;
     if (!titleFocusedOnce.current) {
@@ -65,9 +115,8 @@ export function Shell() {
   }, [location.pathname, meta.title]);
 
   useEffect(() => {
-    // Une session fermée par l'utilisateur n'est pas une session expirée :
-    // le bandeau « session expirée » mentirait. Le garde-fou de `App.tsx`
-    // renvoie vers /pairing, là où il faut ré-appairer (#360).
+    // Session fermée par l'utilisateur ≠ session expirée : le bandeau
+    // « session expirée » mentirait.
     if (!authLost || sessionClosed) return;
     if (location.pathname !== "/pairing") {
       notify("Session expirée : rescanne le QR de l'établissement.", "error");
@@ -76,73 +125,92 @@ export function Shell() {
   }, [authLost, sessionClosed, location.pathname, navigate, notify]);
 
   return (
-    <div className="shell">
-      <SkipLink />
-      <header className="topbar">
-        {meta.back ? (
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Retour"
-            onClick={() => {
-              if (window.history.length > 1) go(-1);
-              else go(meta.back!);
-            }}
-          >
-            <IconBack />
-          </button>
-        ) : null}
-        <h1
-          ref={titleRef}
-          tabIndex={-1}
-          className="topbar__title"
-          style={{ margin: 0 }}
-        >
-          {meta.title}
-        </h1>
-        <div className="topbar__actions">
-          <button
-            type="button"
-            className={`icon-btn${spinning ? " icon-btn--spin" : ""}`}
-            aria-label="Actualiser"
-            onClick={() => {
-              refresh();
-              setSpinning(true);
-              window.setTimeout(() => setSpinning(false), 650);
-            }}
-          >
-            <IconRefresh />
-          </button>
-          {location.pathname !== "/alerts" ? (
-            <button type="button" className="icon-btn" aria-label="Alertes" onClick={() => go("/alerts")}>
-              <IconBell />
-            </button>
-          ) : null}
-          {location.pathname !== "/profile" ? (
+    <div className={isHome ? "shell shell--home" : "shell"}>
+      <header className={isHome ? "topbar topbar--home" : "topbar"}>
+        <div className="topbar__inner">
+          {isHome ? (
             <button
               type="button"
-              className="icon-btn icon-btn--accent"
-              aria-label="Profil"
+              className="topbar__identity"
+              aria-label="Ouvrir le profil"
               onClick={() => go("/profile")}
             >
-              <IconUser />
+              <Avatar name={profile?.displayName ?? "?"} size={40} src={photo} />
+              <span className="topbar__identity-text">
+                <span className="topbar__identity-name">{profile?.displayName ?? "Mon relevé"}</span>
+              </span>
+              <IconChevronDown className="topbar__chevron" size={20} />
             </button>
+          ) : meta.back ? (
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Retour"
+              onClick={() => {
+                if (window.history.length > 1) go(-1);
+                else go(meta.back!);
+              }}
+            >
+              <IconBack size={24} />
+            </button>
+          ) : meta.tab ? (
+            <span className="topbar__mark" aria-hidden="true">
+              <IconButterfly size={24} />
+            </span>
           ) : null}
+          <div className="topbar__heading">
+            <h1
+              ref={titleRef}
+              tabIndex={-1}
+              className={isHome ? "sr-only" : "topbar__title"}
+            >
+              {isHome ? meta.title : headerTitle}
+            </h1>
+            {!isHome && headerSubtitle ? (
+              <span className="topbar__subtitle">{headerSubtitle}</span>
+            ) : null}
+          </div>
+          <div className="topbar__actions">
+            <button
+              type="button"
+              className={`icon-btn${spinning ? " icon-btn--spin" : ""}`}
+              aria-label="Actualiser"
+              onClick={() => {
+                refresh();
+                setSpinning(true);
+                window.setTimeout(() => setSpinning(false), 650);
+              }}
+            >
+              <IconRefresh size={isHome ? 26 : 24} />
+            </button>
+            {isHome ? (
+              <button
+                type="button"
+                className="icon-btn icon-btn--accent"
+                aria-label="Réglages"
+                onClick={() => go("/settings")}
+              >
+                <IconSettings size={26} />
+              </button>
+            ) : location.pathname !== "/profile" ? (
+              <button
+                type="button"
+                className="icon-btn icon-btn--accent"
+                aria-label="Profil"
+                onClick={() => go("/profile")}
+              >
+                <IconUser size={24} />
+              </button>
+            ) : null}
+          </div>
         </div>
       </header>
 
-      <main id="main" tabIndex={-1} className="main">
+      <main id="main" tabIndex={-1} className={isHome ? "main main--home" : "main"}>
         <Outlet />
       </main>
 
       <nav className="tabbar" aria-label="Navigation principale">
-        {activeTab >= 0 ? (
-          <span
-            className="tabbar__pill"
-            aria-hidden="true"
-            style={{ "--tab-index": activeTab } as CSSProperties}
-          />
-        ) : null}
         {TABS.map(({ to, label, Icon }) => (
           <NavLink
             key={to}
@@ -155,7 +223,7 @@ export function Shell() {
               go(to);
             }}
           >
-            <Icon size={22} />
+            <Icon size={24} />
             <span>{label}</span>
           </NavLink>
         ))}

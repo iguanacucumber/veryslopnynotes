@@ -6,69 +6,49 @@ import fr.veryslopnynotes.core.SecurityAlert
 import fr.veryslopnynotes.pronote.RateLimitedError
 import org.json.JSONObject
 
-// Resultat refresh reseau avec repli cache (affichage sans reseau).
-// Jamais d'exception vers UI : tout echec = Failed avec cache si dispo.
+// Jamais d'exception vers l'UI : tout échec = Failed, avec le cache si dispo.
 sealed interface RefreshOutcome {
     data class Updated(val payload: String, val fetchedAt: Long) : RefreshOutcome
     data class OfflineFallback(val payload: String, val fetchedAt: Long, val stale: Boolean) : RefreshOutcome
     data class Failed(val message: String, val cachedPayload: String?) : RefreshOutcome
 }
 
-// Depots offline-first par ressource cachable (#205, ADR-003).
-// Lecture : loadCached() synchrone (jamais de reseau). Ecriture : refreshAsync()
-// lit le CLIENT LOCAL (tache de fond, jamais le thread UI), sauve en cache au
-// succes, replie sur le cache a l'echec (avion/session KO). `baseUrl` reste un
-// parametre des signatures (les ecrans le passent) mais ne sert plus : aucune
-// requete serveur metier ne part d'ici. Invalidation active via
-// evenement local -> clear().
-// I1 : aucun appel hors telephone ; seul `android/pronote/` parle au serveur
-// de l'etablissement, via le client tenu par [PronoteSession] (#206 le remplit).
-// #364 : l'ecriture du cache est gardee par l'epoch de session : une
-// deconnexion survenue pendant la lecture annule l'ecriture (la purge reste
-// effective, le cache du compte deconnecte ne ressuscite pas).
+// Dépôts offline-first (ADR-003). Lecture : `loadCached()` synchrone, jamais de
+// réseau. Écriture : `refreshAsync()` lit le client local en tâche de fond,
+// sauve au succès, replie sur le cache à l'échec. `baseUrl` reste dans les
+// signatures mais ne sert plus : aucune requête métier ne part d'ici.
+// I1 : seul `android/pronote/` parle à l'établissement, via [PronoteSession].
+// L'écriture du cache est gardée par l'epoch de session : une déconnexion
+// pendant la lecture annule l'écriture (la purge reste effective).
 class SyncedRepository(
     private val store: CacheStore,
     private val clock: () -> Long = System::currentTimeMillis,
     private val main: Handler = Handler(Looper.getMainLooper()),
     private val provider: PronoteClientProvider = { PronoteSession.client },
 ) {
-    // La file PARTAGÉE (#403) : UN appel client à la fois dans le process, pour
-    // TOUS (les écrans ET le job de fond). Le client local est mutable
-    // (refresh() reassigne son etat) : deux lectures concurrentes = course et
-    // login en double. Avant, chaque dépôt avait SA file : le job de fond et
-    // l'interface pouvaient se croiser.
+    // File PARTAGÉE : un appel client à la fois dans le process, écrans et job
+    // de fond compris. Le client local est mutable (refresh() réassigne son
+    // état) : deux lectures concurrentes = course et login en double.
 
-    /** L'entrée de (ressource, requête) : une par requête (#477). */
     fun cached(resource: String, query: String): CachedEntry? = store.load(resource, query)
 
-    /** TOUS les payloads d'une ressource (une entrée par requête, #477). */
     fun payloads(resource: String): List<String> = store.payloads(resource)
 
     fun isStale(resource: String, entry: CachedEntry, now: Long = clock()): Boolean =
         CachePolicy.isStale(resource, entry.fetchedAt, now)
 
-    // Invalidation active : purge ressource, UI retombe sur Empty.
-    // Même règle que l'écriture confirmée (`CachePolicy.invalidateAfterWrite`).
+    // Invalidation active : purge la ressource, l'UI retombe sur Empty.
     fun invalidate(resource: String) {
         CachePolicy.invalidateAfterWrite(store, resource)
     }
 
-    // Lecture locale async (file d'attente unique #310 : un seul fil daemon,
-    // ordre d'arrivee). Callback sur main thread. Le payload ecrit le cache
-    // (fenetre demandee, comme avant).
+    // Une entrée FRAÎCHE est servie telle quelle, sans lire le client local
+    // (`force = false`). `force = true` est réservé aux gestes explicites
+    // (tirage, « Actualiser », changement de fenêtre/période/algorithme).
+    // Le cache est annoncé avec SON age (`fetchedAt`), jamais daté de maintenant.
     //
-    // #311 : une entree de cache FRAICHE est servie telle quelle, sans lire le
-    // client local (`force = false`, la premiere entree sur un ecran). La salve
-    // de POST n'est donc plus refaite a chaque passage d'onglet ; `force = true`
-    // est reserve aux GESTES explicites (tirail, « Actualiser », changement de
-    // fenetre/periode/algorithme). Le cache est annonce avec SON age
-    // (`fetchedAt`) : jamais un `Updated` daté de maintenant, qui ferait passer
-    // une donnee ancienne pour fraiche (le badge « perime » reste juste).
-    //
-    // ponytail: une seule clé de cache par ressource : l'entrée porte la
-    //   requête qui l'a produite, donc une autre requête = une autre réponse
-    //   (⇒ relecture, pas un cache-hit qui servirait la semaine précédente).
-    //   Upgrade: une entrée PAR requête (clé de cache = ressource + requête).
+    // ponytail: entrée par requête (ressource + requête) — pas de cache-hit
+    //   qui servirait la semaine précédente.
     fun refreshAsync(
         resource: String,
         baseUrl: String,
@@ -82,10 +62,9 @@ class SyncedRepository(
         } catch (_: Exception) {
             null
         }
-        // #365 : l'entrée ne sert que si elle vient de la MÊME requête ; sinon
-        // elle est ABSENTE (semaine / période / algorithme différents).
-        // #477 : le magasin garde une entrée PAR requête : revenir sur une
-        // requête déjà vue est un cache-hit, sans réseau.
+        // L'entrée ne sert que si elle vient de la MÊME requête ; le magasin
+        // garde une entrée par requête, donc revenir sur une requête déjà vue
+        // est un cache-hit sans réseau.
         if (entry != null && !CachePolicy.shouldFetch(entry, resource, query, clock(), force)) {
             post(cb, RefreshOutcome.Updated(entry.payload, entry.fetchedAt))
             return
@@ -94,13 +73,8 @@ class SyncedRepository(
     }
 
     /**
-     * Lecture locale SANS ecriture cache (semaines non courantes : l'ecran
-     * Devoirs/EDT affiche une autre semaine sans ecraser la courante, comme
-     * l'ancien GET fenetre qui ne persistait pas).
-     *
-     * #365 : coherente avec le reste — le repli cache ne sert qu'une entrée de
-     * la MEME requete, et rien n'est ecrit (l'entree de l'autre semaine reste
-     * celle qui a produit son payload).
+     * Lecture locale SANS écriture cache : une semaine non courante ne doit
+     * pas écraser l'entrée de la semaine courante.
      */
     fun fetchAsync(resource: String, query: String = "", cb: (RefreshOutcome) -> Unit) {
         require(CachePolicy.isCacheable(resource)) { "ressource non cachable: $resource" }
@@ -108,24 +82,18 @@ class SyncedRepository(
     }
 
     private fun readAsync(save: Boolean, resource: String, query: String, cb: (RefreshOutcome) -> Unit) {
-        // Cle de dedoublonnage : ressource|query|ecriture. Deux lectures
-        // identiques EN VOL = une seule execution du client, le MEME
-        // RefreshOutcome pour tous les callbacks (relayes un par un sur le main
-        // thread).
+        // Clé de dédoublonnage : ressource|query|écriture. Deux lectures
+        // identiques en vol = une seule exécution, le MÊME RefreshOutcome
+        // pour tous les callbacks.
         //
-        // L'ECRITURE fait partie de la cle (#509) : une lecture SANS ecriture
-        // (l'assistant, qui cherche un devoir dans le cache) et une lecture
-        // AVEC ecriture (l'ecran, qui alimente le cache) de la meme requete
-        // se partageaient la meme cle — donc celle qui arrivait en premier
-        // decidait pour les deux : une lecture sans ecriture pouvait avaler
-        // l'ecriture du cache, et l'entree n'etait jamais enregistree.
+        // L'ÉCRITURE fait partie de la clé : sinon une lecture sans écriture
+        // (l'assistant) pouvait avaler l'écriture du cache de la même requête.
         ClientQueue.submit(
             CachePolicy.dedupKey(resource, query, save),
             work = { readOutcome(save, resource, query) },
             deliver = { o ->
-                // L'échec de la file est un outcome d'échec (#530) : la
-                // promesse est TOUJOURS réglée (elle attendait le délai natif
-                // quand le travail jétait).
+                // L'échec de la file est un outcome : la promesse est toujours
+                // réglée, jamais laissée en attente du délai natif.
                 post(cb, o.orFailed(RefreshOutcome.Failed("Lecture impossible.", null)))
             },
         )
@@ -133,19 +101,16 @@ class SyncedRepository(
 
     /** Corps de lecture (jamais d'exception qui s'echappe : tout echec = outcome). */
     private fun readOutcome(save: Boolean, resource: String, query: String): RefreshOutcome {
-        // #364 : epoque capturee AVANT la lecture locale (le client local peut
-        // mettre des secondes) : une deconnexion pendant la lecture invalide
-        // l'ecriture, sinon la purge du cache etait annulee par cette lecture.
+        // Époque capturée AVANT la lecture locale : une déconnexion pendant la
+        // lecture invalide l'écriture, sinon elle annule la purge du cache.
         val epoch = SessionEpoch.current()
         return try {
             val payload = readLocal(resource, query)
             if (save) {
-                // Ecriture gardee par l'epoch : `null` = la session a change
-                // (deconnexion) -> payload ABANDONNE, rien n'est ecrit sur le
-                // disque, la purge reste effective.
+                // Gardée par l'epoch : `null` = session changée, le payload est
+                // abandonné et rien n'est écrit.
                 val written = SessionEpoch.writeIfCurrent(epoch) {
                     try {
-                        // #365 : l'entree retient la requete qui l'a produite.
                         store.save(resource, payload, clock(), query)
                         true
                     } catch (_: Exception) {
@@ -163,23 +128,19 @@ class SyncedRepository(
         } catch (e: NoLocalSession) {
             cachedOrFailed(resource, query, "Aucune donnée en cache.")
         } catch (e: RateLimitedError) {
-            // La limitation de débit n'est ni une panne ni une session morte :
-            // le cache reste servi et la phrase dit quoi faire (attendre).
-            // Surtout, le payload partiel n'a pas été écrit (il a LEVÉ).
+            // Débit limité, pas une panne ni une session morte : le cache est
+            // servi et le payload partiel n'a pas été écrit (il a LEVÉ).
             cachedOrFailed(
                 resource,
                 query,
                 "L'établissement limite les connexions : attends une ou deux minutes, puis réessaie.",
             )
         } catch (e: Throwable) {
-            // `Throwable` et non `Exception` (#530) : un `Error` (OOM) est un
-            // échec comme un autre — il ne doit pas remonter comme une
-            // exception libre (la file le livrerait, mais l'écran perdrait le
-            // repli cache).
+            // `Throwable` et non `Exception` : un `Error` (OOM) ne doit pas
+            // remonter libre, l'écran perdrait le repli cache.
             if (isSessionFailure(e)) {
-                // Session locale morte : le cache ne masque PAS une session
-                // morte (des donnees perimees comme si tout allait bien) :
-                // Failed nu, et le signal renvoie vers l'appairage (#113).
+                // Le cache ne masque pas une session morte : Failed nu, pour
+                // renvoyer vers l'appairage.
                 DeviceAuth.reject()
                 RefreshOutcome.Failed(DeviceAuth.REJECTED_MESSAGE, null)
             } else {
@@ -188,8 +149,8 @@ class SyncedRepository(
         }
     }
 
-    // Repli cache : seule une entrée de la MÊME requête est servie (#365) —
-    // celle d'une autre semaine afficherait un écran vide sans le dire.
+    // Repli cache : seule une entrée de la MÊME requête est servie — celle
+    // d'une autre semaine afficherait un écran vide sans le dire.
     private fun cachedOrFailed(resource: String, query: String, message: String): RefreshOutcome {
         val c = try {
             store.load(resource, query)
@@ -205,18 +166,17 @@ class SyncedRepository(
     }
 
     /**
-     * #87 : relecture manuelle : aucun effet metier, donc pas de confirmation
-     * supplementaire (I7 : ce chemin ne declenche aucun LLM). Localement =
-     * ping de session FORCE (`keepAlive().ping()`, #408) : vivante = l'appelant
-     * recharge ses ressources, morte = signal d'appairage.
+     * Relecture manuelle : aucun effet métier (I7 : pas de LLM). Localement,
+     * ping de session FORCÉ : vivante = l'appelant recharge, morte = signal
+     * d'appairage.
      */
     fun requestSyncRefresh(baseUrl: String, accountId: String = "", cb: (RefreshOutcome) -> Unit) {
         if (baseUrl.isBlank()) {
             post(cb, RefreshOutcome.Failed("Serveur non configure.", null))
             return
         }
-        // Relectures simultanees = UN seul ping (cle sans query : la requete ne
-        // depend d'aucun ecran) ; tous les callbacks recoivent le meme outcome.
+        // Relectures simultanées = un seul ping (clé sans query, indépendante
+        // de l'écran) ; tous les callbacks reçoivent le même outcome.
         ClientQueue.submit(
             "sync|",
             work = { syncOutcome() },
@@ -232,10 +192,9 @@ class SyncedRepository(
         }
         if (client == null) return RefreshOutcome.Failed("Relecture indisponible.", null)
         return try {
-            // Ping MANUEL : un aller-retour FORCE (#408). `pingIfDue` ne
-            // partait jamais ici (la lecture venait de rafraichir `lastPing`) :
-            // une session morte passait pour vivante, et ni `DeviceAuth.reject()`
-            // ni l'invite a re-appairer ne partaient.
+            // Ping MANUEL forcé : `pingIfDue` ne partirait jamais ici (la
+            // lecture vient de rafraîchir `lastPing`), une session morte
+            // passerait pour vivante et aucun re-appairage ne serait proposé.
             client.keepAlive().ping()
             // Contenu local = invalidation, jamais interprete (I6/I7).
             RefreshOutcome.Updated("{\"synced\":true}", clock())
@@ -250,15 +209,10 @@ class SyncedRepository(
     }
 
     /**
-     * Corps d'une actualité (#475) : lu À LA DEMANDE (au dépliage), JAMAIS en
-     * cache.
-     *
-     * La liste des actus ne porte que les métadonnées (titre, date, auteur) :
-     * le corps est un POST par actualité déployee, pas vingt POST par écran.
-     * Le corps reste une DONNÉE (texte brut), jamais du HTML (I6).
-     *
-     * Une session morte = échec PIDÉGÉ (le cache ne masque pas une session
-     * morte) : l'écran peut proposer l'appairage.
+     * Corps d'une actualité : lu À LA DEMANDE (au dépliage), jamais mis en
+     * cache — un POST par actualité dépliée, pas vingt par écran. Le corps
+     * reste une donnée (texte brut), jamais du HTML (I6). Une session morte
+     * est un échec piégé, pour que l'écran propose l'appairage.
      */
     fun fetchNewsBody(id: String, cb: (String?, String?) -> Unit) {
         val target = id.trim()
@@ -300,19 +254,14 @@ class SyncedRepository(
     }
 
     /**
-     * Tranches de l'etablissement, lues sur le client local.
-     *
-     * Volontairement HORS cache (comme avant) : `/v1/periods` n'est pas dans
-     * les ressources cachables, donc pas d'ecriture disque : `Updated` = payload
-     * lu, `Failed` = le message réel. Jamais d'exception vers l'UI.
+     * Tranches de l'établissement, hors cache : `/v1/periods` n'est pas
+     * cachable, donc pas d'écriture disque. Jamais d'exception vers l'UI.
      */
     fun fetchPeriods(baseUrl: String, cb: (RefreshOutcome) -> Unit) {
         if (baseUrl.isBlank()) {
             post(cb, RefreshOutcome.Failed("Serveur non configure.", null))
             return
         }
-        // Dédoublonnage (#310) : deux écrans qui demandent les tranches en meme
-        // temps declenchent UNE lecture locale, pas deux.
         ClientQueue.submit(
             "periods|",
             work = { periodsOutcome() },
@@ -341,11 +290,8 @@ class SyncedRepository(
 
     /**
      * Lecture d'une ressource sur le client local. `null` = pas de session
-     * ([NoLocalSession] : repli cache, comme un reseau KO).
-     *
-     * #403 : la lecture elle-même est faite par `cachedRead` (la porte unique),
-     * et elle est exécutée DANS la file partagée : le client n'est jamais lu
-     * en direct.
+     * ([NoLocalSession] : repli cache, comme un réseau KO). La lecture passe
+     * par `cachedRead` (porte unique), exécutée dans la file partagée.
      */
     private fun readLocal(resource: String, query: String): String {
         val client = try {
@@ -353,9 +299,8 @@ class SyncedRepository(
         } catch (_: Exception) {
             null
         } ?: throw NoLocalSession()
-        // Alertes : balayage des contenus DEJA en cache (aucun reseau : marche
-        // hors ligne, frais = « heuristique, rien trouve ») — ce n'est pas une
-        // lecture du client.
+        // Alertes : balayage des contenus DÉJÀ en cache, aucun réseau (marche
+        // hors ligne) — ce n'est pas une lecture du client.
         if (resource == CachePolicy.SECURITY_ALERTS) return alertsPayload(scanTexts())
         return cachedRead(client, resource, query)
     }
@@ -363,9 +308,8 @@ class SyncedRepository(
     private fun scanTexts(): List<SecurityAlert.ScannableText> {
         val out = mutableListOf<SecurityAlert.ScannableText>()
         for (resource in listOf(CachePolicy.NEWS, CachePolicy.ASSIGNMENTS, CachePolicy.DISCUSSIONS)) {
-            // #477 : une ressource a une entrée PAR requête : le balayage lit
-            // TOUTES les entrées en cache (une semaine oubliée ne doit pas
-            // échapper à l'alerte de sécurité).
+            // Une ressource a une entrée par requête : on lit TOUTES les
+            // entrées, une semaine oubliée ne doit pas échapper à l'alerte.
             val payloads = try {
                 store.payloads(resource)
             } catch (_: Exception) {
@@ -413,10 +357,8 @@ class SyncedRepository(
 private class NoLocalSession : Exception()
 
 /**
- * L'échec de la file = le repli du lecteur (#530).
- *
- * L'échec est une VALEUR livrée à tous les callbacks de la clé : l'écran
- * affiche son message au lieu d'attendre le délai natif (promesse pendante).
+ * L'échec de la file est une VALEUR livrée à tous les callbacks de la clé :
+ * l'écran affiche son message au lieu d'attendre une promesse pendante.
  */
 private fun <T> QueueOutcome<T>.orFailed(fallback: T): T = when (this) {
     is QueueOutcome.Ok -> value

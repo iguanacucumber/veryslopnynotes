@@ -1,35 +1,20 @@
-// Données pures : les palettes (#335). Aucune logique ici — voir `schemes.ts`.
+// Palettes pures ; la logique est dans `schemes.ts`.
 
 export interface Palette {
-  /** Fond de page. */
   page: string;
-  /** Cartes et barres. */
   surface: string;
-  /** Survols discrets, fonds secondaires. */
   surfaceVariant: string;
-  /** Badges et pastilles. */
   surfaceContainer: string;
-  /** Encre principale (texte lisible). */
   ink: string;
-  /** Accent : bordures actives, spinner, remplissages `.field:focus`. */
   brand: string;
-  /** Accent clair : anneaux de focus, dégradés. */
   brandLight: string;
-  /** Accent lisible sur page/surface : liens, onglet actif, icônes. */
   brandDeep: string;
-  /** Accent très pâle : fond de puce/onglet actif. */
   brandPale: string;
-  /** Fond plein (bouton principal). */
   brandSolid: string;
-  /** Texte posé sur `brandSolid`. */
   onBrand: string;
-  /** Rouge de signalement : bordures, teintes. */
   danger: string;
-  /** Fond plein d'action destructive. */
   dangerSolid: string;
-  /** Texte posé sur `dangerSolid`. */
   onDanger: string;
-  /** Rouge lisible sur page/surface (messages d'erreur). */
   dangerInk: string;
 }
 
@@ -47,15 +32,15 @@ export const SCHEMES: ReadonlyArray<Scheme> = [
     id: DEFAULT_SCHEME_ID,
     label: "Slop (défaut)",
     light: {
-      page: "#F6FBFA",
+      page: "#FFFFFF",
       surface: "#FFFFFF",
       surfaceVariant: "#F3F6F7",
       surfaceContainer: "#F1F1F1",
-      ink: "#1F292E",
+      ink: "#000000",
       brand: "#29947A",
-      brandLight: "#48A98B",
-      brandDeep: "#1C6653",
-      brandPale: "#EDF8F5",
+      brandLight: "#5AB09B",
+      brandDeep: "#217663",
+      brandPale: "#E9F5F1",
       brandSolid: "#1C6653",
       onBrand: "#FFFFFF",
       danger: "#DC1400",
@@ -66,13 +51,13 @@ export const SCHEMES: ReadonlyArray<Scheme> = [
     dark: {
       page: "#000000",
       surface: "#121212",
-      surfaceVariant: "#1B1B1B",
-      surfaceContainer: "#202020",
-      ink: "#F2F5F4",
-      brand: "#48A98B",
-      brandLight: "#6CC4A8",
-      brandDeep: "#A7E3D2",
-      brandPale: "#14332B",
+      surfaceVariant: "#121212",
+      surfaceContainer: "#121212",
+      ink: "#FFFFFF",
+      brand: "#29947A",
+      brandLight: "#5AB09B",
+      brandDeep: "#5AB09B",
+      brandPale: "#12362C",
       brandSolid: "#6CC4A8",
       onBrand: "#08201A",
       danger: "#F4B9B3",
@@ -803,9 +788,8 @@ export const SCHEMES: ReadonlyArray<Scheme> = [
       dangerInk: "#FF7B84",
     },
   },
-  // Palette « Madoka Magica » (#620) : son skin décoratif (étoiles dorées,
-  // halos roses) vit dans `styles/madoka.css` et n'est activé que par
-  // `data-scheme="madoka"` posé sur `<html>` — aucune autre palette ne le voit.
+  // Son skin décoratif vit dans `styles/madoka.css` et n'est activé que par
+  // `data-scheme="madoka"` sur `<html>` — aucune autre palette ne le voit.
   {
     id: "madoka",
     label: "Madoka Magica",

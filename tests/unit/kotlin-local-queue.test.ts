@@ -1,23 +1,7 @@
-// #310 : file d'attente unique du client local — VRAI Kotlin compilé.
-//
-// `LocalRequestQueue` (android/data, logique pure : `java.util.concurrent` seul,
-// aucun import Android) est compilée par le harnais puis pilotée par
-// `LocalQueueParityMain` : ce n'est pas un miroir TS, c'est le code de
-// production exécuté. Les deux assertions du critère #310 portent dessus :
-//   1. au plus 1 exécution concurrente (fil unique, ordre d'arrivée) ;
-//   2. deux requêtes identiques en vol = 1 seul appel client, 2 callbacks servis.
-//
-// #403 : la file PARTAGÉE (`ClientQueue`) est celle que l'interface ET le job
-// de fond utilisent. Les mêmes scénarios sont rejoués sur elle : le job ne
-// se croise pas avec l'interface, et son attente est BORNÉE (il ne bloque
-// jamais WorkManager indéfiniment).
-//
-// #530 : un travail qui JETTE livre son ÉCHEC à tous les callbacks de la clé
-// (aucune promesse pendante) : une exception, un `Error` (OOM), et le cast
-// interne qui jette sur une collision de clés.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// File d'attente unique du client local, VRAI Kotlin compilé par le harnais
+// (aucun miroir TS) : au plus 1 exécution concurrente, dédoublonnage par clé,
+// attente bornée du job de fond, et un travail qui jette livre son échec.
+// Outillage absent = SKIP BRUYANT, jamais un faux vert.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -108,29 +92,21 @@ async function sharedStats(): Promise<SharedStats> {
 describe("file d'attente unique du client local (#310)", () => {
   test("câblage : le dépôt passe par la file PARTAGÉE, plus de Thread par lecture", () => {
     const repo = readFileSync(REPO, "utf8");
-    // #403 : LA file partagée (une pour tous), pas une file par dépôt.
+    // Une seule file partagée, pas une file par dépôt.
     expect(repo).toContain("ClientQueue.submit(");
-    // Quatre lectures passent par la file : les ressources, la relecture
-    // manuelle, les tranches et le CORPS d'une actualité (#475, lu à la
-    // demande comme les autres).
+    // Quatre lectures passent par la file, dont le CORPS d'une actualité.
     expect(repo.match(/ClientQueue\.submit\(/g)?.length).toBe(4);
     expect(repo).not.toContain("LocalRequestQueue<");
-    // Clé de dédoublonnage : ressource|requête|écriture (#509 — le fait
-    // d'écrire le cache en fait partie, sinon une lecture SANS écriture
-    // avale l'écriture d'une lecture identique).
+    // Clé = ressource|requête|écriture : une lecture SANS écriture n'avale pas l'autre.
     expect(repo).toContain("CachePolicy.dedupKey(resource, query, save)");
-    // Callbacks relayés par le Handler main existant, un par un (post), et plus
-    // aucun Thread par lecture. L'échec de la file devient un outcome
-    // d'échec : la promesse est TOUJOURS réglée (#530).
+    // Callbacks relayés par le Handler main ; un échec de file règle TOUJOURS la promesse.
     expect(repo).toContain("post(cb, o.orFailed(");
     expect(repo).not.toContain("Thread {");
     expect(repo).not.toContain("Thread(");
-    // La logique pure ne connaît ni Android ni le reste du paquet data : elle
-    // compile seule dans le harnais de parité JVM.
+    // Logique pure : ni Android ni le reste du paquet data.
     const queue = readFileSync(QUEUE, "utf8");
     expect(queue).not.toContain("import android.");
     expect(queue).not.toContain("android.os");
-    // La file partagée non plus (elle est dans le jar de parité).
     const shared = readFileSync(SHARED, "utf8");
     expect(shared).not.toContain("import android.");
     expect(shared).toContain("object ClientQueue");
@@ -139,15 +115,13 @@ describe("file d'attente unique du client local (#310)", () => {
   test.skipIf(skip)("fil unique : 3 lectures distinctes = 0 chevauchement, ordre d'arrivée", async () => {
     const qid = await newQueue();
     const keys = ["grades|x", "timetable|y", "news|"];
-    // Soumises en rafale pendant que le client est « occupé » (gated) : elles
-    // attendent toutes dans la file, puis s'exécutent dans l'ordre d'arrivée.
+    // Soumises en rafale pendant que le client est gated : ordre d'arrivée.
     for (const key of keys) await ask({ op: "queueSubmit", qid, key, workMs: 30 });
     await release(qid);
     expect(await waitCallbacks(qid, keys.length)).toEqual({ served: 3, timedOut: false });
     const s = await stats(qid);
     expect(s.workCalls).toBe(3);
-    // L'assertion « au plus 1 appel client concurrent » : 3 lectures en vol,
-    // jamais deux à la fois (une implémentation parallèle verrait 3).
+    // Trois lectures en vol, jamais deux à la fois.
     expect(s.maxConcurrent).toBe(1);
     expect(s.executed).toEqual(keys);
     // Le fil est bien le fil daemon unique de la file.
@@ -163,7 +137,6 @@ describe("file d'attente unique du client local (#310)", () => {
     await release(qid);
     expect(await waitCallbacks(qid, 2)).toEqual({ served: 2, timedOut: false });
     const s = await stats(qid);
-    // UN seul appel client pour deux soumissions identiques…
     expect(s.workCalls).toBe(1);
     expect(s.executed).toEqual([key]);
     expect(s.maxConcurrent).toBe(1);
@@ -202,12 +175,7 @@ describe("file d'attente unique du client local (#310)", () => {
   });
 });
 
-// #530 : un travail qui JETTE ne doit PAS perdre les callbacks de sa clé.
-//
-// Avant, l'exception était RELANCÉE : les callbacks n'étaient jamais appelés —
-// la promesse JS attendait le délai natif complet (20 s) et le job de fond
-// brûlait ses 120 s ; les co-demandeurs de la même clé n'étaient jamais servis.
-// L'échec est un RÉSULTAT : il est livré à TOUS les callbacks de la clé.
+// Un travail qui jette ne perd pas les callbacks de sa clé : l'échec est un RÉSULTAT.
 describe("file locale : un travail qui jette livre un ÉCHEC (#530)", () => {
   test.skipIf(skip)("une exception : TOUS les callbacks de la clé reçoivent l'échec", async () => {
     const qid = await newQueue();
@@ -216,7 +184,6 @@ describe("file locale : un travail qui jette livre un ÉCHEC (#530)", () => {
     // Co-demandeur de la MÊME clé : il doit être servi lui aussi.
     await ask({ op: "queueSubmit", qid, key, fail: "exception" });
     await release(qid);
-    // AUCUNE promesse en attente : les DEUX callbacks sont servis.
     expect(await waitCallbacks(qid, 2)).toEqual({ served: 2, timedOut: false });
     const s = await stats(qid);
     expect(s.callbacks).toEqual(["failed:IllegalStateException", "failed:IllegalStateException"]);
@@ -257,31 +224,23 @@ describe("file locale : un travail qui jette livre un ÉCHEC (#530)", () => {
     };
     expect(served).toEqual({ served: 2, timedOut: false });
     const after = await sharedStats();
-    // Le premier callback reçoit la valeur ; le second, l'ÉCHEC du cast
-    // (avant : un silence permanent, jusqu'au délai natif).
+    // Le second callback reçoit l'ÉCHEC du cast, pas un silence.
     expect(after.callbacks).toEqual(["grades|collision", "failed:ClassCastException"]);
   }, 20000);
 });
 
-// #403 : le job de fond passe par LA MÊME file que l'interface. Sans ça, le
-// `Client` (MUTABLE : `refresh()` réassigne `communication`, `attributes` et la
-// clé AES) est lu en parallèle par l'écran et par le job → deux
-// authentifications sur le même compte → « Exceeded max authorization
-// requests » (erreur 25) → l'établissement LIMITE le compte.
-//
-// Les clés sont DIFFÉRENTES d'un test à l'autre : la file dédoublonne par
-// clé, et un travail laissé en vol (l'attente expirée du test 2) dédoublonnerait
-// la soumission suivante (elle ne verrait jamais son travail démarrer).
+// Le job de fond passe par LA MÊME file que l'interface : `Client` est MUTABLE,
+// et deux authentifications parallèles déclenchent l'erreur 25 (compte limité).
+// Les clés diffèrent d'un test à l'autre : un travail en vol dédoublonnerait la
+// soumission suivante.
 describe("file PARTAGÉE : l'interface et le job de fond ne se croisent pas (#403)", () => {
   test.skipIf(skip)("la lecture du job ATTEND la lecture de l'interface (un seul appel client à la fois)", async () => {
     await newShared();
     // L'interface lit (la lecture reste bloquée par le verrou du pilote).
     await sharedSubmit("grades|1");
-    // Le job de fond pose sa lecture : elle ne peut PAS démarrer, la file est
-    // occupée.
+    // Le job pose sa lecture : elle ne peut PAS démarrer, la file est occupée.
     const id = await sharedAwait("job|grades|1", 10000);
     const busy = await sharedStats();
-    // SEULEMENT la lecture de l'interface a démarré.
     expect(busy.workCalls).toBe(1);
     expect(busy.inflight).toBe(1);
     // La file se libère : le job reçoit son résultat.
@@ -301,12 +260,7 @@ describe("file PARTAGÉE : l'interface et le job de fond ne se croisent pas (#40
     await newShared();
     // Une lecture longue occupe la file.
     await sharedSubmit("grades|2", 200);
-    // Le job attend, mais son délai est court : il rend la main (réessai).
-    // La VALEUR du délai ne fait pas partie du contrat : ce qui est testé,
-    // c'est que l'attente FINIT (elle rend la main au lieu de bloquer à
-    // jamais). 100 ms suffisent donc — la file reste occupée jusqu'au
-    // `sharedRelease` ci-dessous, donc le job ne peut de toute façon pas
-    // être servi pendant l'attente.
+    // Délai court : l'attente FINIT (réessai) ; sa valeur ne fait pas partie du contrat.
     const id = await sharedAwait("job|grades|2", 100);
     const res = await sharedAwaitResult(id);
     expect(res.timedOut).toBe(true);
@@ -317,8 +271,7 @@ describe("file PARTAGÉE : l'interface et le job de fond ne se croisent pas (#40
   test.skipIf(skip)("UNE instance pour tous : deux producteurs, la même clé = un seul appel client", async () => {
     await newShared();
     await sharedSubmit("grades|3");
-    // Second producteur, MÊME clé : la file partagée dédoublonne (une seule
-    // instance) — deux files ne le feraient pas.
+    // MÊME clé : la file partagée dédoublonne, deux files ne le feraient pas.
     await sharedSubmit("grades|3");
     const busy = await sharedStats();
     expect(busy.workCalls).toBe(1);
@@ -329,7 +282,6 @@ describe("file PARTAGÉE : l'interface et le job de fond ne se croisent pas (#40
     };
     expect(served).toEqual({ served: 2, timedOut: false });
     const after = await sharedStats();
-    // UN seul appel client, les DEUX callbacks servis.
     expect(after.workCalls).toBe(1);
     expect(after.callbacks).toEqual(["grades|3", "grades|3"]);
   }, 20000);

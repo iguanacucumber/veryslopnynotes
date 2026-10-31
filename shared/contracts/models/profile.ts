@@ -1,4 +1,3 @@
-// Contrats — profil du compte appairé (parité Papillon).
 // Infos du compte appairé : nom, classe, période courante, photo. Tout est
 // optionnel côté établissement : champ non publié = OMIS, jamais de valeur
 // bidon. La photo est une RÉF OPAQUE résolue par le proxy serveur.
@@ -10,11 +9,8 @@ export const USER_PHOTO_REF_MAX_CHARS = 200;
 export const USER_PERIOD_ID_MAX_CHARS = 64;
 export const USER_MAX_KIDS = 8; // enfants listés (compte parent)
 
-/** Borne du libellé de PÉRIODE (#420). Plus large que le nom : un établissement
- *  peut écrire « Trimestre 1 — année scolaire 2026-2027 ». C'est la borne
- *  UNIQUE : le contrat la publie, le noyau Kotlin la valide
- *  (`UserProfileRules.MAX_PERIOD_NAME`, miroir) et le web la relit
- *  (`web/src/features/profile/model.ts` l'importe d'ici).
+/** Borne UNIQUE du libellé de période, miroir Kotlin (`UserProfileRules.MAX_PERIOD_NAME`)
+ *  et importée par le web (`web/src/features/profile/model.ts`).
  */
 export const USER_PERIOD_NAME_MAX_CHARS = 100;
 
@@ -34,7 +30,7 @@ export function isOpaquePhotoRef(v: unknown): v is string {
   return PHOTO_REF_ID_RE.test(t.slice(PHOTO_REF_PREFIX.length));
 }
 
-/** Compte enfant d'un compte parent (multi-compte, #82). */
+/** Compte enfant d'un compte parent (multi-compte). */
 export interface ChildAccount {
   readonly accountId: string;
   readonly displayName: string;
@@ -48,7 +44,7 @@ export interface UserInfo {
   readonly firstName?: string;
   readonly lastName?: string;
   readonly classLabel?: string;
-  /** Période courante (id + libellé), absente si l'établissement ne la publie pas. */
+  /** Période courante (id + libellé). */
   readonly periodId?: string;
   readonly periodName?: string;
   /** Réf opaque de photo (voir `isOpaquePhotoRef`), jamais une URL. */

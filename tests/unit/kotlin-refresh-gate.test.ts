@@ -1,19 +1,6 @@
-// #405 : le rafraîchissement de session est ATOMIQUE.
-//
-// `ClientBase._refreshing` était un `var Boolean` nu : deux threads (le job de
-// fond et la lecture de l'interface) lisaient `false` en même temps et
-// déclenchaient DEUX rafraîchissements — donc deux `Communication` (deux
-// cookies, deux compteurs de requêtes), le champ finissant sur celle qui avait
-// fini la dernière, et les requêtes entrelacées (clé AES mélangée). Le serveur
-// répondait alors `G=25` « Exceeded max authorization requests ».
-//
-// Ce test ne Miroite pas la logique : il COMPILE la VRAIE source de production
-// (`android/pronote/.../RefreshGate.kt`, Kotlin pur) et la pilote via
-// `agents/runtime/kotlin-parity/RefreshGateParityMain.kt`. Les assertions
-// portent donc sur du code EXÉCUTÉ.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Le rafraîchissement de session est ATOMIQUE : deux threads lisaient `false` et
+// déclenchaient deux `Communication` (cookies, compteurs, clé AES mélangée → G=25).
+// La VRAIE source est compilée et pilotée ; outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -53,8 +40,7 @@ async function sequence(): Promise<Sequence> {
 
 describe("porte de rafraîchissement (#405)", () => {
   test.skipIf(skip)("N threads en même temps : UN SEUL rafraîchissement", async () => {
-    // Le cas du job de fond + la lecture de l'interface : les deux tombent en
-    // erreur en MÊME temps. Un seul doit rafraîchir.
+    // Job de fond + interface en erreur en même temps : un seul doit rafraîchir.
     for (const threads of [2, 4, 8]) {
       const r = await race(threads);
       // UN gagnant (le CAS `compareAndSet`), les autres perdants.
@@ -67,16 +53,14 @@ describe("porte de rafraîchissement (#405)", () => {
 
   test.skipIf(skip)("la porte se rend : un refresh raté ne bloque pas les suivants", async () => {
     const s = await sequence();
-    // Prise : `true`. Une seconde tentative pendant le refresh : `false`
-    // (c'est ce qui empêche le login du refresh de re-déclencher un refresh).
+    // Prise : `true` ; une seconde tentative pendant le refresh : `false`.
     expect(s.first).toBe(true);
     expect(s.second).toBe(false);
     expect(s.heldDuring).toBe(true);
     // Rendue : on peut la reprendre.
     expect(s.third).toBe(true);
     expect(s.heldAfter).toBe(true);
-    // Une EXCEPTION pendant le refresh : la porte est rendue malgré tout, et
-    // le refresh suivant peut repartir.
+    // Une EXCEPTION rend la porte malgré tout : le refresh suivant peut repartir.
     expect(s.caught).toBe(true);
     expect(s.reentered).toBe(true);
   });

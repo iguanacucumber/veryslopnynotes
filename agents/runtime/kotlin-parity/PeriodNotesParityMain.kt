@@ -1,24 +1,6 @@
 // PeriodNotesParityMain.kt — pilote JSON du SNAPSHOT de période (notes).
 //
-// OUTIL DE TEST uniquement (jamais Gradle, jamais l'APK). Il exécute la VRAIE
-// source de production `pronote/DataClasses.kt` (`Period.notes()`,
-// `Period.grades()`, `Period.overallAverage()`), avec un client dont l'envoi
-// est un STUB : aucun réseau.
-//
-// Ce que le pilote prouve :
-//
-//   1. UN SEUL `DernieresNotes` sert notes + moyennes + moyenne générale.
-//   2. Une ligne tordue est SAUTÉE, les autres restent (pas de trimestre
-//      perdu pour une note illisible).
-//   3. Une liste de services ABSENTE = moyenne générale INCONNUE (`null`),
-//      pas un trimestre vide publié comme valide.
-//   4. L'enveloppe `dataSec.data`, elle, reste STRICTE : sans elle, `notes()`
-//      lève (le cache ne doit jamais recevoir un faux trimestre vide).
-//   5. `grades()` et `overallAverage()` gardent leur comportement strict
-//      historique (parité avec la référence TS).
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`).
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.periodnotes
 
 import fr.veryslopnynotes.pronote.ClientBase

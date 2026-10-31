@@ -1,19 +1,6 @@
-// LlmGuardParityMain.kt — pilote JSON de la garde I4 (#409).
+// LlmGuardParityMain.kt — pilote JSON de la garde I4.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-llm-guard.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile la VRAIE source de
-// production `core/LlmGuard.kt` (logique pure : ni Android ni réseau) et la
-// pilote ici : les assertions portent donc sur du code EXÉCUTÉ, pas sur un
-// miroir TS.
-//
-// Deux opérations :
-//   - `prompt` : la garde d'entrée (`assertNoSecretsInPrompt`) sur un prompt
-//     réel (system + donnée externe délimitée à nonce) ;
-//   - `output` : la garde de sortie (`validateTextOutput`).
-//
-// Les REFUS du PORT reviennent en `{"ok":false,"kind":…,"message":…}` : c'est
-// un résultat attendu, pas une panne. Aucun secret n'est écrit en clair ici :
-// les faux secrets sont assemblés par le TEST, à l'exécution.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-llm-guard.test.ts` (jamais Gradle, jamais l'APK).
 package fr.veryslopnynotes.llmguard
 
 import fr.veryslopnynotes.core.JsonValue

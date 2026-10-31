@@ -11,17 +11,14 @@ function subjectInitial(subject: string): string {
   return subject.trim().charAt(0).toUpperCase() || "?";
 }
 
-/**
- * Carte Matières : seule cette carte lit et réécrit les préférences, elle
- * garde donc son chargement et sa reprise ; le conteneur ne fait que l'afficher.
- */
+/** Seule cette carte lit et réécrit les préférences : elle porte chargement et reprise. */
 export function SubjectPrefsCard({
   loading,
   reload,
   onRetry,
 }: {
   loading: boolean;
-  /** Compteur du conteneur : les deux reprises relisent tout, comme avant. */
+  /** Compteur du conteneur : chaque incrément relit tout. */
   reload: number;
   onRetry: () => void;
 }) {
@@ -58,9 +55,7 @@ export function SubjectPrefsCard({
     setSavingSubject(true);
     try {
       const response = await bridge.saveSubject(next);
-      // #395 : le natif peut REFUSER la matière (couleur, emoji ou libellé
-      // hors contrat) : rien n'est alors écrit. On montre le refus, on ne
-      // dit JAMAIS « Matière enregistrée. ».
+      // Le natif peut refuser la matière : rien n'est écrit, ne jamais annoncer l'enregistrement.
       const refusal = subjectSaveRefusal(response);
       if (refusal) {
         setEditorError(refusal);

@@ -1,21 +1,8 @@
-// DownloadedFilesMain.kt — pilote JSON des pièces jointes téléchargées (#540).
+// DownloadedFilesMain.kt — pilote JSON des pièces jointes téléchargées.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/downloaded-files.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile les VRAIES classes de
-// production `fr.veryslopnynotes.data.DownloadedFiles` et
-// `fr.veryslopnynotes.data.LocalDataStore` (logique pure : `java.io` seul,
-// aucun import Android) et les pilote ici : les assertions portent donc sur du
-// code EXÉCUTÉ, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/downloaded-files.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Scénarios rejoués : deux pièces distinctes du MÊME devoir portant le MÊME
-// libellé produisent DEUX fichiers distincts ; le cache des téléchargements est
-// borné ; une écriture pendant une déconnexion est refusée ; la purge de
-// déconnexion et le changement de compte effacent les pièces jointes.
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE (op inconnue, sid absent) sont préfixées `pilote: ` et
-// refusées par le test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.downloads
 
 import fr.veryslopnynotes.data.AccountIdentity
@@ -56,7 +43,7 @@ private class Slot(val id: Int, val root: File) {
     /** Le CACHE des téléchargements : `cacheDir/` (pièces jointes, exports). */
     val cacheRoot = File(root, "cache")
 
-    /** Le store de l'app : le cache ET les téléchargements (#540). */
+    /** Le store de l'app : le cache ET les téléchargements. */
     val store = LocalDataStore(FileCacheStore(offline), cacheRoot)
 
     /** La racine des pièces jointes : `cacheDir/attachments/`. */
@@ -169,7 +156,7 @@ private class Driver {
             ok("deleted" to JVal.Num(deleted.toDouble()))
         }
         // Déconnexion : la purge passe par le `CacheScope` (le MÊME chemin que
-        // le cache) — le store englobe les téléchargements (#540).
+        // le cache) — le store englobe les téléchargements.
         "logout" -> {
             val slot = bench.slot(op)
             CacheScope.purge(slot.store)

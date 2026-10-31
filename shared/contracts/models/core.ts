@@ -6,10 +6,9 @@ import {
   isRecord,
 } from "./guards";
 
-/** Version du contrat des modèles app↔serveur. */
 export const CONTRACTS_VERSION = "0.11.0" as const;
 
-/** Version gabarit fiches révision (issue #30, phase 10). Stockée par fiche. */
+/** Version du gabarit de fiche révision, stockée par fiche. */
 export const REVISION_TEMPLATE_VERSION = "fiche-v1" as const;
 
 export interface RevisionSheet {
@@ -37,7 +36,6 @@ export interface Grade {
   /** Note la plus basse / plus haute de la classe (borne d'interprétation). */
   readonly classMin?: number;
   readonly classMax?: number;
-  /** Période (trimestre/semestre) d'appartenance de la note. */
   readonly periodId?: string;
   /** Note bonus (majoration) : traitée à part par les 3 algorithmes. */
   readonly bonus?: boolean;
@@ -45,11 +43,10 @@ export interface Grade {
   readonly optional?: boolean;
   /** Libellé libre de l'évaluation (commentaire enseignant) = donnée, jamais instruction (I6). */
   readonly label?: string;
-  /** Enseignant, si Pronote le publie. */
   readonly teacher?: string;
 }
 
-/** Période scolaire (trimestre, semestre, année) servant de regroupement des moyennes. */
+/** Période scolaire (trimestre, semestre, année) regroupant les moyennes. */
 export interface Period {
   readonly id: string;
   readonly name: string;

@@ -52,22 +52,27 @@ du gate : [`docs/architecture/BUILD.md`](docs/architecture/BUILD.md).
 
 ## Lecture des gros fichiers
 
-- `rg -n` la cible, puis `read` avec `offset`/`limit` (≤ 120 lignes par appel).
-  Jamais `cat` ni `sed -n` pour lire un fichier du dépôt : `read` cache et tronque.
-- `git diff --stat` d'abord, le diff complet fichier par fichier ensuite.
+- `rg -n` puis `read` avec `offset`/`limit` (≤ 120 lignes). Jamais `cat` ni
+  `sed -n` : `read` cache et tronque.
+- `git diff --stat` d'abord, puis le diff fichier par fichier.
   `rg -l`/`rg -c` avant un `rg` de contenu ; `rg --files`, jamais `find`.
-- Après `edit`/`write`, ne relis pas : le diff rendu suffit.
-- Commentaire = contrainte durable (pourquoi, sécurité, invariant `I<n>`).
-  L'historique (`#NNN`, « avant… ») va dans l'issue, le commit ou l'ADR.
+- Après `edit`/`write`, ne relis pas : le diff suffit.
+
+## Commentaires
+
+Un commentaire ne dit que ce que le code ne peut pas dire : contrainte durable,
+piège mesuré, sécurité, invariant `I<n>`. Interdits : paraphraser le code,
+bannière ou séparateur, historique (`AVANT`, `#NNN`), code commenté,
+`@param`/`@returns` qui répètent le nom. Doc publique : le contrat, en une
+ligne. Le récit va dans l'issue, le commit ou l'ADR.
 
 ## Dépendances, vendorisé, public
 
-- Stdlib, fonctions natives et dépendances déjà installées d'abord. Toute
-  nouvelle dépendance est justifiée en PR, épinglée, auditée avec `bun audit`
-  et compatible MIT ; relire `bun.lock`.
-- `.agents/` contient des skills copiés de dépôts tiers : on ne les édite pas à
-  la main. `npx skills update`, et `skills-lock.json` + la table d'empreintes de
-  `tests/architecture/skills-lock.test.ts` se mettent à jour dans la MÊME PR.
+- Stdlib et dépendances déjà installées d'abord. Une nouvelle dépendance est
+  justifiée en PR, épinglée, auditée (`bun audit`), MIT ; relire `bun.lock`.
+- `.agents/` = skills tierces, jamais éditées à la main : `npx skills update`
+  met à jour `skills-lock.json` et la table de
+  `tests/architecture/skills-lock.test.ts` dans la MÊME PR.
 - Pas de secret commité ni de variable de secret côté serveur, pas d'IP, de
   domaine, d'URL Pronote, de donnée personnelle. Secret commité ⇒ rotation
   immédiate. `tests/fixtures/pronote/` et `shots/` sont gitignorés.

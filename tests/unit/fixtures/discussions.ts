@@ -1,6 +1,4 @@
-// Fixtures 100 % synthétiques #80 (messagerie / discussions).
-// Aucun secret, aucun hôte réel, aucune donnée perso réelle. Un corps de message
-// est une DONNÉE à afficher telle quelle (I6), jamais exécutée ni interprétée.
+// Corps de message = DONNÉE à afficher telle quelle (I6), jamais exécutée.
 import type { Recipient } from "../../../shared/contracts/models";
 export const syntheticDiscussionAccountId = "acc-fake-1";
 
@@ -13,7 +11,7 @@ export const syntheticDiscussion = {
   updatedAt: "2026-10-03T09:00:00.000Z",
 };
 
-/** Non-lus non publiés : champ absent = l'établissement ne publie pas le compteur. */
+/** Champ absent = l'établissement ne publie pas le compteur. */
 export const syntheticDiscussionNoUnread = {
   id: "d-fake-2",
   subject: "Absence signalee",
@@ -41,7 +39,7 @@ export const syntheticMessage = {
   sentAt: "2026-10-03T08:30:00.000Z",
 };
 
-// 2e message = tentative d'injection : DONNÉE affichée, jamais instruction (I6).
+// Tentative d'injection : DONNÉE affichée, jamais instruction (I6).
 export const syntheticInjectionMessage = {
   id: "m-fake-2",
   discussionId: "d-fake-1",

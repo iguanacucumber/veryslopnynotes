@@ -8,8 +8,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDateTime
 
-// Profil : payloads `capabilities`, `me` et `alerts`.
-
 internal fun capabilitiesPayload(client: Client, nowIso: String = parisNowIso()): String {    val periods = try {
         client.periods
     } catch (e: Exception) {
@@ -37,10 +35,9 @@ internal fun capabilitiesPayload(client: Client, nowIso: String = parisNowIso())
         ),
         nowIso,
     )
-    // Contrat invalide = rien n'est affirmé : on publie `capabilities: null`
-    // (le lecteur web et le pont en font « inconnu », donc rien n'est masqué).
-    // JAMAIS une liste d'onglets vide : elle affirmerait « tous les onglets
-    // désactivés » et blackouterait la navigation (#413).
+    // Contrat invalide = `capabilities: null`, que le lecteur web et le pont
+    // lisent comme « inconnu ». JAMAIS une liste d'onglets vide : elle
+    // affirmerait « tout désactivé » et blackouterait la navigation.
     val body = caps?.let {
         JSONObject().apply {
             put("accountId", it.accountId)
@@ -50,8 +47,6 @@ internal fun capabilitiesPayload(client: Client, nowIso: String = parisNowIso())
     } ?: JSONObject.NULL
     return JSONObject().put("capabilities", body).toString()
 }
-
-// --- Profil ------------------------------------------------------------------
 
 internal fun mePayload(client: Client, now: LocalDateTime = LocalDateTime.now()): String {
     val info = client.info
@@ -74,8 +69,8 @@ internal fun mePayload(client: Client, now: LocalDateTime = LocalDateTime.now())
         putIf("classLabel", boundedCp(info.className, 64).ifEmpty { null })
         current?.let {
             put("periodId", it.id.take(64))
-            // La borne du libellé est celle du noyau (miroir du contrat) :
-            // le publié ne peut pas dépasser ce que le validateur accepte.
+            // Borne du noyau (miroir du contrat) : le publié ne peut pas
+            // dépasser ce que le validateur accepte.
             put("periodName", boundedCp(it.name, UserProfileRules.MAX_PERIOD_NAME))
         }
         putIf("photoRef", photoRef)
@@ -85,9 +80,7 @@ internal fun mePayload(client: Client, now: LocalDateTime = LocalDateTime.now())
     return JSONObject().put("user", user).toString()
 }
 
-// --- Alertes -----------------------------------------------------------------
-
-/** Textes scannés = contenus déjà en cache (aucun réseau : marche hors ligne). */
+/** Textes scannés = contenus déjà en cache : aucun réseau, marche hors ligne. */
 internal fun alertsPayload(texts: List<SecurityAlert.ScannableText>): String {
     val arr = JSONArray()
     for (a in SecurityAlert.scanTextsForInjections(texts)) {

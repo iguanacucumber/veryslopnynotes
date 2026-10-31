@@ -9,7 +9,7 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * Issue d'une écriture du cahier (#586).
+ * Issue d'une écriture du cahier.
  *
  * `INVALID` n'est pas `REFUSED` : une note hors contrat n'a rien changé,
  * tandis qu'un refus vient de la garde d'époque (déconnexion). L'interface
@@ -26,14 +26,13 @@ enum class LessonNotesWrite {
 /**
  * Course notes on disk: ONE JSON file in `filesDir/offline/`.
  *
- * Pourquoi un fichier et pas une base : le volume est minuscule (64 notes
- * bornées), le dépôt n'a ni Room ni DataStore, et la purge de compte efface
- * déjà récursivement `offline/` (I16). L'écriture passe par
- * [OfflineArtifacts.writeText] : une note enregistrée pendant une
- * déconnexion est ABANDONNÉE, le dossier purgé ne ressuscite pas.
+ * One file, not a database: the volume is tiny (64 bounded notes), the repo has
+ * no Room or DataStore, and the account purge already erases `offline/`
+ * recursively (I16). The write goes through [OfflineArtifacts.writeText]: a
+ * note saved during a logout is ABANDONED, the purged directory stays gone.
  *
- * `@Synchronized` : le pont peut écrire depuis plusieurs fils, et le fichier
- * est relu avant chaque fusion. Pas de perte silencieuse entre deux ajouts.
+ * `@Synchronized`: the bridge can write from several threads, and the file is
+ * re-read before each merge, so two adds cannot lose one another.
  */
 class FileLessonNotesStore(
     private val file: File,
@@ -82,11 +81,9 @@ interface LessonNotesLocalStore {
 }
 
 /**
- * Lecture/écriture du cahier, bornée et validée.
- *
- * La source de vérité des règles est [LessonNote] / [LessonNotes] (core) :
- * le pont et le dépôt ne peuvent pas accepter plus que ce que le stockage
- * relira.
+ * Lecture/écriture du cahier, bornée et validée. Les règles vivent dans
+ * [LessonNote] / [LessonNotes] (core) : le pont et le stockage acceptent la
+ * même chose que ce que le stockage relira.
  */
 class LessonNotesRepository(private val local: LessonNotesLocalStore) {
     fun notes(): List<LessonNote> = try {
@@ -102,10 +99,9 @@ class LessonNotesRepository(private val local: LessonNotesLocalStore) {
     fun find(id: String): LessonNote? = notes().firstOrNull { it.id == id }
 
     /**
-     * Crée ou remplace une note. `id` vide = nouvelle note (identifiant
-     * aléatoire), sinon la note existante est remplacée en gardant sa date de
-     * création. Un identifiant inconnu est une erreur, jamais une création
-     * silencieuse sous un identifiant fourni par l'interface.
+     * Crée ou remplace une note. `id` vide = nouvelle note, sinon la note
+     * existante est remplacée en gardant sa date de création. Un identifiant
+     * inconnu est une erreur, jamais une création silencieuse.
      */
     fun save(id: String, subject: String, title: String, text: String, epoch: Long): LessonNotesWrite {
         val current = notes()

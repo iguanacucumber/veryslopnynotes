@@ -1,13 +1,11 @@
-// Parité TS <-> Kotlin du client + données (#201, #202).
+// Parité TS <-> Kotlin du client + données.
 //
 // Le stub PRONOTE scripté parle aux DEUX implémentations (référence `pronotets`
 // + port compilé) : même handshake chiffré (aléa fixé), mêmes réponses. Le test
-// compare le FIL brut (octet-identique : clés, IV, compteurs déterministes) ET
-// les objets rendus champ par champ (canonique, `Date` → millis, `_champs`
-// omis, cycles impossibles par construction des fixtures).
+// compare le FIL brut ET les objets rendus champ par champ.
 //
-// Règle `undefined` (rappel #200) : le pilote OMET les clés `undefined` du TS,
-// garde les `null` explicites — le comparateur canonique fait pareil côté TS.
+// Règle `undefined` : le pilote OMET les clés `undefined` du TS et garde les
+// `null` explicites — le comparateur canonique fait pareil côté TS.
 
 import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
 import { deflateRawSync, inflateRawSync } from "node:zlib";
@@ -42,8 +40,6 @@ export async function tsErrorOfAsync(fn: () => Promise<unknown>): Promise<{ name
   }
 }
 
-// --- Constantes du scénario ---------------------------------------------------
-
 export const PIN = "1234";
 export const LOGIN = "eleve.dupont";
 export const JETON = "jeton-secret-xyz";
@@ -66,8 +62,6 @@ export function qrHex(pin: string, text: string): string {
   return Buffer.concat([c.update(Buffer.from(text, "utf8")), c.final()]).toString("hex");
 }
 
-// --- Comparateurs ---------------------------------------------------------------
-
 /** `Date` → millis, `_clés` et `undefined` omis — AVANT `stringify`
  * (`toJSON` s'appliquerait d'abord et masquerait les `Date` au replacer). */
 export function deepTs(v: unknown): unknown {
@@ -87,8 +81,6 @@ export function deepTs(v: unknown): unknown {
 export function tsCanon(v: unknown): string {
   return canonTs(deepTs(v));
 }
-
-// --- Stub PRONOTE scripté -------------------------------------------------------
 
 export interface RecordedPost {
   id: string;
@@ -123,12 +115,11 @@ export interface StubScript {
   nextRaw?: string;
   /** Prochain POST → cette enveloppe JSON (erreurs `Erreur`, en clair). */
   nextEnvelope?: unknown;
-  /** Session MORTE : chaque POST répond l'erreur « session expirée » (#408). */
+  /** Session MORTE : chaque POST répond l'erreur « session expirée ». */
   deadSession?: boolean;
   /**
-   * Session morte JUSQU'AU prochain handshake (#405) : l'établissement a fermé
-   * la session, le refresh (nouveau handshake) la rouvre. Tout post échoue
-   * tant qu'aucun handshake n'a eu lieu depuis l'armement.
+   * Session morte JUSQU'AU prochain handshake : l'établissement a fermé la
+   * session, le refresh (nouveau handshake) la rouvre.
    */
   deadUntilHandshake?: boolean;
 }
@@ -261,16 +252,13 @@ export function startStub(): Stub {
             }
           }
           stub.posts.push({ id: envelope.id, inner, raw: body });
-          // Session MORTE (#408) : CHAQUE POST répond l'erreur « session
-          // expirée » — le rejeu après `refresh` échoue donc aussi (c'est le
-          // cas réel : l'établissement a fermé la session).
+          // Session MORTE : CHAQUE POST répond l'erreur « session expirée » — le
+          // rejeu après `refresh` échoue donc aussi, comme en réel.
           if (s.deadSession) {
             return Response.json({ Erreur: { G: 10, Titre: "session expirée" } });
           }
-          // Session morte JUSQU'AU nouveau handshake (#405) : `gets` compte les
-          // handshakes (le GET de la page) — le refresh en fait UN de plus, et
-          // la session redevient vivante. C'est le cas réel : l'établissement
-          // ferme la session, la re-poignée de main la rouvre.
+          // Session morte JUSQU'AU nouveau handshake : `gets` compte les
+          // handshakes, le refresh en fait UN de plus et la session revit.
           if (s.deadUntilHandshake && stub.gets < 2) {
             return Response.json({ Erreur: { G: 10, Titre: "session expirée" } });
           }

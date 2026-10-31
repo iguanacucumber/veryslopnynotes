@@ -32,10 +32,7 @@ function messageOf(error: unknown, fallback: string): string {
   return fallback;
 }
 
-/**
- * Écran Prof (#633) : l'état, le pont et la persistance locale. Le rendu est
- * dans [TeacherView] (pur, testable en rendu statique).
- */
+/** État, pont et persistance ; le rendu vit dans [TeacherView]. */
 export function TeacherRoute() {
   const { notify } = useApp();
   const navigate = useViewNavigate();
@@ -52,7 +49,7 @@ export function TeacherRoute() {
   const [threadLoaded, setThreadLoaded] = useState(false);
   const [focusTick, setFocusTick] = useState(0);
   const [reload, setReload] = useState(0);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<null | "delete" | "new">(null);
   const [deleting, setDeleting] = useState(false);
   const seq = useRef(0);
   // Toutes les écritures du fil passent par cette file : un enregistrement ne
@@ -205,6 +202,7 @@ export function TeacherRoute() {
   }
 
   async function clearThread(): Promise<void> {
+    const startingNew = confirmAction === "new";
     setDeleting(true);
     seq.current += 1;
     try {
@@ -217,8 +215,8 @@ export function TeacherRoute() {
       setError(null);
       setRefusal(null);
       setFocusTick(0);
-      setConfirmDelete(false);
-      notify("Discussion supprimée.");
+      setConfirmAction(null);
+      notify(startingNew ? "Nouvelle discussion prête." : "Discussion supprimée.");
     } catch (e) {
       notify(messageOf(e, "Suppression impossible : réessaie."), "error");
     } finally {
@@ -270,19 +268,30 @@ export function TeacherRoute() {
         onSend={send}
         onRetry={retry}
         onReject={reject}
-        onNewDiscussion={() => setConfirmDelete(true)}
-        onDelete={() => setConfirmDelete(true)}
+        onNewDiscussion={() => setConfirmAction("new")}
+        onDelete={() => setConfirmAction("delete")}
         onAction={action}
       />
       <Dialog
-        open={confirmDelete}
-        title="Supprimer la discussion ?"
-        description="Le fil local du professeur sera effacé de cet appareil. Aucun envoi ne sera fait."
+        open={confirmAction !== null}
+        title={
+          confirmAction === "new" ? "Démarrer une nouvelle discussion ?" : "Supprimer la discussion ?"
+        }
+        description={
+          confirmAction === "new"
+            ? "Le fil actuel sera effacé de cet appareil et la discussion repartira de la matière choisie. Aucun envoi ne sera fait."
+            : "Le fil local du professeur sera effacé de cet appareil. Aucun envoi ne sera fait."
+        }
         icon={<IconTrash size={20} />}
         busy={deleting}
         actions={
           <>
-            <button type="button" className="btn btn--ghost" onClick={() => setConfirmDelete(false)} disabled={deleting}>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => setConfirmAction(null)}
+              disabled={deleting}
+            >
               Annuler
             </button>
             <button
@@ -291,11 +300,11 @@ export function TeacherRoute() {
               onClick={() => void clearThread()}
               disabled={deleting}
             >
-              Supprimer
+              {confirmAction === "new" ? "Recommencer" : "Supprimer"}
             </button>
           </>
         }
-        onClose={() => setConfirmDelete(false)}
+        onClose={() => setConfirmAction(null)}
       />
     </>
   );

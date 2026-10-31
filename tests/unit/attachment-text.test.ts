@@ -1,20 +1,7 @@
-// #631 — le cours complet et les pièces jointes d'un devoir arrivent à l'IA.
-//
-// VRAI Kotlin exécuté : `android/data/AttachmentText.kt` (extraction LOCALE) et
-// `android/core/AssignmentContext.kt` (ordre des sources) sont compilés par le
-// harnais de parité et pilotés par
-// `agents/runtime/kotlin-parity/AttachmentTextMain.kt`. Les assertions portent
-// donc sur le code de production, sur des fixtures SYNTHÉTIQUES : aucune
-// requête réseau, aucun fichier réel.
-//
-// Ce qui est prouvé ici :
-//   - texte/markdown/HTML (désinfecté) et PDF texte sont LUS ;
-//   - un format non lisible (ou un MIME exécutable) devient une source NOMMÉE
-//     « illisible », jamais une exception ;
-//   - toutes les bornes (octets, pages, caractères) sont SIGNALÉES ;
-//   - un devoir avec un cours long et une PJ texte produit des sources non
-//     tronquées à 500 caractères, et la PJ y figure (elle part dans
-//     « Ce qui est envoyé »).
+// Le cours complet et les pièces jointes arrivent à l'IA : texte, markdown, HTML
+// désinfecté et PDF texte sont LUS ; le reste devient une source NOMMÉE
+// « illisible », jamais une exception. Les bornes sont toutes SIGNALÉES.
+// VRAI Kotlin compilé sur fixtures synthétiques, sans réseau ni fichier réel.
 import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

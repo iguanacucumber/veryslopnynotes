@@ -1,10 +1,7 @@
-// #587 : photo de cours -> texte. Le prompt vision est une DONNÉE, l'image
-// est bornée, la réponse est validée par le schéma.
-//
-// VRAI Kotlin exécuté : `core/Vision.kt` et `core/LessonAi.kt` sont compilés
-// par le harnais puis pilotés par `VisionMain.kt`. Le ré-encodage Android
-// (`PhotoPrep.kt`) est vérifié par un test de source : il tourne sur le
-// téléphone, pas sous `kotlinc`.
+// Photo de cours -> texte : le prompt vision est une DONNÉE, l'image est
+// bornée, la réponse validée par le schéma. Le vrai `Vision.kt` et `LessonAi.kt`
+// sont compilés et pilotés par `VisionMain.kt` ; `PhotoPrep.kt` (Android) est
+// vérifié par un test de source.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

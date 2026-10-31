@@ -26,16 +26,16 @@ describe("réglages — une seule section Assistant (#612)", () => {
   test("l'ordre Apparence, Matières, Assistant, Avancé remplace la section Sécurité", () => {
     expect(settings).not.toContain('title="Sécurité"');
     const order = ["Apparence", "Matières", "Assistant", "Avancé"].map((title) =>
-      settings.indexOf(`<Section title="${title}">`),
+      settings.search(new RegExp(`<Section[^>]*title="${title}"`)),
     );
     expect(order.every((index) => index > -1)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     // Une seule section Assistant : la configuration IA n'est pas éparpillée.
-    expect(settings.match(/<Section title="Assistant">/g)).toHaveLength(1);
+    expect(settings.match(/<Section[^>]*title="Assistant"/g)).toHaveLength(1);
   });
 
   test("clé et manuel vivent dans Assistant, le scraper reste sous Avancé", () => {
-    const assistant = between(settings, '<Section title="Assistant">', '<Section title="Avancé">');
+    const assistant = between(settings, 'title="Assistant"', 'title="Avancé"');
     expect(assistant).toContain("<AssistantCards");
     expect(assistant).toContain("<ManualCard");
     expect(assistant).not.toContain("<ServerCard");
@@ -45,7 +45,7 @@ describe("réglages — une seule section Assistant (#612)", () => {
     expect(overview).toContain("Assistant actif");
     expect(overview).toContain("Aucune clé");
 
-    const advanced = settings.slice(settings.indexOf('<Section title="Avancé">'));
+    const advanced = settings.slice(settings.indexOf('title="Avancé"'));
     expect(advanced).toContain("<ServerCard");
     expect(advanced).not.toContain("<ManualCard");
     expect(server).toContain('id="server-host"');

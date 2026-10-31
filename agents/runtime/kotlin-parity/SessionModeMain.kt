@@ -1,18 +1,6 @@
 // SessionModeMain.kt — pilote JSON du mode d'ouverture d'une session.
 //
-// OUTIL DE TEST uniquement (jamais Gradle, jamais l'APK). Le test compile la
-// VRAIE source de production `fr.veryslopnynotes.data.SessionMode` (logique
-// pure : aucun import Android) et la pilote ici.
-//
-// CE QUE ÇA PROUVE. Une session persistée se rouvre par son jeton (appairage
-// QR) ou par son identifiant (établissement de démonstration). Le mode est
-// decisão AU MOMENT DE LA RESTAURATION, à partir de la valeur persistée : une
-// valeur absente ou inconnue doit rester « jeton » — sinon une session
-// enregistrée avant l'existence de la démonstration se rouvrirait par
-// identifiant, et une valeur corrompue pourrait choisir un mode au hasard.
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`).
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.sessionmode
 
 import fr.veryslopnynotes.data.SessionMode

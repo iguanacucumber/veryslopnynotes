@@ -1,21 +1,10 @@
-// JsonDepthMain.kt — pilote de la BORNE DE PROFONDEUR du `Json` embarqué (#414).
+// JsonDepthMain.kt — pilote de la BORNE DE PROFONDEUR du `Json` embarqué.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-json-depth.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile la VRAIE source de
-// production `fr.veryslopnynotes.pronote.Json` et la pilote ici : les
-// assertions portent donc sur du code exécuté, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-json-depth.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
+//
 //   - `{"op":"parse","text":"…"}` → `{"ok":true}` ou
-//     `{"ok":false,"error":"<classe>","message":"…"}`
-//
-// POINT CLÉ : le pilote attrape `Throwable` et NON `Exception`. Un
-// `StackOverflowError` est une `Error` : le `catch (e: Exception)` du `main`
-// ne l'attraperait pas, le JVM mourrait, et le test ne verrait qu'une trame de
-// dialogue coupée — sans le NOM de l'erreur, donc sans preuve. Ici le nom de
-// classe remonte tel quel (`StackOverflowError` ou `JsonError`) : c'est
-// exactement ce que le test compare (#414).
 package fr.veryslopnynotes.jsondepth
 
 import fr.veryslopnynotes.pronote.JVal

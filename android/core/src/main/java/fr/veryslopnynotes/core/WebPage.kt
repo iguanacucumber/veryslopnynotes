@@ -1,22 +1,19 @@
 package fr.veryslopnynotes.core
 
-// #634 : une page web choisie par l'élève devient une source CITÉE, avec le
-// même contrat que le manuel : texte borné, libellé « Web : titre », contenu
-// marqué Untrusted par le prompt (I6).
+// Une page web choisie par l'élève devient une source CITÉE, même contrat que le
+// manuel : texte borné, libellé « Web : titre », contenu marqué Untrusted (I6).
 //
-// L'URL ne vit QUE dans la saisie / l'appel au scraper : elle n'est jamais
-// portée par [WebPageDoc], jamais mise dans [HomeworkSource], donc jamais dans
-// le prompt ni dans un log. Le scraper rend titre + texte, rien d'autre.
+// L'URL ne vit QUE dans la saisie / l'appel au scraper : jamais dans [WebPageDoc],
+// jamais dans [HomeworkSource], donc jamais dans le prompt ni dans un log.
 sealed interface WebUrlResult {
     data class Ok(val url: String) : WebUrlResult
     data class Rejected(val message: String) : WebUrlResult
 }
 
 /**
- * Validation de la page web saisie : MÊMES règles que [ManualUrl] (schéma
- * http(s), hôte présent, pas d'identifiants, pas d'espace ni de contrôle,
- * bornes). Ce n'est qu'un premier filtre lisible : le SERVEUR refait sa garde
- * SSRF, y compris la résolution DNS d'un nom public vers une IP privée.
+ * Validation de la page web saisie : MÊMES règles que [ManualUrl]. Premier
+ * filtre lisible seulement : le SERVEUR refait sa garde SSRF, y compris la
+ * résolution DNS d'un nom public vers une IP privée.
  */
 object WebUrl {
     /** Miroir de `WEB_SCRAPE_URL_MAX_CHARS` (shared/contracts/api.ts). */
@@ -47,8 +44,7 @@ object WebUrl {
             return rejected("Domaine manquant après le schéma.")
         }
         if (authority.contains('@')) {
-            // Aucune authentification, aucun cookie de l'élève : des identifiants
-            // dans l'URL seraient collectés pour rien.
+            // Aucune authentification, aucun cookie de l'élève.
             return rejected("Identifiants dans l'adresse refusés : le scraper ne s'authentifie pas.")
         }
         if (authority.contains('\\')) {
@@ -72,9 +68,8 @@ data class WebPageDoc(
 }
 
 /**
- * Source citable d'une page web. Sans texte, aucune source n'est ajoutée :
- * jamais une page inventée. Le libellé suit le contrat du manuel
- * (« Manuel : titre ») et devient « Web : titre ».
+ * Source citable d'une page web. Sans texte, aucune source n'est ajoutée : jamais
+ * une page inventée. Le libellé suit le contrat du manuel (« Web : titre »).
  */
 object WebPage {
     const val TITLE_MAX_CHARS = 200
@@ -83,8 +78,8 @@ object WebPage {
     fun source(doc: WebPageDoc): HomeworkSource? {
         val excerpt = capped(doc.excerpt, Homework.MAX_SOURCE_CHARS)
         if (excerpt.isEmpty()) return null
-        // Un titre qui EST une URL ne doit pas devenir un libellé « Web :
-        // https://… » : l'adresse demandée ne part jamais dans le prompt.
+        // Un titre qui EST une URL ne doit pas devenir un libellé : l'adresse
+        // demandée ne part jamais dans le prompt.
         val rawTitle = capped(doc.title, TITLE_MAX_CHARS).takeUnless { it.contains("://") } ?: ""
         val title = rawTitle.ifEmpty { "Page web" }
         val label = capped("Web : $title", Homework.MAX_LABEL_CHARS).ifEmpty { DEFAULT_LABEL }

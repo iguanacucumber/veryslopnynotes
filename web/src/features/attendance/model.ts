@@ -1,8 +1,5 @@
-// Logique affichable de la vie scolaire (miroir web de Attendance.kt,
-// AttendanceFormat.kt et AttendanceRows.kt). Pure : aucun React, aucun réseau.
-//
-// Payloads du pont : `{"absences":[],"periods":[]}` et `{"punishments":[]}`.
-// Le pont factice publie `{"items":[]}` : les deux formes sont lues.
+// Vie scolaire pure : aucun React, aucun réseau. Payloads `absences`/`periods`
+// et `punishments`, ou l'enveloppe `items` du pont factice.
 import { cleanText, parseInstant } from "../../lib/format";
 
 export const MAX_MOTIF_CHARS = 500;
@@ -40,7 +37,6 @@ export interface Punishment {
   date: string;
   type: string;
   motif: string;
-  /** Durée de la sanction en minutes, telle que publiée par le natif. */
   durationMinutes: number | null;
 }
 
@@ -102,8 +98,6 @@ function optInt(obj: Record<string, unknown>, key: string): number {
   return Math.trunc(v);
 }
 
-/** Instant d'une date ISO du contrat, ou null. Instant complet et date seule
- *  (minuit local) : l'analyseur est partagé avec le reste du web. */
 export { parseInstant };
 
 function arrayOf(root: Record<string, unknown>, canonicalKey: string): unknown[] {
@@ -126,13 +120,8 @@ export function parseAttendance(payload: string | null): AttendanceData {
   const root = payloadRoot(payload);
   if (!root) return { absences: [], periods: [] };
   const absences: Absence[] = [];
-  // #570 : un événement = UNE ligne. Le même identifiant publié deux fois
-  // (la même absence, vue par deux périodes) n'est compté qu'une fois.
-  //
-  // L'identité est (kind, id), JAMAIS id seul : les absences et les retards
-  // sont numérotés par DEUX TABLEES indépendantes — une absence `12` et un
-  // retard `12` sont deux événements DIFFÉRENTS. Un ensemble partagé les
-  // confondrait : le second disparaîtrait de l'écran.
+  // Identité (kind, id), jamais id seul : absences et retards sont numérotés
+  // par deux tables indépendantes, un `12` de chaque kind est deux événements.
   const seen = new Set<string>();
   for (const raw of arrayOf(root, "absences")) {
     const obj = record(raw);
@@ -144,8 +133,8 @@ export function parseAttendance(payload: string | null): AttendanceData {
     const date = bound(obj["date"], 40);
     if (!id || !(ABSENCE_KINDS as readonly string[]).includes(kind)) continue;
     if (date.length < 10 || parseInstant(date) === null) continue;
-    // La clé porte le KIND : deux événements de kinds DIFFÉRENTS qui
-    // partagent un identifiant sont deux événements, pas un doublon.
+    // La clé porte le KIND : deux kinds qui partagent un identifiant ne sont
+    // pas un doublon.
     const key = `${kind}:${id}`;
     if (seen.has(key)) continue;
     const dateEnd = optBounded(obj, "dateEnd", 40);
@@ -154,7 +143,7 @@ export function parseAttendance(payload: string | null): AttendanceData {
     const end = dateEnd ? parseInstant(dateEnd) : null;
     if (start !== null && end !== null && end < start) continue;
     // L'identifiant n'est marqué vu qu'une fois la ligne retenue : une ligne
-    // hors contrat ne fait pas d'ombre à une ligne valide de même identifiant.
+    // rejetée ne fait pas d'ombre à une ligne valide de même identifiant.
     seen.add(key);
     absences.push({
       id,
@@ -211,16 +200,8 @@ export function parsePunishments(payload: string | null): Punishment[] {
   return out;
 }
 
-/**
- * Capacités du payload `capabilities` : `{capabilities:{tabs}}` (contrat),
- * `{items:{tabs}}` (pont factice) ou `{tabs}`.
- *
- * `null` = INCONNU (payload absent, illisible, ou contrat invalide publié
- * comme `capabilities: null`) : rien n'est affirmé, donc RIEN n'est masqué.
- * `[]` = liste AFFIRMÉE (contrat valide qui n'expose aucun onglet) : elle dit
- * le contraire de `null`, qui dit « je ne sais pas » (#413). Confondre les
- * deux, c'est blackpointer la navigation sur une panne.
- */
+/** `{capabilities:{tabs}}`, `{items:{tabs}}` ou `{tabs}`. `null` = INCONNU
+ *  (rien n'est masqué) ; `[]` = liste affirmée vide (I14). */
 export function parseCapabilities(payload: string | null): string[] | null {
   const root = payloadRoot(payload);
   if (!root) return null;
@@ -233,11 +214,7 @@ export function parseCapabilities(payload: string | null): string[] | null {
   return null;
 }
 
-/**
- * La sanction est visible si les capacités sont INCONNUES (`null` : rien
- * n'est affirmé, donc rien n'est masqué) ou si l'onglet EST affirmé. Seule
- * une liste AFFIRMÉE qui n'a pas l'onglet le masque (#413).
- */
+/** `null` (inconnu) ne masque rien ; seule une liste affirmée sans l'onglet le masque. */
 export function sanctionsVisible(capabilities: string[] | null): boolean {
   return capabilities === null || capabilities.includes("punishments");
 }
@@ -273,8 +250,6 @@ function hasTime(iso: string): boolean {
   return iso.includes("T") || iso.includes(" ");
 }
 
-/** Étendue d'un événement : une date, ou début → fin sur plusieurs jours.
- *  Même jour avec heures : « 12 octobre 2026 · 08:00 – 12:00 ». */
 export function formatDateSpan(row: Absence): string {
   const start = parseInstant(row.date);
   if (start === null) return "";
@@ -308,7 +283,6 @@ export function absenceTitle(row: Absence): string {
   return row.motif?.trim() || row.subject?.trim() || absenceKindLabel(row.kind);
 }
 
-/** Aucune pastille inventée quand l'établissement n'affirme rien. */
 export function justifiedLabel(justified: boolean | null): string {
   if (justified === true) return "justifiée";
   if (justified === false) return "non justifiée";
@@ -327,7 +301,6 @@ export function isUnverified(row: Absence): boolean {
   return row.justified === null;
 }
 
-/** Événement dont la justification reste à obtenir : inconnue ou refusée. */
 export function needsJustification(row: Absence): boolean {
   return row.justified !== true;
 }
@@ -336,14 +309,8 @@ function minutesOf(rows: Absence[]): number {
   return rows.reduce((sum, r) => sum + (r.minutes !== null && r.minutes > 0 ? r.minutes : 0), 0);
 }
 
-/**
- * État de l'assiduité, sans jamais nier ce que l'établissement ne publie pas.
- *
- * Le natif ne publie `justified` que pour les événements JUSTIFIÉS : une
- * absence de ce champ est une information INCONNUE, pas une absence de
- * sanction. L'écran affiche donc les heures non vérifiées au lieu
- * d'affirmer que tout est justifié.
- */
+/** Le natif ne publie `justified` que pour les événements justifiés : son
+ *  absence est INCONNUE, jamais « tout est justifié ». */
 export function attendanceStatus(rows: Absence[]): AttendanceStatus {
   const unjustified = rows.filter(isUnjustified);
   const unverified = rows.filter(isUnverified);
@@ -381,9 +348,8 @@ export function attendanceStatus(rows: Absence[]): AttendanceStatus {
       state === "clean"
         ? "Toutes les absences et tous les retards publiés sont justifiés."
         : state === "unjustified"
-          ? // Les heures sans information de justification sont dites à part :
-            // sinon « 20 min sur 4 h manquées » laisserait croire que le reste
-            // est justifié.
+          ? // Les heures non vérifiées sont dites à part, sinon le reste
+            // semblerait justifié.
             unverified.length > 0
             ? `${unjustifiedText} · ${unverified.length} sans information de justification`
             : unjustifiedText
@@ -391,7 +357,6 @@ export function attendanceStatus(rows: Absence[]): AttendanceStatus {
   };
 }
 
-/** Sections fixes : absences puis retards ; une section vide n'est pas rendue. */
 export function attendanceSections(rows: Absence[]): AttendanceSection[] {
   const out: AttendanceSection[] = [];
   for (const kind of ["absence", "late"] as const) {

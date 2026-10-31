@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type CSSProperties } from "react";
 import {
   frDateShort,
   frDay,
@@ -17,7 +17,6 @@ import {
   Loading,
   Page,
   StaleBadge,
-  SubjectAvatar,
   WeekNavigator,
 } from "../../ui/components";
 import { IconCalendar, IconPin, IconUser, IconWarning } from "../../ui/icons";
@@ -59,8 +58,8 @@ function paletteFor(subject: string, dark: boolean): Palette {
   const base = subjectColor(subject);
   return {
     base,
-    background: tint(base, dark ? -0.74 : 0.86),
-    ink: tint(base, dark ? 0.72 : -0.5),
+    background: tint(base, dark ? -0.7 : 0.75),
+    ink: tint(base, dark ? 0.1 : -0.15),
   };
 }
 
@@ -93,34 +92,27 @@ function LessonRow({
       aria-label={[lesson.subject, lesson.room, timeRange(lesson), status]
         .filter(Boolean)
         .join(", ")}
+      style={
+        {
+          "--lesson-bg": palette.background,
+          "--lesson-ink": palette.ink,
+          "--lesson-bar": palette.ink,
+        } as CSSProperties
+      }
     >
       <div className="tt-time" aria-hidden="true">
         <strong>{clockLabel(lesson.start)}</strong>
         <span>{clockLabel(lesson.end)}</span>
       </div>
 
-      <div
-        className="tt-card"
-        style={{
-          background: palette.background,
-          color: palette.ink,
-          borderColor: highlight ? palette.base : "transparent",
-        }}
-      >
-        <span className="tt-card__spine" style={{ background: palette.base }} aria-hidden="true" />
+      <div className="tt-card">
         {cancelled ? (
           <div className="tt-cancelled">
-            <IconWarning size={14} />
+            <IconWarning size={20} />
             <span>Prof. absent</span>
           </div>
         ) : null}
         <div className="tt-card__head">
-          <SubjectAvatar
-            subject={lesson.subject}
-            size={32}
-            dark={dark}
-            className={cancelled ? "tt-card__avatar--cancelled" : ""}
-          />
           <h3 className="tt-card__subject">{lesson.subject}</h3>
           {highlight === "current" ? <span className="tt-pill">En cours</span> : null}
           {highlight === "next" ? <span className="tt-pill">Prochain</span> : null}
@@ -130,13 +122,13 @@ function LessonRow({
           <div className="tt-card__meta">
             {lesson.room ? (
               <span className="tt-card__meta-item">
-                <IconPin size={13} />
+                <IconPin size={20} />
                 {lesson.room}
               </span>
             ) : null}
             {lesson.teacher ? (
               <span className="tt-card__meta-item">
-                <IconUser size={13} />
+                <IconUser size={20} />
                 {lesson.teacher}
               </span>
             ) : null}
@@ -154,12 +146,8 @@ function LessonRow({
 
 export default function TimetableScreen() {
   const now = useNow();
-  // Semaine ANCRÉE : un offset relatif à `now` faisait sauter la semaine
-  // affichée à minuit le lundi, sans geste de l'élève. « Semaine courante »
-  // est désormais la seule façon de revenir à la semaine de `now`.
+  // Semaine ancrée : un offset relatif à `now` ferait sauter la semaine affichée à minuit.
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
-  // Écart AFFICHÉ : il suit la même horloge que le reste de l'écran, donc le
-  // libellé passe de « suivante de 1 semaine » à « courante » à minuit.
   const weeks = useMemo(() => weeksBetween(weekStart, new Date(now)), [weekStart, now]);
 
   return (
@@ -196,9 +184,7 @@ function WeekView({
   const groups = useMemo(() => groupDays(weekLessons, weekStart), [weekLessons, weekStart]);
   const current = useMemo(() => currentLesson(weekLessons, now), [weekLessons, now]);
   const next = useMemo(() => nextLesson(weekLessons, now), [weekLessons, now]);
-  // Le bandeau ne parle du « prochain cours » que sur la semaine courante : le
-  // payload est borné à la semaine affichée, donc sur une autre semaine ce
-  // « next » est seulement le premier cours de cette semaine-là.
+  // Le payload est borné à la semaine affichée : « prochain cours » n'a de sens que sur la semaine courante.
   const focus = showingCurrentWeek ? current ?? next : null;
   const focusPalette = focus ? cancelledPalette(focus, dark) : null;
   const days = groups.filter((group) => group.lessons.length > 0);
@@ -213,7 +199,7 @@ function WeekView({
   return (
     <Page className="tt">
       <WeekNavigator
-        label={weekLabel(weekStart)}
+        label={weekLabel(weekStart).replace(/^Semaine du /, "")}
         weeks={weeks}
         onPrevious={() => onShift(-1)}
         onNext={() => onShift(1)}
@@ -265,11 +251,10 @@ function WeekView({
           style={{
             background: focusPalette.background,
             color: focusPalette.ink,
-            borderColor: focusPalette.base,
+            borderLeftColor: focusPalette.ink,
           }}
           aria-label={current ? "Cours en cours" : "Prochain cours"}
         >
-          <SubjectAvatar subject={focus.subject} size={46} dark={dark} />
           <div className="tt-banner__body">
             <span className="tt-banner__label">{current ? "En cours" : "Prochain cours"}</span>
             <strong className="tt-banner__subject">{focus.subject}</strong>
@@ -325,8 +310,7 @@ function WeekView({
           <div className="tt-day__lessons">
             {group.lessons.map((lesson) => (
               <Fragment key={lesson.id}>
-                {/* Repère « maintenant » (#337) : posé juste avant le cours en
-                    cours, il date la journée sans deviner l'heure exacte. */}
+                {/* Repère « maintenant » posé avant le cours en cours. */}
                 {current && lesson.id === current.id ? (
                   <div className="tt-now" role="separator" aria-label={`Maintenant, ${clockLabel(now)}`}>
                     <span className="tt-now__label">maintenant</span>

@@ -1,21 +1,6 @@
-// RefreshGateParityMain.kt — pilote JSON de la PORTE de rafraîchissement (#405).
+// RefreshGateParityMain.kt — pilote JSON de la PORTE de rafraîchissement.
 //
-// OUTIL DE TEST uniquement (jamais Gradle, jamais l'APK). Il pilote la VRAIE
-// source de production `pronote/RefreshGate.kt` (Kotlin pur : ni Android ni
-// réseau), donc les assertions portent sur du code EXÉCUTÉ.
-//
-// Ce que la porte prouve (#405) :
-//
-//   1. UN SEUL rafraîchissement à la fois : N threads lâchés EN MÊME temps sur
-//      la porte, UN seul la prend (le CAS `compareAndSet`).
-//   2. La porte se REND : après `leave()`, on peut la reprendre (un refresh
-//      raté ne bloque pas les suivants).
-//   3. Une exception pendant le refresh ne bloque PAS la porte (le `finally`
-//      de `Client.post` la rend — c'est vérifié par le garde de source, ici on
-//      prouve que le motif « prendre -> essayer -> rendre » tient).
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`).
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.refreshgate
 
 import fr.veryslopnynotes.pronote.JVal

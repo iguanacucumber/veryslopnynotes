@@ -14,12 +14,8 @@ function errorMessage(error: unknown): string {
   return "Manuel non enregistré : réessaie dans un instant.";
 }
 
-/**
- * Invitation UNIQUE à donner l'adresse du manuel. Elle n'apparaît que si
- * l'assistant est configuré (sans clé, un manuel ne sert à rien), et elle ne
- * revient jamais une fois enregistrée ou passée : le même champ reste
- * modifiable dans Réglages.
- */
+/** Invitation unique au manuel : seulement si l'assistant est configuré, jamais
+ *  revue après enregistrement ou refus (le champ reste dans Réglages). */
 export function ManualPrompt() {
   const { notify } = useApp();
   const [open, setOpen] = useState(false);

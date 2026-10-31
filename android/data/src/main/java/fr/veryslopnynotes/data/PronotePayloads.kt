@@ -5,17 +5,13 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 
-// c'est `SyncedRepository` qui file en tâche de fond). Une écriture ne part
-// que d'un geste (toggle, messagerie : I7 inchangé).
-//
-// Fuseau : l'établissement vit en Europe/Paris (comme `APP_TIME_ZONE` côté
-// serveur) ; les instants sortent en ISO avec offset, que les parseurs UI
-// (`OffsetDateTime.parse`) lisent comme l'UTC d'avant.
+// Fuseau de l'établissement : Europe/Paris. Les instants sortent en ISO avec
+// offset, que les parseurs UI (`OffsetDateTime.parse`) lisent directement.
 internal fun LocalDateTime.parisIso(): String = atZone(PARIS).toOffsetDateTime().toString()
 
 internal fun parisNowIso(): String = Instant.now().atZone(PARIS).toOffsetDateTime().toString()
 
-/** Trim + borne en POINTS DE CODE (miroir de `bounded` serveur). */
+/** Borne en POINTS DE CODE (miroir de `bounded` serveur). */
 internal fun boundedCp(raw: String?, max: Int): String {
     val t = (raw ?: "").trim()
     if (t.isEmpty()) return ""
@@ -40,7 +36,7 @@ internal fun toNumOrNull(raw: String?): Double? {
     return t.replace(",", ".").toDoubleOrNull()?.takeIf { it.isFinite() }
 }
 
-/** Query `k=v&k2=v2` d'app (listes fermées, jamais de saisie libre). */
+/** Listes fermées côté app, jamais de saisie libre. */
 internal fun parseQuery(query: String): Map<String, String> {
     val out = LinkedHashMap<String, String>()
     for (part in query.split("&")) {
@@ -51,7 +47,7 @@ internal fun parseQuery(query: String): Map<String, String> {
     return out
 }
 
-/** Lundi 00:00 local de la semaine courante (défaut cantine, miroir `getMenus`). */
+/** Lundi 00:00 local de la semaine courante (défaut cantine). */
 internal fun currentWeekLocal(): Pair<LocalDateTime, LocalDateTime> {
     val today = LocalDate.now(PARIS)
     val monday = today.minusDays(((today.dayOfWeek.value + 6) % 7).toLong())
@@ -59,7 +55,7 @@ internal fun currentWeekLocal(): Pair<LocalDateTime, LocalDateTime> {
     return from to from.plusDays(6).withHour(23).withMinute(59).withSecond(59)
 }
 
-/** Jour local Paris `AAAA-MM-JJ` (recoupement devoirs/séances, miroir `lessonKey`). */
+/** Jour local Paris `AAAA-MM-JJ` (recoupement devoirs/séances). */
 internal fun parisDay(dt: LocalDateTime): String = dt.atZone(PARIS).toLocalDate().toString()
 
 internal fun JSONObject.putIf(key: String, value: String?) {

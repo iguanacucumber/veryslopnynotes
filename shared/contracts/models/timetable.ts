@@ -1,6 +1,4 @@
-// Contrats — EDT semaine (parité Papillon).
-// Add-only strict : tous les champs ajoutés sont OPTIONNELS, un payload 0.2.0
-// antérieur reste valide. Champ absent = établissement qui ne publie rien.
+// Add-only : champs ajoutés toujours optionnels, un payload antérieur reste valide.
 import {
   isIsoDate,
   isNonEmptyString,
@@ -8,7 +6,7 @@ import {
   isRecord,
 } from "./guards";
 
-/** Statuts d'EDT publiés par l'établissement (français -> anglais, cf. menus). */
+/** Statuts traduits du français, comme les menus. */
 export const TIMETABLE_STATUSES = ["normal", "cancelled", "moved"] as const;
 
 export type TimetableStatus = (typeof TIMETABLE_STATUSES)[number];
@@ -26,7 +24,7 @@ export interface TimetableEntry {
   readonly room?: string;
   readonly start: string; // ISO-8601
   readonly end: string; // ISO-8601
-  /** Enseignant, si l'établissement le publie. Absent = non publié, jamais deviné. */
+  /** Enseignant ; absent = non publié, jamais deviné. */
   readonly teacher?: string;
   /** Statut tel que publié : absent = statut non publié (jamais "normal" par défaut). */
   readonly status?: TimetableStatus;

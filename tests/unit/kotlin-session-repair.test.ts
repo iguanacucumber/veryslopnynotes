@@ -1,19 +1,7 @@
-// #397 : le rejet d'une session MORTE purge la session ET le cache.
-//
-// Le problème : `DeviceAuth.reject()` était un NO-OP — le signal n'avait AUCUN
-// abonné. Le natif gardait donc le jeton mort ET son cache : l'app affichait
-// « session expirée » par-dessus des données périmées servies comme fraîches.
-//
-// Ce test rejoue le VRAI code de production (`DeviceAuth.reject()`,
-// `SessionRepair.purge()`, `FileCacheStore` — purs, sans Android) compilé par
-// le harnais et piloté par `agents/runtime/kotlin-parity/SessionRepairParityMain.kt`
-// : les assertions portent sur du code EXÉCUTÉ, pas sur un miroir TS.
-//
-// Le CÂBLAGE (l'app branche l'abonné, la purge passe par `accounts.logout()`)
-// est épinglé par lecture des sources : `tests/architecture/session-repair.test.ts`.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Le rejet d'une session MORTE purge la session ET le cache : `DeviceAuth.reject()`
+// était un no-op sans abonné, et l'app servait des données périmées comme fraîches.
+// VRAI code compilé et piloté ; le câblage est épinglé par lecture des sources.
+// Outillage absent = SKIP BRUYANT.
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -79,16 +67,9 @@ describe("le rejet d'une session morte purge la session et le cache (#397)", () 
   });
 });
 
-// #520 : la détection de session morte ne doit PAS se fier à un MOT du
-// message. Le message d'une erreur de PRONOTE est en partie ÉCRIT par
-// l'établissement (`Erreur.Titre`) : « Confirmation de connexion requise »,
-// « Erreur de session »… un mot suffisait à Purger le cache hors ligne
-// (notes, devoirs, absences, sanctions, messagerie, fiches, préférences) et à
-// renvoyer l'élève vers l'appairage.
-//
-// Ce test rejoue le chemin RÉEL d'un dépôt : l'échec → la décision de
-// production (`isSessionFailure`) → le signal (`DeviceAuth.reject()`) → la
-// purge (`SessionRepair.purge`). Le VRAI code est compilé par le harnais.
+// La détection de session morte ne se fie pas à un MOT du message, en partie écrit
+// par l'établissement : un mot purgeait tout le cache et renvoyait à l'appairage.
+// Le chemin RÉEL est rejoué : échec → isSessionFailure → reject → purge.
 describe("session morte : un message d'établissement ne purge pas le cache (#520)", () => {
   test.skipIf(skip)("un `Titre` d'établissement (« Confirmation de connexion ») : la session SURVIT", async () => {
     const store = await ask({ op: "newStore" });
@@ -96,8 +77,7 @@ describe("session morte : un message d'établissement ne purge pas le cache (#52
     await ask({ op: "openSession" });
     await ask({ op: "write", sid, resource: "grades", payload: '{"grades":[{"moyenne":15}]}', fetchedAt: 1000 });
 
-    // L'établissement répond par une erreur dont le message contient un mot
-    // de session : ce n'est PAS une session morte.
+    // Le message contient un mot de session : ce n'est PAS une session morte.
     const r = await ask({ op: "readFailure", sid, kind: "establishment" });
     expect(r.dead).toBe(false);
     // La session n'est pas invalidée…

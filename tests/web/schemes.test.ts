@@ -71,10 +71,10 @@ describe("web palettes", () => {
     }
   });
 
-  // #620 : la palette Madoka porte un skin décoratif WebView-local. Le test
+  // #620 : la palette Madoka porte un accent doré WebView-local. Le test
   // vérifie le CÂBLAGE (palette → `data-scheme` → feuille importée), pas les
   // couleurs : elles sont déjà tenues par les contrats génériques ci-dessus.
-  test("la palette Madoka existe et son skin étoilé est câblé", () => {
+  test("la palette Madoka existe et son accent doré est câblé", () => {
     const scheme = SCHEMES.find((entry) => entry.id === "madoka");
     expect(scheme?.label).toBe("Madoka Magica");
     const app = readFileSync(join(ROOT, "web/src/ui/AppContext.tsx"), "utf8");
@@ -83,7 +83,7 @@ describe("web palettes", () => {
     expect(main).toContain('import "./styles/madoka.css";');
     const css = readFileSync(join(ROOT, "web/src/styles/madoka.css"), "utf8");
     expect(css).toContain(':root[data-scheme="madoka"]');
-    expect(css).toContain("@keyframes madoka-twinkle");
+    expect(css).toContain("border-color: var(--brand-light)");
   });
 
   test("parseScheme : valeur inconnue = palette par défaut", () => {

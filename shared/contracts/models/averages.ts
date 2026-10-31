@@ -1,4 +1,3 @@
-// Contrats — moyennes (algorithmes parité Papillon).
 import {
   isFiniteNumber,
   isIsoDate,
@@ -34,7 +33,6 @@ export interface GeneralAverage {
   readonly subjectCount: number;
 }
 
-/** Influence d'une note sur la moyenne générale (écart avec/sans la note, /20). */
 export interface GradeInfluence {
   readonly gradeId: string;
   readonly subject: string;
@@ -42,7 +40,7 @@ export interface GradeInfluence {
   readonly impact: number;
 }
 
-/** Point d'historique : moyenne générale recalculée à chaque nouvelle note (courbe). */
+/** Moyenne générale recalculée à chaque nouvelle note (courbe). */
 export interface AverageHistoryPoint {
   readonly date: string; // ISO-8601
   readonly value: number | null;

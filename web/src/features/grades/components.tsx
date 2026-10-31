@@ -1,7 +1,8 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { IconChevronRight, IconGrades } from "../../ui/icons";
-import { frDateShort, subjectColor, tint } from "../../lib/format";
-import { EmptyState, ErrorBox, Loading, Page, StaleBadge, SubjectAvatar } from "../../ui/components";
+import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { IconGrades } from "../../ui/icons";
+import { frDateLong, relativeLongFr, subjectColor, tint } from "../../lib/format";
+import { subjectEmoji } from "../../lib/subjectVisual";
+import { EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../../ui/components";
 import {
   algorithmChipLabel,
   algorithmHint,
@@ -34,21 +35,10 @@ import {
 } from "./model";
 
 const CHART_HEIGHT = 96;
-/** Largeur de repli, avant la première mesure : le tracé est déjà lisible,
- *  il est recalculé à la taille réelle dès que l'élément est mesuré. */
+/** Largeur de repli avant la première mesure ; recalculée à la taille réelle. */
 const CHART_FALLBACK_WIDTH = 320;
 
-/**
- * Écran SANS donnée : distingue trois états, jamais deux (#537, I14).
- *
- * - pas de payload du tout = « Notes indisponibles » (erreur + Réessayer) ;
- * - payload CORROMPU (JSON illisible) = ERREUR : le cache n'est pas vide, il
- *   est illisible — dire « aucune note » affirmerait un fait faux ;
- * - payload lisible mais sans note = « Aucune note en cache » (état vide).
- *
- * Composant PUR (aucun état interne) : l'écran est donc rendu tel quel par
- * les tests (`tests/web/grades.test.ts`).
- */
+/** Écran SANS donnée : un payload illisible est une ERREUR, jamais « aucune note » (I14). */
 export function GradesNoData({
   payload,
   loading,
@@ -121,41 +111,33 @@ function smoothPath(points: ChartPoint[]): string {
   return path;
 }
 
-/** Pastille de couleur de matière (fond teinté, encre foncée/éclaircie). */
+/** Exactement `CompactGrade` : fond `couleur + 15` (8 %), encre décalée de
+ *  moitié, secondaire à 60 %. */
 function subjectTint(hex: string, dark: boolean): { background: string; ink: string } {
   return {
-    background: tint(hex, dark ? -0.62 : 0.86),
-    ink: dark ? tint(hex, 0.4) : tint(hex, -0.45),
+    background: `${hex}15`,
+    ink: tint(hex, dark ? 0.5 : -0.5),
   };
 }
 
-/**
- * Sparkline de l'historique, dessinée en SVG inline (aucune dépendance).
- * Décorative pour le lecteur d'écran : la phrase `aria-label` porte le sens,
- * et le point final reprend le geste de la référence.
- *
- * Géométrie ISOTROPE (#568) : le `viewBox` est exprimé en PIXELS RÉELS (la
- * largeur mesurée de l'élément), pas un cadre fixe étiré — un cadre étiré
- * (`preserveAspectRatio="none"`) déformait la courbe, la pastille et son halo
- * en ellipses, et aplatissait la tendance.
- *
- * `width` (px CSS) est la largeur mesurée : elle n'est passée à la main que
- * par les tests, qui n'ont pas de navigateur.
- */
+/** Géométrie ISOTROPE : `viewBox` en pixels réels, sinon un cadre étiré déforme
+ *  la courbe et la pastille en ellipses. */
 export function Sparkline({
   values,
   width,
+  height = CHART_HEIGHT,
   provided = false,
 }: {
   values: Array<number | null>;
   width?: number;
+  height?: number;
   provided?: boolean;
 }) {
   const ref = useRef<SVGSVGElement | null>(null);
   const [measured, setMeasured] = useState(0);
 
-  // Largeur RÉELLE de l'élément : le `viewBox` suit le conteneur, l'échelle
-  // du dessin reste 1:1 et rien n'est déformé, du téléphone à la tablette.
+  // Largeur réelle : `viewBox` suit le conteneur, échelle 1:1 du téléphone à
+  // la tablette.
   useLayoutEffect(() => {
     const node = ref.current;
     if (!node || typeof ResizeObserver === "undefined") return;
@@ -170,20 +152,21 @@ export function Sparkline({
   }, []);
 
   const chartWidth = width ?? (measured > 0 ? measured : CHART_FALLBACK_WIDTH);
-  const points = sparklinePoints(values, chartWidth, CHART_HEIGHT);
-  const averageY = sparklineAverageY(values, CHART_HEIGHT);
+  const points = sparklinePoints(values, chartWidth, height);
+  const averageY = sparklineAverageY(values, height);
   const description = sparklineDescription(values, provided);
   if (points.length === 0) return null;
   const first = points[0];
   const last = points[points.length - 1];
   if (!first || !last) return null;
   const path = smoothPath(points);
-  const area = `${path} L ${last.x.toFixed(1)} ${CHART_HEIGHT} L ${first.x.toFixed(1)} ${CHART_HEIGHT} Z`;
+  const area = `${path} L ${last.x.toFixed(1)} ${height} L ${first.x.toFixed(1)} ${height} Z`;
   return (
     <svg
       ref={ref}
       className="grades-chart"
-      viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}
+      style={{ height }}
+      viewBox={`0 0 ${chartWidth} ${height}`}
       role="img"
       aria-label={description}
     >
@@ -198,15 +181,14 @@ export function Sparkline({
       ) : null}
       {points.length > 1 ? <path className="grades-chart__area" d={area} /> : null}
       {points.length > 1 ? <path className="grades-chart__line" d={path} pathLength={1} /> : null}
-      {/* Remplissages : `vector-effect` ne s'applique qu'aux traits, il ne les
-          garde donc pas ronds — ici l'échelle est uniforme, ils le sont. */}
+      {/* Remplissages : `vector-effect` ne s'applique qu'aux traits — ici
+          l'échelle est uniforme, les cercles restent ronds. */}
       <circle className="grades-chart__halo" cx={last.x} cy={last.y} r={8} />
       <circle className="grades-chart__dot" cx={last.x} cy={last.y} r={3.5} />
     </svg>
   );
 }
 
-/** Carte moyenne générale : chiffre, provenance, courbe, mention d'historique. */
 export function GradesHero({ report }: { report: AveragesReport }) {
   const titleId = useId();
   const value = report.generalValue;
@@ -218,33 +200,38 @@ export function GradesHero({ report }: { report: AveragesReport }) {
   const coverage = coverageLabel(report);
   return (
     <section className="card grades-hero" aria-labelledby={titleId}>
-      <div className="grades-hero__top">
+      <div className="grades-hero__graph">
+        <Sparkline
+          values={report.history.map((point) => point.value)}
+          height={140}
+          provided={report.provided}
+        />
+      </div>
+      <div className="grades-hero__body">
+        <div className="grades-hero__figure" role="img" aria-label={averageLabel(value, report.provided, report.algorithm)}>
+          {value === null ? (
+            <span className="grades-hero__empty">Aucune moyenne sur cette période</span>
+          ) : (
+            <>
+              <span className="grades-hero__value">{formatMark(value)}</span>
+              <span className="grades-hero__scale">/20</span>
+            </>
+          )}
+        </div>
         <h2 id={titleId} className="grades-hero__title">
           {reportTitle(report)}
         </h2>
-        <span className="grades-tag">{report.provided ? "établissement" : "estimée"}</span>
+        <p className="grades-hero__origin">
+          {report.provided ? "par l’établissement" : originLabel(false, lastHistory)}
+        </p>
+        <span className="sr-only">{originLabel(report.provided, lastHistory)}</span>
+        {coverage ? <span className="sr-only">{coverage}</span> : null}
+        {note ? <span className="sr-only">{note}</span> : null}
       </div>
-      <div className="grades-hero__figure" role="img" aria-label={averageLabel(value, report.provided, report.algorithm)}>
-        {value === null ? (
-          <span className="grades-hero__empty">Aucune moyenne sur cette période</span>
-        ) : (
-          <>
-            <span className="grades-hero__value">{formatMark(value)}</span>
-            <span className="grades-hero__scale">/20</span>
-          </>
-        )}
-      </div>
-      <p className="grades-hero__origin">
-        {originLabel(report.provided, lastHistory)}
-        {coverage ? ` · ${coverage}` : ""}
-      </p>
-      <Sparkline values={report.history.map((point) => point.value)} provided={report.provided} />
-      {note ? <p className="grades-hero__note">{note}</p> : null}
     </section>
   );
 }
 
-/** Dernières notes : cartes horizontales, comme les « nouvelles notes » de Papillon. */
 export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boolean }) {
   const latest = groups
     .flatMap((group) => group.grades)
@@ -254,28 +241,34 @@ export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boo
   if (latest.length === 0) return null;
   return (
     <section className="grades-latest" aria-label="Dernières notes">
-      <h2 className="grades-latest__title">Dernières notes</h2>
+      <h2 className="sr-only">Dernières notes</h2>
       <div className="h-scroll grades-latest__track">
         {latest.map((grade) => {
           const color = subjectColor(grade.subject);
           const palette = subjectTint(color, dark);
           return (
-            <article className="grades-latest__card" key={grade.id}>
+            <article
+              className="grades-latest__card"
+              key={grade.id}
+              style={
+                {
+                  background: palette.background,
+                  "--grade-ink": palette.ink,
+                } as CSSProperties
+              }
+            >
               <div className="grades-latest__head">
-                <SubjectAvatar subject={grade.subject} size={28} dark={dark} />
+                <span className="grades-latest__emoji" aria-hidden="true">
+                  {subjectEmoji(grade.subject)}
+                </span>
                 <span className="grades-latest__subject">{grade.subject}</span>
               </div>
               <p className="grades-latest__label">{gradeLabel(grade)}</p>
-              <div className="grades-latest__foot">
-                <span className="grades-latest__date">{frDateShort(grade.date)}</span>
-                <span
-                  className="grades-pill grades-pill--small"
-                  style={{ background: palette.background, color: palette.ink }}
-                >
-                  {gradeValueLabel(grade.value)}
-                  {scaleSuffix(grade.scale)}
-                </span>
-              </div>
+              <p className="grades-latest__date">{relativeLongFr(grade.date)}</p>
+              <p className="grades-latest__value">
+                <strong>{gradeValueLabel(grade.value)}</strong>
+                <span>{scaleSuffix(grade.scale)}</span>
+              </p>
             </article>
           );
         })}
@@ -284,7 +277,6 @@ export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boo
   );
 }
 
-/** Sélecteur de période natif + puces d'algorithme. */
 export function GradesToolbar({
   algorithm,
   onAlgorithm,
@@ -349,40 +341,31 @@ function GradeRow({
   grade,
   influence,
   estimated,
-  dark,
 }: {
   grade: Grade;
   influence: number | null;
   estimated: boolean;
-  dark: boolean;
 }) {
-  const color = subjectColor(grade.subject);
-  const palette = subjectTint(color, dark);
   const context = gradeContextLabel(grade);
   return (
     <li className="grades-grade">
       <div className="grades-grade__body">
         <p className="grades-grade__title">{gradeLabel(grade)}</p>
         <p className="grades-grade__meta">
-          {frDateShort(grade.date)}
-          {context ? ` · ${context}` : ""}
+          {frDateLong(grade.date)}
+          {context ? <span className="sr-only"> · {context}</span> : null}
         </p>
         {influence !== null ? (
-          <p className={`grades-grade__influence${influence < 0 ? " grades-grade__influence--down" : ""}`}>
-            {influenceLabel(influence, estimated)}
-          </p>
+          <p className="sr-only">{influenceLabel(influence, estimated)}</p>
         ) : null}
       </div>
-      <span
-        className="grades-pill"
-        style={{ background: palette.background, color: palette.ink }}
+      <p
+        className="grades-grade__score"
         aria-label={`Note ${gradeValueLabel(grade.value)} sur ${gradeValueLabel(grade.scale)}`}
       >
-        <span aria-hidden="true">
-          {gradeValueLabel(grade.value)}
-          {scaleSuffix(grade.scale)}
-        </span>
-      </span>
+        <strong>{gradeValueLabel(grade.value)}</strong>
+        <span>{scaleSuffix(grade.scale)}</span>
+      </p>
     </li>
   );
 }
@@ -390,44 +373,30 @@ function GradeRow({
 function SubjectSection({
   group,
   report,
-  dark,
 }: {
   group: GradeGroup;
   report: AveragesReport;
-  dark: boolean;
 }) {
-  const color = subjectColor(group.subject);
-  const palette = subjectTint(color, dark);
   return (
-    <details className="card grades-subject">
-      <summary className="grades-subject__summary">
-        <SubjectAvatar subject={group.subject} size={40} dark={dark} />
-        <span className="grades-subject__name">
-          <span className="grades-subject__title">{group.subject}</span>
-          <span className="grades-subject__meter" aria-hidden="true">
-            <span
-              className="grades-subject__meter-fill"
-              style={{
-                width: `${group.average === null ? 0 : Math.max(0, Math.min(1, group.average / 20)) * 100}%`,
-                background: color,
-              }}
-            />
-          </span>
-          <span className="grades-caption">
-            {group.gradeCount} note{group.gradeCount > 1 ? "s" : ""}
-            {group.provided ? " · établissement" : ""}
-          </span>
+    <section className="grades-subject">
+      <header className="grades-subject__summary">
+        <span className="grades-subject__emoji" aria-hidden="true">
+          {subjectEmoji(group.subject)}
+        </span>
+        <span className="grades-subject__title">{group.subject}</span>
+        <span className="sr-only">
+          {group.gradeCount} note{group.gradeCount > 1 ? "s" : ""}
+          {group.provided ? " · établissement" : ""}
         </span>
         {group.average !== null ? (
-          <span className="grades-subject__average" style={{ color: palette.ink }}>
-            {formatMark(group.average)}
-            <span className="grades-subject__scale">{scaleSuffix(20)}</span>
+          <span className="grades-subject__average">
+            <strong>{formatMark(group.average)}</strong>
+            <span>{scaleSuffix(20)}</span>
           </span>
         ) : (
-          <span className="grades-caption grades-subject__none">Pas de moyenne</span>
+          <span className="grades-subject__none">Pas de moyenne</span>
         )}
-        <IconChevronRight className="grades-chevron" size={18} />
-      </summary>
+      </header>
       <ul className="grades-list">
         {group.grades.map((grade) => {
           const influence = influenceOf(report.influences, grade.id);
@@ -437,42 +406,32 @@ function SubjectSection({
               grade={grade}
               influence={influence?.impact ?? null}
               estimated={report.provided}
-              dark={dark}
             />
           );
         })}
       </ul>
-    </details>
+    </section>
   );
 }
 
-/** Sections par matière, notes dépliables (élément natif `details`). */
 export function GradesSubjectSections({
   groups,
   report,
-  dark,
 }: {
   groups: GradeGroup[];
   report: AveragesReport;
-  dark: boolean;
 }) {
   return (
-    <section className="stack" aria-label="Notes par matière">
+    <section className="grades-ledger" aria-label="Notes par matière">
       {groups.map((group) => (
-        <SubjectSection key={group.subject} group={group} report={report} dark={dark} />
+        <SubjectSection key={group.subject} group={group} report={report} />
       ))}
     </section>
   );
 }
 
-/**
- * Onglet Notes, écran PUR (#527) : il ne lit que ce qu'on lui donne.
- *
- * La route ne fait que brancher la ressource et les sélecteurs ; l'écran est
- * donc RENDU par les tests (`tests/web/grades.test.ts`). Le payload reçu
- * porte déjà la requête à laquelle il appartient : un payload d'une autre
- * période n'arrive donc jamais ici (invalidé par `useResource`).
- */
+/** Écran PUR : il ne lit que ce qu'on lui donne. Le payload porte déjà la
+ *  requête à laquelle il appartient (invalidé par `useResource`). */
 export function GradesScreen({
   payload,
   loading,
@@ -509,10 +468,6 @@ export function GradesScreen({
 
   const hasData = data.report !== null || data.grades.length > 0;
 
-  // #537 : l'écran SANS donnée est un composant pur (`GradesNoData`) : il
-  // distingue « pas de cache », « cache ILLISIBLE » (erreur) et « aucune
-  // note » (vide). Un JSON corrompu n'est jamais présenté comme une absence
-  // de donnée.
   if (!hasData) {
     return (
       <Page>
@@ -548,7 +503,7 @@ export function GradesScreen({
       {groups.length > 0 ? <LatestGrades groups={groups} dark={dark} /> : null}
 
       {groups.length > 0 && data.report ? (
-        <GradesSubjectSections groups={groups} report={data.report} dark={dark} />
+        <GradesSubjectSections groups={groups} report={data.report} />
       ) : (
         <EmptyState
           icon={<IconGrades size={30} />}

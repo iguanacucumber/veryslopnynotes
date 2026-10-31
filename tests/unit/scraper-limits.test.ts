@@ -1,13 +1,6 @@
-// #422 : le HTML récupéré est BORNÉ et sa lecture a un DÉLAI.
-// Avant : `page.content()` lisait TOUTE la page en mémoire (le reparse
-// cheerio en fait plusieurs fois la taille : une page de 50 Mo = des
-// centaines de Mo, x2 scrapes simultanés) et n'avait AUCUN délai — une page
-// qui ne finit pas de streamer survit au délai de 30 s et garde le Chromium
-// vivant.
-//
-// Fakes 100 % synthétiques : le module `playwright` est MOCKÉ (aucun
-// navigateur), la résolution DNS est INJECTÉE et le `fetch` global (chaîne
-// de redirections) est stubé : aucun réseau réel dans les tests.
+// Le HTML récupéré est BORNÉ et sa lecture a un DÉLAI : `page.content()` lisait
+// toute la page et n'avait aucune limite.
+// Fakes synthétiques : `playwright` mocké, DNS injecté, `fetch` stubé.
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { createApp } from "../../server/infrastructure/http";
 import {
@@ -78,9 +71,7 @@ mock.module("playwright", () => ({
         newPage: async () => ({
           url: () => PUBLIC_URL,
           title: async () => "Titre factice",
-          // #525 : la borne est appliquée DANS le navigateur : le faux rend
-          // au plus `max` caractères (+1 témoin) et ne matérialise jamais plus
-          // que la borne.
+          // La borne est appliquée DANS le navigateur : il ne matérialise jamais plus que `max`.
           evaluate: async (_fn: unknown, max: number) => {
             state.contentCalls += 1;
             state.contentMax = max;
@@ -133,8 +124,7 @@ describe("HTML scrapé borné (#422)", () => {
       resolveHost: PUBLIC_RESOLVER,
       logger: (m) => logs.push(m),
     });
-    // La page est rendue, le plafond est JOUGÉ (et dit dans le log : ni URL,
-    // ni credential, seulement un compte).
+    // Le plafond est JOUÉ et dit dans le log : ni URL, ni credential.
     expect(state.contentCalls).toBe(1);
     expect(logs.join("\n")).toContain(`plafonne (${MAX_HTML_CHARS} caracteres`);
     // Le serveur n'explore pas 50 Mo : l'extrait vient du HTML tronqué.
@@ -144,10 +134,7 @@ describe("HTML scrapé borné (#422)", () => {
 
   test("le plafond s'applique AVANT le reparse : le contenu au-delà n'est jamais vu", async () => {
     stubFetch();
-    // La page place son texte APRÈS un gros commentaire. Tronquée au
-    // plafond, le commentaire n'est jamais fermé : le reparse ne voit QUE le
-    // HTML tronqué, donc aucun texte. Sans plafond, le MÊME HTML donnerait
-    // « FIN » — c'est ce qui prouve l'ordre (plafond AVANT cheerio).
+    // Tronqué, le commentaire n'est jamais fermé : preuve que le plafond passe AVANT cheerio.
     const page = (pad: number) => `<html><body><!--${"z".repeat(pad)}--><p>FIN</p></body></html>`;
 
     state = fakeState({ html: page(10) });
@@ -161,18 +148,13 @@ describe("HTML scrapé borné (#422)", () => {
   });
 });
 
-// #525 : le plafond doit protéger l'ALLOCATION, pas seulement le REPARSE.
-// Avant, `page.content()` lisait TOUTE la page en mémoire : une page de
-// plusieurs centaines de Mo vivait côté navigateur ET côté processus, x2 avec
-// le plafond de concurrence. Le plafond ne s'appliquait qu'APRÈS.
+// Le plafond protège l'ALLOCATION, pas seulement le REPARSE : il est demandé à la page.
 describe("plafond appliqué AVANT la matérialisation (#525)", () => {
   test("la borne est demandée AU navigateur (la chaîne traversante est bornée)", async () => {
     stubFetch();
     state = fakeState({ html: "<html><body>texte</body></html>" });
     await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
-    // Le plafond est demandé À LA PAGE : il n'est pas fixé après coup sur une
-    // chaîne déjà construite. C'est la preuve que le processus ne
-    // matérialise jamais la page entière.
+    // Le plafond est demandé À LA PAGE, jamais appliqué après coup sur une chaîne construite.
     expect(state.contentCalls).toBe(1);
     expect(state.contentMax).toBe(MAX_HTML_CHARS);
   });
@@ -196,8 +178,7 @@ describe("plafond appliqué AVANT la matérialisation (#525)", () => {
     stubFetch();
     state = fakeState({ html: "<html><body>texte</body></html>" });
     const docs = await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
-    // Taille inconnue (réponse en morceaux) : c'est la lecture BORNÉE qui
-    // s'applique — la chaîne qui traverse le pont reste ≤ plafond.
+    // Taille inconnue : la lecture BORNÉE s'applique, la chaîne reste ≤ plafond.
     expect(docs).toHaveLength(1);
     expect(state.contentCalls).toBe(1);
     expect(state.contentMax).toBe(MAX_HTML_CHARS);
@@ -215,12 +196,10 @@ describe("délai de lecture du HTML (#422)", () => {
         contentTimeoutMs: 50,
       }),
     );
-    // Motif `timeout` : le handler HTTP en fait un 504 (pas un 502 « scrape
-    // impossible » qui ferait croire à une panne du portail).
+    // Motif `timeout` : 504, pas 502 « scrape impossible ».
     expect(err).toBeInstanceOf(ScrapeManualsError);
     expect(err.reason).toBe("timeout");
-    // Le délai coupe la LECTURE, pas seulement la promesse : le navigateur
-    // est fermé (pas de Chromium fantôme).
+    // Le délai coupe la LECTURE et ferme le navigateur.
     expect(state.browserClosed).toBe(true);
     expect(state.contextClosed).toBe(true);
   });

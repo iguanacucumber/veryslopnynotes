@@ -1,11 +1,5 @@
-// Types du scraper manuels (#210) : tout ce qui reste de
-// `server/infrastructure/manuals.ts` après le débranchement.
-//
-// Le pipeline CHUNK/INDEX/RETRIEVE + citation (issues #25, #26) est mort avec
-// le serveur applicatif : l'assistant devoirs tourne sur le téléphone
-// (`android/core/`, #204) et le scraper ne fait plus que page -> ManualDoc
-// brut (`manuals-scrape.ts`, requêtes #209). Ne reste ici que le strict
-// minimum consommé par le scraper : le document et la troncature sûre.
+// Le scraper ne fait que page -> ManualDoc ; l'assistant devoirs tourne sur le
+// téléphone (`android/core/`). Ici : le document et la troncature sûre.
 export interface ManualDoc {
   readonly id: string;
   readonly platform: string;

@@ -1,24 +1,7 @@
-// #413 : deux validations confondaient « invalide » et « vide ».
-//
-// Ce test ne Miroite pas la logique : il COMPILE les vraies sources de
-// production (`core/Humanize.kt`, `core/CapabilityProbe.kt`,
-// `core/Capabilities.kt`) et les pilote via
-// `agents/runtime/kotlin-parity/CoreValidationParityMain.kt`. Les assertions
-// portent donc sur le code exécuté.
-//
-// Les deux défauts couverts :
-// 1. `Humanize.validateAnswerKeyForRender` : un champ `sources` MAL FORMÉ
-//    ("abc", {}) devenait une liste VIDE — la source invalide était confondue
-//    avec « aucune source », et le texte sortait comme un corrigé validé sans
-//    sources. Fail-closed : c'est un REFUS, pas une liste vide.
-// 2. `CapabilityProbe.fromProbe` : un contrat de capabilities INVALIDE
-//    renvoyait des capacités non nulles mais SANS onglet. Une liste vide
-//    signifie « tous les onglets désactivés » (blackout de la navigation),
-//    pas « rien n'est affirmé » : le contrat invalide vaut désormais `null`
-//    et l'app ne masque RIEN.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un
-// faux vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Deux validations confondaient « invalide » et « vide » : une source mal formée
+// devenait une liste vide validée, et un contrat de capabilities invalide masquait
+// toute la navigation. Fail-closed : refus ou `null`, jamais une liste vide.
+// Les VRAIES sources sont compilées et pilotées ; outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -74,8 +57,7 @@ describe("validation du corrigé (#413) — un `sources` mal formé est REFUSÉ"
     expect(r.ok).toBeUndefined();
     expect(r.error).toBe("AiError");
     expect(r.message).toContain("sources");
-    // Le point dur : la source invalide ne doit JAMAIS ressembler à « aucune
-    // source » (une liste vide validée).
+    // La source invalide ne doit JAMAIS ressembler à « aucune source ».
     expect(r.sources).toBeUndefined();
   });
 
@@ -127,8 +109,7 @@ describe("capabilities (#413) — un contrat invalide vaut « inconnu », pas «
 
   test.skipIf(skip)("un compte VIDE n'affirme AUCUNE capacité (pas de liste vide)", async () => {
     const r = await probe("", { grades: true, news: true }, AT);
-    // Le contrat invalide vaut « rien n'est affirmé » : `null`, JAMAIS une
-    // liste d'onglets vide (qui=blackouterait la navigation).
+    // Le contrat invalide vaut `null`, JAMAIS une liste d'onglets vide.
     expect(r.caps).toBeNull();
     // Et donc RIEN n'est masqué : l'app garde tous les onglets.
     expect(r.disabled).toEqual([]);
@@ -149,18 +130,14 @@ describe("capabilities (#413) — un contrat invalide vaut « inconnu », pas «
   });
 
   test.skipIf(skip)("une observation VIDE reste un contrat AFFIRMÉ (tout désactivé)", async () => {
-    // Nuance : un contrat VALIDE qui n'affirme aucun onglet disables tout
-    // (c'est une affirmation), l'inconnu est `null` (rien n'est affirmé).
+    // Un contrat valide qui n'affirme aucun onglet les désactive tous ; l'inconnu est `null`.
     const r = await probe("e-1", { grades: false, news: false }, AT);
     expect(r.caps).not.toBeNull();
     expect(r.caps?.tabs).toEqual([]);
     expect(r.disabled.length).toBeGreaterThan(0);
   });
 
-  // Câblage : la charge utile (module `data`, `org.json` — hors harnais de
-  // parité) publie l'inconnu comme `capabilities: null`, JAMAIS comme une
-  // liste d'onglets vide. Le lecteur web fait de `null` un « rien n'est
-  // affirmé ».
+  // La charge utile publie l'inconnu comme `capabilities: null`, jamais une liste vide.
   test("l'inconnu est publié comme `capabilities: null`, jamais `tabs: []`", () => {
     const src = payloadsSource();
     const start = src.indexOf("internal fun capabilitiesPayload");

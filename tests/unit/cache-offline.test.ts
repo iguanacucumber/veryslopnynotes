@@ -4,9 +4,8 @@ import type { CacheableResource } from "../../shared/contracts/cache";
 import { CONTRACTS_VERSION } from "../../shared/contracts/models";
 import { isContractEvent } from "../../shared/contracts/events";
 
-// Miroir TS de android/data (CachePolicy + SyncedRepository) — logique
-// offline-first testable via bun (SDK Android absent en CI).
-// Le Kotlin reste la source d'execution app ; ce test fige le contrat.
+// Miroir TS de android/data (CachePolicy + SyncedRepository) : le Kotlin reste
+// la source d'exécution, ce test fige le contrat.
 
 type Entry = { payload: string; fetchedAt: number };
 type Outcome =

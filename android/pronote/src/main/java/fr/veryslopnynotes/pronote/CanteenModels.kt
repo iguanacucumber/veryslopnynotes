@@ -2,21 +2,19 @@ package fr.veryslopnynotes.pronote
 
 import java.time.LocalDateTime
 
-// Cantine : menu, plats et labels alimentaires (`dataClasses.js`).
-
 /**
- * Menu (`isLunch` = `G == 0`, `isDinner` = `G == 1` ; `ListePlats` réindexé par
- * `String(G)`, ordre `dessert = 4` / `fromage = 5` conservé tel quel).
+ * `isLunch` = `G == 0`, `isDinner` = `G == 1` ; `ListePlats` réindexé par
+ * `String(G)`, ordre `dessert = 4` / `fromage = 5` conservé.
  */
 class Menu(private val client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
-    /** Label alimentaire (le `client` est ignoré, signature conservée). */
+    /** `client` ignoré, signature conservée. */
     class FoodLabel(_client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
         val id: String = r(::strOf, listOf("N"))
         val name: String = r(::strOf, listOf("L"))
         val color: String? = r(::optStr, listOf("couleur"), ResolveOpts.lenient())
     }
 
-    /** Plat (labels requis, même si vides côté serveur). */
+    /** Labels requis, même si vides côté serveur. */
     class Food(private val client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
         val id: String = r(::strOf, listOf("N"))
         val name: String = r(::strOf, listOf("L"))
