@@ -1428,16 +1428,45 @@ button.chip {
   background: var(--panel-tint);
 }
 
-/* --- Fiches de révision --------------------------------------------------- */
+/* --- Fiches de révision : bibliothèque de documents de l'assistant -------- */
+
+.revision-sheets__lede {
+  max-width: 58ch;
+  margin: -4px 0 2px;
+  color: var(--secondary);
+  font-size: 15px;
+  line-height: 21px;
+}
+
+.revision-empty {
+  padding: 8px 0;
+}
+
+.revision-library {
+  gap: 10px;
+}
 
 .revision-card {
-  padding: 15px;
+  padding: 17px;
+  border-radius: 20px;
 }
 
 .revision-card__head {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
+}
+
+.ai-doc__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--brand-pale);
+  color: var(--brand-deep);
 }
 
 .revision-card__title-row {
@@ -1449,10 +1478,19 @@ button.chip {
 .revision-card__title {
   display: block;
   margin: 0;
-  font-size: 17px;
-  line-height: 23px;
+  font-size: 18px;
+  line-height: 24px;
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+.revision-card__meta {
+  display: block;
+  margin-top: 2px;
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 17px;
+  font-weight: 550;
 }
 
 /* Aperçu fermé : deux lignes, jamais le corps entier dans la carte. */
@@ -1461,24 +1499,34 @@ button.chip {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 18px;
+  margin: 11px 0 0 48px;
+  color: var(--secondary);
+  font-size: 14px;
+  line-height: 21px;
 }
 
 .revision-card__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 2px;
+  margin: 8px 0 -8px -10px;
+}
+
+.revision-card__chevron {
+  transition: transform var(--duration) var(--ease-out);
+}
+
+.revision-card__chevron--open {
+  transform: rotate(90deg);
 }
 
 .revision-card__body-wrap {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ai-line, var(--border-soft));
 }
 
 /* Corps markdown : mesure lisible, hiérarchie réelle (h4/h5, listes, tableaux). */

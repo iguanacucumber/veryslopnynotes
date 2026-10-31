@@ -109,6 +109,20 @@ export const IconSend = (p: Props) => (
   </Svg>
 );
 
+/** Envoi vertical, comme le compositeur de l'assistant. */
+export const IconArrowUp = (p: Props) => (
+  <Svg {...p}>
+    <path d="M12 20a1.5 1.5 0 0 1-1.5-1.5V6.621l-4.44 4.44a1.5 1.5 0 1 1-2.12-2.122l7.06-7.06a1.5 1.5 0 0 1 2.122 0l7.06 7.06a1.5 1.5 0 1 1-2.122 2.122l-4.44-4.44V18.5A1.5 1.5 0 0 1 12 20" />
+  </Svg>
+);
+
+export const IconCopy = (p: Props) => (
+  <Svg {...p}>
+    <path d="M8.5 2.5h7A3.5 3.5 0 0 1 19 6v7a1.5 1.5 0 0 1-3 0V6a.5.5 0 0 0-.5-.5h-7a1.5 1.5 0 0 1 0-3" />
+    <path d="M5 7h7a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3" />
+  </Svg>
+);
+
 export const IconPlus = (p: Props) => (
   <Svg {...p}>
     <path fillRule="evenodd" clipRule="evenodd" d="M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18m-.018 4.017c-.517 0-.943.394-.995.898l-.005.102v2.984H8a1 1 0 1 0 0 2h2.982v2.98a1 1 0 1 0 2 0v-2.98h2.983l.101-.005a1.001 1.001 0 0 0 0-1.99L15.965 11h-2.983V8.017l-.005-.101a1 1 0 0 0-.995-.899" />

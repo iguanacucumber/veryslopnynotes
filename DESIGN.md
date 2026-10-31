@@ -122,8 +122,12 @@ components:
 L'interface web reprend la mise en page de Papillon 8.6.2 : même police SN Pro,
 même échelle typographique, mêmes surfaces, mêmes rayons, même dock flottant,
 mêmes en-têtes. Les fonctions propres à l'app — onglet Prof, aide devoirs,
-fiches de révision, cahier de cours — gardent leur place et leur comportement,
-mais empruntent les composants Papillon.
+fiches de révision, cahier de cours — gardent leur place et leur comportement.
+
+Les écrans d'IA parlent une langue distincte, inspirée des conversationnels :
+une surface de lecture calme, des réponses en pleine largeur, une bulle courte
+pour la question de l'élève et un compositeur unique. La coquille Papillon
+(tuiles, en-tête, dock) reste autour ; elle n'entre pas dans le fil.
 
 **Key Characteristics:**
 
@@ -137,6 +141,8 @@ mais empruntent les composants Papillon.
   tuiles 2 colonnes, widgets à en-tête 10 px.
 - Dock flottant en capsule de surface, pastille active teintée, libellé accent.
 - Cinq onglets : Accueil, Cours, Tâches, Notes, Prof.
+- L'assistant a ses surfaces : hero d'accueil, suggestions, fil de lecture,
+  pastilles de sources et compositeur en capsule sombre.
 
 ## Colors
 
@@ -266,9 +272,15 @@ pastilles sont à `999px`.
   `adjust(couleur, ±0,8)`, titre 17 / 700, description 15 / 500. Lignes de
   liste : item, rayon 20 px, padding 14 × 16 px, icône 24 px, titre 17.
 - **Prof** : onglets Discussion / Exercices en capsules de 44 px, actif plein
-  accent. Matière et mode dans une seule carte item, champs sur fond page,
-  modes en capsules. Compositeur collé au-dessus du dock, envoi à droite du
-  champ.
+  accent. Réglages matière et mode sur une barre discrète séparée par un filet,
+  modes en capsules. Le fil défile seul ; le compositeur reste au-dessus du dock.
+- **Assistant** : mark circulaire pâle, réponse en texte pleine largeur
+  16 / 26 (15 / 25 sur petit écran), question en bulle compacte à droite
+  (rayon 22 px, coin bas droit à 8 px). Sources en pastilles de 12 px,
+  actions Copier / Réessayer en texte secondaire de 44 px, suggestions en
+  lignes de 52 px bordées. Compositeur en capsule bordée, envoi circulaire
+  plein encre de 38 px. Les fiches sont des documents : mark, titre 18 / 700,
+  aperçu sur deux lignes, corps markdown mesuré.
 - **Boutons** : 44 px, rayon pastille, plein accent. **Champs** : item, rayon
   pastille, focus en anneau.
 - **Dialogues** : largeur maximale 440 px, surface opaque, ombre réelle.

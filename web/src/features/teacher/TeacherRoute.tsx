@@ -168,6 +168,12 @@ export function TeacherRoute() {
     void sendCurrent(question, messages);
   }
 
+  function ask(question: string): void {
+    const trimmed = question.trim();
+    if (!subject || !trimmed || loading) return;
+    void sendCurrent(trimmed, messagesRef.current);
+  }
+
   function retry(proceedAnyway = false): void {
     if (loading) return;
     const current = messagesRef.current;
@@ -274,6 +280,7 @@ export function TeacherRoute() {
         onModeChange={setMode}
         onDraftChange={setDraft}
         onSend={send}
+        onAsk={ask}
         onRetry={retry}
         onReject={reject}
         onNewDiscussion={() => setConfirmAction("new")}

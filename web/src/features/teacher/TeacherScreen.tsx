@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import type { AiContextSourceMeta, TeacherMessage, TeacherMode } from "../../bridge/types";
 import { Card, EmptyState, ErrorBox, Loading, Page, Section } from "../../ui/components";
-import { IconBook, IconSend, IconSparkles, IconTrash } from "../../ui/icons";
+import { CopyTextButton } from "../../ui/CopyTextButton";
+import { IconArrowUp, IconBook, IconChevronRight, IconSparkles, IconTrash } from "../../ui/icons";
 import { MarkdownBody } from "../revisions/MarkdownBody";
 import { aiContextTypeFr } from "../tasks/assignments";
 import {
@@ -39,12 +40,29 @@ export interface TeacherViewProps {
   onModeChange: (mode: TeacherMode) => void;
   onDraftChange: (draft: string) => void;
   onSend: () => void;
+  /** Envoie directement une suggestion ; sans lui, elle remplit le brouillon. */
+  onAsk?: (question: string) => void;
   onRetry: () => void;
   onReject: (index: number) => void;
   onNewDiscussion: () => void;
   onDelete: () => void;
   onAction: (action: string) => void;
 }
+
+const TEACHER_PROMPTS: Record<TeacherMode, readonly string[]> = {
+  explain: [
+    "Explique-moi ce chapitre avec un exemple",
+    "Quels pièges éviter en contrôle ?",
+    "Fais-moi un plan de révision",
+    "Pose-moi une question pour vérifier",
+  ],
+  correct: [
+    "Corrige ma réponse étape par étape",
+    "Où est mon erreur exactement ?",
+    "Donne-moi un indice, pas la réponse",
+    "Refais l’exercice avec moi",
+  ],
+};
 
 /** Écran PRÉSENTATIONNEL : ne parle pas au pont, donc testable en rendu statique. */
 export function TeacherView({
@@ -68,6 +86,7 @@ export function TeacherView({
   onModeChange,
   onDraftChange,
   onSend,
+  onAsk,
   onRetry,
   onReject,
   onNewDiscussion,
@@ -127,31 +146,55 @@ export function TeacherView({
       </div>
 
       {tab === "chat" ? (
-        <div id="teacher-panel-chat" role="tabpanel" aria-labelledby="teacher-tab-chat" className="stack">
-          <section aria-labelledby="teacher-setup-title">
-            <h2 id="teacher-setup-title" className="sr-only">
-              Matière et mode
+        <div id="teacher-panel-chat" role="tabpanel" aria-labelledby="teacher-tab-chat" className="teacher-workspace ai">
+          <section aria-labelledby="teacher-chat-title" className="teacher-chat">
+            <h2 id="teacher-chat-title" className="sr-only">
+              Conversation
             </h2>
-            <Card className="teacher-subject">
-              <label className="teacher-subject__label" htmlFor={subjectId}>
-                Matière du cours
-              </label>
-              <select
-                id={subjectId}
-                className="field teacher-subject__select"
-                value={subject}
-                onChange={(event) => onSubjectChange(event.target.value)}
-                disabled={busy}
-              >
-                <option value="">Choisir une matière…</option>
-                {subjects.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
+
+            <div className="teacher-controls">
+              <div className="teacher-controls__top">
+                <label className="teacher-subject" htmlFor={subjectId}>
+                  <span className="teacher-subject__label">Matière du cours</span>
+                  <select
+                    id={subjectId}
+                    className="teacher-subject__select"
+                    value={subject}
+                    onChange={(event) => onSubjectChange(event.target.value)}
+                    disabled={busy}
+                  >
+                    <option value="">Choisir une matière…</option>
+                    {subjects.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="teacher-chat__actions">
+                  <button
+                    type="button"
+                    className="teacher-action"
+                    onClick={onNewDiscussion}
+                    disabled={busy || !threadLoaded || messages.length === 0}
+                  >
+                    <IconSparkles size={17} />
+                    <span>Nouvelle discussion</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="teacher-action teacher-chat__delete"
+                    onClick={onDelete}
+                    disabled={busy || !threadLoaded || messages.length === 0}
+                  >
+                    <IconTrash size={17} />
+                    <span>Supprimer</span>
+                  </button>
+                </div>
+              </div>
+
               <fieldset className="teacher-modes">
-                <legend className="tiny muted">Mode</legend>
+                <legend className="sr-only">Mode</legend>
                 <div className="teacher-modes__options">
                   {TEACHER_MODES.map((item) => (
                     <label key={item} className="teacher-mode">
@@ -167,186 +210,192 @@ export function TeacherView({
                     </label>
                   ))}
                 </div>
+                <p className="teacher-mode__hint">{teacherModeHint(mode)}</p>
+                {messages.length > 0 ? (
+                  <p className="teacher-mode__hint">Changer de matière démarre une nouvelle discussion.</p>
+                ) : null}
               </fieldset>
-              <p className="tiny muted teacher-mode__hint">{teacherModeHint(mode)}</p>
-              {messages.length > 0 ? (
-                <p className="tiny muted">Changer de matière démarre une nouvelle discussion.</p>
-              ) : null}
-            </Card>
-          </section>
-          <section aria-labelledby="teacher-chat-title">
-            <h2 id="teacher-chat-title" className="sr-only">
-              Conversation
-            </h2>
-            <Card className="teacher-chat">
-              <div className="teacher-chat__actions">
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--small"
-                  onClick={onNewDiscussion}
-                  disabled={busy || !threadLoaded || messages.length === 0}
-                >
-                  <IconSparkles size={16} />
-                  Nouvelle discussion
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--small teacher-chat__delete"
-                  onClick={onDelete}
-                  disabled={busy || !threadLoaded || messages.length === 0}
-                >
-                  <IconTrash size={16} />
-                  Supprimer
-                </button>
-              </div>
+            </div>
 
-              {refusal ? (
-                <div className="teacher-refusal" role="status">
-                  <p>{refusal.message}</p>
-                  <div className="teacher-refusal__actions">
-                    {refusal.actions.map((action) => (
-                      <button
-                        key={action}
-                        type="button"
-                        className="btn btn--ghost btn--small"
-                        onClick={() => onAction(action)}
-                      >
-                        {teacherActionLabel(action)}
-                      </button>
-                    ))}
-                  </div>
+            {refusal ? (
+              <div className="teacher-refusal" role="status">
+                <p>{refusal.message}</p>
+                <div className="teacher-refusal__actions">
+                  {refusal.actions.map((action) => (
+                    <button
+                      key={action}
+                      type="button"
+                      className="btn btn--ghost btn--small"
+                      onClick={() => onAction(action)}
+                    >
+                      {teacherActionLabel(action)}
+                    </button>
+                  ))}
                 </div>
-              ) : null}
+              </div>
+            ) : null}
 
-              {error ? (
-                <ErrorBox message={error.message}>
-                  <button type="button" className="btn btn--small" onClick={onRetry} disabled={busy}>
-                    Réessayer
+            {error ? (
+              <ErrorBox message={error.message}>
+                <button type="button" className="btn btn--small" onClick={onRetry} disabled={busy}>
+                  Réessayer
+                </button>
+              </ErrorBox>
+            ) : null}
+
+            <div
+              ref={logRef}
+              className="teacher-log"
+              role="log"
+              aria-live="polite"
+              aria-relevant="additions text"
+              aria-label="Conversation avec le professeur"
+            >
+              {loadError ? (
+                <ErrorBox message={loadError}>
+                  <button type="button" className="btn btn--small" onClick={onReload}>
+                    Recharger
                   </button>
                 </ErrorBox>
               ) : null}
-
-              <div
-                ref={logRef}
-                className="teacher-log"
-                role="log"
-                aria-live="polite"
-                aria-relevant="additions text"
-                aria-label="Conversation avec le professeur"
-              >
-                {loadError ? (
-                  <ErrorBox message={loadError}>
-                    <button type="button" className="btn btn--small" onClick={onReload}>
-                      Recharger
-                    </button>
-                  </ErrorBox>
-                ) : null}
-                {!threadLoaded ? (
-                  <Loading label="Chargement de la discussion…" />
-                ) : messages.length === 0 && !loading && !error && !refusal && !loadError ? (
-                  <EmptyState
-                    icon={<IconSparkles size={30} />}
-                    title={
-                      subject
-                        ? "Pose ta première question."
-                        : "Choisis une matière pour commencer."
-                    }
-                    body="Le professeur répond à partir de ton cahier, de tes pièces jointes, du manuel et de la page web de la matière."
-                  />
-                ) : (
-                  messages.map((message, index) => (
-                    <div
-                      key={`${message.role}-${index}`}
-                      ref={index === lastTeacher ? answerRef : undefined}
-                      tabIndex={message.role === "teacher" ? -1 : undefined}
-                      className={`teacher-bubble teacher-bubble--${message.role}`}
-                    >
-                      <div className="teacher-bubble__head">
-                        <span className="teacher-bubble__who">
-                          {message.role === "teacher" ? "Le professeur" : "Toi"}
-                        </span>
-                      </div>
-                      {message.role === "teacher" ? (
-                        <div className="teacher-bubble__answer">
-                          <MarkdownBody text={message.text} />
-                        </div>
-                      ) : (
-                        <p className="teacher-bubble__text">{message.text}</p>
-                      )}
-                      {message.role === "teacher" ? (
-                        <>
-                          <div className="teacher-bubble__citations">
-                            {message.sources.length > 0 ? (
-                              <>
-                                <span className="tiny muted">Sources :</span>
-                                <ul className="teacher-sources">
-                                  {message.sources.map((source) => (
-                                    <li key={source} className="teacher-source">
-                                      {source}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </>
-                            ) : (
-                              <div className="teacher-unsourced">
-                                <span className="teacher-unsourced__badge">non sourcée</span>
-                                <button
-                                  type="button"
-                                  className="btn btn--ghost btn--small"
-                                  onClick={() => onReject(index)}
-                                  aria-label="Rejeter cette réponse non sourcée"
-                                >
-                                  Rejeter la réponse
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                          <SentDetails message={message} />
-                        </>
-                      ) : null}
+              {!threadLoaded ? (
+                <Loading label="Chargement de la discussion…" />
+              ) : messages.length === 0 && !loading && !error && !refusal && !loadError ? (
+                <div className="ai-hero teacher-empty">
+                  <span className="ai-mark ai-mark--lg" aria-hidden="true">
+                    <IconSparkles size={24} />
+                  </span>
+                  <strong className="ai-hero__title">
+                    {subject
+                      ? "Pose ta première question."
+                      : "Choisis une matière pour commencer."}
+                  </strong>
+                  <p className="ai-hero__body">
+                    Le professeur répond à partir de ton cahier, de tes pièces jointes, du manuel et
+                    de la page web de la matière.
+                  </p>
+                  {subject ? (
+                    <div className="ai-prompts" aria-label="Questions pour démarrer">
+                      {TEACHER_PROMPTS[mode].map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          className="ai-prompt"
+                          onClick={() => {
+                            if (onAsk) onAsk(suggestion);
+                            else onDraftChange(suggestion);
+                          }}
+                        >
+                          {suggestion}
+                          <IconChevronRight size={16} />
+                        </button>
+                      ))}
                     </div>
-                  ))
-                )}
-                {loading ? (
-                  <div className="teacher-bubble teacher-bubble--teacher" role="status">
-                    <span className="spinner" aria-hidden="true" />
-                    <span>Le professeur réfléchit…</span>
+                  ) : null}
+                </div>
+              ) : (
+                messages.map((message, index) => (
+                  <div
+                    key={`${message.role}-${index}`}
+                    ref={index === lastTeacher ? answerRef : undefined}
+                    tabIndex={message.role === "teacher" ? -1 : undefined}
+                    className={`teacher-bubble teacher-bubble--${message.role}`}
+                  >
+                    <div className="teacher-bubble__head">
+                      {message.role === "teacher" ? (
+                        <span className="teacher-bubble__mark ai-mark" aria-hidden="true">
+                          <IconSparkles size={15} />
+                        </span>
+                      ) : null}
+                      <span className="teacher-bubble__who">
+                        {message.role === "teacher" ? "Le professeur" : "Toi"}
+                      </span>
+                    </div>
+                    {message.role === "teacher" ? (
+                      <div className="teacher-bubble__answer ai-turn__body">
+                        <MarkdownBody text={message.text} />
+                      </div>
+                    ) : (
+                      <p className="teacher-bubble__text">{message.text}</p>
+                    )}
+                    {message.role === "teacher" ? (
+                      <>
+                        <div className="teacher-bubble__citations">
+                          {message.sources.length > 0 ? (
+                            <>
+                              <span className="tiny muted">Sources :</span>
+                              <ul className="teacher-sources ai-sources__list">
+                                {message.sources.map((source) => (
+                                  <li key={source} className="teacher-source ai-source">
+                                    {source}
+                                  </li>
+                                ))}
+                              </ul>
+                            </>
+                          ) : (
+                            <div className="teacher-unsourced">
+                              <span className="teacher-unsourced__badge">non sourcée</span>
+                            </div>
+                          )}
+                        </div>
+                        <SentDetails message={message} />
+                        <div className="teacher-bubble__actions ai-actions">
+                          <CopyTextButton text={message.text} />
+                          {message.unsourced ? (
+                            <button
+                              type="button"
+                              className="ai-action ai-action--danger"
+                              onClick={() => onReject(index)}
+                              aria-label="Rejeter cette réponse non sourcée"
+                            >
+                              Rejeter la réponse
+                            </button>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
+                ))
+              )}
+              {loading ? (
+                <div className="teacher-bubble teacher-bubble--teacher teacher-thinking" role="status">
+                  <span className="spinner" aria-hidden="true" />
+                  <span>Le professeur réfléchit…</span>
+                </div>
+              ) : null}
+            </div>
 
-              <form
-                className="teacher-composer"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  onSend();
-                }}
+            <form
+              className="teacher-composer ai-composer"
+              onSubmit={(event) => {
+                event.preventDefault();
+                onSend();
+              }}
+            >
+              <label className="sr-only" htmlFor={messageId}>
+                Ta question au professeur
+              </label>
+              <textarea
+                id={messageId}
+                className="teacher-composer__input ai-composer__input"
+                value={draft}
+                maxLength={2000}
+                rows={1}
+                placeholder={
+                  subject ? "Pose ta question sur cette matière…" : "Choisis d’abord une matière."
+                }
+                onChange={(event) => onDraftChange(event.target.value)}
+                disabled={busy || !threadLoaded}
+              />
+              <button
+                type="submit"
+                className="teacher-composer__send ai-composer__send"
+                disabled={busy || !threadLoaded || !subject || draft.trim() === ""}
+                aria-label="Envoyer la question"
               >
-                <label className="sr-only" htmlFor={messageId}>
-                  Ta question au professeur
-                </label>
-                <textarea
-                  id={messageId}
-                  className="field teacher-composer__input"
-                  value={draft}
-                  maxLength={2000}
-                  rows={2}
-                  placeholder={
-                    subject ? "Pose ta question sur cette matière…" : "Choisis d’abord une matière."
-                  }
-                  onChange={(event) => onDraftChange(event.target.value)}
-                  disabled={busy || !threadLoaded}
-                />
-                <button
-                  type="submit"
-                  className="btn teacher-composer__send"
-                  disabled={busy || !threadLoaded || !subject || draft.trim() === ""}
-                >
-                  <IconSend size={16} />
-                  Envoyer
-                </button>
-              </form>
-            </Card>
+                <IconArrowUp size={20} />
+              </button>
+            </form>
           </section>
         </div>
       ) : exercisesPanel ? (

@@ -323,6 +323,14 @@ describe("écran Prof — rendu (#633)", () => {
     expect(html).toContain("Explique-moi");
     expect(html).toContain("Corrige-moi");
   });
+
+  test("l'accueil propose des questions et peut les envoyer directement (#767)", () => {
+    const html = renderView();
+    expect(html).toContain("Explique-moi ce chapitre avec un exemple");
+    expect(html).toContain("Quels pièges éviter en contrôle ?");
+    const route = readFileSync(join(ROOT, "web/src/features/teacher/TeacherRoute.tsx"), "utf8");
+    expect(route).toContain("onAsk={ask}");
+  });
 });
 
 describe("écran Prof — câblage (#633)", () => {
