@@ -28,8 +28,13 @@ Une loi ne change que par ADR. Une PR qui la viole est refusée.
 2. **Branche.** `./agents/launch.sh <n> <slug>` depuis `origin/main`. Une issue =
    une branche `agent/<n>-<slug>`. Zéro commit direct sur `main`. PR via `gh`
    (MCP GitHub retiré : ses schémas coûtaient plus cher que la commande).
-3. **Build et review.** `make watch`, diff court, puis `make check`.
-4. **Merge auto.** `./agents/ship.sh <n> "<titre>"` (fetch, rebase, check,
+3. **Build et revue.** `make watch`, diff court, puis `make check`. Relire le
+   périmètre et la lisibilité du diff, puis écrire la note de revue dans
+   `<git-dir>/vsn-review.md` (`ship.sh` affiche le chemin) : 1re ligne
+   `HEAD: <sha>`, puis `## Standards` et `## Spec`. `ship.sh` refuse une note
+   absente ou d'un autre HEAD ; un rebase change le HEAD, donc relire avant de
+   relancer.
+4. **Merge auto.** `./agents/ship.sh <n> "<titre>"` (fetch, rebase, revue, check,
    push, corps de PR), puis `gh pr create`, `gh pr merge --merge
    --delete-branch` et `gh issue close`. Enfin `git fetch --prune`.
 5. **Incident.** Même échec trois fois ⇒ issue incident.
