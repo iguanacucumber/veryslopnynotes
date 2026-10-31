@@ -471,8 +471,16 @@ internal fun VsnBridge.solveHomeworkPhoto(p: JSONObject, epoch: Long, requestId:
                 when (outcome) {
                     is HomeworkOutcome.Answer ->
                         homeworkAnswerJson(outcome).withAiContext(context)
+                    // Le refus photo nomme les documents absents comme les
+                    // autres chemins ; « Procéder quand même » relance en
+                    // texte avec la photo déjà lue dans le fil.
                     is HomeworkOutcome.Refused ->
-                        homeworkRefusalJson(outcome, context)
+                        homeworkRefusalJson(
+                            outcome,
+                            context,
+                            missing = missingDocumentsFor(assignment),
+                            allowProceed = true,
+                        )
                 }
             } catch (e: SecretDetectedException) {
                 JSONObject().put("ok", false).put("message", secretRefusalMessage(e.kind))
