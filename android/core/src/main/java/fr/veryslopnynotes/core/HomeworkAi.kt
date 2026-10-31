@@ -70,7 +70,7 @@ object HomeworkAi {
         val obj = raw as? JsonValue.Obj ?: throw AiError("réponse devoirs invalide (schéma)")
         val status = jsonStrOf(obj, "status") ?: throw AiError("réponse devoirs invalide (schéma)")
         if (status == "ok") {
-            val answer = jsonStrOf(obj, "answer")
+            val answer = jsonStrOf(obj, "answer")?.let(::stripUntrustedTags)
             if (answer == null || answer.trim().isEmpty()) {
                 throw AiError("réponse devoirs invalide (schéma)")
             }
@@ -81,7 +81,7 @@ object HomeworkAi {
             }
             val stepsRaw = obj.fields["steps"] as? JsonValue.Arr
                 ?: throw AiError("réponse devoirs invalide (schéma)")
-            val steps = nonBlankStrings(stepsRaw)
+            val steps = nonBlankStrings(stepsRaw)?.map(::stripUntrustedTags)
                 ?: throw AiError("réponse devoirs invalide (schéma)")
             val sourcesRaw = obj.fields["sources"] as? JsonValue.Arr
                 ?: throw AiError("réponse devoirs invalide (schéma)")
@@ -124,7 +124,7 @@ object HomeworkAi {
                 }
                 sources.add(label)
             }
-            return HomeworkOutcome.Refused(reason = reason, sources = sources)
+            return HomeworkOutcome.Refused(reason = stripUntrustedTags(reason), sources = sources)
         }
         throw AiError("réponse devoirs invalide (schéma)")
     }

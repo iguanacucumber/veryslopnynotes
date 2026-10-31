@@ -101,7 +101,9 @@ private fun driver(op: JsonValue.Obj): JsonValue = when (op.str("op")) {
                     "ok" to JsonValue.Bool(true),
                     "status" to JsonValue.Str("ok"),
                     "answerChars" to JsonValue.Num(outcome.answer.length.toDouble()),
+                    "answer" to JsonValue.Str(outcome.answer),
                     "steps" to JsonValue.Num(outcome.steps.size.toDouble()),
+                    "stepsText" to JsonValue.Arr(outcome.steps.map { JsonValue.Str(it) }),
                     "sources" to JsonValue.Num(outcome.sources.size.toDouble()),
                     // Libellés CANONIQUES rendus par le port : la parité vérifie
                     // qu'une citation préfixée est bien ramenée au libellé fourni.
