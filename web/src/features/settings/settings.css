@@ -38,6 +38,7 @@
   border: 0;
   border-radius: 23px;
   background: color-mix(in srgb, var(--tile-base, var(--brand)) 20%, #fff);
+  box-shadow: var(--shadow-card);
   color: color-mix(in srgb, var(--tile-base, var(--brand)) 80%, #000);
   text-align: left;
   transition: transform var(--duration) var(--ease), filter var(--duration) var(--ease);

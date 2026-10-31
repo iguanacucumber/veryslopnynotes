@@ -9,7 +9,7 @@ colors:
   brand-solid: "#1c6653"
   on-brand: "#ffffff"
   ink: "#000000"
-  secondary: "rgba(0, 0, 0, 0.5)"
+  secondary: "rgba(0, 0, 0, 0.55)"
   surface: "#ffffff"
   page: "#ffffff"
   item: "#f1f1f1"
@@ -65,7 +65,7 @@ rounded:
   xs: "8px"
   sm: "12px"
   md: "16px"
-  lesson: "18px"
+  lesson: "25px"
   lg: "20px"
   xl: "22px"
   widget: "25px"
@@ -83,6 +83,7 @@ components:
     backgroundColor: "{colors.item}"
     rounded: "{rounded.lg}"
     padding: "16px"
+    shadow: "0 1px 2px rgba(0, 0, 0, 0.05), 0 10px 28px -24px rgba(0, 0, 0, 0.4)"
   home-tile:
     backgroundColor: "{colors.item}"
     rounded: "{rounded.xl}"
@@ -106,8 +107,10 @@ components:
     backgroundColor: "{colors.page}"
     height: "56px"
   tabbar:
-    backgroundColor: "{colors.page}"
-    height: "64px"
+    backgroundColor: "{colors.surface}"
+    height: "72px"
+    rounded: "{rounded.pill}"
+    shadow: "0 18px 46px -24px rgba(0, 0, 0, 0.46), 0 2px 10px rgba(0, 0, 0, 0.08)"
 ---
 
 # Design System: VerySlopyNyNotes
@@ -117,20 +120,22 @@ components:
 **North Star : la copie de Papillon 8.6.2.**
 
 L'interface web reprend la mise en page de Papillon 8.6.2 : même police SN Pro,
-même échelle typographique, mêmes surfaces, mêmes rayons, même dock plein
-largeur, mêmes en-têtes. Les fonctions propres à l'app — onglet Prof, aide
-devoirs, fiches de révision, cahier de cours — gardent leur place et leur
-comportement, mais empruntent les composants Papillon.
+même échelle typographique, mêmes surfaces, mêmes rayons, même dock flottant,
+mêmes en-têtes. Les fonctions propres à l'app — onglet Prof, aide devoirs,
+fiches de révision, cahier de cours — gardent leur place et leur comportement,
+mais empruntent les composants Papillon.
 
 **Key Characteristics:**
 
 - Fond de page blanc (noir en sombre), surfaces `--item` gris très clair
   (`#f1f1f1`, `#121212`) sans bordure.
-- Aucune ombre décorative : la profondeur vient du contraste des surfaces.
+- Ombre de carte très basse, presque un liseré : la profondeur vient d'abord du
+  contraste des surfaces ; le dock et les dialogues portent seuls une ombre
+  franche.
 - En-tête plat, titre 19 px / 700, icône de route puis libellé.
-- Accueil : papier peint généré, identité blanche, tuiles 2 colonnes, widgets
-  à en-tête 10 px.
-- Dock plein largeur sur fond de page, capsule active teintée, libellé accent.
+- Accueil : papier peint SVG généré, identité blanche et sous-titre de classe,
+  tuiles 2 colonnes, widgets à en-tête 10 px.
+- Dock flottant en capsule de surface, pastille active teintée, libellé accent.
 - Cinq onglets : Accueil, Cours, Tâches, Notes, Prof.
 
 ## Colors
@@ -150,9 +155,11 @@ sont supportés sans changer les rôles.
 ### Neutral
 
 - **Encre** (`#000000` clair, `#ffffff` sombre) : titres et texte.
-- **Secondaire** : l'encre à 50 % — dates, métadonnées, sous-titres.
-- **Page** (`#ffffff` / `#000000`) : fond général et dock.
-- **Surface** (`#ffffff` / `#121212`) : cartes de devoir, champs, dialogues.
+- **Secondaire** : l'encre à 55 % — dates, métadonnées, sous-titres. Le seuil
+  est le contraste AA, pas une préférence esthétique.
+- **Page** (`#ffffff` / `#000000`) : fond général.
+- **Surface** (`#ffffff` / `#121212`) : cartes de devoir, champs, dialogues,
+  dock flottant.
 - **Item** (`#f1f1f1` / `#121212`) : widgets, tuiles, lignes, pastilles.
 
 ### Named Rules
@@ -190,8 +197,9 @@ Largeur maximale 700 px, gouttière 16 px, cible 412 × 892 px, minimum testé
 360 px. L'accueil espace ses blocs de 12 px ; les autres pages de 12 à 14 px.
 
 La coquille occupe la hauteur utile publiée par le JS (`--app-height`), jamais
-une unité de viewport figée. Le dock est fixe, plein largeur, et remonte avec
-`--keyboard-bottom`. Le `main` réserve la hauteur du dock et 24 px.
+une unité de viewport figée. Le dock est une capsule fixe de 72 px, centrée à
+24 px des bords au plus, et remonte avec `--keyboard-bottom`. Le `main` réserve
+l'empreinte du dock (84 px avec sa marge basse) et 20 px.
 
 L'accueil suit Papillon : en-tête sur papier peint, grille de raccourcis,
 widgets (cours, moyenne, devoirs) dans cet ordre. Les écrans de liste sont des
@@ -200,47 +208,60 @@ tuiles teintées, puis sections ancrées.
 
 ## Elevation & Depth
 
-Aucune ombre de carte : `--shadow-card` se limite à un liseré subpixel en clair,
-rien en sombre. Le dock n'a ni flou ni ombre. Les dialogues portent seuls une
-ombre réelle.
+`--shadow-card` est une ombre basse (1 px de flou proche, halo diffus très
+faible) qui détache les tuiles, les widgets et les contrôles blancs du fond de
+page. En sombre elle disparaît : le contraste des surfaces suffit. Le dock
+porte `--shadow-dock`, plus marquée, pour flotter au-dessus du contenu. Les
+dialogues gardent leur ombre propre.
 
 Le mouvement est court (200 ms, `--ease`) et se limite à l'opacité et au
 `transform`, avec une garde unique `prefers-reduced-motion` dans `tokens.css`.
 
 ## Shapes
 
-Rayons de 8 px (petites pastilles) à 25 px (widgets), avec un usage courant de
-18 à 24 px. Les tuiles d'accueil et les réglages sont à 22–23 px, les cartes de
-cours à 18 px, les cartes de devoirs et de notes à 20 px, les widgets à 25 px.
-Le dock est un rectangle plein, sans rayon. Les capsules, avatars et pastilles
-sont à `999px`, la capsule d'onglet à 15 px.
+Rayons de 8 px (petites pastilles) à 25 px (widgets et cartes de cours), avec un
+usage courant de 20 à 24 px. Les tuiles d'accueil et les réglages sont à
+22–23 px, les cartes de devoirs et les lignes de notes à 20 px, les widgets,
+les cartes de cours et le héros de notes à 24–25 px. Le dock est une capsule de
+`999px` ; les onglets actifs portent une capsule de 21 px. Les avatars et les
+pastilles sont à `999px`.
 
 ## Components
 
 - **Topbar** : fond de page, 56 px, titre 19 / 700, actions rondes de 42 px.
-  À l'accueil, en-tête fixe sur papier peint : avatar, nom blanc 18 / 700,
-  chevron, actions en verre blanc. Les icônes d'accueil sont blanches.
-- **Dock** : cinq onglets, fond page, icônes 24 px. L'onglet actif porte une
-  capsule de 54 × 30 px teintée et un libellé accent 13 / 600.
+  À l'accueil, en-tête fixe sur papier peint : avatar pâle, nom blanc 18 / 700,
+  sous-titre classe · période à 70 %, chevron, actions en verre blanc. Les
+  icônes d'accueil sont blanches.
+- **Dock** : capsule flottante de surface, 72 px, largeur maximale 480 px,
+  cinq onglets de 58 px, icônes 24 px et libellés 13 px. L'onglet actif porte
+  une capsule entière teintée à 14 % de marque, icône et libellé accent.
 - **Tuiles d'accueil** : grille 2 colonnes, rayon 22 px, padding 13 × 10 px,
-  icône Papicons 32 px à couleur fixe, titre 17 / 600, sous-titre 16 / 500
-  secondaire.
-- **Widgets d'accueil** : rayon 25 px, fond item, padding 10 px. En-tête :
-  icône 24 px à 60 %, titre 17 / 600 à 60 %, bouton « Afficher plus » en
-  capsule de 20 px.
+  ombre basse, icône Papicons 32 px à couleur fixe, titre 17 / 600, sous-titre
+  16 / 500 secondaire.
+- **Widgets d'accueil** : rayon 25 px, fond item, ombre basse, padding 10 px.
+  En-tête : icône 24 px à 60 %, titre 17 / 600 à 60 %, bouton « Afficher plus »
+  en capsule de 20 px.
 - **Moyenne d'accueil** : graphe 40 % × 112 px, corps 14 / 16 / 12 px,
   moyenne 24 / 700 accent, libellé 16 / 600, origine 14 / 400.
-- **Cartes de cours** : colonne d'horaires de 60 px, carte 18 px, barre de
+- **Cartes de cours** : colonne d'horaires de 60 px, carte 25 px, barre de
   6 px, titre 18 / 700, salle et professeur 16 / 600 avec icônes 20 px,
   durée 20 / 700 à 58 %.
 - **Cartes de devoir** : rayon 20 px, padding 14 × 16 px, emoji 22 px, matière
   teintée 16 / 600, date relative 15 secondaire, contenu 17 / 500, actions IA
   en pastilles teintées de 12 px, coche de 24 px ou capsule « Terminé ».
-- **Notes** : héros item de rayon 24 px, graphe 140 px, moyenne 32 / 700
-  accent, libellé 17 / 600, origine 16 / 500. Dernières notes : cartes de
-  200 px, rayon 24 px, fond matière + 8 %, titre 17 / 700, date relative 15.
-  Lignes par matière : item, rayon 20 px, titre 17 / 600, date 15, note
-  20 / 600 + dénominateur 15.
+- **Recherche** : capsule `item` pleine largeur, 48 px, icône 22 px à 50 %,
+  texte 16 / 600, bouton d'effacement de 34 px, anneau de focus de 2 px.
+- **Notes** : contrôles période et calcul en capsules de surface de 48 px,
+  recherche dessous, héros teinté à 15 % de marque avec rayon 24 px et graphe
+  140 px, moyenne 32 / 700 accent, libellé 17 / 600, origine 16 / 500. Titres
+  de section « Nouvelles notes » et « Matières » à 17 / 600 secondaire avec
+  icône 20 px. Dernières notes : cartes de 200 px, rayon 24 px, fond matière
+  + 8 %, liseré de la teinte, titre 17 / 700, date relative 15. Lignes par
+  matière : item, rayon 20 px, titre 17 / 600, date 15, note 20 / 600 +
+  dénominateur 15.
+- **Tâches** : recherche, puis résumé centré : anneau conique de 34 px et
+  phrase 17 / 600 accent (« 2 tâches restantes cette semaine » ou « Toutes les
+  tâches sont terminées ! »).
 - **Réglages** : tuiles de rayon 23 px, padding 14 px, icône 32 px, fond
   `adjust(couleur, ±0,8)`, titre 17 / 700, description 15 / 500. Lignes de
   liste : item, rayon 20 px, padding 14 × 16 px, icône 24 px, titre 17.
@@ -260,11 +281,11 @@ sont à `999px`, la capsule d'onglet à 15 px.
 - Teinter les matières avec une encre dérivée de la même couleur.
 - Garder les chiffres grands et tabulaires.
 - Vérifier les 21 palettes en clair et en sombre.
-- Laisser le dock plat et plein largeur.
+- Laisser le dock flotter en capsule, détaché du contenu.
 
 **Don't**
 
-- Remettre un dock flottant, flouté ou ombré.
+- Étirer le dock sur toute la largeur ou le coller aux bords de l'écran.
 - Ajouter un filet noir épais autour des cartes.
 - Colorer une carte sans dériver l'encre de la même teinte.
 - Ajouter une texture ou une image de fond : le papier peint reste généré.

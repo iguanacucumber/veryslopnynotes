@@ -8,6 +8,7 @@ import {
   ErrorBox,
   Loading,
   Page,
+  SearchField,
   Section,
   StaleBadge,
   WeekNavigator,
@@ -33,6 +34,7 @@ import {
   assignmentHasAssistantMaterial,
   assignmentSections,
   assignmentsInWeek,
+  assignmentsMatching,
   homeworkRefusalText,
   parseAiContext,
   parseAssignmentsPayload,
@@ -40,6 +42,7 @@ import {
   parseHomeworkAnswer,
   shiftWeek,
   subjectDisplayFr,
+  taskProgress,
   weekEndOf,
   weekGap,
   weekLabelFr,
@@ -105,6 +108,7 @@ function TasksWeek({ week }: { week: string }) {
   // la semaine affichée. Semaine sans devoir = état vide, pas chargement sans fin.
   const visible = useMemo(() => assignmentsInWeek(parsed.items, week), [parsed.items, week]);
   const [items, setItems] = useState<Assignment[]>(visible);
+  const [search, setSearch] = useState("");
   const [pending, setPending] = useState<Record<string, boolean>>({});
   const [doneOpen, setDoneOpen] = useState(false);
   const [help, setHelp] = useState<HelpState | null>(null);
@@ -163,8 +167,12 @@ function TasksWeek({ week }: { week: string }) {
     };
   }, [refreshTick]);
 
-  // Les sections suivent la semaine AFFICHÉE, pas la semaine en cours.
-  const sections = useMemo(() => assignmentSections(items, week, new Date()), [items, week]);
+  // Les sections suivent la semaine AFFICHÉE, pas la semaine en cours ; la
+  // recherche filtre les cartes, jamais la fenêtre de semaine.
+  const matching = useMemo(() => assignmentsMatching(items, search), [items, search]);
+  const sections = useMemo(() => assignmentSections(matching, week, new Date()), [matching, week]);
+  const progress = useMemo(() => taskProgress(items), [items]);
+  const searching = search.trim() !== "";
 
   async function toggle(assignment: Assignment, next: boolean) {
     if (pending[assignment.id]) return;
@@ -439,6 +447,32 @@ function TasksWeek({ week }: { week: string }) {
 
       {resource.error ? <ErrorBox message={resource.error} /> : null}
 
+      <SearchField
+        value={search}
+        onChange={setSearch}
+        placeholder="Rechercher un devoir, une matière"
+        label="Rechercher un devoir ou une matière"
+      />
+
+      {progress.total > 0 ? (
+        <div className="tasks-summary" role="status">
+          <span
+            className="tasks-summary__ring"
+            aria-hidden="true"
+            style={{ "--task-progress": `${progress.percent * 3.6}deg` } as CSSProperties}
+          >
+            {progress.remaining === 0 ? <IconCheck size={16} /> : null}
+          </span>
+          <span className="tasks-summary__text">
+            {progress.remaining === 0
+              ? "Toutes les tâches sont terminées !"
+              : `${progress.remaining} tâche${progress.remaining > 1 ? "s" : ""} restante${
+                  progress.remaining > 1 ? "s" : ""
+                } cette semaine`}
+          </span>
+        </div>
+      ) : null}
+
       {assistantChecking ? (
         <Card className="tasks-assistant tasks-assistant--checking">
           <span className="tasks-assistant__icon" aria-hidden="true">
@@ -473,16 +507,29 @@ function TasksWeek({ week }: { week: string }) {
       ) : null}
 
       {sections.length === 0 ? (
-        <EmptyState
-          icon={<IconCheck size={30} />}
-          title="Aucun devoir"
-          body="Rien à rendre pour le moment."
-          action={
-            <button type="button" className="btn btn--small" onClick={resource.refresh}>
-              Actualiser
-            </button>
-          }
-        />
+        searching ? (
+          <EmptyState
+            icon={<IconCheck size={30} />}
+            title="Aucun devoir trouvé"
+            body={`Aucun résultat pour « ${search.trim()} » cette semaine.`}
+            action={
+              <button type="button" className="btn btn--small" onClick={() => setSearch("")}>
+                Effacer la recherche
+              </button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={<IconCheck size={30} />}
+            title="Aucun devoir"
+            body="Rien à rendre pour le moment."
+            action={
+              <button type="button" className="btn btn--small" onClick={resource.refresh}>
+                Actualiser
+              </button>
+            }
+          />
+        )
       ) : (
         sections.map((section) => {
           const collapsed = section.id === "done" && !doneOpen;

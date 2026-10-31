@@ -516,6 +516,35 @@ export function assignmentsInWeek(items: Assignment[], weekStart: string): Assig
   });
 }
 
+/** Recherche de la semaine : matière, titre, consigne ou titre de cours, sans
+ *  accent ni casse. La semaine reste bornée AVANT le filtre. */
+export function assignmentsMatching(items: Assignment[], query: string): Assignment[] {
+  const needle = foldFr(query);
+  if (!needle) return items;
+  return items.filter((item) =>
+    [item.subject, item.title, item.description, item.lessonContent?.title ?? ""].some((field) =>
+      foldFr(field).includes(needle),
+    ),
+  );
+}
+
+/** Avancement de la semaine, y compris les devoirs en retard restés à faire. */
+export function taskProgress(items: readonly Assignment[]): {
+  total: number;
+  done: number;
+  remaining: number;
+  percent: number;
+} {
+  const total = items.length;
+  const done = items.filter((item) => item.done).length;
+  return {
+    total,
+    done,
+    remaining: total - done,
+    percent: total > 0 ? Math.round((done / total) * 100) : 0,
+  };
+}
+
 // --- Texte ------------------------------------------------------------------
 
 /** Minuscules sans accent, pour la recherche et la comparaison de titres. */

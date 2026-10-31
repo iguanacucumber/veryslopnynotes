@@ -9,6 +9,7 @@ import {
   algorithmHint,
   computeAverages,
   coverageLabel,
+  filterGradeGroups,
   formatMark,
   gradeContextLabel,
   gradeGroups,
@@ -533,6 +534,24 @@ describe("compteur de notes — les notes RETENUES (coefficient 0 exclu)", () =>
   test("sans rapport, le compte local exclut les coefficients nuls", () => {
     const groups = gradeGroups(grades, []);
     expect(groups[0]?.gradeCount).toBe(1);
+  });
+
+  test("la recherche filtre la matière ou les libellés, sans accent", () => {
+    const groups = gradeGroups(
+      [
+        grade({ subject: "Mathématiques", value: 15, label: "DS fractions" }),
+        grade({ subject: "Histoire-Géographie", value: 12, label: "Dissertation" }),
+      ],
+      [],
+    );
+    expect(filterGradeGroups(groups, "mathematiques").map((group) => group.subject)).toEqual([
+      "Mathématiques",
+    ]);
+    const notes = filterGradeGroups(groups, "dissert");
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.grades).toHaveLength(1);
+    expect(filterGradeGroups(groups, "   ")).toEqual(groups);
+    expect(filterGradeGroups(groups, "introuvable")).toEqual([]);
   });
 });
 
