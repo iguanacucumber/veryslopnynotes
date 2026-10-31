@@ -116,7 +116,15 @@ const READ_METHODS = new Set<BridgeMethod>(["resources.load", "resources.sync"])
 /** `MAX_PARALLEL_READS` en vol au plus. Le minuteur JS part au DÉPART DANS LA
  *  FILE, pas à l'appel ; un rejet ne brise pas la file. */
 let readSlots = MAX_PARALLEL_READS;
-const readWaiters: Array<() => void> = [];
+
+interface ReadWaiter {
+  /** Emplacement reçu : la suite vérifie le signal avant de partir. */
+  give: () => void;
+  /** Abandon avant l'emplacement : sort de la file sans en consommer. */
+  drop: () => void;
+}
+
+const readWaiters: ReadWaiter[] = [];
 
 /** Prend un emplacement s'il y en a un libre (synchrone : le départ est immédiat). */
 function tryTakeReadSlot(): boolean {
@@ -125,21 +133,51 @@ function tryTakeReadSlot(): boolean {
   return true;
 }
 
-/** Attend un emplacement (départ différé : le timer part alors). */
-function waitReadSlot(): Promise<void> {
-  return new Promise<void>((resolve) => readWaiters.push(resolve));
+/** Attend un emplacement (départ différé : le timer part alors). Un abandon
+ *  retire l'attente au lieu de la laisser consommer un emplacement. */
+function waitReadSlot(signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    return new Promise<void>((resolve) => readWaiters.push({ give: resolve, drop: () => {} }));
+  }
+  return new Promise<void>((resolve, reject) => {
+    const waiter: ReadWaiter = {
+      give: () => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      },
+      drop: () => {
+        const index = readWaiters.indexOf(waiter);
+        if (index !== -1) readWaiters.splice(index, 1);
+      },
+    };
+    const onAbort = () => {
+      waiter.drop();
+      reject(signal.reason ?? new DOMException("lecture abandonnée", "AbortError"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    readWaiters.push(waiter);
+  });
 }
 
 /** Rend un emplacement. */
 function releaseReadSlot(): void {
   const next = readWaiters.shift();
-  if (next) next();
+  if (next) next.give();
   else readSlots += 1;
 }
 
-function inReadLane<T>(run: () => Promise<T>): Promise<T> {
-  if (tryTakeReadSlot()) return run().finally(releaseReadSlot);
-  return waitReadSlot().then(() => run().finally(releaseReadSlot));
+async function inReadLane<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (signal?.aborted) throw signal.reason ?? new DOMException("lecture abandonnée", "AbortError");
+  if (!tryTakeReadSlot()) {
+    await waitReadSlot(signal);
+    // Abandon entre la remise de l'emplacement et le départ : l'emplacement
+    // est rendu, la lecture native ne part pas.
+    if (signal?.aborted) {
+      releaseReadSlot();
+      throw signal.reason ?? new DOMException("lecture abandonnée", "AbortError");
+    }
+  }
+  return run().finally(releaseReadSlot);
 }
 
 function callNative<T>(
@@ -180,11 +218,21 @@ function callNative<T>(
 }
 
 /** Appel unique vers Kotlin. En dev, le pont factice répond ; en production
- *  un pont absent est un ÉCHEC, jamais des données fictives. */
-export function call<T>(method: BridgeMethod, params: unknown = {}, timeoutMs?: number): Promise<T> {
+ *  un pont absent est un ÉCHEC, jamais des données fictives.
+ *
+ *  `signal` n'abandonne qu'une lecture encore EN FILE ; une lecture déjà
+ *  partie va au bout et rend son résultat (elle remplit le cache). */
+export function call<T>(
+  method: BridgeMethod,
+  params: unknown = {},
+  timeoutMs?: number,
+  signal?: AbortSignal,
+): Promise<T> {
   if (!isNative()) return devCall<T>(method, params);
   // Une seule lecture en vol : le délai natif ne couvre pas l'attente en file.
-  if (READ_METHODS.has(method)) return inReadLane(() => callNative<T>(method, params, timeoutMs));
+  if (READ_METHODS.has(method)) {
+    return inReadLane(() => callNative<T>(method, params, timeoutMs), signal);
+  }
   return callNative<T>(method, params, timeoutMs);
 }
 
@@ -205,7 +253,8 @@ export const bridge = {
   // Cache indexé par (ressource, requête) : l'entrée servie est celle de la
   // requête AFFICHÉE.
   cached: (key: ResourceParams["key"], query = "") => call<ResourceResult>("resources.cached", { key, query }),
-  load: (params: ResourceParams) => call<ResourceResult>("resources.load", params),
+  load: (params: ResourceParams, signal?: AbortSignal) =>
+    call<ResourceResult>("resources.load", params, undefined, signal),
   invalidate: (key: ResourceParams["key"]) => call<{ ok: true }>("resources.invalidate", { key }),
   sync: () => call<ResourceResult>("resources.sync"),
   capabilities: () => call<{ tabs: string[] }>("capabilities.load"),

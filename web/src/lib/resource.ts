@@ -40,6 +40,15 @@ const PENDING: ResourceView = {
   loading: true,
 };
 
+/** Cache frais et non forcé : le natif rendrait la même donnée, la navigation
+ *  ne relit pas. */
+export function canUseCached(
+  cached: { payload: string | null; stale: boolean },
+  force: boolean,
+): boolean {
+  return !force && Boolean(cached.payload) && !cached.stale;
+}
+
 /** Changement de requête : ancien payload invalidé. Même requête : état
  *  conservé, le cache reste affiché pendant la relecture. */
 export function invalidateOnRequestChange(status: ResourceStatus, request: string): ResourceStatus {

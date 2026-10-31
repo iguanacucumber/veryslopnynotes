@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { bridge } from "../bridge/client";
 import { BridgeCallError, type ResourceKey } from "../bridge/types";
 import { forceReload, type LoadSignature } from "../lib/refresh";
-import { beginLoad, invalidateOnRequestChange, requestId, visibleResource, type ResourceStatus } from "../lib/resource";
+import { beginLoad, canUseCached, invalidateOnRequestChange, requestId, visibleResource, type ResourceStatus } from "../lib/resource";
 import { cssVarsOf, paletteOf, parseScheme } from "../lib/schemes";
 
 type Theme = "SYSTEM" | "LIGHT" | "DARK";
@@ -249,6 +249,7 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     // Signature consommée par ce chargement : le prochain comparera à celle-ci.
     const signature: LoadSignature = { query, manual, tick: refreshTick };
     const force = forceReload(lastLoad.current, signature);
@@ -259,7 +260,8 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
       setStatus((s) => beginLoad(s, request));
       try {
         const cached = await bridge.cached(key, query);
-        if (!cancelled && cached.payload) {
+        if (cancelled) return;
+        if (cached.payload) {
           // Le natif dit déjà si le cache est périmé (`stale`), on ne le
           // devine pas.
           setStatus({
@@ -270,12 +272,15 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
             error: null,
             loading: false,
           });
+          // Cache frais : le natif rendrait la même donnée, on ne relit pas.
+          if (canUseCached(cached, force)) return;
         }
       } catch {
         // Cache indisponible : on tente le natif.
       }
+      if (cancelled) return;
       try {
-        const result = await bridge.load({ key, query, force });
+        const result = await bridge.load({ key, query, force }, controller.signal);
         if (cancelled) return;
         setStatus({
           request,
@@ -302,6 +307,7 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
     void run();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [key, query, manual, refreshTick]);
 
