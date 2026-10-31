@@ -1,14 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import type { AiContextSourceMeta, TeacherMessage, TeacherMode } from "../../bridge/types";
-import {
-  Card,
-  EmptyState,
-  ErrorBox,
-  Loading,
-  Page,
-  PageHeading,
-  Section,
-} from "../../ui/components";
+import { Card, EmptyState, ErrorBox, Loading, Page, Section } from "../../ui/components";
 import { IconBook, IconSend, IconSparkles, IconTrash } from "../../ui/icons";
 import { MarkdownBody } from "../revisions/MarkdownBody";
 import { aiContextTypeFr } from "../tasks/assignments";
@@ -91,7 +83,11 @@ export function TeacherView({
   // Focus après réponse : on vise le DERNIER tour du professeur, jamais le
   // composer. Le `tabIndex=-1` rend le conteneur focusable par programme.
   useEffect(() => {
-    if (focusTick > 0 && hasTeacher && answerRef.current) answerRef.current.focus();
+    // Le fil a déjà fait défiler son propre journal : voler le scroll de la
+    // page cacherait le compositeur sous le dock.
+    if (focusTick > 0 && hasTeacher && answerRef.current) {
+      answerRef.current.focus({ preventScroll: true });
+    }
   }, [focusTick, hasTeacher]);
 
   useEffect(() => {
@@ -104,9 +100,7 @@ export function TeacherView({
   );
 
   return (
-    <Page>
-      <PageHeading title="Professeur" eyebrow="Ton professeur IA, à partir de tes cours." />
-
+    <Page className="teacher">
       <div className="teacher-tabs" role="tablist" aria-label="Professeur">
         <button
           type="button"
@@ -134,215 +128,226 @@ export function TeacherView({
 
       {tab === "chat" ? (
         <div id="teacher-panel-chat" role="tabpanel" aria-labelledby="teacher-tab-chat" className="stack">
-          <Section title="Matière">
-        <Card className="teacher-subject">
-          <label className="tiny muted" htmlFor={subjectId}>
-            Matière du cours
-          </label>
-          <select
-            id={subjectId}
-            className="field"
-            value={subject}
-            onChange={(event) => onSubjectChange(event.target.value)}
-            disabled={busy}
-          >
-            <option value="">Choisir une matière…</option>
-            {subjects.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-          <fieldset className="teacher-modes">
-            <legend className="tiny muted">Mode</legend>
-            {TEACHER_MODES.map((item) => (
-              <label key={item} className="teacher-mode">
-                <input
-                  type="radio"
-                  name="teacher-mode"
-                  value={item}
-                  checked={mode === item}
-                  onChange={() => onModeChange(item)}
-                  disabled={busy}
-                />
-                <span>{teacherModeLabel(item)}</span>
+          <section aria-labelledby="teacher-setup-title">
+            <h2 id="teacher-setup-title" className="sr-only">
+              Matière et mode
+            </h2>
+            <Card className="teacher-subject">
+              <label className="teacher-subject__label" htmlFor={subjectId}>
+                Matière du cours
               </label>
-            ))}
-          </fieldset>
-          <p className="tiny muted teacher-mode__hint">{teacherModeHint(mode)}</p>
-          {messages.length > 0 ? (
-            <p className="tiny muted">Changer de matière démarre une nouvelle discussion.</p>
-          ) : null}
-        </Card>
-      </Section>
-
-      <Section title="Conversation">
-        <Card className="teacher-chat">
-          <div className="teacher-chat__actions">
-            <button
-              type="button"
-              className="btn btn--ghost btn--small"
-              onClick={onNewDiscussion}
-              disabled={busy || !threadLoaded}
-            >
-              <IconSparkles size={16} />
-              Nouvelle discussion
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--small teacher-chat__delete"
-              onClick={onDelete}
-              disabled={busy || !threadLoaded}
-            >
-              <IconTrash size={16} />
-              Supprimer
-            </button>
-          </div>
-
-          <div
-            ref={logRef}
-            className="teacher-log"
-            role="log"
-            aria-live="polite"
-            aria-relevant="additions text"
-            aria-label="Conversation avec le professeur"
-          >
-            {loadError ? (
-              <ErrorBox message={loadError}>
-                <button type="button" className="btn btn--small" onClick={onReload}>
-                  Recharger
-                </button>
-              </ErrorBox>
-            ) : null}
-            {!threadLoaded ? (
-              <Loading label="Chargement de la discussion…" />
-            ) : messages.length === 0 && !loading && !error && !refusal && !loadError ? (
-              <EmptyState
-                icon={<IconSparkles size={30} />}
-                title="Pose ta première question."
-                body="Le professeur répond à partir de ton cahier, de tes pièces jointes, du manuel et de la page web de la matière."
-              />
-            ) : (
-              messages.map((message, index) => (
-                <div
-                  key={`${message.role}-${index}`}
-                  ref={index === lastTeacher ? answerRef : undefined}
-                  tabIndex={message.role === "teacher" ? -1 : undefined}
-                  className={`teacher-bubble teacher-bubble--${message.role}`}
-                >
-                  <div className="teacher-bubble__head">
-                    <span className="teacher-bubble__who">
-                      {message.role === "teacher" ? "Le professeur" : "Toi"}
-                    </span>
-                  </div>
-                  {message.role === "teacher" ? (
-                    <div className="teacher-bubble__answer">
-                      <MarkdownBody text={message.text} />
-                    </div>
-                  ) : (
-                    <p className="teacher-bubble__text">{message.text}</p>
-                  )}
-                  {message.role === "teacher" ? (
-                    <>
-                      <div className="teacher-bubble__citations">
-                        {message.sources.length > 0 ? (
-                          <>
-                            <span className="tiny muted">Sources :</span>
-                            <ul className="teacher-sources">
-                              {message.sources.map((source) => (
-                                <li key={source} className="teacher-source">
-                                  {source}
-                                </li>
-                              ))}
-                            </ul>
-                          </>
-                        ) : (
-                          <div className="teacher-unsourced">
-                            <span className="teacher-unsourced__badge">non sourcée</span>
-                            <button
-                              type="button"
-                              className="btn btn--ghost btn--small"
-                              onClick={() => onReject(index)}
-                              aria-label="Rejeter cette réponse non sourcée"
-                            >
-                              Rejeter la réponse
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      <SentDetails message={message} />
-                    </>
-                  ) : null}
-                </div>
-              ))
-            )}
-            {loading ? (
-              <div className="teacher-bubble teacher-bubble--teacher" role="status">
-                <span className="spinner" aria-hidden="true" />
-                <span>Le professeur réfléchit…</span>
-              </div>
-            ) : null}
-          </div>
-
-          {refusal ? (
-            <div className="teacher-refusal" role="status">
-              <p>{refusal.message}</p>
-              <div className="teacher-refusal__actions">
-                {refusal.actions.map((action) => (
-                  <button
-                    key={action}
-                    type="button"
-                    className="btn btn--ghost btn--small"
-                    onClick={() => onAction(action)}
-                  >
-                    {teacherActionLabel(action)}
-                  </button>
+              <select
+                id={subjectId}
+                className="field teacher-subject__select"
+                value={subject}
+                onChange={(event) => onSubjectChange(event.target.value)}
+                disabled={busy}
+              >
+                <option value="">Choisir une matière…</option>
+                {subjects.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
                 ))}
+              </select>
+              <fieldset className="teacher-modes">
+                <legend className="tiny muted">Mode</legend>
+                <div className="teacher-modes__options">
+                  {TEACHER_MODES.map((item) => (
+                    <label key={item} className="teacher-mode">
+                      <input
+                        type="radio"
+                        name="teacher-mode"
+                        value={item}
+                        checked={mode === item}
+                        onChange={() => onModeChange(item)}
+                        disabled={busy}
+                      />
+                      <span>{teacherModeLabel(item)}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <p className="tiny muted teacher-mode__hint">{teacherModeHint(mode)}</p>
+              {messages.length > 0 ? (
+                <p className="tiny muted">Changer de matière démarre une nouvelle discussion.</p>
+              ) : null}
+            </Card>
+          </section>
+          <section aria-labelledby="teacher-chat-title">
+            <h2 id="teacher-chat-title" className="sr-only">
+              Conversation
+            </h2>
+            <Card className="teacher-chat">
+              <div className="teacher-chat__actions">
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small"
+                  onClick={onNewDiscussion}
+                  disabled={busy || !threadLoaded || messages.length === 0}
+                >
+                  <IconSparkles size={16} />
+                  Nouvelle discussion
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small teacher-chat__delete"
+                  onClick={onDelete}
+                  disabled={busy || !threadLoaded || messages.length === 0}
+                >
+                  <IconTrash size={16} />
+                  Supprimer
+                </button>
               </div>
-            </div>
-          ) : null}
 
-          {error ? (
-            <ErrorBox message={error.message}>
-              <button type="button" className="btn btn--small" onClick={onRetry} disabled={busy}>
-                Réessayer
-              </button>
-            </ErrorBox>
-          ) : null}
+              {refusal ? (
+                <div className="teacher-refusal" role="status">
+                  <p>{refusal.message}</p>
+                  <div className="teacher-refusal__actions">
+                    {refusal.actions.map((action) => (
+                      <button
+                        key={action}
+                        type="button"
+                        className="btn btn--ghost btn--small"
+                        onClick={() => onAction(action)}
+                      >
+                        {teacherActionLabel(action)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
-          <form
-            className="teacher-composer"
-            onSubmit={(event) => {
-              event.preventDefault();
-              onSend();
-            }}
-          >
-            <label className="sr-only" htmlFor={messageId}>
-              Ta question au professeur
-            </label>
-            <textarea
-              id={messageId}
-              className="field field--area teacher-composer__input"
-              value={draft}
-              maxLength={2000}
-              rows={3}
-              placeholder={
-                subject ? "Pose ta question sur cette matière…" : "Choisis d’abord une matière."
-              }
-              onChange={(event) => onDraftChange(event.target.value)}
-              disabled={busy || !threadLoaded}
-            />
-            <button
-              type="submit"
-              className="btn teacher-composer__send"
-              disabled={busy || !threadLoaded || !subject || draft.trim() === ""}
-            >
-              <IconSend size={16} />
-              Envoyer
-            </button>
-          </form>
-        </Card>
-      </Section>
+              {error ? (
+                <ErrorBox message={error.message}>
+                  <button type="button" className="btn btn--small" onClick={onRetry} disabled={busy}>
+                    Réessayer
+                  </button>
+                </ErrorBox>
+              ) : null}
+
+              <div
+                ref={logRef}
+                className="teacher-log"
+                role="log"
+                aria-live="polite"
+                aria-relevant="additions text"
+                aria-label="Conversation avec le professeur"
+              >
+                {loadError ? (
+                  <ErrorBox message={loadError}>
+                    <button type="button" className="btn btn--small" onClick={onReload}>
+                      Recharger
+                    </button>
+                  </ErrorBox>
+                ) : null}
+                {!threadLoaded ? (
+                  <Loading label="Chargement de la discussion…" />
+                ) : messages.length === 0 && !loading && !error && !refusal && !loadError ? (
+                  <EmptyState
+                    icon={<IconSparkles size={30} />}
+                    title={
+                      subject
+                        ? "Pose ta première question."
+                        : "Choisis une matière pour commencer."
+                    }
+                    body="Le professeur répond à partir de ton cahier, de tes pièces jointes, du manuel et de la page web de la matière."
+                  />
+                ) : (
+                  messages.map((message, index) => (
+                    <div
+                      key={`${message.role}-${index}`}
+                      ref={index === lastTeacher ? answerRef : undefined}
+                      tabIndex={message.role === "teacher" ? -1 : undefined}
+                      className={`teacher-bubble teacher-bubble--${message.role}`}
+                    >
+                      <div className="teacher-bubble__head">
+                        <span className="teacher-bubble__who">
+                          {message.role === "teacher" ? "Le professeur" : "Toi"}
+                        </span>
+                      </div>
+                      {message.role === "teacher" ? (
+                        <div className="teacher-bubble__answer">
+                          <MarkdownBody text={message.text} />
+                        </div>
+                      ) : (
+                        <p className="teacher-bubble__text">{message.text}</p>
+                      )}
+                      {message.role === "teacher" ? (
+                        <>
+                          <div className="teacher-bubble__citations">
+                            {message.sources.length > 0 ? (
+                              <>
+                                <span className="tiny muted">Sources :</span>
+                                <ul className="teacher-sources">
+                                  {message.sources.map((source) => (
+                                    <li key={source} className="teacher-source">
+                                      {source}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </>
+                            ) : (
+                              <div className="teacher-unsourced">
+                                <span className="teacher-unsourced__badge">non sourcée</span>
+                                <button
+                                  type="button"
+                                  className="btn btn--ghost btn--small"
+                                  onClick={() => onReject(index)}
+                                  aria-label="Rejeter cette réponse non sourcée"
+                                >
+                                  Rejeter la réponse
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          <SentDetails message={message} />
+                        </>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+                {loading ? (
+                  <div className="teacher-bubble teacher-bubble--teacher" role="status">
+                    <span className="spinner" aria-hidden="true" />
+                    <span>Le professeur réfléchit…</span>
+                  </div>
+                ) : null}
+              </div>
+
+              <form
+                className="teacher-composer"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  onSend();
+                }}
+              >
+                <label className="sr-only" htmlFor={messageId}>
+                  Ta question au professeur
+                </label>
+                <textarea
+                  id={messageId}
+                  className="field teacher-composer__input"
+                  value={draft}
+                  maxLength={2000}
+                  rows={2}
+                  placeholder={
+                    subject ? "Pose ta question sur cette matière…" : "Choisis d’abord une matière."
+                  }
+                  onChange={(event) => onDraftChange(event.target.value)}
+                  disabled={busy || !threadLoaded}
+                />
+                <button
+                  type="submit"
+                  className="btn teacher-composer__send"
+                  disabled={busy || !threadLoaded || !subject || draft.trim() === ""}
+                >
+                  <IconSend size={16} />
+                  Envoyer
+                </button>
+              </form>
+            </Card>
+          </section>
         </div>
       ) : exercisesPanel ? (
         <div id="teacher-panel-exercises" role="tabpanel" aria-labelledby="teacher-tab-exercises" className="stack">

@@ -2,11 +2,9 @@ package fr.veryslopnynotes.pronote
 
 import java.time.LocalDateTime
 
-// Pièces jointes et cours (`dataClasses.js`).
-
 /**
- * Pièce jointe (`type == 0` : lien (`url` sinon `name`) ; sinon URL magique AES
- * `FichiersExternes/<hex>/<nom>?Session=<h>`, `data()` la télécharge).
+ * `type == 0` : lien (`url` sinon `name`) ; sinon URL magique AES
+ * `FichiersExternes/<hex>/<nom>?Session=<h>`, que `data()` télécharge.
  */
 class Attachment(private val client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
     val name: String = r(::strOf, listOf("L"), ResolveOpts.withDefault(""))
@@ -16,9 +14,8 @@ class Attachment(private val client: PronoteClientLike, json: JVal?) : PronoteOb
         if (type == 0.0) {
             r(::optStr, listOf("url"), ResolveOpts.lenient()) ?: name
         } else {
-            // Double bourrage fidèle : manuel PUIS `aesEncrypt` (qui bourre à
-            // son tour) — le serveur attend 48 octets, pas 32. Espaces retirés
-            // (y compris dans `id`, comme `.replace(/ /g,"")` côté TS).
+            // Double bourrage fidèle : manuel PUIS `aesEncrypt` (qui bourre à son
+            // tour), le serveur attend 48 octets et non 32. Espaces retirés.
             val payload = Json.stringify(jobj("N" to JVal.Str(id), "Actif" to JVal.Bool(true))).replace(" ", "")
             val magic = client.communication.encryption
                 .aesEncrypt(pkcs7Pad(payload.toByteArray(Charsets.UTF_8))).toHexLower()
@@ -26,7 +23,6 @@ class Attachment(private val client: PronoteClientLike, json: JVal?) : PronoteOb
                 "?Session=${client.attributes["h"] ?: "undefined"}"
         }
 
-    /** Octets bruts du fichier (requête réseau bloquante). */
     fun data(): ByteArray = client.communication.session.get(url).content
 }
 
@@ -42,8 +38,8 @@ class LessonContent(private val client: PronoteClientLike, json: JVal?) : Pronot
 }
 
 /**
- * Cours (`ListeContenus` : `16` = matière, `3` = profs, `17` = salles, `2` = groupes ;
- * `end` absent = repli `ListeHeuresFin` + modulo ; `content()` réseau, `null` si vide).
+ * `ListeContenus` : `16` = matière, `3` = profs, `17` = salles, `2` = groupes ;
+ * `end` absent = repli `ListeHeuresFin` + modulo.
  */
 class Lesson(private val client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
     val id: String = r(::strOf, listOf("N"))
@@ -116,7 +112,7 @@ class Lesson(private val client: PronoteClientLike, json: JVal?) : PronoteObject
     /** Ni retenue ni sortie : un cours « normal ». */
     val normal: Boolean get() = !detention && !outing
 
-    /** Contenu détaillé (requête `PageCahierDeTexte`, `null` si absent ; mis en cache). */
+    /** `null` si absent ; mis en cache. */
     fun content(): LessonContent? {
         contentCache?.let { return it }
         val week = client.getWeek(start)
@@ -131,8 +127,7 @@ class Lesson(private val client: PronoteClientLike, json: JVal?) : PronoteObject
             val o = lesson as JVal.Obj
             val coursN = (((o.fields["cours"] as JVal.Obj).fields["V"] as JVal.Obj).fields["N"] as? JVal.Str)?.value
             // COURT-CIRCUIT comme la référence : `listeContenus` n'est lu QUE pour
-            // le cours demandé. Avant, une entrée SANS `listeContenus` (un cours
-            // d'un autre jour) jetait et PERDAIT tout le bloc « Contenu de cours ».
+            // le cours demandé, une entrée sans `listeContenus` ne doit pas jeter.
             if (coursN != id) continue
             val list = ((o.fields["listeContenus"] as JVal.Obj).fields["V"] as JVal.Arr).items
             if (list.isNotEmpty()) {

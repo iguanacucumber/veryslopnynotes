@@ -56,9 +56,7 @@ export function registerClientData(): void {
       const ktLessons = JSON.parse(
         await ask({ op: "lessons", cid: ktCid, from: "2026-09-20T00:00:00.000Z", to: "2026-09-27T00:00:00.000Z" }),
       );
-      // `l-2` (fin absente, repli `ListeHeuresFin`) est dedans. 4 cours, pas 2 :
-      // la fenêtre couvre 2 semaines et le stub répond pareil par semaine (en réel
-      // chaque semaine a ses cours) — les deux côtés s'accordent sur les 4.
+      // La fenêtre couvre 2 semaines et le stub répond pareil par semaine : 4 cours.
       expect(canonTs(ktLessons)).toBe(tsCanon(tsLessons));
       expect((ktLessons as unknown[]).length).toBe(4);
 
@@ -82,9 +80,7 @@ export function registerClientData(): void {
     }
   });
 
-  // #417 : le contenu du cours court-circuite comme la référence — `listeContenus`
-  // n'est lu QUE pour le cours demandé. Avant, une entrée SANS `listeContenus`
-  // (un cours d'un autre jour) jetait et PERDAIT tout le bloc « Contenu de cours ».
+  // `listeContenus` n'est lu QUE pour le cours demandé ; sinon tout le bloc était perdu.
 
   test.skipIf(skip)("cours : contenu court-circuité (entrée sans `listeContenus`)", async () => {
     const tsa = startStub();
@@ -364,8 +360,7 @@ export function registerClientData(): void {
     const tsa = startStub();
     const kta = startStub();
     try {
-      // ENT : `e`/`f` lus dans la page (`htmlExtra`), `pourENT: true`, clé
-      // `md5(sha256(pass))` — `uuidAppliMobile` reste vide (pas mobile).
+      // ENT : `e`/`f` lus dans la page, `pourENT: true`, clé `md5(sha256(pass))`, pas mobile.
       for (const stub of [tsa, kta]) {
         stub.htmlExtra = `e: 'entuser', f: 'entpass'`;
         stub.password = "entpass";
@@ -395,16 +390,13 @@ export function registerClientData(): void {
     }
   });
 
-  // #417 : le chemin ENT doit survivre à une page SANS `e`/`f` — la référence
-  // traite l'attribut absent comme `undefined` (`String(undefined)`), le port
-  // jetait un `KotlinNullPointerException` et le login s'arrêtait.
+  // Une page SANS `e`/`f` ne doit pas jeter : l'attribut absent vaut `undefined`.
 
   test.skipIf(skip)("ENT : page sans `e`/`f` → le login aboutit (comme la référence)", async () => {
     const tsa = startStub();
     const kta = startStub();
     try {
-      // Pas de `e`/`f` dans la page : le mot de passe ENT vaut `undefined`
-      // (JS : `String(undefined)`) — le stub attend exactement ce mot de passe.
+      // Pas de `e`/`f` : le mot de passe ENT vaut `String(undefined)`.
       for (const stub of [tsa, kta]) {
         stub.htmlExtra = "";
         stub.password = "undefined";
@@ -456,8 +448,7 @@ export function registerClientData(): void {
       const ktErr = portError(
         await ask({ op: "menus", cid: ktCid, from: "2026-09-21T00:00:00.000Z", to: "2026-09-21T00:00:00.000Z" }, true),
       );
-      // `json.ListePlats.V` absent : accès direct = `TypeError` côté TS,
-      // `ParsingError` ciblé côté port. Les deux jettent, aucun ne devine.
+      // `ListePlats.V` absent : les deux jettent, aucun ne devine.
       expect(tsName).toBe("TypeError");
       expect(ktErr.name).toBe("ParsingError");
     } finally {
@@ -467,8 +458,7 @@ export function registerClientData(): void {
   });
 
   test.skipIf(skip)("fil chiffré + compressé : `CrA` et `CoA` ensemble", async () => {
-    // Régression : #200 n'a prouvé les drapeaux que séparément. Ici les deux :
-    // requêtes double-hex chiffrées, réponses simple-hex chiffrées.
+    // Les deux directions : requêtes double-hex chiffrées, réponses simple-hex chiffrées.
     const tsa = startStub();
     const kta = startStub();
     try {
@@ -484,8 +474,7 @@ export function registerClientData(): void {
       const tsGrades = (await tsPeriod.grades()) as Record<string, unknown>[];
       const ktGrades = JSON.parse(await ask({ op: "periodGrades", cid: ktCid, periodId: "t1-p-1" }));
       expect(canonTs(ktGrades)).toBe(tsCanon(tsGrades.map(flatGrade)));
-      // Le fil brut diffère (flux `deflate` Java ≠ zlib) : on compare les inners
-      // déjà décodés par le stub (le décodage double-hex réussi EST la preuve).
+      // Le fil brut diffère (deflate Java ≠ zlib) : on compare les inners déjà décodés.
       const normInner = (posts: RecordedPost[]) =>
         posts.map((p) => {
           const inner = JSON.parse(JSON.stringify(p.inner)) as { data?: Record<string, unknown> };

@@ -6,9 +6,9 @@ import type {
 } from "../../bridge/types";
 import { parseTeacherTurnResult, classifyTeacherFailure, type TeacherTurnError } from "./teacher";
 
-// Exercices du manuel (#632) : modèle PUR de l'onglet.
-// Aucun réseau ici. Les bornes protègent le pont (qui revalide) et le rendu :
-// un énoncé vide ne devient jamais une carte cliquable.
+// Exercices du manuel : modèle PUR de l'onglet. Aucun réseau ici ; les bornes
+// protègent le pont (qui revalide) et le rendu : un énoncé vide ne devient jamais
+// une carte cliquable.
 
 /** Miroirs des bornes de `core/Exercises.kt`. */
 export const EXERCISES_MAX_ITEMS = 8;
@@ -28,7 +28,6 @@ function boundedCount(raw: unknown, max: number): number {
   return Math.min(max, Math.max(0, Math.floor(raw)));
 }
 
-/** Lit un énoncé du pont : numéro + texte obligatoires, page et difficulté bornées. */
 export function parseExercise(raw: unknown): ExerciseItem | null {
   if (typeof raw !== "object" || raw === null) return null;
   const value = raw as Record<string, unknown>;
@@ -45,10 +44,8 @@ export function parseExercise(raw: unknown): ExerciseItem | null {
   };
 }
 
-/**
- * Lit la proposition du pont. Un lot hors contrat est écarté, jamais rendu en
- * carte vide ; `manualReady` distingue « pas de manuel » de « manuel en échec ».
- */
+/** Un lot hors contrat est écarté, jamais rendu en carte vide ; `manualReady`
+ *  distingue « pas de manuel » de « manuel en échec ». */
 export function parseExerciseProposal(raw: unknown): ExerciseProposal {
   if (typeof raw !== "object" || raw === null) {
     return { ok: false, exercises: [], manual: false, manualReady: false, message: "Proposition illisible." };
@@ -107,12 +104,11 @@ export function exercisePageLabel(exercise: ExerciseItem): string {
   return exercise.page > 0 ? `p. ${exercise.page}` : "";
 }
 
-/** « Ce qui est envoyé » du dernier échange d'exercice. */
 export function exerciseSources(context: AiContextSourceMeta[] | undefined): AiContextSourceMeta[] {
   return (context ?? []).filter((source) => source.type !== "history");
 }
 
-/** Une aide d'exercice est le même schéma validé que le professeur (#633). */
+/** Même schéma validé que le professeur. */
 export function parseExerciseHelp(raw: unknown): ReturnType<typeof parseTeacherTurnResult> {
   return parseTeacherTurnResult(raw);
 }

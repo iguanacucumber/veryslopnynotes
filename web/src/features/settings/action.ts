@@ -1,9 +1,6 @@
 import { BridgeCallError } from "../../bridge/types";
 
-/**
- * Erreur du pont -> phrase actionnable. `auth_required` prévient l'app (elle
- * repart vers l'appairage) ; tout le reste garde le repli de l'appelant.
- */
+/** Erreur du pont -> phrase actionnable ; `auth_required` repart vers l'appairage. */
 export function actionMessage(error: unknown, fallback: string): string {
   if (error instanceof BridgeCallError) {
     if (error.code === "auth_required") {

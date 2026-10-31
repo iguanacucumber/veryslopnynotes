@@ -4,25 +4,22 @@ import java.util.zip.Deflater
 import java.util.zip.Inflater
 
 /**
- * Dialogue avec les serveurs PRONOTE (#200, port de `pronotets` `communication.js`).
- *
  * Handshake (page HTML → attributs → `FonctionParametres`), POST chiffrés
  * (`AES`, `session`/`no`/`id`/`dataSec`) et/ou compressés (`deflateRaw`),
- * changement de clé après auth. Zéro dépendance : `java.util.zip` pour le
- * `nowrap`, `Json` maison pour les enveloppes.
+ * changement de clé après auth. Zéro dépendance (`java.util.zip`, `Json`).
  *
- * Tous les appels réseau sont BLOQUANTS (pas de coroutines sans dépendance) :
- * ne jamais appeler sur le thread UI — le client (#201) s'en charge.
+ * Tous les appels réseau sont BLOQUANTS : jamais sur le thread UI, le client
+ * s'en charge.
  */
 
-/** `Erreur.G` → message, comme côté TS (inconnu = message brut `Titre`). */
+/** `Erreur.G` → message (inconnu = message brut `Titre`). */
 val PRONOTE_ERROR_MESSAGES = mapOf(
     22 to "[ERROR 22] The object was from a previous session. Please read the \"Long Term Usage\" section in the README.",
     10 to "[ERROR 10] Session has expired and pronotets was not able to reinitialise the connection.",
     25 to "[ERROR 25] Exceeded max authorization requests. Please wait before retrying...",
 )
 
-/** HTTP 429 : l'établissement refuse le débit (même sens que `G=25`). */
+/** HTTP 429 : refus de débit, même sens que `G=25`. */
 private const val HTTP_TOO_MANY_REQUESTS = 429
 
 val PRONOTE_HEADERS = mapOf(
@@ -31,10 +28,7 @@ val PRONOTE_HEADERS = mapOf(
 
 val PRONOTE_HEADERS_MOBILE = mapOf("User-Agent" to "iPhone")
 
-/**
- * Espaces blancs JS (`String.trim`, préfixe `parseInt`) : ASCII + NBSP, pas tout
- * Unicode — le protocole n'émet que de l'ASCII, mais autant être exact.
- */
+/** Espaces blancs JS (`trim`, `parseInt`) : ASCII + NBSP, pas tout Unicode. */
 internal fun isJsSpace(c: Char): Boolean =
     c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\u000B' || c == '\u000C' || c == '\u00A0'
 
@@ -43,9 +37,8 @@ internal fun jsTrim(s: String): String = s.trim { isJsSpace(it) }
 internal fun jsTrimStart(s: String): String = s.trimStart { isJsSpace(it) }
 
 /**
- * Recompose une liste de valeurs d'octets séparées par des virgules (telle que
- * produite par le JS de PRONOTE). `parseInt(s, 10)` : préfixe décimal signé
- * après espaces, `NaN` → 0 — puis `& 0xFF` comme `Buffer.from`.
+ * Liste de valeurs d'octets séparées par des virgules : `parseInt(s, 10)` avec
+ * `NaN` → 0, puis `& 0xFF` comme `Buffer.from`.
  */
 fun enBytes(str: String): ByteArray {
     // `"".split(",")` = `[""]` → `[0]`, comme `Buffer.from([NaN])` côté TS.
@@ -68,9 +61,8 @@ fun enBytes(str: String): ByteArray {
 }
 
 /**
- * Aplatit la structure `listeOnglets` imbriquée de PRONOTE en ids d'onglets.
- * Nombre → `[n]` ; tableau → récursion (objets → leurs valeurs) ; le reste
- * (chaîne, booléen, `null`) est écarté, comme côté TS.
+ * Aplatit `listeOnglets` en ids d'onglets : nombre → `[n]`, tableau/objet →
+ * récursion, le reste écarté.
  */
 fun prepareOnglets(value: JVal?): List<Double> {
     if (value == null) return emptyList()
@@ -85,7 +77,6 @@ fun prepareOnglets(value: JVal?): List<Double> {
 /** Changement de déchiffrement : IV et/ou clé appliqués BRUTS après le POST. */
 data class DecryptionChange(val iv: ByteArray? = null, val key: ByteArray? = null)
 
-/** `parseInt(s, 10)` : préfixe décimal signé, `NaN` si aucun chiffre. */
 internal fun parseIntJs(s: String): Double {
     var t = jsTrimStart(s)
     var sign = 1.0
@@ -103,7 +94,7 @@ internal fun parseIntJs(s: String): Double {
     return if (digits == 0) Double.NaN else sign * value
 }
 
-/** `attributes[k]` ou la chaîne `"undefined"` (comme `${undefined}` côté TS). */
+/** `attributes[k]` ou `"undefined"` (comme `${undefined}` en TS). */
 private fun attrJs(attributes: Map<String, String>, key: String): String = attributes[key] ?: "undefined"
 
 fun deflateRaw(data: ByteArray, level: Int = 6): ByteArray {
@@ -138,7 +129,6 @@ fun inflateRaw(data: ByteArray): ByteArray {
 /** Octets bruts en attente d'inflation (réponse chiffrée + compressée). */
 private class RawBytes(val bytes: ByteArray) : JVal
 
-/** Enveloppe `FonctionParametres` : attributs lus + réponse initiale. */
 data class InitialResponse(val attributes: Map<String, String>, val response: JVal)
 
 class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean = false) {
@@ -156,7 +146,7 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
     var lastResponse: HttpResponse? = null
 
     init {
-        // `getRootAddress` : l'AUTORITÉ d'abord, puis le dernier segment.
+        // L'AUTORITÉ d'abord, puis le dernier segment.
         val (root, page) = getRootAddress(site)
         rootSite = root
         htmlPage = page
@@ -165,17 +155,12 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
 
     companion object {
         /**
-         * Découpe l'adresse d'établissement : l'AUTORITÉ (`scheme://host[:port]`)
-         * D'ABORD, puis le dernier segment du chemin (la requête et le fragment
-         * restent avec ce segment).
+         * L'AUTORITÉ (`scheme://host[:port]`) D'ABORD, puis le dernier segment
+         * du chemin (la requête et le fragment restent avec ce segment).
          *
-         * Couper au dernier `/` sans regarder l'AUTORITÉ coupait le schéma
-         * lui-même : un site SANS chemin (`https://host`) donnait `https:/`,
-         * et le POST partait alors sur `https://appelfonction/...` — un autre
-         * hôte — donc l'établissement devenait INUTILISABLE (UnknownHost
-         * Exception : toutes les requêtes échouaient, #429). La référence TS
-         * coupe de la même façon (son `rootSite` vaut `https:/`) et vise, elle,
-         * la page demandée : l'autorité entière.
+         * Couper au dernier `/` sans regarder l'autorité cassait le schéma d'un
+         * site sans chemin (`https://host` → `https:/`), et le POST partait sur
+         * un autre hôte.
          */
         fun getRootAddress(addr: String): Pair<String, String> {
             val scheme = addr.indexOf("://")
@@ -185,14 +170,14 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
             val authorityLen = authority.indexOfFirst { it == '/' || it == '?' || it == '#' }
                 .let { if (it < 0) authority.length else it }
             val authorityEnd = authorityStart + authorityLen
-            // Le CHEMIN s'arrête à la requête (`?`) ou au fragment (`#`).
+            // Le CHEMIN s'arrête à la requête ou au fragment.
             val afterAuthority = addr.substring(authorityEnd)
             val queryAt = afterAuthority.indexOfFirst { it == '?' || it == '#' }
             val pathEnd = if (queryAt < 0) addr.length else authorityEnd + queryAt
             val path = addr.substring(authorityEnd, pathEnd)
             val lastSlash = path.lastIndexOf('/')
             return if (lastSlash < 0) {
-                // Site SANS chemin : la racine est l'autorité, la page est vide.
+                // Sans chemin : racine = autorité, page vide.
                 Pair(addr.substring(0, authorityEnd), addr.substring(authorityEnd))
             } else {
                 val cut = authorityEnd + lastSlash
@@ -202,17 +187,15 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
     }
 
     /**
-     * Monte le chiffrement et envoie l'IV d'AES à PRONOTE : tout ce qui suit
-     * est chiffré. 3 essais sur la page HTML (une page inattendue = nouvel
-     * essai, comme côté TS qui ne retient que les échecs de `parseHtml`).
+     * Envoie l'IV d'AES : tout ce qui suit est chiffré. 3 essais sur la page
+     * HTML (seuls les échecs de `parseHtml` en consomment un).
      */
     fun initialise(clientIdentifier: String?): InitialResponse {
         var parsed: Map<String, String>? = null
         for (attempt in 0 until 3) {
             val res = session.get("$rootSite/$htmlPage")
-            // 429 sur la PAGE elle-même : inutile de réessayer trois fois (le
-            // serveur compte déjà les requêtes) — c'est le même refus de débit
-            // que `G=25` côté `appelfonction`.
+            // 429 sur la page : inutile de réessayer, le serveur compte déjà
+            // les requêtes.
             if (res.status == HTTP_TOO_MANY_REQUESTS) {
                 throw RateLimitedError(
                     "Too many requests (http status: $HTTP_TOO_MANY_REQUESTS)",
@@ -229,8 +212,7 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
         }
         val attrs = parsed ?: throw PronoteAPIError("Unable to connect to pronote, please try again later")
         attributes = attrs
-        // `attributes["http"]` non vide = RSA ; absent OU VIDE = IV en clair
-        // (le TS teste la vérité de la chaîne, pas sa présence).
+        // `http` non vide = RSA ; absent OU vide = IV en clair.
         val uuidBuf = if (!attrs["http"].isNullOrEmpty()) encryption.rsaEncrypt(encryption.aesIvTemp) else encryption.aesIvTemp
         val uuid = uuidBuf.toBase64()
         val jsonPost = JVal.Obj(
@@ -246,11 +228,9 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
     }
 
     /**
-     * POST `appelfonction` : enveloppe `{session, no, id, dataSec}`, compression
-     * (`hex` UTF-8 → `deflateRaw`, niveau 6, hex MAJUSCULE) puis chiffrement
-     * (hex MAJUSCULE — sauf `no`, minuscule comme côté TS). `numero` chiffré
-     * du compteur, compteur `+2`. Réponse : erreur `Erreur` typée, déchiffrement
-     * (clé/IV bruts si `decryptionChange`), inflation si compressé.
+     * Enveloppe `{session, no, id, dataSec}` : compression (hex MAJUSCULE) puis
+     * chiffrement (sauf `no`, minuscule comme en TS), compteur `+2`. Réponse :
+     * erreur `Erreur` typée, déchiffrement, inflation si compressé.
      */
     // ponytail: un seul post a la fois, compteur/AES/cookies non thread-safe.
     @Synchronized
@@ -289,8 +269,8 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
         requestNumber += 2
         lastResponse = response
         if (!response.ok) {
-            // Le STATUT porte l'information (401 = session morte) : il est un
-            // CHAMP de l'erreur, jamais un mot du message (#520).
+            // Le STATUT porte l'information (401 = session morte) : CHAMP de
+            // l'erreur, jamais un mot du message.
             if (response.status == HTTP_TOO_MANY_REQUESTS) {
                 throw RateLimitedError(
                     "Too many requests (http status: $HTTP_TOO_MANY_REQUESTS)",
@@ -310,13 +290,11 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
             val g = (erreur.fields["G"] as? JVal.Num)?.value
             val gInt = if (g != null && g == kotlin.math.floor(g) && g < Int.MAX_VALUE) g.toInt() else null
             if (gInt == 22) throw ExpiredObject(PRONOTE_ERROR_MESSAGES.getValue(22))
-            // `G=25` n'est pas une session morte : c'est « attends ». Il doit
-            // rester un TYPE distinct pour que le client n'essaie pas de
-            // rafraîchir (un refresh = un login de plus = encore plus de
-            // limitation).
+            // `G=25` n'est pas une session morte : TYPE distinct pour que le
+            // client ne rafraîchisse pas (un login de plus = plus de limitation).
             if (gInt == 25) throw RateLimitedError(PRONOTE_ERROR_MESSAGES.getValue(25), pronoteErrorCode = 25)
             val titre = (erreur.fields["Titre"] as? JVal.Str)?.value
-            // `G`/`Titre` absents : `"undefined"`, comme `${undefined}` côté TS.
+            // `G`/`Titre` absents : `"undefined"`, comme `${undefined}` en TS.
             val gStr = if (g == null) "undefined" else jsNumber(g)
             val titreStr = titre ?: "undefined"
             throw PronoteAPIError(
@@ -337,8 +315,8 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
                 if (compressRequests) RawBytes(decrypted) else Json.parse(decrypted.toString(Charsets.UTF_8))
         }
         if (compressRequests) {
-            // `try` large comme côté TS (bare `catch`) : inflation ET lecture
-            // JSON corrompues valent le même `JSONDecodeError`.
+            // `try` large (bare `catch` en TS) : inflation ET lecture JSON
+            // corrompues valent le même `JSONDecodeError`.
             try {
                 val d = responseData.fields["dataSec"]
                 val raw: ByteArray = when (d) {
@@ -354,11 +332,9 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
         return responseData
     }
 
-    /** Changement de clé après une authentification réussie. */
     @Synchronized
     fun afterAuth(data: JVal, authKey: ByteArray) {
         encryption.aesKey = authKey
-        // (Le `if (!cookieJar)` du TS est un no-op commenté : rien à y porter.)
         val dataSec = ((data as JVal.Obj).fields["dataSec"] as JVal.Obj).fields["data"] as JVal.Obj
         val cle = dataSec.fields["cle"] as JVal.Str
         val work = encryption.aesDecrypt(cle.value.hexToBytes())
@@ -366,10 +342,9 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
     }
 
     /**
-     * Attributs de session lus dans la page HTML (`Start({…})`, une regex pas
-     * de parser HTML, comme côté TS). `IP` présent n'importe où = banni.
-     * Sans `h` : erreur interne brute (l'`initialise` réessaie, comme côté TS
-     * où c'est une `Error` nue).
+     * Attributs de session lus dans la page HTML (`Start({…})`, regex et non
+     * parser). `IP` présent = banni ; sans `h`, erreur interne que
+     * `initialise` réessaie.
      */
     fun parseHtml(html: String): Map<String, String> {
         if (html.contains("IP")) {
@@ -399,16 +374,11 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
 }
 
 /**
- * Maintient la session en vie : un ping quand ~110 s d'inactivité, comme
- * `_KeepAlive` (le `post("Navigation", …)` est fourni par le client #201 :
- * ici `shouldPing`/`pingRequest`, zéro dépendance, thread démon).
+ * Ping quand ~110 s d'inactivité ; le `post("Navigation", …)` vient du client,
+ * ici seulement `shouldPing`/`pingRequest` (thread démon).
  *
- * [tickMs] est la PÉRIODE du fil de garde (1 000 ms en production). C'est un
- * paramètre, pas une constante : le harnais de parité (#202) pilote le VRAI
- * code et doit observer un tick RÉEL, or 1 s de attente réelle par test est
- * un luxe que la suite ne peut pas payer 30 fois. La valeur par défaut reste
- * celle de production : convention de relecture, pas un invariant (le ticker
- * est un paramètre, et son comportement est couvert par la parité).
+ * `tickMs` est un paramètre pour que le harnais de parité pilote le VRAI code
+ * avec un tick réel ; 1 000 ms reste la valeur de production.
  */
 class KeepAlive(
     private val shouldPing: () -> Boolean,
@@ -420,22 +390,17 @@ class KeepAlive(
     private var thread: Thread? = null
 
     /**
-     * Ping de session si dû (~110 s d'inactivité) : lève en cas d'échec
-     * réseau/session (#205 : relecture manuelle locale, l'appelant décide du
-     * repli). Le thread de garde, lui, ne lève jamais (voir `start`).
+     * Ping si dû : lève en cas d'échec réseau/session, l'appelant décide du
+     * repli. Le thread de garde, lui, ne lève jamais (voir `start`).
      */
     fun pingIfDue() {
         if (shouldPing()) pingRequest()
     }
 
     /**
-     * Ping MANUEL : un aller-retour FORCÉ, sans seuil (#408).
-     *
-     * `pingIfDue` ne part JAMAIS après une lecture : le POST vient de
-     * rafraîchir `lastPing`, donc le seuil de 110 s n'est pas atteint. Une
-     * relecture manuelle ne vérifiait donc RIEN de la session — une session
-     * morte passait pour vivante. Ici la requête part TOUJOURS : la session
-     * morte remonte son erreur, et l'appelant peut la traduire (ré-appairage).
+     * Aller-retour FORCÉ, sans seuil : `pingIfDue` ne part jamais après une
+     * lecture (le POST vient de rafraîchir `lastPing`), donc une relecture
+     * manuelle ne vérifierait RIEN. Ici la session morte remonte son erreur.
      */
     fun ping() {
         pingRequest()
@@ -455,7 +420,7 @@ class KeepAlive(
                     try {
                         pingRequest()
                     } catch (_: Exception) {
-                        // Un ping raté n'arrête pas la garde (comme `setInterval`).
+                        // Un ping raté n'arrête pas la garde.
                     }
                 }
             }

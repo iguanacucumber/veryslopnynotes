@@ -1,4 +1,3 @@
-// Fixtures de parité client : stub + helpers.
 export * from "./pronote-client-stub";
 export * from "./pronote-client-helpers";
 export { Client } from "pronotets";

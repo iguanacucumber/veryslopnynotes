@@ -1,5 +1,4 @@
-// Fixtures 100 % synthétiques pour la vie scolaire (#77). Absences, retards et
-// sanctions inventés : aucune donnée d'établissement, aucun secret, aucune URL.
+// 100 % synthétique : aucune donnée d'établissement, aucun secret, aucune URL.
 import type { AbsenceRecord, AttendancePeriod, Punishment } from "../../../shared/contracts/models";
 
 export const syntheticAttendanceAccountId = "acc-fake-1";
@@ -71,11 +70,9 @@ export const syntheticPunishments: Punishment[] = [
   },
 ];
 
-/** Payload /v1/attendance conforme au contrat. */
 export const syntheticAttendancePayload = {
   absences: syntheticAbsences,
   periods: syntheticAttendancePeriods,
 };
 
-/** Payload /v1/punishments conforme au contrat. */
 export const syntheticPunishmentsPayload = { punishments: syntheticPunishments };

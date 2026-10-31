@@ -211,8 +211,8 @@ describe("algorithmes (parité core/Averages.kt)", () => {
   });
 
   test("la médiane porte sur TOUTES les notes, pas sur chaque matière", () => {
-    // Médiane par matière : A = 10, B = 20 → 15. Médiane de toutes les notes
-    // (0, 20, 20) : 20. L'aide doit décrire le calcul RÉEL.
+    // Médiane par matière (A=10, B=20 → 15) vs toutes les notes (0, 20, 20 → 20) :
+    // l'aide doit décrire le calcul RÉEL.
     const grades = [
       grade({ subject: "A", value: 0 }),
       grade({ subject: "A", value: 20 }),
@@ -274,10 +274,9 @@ describe("algorithmes (parité core/Averages.kt)", () => {
   });
 });
 
-// Une moyenne publiée par l'établissement ne dépend PAS de l'algorithme choisi.
-// L'écran disait pourtant « Moyenne des matières / Pondérée / Médiane » au-dessus
-// du chiffre fourni, et présentait les influences comme si elles portaient sur
-// ce chiffre. La courbe, elle, reste une estimation.
+// Une moyenne publiée par l'établissement ne dépend PAS de l'algorithme choisi :
+// l'écran ne doit pas afficher « Médiane » au-dessus du chiffre fourni. La courbe
+// et les influences, elles, restent des estimations.
 describe("moyenne fournie par l'établissement : l'écran ne ment pas", () => {
   const report: AveragesReport = {
     algorithm: "median",
@@ -304,7 +303,6 @@ describe("moyenne fournie par l'établissement : l'écran ne ment pas", () => {
     const hint = algorithmHint("median", true);
     expect(hint).toContain("établissement");
     expect(hint).toContain("estimées");
-    // L'algorithme médian n'a jamais produit le 12,50 affiché.
     expect(hint).not.toContain("médiane");
   });
 
@@ -313,7 +311,6 @@ describe("moyenne fournie par l'établissement : l'écran ne ment pas", () => {
     expect(sparklineDescription([11, 14], true)).toBe("Évolution estimée de la moyenne : de 11 à 14.");
     expect(influenceLabel(0.42, true)).toBe("+0,42 sur la moyenne estimée");
     expect(influenceLabel(0, true)).toBe("Sans effet sur la moyenne estimée");
-    // Sans moyenne fournie, les libellés d'origine restent inchangés.
     expect(historyNote([11, 14])).toBe("");
     expect(influenceLabel(0.42)).toBe("+0,42 sur la moyenne");
   });
@@ -325,7 +322,6 @@ describe("moyenne fournie par l'établissement : l'écran ne ment pas", () => {
     expect(html).toContain("publiée par l&#x27;établissement");
     expect(html).toContain("2 matières · 3 notes");
     expect(html).toContain("Courbe estimée à partir des notes");
-    // La description accessible de la courbe aussi est estimée.
     expect(html).toContain("Évolution estimée de la moyenne");
   });
 
@@ -417,8 +413,7 @@ describe("sélection et regroupement", () => {
     const report: SubjectAverage[] = [{ subject: "Maths", value: 12, provided: true, gradeCount: 1 }];
     const groups = gradeGroups(grades, report);
     const nsi = groups.find((group) => group.subject === "NSI");
-    // Le rapport ne dit rien de NSI : estimer vaut mieux qu'affirmer
-    // « Pas de moyenne » alors que la note est là.
+    // Le rapport ne dit rien de NSI : estimer vaut mieux que « Pas de moyenne ».
     expect(nsi?.average).toBe(16);
     expect(nsi?.provided).toBe(false);
     expect(nsi?.gradeCount).toBe(1);
@@ -510,8 +505,8 @@ describe("mise en forme", () => {
 });
 
 describe("compteur de notes — les notes RETENUES (coefficient 0 exclu)", () => {
-  // Le rapport natif publie `gradeCount` = notes retenues (coefficient 0
-  // exclu) ; l'écran affichait le nombre de notes LISTÉES.
+  // Le rapport natif publie `gradeCount` = notes retenues (coefficient 0 exclu) ;
+  // l'écran doit afficher ce compte, pas le nombre de notes listées.
   const grades = [
     grade({ subject: "Maths", value: 12, coefficient: 1 }),
     grade({ subject: "Maths", value: 8, coefficient: 0 }),
@@ -571,9 +566,7 @@ describe("sparkline", () => {
   test("ligne de moyenne : même échelle que la courbe, rien si elle n'apprend rien", () => {
     // 10 → 20 : la moyenne 15 tombe à mi-hauteur du cadre.
     expect(sparklineAverageY([10, 20], 88)).toBe(44);
-    // 10 → 14 → 18 : moyenne 14, encore à mi-hauteur (l'échelle est min..max).
     expect(sparklineAverageY([10, 14, 18], 88)).toBe(44);
-    // 10 → 18 → 20 : moyenne 16, donc sous le milieu du cadre.
     expect(sparklineAverageY([10, 18, 20], 88)).toBeCloseTo(35.2, 5);
     // Séries inexploitables : une seule valeur, série plate, hauteur nulle.
     expect(sparklineAverageY([12], 88)).toBeNull();
@@ -583,13 +576,10 @@ describe("sparkline", () => {
   });
 });
 
-// #568 : la courbe de moyenne s'affichait DÉFORMÉE.
-//
-// Le `viewBox` était un cadre fixe (320×96) étiré par
-// `preserveAspectRatio="none"` sur toute la largeur de la carte : la courbe
-// était tirée en largeur (tendance aplatie) et la pastille — un REMPLISSAGE
-// sur lequel `vector-effect` n'agit pas — devenait une ELLIPSE. Le dessin
-// est RENDU (`react-dom/server`) : c'est ce que l'élève voit.
+// Le `viewBox` doit suivre la largeur mesurée : un cadre fixe étiré par
+// `preserveAspectRatio="none"` aplatit la courbe et transforme la pastille
+// (remplissage, insensible à `vector-effect`) en ellipse. Le dessin est RENDU
+// par `react-dom/server` : c'est ce que l'élève voit.
 describe("sparkline — le dessin reste net, quelle que soit la largeur (#568)", () => {
   const VALUES = [10, 12, 11, 15, 14, 18];
   const CSS = readFileSync(join(ROOT, "web/src/features/grades/grades.css"), "utf8");
@@ -600,21 +590,18 @@ describe("sparkline — le dessin reste net, quelle que soit la largeur (#568)",
 
   test("le viewBox suit la largeur mesurée : plus d'échelle non uniforme", () => {
     const html = render(480);
-    // Le cadre est en pixels réels : l'échelle du dessin est 1:1.
     expect(html).toContain('viewBox="0 0 480 96"');
-    // Le point final est au bord droit : la courbe occupe toute la largeur.
     expect(html).toContain('cx="480"');
-    // L'étirement non uniforme est la cause de la déformation : il n'y est plus.
+    // L'étirement non uniforme est la cause de la déformation.
     expect(html).not.toContain('preserveAspectRatio="none"');
   });
 
   test("la pastille et son halo ne s'appuient pas sur `vector-effect`", () => {
     const html = render(480);
-    // `vector-effect` ne s'applique qu'aux TRAITS : sur un remplissage il ne
-    // fait rien — la pastille suivait l'étirement au lieu de rester ronde.
+    // `vector-effect` ne s'applique qu'aux TRAITS : sur un remplissage, il ne
+    // fait rien et la pastille suivrait l'étirement.
     expect(html).not.toContain("vector-effect");
     expect(html).not.toContain("non-scaling-stroke");
-    // Le remplissage est bien là (une pastille, pas un contour).
     expect(html).toContain('class="grades-chart__dot"');
     expect(html).toContain('r="3.5"');
   });
@@ -624,13 +611,21 @@ describe("sparkline — le dessin reste net, quelle que soit la largeur (#568)",
     // `pathLength={1}` : une unité de trait = la courbe entière.
     expect(html).toContain('pathLength="1"');
     const rule = /\.grades-chart__line\s*\{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? "";
-    // Les COMMENTAIRES ne sont pas des déclarations.
+    // Les commentaires CSS ne sont pas des déclarations.
     const declarations = rule.replace(/\/\*[\s\S]*?\*\//g, "");
     expect(declarations).toContain("stroke-dasharray: 1");
     expect(declarations).toContain("stroke-dashoffset: 1");
-    // Un trait non scalable ramène les cotes à l'écran : le tracé ne
+    // Un trait non scalable ramènerait les cotes à l'écran : le tracé ne
     // couvrirait plus la courbe entière.
     expect(declarations).not.toContain("non-scaling-stroke");
+  });
+
+  test("le graphe du héros ne déborde pas sur la moyenne", () => {
+    const graph = /\.grades-hero__graph\s*\{([\s\S]*?)\n\}/.exec(CSS)?.[1] ?? "";
+    // Le cadre ferme la courbe : le point du dernier relevé ne peut plus
+    // chevaucher le chiffre de moyenne, même au plus bas.
+    expect(graph).toContain("overflow: hidden");
+    expect(graph).not.toContain("margin-bottom: -");
   });
 
   test("le graphique s'assemble en un seul geste", () => {
@@ -640,15 +635,14 @@ describe("sparkline — le dessin reste net, quelle que soit la largeur (#568)",
       return times[1] ?? 0;
     });
     expect(delays.length).toBe(5);
-    // Toutes les pièces partent ensemble : plus de « montage » d'une seconde
-    // où la ligne flottait seule.
+    // Toutes les pièces partent ensemble : plus de « montage » d'une seconde.
     expect(Math.max(...delays)).toBeLessThanOrEqual(600);
   });
 });
 
-// #537 : un payload CORROMPU (JSON illisible) ne doit JAMAIS être présenté
-// comme une absence de note (I14 : « invalide » n'est jamais « vide »).
-// L'écran est RENDU (`react-dom/server`) : c'est ce que l'élève voit.
+// Un payload CORROMPU (JSON illisible) ne doit JAMAIS être présenté comme une
+// absence de note (I14 : « invalide » n'est jamais « vide »). L'écran est RENDU
+// par `react-dom/server` : c'est ce que l'élève voit.
 describe("notes : un cache illisible est une ERREUR, pas un état vide (#537)", () => {
   function renderNoData(payload: string | null, loading = false): string {
     return renderToStaticMarkup(
@@ -659,8 +653,7 @@ describe("notes : un cache illisible est une ERREUR, pas un état vide (#537)", 
   test("payload corrompu : une erreur, PAS « aucune note en cache »", () => {
     const html = renderNoData("{ceci n'est pas du json");
     expect(html).toContain("illisible");
-    // L'état vide affirmerait un fait faux : les notes ne sont pas vides,
-    // elles sont illisibles.
+    // L'état vide affirmerait un fait faux : les notes sont illisibles.
     expect(html).not.toContain("Aucune note en cache");
   });
 
@@ -686,18 +679,14 @@ describe("notes : un cache illisible est une ERREUR, pas un état vide (#537)", 
   });
 });
 
-// #527 : un changement de requête INVALIDE le payload précédent.
-//
-// L'écran des notes recalculait le rapport sur l'ANCIEN payload avec la
-// NOUVELLE période : le héros affichait la moyenne de l'autre période sous
-// le nouveau sélecteur — et, si le chargement échouait, l'ancien rapport
-// restait affiché indéfiniment. L'écran est RENDU (`react-dom/server`) : c'est
-// ce que l'élève voit.
+// Un changement de requête INVALIDE le payload précédent : sinon l'écran recalcule
+// le rapport sur l'ANCIEN payload avec la NOUVELLE période, et un chargement en
+// échec laisse l'ancien rapport affiché indéfiniment. L'écran est RENDU par
+// `react-dom/server` : c'est ce que l'élève voit.
 describe("notes : un changement de requête invalide le payload précédent (#527)", () => {
   const PERIOD_1 = "algorithm=subject&periodId=p1";
   const PERIOD_2 = "algorithm=subject&periodId=p2";
 
-  // Payload de la période 1 : moyenne 12.
   const payloadP1 = JSON.stringify({
     averages: {
       algorithm: "subject",
@@ -711,7 +700,6 @@ describe("notes : un changement de requête invalide le payload précédent (#52
     ],
   });
 
-  // Payload de la période 2 : moyenne 16.
   const payloadP2 = JSON.stringify({
     averages: {
       algorithm: "subject",
@@ -761,13 +749,11 @@ describe("notes : un changement de requête invalide le payload précédent (#52
     // La période 1 est bien affichée…
     expect(render(loaded, request1, "p1")).toContain("12,00");
 
-    // …puis l'élève change de période : la requête change, le payload est invalide.
     const changed = invalidateOnRequestChange(loaded, request2);
     const html = render(changed, request2, "p2");
     expect(html).not.toContain("12,00");
     expect(html).toContain("Chargement des notes");
 
-    // Le chargement de la période 2 arrive : l'héro montre la NOUVELLE moyenne.
     const reloaded: ResourceStatus = {
       request: request2,
       payload: payloadP2,
@@ -792,7 +778,7 @@ describe("notes : un changement de requête invalide le payload précédent (#52
       error: null,
       loading: false,
     };
-    // La requête change, le chargement échoue : l'ancien rapport ne doit pas
+    // La requête change et le chargement échoue : l'ancien rapport ne doit pas
     // rester affiché sous la nouvelle période.
     const failed: ResourceStatus = {
       ...invalidateOnRequestChange(loaded, request2),
@@ -802,7 +788,6 @@ describe("notes : un changement de requête invalide le payload précédent (#52
     const html = render(failed, request2, "p2");
     expect(html).not.toContain("12,00");
     expect(html).toContain("Lecture indisponible.");
-    // L'état de la requête précédente reste bien distinct de celui-ci.
     expect(visibleResource(failed, request1).payload).toBeNull();
   });
 

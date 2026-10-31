@@ -11,17 +11,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 import fr.veryslopnynotes.data.SessionEpoch
 
-// --- Ressources ------------------------------------------------------------
-
 internal fun VsnBridge.resourceCached(p: JSONObject, epoch: Long): JSONObject {
-    // #529 : la session a changé depuis l'ARRIVÉE de l'appel (le cache a
-    // été purgé : déconnexion, session morte, OU bascule de compte). L'entrée
-    // servie pourrait alors être celle d'un AUTRE compte — on ne sert rien.
+    // Session changée depuis l'ARRIVÉE de l'appel (déconnexion, session morte,
+    // bascule de compte) : l'entrée pourrait être celle d'un AUTRE compte.
     if (SessionEpoch.current() != epoch) return emptyCached()
     val key = p.string("key")
     val resource = cacheKey(key) ?: return emptyCached()
-    // #477 : le cache est indexé par (ressource, requête) : l'entrée servie
-    // est celle de la requête AFFICHÉE, pas celle d'une autre semaine.
+    // Le cache est indexé par (ressource, requête) : l'entrée servie est celle
+    // de la requête AFFICHÉE, pas celle d'une autre semaine.
     val query = bounded(p.string("query"), 200)
     val entry = repo.cached(resource, query) ?: return emptyCached()
     return JSONObject()
@@ -87,7 +84,7 @@ internal fun VsnBridge.resultJson(outcome: RefreshOutcome, resource: String?, qu
             .put("error", "Données en cache (hors ligne).")
         is RefreshOutcome.Failed -> {
             sessionOrThrow(outcome.message)
-            // #477 : l'entrée de cache servie est celle de la MÊME requête.
+            // L'entrée de cache servie est celle de la MÊME requête.
             val cached = resource?.let { repo.cached(it, query) }
             obj.put("payload", outcome.cachedPayload ?: JSONObject.NULL)
                 .put("fetchedAt", cached?.fetchedAt ?: 0L)
@@ -113,15 +110,9 @@ internal fun VsnBridge.capabilitiesJson(force: Boolean): JSONObject {
     return JSONObject().put("tabs", JSONArray(tabs))
 }
 
-// --- Actualités -----------------------------------------------------------
-
 /**
- * Corps d'une actualité (#475) : lu À LA DEMANDE, au dépliage.
- *
- * La liste ne télécharge plus les corps (21 POST pour un écran dont
- * l'élève ne lit que 2-3 actus) : celui-ci arrive ici, à la demande, en
- * un POST. Le corps est une DONNÉE (texte brut), jamais du HTML (I6) : le
- * JS l'affiche dans un nœud texte.
+ * Corps d'une actualité lu À LA DEMANDE (la liste ne télécharge plus 21 corps
+ * pour 2-3 actus lues). Le corps est une DONNÉE, jamais du HTML (I6).
  */
 internal fun VsnBridge.newsItem(p: JSONObject): JSONObject {
     val id = bounded(p.string("id"), 64)
@@ -131,21 +122,17 @@ internal fun VsnBridge.newsItem(p: JSONObject): JSONObject {
     } ?: throw BridgeFailure("unavailable", "Actualité indisponible.")
     val (body, error) = result
     sessionOrThrow(error)
-    // Un échec de lecture = un REJET borné : la carte affiche son état
-    // (« Contenu indisponible. »), jamais une page d'erreur.
+    // Un échec de lecture = un REJET borné, jamais une page d'erreur.
     if (error != null) throw BridgeFailure("unavailable", error)
     return JSONObject().put("body", body ?: "")
 }
-
-// --- Devoirs ---------------------------------------------------------------
 
 internal fun VsnBridge.toggleAssignment(p: JSONObject): JSONObject {
     val id = bounded(p.string("id"), 128)
     if (id.isEmpty()) throw BridgeFailure("bad_request", "Devoir introuvable.")
     val done = p.optBoolean("done", false)
-    // #369 : la semaine AFFICHÉE (le `weekStart` de l'écran) : la fenêtre
-    // de recherche suit le payload affiché, sinon le devoir est visible
-    // mais « introuvable ».
+    // La semaine AFFICHÉE : la fenêtre de recherche suit le payload affiché,
+    // sinon le devoir est visible mais « introuvable ».
     val week = bounded(p.string("weekStart"), 10)
     val outcome = await<fr.veryslopnynotes.data.ToggleOutcome> { cb ->
         assignments.toggle(currentBaseUrl(), id, done, week, cb)
@@ -162,11 +149,10 @@ internal fun VsnBridge.openAttachment(p: JSONObject): JSONObject {
     if (homeworkId.isEmpty() || attachmentId.isEmpty()) {
         throw BridgeFailure("bad_request", "Pièce jointe introuvable.")
     }
-    // Même semaine affichée que le toggle (#369).
+    // Même semaine affichée que le toggle.
     val week = bounded(p.string("weekStart"), 10)
-    // #540 : l'époque est capturée AVANT le téléchargement : une pièce
-    // jointe téléchargée pendant une déconnexion n'est pas écrite (le
-    // cache purgé ne ressuscite pas).
+    // L'époque est capturée AVANT le téléchargement : une pièce jointe
+    // téléchargée pendant une déconnexion n'est pas écrite.
     val epoch = SessionEpoch.current()
     val data = await<fr.veryslopnynotes.data.AttachmentData?> { cb ->
         assignments.fetchAttachment(homeworkId, attachmentId, week, cb)
@@ -185,8 +171,6 @@ internal fun VsnBridge.openAttachment(p: JSONObject): JSONObject {
         JSONObject().put("ok", false).put("error", "Pièce jointe illisible.")
     }
 }
-
-// --- Messagerie ------------------------------------------------------------
 
 internal fun VsnBridge.messagesList(): JSONObject {
     val outcome = await<RefreshOutcome> { cb ->
@@ -235,8 +219,7 @@ internal fun VsnBridge.messagesThread(p: JSONObject): JSONObject {
         )
     }
     val obj = JSONObject()
-        // #476 : les participants voyagent avec le fil ouvert (ils ne sont
-        // plus téléchargés pour toute la liste).
+        // Les participants voyagent avec le fil ouvert, pas avec la liste.
         .put(
             "payload",
             JSONObject()

@@ -1,15 +1,12 @@
 package fr.veryslopnynotes.core
 
 // Fiches revision — pipeline phase 6/9.
-// Port fidele de server/ai/revision.ts (supprimé en #210 : ce port est la
-// source de vérité). Contenu externe = Untrusted + nonce,
-// declare donnee (I6). Sans outils, sans reseau, sans secrets (I4/I5).
-// Declenchement = structure cote jobs (I7) ; ici seul remplissage valide.
-// Sortie modele = JSON {fiche} valide, sources citees cote jobs.
+// Contenu externe = Untrusted + nonce (I6). Sans outils, sans reseau, sans
+// secrets (I4/I5). Declenchement = structure cote jobs (I7) ; ici seul le
+// remplissage valide. Sortie modele = JSON {fiche} valide.
 // Les appels provider sont BLOQUANTS : jamais sur le thread UI.
 
-// Candidat examen : champs utilises par buildRevisionDocs cote TS
-// (ExamCandidate d'ExamDetect.kt : source/confiance hors perimetre IA).
+// Candidat examen : champs utilises cote jobs (source/confiance hors perimetre IA).
 data class RevisionExam(
     val id: String,
     val subject: String,
@@ -46,8 +43,7 @@ enum class RevisionFailure {
     UNKNOWN,  // autre cause
 }
 
-// Message utilisateur : francais, borne, sans secret. La cause, elle, reste
-// explicite — « Fiche non generee » ne disait rien de l'echec (#367).
+// Message utilisateur : francais, borne, sans secret ; la cause reste explicite.
 fun revisionFailureMessage(failure: RevisionFailure): String = when (failure) {
     RevisionFailure.FORMAT -> "Le modèle n'a pas renvoyé le format attendu (JSON {\"fiche\"})."
     RevisionFailure.KEY -> "Clé LLM absente ou refusée : renseigne-la dans Réglages."
@@ -59,12 +55,9 @@ fun revisionFailureMessage(failure: RevisionFailure): String = when (failure) {
 object RevisionAi {
     // Docs brutes -> marquees Untrusted ici, nonce cote prompt.
     //
-    // L'IDENTIFIANT du devoir ne part PAS dans le prompt (#606). Ce n'est pas
-    // une donnee pedagogique, et les ids Pronote sont des jetons a forte
-    // entropie (`147#h-etLBzJ2...`) : la garde I4 (forme OPAQUE) les classait
-    // en secret et refusait le prompt que l'app venait de fabriquer — donc
-    // « Secret détecté (identifiant secret) » sur TOUTE fiche de revision
-    // (2 ids de demo sur 2, reproduit sur le vrai port compile).
+    // L'IDENTIFIANT du devoir ne part PAS dans le prompt : ce n'est pas une
+    // donnee pedagogique, et la garde I4 (forme OPAQUE) le classerait en secret
+    // et refuserait le prompt que l'app vient de fabriquer.
     fun buildRevisionDocs(exam: RevisionExam, chunks: List<RevisionChunk>): List<String> {
         val head = "Matiere : " + exam.subject + "\nDate : " + exam.date +
             "\nMotif : " + exam.matched
@@ -73,17 +66,14 @@ object RevisionAi {
     }
 
     fun revisionPromptFor(exam: RevisionExam, chunks: List<RevisionChunk>, nonce: String? = null): SafePrompt {
-        // ponytail: reutilise gabarit phase 6, jamais de consigne ad hoc.
+        // ponytail: reutilise le gabarit phase 6, jamais de consigne ad hoc.
         val docs = buildRevisionDocs(exam, chunks)
         return buildRevisionPrompt(docs, nonce)
     }
 
     // Remplissage seul : appel modele JSON valide. Choix push = jobs (structure).
-    // La cle de l'APP est RELAYEE a l'adaptateur telle quelle (elle n'entre
-    // jamais dans le prompt, elle n'est jamais journalisee) : sans elle,
-    // l'adaptateur refuse l'appel — c'etait le defaut de #428, ou la cle
-    // n'etait pas transmise et le point d'entree public ne pouvait produire
-    // AUCUNE fiche.
+    // La cle de l'APP est relayee telle quelle : elle n'entre jamais dans le
+    // prompt et n'est jamais journalisee.
     fun requestRevisionSheet(
         provider: SafePromptProvider,
         exam: RevisionExam,

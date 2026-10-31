@@ -7,8 +7,6 @@ import {
   type Stub, type StubScript, type RecordedPost,
 } from "./pronote-client-stub";
 
-// --- Clients des deux côtés -----------------------------------------------------
-
 export async function tsLogin(stub: Stub, opts?: { skip2fa?: boolean; accountPin?: string; deviceName?: string }): Promise<InstanceType<typeof Client>> {
   const { Client: C } = await import("pronotets");
   const qr = { login: qrHex(PIN, LOGIN), jeton: qrHex(PIN, JETON), url: `${stub.base}/pronote/eleve.html` };
@@ -29,8 +27,6 @@ export async function ktLogin(stub: Stub, opts?: { skip2fa?: boolean; accountPin
   return cid;
 }
 
-// --- Comparaison de flux --------------------------------------------------------
-
 export interface BothCtx {
   tsa: Stub;
   kta: Stub;
@@ -40,11 +36,10 @@ export interface BothCtx {
   ktPosts: RecordedPost[];
 }
 
-/** Normalise un fil pour comparaison : `no` neutralisé, `Uuid`/`challenge`/
- * `codePin` neutralisés (aléa par-côté : temp, bourrage RSA, IV), `dataSec`
- * déchiffré sous clés STRICTES par phase (comme le stub). Comparé : session,
- * `id`, et tout l'intérieur déchiffré — les octets chiffrés eux-mêmes ne sont
- * PAS comparés (clés/IV par-côté), mais le stub strict les a validés avant. */
+/** Normalise un fil pour comparaison : `no`, `Uuid`/`challenge`/`codePin`
+ *  neutralisés (aléa par-côté), `dataSec` déchiffré sous clés STRICTES par
+ *  phase. Les octets chiffrés ne sont PAS comparés (clés/IV par-côté) ; le stub
+ *  strict les a validés. */
 export function normWire(stub: Stub, posts: RecordedPost[]): unknown[] {
   // Tous les iv1 vus (second tour `token` / `refresh` = nouveau temp) : un post
   // se déchiffre sous l'iv1 de SA poignée de main (C9).
@@ -122,8 +117,6 @@ export async function expectBothWire(ctx: BothCtx, label: string): Promise<void>
   const kt = canonTs(normWire(ctx.kta, ctx.ktPosts));
   expect(`${label} FIL (ts vs kt):\n${kt}`).toBe(`${label} FIL (ts vs kt):\n${ts}`);
 }
-
-// --- Fixtures riches --------------------------------------------------------------
 
 export function richScript(s: StubScript): void {
   s.notes = {
@@ -303,10 +296,8 @@ export function richScript(s: StubScript): void {
   ];
 }
 
-// --- Magie AES des pièces jointes -------------------------------------------------
-// Le magic = AES(K1, iv1_par_côté, payload) : jamais octet-identique entre côtés
-// (IV aléatoires). On prouve l'égalité autrement : déchiffrement par-côté vers
-// le même payload, + URLs normalisées pour le reste.
+// Le magic = AES(K1, iv1 par-côté, payload) : jamais octet-identique entre
+// côtés. Égalité prouvée par déchiffrement par-côté vers le même payload.
 
 export function normMagicUrl(url: string): string {
   // Magic (IV par-côté) + port (stubs séparés) normalisés : le reste est exact.
@@ -335,7 +326,7 @@ export function checkMagic(stub: Stub, url: string, fileId: string): void {
   expect(payload).toEqual({ N: fileId, Actif: true });
 }
 
-// --- Projections TS (cycles coupés comme le pilote) --------------------------------
+// Projections TS (cycles coupés comme le pilote)
 
 export function flatGrade(g: Record<string, unknown>): Record<string, unknown> {
   const { period, ...rest } = g;

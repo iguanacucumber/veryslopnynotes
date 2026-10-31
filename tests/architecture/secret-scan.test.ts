@@ -1,14 +1,9 @@
-// Scan anti-secrets : le carve-out `.agents/` (contenu tiers) ne doit pas
-// devenir une passoire. Invariant : un VRAI secret échoue DANS `.agents/`,
-// tandis que les exemples de documentation des skills passent.
+// Le carve-out `.agents/` ne doit pas devenir une passoire : un vrai secret y
+// échoue, les exemples de documentation des skills passent.
 //
-// Ce test porte sur les MOTIFS (source de vérité partagée avec
-// `check-secrets.ts`), pas sur le disque : un scan réel du dépôt est déjà
-// fait par `make lint`.
-//
-// Les faux secrets ci-dessous sont ASSEMBLÉS à partir de fragments : le scan
-// anti-secrets passe aussi sur `tests/`, et un littéral complet le ferait
-// échouer lui-même. Un littéral entier ne doit jamais être écrit en clair.
+// Test des MOTIFS (source partagée avec `check-secrets.ts`) ; le scan du disque
+// est fait par `make lint`. Les faux secrets sont assemblés par fragments : le
+// scan passe aussi sur `tests/`, un littéral entier le ferait échouer lui-même.
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,7 +15,6 @@ const ROOT = join(import.meta.dir, "..", "..");
 const VENDORED = patternsFor(".agents/skills/code-review/SKILL.md");
 const REPO = patternsFor("web/src/App.tsx");
 
-// Fragments : un secret entier écrit en clair se ferait flaguer par le scan.
 const pemHeader = ["-----BEGIN ", "RSA PRIVATE KEY", "-----"].join("");
 const pemHeaderBare = ["-----BEGIN ", "RSA PRIVATE KEY", "-----"].join("");
 const pemDoc = ["-----BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY( BLOCK)?", "-----"].join("");
@@ -40,14 +34,12 @@ const credLiteral = ['api', '_key = "aB3dE5fG7hJ9kL1mN2pQ4rS6tU8vW0xY"'].join(""
 describe("scan anti-secrets : carve-out .agents", () => {
   test("le dépôt propre garde le jeu strict", () => {
     expect(REPO).toBe(PATTERNS);
-    // Un en-tête PEM seul suffit dans le dépôt : c'est le comportement
-    // historique, on ne l'affaiblit pas.
+    // Dans le dépôt, un en-tête PEM seul suffit (jeu strict).
     expect(matchPatterns(pemHeader, REPO)).toContain("private-key");
   });
 
   test(".agents/ exige une preuve, pas un indice", () => {
     expect(VENDORED).toBe(VENDORED_PATTERNS);
-    // Exemples de doc des skills : ils imitent un secret, ils n'en sont pas.
     const docExamples = [pemDoc, pemInline, awsExample, stateDoc, stateEmpty, mockToken];
     for (const ex of docExamples) {
       expect(matchPatterns(ex, VENDORED)).toEqual([]);
@@ -69,9 +61,7 @@ describe("scan anti-secrets : carve-out .agents", () => {
   });
 
   test("le carve-out ne s'applique qu'à .agents/", () => {
-    // Un fichier du dépôt qui cite un en-tête PEM reste un FAIL.
     expect(matchPatterns(pemHeader, patternsFor("server/index.ts"))).toContain("private-key");
-    // .agents/ à la racine exacte comme sous-chemin : les deux sont vendorisés.
     expect(patternsFor(".agents")).toBe(VENDORED_PATTERNS);
     expect(patternsFor(".agents/skills/code-review/SKILL.md")).toBe(VENDORED_PATTERNS);
     // Un dossier qui COMMENCE PAR .agents n'est pas vendorisé.
@@ -79,25 +69,17 @@ describe("scan anti-secrets : carve-out .agents", () => {
   });
 });
 
-// #522 : le jeu VENDORED était plus étroit que le jeu du dépôt sur deux
-// formes : le JWT et les identifiants dans une URL. Le dossier tiers, le moins
-// contrôlé du dépôt, était donc le moins surveillé sur les deux formes les
-// plus répandues — alors que c'est le seul dont le contenu IMITE des secrets
-// (I11).
 describe("scan anti-secrets : le jeu vendorisé couvre le JWT et les identifiants d'URL", () => {
   const jwt = [
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
     ".eyJzdWIiOiIxMjM0NTY3ODkwIn0",
     ".dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
   ].join("");
-  // Fragmenté : un littéral COMPLET dans la source serait lui-même un secret
-  // (le scan passe sur `tests/`), donc le mot de passe est coupé.
   const urlCred = ["https://user:s3cr3tP4", "ssword", "Long@host/x"].join("");
 
   test("le jeu vendorisé couvre TOUTES les formes du jeu du dépôt", () => {
-    // Le carve-out peut être PLUS STRICT (exiger une preuve plus forte),
-    // jamais PLUS LARGE : un motif absent du jeu vendorisé est un motif
-    // qu'un contenu tiers peut contenir sans être signalé.
+    // Le carve-out peut être PLUS STRICT, jamais PLUS LARGE : un motif absent du
+    // jeu vendorisé serait un secret tiers non signalé.
     const couverture = new Set(VENDORED_PATTERNS.map((p) => p.name));
     for (const { name } of PATTERNS) {
       expect({ name, couvert: couverture.has(name) }).toEqual({ name, couvert: true });
@@ -105,8 +87,8 @@ describe("scan anti-secrets : le jeu vendorisé couvre le JWT et les identifiant
   });
 
   test("un JWT VIVANT échoue dans .agents/", () => {
-    // Un JWT est une PREUVE, pas un indice (I11) : les trois segments de
-    // longueur plausible suffisent.
+    // Un JWT est une PREUVE, pas un indice (I11) : trois segments de longueur
+    // plausible suffisent.
     expect(matchPatterns(jwt, VENDORED)).toContain("jwt");
     expect(matchPatterns(jwt, PATTERNS)).toContain("jwt");
   });
@@ -117,30 +99,24 @@ describe("scan anti-secrets : le jeu vendorisé couvre le JWT et les identifiant
   });
 
   test("la preuve exigée : un JWT tronqué ou une URL d'exemple passe", () => {
-    // Un JWT d'un seul segment n'est pas un JWT.
     expect(matchPatterns("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", VENDORED)).toEqual([]);
-    // Des identifiants d'exemple (mot de passe court) ne sont pas des
-    // credentials : « user:pass@ » et « user:password@ » sont des exemples.
-    // Fragmentés : la source ne doit pas contenir le littéral complet (le
-    // scan passe sur `tests/`).
+    // Mot de passe court (< 8) : `user:pass@` est un exemple, pas un credential.
     expect(matchPatterns(["https://user:pass", "@host/"].join(""), VENDORED)).toEqual([]);
     expect(matchPatterns(["https://user:pass", "word@host/"].join(""), VENDORED)).toEqual([]);
   });
 });
 
-// #522 (fin) : la preuve est VÉRIFIÉE sur le SCAN RÉEL, pas seulement sur les
-// motifs : un JWT et une URL à identifiants déposés dans `.agents/` font
-// échouer `check-secrets`. Sans ça, le carve-out pouvait rester troué.
+// La preuve est VÉRIFIÉE sur le SCAN RÉEL, pas seulement sur les motifs : un
+// JWT ou une URL à identifiants déposés dans `.agents/` font échouer
+// `check-secrets`.
 describe("scan anti-secrets : un secret dans .agents/ fait échouer le scan", () => {
   const jwt = [
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
     ".eyJzdWIiOiIxMjM0NTY3ODkwIn0",
     ".dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
   ].join("");
-  // Fragmenté (voir plus haut) : la source ne doit pas contenir le secret.
   const urlCred = ["https://user:s3cr3tP4", "ssword", "Long@host/x"].join("");
 
-  /** Fixture : un dossier `.agents/skills/x/` avec le contenu donné. */
   function fixture(contenu: string): string {
     const dir = mkdtempSync(join(tmpdir(), "secret-scan-"));
     const skill = join(dir, ".agents", "skills", "x");
@@ -149,7 +125,6 @@ describe("scan anti-secrets : un secret dans .agents/ fait échouer le scan", ()
     return dir;
   }
 
-  /** Lance le VRAI scan sur la fixture. */
   function scan(dir: string): { code: number; out: string } {
     const p = Bun.spawnSync(["bun", join(ROOT, "agents", "runtime", "check-secrets.ts"), dir], {
       cwd: ROOT,
@@ -194,13 +169,7 @@ describe("scan anti-secrets : un secret dans .agents/ fait échouer le scan", ()
   });
 });
 
-// #503 : le jeu du DÉPÔT n'avait que quatre formes, alors que le jeu
-// VENDORED en avait huit : le dossier tiers, le moins contrôlé, était mieux
-// surveillé que le dépôt lui-même. Et le test de placeholder n'était pas
-// ancré : un mot de placeholder PRÉSENT dans la valeur excusait la ligne.
 describe("scan anti-secrets : le dépôt surveille les mêmes formes que le jeu vendorisé", () => {
-  // Fragments : un littéral complet written en clair se ferait flaguer par le
-  // scan (qui passe aussi sur `tests/`).
   const urlCred = ["https://user:s3cr3tP4", "ss@host/x"].join("");
   const jwt = [
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
@@ -225,42 +194,33 @@ describe("scan anti-secrets : le dépôt surveille les mêmes formes que le jeu 
   });
 
   test("un placeholder dans la valeur n'excuse plus une vraie affectation", () => {
-    // Le mot « example » au milieu de la valeur ne suffit plus : seule une
-    // valeur ENTIÈREMENT placeholder est excusée.
+    // Seule une valeur ENTIÈREMENT placeholder est excusée.
     expect(matchPatterns(envReal, PATTERNS)).toContain("env-assign");
     expect(matchPatterns(envFake, PATTERNS)).toContain("env-assign");
-    // Un placeholder franc reste un placeholder.
     expect(matchPatterns(envPlaceholder, PATTERNS)).toEqual([]);
   });
 
   test("les exemples d'attaque des tests ne sont pas des secrets", () => {
-    // « user:pass@ » et un port après un @ : des charges utiles de test, pas
-    // des credentials (le mot de passe doit faire 8 caractères).
+    // « user:pass@ » et un port après un @ : charges utiles de test, pas des
+    // credentials (le mot de passe doit faire 8 caractères).
     expect(matchPatterns("https://user:pass@host/", PATTERNS)).toEqual([]);
     expect(matchPatterns("http://127.0.0.1:80@editeur.example/", PATTERNS)).toEqual([]);
   });
 });
 
-// #521 : le scan n'inspectait que le PREMIER match de chaque motif. Un
-// placeholder en tête de fichier excusait le fichier ENTIER, secret compris :
-// un exemple de documentation placé AVANT la valeur réelle neutralisait la
-// détection sur tout le fichier. Le motif ne passe que si AUCUN match n'est
-// un secret réel.
+// Tous les matchs d'un motif sont inspectés : un placeholder en tête de fichier
+// n'excuse pas un secret réel plus bas.
 describe("scan anti-secrets : tous les matchs d'un motif sont inspectés", () => {
   const placeholder = ["api", '_key = "your_key_here_placeholder_value_xxxx"'].join("");
   const reel = ["api", '_key = "aB3dE5fG7hJ9kL1mN2pQ4rS6tU8vW0xY"'].join("");
 
   test("un placeholder seul ne fait rien passer", () => {
-    // Rien à signaler : le SEUL match est un placeholder.
     expect(matchPatterns(placeholder, PATTERNS)).toEqual([]);
     expect(matchPatterns(placeholder, VENDORED)).toEqual([]);
   });
 
   test("un placeholder AVANT un vrai secret ne l'excuse plus", () => {
-    // Le défaut exact : le premier match est un placeholder, donc le fichier
-    // passait — le vrai secret, en deuxième position, n'était jamais vu.
     expect(matchPatterns(`${placeholder}\n${reel}\n`, PATTERNS)).toContain("credential-literal");
-    // Le carve-out vendorisé suffers du même défaut : même comportement.
     expect(matchPatterns(`${placeholder}\n${reel}\n`, VENDORED)).toContain("credential-literal");
   });
 
@@ -270,8 +230,7 @@ describe("scan anti-secrets : tous les matchs d'un motif sont inspectés", () =>
   });
 
   test("le même motif, plusieurs fois, ne signale qu'une fois", () => {
-    // Le motif est le SIGNAL, pas le compte des occurrences : un fichier avec
-    // trois secrets est un fichier à corriger, pas trois fautes distinctes.
+    // Le motif est le SIGNAL, pas le compte des occurrences.
     const hits = matchPatterns(`${reel}\n${reel}\n${reel}\n`, PATTERNS);
     expect(hits.filter((h) => h === "credential-literal")).toHaveLength(1);
   });

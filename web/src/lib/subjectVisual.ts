@@ -1,6 +1,4 @@
-// Emoji de matière : uniquement de l'affichage, aucune donnée Pronote n'est
-// interprétée. Le nom est normalisé (sans accents) puis comparé à des règles
-// locales ; une matière inconnue garde un livre générique.
+// Emoji de matière : affichage seul, aucune donnée Pronote interprétée.
 
 const RULES: ReadonlyArray<readonly [RegExp, string]> = [
   [/MATHEMATIQUES?|MATHS?/, "📐"],

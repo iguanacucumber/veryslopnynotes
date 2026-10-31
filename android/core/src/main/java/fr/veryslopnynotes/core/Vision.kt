@@ -1,17 +1,13 @@
 package fr.veryslopnynotes.core
 
-// Photo -> modèle vision (#587). Le texte du prompt reste soumis à la garde
-// I4 ; l'image, elle, est OPAQUE : elle ne peut pas être scannée pour des
-// secrets. Elle ne part donc que sur un geste explicite de l'élève, après
-// ré-encodage (métadonnées supprimées) et dans une borne stricte.
-//
-// Ce fichier est PUR (stdlib seule) : le harnais de parité peut l'exécuter.
+// Photo -> modèle vision. Le texte du prompt reste soumis à la garde I4 ;
+// l'image, elle, est OPAQUE : elle ne peut pas être scannée pour des secrets.
+// Elle ne part que sur un geste explicite, après ré-encodage (métadonnées
+// supprimées) et dans une borne stricte. Pur (stdlib seule).
 
 /**
- * Une image prête pour le fournisseur.
- *
- * `mime` est TOUJOURS un type bitmap non exécutable (I6) ; le pont ne produit
- * que du JPEG ré-encodé. `base64` est la donnée du corps multipart JSON.
+ * Une image prête pour le fournisseur. `mime` est TOUJOURS un type bitmap non
+ * exécutable (I6) ; le pont ne produit que du JPEG ré-encodé.
  */
 data class VisionImage(
     val mime: String,
@@ -46,12 +42,8 @@ data class VisionImage(
 }
 
 /**
- * Prompt texte DÉJÀ validé par `buildSafePrompt` + les images qui
- * l'accompagnent.
- *
- * Le type porte la garantie : le texte a passé la garde I4, les images ont
- * passé [VisionImage.isValid] et ne peuvent pas être réinterprétées comme du
- * texte. Aucun outil, aucun effet externe.
+ * Prompt texte DÉJÀ validé par `buildSafePrompt` + les images qui l'accompagnent.
+ * Le type garantit que les images ont passé [VisionImage.isValid].
  */
 data class SafeVisionPrompt(
     val prompt: SafePrompt,
@@ -63,8 +55,7 @@ interface SafeVisionPromptProvider {
 }
 
 /**
- * Construit et valide un prompt vision. Une image minimum, une maximum :
- * au-delà, le coût et la surface augmentent sans besoin métier.
+ * Construit et valide un prompt vision : une image, jamais plus (coût et surface).
  */
 fun buildSafeVisionPrompt(
     system: String,
@@ -78,10 +69,7 @@ fun buildSafeVisionPrompt(
     return SafeVisionPrompt(prompt = prompt, images = listOf(image))
 }
 
-/**
- * Même pipeline que [generateGuardedJson], avec une image déclarée DONNÉE.
- * La sortie est validée par la garde I5 exactement comme un prompt texte.
- */
+/** Même pipeline que [generateGuardedJson], image déclarée DONNÉE ; sortie validée (I5). */
 fun generateGuardedVisionJson(
     provider: SafeVisionPromptProvider,
     system: String,

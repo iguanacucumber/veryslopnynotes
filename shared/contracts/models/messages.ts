@@ -1,4 +1,3 @@
-// Contrats — messagerie (parité Papillon).
 // TOUT texte de messagerie est une DONNÉE non fiable : bornée, jamais
 // exécutée ni interprétée, et JAMAIS remise à un LLM (I6).
 import {
@@ -8,7 +7,7 @@ import {
 } from "./assignments";
 import { isBoundedString, isIsoDate, isRecord } from "./guards";
 
-/** Nature d'un destinataire de discussion (Pronote : enseignant ou administration). */
+/** Destinataire Pronote : enseignant ou administration. */
 export const RECIPIENT_KINDS = ["student", "teacher", "administration"] as const;
 
 export type RecipientKind = (typeof RECIPIENT_KINDS)[number];
@@ -48,12 +47,12 @@ export interface Message {
 export interface Discussion {
   readonly id: string;
   readonly subject: string;
-  /** Participants publiés par l'établissement, bornés et sans doublon ; vide = non publiés. */
+  /** Participants publiés, bornés et sans doublon ; vide = non publiés. */
   readonly participants: string[];
-  /** Messages non lus ; absent = l'établissement ne le publie pas (jamais 0 deviné). */
+  /** Messages non lus ; absent = non publié par l'établissement (jamais 0 deviné). */
   readonly unreadCount?: number;
   readonly lastMessageAt?: string; // ISO-8601
-  /** Fraîcheur du fil. ABSENTE = fraîcheur INCONNUE : jamais une date devinée (#427). */
+  /** Fraîcheur du fil. ABSENTE = fraîcheur INCONNUE, jamais une date devinée. */
   readonly updatedAt?: string; // ISO-8601
 }
 

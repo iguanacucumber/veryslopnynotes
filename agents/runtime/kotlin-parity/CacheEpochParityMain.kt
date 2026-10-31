@@ -1,21 +1,8 @@
-// CacheEpochParityMain.kt — pilote JSON du cache et de l'epoch de session (#364).
+// CacheEpochParityMain.kt — pilote JSON du cache et de l'epoch de session.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-cache-epoch.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile les VRAIES classes de
-// production `fr.veryslopnynotes.data.SessionEpoch` et
-// `fr.veryslopnynotes.data.FileCacheStore` (logique pure : `java.io` seul,
-// aucun import Android) et les pilote ici : les assertions du critère #364
-// portent donc sur du code exécuté, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-cache-epoch.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Scénarios rejoués : une lecture EN VOL traverse une déconnexion (le cache
-// doit rester vide sur le disque), deux écrivains concurrents sur le MÊME
-// dossier (le fichier relu doit toujours être parsable), une lecture normale
-// (le cache est écrit).
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE (op inconnue, sid absent) sont préfixées `pilote: ` et
-// refusées par le test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.cacheepoch
 
 import fr.veryslopnynotes.data.FileCacheStore
@@ -42,14 +29,13 @@ private fun err(name: String, message: String?): JVal.Obj = JVal.Obj(
 
 private fun ok(vararg pairs: Pair<String, JVal>): JVal.Obj = JVal.Obj(linkedMapOf(*pairs))
 
-/** Les fichiers d'une ressource (#477 : un fichier par requête, nom empreinté). */
+/** Un fichier par requête, nom empreinté. */
 private fun filesOf(dir: File, resource: String): List<File> =
     dir.listFiles { f -> f.name.startsWith("cache_${resource}_") }?.sortedBy { it.name } ?: emptyList()
 
 /**
  * Un store + son dossier. Le worker de fond a sa PROPRE instance sur le même
- * dossier que l'app : c'est exactement le cas que #364 visait (deux
- * écrivains, un seul dossier).
+ * dossier que l'app : deux écrivains, un seul dossier.
  */
 private class Slot(val id: Int, val dir: File) {
     val store = FileCacheStore(dir)
@@ -105,7 +91,7 @@ private class Driver {
             val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
             val payload = op.str("payload") ?: ""
             val at = (op.num("fetchedAt") ?: 0.0).toLong()
-            // #365 : l'entree porte la requete qui l'a produite.
+            // l'entree porte la requete qui l'a produite.
             slot.store.save(resource, payload, at, op.str("query") ?: "")
             ok("ok" to JVal.Bool(true))
         }
@@ -147,7 +133,7 @@ private class Driver {
         "raw" -> {
             val slot = bench.slot(op)
             val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
-            // #477 : un fichier par (ressource, requête) — le nom porte
+            // un fichier par (ressource, requête) — le nom porte
             // l'empreinte de la requête.
             val file = filesOf(slot.dir, resource).firstOrNull()
             val exists = file != null && file.exists()
@@ -187,7 +173,7 @@ private class Driver {
         val mixed = AtomicInteger()
         val running = AtomicBoolean(true)
         val start = CountDownLatch(1)
-        // #477 : le fichier porte l'empreinte de la requête — le lecteur le
+        // le fichier porte l'empreinte de la requête — le lecteur le
         // retrouve DANS le dossier (une seule requête ici : un seul fichier).
         var target: File? = null
         val reader = Thread {
@@ -201,7 +187,7 @@ private class Driver {
                 }
                 reads.incrementAndGet()
                 val cut = text.indexOf('\n')
-                // #365 : l'en-tete est « fetchedAt<TAB>requete » : l'horodatage
+                // l'en-tete est « fetchedAt<TAB>requete » : l'horodatage
                 // est ce qui precede le TAB.
                 val head = if (cut < 0) null else text.substring(0, cut)
                 val ts = head?.substringBefore('\t')?.toLongOrNull()

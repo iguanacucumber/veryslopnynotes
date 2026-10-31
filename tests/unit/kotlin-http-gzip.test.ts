@@ -1,14 +1,7 @@
-// #474 : la session HTTP NEGOCIE la compression et décompresse la réponse.
-//
-// Le port Kotlin demandait la compression à l'établissement, mais
 // `HttpURLConnection` ne décompresse QUE ce qu'il a lui-même demandé : la
-// réponse arrivait donc en clair alors que le serveur l'avait compressée.
-//
-// Le test joue le VRAI `HttpSession` compilé (pilote de parité) contre un
-// serveur local qui se comporte comme un établissement : il compresse SA
-// réponse quand le client demande `gzip`, et ne le fait pas sinon.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT (jamais un faux vert).
+// réponse arrivait compressée alors que le port croyait lire du clair (#474).
+// Le vrai `HttpSession` tourne contre un serveur local qui compresse sa réponse
+// quand le client demande `gzip`. Outillage absent = SKIP BRUYANT.
 import { afterAll, describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -37,8 +30,7 @@ const server = Bun.serve({
     const accept = req.headers.get("accept-encoding") ?? "";
     seen.push(accept);
     if (path === "/gzip") {
-      // Établissement qui compresse sa réponse. Le client DOIT la rendre
-      // lisible : sans décompression, il reçoit des octets illisibles.
+      // Le client DOIT rendre la réponse compressée lisible.
       return new Response(GZ, {
         headers: { "content-encoding": "gzip", "content-type": "text/plain; charset=utf-8" },
       });
@@ -49,7 +41,6 @@ const server = Bun.serve({
         headers: { "content-encoding": "gzip", "content-type": "text/plain; charset=utf-8" },
       });
     }
-    // /plain : pas de compression, rien à décompresser.
     return new Response(BODY, { headers: { "content-type": "text/plain; charset=utf-8" } });
   },
 });

@@ -1,10 +1,6 @@
-// AiContextMain.kt — pilote JSON de l'assembleur de contexte IA (#628).
+// AiContextMain.kt — pilote JSON de l'assembleur de contexte IA.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-ai-context.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile la VRAIE source de
-// production `core/AiContext.kt` (pure, sans réseau ni Android) et la pilote
-// ici : priorité, budgets, déduplication, troncature signalée, refus vide et
-// parité des points d'entrée portent donc sur du code EXÉCUTÉ.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-ai-context.test.ts` (jamais Gradle, jamais l'APK).
 package fr.veryslopnynotes.aicontext
 
 import fr.veryslopnynotes.core.AiContext

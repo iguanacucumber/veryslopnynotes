@@ -17,9 +17,7 @@ export function registerProtocolHttp(): void {
       ["get", "http://example.com/"],
       ["set", "sec=s; Path=/; Secure", "http://example.com/"],
       ["get", "http://example.com/"],
-      // `Domain=` IP-littéral : tough-cookie refuse (« public suffix »), le port
-      // accepte si l'hôte correspond (CookieJar, KDoc). Aucun serveur réel
-      // n'émet ça (cookies hôte-seul ou domaines publics) : pas de cas ici.
+      // Pas de cas `Domain=` IP-littéral : tough-cookie le refuse, aucun serveur réel n'en émet.
       ["set", "gone=1; Path=/; Max-Age=0", "http://example.com/"],
       ["get", "http://example.com/"],
     ];
@@ -72,13 +70,9 @@ export function registerProtocolHttp(): void {
       const N = 3;
       const seq = await ask({ op: "httpSeq", sid: ktSid, url: `${stub.base}/final`, n: N });
       expect(JSON.parse(seq)).toEqual({ statuses: Array.from({ length: N }, () => 200) });
-      // Le port distant vu par le serveur est la seule preuve externe de la
-      // réutilisation du socket. Contrôle de l'observation (mesuré) : le même
-      // pilote lancé avec `-Dhttp.keepAlive=false` donne N ports, donc
-      // l'assertion n'est pas vide. Réserve : sur la JVM, un `disconnect()`
-      // après un corps entièrement consommé est DÉJÀ sans effet sur ce cache
-      // (`KeepAliveCache`) — c'est Android/OkHttp qui ferme le socket pour de
-      // bon, d'où #309 ; le harnais prouve la propriété, pas l'appel retiré.
+      // Ports distants = seule preuve externe du socket réutilisé ; avec
+      // `-Dhttp.keepAlive=false` on en observe N. Sur JVM, `disconnect()` après
+      // corps consommé est sans effet : le harnais prouve la propriété, pas l'appel.
       expect(stub.remotePorts.length).toBe(N);
       for (const port of stub.remotePorts) expect(port).toBeGreaterThan(0);
       expect(new Set(stub.remotePorts).size).toBe(1);
@@ -115,13 +109,11 @@ export function registerProtocolHttp(): void {
   });
 
   test.skipIf(skip)("http : une `Location` malformée → erreur RÉSEAU mappée, socket refermé (#429)", async () => {
-    // `Location`s que la JVM refuse (espace dans l'hôte, protocole inconnu,
-    // autorité cassée) : la redirection est ILLISIBLE, pas « à suivre ».
+    // `Location` refusée par la JVM : redirection ILLISIBLE, pas « à suivre ».
     const locations = ["http://ho st/x", "xyz://hote/x", "http://[casse"];
     for (const location of locations) {
-      // La référence TS refuse aussi (TypeError) : le port n'invente pas un
-      // comportement que la référence n'a pas. Serveur à part : le client TS
-      // garde sa connexion en keep-alive, il ne doit pas bruiter l'observation.
+      // La référence TS refuse aussi (TypeError). Serveur à part : le client TS
+      // garde son keep-alive, il ne doit pas bruiter l'observation.
       const rawTs = await startRawServer(location);
       try {
         const tsErr = await tsErrorOfAsync(() => new HttpSession().get(`http://127.0.0.1:${rawTs.port}/r302`));
@@ -136,13 +128,10 @@ export function registerProtocolHttp(): void {
         const ktErr = portError(
           await ask({ op: "httpReq", sid: ktSid, method: "GET", url: `http://127.0.0.1:${raw.port}/r302` }, true),
         );
-        // L'erreur est une PANNE RÉSEAU mappée (« network » pour l'app), pas
-        // une `MalformedURLException` brute qui remontait au caller.
+        // Panne réseau mappée (`network`), pas une `MalformedURLException` brute.
         expect(`${location} -> ${ktErr.name}`).toBe(`${location} -> IOException`);
         expect(ktErr.message).toMatch(/redirection/i);
-        // Et surtout : le socket est refermé (le serveur voit le FIN). Sinon
-        // chaque redirection malformée laissait une connexion ouverte et le
-        // pool de sockets se remplissait.
+        // Socket refermé (le serveur voit le FIN), sinon le pool se remplit.
         expect(`${location} -> ${await closedOrTimeout(raw, 5000)}`).toBe(`${location} -> closed`);
       } finally {
         raw.close();
@@ -150,20 +139,16 @@ export function registerProtocolHttp(): void {
     }
   }, 30000);
 
-  // #497 : la détection d'une `Location` illisible ne doit PAS dépendre de la
-  // JVM : le constructeur `java.net.URL` valide l'hôte selon la version (JDK 17
-  // ACCEPTE « http://ho st/x », JDK 25 le refuse). Le port valide donc l'hôte
-  // lui-même, sinon l'erreur remontée à l'app change de nature selon la JVM
-  // (UnknownHostException brute au lieu de la panne réseau mappée).
+  // Détection indépendante de la JVM : JDK 17 accepte « http://ho st/x », JDK 25
+  // le refuse. Le port valide l'hôte lui-même, sinon l'erreur change de nature
+  // selon la JVM (UnknownHostException brute au lieu de la panne réseau mappée).
 
   test.skipIf(skip)("communication : site AVEC ou SANS chemin — la page visée est celle de la référence (#429)", async () => {
     const stub = startStub(`h: '1', a: 'b'`);
     try {
       for (const site of [`${stub.base}/pronote/eleve.html`, stub.base]) {
-        // La référence TS : `rootSite` = tout sauf le dernier segment,
-        // `htmlPage` = le dernier segment. On compare la PAGE VISÉE (origine +
-        // chemin), pas les chaînes internes : le port coupe l'AUTORITÉ, la
-        // référence la coupe en deux — les deux visent la même page.
+        // La référence coupe en `rootSite`/`htmlPage`, le port coupe l'autorité :
+        // on compare la page visée, pas les chaînes internes.
         const tsComm = new Communication(site, undefined, false);
         const tsTarget = new URL(`${tsComm.rootSite}/${tsComm.htmlPage}`);
         const cid = (JSON.parse(await ask({ op: "commNew", site })) as { cid: number }).cid;
@@ -179,14 +164,11 @@ export function registerProtocolHttp(): void {
   test.skipIf(skip)("communication : un site SANS chemin atteint le bon hôte (le POST partait sur un autre hôte)", async () => {
     const stub = startStub(`h: '1', a: 'b'`);
     try {
-      // La référence TS ne peut PAS aller au bout de ce fil : son `rootSite`
-      // vaut `http:/`, donc son POST part sur `http://appelfonction/...`. Le
-      // port, lui, vise l'hôte de l'établissement — le comportement attendu.
+      // La référence TS part sur `http://appelfonction/...` (son `rootSite` vaut
+      // `http:/`) ; le port vise l'hôte de l'établissement.
       const cid = (JSON.parse(await ask({ op: "commNew", site: stub.base })) as { cid: number }).cid;
       await ask({ op: "commInit", cid, identifier: null });
-      // La page a été demandée à la racine du stub (hôte correct)…
       expect(stub.requests[0]?.path).toBe("/");
-      // …et le POST d'API part sur le MÊME hôte.
       expect(stub.requests[1]?.path).toMatch(/^\/appelfonction\//);
     } finally {
       stub.close();

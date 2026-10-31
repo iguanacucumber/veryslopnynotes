@@ -1,21 +1,18 @@
 package fr.veryslopnynotes.core
 
-// #631 : sources d'un devoir pour l'assembleur IA. PUR (aucun réseau, aucun
-// stockage) : la frontière `data` fournit déjà le texte extrait des pièces
-// jointes ; ce fichier ne fait qu'ordonner consigne, cours et pièces jointes.
+// Sources d'un devoir pour l'assembleur IA. PUR (aucun réseau, aucun stockage) :
+// ce fichier ne fait qu'ordonner consigne, cours et pièces jointes déjà extraites.
 //
 // PLUSIEURS cours peuvent être rattachés au même devoir (même matière + jour) :
-// tous sont des sources citables. Un cours de 8 000 caractères n'est jamais
-// coupé ici à 500 : [AiContext] applique son budget de source et SIGNALE la
-// coupe (`truncated`).
+// tous sont des sources citables. La coupe est faite par [AiContext], qui la
+// SIGNALE (`truncated`).
 
 /**
- * Candidates IA d'un devoir : consigne, puis TOUS les cours rattachés, puis
- * les pièces jointes déjà extraites. Aucune source vide n'est ajoutée.
+ * Candidates IA d'un devoir : consigne, puis TOUS les cours rattachés, puis les
+ * pièces jointes déjà extraites. Aucune source vide n'est ajoutée.
  *
- * [attachments] contient les résultats DÉJÀ bornés/marqués de la frontière
- * (texte lisible, ou source « illisible » nommée). Les pièces jointes arrivent
- * après les cours : [AiContext] garde l'ordre de priorité stable.
+ * [attachments] contient les résultats DÉJÀ bornés/marqués de la frontière : ils
+ * arrivent après les cours, et [AiContext] garde l'ordre de priorité stable.
  */
 fun assignmentContextItems(
     assignment: Assignment,

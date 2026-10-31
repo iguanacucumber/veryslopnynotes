@@ -8,41 +8,38 @@ import fr.veryslopnynotes.core.ChildAccount
 import fr.veryslopnynotes.core.UserProfile
 import fr.veryslopnynotes.core.UserProfileRules
 
-/** Photo de profil : absente (non publiée ou lecture KO) ou décodée du client local. */
 sealed interface PhotoState {
     data object Absent : PhotoState
     data class Loaded(val bitmap: Bitmap) : PhotoState
 }
 
-/** Résultat de lecture du profil : profil, aucun profil publié, ou échec réseau. */
 sealed interface MeResult {
     data class Ok(val profile: UserProfile?) : MeResult
     data class Err(val message: String) : MeResult
 }
 
-// Profil #82 : lu sur le client local (#205, ADR-003) et photo téléchargée par
-// le client — jamais d'adresse d'établissement dans l'app, jamais de WebView.
+// Jamais d'adresse d'établissement dans l'app, jamais de WebView.
 // ponytail: rien n'est persisté ici (mode anonyme) : le profil vit en mémoire et
 // disparaît à la déconnexion (AccountStore.logout). Upgrade: cache profil chiffré
 // si l'utilisateur demande explicitement de garder son profil hors-ligne.
 class ProfileRepository(
     private val provider: PronoteClientProvider = { PronoteSession.client },
-    // Rappel sur le thread principal comme SyncedRepository : l'état Compose
-    // n'est jamais écrit depuis le thread OkHttp.
+    // Callback sur le thread principal : l'état Compose n'est jamais écrit
+    // depuis le thread OkHttp.
     private val main: Handler = Handler(Looper.getMainLooper()),
 ) {
-    /** Async (comme SyncedRepository) : le profil n'est JAMAIS écrit sur disque. */
+    /** Le profil n'est jamais écrit sur disque. */
     fun fetchMe(cb: (MeResult) -> Unit) {
         Thread {
             val client = provider()
             if (client == null) {
-                // Sans session : mode anonyme, état vide propre — jamais d'écran
-                // d'erreur plein-écran pour l'absence de connexion (#260).
+                // Sans session : mode anonyme, état vide — jamais d'écran
+                // d'erreur plein écran.
                 post(cb, MeResult.Ok(null))
                 return@Thread
             }
             try {
-                // user null = infos non publiées : ce n'est pas une erreur.
+                // user null = infos non publiées, pas une erreur.
                 post(cb, MeResult.Ok(parse(mePayload(client))))
             } catch (e: Exception) {
                 if (isSessionFailure(e)) {
@@ -56,9 +53,8 @@ class ProfileRepository(
     }
 
     /**
-     * Photo lue par le client local depuis la réf opaque `photo:<id>` (jamais
-     * une URL d'établissement ici). Réf absente/invalide ou échec = null, l'UI
-     * affiche les initiales.
+     * Photo lue depuis la réf opaque `photo:<id>` (jamais une URL d'établissement).
+     * Réf absente/invalide ou échec = null, l'UI affiche les initiales.
      */
     fun fetchPhoto(profile: UserProfile, cb: (Bitmap?) -> Unit) {
         Thread {
@@ -92,11 +88,10 @@ class ProfileRepository(
         private const val PHOTO_MAX_PX = 512
 
         /**
-          * Payload local (`mePayload`) -> profil. `user` absent ou null =
-          * établissement sans infos publiées : null (écran vide), jamais de
-          * profil d'exemple. Toute valeur non conforme au contrat fait échouer
-          * isValid.
-          */
+         * `user` absent ou null = établissement sans infos publiées : null
+         * (écran vide), jamais de profil d'exemple. Une valeur hors contrat
+         * fait échouer `isValid`.
+         */
         fun parse(body: String): UserProfile? {
             return try {
                 val root = org.json.JSONObject(body)
@@ -136,8 +131,7 @@ class ProfileRepository(
         }
 
         /**
-         * Décode les octets lus par le client local. Bornes : taille
-         * maximale + rééchantillonnage, sinon null (avatar de repli).
+         * Bornes taille + rééchantillonnage ; sinon null (avatar de repli).
          */
         fun decodePhoto(bytes: ByteArray): Bitmap? {
             if (bytes.isEmpty() || bytes.size > PHOTO_MAX_BYTES) return null

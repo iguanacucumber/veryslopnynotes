@@ -3,10 +3,6 @@ import { Card, Divider } from "../../ui/components";
 import { IconBook, IconSparkles } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
 
-/**
- * Carte d'état de l'assistant et de ses sources. Elle affiche seulement
- * `configured`, que la carte de clé possède : rien n'est partagé de plus.
- */
 export function AssistantOverviewCard({ configured }: { configured: boolean }) {
   const { storageUnavailable } = useApp();
   const navigate = useViewNavigate();

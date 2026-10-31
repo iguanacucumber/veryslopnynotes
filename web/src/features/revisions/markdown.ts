@@ -1,20 +1,8 @@
-// Parseur markdown borné des fiches de révision (#630).
-//
-// Pourquoi maison plutôt qu'une bibliothèque : le corps d'une fiche est du
-// contenu de modèle, donc NON FIABLE. Un parseur markdown qui accepte le HTML
-// brut obligerait à assainir ensuite ; ici le HTML n'est jamais interprété :
-// tout ce qui n'est pas explicitement reconnu reste du texte. Le rendu React
-// échappe déjà ce texte : aucun rendu HTML brut n'est possible.
-//
-// Sous-ensemble volontairement petit : titres, paragraphes, gras, italique,
-// listes ordonnées/non ordonnées, citations, code inline, tableaux simples.
-// Les liens sont désactivés (le libellé reste du texte, l'URL est jetée).
-//
-// Bornes : taille, nombre de lignes, profondeur des citations, profondeur
-// d'emboîtement inline, nombre de nœuds. Un document qui dépasse le budget de
-// nœuds retombe en texte plat : jamais de rendu partiel ni de boucle ouverte.
-// Un markdown invalide (tableau sans séparateur, marqueur non fermé) reste du
-// texte, marqueurs compris.
+// Parseur markdown borné des fiches de révision. Le corps vient d'un modèle,
+// donc NON FIABLE : le HTML n'est jamais interprété, tout ce qui n'est pas
+// reconnu reste du texte que React échappe. Les liens sont désactivés (URL
+// jetée). Dépassement du budget de nœuds = repli en texte plat, jamais de rendu
+// partiel ni de boucle ouverte.
 
 export const MAX_MARKDOWN_CHARS = 20_000;
 export const MAX_MARKDOWN_LINES = 2_000;
@@ -44,7 +32,6 @@ type ListMarker = { ordered: boolean; start: number; text: string };
 
 const ESCAPABLE = "\\`*_{}[]()#+-.!|>";
 
-/** Découpe une ligne de tableau simple. `null` si elle n'a aucun `|`. */
 function tableCells(line: string): string[] | null {
   const trimmed = line.trim();
   if (!trimmed.includes("|")) return null;
@@ -56,7 +43,7 @@ function tableCells(line: string): string[] | null {
 }
 
 /** Tableau seulement si l'en-tête et le séparateur ont le même nombre de
- *  cellules, dans les bornes. Sinon la zone reste un paragraphe (texte). */
+ *  cellules ; sinon la zone reste un paragraphe. */
 function tableAt(
   lines: string[],
   index: number,
@@ -127,7 +114,7 @@ function parseInline(source: string, depth = 0): InlineNode[] {
   while (i < source.length) {
     const char = source[i]!;
 
-    // Échappement markdown : le caractère suivant est littéral.
+    // Échappement markdown.
     if (char === "\\" && i + 1 < source.length && ESCAPABLE.includes(source[i + 1]!)) {
       text += source[i + 1]!;
       i += 2;
@@ -280,7 +267,6 @@ function parseBlocks(source: string): MarkdownBlock[] {
   return blocks;
 }
 
-/** Compte les nœuds AST (bloc, inline, item de liste, cellule de tableau). */
 export function countMarkdownNodes(blocks: MarkdownBlock[]): number {
   let count = 0;
   const countInline = (nodes: InlineNode[]) => {
@@ -320,10 +306,7 @@ export function countMarkdownNodes(blocks: MarkdownBlock[]): number {
   return count;
 }
 
-/**
- * Parse un corps de fiche en blocs markdown sûrs. Le résultat ne contient
- * jamais de HTML : le rendu React échappe le texte.
- */
+/** Résultat sans HTML : le rendu React échappe le texte. */
 export function parseMarkdown(markdown: string): MarkdownBlock[] {
   // Un corps Windows (CRLF) ou vieux Mac (CR) rendrait ses marqueurs : les
   // expressions sont ancrées en `$` et `.` ne franchit pas `\r`. Normalisation
@@ -331,8 +314,7 @@ export function parseMarkdown(markdown: string): MarkdownBlock[] {
   const source = boundSource(markdown.replace(/\r\n?/g, "\n"));
   const blocks = parseBlocks(source);
   if (countMarkdownNodes(blocks) <= MAX_MARKDOWN_NODES) return blocks;
-  // Trop de nœuds : repli en texte plat, borné par la taille source. Mieux
-  // vaut une fiche entière en texte qu'un rendu partiel ou une structure
-  // pathologique qui fait exploser le DOM.
+  // Trop de nœuds : texte plat, borné par la taille source, plutôt qu'un rendu
+  // partiel ou une structure pathologique qui fait exploser le DOM.
   return [{ type: "paragraph", children: [{ type: "text", text: source }] }];
 }

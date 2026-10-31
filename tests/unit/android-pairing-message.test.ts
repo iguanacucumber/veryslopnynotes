@@ -1,17 +1,6 @@
-// #396 : un message d'exception brut peut nommer l'hôte de l'établissement.
-//
-// L'appairage traverse la frontière native/JS : le pont ne transmet que le
-// CODE d'échec et rend une phrase bornée CHOISIE PAR LUI
-// (`android/app/.../PairingMessages.kt`). Le message brut de la couche `data`
-// (une `IOException` peut dire « Failed to connect to <hôte>:<port> ») ne
-// franchit plus cette frontière (I10, ADR-004).
-//
-// Ce test ne Miroite pas la logique : il COMPILE la VRAIE source de
-// production et la pilote via `agents/runtime/kotlin-parity/PairingMessagesParityMain.kt`.
-// Les assertions portent donc sur du code exécuté.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Un message d'exception brut peut nommer l'hôte de l'établissement : le pont
+// ne transmet que le CODE d'échec et une phrase choisie par lui (I10).
+// La VRAIE source est compilée et pilotée ; outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -43,8 +32,7 @@ function dataCodes(): string[] {
   return [...new Set(codes)].sort();
 }
 
-// Hôte et message FACTICES (`.test` est réservé, cf. RFC 2606) : ils servent
-// seulement à prouver qu'un texte d'hôte ne ressort pas du pont.
+// Hôte et message FACTICES (`.test` réservé, RFC 2606) : un texte d'hôte ne doit pas ressortir.
 const FAKE_HOST = "etab.exemple.test";
 const RAW_EXCEPTION = `Failed to connect to ${FAKE_HOST}:8080`;
 

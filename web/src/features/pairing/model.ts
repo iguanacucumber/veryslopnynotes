@@ -1,7 +1,6 @@
-// Modèle de l'appairage (#120/#299) : validation du QR scanné, hôte affichable
-// et traduction des codes d'échec en phrases actionnables. Le QR et le PIN sont
-// des secrets de session : rien ici ne les écrit, ne les journalise ni ne les
-// rend en entier.
+// Appairage : validation du QR scanné, hôte affichable et traduction des codes
+// d'échec en phrases actionnables. Le QR et le PIN sont des secrets de session :
+// rien ici ne les écrit, ne les journalise ni ne les rend en entier.
 
 export const PIN_MAX_CHARS = 64;
 const MAX_QR_FIELD_CHARS = 1024;
@@ -21,11 +20,8 @@ function bounded(value: string, max: number): boolean {
   return value !== "" && value.length <= max;
 }
 
-/**
- * Hôte Seul de l'adresse portée par le QR. On ne rend jamais `login`, `jeton`,
- * chemin, query ni identifiants : l'écran n'a besoin que du domaine pour que
- * l'utilisateur reconnaisse son établissement. `""` = adresse illisible.
- */
+/** On ne rend jamais `login`, `jeton`, chemin, query ni identifiants : seul le
+ *  domaine. `""` = adresse illisible. */
 export function qrHost(url: string): string {
   try {
     const parsed = new URL(url.trim());
@@ -36,7 +32,6 @@ export function qrHost(url: string): string {
   }
 }
 
-/** QR renvoyé par le natif : trois chaînes bornées et une adresse lisible. */
 export function validateScannedQr(value: unknown): SchoolQr | null {
   if (!isRecord(value)) return null;
   const login = typeof value["login"] === "string" ? value["login"].trim() : "";
@@ -59,13 +54,8 @@ export function pinError(raw: string): string | null {
   return null;
 }
 
-/**
- * Message d'un échec de la connexion à l'établissement de DÉMONSTRATION.
- *
- * Même règle que `pairErrorMessage` : le geste à faire, jamais un diagnostic
- * brut. Le QR n'est pas en jeu ici (la démo n'en demande aucun) — on ne dit
- * donc jamais « rescane ».
- */
+/** Le geste à faire, jamais un diagnostic brut ; la démo ne demande aucun QR,
+ *  donc jamais « rescane ». */
 export function demoErrorMessage(code: string | undefined): string {
   switch ((code ?? "").toLowerCase()) {
     case "network":
@@ -81,7 +71,6 @@ export function demoErrorMessage(code: string | undefined): string {
   }
 }
 
-/** Message d'un scan qui n'a rien rendu (annulation, caméra, code illisible). */
 export function scanErrorMessage(cancelled: boolean): string {
   if (cancelled) return "Scan annulé : aucun QR lu. Tu peux rescanner quand tu veux.";
   return "Aucun QR lu (caméra refusée ou code illisible) : rescane le code affiché par ton application.";

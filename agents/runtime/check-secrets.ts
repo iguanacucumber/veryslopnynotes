@@ -1,10 +1,7 @@
-// Scan anti-secrets : échoue si pattern secret dans fichiers trackés.
-// private-key — vraie clé PEM (commentaires inclus volontairement, pas de FP à traiter).
-// openrouter-key — sk-or-v1-... ; FP: masqués xxx courts ignorés par {8,}.
-// env-assign — KEY=valeur réelle ; FP: .env.example ignoré, $VAR ignoré, placeholders (your/example/xxx/</TODO/dummy) ignorés. ponytail: plafond regex, upgrade gitleaks en CI.
-// storageState — token/session Playwright, jamais commité.
-// Les motifs vivent dans `secret-patterns.ts` : le jeu strict pour le dépôt, un
-// jeu élargi (preuve au lieu d'indice) pour le contenu vendorisé `.agents/`.
+// Scan anti-secrets : échoue si un motif secret apparaît dans les fichiers
+// trackés. Les motifs vivent dans `secret-patterns.ts` (jeu strict pour le
+// dépôt, jeu élargi pour le contenu vendorisé `.agents/`).
+// ponytail: plafond regex, upgrade gitleaks en CI.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join, relative, resolve } from "node:path";
@@ -15,15 +12,14 @@ import { matchPatterns, patternsFor } from "./secret-patterns";
 const ROOT = process.argv[2] ? resolve(process.argv[2]) : join(import.meta.dir, "..", "..");
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage", ".bun-cache"]);
 const SKIP_FILES = new Set(["bun.lock", "bun.lockb", "package-lock.json", "check-secrets.ts", "secret-patterns.ts"]);
-// Chemins locaux jamais commités (gitignorés) : pas de scan contenu.
-// .env.local untracked requis pour intégration -> PASS (issue #85).
+// Chemins locaux gitignorés : pas de scan contenu (.env.local untracked est
+// requis pour l'intégration).
 const SKIP_PATH_PREFIXES = ["server/data/", "playwright/.auth/"];
 
 let failures: string[] = [];
 
-// Liste fichiers trackés git si dispo, fallback readdir brut sinon.
-// Tout fichier untracked (.env.local, server/data, playwright/.auth)
-// est ignoré : secrets locaux ne bloquent pas make check (#85).
+// Liste des fichiers trackés si git est dispo, readdir brut sinon. Un fichier
+// untracked est local : ses secrets ne bloquent pas `make check`.
 function trackedSet(): Set<string> | null {
   try {
     const out = execSync("git ls-files -z", { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] });
@@ -63,14 +59,12 @@ function walk(dir: string) {
     if (SKIP_FILES.has(e) || e === ".env.example") continue;
     const rel = relative(ROOT, p).replace(/\\/g, "/");
     // Fichiers .env* : FAIL uniquement si trackés git, sinon skip contenu.
-    // .env.local untracked requis pour intégration -> PASS (#85).
     if (/\.env(\.|$)/.test(e) || e.endsWith(".env") || e.endsWith(".env.local")) {
       const tracked = TRACKED ? TRACKED.has(rel) : true;
       if (tracked) failures.push(`${rel}: fichier .env* tracké (interdit sauf .env.example)`);
       continue;
     }
-    // Hors git (fallback) : scan contenu quand même ci-dessous.
-    // Sous git : seuls fichiers trackés scannés (untracked = locaux, skip).
+    // Hors git (fallback) : scan contenu ; sous git : seuls les trackés.
     if (TRACKED && !TRACKED.has(rel)) continue;
     let content: string;
     try {

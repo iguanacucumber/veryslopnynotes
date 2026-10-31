@@ -1,21 +1,16 @@
 package fr.veryslopnynotes.core
 
-// Corrigé de devoir : génération sur l'appareil (ex-POST /v1/homework/generate,
-// route supprimée en #210). Miroir de shared/contracts/api.ts
-// (HomeworkGenerateResponse) et de l'ex-module server/ai/homework.ts (supprimé
-// en #210 : ce port est la source de vérité).
+// Corrigé de devoir : génération sur l'appareil. Miroir de shared/contracts/api.ts
+// (HomeworkGenerateResponse).
 //
 // Règles qui commandent ce fichier :
 // - le dépôt ne détient AUCUN credential LLM. La clé vient du store chiffré et
-//   part dans le CORPS de chaque requête (`apiKey`, `writeOnly`) ; elle n'est ni
-//   loggée, ni mise en URL, ni mémorisée par le dépôt (relue à chaque appel,
-//   comme le jeton de session) ;
+//   part dans le CORPS de chaque requête ; elle n'est ni loggée, ni mise en URL,
+//   ni mémorisée (relue à chaque appel) ;
 // - `sources` ne peut pas être vide : sans source la génération répond `refused`
-//   SANS appeler le modèle (ex-server/ai/homework.ts). Une source est donc un
-//   extrait du devoir lui-même, étiqueté — l'étiquette sert de citation, le
-//   serveur refuse toute citation absente des étiquettes fournies ;
-// - la réponse est de la DONNÉE : affichée par Text() seul, jamais WebView, et
-//   les stages ne sont jamais des instructions exécutables (I6).
+//   SANS appeler le modèle. Une source est un extrait du devoir lui-même,
+//   étiqueté ; toute citation absente des étiquettes fournies est refusée ;
+// - la réponse est de la DONNÉE, affichée par Text() seul (I6).
 data class HomeworkSource(
     val label: String,
     val text: String,
@@ -28,7 +23,6 @@ data class HomeworkSource(
     }
 }
 
-/** Sortie validée du serveur : un corrigé sourcé, ou un refus motive. */
 sealed class HomeworkOutcome {
     data class Answer(
         val answer: String,
@@ -51,40 +45,32 @@ object Homework {
     const val MAX_API_KEY_CHARS = 512
 
     /**
-     * Budget de l'enveloppe JSON autour du corrige (cles, echappements,
-     * etapes, sources) : le corrige ne peut pas occuper TOUTE la sortie.
-     *
-     * Avant #411, `MAX_ANSWER_CHARS` valait 8 000 comme le plafond de sortie
-     * (8 000) : la reponse JSON du fournisseur (corrige + enveloppe) ne
-     * pouvait donc JAMAIS tenir dans la garde — la borne etait inatteignable
-     * par construction, et le corrige maximal etait mort-né.
+     * Budget de l'enveloppe JSON autour du corrigé (clés, échappements, étapes,
+     * sources) : le corrigé ne peut pas occuper TOUTE la sortie.
      */
     const val JSON_ENVELOPE_RESERVE_CHARS = 4000
 
     /**
-     * Le corrige : le plafond I5 [MAX_OUTPUT_CHARS] moins l'enveloppe JSON
-     * (8 000 caracteres). Derive, jamais recopie : la garde et le contrat
-     * restent coherents quand le plafond de sortie bouge.
+     * Le corrigé : le plafond I5 [MAX_OUTPUT_CHARS] moins l'enveloppe JSON.
+     * Dérivé, jamais recopié.
      */
     const val MAX_ANSWER_CHARS = MAX_OUTPUT_CHARS - JSON_ENVELOPE_RESERVE_CHARS
 
     /**
-     * Affichage d'un corrigé (#629) : miroir de `HOMEWORK_MAX_STEPS` /
-     * `HOMEWORK_MAX_STEP_CHARS` (`shared/contracts/api.ts`). Bornes de RENDU,
-     * pas de validation : le pont tronque pour l'UI, il ne jette pas un
-     * corrigé valide dont le modèle a rendu trop d'étapes.
+     * Affichage d'un corrigé : miroir de `HOMEWORK_MAX_STEPS` /
+     * `HOMEWORK_MAX_STEP_CHARS`. Bornes de RENDU : le pont tronque pour l'UI,
+     * il ne jette pas un corrigé valide.
      */
     const val MAX_STEPS = 12
     const val MAX_STEP_CHARS = 400
     const val REFUSAL_SOURCES_INSUFFICIENT = "sources_insuffisantes"
 
-    /** Le refus déterministe du serveur quand aucune source n'est fournie. */
     const val SOURCES_REQUIRED_MESSAGE =
         "Aucune source : le devoir n'a pas de contenu exploitable."
 
     /**
      * Bornes de la requête, AVANT tout envoi : le serveur refuse (400) ce que
-     * l'app laisse dépasser, donc inutile de payer un aller-retour pour ça.
+     * l'app laisse dépasser.
      */
     fun isRequestValid(
         question: String,
@@ -101,9 +87,8 @@ object Homework {
     }
 
     /**
-     * Étiquettes uniques, dans l'ordre, ≤ [MAX_SOURCES] : le serveur n'autorise
-     * que les citations qui reprennent EXACTEMENT une étiquette fournie. Deux
-     * sources de même libellé collapsées évitent une citation ambiguë.
+     * Étiquettes uniques, dans l'ordre, ≤ [MAX_SOURCES] : seules les citations
+     * reprenant EXACTEMENT une étiquette fournie sont autorisées.
      */
     fun uniqueLabels(sources: List<HomeworkSource>): List<String> =
         sources.map { it.label.trim() }.filter { it.isNotEmpty() }.distinct().take(MAX_SOURCES)

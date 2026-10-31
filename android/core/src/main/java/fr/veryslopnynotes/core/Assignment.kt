@@ -1,12 +1,10 @@
 package fr.veryslopnynotes.core
 
-// Devoir enrichi #75 : miroir de shared/contracts/models.ts Assignment.
+// Devoir enrichi : miroir de shared/contracts/models.ts Assignment.
 // description/contenu de cours = texte enseignant, DONNÉE bornée affichée via
-// Text() seul (jamais WebView, jamais Html, jamais instruction — I6).
-// Pièces jointes : `ref` OPAQUE résolue par l'identifiant de la pièce
-// (jamais une URL Pronote : règle d'or média, I1).
-// ponytail: pas de lib date — la date affichée vient de `DateFr.kt`
-// (`dayLabelFr`), qui lit l'ISO avec `java.time` (minSdk 26).
+// Text() seul, jamais instruction (I6). Pièces jointes : `ref` OPAQUE, jamais
+// une URL Pronote (I1).
+// ponytail: pas de lib date — l'affichage lit l'ISO via `DateFr.kt`.
 data class AssignmentAttachment(
     val id: String,
     val label: String,
@@ -19,11 +17,8 @@ data class AssignmentAttachment(
         /**
          * Schéma d'une `ref` de devoir : clé interne `homework:<devoir>:<piece>:<id>`.
          *
-         * MÊME forme que le parseur web (`web/src/features/tasks/assignments.ts`)
-         * et que le contrat TS (`shared/contracts/models.ts`) : une `ref` hors
-         * schéma fait PERDRE le devoir ENTIER côté web (titre, consigne,
-         * échéance), pas seulement sa pièce jointe. On n'accepte donc que ce
-         * que les deux autres lireurs savent lire.
+         * MÊME forme que le parseur web et le contrat TS : une `ref` hors schéma
+         * fait PERDRE le devoir ENTIER côté web, pas seulement sa pièce jointe.
          */
         private val HOMEWORK_REF = Regex("^homework:[A-Za-z0-9._:-]+$")
 
@@ -31,8 +26,7 @@ data class AssignmentAttachment(
         private val CONTROL_CHARS = Regex("[\\u0000-\\u001f\\u007f]")
 
         // Formes d'URL INTERDITES dans une ref : référence interne uniquement.
-        // Sans distinction de casse (`DATA:` comme `data:`), comme le contrat.
-        // Le schéma `homework:` les exclut déjà : garde-fou explicite (I1).
+        // Sans distinction de casse ; garde-fou explicite (I1).
         private val ABSOLUTE_REF = Regex("://|^//|data:|\\\\", RegexOption.IGNORE_CASE)
 
         fun isValid(a: AssignmentAttachment): Boolean =
@@ -40,7 +34,6 @@ data class AssignmentAttachment(
                 a.label.isNotBlank() && a.label.length <= MAX_LABEL &&
                 isRefValid(a.ref)
 
-        /** Une `ref` lisible par les deux autres lecteurs (web + contrat TS). */
         private fun isRefValid(ref: String): Boolean =
             ref.isNotBlank() && ref.length <= MAX_REF &&
                 !CONTROL_CHARS.containsMatchIn(ref) &&
@@ -50,24 +43,18 @@ data class AssignmentAttachment(
         /**
          * `ref` d'une pièce jointe : `homework:<devoir>:file:<piece>:<id>`.
          *
-         * L'identifiant Pronote est ASSAINI, jamais refusé : un identifiant
-         * exotique (« 12 34 ») produirait une `ref` hors schéma, et le refus
-         * ferait disparaître le devoir entier côté web — on perdrait la pièce
-         * jointe, le titre et l'échéance pour un simple espace.
+         * L'identifiant Pronote est ASSAINI, jamais refusé : une `ref` hors
+         * schéma ferait disparaître le devoir entier côté web.
          *
-         * ponytail: la `ref` est une CLÉ (la pièce est résolue par son `id`),
-         * pas une URL : la sanitisation n'a donc pas à être réversible.
+         * ponytail: la `ref` est une CLÉ, pas une URL : la sanitisation n'a pas
+         * à être réversible.
          */
         fun homeworkRef(homeworkIndex: Int, fileIndex: Int, fileId: String): String? =
             refOf("homework:$homeworkIndex:file:$fileIndex:", fileId)
 
         /**
          * `ref` d'une pièce jointe de COURS : `homework:<devoir>:lesson:<cours>:file:<piece>:<id>`.
-         *
-         * Même préfixe `homework:` que les pièces du devoir pour rester lisible
-         * par les contrats existants (web + TS), mais le segment `lesson:`
-         * distingue un fichier de cours d'un fichier de devoir : deux pièces
-         * du même devoir ne peuvent pas partager la même `ref`.
+         * Le segment `lesson:` distingue un fichier de cours d'un fichier de devoir.
          */
         fun lessonAttachmentRef(
             homeworkIndex: Int,
@@ -86,7 +73,6 @@ data class AssignmentAttachment(
             return if (isRefValid(ref)) ref else null
         }
 
-        /** Identifiant rendu conforme au schéma : tout caractère exotique devient `_`. */
         private fun sanitizeRefPart(raw: String): String {
             val text = raw.trim()
             val out = StringBuilder()
@@ -99,7 +85,6 @@ data class AssignmentAttachment(
             return out.toString()
         }
 
-        /** Caractères autorisés dans la partie `id` d'une `ref` (hors `homework:`). */
         private fun isRefIdChar(cp: Int): Boolean =
             (cp in 'a'.code..'z'.code) ||
                 (cp in 'A'.code..'Z'.code) ||
@@ -118,12 +103,9 @@ data class AssignmentLessonContent(
         const val MAX_TITLE = 200
 
         /**
-         * Borne de PAYLOAD du cours rattaché (#628) : 8 000 caractères, la même
-         * que le manuel. Avant, le cours était coupé à 500 — le contexte IA ne
-         * voyait donc qu'un fragment, quelle que soit la place disponible. Le
-         * prompt garde son budget propre (2 000 par source) et SIGNALE la coupe
-         * (`AiContextSource.truncated`) ; cette borne-ci évite seulement de
-         * garder un cours géant en cache.
+         * Borne de PAYLOAD du cours rattaché : 8 000 caractères, la même que le
+         * manuel. Le prompt garde son budget propre (2 000 par source) et SIGNALE
+         * la coupe ; cette borne évite seulement de garder un cours géant en cache.
          */
         const val MAX_EXCERPT = 8000
 
@@ -148,9 +130,8 @@ data class Assignment(
     val periodId: String? = null,
     val weekId: String? = null,
     /**
-     * TOUS les cours rattachés à la même matière + jour (#631). `lessonContent`
-     * reste le premier, pour les lecteurs qui ne connaissent que le champ
-     * singulier (web, caches antérieurs).
+     * TOUS les cours rattachés à la même matière + jour. `lessonContent` reste le
+     * premier, pour les lecteurs qui ne connaissent que le champ singulier.
      */
     val lessonContents: List<AssignmentLessonContent> = emptyList(),
 ) {
@@ -180,11 +161,5 @@ data class Assignment(
             if (a.lessonContents.any { !AssignmentLessonContent.isValid(it) }) return false
             return true
         }
-
-        // #147 : le badge « lundi 05/10 » (dérivé de `dueDate`, jamais un champ
-        // du contrat) est parti dans `DateFr.kt` — `dayLabelFr`, l'unique
-        // implémentation des dates françaises, et `isoDayKey` pour la clé de
-        // regroupement des devoirs par jour. Les deux tables de jour qui
-        // coexistaient ici et dans l'écran Cantine ont disparu.
     }
 }

@@ -1,13 +1,12 @@
 package fr.veryslopnynotes.core
 
 /**
- * Compteurs de présence par période (#77, port Kotlin #203).
+ * Compteurs de présence par période.
  *
- * Logique pure de vie scolaire, portée côté Android :
- * aucun Pronote, aucun HTTP, aucun SQLite (I3). Les compteurs sont DÉRIVÉS des
- * absences publiées (kind + durationMinutes) — aucune valeur devinée, aucun
- * effet métier ici : la détection de nouvelle absence se fait sur ces données
- * structurées, jamais sur une sortie libre LLM (I7).
+ * Logique pure de vie scolaire : aucun Pronote, aucun HTTP, aucun SQLite (I3).
+ * Les compteurs sont DÉRIVÉS des absences publiées (kind + durationMinutes) —
+ * aucune valeur devinée ; la détection de nouvelle absence se fait sur ces
+ * données structurées (I7).
  */
 
 const val ABSENCE_KIND_ABSENCE = "absence"
@@ -33,7 +32,6 @@ data class AbsenceRecord(
     val justified: Boolean? = null,
 )
 
-/** Miroir de `isAbsenceRecord` : c'est lui qui décide si un record compte. */
 fun isAbsenceRecord(r: AbsenceRecord): Boolean {
     if (r.id.trim().isEmpty() || r.accountId.trim().isEmpty()) return false
     if (!ABSENCE_KINDS.contains(r.kind)) return false

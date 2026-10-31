@@ -2,11 +2,9 @@ package fr.veryslopnynotes.pronote
 
 import java.time.LocalDateTime
 
-// Messagerie : destinataire, message et discussion (`dataClasses.js`).
-
 /**
- * Destinataire (`type` = `teacher` si `G == 3` sinon `staff` ; `functions` =
- * `listeRessources` ou `[fonction.V.L]` ; `_type` = discriminant brut).
+ * `type` = `teacher` si `G == 3` sinon `staff` ; `functions` =
+ * `listeRessources` ou `[fonction.V.L]`.
  */
 class Recipient(_client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
     val _type: Double = r(::numOf, listOf("G"))
@@ -21,8 +19,7 @@ class Recipient(_client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
 }
 
 /**
- * Message (`author` = `null` si `emetteur`, sinon `public_gauche` ; `contenu`
- * dés-HTML-isé ssi `estHTML` ; `date` = alias obsolète de `created`).
+ * `author` = `null` si `emetteur` ; `date` est un alias obsolète de `created`.
  */
 class Message(private val client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
     private val possession: String = r(::strOf, listOf("possessionMessage", "V", "N"))
@@ -41,13 +38,13 @@ class Message(private val client: PronoteClientLike, json: JVal?) : PronoteObjec
     }
     var replyingTo: Message? = null
 
-    /** Destinataires (`SaisiePublicMessage` 131 ; réseau bloquant). */
+    /** Destinataires (`SaisiePublicMessage` 131). */
     fun recipients(): List<String?> {
         val resp = client.post("SaisiePublicMessage", 131.0, mapOf("message" to jobj("N" to JVal.Str(id))))
         return dataList(resp, "listeDest").map { rawLeaf((it as? JVal.Obj)?.fields?.get("L")) }
     }
 
-    /** Réponse au message (`DiscussionClosed` si les boutons sont vides ; réseau bloquant). */
+    /** `DiscussionClosed` si les boutons sont vides. */
     fun reply(message: String) {
         val resp = client.post(
             "ListeMessages", 131.0,
@@ -71,9 +68,8 @@ class Message(private val client: PronoteClientLike, json: JVal?) : PronoteObjec
 }
 
 /**
- * Discussion (`labels` : chaque `listeEtiquettes.V[i].N` traverse le dict
- * `callerLabels` puis `{4: Drafts, 5: Trash}`, `null` si inconnu ; `close` =
- * alias obsolète de `closed`, `replyable` toujours `true`).
+ * Chaque `listeEtiquettes.V[i].N` traverse le dict `callerLabels` puis
+ * `{4: Drafts, 5: Trash}`, `null` si inconnu ; `replyable` toujours `true`.
  */
 class Discussion(private val client: PronoteClientLike, json: JVal?, callerLabels: Map<String, String>) :
     PronoteObject(json) {
@@ -102,7 +98,7 @@ class Discussion(private val client: PronoteClientLike, json: JVal?, callerLabel
 
     private var dateCache: LocalDateTime? = null
 
-    /** Participants (`SaisiePublicMessage` 131 ; réseau bloquant). */
+    /** Participants (`SaisiePublicMessage` 131). */
     fun participants(): List<String?> {
         val resp = client.post(
             "SaisiePublicMessage", 131.0,
@@ -116,8 +112,8 @@ class Discussion(private val client: PronoteClientLike, json: JVal?, callerLabel
     }
 
     /**
-     * Messages chaînés (`replyingTo` en deux passes, triés par `created` ;
-     * `messageSource` absent = `null`, là où le TS jetterait).
+     * `replyingTo` en deux passes, triés par `created` ; `messageSource` absent
+     * = `null`, là où le TS jetterait.
      */
     fun messages(): List<Message> {
         val resp = client.post(
@@ -142,7 +138,7 @@ class Discussion(private val client: PronoteClientLike, json: JVal?, callerLabel
         return byId.values.sortedBy { it.created }
     }
 
-    /** Date d'ouverture (alias du premier message ; mise en cache ; réseau bloquant). */
+    /** Date du premier message ; mise en cache. */
     fun date(): LocalDateTime {
         dateCache?.let { return it }
         val d = messages().first().date
@@ -150,7 +146,7 @@ class Discussion(private val client: PronoteClientLike, json: JVal?, callerLabel
         return d
     }
 
-    /** Marque lu/non-lu (`SaisieMessage` 131 `pourLu` ; réseau bloquant). */
+    /** Marque lu/non-lu (`SaisieMessage` 131 `pourLu`). */
     fun markAs(read: Boolean) {
         client.post(
             "SaisieMessage", 131.0,
@@ -162,7 +158,7 @@ class Discussion(private val client: PronoteClientLike, json: JVal?, callerLabel
         )
     }
 
-    /** Réponse (`DiscussionClosed` si `closed` ; réseau bloquant). */
+    /** `DiscussionClosed` si `closed`. */
     fun reply(message: String) {
         if (closed) throw DiscussionClosed("Cannot reply to discussion")
         val resp = client.post(
@@ -181,7 +177,7 @@ class Discussion(private val client: PronoteClientLike, json: JVal?, callerLabel
         client.post("SaisieMessage", 131.0, payload)
     }
 
-    /** Corbeille (`SaisieMessage` 131 `corbeille` ; réseau bloquant). */
+    /** Corbeille (`SaisieMessage` 131 `corbeille`). */
     fun delete() {
         client.post(
             "SaisieMessage", 131.0,

@@ -1,12 +1,7 @@
-// Limitation de débit de l'établissement (`G=25` / HTTP 429).
-//
-// Le vrai `ClientBase.sendWithRefresh` et la vraie `RateLimitGate` sont
-// EXÉCUTÉS (pas de miroir) : le transport est un stub qui compte les requêtes.
-// Le test prouve que la boucle « G=25 -> refresh -> login -> G=25 » est cassée,
-// que la fenêtre de calme expire, et qu'une erreur générique rafraîchit encore.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT (jamais un faux vert) ; un
-// échec de compilation, lui, est un défaut (le test rougit).
+// Limitation de débit de l'établissement (`G=25` / HTTP 429) : la boucle
+// « G=25 → refresh → login → G=25 » est cassée et la fenêtre de calme expire.
+// Le vrai `ClientBase.sendWithRefresh` et `RateLimitGate` sont EXÉCUTÉS.
+// Outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -71,8 +66,7 @@ describe("porte de limitation de débit", () => {
 
   test.skipIf(skip)("G=25 ne déclenche AUCUN refresh et la requête suivante repart sans réseau", async () => {
     const r = await run<ClientResult>("noRefreshOnRateLimit");
-    // Le serveur a refusé le débit : un refresh = un login de plus, donc
-    // encore plus de limitation. UN envoi, ZÉRO refresh.
+    // Un refresh = un login de plus : UN envoi, ZÉRO refresh.
     expect(r.sends).toBe(1);
     expect(r.refreshes).toBe(0);
     expect(r.first).toBe("RateLimitedError");
@@ -84,8 +78,7 @@ describe("porte de limitation de débit", () => {
 
   test.skipIf(skip)("un rate-limit PENDANT le refresh arme la porte", async () => {
     const r = await run<ClientResult>("refreshRateLimited");
-    // Une erreur générique déclenche UN refresh ; ce refresh tombe sur la
-    // limite. L'erreur remonte typée, et rien ne repart ensuite.
+    // Un refresh sur la limite remonte typée, et rien ne repart ensuite.
     expect(r.sends).toBe(1);
     expect(r.refreshes).toBe(1);
     expect(r.first).toBe("RateLimitedError");
@@ -120,8 +113,7 @@ describe("porte de limitation de débit", () => {
     // Pas de purge de cache ni de retour à l'appairage : attendre suffit.
     expect(r["rateLimitedSession"]).toBe(false);
     expect(r["sessionExpired"]).toBe(true);
-    // Une erreur générique ou de parsing reste avalée par le repli tolérant :
-    // un trimestre partiel reste affichable.
+    // Une erreur générique ou de parsing reste avalée : un trimestre partiel reste affichable.
     expect(r["generic"]).toBe(false);
     expect(r["parsing"]).toBe(false);
     // Un objet périmé (G=22) n'est pas une session morte (#485).

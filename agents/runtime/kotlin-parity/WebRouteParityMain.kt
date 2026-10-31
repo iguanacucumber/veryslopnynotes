@@ -1,13 +1,9 @@
-// WebRouteParityMain.kt — pilote JSON de la route de l'interface web (#400).
+// WebRouteParityMain.kt — pilote JSON de la route de l'interface web.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-web-route.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile la VRAIE source de
-// production `fr.veryslopnynotes.app.WebRouteState` (logique pure : ni Android
-// ni réseau) et la pilote ici : les assertions portent donc sur du code
-// EXÉCUTÉ, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-web-route.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
+//
 //   - `{"op":"route","url":"…#/grades"}` → `{"path":"/grades"}` (ou `null`)
 //   - `{"op":"state","path":"/grades"}`  → `{"path":"/grades"}` (ou `null`)
 //   - `{"op":"routes"}`                  → `{"routes":["/","/alerts",…]}`

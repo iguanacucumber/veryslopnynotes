@@ -1,14 +1,8 @@
-// ProfileParityMain.kt — pilote JSON du validateur de profil (#420).
+// ProfileParityMain.kt — pilote JSON du validateur de profil.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-profile-parity.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile le VRAI fichier de
-// production (`core/UserProfile.kt`) et le pilote ici : la borne comparée à
-// celle du contrat TS est celle du code EXÉCUTÉ, pas un miroir réécrit.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-profile-parity.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE (op inconnue) sont préfixées `pilote: ` et refusées par le
-// test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.core
 
 import fr.veryslopnynotes.pronote.JVal

@@ -6,11 +6,7 @@ import { Card } from "../../ui/components";
 import { actionMessage } from "./action";
 import { validateServerHost } from "./model";
 
-/**
- * Carte Avancé : adresse du scraper. L'instantané lu par le conteneur amorce
- * le champ, exactement comme l'effet unique d'avant ; l'enregistrement reste
- * local à la carte.
- */
+/** L'instantané du conteneur amorce le champ ; l'enregistrement reste local à la carte. */
 export function ServerCard({ snapshot, loading }: { snapshot: SettingsSnapshot | null; loading: boolean }) {
   const { notify } = useApp();
   const [host, setHost] = useState("");

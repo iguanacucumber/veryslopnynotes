@@ -1,19 +1,6 @@
-// Les PROCESSUS du harnais de parité Kotlin : c'est là que les fuites
-// vivaient. Trois défauts réels, trois preuves.
-//
-//   1. ORPHELIN. `kotlinc` est un script bash qui lance `java` comme ENFANT.
-//      Tuer le script seul laissait le `java` compiler à 100 % CPU EN
-//      ARRIÈRE-PLAN : c'est exactement ce que l'on voyait dans `ps`.
-//   2. BLOCAGE. `Bun.spawnSync` bloquait le worker : un compilateur coincé
-//      figeait le test jusqu'à la fin des temps, sans plafond de durée.
-//   3. SATURATION. `bun test --parallel` lance un worker par fichier et il y a
-//      une douzaine de fichiers de parité : autant de JVM `kotlinc` d'un coup,
-//      la machine à 100 % CPU.
-//
-// Le harnais est testé AVEC des FAUX binaires (`KOTLINC_BIN`, `KOTLIN_JAVA_BIN`) :
-// pas de JVM réelle, pas de cache pollué, comportement déterministe. Les faux
-// reproduisent la structure du vrai (un script qui lance un ENFANT et ne rend
-// pas la main) — c'est ce petit-fils qu'il ne faut pas laisser derrière soi.
+// Les processus du harnais de parité Kotlin : aucun orphelin (le `java` enfant
+// de kotlinc), aucun blocage sans plafond, aucun excès de JVM concurrentes.
+// Testé avec des FAUX binaires : pas de JVM réelle, comportement déterministe.
 import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -49,18 +36,7 @@ function zombiePids(): number[] {
   return childPids().filter((pid) => ps(["-o", "stat=", "-p", String(pid)]).trim().startsWith("Z"));
 }
 
-/**
- * Attend qu'une condition devienne VRAIE, en scrutant l'état réel.
- *
- * Une attente FIXE (`Bun.sleep(400)`) suppose que la machine est assez
- * rapide : sur une machine chargée, elle attend 400 ms pour rien ; sur une
- * machine lente, elle peut ne PAS suffire (le test devient faussement
- * VERT). Attendre l'ÉTAT — l'enfant est né, le processus est mort — est
- * à la fois plus rapide ET plus sûr.
- *
- * `timeoutMs` n'est PAS une durée d'attente : c'est le PLAFOND après lequel
- * on renonce (le test échoue alors, bruyamment, au lieu de boucler).
- */
+/** Attend que l'état réel devienne vrai : `timeoutMs` est un plafond, pas une attente. */
 async function until(
   cond: () => boolean | Promise<boolean>,
   timeoutMs: number,
@@ -74,12 +50,7 @@ async function until(
   }
 }
 
-/** Faux compilateur : journalise son début/fin et produit un jar vide.
- *  Le journal et le jar sortent des variables d'environnement (le harnais
- *  passe les sources en arguments, pas le journal).
- *  Le `sleep` rend la compilation PLUS LONGUE que l.start de l'autre : c'est
- *  ce qui rend un CHEVAUCHEMENT visible dans le journal (« S » puis « S »).
- *  50 ms suffisent : le test n'observe que l'ordre des marqueurs. */
+/** Faux compilateur : journalise début/fin, produit un jar vide ; le `sleep` rend un chevauchement visible. */
 const STUB_OK = `#!/usr/bin/env bash
 out=""
 prev=""
@@ -93,8 +64,7 @@ sleep 0.05
 echo "F" >> "$KOTLIN_STUB_LOG"
 `;
 
-/** Faux compilateur BLOQUÉ : il lance un enfant (comme le vrai `kotlinc`
- *  lance `java`) et ne rend jamais la main. */
+/** Faux compilateur BLOQUÉ : lance un enfant comme le vrai kotlinc, sans rendre la main. */
 const STUB_BLOCKING = `#!/usr/bin/env bash
 sleep 300 &
 echo $! > "$KOTLIN_STUB_PIDFILE"
@@ -107,8 +77,7 @@ echo "erreur: source cassée" >&2
 exit 1
 `;
 
-/** Faux `java` : il note son pid et ne rend jamais la main (un pilote qui
- *  traîne). */
+/** Faux `java` : note son pid et ne rend jamais la main. */
 const STUB_JAVA = `#!/usr/bin/env bash
 echo $$ > "$KOTLIN_STUB_PIDFILE"
 sleep 300
@@ -132,18 +101,15 @@ function env(key: string, value: string | undefined): () => void {
   };
 }
 
-/** Vide le cache d'un harnais : le cache est indexé par le CONTENU des
- *  sources, donc un run précédent aurait servi un jar déjà compilé et le
- *  test n'aurait rien compilé du tout. */
+/** Vide le cache : il est indexé par le CONTENU des sources. */
 function clearCache(name: string): void {
   rmSync(join(ROOT, "node_modules", ".cache", name), { recursive: true, force: true });
 }
 
 describe("harnais de parité Kotlin : gestion des processus", () => {
   test("killGroup tue le petit-fils, pas seulement le script", async () => {
-    // Reproduit la structure réelle : un script (`kotlinc`) qui lance un
-    // enfant (`java`). Tuer le script seul laisserait l'enfant orphelin.
-    // (`& wait` : sans lui, bash EXÉCUTE `sleep` et n'a aucun enfant.)
+    // Un script (kotlinc) qui lance un enfant (java) : tuer le script seul laisse l'orphelin.
+    // (`& wait` : sans lui, bash exécute `sleep` et n'a aucun enfant.)
     const proc = Bun.spawn(["bash", "-c", "sleep 300 & wait"], {
       detached: true,
       stdout: "pipe",
@@ -182,16 +148,12 @@ describe("harnais de parité Kotlin : gestion des processus", () => {
 
     const restoreBin = env("KOTLINC_BIN", stub);
     const restorePid = env("KOTLIN_STUB_PIDFILE", pidFile);
-    // Sémaphore isolé : sinon ce test attend le slot des compiles RÉELLES
-    // qui tournent en parallèle et dépasse le timeout du runner.
+    // Sémaphore isolé : sinon ce test attend le slot des compiles réelles en parallèle.
     const restoreSlots = env("KOTLIN_COMPILE_SLOTS_DIR", join(dir, "slots"));
     let child = 0;
     clearCache("kotlin-harness-proc");
     try {
-      // Plafond COURT : le faux compilateur ne rend jamais la main, donc le
-      // plafond est ce que le test attend — pas la durée du travail. 400 ms
-      // suffisent à prouver que le plafond TUE (et non 1 500 ms de patience
-      // pour un résultat identique).
+      // Plafond court : le faux compilateur ne rend jamais la main.
       await expect(
         parityToolchain.ensureJar("kotlin-harness-proc", [src], { timeoutMs: 400 }),
       ).rejects.toThrow(/dépassé/);
@@ -206,8 +168,7 @@ describe("harnais de parité Kotlin : gestion des processus", () => {
     }
     expect(Number.isInteger(child)).toBe(true);
     expect(child).toBeGreaterThan(0);
-    // Le « java » du faux compilateur : mort avec son groupe. (Le SIGKILL est
-    // asynchrone : on attend la mort, on ne la suppose pas immédiate.)
+    // Mort avec son groupe ; le SIGKILL est asynchrone, donc on attend la mort.
     const dead = await until(() => !alive(child), 10_000);
     expect(dead).toBe(true);
     expect(alive(child)).toBe(false);
@@ -287,8 +248,7 @@ describe("harnais de parité Kotlin : gestion des processus", () => {
     const restorePid = env("KOTLIN_STUB_PIDFILE", pidFile);
     try {
       const link = await parityToolchain.openLink(join(dir, "peu-importe.jar"));
-      // Le faux `java` tourne : il ne rend jamais la main tout seul. On attend
-      // que son PID soit ÉCRIT (état), pas qu'un délai s'écoule.
+      // On attend que son PID soit ÉCRIT, pas qu'un délai s'écoule.
       const written = await until(() => existsSync(pidFile), 10_000);
       expect(written).toBe(true);
       const pid = Number(readFileSync(pidFile, "utf8").trim());

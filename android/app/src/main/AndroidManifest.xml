@@ -1,32 +1,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- Réseau : un seul hôte allowlist = serveur (I1).
-         networkSecurityConfig : clairtext UNIQUEMENT pour la boucle locale et
-         l'alias émulateur (voir res/xml/network_security_config.xml) — partout
-         ailleurs HTTPS obligatoire. -->
+    <!-- Réseau : un seul hôte allowlist = serveur (I1). Clairtext UNIQUEMENT
+         pour la boucle locale et l'alias émulateur ; ailleurs HTTPS obligatoire. -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- CAMERA arrive par le manifeste de zxing-android-embedded (l'AAR), qui la
-         déclare et la demande au runtime via son activité de scan. La caméra
-         est marquée optionnelle : le merger ajoute sinon
-         `android.hardware.camera.any` en required, et l'app devient
-         ininstallable sur un appareil sans caméra. -->
+    <!-- Caméra optionnelle : sinon le merger rend `android.hardware.camera.any`
+         requis et l'app devient ininstallable sur un appareil sans caméra. -->
     <uses-feature
         android:name="android.hardware.camera.any"
         android:required="false" />
-    <!-- #135 : thème de FENÊTRE sans barre d'action. Sans lui, la plateforme
-         pose une barre d'action qui affiche le LABEL de l'app au-dessus de la
-         WebView — donc « VerySlopyNyNotes » sur toutes les routes, plus 56 dp
-         perdus (cf. res/values/themes.xml). -->
-    <!-- #361 : AUCUNE sauvegarde automatique. Les payloads Pronote sont écrits
-         EN CLAIR dans `filesDir/offline/` (notes, absences, sanctions,
-         messages) : sans cette protection, la sauvegarde Drive les emporte et
-         les restaure sur un autre appareil — `AccountStore.logout()` ne peut pas
-         retirer cette copie.
-         `allowBackup="false"` coupe la sauvegarde cloud sur TOUTES les versions.
-         Sur API 31+, il ne coupe PAS le transfert appareil-à-appareil (le
-         fabricant peut l'ignorer) : `dataExtractionRules` ferme cette porte.
-         Le cache (`cacheDir/`, seul dossier partagé via le FileProvider) n'est
-         jamais sauvegardé par la plateforme — aucune règle, aucune fuite. -->
+    <!-- Thème de FENÊTRE sans barre d'action : sinon la plateforme affiche le
+         LABEL de l'app au-dessus de la WebView (+ 56 dp perdus). -->
+    <!-- AUCUNE sauvegarde automatique : les payloads Pronote sont écrits EN
+         CLAIR dans `filesDir/offline/`. `allowBackup="false"` coupe le cloud ;
+         `dataExtractionRules` coupe le transfert appareil-à-appareil (API 31+). -->
     <application
         android:label="VerySlopyNyNotes"
         android:icon="@mipmap/ic_launcher"
@@ -37,21 +23,16 @@
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         tools:targetApi="31">
-        <!-- #130 : zxing déclare son activité de scan `clearTaskOnLaunch="true"`,
-             donc le simple fait d'ouvrir le scan DÉTRUITAIT l'assistant : à la
-             fermeture (retour ou lecture), le téléphone relançait MainActivity
-             depuis zéro — serveur, adresse d'établissement, QR et PIN saisis,
-             tout perdu. L'activité vit dans la tâche de l'appelant, donc on
-             annule le drapeau. La lib fige son aperçu en `sensorLandscape` par
-             défaut : on force `portrait`, comme l'écran qui affiche le QR. -->
+        <!-- zxing déclare `clearTaskOnLaunch="true"` : ouvrir le scan détruirait
+             l'assistant. Annulé, et aperçu forcé en portrait comme l'écran du QR. -->
         <activity
             android:name="com.journeyapps.barcodescanner.CaptureActivity"
             android:clearTaskOnLaunch="false"
             android:screenOrientation="portrait"
             tools:node="merge"
             tools:replace="android:clearTaskOnLaunch,android:screenOrientation" />
-        <!-- #205 : pièces jointes lues sur le client local, servies au viewer
-             externe (cache seul, jamais d'URL d'établissement). -->
+        <!-- Pièces jointes servies au viewer externe (cache seul, jamais d'URL
+             d'établissement). -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="fr.veryslopnynotes.app.fileprovider"
@@ -61,11 +42,8 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-        <!-- #399 : `adjustResize` — la fenêtre se réduit pour le clavier.
-             Déclaration EXPLICITE du contrat clavier (sur les versions
-             récentes, edge-to-edge, la fenêtre ne se redimensionne plus :
-             c'est l'inset IME appliqué au conteneur de la WebView qui retire
-             le clavier de la zone visible, cf. `MainActivity.kt`). -->
+        <!-- `adjustResize` : l'inset IME appliqué au conteneur retire le clavier
+             (en edge-to-edge la fenêtre ne se redimensionne plus). -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

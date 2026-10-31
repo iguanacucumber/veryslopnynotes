@@ -16,25 +16,16 @@ import androidx.core.view.updatePadding
 import fr.veryslopnynotes.data.PeriodicSyncWorker
 
 // Hôte natif de l'interface React (ADR-004) : `NativeWebShell` sert les assets
-// locaux de `web/` dans la WebView et le pont `VsnBridge` est le seul accès aux
-// données. Aucun appel réseau ici (seul `android/pronote/` parle réseau, I1) ;
-// l'interface ne rappelle jamais un hôte tiers (CSP `connect-src 'none'`).
+// locaux de `web/`. Aucun appel réseau ici (I1) et aucun hôte tiers (CSP).
 class MainActivity : ComponentActivity() {
     private var webShell: NativeWebShell? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // #135 : la fenêtre occupe tout l'écran, y compris sous les barres.
         enableEdgeToEdge()
-        // #303 : plein écran immersif — les DEUX barres système disparaissent
-        // (statut en haut, navigation en bas) au profit du contenu.
         hideSystemBars()
-        // #249 : la planification du sync de fond quitte le chemin critique
-        // du premier frame (WorkManager.getInstance + enqueue = IPC/DB).
-        // KEEP = une seule planification, jamais deux : l'ordre avec le
-        // premier frame n'a aucune importance, seul le créneau 6 h compte.
-        // Contexte applicatif (pas l'activité), thread daemon, best-effort :
-        // un échec ici ne doit jamais faire rater un démarrage.
+        // La planification du sync de fond quitte le chemin critique du premier
+        // frame ; un échec ici ne doit jamais faire rater un démarrage.
         Thread({
             try {
                 PeriodicSyncWorker.schedule(applicationContext)
@@ -45,10 +36,9 @@ class MainActivity : ComponentActivity() {
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         val shell = NativeWebShell(this)
         webShell = shell
-        // #399 : la WebView vit dans un CONTENEUR, pas directement dans la
-        // fenêtre. Le conteneur reçoit l'inset du clavier (padding bas) :
-        // c'est donc la zone VISIBLE de la WebView qui s'arrête au-dessus du
-        // clavier, et non la fenêtre entière.
+        // La WebView vit dans un CONTENEUR, pas directement dans la fenêtre :
+        // lui seul reçoit l'inset clavier, donc la zone visible s'arrête
+        // au-dessus du clavier.
         val container = FrameLayout(this).apply {
             addView(
                 shell.view,
@@ -60,23 +50,14 @@ class MainActivity : ComponentActivity() {
         }
         setContentView(container)
         applyImeInsets(container)
-        // #400 : la route à l'ouverture. Une RECRÉATION de l'activité (rotation,
-        // changement de configuration, mort du processus) rouvre sur la route
-        // SAUVEGARDÉE ; sinon, sur la route du deep link ; sinon, l'accueil.
         // La route sauvée prime TOUJOURS sur le deep link : l'intention est
         // périmée (c'est elle qui renvoyait l'utilisateur sur l'ancien écran).
         shell.open(savedRoute(savedInstanceState) ?: routePath(intent))
     }
 
     /**
-     * #400 : la route CURRENTE est sauvegardée avec l'état de la WebView.
-     *
-     * Deux choses sont sauvées :
-     *  - le CHEMIN de la route (`ROUTE_STATE_KEY`) : c'est le REPLI. L'état
-     *    de la WebView peut être perdu (mort du processus) ; la route, elle,
-     *    est un simple chemin, donc elle se relit ;
-     *  - l'état de la WebView (historique, page) : c'est lui qui restitue
-     *    l'écran tel qu'il était.
+     * L'état de la WebView peut être perdu (mort du processus) ; le CHEMIN de
+     * route, lui, se relit et sert de repli.
      */
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
@@ -88,12 +69,8 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * #400 : la route survit à la recréation de l'activité.
-     *
-     * `restoreState` restitue l'historique et la page de la WebView. Il
-     * renvoie `null` quand l'état n'a pas pu être restauré : on rouvre alors
-     * sur la route SAUVEGARDÉE, jamais sur l'accueil (la route est le contrat,
-     * pas l'écran de départ).
+     * `restoreState` renvoie `null` quand l'état n'a pas pu être restauré : on
+     * rouvre sur la route SAUVEGARDÉE, jamais sur l'accueil.
      */
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
         super.onRestoreInstanceState(savedInstanceState)
@@ -104,27 +81,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Route relue dans l'état sauvegardé (`null` s'il n'y en a pas).
-     *
-     * Un chemin hors contrat est refusé : l'accueil, pas une route inventée.
-     */
+    /** Un chemin hors contrat est refusé : l'accueil, pas une route inventée. */
     private fun savedRoute(savedInstanceState: Bundle?): String? =
         routePathFromState(savedInstanceState?.getString(ROUTE_STATE_KEY))
 
     /**
-     * #399 : le clavier logiciel ne masque plus un champ de saisie.
-     *
-     * L'activité est edge-to-edge (#135) et immersive (#303) : la fenêtre ne
-     * se redimensionne PAS quand le clavier s'ouvre. L'inset IME est donc
-     * appliqué en PADDING BAS du conteneur de la WebView : la zone visible
-     * s'arrête au-dessus du clavier, la page web voit un viewport réduit (le
-     * champ focalisé revient dans le cadre) et la barre d'onglets remonte
-     * avec lui.
-     *
-     * `Type.ime()` et non `systemBars()` : ce sont les barres qui changent de
-     * taille ici, et l'inset clavier vaut 0 quand le clavier est fermé — le
-     * padding retombe à 0 tout seul.
+     * L'activité est edge-to-edge et immersive : la fenêtre ne se redimensionne
+     * PAS quand le clavier s'ouvre, d'où l'inset IME en padding bas.
+     * `Type.ime()` et non `systemBars()` : l'inset clavier vaut 0 clavier fermé.
      */
     private fun applyImeInsets(container: View) {
         ViewCompat.setOnApplyWindowInsetsListener(container) { view, insets ->
@@ -136,9 +100,8 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Deep link debug `veryslopnynotes://<route>` → route hash de l'UI web.
-     * Release : aucun intent-filter, donc rien n'arrive ici. Une route
-     * inconnue est ignorée (accueil).
+     * Deep link debug `veryslopnynotes://<route>` : en release, aucun
+     * intent-filter, donc rien n'arrive ici. Une route inconnue est ignorée.
      */
     private fun routePath(intent: Intent?): String? {
         val data = intent?.data ?: return null
@@ -164,14 +127,9 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * #303 : masque les barres système de la fenêtre de l'activité.
-     *
-     * `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE` : un geste de bord fait
-     * réapparaître les barres EN TRANSITOIRE, puis elles se re-masquent seules.
-     * Sans ce réglage, une barre révélée restait affichée pour de bon.
-     *
-     * `WindowCompat` et non `window.insetsController` (API 30) : minSdk 26, et
-     * androidx.core est déjà une dépendance déclarée de l'app.
+     * `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE` : un geste de bord fait réapparaître
+     * les barres EN TRANSITOIRE ; sans ce réglage, une barre révélée restait là.
+     * `WindowCompat` et non `insetsController` : minSdk 26.
      */
     private fun hideSystemBars() {
         WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -181,13 +139,8 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * #303 : re-masquage à chaque REPRISE DE FOCUS de la fenêtre.
-     *
-     * Le masquage posé une fois dans [onCreate] ne survit pas à tout : la
-     * plateforme le réinitialise quand la fenêtre reprend le focus après une
-     * autre activité (scan du QR) ou la fermeture d'un dialogue. Masquer ici
-     * plutôt qu'au démarrage seul, c'est le même appel sur le seul chemin que
-     * la plateforme emprunte TOUJOURS.
+     * La plateforme réinitialise le masquage quand la fenêtre reprend le focus
+     * (retour d'une autre activité, fermeture d'un dialogue).
      */
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)

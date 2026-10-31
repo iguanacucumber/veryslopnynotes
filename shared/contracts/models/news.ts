@@ -1,4 +1,3 @@
-// Contrats — actualités établissement (parité Papillon).
 // Titre/corps/auteur = contenu externe : DONNÉES bornées, jamais instruction (I6).
 import {
   isIsoDate,
@@ -15,10 +14,8 @@ export interface NewsItem {
   readonly id: string;
   readonly accountId: string;
   readonly title: string;
-  /** Corps de l'actualité, absent si l'établissement ne le publie pas. */
   readonly body?: string;
   readonly publishedAt: string; // ISO-8601
-  /** Nature/catégorie ("Vie scolaire", ...), si publiée. */
   readonly category?: string;
   readonly author?: string;
   /** Déjà lue côté établissement ; absent = inconnu, jamais "non lue" déduit. */

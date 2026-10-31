@@ -1,20 +1,7 @@
-// #540 : les pièces jointes téléchargées ne doivent ni se CHEVAUCHER ni
-// s'ACCUMULER.
-//
-// Le fichier était nommé d'après le seul LIBELLÉ (`consigne.pdf`) : deux
-// pièces distinctes du même devoir visaient le MÊME chemin, donc la seconde
-// écrasait la première et le viewer ouvrait le mauvais document. Rien ne
-// supprimait ces fichiers non plus (jusqu'à 10 Mo par pièce).
-//
-// Ce test ne Miroite pas la logique : il COMPILE la vraie source de production
-// (`android/data/.../DownloadedFiles.kt` + `LocalDataStore.kt`, sans dépendance
-// Android) et la pilote via `agents/runtime/kotlin-parity/DownloadedFilesMain.kt`.
-// Les assertions portent donc sur le code EXÉCUTÉ.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit). Le
-// pin statique du bas, lui, tourne TOUJOURS : il prouve que le CÂBLAGE de la
-// purge est en place même sans la chaîne d'outils Kotlin.
+// Les pièces jointes téléchargées ne doivent ni se CHEVAUCHER ni s'ACCUMULER :
+// deux pièces du même libellé visaient le même chemin, et rien ne les purgeait.
+// La VRAIE source est compilée et pilotée ; le pin statique du bas prouve le
+// câblage de la purge même sans la chaîne Kotlin.
 import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -171,14 +158,12 @@ describe("câblage de la purge des téléchargements (#540)", () => {
   const store = readFileSync(join(DATA, "LocalDataStore.kt"), "utf8");
 
   test("l'app et le job de fond passent le store qui purge les téléchargements", () => {
-    // Sans ça, la purge de compte laisserait les pièces jointes du compte
-    // parti dans le cache (et le compte suivant les ouvrirait).
+    // Sans ça, la purge de compte laisserait les pièces du compte parti dans le cache.
     expect(bridge).toContain("LocalDataStore(FileCacheStore(File(ctx.filesDir, \"offline\")), ctx.cacheDir)");
     expect(worker).toContain(
       "LocalDataStore(FileCacheStore(File(applicationContext.filesDir, \"offline\")), applicationContext.cacheDir)",
     );
-    // La purge des téléchargements est dans le MÊME `clearAll` que celle du
-    // cache : un seul chemin de purge, donc pas de chemin qui l'oublie.
+    // La purge des téléchargements est dans le MÊME `clearAll` que celle du cache.
     expect(store).toContain("override fun clearAll()");
     expect(store).toContain("DownloadedFiles.purge(cacheRoot)");
   });
@@ -187,8 +172,7 @@ describe("câblage de la purge des téléchargements (#540)", () => {
     // Le libellé seul ne suffit pas : deux pièces distinctes le partagent.
     expect(attachments).toContain("att.id");
     expect(attachments).toContain("DownloadedFiles.write(");
-    // L'écriture est gardée par l'époque (une déconnexion pendant le
-    // téléchargement n'écrit rien).
+    // L'écriture est gardée par l'époque : une déconnexion pendant le téléchargement n'écrit rien.
     expect(attachments).toContain("epoch: Long");
   });
 });

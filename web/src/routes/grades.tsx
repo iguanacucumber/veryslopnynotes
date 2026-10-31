@@ -8,19 +8,9 @@ import {
 import { GradesScreen } from "../features/grades/components";
 import "../features/grades/grades.css";
 
-/**
- * Onglet Notes : moyenne générale, historique, sélecteurs de période et
- * d'algorithme, puis notes groupées par matière.
- *
- * Changer de période ou d'algorithme change la QUERY de la ressource : le
- * natif recalcule moyennes, historique et influences, l'écran ne fait que
- * demander une autre tranche. Sans rapport dans le payload (cache ancien,
- * pont de développement), le calcul est refait localement par `model.ts`.
- *
- * Le payload affiché est celui de la requête COURANTE : `useResource`
- * invalide le précédent au changement de requête (#527) — l'écran ne
- * montre jamais les chiffres d'une autre période.
- */
+/** Changer de période ou d'algorithme change la QUERY : le natif recalcule.
+ *  Sans rapport dans le payload (cache ancien, pont de dev), `model.ts`
+ *  recalcule localement. `useResource` invalide le payload au changement. */
 export default function GradesRoute() {
   const { dark } = useApp();
   const [algorithm, setAlgorithm] = useState<Algorithm>("subject");

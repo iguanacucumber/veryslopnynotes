@@ -14,10 +14,8 @@ import java.time.LocalDateTime
 
 private const val LESSON_FETCH_LIMIT = 10
 
-/** Pièces jointes d'un cours publiées dans le payload (même plafond que le devoir). */
 private const val LESSON_ATTACHMENTS_LIMIT = Assignment.MAX_ATTACHMENTS
 
-/** Un cours rattaché : titre, description DÉJÀ nettoyée, pièces jointes. */
 internal data class LessonPayload(
     val title: String,
     val text: String,
@@ -30,11 +28,10 @@ private fun lessonKeyOf(subject: String, day: String?): String? {
 }
 
 /**
- * Contenus de cours rattachés aux devoirs (matière + jour, plafond 10, miroir
- * serveur). #631 : PLUSIEURS cours peuvent partager la même clé ; ils sont
- * tous conservés pour que chacun devienne une source citable. Le cours est
- * publié dans sa borne de PAYLOAD (8 000 caractères) ; le prompt applique
- * ensuite son budget propre et signale la coupe.
+ * Contenus de cours rattachés aux devoirs (matière + jour, plafond 10). PLUSIEURS
+ * cours peuvent partager la même clé : tous sont conservés pour que chacun
+ * devienne une source citable. Le cours est publié dans sa borne de payload
+ * (8 000 caractères) ; le prompt applique ensuite son budget et signale la coupe.
  */
 private fun lessonContents(
     client: Client,
@@ -82,7 +79,6 @@ private fun lessonContents(
     return out
 }
 
-/** Objet `lessonContent` (un cours complet) avec ses pièces jointes. */
 private fun lessonJson(
     lesson: LessonPayload,
     homeworkIndex: Int,
@@ -115,14 +111,13 @@ private fun lessonJson(
 }
 
 /**
- * Identifiant PUBLIÉ d'un devoir (#570).
+ * Identifiant PUBLIÉ d'un devoir.
  *
- * L'identifiant Pronote (`N`) quand il existe : c'est l'IDENTITÉ du devoir
- * (le toggle le renvoie tel quel au dépôt). Sinon un repli SYNTHÉTIQUE,
- * unique dans le payload ET dans la fenêtre servie : le cache garde une
- * entrée par semaine (#477), et deux fenêtres ne doivent JAMAIS forger le
- * même identifiant pour deux devoirs DIFFÉRENTS — le web déduplique par
- * identifiant, un repli partagé effacerait un vrai devoir.
+ * L'identifiant Pronote quand il existe : c'est l'IDENTITÉ du devoir (le toggle
+ * le renvoie tel quel). Sinon un repli SYNTHÉTIQUE unique dans le payload ET
+ * dans la fenêtre servie : deux fenêtres ne doivent JAMAIS forger le même
+ * identifiant pour deux devoirs différents — le web déduplique par identifiant,
+ * un repli partagé effacerait un vrai devoir.
  */
 private fun homeworkIdOf(
     hw: fr.veryslopnynotes.pronote.Homework,
@@ -151,7 +146,7 @@ internal fun assignmentJson(
         val fileId = boundedCp(f.id, 200)
         if (label.isEmpty() || fileId.isEmpty()) return@forEachIndexed
         // La `ref` est ASSAINIE (identifiant Pronote exotique) : une `ref` hors
-        // schéma ferait disparaître le devoir ENTIER côté web (#366).
+        // schéma ferait disparaître le devoir ENTIER côté web.
         val ref = AssignmentAttachment.homeworkRef(index, di, fileId) ?: return@forEachIndexed
         atts.put(JSONObject().apply {
             put("id", fileId)
@@ -168,7 +163,7 @@ internal fun assignmentJson(
         put("dueDate", hw.date.parisIso())
         put("done", hw.done)
         putIf("description", description.ifEmpty { null })
-        // #631 : tous les cours de la même matière + jour, chacun avec ses PJ.
+        // Tous les cours de la même matière + jour, chacun avec ses PJ.
         // `lessonContent` reste le premier pour les lecteurs existants ;
         // `lessonContents` n'apparaît qu'au-delà d'un cours (payload borné).
         val lessonObjects = JSONArray()
@@ -184,10 +179,9 @@ internal fun assignmentJson(
 }
 
 /**
- * Fenêtre demandée (`weekStart` lundi→dimanche, comme le routeur) ou repli
- * -7/+21 jours (miroir `getAssignments`). La MÊME fenêtre sert à la recherche
- * du toggle et des pièces jointes (`assignmentWindow`) : un devoir affiché
- * doit rester trouvable (#369).
+ * Fenêtre demandée (`weekStart` lundi→dimanche) ou repli -7/+21 jours (miroir
+ * `getAssignments`). La MÊME fenêtre sert au toggle et aux pièces jointes : un
+ * devoir affiché doit rester trouvable.
  */
 internal fun assignmentsPayload(client: Client, query: Map<String, String>, now: LocalDateTime = LocalDateTime.now()): String {
     val win = weekWindow(query)
@@ -200,11 +194,10 @@ internal fun assignmentsPayload(client: Client, query: Map<String, String>, now:
     val arr = JSONArray()
     val fromMs = from.atZone(PARIS).toInstant().toEpochMilli()
     val toMs = to.atZone(PARIS).toInstant().toEpochMilli()
-    // #570 : un devoir = UNE ligne publiée. Le même devoir (même `N`) peut
-    // revenir dans la liste brute : il est publié UNE fois (le web
-    // déduplique par identifiant, mais le NATIF est la source de vérité).
-    // La fenêtre servie : le repli d'identifiant est unique par fenêtre
-    // (deux fenêtres = deux entrées de cache, #477).
+    // Un devoir = UNE ligne publiée. Le même devoir (même `N`) peut revenir
+    // dans la liste brute : il est publié une fois (le web déduplique par
+    // identifiant, mais le NATIF est la source de vérité). Le repli
+    // d'identifiant est unique par fenêtre.
     val scope = "${from.toLocalDate()}-${to.toLocalDate()}"
     val rows = raws.mapIndexedNotNull { i, hw ->
         val dueMs = hw.date.atZone(PARIS).toInstant().toEpochMilli()

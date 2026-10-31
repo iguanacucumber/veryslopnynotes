@@ -1,7 +1,5 @@
-// Contrats — capacités dynamiques (parité Papillon).
-// Papillon masque une entrée d'onglet quand l'onglet Pronote correspondant
-// n'est pas actif chez l'établissement. Capacités non déterminées = `null`
-// côté API (voir `CapabilitiesResponse`).
+// Onglet masqué si l'onglet Pronote correspondant n'est pas actif ;
+// capacités non déterminées = `null` côté API (voir `CapabilitiesResponse`).
 import { isBoundedString, isIsoDate, isRecord } from "./guards";
 
 export const TAB_CAPABILITIES = [

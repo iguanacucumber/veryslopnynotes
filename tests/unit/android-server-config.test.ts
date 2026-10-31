@@ -1,10 +1,6 @@
-// Serveur choisi À L'EXÉCUTION (au lieu d'être figé dans BuildConfig).
-// La validation n'est PAS réécrite en TS : les tables ci-dessous sont rejouées
-// contre `ServerConfig.validateBaseUrl` EXÉCUTÉ par le pilote de parité
-// (`CoreValidationParityMain.kt`). Les autres tests gardent le câblage réel
-// (store, purge, graine de build) et l'invariant I1.
-// Point de sécurité central : la saisie est libre, donc la validation EST
-// l'allowlist — `ServerConfig.validateBaseUrl` + `isAllowed`.
+// Serveur choisi À L'EXÉCUTION : `ServerConfig.validateBaseUrl` est EXÉCUTÉ par
+// le pilote de parité, pas réécrit en TS. La saisie est libre, donc la
+// validation EST l'allowlist. Les autres tests gardent le câblage réel et I1.
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -114,8 +110,7 @@ const REJECTED: [string, string][] = [
   ["https://notes.exemple.fr:-1", PORT_HINT],
   ["https://notes.exemple.fr:+80", "Caractère interdit dans le domaine."],
   ["https://notes.exemple.fr: 80", "Espace ou caractère interdit dans l'adresse."],
-  // Hôtes invalides : zéros initiaux (lecture octale divergente), IPv6 sans
-  // crochets, étiquettes DNS cassées, bornes de longueur.
+  // Hôtes invalides : zéros initiaux, IPv6 sans crochets, étiquettes cassées, longueurs.
   ["https://010.0.0.1", HOST_HINT],
   ["https://256.1.1.1", HOST_HINT],
   ["https://1.2.3", HOST_HINT],
@@ -141,8 +136,7 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
       const res = await serverUrl(input);
       expect({ input, res }).toEqual({ input, res: { ok: true, baseUrl: canonical } });
     }
-    // La graine BuildConfig par défaut (defaultConfig Gradle) reste valide :
-    // le flux émulateur 10.0.2.2:3000 n'est jamais refusé par la validation.
+    // La graine BuildConfig reste valide : 10.0.2.2:3000 n'est jamais refusé.
     const seed = "http://10.0.2.2:3000";
     expect(await serverUrl(seed)).toEqual({ ok: true, baseUrl: seed });
   });
@@ -151,8 +145,7 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     for (const [input, message] of REJECTED) {
       const res = await serverUrl(input);
       expect({ input, res }).toEqual({ input, res: { ok: false, message } });
-      // Un refus ne doit jamais réécrire la saisie dans son propre message
-      // (elle révèle l'établissement : ni log, ni crash, ni écran).
+      // Un refus ne réécrit jamais la saisie : elle révèle l'établissement.
       expect(res.message?.includes(input.trim()) && input.trim().length > 3).toBe(false);
     }
   });
@@ -163,7 +156,7 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
       ["https://notes.exemple.fr/v1/grades", base, true],
       ["https://notes.exemple.fr/v1/media?ref=x", base, true],
       ["https://notes.exemple.fr", base, true],
-      // Préfixe nu : ce faux ami passait avant l'ajout de la barre oblique.
+      // Préfixe nu : ce faux ami passait avant la barre oblique.
       ["https://notes.exemple.fr.evil.tld/v1/grades", base, false],
       // Autre schéma, autre port, autre chemin racine : refusés.
       ["http://notes.exemple.fr/v1/grades", base, false],
@@ -182,33 +175,29 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     const store = read(join(DATA, "ServerStore.kt"));
     expect(store).toContain("class ServerStore(context: Context)");
     expect(store).toContain("getSharedPreferences(PREFS, Context.MODE_PRIVATE)");
-    // Fichier PROPRE à AccountStore : `logout()` vide ses prefs, le serveur
-    // choisi doit survivre à une déconnexion.
+    // Prefs PROPRE à AccountStore : le serveur choisi survit à `logout()`.
     const accounts = read(join(DATA, "AccountStore.kt"));
     expect(store).toContain('const val PREFS = "server"');
     expect(accounts).toContain('const val PREFS = "accounts"');
     expect(store).not.toContain('const val PREFS = "accounts"');
-    // Validation avant écriture, et revalidation à la lecture (une prefs
-    // altérée ne réintroduit pas un hôte refusé).
+    // Validation avant écriture, et revalidation à la lecture.
     expect(store).toContain("fun baseUrl(seed: String): String");
     expect(store).toContain("ServerConfig.validateBaseUrl(stored)");
     expect(store).toContain("fun save(raw: String): ServerUrlResult");
     expect(store).toContain("if (validated !is ServerUrlResult.Ok) return validated");
     expect(store.indexOf("fun save")).toBeLessThan(store.indexOf("putString(KEY_BASE_URL"));
-    // Un seul store, aucun secret, aucun log, aucune donnée d'établissement.
+    // Un seul store : aucun secret, aucun log, aucune donnée d'établissement.
     expect(codeOnly(store)).not.toMatch(/Log\.[vdiew]\(|println\(|printStackTrace/);
-    // Aucun secret utilisé ni stocké ici : l'adresse est la seule clé.
+    // L'adresse est la seule clé : aucun secret stocké ici.
     expect(codeOnly(store)).not.toMatch(/token|secret|password/i);
     expect(store).not.toContain("class ServerStoreStore");
-    // Un seul store de serveur dans android/ (pas de copie concurrente).
     const dataFiles = readdirSync(DATA).map((f) => join(DATA, f));
     const stores = dataFiles.filter((f) => read(f).includes("const val PREFS = \"server\""));
     expect(stores.map((f) => f.split("/").pop())).toEqual(["ServerStore.kt"]);
   });
 
   test("adresse du scraper : état + store, déconnexion purge par logout()", () => {
-    // Depuis le cutover WebView, le pont natif porte la graine et l'état ;
-    // l'écran React n'a plus aucune saisie d'adresse serveur.
+    // Le pont natif porte la graine et l'état ; l'écran React ne saisit plus d'adresse.
     const bridge = readBridgeSource();
     const bridgeCode = codeOnly(bridge);
     expect(bridge).toContain("private val baseUrlSeed: String = fr.veryslopnynotes.core.ServerConfig.baseUrl(");
@@ -219,9 +208,7 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(bridgeCode).not.toContain("clearAll(");
     expect(bridgeCode).not.toContain("sessions.clear(");
     expect(bridgeCode).not.toContain("SessionTokens(");
-    // Le chemin de purge est bien celui du AccountStore existant.
     expect(accounts_has_logout()).toBe(true);
-    // Aucune référence à l'ancien changement de serveur dans l'app.
     expect(bridgeCode).not.toContain("changeServer");
     expect(bridgeCode).not.toContain("onServerChange");
   });
@@ -239,11 +226,8 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(gradle).toContain('buildConfigField("String", "SERVER_SCHEME"');
     expect(gradle).toContain('buildConfigField("String", "SERVER_HOST"');
     expect(gradle).toContain('?: "10.0.2.2:3000"');
-    // Clairtext : JAMAIS `usesCleartextTraffic` (attribut global). Le seul
-    // mécanisme admis est une networkSecurityConfig qui l'INTERDIT par défaut
-    // et ne l'autorise que pour la boucle locale / alias émulateur — sinon le
-    // cleartext est bloqué par la plateforme depuis targetSdk 28 et la branche
-    // `schemeFor` « émulateur » du code est inatteignable.
+    // Jamais `usesCleartextTraffic` : une networkSecurityConfig l'interdit par défaut,
+    // sauf boucle locale et alias émulateur.
     const manifest = read(join(ANDROID, "app/src/main/AndroidManifest.xml"));
     expect(manifest).not.toContain("usesCleartextTraffic");
     expect(manifest).toContain('android:networkSecurityConfig="@xml/network_security_config"');
@@ -262,9 +246,7 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
   });
 
   test("I1 : aucun hôte en dur dans android/, aucun hôte Pronote", () => {
-    // I1 repointé #200 : seul `android/pronote/` parle Pronote en direct (port
-    // #200) ; la déclaration du module dans `settings.gradle.kts` est l'unique
-    // mention tolérée hors module. Prose (INVARIANTS, AGENTS.md) en #211.
+    // Seul `android/pronote/` parle Pronote ; sa déclaration Gradle est la seule mention tolérée.
     const pronoteHost = /pronote/i;
     const files = androidFiles();
     expect(files.length).toBeGreaterThan(20);
@@ -272,15 +254,9 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
       if (f.includes("/android/pronote/")) continue;
       let code = codeOnly(read(f));
       if (f.endsWith("settings.gradle.kts")) code = code.replace(/^include\(.*\)$/m, "");
-      // #205 : `data` et `ui` dépendent du module local (`project(":pronote")`,
-      // ADR-003) — la déclaration de dépendance est le câblage sanctionné, pas
-      // un hôte : on la retire avant le balayage, comme l'`include` ci-dessus.
+      // La déclaration de dépendance est le câblage sanctionné, pas un hôte.
       code = code.replace(/project\(":pronote"\)/g, "");
-      // #205 : les dépôts manipulent les TYPES du client local (`PronoteSession`,
-      // `PronoteClientProvider`, paquet `fr.veryslopnynotes.pronote`) — aucune
-      // adresse là-dedans, le garde-fou des URL en dur ci-dessous reste entier.
-      // #520 : l'erreur de protocole et son code `G` aussi (`data` décide
-      // « session morte » par TYPE et par code, jamais par un mot du message).
+      // Les TYPES du client local et le code d'erreur de protocole ne portent aucune adresse.
       code = code
         .replace(/PronoteSession|PronoteClientProvider|PronoteAPIError|pronoteErrorCode/g, "")
         .replace(/fr\.veryslopnynotes\.pronote/g, "");
@@ -289,24 +265,12 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
         hit: false,
       });
     }
-    // Les SEULES chaînes ressemblant à une URL dans le code Kotlin de
-    // android/ : plus (#204) l'endpoint PUBLIC du fournisseur LLM (pas un hôte
-    // d'établissement ni de serveur : catégorie distincte, comme le modèle en
-    // constante de code ; jamais d'identifiant ni de secret dedans), plus le
-    // gabarit du message de refus de `ServerConfig` et les deux gardes de
-    // schéma du store de session (pas des hôtes). Un hôte réel d'établissement
-    // passé en dur (ou dans un message) casserait cette liste — l'adresse de
-    // l'établissement vient du QR (#299), jamais du code.
-    // #206 : le gabarit "https://domaine[:port]" (label du champ serveur
-    // supprimé) a disparu.
+    // Seules URL tolérées : endpoint public LLM, gabarit de refus, gardes de schéma.
+    // Un hôte réel d'établissement (il vient du QR) casserait cette liste.
     const allowed = new Set([
       "https://domaine[:port].",
       "https://openrouter.ai/api/v1/chat/completions",
-      // L'établissement de DÉMONSTRATION public de l'éditeur : une adresse
-      // PUBLIQUE par nature (l'éditeur la publie sur son site de
-      // démonstration), avec un compte public lui aussi. Elle ne sert qu'à la
-      // connexion en un clic — l'adresse de l'établissement de l'utilisateur,
-      // elle, vient toujours du QR (#299).
+      // Établissement de DÉMONSTRATION public de l'éditeur, compte public.
       "https://demo.index-education.net/pronote/eleve.html",
       "https://",
       "http://",
@@ -319,17 +283,11 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
   });
 });
 
-// `logout()` existe bien (le chemin de purge appelé à la déconnexion) :
-// session persistée PUIS session mémoire PUIS caches (un jeton vivant après
-// la purge des caches partirait vers des lectures fantômes).
+// `logout()` purge dans l'ordre : session persistée, session mémoire, PUIS caches.
 function accounts_has_logout(): boolean {
   const accounts = read(join(DATA, "AccountStore.kt"));
   const repair = read(join(DATA, "SessionRepair.kt"));
-  // #407 : la purge est déléguée à `CacheScope.purge` (UN seul endroit, avec l'appairage
-  // d'un autre compte et la session morte) — l'ORDRE ne bouge pas : session
-  // persistée, session mémoire, PUIS caches.
-  // #397 : la déconnexion ET la session morte partagent le MÊME code de purge
-  // (`SessionRepair.purge`) : l'ordre est vérifié là où il est écrit.
+  // Purge déléguée à `SessionRepair.purge` (seul endroit) ; l'ordre y est vérifié.
   const purge = repair.indexOf("CacheScope.purge(cacheStore)");
   return (
     accounts.includes("fun logout()") &&

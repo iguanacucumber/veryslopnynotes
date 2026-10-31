@@ -1,16 +1,6 @@
-// #367 : la fiche de revision doit etre un JSON {"fiche": ...}.
-//
-// Le prompt demandait « reponds en texte simple » alors que la sortie lue est
-// un JSON : le modele obeissait, la garde I5 (parseJsonOutput +
-// parseRevisionAnswer) rejetait la prose, et le pont avalait l'erreur en
-// « Fiche non générée. » — aucune fiche ne pouvait etre enregistree.
-//
-// VRAI Kotlin compile : `android/core/` (Untrusted, LlmGuard, AiPrompts,
-// RevisionAi — stdlib seul) est compile par le harnais puis pilote par
-// `agents/runtime/kotlin-parity/RevisionAiMain.kt`. Les assertions portent
-// donc sur du code execute, pas sur un miroir TS. Le pont (`app/`) ne compile
-// pas hors Gradle : son câblage est verifie par lecture de source (le meme
-// filet que `android-homework.test.ts`).
+// La fiche de révision doit être un JSON {"fiche": …} : le prompt demandait de
+// la prose, que la garde I5 rejetait (« Fiche non générée. »).
+// VRAI Kotlin compilé par le harnais ; le pont (`app/`) est vérifié par lecture.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -45,7 +35,7 @@ describe("fiche de revision — le prompt demande le JSON attendu (#367)", () =>
     expect(prompt.system).not.toContain("reponds en texte simple");
     // Le corps porte le schema : c'est lui qui est envoye au fournisseur.
     expect(prompt.body).toContain("{\"fiche\":string}");
-    // #630 : le sous-ensemble markdown est demandé explicitement, sans HTML.
+    // Le sous-ensemble markdown est demandé explicitement, sans HTML.
     expect(prompt.system).toContain("markdown simple");
     expect(prompt.system).toContain("AUCUNE balise HTML");
   });
@@ -53,8 +43,7 @@ describe("fiche de revision — le prompt demande le JSON attendu (#367)", () =>
   test.skipIf(skip)("les sources restent des DONNEES delimitees par nonce (I6)", async () => {
     const prompt = JSON.parse(await ask({ op: "prompt" })) as Prompt;
     expect(prompt.nonce).toBe("revisionnonce000001");
-    // Delimiteurs a nonce des deux cotes : le contenu externe n'est pas melange
-    // a la consigne.
+    // Délimiteurs à nonce : le contenu externe n'est pas mélangé à la consigne.
     expect(prompt.body).toContain(`---UNTRUSTED_DATA nonce="${prompt.nonce}"---`);
     expect(prompt.body).toContain(`<UNTRUSTED_DATA nonce="${prompt.nonce}">`);
     expect(prompt.body).toContain(`</UNTRUSTED_DATA nonce="${prompt.nonce}">`);
@@ -79,8 +68,7 @@ describe("fiche de revision — le prompt demande le JSON attendu (#367)", () =>
   });
 
   test.skipIf(skip)("le message d'echec est explicite, borne et sans secret", async () => {
-    // Requetes SEQUENTIELLES : le pilote est ligne a ligne, les reponses se
-    // succedent dans l'ordre d emission.
+    // Le pilote est ligne à ligne : les réponses se succèdent dans l'ordre d'émission.
     const messages: string[] = [];
     for (const failure of ["FORMAT", "KEY", "QUOTA", "PROVIDER", "UNKNOWN"]) {
       const { message } = JSON.parse(await ask({ op: "failure", failure })) as { message: string };
@@ -99,9 +87,7 @@ describe("fiche de revision — le prompt demande le JSON attendu (#367)", () =>
 });
 
 describe("fiche de revision — le point d'entree public relaie la cle (#428)", () => {
-  // Avant #428, `requestRevisionSheet` OUBLIAIT la clé : l'appel partait
-  // sans, et `OpenRouterLlm` levait « clé LLM absente » AVANT tout appel
-  // HTTP. Le point d'entrée documenté ne pouvait donc jamais produire de fiche.
+  // Sans clé, l'erreur « clé LLM absente » sort avant tout appel HTTP.
   test.skipIf(skip)("avec une cle, le fournisseur est appele et la fiche est rendue", async () => {
     const res = JSON.parse(await ask({ op: "fiche", key: "cle-de-test-1234" })) as SheetResult;
     expect(res.ok).toBe(true);
@@ -116,8 +102,7 @@ describe("fiche de revision — le point d'entree public relaie la cle (#428)", 
     const res = JSON.parse(await ask({ op: "fiche" })) as SheetResult;
     expect(res.ok).toBe(false);
     expect(res.error).toContain("clé");
-    // Le fournisseur a bien ete appele, SANS cle : le core n'invente pas de
-    // credential de repli (I8 : l'appareil n'en possede aucun).
+    // Aucun credential de repli (I8 : l'appareil n'en possède aucun).
     expect(res.apiKey).toBeNull();
     expect(res.calls).toBe(1);
   });
@@ -137,8 +122,7 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
   const revision = codeOnly(readFileSync(join(CORE, "RevisionAi.kt"), "utf8"));
 
   test("la sortie passe toujours par la garde I5 (parse + schema)", () => {
-    // La validation n'est ni contournee ni affaiblie : elle vit dans le CORE,
-    // que le pont appelle (#428) — le pont ne re-parse plus de son côté.
+    // La validation vit dans le CORE : le pont ne re-parse plus de son côté.
     expect(revision).toMatch(/parseRevisionAnswer\(parsed\)/);
     expect(revision).toMatch(/generateGuardedJson\(provider, SYSTEM_REVISION_JSON/);
   });
@@ -154,14 +138,12 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
   });
 
   test("le fournisseur porte le délai du pont, pas le défaut 20 s (#594)", () => {
-    // Un modèle gratuit lent est tué à 20 s par le défaut OkHttp alors que
-    // le pont attend AWAIT_LLM_MS (45 s) : même délai que l'aide photo.
+    // Le modèle est tué à 20 s par OkHttp alors que le pont attend 45 s.
     expect(bridge).toMatch(/requestRevisionSheet\(OpenRouterLlm\(timeoutMs = AWAIT_LLM_MS\)/);
   });
 
   test("la fiche cherche le devoir dans la semaine AFFICHÉE (#369, #596)", () => {
-    // Sans weekStart, le repli réseau ne couvre que now−7 j / now+21 j :
-    // un devoir affiché hors de cette fenêtre était « introuvable ».
+    // Sans weekStart, le repli réseau couvre now−7 j / now+21 j.
     expect(bridge).toMatch(
       /fun (VsnBridge\.)?generateRevision\(p: JSONObject, epoch: Long\)[\s\S]*?val week = bounded\(p\.string\("weekStart"\), 10\)/,
     );
@@ -171,7 +153,7 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
     expect(prompts).toContain("SYSTEM_REVISION_JSON");
     expect(prompts).not.toContain("SYSTEM_REVISION =");
     expect(prompts).not.toContain("reponds en texte simple");
-    // #630 : la consigne décrit le markdown supporté et interdit le HTML.
+    // La consigne décrit le markdown supporté et interdit le HTML.
     expect(prompts).toContain("markdown simple");
     expect(prompts).toContain("AUCUNE balise HTML");
     // Les deux chemins de revision (pont et jobs) partagent la meme consigne.
@@ -180,13 +162,8 @@ describe("fiche de revision — le pont ne jette plus l'echec (#367)", () => {
   });
 });
 
-// #606 — recette LIVE sur appareil : « Fiche de révision » échouait sur tout
-// devoir réel avec « Secret détecté (identifiant secret) ».
-//
-// Le prompt portait `Id examen : <id>`. Les ids Pronote sont des jetons à
-// forte entropie (`147#h-etLBzJ2…`) : la garde I4 (forme OPAQUE) les classait
-// en secret et refusait le prompt fabriqué par l'app elle-même. L'identifiant
-// ne sert à RIEN au modèle (titre, matière, date et extraits suffisent).
+// Recette LIVE : les ids Pronote (forte entropie) étaient classés secret par la
+// garde I4. Ils ne servent à rien au modèle et ne sont plus dans le prompt.
 describe("fiche de revision — l'id du devoir ne part pas dans le prompt (#606)", () => {
   // Ids réels observés en mode démo (mêmes formes que la production).
   const PRONOTE_ID = ["147#h-etLBzJ2Deo5zD2", "02k8QuEiINhwBMzgQvJsLBKuwg"].join("-");
@@ -215,8 +192,7 @@ describe("fiche de revision — l'id du devoir ne part pas dans le prompt (#606)
   });
 
   test.skipIf(skip)("la garde I4 reste effective sur les extraits de cours", async () => {
-    // Un vrai secret dans le cours est toujours refusé : on n'a pas affaibli
-    // la garde, on a retiré du prompt ce qui n'y avait pas sa place.
+    // Un vrai secret dans le cours reste refusé : la garde n'est pas affaiblie.
     const jwt = [
       "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
       "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkVsInZ1ZSJ9",

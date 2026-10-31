@@ -1,18 +1,6 @@
-// #394 : un `Error` (et non une `Exception`) levé pendant un appel du pont
-// ne doit JAMAIS laisser la promesse JS pendante.
-//
-// Un `Error` non capturé tue le fil du worker SANS `resolve` ni `reject` : la
-// promesse `pending[requestId]` n'est jamais réglée et l'interface bloque sur
-// un chargement infini, sans message (pour `pairing.scanQr`, dont le délai JS
-// est 0, elle pendait POUR TOUJOURS).
-//
-// Ce test ne Miroite pas la logique : il COMPILE la VRAIE source de production
-// (`android/app/.../BridgeErrors.kt`) et la pilote via
-// `agents/runtime/kotlin-parity/BridgeErrorsParityMain.kt`. Les assertions
-// portent donc sur du code exécuté.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Un `Error` levé pendant un appel du pont ne doit JAMAIS laisser la promesse JS
+// pendante : le fil du worker meurt sans `resolve` ni `reject`.
+// La VRAIE source est compilée et pilotée ; outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -63,9 +51,7 @@ describe("pont : un échec natif devient toujours un rejet (#394)", () => {
   });
 
   test.skipIf(skip)("un `Error` ne s'échappe JAMAIS du fil du worker", async () => {
-    // Si l'exception s'échappait, le pilote mourrait (le harnais le verrait :
-    // pas de réponse). Le fait de recevoir une réponse prouve que le pont a
-    // attrapé l'échec.
+    // Recevoir une réponse prouve que le pont a attrapé l'échec.
     const rejet = await appel("error", "boom");
     expect(rejet.rejected).toBe(true);
     // Le pilote survit : un appel suivant répond encore.
@@ -73,8 +59,7 @@ describe("pont : un échec natif devient toujours un rejet (#394)", () => {
   });
 
   test.skipIf(skip)("le message brut de l'échec ne sort JAMAIS", async () => {
-    // Le message d'une exception peut nommer un hôte, un compte, une URL :
-    // il ne franchit pas la frontière native/JS.
+    // Le message d'une exception peut nommer un hôte ou une URL : il ne franchit pas la frontière.
     const brut = "échec sur 10.0.0.1:8080 jeton=secret";
     for (const genre of GENRES) {
       const rejet = await appel(genre, brut);
@@ -93,17 +78,14 @@ describe("pont : un échec natif devient toujours un rejet (#394)", () => {
   });
 
   test.skipIf(skip)("la mémoire épuisée est un `unavailable`, pas une cause affirmée à tort", async () => {
-    // La cause est CERTAINE (c'est un `OutOfMemoryError`) : le pont peut
-    // dire « réessaie ». Une cause inventée serait pire qu'aucune cause.
+    // Cause CERTAINE (`OutOfMemoryError`) : le pont peut dire « réessaie ».
     const rejet = await traduction("out_of_memory");
     expect(rejet.code).toBe("unavailable");
     expect((rejet.message ?? "").trim()).not.toBe("");
   });
 
   test.skipIf(skip)("un échec ATTENDU garde son code et sa phrase", async () => {
-    // `BridgeFailure` : le pont a choisi son code et sa phrase (ex. « QR et
-    // PIN requis. ») — la traduction ne doit pas l'écraser par « Erreur
-    // native. ».
+    // `BridgeFailure` : le pont a choisi son code et sa phrase, la traduction ne l'écrase pas.
     const rejet = await traduction("bridge_failure", "Requête invalide.");
     expect(rejet.code).toBe("bad_request");
     expect(rejet.message).toBe("Requête invalide.");

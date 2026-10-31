@@ -7,10 +7,8 @@ import {
   greenOutput,
 } from "../../agents/runtime/test-output";
 
-// agents/runtime/test-output.ts — la sortie de `bun test` passe par un filtre
-// borné. Échantillons RÉELS capturés avec bun 1.4.4 (voir fixtures) : un
-// échec garde sa cause (fichier:ligne, `error:`, premier hunk) et jette le
-// reste ; le code de sortie de bun n'est jamais réécrit.
+// `test-output.ts` filtre la sortie de `bun test` : un échec garde sa cause
+// (fichier:ligne, `error:`, premier hunk) et jette le reste.
 const ROOT = join(import.meta.dir, "..", "..");
 const FIXTURES = join(import.meta.dir, "fixtures");
 const SCRIPT = join(ROOT, "agents", "runtime", "test-output.ts");

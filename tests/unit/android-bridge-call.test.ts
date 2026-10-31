@@ -1,15 +1,7 @@
-// #539/#646 : toute ENTRÉE du pont répond EXACTEMENT une fois.
-//
-// Deux branches de `runCall` sortaient SANS répondre (identifiant d'appel mal
-// formé, pont fermé) : la promesse JS pendait — pour TOUJOURS sur
-// `pairing.scanQr`, dont le délai JS est 0. La décision vit désormais dans
-// `app/BridgeCall.kt`, fichier PUR compilé et EXÉCUTÉ par le harnais de
-// parité : ce n'est pas un miroir TS ni un parseur de source, c'est le code de
-// production exécuté. Un reformatage de `VsnBridge.kt` ne change plus le
-// verdict.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Toute ENTRÉE du pont répond EXACTEMENT une fois : deux branches sortaient sans
+// répondre et la promesse JS pendait (pour toujours sur `pairing.scanQr`).
+// La décision vit dans `app/BridgeCall.kt`, PUR et EXÉCUTÉ ; outillage absent =
+// SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -63,8 +55,7 @@ describe("pont : toute entrée répond exactement une fois (#539)", () => {
       const rejet = responses(r)[0]!;
       expect(rejet.kind).toBe("reject");
       expect(rejet.code).toBe("bad_request");
-      // L'identifiant revient TEL QUEL : sinon le JS ne retrouverait pas sa
-      // promesse.
+      // L'identifiant revient TEL QUEL : sinon le JS ne retrouve pas sa promesse.
       expect(rejet.requestId).toBe(requestId);
       expect((rejet.message ?? "").trim()).not.toBe("");
     }
@@ -106,8 +97,7 @@ describe("pont : toute entrée répond exactement une fois (#539)", () => {
   });
 
   test.skipIf(skip)("la priorité est stable : identifiant, méthode, taille, abandon, pont", async () => {
-    // Identifiant mal formé + pont fermé : c'est l'identifiant qui est refusé
-    // (le JS doit retrouver sa promesse par son identifiant).
+    // Identifiant mal formé + pont fermé : c'est l'identifiant qui est refusé.
     const idDAbord = await route("", "bridge.cancel", "{}", true);
     expect(idDAbord.replies[0]!.kind).toBe("reject");
     expect(idDAbord.replies[0]!.code).toBe("bad_request");

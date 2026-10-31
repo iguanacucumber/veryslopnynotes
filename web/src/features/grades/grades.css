@@ -97,10 +97,14 @@
   overflow: hidden;
 }
 
+/* Le graphe garde sa hauteur Papillon, mais vit dans une bande fermée : la
+   courbe ne descend jamais sous la moyenne, même quand le dernier point est
+   au plus bas. `overflow` garde aussi le halo dans la carte. */
 .grades-hero__graph {
-  height: 152px;
-  padding: 12px 16px 0;
-  margin-bottom: -12px;
+  height: 164px;
+  padding: 12px 16px;
+  margin-bottom: 0;
+  overflow: hidden;
 }
 
 .grades-hero__body {
@@ -108,8 +112,7 @@
   flex-direction: column;
   gap: 1px;
   width: 100%;
-  padding: 18px;
-  padding-top: 0;
+  padding: 16px 18px 18px;
 }
 
 .grades-hero__figure {

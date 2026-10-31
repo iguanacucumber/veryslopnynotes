@@ -1,11 +1,10 @@
 import type { AiContextSourceMeta, TeacherMessage, TeacherMode, TeacherThread, TeacherTurnResult } from "../../bridge/types";
 import { parseAiContext } from "../tasks/assignments";
 
-// Professeur IA contextualisé (#633) : modèle PUR de l'écran Prof.
-// Aucun réseau ici : les bornes protègent le pont (le natif revalide tout) et
-// le rendu (jamais une bulle vide, jamais une source inventée).
+// Modèle PUR de l'écran Prof. Aucun réseau ici : les bornes protègent le pont
+// (le natif revalide tout) et le rendu (jamais une bulle vide, jamais une source
+// inventée).
 
-/** Causes affichables d'un tour raté : message + « Réessayer » dans l'UI. */
 export type TeacherErrorKind = "key" | "quota" | "timeout" | "empty" | "refused" | "unavailable";
 
 export interface TeacherTurnError {
@@ -69,7 +68,6 @@ function parseSources(raw: unknown): string[] {
   return out;
 }
 
-/** Lit un tour local (stockage ou réponse du pont), borné et validé. */
 export function parseTeacherMessage(raw: unknown): TeacherMessage | null {
   if (typeof raw !== "object" || raw === null) return null;
   const value = raw as Record<string, unknown>;
@@ -91,7 +89,6 @@ export function parseTeacherMessage(raw: unknown): TeacherMessage | null {
   };
 }
 
-/** Lit le fil local renvoyé par `teacher.load`. */
 export function parseTeacherThread(raw: unknown): TeacherThread {
   const empty: TeacherThread = { subject: "", messages: [] };
   if (typeof raw !== "object" || raw === null) return empty;
@@ -103,20 +100,13 @@ export function parseTeacherThread(raw: unknown): TeacherThread {
   return { subject, messages: trimTeacherMessages(messages) };
 }
 
-/** Borne le fil local aux derniers tours (le natif applique la même borne). */
 export function trimTeacherMessages(messages: TeacherMessage[]): TeacherMessage[] {
   return messages.filter((message) => parseTeacherMessage(message) !== null).slice(-TEACHER_MAX_MESSAGES);
 }
 
-/**
- * Tours d'historique envoyés au pont : le fil borné (≤ 40), pas seulement les
- * 6 derniers. Le natif garde les 6 récents pour le prompt et résume les plus
- * anciens (`TeacherChat.summaryOf`) ; couper ici rendait ce résumé inatteignable.
- *
- * `sources`/`unsourced` sont OBLIGATOIRES : sans eux, `parseTeacherThreadOrNull`
- * rejette chaque tour professeur (`unsourced == sources.isEmpty()`) et le
- * modèle perd ses réponses précédentes (#706).
- */
+/** Fil borné complet (≤ 40) : le natif résume lui-même les tours anciens.
+ *  `sources`/`unsourced` OBLIGATOIRES, sinon le natif rejette chaque tour
+ *  professeur et le modèle perd ses réponses précédentes. */
 export function teacherHistory(
   messages: TeacherMessage[],
 ): Array<Pick<TeacherMessage, "role" | "text" | "sources" | "unsourced">> {
@@ -128,7 +118,7 @@ export function teacherHistory(
   }));
 }
 
-/** Payload d'un tour : borné AVANT le pont (qui revalide). */
+/** Borné AVANT le pont, qui revalide. */
 export function buildTeacherTurn(
   subject: string,
   message: string,
@@ -151,11 +141,8 @@ export function buildTeacherTurn(
   };
 }
 
-/**
- * Lit la réponse du pont. Une réponse `ok` SANS texte devient une erreur
- * explicite : jamais une bulle vide. Les sources restent les libellés fournis
- * par le natif ; une réponse sans libellé est marquée non sourcée.
- */
+/** Une réponse `ok` SANS texte devient une erreur explicite : jamais une bulle
+ *  vide ; une réponse sans libellé est marquée non sourcée. */
 export function parseTeacherTurnResult(raw: unknown): TeacherTurnResult {
   if (typeof raw !== "object" || raw === null) {
     return { ok: false, message: "Le professeur n’a pas répondu : réessaie." };
@@ -199,10 +186,7 @@ export function parseTeacherTurnResult(raw: unknown): TeacherTurnResult {
   };
 }
 
-/**
- * Classe un échec de tour : clé absente, quota, timeout, réponse vide, refus
- * ou indisponible. Le message du pont fait foi ; le repli est explicite.
- */
+/** Le message du pont fait foi ; le repli est explicite. */
 export function classifyTeacherFailure(result: TeacherTurnResult): TeacherTurnError {
   if (result.refused) {
     return { kind: "refused", message: result.message || "Aucune source exploitable pour cette matière." };
@@ -225,13 +209,12 @@ export function classifyTeacherFailure(result: TeacherTurnResult): TeacherTurnEr
   return { kind: "unavailable", message: message || "Le professeur est indisponible : réessaie." };
 }
 
-/** Tour élève local (aucune source : c'est une question). */export function studentMessage(text: string): TeacherMessage | null {
+export function studentMessage(text: string): TeacherMessage | null {
   const body = boundedString(text, TEACHER_MAX_MESSAGE);
   if (!body) return null;
   return { role: "student", text: body, sources: [], unsourced: false, context: [], summaryChars: 0 };
 }
 
-/** Tour professeur depuis une réponse validée du pont. */
 export function teacherMessage(result: TeacherTurnResult): TeacherMessage | null {
   const answer = boundedString(result.answer, TEACHER_MAX_ANSWER);
   if (!result.ok || !answer) return null;
@@ -246,7 +229,6 @@ export function teacherMessage(result: TeacherTurnResult): TeacherMessage | null
   };
 }
 
-/** Rejeter une réponse non sourcée : elle disparaît du fil local. */
 export function rejectTeacherAnswer(messages: TeacherMessage[], index: number): TeacherMessage[] {
   if (index < 0 || index >= messages.length) return messages;
   if (messages[index]?.role !== "teacher") return messages;
@@ -286,12 +268,10 @@ export function teacherThreadPayload(subject: string, messages: TeacherMessage[]
   };
 }
 
-/** Sources du TOUR (hors historique) pour « Ce qui est envoyé ». */
 export function turnSources(message: TeacherMessage): AiContextSourceMeta[] {
   return (message.context ?? []).filter((source) => source.type !== "history");
 }
 
-/** Tours d'historique réellement envoyés avec ce tour. */
 export function historySources(message: TeacherMessage): AiContextSourceMeta[] {
   return (message.context ?? []).filter((source) => source.type === "history");
 }

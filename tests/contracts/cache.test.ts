@@ -4,21 +4,13 @@ import { EVENT_TYPES, isContractEvent } from "../../shared/contracts/events";
 import { CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
 import type { CacheableResource } from "../../shared/contracts/cache";
 
-// #311 : miroir de `CachePolicy.shouldFetch` (android/data). La règle est PURE
-// (comme `isStale`), donc elle se fige ici sans SDK Android : une entrée de
-// cache FRAÎCHE suffit à l'écran, sauf geste explicite de l'utilisateur
-// (`force`). Entrée absente ou périmée = relecture du client local.
-//
-// #372 : la fraîcheur suit EXACTEMENT la règle de `CachePolicy.isStale`
-// (android/data) — donc celle de `cacheStatus` (contrat, même règle) : une
-// entrée datée dans le FUTOUR (dérive d'horloge d'appareil) est PÉRIMÉE.
-// Miroir de `isStale` LUI-MÊME, pas de `cacheStatus` : c'est la borne Kotlin
-// qui décide ici, et le badge (« périmé ») garde la sienne.
-//
-// #365 : la réponse dépend de la REQUÊTE (semaine, période, algorithme).
-// L'entrée porte la requête qui l'a produite : une entrée d'une autre requête
-// est une entrée ABSENTE ⇒ relecture (le miroir ci-dessous est rejoué par le
-// VRAI Kotlin compilé dans `tests/unit/kotlin-cache-query.test.ts`).
+// Miroir de `CachePolicy.shouldFetch` (android/data) : une entrée FRAÎCHE suffit
+// à l'écran, sauf geste explicite (`force`) ; absente ou périmée = relecture.
+// Une entrée datée dans le FUTUR (dérive d'horloge) est PÉRIMÉE : son âge est
+// indéterminable. La réponse dépend aussi de la requête (semaine, période,
+// algorithme) : l'entrée porte la requête qui l'a produite, sinon elle vaut
+// ABSENTE. La règle est rejouée par le VRAI Kotlin dans
+// `tests/unit/kotlin-cache-query.test.ts`.
 type CachedEntry = { payload: string; fetchedAt: number; query: string };
 
 function isStale(resource: CacheableResource, fetchedAt: number, now: number): boolean {
@@ -44,8 +36,7 @@ function shouldFetch(
 
 describe("fraîcheur avant relecture (#311)", () => {
   test("cache frais + force=false ⇒ zéro appel client", () => {
-    // À la borne du TTL, l'entrée est encore fraîche (borne inclusive) : c'est
-    // exactement le cas « onglet rouvert dans le TTL » de l'issue.
+    // À la borne du TTL, l'entrée est encore fraîche (borne inclusive).
     expect(shouldFetch({ payload: "g", fetchedAt: 1_000, query: "" }, "grades", "", 1_000 + CACHE_TTL_MS.grades, false)).toBe(false);
   });
 
@@ -71,8 +62,8 @@ describe("fraîcheur avant relecture (#311)", () => {
 
 describe("la clé de cache porte la requête (#365)", () => {
   test("même ressource, requête différente ⇒ relecture", () => {
-    // L'EDT de la semaine prochaine : l'entrée fraîche de la semaine
-    // courante ne peut PAS lui servir de réponse.
+    // L'EDT de la semaine prochaine : l'entrée fraîche de la semaine courante
+    // ne peut PAS lui servir de réponse.
     const entry = { payload: "t", fetchedAt: 1_000, query: "weekStart=2026-10-19" };
     expect(shouldFetch(entry, "timetable", "weekStart=2026-10-26", 1_000, false)).toBe(true);
     expect(shouldFetch(entry, "timetable", "weekStart=2026-10-19", 1_000, false)).toBe(false);
@@ -101,11 +92,10 @@ describe("fraîcheur du contrat : horloge en avance (#372)", () => {
   const now = 1_700_000_000_000;
 
   test("entrée datée dans le futur = périmée (dérive d'horloge d'appareil)", () => {
-    // Une entrée datée APRÈS maintenant n'est pas fraîche : son âge est
-    // indéterminable, donc on la traite comme périmée (badge affiché, cache
-    // relu). La soustraction seule (`now - fetchedAt` négatif) la disait fraîche.
+    // Âge indéterminable : on traite l'entrée comme périmée (badge affiché,
+    // cache relu). La soustraction seule (`now - fetchedAt` négatif) la disait
+    // fraîche.
     expect(cacheStatus("grades", now + 1000, now)).toBe("stale");
-    // Une entrée passée normale reste fraîche.
     expect(cacheStatus("grades", now - 1000, now)).toBe("fresh");
   });
 

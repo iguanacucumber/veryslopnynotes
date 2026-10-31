@@ -1,6 +1,5 @@
-// Actualités de l'établissement : payload -> modèle d'affichage.
-// Le contenu est une DONNÉE, jamais du HTML : ces fonctions ne produisent que
-// des chaînes, et la route les rend dans des nœuds texte React.
+// Actualités : payload -> modèle d'affichage. Le contenu est une DONNÉE, jamais
+// du HTML : ces fonctions ne produisent que des chaînes rendues en nœuds texte.
 import { cleanText, frDateLong } from "../../lib/format";
 
 export const NEWS_MAX_ITEMS = 100;
@@ -39,8 +38,7 @@ function parseItems(payload: string | null): unknown[] {
   try {
     const root: unknown = JSON.parse(payload);
     if (!isRecord(root)) return [];
-    // `news` est la forme du contrat / de PronotePayloads.kt ; `items` est
-    // l'enveloppe générique du pont factice et des caches anciens.
+    // `news` = contrat ; `items` = enveloppe du pont factice et des caches anciens.
     if (Array.isArray(root["news"])) return root["news"];
     if (Array.isArray(root["items"])) return root["items"];
     return [];
@@ -49,8 +47,6 @@ function parseItems(payload: string | null): unknown[] {
   }
 }
 
-/** Lit au plus [NEWS_MAX_ITEMS] entrées, borne chaque champ et ignore une
- *  entrée sans identifiant, sans titre ou en double. */
 export function parseNewsPayload(payload: string | null): NewsItem[] {
   const items: NewsItem[] = [];
   const seen = new Set<string>();
@@ -78,7 +74,6 @@ export function newsCategoryLabel(category: string): string {
   return category.trim() || NEWS_CATEGORY_OTHER;
 }
 
-/** Date longue en français (« 16 octobre 2026 »), vide si illisible. */
 export function newsDateLabel(value: string): string {
   return frDateLong(value);
 }
@@ -118,7 +113,6 @@ export function newsGroups(items: NewsItem[]): NewsGroup[] {
     });
 }
 
-/** Aperçu coupé au mot le plus proche, avec une ellipse explicite. */
 export function newsPreview(body: string, max = NEWS_BODY_PREVIEW): string {
   const clean = cleanText(body).replace(/\s+/g, " ");
   if (clean.length <= max) return clean;
@@ -127,13 +121,8 @@ export function newsPreview(body: string, max = NEWS_BODY_PREVIEW): string {
   return `${(lastSpace > max / 2 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
 }
 
-/**
- * Corps d'une actualité : absent (à demander), en cours, chargé, en erreur.
- *
- * #475 : la liste ne porte plus le corps — il se charge À LA DEMANDE, au
- * dépliage (un POST par actualité déployee, pas vingt par écran). L'état vit
- * ici, hors du composant : la route n'affiche que des textes.
- */
+/** Corps chargé À LA DEMANDE, au dépliage (un POST par actualité déployée) ;
+ *  l'état vit hors du composant. */
 export type NewsBodyStatus = "absent" | "loading" | "loaded" | "error";
 
 export interface NewsBodyState {
@@ -142,47 +131,37 @@ export interface NewsBodyState {
   error: string;
 }
 
-/** Message d'échec de la demande du corps (borné : jamais le message natif). */
+/** Message d'échec borné, jamais le message natif. */
 export const NEWS_BODY_ERROR = "Contenu indisponible.";
 
-/** État initial : le corps du payload s'il y en a un, sinon à demander. */
 export function newsBodyState(payloadBody: string): NewsBodyState {
   return payloadBody.trim().length > 0
     ? { status: "loaded", body: payloadBody, error: "" }
     : { status: "absent", body: "", error: "" };
 }
 
-/**
- * Le corps est-il à demander au natif ? (absent, ou échec à réessayer)
- *
- * Pendant la demande, le statut est « loading » : on ne redemande pas.
- */
+/** Pendant la demande le statut est « loading » : on ne redemande pas. */
 export function needsNewsBody(state: NewsBodyState): boolean {
   return state.status === "absent" || state.status === "error";
 }
 
-/** Demande en cours. */
 export function newsBodyLoading(state: NewsBodyState): NewsBodyState {
   return { status: "loading", body: state.body, error: "" };
 }
 
-/** Corps reçu (vide = l'établissement n'a rien publié). */
 export function newsBodyLoaded(_state: NewsBodyState, body: string): NewsBodyState {
   return { status: "loaded", body, error: "" };
 }
 
-/** Échec de la demande : le corps reste absent, l'erreur est dite. */
 export function newsBodyFailed(state: NewsBodyState, message = NEWS_BODY_ERROR): NewsBodyState {
   return { status: "error", body: state.body, error: message };
 }
 
-/** Le texte affiché : le corps, en entier s'il est déplié, en aperçu sinon. */
 export function newsBodyText(state: NewsBodyState, expanded: boolean): string {
   if (!state.body) return "";
   return expanded || state.body.length <= NEWS_BODY_PREVIEW ? state.body : newsPreview(state.body);
 }
 
-/** Le corps est-il long (donc repliable) ? */
 export function newsBodyCollapsible(state: NewsBodyState): boolean {
   return state.body.length > NEWS_BODY_PREVIEW;
 }

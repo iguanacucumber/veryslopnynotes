@@ -28,18 +28,15 @@ function list(dir: string): string[] {
   return out;
 }
 
-/** Méthodes que le pont Kotlin expose au JS (`@JavascriptInterface`). */
 function kotlinExposed(source: string): string[] {
   return [...source.matchAll(/@JavascriptInterface\s+fun\s+(\w+)\s*\(/g)].map((m) => m[1]!);
 }
 
-/** Allowlist `METHODS` du pont Kotlin (les noms que `call` accepte). */
 function kotlinMethods(source: string): string[] {
   const block = /METHODS\s*=\s*setOf\(([\s\S]*?)\n\s*\)/.exec(source)?.[1] ?? "";
   return [...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
 }
 
-/** Constantes `const val` numériques du pont Kotlin (en ms). */
 function kotlinConstants(source: string): Map<string, number> {
   const out = new Map<string, number>();
   for (const m of source.matchAll(/(?:private\s+)?const\s+val\s+(\w+)\s*=\s*([\d_]+)L?/g)) {
@@ -48,7 +45,6 @@ function kotlinConstants(source: string): Map<string, number> {
   return out;
 }
 
-/** Plafond d'attente natif, lu dans le source Kotlin (somme des plafonds). */
 function kotlinCeiling(source: string): number {
   const constants = kotlinConstants(source);
   const expr = /const\s+val\s+MAX_NATIVE_WAIT_MS\s*=\s*([^\n]+)/.exec(source)?.[1] ?? "";
@@ -107,8 +103,8 @@ describe("web invariants", () => {
   });
 
   test("aucune couleur en dur dans les composants UI (#564)", () => {
-    // Les couleurs vivent dans `styles/tokens.css` et les palettes. Un
-    // `#fff`/`rgba()` dans un TSX contourne le thème sombre et les 21 palettes.
+    // Les couleurs vivent dans `styles/tokens.css` et les palettes : une couleur
+    // en dur contourne le thème sombre et les 21 palettes.
     const tsx = ["features", "routes", "ui"]
       .flatMap((dir) => list(join(WEB, "src", dir)))
       .filter((file) => file.endsWith(".tsx"));
@@ -120,8 +116,7 @@ describe("web invariants", () => {
 
   test("un appairage réussi ouvre la session côté web", () => {
     // Le statut lu au démarrage est périmé après un appairage : sans ce
-    // câblage, le garde-fou renvoie vers /pairing et le menu principal
-    // reste inaccessible sans redémarrer l'application (#357).
+    // câblage, le garde-fou renvoie vers /pairing et le menu reste inaccessible.
     const ctx = readFileSync(join(WEB, "src/ui/AppContext.tsx"), "utf8");
     expect(ctx).toContain("setSessionOpen(true)");
     expect(ctx).toContain("setAuthLost(false)");
@@ -133,9 +128,9 @@ describe("web invariants", () => {
   });
 
   test("une déconnexion ferme la session côté web", () => {
-    // Le natif invalide la session et purge les caches ; sans cette fermeture
+    // Le natif invalide la session et purge les caches : sans cette fermeture
     // côté interface, le garde-fou laisse l'accueil d'un compte déconnecté
-    // afficher « aucune donnée en cache » pour toujours (#360).
+    // afficher « aucune donnée en cache » pour toujours.
     const ctx = readFileSync(join(WEB, "src/ui/AppContext.tsx"), "utf8");
     expect(ctx).toContain("setSessionClosed(true)");
     const profile = readFileSync(join(WEB, "src/features/profile/ProfileScreen.tsx"), "utf8");
@@ -148,8 +143,8 @@ describe("web invariants", () => {
 describe("contrat du pont natif", () => {
   test("le pont n'expose qu'une seule interface au JS", () => {
     // I10 / ADR-004 : UNE SEULE interface (`call`). Un second
-    // `@JavascriptInterface` (l'ancien `cancel`) rendait une méthode
-    // appelable par n'importe quel JS de la WebView, hors allowlist.
+    // `@JavascriptInterface` serait appelable par n'importe quel JS de la
+    // WebView, hors allowlist.
     const kotlin = readBridgeSource();
     expect(kotlinExposed(kotlin)).toEqual(["call"]);
     const client = readFileSync(join(WEB, "src/bridge/client.ts"), "utf8");
@@ -158,14 +153,11 @@ describe("contrat du pont natif", () => {
   });
 
   test("les méthodes du pont Kotlin sont exactement l'union TS", () => {
-    // Parité 1:1 : une méthode présente d'un seul côté est un trou (le JS
-    // l'appellera et le natif refusera, ou l'inverse : une méthode
-    // appelable hors contrat).
+    // Parité 1:1 : une méthode présente d'un seul côté est un trou dans le contrat.
     const kotlin = readFileSync(BRIDGE_CALL, "utf8");
     const allowlist = kotlinMethods(kotlin);
     expect(new Set(allowlist)).toEqual(new Set(BRIDGE_METHODS));
     expect(allowlist.length).toBe(BRIDGE_METHODS.length);
-    // L'allowlist couvre l'union : rien ne reste hors contrat.
     for (const method of BRIDGE_METHODS) expect(allowlist).toContain(method);
   });
 
@@ -179,10 +171,8 @@ describe("contrat du pont natif", () => {
   });
 
   test("le payload des sanctions publie la DURÉE, pas une gravité (#424)", () => {
-    // Le natif publiait la durée de la sanction dans le champ `gravity` : le
-    // web en faisait un « Niveau 120 » (deux heures de retenue) et la puce
-    // « Durée » restait morte. Le champ publié et le champ lu doivent être
-    // le même.
+    // Le champ publié et le champ lu doivent être le même : `gravity` recevait
+    // la durée, et le web en faisait un « Niveau 120 ».
     const payload = codeOnly(payloadsSource());
     expect(payload).toContain('put("durationMinutes"');
     expect(payload).not.toContain('put("gravity"');
@@ -193,8 +183,7 @@ describe("contrat du pont natif", () => {
 
   test("l'appairage n'envoie jamais le message brut au JS (#396)", () => {
     // Un message d'exception peut nommer l'hôte de l'établissement (adresse
-    // interne, port) : il ne franchit pas la frontière native/JS (I10). Le
-    // pont ne transmet que le CODE et rend une phrase choisie par lui.
+    // interne, port) : il ne franchit pas la frontière native/JS (I10).
     const kotlin = readBridgeSource();
     const debut = kotlin.indexOf("private fun pair(");
     expect(debut).toBeGreaterThan(-1);
@@ -202,7 +191,6 @@ describe("contrat du pont natif", () => {
     expect(corps).toContain("pairingFailureMessage(result.code)");
     expect(corps).not.toContain("result.message");
 
-    // La table du pont ne nomme ni hôte, ni IP, ni port.
     const table = readFileSync(
       join(ROOT, "android/app/src/main/java/fr/veryslopnynotes/app/PairingMessages.kt"),
       "utf8",

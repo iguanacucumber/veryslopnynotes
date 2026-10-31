@@ -1,12 +1,12 @@
-// Scraper Playwright minimal (#209) : GET /v1/health,
+// Scraper Playwright minimal : GET /v1/health,
 // POST /v1/manuals/scrape, POST /v1/web/scrape ; tout le reste = 404.
 // Plain HTTPS, SANS auth : risque accepté et documenté (I8) — loopback ou
 // reverse-proxy authentifié, jamais exposé.
 // platform/startUrl viennent du corps (writeOnly), jamais d'env ni du dépôt ;
-// username/password sont refusés (#526). Le jar est choisi par le serveur
-// (#538) : seul son nom vient de l'exploitant.
-// Navigation gardée : hôte public, nom résolu (#419), redirections et URL
-// finale re-vérifiées.
+// username/password sont refusés. Le jar est choisi par le serveur : seul son
+// nom vient de l'exploitant.
+// Navigation gardée : hôte public, nom résolu, redirections et URL finale
+// re-vérifiées.
 // I8 : PORT/HOST + chemins TLS = seules variables lues, dans start().
 import { readFileSync } from "node:fs";
 import { CONTRACTS_VERSION } from "../../shared/contracts/models";
@@ -40,8 +40,8 @@ export interface ScraperDeps {
     opts: {
       readonly startUrl: string;
       /**
-       * Jar de session du SERVEUR (jamais choisi par l'appelant, #538) :
-       * chemin libre, sous la responsabilité de l'exploitant.
+       * Jar de session du SERVEUR (jamais choisi par l'appelant) : chemin
+       * libre, sous la responsabilité de l'exploitant.
        */
       readonly defaultAuthFile?: string;
       readonly headless?: boolean;
@@ -50,8 +50,8 @@ export interface ScraperDeps {
     },
   ) => Promise<ManualDoc[]>;
   /**
-   * Scrape d'une PAGE WEB (#634) : même moteur, SANS jar de session. Défaut =
-   * vrai `scrapeWebPage` ; tests = fake pur.
+   * Scrape d'une PAGE WEB : même moteur, SANS jar de session. Défaut = vrai
+   * `scrapeWebPage` ; tests = fake pur.
    */
   readonly scrapeWeb?: (
     opts: {
@@ -63,29 +63,28 @@ export interface ScraperDeps {
   ) => Promise<WebDoc[]>;
   /**
    * Jar de session du serveur : le seul jar monté par le navigateur, choisi
-   * par l'exploitant (jamais par l'appelant de l'API, #538).
+   * par l'exploitant (jamais par l'appelant de l'API).
    */
   readonly authFile?: string;
   /** Délai d'attente du scrape (défaut 30 s) ; injectable pour les tests. */
   readonly timeoutMs?: number;
   /**
-   * Résolution DNS de l'hôte (garde SSRF, #419). Défaut = résolveur du
-   * système ; les tests injectent un faux résolveur (aucun réseau).
+   * Résolution DNS de l'hôte (garde SSRF). Défaut = résolveur du système ;
+   * les tests injectent un faux résolveur (aucun réseau).
    */
   readonly resolveHost?: HostResolver;
 }
 
 export interface App {
   readonly handler: (req: Request) => Promise<Response>;
-  /** Scrapes en vol (plafond de concurrence) : observabilité, tests. */
   readonly inFlightScrapes: () => number;
 }
 
 /**
  * POST /v1/manuals/scrape : corps borné AVANT parse (route ouverte : ne jamais
  * y bufferiser un corps arbitraire), validé par le contrat, credentials
- * transmis au scraper sans transiter par un log. Réponse = docs validés un par
- * un : une page d'erreur ne devient jamais un ManualDoc.
+ * refusés avant tout log. Réponse = docs validés un par un : une page d'erreur
+ * ne devient jamais un ManualDoc.
  * Plafond de concurrence : 2 scrapes en vol, le reste = 503 (l'endpoint est
  * public par conception, cf. I8 — un tiers ne doit pas pouvoir empiler des
  * Chromium, ~300 Mo chacun). Délai dépassé = 504 (le code exact), pas 502 :
@@ -96,7 +95,6 @@ export interface App {
 const SCRAPE_TIMEOUT_MS = 30_000;
 const MAX_CONCURRENT_SCRAPES = 2;
 
-/** Compteur de scrapes en vol, par application (jamais global). */
 interface ScrapeState {
   inFlight: number;
 }
@@ -141,32 +139,29 @@ export function createApp(deps: ScraperDeps = {}): App {
 }
 
 function timeoutError(ms: number): Error {
-  // Motif `timeout` : le délai dépassé est un 504 (le code exact), pas un
-  // 502 « scrape impossible » qui ferait croire à une panne du portail.
+  // Motif `timeout` : 504 (le code exact), pas 502 qui ferait croire à une
+  // panne du portail.
   return new ScrapeManualsError(`scrape timeout ${ms}ms`, "timeout");
 }
 
 /**
- * Le corps porte-t-il un champ `authFile` ? (#538)
+ * Le corps porte-t-il un champ `authFile` ?
  *
  * Le contrat ne connaît PLUS ce champ : le jar de session est choisi par le
- * serveur. Un corps qui le porte est donc hors contrat — on le dit par son
- * NOM (message dédié) plutôt que par un 400 générique : l'appelant sait
- * quoi retirer de sa requête.
+ * serveur. On le refuse par son NOM plutôt que par un 400 générique, pour que
+ * l'appelant sache quoi retirer de sa requête.
  */
 function hasAuthFileField(body: unknown): boolean {
   return typeof body === "object" && body !== null && "authFile" in body;
 }
 
 /**
- * Le corps porte-t-il des identifiants de portail ? (#526)
+ * Le corps porte-t-il des identifiants de portail ?
  *
  * Le scraper ne s'authentifie PAS : le navigateur monte le jar de session du
- * SERVEUR (#538/I24). `username`/`password` n'étaient lus par aucun chemin de
- * code — ils étaient exigés par le contrat, transmis par le serveur, puis
- * jetés : l'appelant croyait s'authentifier. Un corps qui les porte est donc
- * REFUSÉ (message dédié) : mieux vaut un 400 franc qu'un credential
- * collecté pour rien, jamais journalisé, jamais transmis au scraper.
+ * SERVEUR (I24). Un corps qui les porte est REFUSÉ (message dédié) : mieux
+ * vaut un 400 franc qu'un credential collecté pour rien, jamais journalisé,
+ * jamais transmis au scraper.
  */
 function hasCredentialFields(body: unknown): boolean {
   return (
@@ -186,7 +181,7 @@ async function handleScrape(
   resolveHost?: HostResolver,
 ): Promise<Response> {
   // Plafond AVANT tout `await` : incrémenter après une lecture de corps
-  // laissait une fenêtre où N requêtes passaient toutes le contrôle (#363).
+  // laissait une fenêtre où N requêtes passaient toutes le contrôle.
   if (state.inFlight >= MAX_CONCURRENT_SCRAPES) {
     return error("busy", 503, "scraper occupe, reessayer plus tard", { "retry-after": "5" });
   }
@@ -210,9 +205,9 @@ async function handleScrape(
       return error("bad_request", 400, "invalid JSON body");
     }
     if (!isManualsScrapeRequest(body)) return error("bad_request", 400, "invalid scrape request");
-    // #526 : le scraper ne s'authentifie pas (la session est le jar du
-    // serveur, I24). Des identifiants dans le corps seraient collectés pour
-    // rien : le corps est REFUSÉ, et rien n'est transmis au scraper.
+    // Le scraper ne s'authentifie pas (la session est le jar du serveur, I24).
+    // Des identifiants dans le corps seraient collectés pour rien : le corps
+    // est REFUSÉ, et rien n'est transmis au scraper.
     if (hasCredentialFields(body)) {
       return error(
         "bad_request",
@@ -220,10 +215,9 @@ async function handleScrape(
         "username/password : le scraper ne s'authentifie pas (session du serveur)",
       );
     }
-    // #538 : le jar de session est CHOISI par le serveur. Un corps qui le
-    // demande est REFUSÉ (message dédié) : le nom du jar ne se déduisait pas
-    // du contenu de la session, mais l'appelait — un appelant pouvait donc
-    //Naviguer avec la session d'un autre tenant.
+    // Le jar de session est CHOISI par le serveur. Un corps qui le demande
+    // est REFUSÉ (message dédié) : un appelant pouvait sinon naviguer avec la
+    // session d'un autre tenant.
     if (hasAuthFileField(body)) {
       return error("bad_request", 400, "authFile : le jar de session est choisi par le serveur");
     }
@@ -236,14 +230,14 @@ async function handleScrape(
         { platform: body.platform },
         {
           startUrl: body.startUrl,
-          // #538 : le SEUL jar monté est celui du serveur.
+          // Le SEUL jar monté est celui du serveur.
           defaultAuthFile: defaultJar,
           headless: body.headless,
-          // #419 : la garde SSRF résout le nom d'hôte avant la navigation.
-          // Le résolveur est celui du serveur (jamais celui de l'appelant) ;
+          // La garde SSRF résout le nom d'hôte avant la navigation. Le
+          // résolveur est celui du serveur (jamais celui de l'appelant) ;
           // les tests injectent un faux résolveur.
           resolveHost,
-          // #363 : le délai dépassé ou le client parti tuent le navigateur.
+          // Le délai dépassé ou le client parti tuent le navigateur.
           signal: controller.signal,
         },
       );
@@ -278,25 +272,25 @@ async function handleScrape(
         if (onClientAbort) req.signal?.removeEventListener("abort", onClientAbort);
       }
     } catch (err) {
-      // Navigateur absent = capability manquante (501 franc), pas un faux succès
-      // ni un 500 « unexpected failure » : motifs multiples, message Playwright
-      // réel compris (exécutable absent, install-deps, invite à installer).
+      // Navigateur absent = capability manquante (501 franc), pas un faux
+      // succès ni un 500 « unexpected failure » : le message Playwright réel
+      // (exécutable absent, install-deps) est conservé.
       if (isMissingBrowserError(err)) {
         return error("not_implemented", 501, "scraper sans navigateur");
       }
       if (err instanceof ScrapeManualsError) {
-        // #419 : le refus de la garde SSRF est EXPLICITE (hôte privé), pas un
-        // 502 muet qui laisserait croire à une panne du portail.
+        // Le refus de la garde SSRF est EXPLICITE (hôte privé), pas un 502
+        // muet qui laisserait croire à une panne du portail.
         if (err.reason === "private_host") return error("private_host", 403, "hote prive refuse");
         // Nom d'hôte introuvable : le scraping n'est pas en cause, le DNS
         // l'est — le code le dit (jamais un « scrape impossible » trompeur).
         if (err.reason === "unresolved_host") return error("unresolved_host", 502, "nom d'hote introuvable");
-        // #422 : délai dépassé = 504 (le code exact), pas 502. Le délai HTTP
-        // ET le délai de lecture du HTML (page.content()) finissent ici.
+        // Délai dépassé = 504 (le code exact), pas 502. Le délai HTTP ET le
+        // délai de lecture du HTML finissent ici.
         if (err.reason === "timeout") return error("timeout", 504, "delai de scrape depasse");
-        // #526 : le portail a renvoyé sa PAGE DE CONNEXION (HTTP 200) : la
-        // session du jar n'est plus valable. Le code le dit (jamais un
-        // « scrape impossible » trompeur).
+        // Le portail a renvoyé sa PAGE DE CONNEXION (HTTP 200) : la session
+        // du jar n'est plus valable. Le code le dit, jamais un « scrape
+        // impossible » trompeur.
         if (err.reason === "login_required") {
           return error("login_required", 502, "page de connexion detectee (session a renouveler)");
         }
@@ -321,8 +315,8 @@ async function handleScrape(
 
 /**
  * POST /v1/web/scrape : même garde SSRF, même plafond de concurrence, SANS
- * jar de session (#634). Le corps est borné AVANT parse et validé par le
- * contrat partagé ; la réponse ne contient jamais l'URL demandée.
+ * jar de session. Le corps est borné AVANT parse et validé par le contrat
+ * partagé ; la réponse ne contient jamais l'URL demandée.
  */
 async function handleWebScrape(
   req: Request,
@@ -422,13 +416,10 @@ async function handleWebScrape(
 
 /**
  * Navigateur Playwright ABSENT = capability manquante (501 franc), pas un
- * faux 500 « unexpected failure ». Le message réel de Playwright change selon
- * la version et la cause (« Executable doesn't exist at … », « Please run the
- * following command to download new browsers », « Host system is missing
- * dependencies… », « playwright install ») : on matche une LISTE de motifs,
- * jamais une chaîne fragile. ponytail: regex sur le message, pas de
- * dépendance et pas de parsing de sortie d'outil.
- * Upgrade: appellate d'erreur stable de Playwright si un jour elle existe.
+ * faux 500 « unexpected failure ». Le message réel varie selon la version et
+ * la cause : on matche une LISTE de motifs, jamais une chaîne fragile.
+ * ponytail: regex sur le message, pas de dépendance ni de parsing de sortie.
+ * Upgrade: une erreur stable de Playwright si elle existe un jour.
  */
 const MISSING_BROWSER_PATTERNS: readonly RegExp[] = [
   /playwright non install/i, // module absent (message interne du scraper)
@@ -439,7 +430,6 @@ const MISSING_BROWSER_PATTERNS: readonly RegExp[] = [
   /navigateur (?:absent|manquant|introuvable)/i,
 ];
 
-/** L'erreur signifie-t-elle « pas de navigateur utilisable » ? */
 function isMissingBrowserError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
   return MISSING_BROWSER_PATTERNS.some((re) => re.test(message));
@@ -467,8 +457,8 @@ function envValue(env: Record<string, string | undefined>, key: string): string 
 }
 
 /**
- * TLS : `TLS_CERT_FILE` + `TLS_KEY_FILE` = HTTPS, rien = HTTP (borne aux tests
- * et à Docker). Chemins vers du matériel local, pas des credentials : rien à
+ * TLS : `TLS_CERT_FILE` + `TLS_KEY_FILE` = HTTPS, rien = HTTP (tests et
+ * Docker). Chemins vers du matériel local, pas des credentials : rien à
  * commiter, clé générée hors dépôt. Une seule des deux = REFUS explicite,
  * jamais un repli silencieux en clair (l'app interdit le clairtext).
  */
@@ -495,7 +485,6 @@ function readPem(path: string, variable: string): string {
 
 /**
  * Démarre le scraper (CLI). `HOST` explicite requis pour exposer hors loopback.
- * Type de retour : `ReturnType<typeof Bun.serve`.
  */
 export function start(
   env: Record<string, string | undefined> = Bun.env as Record<string, string | undefined>,
@@ -505,10 +494,9 @@ export function start(
   const hostname = envValue(env, "HOST") || "127.0.0.1";
   const tls = tlsFromEnv(env);
   if (!tls) {
-    // #421 : le repli en clair doit être BRUYANT, pas une ligne discrète
-    // parmi les autres. Le scraper est sans auth (I8) : un opérateur qui
-    // croit démarrer en HTTPS ne doit pas se retrouver en clair sans le
-    // savoir (c'est ce que laissait passer `make runServer` avant).
+    // Le repli en clair doit être BRUYANT, pas une ligne discrète : le scraper
+    // est sans auth (I8), un opérateur qui croit démarrer en HTTPS ne doit pas
+    // se retrouver en clair sans le savoir.
     console.warn(
       "[server] ATTENTION : service en CLAIR (http) — aucun TLS_CERT_FILE/TLS_KEY_FILE. " +
         "Le scraper est sans authentification (I8) : ne l'exposez que sur un réseau de confiance.",

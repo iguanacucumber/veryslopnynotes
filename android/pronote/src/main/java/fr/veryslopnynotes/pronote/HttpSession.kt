@@ -8,24 +8,18 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.zip.GZIPInputStream
 
-/** Plafond d'une réponse (10 Mo), une fois décompressée comme avant (#474). */
+/** Plafond d'une réponse (10 Mo), une fois décompressée. */
 private const val MAX_RESPONSE_BYTES = 10_485_760
 
 /**
- * Session HTTP du protocole (#200, port de `pronotets` `http.js`).
- *
- * L'équivalent de `requests.Session` : jar à cookies persistant (RFC 6265,
- * sans `tough-cookie`) + redirects suivies à la main, car ni
+ * Jar à cookies persistant (RFC 6265) + redirects suivies à la main : ni
  * `HttpURLConnection` ni `fetch` ne gardent les cookies seuls. Transport :
- * `HttpURLConnection` (plateforme, zéro dépendance).
+ * `HttpURLConnection`, zéro dépendance.
  *
- * Fidélité assumée : pas de timeout (comme `fetch` côté TS — c'est le client
- * #201 qui bornera), redirects max 10 avec la même boucle (le `throw` final
- * est inatteignable des deux côtés : la boucle retourne toujours), passage
- * POST → GET sur 303 (et 301/302 émises pour un POST).
+ * Pas de timeout ici (le client le borne), redirects max 10, POST → GET sur 303
+ * (et 301/302 émises pour un POST).
  */
 
-/** Un cookie stocké : `name`/`domain`/`path` forment l'identité (jamais mutés). */
 private data class StoredCookie(
     val name: String,
     var value: String,
@@ -43,12 +37,12 @@ class CookieJar {
 
     private fun now(): Long = if (clock > 0) clock else System.currentTimeMillis()
 
-    /** Horloge injectée (tests déterministes) ; `0` = heure réelle. */
+    /** Horloge injectée (tests) ; `0` = heure réelle. */
     fun setNow(millis: Long) {
         clock = millis
     }
 
-    /** `Cookie` à envoyer pour cette URL (`""` = rien à envoyer). */
+    /** `""` = rien à envoyer. */
     fun getCookieString(url: String): String {
         val u = URL(url)
         val host = u.host.lowercase(Locale.ROOT)
@@ -77,15 +71,12 @@ class CookieJar {
         return true
     }
 
-    /**
-     * Enregistre un en-tête `Set-Cookie` (une seule valeur ; les doublons
-     * empilés avec virgule sont re-découpés, `Expires` contenant une virgule).
-     * En-tête malformé = ignoré en silence (comme `requests`).
-     *
-     * Frontière assumée : un `Domain=` IP-littéral accepté si l'hôte correspond
-     * (`tough-cookie` le refuse comme « public suffix »). Aucun serveur réel
-     * n'émet ça (cookies hôte-seul ou domaines publics) — la parité ne le couvre pas.
-     */
+/**
+ * En-tête malformé = ignoré en silence (comme `requests`).
+ *
+ * Frontière assumée : `Domain=` IP-littéral accepté si l'hôte correspond, ce
+ * que `tough-cookie` refuse ; aucun serveur réel n'émet ça.
+ */
     fun setCookie(headerValue: String, url: String) {
         val u = try {
             URL(url)
@@ -97,7 +88,7 @@ class CookieJar {
         }
     }
 
-    /** Re-découpe `a=b, c=d` sans couper la virgule de `Expires=Wed, 21…`. */
+    /** Re-découpe `a=b, c=d` sans couper la virgule de `Expires`. */
     private fun splitStacked(headerValue: String): List<String> {
         // Une virgule n'ouvre un nouveau cookie que si la suite est `nom=` —
         // la virgule d'`Expires` est suivie d'une date, jamais d'un `nom=`.
@@ -129,8 +120,7 @@ class CookieJar {
         val name = first.substring(0, eq).trim()
         if (name.isEmpty()) return
         var value = first.substring(eq + 1).trim()
-        // Valeur entre guillemets : le `DQUOTE` d'enveloppe ne fait pas partie
-        // de la valeur (RFC 6265 §5.2).
+        // Valeur entre guillemets : le `DQUOTE` d'enveloppe est retiré (RFC 6265 §5.2).
         if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
             value = value.substring(1, value.length - 1)
         }
@@ -179,8 +169,8 @@ class CookieJar {
             return
         }
         if (existing >= 0) {
-            // RFC 6265 §5.3 étape 12 : même (nom, domaine, chemin) — la valeur
-            // et l'expiration sont remplacées, l'ancienneté gardée.
+            // Même (nom, domaine, chemin) : valeur et expiration remplacées,
+            // ancienneté gardée (RFC 6265 §5.3).
             val c = cookies[existing]
             c.value = value
             c.expiresAt = expiresAt
@@ -252,7 +242,7 @@ class HttpSession(
         return sb.toString()
     }
 
-    /** `URLSearchParams.set` : UTF-8, espace → `+` (comme `URLEncoder`). */
+    /** Comme `URLSearchParams` : UTF-8, espace → `+` (`URLEncoder`). */
     private fun urlEncode(s: String): String = URLEncoder.encode(s, "UTF-8")
 
     // ponytail: plafond 10 Mo par chunks, evite OOM sur grosse reponse.
@@ -272,21 +262,14 @@ class HttpSession(
         }
     }
 
-    /**
-     * `Location` d'une redirection → URL absolue.
-     *
-     * Une `Location` ILLISIBLE (protocole inconnu, espace dans l'hôte,
-     * autorité cassée) est une PANNE RÉSEAU : elle devient une `IOException`
-     * — donc « réseau » pour l'app — et non une `MalformedURLException`
-     * brute qui remontait au caller sans mapper (#429).
-     *
-     * L'hôte est validé ICI, pas par le constructeur `URL` : celui-ci ne
-     * valide pas l'hôte de la même façon selon la JVM. Sur JDK 25,
-     * `URL("http://ho st/x")` est refusée à la construction ; sur JDK 17 elle
-     * est ACCEPTÉE, et l'échec arrive plus tard, à la résolution DNS —
-     * `UnknownHostException` BRUTE, non mappée, et un comportement différent
-     * selon la JVM (#497). La panne est donc toujours la même.
-     */
+/**
+ * `Location` illisible (protocole inconnu, espace dans l'hôte) = PANNE RÉSEAU :
+ * une `IOException`, jamais une `MalformedURLException` brute.
+ *
+ * L'hôte est validé ICI : le constructeur `URL` le refuse sur JDK 25 mais
+ * l'accepte sur JDK 17, où l'échec arrive en DNS (`UnknownHostException` brute).
+ * La panne doit être la même selon la JVM.
+ */
     private fun resolveRedirect(currentUrl: String, location: String): String {
         val target = try {
             URL(URL(currentUrl), location).toString()
@@ -304,18 +287,11 @@ class HttpSession(
         return target
     }
 
-    /**
-     * Décompression d'une réponse `gzip` (#474).
-     *
-     * `HttpURLConnection` ne décompresse QUE ce qu'il a lui-même demandé : dès
-     * qu'on pose `Accept-Encoding`, la decompression nous revient. Donc
-     * `Content-Encoding: gzip` présent = corps ENCORE compressé.
-     *
-     * ÉCHEC = octets BRUTS conservés : on ne perd JAMAIS la réponse (un
-     * serveur qui annonce `gzip` et envoie autre chose ne doit pas faire
-     * échouer la lecture). Le PLAFOND reste le même une fois décompressé
-     * (une bombe gzip ne doit pas non plus faire exploser la mémoire).
-     */
+/**
+ * `HttpURLConnection` ne décompresse QUE ce qu'il a demandé : dès qu'on pose
+ * `Accept-Encoding`, c'est à nous. ÉCHEC = octets BRUTS conservés, on ne perd
+ * JAMAIS la réponse. Le plafond s'applique aussi après décompression.
+ */
     private fun gunzip(raw: ByteArray): ByteArray {
         if (raw.isEmpty()) return raw
         return try {
@@ -332,10 +308,8 @@ class HttpSession(
         var body: ByteArray? = null
         val headers = HashMap(baseHeaders)
         opts.headers?.let { headers.putAll(it) }
-        // #474 : la session DEMANDE la compression. Sans cet en-tête, les
-        // réponses volumineuses de l'établissement (EDT, notes, cahier de
-        // texte) remontent en clair. On ne l'écrase pas si l'appelant en a
-        // déjà posé un (il sait ce qu'il demande).
+        // Sans cet en-tête, les grosses réponses (EDT, notes) remontent en
+        // clair. N'écrase pas un en-tête déjà posé par l'appelant.
         if (headers.keys.none { it.equals("Accept-Encoding", ignoreCase = true) }) {
             headers["Accept-Encoding"] = "gzip"
         }
@@ -380,8 +354,7 @@ class HttpSession(
                 val location = header("location").firstOrNull()
                 val isRedirect = status in 300..399 && location != null
                 if (isRedirect && redirect < maxRedirects) {
-                    // `Location` ILLISIBLE : erreur réseau mappée, PAS une
-                    // `MalformedURLException` brute (#429).
+                    // `Location` illisible : erreur réseau mappée.
                     val nextUrl = resolveRedirect(currentUrl, location)
                     // ponytail: meme-hote garde corps (parite 307), hote change = drop corps + content-type.
                     try {
@@ -402,17 +375,14 @@ class HttpSession(
                     conn.disconnect()
                     continue
                 }
-                // Chemin de SUCCÈS : pas de `disconnect()` — le corps est lu jusqu'au
-                // bout puis fermé (`cappedBytes`), donc le socket retourne au cache
-                // keep-alive de `HttpURLConnection` et le POST suivant du refresh
-                // réutilise la MÊME connexion au lieu de repayer un handshake TCP+TLS
-                // (#309). Fermer ici à chaque réponse vidait ce cache.
+                // Pas de `disconnect()` : le corps est lu jusqu'au bout, le socket
+                // retourne au cache keep-alive et le POST suivant réutilise la
+                // MÊME connexion (pas de handshake TCP+TLS).
                 val stream = if (status >= 400) conn.errorStream else conn.inputStream
                 val raw: ByteArray = if (stream == null) ByteArray(0) else cappedBytes(stream, MAX_RESPONSE_BYTES)
-                // #474 : l'établissement a compressé la réponse — on la rend
-                // lisible. Un `Content-Encoding` absent = corps déjà en clair
-                // (la décompression est faite PAR LE PLATEFORME quand celui-ci
-                // a posé l'en-tête ; le nôtre l'a posé, donc c'est à nous).
+                // `Content-Encoding` absent = corps déjà en clair (la
+                // décompression est faite par la plateforme quand c'est elle
+                // qui a posé l'en-tête).
                 val gzipped = header("content-encoding").any { it.trim().equals("gzip", ignoreCase = true) }
                 val bytes: ByteArray = if (gzipped) gunzip(raw) else raw
                 return HttpResponse(
@@ -424,11 +394,8 @@ class HttpSession(
                     content = bytes,
                 )
             } catch (e: Exception) {
-                // TOUTE sortie en erreur de l'itération referme le socket : une
-                // `Location` illisible, un corps coupé (plafond 10 Mo, socket
-                // mort) ou une écriture refusée ne doivent JAMAIS laisser la
-                // connexion ouverte — le pool de sockets se remplissait à chaque
-                // redirection malformée (#429).
+                // TOUTE erreur referme le socket : la laisser ouverte remplit
+                // le pool de connexions.
                 try { conn.disconnect() } catch (_: Exception) {}
                 throw e
             }

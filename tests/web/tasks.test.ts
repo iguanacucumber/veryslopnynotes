@@ -86,9 +86,8 @@ describe("web tâches — parsing défensif", () => {
   });
 
   test("la `ref` est validée BRUTE : hors schéma, le devoir ENTIER disparaît", () => {
-    // Même verdict que le contrat TS et que le Kotlin (`core/Assignment.kt`) :
-    // une `ref` avec un espace (identifiant Pronote exotique), un caractère de
-    // contrôle ou une URL fait perdre le devoir entier.
+    // Même verdict que le contrat TS et le Kotlin (`core/Assignment.kt`) : une
+    // `ref` invalide fait perdre le devoir entier.
     for (const ref of [
       "homework:0:file:0:12 34",
       "homework:0:file:0:a\u0001b",
@@ -98,7 +97,7 @@ describe("web tâches — parsing défensif", () => {
     ]) {
       expect(parseAssignment({ ...VALID, attachments: [{ id: "x", label: "x", ref }] })).toBeNull();
     }
-    // Une `ref` au schéma est conservée telle quelle (elle a été assainie en amont).
+    // Une `ref` au schéma est conservée telle quelle (assainie en amont).
     const parsed = parseAssignment({
       ...VALID,
       attachments: [{ id: "12 34", label: "sujet.pdf", ref: "homework:0:file:0:12_34" }],
@@ -123,8 +122,8 @@ describe("web tâches — parsing défensif", () => {
     expect(parsed?.lessonContent?.excerpt).toHaveLength(8000);
   });
 
-  // #631 : le payload peut porter PLUSIEURS cours (matière + jour) et leurs
-  // pièces jointes. Le premier reste `lessonContent` pour les anciens lecteurs.
+  // Le payload peut porter PLUSIEURS cours (matière + jour) et leurs pièces
+  // jointes ; le premier reste `lessonContent` pour les anciens lecteurs.
   test("lit les cours multiples et leurs pièces jointes", () => {
     const parsed = parseAssignment({
       ...VALID,
@@ -170,9 +169,8 @@ describe("web tâches — parsing défensif", () => {
     expect(duplicates.items.map((item) => item.id)).toEqual(["same", "other"]);
   });
 
-  // #570 : la déduplication par identifiant TIENT toujours, et elle est
-  // par identifiant SEUL : deux devoirs RÉELS qui se ressemblent (matière,
-  // titre, échéance) ne sont jamais confondus.
+  // La déduplication est par identifiant SEUL : deux devoirs réels qui se
+  // ressemblent (matière, titre, échéance) ne sont jamais confondus.
   test("la déduplication par id écarte le doublon et garde les devoirs distincts (#570)", () => {
     const twice = parseAssignmentsPayload(payload([VALID, { ...VALID }]));
     expect(twice.items.map((item) => item.id)).toEqual(["a3"]);
@@ -228,9 +226,7 @@ describe("web tâches — sections", () => {
   const CURRENT_WEEK = "2026-10-19";
 
   test("les sections suivent la semaine affichée, pas la semaine en cours", () => {
-    // #567 : les sections décrivent la semaine AFFICHÉE. Un devoir de la
-    // semaine suivante est « Plus tard » quand la semaine courante est
-    // affichée, et « Cette semaine » quand on navigue jusqu'à lui.
+    // #567 : les sections décrivent la semaine AFFICHÉE, pas la semaine en cours.
     const items = parseAssignmentsPayload(
       payload([
         { ...VALID, id: "lundi-passe", dueDate: "2026-10-19T08:00:00.000Z" },
@@ -251,8 +247,7 @@ describe("web tâches — sections", () => {
     ]);
     expect(courante.find((section) => section.id === "week")?.title).toBe("Cette semaine");
 
-    // Semaine suivante affichée : plus de « Aujourd'hui », le devoir de
-    // lundi 26 octobre entre dans la semaine affichée.
+    // Semaine suivante affichée : plus de « Aujourd'hui ».
     const suivante = assignmentSections(items, "2026-10-26", NOW);
     expect(suivante.map((section) => section.id)).toEqual(["overdue", "week"]);
     expect(suivante.find((section) => section.id === "week")?.items.map((item) => item.id)).toEqual([
@@ -262,9 +257,8 @@ describe("web tâches — sections", () => {
   });
 
   test("semaine courante : un devoir dû hier reste « En retard », pas dans la semaine", () => {
-    // #567 (suite) : la semaine affichée ne doit pas faire perdre le signal
-    // « en retard » — l'écran ne montre que la semaine choisie, donc un
-    // devoir en retard depuis lundi doit rester visible comme tel.
+    // La semaine affichée ne doit pas faire perdre le signal « en retard » :
+    // l'écran ne montre que la semaine choisie.
     const items = parseAssignmentsPayload(
       payload([
         { ...VALID, id: "hier", dueDate: "2026-10-20T18:00:00.000Z" },
@@ -284,8 +278,7 @@ describe("web tâches — sections", () => {
   });
 
   test("une échéance du jour SANS heure n'est jamais en retard", () => {
-    // Une date seule est un rendez-vous de la journée entière : elle reste
-    // « Aujourd'hui », jamais « En retard ».
+    // Une date seule est un rendez-vous de la journée entière.
     const items = parseAssignmentsPayload(
       payload([{ ...VALID, id: "aujourdhui", dueDate: "2026-10-21" }]),
     ).items;
@@ -303,8 +296,8 @@ describe("web tâches — sections", () => {
       ]),
     ).items;
     const sections = assignmentSections(items, "2026-10-12", NOW);
-    // Pas de « Aujourd'hui » pour une semaine passée : la journée en cours
-    // est simplement « Plus tard » pour cette semaine-là.
+    // Pas de « Aujourd'hui » pour une semaine passée : la journée en cours est
+    // « Plus tard » pour cette semaine-là.
     expect(sections.map((section) => section.id)).toEqual(["overdue", "week", "later"]);
     expect(sections.map((section) => section.items.map((item) => item.id))).toEqual([
       ["avant"],
@@ -368,8 +361,8 @@ describe("web tâches — navigation de semaine", () => {
   });
 
   test("le pont envoie la semaine affichée au natif (fenêtre de recherche)", async () => {
-    // #369 : sans la semaine affichée, le natif cherche le devoir dans une
-    // fenêtre fixe (-7/+21 j) : un devoir de la semaine +4 est « introuvable ».
+    // Sans la semaine affichée, le natif cherche dans une fenêtre fixe
+    // (-7/+21 j) : un devoir de la semaine +4 est « introuvable ».
     const sent: Array<{ method: string; params: Record<string, unknown> }> = [];
     const g = globalThis as unknown as {
       window?: unknown;

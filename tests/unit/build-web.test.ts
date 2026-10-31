@@ -1,12 +1,7 @@
-// #516 : le build Vite peut MOURIR sans message (le binding natif se fait
-// tuer) — le gate rougissait pour un bundle intact, et le journal ne disait
-// rien de la cause. `agents/runtime/build-web.ts` est le filet : plafond de
-// durée, UN réessai quand le processus est MORT (jamais quand il a échoué),
-// et un diagnostic qui nomme la cause.
-//
-// Les essais ici rejouent une MORT DE PROCESSUS avec une fausse commande
-// (`sh` qui se tue) : le comportement est éprouvé SANS payer un build Vite
-// (et donc sans dépendre de la machine).
+// Le build Vite peut MOURIR sans message (binding natif tué) : le gate
+// rougissait pour un bundle intact. `build-web.ts` plafonne la durée, réessaie
+// UNE fois une mort (jamais un échec) et nomme la cause. Les essais rejouent
+// une mort avec une fausse commande, sans payer un build Vite.
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -76,9 +71,7 @@ describe("build-web : un build Vite mort ne rougit pas le gate pour rien (#516)"
     expect(describeOutcome(echec)).toContain("ÉCHEC (code 2)");
   });
 
-  // Le build de l'APK passe par le MÊME helper : sans cela, le build de
-  // production resterait sans plafond ni réessai (le gate le lancerait en
-  // parallèle, dans les mêmes conditions).
+  // Le build de l'APK passe par le MÊME helper, sinon pas de plafond ni de réessai.
   test("le build de l'APK passe par le même helper", async () => {
     const pkg = JSON.parse(
       await Bun.file(join(import.meta.dir, "..", "..", "package.json")).text(),

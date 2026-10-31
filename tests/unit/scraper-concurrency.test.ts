@@ -1,8 +1,7 @@
-// Plafond de concurrence + annulation RÉELLE du scraper (#363).
-// Avant : le compteur était incrémenté APRÈS un `await` (lecture du corps)
-// et le délai d'attente ne faisait que rejeter la promesse — 8 requêtes
-// parallèles = 8 Chromium, et les navigateurs continuaient après le timeout.
-// Fakes 100 % synthétiques : aucun navigateur, aucun réseau.
+// Plafond de concurrence et annulation RÉELLE du scraper : le compteur était
+// incrémenté APRÈS un `await`, et le timeout ne faisait que rejeter la promesse
+// — 8 requêtes parallèles = 8 Chromium qui continuaient. Fakes synthétiques,
+// aucun navigateur ni réseau.
 import { describe, expect, test } from "bun:test";
 import { createApp } from "../../server/infrastructure/http";
 import { scrapeManuals } from "../../server/infrastructure/manuals-scrape";
@@ -52,9 +51,7 @@ describe("plafond de concurrence du scraper (#363)", () => {
       },
     });
 
-    // Les 8 handlers entrent AVANT le premier await du faux scrape : le
-    // compteur est incrémenté avant toute lecture de corps, donc le plafond
-    // est réellement appliqué (avant #363 : les 8 passaient).
+    // Les 8 handlers entrent AVANT le premier await : le compteur précède toute lecture de corps.
     const pending = Array.from({ length: 8 }, () => app.handler(post(scrapeBody())));
     const peak = app.inFlightScrapes();
     release();
@@ -89,13 +86,11 @@ describe("plafond de concurrence du scraper (#363)", () => {
     });
 
     const res = await app.handler(post(scrapeBody()));
-    // #422 : le délai dépassé = 504 (le code exact), pas 502 : le portail
-    // n'est pas en cause, c'est le temps qui manque.
+    // Délai dépassé = 504, pas 502 : c'est le temps qui manque, pas le portail.
     expect(res.status).toBe(504);
     expect((await res.json()) as unknown).toMatchObject({ error: { code: "timeout" } });
     expect(gotSignal).toBe(true);
-    // Le délai n'a pas seulement rejeté la promesse : le scraper a été
-    // annulé (sinon le Chromium continue en arrière-plan).
+    // Le scraper est vraiment annulé, sinon Chromium continue en arrière-plan.
     expect(aborted).toBe(true);
     expect(app.inFlightScrapes()).toBe(0);
   });

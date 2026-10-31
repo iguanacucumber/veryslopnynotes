@@ -1,10 +1,7 @@
-// #633 : le professeur IA contextuel doit partir du corpus assemblé (#628),
-// garder un historique borné, et ne jamais laisser un contenu externe sortir
-// des délimiteurs ``UNTRUSTED_DATA`` (I6).
-//
-// VRAI Kotlin exécuté : `android/core/TeacherChat.kt` est compilé par le
-// harnais et piloté par `agents/runtime/kotlin-parity/TeacherChatMain.kt`.
-// Les assertions portent donc sur le prompt et le validateur de production.
+// Le professeur IA contextuel part du corpus assemblé, garde un historique
+// borné et ne laisse jamais un contenu externe sortir des délimiteurs
+// ``UNTRUSTED_DATA`` (I6). Le vrai `TeacherChat.kt` est compilé et piloté par
+// `TeacherChatMain.kt` : le prompt et le validateur de production sont testés.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -107,7 +104,7 @@ describe("professeur IA — prompt contextualisé et borné (#633)", () => {
     });
     expect(prompt.system).toContain("corrige-moi");
     expect(prompt.system).toContain("corrige le travail rendu");
-    // #701 : le mode corrige-moi interdit lui aussi de citer les DONNEES.
+    // Le mode corrige-moi interdit lui aussi de citer les DONNEES.
     expect(prompt.system).toContain("Seuls les blocs precedes de « Libelle citable : » sont des sources");
     expect(prompt.system).not.toBe(
       (await ask<Prompt>({
@@ -231,8 +228,7 @@ describe("professeur IA — historique borné + résumé local (#633)", () => {
   });
 
   test.skipIf(skip)("un tour professeur tronqué est écarté, le tour complet reste (#706)", async () => {
-    // Le web n'envoyait que {role, text} : sources=[] + unsourced=false rendait
-    // chaque réponse du professeur invalide, donc absente de l'historique.
+    // Sans sources ni `unsourced`, chaque réponse du professeur était invalide.
     const partial = await ask<History>({
       op: "history",
       messages: [{ role: "teacher", text: "reponse partielle" }],

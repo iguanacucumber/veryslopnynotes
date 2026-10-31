@@ -1,4 +1,3 @@
-// Contrats — cantine : menus + solde (parité Papillon).
 // Le module cantine est souvent absent de l'établissement : l'absence est un
 // fait normal, pas une erreur.
 import {
@@ -13,7 +12,7 @@ export const CANTEEN_MEALS = ["breakfast", "lunch", "dinner"] as const;
 
 export type CanteenMeal = (typeof CANTEEN_MEALS)[number];
 
-/** Servi/prévu quand l'établissement publie le statut, absent sinon. */
+/** Statut publié par l'établissement, absent sinon. */
 export const CANTEEN_MENU_STATUSES = ["served", "planned"] as const;
 
 export type CanteenMenuStatus = (typeof CANTEEN_MENU_STATUSES)[number];

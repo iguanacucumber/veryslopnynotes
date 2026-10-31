@@ -244,6 +244,10 @@ sont à `999px`, la capsule d'onglet à 15 px.
 - **Réglages** : tuiles de rayon 23 px, padding 14 px, icône 32 px, fond
   `adjust(couleur, ±0,8)`, titre 17 / 700, description 15 / 500. Lignes de
   liste : item, rayon 20 px, padding 14 × 16 px, icône 24 px, titre 17.
+- **Prof** : onglets Discussion / Exercices en capsules de 44 px, actif plein
+  accent. Matière et mode dans une seule carte item, champs sur fond page,
+  modes en capsules. Compositeur collé au-dessus du dock, envoi à droite du
+  champ.
 - **Boutons** : 44 px, rayon pastille, plein accent. **Champs** : item, rayon
   pastille, focus en anneau.
 - **Dialogues** : largeur maximale 440 px, surface opaque, ombre réelle.

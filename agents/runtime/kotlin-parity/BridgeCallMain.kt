@@ -1,19 +1,8 @@
-// BridgeCallMain.kt — pilote JSON de l'admission d'un appel du pont (#539/#646).
+// BridgeCallMain.kt — pilote JSON de l'admission d'un appel du pont.
 //
-// OUTIL DE TEST uniquement : compilé par
-// `tests/unit/android-bridge-call.test.ts` (jamais par Gradle, jamais dans
-// l'APK). Le test compile la VRAIE source de production
-// `app/BridgeCall.kt` (logique pure : aucun import Android) et la pilote
-// ici : les assertions portent sur du code EXÉCUTÉ, pas sur un parseur de
-// source. Un reformatage de `VsnBridge.kt` ne change donc plus le verdict.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/android-bridge-call.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Le point du pilote : aucune sortie précoce sans réponse. Chaque route
-// enregistre EXACTEMENT une réponse dans le sink ; la route `Work` n'en
-// enregistre aucune (le fil du worker répondra).
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout. Les erreurs du PILOTE (op inconnue, champ absent) sont préfixées
-// `pilote: ` et refusées par le harnais.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.bridgecall
 
 import fr.veryslopnynotes.app.BridgeEarlySink

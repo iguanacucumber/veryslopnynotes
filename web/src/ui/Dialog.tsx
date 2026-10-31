@@ -4,12 +4,8 @@ import { IconClose } from "./icons";
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-/**
- * Dialogue modal partagé (#564) : même overlay, mêmes gestes, même focus que
- * la suppression d'une discussion ou la déconnexion. Le panneau vit dans le
- * document (pas de portail) : l'overlay est `position: fixed`, aucun ancêtre
- * de l'app ne crée de containing block.
- */
+/** Dialogue modal partagé : pas de portail, l'overlay est `position: fixed` et
+ *  aucun ancêtre de l'app ne crée de containing block. */
 export function Dialog({
   open,
   title,

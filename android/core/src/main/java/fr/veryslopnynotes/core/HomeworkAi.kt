@@ -1,16 +1,14 @@
 package fr.veryslopnynotes.core
 
 // Devoirs generate v1 — GENERATE -> VALIDATE sur Untrusted.
-// Port fidele de server/ai/homework.ts (supprimé en #210 : ce port est la
-// source de vérité). JSON valide par schema, sources citees,
-// refus propre si insuffisant.
-// I4 : consigne fixe, aucun secret, garde assertNoSecretsInPrompt via guard.
+// JSON valide par schema, sources citees, refus propre si insuffisant.
+// I4 : consigne fixe, aucun secret, garde via guard.
 // I6 : question + sources marquees Untrusted, delimiteurs nonce via guard.
-// I7 : aucun effet metier ici — retourne donnees pures, jamais push/store.
+// I7 : aucun effet metier ici — retourne des donnees pures.
 // Stdlib + guard/untrusted/core uniquement. Aucun reseau/env/outil.
 // Les appels provider sont BLOQUANTS : jamais sur le thread UI.
-// ponytail: bornes alignees sur Homework (miroir du contrat). Upgrade : gabarit
-// versionne RENDER (Humanize) quand le schema gagne une version.
+// ponytail: bornes alignees sur Homework. Upgrade : gabarit versionne (Humanize)
+// quand le schema gagne une version.
 
 // ponytail: consigne fixe, jamais construite depuis externe. Upgrade: versionner si plusieurs matieres.
 const val SYSTEM_HOMEWORK_JSON =
@@ -24,11 +22,9 @@ const val SYSTEM_HOMEWORK_JSON =
     "Chaque source citee doit reprendre exactement un libelle fourni dans les DONNEES."
 
 /**
- * Consigne du corrigé PHOTO (#588). Le texte reste une consigne fixe ; la
- * photo est une donnée externe, jamais une instruction.
- *
- * La méthode du cours est explicitement prioritaire : c'est ce qui distingue
- * un corrigé « au programme de l'élève » d'une réponse générique.
+ * Consigne du corrigé PHOTO. Le texte reste une consigne fixe ; la photo est une
+ * donnée externe, jamais une instruction. La méthode du cours est prioritaire :
+ * c'est ce qui distingue un corrigé « au programme de l'élève » d'une réponse générique.
  */
 const val SYSTEM_HOMEWORK_PHOTO_JSON =
     "Tu aides aux devoirs à partir d'une photo d'énoncé. Utilise uniquement les DONNEES delimitees " +
@@ -42,7 +38,6 @@ const val SYSTEM_HOMEWORK_PHOTO_JSON =
         SYSTEM_CITATION_RULE +
         "Chaque source citee doit reprendre exactement un libelle fourni, ou \"" + "Photo de l'énoncé" + "\"."
 
-/** Étiquette citable de la photo elle-même (aucun texte de source). */
 const val HOMEWORK_PHOTO_LABEL = "Photo de l'énoncé"
 
 const val HOMEWORK_REFUSAL_REASON = "sources_insuffisantes"
@@ -59,26 +54,18 @@ private fun nonBlankStrings(v: JsonValue): List<String>? {
 
 object HomeworkAi {
     // Blocs DONNEE envoyes au modele : question eleve + une entree par source.
-    // Expose separement pour l'appel direct OpenRouter (data), qui valide la
-    // reponse avec parseHomeworkResponse sur le meme schema.
+    // Expose separement pour l'appel direct OpenRouter, qui valide avec le meme schema.
     fun homeworkData(question: String, sources: List<HomeworkSource>): List<Untrusted<String>> {
         val head = markExternal("Question eleve (DONNEE) :\n" + question)
-        // Le libelle doit apparaitre TEL QUEL : la consigne exige que chaque
-        // citation « reprenne exactement un libelle fourni », et la validation
-        // compare `sources` aux libelles bruts (Homework.uniqueLabels).
-        // Avec l'ancien prefixe « Source : », le modele recopiait
-        // « Source : Cours : chapitre 4 » (ou renvoyait une liste vide) et la
-        // reponse etait jetee — « hors format » pour une citation que le prompt
-        // avait lui-meme fabriquee (#604, recette live).
+        // Le libelle doit apparaitre TEL QUEL : la validation compare `sources`
+        // aux libelles bruts (Homework.uniqueLabels).
         val rest = sources.map { markExternal("Libelle citable : " + it.label + "\nContenu (DONNEE) :\n" + it.text) }
         return listOf(head) + rest
     }
 
-    // VALIDATE : JSON du modele -> HomeworkOutcome. Meme schema que
-    // isHomeworkGenerateResponse cote TS : ok exige des sources citees,
-    // chaque citation doit reprendre une etiquette fournie.
-    // Meme requete que l'ex-garde contrat TS (supprimée en #210) : sources VIDES autorisees
-    // (le refus deterministe suit), bornes sur question/cle/lot.
+    // VALIDATE : JSON du modele -> HomeworkOutcome. Meme schema que le contrat TS :
+    // ok exige des sources citees, chaque citation doit reprendre une etiquette fournie.
+    // Requete valide : sources VIDES autorisees (le refus deterministe suit).
     fun parseHomeworkResponse(raw: JsonValue, allowedLabels: Set<String>): HomeworkOutcome {
         val obj = raw as? JsonValue.Obj ?: throw AiError("réponse devoirs invalide (schéma)")
         val status = jsonStrOf(obj, "status") ?: throw AiError("réponse devoirs invalide (schéma)")
@@ -87,9 +74,8 @@ object HomeworkAi {
             if (answer == null || answer.trim().isEmpty()) {
                 throw AiError("réponse devoirs invalide (schéma)")
             }
-            // #411 : un corrige trop long n'est pas un « schema » invalide :
-            // la reponse est bien formee, elle depasse sa borne. Le refus
-            // nomme la LIMITE REELLE (sinon l'eleve lit « hors format »).
+            // Un corrige trop long n'est pas un « schema » invalide : la reponse
+            // est bien formee, le refus doit nommer la LIMITE REELLE.
             if (answer.length > Homework.MAX_ANSWER_CHARS) {
                 throw OutputTooLongException(Homework.MAX_ANSWER_CHARS)
             }
@@ -101,9 +87,6 @@ object HomeworkAi {
                 ?: throw AiError("réponse devoirs invalide (schéma)")
             val sources = nonBlankStrings(sourcesRaw)
                 ?: throw AiError("réponse devoirs invalide (schéma)")
-            // Vide rejete ici en "(schéma)" comme la référence : le schéma TS exige
-            // déjà length > 0, donc sa branche "(sources manquantes)" est inatteignable
-            // (défense en profondeur morte) — même observable, pas de branche morte ici.
             if (sources.isEmpty()) throw AiError("réponse devoirs invalide (schéma)")
             // Le préambule « Libelle citable : » est un artefact du prompt : le
             // modèle le recopie parfois. On le retire AVANT de comparer, mais le
@@ -146,9 +129,8 @@ object HomeworkAi {
         throw AiError("réponse devoirs invalide (schéma)")
     }
 
-    // Requete valide au sens de l'ex-garde contrat TS (supprimée en #210) : question
-    // et cle bornees non-vides, lot borne, sources valides — mais lot VIDE
-    // autorise (le refus deterministe sans appel LLM suit). Differt de
+    // Requete valide : question et cle bornees non-vides, lot borne, sources valides
+    // — mais lot VIDE autorise (refus deterministe sans appel LLM). Differt de
     // Homework.isRequestValid, qui exige un lot non-vide cote app.
     private fun isGenerationRequestValid(
         question: String,
@@ -161,10 +143,9 @@ object HomeworkAi {
         return sources.all { it.isValid() }
     }
 
-    // Genere un corrige source ou un refus. Ne declenche aucun effet metier (I7).
-    // Refus deterministe sans appel LLM si aucune source (economie + reproductibilite).
-    // La cle de l'appelant (apiKey) est relayee a l'adaptateur telle quelle :
-    // elle n'entre pas dans le prompt et n'est jamais journalisee.
+    // Genere un corrige source ou un refus. Aucun effet metier (I7). Refus
+    // deterministe sans appel LLM si aucune source. apiKey est relayee telle
+    // quelle : elle n'entre pas dans le prompt et n'est jamais journalisee.
     fun generateHomework(
         provider: SafePromptProvider,
         question: String,
@@ -184,11 +165,8 @@ object HomeworkAi {
     }
 
     /**
-     * Corrigé à partir d'une PHOTO d'énoncé (#588).
-     *
-     * Contrairement à [generateHomework], un lot de sources texte VIDE est
-     * valide : la photo elle-même est la source citable. Le texte du cours et
-     * du manuel reste prioritaire pour respecter la méthode de l'élève.
+     * Corrigé à partir d'une PHOTO d'énoncé. Un lot de sources texte VIDE est
+     * valide : la photo elle-même est la source citable.
      */
     fun generateHomeworkFromPhoto(
         provider: SafeVisionPromptProvider,

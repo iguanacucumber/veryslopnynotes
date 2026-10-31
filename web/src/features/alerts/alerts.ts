@@ -8,10 +8,9 @@ export const ALERT_KIND_INJECTION = "injection_neutralized";
 export const EXCERPT_MAX = 500;
 export const EXCERPT_COLLAPSED = 140;
 
-// Le filtre de l'appareil est une HEURISTIQUE (#415) : il reconnaît des
-// formulations d'injection courantes, il ne vérifie rien. L'interface le dit
-// partout — jamais « vérifié », jamais « aucun contenu hostile » sans
-// réserve.
+// Le filtre de l'appareil est une HEURISTIQUE : il reconnaît des formulations
+// d'injection courantes, il ne vérifie rien. Jamais « vérifié » ni « aucun
+// contenu hostile » sans réserve.
 export const ALERTS_HEURISTIC_NOTE =
   "Filtre heuristique : il repère des formulations d’injection courantes, pas toutes. Un contenu hostile peut donc passer inaperçu, et une note légitime peut être signalée à tort.";
 // L'état vide n'affirme PAS l'absence de contenu hostile (fausse assurance) :
@@ -52,7 +51,6 @@ function text(value: unknown, max: number): string {
   return typeof value === "string" ? cleanText(value).slice(0, max) : "";
 }
 
-/** Espaces compactés, caractères de contrôle retirés, longueur bornée. */
 export function sanitizeExcerpt(raw: string, max = EXCERPT_MAX): string {
   const clean = cleanText(raw).replace(/\s+/g, " ");
   return clean.length > max ? clean.slice(0, max) : clean;
@@ -71,9 +69,8 @@ function alertArray(payload: string | null): unknown[] {
   }
 }
 
-/** Lit au plus [ALERTS_MAX_ITEMS] alertes valides, dédupliquées par id.
- *  Un extrait trop long est tronqué, pas ignoré : mieux vaut montrer la
- *  menace bornée que la cacher. */
+/** Un extrait trop long est tronqué, pas ignoré : mieux vaut montrer la menace
+ *  bornée que la cacher. */
 export function parseAlertsPayload(payload: string | null): SecurityAlert[] {
   const alerts: SecurityAlert[] = [];
   const seen = new Set<string>();
@@ -95,8 +92,7 @@ export function alertSeverity(kind: string): AlertSeverity {
   return kind === ALERT_KIND_INJECTION ? "danger" : "info";
 }
 
-/** Libellé français. Un kind hors contrat reste une information neutre,
- *  jamais le jeton serveur ni une fausse menace. */
+/** Un kind hors contrat reste neutre, jamais le jeton serveur ni une fausse menace. */
 export function alertKindLabel(kind: string): string {
   return kind === ALERT_KIND_INJECTION ? "Injection neutralisée" : "Alerte de sécurité";
 }
@@ -105,7 +101,6 @@ export function alertSourceLabel(source: string): string {
   return SOURCE_LABELS[source] ?? "Autre source";
 }
 
-/** Aperçu replié, coupé au mot le plus proche. */
 export function excerptPreview(excerpt: string, max = EXCERPT_COLLAPSED): string {
   const clean = sanitizeExcerpt(excerpt);
   if (clean.length <= max) return clean;

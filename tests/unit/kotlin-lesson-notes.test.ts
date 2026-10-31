@@ -1,14 +1,7 @@
-// #586: course notes are a LOCAL memory per subject.
-//
-// Real Kotlin runs here: `core/LessonNote.kt` is compiled by the harness and
-// driven by `agents/runtime/kotlin-parity/LessonNotesMain.kt`. The rules under
-// test decide what the assistant may cite: validation, per-subject selection,
-// source bounds.
-//
-// The disk store (`data/LessonNotesStore.kt`) imports `org.json` (Android API,
-// absent outside Gradle): it is covered by a source test checking that it
-// writes through `OfflineArtifacts` (epoch guard), plus the executed Kotlin
-// test from #404 for the guard itself.
+// Course notes are a LOCAL memory per subject (#586). Real Kotlin runs:
+// `core/LessonNote.kt` via `LessonNotesMain.kt`; these rules decide what the
+// assistant may cite. The disk store imports `org.json` (Android only), so a
+// source test checks its epoch-guarded writes.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -37,8 +30,7 @@ function note(id: string, subject: string, title: string, text: string, createdA
 describe("course notes — executed rules (#586)", () => {
   test.skipIf(skip)("a conforming note is accepted, an out-of-contract note is refused", async () => {
     expect((await ask({ op: "valid", ...note("n1", "Mathématiques", "Chapitre 4", "f'(x)=2x") })).valid).toBe(true);
-    // Out-of-schema id: it would end up in a file name or JSON response, so it
-    // is refused BEFORE storage.
+    // Out-of-schema id (a file name, a JSON response) is refused BEFORE storage.
     expect((await ask({ op: "valid", ...note("../x", "Maths", "T", "texte") })).valid).toBe(false);
     expect((await ask({ op: "valid", ...note("n1", "", "T", "texte") })).valid).toBe(false);
     expect((await ask({ op: "valid", ...note("n1", "Maths", "", "texte") })).valid).toBe(false);
@@ -62,8 +54,7 @@ describe("course notes — executed rules (#586)", () => {
       note(`n${i}`, "Maths", `Cours ${i}`, "x".repeat(4000), `2026-10-2${i}T08:00:00Z`),
     );
     const res = await ask({ op: "sources", subject: "Maths", notes });
-    // #628 : plus de plafond artificiel à 3 notes. Chaque note reste bornée
-    // comme une source ; l'assembleur IA décide ensuite de la place réelle.
+    // No artificial cap: each note is bounded as a source; the AI assembler fits them.
     expect(res.count).toBe(6);
     expect(res.labels).toEqual([
       "Cahier : Cours 5",
@@ -78,8 +69,7 @@ describe("course notes — executed rules (#586)", () => {
 
   test("the disk store goes through the epoch guard and reads valid notes", () => {
     const store = readFileSync(STORE, "utf8");
-    // A write during logout is ABANDONED: the file is not created and the
-    // purged directory is not resurrected (I16/#404).
+    // A write during logout is ABANDONED: no file, purged directory not resurrected (I16).
     expect(store).toContain("OfflineArtifacts.writeText(file, lessonNotesJson(notes), epoch)");
     // A corrupt entry is ignored, never served to the assistant.
     expect(store).toContain("if (LessonNote.isValid(note)) out.add(note)");

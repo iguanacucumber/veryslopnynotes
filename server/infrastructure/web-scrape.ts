@@ -1,20 +1,15 @@
-// #634 : une page web choisie par l'élève -> source citée « Web : titre ».
+// Une page web choisie par l'élève -> source citée « Web : titre ».
 //
-// MÊME moteur et MÊME garde que le scrape de manuel
-// (`server/infrastructure/manuals-scrape.ts`) : schéma http(s), hôte privé /
-// loopback / link-local / métadonnées refusés, nom résolu (rebinding DNS),
-// chaîne de redirections vérifiée, URL finale re-vérifiée, taille bornée avant
-// lecture, HTML borné dans le navigateur, délai de lecture.
+// MÊME moteur et MÊME garde que le scrape de manuel (`manuals-scrape.ts`) :
+// schéma http(s), hôte privé/loopback/link-local/métadonnées refusés, nom
+// résolu (rebinding DNS), redirections et URL finale vérifiées, taille bornée
+// avant lecture, HTML borné dans le navigateur, délai de lecture.
 //
-// Différences VOLONTAIRES :
-//  - aucun jar de session n'est monté (`useSession: false`) : la page web ne
-//    s'authentifie pas et ne porte aucun cookie de l'élève ;
-//  - les identifiants userinfo dans l'URL sont refusés ;
-//  - un contenu non textuel (`content-type` absent des types texte) est refusé.
+// Différences VOLONTAIRES : aucun jar de session (`useSession: false`), pas de
+// cookie de l'élève, userinfo refusé, contenu non textuel refusé.
 //
 // La réponse ne contient NI l'URL complète NI aucun cookie : seulement le
-// titre et le texte. L'app construit le libellé citable, et marque le contenu
-// Untrusted avant l'IA (I6).
+// titre et le texte. L'app marque le contenu Untrusted avant l'IA (I6).
 import type { ScrapeManualsError } from "./manuals-scrape";
 import { scrapePage } from "./manuals-scrape";
 import type { ScrapeOptions } from "./manuals-scrape";

@@ -1,30 +1,8 @@
-// LocalQueueParityMain.kt — pilote JSON de la file d'attente locale (#310).
+// LocalQueueParityMain.kt — pilote JSON de la file d'attente locale.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-local-queue.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile la VRAIE classe de
-// production `fr.veryslopnynotes.data.LocalRequestQueue` (logique pure, sans
-// Android) et la pilote ici : les deux assertions du critère #310 — au plus
-// 1 appel client concurrent ; requêtes identiques en vol = 1 appel, N callbacks
-// servis — portent donc sur du code exécuté, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-local-queue.test.ts` (jamais Gradle, jamais l'APK).
 //
-// #403 : le pilote connaît aussi la file PARTAGÉE (`ClientQueue`), celle que
-// l'interface ET le job de fond utilisent. Les scénarios sont les mêmes
-// (travaux GATED : on empile, on libère, on observe).
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE (op inconnue, `qid`/`key` absent) sont préfixées `pilote: `
-// et refusées par le test.
-//
-// Le « client » simulé est GATED : le travail soumis ne démarre qu'après
-// `queueRelease`. Les scénarios sont donc déterministes (aucun sleep de course) :
-// on empile les soumissions, on libère, on observe. `workMs` fait durer chaque
-// appel pour qu'un chevauchement — s'il y en avait un — soit TOUJOURS vu.
-//
-// #530 : `fail` fait JETER le travail (`exception` ou `error`) : le pilote
-// observe alors ce que la file LIVRE aux callbacks (un échec, pas un silence).
-// `type: "int"` pose un travail d'un AUTRE type sous la MÊME clé : c'est la
-// collision qui fait jeter le cast interne de `ClientQueue`.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.localqueue
 
 import fr.veryslopnynotes.data.ClientQueue
@@ -58,8 +36,8 @@ private const val TIMEOUT = "__timeout__"
 /**
  * L'échec que le travail simulé jette (`exception` ou `error`), ou `null`.
  *
- * `error` = un `Error` (OOM) : ce n'est PAS une `Exception`, et l'issue
- * #530 le veut traité comme les autres.
+ * `error` = un `Error` (OOM) : ce n'est PAS une `Exception`, traité comme les
+ * autres.
  */
 private fun failureOf(kind: String?): Throwable? = when (kind) {
     null -> null
@@ -214,7 +192,6 @@ private class Driver {
                 "daemon" to JVal.Bool(s.workerDaemon),
             )
         }
-        // --- File PARTAGÉE (`ClientQueue`) : l'interface ET le job de fond ---
 
         "sharedNew" -> {
             shared = SharedState()

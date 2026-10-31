@@ -10,16 +10,16 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Fil de discussion du professeur IA (#633) : UN fichier JSON dans
+ * Fil de discussion du professeur IA : UN fichier JSON dans
  * `filesDir/offline/teacher_chat.json`.
  *
- * Pourquoi `offline/` : le fil est de la DONNÉE DU COMPTE (les questions de
- * l'élève, les réponses, les sources). La purge de déconnexion efface ce
- * dossier EN TOUT (I16 bis) : aucun fil ne survit à la session. L'écriture
- * passe par [OfflineArtifacts] (garde d'époque) : une sauvegarde demandée
- * pendant une déconnexion est ABANDONNÉE, le dossier purgé ne ressuscite pas.
+ * `offline/` parce que le fil est de la DONNÉE DU COMPTE (questions, réponses,
+ * sources) : la purge de déconnexion efface ce dossier EN TOUT (I16 bis).
+ * L'écriture passe par [OfflineArtifacts] (garde d'époque) : une sauvegarde
+ * demandée pendant une déconnexion est ABANDONNÉE, le dossier purgé ne
+ * ressuscite pas.
  *
- * Aucun réseau ici, aucun identifiant Pronote : seulement le fil local.
+ * Aucun réseau ici, aucun identifiant Pronote.
  */
 interface TeacherChatLocalStore {
     fun load(): TeacherThread

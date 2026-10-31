@@ -39,8 +39,7 @@ export function registerProtocolWire(): void {
       await tsComm.initialise(undefined);
       const cid = await ktSeededComm(stub);
       await ask({ op: "commInit", cid, identifier: undefined });
-      // Les deux lisent une chaîne non vide comme vraie : le fil est chiffré,
-      // le stub (même lecture) déchiffre, les deux clients comprennent pareil.
+      // Les deux lisent une chaîne non vide comme vraie ; le stub déchiffre, les deux comprennent pareil.
       expect(tsComm.encryptRequests).toBe(true);
       const stateLine = await ask({ op: "commState", cid });
       expect(`state -> ${canonTs(JSON.parse(stateLine))}`).toBe(
@@ -59,9 +58,7 @@ export function registerProtocolWire(): void {
       stub.behavior.answer = (_id, inner) => ({ bienRecu: inner });
       const tsComm = tsSeededComm(stub);
       await tsComm.initialise("ident-test");
-      // `afterAuth` pose `authKey` D'ABORD puis déchiffre `cle` SOUS ELLE (pas
-      // sous la clé de session) : le test choisit les deux, fixe, des deux côtés.
-      // Dérivée commune : K1 = md5([10,20,30]).
+      // `afterAuth` pose `authKey` puis déchiffre `cle` SOUS ELLE ; K1 = md5([10,20,30]).
       const authKeyHex = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
       const cle = tsAesEncrypt(authKeyHex, IV1_HEX, Buffer.from("10,20,30", "utf8")).toString("hex");
       const authPayload = { dataSec: { data: { cle } } };
@@ -258,13 +255,7 @@ export function registerProtocolWire(): void {
   });
 
   test.skipIf(skip)("keepAlive : ping si dû, silence sinon (seuil 110 s)", async () => {
-    // Kotlin : vrai thread de garde, un tick RÉEL — mais une PÉRIODE courte
-    // (25 ms) au lieu des 1 000 ms de production. Ce qui est testé, c'est le
-    // SEUIL (110 s) et le fait que le fil pinge quand il est dû : la
-    // période n'en est qu'un détail. La période de production (1 000 ms) reste
-    // une convention de relecture, pas un invariant.
-    // TS : horloge factice, aucun temps réel, mêmes 1 s d'intervalle.
-    // Le seuil « frais » passe par `keepAliveTick` : pas besoin d'un second thread.
+    // Vrai thread de garde, période 25 ms au lieu de 1 000 : ce qui est testé, c'est le SEUIL (110 s).
     const TICK_MS = 25;
     const ktStaleP = ask({ op: "keepAlive", staleSec: 200, runMs: 200, tickMs: TICK_MS });
 
@@ -300,16 +291,12 @@ export function registerProtocolWire(): void {
     }
     expect(ktFresh.pings).toBe(0);
 
-    // Ping MANUEL (#408) : INCONDITIONNEL — le seuil ne s'applique pas (le
-    // seuil vient d'être rafraîchi par une lecture, un ping « si dû » ne
-    // partirait donc pas). C'est une EXTENSION du port : la référence n'a que
-    // le ping périodique, dont le fil est comparé plus haut.
+    // Ping MANUEL : INCONDITIONNEL, le seuil ne s'applique pas (extension du port).
     const ktManual = JSON.parse(await ask({ op: "keepAlivePing" })) as { pings: number };
     expect(ktManual.pings).toBe(1);
   }, 30000);
 
-  // #429 : une redirection illisible ne doit ni fuir la connexion ni renvoyer
-  // une exception brute à l'appelant.
+  // Une redirection illisible ne doit ni fuir la connexion ni renvoyer une exception brute.
 
   test("le port valide l'hôte de la redirection lui-même (indépendant de la JVM)", () => {
     const port = readFileSync(
@@ -331,7 +318,5 @@ export function registerProtocolWire(): void {
     expect(port).toContain("Redirection invalide");
   });
 
-  // #429 : un site d'établissement SANS chemin (`https://host`) doit viser la
-  // MÊME page que la référence — l'ancien découpage coupait l'AUTORITÉ en
-  // `https:/` et le POST partait sur un autre hôte (`UnknownHostException`).
+  // Un site SANS chemin (`https://host`) doit viser la MÊME page que la référence.
 }

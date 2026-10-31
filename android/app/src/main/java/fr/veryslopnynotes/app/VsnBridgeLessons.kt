@@ -22,12 +22,8 @@ import java.util.concurrent.TimeUnit
 import fr.veryslopnynotes.app.VsnBridge.Companion.AWAIT_LLM_MS
 import fr.veryslopnynotes.app.VsnBridge.Companion.AWAIT_PHOTO_MS
 
-// --- Cahier de cours (#586) -------------------------------------------------
-
 /**
- * Matières proposées par le Cahier : celles déjà connues des caches
- * (notes, devoirs, EDT), les préférences et les notes existantes. Aucune
- * lecture réseau ici : l'écran s'ouvre même hors ligne.
+ * Aucune lecture réseau : l'écran s'ouvre même hors ligne.
  */
 internal fun VsnBridge.lessonsList(): JSONObject {
     val known = LinkedHashSet<String>()
@@ -116,13 +112,8 @@ internal fun VsnBridge.lessonsSetManual(p: JSONObject): JSONObject {
 }
 
 /**
- * Photo de cours -> brouillon de note (#587). La photo ne traverse JAMAIS
- * le pont : elle est lue ici, ré-encodée, envoyée au fournisseur vision,
- * puis supprimée. Le texte revient pour relecture avant enregistrement.
- *
- * L'attente inclut le temps que l'élève cadre la photo : le JS met cette
- * méthode à 0 (timeout illimité), comme le scan du QR. Le plafond natif
- * évite seulement un fil pendu pour toujours.
+ * La photo ne traverse jamais le pont : lue, ré-encodée, envoyée au fournisseur
+ * vision, puis supprimée. Le plafond natif évite un fil pendu pour toujours.
  */
 internal fun VsnBridge.lessonsAddPhoto(p: JSONObject): JSONObject {
     val subject = bounded(p.string("subject"), LessonNote.MAX_SUBJECT_CHARS)
@@ -175,8 +166,8 @@ internal fun VsnBridge.lessonsAddPhoto(p: JSONObject): JSONObject {
 }
 
 /**
- * Attend la capture. Le callback de l'activité arrive sur le thread
- * principal ; le résultat est publié au fil du pont via le latch.
+ * Le callback de l'activité arrive sur le thread principal ; le latch publie le
+ * résultat au fil du pont.
  */
 internal fun VsnBridge.awaitPhoto(source: String): PhotoCapture.Result {
     val latch = CountDownLatch(1)
@@ -199,7 +190,6 @@ internal fun VsnBridge.lessonJson(note: LessonNote): JSONObject = JSONObject()
     .put("text", note.text)
     .put("createdAt", note.createdAt)
 
-/** Le manuel est-il utilisable pour cette matière, sans réseau ? */
 internal fun VsnBridge.manualAvailableForSubject(
     subject: String,
     known: List<String>,

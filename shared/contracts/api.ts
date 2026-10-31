@@ -1,7 +1,6 @@
-// Contrats v1 — scraper manuels/pages web + validateurs (source de vérité, #4).
-// Routes servies : GET /v1/health, POST /v1/manuals/scrape (#209/#210),
-// POST /v1/web/scrape (#634). L'app est device-only (ADR-003) : les routes
-// métier du serveur applicatif n'existent plus.
+// Routes servies : GET /v1/health, POST /v1/manuals/scrape,
+// POST /v1/web/scrape. L'app est device-only (ADR-003) : les routes métier
+// du serveur applicatif n'existent plus.
 // Les garde-fous de réponse restent : les miroirs Android s'en servent.
 // Doit rester en sync avec api.openapi.yaml (test contracts).
 
@@ -17,17 +16,13 @@ export interface ApiRoute {
 
 export const API_ROUTES: readonly ApiRoute[] = [
   { method: "GET", path: "/v1/health" },
-  // #209 : scraper Playwright minimal — le process ne sert QUE des manuels
-  // (plain HTTPS, sans auth : décision utilisateur du 2026-10-11, risque
-  // accepté documenté côté server/infrastructure/http.ts). Plateforme +
-  // startUrl injectés par l'appelant dans le corps (writeOnly), jamais en
-  // env ni commités ; les identifiants de portail sont REFUSÉS (#526 : le
-  // scraper ne s'authentifie pas, la session est celle du serveur).
-  // Les 31 routes métier du serveur applicatif sont supprimées en #210
-  // (app device-only, ADR-003).
+  // Scraper manuels : plain HTTPS sans auth (risque accepté et documenté
+  // côté server/infrastructure/http.ts). Plateforme + startUrl viennent du
+  // corps (writeOnly), jamais de l'env : les identifiants de portail sont
+  // REFUSÉS, le scraper ne s'authentifie pas.
   { method: "POST", path: "/v1/manuals/scrape" },
-  // #634 : une page web choisie par l'élève devient une source citée. Même
-  // garde SSRF que le scrape de manuel, SANS jar de session (aucune
+  // Une page web choisie par l'élève devient une source citée. Même garde
+  // SSRF que le scrape de manuel, SANS jar de session (aucune
   // authentification, aucun cookie de l'élève).
   { method: "POST", path: "/v1/web/scrape" },
 ] as const;
@@ -37,8 +32,8 @@ export interface HealthResponse {
   readonly version: string;
 }
 
-// #74 : /v1/grades enrichi du rapport de moyennes (fournie/estimée, algorithme
-// choisi par query `?algorithm=`, période par `?periodId=`). Breaking 0.1.0→0.2.0.
+// /v1/grades porte le rapport de moyennes (fournie/estimée, algorithme choisi
+// par query `?algorithm=`, période par `?periodId=`).
 export interface GradesResponse {
   readonly grades: Grade[];
   readonly averages: AveragesReport;
@@ -50,13 +45,13 @@ export interface AssignmentsResponse {
 export interface TimetableResponse {
   readonly entries: TimetableEntry[];
 }
-/** Périodes (#74) : libellés des onglets, les notes ne portant que periodId. */
+/** Libellés des onglets de période ; les notes ne portent que periodId. */
 export interface PeriodsResponse {
   readonly periods: Period[];
 }
 
-// #81 cantine : menus de la fenêtre from/to (semaine courante par défaut).
-// Tableau vide = aucun menu publié sur la fenêtre (module cantine absent de
+// Cantine : menus de la fenêtre from/to (semaine courante par défaut).
+// Tableau vide = aucun menu publié sur la fenêtre (module absent de
 // l'établissement ou hors périmètre) : l'app masque alors l'onglet, sans erreur.
 // balance absent = solde non publié (Turboself/ARD non branché).
 export interface CanteenMenusResponse {
@@ -64,31 +59,30 @@ export interface CanteenMenusResponse {
   readonly balance?: CanteenBalance;
 }
 
-// Devoirs generate (issue #27, phase 9) — JSON validé, sources citées.
+// Devoirs generate — JSON validé, sources citées.
 // Requête = question + sources déjà récupérées (cours + manuels) ;
 // réponse = corrigé sourcé ou refus propre si insuffisant.
-// Aucun effet métier : RENDER/push = phases suivantes, jamais ici (I7).
+// Aucun effet métier : RENDER/push = jamais ici (I7).
 export const HOMEWORK_MAX_QUESTION_CHARS = 2000;
-/** Nombre maximal de sources jointes à la question. */
 export const HOMEWORK_MAX_SOURCES = 8;
 export const HOMEWORK_MAX_SOURCE_CHARS = 2000;
 export const HOMEWORK_MAX_SOURCE_LABEL_CHARS = 200;
 /**
- * 0.7.0 : clé du fournisseur LLM, ENVOYÉE PAR L'APP à chaque appel. Le serveur
- * n'en détient aucune (ni .env, ni variable, ni disque) : elle vit dans le
- * corps de la requête, part dans l'en-tête `Authorization` de l'appel
- * fournisseur, et n'est ni journalisée nipersistée. Bornée comme un credential.
+ * Clé du fournisseur LLM, ENVOYÉE PAR L'APP à chaque appel. Le serveur n'en
+ * détient aucune (ni .env, ni variable, ni disque) : elle vit dans le corps
+ * de la requête, part dans l'en-tête `Authorization` de l'appel fournisseur,
+ * et n'est ni journalisée ni persistée. Bornée comme un credential.
  */
 export const HOMEWORK_MAX_API_KEY_CHARS = 512;
 /**
  * Longueur maximale du corrigé. Miroir de `Homework.MAX_ANSWER_CHARS`
  * (`android/core/.../Homework.kt`), où elle est DÉRIVÉE du plafond de sortie
- * I5 (moins l'enveloppe JSON) : les deux bornes ne peuvent pas dériver
- * l'une de l'autre (#411 — le test `kotlin-llm-budget.test.ts` les compare).
+ * I5 (moins l'enveloppe JSON) : le test `kotlin-llm-budget.test.ts` compare
+ * les deux bornes.
  */
 export const HOMEWORK_MAX_ANSWER_CHARS = 8000;
 /**
- * Affichage d'un corrigé (#629) : nombre d'étapes et longueur d'une étape.
+ * Affichage d'un corrigé : nombre d'étapes et longueur d'une étape.
  * Miroir de `Homework.MAX_STEPS` / `MAX_STEP_CHARS`. Ce ne sont pas des bornes
  * de VALIDATION (un modèle peut rendre plus d'étapes) : le pont et l'UI
  * TRONQUENT pour l'affichage, sans jeter un corrigé valide.
@@ -182,8 +176,6 @@ export function isHomeworkGenerateResponse(v: unknown): v is HomeworkGenerateRes
   return false;
 }
 
-// #83 préférences matière : liste des préférences connues, clé = nom de matière.
-
 /** Liste des préférences connues, clé = nom de matière. */
 export interface SubjectPrefsResponse {
   readonly prefs: SubjectPrefs[];
@@ -196,7 +188,7 @@ export function isSubjectPrefsResponse(v: unknown): v is SubjectPrefsResponse {
 }
 
 
-// Actualités établissement (#79) : liste la plus récente d'abord.
+// Actualités établissement : liste la plus récente d'abord.
 // Onglet non actif côté établissement = liste vide (200), jamais 500.
 export interface NewsResponse {
   readonly news: NewsItem[];
@@ -209,7 +201,7 @@ export function isNewsResponse(v: unknown): v is NewsResponse {
 }
 
 
-// #77 vie scolaire : `absences` porte absences ET retards (champ `kind`),
+// Vie scolaire : `absences` porte absences ET retards (champ `kind`),
 // `periods` = compteurs dérivés par période. Onglet vie scolaire absent de
 // l'établissement = deux listes vides (200), jamais 500.
 export interface AttendanceResponse {
@@ -240,10 +232,8 @@ export function isPunishmentsResponse(v: unknown): v is PunishmentsResponse {
   return Array.isArray(p) && p.every(isPunishment);
 }
 
-// --- #80 messagerie : garde-fous de lecture ---
-// Les contrats d'écriture (une route explicite par action) sont supprimés avec
-// le serveur (#210) ; restent les validateurs de LISTES, utilisés par les
-// miroirs Android des écrans Discussions.
+// Messagerie : restent les validateurs de LISTES, utilisés par les miroirs
+// Android des écrans Discussions.
 
 export interface DiscussionsResponse {
   readonly discussions: Discussion[];
@@ -275,14 +265,14 @@ export function isDiscussionRecipientsResponse(v: unknown): v is DiscussionRecip
   return Array.isArray(r) && r.every(isRecipient);
 }
 
-// --- #209 scraper Playwright minimal (page -> ManualDoc) ---
+// Scraper Playwright minimal (page -> ManualDoc).
 // Corps POST borné AVANT parse : un POST non authentifié ne bufferise jamais
 // une taille arbitraire. startUrl writeOnly : jamais journalisé/persisté.
-// Jar de session choisi par le SERVEUR (#538/I24) : `authFile` n'existe plus
-// dans le contrat et un corps qui le porte est refusé (message dédié).
-// Le scraper ne s'authentifie pas (#526) : username/password sont optionnels
-// pour la compilation, mais un corps qui les porte est refusé — un credential
-// collecté pour rien ne doit pas passer pour une authentification.
+// Jar de session choisi par le SERVEUR (I24) : `authFile` n'existe plus dans
+// le contrat et un corps qui le porte est refusé (message dédié).
+// Le scraper ne s'authentifie pas : username/password sont optionnels pour la
+// compilation, mais un corps qui les porte est refusé — un credential collecté
+// pour rien ne doit pas passer pour une authentification.
 export const MANUALS_SCRAPE_PATH = "/v1/manuals/scrape";
 export const MANUALS_SCRAPE_MAX_BODY_CHARS = 8192;
 export const MANUALS_SCRAPE_PLATFORM_MAX_CHARS = 100;
@@ -291,12 +281,12 @@ export const MANUALS_SCRAPE_URL_MAX_CHARS = 2000;
 export interface ManualsScrapeRequest {
   readonly platform: string;
   /**
-   * Obsolète : REFUSÉ par le serveur (#526). Le scraper ne s'authentifie pas
-   * — la session est celle du SERVEUR (jar, I24). Déclaré optionnel pour que
+   * Obsolète : REFUSÉ par le serveur. Le scraper ne s'authentifie pas —
+   * la session est celle du SERVEUR (jar, I24). Déclaré optionnel pour que
    * les appelants existants compilent ; l'envoi est rejeté (400).
    */
   readonly username?: string;
-  /** Obsolète : REFUSÉ par le serveur (#526), comme `username`. */
+  /** Obsolète : REFUSÉ par le serveur, comme `username`. */
   readonly password?: string;
   /** URL de départ fournie par l'humain (jamais committée). */
   readonly startUrl: string;
@@ -325,10 +315,9 @@ export function isManualsScrapeRequest(v: unknown): v is ManualsScrapeRequest {
   if (typeof v !== "object" || v === null) return false;
   const r = v as Record<string, unknown>;
   if (!isBoundedNonEmptyString(r["platform"], MANUALS_SCRAPE_PLATFORM_MAX_CHARS)) return false;
-  // #526 : `username`/`password` ne sont PLUS exigés (le scraper ne
-  // s'authentifie pas : la session est celle du serveur). Le contrat les
-  // IGNORE — c'est le SERVEUR qui refuse un corps qui les porte (message
-  // dédié), comme pour `authFile` (#538).
+  // `username`/`password` ne sont PLUS exigés (le scraper ne s'authentifie
+  // pas : la session est celle du serveur). Le contrat les IGNORE — c'est le
+  // SERVEUR qui refuse un corps qui les porte (message dédié), comme `authFile`.
   if (!isBoundedNonEmptyString(r["startUrl"], MANUALS_SCRAPE_URL_MAX_CHARS)) return false;
   if (!/^https?:\/\//i.test(r["startUrl"] as string)) return false;
   // Garde SSRF partagée avec le serveur (shared/contracts/net.ts) : IPv4
@@ -336,7 +325,7 @@ export function isManualsScrapeRequest(v: unknown): v is ManualsScrapeRequest {
   // métadonnées, ULA IPv6. Cette garde est LITTÉRALE (validateur synchrone) :
   // un nom DNS public passe ICI, mais le SERVEUR le résout avant la
   // navigation et refuse le nom dont une adresse est privée
-  // (server/infrastructure/ssrf.ts, issue #419).
+  // (server/infrastructure/ssrf.ts).
   if (!isPublicHttpUrl(r["startUrl"] as string)) return false;
   const headless = r["headless"];
   return headless === undefined || typeof headless === "boolean";
@@ -363,7 +352,7 @@ export function isManualsScrapeResponse(v: unknown): v is ManualsScrapeResponse 
   return Array.isArray(d) && d.every(isManualsScrapeDoc);
 }
 
-// --- #634 page web comme source IA (même garde SSRF que le manuel) ---
+// Page web comme source IA (même garde SSRF que le manuel).
 // L'URL complète ne revient JAMAIS dans la réponse : l'app construit le
 // libellé citable « Web : titre » et le serveur n'expose que titre + texte.
 export const WEB_SCRAPE_PATH = "/v1/web/scrape";

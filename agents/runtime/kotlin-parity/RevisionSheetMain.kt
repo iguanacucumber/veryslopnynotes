@@ -1,16 +1,8 @@
-// RevisionSheetMain.kt — pilote JSON des fiches de révision (export PDF) (#412).
+// RevisionSheetMain.kt — pilote JSON des fiches de révision (export PDF).
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-revision-sheet.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile les VRAIES sources
-// de production (`core/RevisionSheet.kt` et ses dépendances pures — stdlib
-// Kotlin seul, aucun import Android) et la pilote ici : les assertions
-// portent donc sur du code exécuté, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-revision-sheet.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne
-// sur stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`).
-// Les erreurs du PILOTE (op inconnue) sont préfixées `pilote: ` et refusées
-// par le test ; les erreurs du PORT (fiche invalide) sortent en
-// `{"error", "message"}`.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.core
 
 import fr.veryslopnynotes.pronote.JVal

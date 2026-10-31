@@ -1,9 +1,6 @@
-// TeacherChatMain.kt — pilote JSON du professeur IA (#633).
+// TeacherChatMain.kt — pilote JSON du professeur IA.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-teacher-chat.test.ts`.
-// Le test compile la VRAIE source `core/TeacherChat.kt` (pure) et la pilote :
-// prompt (contexte + historique + résumé, tout UNTRUSTED), validation de la
-// sortie, sources citées, fil borné.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-teacher-chat.test.ts` (jamais Gradle, jamais l'APK).
 package fr.veryslopnynotes.teacher
 
 import fr.veryslopnynotes.core.AiContext

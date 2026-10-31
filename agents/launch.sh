@@ -34,16 +34,15 @@ if [ "$MODE" = worktree ] && [ -e "$WT" ]; then
   exit 1
 fi
 
-# Base fraîche : un worktree créé depuis le main local périmé oblige à rebaser
-# plus tard, souvent sur un lockfile ou un fichier déjà modifié par un autre agent.
+# Base fraîche : un worktree créé depuis un main local périmé oblige à rebaser
+# plus tard (lockfile, fichier déjà pris par un autre agent).
 git -C "$ROOT" fetch origin main --prune
 git -C "$ROOT" rev-parse --verify --quiet origin/main >/dev/null || {
   echo "launch: refus — origin/main introuvable (remote mal configuré ?)." >&2
   exit 1
 }
 
-# Parallèle : push = claim. Refuser AVANT de créer quoi que ce soit évite un
-# worktree orphelin quand un autre agent a déjà pris l'issue.
+# Push = claim, refusé AVANT de créer : pas de worktree orphelin.
 if [ "$PUSH" = 1 ] && git -C "$ROOT" ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
   echo "launch: refus — $BRANCH existe déjà sur origin (claim pris)." >&2
   exit 1
@@ -60,8 +59,8 @@ fi
 # 8 ms à chaud : le worktree doit être prêt à tester, pas à installer.
 (cd "$DIR" && bun install --frozen-lockfile)
 
-# local.properties est gitignoré (chemin SDK propre à la machine) : sans copie,
-# android-compile SKIPpe dans chaque nouveau worktree.
+# local.properties est gitignoré : sans copie, android-compile SKIPpe dans
+# chaque nouveau worktree.
 if [ -f "$ROOT/android/local.properties" ] && [ ! -f "$DIR/android/local.properties" ]; then
   cp "$ROOT/android/local.properties" "$DIR/android/local.properties"
 fi

@@ -15,7 +15,6 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 
 /**
- * Cause d'un échec de génération de fiche, depuis l'exception levée.
  * `AiError` = garde I5 (sortie non conforme au schéma `{"fiche"}`) ;
  * `LlmError` = fournisseur (clé refusée, quota, réseau, sortie tronquée).
  */
@@ -28,8 +27,6 @@ internal fun VsnBridge.revisionFailure(e: Throwable): RevisionFailure = when {
     }
     else -> RevisionFailure.UNKNOWN
 }
-
-// --- Fiches de révision ----------------------------------------------------
 
 internal fun VsnBridge.revisionList(): JSONObject {
     val store = revisions ?: return JSONObject().put("sheets", JSONArray())
@@ -61,9 +58,7 @@ internal fun VsnBridge.revisionExportPdf(p: JSONObject): JSONObject {
         null
     } ?: return JSONObject().put("ok", false).put("message", "Fiche introuvable.")
     return try {
-        // #540 : le MÊME nom que les pièces jointes (l'IDENTIFIANT de la
-        // fiche d'abord), la MÊME garde d'époque (une exportation pendant
-        // une déconnexion n'est pas écrite) et le MÊME cache borné.
+        // Même nom, garde d'époque et cache borné que les pièces jointes (I4).
         val epoch = SessionEpoch.current()
         val bytes = ByteArrayOutputStream().use { out ->
             RevisionPdf.writeSheet(sheet, out)

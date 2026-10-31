@@ -1,35 +1,20 @@
-// Données pures : les palettes (#335). Aucune logique ici — voir `schemes.ts`.
+// Palettes pures ; la logique est dans `schemes.ts`.
 
 export interface Palette {
-  /** Fond de page. */
   page: string;
-  /** Cartes et barres. */
   surface: string;
-  /** Survols discrets, fonds secondaires. */
   surfaceVariant: string;
-  /** Badges et pastilles. */
   surfaceContainer: string;
-  /** Encre principale (texte lisible). */
   ink: string;
-  /** Accent : bordures actives, spinner, remplissages `.field:focus`. */
   brand: string;
-  /** Accent clair : anneaux de focus, dégradés. */
   brandLight: string;
-  /** Accent lisible sur page/surface : liens, onglet actif, icônes. */
   brandDeep: string;
-  /** Accent très pâle : fond de puce/onglet actif. */
   brandPale: string;
-  /** Fond plein (bouton principal). */
   brandSolid: string;
-  /** Texte posé sur `brandSolid`. */
   onBrand: string;
-  /** Rouge de signalement : bordures, teintes. */
   danger: string;
-  /** Fond plein d'action destructive. */
   dangerSolid: string;
-  /** Texte posé sur `dangerSolid`. */
   onDanger: string;
-  /** Rouge lisible sur page/surface (messages d'erreur). */
   dangerInk: string;
 }
 
@@ -803,9 +788,8 @@ export const SCHEMES: ReadonlyArray<Scheme> = [
       dangerInk: "#FF7B84",
     },
   },
-  // Palette « Madoka Magica » (#620) : son skin décoratif (étoiles dorées,
-  // halos roses) vit dans `styles/madoka.css` et n'est activé que par
-  // `data-scheme="madoka"` posé sur `<html>` — aucune autre palette ne le voit.
+  // Son skin décoratif vit dans `styles/madoka.css` et n'est activé que par
+  // `data-scheme="madoka"` sur `<html>` — aucune autre palette ne le voit.
   {
     id: "madoka",
     label: "Madoka Magica",

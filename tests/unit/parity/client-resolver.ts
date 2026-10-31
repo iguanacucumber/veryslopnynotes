@@ -84,8 +84,7 @@ export function registerClientResolver(): void {
     }
   });
 
-  // #417 : `Number()` d'un TABLEAU = `Number(join)` côté JS. Le port rendait
-  // `NaN` pour TOUT tableau : `"nbNonLus": []` → 0, `"duree": [30]` → 30.
+  // `Number()` d'un TABLEAU = `Number(join)` ; le port rendait `NaN` pour tout tableau.
 
   test.skipIf(skip)("nombres : `Number()` des TABLEAUX comme en JS ([] = 0, [30] = 30, [1,2] = NaN)", async () => {
     const { num } = await import("../../../node_modules/pronotets/dist/resolver.js");
@@ -96,8 +95,7 @@ export function registerClientResolver(): void {
     }
   });
 
-  // #417 : `String()` d'un TABLEAU = son `join(",")` : `null` → chaîne VIDE.
-  // Le port rendait le texte littéral `null` (un motif d'absence affiché).
+  // `String()` d'un TABLEAU = son `join(",")` : `null` → chaîne vide, pas « null ».
 
   test.skipIf(skip)("chaînes : `String()` des TABLEAUX comme en JS ([null] = \"\", [1,2] = \"1,2\")", async () => {
     const { str } = await import("../../../node_modules/pronotets/dist/resolver.js");
@@ -108,8 +106,7 @@ export function registerClientResolver(): void {
     }
   });
 
-  // #417 : `new Date(y, …)` REMAPPE les années 0..99 en 1900+y (`new Date(26, 8, 5)`
-  // = 1926). Le port gardait l'année 26 : une date qui n'existe pas.
+  // `new Date(y, …)` remappe 0..99 en 1900+y ; le port gardait 26 (date inexistante).
 
   test.skipIf(skip)("dates : `new Date()` remappe les années 0..99 (05/09/0026 → 1926)", async () => {
     const { Util } = await import("../../../node_modules/pronotets/dist/resolver.js");

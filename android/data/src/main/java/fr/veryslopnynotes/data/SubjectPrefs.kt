@@ -7,11 +7,10 @@ import org.json.JSONObject
 import java.io.File
 import java.time.Instant
 
-// Préférences matière #83 (parité Papillon) : couleur #RRGGBB, emoji court,
-// libellé perso. Clé = nom de matière. Miroir strict de shared/contracts
-// SubjectPrefs : garde-fou isValid() avant écriture, donc jamais de donnée
-// libre stockée ni interprétée (I6). Matière sans prefs = nom de matière seul
-// (fallback UI), donc l'affichage existant continue de marcher tel quel.
+// Préférences matière (parité Papillon) : couleur #RRGGBB, emoji court, libellé
+// perso. Clé = nom de matière. Miroir strict de shared/contracts SubjectPrefs :
+// garde-fou isValid() avant écriture, donc jamais de donnée libre stockée ni
+// interprétée (I6). Matière sans prefs = nom de matière seul.
 data class SubjectPrefs(
     val subject: String,
     val color: String? = null,
@@ -31,13 +30,9 @@ data class SubjectPrefs(
         const val MAX_COUNT = 64
 
         /**
-         * Contrat d'une matière.
-         *
-         * #395 : les règles vivent dans [SubjectPrefRules] — la source UNIQUE,
-         * partagée avec le pont (`app/VsnBridge.kt`), qui les EXÉCUTE. Le
-         * dépôt ne peut donc plus valider moins (ou plus) que le pont :
-         * avant, le pont ignorait la couleur, l'emoji et le libellé, le
-         * dépôt abandonnait l'écriture, et l'interface mentait.
+         * Contrat d'une matière : les règles vivent dans [SubjectPrefRules], la
+         * source UNIQUE partagée avec le pont, qui les exécute. Dépôt et pont
+         * valident donc pareil.
          */
         fun isValid(p: SubjectPrefs): Boolean =
             SubjectPrefRules.invalidField(p.subject, p.color, p.emoji, p.label) == null &&
@@ -84,8 +79,8 @@ fun subjectPrefsListToJson(prefs: List<SubjectPrefs>): String {
     return arr.toString()
 }
 
-// Fusion local + distant : le plus récent gagne par matière (updatedAt ISO),
-// donc le local survit au restart et gagne en cas d'égalité/dérive d'horloge.
+// Fusion local + distant : le plus récent gagne par matière, le local gagne en
+// cas d'égalité/dérive d'horloge.
 // ponytail: pas de file de conflits ni d'historique. Upgrade: résolution
 // explicite et conservation des deux versions en cas de modification concurrente.
 fun mergeSubjectPrefs(local: List<SubjectPrefs>, remote: List<SubjectPrefs>): List<SubjectPrefs> {
@@ -105,17 +100,14 @@ private fun isoMillis(iso: String): Long = try {
     0L
 }
 
-// Stockage local des prefs : un fichier JSON, même approche que FileCacheStore
-// (stdlib java.io seule, pas de Room/DataStore). Repli mémoire si disque KO.
+// Stockage local des prefs : un fichier JSON (stdlib java.io seule, pas de
+// Room/DataStore). Repli mémoire si disque KO.
 interface SubjectPrefsLocalStore {
     fun load(): List<SubjectPrefs>
     /**
-     * Enregistre les préférences.
-     *
-     * #404 : [epoch] = époque de session capturée au DÉBUT de l'opération.
-     * L'écriture est REFUSÉE si la session a changé depuis (déconnexion) :
-     * `false` est renvoyé et le fichier n'est pas écrit — le répertoire purgé
-     * ne ressuscite pas.
+     * [epoch] = époque de session capturée au DÉBUT de l'opération. L'écriture
+     * est REFUSÉE si la session a changé : `false`, fichier non écrit, le
+     * répertoire purgé ne ressuscite pas.
      */
     fun save(prefs: List<SubjectPrefs>, epoch: Long): Boolean
 }
@@ -131,9 +123,8 @@ class FileSubjectPrefsStore(private val file: File) : SubjectPrefsLocalStore {
 
     @Synchronized
     override fun save(prefs: List<SubjectPrefs>, epoch: Long): Boolean =
-        // #404 : l'écriture passe par la garde d'époque (comme le cache) : une
-        // écriture commencée avant la purge de déconnexion est abandonnée, et
-        // le dossier purgé n'est pas ressuscité.
+        // L'écriture passe par la garde d'époque (comme le cache) : une
+        // écriture commencée avant la purge de déconnexion est abandonnée.
         OfflineArtifacts.writeText(
             file,
             subjectPrefsListToJson(prefs.take(SubjectPrefs.MAX_COUNT)),
@@ -149,7 +140,7 @@ class InMemorySubjectPrefsStore : SubjectPrefsLocalStore {
 
     @Synchronized
     override fun save(prefs: List<SubjectPrefs>, epoch: Long): Boolean =
-        // Même garde que le store disque : le refus est le même partout (#404).
+        // Même garde que le store disque : le refus est le même partout.
         SessionEpoch.writeIfCurrent(epoch) {
             this.prefs = prefs.take(SubjectPrefs.MAX_COUNT)
             true
@@ -157,26 +148,19 @@ class InMemorySubjectPrefsStore : SubjectPrefsLocalStore {
 }
 
 /**
- * Issue d'un enregistrement de préférences.
- *
- * `INVALID` et `REFUSED` ne se ressemblent pas : une préférence hors
- * contrat n'est pas un refus de session (rien n'a changé), un refus vient de
- * la garde d'époque (#404).
+ * Issue d'un enregistrement. `INVALID` (hors contrat, rien n'a changé) et
+ * `REFUSED` (garde d'époque : session changée) ne se ressemblent pas.
  */
 enum class SubjectPrefsWrite {
-    /** Enregistrée sur le disque. */
     WRITTEN,
 
-    /** Préférence hors contrat : rien n'est écrit (garde [SubjectPrefs.isValid]). */
     INVALID,
 
-    /** La session a changé depuis l'époque capturée : rien n'est écrit (#404). */
     REFUSED,
 }
 
 // Offline-first : l'affichage lit le FICHIER local (survit au restart, lisible
-// hors ligne). #205 : plus de réplication serveur (téléphone seul, ADR-003) —
-// le fichier EST la vérité. Callback sur main thread comme SyncedRepository.
+// hors ligne) ; le fichier EST la vérité. Callback sur main thread.
 class SubjectPrefsRepository(
     private val local: SubjectPrefsLocalStore,
     private val main: Handler = Handler(Looper.getMainLooper()),
@@ -187,12 +171,9 @@ class SubjectPrefsRepository(
         emptyList()
     }
 
-    // Édition : écriture locale immédiate (offline).
-    // updatedAt horodaté par l'appareil.
-    //
-    // #404 : [epoch] = époque de session capturée au DÉBUT de l'opération
-    // (l'appelant) : l'écriture est ABANDONNÉE si la session a changé depuis
-    // (déconnexion) — rien n'est écrit, le dossier purgé ne ressuscite pas.
+    // Écriture locale immédiate (offline), `updatedAt` par l'appareil.
+    // [epoch] capturée au DÉBUT par l'appelant : l'écriture est abandonnée si
+    // la session a changé, le dossier purgé ne ressuscite pas.
     fun upsert(
         subject: String,
         color: String?,
@@ -212,7 +193,6 @@ class SubjectPrefsRepository(
         return SubjectPrefsWrite.WRITTEN
     }
 
-    // Refresh : la liste locale fait foi (aucun distant à fusionner).
     fun refresh(baseUrl: String, onDone: (List<SubjectPrefs>) -> Unit) {
         post(onDone, prefs())
     }

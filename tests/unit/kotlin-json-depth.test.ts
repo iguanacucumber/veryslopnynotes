@@ -1,18 +1,6 @@
-// #414 : le parseur JSON du port est BORNÉ en profondeur.
-//
-// Le `Json` embarqué (`android/pronote/.../Json.kt`) est un parseur
-// RÉCURSIF : sans borne, une réponse serveur malformée (`[[[[…]]]]`) épuise
-// la pile et lève `StackOverflowError` — une `Error`, donc NON attrapable par
-// les `catch (e: Exception)` des dépôts, de `PeriodicSyncWorker` et du pilote
-// de parité : l'app CRASHE au lieu d'échouer proprement. `JSON.parse` de V8,
-// lui, lève un `RangeError` attrapable.
-//
-// Ce test ne Miroite pas la logique : il COMPILE la vraie source de production
-// (`Json.kt`) et la pilote via `agents/runtime/kotlin-parity/JsonDepthMain.kt`.
-// Les assertions portent donc sur le code exécuté.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Le parseur JSON du port est BORNÉ en profondeur : sans borne, une réponse
+// `[[[[…]]]]` épuise la pile et lève une `Error` NON attrapable (crash).
+// La VRAIE source est compilée et pilotée ; outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -21,12 +9,7 @@ import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harnes
 const JSON_LIB = join(ROOT, "android", "pronote", "src", "main", "java", "fr", "veryslopnynotes", "pronote", "Json.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "JsonDepthMain.kt");
 
-/**
- * La borne choisie par le port : 512 conteneurs imbriqués. Assez large pour
- * n'importe quelle enveloppe PRONOTE (3-4 niveaux), assez étroit pour que la
- * pile ne déborde jamais. Volontairement ÉCRIT ICI et non lu dans le code :
- * changer la borne doit casser ce test (délibéré, jamais silencieux).
- */
+/** Borne du port : 512 conteneurs, ÉCRITE ICI et non lue dans le code (la changer doit casser le test). */
 const MAX_DEPTH = 512;
 
 const skip = parityToolchain.skipReason !== null;
@@ -53,10 +36,7 @@ function nested(n: number): string {
 
 describe("borne de profondeur du parseur JSON (#414)", () => {
   test.skipIf(skip)("une entrée profonde échoue par une erreur RATRAPABLE, pas par un StackOverflowError", async () => {
-    // 5000 niveaux : le parseur non borné y épuise la pile (observé : SOE dès
-    // ~2000 niveaux sur la JVM du harnais). Le port doit le refuser par un
-    // `JsonError` — une `Exception`, donc attrapable par les `catch` de
-    // l'app : un ÉCHEC DE LECTURE, pas un crash.
+    // 5000 niveaux : le port doit refuser par un `JsonError` (Exception), pas crasher.
     const r = await parse(nested(5000));
     expect(r.ok).toBe(false);
     expect(r.error).toBe("JsonError");
@@ -79,9 +59,7 @@ describe("borne de profondeur du parseur JSON (#414)", () => {
     expect(over.error).toBe("JsonError");
   });
 
-  // Pin statique : le filet du comportement est le test Kotlin ci-dessus ;
-  // celui-ci protège même quand la chaîne d'outils Kotlin est absente (SKIP
-  // bruyant) — et vérifie que la BORNE existe bien dans le parseur.
+  // Pin statique : protège même sans la chaîne Kotlin (SKIP bruyant).
   test("le parseur compare la profondeur courante à une borne (pin statique)", () => {
     const src = readFileSync(JSON_LIB, "utf8");
     expect(src).toMatch(/MAX_DEPTH\s*=\s*\d+/);

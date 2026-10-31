@@ -3,9 +3,8 @@ package fr.veryslopnynotes.core
 import java.text.Normalizer
 import java.util.Base64
 
-// Alerte sécurité phase 6 (#21) : injection neutralisée (I6).
-// Excerpt = donnée suspecte, jamais instruction. Affichage via Text()
-// seul côté ui, jamais WebView/Html (voir SecurityAlertsScreen).
+// Alerte sécurité : injection neutralisée (I6). Excerpt = donnée suspecte,
+// jamais instruction. Affichage via Text() seul, jamais WebView/Html.
 // Miroir de shared/contracts/events.ts SecurityAlertData.
 data class SecurityAlert(
     val id: String,
@@ -13,7 +12,6 @@ data class SecurityAlert(
     val excerpt: String,
     val source: String,
 ) {
-    /** Un texte local à scanner : `source` = origine pipeline (homework, news…). */
     data class ScannableText(val source: String, val text: String)
 
     companion object {
@@ -36,38 +34,17 @@ data class SecurityAlert(
             return if (t.length > max) t.take(max) else t
         }
 
-        // --- Filtre anti-injection (#415) -----------------------------------
+        // Filtre anti-injection : HEURISTIQUE, pas un vérificateur. Il reconnaît
+        // des FORMULATIONS d'injection courantes (français, anglais) après
+        // normalisation. Il ne prouve NI l'absence d'injection (paraphrase,
+        // encodage, autre langue passent) NI l'absence de contenu légitime.
         //
-        // HEURISTIQUE, pas un vérificateur. Le filtre reconnaît des
-        // FORMULATIONS d'injection courantes (français, anglais) après
-        // normalisation. Il ne prouve NI l'absence d'injection (une paraphrase,
-        // un encodage, une autre langue passent) NI l'absence de contenu
-        // légitime (une note qui PARLE d'injection peut être signalée).
-        // L'interface le dit : « heuristique », jamais « vérifié ».
+        // Un mot isolé ne suffit pas : il faut une FORMULE (un verbe d'override
+        // suivi d'un nom de consigne, ou une formule d'override autonome).
         //
-        // #415 corrige trois défauts de la version précédente (liste de
-        // sous-chaînes littérales, sans normalisation) :
-        //  1. contournable : casse, espaces multiples, accents, caractères
-        //     zero-width et charges encodées passaient sans alerte ;
-        //  2. trop bavard : des marqueurs ISOLÉS (une formule HTTP, un mot
-        //     technique de l'app) déclenchaient une alerte rouge sur une note
-        //     de cours parfaitement légitime ;
-        //  3. l'interface annonçait un contrôle (« vérifié ») au lieu d'une
-        //     heuristique.
-        //
-        // Un mot isolé ne suffit plus : il faut une FORMULE (un verbe
-        // d'override suivi d'un nom de consigne, ou une formule d'override
-        // autonome). C'est ce qui sépare « la consigne système d'un serveur »
-        // (légitime) de « ignore la consigne système » (injection).
-        //
-        // LIMITES assumées (le filtre est une heuristique, pas un contrôle) :
-        //  - une PARAPHRASE (« écarte ce que tu as reçu »), une autre langue
-        //    ou un autre encodage passe inaperçu ;
-        //  - la forme élidée « ignore l'instruction… » n'est PAS retenue, pour
-        //    ne pas signaler les notes de cours légitimes qui la contiennent
-        //    (« le processeur ignore l'instruction MOV ») ;
-        //  - à l'inverse, une note de cours qui PARLE d'override peut être
-        //    signalée à tort (« le routeur ignore les consignes de filtrage »).
+        // LIMITES assumées : une paraphrase passe ; la forme élidée « ignore
+        // l'instruction… » n'est PAS retenue (notes de cours légitimes) ; une
+        // note qui PARLE d'override peut être signalée à tort.
 
         /** Caractères invisibles : zero-width, BOM, tiret conditionnel. */
         private val INVISIBLE_RE = Regex("[\u00AD\u180E\u200B\u200C\u200D\u2060\uFEFF]")
@@ -79,24 +56,15 @@ data class SecurityAlert(
         private val COMBINING_RE = Regex("[\u0300-\u036F]")
 
         /**
-         * Formulations d'injection reconnues. Les mots de liaison sont
-         * facultatifs (correspondance tolérante) : « ignore les instructions »,
-         * « ignorez les consignes précédentes », « ignore previous
-         * instructions », « Disregard the above »…
+         * Formulations d'injection reconnues ; les mots de liaison sont facultatifs.
          */
         private val INJECTION_PATTERNS: List<Regex> = listOf(
-            // FR — « ignore(ez) les consignes|instructions »
             Regex("""ignore\w*\s+(?:toutes?\s+)?(?:(?:les?|la|ces?|tes?|ta|vos?|cette)\s+)?(?:consignes?|instructions?)"""),
-            // FR — « ignorez tout ce qui précède » (forme canonique)
             Regex("""ignore\w*\s+tout\s+ce\s+qui\s+precede"""),
-            // FR — « oublie(ez) tout » / « oublie les instructions »
             Regex("""oublie\w*\s+(?:tout\b|(?:(?:toutes?\s+les\s+|les\s+|la\s+|ce\s+|ces\s+|cette\s+)?(?:consignes?|instructions?)))"""),
-            // FR — « nouvelle instruction » (formule d'override)
             Regex("""nouvelle\s+instruction"""),
-            // EN — « ignore|disregard|forget (all) (previous) instructions »
             Regex("""(?:ignore|disregard|forget)\s+(?:(?:all|any|the|my|your|these|those|of|about)\s+)*(?:(?:previous|prior|earlier|above|preceding|foregoing|former)\s+)*(?:instructions?|directives?|rules?|guidelines?|everything|above)"""),
-            // EN — « ignore the prompt » : l'article est EXIGÉ, « prompt
-            // engineering » n'est pas une consigne.
+            // L'article est EXIGÉ : « prompt engineering » n'est pas une consigne.
             Regex("""(?:ignore|disregard|forget)\s+(?:(?:all|any|the|my|your|these|those|of|about)\s+)*(?:(?:previous|prior|earlier|above|preceding|foregoing|former)\s+)*(?:the|this|that|system)\s+prompts?\b"""),
         )
 
@@ -108,11 +76,8 @@ data class SecurityAlert(
         private const val MAX_ENCODED_CANDIDATES = 16
 
         /**
-         * Balayage local des textes déjà lus (cache) : un texte qui porte une
-         * formule d'injection devient une alerte `injection_neutralized`
-         * (extrait assaini, jamais le texte brut). Pur, déterministe, sans
-         * réseau : un scan frais sans formule = « heuristique, rien trouvé »,
-         * pas une absence de vérification.
+         * Balayage local des textes déjà lus : un texte qui porte une formule
+         * d'injection devient une alerte (extrait assaini, jamais le texte brut).
          */
         fun scanTextsForInjections(texts: List<ScannableText>): List<SecurityAlert> {
             val out = mutableListOf<SecurityAlert>()
@@ -133,13 +98,11 @@ data class SecurityAlert(
             return out
         }
 
-        /** Une formulation d'injection est-elle présente dans le texte ? */
         private fun matchesInjection(raw: String): Boolean {
             val folded = fold(raw)
             val text = foldAccents(folded.lowercase())
             if (INJECTION_PATTERNS.any { it.containsMatchIn(text) }) return true
-            // Une charge encodée est relue comme du texte : encodée, elle
-            // n'est pas plus inoffensive (#415).
+            // Une charge encodée est relue comme du texte : elle n'est pas inoffensive.
             var seen = 0
             for (candidate in BASE64_RE.findAll(folded)) {
                 if (seen >= MAX_ENCODED_CANDIDATES) break
@@ -157,14 +120,11 @@ data class SecurityAlert(
             return SPACES_RE.replace(INVISIBLE_RE.replace(nfkc, ""), " ").trim()
         }
 
-        /** Accents pliés : « système » et « systeme » deviennent le même texte. */
         private fun foldAccents(text: String): String =
             COMBINING_RE.replace(Normalizer.normalize(text, Normalizer.Form.NFD), "")
 
-        /** Texte prêt à comparer : plié, minuscules, accents pliés. */
         private fun comparable(raw: String): String = foldAccents(fold(raw).lowercase())
 
-        /** Décodage base64 (stdlib) : `null` si le candidat n'est pas du base64. */
         private fun decodeBase64(candidate: String): String? = try {
             String(Base64.getDecoder().decode(candidate), Charsets.UTF_8)
         } catch (_: IllegalArgumentException) {

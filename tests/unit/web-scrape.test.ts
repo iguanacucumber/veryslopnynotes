@@ -1,11 +1,7 @@
-// #634 : une page web choisie par l'élève devient une source citée bornée.
-// Le moteur est CELUI DU MANUEL (même garde SSRF, même plafond de concurrence),
-// avec trois différences testées ici : aucun jar de session, contenu non
-// textuel refusé, identifiants userinfo refusés.
-//
-// Fakes 100 % synthétiques : Playwright est MOCKÉ (aucun navigateur), la
-// résolution DNS est INJECTÉE et `fetch` (chaîne de redirections) est stubé :
-// aucun réseau réel.
+// Une page web choisie par l'élève devient une source citée bornée. Même moteur
+// que le manuel (garde SSRF, plafond de concurrence), sauf : pas de jar de
+// session, contenu non textuel refusé, userinfo refusé.
+// Fakes synthétiques : Playwright mocké, DNS injecté, `fetch` stubé.
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { createApp } from "../../server/infrastructure/http";
 import { MAX_HTML_BYTES, ScrapeManualsError } from "../../server/infrastructure/manuals-scrape";

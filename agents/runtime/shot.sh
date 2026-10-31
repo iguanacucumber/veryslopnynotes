@@ -1,31 +1,15 @@
 #!/usr/bin/env bash
-# shot.sh — capture d'écran d'un écran de l'app, SANS taper au doigt (#133).
+# shot.sh — capture d'écran d'un écran de l'app, sans taper au doigt.
 #
 #   agents/runtime/shot.sh <route> [--wait <secondes>] [--theme <t>] [--no-build]
-#   make shot ROUTE=grades [SHOT_ARGS=--no-build]
-#   make shot ROUTE=grades SHOT_ARGS="--theme dark"   # #179 : capture en sombre
+#   make shot ROUTE=grades SHOT_ARGS="--theme dark"
 #
-# Pourquoi ce script existe : vérifier une refonte d'interface écran par écran
-# supposait `adb shell input tap X Y`. Des coordonnées qui dépendent de la taille
-# d'écran, de la barre système et du thème, et qui échouent en SILENCE — la
-# capture montre l'onglet d'à côté, la vérification « passe », personne ne le
-# voit. Les deep links `veryslopnynotes://<route>` (déclarés UNIQUEMENT dans le
-# source set debug, cf. android/app/src/debug/AndroidManifest.xml) ouvrent
-# l'écran visé : la capture devient déterministe.
-#
-# Contrat : échec BRUYANT, jamais de succès silencieux. Pas d'appareil, APK
-# introuvable, capture noire, arrivée sur l'appairage au lieu de la route : on
-# sort en erreur en disant ce qui N'A PAS été fait. Une capture non contrôlée ne
-# vaut rien — c'est une image, on ne la relit pas dans un diff.
-#
-# Ce que la capture PROUVE, c'est l'arbre de travail AU MOMENT de la capture :
-# Gradle construit l'APK debug systématiquement (il incrementalise, donc quasi
-# gratuit quand rien n'a changé) et l'appareil est comparé par empreinte, pas
-# par date (#151 : une source plus récente que l'APK = APK périmé, donc
-# reconstruction ; un APK périmé sur l'appareil = réinstallation).
-#
-# Outillage (android-env.sh) : on SOURCE ce fichier de fonctions, jamais on ne
-# le réécrit — c'est lui qui connaît la borne JDK 17-21 de Gradle.
+# Deep links `veryslopnynotes://<route>` (source set debug) au lieu de
+# `input tap X Y` : des coordonnées dépendent de l'écran et échouent en silence
+# (la capture montre l'onglet d'à côté).
+# Contrat : échec BRUYANT, jamais de succès silencieux — une capture non
+# contrôlée ne vaut rien, on ne la relit pas dans un diff.
+# android-env.sh est SOURCÉ, jamais réécrit : il connaît la borne JDK 17-21.
 set -euo pipefail
 
 RUNTIME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,9 +19,8 @@ APK="$ANDROID_DIR/app/build/outputs/apk/debug/app-debug.apk"
 
 APP_PKG="fr.veryslopnynotes.app"
 SCHEME="veryslopnynotes"
-# uiautomator écrit son dump où on le dit, puis on le relit et on l'efface :
-# laisser un XML de l'app (avec les libellés de ses écrans) sur le téléphone,
-# c'est du résidu de session dans /sdcard.
+# uiautomator écrit son dump là, puis on le relit et on l'efface : un XML de
+# l'app sur /sdcard serait du résidu de session.
 REMOTE_UI_XML="/sdcard/vsn-shot-ui.xml"
 
 ROUTE=""
@@ -76,8 +59,7 @@ usage : shot.sh <route> [--theme <t>] [--wait <secondes>] [--no-build]
 USAGE
 }
 
-# adb -s : un seul numéro de série = une seule commande, sans lever une
-# ambiguïté quand deux téléphones sont branchés (le secondmute).
+# Deux téléphones branchés : `-s` lève l'ambiguïté.
 a() {
     if [ -n "$SERIAL" ]; then
         adb -s "$SERIAL" "$@"
@@ -97,19 +79,15 @@ need_device() {
     [ "$n" -eq 1 ] || die "adb : $n appareils connectés ($(printf '%s' "$ready" | tr '\n' ' ')). rien capturé — brancher un seul téléphone."
 }
 
-# Empreinte de l'APK local, vide si absent/illisible.
+# Vide si absent/illisible.
 apk_sha256() {
     [ -f "$APK" ] || return 0
     sha256sum "$APK" 2>/dev/null | cut -d' ' -f1
 }
 
-# L'APK doit contenir EXACTEMENT l'arbre de travail courant : c'est Gradle qui
-# en est l'autorité, donc on le lance TOUJOURS (il incrementalise : ~1 s quand
-# rien n'a changé, quelques secondes sinon). #151 : une comparaison de mtimes ne
-# prouve rien — son inverse renvoyait « à jour » sur un APK plus vieux que les
-# sources (faux vert), et un motif oublié (`assets/`, `.pro`,
-# `libs.versions.toml`) aurait réintroduit le même mensonge dans l'autre
-# sens. `--no-build` est le SEUL renoncement, et il parle.
+# Gradle est l'autorité de la fraîcheur (il incrémentalise : ~1 s à vide) :
+# comparer des mtimes a déjà rendu un faux vert. `--no-build` est le SEUL
+# renoncement, et il parle.
 ensure_apk() {
     if [ "$BUILD" = 0 ]; then
         [ -f "$APK" ] || die "shot : --no-build et APK debug absent ($APK) — rien installé, rien capturé."
@@ -123,15 +101,12 @@ ensure_apk() {
 }
 
 build_apk() {
-    # android-env.sh est écrit pour un shell SANS `set -u` (il lit des variables
-    # d'environnement éventuellement absentes). On leur donne un défaut vide :
-    # sinon `set -u` fait échouer la capture sur ANDROID_JDK_HOME non défini,
-    # pour une raison qui n'a rien à voir avec la capture.
+    # android-env.sh tolère les variables absentes, pas `set -u` : d'où les
+    # défauts vides.
     export ANDROID_JDK_HOME="${ANDROID_JDK_HOME:-}" JAVA_HOME="${JAVA_HOME:-}"
     export ANDROID_HOME="${ANDROID_HOME:-}" ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-}"
-    # `export` et non préfixe `VAR=x . script` : le préfixe n'est plus garanti
-    # quand la fonction android_sdk est appelée APRÈS le source (donc avec le
-    # `set -u` de ce script, on obtenait « unbound variable »).
+    # `export` et non préfixe `VAR=x . script` : le préfixe ne survit pas à un
+    # appel d'`android_sdk` après le source (« unbound variable »).
     export ANDROID_PROJECT_DIR="$ANDROID_DIR"
     # shellcheck source=android-env.sh
     . "$RUNTIME_DIR/android-env.sh"
@@ -147,10 +122,8 @@ build_apk() {
         ./gradlew --console=plain assembleDebug ) || die "shot : construction Gradle en échec — rien d'installé, rien capturé."
 }
 
-# Empreinte de l'APK RÉELLEMENT installé, vide si absent ou illisible. Contenu,
-# jamais mtime : deux horloges (poste, téléphone) se mentent, un hash non.
-# `base.apk` est le fichier même que `adb install` a écrit (vérifié : sha256
-# identique au local), donc l'égalité est une preuve, pas une estimation.
+# Contenu, jamais mtime : deux horloges se mentent. `base.apk` est le fichier
+# même qu'`adb install` a écrit.
 installed_apk_sha256() {
     local path hash
     path=$(a shell dumpsys package "$APP_PKG" | sed -n 's/.*codePath=\(.*\)/\1/p' | head -1 | tr -d '\r')
@@ -159,9 +132,8 @@ installed_apk_sha256() {
     printf '%s' "$hash"
 }
 
-# Jamais de `adb uninstall` ici : cela effacerait les données de l'app, donc la
-# session appairée, donc l'obligation de rescanner le QR de l'établissement. On
-# échoue et on laisse l'utilisateur trancher.
+# Jamais `adb uninstall` : cela effacerait la session appairée (QR à rescaner).
+# On échoue et on laisse l'utilisateur trancher.
 ensure_installed() {
     ensure_apk
     local local_sha remote_sha
@@ -172,8 +144,7 @@ ensure_installed() {
             "$(printf '%s' "$local_sha" | cut -c1-12)"
         return 0
     fi
-    # Empreinte illisible ou différente = installation. Le seul sens raté serait
-    # de se taire, donc on installe.
+    # Empreinte illisible ou différente = installation.
     printf "shot : installation de l'APK debug (local %s, appareil %s) …\n" \
         "$(printf '%s' "${local_sha:-?}" | cut -c1-12)" "$(printf '%s' "${remote_sha:-inconnu}" | cut -c1-12)"
     local out
@@ -183,25 +154,23 @@ ensure_installed() {
   seul : « adb uninstall » effacerait la session appairée (QR à rescaner)."
     fi
     printf '%s\n' "$out" | sed 's/^/shot : /'
-    # L'installation est un fait, pas une intention : on la relit sur l'appareil.
+    # L'installation est un fait : on la relit sur l'appareil.
     remote_sha=$(installed_apk_sha256)
     if [ -n "$remote_sha" ] && [ "$remote_sha" != "$local_sha" ]; then
         die "shot : l'appareil fait tourner une AUTRE empreinte (${remote_sha:0:12} contre
   ${local_sha:0:12}). Capture NON faite : elle montrerait une autre interface."
     fi
-    # Empreinte illisible (appareil sans sha256sum) = vérification IMPOSSIBLE, pas
-    # fausse : on continue, mais on le dit — un « ça marche » sans preuve ne
-    # vaut rien.
+    # Empreinte illisible = vérification impossible, pas fausse : on continue
+    # en le disant.
     [ -n "$remote_sha" ] || printf "shot : empreinte de l'APK installed ILLISIBLE sur cet appareil (pas de sha256sum) : installation non vérifiée.\n" >&2
 }
 
 launch_app() {
     local out
     # Arrêt forcé AVANT le lancement : un deep link n'est traité qu'à la
-    # CONSTRUCTION du NavController (NavController.onGraphCreated), donc sur une
-    # activité déjà vivante le `onNewIntent` serait ignoré et la capture
-    # montrerait l'écran précédent — le faux vert qu'on veut supprimer. L'arrêt
-    # forcé ne touche à AUCUNE donnée de l'app : ni session appairée, ni cache.
+    # CONSTRUCTION du NavController, donc sur une activité vivante le
+    # `onNewIntent` serait ignoré (capture de l'écran précédent). Ne touche
+    # aucune donnée de l'app.
     a shell am force-stop "$APP_PKG" >/dev/null 2>&1 || true
     sleep 1
     out=$(a shell am start -W -a android.intent.action.VIEW \
@@ -212,11 +181,8 @@ launch_app() {
     fi
 }
 
-# #179 — LE THÈME, POSÉ SUR L'APPAREIL. Une recette qui ne peut pas rejouer le
-# sombre ne prouve rien du sombre : il fallait écrire `shared_prefs/settings.xml`
-# à la main. `cmd uimode night` force l'état du système, donc `AppTheme.SYSTEM`
-# (le défaut) le suit, et AUCUNE donnée de l'app n'est touchée — ni session
-# appairée, ni cache, ni préférences.
+# Thème posé sur l'APPAREIL (`cmd uimode night`) : `AppTheme.SYSTEM` suit, et
+# aucune donnée de l'app n'est touchée.
 force_theme() {
     [ -n "$THEME" ] || return 0
     local mode
@@ -236,7 +202,6 @@ screen_size() {
     a shell wm size | sed -n 's/.*size: \([0-9][0-9]*x[0-9][0-9]*\).*/\1/p' | tail -1
 }
 
-# Une seule capture par tentative, en mémoire : le PNG affiché est la preuve.
 capture() {
     local dest="$1"
     a exec-out screencap -p > "$dest" || die "shot : screencap a échoué — aucun fichier écrit."
@@ -252,13 +217,11 @@ raw_frame() {
     a exec-out screencap > "$RAW" || die "shot : screencap brut a échoué — capture non contrôlable."
 }
 
-# Une image uniformément noire/blanche = écran éteint ou en cours d'extinction :
-# `screencap` ne rend alors RIEN de l'app, et la capture passerait pour une
-# capture d'écran de l'app. Trois outils possibles, trois verdicts identiques ;
-# aucun disponible = échec, jamais un « ça doit être bon ».
-# Le chemin passe par l'ENVIRONNEMENT, pas par argv : selon le runtime (bun,
-# node, un wrapper node fourni par bun), `-e` avale ou non l'argument suivant —
-# un chemin perdu se lirait « fichier absent », jamais « image noire ».
+# Image uniformément noire/blanche = écran éteint : `screencap` ne rend rien de
+# l'app et la capture passerait pour une capture. Aucun outil disponible =
+# échec, jamais un « ça doit être bon ».
+# Le chemin passe par l'ENVIRONNEMENT, pas par argv : selon le runtime, `-e`
+# avale ou non l'argument suivant.
 DISTINCT_JS='const { readFile } = await import("node:fs/promises");
 const buf = new Uint8Array(await readFile(process.env.SHOT_RAW));
 const px = new Uint32Array(buf.buffer, buf.byteOffset, buf.byteLength >> 2);
@@ -287,8 +250,7 @@ blank_verdict() {
         return 0
     fi
     if command -v ffmpeg >/dev/null 2>&1; then
-        # ffmpeg ne décode pas le PNG dans tous les builds (celui-ci non) :
-        # on analyse donc le tampon BRUT, que tout le monde sait lire.
+        # Ce build de ffmpeg ne décode pas le PNG : on analyse le tampon BRUT.
         raw_frame
         out=$(ffmpeg -v error -f rawvideo -pix_fmt rgba -s "$(screen_size)" -i "$RAW" \
             -vf "signalstats,metadata=mode=print:file=-" -f null - 2>/dev/null \
@@ -298,8 +260,8 @@ blank_verdict() {
             ymin=$(printf '%s' "$out" | sed -n 's/^YMIN //p')
             ymax=$(printf '%s' "$out" | sed -n 's/^YMAX //p')
             yavg=$(printf '%s' "$out" | sed -n 's/^YAVG //p')
-            # Unité seulement si ffmpeg a vraiment sorti les deux bornes : sinon
-            # « YMIN=YMAX= » ferait croire à une image uniforme (faux écran noir).
+            # Sans les deux bornes : « YMIN=YMAX= » ferait croire à une image
+            # uniforme (faux écran noir).
             if [ -n "$ymin" ] && [ -n "$ymax" ] && awk -v a="$ymin" -v b="$ymax" 'BEGIN { exit (b - a <= 1) ? 0 : 1 }'; then
                 echo "image uniforme (YMIN=YMAX=$ymin) : écran éteint"
                 return 0
@@ -325,15 +287,10 @@ blank_verdict() {
   bun/node absents). Capture NON contrôlée, donc refusée — installez ImageMagick."
 }
 
-# Libellés réellement à l'écran : `uiautomator dump` voit l'arbre d'accessibilité
-# de la WebView. Le PREMIER dump après un démarrage ne contient souvent que le
-# nœud `WebView` (arbre Chromium pas encore peuplé) : on retente quelques fois
-# avant de conclure à un échec. Vide après les essais = écran éteint ou
-# instrumentation active — on le dit, on ne devine pas.
-#
-# #418 : un arbre ILLISIBLE est un ÉCHEC, pas un succès muet. La fonction
-# sort en ERREUR (code ≠ 0) : un dump qu'on n'a pas lu ne prouve AUCUNE
-# route, donc il ne doit jamais pouvoir passer pour une capture vérifiée.
+# Libellés réellement à l'écran (`uiautomator dump` voit l'arbre WebView). Le
+# premier dump après démarrage ne contient souvent que le nœud `WebView` : on
+# retente. Arbre illisible après les essais = ÉCHEC (code ≠ 0), jamais un succès
+# muet : un dump non lu ne prouve aucune route.
 screen_texts() {
     local attempt xml texts
     for attempt in 1 2 3 4 5 6; do
@@ -355,101 +312,27 @@ screen_texts() {
     return 1
 }
 
-# Écran d'appairage : une SEULE page (#299) — le QR qui porte l'adresse + son
-# PIN. Titre et champ sont les deux libellés stables de l'écran.
+# Écran d'appairage : une seule page (QR + PIN). Ces deux libellés sont stables.
 is_pairing() {
     printf '%s' "$1" | grep -qiE "qr de l'application|code pin du qr"
 }
 
-# Verrouillage de l'appareil : la capture ne montre alors QUE le clavier du
-# code, ce qui n'est ni noir ni notre écran — d'où un contrôle à part, préalable
-# à celui de la route. "Code PIN" est EXCLU du motif : l'appairage affiche
-# "Code PIN du QR", et confondre les deux enverrait l'utilisateur chercher une
-# session morte alors que le téléphone est simplement verrouillé.
+# Appareil verrouillé : la capture ne montre que le clavier du code. « Code PIN »
+# est EXCLU du motif — l'appairage affiche « Code PIN du QR ».
 is_locked() {
-    # Insensible à la casse : le verrouillage suit la LANGUE du téléphone, pas
-    # celle du script (vérifié : « Enter PIN » sur un appareil en anglais).
+    # Insensible à la casse : le verrouillage suit la LANGUE du téléphone.
     printf '%s' "$1" | grep -qiE 'enter pin|enter password|enter pattern|swipe up to unlock|déverrouill|vérification biométrique'
 }
 
-# ---------------------------------------------------------------------------
-# #160 — LE TEXTE À L'ÉCRAN, ÉCRIT UN SEUL ENDROIT.
-#
-# `verify_route` cherche deux choses dans le dump uiautomator : le TITRE de la
-# barre du haut — le libellé du contrat de navigation, table `ROUTE_META` de
-# `web/src/ui/AppShell.tsx`, donc stable quand une refonte remplace le CORPS
-# d'un écran — puis un FRAGMENT propre à cet écran.
-#
-# Pourquoi le fragment est partout : le titre seul ne prouve pas grand-chose.
-# Sur les cinq routes d'ONGLET, c'est le libellé de l'onglet (« Accueil »,
-# « Notes », « Profil »…) que la barre d'onglets affiche sur TOUTES les routes :
-# il est donc toujours là. Ailleurs, un ÉCRAN CENTRAL le réimprime en bouton —
-# l'onglet Notes propose « Réglages », « Appairage QR+PIN » et « Alertes
-# sécurité », l'accueil des cartes « Actualités », « Cantine », « Vie scolaire »,
-# « Messages », le profil les mêmes. Deux exceptions : `news`
-# et `revision-sheets`, dont le corps ne dépend que de la donnée, donc sans libellé fixe :
-# leur titre EST le témoin.
-#
-# Format : `route|titre|fragment`, `;` entre fragments ALTERNATIFS (un seul
-# suffit) — l'accueil est le seul écran dont TOUT le corps dépend des données :
-# « Afficher plus » quand un widget est là, « Rien à afficher » quand la page
-# est vide.
-#
-# #166 — UN FRAGMENT PAR ÉTAT, sinon le témoin est de la donnée. Règle lue et
-# vérifiée dans `tests/unit/shot-harness.test.ts` : la liste doit contenir au
-# moins un libellé lisible dans l'état PLEIN **et** dans l'état SANS DONNÉE
-# (cache vide, échec réseau, établissement qui ne publie rien). Le défaut était
-# l'onglet Notes : « Moyennes par matière » ne sort que dans la branche qui a
-# des notes à montrer (`GradesScreen.kt`), donc hors ligne — sur un écran
-# parfaitement correct — la capture échouait :
-#
-#     shot : la route « grades » NON PROUVÉE (« Moyennes par matière » absent).
-#
-# Le même critère a été repassé sur les dix-sept : `calendar` (« semaine du »),
-# `tasks` (« Devoirs de la semaine »), `profile` (« Détecter les onglets »),
-# `settings`, `canteen`, `attendance`, `sanctions`, `messages`, `pairing` et `alerts`
-# portent un titre de section ou un bouton rendu HORS de la branche de donnée,
-# donc ils tiennent sans donnée. `news` et `revision-sheets` ont
-# un titre de barre du haut unique, ce qui suffit (cf. le test de condition).
-#
-# #172 — LA BRANCHE D'ERREUR, ÉTAT LE PLUS AVEUGLE. `PapErrorState` ne rend que
-# le message de la couche data et « Réessayer », un libellé que SEPT écrans
-# rendent aussi (Actualités, Cantine, Vie scolaire, Sanctions, Messages, Alertes
-# sécurité, Fiches révision). Or les cinq routes d'ONGLET ont leur titre dans la
-# barre d'onglets : « Notes » se lit sur TOUTES les routes, donc ajouter
-# « Réessayer » au témoin de l'onglet Notes transformerait une dérive de
-# navigation vers l'un des sept autres en faux vert (titre « Notes » + «
-# Réessayer » = succès trompeur). Un témoin d'état d'erreur est donc, par
-# construction, une LIGNE FIXE PROPRE À L'ÉCRAN : c'est ce que portent les trois
-# écrans réparés ici — « Notes indisponibles. » (onglet Notes), « Sanctions
-# déclarées » + « Sanctions indisponibles. » (route Sanctions), « Heures
-# manquées » + « Absences indisponibles. » (route Vie scolaire) — puis, en #178,
-# « Cantine », dont le titre est remonté HORS du `when` (`CANTEEN_HEADING`) :
-# avant, `make shot ROUTE=canteen` hors ligne échouait sur « le témoin de
-# l'écran a changé » alors que l'écran était correct.
-#
-# Ces libellés sont sans apostrophe : la table ci-dessous est une chaîne entre
-# apostrophes simples, donc un « l'instant » la fermerait au milieu (erreur de
-# syntaxe bash, et un harnais de test qui rendrait 127 sans rien dire).
-#
-# Le corollaire, vérifié par `tests/unit/shot-harness.test.ts` : un écran dont la
-# branche d'erreur ne rend AUCUNE ligne fixe n'est pas prouvable dans cet état —
-# ni par le titre (les onglets le répètent partout) ni par « Réessayer » (sept
-# écrans le partagent). On préfère le dire dans la table plutôt que d'accepter
-# une capture qui prouve autre chose que ce qu'on demande.
-#
-# Correspondance par FRAGMENT (`grep -F`) : un nœud Compose porte la phrase
-# entière (« Prochain cours · Maths · 08:00 »), pas le mot isolé.
-#
-# Une refonte ne peut plus casser la vérification en silence : quand le témoin
-# manque, le message nomme CETTE table (fichier + ligne) et dit où changer le
-# titre. Le libellé d'onglet reste EXCLU comme témoin : voir plus haut.
-#
-# #190 : `calendar` s'appelle « Cours » (le libellé de la référence). `grades`
-# porte encore « Notes », mais c'est le REPLI : l'écran publie le nom de la
-# période dans la barre, donc c'est son FRAGMENT qui prouve la route, pas ce
-# titre — il reste dans la table parce que `TOP_BARS` le garde pour l'état sans
-# période, et les deux tables doivent dire la même chose.
+# Textes à l'écran, écrits UN SEUL endroit.
+# Format : `route|titre|fragment`, `;` entre fragments alternatifs. Le titre seul
+# ne prouve rien (les onglets le répètent sur toutes les routes) : `verify_route`
+# cherche AUSSI un fragment propre à l'écran, un par ÉTAT — plein et sans donnée
+# (cache vide, échec réseau). Règle vérifiée par
+# `tests/unit/shot-harness.test.ts` ; un écran sans ligne fixe dans sa branche
+# d'erreur n'est pas prouvable.
+# Libellés sans apostrophe : la table est une chaîne entre apostrophes simples.
+# Correspondance par FRAGMENT (`grep -F`) : un nœud porte la phrase entière.
 ROUTE_WITNESSES='
 index|Accueil|DEVOIRS;Accès rapides;Bonsoir;Bonjour;Bonne nuit
 calendar|Cours|Semaine du;PROCHAIN COURS;Aucun cours
@@ -471,16 +354,9 @@ cahier|Cahier de cours|Cahier de cours;Ajouter un cours;Aucun cours enregistré
 prof|Prof|Ton professeur IA;Pose ta première question;Conversation
 '
 
-# Ligne de la table d'une route. Vide = route inconnue (donc absente des 17).
-#
-# #536 : la route est comparée LITTÉRALEMENT (le premier champ `|`, `=`
-# exact), jamais par une EXPRESSION RÉGULIÈRE. Interpolée dans un `grep -E`,
-# elle passait la liste blanche : `ROUTE='.*'` matchait la PREMIÈRE ligne de la
-# table (`index|Accueil`), donc une route INCONNUE était acceptée, la capture
-# était rangée sous `.*.png` et la vérification de titre comparait l'accueil à
-# l'accueil — le script annonçait une capture « vérifiée » d'un écran qui
-# n'est pas la route demandée. Le mot `|` échappé (`\|`) ne change rien : le
-# route DOIT être le premier champ entier, `index|Accueil` ne l'est pas.
+# Ligne de la table d'une route. Vide = route inconnue.
+# Route comparée LITTÉRALEMENT au premier champ, jamais en regex : `.*` en
+# `grep -E` acceptait une route inconnue et « vérifiait » l'accueil.
 witness_row() {
     local route="$1" line
     while IFS= read -r line; do
@@ -491,12 +367,11 @@ witness_row() {
     return 0
 }
 
-# Titre de barre du haut attendu pour la route, "" si elle est inconnue.
+# "" si route inconnue.
 route_title() {
     witness_row "$1" | cut -d'|' -f2
 }
 
-# Fragments alternatifs propres à la route, un par ligne. Vide = le titre suffit.
 route_fragments() {
     local row
     row=$(witness_row "$1")
@@ -504,14 +379,12 @@ route_fragments() {
     printf '%s' "$row" | cut -d'|' -f3- | tr ';' '\n' | sed '/^$/d'
 }
 
-# Une route est connue si elle a un titre : c'est aussi la LISTE BLANCHE (une
-# route inconnue est refusée avant toute écriture, jamais capturée au hasard).
+# Aussi la LISTE BLANCHE : une route inconnue est refusée avant toute écriture.
 route_known() {
     [ -n "$(route_title "$1")" ]
 }
 
-# Ligne DU FICHIEL où vit le marqueur : le message d'échec la nomme, donc on ne
-# laisse pas deviner où le changer.
+# Ligne de ce fichier, citée dans le message d'échec : on ne laisse pas deviner.
 witness_line() {
     local route="$1" n=0 line
     while IFS= read -r line; do
@@ -523,11 +396,7 @@ witness_line() {
     return 0
 }
 
-# Le bouton que seul l'écran Profil affiche (ProfileRoute). TIRÉ DE LA TABLE,
-# pas réécrit : garde-fou de dérive, pas une deuxième source. Ce profil propose
-# en BOUTON les mêmes libellés que les écrans Actualités / Cantine / Vie
-# scolaire / Fiches, donc un deep link qui dériverait vers le profil ferait
-# passer leurs titres pour rien.
+# Tiré de la table, pas réécrit : garde-fou de dérive, pas une deuxième source.
 PROFILE_MARKER=$(route_fragments profile | head -1 || true)
 
 cleanup() {
@@ -536,16 +405,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Titre de barre du haut + fragment propre à l'écran : c'est ce qui distingue
-# un écran d'un autre (voir `ROUTE_WITNESSES` plus haut). Les libellés d'onglets
-# ("Notes", "Profil"…) sont EXCLUS comme témoins : la barre d'onglets les affiche
-# sur TOUTES les routes, donc ils ne prouvent rien — d'où le fragment des cinq
-# routes d'onglets.
 verify_route() {
     local texts title fragments fragment title_seen candidate
     local dump=0
-    # `|| dump=$?` : la lecture ratée ne doit pas tuer le script SANS un mot
-    # (set -e) — c'est ici qu'elle est nommée, puis rendue fatale.
+    # `|| dump=$?` : sinon `set -e` tuerait le script sans nommer la lecture
+    # ratée — c'est ici qu'elle est nommée, puis rendue fatale.
     texts=$(screen_texts) || dump=$?
     if [ "$dump" -ne 0 ] || [ -z "$texts" ]; then
         printf 'shot : ÉCHEC — arborescence illisible (uiautomator a échoué) :\n' >&2
@@ -559,9 +423,8 @@ verify_route() {
         printf '  Capture conservée (preuve) : %s\n' "$OUT_PNG" >&2
         exit 1
     fi
-    # Deux dérives à énoncer PAR LEUR NOM, pas par une absence de marqueur :
-    # l'appairage (credential refusée ou session absente : AppNav y renvoie,
-    # #113) et le profil (destination de repli après un bouton « Appairage »).
+    # Dérives nommées par leur nom : l'appairage (credential refusée ou session
+    # absente) et le profil (destination de repli), pas une absence de témoin.
     if [ "$ROUTE" != "pairing" ] && is_pairing "$texts"; then
         printf "shot : ARRIVÉ sur l'écran d'APPAIRAGE au lieu de « %s ».\n" "$ROUTE" >&2
         printf "  Le deep link « %s://%s » a bien été envoyé ; l'app a dévié\n" "$SCHEME" "$ROUTE" >&2
@@ -580,8 +443,8 @@ verify_route() {
         printf "shot : route « %s » inconnue — capture prise SANS vérification d'écran.\n" "$ROUTE" >&2
         return 0
     fi
-    # Le titre : le libellé du contrat de navigation, présent sur la route comme
-    # sur aucune autre. Le fragment : seulement quand le titre ne suffit pas.
+    # Le titre : le libellé du contrat de navigation. Le fragment : seulement
+    # quand le titre ne suffit pas.
     title_seen=absent
     if printf '%s' "$texts" | grep -qF "$title"; then title_seen=présent; fi
     fragment=""
@@ -604,20 +467,16 @@ EOF
         fi
         return 0
     fi
-    # #160 : l'écran peut être PARFAIT, c'est le témoin qui a péri — l'annoncer
-    # « pas atteinte » envoyait chercher une panne de navigation qui n'existait
-    # pas. On dit ce qui manque, et OÙ le changer.
+    # L'écran peut être PARFAIT et le témoin mort : dire ce qui manque et où le
+    # changer, sinon on envoie chercher une panne de navigation inexistante.
     printf "shot : route « %s » NON PROUVÉE — le témoin de l'écran a changé.\n" "$ROUTE" >&2
     printf "  Titre attendu « %s » : %s.\n" "$title" "$title_seen" >&2
     if [ -n "$fragments" ]; then
         printf "  Fragment(s) attendu(s) « %s » : %s.\n" \
             "$(printf '%s' "$fragments" | tr '\n' '|')" \
             "$([ -n "$fragment" ] && echo présent || echo ABSENT)" >&2
-        # #166 : titre présent + aucun fragment = l'écran est presque toujours
-        # dans un état SANS DONNÉE (cache vide, échec réseau), pas un écran
-        # refait. On le dit, sinon on envoie chercher une panne de navigation
-        # inexistante — et on rappelle que la liste doit porter une variante par
-        # état.
+        # Titre présent + aucun fragment = état SANS DONNÉE, presque toujours,
+        # pas un écran refait.
         if [ "$title_seen" = présent ]; then
             printf "  Le titre est là, le fragment non : l'écran est sans DONNÉE (cache\n" >&2
             printf "  vide, échec réseau, établissement qui ne publie rien) — donc soit son\n" >&2
@@ -651,9 +510,7 @@ main() {
         esac
     done
     [ -n "$ROUTE" ] || { usage >&2; die "route manquante (ex. : make shot ROUTE=grades)."; }
-    # Route inconnue = échec AVANT toute écriture : sans témoin, une capture
-    # ne prouve rien et l'app ouvrirait bêtement son écran de départ. Le message
-    # sort la liste, donc le nom exact se lit sans ouvrir le script.
+    # Route inconnue = échec AVANT toute écriture ; le message sort la liste.
     if ! route_known "$ROUTE"; then
         usage >&2
         die "route inconnue : « $ROUTE ». Rien capturé."
@@ -661,18 +518,16 @@ main() {
 
     need_device
 
-    # Garantit que l'appareil fait tourner cet arbre de travail, puis ouvre la route.
     ensure_installed
 
-    # Avant le dossier de capture : un thème refusé ne doit pas laisser un
-    # `shots/<date>/` vide, ni une capture du thème courant.
+    # Avant le dossier de capture : un thème refusé ne laisse pas un
+    # `shots/<date>/` vide.
     force_theme
 
     local name
     name="$ROUTE.png"
-    # Le thème entre dans le nom : sans lui, la capture sombre ÉCRASERAIT la
-    # capture claire du même jour, et la comparaison des deux deviendrait
-    # impossible (c'est exactement la comparaison que #179 demande).
+    # Sans le thème dans le nom, une capture sombre écraserait la claire du même
+    # jour : la comparaison des deux deviendrait impossible.
     [ -z "$THEME" ] || name="${name%.png}.$THEME.png"
     local out_dir="$REPO_ROOT/shots/$(date -u +%F)"
     OUT_PNG="$out_dir/$name"
@@ -686,7 +541,7 @@ main() {
     verdict=$(blank_verdict "$OUT_PNG")
     if [ "$verdict" != "ok" ]; then
         # Écran éteint : on réveille et on réessaie UNE fois (le téléphone se
-        # rendort entre deux captures, et un wakeup demande ~1 s).
+        # rendort entre deux captures).
         printf 'shot : %s — réveil de l''écran puis nouvelle tentative.\n' "$verdict" >&2
         a shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
         a shell wm dismiss-keyguard >/dev/null 2>&1 || true
@@ -703,7 +558,7 @@ main() {
     fi
 
     # `if` et non `&&` : en dernière instruction de main, un `&&` dont le test
-    # est faux ferait sortir le script en 1 alors que la capture est bonne.
+    # est faux sortirait en 1 alors que la capture est bonne.
     verify_route
 
     printf '%s\n' "$OUT_PNG"

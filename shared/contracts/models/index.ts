@@ -1,4 +1,3 @@
-// Index des contrats par domaine (découpage de `models.ts`, issue #716).
 export * from "./guards";
 export * from "./core";
 export * from "./averages";

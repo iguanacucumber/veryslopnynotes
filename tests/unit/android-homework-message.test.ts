@@ -1,17 +1,6 @@
-// #416 : le motif de refus de l'assistant ne doit JAMAIS être affiché tel quel.
-//
-// Le motif du modèle (`HomeworkOutcome.Refused.reason`) est un texte LIBRE :
-// il peut contenir un echo de la consigne, une autre cause que « sources
-// insuffisantes », ou rien du tout. Le pont le MAPPE sur une phrase française
-// bornée (`android/app/.../HomeworkMessages.kt`) et l'envoie dans `message`,
-// le champ que l'UI lit.
-//
-// Ce test ne Miroite pas la logique : il COMPILE la VRAIE source de
-// production et la pilote via `agents/runtime/kotlin-parity/HomeworkMessagesParityMain.kt`.
-// Les assertions portent donc sur du code exécuté.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Le motif de refus de l'assistant (texte LIBRE du modèle) ne doit JAMAIS être
+// affiché tel quel : le pont le mappe sur une phrase française bornée.
+// La VRAIE source est compilée et pilotée ; outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -61,8 +50,7 @@ describe("message de refus de l'assistant (#416)", () => {
     const m = await message(SOURCES_INSUFFISANTES);
     expect(m).toContain("matière");
     expect(m).not.toContain(SOURCES_INSUFFISANTES);
-    // #608 : des sources ONT été envoyées (consigne, cours, manuel, cahier).
-    // La phrase ne doit pas prétendre le contraire.
+    // Des sources ONT été envoyées : la phrase ne doit pas prétendre le contraire.
     expect(m).not.toMatch(/sans source/i);
     expect(m).toMatch(/ne suffisent pas/i);
   });
@@ -83,13 +71,11 @@ describe("message de refus de l'assistant (#416)", () => {
       const m = await message(motif);
       const extrait = motif.trim().slice(0, 30);
       expect({ motif: motif.slice(0, 20), vide: m.trim() === "" }).toEqual({ motif: motif.slice(0, 20), vide: false });
-      // Le motif du modèle ne doit pas être dans la phrase (hors le cas du
-      // jeton déterministe, traité plus bas).
+      // Le motif du modèle ne doit pas être dans la phrase.
       if (extrait !== "" && motif.trim() !== SOURCES_INSUFFISANTES) {
         expect(m).not.toContain(extrait);
       }
-      // Un motif libre ne doit pas produire le faux diagnostic « pas assez de
-      // matière » : le modèle a refusé pour une AUTRE raison.
+      // Un motif libre ne produit pas le faux diagnostic « pas assez de matière ».
       if (motif.trim().toLowerCase() !== SOURCES_INSUFFISANTES) {
         expect(m).not.toContain("matière");
       }
@@ -113,8 +99,7 @@ describe("message de refus de l'assistant (#416)", () => {
     const debut = bridge.indexOf("is HomeworkOutcome.Refused ->");
     expect(debut).toBeGreaterThan(-1);
     const corps = bridge.slice(debut, bridge.indexOf("\n        }", debut));
-    // #629 : la construction du refus vit dans un helper borné, appelé par la
-    // branche ; c'est lui qui porte la phrase et les CTA.
+    // La construction du refus vit dans un helper borné qui porte phrase et CTA.
     expect(corps).toContain("homeworkRefusalJson(outcome, context)");
     const helperDebut = bridge.indexOf("internal fun VsnBridge.homeworkRefusalJson");
     expect(helperDebut).toBeGreaterThan(-1);

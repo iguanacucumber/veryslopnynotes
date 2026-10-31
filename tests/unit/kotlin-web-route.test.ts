@@ -1,14 +1,6 @@
-// #400 : la route de l'interface web survit à la recréation de l'activité.
-//
-// La route vit dans le HASH de l'URL de la WebView (`web/src/main.tsx` :
-// `HashRouter`) : la lire, la garder et la relire est une LOGIQUE PURE, dans
-// `android/app/.../WebRouteState.kt` (aucun import `android.*`). Ce test
-// compile cette VRAIE source et la pilote via
-// `agents/runtime/kotlin-parity/WebRouteParityMain.kt` : les assertions
-// portent donc sur du code EXÉCUTÉ, pas sur un miroir TS.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// La route de l'interface web survit à la recréation de l'activité : elle est
+// lue dans le hash de l'URL par `WebRouteState.kt`, EXÉCUTÉ via le harnais.
+// Outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -67,15 +59,12 @@ describe("route de l'interface web (#400)", () => {
   });
 
   test.skipIf(skip)("une route hors contrat n'est jamais servie", async () => {
-    // Le contrat est la liste des routes : la WebView ne sert pas d'écran
-    // qui n'existe pas, et la restauration ne ramène pas l'utilisateur
-    // dans un décor.
+    // La liste des routes est le contrat : pas d'écran inexistant, pas de décor restauré.
     expect(await routeFromUrl(`${INDEX}#/secret`)).toBeNull();
     expect(await routeFromUrl(`${INDEX}#/../etc/passwd`)).toBeNull();
   });
 
-  // LE point de l'issue : le chemin de la route est CONSERVÉ dans l'état
-  // sauvegardé, puis RELU tel quel.
+  // Le chemin de la route est CONSERVÉ dans l'état sauvegardé, puis RELU tel quel.
   test.skipIf(skip)("le chemin survit à l'aller-retour par l'état sauvegardé", async () => {
     const path = await routeFromUrl(`${INDEX}#/attendance`);
     expect(path).toBe("/attendance");
@@ -93,12 +82,9 @@ describe("route de l'interface web (#400)", () => {
   });
 
   test.skipIf(skip)("la liste des routes est celle de l'interface web", async () => {
-    // L'interface React déclare ses routes dans `web/src/App.tsx` : la liste
-    // native doit être la MÊME, sinon le repli renverrait l'utilisateur sur
-    // l'accueil alors que son écran existe.
+    // La liste native doit être la MÊME que `App.tsx`, sinon le repli renvoie à l'accueil.
     const app = readFileSync(join(ROOT, "web", "src", "App.tsx"), "utf8");
-    // La route « * » est le filet de sécurité du routeur (elle renvoie sur
-    // l'accueil) : ce n'est pas une route servie.
+    // « * » est le filet du routeur, pas une route servie.
     const web = [...app.matchAll(/<Route path="([^"]+)"/g)]
       .map((m) => m[1]!)
       .filter((route) => route !== "*")
@@ -115,8 +101,7 @@ describe("route de l'interface web (#400)", () => {
     expect(await routeFromState(meta.home)).toBe("/");
   });
 
-  // La source de production est PUBLIQUE dans le module `app` : la logique
-  // de route y est lue par l'activité ET par la WebView.
+  // La logique de route est PUBLIQUE dans le module app : lue par l'activité et la WebView.
   test("la route vit dans un fichier PUR, lu par l'activité et la WebView", () => {
     const source = readFileSync(join(ROOT_APP, "WebRouteState.kt"), "utf8");
     expect(source).not.toMatch(/^import\s+android\./m);

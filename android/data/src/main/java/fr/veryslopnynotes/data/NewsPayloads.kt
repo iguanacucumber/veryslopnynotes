@@ -4,15 +4,12 @@ import fr.veryslopnynotes.pronote.Client
 import org.json.JSONArray
 import org.json.JSONObject
 
-// Actualités : payload `news`.
-
 internal fun newsPayload(client: Client): String {
     val arr = JSONArray()
     val raws = client.informationAndSurveys()
     raws.take(100).forEachIndexed { i, info ->
-        // #475 : la LISTE ne télécharge plus le corps (1 POST, pas 21) : le
-        // corps est une DONNÉE demandée à la demande, au dépliage
-        // (`news.item` -> `Client.informationContent(id)`).
+        // La LISTE ne télécharge pas le corps (1 POST, pas 21) : il est demandé
+        // au dépliage (`news.item` -> `Client.informationContent(id)`).
         val title = boundedCp(info.title, 200)
         val finalTitle = title.ifEmpty { "Actualité" }
         arr.put(JSONObject().apply {

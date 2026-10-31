@@ -1,9 +1,6 @@
-// #632 : les exercices viennent du manuel/cahier DÉJÀ extraits, jamais inventés.
-//
-// VRAI Kotlin exécuté : `android/core/Exercises.kt` est compilé par le harnais
-// et piloté par `agents/runtime/kotlin-parity/ExercisesMain.kt`. Les assertions
-// portent sur l'extraction verbatim, le filtre page/chapitre, les trois niveaux
-// d'aide et la validation des sources citées.
+// Les exercices viennent du manuel/cahier DÉJÀ extraits, jamais inventés. Le
+// vrai `Exercises.kt` est compilé et piloté par `ExercisesMain.kt` : extraction
+// verbatim, filtre page/chapitre, trois niveaux d'aide, validation des sources.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -146,7 +143,7 @@ describe("exercices — aide progressive (#632)", () => {
     expect(method.system).toContain("METHODE");
     expect(method.system).toContain("Ne donne PAS le résultat final");
     expect(correction.system).toContain("CORRECTION COMPLETE");
-    // #701 : les trois niveaux portent la même règle de citation.
+    // Les trois niveaux portent la même règle de citation.
     for (const level of [hint, method, correction]) {
       expect(level.system).toContain("Seuls les blocs precedes de « Libelle citable : » sont des sources");
     }
@@ -197,8 +194,7 @@ describe("exercices — sortie validée (#632)", () => {
   });
 
   test.skipIf(skip)("une citation recopiant le préambule est ramenée au libellé fourni (#701)", async () => {
-    // Recette live : le modèle renvoyait la ligne entière « Libelle citable : X ».
-    // Le préambule est un artefact du prompt, pas une source inventée.
+    // Le modèle renvoyait « Libelle citable : X » : le préambule est un artefact du prompt.
     const res = await ask<Parsed>({
       op: "parse",
       text: JSON.stringify({
@@ -254,9 +250,8 @@ describe("exercices — sortie validée (#632)", () => {
   });
 
   test.skipIf(skip)("une citation de bloc DONNEE reste refusée (le correctif est dans le prompt)", async () => {
-    // #701 : le prompt interdit désormais de citer « Reponse de l'eleve ».
-    // Le validateur ne devient pas permissif pour autant : une source hors
-    // corpus reste une citation inventée (#604).
+    // Le prompt interdit de citer « Reponse de l'eleve » ; une source hors corpus
+    // reste une citation inventée.
     const res = await ask<Parsed>(
       {
         op: "parse",

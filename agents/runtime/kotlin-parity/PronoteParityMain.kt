@@ -1,20 +1,8 @@
-// PronoteParityMain.kt — pilote JSON du harnais de parité protocole (#200, #202).
+// PronoteParityMain.kt — pilote JSON du harnais de parité protocole.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-pronote-parity.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Protocole : une opération JSON par
-// ligne sur stdin, une réponse par ligne sur stdout, rendues avec le `Json`
-// embarqué lui-même (le pilote mange donc son propre chien : `jsonEcho`
-// valide le parseur/sérialiseur contre `JSON.parse`/`JSON.stringify`).
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-pronote-parity.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Les réponses d'erreur du PORT (`CryptoError`, `PronoteAPIError`,
-// `ExpiredObject`, `JsonError`) sont capturées en `{"error", "message"}` :
-// NOM et message comparés à la référence. Les erreurs du PILOTE (op inconnue,
-// entrée malformée) sortent aussi en `{"error"…}` mais préfixées `pilote: `
-// dans `message` — le test les refuse (une entrée malformée n'est pas un
-// résultat).
-//
-// États persistants (sessions HTTP, communications) : indexés par `sid`/`cid`
-// alloués par le pilote, comme les `CookieJar` injectés côté TS.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.pronoteparity
 
 import fr.veryslopnynotes.pronote.Communication
@@ -74,13 +62,10 @@ private class Driver {
 
     fun run(op: JVal.Obj): JVal {
         return when (op.str("op")) {
-            // --- Json embarqué (mangé par son propre chien) ------------------
             "jsonEcho" -> Json.parse(op.str("text") ?: throw IllegalArgumentException("opération inconnue : ${op.str("op")}"))
-            // --- Rendu des nombres (#410) -----------------------------------
             // Le rendu doit être IDENTIQUE à `JSON.stringify` : c'est lui qui
             // décide de la forme de la décimale (entier court, plat, exponentiel).
             "jsNumber" -> ok("text" to JVal.Str(jsNumber(numberText(op))))
-            // --- Crypto ------------------------------------------------------
             "md5" -> ok("hex" to JVal.Str(md5((op.str("dataHex") ?: "").hexToBytes()).toHexLower()))
             "sha256" -> ok("hex" to JVal.Str(sha256HexUpper(op.str("text") ?: "")))
             "aes" -> {
@@ -132,7 +117,6 @@ private class Driver {
                 "n" to JVal.Str(Encryption.RSA_1024_MODULUS.toString()),
                 "e" to JVal.Str(Encryption.RSA_1024_EXPONENT.toString()),
             )
-            // --- Fonctions pures ----------------------------------------------
             "hexToBytes" -> ok("hex" to JVal.Str((op.str("hex") ?: "").hexToBytes().toHexLower()))
             // Hiérarchie d'erreur : le contrat documenté est
             // `catch (e: PronoteAPIError)` — il doit attraper `ExpiredObject`
@@ -167,7 +151,6 @@ private class Driver {
                     ok("ok" to JVal.Bool(false), "error" to JVal.Str(e.javaClass.simpleName))
                 }
             }
-            // --- Jar à cookies -------------------------------------------------
             "cookieNew" -> {
                 val sid = alloc()
                 jars[sid] = CookieJar()
@@ -182,7 +165,6 @@ private class Driver {
                 val jar = jars[(op.num("sid") ?: 0.0).toInt()] ?: throw IllegalArgumentException("pilote: sid inconnu")
                 ok("value" to JVal.Str(jar.getCookieString(op.str("url") ?: "")))
             }
-            // --- Session HTTP ---------------------------------------------------
             "httpNew" -> {
                 val sid = alloc()
                 val headers = op.obj("headers")?.fields?.mapValues { (_, v) -> (v as JVal.Str).value } ?: emptyMap()
@@ -213,7 +195,7 @@ private class Driver {
                 )
             }
             "httpSeq" -> {
-                // N requêtes séquentielles sur la MÊME session (#309) : le
+                // N requêtes séquentielles sur la MÊME session : le
                 // serveur factice doit voir UN SEUL port distant si le socket
                 // retourne au cache keep-alive. Renvoie les statuts (sanity).
                 val session = sessions[(op.num("sid") ?: 0.0).toInt()] ?: throw IllegalArgumentException("pilote: sid inconnu")
@@ -222,7 +204,6 @@ private class Driver {
                 val statuses = (1..n).map { session.get(url).status }
                 ok("statuses" to JVal.Arr(statuses.map { JVal.Num(it.toDouble()) }))
             }
-            // --- Communication ---------------------------------------------------
             "commNew" -> {
                 val cid = alloc()
                 comms[cid] = Communication(op.str("site") ?: "", null, op.bool("mobile") == true)
@@ -230,7 +211,7 @@ private class Driver {
             }
             "commRoot" -> {
                 // Découpe du site (autorité puis dernier segment) : la parité
-                // compare la page visée, pas les chaînes internes (#429).
+                // compare la page visée, pas les chaînes internes.
                 val comm = comms[(op.num("cid") ?: 0.0).toInt()] ?: throw IllegalArgumentException("pilote: cid inconnu")
                 ok(
                     "rootSite" to JVal.Str(comm.rootSite),
@@ -290,7 +271,6 @@ private class Driver {
                     "compressRequests" to JVal.Bool(comm.compressRequests),
                 )
             }
-            // --- KeepAlive --------------------------------------------------------
             "keepAlive" -> {
                 // `staleSec` : ancienneté simulée du dernier ping ; `runMs` :
                 // durée d'écoute ; `tickMs` : période du fil de garde (1 000 ms
@@ -319,7 +299,7 @@ private class Driver {
                 ).pingIfDue()
                 ok("pings" to JVal.Num(pings.toDouble()))
             }
-            // Ping MANUEL (#408) : INCONDITIONNEL — le seuil ne s'applique pas.
+            // Ping MANUEL : INCONDITIONNEL — le seuil ne s'applique pas.
             // `shouldPing` vaut faux : un ping « si dû » ne partirait pas.
             "keepAlivePing" -> {
                 var pings = 0

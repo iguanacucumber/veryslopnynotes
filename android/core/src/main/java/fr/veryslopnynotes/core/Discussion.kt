@@ -1,13 +1,11 @@
 package fr.veryslopnynotes.core
 
-// Messagerie #80 : miroir de shared/contracts/models.ts (Recipient, Message,
-// Discussion). Sujet / corps / nom d'expéditeur = DONNÉES de l'établissement, bornées et
-// affichées par Text() seul (jamais de HTML, jamais d'exécution : I6).
-// ÉCRITURES (répondre, créer, lu/non-lu, supprimer) : actions APP CONFIRMÉES
-// depuis un geste de l'utilisateur, jamais depuis une sortie LLM (I7) ; les
-// routes sont sur le serveur allowlist seul (jamais d'adresse Pronote, I1).
-// ponytail: dates = 10 premiers caractères de l'ISO, stdlib seule ; champ
-// optionnel du contrat = "" ou -1 côté affichage (jamais de valeur devinée).
+// Messagerie : miroir de shared/contracts/models.ts (Recipient, Message,
+// Discussion). Sujet / corps / nom d'expéditeur = DONNÉES bornées, affichées
+// par Text() seul (I6).
+// ÉCRITURES : actions APP CONFIRMÉES depuis un geste utilisateur, jamais depuis
+// une sortie LLM (I7) ; routes du serveur allowlist seul (I1).
+// ponytail: dates = 10 premiers caractères de l'ISO ; champ optionnel = "" ou -1.
 object DiscussionRules {
     const val MAX_ID = 64
     const val MAX_NAME = 100
@@ -22,9 +20,6 @@ object DiscussionRules {
     const val UNKNOWN_UNREAD = -1
 
     val KINDS = listOf("student", "teacher", "administration")
-
-    // #147 : `dateLabel` (tranche ISO) est supprimé — la messagerie affiche le
-    // temps relatif et trie sur l'INSTANT PARSÉ, jamais sur une chaîne.
 
     /** Badge non-lus ; compteur inconnu = aucun badge (jamais « 0 »). */
     fun unreadLabel(count: Int): String =
@@ -41,9 +36,8 @@ object DiscussionRules {
 }
 
 /**
- * Pièce jointe d'un message : RÉF OPAQUE résolue par le proxy serveur
- * (/v1/media). Toute forme d'adresse est invalide par contrat : l'app ne voit
- * JAMAIS une adresse Pronote (I1, règle d'or média).
+ * Pièce jointe d'un message : RÉF OPAQUE résolue par le proxy serveur (/v1/media).
+ * Toute forme d'adresse est invalide : l'app ne voit JAMAIS d'adresse Pronote (I1).
  */
 data class MessageAttachment(
     val id: String,
@@ -95,9 +89,8 @@ data class Discussion(
     /** Date du dernier message : "" = inconnue (jamais devinée). */
     val lastMessageAt: String,
     /**
-     * Fraîcheur du fil : "" = INCONNUE (#427). Un fil sans fraîcheur est
-     * un fil qui EXISTE : il est affiché et se trie sur l'ordre d'arrivée,
-     * pas sur une date inventée (« maintenant » le faisait remonter en tête).
+     * Fraîcheur du fil : "" = INCONNUE. Un fil sans fraîcheur EXISTE : il est
+     * affiché et se trie sur l'ordre d'arrivée, pas sur une date inventée.
      */
     val updatedAt: String,
 ) {

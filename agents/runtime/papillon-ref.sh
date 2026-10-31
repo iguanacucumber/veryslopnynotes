@@ -1,24 +1,17 @@
 #!/usr/bin/env bash
-# papillon-ref.sh — frames de RÉFÉRENCE de l'application Papillon (#133).
+# papillon-ref.sh — frames de RÉFÉRENCE de l'application Papillon.
 #
 #   agents/runtime/papillon-ref.sh [nom ...]   (défaut : les trois démos)
 #   make papillonRef
 #
-# Sources : les ENREGISTREMENTS DE DÉMONSTRATION PUBLIÉS SUR papillon.bzh
-# (vidéos de l'application de référence Papillon, 1180x2556). Matériel public
-# de comparaison visuelle — ce n'est ni un serveur du projet, ni une adresse
-# Pronote, ni une donnée d'un élève : aucune de ces URL n'est un hôte de la
-# prod (invariant I1 : le téléphone ne parle qu'au serveur allowlist).
+# Sources : les enregistrements de démonstration publics de papillon.bzh. Ce ne
+# sont ni des hôtes de la prod ni des données d'élève (I1).
 #
-# Pourquoi ffmpeg ne suffit pas à une frame : les webm sont très courts et
-# selon les encodages la frame à 6 s ou 20 s n'existe pas (« Output file is
-# empty, nothing was encoded »). On essaie donc plusieurs positions et on
-# garde la PREMIÈRE qui rend une image. Et le PNG n'est pas un encodeur de ce
-# build ffmpeg (seul mjpeg l'est) : on sort du JPEG, ce qui suffit pour
-# comparer des écrans à l'œil.
+# Pourquoi plusieurs positions : les webm sont courts, la frame à 6 s ou 20 s
+# n'existe pas toujours (« Output file is empty ») — on garde la PREMIÈRE qui
+# rend une image. Ce build ffmpeg n'encode que mjpeg, pas PNG.
 #
-# Réseau : échec BRUYANT. Une référence non téléchargée doit se voir, sinon on
-# compare l'interface overhaulée à rien. Rien ici n'est requis par `make check`.
+# Réseau : échec BRUYANT, sinon on compare à rien. Jamais dans `make check`.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -31,8 +24,7 @@ die() {
     exit 1
 }
 
-# Positions testées par vidéo : la première qui encode gagne. Le court-métage
-# évite de traverser un clip entier pour un écran.
+# La première position qui encode gagne : pas de traversée du clip entier.
 SEEK_POSITIONS=(3 4 5 6 8 10 12 15 20 25)
 
 fetch() {
@@ -50,8 +42,7 @@ fetch() {
     printf 'papillon-ref : %s (%s octets)\n' "$name" "$(stat -c %s "$dest")"
 }
 
-# Une frame = sortie non vide ET lisible comme image. ffmpeg peut retourner 0 en
-# n'écrivant rien d'utile : on vérifie le fichier, pas le code de sortie.
+# ffmpeg peut retourner 0 sans rien écrire : on vérifie le fichier, pas le code.
 grab() {
     local src="$1" out="$2" pos
     for pos in "${SEEK_POSITIONS[@]}"; do

@@ -1,4 +1,3 @@
-// Contrats v0 — événements serveur→app (SSE, source de vérité, issues #4, #18).
 // Enveloppe versionnée {v, type, at, data}. Détection nouvelle note / DS
 // sur données structurées uniquement (I7), jamais sur sortie libre LLM.
 
@@ -36,14 +35,13 @@ export type CacheInvalidatedData = {
   readonly resource: CacheableResource;
   readonly reason: "sync" | "expiry" | "manual";
 };
-/** Actualités établissement (#79) : snapshot paginé, l'app recharge /v1/news. */
+/** Actualités établissement : snapshot paginé, l'app recharge /v1/news. */
 export type NewsUpdatedData = {
   readonly items: NewsItem[];
 };
 
-// Alertes sécurité phase 6 (#21) : injections neutralisées (I6).
-// Excerpt = contenu suspect tronqué, affiché comme donnée jamais interprétée.
-// Fixtures 100 % synthétiques, sans secret ni URL réelle.
+// Injections neutralisées (I6) : l'extrait suspect reste une donnée,
+// jamais interprétée. Fixtures synthétiques, sans secret ni URL réelle.
 export const SECURITY_ALERT_KINDS = ["injection_neutralized"] as const;
 
 export type SecurityAlertKind = (typeof SECURITY_ALERT_KINDS)[number];

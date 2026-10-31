@@ -1,10 +1,7 @@
-// Scraper-only (#209, #210) : le process ne sert QUE des manuels.
-// Surface : GET /v1/health + POST /v1/manuals/scrape, sans auth. Tout le reste
-// (les 28 chemins métier supprimés en #210) = 404. Plateforme + URL de départ
-// injectées par l'appelant dans le corps, jamais en env ni commités, jamais
-// journalisées ; les identifiants de portail sont REFUSÉS (#526).
-// Fakes 100 % synthétiques : scrape injecté, aucun navigateur, aucun réseau
-// externe (Bun.serve uniquement sur 127.0.0.1 éphémère pour le client HTTPS).
+// Scraper-only : le process ne sert QUE GET /v1/health + POST /v1/manuals/scrape,
+// tout le reste = 404. Plateforme et URL de départ viennent du corps, jamais
+// d'env ni de log ; les identifiants de portail sont REFUSÉS.
+// Fakes synthétiques : scrape injecté, aucun navigateur, aucun réseau externe.
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -59,9 +56,7 @@ function scrapeBodyWithCredentials() {
 const post = (path: string, body: unknown) =>
   new Request(`http://127.0.0.1${path}`, { method: "POST", body: JSON.stringify(body) });
 
-// --- #526 : le VRAI scraper, navigateur MOCKÉ (aucun réseau, aucun Chromium).
-// Le module `playwright` est mocké et le `fetch` global (chaîne de
-// redirections) est stubé : le test joue le bout en bout du scrape.
+// Le VRAI scraper, navigateur MOCKÉ : `playwright` et `fetch` sont stubés.
 const PUBLIC_URL = "https://manuels.example.invalid/6e/maths";
 /** IP publique factice (aucune adresse réelle n'est contactée). */
 const PUBLIC_IP = "93.184.216.34";
@@ -87,8 +82,7 @@ mock.module("playwright", () => ({
         newPage: async () => ({
           url: () => PUBLIC_URL,
           title: async () => "Titre factice",
-          // #525 : la lecture passe par `evaluate` (la borne est appliquée
-          // DANS le navigateur) : le faux rend au plus `max` caractères.
+          // La borne est appliquée DANS le navigateur : le faux rend au plus `max` caractères.
           evaluate: async (_fn: unknown, max: number) =>
             renderedHtml.length > max ? renderedHtml.slice(0, max + 1) : renderedHtml,
           route: async () => {},
@@ -147,8 +141,7 @@ describe("scraper-only (#209)", () => {
   test("surface : les 28 chemins métier + chemins inconnus = 404, avec ou sans bearer", async () => {
     const app = createApp({ scrape: fakeScrape().scrape });
     const auth = { authorization: "Bearer jeton-jamais-vu" };
-    // #210 : la table ne liste plus que le vivant ; les 31 routes métier
-    // supprimées restent 404 par construction (rejet avant toute lecture).
+    // La table ne liste plus que le vivant ; les routes métier supprimées sont 404.
     expect(API_ROUTES).toEqual([
       { method: "GET", path: "/v1/health" },
       { method: "POST", path: "/v1/manuals/scrape" },
@@ -221,8 +214,7 @@ describe("scraper-only (#209)", () => {
       expect(isManualsScrapeResponse(payload)).toBe(true);
       expect(payload.docs).toHaveLength(1);
       expect(fake.calls).toHaveLength(1);
-      // #526 : le scraper ne s'authentifie pas — il ne reçoit QUE la
-      // plateforme (la session est celle du serveur, I24).
+      // Le scraper ne s'authentifie pas : il ne reçoit QUE la plateforme (I24).
       expect(fake.calls[0]?.config).toEqual({ platform: syntheticManualAccount.platform });
       expect(fake.calls[0]?.opts).toMatchObject({ startUrl: "https://manuels.example.invalid/6e/maths" });
     } finally {
@@ -240,7 +232,7 @@ describe("scraper-only (#209)", () => {
     for (const body of [
       scrapeBody({ startUrl: "ftp://hote.invalid/x" }),
       scrapeBody({ startUrl: "  " }),
-      // #538 : le corps ne demande plus de jar — le serveur refuse (400).
+      // Le corps ne demande plus de jar : le serveur refuse (400).
       scrapeBody({ authFile: "/etc/passwd" }),
       scrapeBody({ authFile: "../jar.json" }),
       {},
@@ -274,8 +266,7 @@ describe("scraper-only (#209)", () => {
         throw new ScrapeManualsError("Playwright non installé — e2e manuals skippé");
       },
     });
-    // Playwright absent : message reconnu comme capability manquante (#374 :
-    // 501 franc, pas 502 « scrape impossible » ni 500 « unexpected failure »).
+    // Playwright absent : 501 franc, pas 502 ni 500.
     const res = await noBrowser.handler(post("/v1/manuals/scrape", scrapeBody()));
     expect(res.status).toBe(501);
   });
@@ -283,13 +274,9 @@ describe("scraper-only (#209)", () => {
   test("contrat : gardes requête/réponse", async () => {
     expect(isManualsScrapeRequest(scrapeBody())).toBe(true);
     expect(isManualsScrapeRequest({ ...scrapeBody(), headless: false })).toBe(true);
-    // #538 : le contrat ne connaît PLUS de champ de jar (le jar de session
-    // est choisi par le serveur) : un champ inconnu est ignoré par le
-    // contrat, c'est le SERVEUR qui refuse le corps (message dédié).
+    // C'est le SERVEUR qui refuse le corps qui demande un jar, pas le contrat.
     expect(isManualsScrapeRequest({ ...scrapeBody(), authFile: "manuel.json" })).toBe(true);
-    // #526 : le contrat n'exige PLUS d'identifiants (le scraper ne
-    // s'authentifie pas) et n'en VALIDE aucun : c'est le SERVEUR qui refuse
-    // un corps qui en porte (message dédié, cf. le test #526 plus bas).
+    // Le contrat n'exige ni ne valide d'identifiants : c'est le SERVEUR qui refuse.
     expect(isManualsScrapeRequest({ ...scrapeBody(), username: "u", password: "p" })).toBe(true);
     expect(isManualsScrapeRequest(null)).toBe(false);
     expect(isManualsScrapeResponse({ docs: [FAKE_DOC] })).toBe(true);
@@ -301,8 +288,7 @@ describe("scraper-only (#209)", () => {
   test("#538 : le corps ne choisit plus le jar : le serveur impose le sien", async () => {
     const fake = fakeScrape();
     const app = createApp({ scrape: fake.scrape, authFile: "/srv/jars/serveur.json" });
-    // Un corps qui demande un jar : REFUSÉ. Le jar d'un autre tenant n'est
-    // jamais monté, et le scrape ne part pas.
+    // Un corps qui demande un jar est REFUSÉ : celui d'un autre tenant n'est jamais monté.
     const refused = await app.handler(
       post("/v1/manuals/scrape", scrapeBody({ authFile: "manuel.json" })),
     );
@@ -351,10 +337,7 @@ describe("scraper-only (#209)", () => {
     expect((await app.handler(post("/v1/manuals/scrape", scrapeBody()))).status).toBe(200);
   });
 
-  // #421 : le repli en clair ne doit pas être SILENCIEUX. Le serveur accepte
-  // de tourner en http (bornes aux tests et à Docker), mais il doit le DIRE
-  // fort : sans ça, un opérateur croit démarrer en HTTPS et expose un
-  // scraper sans auth (I8) en clair.
+  // Le repli en clair doit être BRUYANT : sinon un opérateur croit servir du HTTPS sans auth (I8).
   test("sans TLS : le repli en clair est BRUYANT (#421)", () => {
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     const log = spyOn(console, "log").mockImplementation(() => {});
@@ -374,15 +357,8 @@ describe("scraper-only (#209)", () => {
   });
 });
 
-// #526 : le scraper NE S'AUTHENTIFIE PAS et une PAGE DE CONNEXION n'est
-// jamais un manuel.
-//
-// Avant : le contrat exigeait `username`/`password`, le serveur les recevait
-// et les transmettait — mais AUCUN chemin de code ne les lisait (le
-// navigateur montait le jar de session du serveur). Un appelant croyait
-// s'authentifier ; le portail, lui, renvoyait sa page de login en HTTP 200 :
-// `ok = status < 400` passait, la page devenait un ManualDoc, et l'assistant
-// pouvait la citer comme source.
+// Le scraper ne s'authentifie pas, et une PAGE DE CONNEXION n'est jamais un manuel
+// (le portail rendait son login en 200 et il devenait citable).
 describe("#526 — identifiants refusés, page de connexion jamais ingérée", () => {
   test("le contrat n'exige plus d'identifiants (usage réel : la session est celle du serveur)", () => {
     expect(

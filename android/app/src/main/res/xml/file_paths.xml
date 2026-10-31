@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <!-- #205 : pièces jointes des devoirs, lues sur le client local puis servies
-         au viewer externe. Ce seul sous-dossier du cache est partageable. -->
+    <!-- Seuls ces sous-dossiers du cache sont partageables. -->
     <cache-path name="attachments" path="attachments/" />
-    <!-- #206 : exports PDF des fiches de révision, rendus sur place puis servis
-         au viewer externe (même motif que les pièces jointes). -->
     <cache-path name="exports" path="exports/" />
-    <!-- #587 : photo de cours, écrite par l'appareil photo puis ré-encodée
-         avant l'envoi. Jamais exposée au JS, supprimée après usage. -->
+    <!-- Photo de cours : jamais exposée au JS, supprimée après usage. -->
     <cache-path name="photos" path="photos/" />
 </paths>

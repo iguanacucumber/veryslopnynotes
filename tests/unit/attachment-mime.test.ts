@@ -1,21 +1,7 @@
-// #398 : une pièce jointe nommée par le serveur ne sort JAMAIS en type
-// EXÉCUTABLE.
-//
-// Le nom du fichier vient du serveur (`AssignmentsRepository.fetchAttachment`)
-// et le type MIME en découlait : `consignes.html` partait vers un lecteur
-// tiers comme du HTML exécutable (script), pas comme des octets inertes.
-// C'est contraire à I6 (le contenu externe est une DONNÉE, jamais un
-// programme).
-//
-// Ce test ne Miroite pas la logique : il COMPILE la vraie source de production
-// (`android/app/.../AttachmentMime.kt`, sans dépendance Android) et la pilote
-// via `agents/runtime/kotlin-parity/AttachmentMimeMain.kt`. Les assertions
-// portent donc sur le code exécuté.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit). Le
-// pin statique du bas, lui, tourne TOUJOURS : il prouve que la table ne
-// contient aucun type exécutable même sans la chaîne d'outils Kotlin.
+// Une pièce jointe nommée par le serveur ne sort JAMAIS en type EXÉCUTABLE :
+// `consignes.html` partait comme HTML exécutable, contraire à I6.
+// La VRAIE source est compilée et pilotée ; le pin statique du bas tourne
+// toujours, même sans la chaîne Kotlin.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -63,8 +49,7 @@ async function mimeOf(name: string): Promise<string> {
 
 describe("I6 — le type MIME d'une pièce jointe n'est jamais exécutable (#398)", () => {
   test.skipIf(skip)("un nom HTML ne sort jamais en text/html", async () => {
-    // Le cas de l'issue : une pièce jointe `consignes.html` servie à un
-    // lecteur tiers comme du HTML exécutable.
+    // Le cas de l'issue : `consignes.html` servi à un lecteur tiers comme HTML exécutable.
     expect(await mimeOf("consignes.html")).not.toBe("text/html");
     expect(await mimeOf("consignes.html")).toBe("text/plain");
     expect(await mimeOf("consignes.htm")).not.toBe("text/html");
@@ -88,8 +73,7 @@ describe("I6 — le type MIME d'une pièce jointe n'est jamais exécutable (#398
       "script.js",
       "macro.vbs",
       "page.HTA",
-      // Extensions sans point, chemin, double extension : le nom entier est
-      // hostile, pas seulement son suffixe.
+      // Extensions sans point, chemin, double extension : le nom entier est hostile.
       "html",
       "dossier/page.html",
       "page.html.exe",
@@ -131,9 +115,7 @@ describe("I6 — le type MIME d'une pièce jointe n'est jamais exécutable (#398
     expect(await mimeOf("")).toBe("application/octet-stream");
   });
 
-  // Pin statique : le filet du comportement est le test Kotlin ci-dessus ;
-  // celui-ci protège même quand la chaîne d'outils Kotlin est absente (SKIP
-  // bruyant) et prouve que la TABLE ne mappe aucun type exécutable.
+  // Pin statique : protège même sans la chaîne Kotlin (SKIP bruyant).
   test("la table MIME ne mappe aucun type exécutable (pin statique)", () => {
     const src = codeOnly(readFileSync(MIME_SRC, "utf8"));
     const table = parseMimeTable(src);
@@ -154,8 +136,7 @@ describe("I6 — le type MIME d'une pièce jointe n'est jamais exécutable (#398
     ]) {
       expect([...refus]).toContain(attendu);
     }
-    // Les extensions à risque sont explicitement neutralisées en texte, et
-    // aucune n'est servie par la table des formats connus.
+    // Les extensions à risque sont neutralisées en texte, jamais servies comme connues.
     const texteSeul = parseKotlinStringSet(src, "TEXT_ONLY_EXTENSIONS");
     for (const ext of ["html", "htm", "svg", "xml"]) {
       expect([...texteSeul]).toContain(ext);

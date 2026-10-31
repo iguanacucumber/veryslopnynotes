@@ -1,9 +1,5 @@
-// Données de fixture du pont factice : aucun comportement, sauter ce fichier.
-//
-// Les formes imitent les payloads réels déjà lus par les écrans Compose.
-// Aucun de ces objets n'est une donnée personnelle : tout est fictif. Seul
-// `mock.ts` porte la logique (dispatch, requêtes) ; ce module ne sert qu'à
-// `bun run dev:web` et Playwright (#423).
+// Fixtures du pont factice : aucun comportement, tout est fictif. Sert
+// uniquement à `bun run dev:web` et Playwright.
 
 import type {
   LessonNote,
@@ -17,7 +13,6 @@ const iso = (day: number, hour: number, minute = 0): string => {
   return d.toISOString();
 };
 
-/** Bloc de contexte cité par une réponse LLM factice. */
 export interface LlmSource {
   type: string;
   label: string;
@@ -266,8 +261,7 @@ export const FIXTURES: Record<ResourceKey, unknown> = {
   },
   news: {
     __untrusted: true,
-    // #475 : la liste ne porte QUE les métadonnées : le corps se charge à la
-    // demande (`news.item`), comme le fait le pont natif.
+    // La liste ne porte que les métadonnées : le corps se charge à la demande.
     items: [
       {
         id: "n1",
@@ -381,7 +375,7 @@ export const THREADS: Record<string, unknown> = {
         sentAt: iso(18, 9),
       },
     ],
-    // #476 : les participants arrivent avec le fil OUVERT.
+    // Les participants arrivent avec le fil OUVERT.
     participants: ["M. MARTIN C.", "DUPONT Camille"],
   },
   d2: {

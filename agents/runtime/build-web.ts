@@ -1,66 +1,45 @@
 // Build du bundle web — UN point d'entrée pour l'APK (`bun run build:web`,
-// appelé par la tâche Gradle `buildWebUi`) et pour le test d'architecture qui
-// rejoue un build jetable.
+// appelé par la tâche Gradle `buildWebUi`) et pour le test d'architecture.
 //
-// #516 : le processus Vite peut MOURIR SANS MESSAGE (le binding natif
-// Rolldown se fait tuer, ou le runner le tue) : le journal s'arrête sur
-// « ✓ 87 modules transformed. », le gate rougit, et RIEN ne dit pourquoi.
-// Deux filets, ici, pour que le gate ne rougisse pas POUR RIEN :
+// Le processus Vite peut MOURIR SANS MESSAGE (binding Rolldown tué) : le gate
+// rougit sans que rien ne dise pourquoi. D'où un PLAFOND de durée par essai
+// (un build coincé est TUÉ, pas attendu) et UN réessai quand le processus est
+// MORT (signal) — jamais quand il a ÉCHOUÉ (code != 0 : c'est déterministe).
 //
-//   1. un PLAFOND de durée par essai : un build coincé est TUÉ (et nommé),
-//      pas attendu jusqu'à la fin du job ;
-//   2. UN RÉESSAI quand le processus est MORT (signal) — JAMAIS quand il a
-//      ÉCHOUÉ (code de sortie != 0 : une erreur de compilation est
-//      déterministe, la rejouer ne servirait à rien).
-//
-// Le réessai qui réussit est SIGNALÉ (bruyant) : rien n'est sauté — le bundle
-// rejoué EST vérifié — mais le crash ne passe pas inaperçu.
+// Le réessai qui réussit est SIGNALÉ : rien n'est sauté, le crash ne passe pas
+// inaperçu.
 import { join, resolve } from "node:path";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const VITE = join(ROOT, "node_modules", ".bin", "vite");
 const CONFIG = join(ROOT, "web", "vite.config.ts");
 
-/**
- * Plafond d'un essai, en ms. Un build Vite normal prend ~1 s ; 60 s est
- * large (le runner le plus chargé l'a fait en quelques secondes).
- */
+/** Plafond d'un essai, en ms : un build normal prend ~1 s. */
 export const BUILD_TIMEOUT_MS = 60_000;
 
-/** Un essai de build. */
 export interface BuildAttempt {
   /** Code de sortie (null si le processus est mort par signal). */
   code: number | null;
-  /** Signal qui a tué le processus (null si le processus a fini tout seul). */
   signal: string | null;
-  /** Journal du processus (stdout + stderr). */
   journal: string;
-  /** Durée de l'essai, en ms. */
   ms: number;
-  /** Le processus a été tué PAR NOTRE PLAFOND (pas par un crash). */
+  /** Tué PAR NOTRE PLAFOND (pas par un crash). */
   timedOut: boolean;
-  /** Le processus est MORT (signal) — pas un échec de compilation. */
+  /** Mort (signal), pas un échec de compilation. */
   dead: boolean;
 }
 
-/** Le résultat d'une suite d'essais. */
 export interface BuildOutcome {
-  /** Le bundle a été produit (au moins un essai a réussi). */
   ok: boolean;
-  /** Les essais, dans l'ordre. */
   attempts: BuildAttempt[];
 }
 
 /**
  * Lance le build Vite.
  *
- * @param outDir dossier de sortie (défaut : celui de `web/vite.config.ts`) ;
- *               un dossier hors du projet est vidé (`--emptyOutDir`), comme
- *               le fait le build de l'APK.
- * @param cmd    commande à lancer (défaut : le Vite du dépôt) — pour les
- *               tests, qui rejouent une mort de processus sans payer un build.
- * @param attempts nombre d'essais (défaut : 2, donc UN réessai).
- * @param timeoutMs plafond par essai, en ms.
+ * @param outDir dossier de sortie ; un dossier hors projet est vidé
+ *               (`--emptyOutDir`), comme le build de l'APK.
+ * @param cmd    commande à lancer — les tests rejouent une mort de processus.
  */
 export function buildWeb(opts: {
   outDir?: string;
@@ -102,8 +81,8 @@ export function buildWeb(opts: {
           : String(signalBrut);
     // Notre plafond : le processus a été tué PAR NOUS (pas par un crash).
     const timedOut = code === null && ms >= timeoutMs;
-    // Mort par signal : le signal est renseigné, ou le code suit la
-    // convention du shell (128 + n°) quand le processus est un wrapper.
+    // Mort par signal : le signal est renseigné, ou le code suit la convention
+    // du shell (128 + n°) quand le processus est un wrapper.
     const dead =
       !timedOut &&
       (signal !== null || (code !== null && code > 128 && code < 165));
@@ -118,20 +97,17 @@ export function buildWeb(opts: {
       }
       return { ok: true, attempts };
     }
-    // ÉCHEC de compilation (code != 0) : déterministe, on ne rejoue pas.
-    // PLAFOND atteint : le build est coincé, rejouer ne servirait à rien.
+    // ÉCHEC (code != 0) = déterministe, et PLAFOND atteint = coincé : rejouer
+    // ne servirait à rien.
     if (!dead) return { ok: false, attempts };
-    // Mort par signal : le process Crash ou le runner l'a tué — on rejoue une
-    // fois. Le journal du mort est gardé : il dit pourquoi.
+    // Le journal du mort est gardé : il dit pourquoi.
   }
   return { ok: false, attempts };
 }
 
 /**
- * Le diagnostic d'une suite d'essais : la CAUSE de chaque essai (pas un code
- * nu). Le journal, lui, est écrit UNE fois par l'appelant — le recopier ici le
- * faisait afficher deux fois. Un échec qui ne dit pas pourquoi est un échec
- * qu'on ne peut pas corriger (#516).
+ * Diagnostic d'une suite d'essais : la CAUSE de chaque essai. Le journal est
+ * écrit UNE fois par l'appelant (le recopier l'affichait deux fois).
  */
 export function describeOutcome(r: BuildOutcome): string {
   return r.attempts
@@ -149,14 +125,12 @@ export function describeOutcome(r: BuildOutcome): string {
     .join("\n");
 }
 
-/** Journal sans séquences ANSI hors terminal : un log de CI n'est pas coloré. */
 function sansAnsi(s: string): string {
   return process.stdout.isTTY ? s : s.replace(/\u001b\[[0-9;]*m/g, "");
 }
 
-// Point d'entrée seulement : le module reste importable (tests) SANS lancer
-// un build. Un dossier de sortie en argument (le build de l'APK n'en donne
-// pas : il suit `web/vite.config.ts`).
+// Module importable par les tests sans lancer un build. Un dossier de sortie en
+// argument (le build de l'APK n'en donne pas : il suit `web/vite.config.ts`).
 if (import.meta.main) {
   const outDir = process.argv[2];
   const r = buildWeb(outDir ? { outDir } : {});

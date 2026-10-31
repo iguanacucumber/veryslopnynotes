@@ -1,6 +1,4 @@
-// Contrats — préférences matière (parité Papillon).
-// Add-only : une matière sans SubjectPrefs s'affiche avec son seul nom, donc
-// l'existant continue de fonctionner sans aucune prefs (fallback UI).
+// Add-only : une matière sans SubjectPrefs s'affiche avec son seul nom (fallback UI).
 import { isIsoDate, isRecord } from "./guards";
 
 export const SUBJECT_PREFS_MAX_SUBJECT_CHARS = 64;
@@ -20,7 +18,6 @@ export interface SubjectPrefs {
   readonly subject: string;
   /** Couleur d'affichage #RRGGBB (absente = couleur par défaut du thème). */
   readonly color?: string;
-  /** Emoji court (absent = aucun). */
   readonly emoji?: string;
   /** Libellé personnalisé (absent = nom de matière d'origine). */
   readonly label?: string;

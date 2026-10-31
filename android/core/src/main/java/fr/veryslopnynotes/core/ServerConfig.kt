@@ -1,38 +1,32 @@
 package fr.veryslopnynotes.core
 
-// Résultat de validation d'une adresse de serveur SAISIE PAR L'UTILISATEUR
-// (choix à l'exécution, écran d'appairage). `Ok` = forme canonique à
-// persister ; `Rejected` = message français actionnable et RIEN n'est modifié.
-// Aucun des deux ne contient l'adresse saisie : elle ne part ni dans un log,
-// ni dans un message de crash (elle révèle l'établissement, règle d'or).
+// Résultat de validation d'une adresse de serveur SAISIE PAR L'UTILISATEUR.
+// `Ok` = forme canonique à persister ; `Rejected` = message actionnable, rien
+// n'est modifié. Aucun des deux ne contient l'adresse saisie : elle ne part ni
+// dans un log, ni dans un message de crash (elle révèle l'établissement).
 sealed interface ServerUrlResult {
     data class Ok(val baseUrl: String) : ServerUrlResult
     data class Rejected(val message: String) : ServerUrlResult
 }
 
-// Config allowlist du scraper unique (#209, #206) : la valeur de BuildConfig
-// (local.properties `server.host` ou env SERVER_HOST) n'est plus qu'une GRAINE
-// par défaut, quand rien n'est choisi à l'exécution. HTTPS-only sauf hôtes
-// émulateur (10.0.2.2/localhost). Aucun hôte tiers, aucune URL en dur ici :
-// l'allowlist tient désormais dans `validateBaseUrl`, qui borne et normalise
-// la saisie. L'app ne parle plus métier à personne : le téléphone lit
-// l'établissement en direct (ADR-003), le scraper ne sert que des manuels.
+// Config allowlist du scraper unique : HTTPS-only sauf hôtes émulateur
+// (10.0.2.2/localhost). Aucun hôte tiers, aucune URL en dur : l'allowlist tient
+// dans `validateBaseUrl`, qui borne et normalise la saisie. Le téléphone lit
+// l'établissement en direct (ADR-003) ; le scraper ne sert que des manuels.
 object ServerConfig {
     const val SCHEME_PLACEHOLDER = "https"
     const val HOST_PLACEHOLDER = "server-host-configured-at-build"
 
     /**
-     * Bornes de saisie : au-delà, ce n'est plus une adresse de serveur. Le
-     * plafond global (300) laisse la place au plafond de domaine (253, maximum
-     * DNS) : sinon la borne de domaine serait inatteignable et donc morte.
+     * Bornes de saisie. Le plafond global (300) laisse la place au plafond de
+     * domaine (253, maximum DNS), sinon la borne de domaine serait morte.
      */
     const val MAX_BASE_URL_CHARS = 300
     const val MAX_AUTHORITY_CHARS = 253
 
     private const val MAX_LABEL_CHARS = 63
     private const val MAX_PORT = 65535
-    // Messages de refus : une cause, une correction, jamais l'adresse saisie
-    // (elle ne doit apparaître ni dans un log ni dans un message de crash).
+    // Messages de refus : une cause, une correction, jamais l'adresse saisie.
     private const val PORT_HINT = "Port invalide : utilisez un nombre entre 1 et 65535."
     private const val HOST_HINT = "Domaine invalide : utilisez un nom de domaine, une IPv4 ou une IPv6 entre crochets."
 
@@ -44,11 +38,10 @@ object ServerConfig {
 
     /**
      * Hôtes Loopback au sens ÉGALITÉ STRICTE : `isEmulatorHost` compare par
-     * préfixe (miroir de la règle Gradle), donc « 10.0.2.234 » ou
-     * « localhost.evil.tld » y passent. Or c'est cette liste qui décide si du
-     * HTTP clair est accepté : un préfixe trop laxiste enverrait les
-     * credentials du portail en clair vers un hôte arbitraire. On exige donc
-     * l'égalité, plus la boucle locale classique (127.0.0.0/8, ::1) utile en dev.
+     * préfixe, donc « 10.0.2.234 » ou « localhost.evil.tld » y passent. Or
+     * c'est cette liste qui décide si du HTTP clair est accepté : un préfixe
+     * laxiste enverrait les credentials du portail en clair vers un hôte
+     * arbitraire.
      */
     fun isLoopbackHost(host: String): Boolean {
         val bare = if (host.startsWith("[") && host.endsWith("]")) host.substring(1, host.length - 1) else host
@@ -59,27 +52,17 @@ object ServerConfig {
         if (isEmulatorHost(host)) "http" else "https"
 
     /**
-     * Valide et NORMALISE l'adresse du serveur choisi à l'exécution. C'est
-     * TOUT ce qui sépare encore l'app d'un hôte unique : la saisie est libre,
-     * donc la contrainte est ici, pas dans une constante de build.
+     * Valide et NORMALISE l'adresse du serveur choisi à l'exécution : la saisie
+     * est libre, la contrainte est donc ici.
      *
      * Forme acceptée : `https://hôte[:port]` (ou `http` si et seulement si
-     * l'hôte est l'émulateur ou la boucle locale — `isLoopbackHost`, égalité
-     * stricte, donc inattaquable depuis l'extérieur). Hôte = IPv4, IPv6
-     * littérale entre crochets, ou nom DNS ; port 1-65535.
+     * l'hôte est l'émulateur ou la boucle locale). REFUSÉS, avec un message qui
+     * dit quoi corriger : identifiants `user:pass@`, chemin, query, fragment,
+     * espaces et contrôles, schémas autres, ports hors bornes, IP à zéro initial
+     * (lecture octale divergente), IPv6 sans crochets, adresses trop longues.
      *
-     * Sont REFUSÉS, avec un message qui dit quoi corriger : identifiants
-     * `user:pass@`, chemin, query, fragment, espaces et caractères de contrôle,
-     * schémas autres que http/https, ports hors bornes, IP à zéro initial
-     * (lecture octale divergente selon le résolveur), IPv6 sans crochets,
-     * adresses trop longues. La forme canonique est minusculisée et débarrassée
-     * d'une barre oblique finale, donc `https://hôte/` et `https://Hôte` sont
-     * acceptés comme `https://hôte`.
-     *
-     * ponytail: validation à la main plutôt que `java.net.URI`, qui accepte
-     * `@`, chemins et espaces et qu'il faudrait encore borner. Upgrade:
-     * java.net.URI + comparaison de composants si un jour la liste des formes
-     * acceptées doit s'élargir.
+     * ponytail: validation à la main plutôt que `java.net.URI`, qui accepte `@`,
+     * chemins et espaces. Upgrade: URI + comparaison de composants.
      */
     fun validateBaseUrl(raw: String): ServerUrlResult {
         val input = raw.trim()
@@ -89,8 +72,7 @@ object ServerConfig {
         if (input.length > MAX_BASE_URL_CHARS) {
             return rejected("Adresse trop longue ($MAX_BASE_URL_CHARS caractères maximum).")
         }
-        // Espace ou caractère de contrôle : il se retrouverait tel quel dans
-        // l'URL de requête (ou dans un en-tête), donc refus sans exception.
+        // Espace ou contrôle : il se retrouverait tel quel dans l'URL de requête.
         if (input.any { it.isWhitespace() || it.isISOControl() }) {
             return rejected("Espace ou caractère interdit dans l'adresse.")
         }
@@ -102,8 +84,7 @@ object ServerConfig {
         if (scheme != "https" && scheme != "http") {
             return rejected("Schéma refusé : utilisez https (http est réservé à l'émulateur et à la boucle locale).")
         }
-        // Barre oblique finale tolérée (collée depuis un navigateur) ; toute
-        // autre barre oblique = chemin, refusé plus bas.
+        // Barre oblique finale tolérée ; toute autre barre oblique = chemin, refusé.
         val authority = input.substring(sep + 3).lowercase().trimEnd('/')
         if (authority.isEmpty()) {
             return rejected("Domaine manquant après le schéma.")
@@ -129,8 +110,7 @@ object ServerConfig {
             ?: return rejected(if (authority.count { it == ':' } > 1) HOST_HINT else PORT_HINT)
         if (!isValidHost(parts.host)) return rejected(HOST_HINT)
         if (parts.port != null && !isValidPort(parts.port)) return rejected(PORT_HINT)
-        // Le seul cas où le clair est toléré, et c'est une adresse de
-        // développement : aucun texte saisi ne peut en élargir la portée.
+        // Le seul cas où le clair est toléré : une adresse de développement.
         if (scheme == "http" && !isLoopbackHost(parts.host)) {
             return rejected("HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur.")
         }
@@ -158,8 +138,7 @@ object ServerConfig {
         }
         val colon = authority.lastIndexOf(':')
         if (colon < 0) return HostPort(authority, null)
-        // Plusieurs ':' hors crochets = IPv6 non parenthésée : on refuse plutôt
-        // que de deviner où passe le port.
+        // Plusieurs ':' hors crochets = IPv6 non parenthésée : refus, pas de devinette.
         if (authority.substring(0, colon).contains(':')) return null
         return HostPort(authority.substring(0, colon), authority.substring(colon + 1))
     }
@@ -178,8 +157,8 @@ object ServerConfig {
         return isIpv4(bare) || isDnsName(bare)
     }
 
-    // IPv4 littérale : 4 groupes 0-255. Zéro initial refusé (010 lu comme
-    // octal par certains résolveurs et comme 10 par d'autres = deux hôtes).
+    // IPv4 littérale : zéro initial refusé (010 lu comme octal par certains
+    // résolveurs et comme 10 par d'autres = deux hôtes).
     private fun isIpv4(host: String): Boolean {
         val groups = host.split('.')
         return groups.size == 4 && groups.all { g ->
@@ -188,8 +167,7 @@ object ServerConfig {
         }
     }
 
-    // IPv6 littérale : hexa et ':' seulement, au moins deux ':' (toute IPv6
-    // valide en a deux ou plus). Pas d'identifiant de zone (`%iface`).
+    // IPv6 littérale : hexa et ':' seulement, au moins deux ':'. Pas de zone (`%iface`).
     private fun isIpv6(host: String): Boolean =
         host.count { it == ':' } >= 2 &&
             host.all { it in '0'..'9' || it in 'a'..'f' || it == ':' || it == '.' }
@@ -199,10 +177,9 @@ object ServerConfig {
     private fun isDnsName(host: String): Boolean {
         if (host.endsWith(".")) return false
         val labels = host.split('.')
-        // RFC 1123 : le dernier label d'un nom de domaine ne peut pas être
-        // entièrement numérique. Sinon « 010.0.0.1 » passerait pour un nom
-        // alors que le résolveur le lit comme une IP à zéro initial (= autre
-        // hôte) : on le refuse plutôt que de trancher à sa place.
+        // RFC 1123 : le dernier label ne peut pas être entièrement numérique,
+        // sinon « 010.0.0.1 » passerait pour un nom alors que le résolveur le
+        // lit comme une IP à zéro initial (= autre hôte).
         if (labels.size > 1 && labels.last().all { it in '0'..'9' }) return false
         return labels.all { label ->
             label.length in 1..MAX_LABEL_CHARS &&
@@ -211,21 +188,18 @@ object ServerConfig {
         }
     }
 
-    // #209 : le process serveur n'est plus qu'un scraper de manuels (plain
-    // HTTPS, sans auth) ; #206 : l'app ne lui parle plus métier du tout (le
-    // téléphone lit l'établissement en direct). `validateBaseUrl` ne valide
-    // donc plus qu'une URL de scraper, et c'est la SEULE route connue ici.
+    // Le scraper ne sert que des manuels (plain HTTPS, sans auth) : seule route
+    // métier connue ici.
     const val MANUALS_SCRAPE_PATH = "/v1/manuals/scrape"
     fun manualsScrapeUrl(baseUrl: String): String = baseUrl + MANUALS_SCRAPE_PATH
 
-    // #634 : même scraper facultatif, même allowlist, route distincte (aucun
-    // jar de session côté serveur pour une page web publique).
+    // Même scraper facultatif, route distincte : aucun jar de session côté serveur.
     const val WEB_SCRAPE_PATH = "/v1/web/scrape"
     fun webScrapeUrl(baseUrl: String): String = baseUrl + WEB_SCRAPE_PATH
 
-    // ponytail: allowlist = baseUrl + "/" (le préfixe nu laissait passer
-    // `https://hote.evil.tld` quand baseUrl vaut `https://hote`, et baseUrl est
-    // désormais une saisie utilisateur). Upgrade: pinning cert phase 10.
+    // ponytail: allowlist = baseUrl + "/" (le préfixe nu laisse passer
+    // `https://hote.evil.tld`), et baseUrl est une saisie utilisateur.
+    // Upgrade: pinning cert phase 10.
     fun isAllowed(url: String, baseUrl: String): Boolean =
         url == baseUrl || url.startsWith(baseUrl.trimEnd('/') + "/")
 }

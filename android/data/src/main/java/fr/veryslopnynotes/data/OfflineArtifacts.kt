@@ -4,34 +4,26 @@ import fr.veryslopnynotes.core.RevisionKv
 import java.io.File
 
 /**
- * #404 : les écritures HORS CacheStore passent par la MÊME garde d'époque.
+ * Les écritures HORS CacheStore passent par la MÊME garde d'époque.
  *
- * Le cache n'était pas le seul à écrire dans `filesDir/offline/` : les fiches
- * de révision (`revisions/`) et les préférences matière
- * (`subject_prefs.json`) y écrivaient À CÔTÉ, sans la garde d'époque. La
- * purge de déconnexion effaçait bien le dossier (elle est récursive), mais
- * une écriture EN VOL — une fiche générée pendant la déconnexion, une
- * préférence enregistrée — recréait le répertoire purgé et y laissait de la
- * donnée du compte déconnecté (le contenu scolaire d'une fiche, les
- * préférences de matières).
+ * Les fiches de révision (`revisions/`) et les préférences matière
+ * (`subject_prefs.json`) écrivaient à côté du cache, sans la garde. La purge de
+ * déconnexion effaçait bien le dossier, mais une écriture EN VOL recréait le
+ * répertoire purgé et y laissait la donnée du compte déconnecté.
  *
- * L'époque est capturée AU DÉBUT de l'opération (une fiche passe par un
- * appel LLM de plusieurs secondes) et revérifiée ici : la purge et l'écriture
- * sont alors ORDONNÉES — soit l'écriture précède la purge (et la purge
- * l'efface), soit la purge précède (et l'écriture est REFUSÉE, sans même
- * ressusciter le répertoire).
+ * L'époque est capturée AU DÉBUT de l'opération et revérifiée ici : soit
+ * l'écriture précède la purge (qui l'efface), soit la purge précède (l'écriture
+ * est REFUSÉE, sans ressusciter le répertoire).
  *
  * ponytail: stdlib `java.io` seule, pas de Room/DataStore, pas de journal.
- * Upgrade: un store unique (toutes les écritures dans le même dossier, une
- * seule serrure, une écriture atomique comme le cache).
+ * Upgrade: un store unique (même dossier, une serrure, écriture atomique).
  */
 object OfflineArtifacts {
     /**
      * Écrit un fichier texte sous la garde d'époque.
      *
-     * Renvoie `false` si l'écriture est abandonnée (la session a changé
-     * depuis [epoch]) : le fichier n'est pas créé et son dossier parent n'est
-     * PAS ressuscité.
+     * `false` = écriture abandonnée (la session a changé depuis [epoch]) : le
+     * fichier n'est pas créé et son dossier parent n'est PAS ressuscité.
      */
     fun writeText(file: File, content: String, epoch: Long): Boolean =
         SessionEpoch.writeIfCurrent(epoch) {
@@ -53,10 +45,9 @@ object OfflineArtifacts {
  * Fiches de révision sur disque : un fichier `.bin` par clé, dans
  * `filesDir/offline/revisions/`.
  *
- * #404 : l'écriture passe par la garde d'époque ([OfflineArtifacts]) — une
- * fiche générée pendant une déconnexion n'est PAS écrite, donc le répertoire
- * purgé ne ressuscite pas. L'époque est celle de l'opération (capturée par
- * l'appelant AVANT l'appel LLM, qui dure plusieurs secondes).
+ * L'écriture passe par la garde d'époque ([OfflineArtifacts]) : une fiche
+ * générée pendant une déconnexion n'est PAS écrite. L'époque est capturée par
+ * l'appelant AVANT l'appel LLM, qui dure plusieurs secondes.
  */
 class FileRevisionStore(private val dir: File) : RevisionKv {
     override fun get(key: String): ByteArray? = try {

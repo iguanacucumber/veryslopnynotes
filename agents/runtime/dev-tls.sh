@@ -1,29 +1,19 @@
-# dev-tls.sh — source depuis le Makefile, ne JAMAIS exécuté directement.
+# dev-tls.sh — source depuis le Makefile, jamais exécuté directement.
 #
-# UN seul endroit qui sait fournir un certificat pour `make runServer`. L'app
-# Android refuse le clairtext hors émulateur
-# (android/app/src/main/res/xml/network_security_config.xml), donc le serveur
-# doit être en HTTPS pour qu'un téléphone puisse s'y connecter.
+# Fournit un certificat pour `make runServer` : l'app Android refuse le clairtext
+# hors émulateur, donc le serveur doit être en HTTPS.
 #
-# Le matériel est écrit HORS du dépôt (~/.cache/veryslopnynotes/tls) : une clé
-# privée dans l'arbre de travail finit un jour commitée, et c'est exactement ce
-# que `make lint` (check-secrets) interdit. Reutilise le certificat s'il existe,
+# Matériel écrit HORS du dépôt (~/.cache/veryslopnynotes/tls) : une clé privée
+# dans l'arbre finit un jour commitée, ce que `make lint` interdit. Réutilisée,
 # donc la confiance accordée au téléphone survit aux redémarrages.
 #
-# Fonction (aucun effet de bord à part définir) :
-#   dev_tls -> exporte TLS_CERT_FILE + TLS_KEY_FILE, ou échoue (exit 1)
-#     - couple DÉJÀ fourni (TLS_CERT_FILE + TLS_KEY_FILE) : respecté TEL QUEL,
-#       openssl inutile, aucun certificat créé (#421) ;
-#     - sinon : auto-signé généré hors du dépôt, réutilisé s'il existe.
-#
+# dev_tls -> exporte TLS_CERT_FILE + TLS_KEY_FILE, ou échoue (exit 1).
 # ponytail: certificat feuille auto-signé, pas d'AC locale, pas de renouvellement.
-# Upgrade: mkcert (racine de confiance installable en un geste sur le téléphone),
-# puis il suffira de remplacer la génération ci-dessous par `mkcert -install`.
+# Upgrade: mkcert (racine de confiance installable en un geste sur le téléphone).
 DEV_TLS_DIR="${DEV_TLS_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/veryslopnynotes/tls}"
 
-# Noms couverts par le SAN : ce que l'app saisit réellement — `localhost`, l'alias
-# émulateur 10.0.2.2, et l'IP LAN de la machine (le téléphone voit le LAN, pas
-# 127.0.0.1). Sans l'IP LAN, le certificat est rejété pour « nom inconnu ».
+# SAN = ce que l'app saisit : `localhost`, l'alias émulateur 10.0.2.2 et l'IP LAN
+# (le téléphone voit le LAN, pas 127.0.0.1). Sans l'IP LAN : « nom inconnu ».
 dev_tls_san() {
     san="DNS:localhost,DNS:veryslopnynotes.local,IP:127.0.0.1,IP:10.0.2.2"
     lan=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)
@@ -32,10 +22,9 @@ dev_tls_san() {
 }
 
 dev_tls() {
-    # Un couple fourni par l'opérateur est RESPECTÉ TEL QUEL (#421) : pas de
-    # génération, pas d'openssl. Sinon on écrasait TLS_CERT_FILE/TLS_KEY_FILE
-    # avec notre auto-signé — le téléphone voyait alors le mauvais certificat
-    # (« Trust anchor not found ») et l'opérateur dépanne le téléphone.
+    # Un couple fourni par l'opérateur est RESPECTÉ TEL QUEL : écraser
+    # TLS_CERT_FILE/TLS_KEY_FILE avec notre auto-signé donnerait « Trust anchor
+    # not found » côté téléphone.
     if [ -n "${TLS_CERT_FILE:-}" ] || [ -n "${TLS_KEY_FILE:-}" ]; then
         if [ -z "${TLS_CERT_FILE:-}" ] || [ -z "${TLS_KEY_FILE:-}" ]; then
             echo "runServer : TLS_CERT_FILE et TLS_KEY_FILE doivent etre definis ensemble." >&2
@@ -63,10 +52,8 @@ HINT
     if [ ! -s "$DEV_TLS_DIR/key.pem" ] || [ ! -s "$DEV_TLS_DIR/cert.pem" ]; then
         mkdir -p "$DEV_TLS_DIR" || exit 1
         chmod 700 "$DEV_TLS_DIR"
-        # `CA:TRUE` : Android n'installe que comme CA un certificat qui le
-        # declare. Sans caextension, l'ecran « Installer un certificat » le
-        # refuse et l'app echoue en "Trust anchor for certification path not
-        # found" — le serveur etant pourtant bien en HTTPS.
+        # `CA:TRUE` : Android n'installe comme CA qu'un certificat qui le
+        # déclare, sinon « Trust anchor for certification path not found ».
         openssl req -x509 -newkey rsa:2048 -nodes \
             -keyout "$DEV_TLS_DIR/key.pem" -out "$DEV_TLS_DIR/cert.pem" \
             -days 365 -subj "/CN=veryslopnynotes.local" \

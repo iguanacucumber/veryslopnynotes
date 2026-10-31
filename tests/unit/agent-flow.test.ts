@@ -3,10 +3,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileS
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// agents/launch.sh + agents/ship.sh (#343) — la boucle agent doit démarrer sur
-// origin/main frais et finir par un push vérifié, sans réseau ni téléphone.
-// Fixture : dépôt bare local + stubs `bun`/`make`, donc aucun appel GitHub et
-// aucun `make check` réel.
+// `launch.sh` + `ship.sh` : démarrage sur origin/main frais, push vérifié, sans
+// réseau ni téléphone. Fixture : dépôt bare local + stubs `bun`/`make`.
 const ROOT = join(import.meta.dir, "..", "..");
 const LAUNCH = join(ROOT, "agents", "launch.sh");
 const SHIP = join(ROOT, "agents", "ship.sh");

@@ -1,16 +1,8 @@
-// UntrustedParityMain.kt — pilote JSON du marquage Untrusted (#373).
+// UntrustedParityMain.kt — pilote JSON du marquage Untrusted.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/android-untrusted.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile les VRAIES sources
-// de production (`core/Untrusted.kt`, `core/AiPrompts.kt`, `core/LlmGuard.kt`)
-// et les pilote ici : les assertions portent donc sur du code execute, pas sur
-// un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/android-untrusted.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une operation JSON par ligne sur stdin, une reponse par ligne sur
-// stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`). Une
-// erreur du PORT (collision nonce, etc.) revient en `{"error":…}` : c'est un
-// resultat attendu par le test, pas une panne du pilote. Les erreurs du
-// PILOTE sont prefixees `pilote: ` et refusent par le harnais.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.untrusted
 
 import fr.veryslopnynotes.core.JsonValue

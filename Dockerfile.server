@@ -1,56 +1,31 @@
-# Release scraper manuels (#209, #210) : image minimale, sans secret.
-# Le process ne sert QUE des manuels (HTTPS, sans auth — risque accepté
-# documenté dans server/infrastructure/http.ts) : seuls http.ts + manuals*.ts
-# sont embarqués (le client Pronote TS a été supprimé en #238).
-# L'image ne tourne ni en root ni en clair (#533) : utilisateur non privilégié,
-# TLS obligatoire, exposition décidée par l'opérateur.
-# Base épinglée exacte (ADR-001, `bun --version` 1.4.4). Digest : `docker pull
-# oven/bun:1.4.4` puis figer `FROM oven/bun:1.4.4@sha256:<digest>` (daemon
-# absent en local, tag exact en attendant). 1.4.4 corrige CVE-2026-111497
-# (Brotli, node2shell/HTTP2Shell) : ne pas redescendre sous cette version.
+# Scraper de manuels seul : seuls http.ts + manuals*.ts embarqués, sans auth
+# (I8, risque documenté dans server/infrastructure/http.ts).
+# Base épinglée (ADR-001) : ne pas redescendre sous 1.4.4 (CVE-2026-111497,
+# Brotli/node2shell/HTTP2Shell). Digest à figer quand un daemon est dispo.
 FROM oven/bun:1.4.4 AS base
 WORKDIR /app
-# Lock commité : install strict, aucun fallback (dérive interdite).
+# Install strict, aucun fallback : dérive interdite.
 COPY package.json bun.lock tsconfig.json ./
 RUN bun install --frozen-lockfile
-# Chromium pour le scraper (#374) : le paquet `playwright` n'a AUCUN script
-# d'installation (package.json sans bloc `scripts`) => `bun install` ne
-# télécharge PAS le navigateur. Sans la ligne ci-dessous, `chromium.launch()`
-# échoue (« Executable doesn't exist ») et TOUTE requête de scrape répond 500
-# : l'image ne ferait plus son seul travail (seule /v1/health répondrait).
-# Téléchargement AU BUILD, jamais au runtime (déterministe, hors ligne au
-# runtime) : `playwright install` + les libs système via `--with-deps` (base
-# Debian de oven/bun:1.4.4 => apt-get dispo, exécution en root au build).
-# `playwright` est une devDependency : ne jamais passer `--production` ici, le
-# scraper en a besoin à l'exécution. Chemin des navigateurs fixé ET partagé
-# entre le build et le runtime (ENV ci-dessous) : le runtime doit retrouver
-# exactement le binaire téléchargé ici.
+# `playwright` n'a aucun script d'installation : `bun install` ne télécharge pas
+# Chromium, et `chromium.launch()` échouerait (tout scrape en 500). Téléchargé
+# AU BUILD, jamais au runtime. DevDependency requise à l'exécution : ne jamais
+# passer `--production`. Chemin partagé build/runtime via l'ENV ci-dessous.
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN bunx playwright install --with-deps chromium
-# Contexte minimal : ni agents/ (outillage local), ni tests, ni docs.
 # Secrets/clés/.env* exclus via .dockerignore (jamais COPY).
 COPY server ./server
 COPY shared ./shared
-# Utilisateur NON PRIVILÉGIÉ (#533) : le service pilote Chromium et écrit un
-# jar de session. En root, il laissait des fichiers root et un point d'entrée
-# root — et Chromium refuse de démarrer en root sans `--no-sandbox`. Le
-# compte est CRÉÉ ici (le base image n'en garantit aucun) ; seul le
-# répertoire du jar lui appartient, le reste de l'image est en lecture seule.
+# Non privilégié : Chromium refuse de démarrer en root sans `--no-sandbox`.
+# Seul le répertoire du jar de session appartient au compte.
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin vsn \
  && mkdir -p /app/playwright/.auth \
  && chown -R vsn:vsn /app/playwright
-# HOME explicite : sans lui, le process hériterait de /root (non inscriptible)
-# et Chromium ne pourrait pas écrire son profil.
+# HOME explicite : /root est non inscriptible, Chromium doit écrire son profil.
 ENV HOME=/home/vsn
-# PORT explicite. HOST n'est PAS forcé : l'exposition hors du conteneur est
-# une DÉCISION de l'opérateur (`-e HOST=0.0.0.0`), comme pour `make runServer`
-# (boucle locale par défaut). Le service n'est donc joignable de l'extérieur
-# que si on le décide.
+# HOST non forcé : l'exposition est une décision de l'opérateur.
 ENV PORT=3000
 EXPOSE 3000
 USER vsn
-# Le TLS est OBLIGATOIRE, comme pour `make runServer` : le scraper est SANS
-# AUTHENTIFICATION (I8) — il ne doit jamais être joignable en CLAIR. Le
-# couple est fourni par l'opérateur (volume monté) ; sans lui, le service ne
-# démarre PAS (jamais de repli silencieux en clair). Voir server/README.md.
+# TLS obligatoire (service sans auth, I8) : jamais de repli en clair.
 CMD ["sh", "-c", "if [ -z \"$TLS_CERT_FILE\" ] || [ -z \"$TLS_KEY_FILE\" ]; then echo 'scraper : TLS_CERT_FILE et TLS_KEY_FILE obligatoires (service sans auth, I8) — pas de repli en clair.' >&2; exit 1; fi; exec bun run server/infrastructure/http.ts"]

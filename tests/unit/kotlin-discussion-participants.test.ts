@@ -1,15 +1,7 @@
-// #476 : les participants des fils ne sont plus téléchargés pour TOUTE la
-// liste.
-//
-// La liste des fils_downloadait les participants des 12 premiers (un POST par
-// fil) : 25 POST pour ouvrir la messagerie, dont 12 pour des noms affichés
-// seulement quand on ouvre un fil. Les participants sont maintenant demandés
-// À L'OUVERTURE (le fil les redemande déjà).
-//
-// Le VRAI `Client` est rejoué avec un STUB qui compte les requêtes à la place
-// de l'établissement : le test porte sur du code de production exécuté.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT (jamais un faux vert).
+// Les participants des fils ne sont plus téléchargés pour TOUTE la liste (25 POST
+// à l'ouverture, dont 12 pour des noms affichés seulement à l'ouverture) : ils
+// sont demandés À L'OUVERTURE. Le vrai `Client` est rejoué avec un stub qui
+// compte les requêtes ; outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";

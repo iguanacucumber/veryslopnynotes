@@ -1,15 +1,13 @@
 package fr.veryslopnynotes.core
 
-// Cahier de cours local (#586) : l'élève garde ses cours par matière, et
-// l'assistant les reçoit comme SOURCES à chaque demande. Ce n'est pas une
-// mémoire du modèle : rien n'est entraîné, rien ne quitte le téléphone sans
-// une demande explicite.
+// Cahier de cours local : l'élève garde ses cours par matière, et l'assistant
+// les reçoit comme SOURCES à chaque demande. Rien n'est entraîné, rien ne quitte
+// le téléphone sans une demande explicite.
 //
-// Le texte est une DONNÉE (I6) : il est marqué Untrusted par le prompt, borné
-// ici et jamais interprété comme une instruction.
+// Le texte est une DONNÉE (I6) : marqué Untrusted par le prompt, borné ici.
 //
-// ponytail: une note = un texte, pas de pièces jointes ni de fichiers ici.
-// Upgrade: photos stockées à côté quand le besoin de relecture apparaît.
+// ponytail: une note = un texte, pas de pièces jointes ici. Upgrade: photos
+// stockées à côté quand le besoin de relecture apparaît.
 
 data class LessonNote(
     val id: String,
@@ -41,22 +39,15 @@ data class LessonNote(
 /**
  * Règles du cahier : bornes du lot et fabrique de sources citables.
  *
- * Une note devient une source `HomeworkSource` (étiquette « Cahier : titre »),
- * exactement comme l'extrait de cours Pronote ou le manuel. Le prompt la
- * marque Untrusted, et le modèle ne peut citer que les étiquettes fournies.
- *
- * #628 : plus de plafond artificiel à 3 notes. Toutes les notes valides de la
- * matière (≤ [MAX_PER_SUBJECT]) sont candidates ; l'assembleur unique
- * [AiContext] décide ensuite de la place réelle dans le budget du prompt et
- * signale les coupes. Le préfixe « Cahier : » évite qu'une note homonyme d'un
- * cours Pronote soit dédupliquée par erreur.
+ * Toutes les notes valides de la matière sont candidates ; [AiContext] décide
+ * ensuite de la place réelle dans le budget et signale les coupes. Le préfixe
+ * « Cahier : » évite qu'une note homonyme d'un cours soit dédupliquée à tort.
  */
 object LessonNotes {
     const val MAX_NOTES = 64
     const val MAX_PER_SUBJECT = 8
     const val MAX_SOURCE_LABEL_CHARS = 200
 
-    /** Notes d'une matière, les plus récentes d'abord, bornées au lot. */
     fun forSubject(notes: List<LessonNote>, subject: String): List<LessonNote> {
         val key = subject.trim()
         if (key.isEmpty()) return emptyList()
@@ -69,10 +60,9 @@ object LessonNotes {
     }
 
     /**
-     * Sources citables (contrat historique, sans métadonnées) : toutes les
-     * notes valides de la matière, texte borné comme une source. La coupe à
-     * [Homework.MAX_SOURCE_CHARS] n'est pas signalée ici : pour le contexte IA,
-     * partir des notes brutes via [AiContext.note] afin d'exposer `truncated`.
+     * Sources citables (contrat historique, sans métadonnées) : toutes les notes
+     * valides de la matière. La coupe n'est pas signalée ici : partir des notes
+     * brutes via [AiContext.note] expose `truncated`.
      */
     fun sources(notes: List<LessonNote>, subject: String): List<HomeworkSource> =
         forSubject(notes, subject)

@@ -22,12 +22,8 @@ import {
 
 const ROOT = join(import.meta.dir, "..", "..");
 
-// #418 : le parcours des fichiers est celui de `agents/runtime/check-architecture.ts`
-// (`listFiles`), pas une copie maison. La copie avait deux défauts : elle
-// n'excluait pas les ARTEFACTS GÉNÉRÉS (`android/app/src/main/assets/web/`, le
-// bundle Vite réécrit pendant le build) ni les dossiers de build Gradle — le
-// dossier pouvait disparaître sous les pieds du parcours (flake) —, et une
-// entrée illisible faisait abandonner tout le répertoire en silence.
+// Parcours partagé avec le gate : une copie maison ratait les artefacts générés
+// (`android/app/src/main/assets/web/`) et flakait sur les dossiers de build.
 
 describe("invariants", () => {
   test("I1: le module direct est déclaré une fois, et il existe", () => {
@@ -44,15 +40,12 @@ describe("invariants", () => {
     expect(pronoteHost.test(codeOnly('const url = "https://pronote.example.fr/";'))).toBe(true);
   });
 
-  // #489 : `index-education.net` est le domaine RÉEL des établissements PRONOTE
-  // (cf. la référence `pronotets`). `/pronote/i` seul ne le voyait pas : un
-  // hôte PRONOTE glissé dans `android/data/` passait la garde I1.
+  // `index-education.net` est le domaine RÉEL des établissements PRONOTE
+  // (`pronotets`), que `/pronote/i` seul ne reconnaît pas.
   test("I1: l'hôte PRONOTE RÉEL est reconnu (index-education.net)", () => {
     expect(pronoteHost.test(codeOnly('const url = "https://demo.index-education.net/eleve";'))).toBe(true);
     expect(pronoteHost.test(codeOnly('val base = "https://demo.index-education.net/eleve"'))).toBe(true);
-    // Un domaine ordinaire ne déclenche rien.
     expect(pronoteHost.test(codeOnly('const url = "https://api.example.fr/x";'))).toBe(false);
-    // Et le serveur ne doit pas non plus y joindre un accès direct.
     expect(
       hasDirectFetch(codeOnly('const u = "https://hubeduconnect.index-education.net/";\nawait fetch(u);')),
     ).toBe(true);
@@ -68,8 +61,7 @@ describe("invariants", () => {
   });
 
   test("I3 plateforme: java.net, android.database et androidx.room interdits dans core", () => {
-    // Gradle ne voit pas ces imports (pas des dépendances de module) : c'est
-    // le scan étroit qui les refuse. Un commentaire n'est pas un import.
+    // Gradle ne voit pas ces imports : le scan étroit de sources les refuse.
     expect(platformRe.test(codeOnly('import java.net.URL'))).toBe(true);
     expect(platformRe.test(codeOnly('import android.database.sqlite.SQLiteDatabase'))).toBe(true);
     expect(platformRe.test(codeOnly('import androidx.room.Room'))).toBe(true);
@@ -79,82 +71,60 @@ describe("invariants", () => {
 
   test("I2: la frontière des modules est celle de Gradle", () => {
     // La vérité est dans les quatre `build.gradle.kts` : core/pronote sans
-    // dépendance, data -> core+pronote, app -> core+data. Toute autre arête
-    // échoue sans qu'il faille recopier les types du port dans un scanner.
+    // dépendance, data -> core+pronote, app -> core+data.
     expect(moduleBoundaryErrors(ROOT)).toEqual([]);
   });
 
   test("I2 FP: fetch hors Pronote ignoré, accès direct détecté", () => {
-    // FP: commentaire seul → ignoré (une mention en prose n'est pas un accès)
     expect(hasDirectFetch(codeOnly("// fetch pronote\nconst a = 1;"))).toBe(false);
-    // vrai positif: même ligne
     expect(hasDirectFetch(codeOnly('await fetch("https://pronote.example.fr/x");'))).toBe(true);
-    // vrai positif: URL Pronote + réseau ailleurs
     expect(
       hasDirectFetch(codeOnly('const u = "https://pronote.example.invalid/eleve/";\nawait fetch(u);')),
     ).toBe(true);
   });
 
-  // #535 : l'hôte PRONOTE assemblé à l'exécution passait le scan. Le mot est
-  // dans le fichier, mais PAS dans un littéral complet d'URL : l'ancien scan
-  // exigeait le mot ET l'appel réseau sur la MÊME ligne, ou une URL littérale
-  // entière. Or le mot `pronote`/`index-education` est déjà INTERDIT hors du
-  // module `android/pronote/` (I1) : sa présence + un appel réseau dans le
-  // MÊME fichier suffit, la forme de l'URL n'a rien à y faire.
+  // Le mot `pronote`/`index-education` est déjà interdit hors de
+  // `android/pronote/` (I1) : sa présence + un appel réseau dans le MÊME
+  // fichier suffit, la forme de l'URL importe peu.
   test("I2: l'hôte PRONOTE est détecté même assemblé à l'exécution", () => {
-    // Le cas de l'issue : le mot est dans un littéral, l'URL est concaténée,
-    // et l'appel réseau est sur une AUTRE ligne.
     expect(
       hasDirectFetch(
         codeOnly('const h = "index-education" + ".net";\nawait fetch("https://" + h);'),
       ),
     ).toBe(true);
-    // Le mot seul, sans mot complet dans un seul littéral : la forme la plus
-    // naturelle quand on veut passer sous le radar.
     expect(hasDirectFetch(codeOnly('const h = "pronote";\nawait fetch("https://" + h);'))).toBe(true);
-    // Sur plusieurs lignes, le mot et l'appel réseau peuvent être éloignés.
     expect(
       hasDirectFetch(
         codeOnly('const a = "hubeduconnect";\nconst b = "index-education.net";\nawait fetch(a + b);'),
       ),
     ).toBe(true);
-    // Le signal est le MOT + un appel réseau dans le même fichier : sans appel
-    // réseau, un fichier qui mentionne l'hôte n'est pas un accès.
     expect(hasDirectFetch(codeOnly('const h = "index-education.net";\nconst a = 1;'))).toBe(false);
-    // FP préservé : aucune mention d'hôte → rien à signaler.
     expect(hasDirectFetch(codeOnly("const p = apiProvider;\nawait fetch(apiUrl);"))).toBe(false);
   });
 
   test("I8 (0.7.0): le serveur ne lit AUCUN credential dans l'environnement", () => {
-    // Le serveur ne détient rien : `PORT`/`HOST` (écoute) et les deux CHEMINS TLS
-    // sont les SEULES variables lues, et uniquement dans `start()`. Un chemin de
-    // certificat local n'est pas un credential : il n'authentifie rien, et la clé
-    // qu'il désigne vit hors du dépôt (agents/runtime/dev-tls.sh). Tout ce qui
-    // s'authentifie (QR de l'établissement, clé LLM) vient du client, à la demande.
+    // Le serveur ne détient aucun credential : `PORT`/`HOST` et les chemins TLS
+    // sont les seules variables lues, dans `start()` ; la clé du certificat vit
+    // hors du dépôt. Tout ce qui s'authentifie vient du client.
     const allowedRead = /envValue\(env,\s*"(PORT|HOST|TLS_CERT_FILE|TLS_KEY_FILE)"\)/;
     const hits: string[] = [];
     for (const f of listFiles(join(ROOT, "server"))) {
       for (const line of codeOnly(readFileSync(f, "utf8")).split("\n")) {
         if (!/Bun\.env|process\.env/.test(line)) continue;
-        // La lecture de PORT/HOST/TLS est le seul accès autorisé, et il passe par
-        // `envValue(env, "…")` avec un littéral — jamais un nom construit.
         const allowed = allowedRead.test(line) || /= Bun\.env as Record/.test(line);
         if (!allowed) hits.push(`${f.replace(ROOT, "")}: ${line.trim()}`);
       }
     }
     expect(hits).toEqual([]);
 
-    // Vrai positif : une lecture de credential doit être signalée, sinon le test
-    // ne prouve rien (il doit mordre, pas juste passer).
+    // Vrai positif : la garde doit mordre, pas seulement passer.
     const sneak = 'const k = process.env["OPENROUTER_API_KEY"] ?? "";';
     expect(sneak).toMatch(/process\.env/);
     expect(allowedRead.test(sneak)).toBe(false);
 
-    // La clé privée de ce certificat n'a rien à faire dans le dépôt : ni versionnée,
-    // ni même présente (le serveur la lit à l'exécution, hors de l'arbre).
+    // La clé privée du certificat reste hors du dépôt (lue à l'exécution).
     expect(listFiles(join(ROOT, "server")).filter((f) => /\.(pem|key)$/.test(f))).toEqual([]);
 
-    // Et le template d'env n'existe plus du tout (rien à commiter, rien à documenter).
     expect(existsSync(join(ROOT, ".env.example"))).toBe(false);
     expect(existsSync(join(ROOT, ".env.local"))).toBe(false);
   });
@@ -170,18 +140,13 @@ describe("invariants", () => {
     expectSourceContains(readFileSync(untrusted, "utf8"), "createNonce", untrusted);
   });
 
-  // #398 : I6 — le contenu externe est une DONNÉE, jamais un programme. Le
-  // nom d'une pièce jointe vient du SERVEUR : le type MIME qui en découle ne
-  // peut donc pas être EXÉCUTABLE, sinon `consignes.html` part vers un
-  // lecteur tiers comme du HTML exécutable (script) au lieu d'octets inertes.
-  //
-  // `WebApp.mimeOfAsset` (les assets LOCAUX de l'app, servis à la WebView)
-  // est hors périmètre : ce n'est pas une donnée du serveur.
+  // I6 — le contenu externe est une DONNÉE, jamais un programme : le nom d'une
+  // pièce jointe vient du serveur, donc son type MIME ne peut pas être exécutable.
+  // `WebApp.mimeOfAsset` est hors périmètre (assets locaux, pas une donnée serveur).
   test("I6: la table MIME des pièces jointes ne mappe aucun type exécutable", () => {
     const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
     const src = codeOnly(readFileSync(join(APP, "AttachmentMime.kt"), "utf8"));
 
-    // 1. La table des formats connus ne sort JAMAIS un type exécutable.
     const table = parseMimeTable(src);
     expect(table.size).toBeGreaterThan(0);
     const executable = [...table]
@@ -189,9 +154,6 @@ describe("invariants", () => {
       .map(([ext]) => ext);
     expect({ executable }).toEqual({ executable: [] });
 
-    // 2. La liste de refus couvre les types exécutables attendus, ET tous
-    //    ceux que le test connaît comme exécutables (le garde-fou runtime
-    //    refuse au moins tout le catalogue).
     const refus = parseKotlinStringSet(src, "EXECUTABLE_MIME_TYPES");
     for (const attendu of [
       "text/html",
@@ -206,16 +168,12 @@ describe("invariants", () => {
     const nonRefuses = [...EXECUTABLE_MIME_TYPES].filter((t) => !refus.has(t));
     expect({ nonRefuses }).toEqual({ nonRefuses: [] });
 
-    // 3. Les extensions à risque sont explicitement neutralisées en texte, et
-    //    aucune n'est servie par la table des formats connus.
     const texteSeul = parseKotlinStringSet(src, "TEXT_ONLY_EXTENSIONS");
     for (const ext of ["html", "htm", "svg", "xml"]) {
       expect([...texteSeul]).toContain(ext);
       expect(table.has(ext)).toBe(false);
     }
 
-    // 4. Le pont sert le type de `mimeOf` — jamais un type écrit en dur pour
-    //    une pièce jointe nommée par le serveur.
     const bridge = codeOnly(readBridgeSource());
     expectSourceMatch(
       bridge,
@@ -224,9 +182,6 @@ describe("invariants", () => {
     );
   });
 
-  // #242 : characterization pins — resserrent des trous prouvés, sans changer
-  // la sémantique I1–I8. Chacun échoue sur une casse réelle qui passe les
-  // tests ci-dessus (voir issue). Ajouts seuls, aucun test existant modifié.
   test("I8 closed (#242): envValue n'ouvre que PORT/HOST/TLS_*", () => {
     const allowed = new Set(["PORT", "HOST", "TLS_CERT_FILE", "TLS_KEY_FILE"]);
     const keys = new Set<string>();
@@ -237,10 +192,8 @@ describe("invariants", () => {
     expect([...keys].sort()).toEqual([...allowed].sort());
   });
 
-  // #428 : UN SEUL endroit decide du prompt et du schema de la fiche. Le pont
-  // appelle le point d'entree PUBLIC du core ; il ne forge plus son propre
-  // appel fournisseur (la cle n'y etait pas transmise : l'appel echouait
-  // toujours, avant meme le reseau).
+  // Un seul endroit décide du prompt et du schéma de la fiche : le pont appelle
+  // le point d'entrée public du core, jamais un appel fournisseur à la main.
   test("I5: la fiche de revision passe par le point d'entree public du core", () => {
     const bridge = codeOnly(readBridgeSource());
     const pont = join(
@@ -255,14 +208,10 @@ describe("invariants", () => {
       "app",
       "VsnBridge.kt",
     );
-    // Le point d'entree canonique…
     expectSourceMatch(bridge, /RevisionAi\.requestRevisionSheet\(/, pont);
-    // …avec la cle de l'app relayee…
     expectSourceMatch(bridge, /requestRevisionSheet\([^\n]*apiKey/, pont);
-    // …et plus AUCUN appel fournisseur a la main pour la fiche.
     expectSourceNotMatch(bridge, /generateSafe\(/, pont);
     expectSourceNotMatch(bridge, /revisionPromptFor\(/, pont);
-    // Le prompt et le schema sont decideds par le core, pas par le pont.
     const core = codeOnly(
       readFileSync(
         join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core", "RevisionAi.kt"),

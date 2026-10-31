@@ -1,15 +1,4 @@
-// ClientParityMain.kt — pilote JSON de la parité client + données (#201, #202).
-//
-// OUTIL DE TEST uniquement (jamais Gradle, jamais l'APK). Même protocole que
-// `PronoteParityMain` (une opération par ligne). Les objets métier sont rendus
-// en `JVal` EXPLICITEMENT, champ par champ, avec la règle `undefined` du TS :
-// - clé OMSE quand le TS donne `undefined` (chemin `lenient` absent, repas
-//   manquant, `period` inconnue, `overallAverage` sans `V`) ;
-// - `null` GARDÉ quand le TS donne explicitement `null` (`author` émétteur,
-//   `replyingTo` sans source, `subject` sans matière, `content()` vide de
-//   `Lesson`, `profilePicture` absent).
-// Le test compare au canonique : `JSON.stringify(ts, replacer)` gère `Date` et
-// omet les `_champs` / cycles de la même façon.
+// ClientParityMain.kt — pilote JSON de la parité client + données.
 package fr.veryslopnynotes.clientparity
 
 import fr.veryslopnynotes.pronote.Absence
@@ -87,7 +76,6 @@ private class Render(private val map: LinkedHashMap<String, JVal?> = LinkedHashM
     }
 }
 
-// --- Rendus champ par champ ---------------------------------------------------
 
 private fun renderSubject(s: Subject): JVal.Obj {
     val r = Render()
@@ -330,7 +318,6 @@ private fun renderClientInfo(c: ClientInfo): JVal.Obj {
     return r.build()
 }
 
-// --- Opérations ---------------------------------------------------------------
 
 private fun JVal.Obj.reqStr(key: String): String = (fields[key] as? JVal.Str)?.value
     ?: throw IllegalArgumentException("pilote: $key texte attendu")
@@ -350,7 +337,6 @@ private class ClientDriver {
 
     fun run(op: JVal.Obj): JVal {
         return when (op.str("op")) {
-            // --- Resolveur pur -------------------------------------------------
             "dateParse" -> ok("millis" to millis(dateParse(JVal.Str(op.reqStr("text")))))
             "datetimeParse" -> ok("millis" to millis(datetimeParse(JVal.Str(op.reqStr("text")))))
             "gradeParse" -> {
@@ -365,7 +351,6 @@ private class ClientDriver {
             "numOf" -> ok("value" to JVal.Num(numOf(op.fields["value"])))
             "strOf" -> ok("value" to JVal.Str(strOf(op.fields["value"])))
             "boolOf" -> ok("value" to JVal.Bool(boolOf(op.fields["value"])))
-            // --- Client --------------------------------------------------------
             "clientQrcode" -> {
                 val cid = nextId++
                 val qr = QrCode(op.reqStr("loginHex"), op.reqStr("jetonHex"), op.reqStr("qrUrl"))
@@ -421,14 +406,14 @@ private class ClientDriver {
                 )
             }
             // Ping de session : `ifDue` respecte le seuil (110 s), `manual` le
-            // force (#408 — la relecture manuelle doit partir pour de vrai).
+            // force.
             "clientPing" -> {
                 val c = client(op.num("cid"))
                 val ka = c.keepAlive()
                 if (op.str("mode") == "manual") ka.ping() else ka.pingIfDue()
                 ok("ok" to JVal.Bool(true))
             }
-            // Requêtes CONCURRENTES sur le MÊME client (#405) : le job de fond
+            // Requêtes CONCURRENTES sur le MÊME client : le job de fond
             // et la lecture de l'interface tombent en erreur en même temps.
             // Le port doit sérialiser (un SEUL refresh, une seule
             // `Communication` vivante) et ne surfacer AUCUNE erreur : le
@@ -477,7 +462,6 @@ private class ClientDriver {
                 val c = client(op.num("cid"))
                 ok("week" to JVal.Num(c.getWeek(parseDt(op.reqStr("date"))).toDouble()))
             }
-            // --- Trimestre ------------------------------------------------------
             "periodGrades" -> {
                 val c = client(op.num("cid"))
                 JVal.Arr(periodOf(c, op.str("periodId")).grades().map { renderGrade(it) })
@@ -502,7 +486,6 @@ private class ClientDriver {
                 val c = client(op.num("cid"))
                 JVal.Arr(periodOf(c, op.str("periodId")).punishments().map { renderPunishment(it) })
             }
-            // --- Cours / devoirs -------------------------------------------------
             "lessons" -> {
                 val c = client(op.num("cid"))
                 JVal.Arr(c.lessons(parseDt(op.reqStr("from")), op.str("to")?.let { parseDt(it) }).map { renderLesson(it) })
@@ -538,7 +521,6 @@ private class ClientDriver {
                     "name" to JVal.Str(att.name),
                 )
             }
-            // --- Discussions ------------------------------------------------------
             "discussions" -> {
                 val c = client(op.num("cid"))
                 JVal.Arr(c.discussions(op.bool("onlyUnread") == true).map { renderDiscussion(it) })
@@ -576,7 +558,6 @@ private class ClientDriver {
                 c.newDiscussion(op.str("subject") ?: "", op.str("body") ?: "", dests)
                 ok("sent" to JVal.Num(dests.size.toDouble()))
             }
-            // --- Actus / cantine / profil ------------------------------------------
             "news" -> {
                 val c = client(op.num("cid"))
                 val filter = InfoFilter(

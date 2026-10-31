@@ -1,17 +1,11 @@
-// EventDedupeParityMain.kt — pilote JSON de la déduplication (kind, id) (#645).
+// EventDedupeParityMain.kt — pilote JSON de la déduplication (kind, id).
 //
-// OUTIL DE TEST uniquement : compilé par
-// `tests/unit/kotlin-payload-dedupe.test.ts` (jamais par Gradle, jamais dans
-// l'APK). Le test compile la VRAIE source de production `core/EventDedupe.kt`
-// et la pilote ici : les assertions portent sur le code EXÉCUTÉ, pas sur la
-// forme de `PronotePayloads.kt` (`org.json`, hors harnais).
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-payload-dedupe.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
+//
 //   - `{"op":"dedupe","events":[{"kind":"absence","id":"12"}, …]}`
-//     → `{"keys":[…],"kept":[…],"counts":{"absence":1,"late":1}}`
 //   - `{"op":"key","kind":"absence","id":"12"}`
-//     → `{"key":"absence:12"}`
 package fr.veryslopnynotes.eventdedupe
 
 import fr.veryslopnynotes.core.JsonValue

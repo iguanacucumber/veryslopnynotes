@@ -1,5 +1,4 @@
-// État « lu » des actualités, persistant et borné. Les identifiants sont des
-// données locales (aucun secret) : un tableau JSON plafonné à 500 entrées.
+// Identifiants = données locales (aucun secret), plafonnés à 500 entrées.
 export const NEWS_READ_STORAGE_KEY = "vsn:news:read";
 export const NEWS_READ_MAX = 500;
 const NEWS_READ_MAX_ID = 200;
@@ -29,8 +28,7 @@ function normalize(value: unknown): string[] {
   return out;
 }
 
-/** Identifiants déjà lus. Un stockage absent ou corrompu rend un ensemble vide,
- *  jamais une exception. */
+/** Stockage absent ou corrompu : ensemble vide, jamais une exception. */
 export function loadNewsReadIds(store: ReadStore | null = defaultStore()): Set<string> {
   if (!store) return new Set();
   try {
@@ -41,7 +39,6 @@ export function loadNewsReadIds(store: ReadStore | null = defaultStore()): Set<s
   }
 }
 
-/** Ajoute `id` et retourne le nouvel ensemble persisté, plafonné à 500. */
 export function markNewsRead(id: string, store: ReadStore | null = defaultStore()): Set<string> {
   const clean = id.trim().slice(0, NEWS_READ_MAX_ID);
   const previous = loadNewsReadIds(store);
@@ -51,7 +48,7 @@ export function markNewsRead(id: string, store: ReadStore | null = defaultStore(
     try {
       store.setItem(NEWS_READ_STORAGE_KEY, JSON.stringify(next));
     } catch {
-      // quota ou stockage indisponible : l'état mémoire reste cohérent
+      // Quota ou stockage indisponible : l'état mémoire reste cohérent.
     }
   }
   return new Set(next);

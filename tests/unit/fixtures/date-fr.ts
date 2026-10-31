@@ -1,20 +1,12 @@
-// Miroir PARTAGÉ des dates françaises (#147) — la table est LUE dans le Kotlin,
-// pas recopiée.
-//
-// AVANT, chaque test d'écran avait sa PROPRE liste : `DAYS` côté accueil,
-// `DAY_NAMES` côté EDT et côté cantine, une liste en ligne côté devoirs, et
-// `WEEKDAYS_FR` (ordre LUNDI-D'ABORD !) + `MONTHS_FR` côté vie scolaire — deux
-// indexations de la même donnée dans le même dépôt, dont quatre tableaux Kotlin
-// identiques en face. C'est ce que ce fichier supprime : les tests lisent
-// `core/DateFr.kt`, donc ajouter un jour ou un mois se fait à un seul endroit.
+// La table est LUE dans `core/DateFr.kt`, pas recopiée : un jour ou un mois
+// ajouté se fait à un seul endroit.
 //
 // `LocalDate.parse` est strict (2026-13-01 et 2026-02-30 sont refusés) : le
-// miroir le reproduit, sinon un test vert validerait une date que l'app affiche
-// en « lundi 30/02 ».
+// miroir le reproduit, sinon un test vert validerait « lundi 30/02 ».
 //
 // ponytail: lecture à la PREMIÈRE UTILISATION, pas au chargement du module — un
-// fichier absent (le helper pas encore écrit) doit faire échouer le TEST qui le
-// réclame, pas tout le fichier de test à l'import.
+// fichier absent doit faire échouer le TEST qui le réclame, pas tout le fichier
+// de test à l'import.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -96,7 +88,7 @@ export function dayLabelFr(iso: string): string {
 /** Nom du mois en minuscules, hors borne = chaîne vide (miroir de `monthFr`). */
 export const monthFr = (month: number): string => frMonths()[month - 1] ?? "";
 
-/** Nom du jour en capitale : « Vendredi » (miroir de `weekdayCapitalizedFr`). */
+/** Nom du jour capitalisé. */
 export const weekdayCapitalizedFr = (y: number, m: number, d: number): string => {
   const name = frDayNames()[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]!;
   return name.charAt(0).toUpperCase() + name.slice(1);

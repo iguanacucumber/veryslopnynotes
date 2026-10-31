@@ -6,8 +6,6 @@ import fr.veryslopnynotes.pronote.Client
 import org.json.JSONArray
 import org.json.JSONObject
 
-// Vie scolaire : payloads `attendance` et `punishments`.
-
 private val HOURS_MIN_RE = Regex("(\\d{1,2})\\s*h(?:(\\d{1,2}))?", RegexOption.IGNORE_CASE)
 
 internal fun hoursToMinutes(raw: String?): Double? {
@@ -32,15 +30,10 @@ internal fun attendancePayload(client: Client): String {
     val absences = JSONArray()
     val counters = LinkedHashMap<String, JSONObject>()
     val names = mutableMapOf<String, String>()
-    // #570 : une absence = UNE ligne publiée. La MÊME absence (même `N`
-    // Pronote) est renvoyée par CHAQUE période dont la plage la recouvre :
-    // sans déduplication, elle était publiée deux fois et COMPTÉE deux fois.
-    //
-    // L'identité est (kind, id), JAMAIS id seul : les absences et les
-    // retards sont numérotés par DEUX TABLEES Pronote indépendantes
-    // (`listeAbsences`, filtrée sur `G` 13 ou 14) — une absence `N = 12` et
-    // un retard `N = 12` sont deux enregistrements DIFFÉRENTS. Un ensemble
-    // partagé les confondrait : le second disparaîtrait de l'écran.
+    // Une absence = UNE ligne publiée : la même absence est renvoyée par
+    // CHAQUE période qui la recouvre. L'identité est (kind, id), JAMAIS id seul :
+    // absences et retards sont numérotés par DEUX tables Pronote indépendantes,
+    // donc une absence `N = 12` et un retard `N = 12` sont DIFFÉRENTS.
     val rows = mutableListOf<Pair<JSONObject, String?>>()
     for ((periodIndex, p) in client.periods.withIndex()) {
         val pid = p.id.ifBlank { null }
@@ -52,8 +45,8 @@ internal fun attendancePayload(client: Client): String {
             emptyList()
         }
         for ((i, a) in ab.withIndex()) {
-            // Le repli est UNIQUE dans le payload : deux périodes ne forgent
-            // jamais le même identifiant pour deux absences DIFFÉRENTES.
+            // Repli UNIQUE dans le payload : deux périodes ne forgent jamais
+            // le même identifiant pour deux absences différentes.
             val id = a.id.ifBlank { "abs-$periodIndex-$i" }
             rows.add(JSONObject().apply {
                 put("id", id)
@@ -86,8 +79,8 @@ internal fun attendancePayload(client: Client): String {
             } to pid)
         }
     }
-    // Les compteurs sont calculés depuis les lignes DÉDUPLIQUÉES : une
-    // absence parue dans deux périodes ne compte qu'une fois.
+    // Compteurs calculés depuis les lignes DÉDUPLIQUÉES : une absence parue
+    // dans deux périodes ne compte qu'une fois.
     for ((obj, id) in dedupe(rows) { eventKey(it.first.optString("kind"), it.first.optString("id")) }) {
         absences.put(obj)
         if (id != null) {
@@ -126,11 +119,8 @@ internal fun punishmentsPayload(client: Client): String {
                 put("date", s.given.parisIso())
                 put("motif", motif)
                 put("type", boundedCp(s.nature, 100).ifEmpty { "Sanction" })
-                // La durée de la sanction, en MINUTES (`duree` Pronote, même
-                // unité que le retard : `Delay.minutes` lit le même champ).
-                // Le champ s'appelle `durationMinutes` et plus `gravity` : la
-                // durée d'une retenue n'est pas un « niveau » de gravité, et
-                // le web affichait « Niveau 120 » pour deux heures de retenue.
+                // Durée en MINUTES (`duree` Pronote, même unité que
+                // `Delay.minutes`) : une retenue n'est pas un « niveau ».
                 s.duration?.takeIf { it.isFinite() && it > 0 }?.let { put("durationMinutes", it) }
                 putIf("periodId", pid?.take(64))
             })

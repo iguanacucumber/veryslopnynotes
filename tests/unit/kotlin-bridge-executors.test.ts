@@ -1,15 +1,6 @@
-// #393 : le pont ne sature plus — VRAI Kotlin compilé.
-//
-// `BridgeExecutors` (android/app, logique pure : `java.util.concurrent` seul,
-// aucun import Android) est compilée par le harnais puis pilotée par
-// `BridgeExecutorsMain` : ce n'est pas un miroir TS, c'est le code de
-// production exécuté. Les deux critères du #393 portent dessus :
-//   1. le pont ne fait PAS la queue : un appel court (`app.back`) répond
-//      pendant que cinq appels longs sont en vol ;
-//   2. les opérations LLM ont leur PROPRE file, bornée : un troisième appel
-//      attend un créneau.
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Le pont ne sature plus : un appel court répond pendant cinq appels longs, et
+// les opérations LLM ont leur PROPRE file bornée. VRAI Kotlin compilé.
+// Outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -76,8 +67,7 @@ describe("exécuteurs du pont (#393)", () => {
       const court = await shortCall(qid);
       expect(court.timedOut).toBe(false);
       expect(court.delayMs).toBeLessThan(3000);
-      // Les cinq tournent EN MÊME TEMPS : aucun plafond de deux appels
-      // simultanés ne les sérialise.
+      // Les cinq tournent EN MÊME TEMPS : aucun plafond de deux appels simultanés.
       const s = await stats(qid);
       expect(s.callsMax).toBe(5);
     } finally {
@@ -94,10 +84,7 @@ describe("exécuteurs du pont (#393)", () => {
       expect(await waitStarted(qid, 2)).toBe(2);
       // Le TROISIÈME appel LLM attend un créneau libre : la file LLM est bornée.
       await ask({ op: "execSlow", qid, count: 1, method: "llm.generateRevision" });
-      // Le délai n'est PAS le contrat : ce qui l'est, c'est que le troisième
-      // appel ne DÉMARRE PAS pendant que les deux autres occupent les deux
-      // créneaux. 150 ms suffisent à le montrer (les deux premiers sont déjà
-      // démarrés et bloqués : le troisième ne peut pas obtenir de créneau).
+      // Le troisième appel ne DÉMARRE PAS pendant que les deux autres occupent les créneaux.
       const troisieme = JSON.parse(
         await ask({ op: "execWaitStarted", qid, want: 3, timeoutMs: 150 }),
       ) as { started: number; timedOut: boolean };
@@ -107,8 +94,7 @@ describe("exécuteurs du pont (#393)", () => {
       const court = await shortCall(qid);
       expect(court.timedOut).toBe(false);
       expect(court.delayMs).toBeLessThan(3000);
-      // Les deux appels LLM tournent bien EN MÊME TEMPS : le troisième, lui,
-      // attend son créneau.
+      // Les deux appels LLM tournent en même temps ; le troisième attend son créneau.
       const s = await stats(qid);
       expect(s.llmMax).toBe(2);
     } finally {

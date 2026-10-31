@@ -1,17 +1,8 @@
 // AttachmentTextMain.kt — pilote JSON de l'extraction du texte des pièces
-// jointes (#631).
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/attachment-text.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile les VRAIES sources de
-// production `fr.veryslopnynotes.data.AttachmentText` (extraction pure, aucun
-// import Android) et `fr.veryslopnynotes.core.AssignmentContext` (ordre des
-// sources), puis les pilote ici : les assertions portent donc sur du code
-// EXÉCUTÉ, sur des fixtures SYNTHÉTIQUES — aucune requête réseau.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/attachment-text.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE (op inconnue, champ absent) sont préfixées `pilote: ` et
-// refusées par le test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.parity.attachmenttext
 
 import fr.veryslopnynotes.core.AiContext
@@ -173,7 +164,7 @@ private class Driver {
             val reason = op.str("reason") ?: "format_non_lisible"
             itemJson(AttachmentText.toAiContextItem(label, AttachmentTextResult.Unreadable(reason)))
         }
-        // Assembleur #628 sur un devoir complet : ordre, priorité, troncature.
+        // Assembleur sur un devoir complet : ordre, priorité, troncature.
         "context" -> {
             val assignment = assignmentOf(op.obj("assignment") ?: throw IllegalArgumentException("pilote: assignment absent"))
                 ?: throw IllegalArgumentException("pilote: assignment hors contrat")

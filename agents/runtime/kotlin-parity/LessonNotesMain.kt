@@ -1,13 +1,6 @@
-// LessonNotesMain.kt — pilote JSON du cahier de cours (#586).
+// LessonNotesMain.kt — pilote JSON du cahier de cours.
 //
-// OUTIL DE TEST uniquement : compilé par
-// `tests/unit/kotlin-lesson-notes.test.ts` (jamais par Gradle, jamais dans
-// l'APK). Le test exécute les VRAIES règles de `core/LessonNote.kt` :
-// validation d'une note, sélection par matière et sources citables.
-//
-// Le stockage disque (`data/LessonNotesStore.kt`) importe `org.json` : il est
-// couvert par un test de source (garde d'époque `OfflineArtifacts`), pas par
-// ce pilote.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-lesson-notes.test.ts` (jamais Gradle, jamais l'APK).
 package fr.veryslopnynotes.core
 
 import fr.veryslopnynotes.pronote.JVal

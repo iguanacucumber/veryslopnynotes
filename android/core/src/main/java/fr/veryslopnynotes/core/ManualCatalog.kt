@@ -4,17 +4,13 @@ import java.text.Normalizer
 import java.util.Locale
 
 // Choix du manuel lelivrescolaire.fr à partir de ce que l'app sait déjà :
-// - la classe vient du profil Pronote (`classLabel`, ex. « TG2 ») ;
-// - les spécialités sont déduites des matières réellement suivies
-//   (notes, devoirs, emploi du temps), jamais inventées ;
-// - la matière du devoir choisit l'ouvrage dans une petite table de slugs
-//   VÉRIFIÉS. Une matière absente de la table (NSI, HGGSP, SVT en Tle…)
-//   n'ouvre AUCUN manuel : mieux vaut pas de source qu'un mauvais ouvrage.
+// la classe vient du profil (`classLabel`), les spécialités des matières suivies,
+// et une petite table de slugs VÉRIFIÉS choisit l'ouvrage. Une matière absente
+// de la table n'ouvre AUCUN manuel : mieux vaut pas de source qu'un mauvais ouvrage.
 //
 // L'app ne contacte pas le site : elle construit une adresse que le scraper
-// facultatif lira. Le domaine n'est pas en dur ici (I1) : l'adresse de base
-// est celle saisie par l'utilisateur (par défaut `/manuels`), et seuls les
-// slugs — des noms de collections, pas des hôtes — sont dans cette table.
+// facultatif lira. Le domaine n'est pas en dur ici (I1) : seuls les slugs — des
+// noms de collections, pas des hôtes — sont dans cette table.
 enum class ManualLevel {
     SIXIEME, CINQUIEME, QUATRIEME, TROISIEME, SECONDE, PREMIERE, TERMINALE, UNKNOWN,
 }
@@ -103,9 +99,8 @@ object ManualCatalog {
     private val SPECIALTY_KEYS_TLE = SPECIALTY_KEYS_1RE + "MATH_EXP"
 
     /**
-     * Une adresse de CATALOGUE (pas un manuel précis) : l'app doit alors
-     * résoudre l'ouvrage selon la classe et la matière. Le chemin seul décide,
-     * jamais le domaine.
+     * Une adresse de CATALOGUE (pas un manuel précis) : l'app résout alors
+     * l'ouvrage selon la classe et la matière. Le chemin seul décide, jamais le domaine.
      */
     fun isCatalog(raw: String): Boolean {
         val path = pathOf(raw) ?: return false
@@ -116,10 +111,8 @@ object ManualCatalog {
     fun levelOf(classLabel: String, subjects: List<String>): ManualLevel {
         val text = words(classLabel)
         if (text.isNotEmpty()) {
-            // Voies professionnelle / technologique : la table ne couvre que
-            // les manuels généraux. Aucun ouvrage plutôt qu'un mauvais.
-            // « générale et technologique » est le lycée GÉNÉRAL : ne pas le
-            // confondre avec une série technologique.
+            // Voies professionnelle / technologique : la table ne couvre que les
+            // manuels généraux. « générale et technologique » est le lycée GÉNÉRAL.
             val generalTrack = text.contains("GENERALE ET TECHNOLOGIQUE") ||
                 text.contains("GENERAL ET TECHNOLOGIQUE")
             if (text.contains("BAC PRO") || text.contains("BTS") || text.contains("CAP") ||

@@ -1,21 +1,7 @@
-// Le mode d'ouverture d'une session persistée.
-//
-// AVANT : la session se rouvrait TOUJOURS par son jeton (`Client.tokenLogin`).
-// L'établissement de démonstration n'a pas de jeton — c'est un couple
-// identifiant / mot de passe public — donc sa session devait être rouverte
-// autrement.
-//
-// CE QUE CE TEST PROUVE (deux niveaux) :
-//   1. la DÉCISION, sur le VRAI Kotlin exécuté (`data/SessionMode.kt` est
-//      compilé par le port de parité) : une session de démonstration se rouvre
-//      par identifiant, une session d'appairage par jeton, et une valeur
-//      absente ou INCONNUE reste « jeton » (une session enregistrée avant
-//      l'existence de la démonstration ne doit pas changer de mode) ;
-//   2. le CÂBLAGE : le dépôt publie le mode de la session de démonstration et
-//      la restauration s'en sert — sans quoi la décision pure serait orpheline.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation est un défaut (le test rougit).
+// Le mode d'ouverture d'une session persistée : démonstration → identifiant,
+// appairage → jeton, valeur absente ou inconnue → jeton (comme avant).
+// La DÉCISION est EXÉCUTÉE (`SessionMode.kt`) ; le CÂBLAGE est lu en source.
+// Outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -45,8 +31,7 @@ describe("mode d'ouverture d'une session persistée", () => {
   });
 
   test.skipIf(skip)("une valeur absente ou inconnue reste « jeton » (Kotlin)", async () => {
-    // Session enregistrée avant l'existence de la démonstration : elle se
-    // rouvre par son jeton, comme toujours.
+    // Session enregistrée avant la démonstration : elle se rouvre par son jeton.
     expect(await mode(null)).toBe("jeton");
     // Valeur corrompue : le mode par défaut, jamais un mode au hasard.
     expect(await mode("n'importe quoi")).toBe("jeton");

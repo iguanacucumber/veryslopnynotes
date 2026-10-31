@@ -5,16 +5,14 @@ import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
-// Session Pronote locale (#206, ADR-003) : ce que `Client.tokenLogin` doit
-// reconstruire sans rescanner le QR — l'URL réécrite du client, le login, le
-// jeton de connexion (tourné à l'appairage) et l'identité de l'appareil.
+// Session Pronote locale (ADR-003) : ce que `Client.tokenLogin` doit
+// reconstruire sans rescanner le QR — URL du client, login, jeton de connexion
+// et identité de l'appareil.
 //
-// Le PIN du QR n'est JAMAIS persisté : il ne sert qu'à déchiffrer `login` +
-// `jeton` au moment de l'appairage (PairingRepository) et n'en sort jamais.
-// Ce qui dort ici, c'est la SESSION qui en résulte — chiffrée, bornée,
-// jamais journalisée, jamais dans un `toString()`, jamais dans un message
-// d'erreur. Classe simple et non `data class` VOLONTAIREMENT : le `toString()`
-// généré par `data` ferait fuiter le jeton dans un log ou un rapport de crash.
+// Le PIN du QR n'est JAMAIS persisté : il ne déchiffre `login` + `jeton` qu'à
+// l'appairage. Ce qui dort ici est chiffré, borné, jamais journalisé, jamais
+// dans un `toString()` ni un message d'erreur. Pas une `data class`
+// VOLONTAIREMENT : le `toString()` généré ferait fuiter le jeton.
 // ponytail: pas de sérialisation ici (le jeton ne se copie jamais ailleurs).
 class StoredSession(
     val endpointUrl: String,
@@ -23,20 +21,14 @@ class StoredSession(
     val uuid: String,
     val clientIdentifier: String?,
     val schoolUrl: String,
-    /**
-     * Mode de réouverture (`SessionMode`) : `JETON` pour un appairage QR,
-     * `IDENTIFIANT` pour l'établissement de démonstration. Une session
-     * enregistrée avant ce mode n'a pas de valeur : elle reste `JETON`.
-     */
+    /** `JETON` (QR) ou `IDENTIFIANT` (démo) ; une session d'avant ce champ reste `JETON`. */
     val mode: String = SessionMode.JETON,
 ) {
-    // Secret JAMAIS imprimé : ni crash, ni log, ni capture d'écran de debug.
     override fun toString(): String = "StoredSession(url=***, user=***)"
 }
 
-// Store de session Pronote (#206 : TokenStore des jetons serveur supprimé).
-// Une session complète ou rien : sans jeton, l'app ne peut rien lire, donc on
-// refuse d'écrire plutôt que d'enregistrer une session inutilisable.
+// Store de session Pronote : une session complète ou rien — sans jeton, l'app
+// ne peut rien lire, donc on refuse d'écrire une session inutilisable.
 interface SessionStore {
     fun save(session: StoredSession)
     fun load(): StoredSession?
@@ -46,29 +38,19 @@ interface SessionStore {
 }
 
 /**
- * UN point de construction des preferences CHIFFREES pour tout le process
- * (session Pronote, clé LLM) : MasterKey AES256-GCM + EncryptedSharedPrefs.
- * Deux copies de ce bloc divergeraient (schéma de chiffrement différent entre
- * la session et la clé), donc une seule fonction, un seul schéma.
+ * UN point de construction des préférences CHIFFRÉES du process (session,
+ * clé LLM) : MasterKey AES256-GCM + EncryptedSharedPrefs. Deux copies
+ * divergeraient (schéma de chiffrement différent) : une seule fonction.
  *
- * #206 : PLUS DE REPLI EN CLAIR. Avant, un Keystore indisponible écrivait le
- * jeton en `MODE_PRIVATE` lisible — un secret au repos en clair, silencieux.
- * Maintenant l'échec est BRUYANT (l'exception remonte) et les singletons
- * (`SessionStores`, `LlmKeys`) basculent sur le secours mémoire (session
- * perdue au redémarrage = ré-appairage, jamais un secret en clair).
- *
- * #401 : le repli mémoire est désormais SIGNALÉ : l'état dégradé est
- * publié (`SecureStorage` -> pont -> interface, qui le journalise). L'app ne
- * croit plus en silence ne pas être appairée, et la clé de l'assistant ne
- * disparaît plus sans explication.
+ * PLUS DE REPLI EN CLAIR : un Keystore indisponible levait un secret lisible
+ * en `MODE_PRIVATE`. L'échec est BRUYANT (l'exception remonte) et les
+ * singletons basculent sur le secours mémoire (session perdue au redémarrage =
+ * ré-appairage, jamais un secret en clair). L'état dégradé est publié
+ * (`SecureStorage`), donc l'app ne croit plus en silence ne pas être appairée.
  * ponytail: pas de DataStore ici (quelques paires clé/valeur suffisent).
  *
- * #249 : UNE seule MasterKey pour tout le process (session + clé LLM).
- * Avant, chaque `encryptedPrefs(name)` reconstruisait sa MasterKey
- * (Keystore IPC) : deux chargements Keystore au démarrage pour deux
- * fichiers. Le schéma/alias est identique, donc le partage est sûr ;
- * la construction reste paresseuse et le repli mémoire de #206 inchangé
- * (l'exception remonte, les singletons basculent).
+ * UNE seule MasterKey pour tout le process : sinon deux chargements Keystore
+ * au démarrage. Alias et schéma identiques, construction paresseuse.
  */
 private val masterKeyLock = Any()
 
@@ -96,7 +78,7 @@ class EncryptedSessionStore(context: Context) : SessionStore {
 
     override fun save(session: StoredSession) {
         // Messages d'erreur SANS secret : un `require` peut finir dans un
-        // rapport de crash, il ne doit rien révéler du jeton.
+        // rapport de crash.
         require(isUsableUrl(session.endpointUrl)) { "session invalide" }
         require(isUsableSecret(session.username)) { "session invalide" }
         require(isUsableSecret(session.password)) { "session invalide" }
@@ -128,13 +110,11 @@ class EncryptedSessionStore(context: Context) : SessionStore {
             uuid = uuid,
             clientIdentifier = prefs.getString(KEY_CLIENT_ID, null)?.takeIf { it.isNotEmpty() },
             schoolUrl = prefs.getString(KEY_SCHOOL_URL, null)?.trim().orEmpty(),
-            // Une session enregistrée avant le mode de démonstration n'a pas
-            // de valeur : elle se rouvre par son jeton, comme toujours.
             mode = SessionMode.of(prefs.getString(KEY_MODE, null)),
         )
     }
 
-    // Déconnexion : PLUS AUCUNE trace de session, jeton compris (un jeton
+    // Déconnexion : plus aucune trace de session, jeton compris (un jeton
     // rejoué après un logout doit échouer). AccountStore.logout() appelle ici.
     override fun clear() {
         prefs.edit().clear().apply()
@@ -165,9 +145,9 @@ class EncryptedSessionStore(context: Context) : SessionStore {
     }
 }
 
-// Secours mémoire (previews Compose, tests unitaires JVM sans Android,
-// Keystore indisponible : la session ne survit pas au redémarrage, et c'est
-// le contrat — jamais un secret en clair sur disque).
+// Secours mémoire (previews Compose, tests JVM, Keystore indisponible) : la
+// session ne survit pas au redémarrage, et c'est le contrat — jamais un secret
+// en clair sur disque.
 class InMemorySessionStore : SessionStore {
     private var session: StoredSession? = null
 
@@ -187,18 +167,13 @@ class InMemorySessionStore : SessionStore {
 }
 
 /**
- * UN store pour tout le process (activité, écran d'appairage, repositories) :
- * chiffré si le Keystore répond, mémoire sinon. Une seule instance, sinon deux
- * états divergents : un appairage réussi dans l'écran resterait invisible pour
- * le reste de l'app, et après `logout()` le jeton survivrait quelque part.
+ * UN store pour tout le process : chiffré si le Keystore répond, mémoire sinon.
+ * Une seule instance, sinon deux états divergents : un appairage réussi
+ * resterait invisible, et après `logout()` le jeton survivrait quelque part.
  *
- * La sonde `hasSession()` force l'init paresseuse DANS le `try` : sans elle,
- * un Keystore KO ne jetterait qu'au premier usage réel (hors `try`), et le
- * repli mémoire n'aurait jamais lieu.
- *
- * #401 : le repli mémoire est SIGNALÉ, plus avalé en silence. L'échec est
- * publié (`SecureStorage` -> pont -> interface, qui le journalise) : l'app ne
- * croit plus en silence ne pas être appairée.
+ * `hasSession()` force l'init paresseuse DANS le `try` : sans elle, un Keystore
+ * KO ne jetterait qu'au premier usage réel, hors `try`, et le repli mémoire
+ * n'aurait jamais lieu. L'état dégradé est publié, plus avalé en silence.
  * ponytail: double-checked locking sur un @Volatile, pas de framework de DI.
  */
 object SessionStores {
@@ -215,13 +190,11 @@ object SessionStores {
     private fun newStore(context: Context): SessionStore = try {
         EncryptedSessionStore(context).also { it.hasSession() }
     } catch (_: Exception) {
-        // #401 : l'échec n'est PLUS SILENCIEUX. Le repli mémoire reste (jamais
-        // un secret en clair), mais il est DIT : l'état dégradé est publié et
-        // l'interface l'affiche.
+        // Repli mémoire (jamais un secret en clair), mais DIT : l'état dégradé
+        // est publié et l'interface l'affiche.
         //
         // AUCUN journal ici : le store tient le jeton, la règle du dépôt est
-        // « jamais de log à côté d'un secret » (cf. le pin sur
-        // `SessionStore.kt`). Le diagnostic passe par l'ÉTAT, pas par un log.
+        // « jamais de log à côté d'un secret ». Le diagnostic passe par l'ÉTAT.
         SecureStorage.markUnavailable()
         InMemorySessionStore()
     }

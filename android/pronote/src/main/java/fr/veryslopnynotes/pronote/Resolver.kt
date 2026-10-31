@@ -3,18 +3,14 @@ package fr.veryslopnynotes.pronote
 import java.time.LocalDateTime
 
 /**
- * Résolution des valeurs PRONOTE brutes (#201, port de `pronotets` `resolver.js`).
+ * Dates FR, notes codées (`|1` = Absent…), HTML des enseignants, tranches
+ * horaires. Pur, zéro dépendance.
  *
- * Dates FR (`JJ/MM/AAAA`, `JJ/MM/AAAA HH:MM:SS`, `JJ/MM/AA HHhMM`…), notes
- * codées (`|1` = Absent…), HTML des enseignants, tranches horaires. Pur, zéro
- * dépendance.
- *
- * Dates = `LocalDateTime` (heure murale LOCALE, sans fuseau — comme `new Date`
- * côté TS, avec les mêmes bizarreries assumées : `JJ/MM` injecte l'année
- * courante, `HHMM` jette l'heure qu'il vient de lire, `AA` → 2000+AA).
+ * Dates = `LocalDateTime` (heure murale LOCALE, sans fuseau, comme `new Date` :
+ * `JJ/MM` injecte l'année courante, `HHMM` jette l'heure lue, `AA` → 2000+AA).
  */
 
-/** Table `gradeTranslate` : code PRONOTE (1..8) → constante (exacte, ordonnée). */
+/** Code PRONOTE (1..8) → constante, ordre exact (index = code - 1). */
 val GRADE_TRANSLATE = listOf(
     "Absent",
     "Dispense",
@@ -28,16 +24,14 @@ val GRADE_TRANSLATE = listOf(
 
 /**
  * Note codée `|N` → constante, sinon la chaîne telle quelle (virgule FR
- * conservée : `"14,50"` reste `"14,50"`, c'est le mapper qui normalise).
- * Hors table (`|9`, `|` seul) → `null`, comme l'index undefined côté TS.
- * Non-texte (dont `null` présent) = jeté brut, emballé en `ParsingError` par
- * `r()` — comme `.includes` qui jette `TypeError` côté TS.
+ * conservée : `"14,50"` reste `"14,50"`). Hors table → `null` ; non-texte =
+ * jeté brut, réemballé en `ParsingError` par `r()`, comme `.includes` en TS.
  */
 fun gradeParse(v: JVal?): String? {
     val value = (v as? JVal.Str)?.value ?: throw IllegalArgumentException("note non textuelle")
     if (!value.contains("|")) return value
     if (value.length < 2) return null
-    // `value[1]` : le SECOND caractère, en unité UTF-16 comme côté TS.
+    // `value[1]` : SECOND caractère, en unité UTF-16 comme côté TS.
     val code = parseIntJs(value[1].toString())
     if (code.isNaN()) return null
     val idx = code.toInt() - 1
@@ -45,8 +39,8 @@ fun gradeParse(v: JVal?): String? {
 }
 
 /**
- * `String(v)` : null → `"null"`, nombre au format JS, booléen, objet/arbre plats.
- * Tableau → son `join(",")` (`null` → chaîne VIDE : `String([null])` = `""`).
+ * `String(v)` en JS : `null` → `"null"`, tableau → `join(",")` (un `null`
+ * y devient une chaîne VIDE).
  */
 fun strOf(v: JVal?): String = when (v) {
     null, is JVal.Null -> "null"
@@ -60,20 +54,16 @@ fun strOf(v: JVal?): String = when (v) {
 }
 
 /**
- * `Array.prototype.toString` = `join(",")` : `null`/`undefined` → chaîne VIDE
- * (pas `"null"`), un tableau imbriqué → son propre `join` (`"1,2"`, pas
- * `"[1],[2]"`). C'est ce que rend `String([null])` = `""` et
- * `String([[1],[2]])` = `"1,2"`.
+ * `Array.prototype.toString` = `join(",")` : `null` → chaîne VIDE, un tableau
+ * imbriqué rend son propre `join` (`String([[1],[2]])` = `"1,2"`).
  */
 private fun jsArrayToString(items: List<JVal>): String =
     items.joinToString(",") { if (it == null || it is JVal.Null) "" else strOf(it) }
 
 /**
- * `Number(v)` (sous-ensemble) : nombre direct ; chaîne taillée puis `""` → 0,
- * hexadécimal (`0x10` → 16), `Infinity` signés, décimal/exposant ; le reste →
- * `NaN`. Booléen → 1/0, `null` → 0, objet → `NaN` (pas de `valueOf`).
- * TABLEAU → `Number(String(x))` (le `toString` du tableau) : `Number([])` = 0,
- * `Number([30])` = 30, `Number([null])` = 0, `Number([1,2])` = `NaN`.
+ * `Number(v)` en JS (sous-ensemble) : `""` → 0, hex/bin/octal, `Infinity`,
+ * décimal/exposant ; le reste → `NaN`. `null` → 0, objet → `NaN`. TABLEAU →
+ * `Number(String(x))` : `[]` = 0, `[30]` = 30, `[1,2]` = `NaN`.
  */
 fun numOf(v: JVal?): Double {
     if (v == null || v is JVal.Null) return 0.0
@@ -89,8 +79,7 @@ fun numOf(v: JVal?): Double {
         val sign = if (t.startsWith("-")) -1.0 else 1.0
         return sign * hex.groupValues[1].toLong(16).toDouble()
     }
-    // `Number("0b101")` = 5, `Number("0o17")` = 15 (le serveur n'envoie jamais
-    // ça, mais `Number()` les accepte : la parité ne doit pas dépendre du goût).
+    // `Number("0b101")` = 5, `Number("0o17")` = 15 : la parité ne dépend pas du goût.
     val bin = Regex("^[+-]?0[bB]([01]+)$").matchEntire(t)
     if (bin != null) {
         val sign = if (t.startsWith("-")) -1.0 else 1.0
@@ -106,7 +95,7 @@ fun numOf(v: JVal?): Double {
     return t.toDoubleOrNull() ?: Double.NaN
 }
 
-/** `Boolean(v)` : null/absent/0/NaN/chaîne vide → faux, tout le reste (dont `"false"`) → vrai. */
+/** `Boolean(v)` : null/0/NaN/chaîne vide → faux, tout le reste (dont `"false"`) → vrai. */
 fun boolOf(v: JVal?): Boolean = when (v) {
     null, is JVal.Null -> false
     is JVal.Bool -> v.value
@@ -132,14 +121,10 @@ private fun frParts(s: String): Triple<Int, Int, Int> {
 }
 
 /**
- * `new Date(y, mo0, d, h, mi, s)` : mois/jours/heures en TROP débordent en
- * cascade (32/09 → 02/10, mois 13 → janvier +1, 25h → lendemain 01h), jamais
- * d'erreur de plage. Mois négatifs idem (`floorDiv`, pas de troncature).
- * Résolu dans la zone système (trous DST décalés vers l'avant, comme JS).
+ * `new Date(y, mo0, d, h, mi, s)` : les débordements cascadent (32/09 → 02/10,
+ * mois 13 → janvier +1), jamais d'erreur de plage. Résolu dans la zone système.
  *
- * ANNÉE 0..99 REMAPPÉE en 1900+y (règle JS de `new Date(y, …)`) : `"05/09/0026"`
- * vaut le 5 septembre 1926, pas l'an 26. `LocalDateTime` ne connaît pas ce
- *-remappage : sans lui, le port affichait une date inexistante.
+ * ANNÉE 0..99 REMAPPÉE en 1900+y, comme JS : `"05/09/0026"` vaut 1926.
  */
 private fun jsDate(y: Int, mo0: Int, d: Int, h: Int = 0, mi: Int = 0, s: Int = 0): LocalDateTime {
     val year = if (y in 0..99) y + 1900 else y
@@ -151,17 +136,14 @@ private fun jsDate(y: Int, mo0: Int, d: Int, h: Int = 0, mi: Int = 0, s: Int = 0
         .plusHours(h.toLong())
         .plusMinutes(mi.toLong())
         .plusSeconds(s.toLong())
-    // Trous DST (ex. minuit inexistant) : JS avance d'autant ; `ZonedDateTime`
-    // en résolution SMART fait pareil, chevauchements = premier offset.
-    // SMART par défaut : trou = avancé de la durée du trou (comme JS),
-    // chevauchement = premier offset (comme les moteurs JS).
+    // Trous DST : SMART avance de la durée du trou (comme JS), chevauchement =
+    // premier offset (comme les moteurs JS).
     return java.time.ZonedDateTime.of(base, java.time.ZoneId.systemDefault()).toLocalDateTime()
 }
 
 /**
- * `dateParse` : 6 formats, sinon `DateParsingError`. `JJ/MM` = année courante
- * (borne Dec→Jan assumée) ; `HHMM` = aujourd'hui à minuit (l'heure lue est
- * JETÉE, comme côté TS).
+ * 6 formats, sinon `DateParsingError`. `JJ/MM` = année courante (borne Dec→Jan
+ * assumée) ; `HHMM` = aujourd'hui à minuit (l'heure lue est JETÉE, comme en TS).
  */
 fun dateParse(v: JVal?): LocalDateTime {
     val s = (v as? JVal.Str)?.value ?: throw IllegalArgumentException("date non textuelle")
@@ -199,8 +181,8 @@ fun dateParse(v: JVal?): LocalDateTime {
 }
 
 /**
- * `datetimeParse` : 3 formats seulement (`JJ/MM` et `HHMM` REFUSÉS, comme côté
- * TS — à l'appelant de choisir). Heure conservée quand elle est là.
+ * 3 formats seulement (`JJ/MM` et `HHMM` REFUSÉS, comme en TS — à l'appelant de
+ * choisir). Heure conservée quand elle est là.
  */
 fun datetimeParse(v: JVal?): LocalDateTime {
     val s = (v as? JVal.Str)?.value ?: throw IllegalArgumentException("date non textuelle")
@@ -234,8 +216,8 @@ private val HTML_NAMED = mapOf(
 )
 
 /**
- * `htmlParse` : strip des balises (`<.*?>`), entités numériques (hexa +
- * décimales, `fromCodePoint`) puis 7 nommées — inconnue laissée telle quelle.
+ * Strip des balises (`<.*?>`), entités numériques (hexa + décimales) puis 7
+ * nommées — inconnue laissée telle quelle.
  */
 fun htmlParse(v: JVal?): String {
     val html = (v as? JVal.Str)?.value ?: throw IllegalArgumentException("HTML non textuel")
@@ -252,10 +234,9 @@ fun htmlParse(v: JVal?): String {
 }
 
 /**
- * `place2time` : tranche `G == place` dans `listeHeures`, `L` = `08h00` strict
- * (2 chiffres, `h` minuscule). `place > taille` → modulo `taille - 1` (collisions
- * assumées, comme côté TS). Absent/illisible → `IllegalStateException` (le TS
- * jette une `Error` nue, reprise en `DataError` par l'appelant).
+ * Tranche `G == place` dans `listeHeures` (`L` = `08h00`). `place > taille` →
+ * modulo `taille - 1` (collisions assumées, comme en TS). Absent/illisible →
+ * `IllegalStateException`, reprise en `DataError` par l'appelant.
  */
 fun place2time(heures: JVal?, place: Double): Pair<Int, Int> {
     val list = (heures as? JVal.Arr)?.items ?: throw IllegalStateException("Could not find starting time for place $place")
@@ -269,27 +250,24 @@ fun place2time(heures: JVal?, place: Double): Pair<Int, Int> {
     return Pair(m.groupValues[1].toInt(), m.groupValues[2].toInt())
 }
 
-/** `JJ/MM/AAAA` (champs locaux, zero-padded) pour les bornes `PagePresence`. */
 fun frDate(d: LocalDateTime): String =
     "${d.dayOfMonth.toString().padStart(2, '0')}/${d.monthValue.toString().padStart(2, '0')}/${d.year}"
 
-/** `JJ/MM/AAAA HH:MM:SS` pour les mêmes bornes. */
 fun frDateTime(d: LocalDateTime): String =
     "${frDate(d)} ${d.hour.toString().padStart(2, '0')}:${d.minute.toString().padStart(2, '0')}:${d.second.toString().padStart(2, '0')}"
 
 /**
- * Marcheur de JSON (`Resolver.call`) : `converter` appliqué au bout du chemin,
- * `default` court-circuite le reste, `strict` (défaut vrai) jette
- * `ParsingError` — l'erreur du convertisseur est RÉEMBALLÉE sauf si déjà
- * `ParsingError`.
+ * Marcheur de JSON (`Resolver.call`) : `converter` au bout du chemin, `default`
+ * court-circuite, `strict` jette `ParsingError` (l'erreur du convertisseur est
+ * RÉEMBALLÉE sauf si déjà `ParsingError`).
  */
 class Resolver(private val root: JVal?) {
     fun <R> call(converter: (JVal?) -> R, path: List<Any>, opts: ResolveOpts<R>? = null): R {
         val strict = opts?.strict ?: true
         var current: JVal? = root
         for (p in path) {
-            // `p in Object(...)` côté TS : parent null OU clé absente = arrêt
-            // (une valeur `null` PRÉSENTE n'est pas un arrêt : le convertisseur la voit).
+            // Parent null OU clé absente = arrêt ; une valeur `null` PRÉSENTE ne
+            // l'est pas : le convertisseur la voit.
             val missing = current == null || when {
                 p is String && current is JVal.Obj -> !current.fields.containsKey(p)
                 p is Int && current is JVal.Arr -> p < 0 || p >= current.items.size
@@ -329,8 +307,7 @@ data class ResolveOpts<R>(val default: R? = null, val hasDefault: Boolean = fals
 }
 
 /**
- * Base des objets PRONOTE (`PronoteObject`) : `r()` = `call` raccourci.
- * (`toDict` et `Util.get` ne sont pas portés : aucun lecteur ne les utilise.)
+ * Base des objets PRONOTE : `r()` = `call` raccourci.
  */
 abstract class PronoteObject(json: JVal?) {
     protected val resolver = Resolver(json)

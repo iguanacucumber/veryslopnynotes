@@ -1,16 +1,11 @@
-// #426 : la tâche Gradle `buildWebUi` (android/app/build.gradle.kts) décide
-// ce que l'APK embarque comme interface web. Ses ENTRÉES doivent couvrir tout
-// ce qui change le bundle produit — sinon Gradle dit « UP-TO-DATE » et
-// l'APK part avec un bundle PÉRIMÉ.
+// La tâche Gradle `buildWebUi` (android/app/build.gradle.kts) décide ce que l'APK
+// embarque : ses ENTRÉES doivent couvrir tout ce qui change le bundle, sinon
+// Gradle dit « UP-TO-DATE » et l'APK part avec un bundle PÉRIMÉ. `bun.lock` en
+// particulier : une dépendance transitive change le lock sans `package.json`.
 //
-// Le cas manquant : `bun.lock`. Une mise à jour de dépendance TRANSITIVE
-// change le lockfile SANS toucher `package.json` : le build disait
-// « UP-TO-DATE », l'APK embarquait l'ancien bundle, différent de celui que
-// `make check` avait construit et testé.
-//
-// Test d'ARCHITECTURE (rapide, sans outillage) : la déclaration elle-même.
-// Le comportement — « le bundle suit le lockfile » — est éprouvé par le VRAI
-// Gradle dans `tests/unit/gradle-web-ui.test.ts`.
+// Test d'ARCHITECTURE sur la déclaration ; le comportement est éprouvé par le
+// VRAI Gradle dans `gradle-web-ui.test.ts`, à côté (il exige JDK + SDK, il n'a
+// rien à faire dans la suite unitaire).
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -22,8 +17,8 @@ const ROOT = join(import.meta.dir, "..", "..");
 const SRC = codeOnly(readFileSync(join(ROOT, "android", "app", "build.gradle.kts"), "utf8"));
 
 /**
- * Corps d'une tâche enregistrée (`tasks.register<Exec>("nom") { … }`).
- * Accolades comptées : le corps peut contenir des `{}` (configurations).
+ * Corps d'une tâche enregistrée. Accolades comptées : le corps peut contenir
+ * des `{}` (configurations).
  */
 function taskBlock(name: string): string {
   const start = SRC.indexOf(`tasks.register<Exec>("${name}")`);
@@ -37,8 +32,8 @@ function taskBlock(name: string): string {
 }
 
 /**
- * Chemins déclarés en ENTRÉE de la tâche, relatifs à la racine du dépôt
- * (`rootProject.projectDir.parentFile` = la racine, cf. le gradle).
+ * Chemins déclarés en ENTRÉE, relatifs à la racine du dépôt
+ * (`rootProject.projectDir.parentFile`, cf. le gradle).
  */
 function declaredInputs(block: string): string[] {
   const re = /inputs\.(?:file|dir)\((?:rootProject\.projectDir\.parentFile\.)?resolve\("([^"]+)"\)/g;
@@ -50,11 +45,8 @@ describe("buildWebUi : les entrées de la tâche couvrent le bundle (#426)", () 
     const block = taskBlock("buildWebUi");
     expect(block).not.toBe("");
     const inputs = declaredInputs(block);
-    // Le lockfile textuel de Bun : `bun.lockb` (ancien format binaire) n'est
-    // plus le fichier du dépôt — le pointer serait un build cassé.
+    // `bun.lockb` (ancien format binaire) n'est plus le fichier du dépôt.
     expect(block).not.toContain("bun.lockb");
-    // Les entrées d'avant, plus le lockfile : une mise à jour transitive ne
-    // touche QUE `bun.lock`, il faut donc qu'il soit là.
     for (const attendu of ["web/src", "web/vite.config.ts", "package.json", "bun.lock"]) {
       expect(inputs).toContain(attendu);
     }
@@ -69,8 +61,8 @@ describe("buildWebUi : les entrées de la tâche couvrent le bundle (#426)", () 
   });
 
   test("preBuild dépend toujours de buildWebUi (pas de régression)", () => {
-    // L'APK ne peut pas être construit sans `web/index.html` : le bundle
-    // est produit par `preBuild`, pas par une étape optionnelle.
+    // L'APK ne peut pas être construit sans `web/index.html` : le bundle est
+    // produit par `preBuild`, pas par une étape optionnelle.
     expect(SRC).toMatch(/tasks\.named\("preBuild"\)\s*\{\s*dependsOn\(buildWebUi\)\s*\}/);
   });
 });

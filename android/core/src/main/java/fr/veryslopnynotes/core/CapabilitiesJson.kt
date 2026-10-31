@@ -3,24 +3,18 @@ package fr.veryslopnynotes.core
 import org.json.JSONObject
 
 /**
- * LECTURE JSON du contrat de capacités (#87, #413).
+ * LECTURE JSON du contrat de capacités.
  *
- * `org.json` est une API Android : ce fichier ne compile PAS hors Gradle
- * (le harnais de parité compile le modèle pur `Capabilities.kt` avec
- * `kotlinc` seul). D'où la séparation : le MODÈLE est testable partout, sa
- * lecture JSON reste côté Android.
+ * `org.json` est une API Android : ce fichier ne compile PAS hors Gradle, d'où
+ * la séparation avec le modèle pur `Capabilities.kt`.
  *
- * Règle (#413) : un contrat INVALIDE vaut « rien n'est affirmé » (`null`),
- * jamais une liste d'onglets vide — une liste vide signifie « tous les
- * onglets désactivés » et blackouterait la navigation. Mêmes conditions que
- * `CapabilityProbe.fromProbe` : compte vide/trop long, onglet inconnu ou
- * doublon, trop d'onglets, date illisible.
+ * Un contrat INVALIDE vaut `null`, jamais une liste d'onglets vide (qui
+ * blackouterait la navigation). Mêmes conditions que `CapabilityProbe.fromProbe`.
  */
 object CapabilitiesJson {
     /**
-     * Payload `{"capabilities": {...}}` → capacités. `capabilities: null`
-     * (non déterminées), liste illisible, onglet inconnu ou doublon → null
-     * (« rien n'est affirmé »), jamais une liste inventée.
+     * Payload `{"capabilities": {...}}` → capacités. Tout cas illisible vaut
+     * `null` (« rien n'est affirmé »), jamais une liste inventée.
      */
     fun parse(body: String?): Capabilities? {
         if (body.isNullOrBlank()) return null
@@ -39,8 +33,7 @@ object CapabilitiesJson {
                 tabs.add(t)
             }
             val fetchedAt = c.optString("fetchedAt", "").trim()
-            // Une date illisible n'affirme AUCUNE capacité (même verdict que
-            // `CapabilityProbe.fromProbe` et que le contrat TS `isCapabilities`).
+            // Une date illisible n'affirme AUCUNE capacité (même verdict que le probe).
             if (fetchedAt.isEmpty() || isoMillis(fetchedAt) == null) return null
             Capabilities(accountId = accountId, tabs = tabs, fetchedAt = fetchedAt)
         } catch (_: Exception) {

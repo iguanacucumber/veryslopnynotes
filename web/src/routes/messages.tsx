@@ -38,8 +38,8 @@ function reportable(error: unknown, notify: (message: string, kind?: "info" | "e
 
 export default function MessagesRoute() {
   const { notify, refreshTick } = useApp();
-  // Entrée d’historique sentinelle : le fil et la rédaction sont des MODES de
-  // /messages, pas des routes. Le retour système revient donc à la liste.
+  // Fil et rédaction sont des MODES de /messages, pas des routes : le retour
+  // système revient donc à la liste.
   const sentinel = useRef(0);
   const [mode, setMode] = useState<Mode>("list");
   const [threads, setThreads] = useState<Discussion[]>([]);
@@ -61,17 +61,13 @@ export default function MessagesRoute() {
   const [recipientsError, setRecipientsError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  // Séquences de chargement : une réponse PÉRIMÉE est ignorée. Sans elles,
-  // ouvrir le fil A, revenir à la liste et ouvrir le fil B pouvait afficher
-  // les messages de A sous l'en-tête de B (A répondait après B) — même motif
-  // que `features/revisions/RevisionSheets.tsx` (#501).
+  // Une réponse PÉRIMÉE est ignorée : sinon les messages du fil A s'affichent
+  // sous l'en-tête du fil B (A répond après B).
   const threadsSeq = useRef(createSeq());
   const threadSeq = useRef(createSeq());
 
-  // #524 : la réponse d'un envoi ne peut écrire que dans le fil OUVERT au
-  // moment de l'envoi. La garde ignore les réponses PÉRIMÉES (le fil a
-  // changé entre-temps) : sinon les messages de A s'affichaient sous
-  // l'en-tête de B et le brouillon tapé dans B disparaissait.
+  // La réponse d'un envoi n'écrit que dans le fil OUVERT à l'envoi : une
+  // réponse périmée ne doit ni changer de fil ni effacer le brouillon.
   const replyGuard = useRef(createReplyGuard());
   const threadRefresh = useRef(refreshTick);
 
@@ -106,21 +102,16 @@ export default function MessagesRoute() {
     setThreadError(null);
     try {
       const result = await bridge.thread(discussion.id);
-      // Réponse PÉRIMÉE : un autre fil a été ouvert entre-temps (ou l'écran a
-      // été refermé). On l'ignore — sinon les messages de l'ancien fil
-      // s'affichaient sous l'en-tête du nouveau.
+      // Réponse PÉRIMÉE : un autre fil a été ouvert entre-temps.
       if (!threadSeq.current.isCurrent(seq)) return;
       if (result.error) setThreadError(result.error);
       const parsed = parseMessages(result.payload);
       setMessages(parsed);
-      // #537 : un payload ILLISIBLE n'est pas un fil vide : c'est une erreur
-      // (« la donnée n'a pas pu être lue »), jamais « Ce fil est vide ».
+      // Un payload ILLISIBLE n'est pas un fil vide : c'est une erreur.
       if (!result.error && !isMessagesPayloadReadable(result.payload)) {
         setThreadError("Fil illisible : la donnée n’a pas pu être lue.");
       }
-      // #476 : les participants du fil arrivent AVEC ses messages (la liste ne
-      // les télécharge plus) : on les garde pour l'en-tête du fil et pour la
-      // ligne de la liste.
+      // Les participants arrivent AVEC les messages du fil.
       const participants = parseParticipants(result.payload);
       if (participants.length > 0) {
         setOpen((current) =>
@@ -145,9 +136,8 @@ export default function MessagesRoute() {
     }
   }, []);
 
-  // Le geste global « Actualiser » recharge aussi le fil OUVERT : son bouton
-  // local a disparu (#564), sans quoi le fil serait le seul écran que le
-  // geste global ne rafraîchit pas.
+  // Le geste global « Actualiser » recharge aussi le fil OUVERT, sinon il
+  // serait le seul écran que le geste global ne rafraîchit pas.
   useEffect(() => {
     if (threadRefresh.current === refreshTick) return;
     threadRefresh.current = refreshTick;
@@ -167,8 +157,6 @@ export default function MessagesRoute() {
     setThreadError(null);
   }, []);
 
-  /** Une entrée d’historique de plus, même URL : le retour système la consomme
-   *  et l’écran reste sur /messages (le fil n’est pas une route). */
   const pushSentinel = useCallback(() => {
     try {
       window.history.pushState({ vsn: "messages-mode" }, "", window.location.href);
@@ -181,8 +169,7 @@ export default function MessagesRoute() {
   const openThread = useCallback(
     (discussion: Discussion) => {
       pushSentinel();
-      // Le fil affiché change : l'envoi en cours (s'il y en a un) ne vaut plus
-      // rien pour cet écran.
+      // Le fil affiché change : l'envoi en cours ne vaut plus rien ici.
       replyGuard.current.setDisplayedThread(discussion.id);
       setSending(false);
       setOpen(discussion);
@@ -202,7 +189,7 @@ export default function MessagesRoute() {
   }, [resetToList]);
 
   // Le retour système (PopState) consomme la sentinelle : on retombe sur la
-  // liste, sans quitter l’onglet. Le bouton Retour de l’écran fait de même.
+  // liste, sans quitter l’onglet.
   useEffect(() => {
     if (mode === "list") return;
     const onPop = () => {
@@ -248,24 +235,21 @@ export default function MessagesRoute() {
         notify(result.error || "Réponse impossible.", "error");
         return;
       }
-      // #524 : la réponse n'écrit que dans le fil ouvert à l'envoi. Fil
-      // changé (ou écran refermé) → réponse PÉRIMÉE : elle ne recharge AUCUN
-      // fil et n'efface AUCUN brouillon.
+      // La réponse n'écrit que dans le fil ouvert à l'envoi : fil changé ou
+      // écran refermé = PÉRIMÉE, elle ne recharge aucun fil, n'efface aucun
+      // brouillon.
       const target = replyGuard.current.resolveThreadId(token);
       notify("Message envoyé.");
       if (target !== null) {
-        // Le brouillon n'est effacé que s'il est ENCORE celui envoyé : un
-        // brouillon tapé pendant l'attente est conservé.
+        // Le brouillon n'est effacé que s'il est ENCORE celui envoyé.
         setDraft((current) => draftAfterReply(current, sentDraft));
         await loadThread(open);
       }
-      // La LISTE, elle, n'est pas un fil : elle peut se rafraîchir.
       await loadThreads();
     } catch (e) {
       reportable(e, notify);
     } finally {
-      // Un envoi plus récent (ou un fil changé) a pris la main : on ne touche
-      // plus à l'état d'envoi, qui n'est plus le nôtre.
+      // Un envoi plus récent a pris la main : l'état d'envoi n'est plus le nôtre.
       if (replyGuard.current.isCurrent(token)) setSending(false);
     }
   }, [draft, loadThread, loadThreads, notify, open]);

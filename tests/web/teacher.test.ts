@@ -333,7 +333,7 @@ describe("écran Prof — câblage (#633)", () => {
   });
 
   test("après une réponse, le focus va au dernier tour du professeur", () => {
-    expect(view).toContain("answerRef.current.focus()");
+    expect(view).toContain("answerRef.current.focus({ preventScroll: true })");
     expect(view).toContain("focusTick");
     expect(view).toContain("tabIndex={message.role === \"teacher\" ? -1 : undefined}");
   });

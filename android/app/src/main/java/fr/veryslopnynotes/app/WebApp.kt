@@ -18,24 +18,17 @@ import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.net.URLDecoder
 
-// Coquille WebView locale (#333) : l'UI React est embarquée dans
-// `assets/web/`, servie sous une origine https interceptée (pas de `file://`,
-// donc pas d'accès au disque ni aux autres origines). Aucun réseau : toute
-// requête hors de cette origine est refusée, et le pont natif est le seul
-// accès aux données (`VsnBridge`). CSP de `index.html` : `connect-src 'none'`.
-//
-// `NativeWebShell` est l'unique interface de l'activité (ADR-004) : plus de
-// chemin Compose.
+// Coquille WebView locale (ADR-004) : l'UI React est embarquée dans
+// `assets/web/`, servie sous une origine https interceptée (pas de `file://`).
+// Aucun réseau : toute requête hors de cette origine est refusée (I1).
 
 /** Origine servie par `shouldInterceptRequest` ; jamais résolue par le réseau. */
 const val WEB_ASSET_HOST = "appassets.androidplatform.net"
 
 private const val WEB_INDEX = "web/index.html"
 
-// Les routes hash connues vivent dans `WebRouteState.kt` (#400) : ce fichier
-// est PUR (il compile hors Gradle, donc le harnais de parité le rejoue), et
-// la liste n'a ainsi qu'UN endroit de vérité — la WebView, l'activité et les
-// tests lisent la même.
+// Les routes hash connues vivent dans `WebRouteState.kt` : un seul endroit de
+// vérité, lu par la WebView, l'activité et les tests.
 
 @SuppressLint("SetJavaScriptEnabled")
 class NativeWebShell(private val activity: ComponentActivity) {
@@ -45,10 +38,8 @@ class NativeWebShell(private val activity: ComponentActivity) {
     private var pageLoaded = false
 
     private val webView: WebView = WebView(activity).apply {
-        // #400 : identifiant STABLE (`res/values/ids.xml`). L'état d'une vue
-        // est indexé par son id : un id régénéré à chaque lancement ne
-        // survivrait pas à la recréation de l'activité, et l'état de la
-        // WebView ne serait jamais retrouvé.
+        // Identifiant STABLE (`res/values/ids.xml`) : l'état d'une vue est
+        // indexé par son id, un id régénéré ne survivrait pas à la recréation.
         id = R.id.web_view
         setBackgroundColor(splashColor)
         alpha = 0f // fond natif (= splash) jusqu'au premier rendu
@@ -90,7 +81,6 @@ class NativeWebShell(private val activity: ComponentActivity) {
 
     val view: WebView get() = webView
 
-    /** Charge l'index, éventuellement sur une route de deep link. */
     fun open(path: String?) {
         val safe = if (path != null && path in WEB_ROUTES) path else "/"
         webView.loadUrl(urlFor(safe))
@@ -124,7 +114,6 @@ class NativeWebShell(private val activity: ComponentActivity) {
         return if (path == "/") base else "$base#$path"
     }
 
-    /** Premier rendu : le fond natif s'efface, le JS est prévenu. */
     private fun onFirstPaint() {
         if (pageLoaded) return
         pageLoaded = true

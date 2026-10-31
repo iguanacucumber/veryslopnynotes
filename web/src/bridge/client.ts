@@ -83,16 +83,8 @@ export function isNative(): boolean {
   return typeof window.VSN?.call === "function";
 }
 
-/**
- * Pont factice : DÉVELOPPEMENT SEULEMENT (#423).
- *
- * `import.meta.env.DEV` vaut `false` dans un build de production : la
- * branche est morte, le module factice n'entre pas dans le graphe du build
- * (donc pas dans le bundle livré à l'APK) et l'appel échoue BRUYAMMENT.
- * Avant, un pont absent servait une école fictive complète (faux profil,
- * fausses notes) et `session.restore` répondait « restored » : l'écran
- * d'appairage n'apparaissait jamais.
- */
+/** Pont factice en développement SEULEMENT : hors DEV, la branche est morte
+ *  et un pont absent échoue bruyamment, jamais de fausse école. */
 async function devCall<T>(method: string, params: unknown): Promise<T> {
   if (import.meta.env.DEV) {
     const { mockCall } = await import("./mock");
@@ -101,11 +93,8 @@ async function devCall<T>(method: string, params: unknown): Promise<T> {
   throw new BridgeCallError("unavailable", "pont natif indisponible");
 }
 
-/**
- * Abandon : le natif est prévenu que l'appel est lâché, sa réponse tardive
- * sera ignorée. Signal best-effort et SANS promesse : une promesse oubliée
- * deviendrait un rejet non géré si le pont ne répondait jamais.
- */
+/** Prévient le natif qu'un appel est lâché. Best-effort, sans promesse : une
+ *  promesse oubliée deviendrait un rejet non géré. */
 function abort(requestId: string): void {
   try {
     window.VSN!.call(`c${++sequence}`, "bridge.cancel", JSON.stringify({ requestId }));
@@ -119,22 +108,13 @@ export function pendingCount(): number {
   return pending.size;
 }
 
-/**
- * Méthodes qui partent vers l'établissement : les LECTURES (#393).
- *
- * Le natif les sérialise (une file locale) ; le JS aussi, sinon la N-ième
- * lecture expire avant son tour (« Lecture indisponible. »). La liste est
- * fermée : une méthode de lecture oubliée ici revient au bug d'origine.
- */
+/** Méthodes qui partent vers l'établissement : le natif les sérialise, le JS
+ *  aussi (sinon la N-ième expire avant son tour). Liste fermée : une lecture
+ *  oubliée ici ramène le bug. */
 const READ_METHODS = new Set<BridgeMethod>(["resources.load", "resources.sync"]);
 
-/**
- * File des lectures : `MAX_PARALLEL_READS` en vol au plus (#393).
- *
- * Le minuteur JS part AU DÉPART DANS LA FILE (pas à l'appel) : une lecture
- * en attente n'use pas son budget avant d'être partie. Un rejet ne brise pas la
- * file : le suivant part quand même.
- */
+/** `MAX_PARALLEL_READS` en vol au plus. Le minuteur JS part au DÉPART DANS LA
+ *  FILE, pas à l'appel ; un rejet ne brise pas la file. */
 let readSlots = MAX_PARALLEL_READS;
 const readWaiters: Array<() => void> = [];
 
@@ -150,7 +130,7 @@ function waitReadSlot(): Promise<void> {
   return new Promise<void>((resolve) => readWaiters.push(resolve));
 }
 
-/** Rend un emplacement : le premier en attente le récupère. */
+/** Rend un emplacement. */
 function releaseReadSlot(): void {
   const next = readWaiters.shift();
   if (next) next();
@@ -162,7 +142,6 @@ function inReadLane<T>(run: () => Promise<T>): Promise<T> {
   return waitReadSlot().then(() => run().finally(releaseReadSlot));
 }
 
-/** Appel natif : la promesse JS et son minuteur. */
 function callNative<T>(
   method: BridgeMethod,
   params: unknown,
@@ -170,17 +149,16 @@ function callNative<T>(
 ): Promise<T> {
   installCallbacks();
   const requestId = `r${++sequence}`;
-  // Le JS attend TOUJOURS plus longtemps que le plafond natif de la méthode
-  // (#371) : sinon il abandonne avant la réponse native et la perd.
+  // Toujours plus que le plafond natif, sinon la réponse native est perdue.
   const budget = timeoutMs ?? BRIDGE_TIMEOUTS[method] ?? DEFAULT_TIMEOUT_MS;
   return new Promise<T>((resolve, reject) => {
     // 0 = pas de timeout : le scan QR reste ouvert tant que l'utilisateur
-    // cadre le code, et le résultat natif doit encore être accepté au retour.
+    // cadre le code.
     const timer =
       budget > 0
         ? window.setTimeout(() => {
-            // Abandon propre : l'entrée `pending` est libérée (la réponse
-            // tardive sera ignorée) et le natif est prévenu.
+            // Libère `pending` (la réponse tardive sera ignorée) et prévient
+            // le natif.
             pending.delete(requestId);
             abort(requestId);
             reject(new BridgeCallError("unavailable", "le téléphone n'a pas répondu"));
@@ -201,13 +179,11 @@ function callNative<T>(
   });
 }
 
-/** Appel unique vers Kotlin. En développement (`bun run dev:web`), le pont
- *  factice répond avec des données de démonstration ; en production, il
- *  n'existe pas : un pont absent est un ÉCHEC, jamais des données fictives. */
+/** Appel unique vers Kotlin. En dev, le pont factice répond ; en production
+ *  un pont absent est un ÉCHEC, jamais des données fictives. */
 export function call<T>(method: BridgeMethod, params: unknown = {}, timeoutMs?: number): Promise<T> {
   if (!isNative()) return devCall<T>(method, params);
-  // Les lectures font la QUEUE (une seule en vol) : le délai natif ne couvre
-  // que le travail, pas l'attente devant la file locale (#393).
+  // Une seule lecture en vol : le délai natif ne couvre pas l'attente en file.
   if (READ_METHODS.has(method)) return inReadLane(() => callNative<T>(method, params, timeoutMs));
   return callNative<T>(method, params, timeoutMs);
 }
@@ -223,20 +199,18 @@ export const bridge = {
   accounts: () => call<{ count: number }>("session.accounts"),
   scanQr: () => call<{ qr: PairParams["qr"] | null; cancelled: boolean }>("pairing.scanQr", {}, 0),
   pair: (params: PairParams) => call<PairResult>("pairing.pair", params),
-  // Connexion à l'établissement de démonstration : ni QR, ni PIN — le native
-  // ouvre la session et rend le même contrat que `pair`.
+  // Démo : ni QR ni PIN, même contrat que `pair`.
   pairDemo: () => call<PairResult>("pairing.pairDemo"),
   cancelPairing: () => call<{ ok: true }>("pairing.cancel"),
-  // #477 : le cache est indexé par (ressource, requête) : l'entrée servie est
-  // celle de la requête AFFICHÉE.
+  // Cache indexé par (ressource, requête) : l'entrée servie est celle de la
+  // requête AFFICHÉE.
   cached: (key: ResourceParams["key"], query = "") => call<ResourceResult>("resources.cached", { key, query }),
   load: (params: ResourceParams) => call<ResourceResult>("resources.load", params),
   invalidate: (key: ResourceParams["key"]) => call<{ ok: true }>("resources.invalidate", { key }),
   sync: () => call<ResourceResult>("resources.sync"),
   capabilities: () => call<{ tabs: string[] }>("capabilities.load"),
   refreshCapabilities: () => call<{ tabs: string[] }>("capabilities.refresh"),
-  // #475 : le corps d'une actualité arrive À LA DEMANDE (au dépliage) : la
-  // liste ne le télécharge plus.
+  // Corps d'une actualité chargé À LA DEMANDE (au dépliage).
   newsItem: (id: string) => call<{ body: string }>("news.item", { id }),
   toggleAssignment: (id: string, done: boolean, weekStart: string) =>
     call<{ ok: boolean; error?: string }>("assignments.toggle", { id, done, weekStart }),
@@ -309,14 +283,14 @@ export const bridge = {
       contextChars?: number;
       contextOmitted?: number;
     }>("llm.generateRevision", { assignmentId, weekStart }),
-  /** Professeur IA contextualisé (#633) : un tour borné, sources citées. */
+  /** Professeur IA contextualisé : un tour borné, sources citées. */
   teacherTurn: (params: TeacherTurnParams) =>
     call<TeacherTurnResult>("llm.teacherTurn", params),
   teacherThread: () => call<TeacherThread>("teacher.load"),
   saveTeacherThread: (thread: TeacherThread) =>
     call<TeacherSaveResult>("teacher.save", thread),
   deleteTeacherThread: () => call<TeacherSaveResult>("teacher.delete"),
-  /** Exercices du manuel (#632) : proposition locale, sans appel payant. */
+  /** Exercices du manuel : proposition locale, sans appel payant. */
   proposeExercises: (params: ExerciseProposeParams) =>
     call<ExerciseProposal>("exercises.propose", params),
   /** Aide progressive sur un exercice ; `photoSource` capture la réponse. */

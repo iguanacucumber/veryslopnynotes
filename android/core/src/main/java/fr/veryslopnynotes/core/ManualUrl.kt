@@ -1,14 +1,11 @@
 package fr.veryslopnynotes.core
 
-// Adresse du manuel de l'élève (saisie UNE fois dans l'app, réutilisée par
-// l'assistant devoirs et les fiches de révision).
+// Adresse du manuel de l'élève (saisie UNE fois, réutilisée par l'assistant
+// devoirs et les fiches de révision).
 //
-// L'app ne télécharge JAMAIS cette page elle-même : elle la confie au scraper
-// facultatif (`POST /v1/manuals/scrape`). Le serveur refait donc sa propre
-// garde SSRF, et cette validation n'est qu'un premier filtre lisible : schéma
-// http(s), hôte présent, pas d'identifiants, pas d'espace ni de caractère de
-// contrôle. Un nom qui résout vers une IP privée est refusé par le SERVEUR
-// (I8) — inutile de dupliquer ici une résolution DNS que l'app ne fait pas.
+// L'app ne télécharge JAMAIS cette page : elle la confie au scraper facultatif,
+// qui refait sa propre garde SSRF (I8). Cette validation n'est qu'un premier
+// filtre lisible : schéma http(s), hôte présent, pas d'identifiants ni de contrôle.
 sealed interface ManualUrlResult {
     data class Ok(val url: String) : ManualUrlResult
     data class Rejected(val message: String) : ManualUrlResult
@@ -37,15 +34,13 @@ object ManualUrl {
         if (scheme != "http" && scheme != "https") {
             return rejected("Schéma refusé : utilisez http ou https.")
         }
-        // Autorité = jusqu'au premier séparateur de chemin / paramètres / ancre.
         val afterScheme = input.substring(sep + 3)
         val authority = afterScheme.takeWhile { it != '/' && it != '?' && it != '#' }
         if (authority.isEmpty()) {
             return rejected("Domaine manquant après le schéma.")
         }
         if (authority.contains('@')) {
-            // Le scraper ne s'authentifie pas : des identifiants dans l'URL
-            // laisseraient croire le contraire (et seraient stockés pour rien).
+            // Le scraper ne s'authentifie pas : des identifiants seraient stockés pour rien.
             return rejected("Identifiants dans l'adresse refusés : le scraper ne s'authentifie pas.")
         }
         if (authority.contains('\\')) {

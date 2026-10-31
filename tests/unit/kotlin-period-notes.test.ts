@@ -1,12 +1,6 @@
 // Snapshot de période : notes + moyennes + moyenne générale en UN SEUL POST.
-//
-// Le VRAI `Period.notes()` (et les lectures strictes `grades()` /
-// `overallAverage()`) sont EXÉCUTÉS sur la source de production, avec un client
-// dont l'envoi est un stub. Pas de miroir : une ligne tordue doit vraiment être
-// sautée, et l'enveloppe vraiment rester stricte.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT (jamais un faux vert) ; un
-// échec de compilation, lui, est un défaut (le test rougit).
+// Le vrai `Period.notes()` et les lectures strictes tournent sur la source de
+// production avec un client stub. Outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
@@ -41,8 +35,6 @@ async function run<T>(op: string): Promise<T> {
 describe("snapshot de période (Period.notes)", () => {
   test.skipIf(skip)("notes + moyennes + moyenne générale = UN SEUL DernieresNotes", async () => {
     const r = await run<NotesResult>("onePost");
-    // Avant : la période sélectionnée était lue 3 fois au total
-    // (`grades` + `averages` + `overallAverage`).
     expect(r.posts).toBe(1);
     expect(r.grades).toBe(2);
     expect(r.gradeIds).toEqual(["g1", "g2"]);

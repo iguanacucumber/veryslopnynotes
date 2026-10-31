@@ -1,11 +1,7 @@
-// CVE-2026-111497 (node2shell / HTTP2Shell) : le décodeur Brotli embarqué par
-// le runtime est vulnérable (RCE) avant Bun 1.4.4. Le correctif est un RUNTIME,
-// pas un paquet npm : une base Docker ou une CI restée en 1.4.3 rejoue la
-// vulnérabilité même si `bun audit` est vert (il ne voit que les paquets npm).
-//
-// Ce test verrouille le plancher et la COHÉRENCE des trois endroits qui
-// fixent le runtime : image serveur, CI, types. Un downgrade — ou une CI qui
-// ne teste plus la version déployée — échoue ici, visiblement, dans la PR.
+// CVE-2026-111497 (node2shell / HTTP2Shell) : le décodeur Brotli du runtime est
+// vulnérable (RCE) avant Bun 1.4.4. Le correctif est un RUNTIME, pas un paquet
+// npm : `bun audit` ne le voit pas. Ce test verrouille le plancher et la
+// cohérence des trois endroits qui fixent le runtime (image, CI, types).
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -19,7 +15,7 @@ function versionParts(version: string): number[] {
   return parts;
 }
 
-/** `version >= plancher`, composant par composant (pas de dépendance semver). */
+/** `version >= plancher`, composant par composant (sans dépendance semver). */
 function auMoins(version: string, plancher: string): boolean {
   const a = versionParts(version);
   const b = versionParts(plancher);

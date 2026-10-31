@@ -2,9 +2,6 @@ package fr.veryslopnynotes.pronote
 
 import java.time.LocalDateTime
 
-// Vie scolaire : absence, retard et punition (`dataClasses.js`).
-
-/** Absence (`hours`/`justification` absents = `null`, `days` défaut `0`). */
 class Absence(json: JVal?) : PronoteObject(json) {
     val id: String = r(::strOf, listOf("N"))
     val fromDate: LocalDateTime = r(::datetimeParse, listOf("dateDebut", "V"))
@@ -15,7 +12,6 @@ class Absence(json: JVal?) : PronoteObject(json) {
     val reasons: List<String?> = r(::rawList, listOf("listeMotifs", "V"), ResolveOpts.withDefault(listOf<String?>()))
 }
 
-/** Retard (mêmes défauts que `Absence`, `minutes` défaut `0`). */
 class Delay(json: JVal?) : PronoteObject(json) {
     val id: String = r(::strOf, listOf("N"))
     val date: LocalDateTime = r(::datetimeParse, listOf("date", "V"))
@@ -26,11 +22,11 @@ class Delay(json: JVal?) : PronoteObject(json) {
 }
 
 /**
- * Punition (`during_lesson` = `!horsCours` ; `place2time` illisible = `DataError` ;
- * `schedule` vide sauf si `schedulable`).
+ * `during_lesson` = `!horsCours` ; `place2time` illisible = `DataError` ;
+ * `schedule` vide sauf si `schedulable`.
  */
 class Punishment(private val client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
-    /** Programmation (`placeExecution` absent = date seule ; tranche illisible = `DataError`). */
+    /** `placeExecution` absent = date seule ; tranche illisible = `DataError`. */
     class ScheduledPunishment(private val client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
         val id: String = r(::strOf, listOf("N"))
         val start: LocalDateTime = run {
@@ -81,6 +77,6 @@ class Punishment(private val client: PronoteClientLike, json: JVal?) : PronoteOb
                 items.map { ScheduledPunishment(client, it) }
             }, listOf("programmation", "V"))
         } else emptyList()
-    /** Durée de la sanction, en MINUTES (`duree` Pronote, comme le retard). */
+    /** Durée en MINUTES (`duree` Pronote, comme le retard). */
     val duration: Double? = r(::optNum, listOf("duree"), ResolveOpts.lenient())
 }

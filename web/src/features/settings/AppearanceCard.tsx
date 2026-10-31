@@ -4,10 +4,6 @@ import { Card, Divider } from "../../ui/components";
 import { SchemePicker } from "./SchemePicker";
 import { THEME_OPTIONS, themeLabel } from "./model";
 
-/**
- * Carte Apparence : thème et palette vivent dans `AppContext`, donc rien à
- * charger ni à valider ici — la carte ne fait que les afficher.
- */
 export function AppearanceCard() {
   const { theme, setTheme, scheme, setScheme } = useApp();
   return (

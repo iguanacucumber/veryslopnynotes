@@ -1,21 +1,8 @@
-// #395 : le pont ne doit JAMAIS dire « enregistré » quand rien n'est écrit.
-//
-// Le défaut que ce test traque : `VsnBridge.saveSubject` ne validait que le
-// NOM de la matière. La couleur, l'emoji et le libellé arrivaient bruts
-// (jusqu'à 256 Ko), et le dépôt (`SubjectPrefsRepository.upsert`) ABANDONNAIT
-// l'écriture quand sa règle n'était pas satisfaite. Le pont répondait
-// pourtant `{"ok":true}` : l'interface affichait « Matière enregistrée. » et
-// la saisie disparaissait — une perte de données SILENCIEUSE.
-//
-// Ce test ne Miroite pas la logique : il COMPILE les VRAIES sources de
-// production (`data/SubjectPrefRules.kt` et `app/SubjectPrefMessages.kt` —
-// fichiers purs, sans `org.json` ni `android.*`) et les pilote via
-// `agents/runtime/kotlin-parity/SubjectPrefParityMain.kt`. Les assertions
-// portent donc sur du code exécuté. Le câblage du pont (l'ordre des réponses,
-// l'appel au dépôt) est vérifié sur la source.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Le pont ne doit JAMAIS dire « enregistré » quand rien n'est écrit : couleur,
+// emoji et libellé sont validés avant écriture, jamais tronqués.
+// Les VRAIES sources (`SubjectPrefRules.kt`, `SubjectPrefMessages.kt`) sont
+// compilées et pilotées ; le câblage du pont est vérifié sur la source.
+// Outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -112,8 +99,7 @@ describe("pont : une matière hors contrat est refusée, pas enregistrée (#395)
   });
 
   test.skipIf(skip)("les entrées sont BORNÉES : rien de 256 Ko ne passe", async () => {
-    // Le pont est une frontière de confiance (I10) : une couleur, un emoji ou
-    // un libellé démesurés sont REFUSÉS, jamais tronqués en silence.
+    // Frontière de confiance (I10) : couleur, emoji ou libellé démesurés sont REFUSÉS.
     const huge = "x".repeat(256 * 1024);
     expect((await read({ subject: "Maths", color: huge })).field).toBe("COLOR");
     expect((await read({ subject: "Maths", label: huge })).field).toBe("LABEL");
@@ -167,10 +153,8 @@ describe("câblage : le pont et le dépôt partagent la MÊME règle (#395)", ()
   const save = bridgeMethod(bridge, "saveSubject");
 
   test("le dépôt valide par les règles partagées", () => {
-    // `isValid` s'appuie sur `SubjectPrefRules.invalidField` : une seule
-    // vérité, donc le dépôt ne peut pas valider moins que le pont.
+    // `isValid` s'appuie sur `SubjectPrefRules.invalidField` : une seule vérité.
     expect(prefs).toContain("SubjectPrefRules.invalidField(");
-    // Les bornes ne sont PLUS dupliquées dans le dépôt.
     expect(prefs).not.toContain("COLOR_RE");
   });
 
@@ -194,16 +178,13 @@ describe("câblage : le pont et le dépôt partagent la MÊME règle (#395)", ()
   });
 
   test("le pont ne dit JAMAIS « ok » quand le dépôt n'a rien écrit", () => {
-    // Le dépôt peut refuser (`INVALID`) : le pont répond alors `ok:false`,
-    // jamais « ok ». Le « ok » vient APRÈS le résultat de l'écriture.
+    // Le pont répond `ok:false` si le dépôt refuse : le « ok » vient APRÈS l'écriture.
     expect(save).toContain("SubjectPrefsWrite.INVALID");
     expect(save.indexOf('put("ok", true)')).toBeGreaterThan(save.indexOf("SubjectPrefsWrite.INVALID"));
   });
 
   test("le dépôt n'écrit RIEN quand la matière est hors contrat", () => {
-    // `upsert` valide AVANT d'écrire : un refus (`INVALID`) laisse le disque
-    // intact. C'est ce qui rendait la perte de données SILENCIEUSE (le pont
-    // répondait « ok », le dépôt n'écrivait rien).
+    // `upsert` valide AVANT d'écrire : un refus laisse le disque intact.
     const upsert = prefs.slice(prefs.indexOf("fun upsert("));
     const refus = upsert.indexOf("return SubjectPrefsWrite.INVALID");
     const ecriture = upsert.indexOf("write(");

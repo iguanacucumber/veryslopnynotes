@@ -1,6 +1,4 @@
-// Fixtures 100 % synthétiques pour la cantine (#81). Plats, allergènes et
-// soldes inventés : aucune donnée d'établissement, aucun secret, aucune URL.
-// Menu ci-dessous = forme synthétique minimale pour tester le mapper défensif.
+// 100 % synthétique : aucune donnée d'établissement, aucun secret, aucune URL.
 import type { CanteenBalance, CanteenMenu } from "../../../shared/contracts/models";
 
 export const syntheticCanteenAccountId = "acc-fake-1";
@@ -30,7 +28,6 @@ export const syntheticCanteenBalance: CanteenBalance = {
   updatedAt: "2026-10-05T07:00:00.000Z",
 };
 
-/** Payload /v1/menus conforme au contrat (menus + solde). */
 export const syntheticCanteenPayload = {
   menus: syntheticCanteenMenus,
   balance: syntheticCanteenBalance,

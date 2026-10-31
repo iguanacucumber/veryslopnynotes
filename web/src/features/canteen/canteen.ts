@@ -1,6 +1,5 @@
-// Menus de la cantine : payload -> jours + repas d'affichage.
-// Aucun HTML : les plats et allergènes sont des chaînes bornées, rendues en
-// texte. Les jetons du contrat sont traduits, jamais affichés bruts.
+// Menus de la cantine : payload -> jours + repas. Aucun HTML : plats et
+// allergènes sont des chaînes bornées rendues en texte, les jetons traduits.
 import { cleanText, frDateLong, frDay, isoDay, parseDate } from "../../lib/format";
 
 export const CANTEEN_MAX_DAYS = 14;
@@ -82,10 +81,9 @@ function dayKey(value: unknown): string | null {
   return date ? isoDay(date) : null;
 }
 
-/** Lit les menus du contrat (`menus`) ou l'enveloppe factice (`items`).
- *  Repas inconnu, date illisible ou sans plat = ligne ignorée : aucun menu
- *  inventé. Le solde et le statut ne sont pas publiés par le producteur natif,
- *  donc l'écran ne les affiche pas. */
+/** Menus du contrat (`menus`) ou enveloppe factice (`items`). Repas inconnu,
+ *  date illisible ou sans plat = ligne ignorée. Le solde et le statut ne sont
+ *  pas publiés par le natif, donc pas affichés. */
 export function parseCanteenPayload(payload: string | null): CanteenWeek {
   const root = parseRoot(payload);
   const byDate = new Map<string, CanteenMenu[]>();
@@ -101,7 +99,7 @@ export function parseCanteenPayload(payload: string | null): CanteenWeek {
     if (!date || !MEALS.has(meal)) continue;
     const bucket = byDate.get(date);
     if (!bucket && byDate.size >= CANTEEN_MAX_DAYS) continue;
-    // Un même jour+repas n'existe qu'une fois ; trois repas maximum par jour.
+    // Un même jour+repas n'existe qu'une fois ; 3 repas maximum par jour.
     const key = `${date}|${meal}`;
     if (seen.has(key)) continue;
     if (bucket && bucket.length >= CANTEEN_MAX_MEALS_PER_DAY) continue;
@@ -122,8 +120,7 @@ export function parseCanteenPayload(payload: string | null): CanteenWeek {
     .sort(([a], [b]) => (a === b ? 0 : a < b ? -1 : 1))
     .map(([date, meals]) => ({
       date,
-      // Le payload n’a pas d’ordre garanti : le service se lit toujours dans
-      // le même ordre, quel que soit celui des lignes reçues.
+      // Le payload n'a pas d'ordre garanti : le service garde toujours le même ordre.
       meals: meals.sort(
         (a, b) =>
           (MEAL_ORDER[a.meal] ?? Number.MAX_SAFE_INTEGER) -
@@ -133,8 +130,7 @@ export function parseCanteenPayload(payload: string | null): CanteenWeek {
   return { days };
 }
 
-/** Date longue française ; vide si la donnée n'est pas datable. Une date seule
- *  est lue à minuit local (analyseur partagé) pour ne pas glisser d'un jour. */
+/** Une date seule est lue à minuit local pour ne pas glisser d'un jour. */
 export function canteenDayLabel(date: string): string {
   return frDateLong(date);
 }
@@ -143,15 +139,13 @@ export function canteenMealLabel(meal: string): string {
   return MEAL_LABELS[meal] ?? "Repas";
 }
 
-/** Jour de la semaine capitalisé (« Lundi »), vide si la date est illisible. */
 export function canteenWeekdayLabel(date: string): string {
   const label = frDay(date);
   return label ? label.charAt(0).toUpperCase() + label.slice(1) : "";
 }
 
-/** Vrai si `date` tombe le jour civil local de `now` (défaut : maintenant).
- *  Comparaison de jours civils, pas d’instants : 23 h et 00 h 30 restent deux
- *  jours différents, et aucun fuseau ne décale la carte. */
+/** Comparaison de jours civils, pas d'instants : 23 h et 00 h 30 restent deux
+ *  jours, et aucun fuseau ne décale la carte. */
 export function canteenIsToday(date: string, now: number = Date.now()): boolean {
   const parsed = parseDate(date);
   return parsed !== null && isoDay(parsed) === isoDay(new Date(now));

@@ -43,11 +43,10 @@ private fun mapCoreGrade(g: fr.veryslopnynotes.pronote.Grade, index: Int, period
 }
 
 /**
- * Moyennes publiées d'une période, depuis le SNAPSHOT `Period.notes()`.
+ * Moyennes publiées d'une période, depuis le snapshot `Period.notes()`.
  *
- * Aucun POST ici : `gradesPayload` a déjà lu la période une fois. Les lignes
- * illisibles ont été sautées par le snapshot ; cette fonction ne fait que
- * mettre en forme ce qui est exploitable.
+ * Aucun POST ici : `gradesPayload` a déjà lu la période. Les lignes illisibles
+ * ont été sautées par le snapshot ; cette fonction met en forme l'exploitable.
  */
 private fun mapProvided(periodId: String, notes: PeriodNotes): ProvidedAverages? {
     val subjects = LinkedHashMap<String, Double>()
@@ -121,18 +120,16 @@ private fun reportJson(report: AveragesReport): JSONObject = JSONObject().apply 
 }
 
 /**
- * Toutes les périodes, rapport cadré sur la `periodId` demandée (miroir `/v1/grades`).
+ * Toutes les périodes, rapport cadré sur la `periodId` demandée.
  *
- * UN SEUL `DernieresNotes` par période (le snapshot `Period.notes()`) : notes,
- * moyennes publiées et moyenne générale viennent de la même réponse. Avant,
- * chaque période était lue une fois (`grades`) et la période sélectionnée deux
- * fois de plus (`averages` + `overallAverage`).
+ * UN SEUL `DernieresNotes` par période : notes, moyennes publiées et moyenne
+ * générale viennent de la même réponse.
  *
  * La même note revient dans CHAQUE période dont la plage la recouvre : elle
- * n'est publiée qu'une fois, par identifiant Pronote NON VIDE (le repli
- * synthétique reste unique par ligne, jamais dédupliqué). Quand deux périodes
- * portent le même identifiant, la plus PRÉCISE (la plus courte) gagne : un
- * semestre ne doit pas usurper la note de son trimestre.
+ * n'est publiée qu'une fois, par identifiant Pronote non vide (le repli
+ * synthétique reste unique par ligne). À identifiant égal, la période la plus
+ * PRÉCISE (la plus courte) gagne : un semestre ne doit pas usurper la note de
+ * son trimestre.
  */
 internal fun gradesPayload(client: Client, query: Map<String, String>): String {
     val algorithm = query["algorithm"]?.takeIf { it in AVERAGE_ALGORITHMS } ?: ALGORITHM_SUBJECT
@@ -162,8 +159,8 @@ internal fun gradesPayload(client: Client, query: Map<String, String>): String {
         for (g in notes.grades) {
             // La période PORTÉE par la ligne prime quand elle nomme une période
             // COURANTE. `Period.instances` est un registre global jamais vidé
-            // entre sessions : un identifiant périmé ne doit pas rattacher une
-            // note à un trimestre d'un autre compte.
+            // entre sessions : un id périmé rattacherait une note à un trimestre
+            // d'un autre compte.
             val rowPeriodId = g.period?.id?.takeIf { it in currentIds } ?: pid
             val mapped = mapCoreGrade(g, seq++, rowPeriodId) ?: continue
             if (g.id.isBlank()) {

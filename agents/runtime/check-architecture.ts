@@ -1,22 +1,15 @@
-// check-architecture.ts — garde-fous I1/I2/I3/I5 (+I4 secrets LLM). I6/I7 = tests/review, pas scannables en regex.
-// I1 android sans hôte Pronote — FP: .md ignorés, commentaires /* */ et // ignorés. ponytail: plafond regex, upgrade dependency-cruiser phase 1.
-// I2 serveur sans client Pronote + frontière des modules lue dans les build.gradle.kts ; un seul Client Android.
-// I3 android/core sans import plateforme interdit (java.net/android.database/androidx.room) — FP: block comments, javadoc *, imports multi-lignes ([^;]* couvre \n). ponytail: plafond regex, upgrade AST/dependency-cruiser.
-// I4 secrets dans l'IA refusés (`server/ai/` supprimé en #210, reste `android/core/`) — commentaires ignorés. ponytail: doublon volontaire avec check-secrets, upgrade gitleaks.
-// I5 LLM sans outils/réseau/secrets — FP: commentaires ignorés, tools: [] vide autorisé. ponytail: plafond regex sur android/core (`server/ai/` supprimé en #210), upgrade AST.
+// check-architecture.ts — garde-fous I1/I2/I3/I5 (+I4 secrets LLM). I6/I7 = tests/review.
+// I1 android sans hôte Pronote ; I2 serveur sans client Pronote + frontière lue
+// dans les build.gradle.kts (un seul Client) ; I3 android/core sans import
+// plateforme ; I4 secrets IA refusés ; I5 LLM sans outils/réseau/secrets.
+// FP: `.md`, commentaires (`//`, `/* */`, javadoc) ignorés ; un fichier
+// illisible est SIGNALÉ, jamais avalé : invariant non vérifiable ≠ respecté.
+// ponytail: plafond regex (upgrade AST/dependency-cruiser) ; le scan de secrets
+// reste un doublon volontaire de check-secrets (upgrade gitleaks).
 //
-// #368 : le parcours ne mange plus les artefacts générés et ne se tait plus sur
-// une erreur de lecture.
-//   - `assets` (bundle Vite écrit par `web-build` dans
-//     `android/app/src/main/assets/web/`) : artifact GITIGNORÉ, réécrit
-//     pendant le scan — check.ts lance les étapes EN PARALLÈLE, donc le
-//     verdict de I1 dépendait de l'ordre d'exécution (faux vert ou faux
-//     rouge selon qui gagne la course). Une source, elle, ne bouge pas.
-//   - erreurs : un `catch` global autour du parcours avalait TOUT le
-//     répertoire (un fichier supprimé entre `readdir` et `stat` → rien
-//     n'était scanné, verdict vert). Maintenant : erreur fichier par
-//     fichier, on CONTINUE, et un fichier illisible est SIGNALÉ (invariant
-//     non vérifiable ≠ invariant respecté).
+// Les artefacts GÉNÉRÉS (`assets` du bundle Vite, réécrit pendant que les
+// étapes tournent en parallèle) sont exclus du parcours : sinon le verdict de
+// I1 dépend de l'ordre d'exécution (faux vert ou faux rouge selon qui gagne).
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
 import { bound, repoPath } from "./output";
@@ -24,22 +17,14 @@ import { codeOnly, hasDirectFetch, platformRe, pronoteHost } from "./source-guar
 
 const ROOT = join(import.meta.dir, "..", "..");
 
-/** Répertoires NON parcourus : outillage, caches, sorties de build.
- *  `node_modules`/`.git` = outillage ; `build`/`dist`/`.gradle` = sorties de
- *  build (Gradle écrit dans les dossiers `build` de chaque module pendant le
- *  scan). */
+/** Répertoires NON parcourus : outillage et sorties de build (Gradle écrit dans
+ *  les dossiers `build` de chaque module pendant le scan). */
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", ".gradle"]);
 
-/** Artefact GÉNÉRÉ : le bundle Vite écrit par `web-build` dans
- *  `android/app/src/main/assets/web/` (gitignoré, réécrit à chaque build).
- *  On l'ignore PAR CHEMIN (`src` puis `main` puis `assets`), pas par nom de
- *  dossier : les sources de l'interface sont dans `web/src` (scannées par
- *  `tests/architecture/web.test.ts`), le bundle n'en est qu'une copie
- *  générée — le laisser dans le scan rendait le verdict de I1 dépendant de
- *  l'ordre d'exécution des étapes. */
+/** Bundle Vite généré (`assets/web`, gitignoré, réécrit à chaque build) :
+ *  ignoré PAR CHEMIN, pas par nom de dossier — `web/src` doit rester scanné. */
 const GENERATED_SUFFIX = ["src", "main", "assets"];
 
-/** Le chemin finit-il par `src`, `main`, `assets` ? */
 function isGenerated(path: string): boolean {
   const parts = path.split(sep);
   return GENERATED_SUFFIX.every((seg, i) => parts[parts.length - GENERATED_SUFFIX.length + i] === seg);
@@ -47,11 +32,8 @@ function isGenerated(path: string): boolean {
 
 /** Fichiers du parcours, sous `dir`.
  *
- *  Les entrées sont triées (parcours déterministe, verdict reproductible) et
- *  chaque entrée est traitée POUR ELLE : un `stat` qui échoue (fichier
- *  supprimé entre `readdir` et `stat`, lien mort) ne doit pas faire
- *  abandonner le reste du répertoire — avant, le `catch` global perdait le
- *  répertoire entier, en silence, donc en vert. */
+ *  Trié (verdict reproductible) ; une entrée illisible (fichier supprimé entre
+ *  `readdir` et `stat`, lien mort) n'abandonne pas le reste du répertoire. */
 export function listFiles(dir: string, out: string[] = []): string[] {
   let entries: string[];
   try {
@@ -78,17 +60,11 @@ export function listFiles(dir: string, out: string[] = []): string[] {
 }
 
 /**
- * Un répertoire scanné doit EXISTER et contenir des fichiers.
+ * Un répertoire scanné doit EXISTER et contenir des fichiers : sinon I1, I2 et
+ * I3 seraient **vacuement vrais** (un répertoire renommé annoncerait « OK »).
+ * Un invariant non vérifiable n'est pas un invariant respecté → ÉCHEC.
  *
- * #532 : les scanners passaient au VERT quand ils n'avaient rien à scanner.
- * `listFiles` renvoyait une liste VIDE pour un répertoire absent (renommé,
- * déplacé), donc I1, I2 et I3 devenaient **vacuement vrais** : chaque
- * étape du gate annonçait « OK » sans avoir rien vérifié. Un invariant non
- * vérifiable n'est pas un invariant respecté — donc c'est un ÉCHEC, bruyant.
- *
- * `root` = racine du dépôt. `sousDossiers` = ce que cet invariant exige
- * d'avoir trouvé. Un répertoire absent est distingué d'un répertoire vide :
- * les deux sont des échecs, mais le message doit nommer la cause.
+ * `root` = racine du dépôt. `sousDossiers` = ce que cet invariant exige.
  */
 function repertoiresManquants(root: string, sousDossiers: string[]): string[] {
   const manquants: string[] = [];
@@ -106,8 +82,7 @@ function repertoiresManquants(root: string, sousDossiers: string[]): string[] {
 }
 
 /** Arêtes inter-modules AUTORISÉES par la frontière (ADR-003) : la vérité est
- *  dans Gradle, pas dans une liste de types. `core` et `pronote` restent purs
- *  (aucun bloc `dependencies`) ; `data` consomme le port, `app` l'interface. */
+ *  dans Gradle, pas dans une liste de types. `core` et `pronote` restent purs. */
 export const MODULE_EDGES: Readonly<Record<string, readonly string[]>> = {
   core: [],
   pronote: [],
@@ -115,15 +90,13 @@ export const MODULE_EDGES: Readonly<Record<string, readonly string[]>> = {
   app: ["core", "data"],
 };
 
-/** Modules référencés par `project(":x")` dans un build.gradle.kts (commentaires
- *  retirés : une arête commentée n'existe pas). */
+/** Modules référencés par `project(":x")` (commentaires retirés). */
 export function gradleProjectDeps(source: string): string[] {
   return [...codeOnly(source).matchAll(/project\(\s*["']:([\w.-]+)["']\s*\)/g)].map((m) => m[1]!);
 }
 
-/** Erreurs de frontière lues dans les quatre fichiers `build.gradle.kts`.
- *  Une arête non déclarée est un échec ; un module absent aussi (invariant
- *  non vérifiable). */
+/** Erreurs de frontière lues dans les quatre `build.gradle.kts` : arête non
+ *  déclarée = échec, module absent = invariant non vérifiable. */
 export function moduleBoundaryErrors(root: string): string[] {
   const errors: string[] = [];
   for (const [module, allowed] of Object.entries(MODULE_EDGES)) {
@@ -146,29 +119,26 @@ export function moduleBoundaryErrors(root: string): string[] {
   return errors;
 }
 
-/** Scan des invariants. `root` = racine du dépôt (surchargeable pour les
- *  tests : un fixture temporaire). */
+/** Scan des invariants. `root` surchargeable pour les tests (fixture). */
 export function scanArchitecture(root: string = ROOT): string[] {
   const androidFiles = listFiles(join(root, "android"));
   const androidCoreFiles = listFiles(join(root, "android", "core"));
   const serverFiles = listFiles(join(root, "server"));
 
   const fail: string[] = [];
-  /** Fichiers illisibles : l'invariant ne peut pas être vérifié dessus, donc
-   *  ce n'est PAS un « respecté ». Ils sont signalés, pas avalés. */
+  /** Fichiers illisibles : invariant non vérifiable, donc signalé, pas avalé. */
   const unreadable = new Set<string>();
 
-  /** Bloc d'un invariant : le libellé, puis les chemins BORNÉS (10 max, le
-   *  reste dans le log complet). Le verdict, lui, porte TOUS les chemins. */
+  /** Bloc d'un invariant : libellé + chemins BORNÉS ; le verdict porte TOUS
+   *  les chemins. */
   const bloc = (label: string, paths: readonly string[]): string =>
     [
       label,
       ...bound(root, "check-architecture", paths.map((p) => `  ${repoPath(root, p)}`)),
     ].join("\n");
 
-  /** Source sans commentaires, ou null si le fichier n'a pas pu être lu.
-   *  ENOENT = le fichier n'existe (plus) : rien à vérifier, on passe. Autre
-   *  erreur (droits, EIO) = l'invariant n'est PAS vérifiable → signalé. */
+  /** Source sans commentaires, ou null si illisible. ENOENT = rien à vérifier ;
+   *  toute autre erreur (droits, EIO) = invariant non vérifiable → signalé. */
   const readCode = (file: string): string | null => {
     try {
       return codeOnly(readFileSync(file, "utf8"));
@@ -178,12 +148,8 @@ export function scanArchitecture(root: string = ROOT): string[] {
     }
   };
 
-  // I1 : Android sans URL/hôte Pronote — repointé #200 puis #205 : seul
-  // `android/pronote/` parle Pronote en direct (module du port) ; depuis #205,
-  // `data`/`ui` manipulent les TYPES du client local (dépendance
-  // `project(":pronote")`, ADR-003) — câblage sanctionné, pas un hôte. Le mot
-  // reste interdit partout ailleurs ; `settings.gradle.kts` ne le porte que
-  // dans sa déclaration de module. La prose (INVARIANTS, AGENTS.md) suit en #211.
+  // I1 : seul `android/pronote/` parle Pronote ; le mot est interdit partout
+  // ailleurs, sauf la déclaration de module de `settings.gradle.kts`.
   const PRONOTE_DIR = join(root, "android", "pronote") + "/";
   const i1 = androidFiles.filter((f) => {
     if (f.endsWith(".md")) return false; // docs légitimes ignorées
@@ -207,13 +173,12 @@ export function scanArchitecture(root: string = ROOT): string[] {
   });
   if (directFetch.length) fail.push(bloc("I2: accès réseau Pronote hors client:", directFetch));
 
-  // I2 : la frontière réelle est déclarée dans Gradle. Le scan de source ne
-  // recopie plus les types du port : une arête non déclarée suffit à échouer.
+  // I2 : la frontière réelle est déclarée dans Gradle ; une arête non déclarée
+  // suffit à échouer.
   for (const erreur of moduleBoundaryErrors(root)) fail.push(erreur);
 
   // I2 surface : hors `android/pronote/`, aucun module n'implémente le
-  // transport (le port expose `Client`, ses types et ses erreurs) ; le module
-  // direct déclare UN SEUL `Client` (ADR-003).
+  // transport ; le module direct déclare UN SEUL `Client` (ADR-003).
   const transports: string[] = [];
   for (const mod of ["app", "core", "data"]) {
     for (const f of listFiles(join(root, "android", mod))) {
@@ -232,16 +197,15 @@ export function scanArchitecture(root: string = ROOT): string[] {
     fail.push(`I2: android/pronote doit déclarer UN SEUL Client (trouvé ${clients.length})`);
   }
 
-  // I3 : android/core sans import de plateforme que Gradle ne voit pas.
   const i3 = androidCoreFiles.filter((f) => {
     const c = readCode(f);
     return c !== null && platformRe.test(c);
   });
   if (i3.length) fail.push(bloc("I3: android/core importe une plateforme interdite:", i3));
 
-  // I5 + I4 : LLM sans outils/réseau/secrets (I6/I7 non scannables ici — voir miroirs unitaires Android + review).
-  // Port #204 : l'IA vit dans `android/core/`; `server/ai/` a été supprimé en #210.
-  // `android/data/OpenRouterLlm.kt` est hors scan : seul appel fournisseur autorisé, testé par android-homework.test.ts.
+  // I5 + I4 : LLM sans outils/réseau/secrets (I6/I7 = tests Android + review).
+  // `android/data/OpenRouterLlm.kt` est hors scan : seul appel fournisseur
+  // autorisé, testé par android-homework.test.ts.
   const llmFiles = listFiles(join(root, "server/ai"));
   const ANDROID_AI = ["Untrusted.kt", "LlmGuard.kt", "AiPrompts.kt", "HomeworkAi.kt", "RevisionAi.kt", "Humanize.kt"].map(
     (f) => join(root, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core", f),
@@ -271,15 +235,14 @@ export function scanArchitecture(root: string = ROOT): string[] {
   });
   if (i5.length) fail.push(bloc("I5: LLM touche outils/réseau/secrets:", i5));
 
-  // Un fichier illisible = invariant NON vérifié : on le dit (faux vert
-  // interdit), on ne le compte pas comme une violation d'invariant.
+  // Un fichier illisible = invariant NON vérifié : signalé, pas compté comme
+  // une violation.
   if (unreadable.size) {
     fail.push(bloc("fichiers illisibles (invariant non vérifiable) :", [...unreadable]));
   }
 
-  // #532 : rien à scanner = rien de vérifié. Un répertoire renommé (ou une
-  // racine vide) rendait I1, I2 et I3 vacuement vrais : le gate annonçait
-  // « OK » sans avoir lu une seule ligne.
+  // Rien à scanner = rien de vérifié : un répertoire renommé (ou une racine
+  // vide) rendrait I1, I2 et I3 vacuement vrais.
   const vides = repertoiresManquants(root, ["android", "server"]);
   for (const v of vides) fail.push(v);
   // I3 porte sur `android/core/` : un module vide = invariant non vérifiable.

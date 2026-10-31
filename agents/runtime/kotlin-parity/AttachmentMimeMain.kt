@@ -1,13 +1,9 @@
-// AttachmentMimeMain.kt — pilote JSON du type MIME des pièces jointes (#398).
+// AttachmentMimeMain.kt — pilote JSON du type MIME des pièces jointes.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/attachment-mime.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile la VRAIE source de
-// production `fr.veryslopnynotes.app.AttachmentMime` (sans dépendance Android)
-// et la pilote ici : les assertions portent donc sur du code exécuté, pas sur
-// un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/attachment-mime.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne
-// sur stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
+//
 //   - `{"name":"consignes.html"}` → `{"ok":true,"mime":"text/plain"}`
 package fr.veryslopnynotes.attachmentmime
 

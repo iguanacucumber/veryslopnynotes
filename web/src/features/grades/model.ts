@@ -1,10 +1,5 @@
-// Lecture défensive et calcul des moyennes de l'onglet Notes.
-//
-// Port de `android/ui/.../Averages.kt` (lecture/mise en forme) et de
-// `android/core/.../Averages.kt` (algorithmes). Aucune dépendance, aucun
-// réseau : ce fichier ne lit que la chaîne JSON déjà reçue du pont natif.
-// Toute chaîne du payload est une DONNÉE (jamais du HTML, jamais une
-// instruction) et elle est nettoyée/bornée avant de sortir d'ici.
+// Lecture défensive des moyennes. Toute chaîne du payload est une DONNÉE,
+// nettoyée et bornée avant de sortir d'ici.
 import { asNumber, cleanText, parseDate } from "../../lib/format";
 import { subjectKey } from "../../lib/subject";
 
@@ -87,8 +82,7 @@ export interface GradesData {
   report: AveragesReport | null;
 }
 
-// --- Bornes de lecture (mêmes valeurs que le Kotlin) -----------------------
-
+// Bornes de lecture, mêmes valeurs que le Kotlin.
 const MAX_SUBJECT_CHARS = 100;
 const MAX_LABEL_CHARS = 200;
 const MAX_TEACHER_CHARS = 100;
@@ -97,8 +91,6 @@ const MAX_ID_CHARS = 64;
 const MAX_AVERAGE_POINTS = 200;
 
 const NO_DATA = -1;
-
-// --- Lecture du JSON -------------------------------------------------------
 
 type Json = Record<string, unknown>;
 
@@ -130,11 +122,7 @@ function numberOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/**
- * Moyenne lisible : un nombre fini >= 0. Une moyenne négative est une donnée
- * incohérente (aucune note n'est négative, cf. `parseGrade`) : elle est traitée
- * comme ABSENTE, jamais affichée « -3,00/20 ».
- */
+/** Une moyenne négative est une donnée incohérente : traitée comme ABSENTE. */
 function markOrNull(value: unknown): number | null {
   const n = numberOrNull(value);
   return n !== null && n >= 0 ? n : null;
@@ -168,8 +156,7 @@ function parseGrade(raw: unknown): Grade | null {
     subject,
     value,
     scale,
-    // Un coefficient 0 exclut la note du calcul (règle Papillon) : le garder
-    // ici, c'est ce que le calcul local doit savoir.
+    // Un coefficient 0 exclut la note du calcul (règle Papillon).
     coefficient,
     date: date.text,
     millis: date.millis,
@@ -234,14 +221,8 @@ function parseReport(raw: unknown): AveragesReport | null {
   };
 }
 
-/**
- * Payload `/v1/grades` -> notes + rapport de moyennes.
- *
- * Le pont factice de développement sert `{ items: [...] }` ; le payload réel
- * sert `{ grades: [...], averages: {...} }`. Les deux formes sont acceptées.
- * Sans rapport valide, il est recalculé LOCALEMENT à partir des notes (mêmes
- * algorithmes que le natif) — aucun chiffre n'est inventé, seulement dérivé.
- */
+/** Payload `/v1/grades` : `{items}` (pont factice) ou `{grades, averages}`.
+ *  Sans rapport valide, il est recalculé localement, jamais inventé. */
 export function parseGradesPayload(
   payload: string | null,
   algorithm: Algorithm = ALGORITHM_DEFAULT,
@@ -257,18 +238,8 @@ export function parseGradesPayload(
   return { grades, report };
 }
 
-/**
- * Le payload est-il LISIBLE ? (#537)
- *
- * Un JSON illisible (ou un corps qui n'est pas un objet) n'est PAS une absence
- * de note : l'écran doit le dire (erreur), jamais « aucune note en cache »
- * (I14 : « invalide » n'est jamais « vide »). Le parseur reste TOLÉRANT
- * (aucun crash, aucune note exploitable) ; c'est l'écran qui distingue
- * « illisible » de « vide ».
- *
- * `null` = aucun payload (pas de cache) : l'appelant le traite à part —
- * « pas de cache » et « cache illisible » ne sont pas la même chose.
- */
+/** Un JSON illisible n'est PAS une absence de note (I14 : « invalide » n'est
+ *  jamais « vide »). `null` = aucun payload, traité à part par l'appelant. */
 export function isGradesPayloadReadable(payload: string | null): boolean {
   if (payload === null) return false;
   return record(parseJson(payload)) !== null;
@@ -292,8 +263,6 @@ export function parsePeriods(payload: string | null): Period[] {
   }
   return out;
 }
-
-// --- Calcul des moyennes (port de core/Averages.kt) ------------------------
 
 function weightOf(grade: Grade): number {
   const c = grade.coefficient;
@@ -430,7 +399,6 @@ export function averageWith(algorithm: Algorithm | null, grades: readonly Grade[
   return subjectAlgorithmAverage(grades);
 }
 
-/** Notes de la période choisie (miroir de `gradesForPeriod`). */
 export function gradesForPeriod(grades: readonly Grade[], periodId: string | null): Grade[] {
   const id = (periodId ?? "").trim();
   if (!id) return [...grades];
@@ -440,15 +408,8 @@ export function gradesForPeriod(grades: readonly Grade[], periodId: string | nul
   return grades.every((grade) => !grade.periodId) ? [...grades] : [];
 }
 
-/**
- * Deux décimales, comme le natif : `BigDecimal(value).setScale(2, HALF_UP)`
- * (`core/Averages.kt`, `twoDecimals`) est exactement `Number(value.toFixed(2))`
- * — arrondi au 1/100, moitié AU LOIN de zéro, symétrique (`-0.125` -> `-0.13`).
- *
- * L'arrondi binaire (`Math.round(v * 100) / 100`) dérive : `2.675 * 100` vaut
- * `267.49999999999997` en IEEE-754, le web affichait donc `2.68` là où le
- * natif affichait `2.67`.
- */
+/** `Number(value.toFixed(2))` reproduit le `HALF_UP` natif ; l'arrondi binaire
+ *  (`Math.round(v * 100) / 100`) dérive (`2.675 * 100` = `267.49999999999997`). */
 export function twoDecimals(value: number): number {
   if (!Number.isFinite(value)) return 0;
   const rounded = Number(value.toFixed(2));
@@ -497,13 +458,7 @@ function buildSubjectAverages(grades: readonly Grade[]): SubjectAverage[] {
   return out.sort((a, b) => a.subject.localeCompare(b.subject, "fr"));
 }
 
-/**
- * Rapport de moyennes dérivé des notes lues.
- *
- * `provided` est toujours `false` : ce calcul ne sert que lorsque le payload
- * n'en porte pas. L'historique et les influences suivent les mêmes règles que
- * le natif (toutes les notes antérieures, fenêtre bornée à 200 points).
- */
+/** `provided` toujours `false` : ce calcul ne sert que sans rapport du payload. */
 export function computeAverages(
   grades: readonly Grade[],
   algorithm: Algorithm = ALGORITHM_DEFAULT,
@@ -522,12 +477,7 @@ export function computeAverages(
   };
 }
 
-// --- Sélection et regroupement --------------------------------------------
-
-/**
- * Query du contrat : `algorithm=…&periodId=…`. Les deux valeurs viennent de
- * listes fermées ; le periodId est borné à 64 caractères comme le routeur.
- */
+/** Query du contrat `algorithm=…&periodId=…` ; periodId borné comme le routeur. */
 export function gradesQuery(algorithm: Algorithm, periodId: string | null): string {
   const chosen = isAlgorithm(algorithm) ? algorithm : ALGORITHM_DEFAULT;
   const parts = [`algorithm=${encodeURIComponent(chosen)}`];
@@ -536,23 +486,9 @@ export function gradesQuery(algorithm: Algorithm, periodId: string | null): stri
   return parts.join("&");
 }
 
-/**
- * Groupes par matière : UNE carte par matière, comme le rapport natif.
- *
- * Le regroupement se fait par clé NORMALISÉE (`subjectKey`) : « Mathématiques »
- * et « MATHEMATIQUES » sont une seule matière, et la moyenne se cherche dans
- * le rapport par cette même clé. Sinon le web montrait deux cartes — dont une
- * « Pas de moyenne » — en désaccord avec la moyenne générale affichée plus
- * haut (le rapport natif, lui, n'en publie qu'une).
- *
- * La graphie affichée est celle du rapport (donc la première graphie rencontrée
- * par le natif) ; à défaut, celle de la première note du groupe.
- *
- * Repli LOCAL quand le rapport n'a AUCUNE entrée pour la matière (payload
- * ancien, rapport partiel) : la carte estime à partir des notes présentes,
- * marquée `provided: false`. Une entrée présente mais à `null` reste « pas de
- * moyenne » : le rapport fait foi, on ne le contredit pas.
- */
+/** Une carte par matière, regroupée par clé NORMALISÉE (`subjectKey`) comme le
+ *  rapport natif. Repli local seulement sans entrée du rapport ; une entrée à
+ *  `null` fait foi. */
 export function gradeGroups(grades: readonly Grade[], subjects: readonly SubjectAverage[]): GradeGroup[] {
   const byKey = new Map<string, { subject: string; grades: Grade[] }>();
   for (const grade of grades) {
@@ -561,7 +497,7 @@ export function gradeGroups(grades: readonly Grade[], subjects: readonly Subject
     if (bucket) bucket.grades.push(grade);
     else byKey.set(key, { subject: grade.subject, grades: [grade] });
   }
-  // Le rapport est indexé par la MÊME clé : une entrée par matière normalisée.
+  // Le rapport est indexé par la même clé normalisée.
   const averages = new Map<string, SubjectAverage>();
   for (const subject of subjects) {
     const key = subjectKey(subject.subject);
@@ -580,17 +516,13 @@ export function gradeGroups(grades: readonly Grade[], subjects: readonly Subject
         subject: average?.subject ?? bucket?.subject ?? key,
         average: average ? average.value : local === NO_DATA ? null : local,
         provided: average?.provided ?? false,
-        // Le rapport natif compte les notes RETENUES (coefficient 0 exclu) :
-        // afficher `grades.length` montrait « 3 notes » pour une moyenne
-        // calculée sur 2 notes. Sans rapport, le même compte local.
+        // Compter les notes RETENUES (coefficient 0 exclu), comme le natif.
         gradeCount: average?.gradeCount ?? grades.filter(isUsable).length,
         grades,
       };
     })
     .sort((a, b) => {
-      // Moyenne décroissante, puis nom. Sans moyenne, la valeur vaut -Infinity :
-      // la différence de deux -Infinity est NaN, et le tri par nom ne
-      // s'exécuterait jamais — comparer les valeurs avant de soustraire.
+      // La différence de deux -Infinity est NaN : comparer avant de soustraire.
       const left = a.average ?? Number.NEGATIVE_INFINITY;
       const right = b.average ?? Number.NEGATIVE_INFINITY;
       if (left !== right) return right - left;
@@ -602,16 +534,12 @@ export function influenceOf(influences: readonly Influence[], gradeId: string): 
   return influences.find((influence) => influence.gradeId === gradeId) ?? null;
 }
 
-// --- Mise en forme ---------------------------------------------------------
-
-/** Deux décimales, virgule française : 14.5 -> « 14,50 ». */
 export function formatMark(value: number, decimals = 2): string {
   if (!Number.isFinite(value)) return "—";
   const digits = Math.min(4, Math.max(0, Math.trunc(decimals)));
   return value.toFixed(digits).replace(".", ",");
 }
 
-/** Note sans zéros inutiles : 15 -> « 15 », 15.5 -> « 15,5 ». */
 export function gradeValueLabel(value: number): string {
   const two = formatMark(value);
   if (two.endsWith(",00")) return two.slice(0, -3);
@@ -630,7 +558,7 @@ export function algorithmLabel(algorithm: Algorithm): string {
   return "Moyenne des matières";
 }
 
-/** Titre du héros : une moyenne fournie ne dépend pas de l'algorithme choisi. */
+/** Une moyenne fournie ne dépend pas de l'algorithme choisi. */
 export function reportTitle(report: AveragesReport): string {
   return report.provided ? "Moyenne générale" : algorithmLabel(report.algorithm);
 }
@@ -641,13 +569,8 @@ export function algorithmChipLabel(algorithm: Algorithm): string {
   return "Matières";
 }
 
-/**
- * Une phrase pour expliquer le calcul choisi, sans jargon.
- *
- * Quand l'établissement publie la moyenne générale, les puces ne changent PAS
- * ce nombre : elles ne portent que sur la courbe et les influences, estimées.
- * Le dire évite de laisser croire que « Médiane » a produit le 12,50 affiché.
- */
+/** Quand la moyenne est publiée, les puces ne portent que sur la courbe et les
+ *  influences, estimées : le dire évite de croire que « Médiane » a produit le 12,50. */
 export function algorithmHint(algorithm: Algorithm, provided = false): string {
   if (provided) {
     return "Moyenne publiée par l'établissement ; la courbe et les influences sont estimées.";
@@ -657,7 +580,6 @@ export function algorithmHint(algorithm: Algorithm, provided = false): string {
   return "Moyenne simple des moyennes de matières.";
 }
 
-/** « 2 matières · 3 notes » : ce que couvre la moyenne affichée. */
 export function coverageLabel(report: AveragesReport): string {
   const grades = report.subjects.reduce((total, subject) => total + subject.gradeCount, 0);
   const parts: string[] = [];
@@ -668,7 +590,6 @@ export function coverageLabel(report: AveragesReport): string {
   return parts.join(" · ");
 }
 
-/** « publiée par l'établissement » / « estimée au 12/10/2026 ». */
 export function originLabel(provided: boolean, estimatedAt: string | null): string {
   if (provided) return "publiée par l'établissement";
   const date = parseDate(estimatedAt);
@@ -684,7 +605,6 @@ export function averageLabel(value: number | null, provided: boolean, algorithm:
   return `${formatMark(value)}/20 (moyenne ${origin})`;
 }
 
-/** Phrase d'influence : « +0,42 sur la moyenne » (ou « estimée »). */
 export function influenceLabel(impact: number, estimated = false): string {
   if (!Number.isFinite(impact)) return "";
   const rounded = formatMark(Math.abs(impact));
@@ -693,7 +613,6 @@ export function influenceLabel(impact: number, estimated = false): string {
   return `${impact > 0 ? "+" : "−"}${rounded} ${target}`;
 }
 
-/** Contexte de classe et de coefficient, vide si rien n'est publié. */
 export function gradeContextLabel(grade: Grade): string {
   const parts: string[] = [];
   if (grade.coefficient !== null && grade.coefficient !== 1) {
@@ -709,7 +628,7 @@ export function gradeContextLabel(grade: Grade): string {
   return parts.join(" · ");
 }
 
-/** Libellé de l'évaluation, repli sur la matière (jamais une chaîne vide). */
+/** Repli sur la matière : jamais une chaîne vide. */
 export function gradeLabel(grade: Grade): string {
   return grade.label?.trim() || grade.subject;
 }
@@ -730,8 +649,6 @@ function formatDay(value: string): string {
   return `${day}/${month}/${date.getFullYear()}`;
 }
 
-// --- Sparkline (géométrie pure, dessin SVG dans le composant) --------------
-
 export interface SparkPoint {
   x: number;
   y: number;
@@ -741,14 +658,8 @@ function knownValues(values: readonly (number | null)[]): number[] {
   return values.filter((value): value is number => value !== null && Number.isFinite(value));
 }
 
-/**
- * Points de la courbe dans le rectangle demandé.
- *
- * - valeurs nulles ignorées (la courbe ne relie que le connu) ;
- * - moins de deux valeurs = aucun tracé (une note ne fait pas une tendance) ;
- * - domaine min..max, ligne à mi-hauteur si toutes égales ;
- * - y inversé : la meilleure moyenne en haut.
- */
+/** Points de la courbe : valeurs nulles ignorées, moins de deux valeurs = aucun
+ *  tracé, y inversé (la meilleure moyenne en haut). */
 export function sparklinePoints(
   values: readonly (number | null)[],
   width: number,
@@ -768,12 +679,8 @@ export function sparklinePoints(
   }));
 }
 
-/**
- * Ordonnée de la moyenne de l'historique, dans la même échelle que
- * `sparklinePoints` : la ligne pointillée de la courbe dit si la tendance finit
- * au-dessus ou au-dessous de la moyenne de la période.
- * `null` quand la ligne n'apprendrait rien (moins de deux points, série plate).
- */
+/** Ordonnée de la moyenne, dans l'échelle de `sparklinePoints` ; `null` quand
+ *  la ligne n'apprendrait rien (moins de deux points, série plate). */
 export function sparklineAverageY(values: readonly (number | null)[], height: number): number | null {
   const known = knownValues(values);
   if (known.length < 2 || !(height > 0)) return null;
@@ -785,11 +692,8 @@ export function sparklineAverageY(values: readonly (number | null)[], height: nu
   return height * (1 - (average - min) / span);
 }
 
-/**
- * Phrase sous la courbe. Quand la moyenne affichée est FOURNIE, la courbe reste
- * une estimation au fil des notes : le dire évite de faire passer le dernier
- * point pour la moyenne de l'établissement.
- */
+/** Quand la moyenne est fournie, la courbe reste une estimation : le dire évite
+ *  de faire passer le dernier point pour la moyenne de l'établissement. */
 export function historyNote(values: readonly (number | null)[], provided = false): string {
   const size = knownValues(values).length;
   if (size === 0) {

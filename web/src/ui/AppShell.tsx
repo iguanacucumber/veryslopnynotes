@@ -40,7 +40,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/alerts": { title: "Alertes", back: "/" },
   "/revision-sheets": { title: "Révisions", back: "/profile" },
   "/course-notes": { title: "Cahier", back: "/profile" },
-  "/prof": { title: "Prof", tab: true },
+  "/prof": { title: "Professeur", tab: true },
 };
 
 const TABS = [

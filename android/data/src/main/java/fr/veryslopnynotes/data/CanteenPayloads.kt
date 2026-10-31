@@ -4,8 +4,6 @@ import fr.veryslopnynotes.pronote.Client
 import org.json.JSONArray
 import org.json.JSONObject
 
-// Cantine : payload `menus`.
-
 private fun mealOf(isDinner: Boolean, name: String?): String {
     if (isDinner) return "dinner"
     if (name != null && Regex("\\b(petit[\\s-]?d[eé]jeuner|breakfast)\\b", RegexOption.IGNORE_CASE).containsMatchIn(boundedCp(name, 100))) {

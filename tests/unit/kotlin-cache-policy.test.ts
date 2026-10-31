@@ -1,16 +1,7 @@
-// #372 : une horloge en avance rendait le cache frais POUR TOUJOURS.
-//
-// `CachePolicy` (android/data) est compilé par le harnais puis piloté par
-// `CachePolicyParityMain` : ce n'est pas un miroir TS, c'est le code de
-// production EXÉCUTÉ. Deux vérifications :
-//   1. une entrée datée dans le FUTUR (dérive d'horloge d'appareil, NTP qui
-//      recule) est PÉRIMÉE — badge « périmé » affiché, client local relu ;
-//   2. PARITÉ avec le contrat TS `cacheStatus` (shared/contracts/cache.ts) :
-//      même verdict sur la même série de cas (passé, futur, périmé, borne du
-//      TTL), et TTL identiques des deux côtés.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT du harnais (jamais un faux
-// vert) ; un échec de compilation, lui, est un défaut (le test rougit).
+// Une horloge en avance rendait le cache frais POUR TOUJOURS (#372) : une
+// entrée datée dans le futur (NTP qui recule) doit être PÉRIMÉE. `CachePolicy`
+// est le vrai Kotlin exécuté, comparé au contrat TS `cacheStatus` (verdicts et
+// TTL). Outillage absent = SKIP BRUYANT ; échec de compilation = défaut.
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { CACHEABLE_RESOURCES, CACHE_TTL_MS, cacheStatus } from "../../shared/contracts/cache";
@@ -29,13 +20,11 @@ async function ask(op: unknown): Promise<string> {
   return link!.ask(op);
 }
 
-/** Verdict « périmé » du VRAI Kotlin (`CachePolicy.isStale`). */
 async function kotlinIsStale(resource: string, fetchedAt: number, now: number): Promise<boolean> {
   const res = JSON.parse(await ask({ op: "isStale", resource, fetchedAt, now })) as { stale: boolean };
   return res.stale;
 }
 
-/** Verdict « relecture du client local » du VRAI Kotlin (`CachePolicy.shouldFetch`). */
 async function kotlinShouldFetch(
   resource: string,
   fetchedAt: number,
@@ -53,17 +42,15 @@ const NOW = 1_700_000_000_000;
 
 describe("fraîcheur du cache : horloge en avance (#372)", () => {
   test.skipIf(skip)("entrée datée dans le FUTUR = périmée (Kotlin)", async () => {
-    // Une dérive d'horloge d'appareil (NTP qui recule) date l'entrée APRÈS
-    // maintenant : elle est périmée, pas fraîche.
+    // Une dérive d'horloge date l'entrée APRÈS maintenant : périmée, pas fraîche.
     expect(await kotlinIsStale("grades", NOW + 1000, NOW)).toBe(true);
     // Une entrée normale (passée) reste fraîche.
     expect(await kotlinIsStale("grades", NOW - 1000, NOW)).toBe(false);
   });
 
   test.skipIf(skip)("shouldFetch relit le client local sur une entrée future", async () => {
-    // Sans ça, l'app ne relisait PLUS JAMAIS le client local pendant toute la
-    // dérive (capabilities : TTL 24 h → jusqu'à 48 h de données périmées
-    // servies comme fraîches).
+    // Sans ça, l'app ne relisait plus le client local pendant toute la dérive
+    // (TTL 24 h → jusqu'à 48 h de données périmées servies comme fraîches).
     expect(await kotlinShouldFetch("grades", NOW + 1000, NOW, false, true)).toBe(true);
     // Entrée fraîche = pas de relecture, sauf geste explicite de l'utilisateur.
     expect(await kotlinShouldFetch("grades", NOW - 1000, NOW, false, true)).toBe(false);

@@ -1,22 +1,17 @@
-// Garde SSRF partagée (issue #362) — contrat ET serveur, UNE implémentation.
+// Garde SSRF partagée par le contrat et le serveur, UNE implémentation.
 //
-// Pourquoi un module partagé : la garde était DUPLIQUÉE (contrat + scraper).
-// Les deux copies ne testaient que des chaînes IPv4 littérales, alors que
 // `new URL()` NORMALISE l'hôte : "127.0.0.1" devient "[::ffff:7f00:1]",
-// "2130706433" et "0x7f000001" deviennent "127.0.0.1". La boucle locale
-// passait donc la garde (constaté : l'extrait contenait le corps d'un service
-// interne). Une seule implémentation = un seul trou possible.
+// "2130706433" et "0x7f000001" deviennent "127.0.0.1". Tester des chaînes
+// IPv4 littérales ne suffit donc pas.
 //
 // Périmètre : hôte LITTÉRAL privé/interne (loopback, RFC1918, link-local,
-// métadonnées cloud, ULA IPv6, IPv4-mapped IPv6, formes entières/hexadécimales
-// /octales). Un nom DNS reste ACCEPTÉ ICI : cette garde est LITTÉRALE (elle
-// vit dans un validateur synchrone, donc sans E/S). C'est le SERVEUR qui
-// résout le nom avant la navigation — `server/infrastructure/ssrf.ts`
-// (issue #419) : le nom est résolu et chaque adresse obtenue est testée
-// contre les plages privées.
+// métadonnées cloud, ULA IPv6, IPv4-mapped IPv6, formes entières/hex/octales).
+// Un nom DNS reste ACCEPTÉ ICI : cette garde est LITTÉRALE (validateur
+// synchrone, sans E/S). C'est le SERVEUR qui résout le nom avant navigation
+// (`server/infrastructure/ssrf.ts`) et teste chaque adresse obtenue.
 // ponytail: analyse lexicale pure, zéro dépendance, zéro résolution DNS.
-// Upgrade: (fait côté serveur, #419) résolution DNS + re-test à chaque
-// redirection — cf. `server/infrastructure/ssrf.ts` et `assertPublicUrl`.
+// Upgrade: résolution DNS + re-test à chaque redirection côté serveur
+// (`server/infrastructure/ssrf.ts`, `assertPublicUrl`).
 
 /** Partie d'adresse IPv4 : décimal, hexadécimal (0x…) ou octal (0177…). */
 function ipv4Part(part: string): number | null {
@@ -169,8 +164,8 @@ function isBlockedIPv6(g: readonly number[]): boolean {
 /**
  * Hôte privé/interne ? Couvre IPv4 (littéral, entier, hex, octal), IPv6
  * (mapped, ULA, link-local, multicast) et les noms de loopback. Un nom DNS
- * public est accepté (garde LITTÉRALE : la résolution DNS est faite par le
- * serveur, cf. `server/infrastructure/ssrf.ts`).
+ * public est accepté (garde LITTÉRALE : le serveur résout,
+ * `server/infrastructure/ssrf.ts`).
  */
 export function isBlockedHost(host: string): boolean {
   let h = host.trim().toLowerCase();
@@ -191,9 +186,8 @@ export function isBlockedHost(host: string): boolean {
 
 /**
  * L'hôte est-il un LITTÉRAL IP (v4 ou v6) ? Une adresse ne se résout pas :
- * le dialogue est direct. Sert à ne pas demander une résolution DNS d'un
- * littéral — et à ne pas casser les IPv6 littéraux publics, que le
- * résolveur refuserait entre crochets (`[2606:4700::1111]`).
+ * inutile de demander une résolution DNS — et les IPv6 publiques entre
+ * crochets (`[2606:4700::1111]`) seraient refusées par le résolveur.
  */
 export function isIpLiteral(host: string): boolean {
   let h = host.trim().toLowerCase();

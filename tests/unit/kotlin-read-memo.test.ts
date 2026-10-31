@@ -1,12 +1,6 @@
-// #473 : les lectures identiques ne sont plus redemandées à l'établissement.
-//
-// Le VRAI `ClientBase.post` est rejoué (enveloppe `{Signature, data}`, mémo des
-// lectures, rejeu après `refresh`) avec un STUB qui compte les requêtes à la
-// place de l'établissement : le test porte sur du code de production exécuté,
-// pas sur un miroir TS.
-//
-// Outillage `kotlinc`/`java` absent = SKIP BRUYANT (jamais un faux vert) ; un
-// échec de compilation est un défaut (le test rougit).
+// Les lectures identiques ne sont plus redemandées à l'établissement : le VRAI
+// `ClientBase.post` est rejoué avec un stub qui compte les requêtes.
+// Outillage absent = SKIP BRUYANT.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -62,8 +56,7 @@ describe("la mémo des lectures identiques (#473)", () => {
   });
 
   test.skipIf(skip)("trois lectures identiques (notes + moyennes + moyenne générale) = une requête", async () => {
-    // C'est le cas d'écran : `Period.grades()`, `Period.averages()` et
-    // `Period.overallAverage()` postent la MÊME chose.
+    // Cas d'écran : `grades()`, `averages()` et `overallAverage()` postent la MÊME chose.
     const res = await run(true, [NOTES, NOTES, NOTES]);
     expect(res.sends).toBe(1);
   });
@@ -88,8 +81,7 @@ describe("la mémo des lectures identiques (#473)", () => {
       { function: "SaisieTAFFaitEleve", onglet: 88, payload: { listeTAF: [] } },
       NOTES,
     ]);
-    // La lecture avant et après l'écriture : l'écriture a vidé la mémo, donc
-    // la seconde lecture repart (elle ne sert pas l'état d'avant l'écriture).
+    // L'écriture a vidé la mémo : la seconde lecture repart.
     expect(res.sends).toBe(3);
     expect(res.functions).toEqual(["DernieresNotes", "SaisieTAFFaitEleve", "DernieresNotes"]);
   });
@@ -121,16 +113,14 @@ describe("la mémo des lectures identiques (#473)", () => {
   });
 
   test("la session renouvelée vide la mémo", () => {
-    // `refresh()` rejoue l'authentification : les lectures mémorisées sont de
-    // l'ancien monde, elles repartent.
+    // `refresh()` rejoue l'authentification : les lectures mémorisées repartent.
     const client = readFileSync(CLIENT, "utf8");
     const refresh = client.slice(client.indexOf("fun refresh("), client.indexOf("fun refresh(") + 2000);
     expect(refresh).toContain("readMemo?.clear()");
   });
 
   test("l'app active la mémo, le harnais de parité non", () => {
-    // L'app (appairage + restauration) veut la mémo ; la référence TS, elle,
-    // compare le FIL : la mémo y est désactivée par défaut.
+    // L'app veut la mémo ; la référence TS compare le FIL, mémo désactivée par défaut.
     const pairing = readFileSync(PAIRING, "utf8");
     expect(pairing).toContain("memoizeReads = true");
     const client = readFileSync(CLIENT, "utf8");

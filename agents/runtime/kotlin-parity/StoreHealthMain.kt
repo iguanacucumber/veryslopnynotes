@@ -1,23 +1,8 @@
-// StoreHealthMain.kt — pilote JSON de l'état du stockage chiffré (#401).
+// StoreHealthMain.kt — pilote JSON de l'état du stockage chiffré.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-store-health.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile la VRAIE source de
-// production `fr.veryslopnynotes.data.StoreHealth` (logique pure : aucun
-// import Android) et la pilote ici.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-store-health.test.ts` (jamais Gradle, jamais l'APK).
 //
-// CE QUE ÇA PROUVE. L'appel au Keystore a besoin du SDK : il reste dans le
-// `catch` des stores (`SessionStores.newStore` / `LlmKeys.newStore`). Ce que
-// le port exécute, c'est la DÉCISION et l'ÉTAT qu'elle produit :
-//   - le Keystore répond  -> AVAILABLE (rien à signaler) ;
-//   - le Keystore échoue  -> UNAVAILABLE : un état EXPLICITE, plus un silence.
-// Un source guard (côté TS) vérifie que les deux `catch` appellent bien
-// `SecureStorage.markUnavailable()` : sans lui, la décision pure serait
-// orpheline et l'échec resterait muet.
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`). Les
-// erreurs du PILOTE (op inconnue, champ absent) sont préfixées `pilote: ` et
-// refusées par le test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.storehealth
 
 import fr.veryslopnynotes.data.SecureStorage

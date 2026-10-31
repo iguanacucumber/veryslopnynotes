@@ -14,10 +14,9 @@ const FR_MONTHS_SHORT = [
 /** Une date seule (`YYYY-MM-DD`) est un jour civil : minuit LOCAL. */
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** Instant (ms) d'un ISO du contrat, ou null s'il est illisible. Les deux
- *  formes sont admises : instant complet et date seule. Une date SEULE est
- *  minuit LOCAL (comme le parseur natif), sinon elle glisserait d'un jour
- *  dans les fuseaux à l'ouest de Greenwich. */
+/** Instant (ms) d'un ISO du contrat, ou null s'il est illisible. Une date
+ *  SEULE est minuit LOCAL (comme le parseur natif), sinon elle glisse d'un
+ *  jour dans les fuseaux à l'ouest de Greenwich. */
 export function parseInstant(value: string | null | undefined): number | null {
   if (!value) return null;
   const raw = value.trim();

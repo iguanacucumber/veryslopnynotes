@@ -15,7 +15,7 @@ export function registerProtocolJson(): void {
       const kt = await ask({ op: "jsonEcho", text });
       expect(`${text} -> ${kt}`).toBe(`${text} -> ${JSON.stringify(JSON.parse(text))}`);
     }
-    // Invalides : les deux refusent (la position exacte n'est pas contractuelle).
+    // Invalides : les deux refusent (la position n'est pas contractuelle).
     for (const text of ['{"a":01}', "{'a':1}", '{"a":undefined}', '{"ouvert":']) {
       const ktErr = portError(await ask({ op: "jsonEcho", text }, true));
       const tsErr = tsErrorOf(() => JSON.parse(text));
@@ -24,8 +24,7 @@ export function registerProtocolJson(): void {
     }
   });
 
-  // #417 : `\u` STRICT — 4 chiffres hexadécimaux EXACTEMENT. `toIntOrNull(16)`
-  // acceptait un signe : `"\u+41"` passait, `"\u-41"` donnait un caractère faux.
+  // `\u` STRICT : 4 hex exactement ; `toIntOrNull(16)` acceptait un signe.
 
   test.skipIf(skip)("json : échappement `\\u` strict (4 hex, pas de signe)", async () => {
     const invalides = ['"\\u+041"', '"\\u-041"', '"\\u 41"', '"\\u00g1"', '"\\ud83d\\u+123"'];
@@ -42,28 +41,23 @@ export function registerProtocolJson(): void {
     }
   });
 
-  // #417 : hex STRICT — `Character.digit` acceptait les chiffres Unicode non ASCII
-  // (`０１`, `٠١`) : le port décodait `0x01` là où la référence n'y voit rien.
+  // Hex STRICT : `Character.digit` acceptait les chiffres Unicode (`０１`, `٠١`).
 
   test.skipIf(skip)("octets : hex strict (les chiffres Unicode non ASCII sont refusés)", async () => {
     for (const hex of ["", "00", "ff", "00112233445566778899aabbccddeeff", "DEADBEEF"]) {
       const kt = await ask({ op: "hexToBytes", hex });
       expect(`${hex} -> ${kt}`).toBe(`${hex} -> ${JSON.stringify({ hex: Buffer.from(hex, "hex").toString("hex") })}`);
     }
-    // U+FF10/U+FF11 (chiffres « pleine largeur ») et U+0660/U+0661 (chiffres
-    // arabo-indiens) : ni l'un ni l'autre n'est un hexadécimal ASCII.
+    // Chiffres pleine largeur et arabo-indiens : pas des hexadécimaux ASCII.
     for (const hex of ["０１", "٠١", "0z", "zz", "0", "0x"]) {
       const ktErr = portError(await ask({ op: "hexToBytes", hex }, true));
       expect(`${hex} -> ${ktErr.name}`).toBe(`${hex} -> IllegalArgumentException`);
-      // La référence s'arrête au premier octet invalide : elle NE décode PAS
-      // `０١` en 0x01 non plus (les deux refusent, aucun n'invente l'octet).
+      // La référence refuse aussi : aucun n'invente l'octet.
       expect(Buffer.from(hex, "hex").toString("hex")).not.toBe("01");
     }
   });
 
-  // #417 : `ExpiredObject` hérite de `PronoteAPIError` (comme la référence) —
-  // sinon le `catch (e: PronoteAPIError)` documenté ignore le cas « objet d'une
-  // session précédente » (l'exception filait tel quel).
+  // `ExpiredObject` hérite de `PronoteAPIError` : le `catch` documenté l'attrape.
 
   test.skipIf(skip)("erreurs : `ExpiredObject` est un `PronoteAPIError` (contrat du catch)", async () => {
     const { ExpiredObject, PronoteAPIError } = await import("../../../node_modules/pronotets/dist/exceptions.js");
@@ -76,10 +70,8 @@ export function registerProtocolJson(): void {
   });
 
   test.skipIf(skip)("nombres : le rendu Kotlin est IDENTIQUE à `JSON.stringify` (#410)", async () => {
-    // Le texte, pas un nombre JSON : `-0` ne survit pas à `JSON.stringify`
-    // (`JSON.stringify(-0)` vaut `"0"`). Chaque case est lue des DEUX côtés
-    // (`Number(raw)` côté TS, `toDouble()` côté Kotlin) : même double, donc
-    // même rendu attendu.
+    // Texte brut, pas un nombre JSON : `JSON.stringify(-0)` vaut `"0"`. Chaque
+    // case est lue des deux côtés, donc même double et même rendu attendu.
     const cases = [
       "0", "-0", "20", "0.5", "0.1", "0.30000000000000004",
       "1e-4", "1e-6", "1e-7", "1.5e-7", "1e21", "1e19", "1e20", "-1e19",

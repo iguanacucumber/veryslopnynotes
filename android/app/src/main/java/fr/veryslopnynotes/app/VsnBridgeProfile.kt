@@ -11,8 +11,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
-// --- Profil ----------------------------------------------------------------
-
 internal fun VsnBridge.profileMe(): JSONObject {
     val result = await<MeResult> { cb -> profileRepo.fetchMe(cb) }
         ?: throw BridgeFailure("unavailable", "Profil indisponible.")

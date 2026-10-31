@@ -1,15 +1,8 @@
-// RevisionAiMain.kt — pilote JSON du core IA « fiche de revision » (#367).
+// RevisionAiMain.kt — pilote JSON du core IA « fiche de revision ».
 //
-// OUTIL DE TEST uniquement : compile par `tests/unit/android-revision.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile les VRAIES sources
-// de production (`android/core/.../Untrusted.kt`, `LlmGuard.kt`, `AiPrompts.kt`,
-// `RevisionAi.kt` — stdlib Kotlin seul, aucun import Android) et la pilote
-// ici : les assertions portent donc sur du code execute, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/android-revision.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Protocole : une operation JSON par ligne sur stdin, une reponse par ligne
-// sur stdout (comme les autres pilotes de `agents/runtime/kotlin-parity/`).
-// Les erreurs du PILOTE (op inconnue) sont prefixees `pilote: ` et refusees
-// par le test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.revision
 
 import fr.veryslopnynotes.core.AiError
@@ -74,7 +67,7 @@ private class Driver {
                 ok("ok" to JVal.Bool(false), "error" to JVal.Str(e.message ?: "inconnu"))
             }
         }
-        // Le point d'entree PUBLIC de la fiche (#428) : la cle de l'app doit
+        // Le point d'entree PUBLIC de la fiche : la cle de l'app doit
         // etre RELAYEE au fournisseur. Le faux provider imite OpenRouterLlm :
         // sans cle, il refuse l'appel (c'est le bug observe — la cle n'etait
         // pas transmise, donc l'adaptateur reel levait « clé LLM absente »
@@ -85,7 +78,7 @@ private class Driver {
             val body = op.str("body") ?: "{\"fiche\":\"Rappel : derivé de x^2 = 2x.\"}"
             var seenKey: String? = null
             var calls = 0
-            // #493 : le fournisseur implemente `SafePromptProvider` : il
+            // le fournisseur implemente `SafePromptProvider` : il
             // recoit le SafePrompt TEL QUE la garde l'a verifie (nonce de
             // l'appelant preserve). L'ancien `LlmProvider` (lambda) rebuildait
             // le prompt avec un nouveau nonce — le corps envoye n'etait donc
@@ -121,7 +114,7 @@ private class Driver {
                 )
             }
         }
-        // Prompt réellement envoyé pour un devoir donné (#606) : le corps est
+        // Prompt réellement envoyé pour un devoir donné : le corps est
         // celui que la garde I4 vient de valider, donc le test voit à la fois
         // le refus (id entropique) et le contenu (matière/date/motif).
         "promptFor" -> {

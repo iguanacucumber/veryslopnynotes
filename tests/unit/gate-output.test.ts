@@ -25,8 +25,7 @@ describe("sortie de gate bornée", () => {
       expect(lignes.length).toBe(MAX_ITEMS + 1);
       expect(lignes.at(-1)).toContain("… reste: 101");
       expect(lignes.at(-1)).toContain("node_modules/.cache/gate-logs/etape.log");
-      // Le log complet contient TOUS les items : borner l'affichage ne filtre
-      // pas le verdict.
+      // Le log complet contient TOUS les items : borner l'affichage ne filtre pas le verdict.
       const log = join(dir, "node_modules", ".cache", "gate-logs", "etape.log");
       expect(existsSync(log)).toBe(true);
       expect(readFileSync(log, "utf8").trimEnd().split("\n")).toEqual(items);

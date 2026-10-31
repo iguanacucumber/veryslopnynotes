@@ -1,18 +1,6 @@
-// #427 : un fil dont la fraîcheur est INCONNUE ne doit pas être daté
-// « maintenant ».
-//
-// `discussionsPayload` (module `data`) n'enrichit que les 12 premiers fils :
-// au-delà, la date du dernier message est inconnue. Le champ `updatedAt`
-// partait alors à `nowIso` — les plus anciens fils REMONTAIENT en tête de la
-// liste et le payload mentait sur leur fraîcheur.
-//
-// `PronotePayloads.kt` est du Kotlin Android (`org.json`, module `data`) : il
-// ne compile pas hors Gradle et n'est pas dans le jar de parité
-// (`tests/unit/fixtures/parity-sources.ts` ne liste que du Kotlin pur). Le
-// câblage est donc épinglé par LECTURE DE SOURCE — même limite que le
-// miroir `android-homework` (cf. `kotlin-cache-invalidation.test.ts`). Le
-// CONTRAT TS, lui, est exécuté : il doit accepter un fil sans fraîcheur
-// (comme il accepte un fil sans `lastMessageAt`).
+// Un fil dont la fraîcheur est INCONNUE ne doit pas être daté « maintenant » :
+// au-delà des 12 premiers fils, `updatedAt` partait à `nowIso` et ils remontaient
+// en tête. Câblage épinglé par lecture de source ; le CONTRAT TS est exécuté.
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -46,8 +34,7 @@ describe("fraîcheur des fils : jamais de date inventée (#427)", () => {
   });
 
   test("`updatedAt` n'est écrit que si une date RÉELLE est connue", () => {
-    // `putIf` (helper du fichier) n'écrit que si la valeur est présente :
-    // le champ est donc OMIS du JSON pour un fil non enrichi.
+    // `putIf` n'écrit que si la valeur est présente : le champ est OMIS pour un fil non enrichi.
     expect(body).toContain('putIf("updatedAt", updatedAt)');
     expect(body).not.toContain('put("updatedAt", updatedAt)');
     expect(body).toContain('lastMessageAt?.let { put("lastMessageAt", it) }');
@@ -55,8 +42,7 @@ describe("fraîcheur des fils : jamais de date inventée (#427)", () => {
     expect(payloads).toContain(
       "internal fun JSONObject.putIf(key: String, value: String?) {\n    if (!value.isNullOrEmpty()) put(key, value)\n}",
     );
-    // La borne d'enrichissement est inchangée (12 fils) : c'est la limite de
-    // réseau, pas le correctif.
+    // La borne d'enrichissement reste 12 fils : c'est une limite de réseau.
     expect(payloads).toContain("private const val DISCUSSION_ENRICH_LIMIT = 12");
     expect(body).toContain("if (i < DISCUSSION_ENRICH_LIMIT)");
   });
@@ -65,15 +51,12 @@ describe("fraîcheur des fils : jamais de date inventée (#427)", () => {
     expect(body).toContain('put("id", id)');
     expect(body).toContain('put("subject"');
     expect(body).toContain('put("discussions", arr)');
-    // #476 : les participants ne sont PLUS dans la liste (ils sont demandés
-    // à l'ouverture du fil) : le champ est OMIS, jamais une liste vide qui
-    // ferait croire à un fil sans interlocuteur.
+    // Les participants ne sont plus dans la liste : le champ est OMIS, jamais vide.
     expect(body).not.toContain('put("participants"');
   });
 
   test("le miroir Kotlin accepte un fil de fraîcheur inconnue", () => {
-    // `core.Discussion` (miroir du contrat) : une fraîcheur vide = une
-    // fraîcheur INCONNUE, pas une ligne cassée. Le fil existe, il est affiché.
+    // Une fraîcheur vide = INCONNUE, pas une ligne cassée.
     expect(core).toContain("val updatedAt: String");
     expect(core).not.toContain("updatedAt.isNotBlank()");
   });

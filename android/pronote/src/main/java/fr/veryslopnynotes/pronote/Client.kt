@@ -3,21 +3,14 @@ package fr.veryslopnynotes.pronote
 import java.time.LocalDateTime
 
 /**
- * Client PRONOTE (#201, port de `pronotets` `client.js` : `ClientBase` + `Client`).
- *
  * Authentification QR (+ `tokenLogin` pour le second tour 2FA), `post` avec
- * rejeu après `refresh`, lectures (notes/devoirs/EDT/discussions/menus/actus/
- * cantine/vie scolaire/profil). Bloquant (pas de coroutines sans dépendance) :
- * jamais sur le thread UI. Zéro dépendance.
+ * rejeu après `refresh`, lectures. Bloquant : jamais sur le thread UI.
  *
- * Non porté (uniligne, aucun lecteur ne les utilise) : `ParentClient`,
- * `VieScolaireClient` (multi-comptes), `requestQrCodeData`, `exportIcal`,
- * `generateTimetablePdf`, `getTeachingStaff`, `currentPeriod`, `sessionCheck`.
  * Les noms d'état gardent leur casse TS (`logged_in`, `periods_`) : ce sont des
  * clés de parité, pas du style.
  */
 
-/** QR de l'établissement : `login` + `jeton` chiffrés (hex), `url` porteuse. */
+/** `login` + `jeton` chiffrés (hex), `url` porteuse. */
 data class QrCode(val login: String, val jeton: String, val url: String)
 
 data class ClientOptions(
@@ -27,9 +20,8 @@ data class ClientOptions(
     val accountPin: String? = null,
     val clientIdentifier: String? = null,
     val deviceName: String? = null,
-    // #473 : mémo des lectures identiques (60 s, mémoire du process). DÉSACTIVÉE
-    // par défaut : le harnais de parité compare le fil de la référence TS, il
-    // doit rester inchangé. L'APP l'active (cf. `PairingRepository`).
+    // Mémo des lectures (60 s) DÉSACTIVÉE par défaut : le harnais de parité
+    // compare le fil de la référence TS. L'APP l'active (cf. `PairingRepository`).
     val memoizeReads: Boolean = false,
 )
 
@@ -38,8 +30,6 @@ data class QrLoginOptions(
     val clientIdentifier: String? = null,
     val deviceName: String? = null,
     val skip2fa: Boolean = false,
-    // #473 : même règle que `ClientOptions.memoizeReads` (désactivée par
-    // défaut, activée par l'app à l'appairage).
     val memoizeReads: Boolean = false,
 )
 
@@ -57,10 +47,10 @@ data class InfoFilter(
     val dateTo: LocalDateTime? = null,
 )
 
-/** Vérité JS d'une valeur (pour les champs laissés bruts : `labels[l.N]`, `mode === 0`). */
+/** Vérité JS d'une valeur (champs laissés bruts : `labels[l.N]`). */
 internal fun jsTruthy(v: JVal?): Boolean = boolOf(v)
 
-/** `String(v)` pour une CLÉ d'objet : absent → `"undefined"` (comme `labels[x]` côté TS). */
+/** `String(v)` pour une CLÉ d'objet : absent → `"undefined"`, comme `labels[x]` en TS. */
 internal fun jsKeyOf(v: JVal?): String = if (v == null) "undefined" else strOf(v)
 
 open class ClientBase(
@@ -77,22 +67,15 @@ open class ClientBase(
     val deviceName: String? = opts.deviceName
 
     /**
-     * Mémo des lectures identiques (#473) : `null` = désactivée.
-     *
-     * Elle vit dans le client (donc dans le process) et repart vide à chaque
-     * session renouvelée (`refresh`) comme à chaque écriture.
-     *
-     * `internal` : le harnais de parité y injecte une horloge (le TTL se
-     * rejoue sans attendre une vraie minute).
+     * `null` = désactivée. Repart vide à chaque `refresh` et à chaque écriture.
+     * `internal` : le harnais de parité y injecte une horloge.
      */
     internal var readMemo: ReadMemo? = if (opts.memoizeReads) ReadMemo() else null
 
     /**
-     * État de session PUBLIÉ (#405) : `refresh()` remplace ces champs d'un
-     * bloc. Le verrou de session (`post`/`refresh` partagent le moniteur)
-     * sérialise le remplacement — aucune requête en vol ne voit un état à
-     * moitié changé — et le `volatile` publie la nouvelle référence aux
-     * lecteurs HORS verrou (ping de garde, pièces jointes, cache d'info).
+     * `refresh()` remplace ces champs d'un bloc sous le moniteur de session ;
+     * le `volatile` publie la nouvelle référence aux lecteurs HORS verrou
+     * (ping de garde, pièces jointes, cache d'info).
      */
     @Volatile
     override lateinit var communication: Communication
@@ -112,19 +95,14 @@ open class ClientBase(
     var periods_: List<Period>? = null
 
     /**
-     * Porte de rafraîchissement (#405) : UN refresh à la fois (CAS). Elle
-     * remplace le `var _refreshing` d'avant, qui n'était ni `@Volatile` ni
-     * atomique : deux threads lisaient `false` en même temps et
-     * déclenchaient DEUX rafraîchissements (deux `Communication` — donc deux
-     * cookies et deux compteurs de requêtes — et le serveur répondait `G=25`).
+     * UN refresh à la fois (CAS) : deux rafraîchissements font deux
+     * `Communication` (deux cookies, deux compteurs) et le serveur répond `G=25`.
      */
     private val refreshGate = RefreshGate()
 
     /**
-     * Porte de LIMITATION DE DÉBIT : un `G=25`/HTTP 429 arme une fenêtre de
-     * calme. Pendant celle-ci, aucune requête ne part et AUCUN refresh n'est
-     * tenté — c'est le refresh qui amplifiait la limite (chaque refresh =
-     * poignée de main + login supplémentaires). La porte se lève toute seule.
+     * Un `G=25`/HTTP 429 arme une fenêtre de calme : aucune requête et AUCUN
+     * refresh, c'est lui qui amplifie la limite. La porte se lève seule.
      */
     private val rateLimitGate = RateLimitGate()
     private var _expired: Boolean = false
@@ -141,7 +119,6 @@ open class ClientBase(
         }
     }
 
-    /** `ready()` : la construction synchrone a déjà tout fait (companion) ; compat d'API. */
     open fun ready(): ClientBase = this
 
     internal fun init() {
@@ -164,7 +141,7 @@ open class ClientBase(
         logged_in = login()
     }
 
-    /** Navigation brute dans une enveloppe (accès directs : absent = jeté, comme côté TS). */
+    /** Accès directs : absent = jeté, comme en TS. */
     private fun objAt(root: JVal?, vararg keys: String): JVal? {
         var cur: JVal? = root
         for (k in keys) cur = (cur as? JVal.Obj)?.fields?.get(k) ?: throw ParsingError("Enveloppe illisible", keys.toList())
@@ -173,7 +150,7 @@ open class ClientBase(
 
 
     private fun login(): Boolean {
-        // `identifiant` absent = clé omise (comme `undefined` côté TS).
+        // `identifiant` absent = clé omise (comme `undefined` en TS).
         val unameRaw: String? = if (ent != null) attributes["e"] else username
         val pwdRaw: String? = if (ent != null) attributes["f"] else password
         val ident = LinkedHashMap<String, JVal>()
@@ -193,11 +170,8 @@ open class ClientBase(
             ?: throw ParsingError("Identification sans data", listOf("dataSec", "data"))
         val e = Encryption()
         e.aesSetIv(communication.encryption.aesIv)
-        // ENT : `attributes["e"]`/`["f"]` ABSENTS = `undefined` côté TS, pas une
-        // exception : `String(undefined)` vaut `"undefined"` et le login
-        // continue. Le `!!` jettait (`KotlinNullPointerException`) là où la
-        // référence enchaîne. Hors ENT, `username`/`password` ne sont jamais
-        // nuls (le constructeur refuse les deux vides).
+        // ENT : `e`/`f` ABSENTS = `"undefined"` et le login continue ; le `!!`
+        // jetait là où la référence enchaîne. Hors ENT, jamais nuls.
         var uname = unameRaw ?: "undefined"
         var pwd = pwdRaw ?: "undefined"
         if (ent != null) {
@@ -233,7 +207,7 @@ open class ClientBase(
             ?: throw ParsingError("Authentification sans data", listOf("dataSec", "data"))
         if (!authData.fields.containsKey("cle")) return false.also { logged_in = false }
         communication.afterAuth(authResponse, e.aesKey)
-        // Bizarrerie fidèle : le client garde la clé d'AUTH, la communication a la clé de SESSION.
+        // Le client garde la clé d'AUTH, la communication a la clé de SESSION.
         encryption.aesKey = e.aesKey
         val doubleAuth = authData.fields["actionsDoubleAuth"] as? JVal.Obj
         if (doubleAuth != null) {
@@ -243,7 +217,7 @@ open class ClientBase(
             do2fa(nums.contains(3.0), nums.contains(5.0) || nums.contains(3.0), accountPin, deviceName)
         }
         val lastConn = authData.fields["derniereConnexion"]
-        // Falsy = `null` ; sinon `.V` direct (non-objet = jeté, comme `.V` côté TS).
+        // Falsy = `null` ; sinon `.V` direct (non-objet = jeté).
         lastConnection = if (jsTruthy(lastConn)) datetimeParse((lastConn as JVal.Obj).fields["V"]) else null
         if ((loginMode == "qr_code" || loginMode == "token") && jsTruthy(authData.fields["jetonConnexionAppliMobile"])) {
             password = strOf(authData.fields["jetonConnexionAppliMobile"])
@@ -291,13 +265,13 @@ open class ClientBase(
         uuid = uuid,
     )
 
-    /** Semaine PRONOTE (lundi = 1er jour) : `1 + floor(jours/7)` depuis `PremierLundi`. */
+    /** Semaine PRONOTE (lundi = 1er jour), depuis `PremierLundi`. */
     override fun getWeek(date: LocalDateTime): Int {
         val days = (date.toLocalDate().toEpochDay() - startDay.toLocalDate().toEpochDay()).toInt()
         return 1 + Math.floorDiv(days, 7)
     }
 
-    /** Trimestres (reconstruits à chaque accès sauf cache `periods_` non vide, comme côté TS). */
+    /** Reconstruits à chaque accès sauf cache `periods_` non vide. */
     val periods: List<Period>
         get() {
             val cached = periods_
@@ -310,7 +284,7 @@ open class ClientBase(
                 .map { Period(this, it) }
         }
 
-    /** Garde de session (le `post("Navigation", …)` est branché ici, pas dans le modèle). */
+    /** Le `post("Navigation", …)` est branché ici, pas dans le modèle. */
     fun keepAlive(): KeepAlive = KeepAlive(
         shouldPing = { System.currentTimeMillis() / 1000 - communication.lastPing >= 110 },
         pingRequest = {
@@ -322,17 +296,14 @@ open class ClientBase(
     )
 
     /**
-     * Re-poignée de main + re-login (sauf ENT injecté, rejoué lui aussi).
+     * Re-poignée de main + re-login (l'ENT injecté est rejoué).
      *
-     * VERRU DE SESSION (#405) : `refresh` et `post` partagent le même
-     * moniteur (`@Synchronized`). Le remplacement de `communication`,
-     * `attributes` et de la clé AES n'attrape donc JAMAIS une requête en
-     * vol, et deux rafraîchissements ne peuvent pas se chevaucher.
+     * `refresh` et `post` partagent le moniteur : le remplacement de
+     * `communication`/`attributes`/clé AES n'attrape JAMAIS une requête en vol.
      */
     @Synchronized
     open fun refresh() {
-        // #473 : la session est neuve, les lectures mémorisées sont de l'ancien
-        // monde (mêmes clés, nouvelle session) — elles repartent.
+        // Session neuve : les lectures mémoïsées sont de l'ancien monde.
         readMemo?.clear()
         val cookieJar = ent?.invoke(username, password, mapOf("pronote_url" to pronoteUrl))
         communication = Communication(pronoteUrl, cookieJar, loginMode != "normal")
@@ -351,20 +322,11 @@ open class ClientBase(
 
     /**
      * Enveloppe `{Signature, data}` (`Signature` omise si onglet nul/zéro/NaN,
-     * `data` omise si nulle), mémo des lectures identiques (#473) et rejeu
-     * unique après `refresh` sur `PronoteAPIError` (`ExpiredObject` et le
-     * reste remontent tels quels).
+     * `data` omise si nulle), mémo des lectures et rejeu unique après `refresh`.
      *
-     * VERRU DE SESSION (#405) : `post` et `refresh` partagent le moniteur.
-     * Le job de fond (`PeriodicSyncWorker`) et la lecture de l'interface
-     * tombant en erreur en MÊME temps, ils déclenchaient deux
-     * rafraîchissements concurrents : deux `Communication` (deux cookies, deux
-     * compteurs de requêtes), le champ finissant sur celle qui avait fini la
-     * dernière, et les requêtes entrelacées (clé AES mélangée) — le serveur
-     * répondait alors `G=25` « Exceeded max authorization requests » ou la
-     * session restait à moitié initialisée. Ici le perdant de la course
-     * ATTEND le rafraîchissement (au lieu de doubler la connexion) et rejoue
-     * sa requête sur la session neuve.
+     * `post` et `refresh` partagent le moniteur : deux rafraîchissements
+     * concurrents (job de fond + interface) donnaient deux `Communication` et
+     * une clé AES mélangée. Le perdant ATTEND puis rejoue sur la session neuve.
      */
     @Synchronized
     override fun post(functionName: String, onglet: Double?, data: Map<String, JVal>?): JVal {
@@ -373,10 +335,8 @@ open class ClientBase(
             postData["Signature"] = JVal.Obj(linkedMapOf("onglet" to JVal.Num(onglet)))
         }
         if (data != null) postData["data"] = JVal.Obj(LinkedHashMap(data))
-        // #473 : la MÊME lecture (fonction + onglet + charge utile) ne part
-        // qu'une fois par minute. Une fonction HORS liste blanche (écriture,
-        // ping, authentification) VIDE la mémo : l'état du compte vient de
-        // changer, les lectures servies seraient fausses.
+        // La MÊME lecture ne part qu'une fois par minute. Une fonction HORS
+        // liste blanche (écriture, ping, auth) VIDE la mémo.
         val memo = readMemo
         val key = memo?.keyFor(functionName, onglet, JVal.Obj(postData))
         if (key == null) {
@@ -385,46 +345,38 @@ open class ClientBase(
         }
         memo.get(key)?.let { return it }
         val response = sendWithRefresh(functionName, postData)
-        // Seule une RÉUSSITE est mémorisée (une erreur remontera au même
-        // écran, pas à la mémo).
+        // Seule une RÉUSSITE est mémorisée.
         memo.put(key, response)
         return response
     }
 
     /**
-     * Envoi effectif d'une fonction à l'établissement, avec rejeu unique après
-     * `refresh` sur `PronoteAPIError` (`ExpiredObject` et le reste remontent
-     * tels quels).
+     * Envoi effectif, avec rejeu unique après `refresh` sur `PronoteAPIError`
+     * (`ExpiredObject` remonte tel quel).
      *
-     * `send` est ouvert pour les TESTS (un stub qui compte les requêtes
-     * rejoue le vrai `post` sans réseau) : le harnais de parité l'exploite.
-     * `refresh` l'est aussi pour que le pilote de rate-limit prouve qu'aucun
-     * refresh n'est déclenché sans toucher au réseau.
+     * `send`/`refresh` ouverts pour les TESTS : un stub compte les requêtes
+     * sans réseau, et le pilote de rate-limit prouve qu'aucun refresh ne part.
      */
     private fun sendWithRefresh(functionName: String, postData: Map<String, JVal>): JVal {
-        // Pendant la fenêtre de calme : échec immédiat, sans requête et sans
-        // refresh. C'est le seul chemin qui empêche la boucle
-        // « G=25 -> refresh -> login -> G=25 ».
+        // Fenêtre de calme : échec immédiat, sans requête ni refresh — le seul
+        // chemin qui empêche la boucle « G=25 -> refresh -> login -> G=25 ».
         rateLimitGate.check()
         try {
             return send(functionName, postData)
         } catch (e: RateLimitedError) {
-            // Le serveur vient de refuser le débit. On n'essaie surtout pas de
-            // rafraîchir : on arme la porte et on rend l'erreur telle quelle.
+            // Ne surtout pas rafraîchir : armer la porte, rendre l'erreur telle quelle.
             rateLimitGate.trip()
             throw e
         } catch (e: ExpiredObject) {
             throw e
         } catch (e: PronoteAPIError) {
-            // Un rafraîchissement est DÉJÀ en cours (le login du refresh
-            // échoue) : on ne le double pas — l'erreur remonte, comme avant.
+            // Un rafraîchissement est DÉJÀ en cours : ne pas le doubler.
             if (!refreshGate.tryEnter()) throw e
             try {
                 refresh()
             } catch (rate: RateLimitedError) {
-                // Le refresh lui-même tombe sur la limite : la session n'est
-                // pas morte, on attend. Sans ce catch, l'appelant verrait une
-                // erreur générique et pourrait réessayer.
+                // Le refresh tombe sur la limite : la session n'est pas morte,
+                // on attend.
                 rateLimitGate.trip()
                 throw rate
             } finally {
@@ -433,25 +385,22 @@ open class ClientBase(
             return try {
                 send(functionName, postData)
             } catch (e: RateLimitedError) {
-                // Le rejeu a été refusé aussi : armer la porte évite la
-                // troisième tentative de l'appelant.
+                // Rejeu refusé aussi : armer la porte évite une 3e tentative.
                 rateLimitGate.trip()
                 throw e
             }
         }
     }
 
-    /** POST effectif vers l'établissement (surchargeable par les tests). */
+    /** POST effectif (surchargeable par les tests). */
     internal open fun send(functionName: String, postData: Map<String, JVal>): JVal =
         communication.post(functionName, postData)
 
 }
 
 /**
- * Client élève (lectures + écritures devoir/discussion).
- *
- * `open` : le harnais de parité en dérive un client dont l'envoi est un
- * STUB qui compte les requêtes (aucun réseau, aucun établissement).
+ * Client élève (lectures + écritures devoir/discussion). `open` : le harnais de
+ * parité en dérive un client dont l'envoi est un STUB qui compte les requêtes.
  */
 open class Client(
     pronoteUrl: String,
@@ -467,20 +416,15 @@ open class Client(
         }
 
         /**
-         * Session sur l'établissement de DÉMONSTRATION public de l'éditeur
-         * (`DemoSchool`) : ni QR, ni PIN — le compte de démonstration est
-         * public et s'ouvre par son identifiant.
-         *
-         * Symétrique de `qrcodeLogin` : c'est le client qui ouvre la session,
-         * le dépôt ne fait que la publier.
+         * Établissement de DÉMONSTRATION public : ni QR, ni PIN. C'est le client
+         * qui ouvre la session, le dépôt ne fait que la publier.
          */
         fun demoLogin(): Client = DemoSchool.login()
 
         /**
-         * QR de l'établissement : `login`/`jeton` déchiffrés par le PIN
-         * (`md5`), URL réécrite (`mobile.` + `?fd=1&…&login=true`), session
-         * mobile (UA iPhone), rotation du jeton, second tour `token` si la
-         * sécurisation l'exige.
+         * `login`/`jeton` déchiffrés par le PIN, URL réécrite (`mobile.`,
+         * `login=true`), UA iPhone, second tour `token` si la sécurisation
+         * l'exige.
          */
         fun qrcodeLogin(qrCode: QrCode, pin: String, uuid: String, opts: QrLoginOptions = QrLoginOptions()): Client {
             val encryption = Encryption()
@@ -491,7 +435,7 @@ open class Client(
                 login, jeton,
                 ClientOptions(mode = "qr_code", uuid = uuid, accountPin = opts.accountPin, clientIdentifier = opts.clientIdentifier, deviceName = opts.deviceName, memoizeReads = opts.memoizeReads),
             )
-            // Les déchiffrements ont déjà jeté (`QRCodeDecryptError`) si le PIN est faux.
+            // Un PIN faux a déjà jeté `QRCodeDecryptError`.
             client.init()
             client.loginMode = "token"
             if (!opts.skip2fa) {
@@ -519,31 +463,27 @@ open class Client(
             } catch (e: CryptoError) {
                 throw QRCodeDecryptError("invalid confirmation code")
             } catch (e: IllegalArgumentException) {
-                // Hex malformé : le TS (`Buffer.from` lenient : tronque/ignore) échoue
-                // ensuite au déchiffrement vers le MÊME `QRCodeDecryptError`.
-                // Équivalence d'issue, pas de chemin : prouvée par la parité.
+                // Hex malformé : le TS échoue ensuite au déchiffrement vers le
+                // MÊME `QRCodeDecryptError` (équivalence d'issue, prouvée par la parité).
                 throw QRCodeDecryptError("invalid confirmation code")
             }
         }
 
         internal fun rewriteQrUrl(raw: String): String {
             // Comme `new URL()` : userinfo gardée, IPv6 entre crochets, ports par
-            // défaut (:80/:443) omis, hash vidé. Les URL d'établissement réelles
-            // sont simples ; c'est la fidélité des cas tordus qui est verrouillée ici.
-            // ponytail: `.../pronote` -> `.../pronote/eleve.html` (prefill + saisie
-            // sans fichier sinon 404-fast -> school_unreachable). Full eleve.html intact.
-            // URLs malformees -> IllegalArgumentException (bad_request, pas school_unreachable).
+            // défaut omis, hash vidé.
+            // ponytail: `.../pronote` -> `.../pronote/eleve.html` (sinon 404 ->
+            // school_unreachable). URL malformée -> IllegalArgumentException (bad_request).
             val uri = try {
                 java.net.URI(raw.trim())
             } catch (e: Exception) {
                 throw IllegalArgumentException("URL sans hote : $raw")
             }
-            // `new URL()` met le schéma en minuscules ; `URI` le garde tel quel.
+            // `new URL()` met le schéma en minuscules, `URI` le garde tel quel.
             val scheme = uri.scheme?.lowercase() ?: throw IllegalArgumentException("URL sans hôte : $raw")
             val authority = uri.rawAuthority ?: throw IllegalArgumentException("URL sans hôte : $raw")
-            // `URI.getHost()` vaut NULL dès que l'autorité n'est pas « serveur »
-            // (underscore, IDN, espace) : l'autorité BRUTE est découpée à la main,
-            // comme le fait `new URL()` côté TS (qui accepte ces formes).
+            // `URI.getHost()` vaut NULL si l'autorité n'est pas « serveur »
+            // (underscore, IDN, espace) : découpage à la main, comme `new URL()`.
             val at = authority.lastIndexOf('@')
             val userinfo = if (at >= 0) "${authority.substring(0, at)}@" else ""
             val hostPort = if (at >= 0) authority.substring(at + 1) else authority
@@ -551,7 +491,7 @@ open class Client(
             if (rawHost.isEmpty()) throw IllegalArgumentException("URL sans hôte : $raw")
             val host = hostOf(rawHost, raw)
             var normPath = uri.path ?: ""
-            // `new URL()` : le chemin d'une URL absolue vaut toujours "/" au moins.
+            // `new URL()` : le chemin vaut toujours "/" au moins.
             if (normPath.isEmpty()) normPath = "/"
             val noTrail = if (normPath.endsWith("/") && normPath.length > 1) normPath.dropLast(1) else normPath
             if (noTrail.endsWith("/pronote")) normPath = "$noTrail/eleve.html"
@@ -564,10 +504,8 @@ open class Client(
         }
 
         /**
-         * Hôte + port de l'autorité brute : `hote`, `hote:port` ou `[v6]:port`.
-         * Les crochets IPv6 sont conservés (l'URL finale les reprend tels quels).
-         * Port = -1 quand l'autorité n'en porte pas (`hote:` = port par défaut,
-         * comme `new URL()`).
+         * `hote`, `hote:port` ou `[v6]:port` ; crochets IPv6 conservés. Port -1
+         * quand l'autorité n'en porte pas (`hote:` = port par défaut).
          */
         private fun hostPortOf(hostPort: String, raw: String): Pair<String, Int> {
             if (hostPort.startsWith("[")) {
@@ -584,12 +522,12 @@ open class Client(
             val colon = hostPort.lastIndexOf(':')
             if (colon < 0) return Pair(hostPort, -1)
             val host = hostPort.substring(0, colon)
-            // Un hôte ne porte pas de ':' : `hote:port:port` n'est pas une URL.
+            // Un hôte ne porte pas de ':' : `hote:port:port` est invalide.
             if (":" in host) throw IllegalArgumentException("URL sans hôte : $raw")
             return Pair(host, portOf(hostPort.substring(colon + 1), raw))
         }
 
-        /** Port : vide = port par défaut ; hors 0..65535 = URL invalide (`new URL()`). */
+        /** Vide = port par défaut ; hors 0..65535 = invalide. */
         private fun portOf(port: String, raw: String): Int {
             if (port.isEmpty()) return -1
             val value = port.toIntOrNull() ?: throw IllegalArgumentException("URL sans hôte : $raw")
@@ -598,10 +536,9 @@ open class Client(
         }
 
         /**
-         * Hôte final : minuscules, puis punycode pour un IDN —
-         * `new URL("https://école.example")` donne `xn--cole-9oa.example`.
-         * ponytail: `IDN` est IDNA2003, le TS est UTS46 : `ß` -> `fass.de` ici,
-         * `xn--fa-hia.de` côté TS. Lettre allemande, pas d'établissement français.
+         * Minuscules, puis punycode pour un IDN.
+         * ponytail: `IDN` est IDNA2003, le TS est UTS46 (`ß` diverge) — lettre
+         * allemande, pas d'établissement français.
          */
         private fun hostOf(host: String, raw: String): String {
             val lower = host.lowercase()
@@ -614,7 +551,7 @@ open class Client(
         }
 
         fun tokenLogin(pronoteUrl: String, username: String, password: String, uuid: String, opts: ClientOptions = ClientOptions()): Client {
-            // `ent` jamais propagé (le TS reconstruit des opts frais sans `ent`).
+            // `ent` jamais propagé (le TS reconstruit ses opts sans `ent`).
             val client = Client(
                 pronoteUrl, username, password,
                 opts.copy(mode = "token", uuid = uuid, ent = null),
@@ -625,9 +562,9 @@ open class Client(
     }
 
 
-    /** Cours entre deux dates (semaines balayées, filtrés sur la fenêtre, bornes incluses). */
+    /** Semaines balayées, filtrés sur la fenêtre, bornes incluses. */
     fun lessons(dateFrom: LocalDateTime, dateTo: LocalDateTime?): List<Lesson> {
-        // `Ressource` absente = clés omises (comme `undefined` côté TS).
+        // `Ressource` absente = clés omises (comme `undefined` en TS).
         val user = userResource()
         val base = LinkedHashMap<String, JVal>()
         if (user != null) {
@@ -660,9 +597,9 @@ open class Client(
         return out.filter { it.start >= from && it.start <= to }
     }
 
-    /** Devoirs (semaines `premier..dernier`, filtrés sur la fenêtre). */
+    /** Semaines `premier..dernier`, filtrés sur la fenêtre. */
     fun homework(dateFrom: LocalDateTime, dateTo: LocalDateTime?): List<Homework> {
-        // `DerniereDate.V` (l'objet seul n'est pas une date, comme `.V` manquant côté TS).
+        // `DerniereDate.V` : l'objet seul n'est pas une date.
         val to = dateTo ?: dateParse((dataGeneral() as? JVal.Obj)?.fields?.get("DerniereDate")?.let { (it as? JVal.Obj)?.fields?.get("V") })
         val resp = post(
             "PageCahierDeTexte", 88.0,
@@ -689,7 +626,7 @@ open class Client(
         ((((userSettings as? JVal.Obj)?.fields?.get("dataSec") as? JVal.Obj)
             ?.fields?.get("data") as? JVal.Obj)?.fields?.get("ressource"))
 
-    /** Destinataires (enseignants `G:3` + vie sco `G:34`, concaténés dans l'ordre). */
+    /** Enseignants `G:3` puis vie sco `G:34`, dans cet ordre. */
     fun getRecipients(): List<Recipient> {
         val out = mutableListOf<Recipient>()
         for (g in listOf(3.0, 34.0)) {
@@ -706,7 +643,7 @@ open class Client(
         return out
     }
 
-    /** Nouvelle discussion (aucun id renvoyé, comme côté TS). */
+    /** Aucun id renvoyé, comme en TS. */
     fun newDiscussion(subject: String, message: String, recipients: List<Recipient>) {
         post(
             "SaisieMessage", 131.0,
@@ -722,7 +659,7 @@ open class Client(
         )
     }
 
-    /** Discussions de premier niveau (`estUneDiscussion`, profondeur 0), non-lus filtrables. */
+    /** Premier niveau (`estUneDiscussion`, profondeur 0), non-lus filtrables. */
     fun discussions(onlyUnread: Boolean = false): List<Discussion> {
         val resp = post(
             "ListeMessagerie", 131.0,
@@ -749,7 +686,7 @@ open class Client(
         }
     }
 
-    /** Actus + sondages (filtres non-lus/fenêtre sur `startDate` présent). */
+    /** Actus + sondages, filtrés sur `startDate` présent. */
     fun informationAndSurveys(opts: InfoFilter = InfoFilter()): List<Information> {
         val resp = post(
             "PageActualites", 8.0,
@@ -771,16 +708,13 @@ open class Client(
     }
 
     /**
-     * Corps d'une actualité (#475) : TEXTE BRUT, 1 POST `PageActualites`.
-     *
-     * La liste des actus ne télécharge plus les corps (21 POST pour un écran
-     * dont l'élève ne lit que 2-3 actus) : le corps se charge à la demande,
-     * au dépliage.
+     * TEXTE BRUT, 1 POST `PageActualites` : la liste ne télécharge pas les corps,
+     * ils se chargent à la demande, au dépliage.
      */
     fun informationContent(id: String): String =
         informationBodyText(informationQuestions(this, id))
 
-    /** Cantine (semaines calendaires balayées, `Date` injectée par jour, filtrée sur la fenêtre). */
+    /** Semaines balayées, `Date` injectée par jour, filtré sur la fenêtre. */
     fun menus(dateFrom: LocalDateTime, dateTo: LocalDateTime?): List<Menu> {
         val to = dateTo ?: dateFrom
         val out = mutableListOf<Menu>()

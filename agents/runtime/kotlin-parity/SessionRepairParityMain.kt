@@ -1,20 +1,8 @@
-// SessionRepairParityMain.kt — pilote JSON de la réparation d'une session MORTE (#397).
+// SessionRepairParityMain.kt — pilote JSON de la réparation d'une session MORTE.
 //
-// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-session-repair.test.ts`
-// (jamais par Gradle, jamais dans l'APK). Le test compile les VRAIES classes de
-// production `fr.veryslopnynotes.data.DeviceAuth` (le signal), `fr.veryslopnynotes.
-// data.SessionRepair` (la purge) et `fr.veryslopnynotes.data.FileCacheStore`
-// (logique pure : `java.io` seul, aucun import Android) et les pilote ici : les
-// assertions portent donc sur du code exécuté, pas sur un miroir TS.
+// OUTIL DE TEST uniquement : compilé par `tests/unit/kotlin-session-repair.test.ts` (jamais Gradle, jamais l'APK).
 //
-// Scénario rejoué : un dépôt lève le signal « session morte » ; l'abonné de
-// l'app purge alors la session (persistée + en mémoire) ET le cache. Avant
-// (#397), le signal n'avait AUCUN abonné : `reject()` ne purgeait rien.
-//
-// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur
-// stdout, comme les autres pilotes de `agents/runtime/kotlin-parity/`. Les
-// erreurs du PILOTE (op inconnue, sid absent) sont préfixées `pilote: ` et
-// refusées par le test.
+// Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.sessionrepair
 
 import fr.veryslopnynotes.data.DeviceAuth
@@ -150,7 +138,7 @@ private class Driver {
                 "client" to JVal.Bool(PronoteSession.client != null),
             )
         }
-        // #520 : une LECTURE qui échoue — le chemin RÉEL d'un dépôt : la
+        // une LECTURE qui échoue — le chemin RÉEL d'un dépôt : la
         // décision de production (`isSessionFailure`) décide si le signal
         // « session morte » est levé, donc si le cache est purgé. La
         // décision tranche par TYPE et par code `G`, JAMAIS par un mot du
