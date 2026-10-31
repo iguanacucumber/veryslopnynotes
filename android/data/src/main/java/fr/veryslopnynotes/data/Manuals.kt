@@ -56,6 +56,26 @@ fun manualMatchesSubject(docSubject: String, requested: String): Boolean {
 }
 
 /**
+ * Une fiche d'ouvrage précis parle-t-elle de la matière demandée ?
+ *
+ * Le titre de page (« 1. Relation de divisibilité dans Z ») ne nomme pas
+ * toujours la matière ; l'en-tête du manuel, lui, est dans le début de
+ * l'extrait. On accepte donc la fiche si son titre OU le début de son extrait
+ * porte la matière — jamais le corps entier, où un exercice de maths pourrait
+ * citer l'histoire par hasard.
+ */
+fun manualMatchesSubject(doc: ManualDoc, requested: String): Boolean =
+    manualMatchesSubject(doc.subject, requested) ||
+        manualMentionsSubject(doc.title, requested) ||
+        manualMentionsSubject(doc.excerpt, requested)
+
+internal fun manualMentionsSubject(docText: String, requested: String): Boolean {
+    val wanted = ManualCatalog.subjectKey(requested) ?: return false
+    // Début seulement : le corps d'un exercice peut citer une autre matière.
+    return ManualCatalog.subjectKey(docText.take(1_000)) == wanted
+}
+
+/**
  * Une adresse + des extraits, dans des préférences PROPRES (comme le serveur).
  *
  * Les RÉGLAGES d'usage (invitation déjà vue) survivent à une déconnexion ; le

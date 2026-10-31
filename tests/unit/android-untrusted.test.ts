@@ -168,6 +168,15 @@ describe("I6 — le marqueur de délimitation ne peut pas être forgé (#373)", 
     expect(count(r.body!, `</UNTRUSTED_DATA nonce="${NONCE}">`)).toBe(1);
   });
 
+  test.skipIf(skip)("un attribut nonce orphelin ne fuit pas dans la réponse", async () => {
+    const raw = '> *Source : Contenu  nonce="a9d83f00"*\nFin.';
+    const r = await ask({ op: "strip", content: raw });
+    expect(r.ok).toBe(true);
+    expect(r.body).not.toMatch(/nonce\s*=/i);
+    expect(r.body).toContain("Source : Contenu");
+    expect(r.body).toContain("Fin.");
+  });
+
   test.skipIf(skip)("le prompt produit reste stable à nonce fixé", async () => {
     const content = "Exercice 1 : calculer 3 + 4.";
     const a = await ask({ op: "prompt", content, nonce: NONCE });

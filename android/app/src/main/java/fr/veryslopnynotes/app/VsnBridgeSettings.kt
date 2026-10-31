@@ -181,7 +181,7 @@ internal fun VsnBridge.manualDocFor(subject: String): ManualDoc? {
     }
     // Le catalogue a déjà choisi l'ouvrage PAR matière ; une adresse précise ne
     // dit rien de la sienne, donc seule la fiche tranche.
-    fun matches(doc: ManualDoc): Boolean = catalog || manualMatchesSubject(doc.subject, subject)
+    fun matches(doc: ManualDoc): Boolean = catalog || manualMatchesSubject(doc, subject)
     manuals.doc(target)?.let { doc -> return if (matches(doc)) doc else null }
     val now = System.currentTimeMillis()
     val lastFailure = manualFailures[target] ?: 0L

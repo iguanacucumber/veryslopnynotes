@@ -10,6 +10,7 @@ import fr.veryslopnynotes.core.buildRevisionPrompt
 import fr.veryslopnynotes.core.markExternal
 import fr.veryslopnynotes.core.parseJsonValue
 import fr.veryslopnynotes.core.stringifyJson
+import fr.veryslopnynotes.core.stripUntrustedTags
 import fr.veryslopnynotes.core.wrapUntrusted
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -52,6 +53,11 @@ fun main() {
                         "nonce" to JsonValue.Str(n),
                     )
                 }
+                // Sortie de modèle : les délimiteurs recopiés sont retirés.
+                "strip" -> obj(
+                    "ok" to JsonValue.Bool(true),
+                    "body" to JsonValue.Str(stripUntrustedTags(content)),
+                )
                 else -> throw IllegalArgumentException("pilote: operation inconnue : ${op.str("op")}")
             }
             stdout.println(stringifyJson(res))

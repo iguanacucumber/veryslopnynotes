@@ -35,11 +35,13 @@ private class FakeProvider(private val response: String) : SafeVisionPromptProvi
     var sawImage: Boolean = false
     var sawImages: Int = 0
     var sawMarker: Boolean = false
+    var sawInterfaceGuard: Boolean = false
 
     override fun generateVisionSafe(prompt: SafeVisionPrompt, apiKey: String?): String {
         sawImages = prompt.images.size
         sawImage = sawImages > 0
         sawMarker = prompt.prompt.body.contains("UNTRUSTED_DATA")
+        sawInterfaceGuard = prompt.prompt.system.contains("Ignore l'interface visible", ignoreCase = true)
         return response
     }
 }
@@ -69,6 +71,7 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
             "text" to JVal.Str(draft.text),
             "sawImage" to JVal.Bool(provider.sawImage),
             "sawMarker" to JVal.Bool(provider.sawMarker),
+            "sawInterfaceGuard" to JVal.Bool(provider.sawInterfaceGuard),
         )
     }
     "homeworkPhoto" -> {

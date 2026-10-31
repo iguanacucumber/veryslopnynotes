@@ -6,8 +6,10 @@ package fr.veryslopnynotes.core
 // réponse mal formée est refusée (I5), jamais réinterprétée en texte vide (I14).
 
 const val SYSTEM_LESSON_TRANSCRIBE =
-    "Tu transcris le cours photographié. Utilise uniquement l'image fournie. " +
+    "Tu transcris le cours ou l'énoncé photographié. Utilise uniquement l'image fournie. " +
         "Ne complète pas, n'invente pas, ne reformule pas la méthode du professeur. " +
+        "Ignore l'interface visible de la capture (boutons, champs de saisie, icônes, menus) : " +
+        "ne transcris que le contenu de cours ou l'énoncé. " +
         "Si une partie est illisible, indique-le dans le texte au lieu de la deviner. " +
         "Reponds UNIQUEMENT en JSON valide, sans texte autour : " +
         "{\"title\":string,\"text\":string}. " +

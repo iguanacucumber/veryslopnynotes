@@ -64,6 +64,7 @@ function functionSource(src: string, signature: string): string {
 }
 
 const PREDICATE = functionSource(manualSource, "fun manualMatchesSubject(");
+const MENTIONS = functionSource(manualSource, "internal fun manualMentionsSubject(");
 
 const skip = parityToolchain.skipReason !== null;
 
@@ -80,6 +81,7 @@ import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
 
 ${PREDICATE}
+${MENTIONS}
 
 private fun JVal.Obj.str(key: String): String = (fields[key] as? JVal.Str)?.value ?: ""
 
@@ -92,7 +94,11 @@ fun main() {
         val line = stdin.readLine() ?: break
         if (line.isBlank()) continue
         val op = Json.parse(line) as JVal.Obj
-        val ok = manualMatchesSubject(op.str("doc"), op.str("requested"))
+        val ok = if (op.str("op") == "mentions") {
+            manualMentionsSubject(op.str("doc"), op.str("requested"))
+        } else {
+            manualMatchesSubject(op.str("doc"), op.str("requested"))
+        }
         stdout.println(Json.stringify(JVal.Bool(ok)))
     }
 }
@@ -141,6 +147,18 @@ describe("manuel d'un ouvrage précis — la matière de la fiche décide", () =
     expect(await matches("NSI", "Numérique et sciences informatiques")).toBe(true);
   });
 
+  test.skipIf(skip)("un titre de page neutre est complété par l'en-tête du manuel", async () => {
+    // Page réelle : le titre ne dit pas la matière, l'extrait si.
+    const page = "1. Relation de divisibilité dans Z | Lelivrescolaire.fr " +
+      "Nos manuels Se connecter Menu Sommaire Accueil du manuel Mathématiques Expertes Terminale";
+    const verdict = async (doc: string, requested: string): Promise<boolean> =>
+      JSON.parse(await link!.ask({ op: "mentions", doc, requested })) as boolean;
+    expect(await verdict(page, "Mathématiques expertes")).toBe(true);
+    // « Mathématiques » n'est PAS « Mathématiques expertes ».
+    expect(await verdict(page, "Mathématiques")).toBe(false);
+    expect(await verdict("Histoire-Géographie Terminale", "Mathématiques")).toBe(false);
+  });
+
   test.skipIf(skip)("matière vide ou inconnue : refus (fail-closed)", async () => {
     // Une fiche sans matière ne prouve rien.
     expect(await matches("", "Mathématiques")).toBe(false);
@@ -160,8 +178,8 @@ describe("pont — extrait et disponibilité appliquent la même règle", () => 
     // Le catalogue est reconnu une fois, et sa branche de résolution est intacte.
     expect(doc).toContain("val catalog = ManualCatalog.isCatalog(stored)");
     expect(doc).toContain("ManualCatalog.resolve(stored, classLabel, subjects, subject)");
-    // Extrait en cache : la fiche tranche (plus de `return it` inconditionnel).
-    expect(doc).toContain("manualMatchesSubject(doc.subject, subject)");
+    // Extrait en cache : la fiche entière tranche (sujet, titre, début d'extrait).
+    expect(doc).toContain("manualMatchesSubject(doc, subject)");
     expect(doc).not.toContain("manuals.doc(target)?.let { return it }");
     // Extrait fraîchement récolté : même contrôle avant de le rendre.
     const cached = doc.slice(0, doc.indexOf("val now = System.currentTimeMillis()"));
@@ -176,7 +194,7 @@ describe("pont — extrait et disponibilité appliquent la même règle", () => 
     expect(available.length).toBeGreaterThan(0);
     // Ouvrage précis : la fiche en cache décide…
     expect(available).toContain("val doc = manuals.doc(url) ?: return true");
-    expect(available).toContain("manualMatchesSubject(doc.subject, subject)");
+    expect(available).toContain("manualMatchesSubject(doc, subject)");
     // …et la disponibilité n'est plus vraie pour toutes les matières.
     expect(available).not.toContain("if (!ManualCatalog.isCatalog(url)) return true");
     // Le catalogue garde sa règle de résolution.

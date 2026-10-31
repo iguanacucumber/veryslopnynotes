@@ -164,9 +164,14 @@ describe("exercices — aide progressive (#632)", () => {
     expect(method.system).toContain("METHODE");
     expect(method.system).toContain("Ne donne PAS le résultat final");
     expect(correction.system).toContain("CORRECTION COMPLETE");
-    // Les trois niveaux portent la même règle de citation.
+    // Une copie juste ne devient jamais une erreur inventée.
+    expect(correction.system).toContain("n'invente aucune erreur");
+    // Les trois niveaux portent la même règle de citation et la même garde
+    // contre les artefacts de prompt ou d'interface recopiés.
     for (const level of [hint, method, correction]) {
       expect(level.system).toContain("Seuls les blocs precedes de « Libelle citable : » sont des sources");
+      expect(level.system).toContain("Ne décris jamais l'interface");
+      expect(level.system).toContain('Ne recopie jamais dans "answer"');
     }
     expect(new Set([hint.system, method.system, correction.system]).size).toBe(3);
   });
