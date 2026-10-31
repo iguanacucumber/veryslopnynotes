@@ -1,32 +1,34 @@
-// Le PORT DE PARITÉ tient dans UN SEUL jar (#444).
+// Le PORT DE PARITÉ est compilé en une union à froid (#444), puis découpé en
+// port + pilotes (#754).
 //
-// AVANT : chaque test de parité compilait son propre programme Kotlin —
+// AVANT #444 : chaque test de parité compilait son propre programme Kotlin —
 // 15 `kotlinc`, 15 JVM neuves, ~500 s de CPU et ~11 Go de pointe pour la
 // seule suite unitaire. OR 15 de ces 15 programmes incluaient `Json.kt` : on
 // recompilait le même code 15 fois.
 //
-// APRÈS : un jar pour le port entier, compilé UNE fois, et un verrou qui
-// fait attendre les workers concurrents au lieu de les laisser compiler
-// chacun de leur côté.
+// APRÈS #444 : une union pour le port entier, compilée UNE fois, et un verrou
+// qui fait attendre les workers concurrents au lieu de les laisser compiler
+// chacun de leur côté. #754 garde ce coût à froid et découpe le résultat :
+// seul un pilote modifié repasse par `kotlinc`.
 //
-// Ce fichier prouve les DEUX invariants qui rendent ça vrai :
+// Ce fichier prouve les invariants qui rendent ça vrai :
 //
-//   1. UN SEUL JAR — les 17 tests de parité visent le même, et le verrou à
-//      jar ne compile qu'une fois.
-//   2. CHAQUE PILOTE EST LANCABLE — le jar porte 17 `main()`, le harnais
-//      lance le pilote par sa CLASSE. Un pilote mal déduit doit se voir
-//      ICI, pas dans 17 tests rouges à la fois.
+//   1. UNE UNION — les tests visent le même port, et le verrou à jar ne
+//      compile qu'une fois.
+//   2. CHAQUE PILOTE EST LANCABLE — les pilotes portent 17 `main()`, le
+//      harnais lance le pilote par sa CLASSE. Un pilote mal déduit doit se
+//      voir ICI, pas dans 17 tests rouges à la fois.
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { ensureSingleJar, lockIsStale } from "./fixtures/jar-lock";
 import { driverSources, mainClassOf, PARITY_SOURCES, PRODUCTION_SOURCES } from "./fixtures/parity-sources";
 import { JVM_FLAGS, parityToolchain, ROOT } from "./fixtures/kotlin-harness";
 
 const DRIVERS = driverSources();
 
-describe("port de parité : un jar pour tous les pilotes", () => {
+describe("port de parité : une union, deux jars", () => {
   test("l'union contient TOUS les pilotes et toutes les sources de production", () => {
     // Un pilote laissé de côté = un test qui ne compile plus rien (ou qui
     // compile son propre jar : exactement le défaut qu'on vient de supprimer).
@@ -196,13 +198,25 @@ describe("verrou à jar : une seule compilation, même en concurrence", () => {
   });
 });
 
-describe("le jar de l'union expose le main de chaque pilote", () => {
+function jarEntries(path: string): string[] {
+  if (!existsSync(path)) return [];
+  const proc = Bun.spawnSync(["jar", "tf", path], { stdout: "pipe", stderr: "pipe" });
+  if (proc.exitCode !== 0) {
+    throw new Error(`« jar tf ${path} » a échoué : ${proc.stderr.toString().trim()}`);
+  }
+  return proc.stdout.toString().split("\n").filter(Boolean);
+}
+
+describe("le port et ses pilotes sont des jars séparés", () => {
   const skip = parityToolchain.skipReason !== null;
 
   test.skipIf(skip)(
-    "chaque pilote se lance depuis le jar partagé",
+    "chaque pilote se lance depuis le classpath port + pilotes",
     async () => {
-      const jar = await parityToolchain.ensureJar("kotlin-parity", PARITY_SOURCES);
+      const jars = await parityToolchain.ensureParityJars();
+      const cp = [jars.overlay, jars.drivers, jars.port]
+        .filter((p): p is string => p !== undefined)
+        .join(delimiter);
       // Les 17 pilotes sont lancés PAR PAQUETS (4 à la fois) : 17 JVM d'un
       // coup, c'est 700 Mo de plus au pic — exactement ce qu'on supprime.
       const queue = [...DRIVERS];
@@ -214,7 +228,7 @@ describe("le jar de l'union expose le main de chaque pilote", () => {
           // d'OPÉRATION (unknown op), jamais sur un « classe introuvable ».
           // Mêmes drapeaux que les pilotes du harnais (C1 seul, GC sériel) :
           // une JVM qui fait une opération et meurt n'a rien à optimiser.
-          const proc = Bun.spawn(["java", ...JVM_FLAGS, "-cp", jar, cls], {
+          const proc = Bun.spawn(["java", ...JVM_FLAGS, "-cp", cp, cls], {
             stdin: "ignore",
             stdout: "pipe",
             stderr: "pipe",
@@ -231,6 +245,28 @@ describe("le jar de l'union expose le main de chaque pilote", () => {
     },
     // Le délai par défaut (5 s) ne suffit pas : à froid, ce test ATTEND la
     // compilation du port (~15 s) avant de lancer les pilotes.
+    180_000,
+  );
+
+  test.skipIf(skip)(
+    "le port ne contient AUCUNE classe de pilote, les pilotes les portent toutes",
+    async () => {
+      const jars = await parityToolchain.ensureParityJars();
+      const port = new Set(jarEntries(jars.port));
+      const driverJars = new Set([...jarEntries(jars.drivers), ...jarEntries(jars.overlay ?? "")]);
+      for (const driver of DRIVERS) {
+        const entry = `${mainClassOf(driver).replaceAll(".", "/")}.class`;
+        expect({ driver, dansLePort: port.has(entry) }).toEqual({ driver, dansLePort: false });
+        expect({ driver, dansUnJarPilote: driverJars.has(entry) }).toEqual({
+          driver,
+          dansUnJarPilote: true,
+        });
+      }
+      // Et le port porte bien la production : le découpage n'a pas tout mis
+      // dans les pilotes.
+      expect(port.has("fr/veryslopnynotes/pronote/Client.class")).toBe(true);
+    },
+    // Même attente que le lancement : le cache à froid compile l'union.
     180_000,
   );
 });

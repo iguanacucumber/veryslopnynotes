@@ -198,17 +198,17 @@ jobs:
           echo "::endgroup::"
           kotlinc -version
 
-      # LE CACHE DU JAR DE PARITÉ (6,5 Mo). Le harnais compile le port Kotlin
-      # dans `node_modules/.cache/kotlin-parity/<empreinte>/parity.jar` —
-      # l'empreinte est le sha256 du CONTENU des sources. La CI met ce jar en
-      # cache sous la MÊME empreinte (calcul partagé, une seule source de
-      # vérité) : quand les sources Kotlin n'ont pas bougé, la compilation
-      # (43,6 s) est reprise du cache au lieu d'être refaite.
+      # LE CACHE DU PORT DE PARITÉ (~6,5 Mo). Le harnais compile l'union à
+      # froid dans `node_modules/.cache/kotlin-parity/`, puis la découpe en
+      # `port.jar` (production) + `drivers.jar` (pilotes). La clé est
+      # l'empreinte des SEULES sources de production (calcul partagé, une
+      # seule source de vérité) : un pilote modifié restaure le port et ne
+      # recompile que son overlay (~2 s au lieu de 43,6 s à froid).
       #
       # CE QUE ÇA NE CHANGE PAS. Les tests exécutent TOUJOURS le Kotlin
       # compilé et le comparent à la référence TS — seul le RECOMPILAGE est
       # réutilisé, et seulement pour des sources IDENTIQUES.
-      - name: Empreinte du port Kotlin
+      - name: Empreinte du port de parité
         id: port-kotlin
         run: |
           set -euo pipefail
@@ -216,17 +216,17 @@ jobs:
           # Une empreinte vide ou malformée produirait une clé de cache
           # silencieusement mauvaise : mieux vaut un ÉCHEC bruyant.
           if ! [[ "$digest" =~ ^[0-9a-f]{16}$ ]]; then
-            echo "empreinte du port Kotlin INVALIDE : « $digest »" >&2
+            echo "empreinte du port de parité INVALIDE : « $digest »" >&2
             exit 1
           fi
           echo "empreinte=${digest}" >> "$GITHUB_OUTPUT"
 
-      - name: Cache du jar de parité
+      - name: Cache du port de parité
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         continue-on-error: true
         with:
           path: node_modules/.cache/kotlin-parity
-          key: kotlin-parity-${{ steps.port-kotlin.outputs.empreinte }}
+          key: kotlin-parity-port-v1-${{ steps.port-kotlin.outputs.empreinte }}
 
       # LE GATE. Une seule invocation, exactement celle du poste. Sa sortie
       # (`check.ts` : une ligne par étape + la queue du premier échec) est

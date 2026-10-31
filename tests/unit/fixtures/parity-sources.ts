@@ -216,7 +216,7 @@ export function driverSources(): string[] {
 }
 
 /**
- * L'UNION : tout ce que la parité compile, en une seule fois.
+ * L'UNION : tout ce que la parité compile à FROID, en une seule fois.
  *
  * L'ordre est FIXE (sources de production, puis pilotes triés) : le digest du
  * cache est un sha256 du contenu des fichiers, donc l'ordre décide de la
@@ -230,8 +230,8 @@ export const PARITY_SOURCES: string[] = [...PRODUCTION_SOURCES, ...driverSources
  *
  * UNE SEULE SOURCE DE VÉRITÉ. C'est ce calcul qui nomme le dossier de cache
  * du harnais (`node_modules/.cache/<nom>/<empreinte>/`) ET la clé du cache CI
- * du jar de parité : deux calculs, deux clés, un cache mort. La CI lit donc
- * CETTE fonction (`agents/runtime/parity-digest.ts`).
+ * des sources de production : deux calculs, deux clés, un cache mort. La CI
+ * lit donc CETTE fonction (`agents/runtime/parity-digest.ts`).
  *
  * 16 hex (64 bits) : assez court pour une clé de cache, assez long pour
  * qu'une collision soit invraisemblable — et une collision nuirait au
@@ -243,15 +243,20 @@ export function digestOf(sources: string[]): string {
   return h.digest("hex").slice(0, 16);
 }
 
-/**
- * L'empreinte DU PORT de parité (le jar unique que le harnais compile).
- *
- * Change dès qu'un octet d'une source de production ou d'un pilote change :
- * c'est ce qui rend le cache du jar sûr — un jar restauré a été compilé
- * EXACTEMENT à partir de ces sources.
- */
+/** Empreinte de l'union complète (cache local du chemin à froid). */
 export function parityDigest(): string {
   return digestOf(PARITY_SOURCES);
+}
+
+/**
+ * Empreinte des sources de PRODUCTION seules : clé du port compilé.
+ *
+ * C'est la seule partie qui coûte cher à compiler (~15 s). Un pilote modifié
+ * ne change pas cette empreinte : le port en cache reste valide, seul
+ * l'overlay des pilotes est reconstruit.
+ */
+export function productionDigest(): string {
+  return digestOf(PRODUCTION_SOURCES);
 }
 
 /**

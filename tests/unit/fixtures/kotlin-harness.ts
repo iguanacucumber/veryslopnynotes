@@ -14,8 +14,9 @@
 // (Le détail du geste des processus — groupes, plafond, sémaphore — est dans
 // `kotlin-harness-build.ts` : c'est la compilation qui tient ces ressources.)
 import { afterAll } from "bun:test";
-import { computeSkipReason, ensureJar, JVM_FLAGS, resolveJava } from "./kotlin-harness-build";
-import { mainClassOf, PARITY_SOURCES } from "./parity-sources";
+import { delimiter } from "node:path";
+import { computeSkipReason, ensureJar, ensureParityJars, JVM_FLAGS, resolveJava } from "./kotlin-harness-build";
+import { mainClassOf } from "./parity-sources";
 
 export { JVM_FLAGS, killGroup, ROOT } from "./kotlin-harness-build";
 // La clé de cache du jar se calcule dans `kotlin-harness-build.ts` (via
@@ -37,10 +38,14 @@ export interface ParityLink {
 export interface ParityToolchain {
   readonly skipReason: string | null;
   ensureJar(cacheName: string, sources: string[], opts?: { timeoutMs?: number }): Promise<string>;
-  openLink(jar: string, opts?: { timezone?: string; mainClass?: string }): Promise<ParityLink>;
+  ensureParityJars(): Promise<{ port: string; drivers: string; overlay?: string }>;
+  openLink(
+    jar: string | string[],
+    opts?: { timezone?: string; mainClass?: string },
+  ): Promise<ParityLink>;
   /**
-   * Compile le port de parité (UNE compilation pour tous les tests) et ouvre
-   * le pilote `driverPath`. Raccourci des 17 tests : une ligne.
+   * Ouvre le pilote `driverPath` depuis le port compilé et ses pilotes (ou
+   * leur overlay). Raccourci des tests de parité : une ligne.
    */
   openParityLink(driverPath: string, opts?: { timezone?: string }): Promise<ParityLink>;
 }
@@ -68,7 +73,7 @@ function toolchain(): ParityToolchain {
   }
 
   async function openLink(
-    jar: string,
+    jar: string | string[],
     opts?: { timezone?: string; mainClass?: string },
   ): Promise<ParityLink> {
     const java = resolveJava();
@@ -76,8 +81,9 @@ function toolchain(): ParityToolchain {
     // Même fuseau des deux côtés : `bun test` fige UTC, la JVM prend le
     // système — sans ça les `LocalDateTime` muraux divergent d'autant d'heures.
     const timezone = opts?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-    // Le jar de parité porte 17 `main()` : `java -jar` ne peut pas choisir.
+    // Les pilotes portent 17 `main()` : `java -jar` ne peut pas choisir.
     // Avec une classe, on la lance par son nom (`-cp` + classe).
+    const jars = Array.isArray(jar) ? jar : [jar];
     const args = ["-Dfile.encoding=UTF-8", `-Duser.timezone=${timezone}`];
     // C1 SEUL (`TieredStopAtLevel=1`) : le pilote est un processus COURT qui
     // fait quelques opérations puis meurt. Le compilateur C2 (le-optimisant)
@@ -88,8 +94,9 @@ function toolchain(): ParityToolchain {
     // mêmes résultats) : ils changent la stratégie de compilation et de GC.
     // Mesuré sur ce harnais : le démarrage du pilote passe de ~40 ms à ~34 ms,
     // et les 30 fichiers de parité le paient 30 fois.
-    if (opts?.mainClass) args.push("-cp", jar, opts.mainClass);
-    else args.push("-jar", jar);
+    if (opts?.mainClass) args.push("-cp", jars.join(delimiter), opts.mainClass);
+    else if (jars.length === 1) args.push("-jar", jars[0]!);
+    else throw new Error("un classpath multiple exige la classe principale du pilote");
     const proc = Bun.spawn([java, ...JVM_FLAGS, ...args], {
       stdin: "pipe",
       stdout: "pipe",
@@ -225,18 +232,22 @@ function toolchain(): ParityToolchain {
   }
 
   /**
-   * Compile le port de parité (UNE compilation pour tous les tests) et ouvre
-   * le pilote `driverPath`.
+   * Compile/reutilise le port de parité et ouvre le pilote `driverPath`.
    *
-   * Le jar est partagé : les 17 tests de parité visent le même, donc le
-   * verrou de `ensureJar` fait compiler UNE fois (et les autres attendent).
+   * Le port et les pilotes de base sont partagés par tous les tests ; seuls
+   * les pilotes modifiés passent par un overlay (verrou par artefact). Le
+   * verrou de `ensureSingleJar` fait compiler chacun UNE fois, les autres
+   * attendent le même binaire.
    */
   async function openParityLink(
     driverPath: string,
     opts?: { timezone?: string },
   ): Promise<ParityLink> {
-    const jar = await ensureJar("kotlin-parity", PARITY_SOURCES);
-    return openLink(jar, { ...opts, mainClass: mainClassOf(driverPath) });
+    const jars = await ensureParityJars();
+    return openLink(
+      [jars.overlay, jars.drivers, jars.port].filter((p): p is string => p !== undefined),
+      { ...opts, mainClass: mainClassOf(driverPath) },
+    );
   }
 
   return {
@@ -246,6 +257,7 @@ function toolchain(): ParityToolchain {
       return computeSkipReason();
     },
     ensureJar,
+    ensureParityJars,
     openLink,
     openParityLink,
   };

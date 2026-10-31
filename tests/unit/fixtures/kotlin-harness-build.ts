@@ -10,11 +10,12 @@
 // En revanche un ÉCHEC DE COMPILATION est un défaut : `ensureJar` lève (le code
 // commité doit compiler).
 //
-// UN JAR POUR TOUT LE PORT (#444). Les 17 tests de parité visent le MÊME jar
-// (cf. `parity-sources.ts`) : avant, chacun compilait son propre programme
-// Kotlin, donc 15 `kotlinc` — 15 JVM neuves, ~400 s de CPU — pour un seul
-// port. Le jar porte 17 `main()` : le pilote est lancé par sa CLASSE
-// (`openLink(jar, { mainClass })`), pas par `java -jar`.
+// UNE UNION À FROID, DEUX JARS À CHAUD (#444, #754). Les tests de parité
+// visent le même port : avant, chacun compilait son propre programme Kotlin.
+// L'union est encore compilée d'un bloc à froid, puis découpée en `port.jar`
+// (production) et `drivers.jar` ; un pilote modifié ne recompile qu'un
+// overlay contre le port. Le port porte un `main()` par pilote : le pilote est
+// lancé par sa CLASSE (`openLink(jars, { mainClass })`), pas par `java -jar`.
 //
 // GESTE DES PROCESSUS — le sujet de ce fichier. Une compilation Kotlin, c'est
 // une JVM qui prend un cœur et 512 Mo de tas. Quatre fuites, toutes
@@ -34,15 +35,26 @@
 //   3. SATURATION. `bun test --parallel` lance un worker par fichier et il y a
 //      une douzaine de fichiers de parité : autant de JVM `kotlinc` d'un coup,
 //      la machine à 100 % CPU. Un sémaphore borne les compilations simultanées.
-//      (Depuis #444, il n'y a plus qu'UN jar à compiler : le sémaphore est
-//      devenu un filet de sécurité, le VERROU À JAR de `jar-lock.ts` fait
-//      déjà qu'une seule compilation a lieu pour le port.)
+//      (Depuis #444, il n'y a plus qu'une compilation d'union à froid : le
+//      sémaphore est un filet de sécurité, le VERROU À JAR de `jar-lock.ts`
+//      fait déjà qu'une seule compilation a lieu par artefact.)
 //   4. ZOMBIS. Le pilote `java` était tué sans être récolté — `[java] <defunct>`
 //      empilé dans `ps` après chaque run. On attend désormais sa mort.
-import { closeSync, existsSync, mkdirSync, openSync, renameSync, unlinkSync, writeSync } from "node:fs";
-import { join } from "node:path";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
+import { basename, delimiter, join } from "node:path";
 import { ensureSingleJar, lockIsStale } from "./jar-lock";
-import { digestOf } from "./parity-sources";
+import { splitParityJar } from "./kotlin-jar-split";
+import { digestOf, driverSources, PARITY_SOURCES, productionDigest } from "./parity-sources";
 
 export const ROOT = join(import.meta.dir, "..", "..", "..");
 
@@ -256,19 +268,31 @@ export function computeSkipReason(): string | null {
  *   compilation réussie — une compilation interrompue ne laisse pas un jar
  *   tronqué que le run suivant réutiliserait comme s'il était valide.
  */
-async function compile(sources: string[], jar: string, timeoutMs: number): Promise<void> {
+async function compile(
+  sources: string[],
+  jar: string,
+  timeoutMs: number,
+  opts?: { includeRuntime?: boolean; classpath?: string[]; friendPaths?: string[]; label?: string },
+): Promise<void> {
   const kotlinc = resolveKotlinc();
   if (!kotlinc) throw new Error("`kotlinc` absent : la compilation Kotlin est impossible");
   // Le nom temporaire DOIT finir en `.jar` : `kotlinc -d X` n'écrit un JAR
   // que si X se termine par `.jar` — sinon il écrit un RÉPERTOIRE de
   // classes, que `java -jar` refuse ensuite.
   const tmp = `${jar.replace(/\.jar$/, "")}.${process.pid}.partial.jar`;
+  const flags = [
+    ...(opts?.includeRuntime === false ? [] : ["-include-runtime"]),
+    ...(opts?.classpath?.length ? ["-cp", opts.classpath.join(delimiter)] : []),
+    ...(opts?.friendPaths?.length ? [`-Xfriend-paths=${opts.friendPaths.join(delimiter)}`] : []),
+    "-d",
+    tmp,
+  ];
   // Le compilateur passe par le SUPERVISEUR (kotlin-compile.sh) : le worker
   // de test peut être tué SANS signal par `bun test --parallel` (SIGKILL au
   // Ctrl-C) et aucun code ne tourne alors pour tuer la compilation. Le
   // superviseur, lui, survit à son parent et tue le groupe quand le tube
   // du worker se ferme.
-  const proc = Bun.spawn([bash(), SUPERVISOR, kotlinc, ...sources, "-include-runtime", "-d", tmp], {
+  const proc = Bun.spawn([bash(), SUPERVISOR, kotlinc, ...sources, ...flags], {
     stdin: "pipe", // le témoin : se ferme quand le worker meurt
     stdout: "pipe",
     stderr: "pipe",
@@ -327,10 +351,11 @@ async function compile(sources: string[], jar: string, timeoutMs: number): Promi
   }
   if (code !== 0) {
     discard(tmp);
+    const hint = opts?.classpath
+      ? "seuls les pilotes modifiés sont recompilés, contre port.jar seul"
+      : "le port de parité est compilé D'UN SEUL BLOC à froid : le défaut peut être dans n'importe quel fichier du port";
     throw new Error(
-      `le port Kotlin ne compile pas (défaut, pas un skip) :\n${stderr}\n${stdout}` +
-        `\n(le port de parité est compilé D'UN SEUL BLOC : le défaut ci-dessus peut être dans n'importe ` +
-        `quel fichier du port, pas seulement dans celui du test qui échoue)`,
+      `${opts?.label ?? "le port Kotlin"} ne compile pas (défaut, pas un skip) :\n${stderr}\n${stdout}\n(${hint})`,
     );
   }
   renameSync(tmp, jar);
@@ -373,4 +398,133 @@ export async function ensureJar(
     // le plafond de la compilation, plus une marge.
     { waitMs: timeoutMs + 60_000 },
   );
+}
+
+/** Jars de la parité : le port compilé, ses pilotes, et l'overlay des pilotes
+ *  modifiés depuis la compilation du port (absent si rien n'a bougé). */
+export interface ParityJars {
+  port: string;
+  drivers: string;
+  overlay?: string;
+}
+
+/** Incrémenter si le découpage change : un cache de l'ancien format ne doit
+ *  pas être pris pour un port valide. */
+const SPLIT_VERSION = 1;
+
+function cacheRoot(): string {
+  return join(ROOT, "node_modules", ".cache", "kotlin-parity");
+}
+
+function manifestOf(path: string): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, string>;
+    }
+  } catch {
+    // Absent ou corrompu : tous les pilotes seront recompilés dans l'overlay.
+  }
+  return {};
+}
+
+/**
+ * Port compilé + pilotes de base, mis en cache par l'empreinte des seules
+ * sources de PRODUCTION.
+ *
+ * À froid, l'union reste compilée d'un bloc (le découpage de l'union est
+ * moins cher que deux analyses `kotlinc` séparées) ; le jar est ensuite
+ * éclaté par `SourceFile`. Un pilote modifié plus tard ne réutilise que le
+ * port, jamais l'ancienne classe du pilote.
+ */
+async function ensurePort(timeoutMs: number): Promise<{
+  dir: string;
+  port: string;
+  drivers: string;
+  manifest: string;
+}> {
+  const dir = join(cacheRoot(), `${productionDigest()}-port-v${SPLIT_VERSION}`);
+  const port = join(dir, "port.jar");
+  const drivers = join(dir, "drivers.jar");
+  const manifest = join(dir, "drivers.json");
+  const ready = join(dir, "ready");
+  mkdirSync(dir, { recursive: true });
+
+  const build = async (): Promise<void> => {
+    const deadline = Date.now() + timeoutMs;
+    const release = await acquireSlot(deadline);
+    const union = join(dir, "union.jar");
+    try {
+      await compile(PARITY_SOURCES, union, timeoutMs);
+      const names = new Set(driverSources().map((p) => basename(p)));
+      splitParityJar(union, port, drivers, names);
+      const digests: Record<string, string> = {};
+      for (const source of driverSources()) digests[basename(source)] = digestOf([source]);
+      writeFileSync(manifest, JSON.stringify(digests));
+      writeFileSync(ready, "1");
+    } finally {
+      try {
+        unlinkSync(union);
+      } catch {
+        // compilation avortée : rien à supprimer
+      }
+      release();
+    }
+  };
+
+  // Cache partiel (archivage interrompu) : le marqueur seul ne suffit pas.
+  if (existsSync(ready) && (!existsSync(port) || !existsSync(drivers) || !existsSync(manifest))) {
+    try {
+      unlinkSync(ready);
+    } catch {
+      // déjà retiré par un autre worker
+    }
+  }
+  if (!existsSync(ready)) {
+    await ensureSingleJar(ready, build, { waitMs: timeoutMs + 60_000 });
+  }
+  if (!existsSync(port) || !existsSync(drivers) || !existsSync(manifest)) {
+    throw new Error(`cache de parité incomplet dans ${dir} : port, pilotes ou manifeste absent`);
+  }
+  return { dir, port, drivers, manifest };
+}
+
+/**
+ * Port + pilotes prêts pour `java -cp`.
+ *
+ * Les pilotes modifiés depuis la compilation du port sont compilés dans un
+ * overlay à part, contre `port.jar` SEUL : l'ancienne classe du pilote n'est
+ * donc pas sur le classpath de compilation (une déclaration supprimée ne peut
+ * pas être « retrouvée » dans le cache). À l'exécution, l'overlay passe avant
+ * les pilotes de base et masque leurs anciennes classes.
+ */
+export async function ensureParityJars(): Promise<ParityJars> {
+  const timeoutMs = compileTimeoutMs();
+  const base = await ensurePort(timeoutMs);
+  const known = manifestOf(base.manifest);
+  const changed = driverSources().filter((p) => known[basename(p)] !== digestOf([p]));
+  if (changed.length === 0) return { port: base.port, drivers: base.drivers };
+
+  const overlayDir = join(cacheRoot(), "overlay", `${productionDigest()}-v${SPLIT_VERSION}`, digestOf(changed));
+  const overlay = join(overlayDir, "overlay.jar");
+  mkdirSync(overlayDir, { recursive: true });
+  await ensureSingleJar(
+    overlay,
+    async () => {
+      const deadline = Date.now() + timeoutMs;
+      const release = await acquireSlot(deadline);
+      try {
+        await compile(changed, overlay, timeoutMs, {
+          includeRuntime: false,
+          classpath: [base.port],
+          friendPaths: [base.port],
+          label: "les pilotes de parité modifiés",
+        });
+      } finally {
+        release();
+      }
+    },
+    { waitMs: timeoutMs + 60_000 },
+  );
+  return { port: base.port, drivers: base.drivers, overlay };
 }

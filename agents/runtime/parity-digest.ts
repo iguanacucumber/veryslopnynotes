@@ -1,16 +1,14 @@
-// L'EMPREINTE du port Kotlin de parité : la CLÉ du cache CI de son jar.
+// Empreinte des sources de PRODUCTION de parité = CLÉ du cache CI du port.
 //
-// UNE SEULE SOURCE DE VÉRITÉ. `parityDigest()` (tests/unit/fixtures/
-// parity-sources.ts) est le calcul que le harnais de compilation utilise pour
-// nommer son dossier de cache local. La CI met le jar en cache sous la MÊME
-// clé : deux calculs, deux clés, un cache mort.
+// UNE SEULE SOURCE DE VÉRITÉ : `productionDigest()` est le calcul qu'utilise
+// le harnais pour nommer son dossier local. Deux calculs, deux clés, un cache
+// mort. Les sources vivent dans les fixtures du harnais (qui les compile) : la
+// recopier ici serait la deuxième source de vérité.
 //
-// POURQUOI CE SCRIPT ATTEINT LES FIXTURES : la LISTE des sources du port vit
-// là (elle est le bien du harnais, qui les compile). La recopier ici serait
-// une DEUXIÈME source de vérité — celle qu'il ne faut surtout pas.
+// Les pilotes ne sont PAS dans cette clé : un pilote modifié doit restaurer le
+// port et ne recompiler que son overlay.
 //
-// Sortie : l'empreinte seule (16 hex), sur stdout — la CI en fait une sortie
-// d'étape (`$GITHUB_OUTPUT`), puis la clé du cache `actions/cache`.
-import { parityDigest } from "../../tests/unit/fixtures/parity-sources";
+// Sortie : l'empreinte seule (16 hex) sur stdout, reprise dans `$GITHUB_OUTPUT`.
+import { productionDigest } from "../../tests/unit/fixtures/parity-sources";
 
-console.log(parityDigest());
+console.log(productionDigest());

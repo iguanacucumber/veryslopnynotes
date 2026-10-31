@@ -3,7 +3,13 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_TARGETS } from "../../agents/runtime/check";
-import { digestOf, PARITY_SOURCES, parityDigest } from "./fixtures/parity-sources";
+import {
+  digestOf,
+  PARITY_SOURCES,
+  parityDigest,
+  productionDigest,
+  PRODUCTION_SOURCES,
+} from "./fixtures/parity-sources";
 
 // agents/runtime/check.ts — le pilote de `make check` : 11 étapes lancées en
 // même temps, une sortie par étape, un code de sortie global.
@@ -315,11 +321,12 @@ exit "\${FAKE_BUN_CODE:-0}"
 
   // #511 : la CI ne doit pas payer, à chaque run, le prix de la compilation du
   // port Kotlin (43,6 s) — ni celui des dépendances Gradle (139 s à froid).
-  // Le jar de parité est mis en cache par l'empreinte de SES SOURCES.
-  test("la CI met en cache le jar de parité et les dépendances Gradle", async () => {
+  // Le port est mis en cache par l'empreinte des sources de PRODUCTION : un
+  // pilote modifié restaure le port et ne recompile que son overlay.
+  test("la CI met en cache le port de parité et les dépendances Gradle", async () => {
     const ci = await Bun.file(join(ROOT, ".github", "workflows", "ci.yml")).text();
     const paths = cachedPaths(ci);
-    // Le jar, dans le dossier que le harnais remplit déjà.
+    // Le port et les pilotes de base, dans le dossier que le harnais remplit.
     expect(paths).toContain("node_modules/.cache/kotlin-parity");
     // Les dépendances Gradle : sans elles, chaque run retélécharge 378 Mo et
     // refait 353 Mo de transformations AAR.
@@ -329,9 +336,9 @@ exit "\${FAKE_BUN_CODE:-0}"
     // #624 : la version vient de `env.KOTLIN_VERSION`, comparée au catalogue
     // par tests/architecture/gradle-versions.test.ts.
     expect(paths).toContain("node_modules/.cache/kotlinc-${{ env.KOTLIN_VERSION }}");
-    // La clé vient de l'empreinte, pas d'un nom figé.
+    // La clé vient de l'empreinte des sources de production, pas d'un nom figé.
     expect(ci).toContain("parity-digest");
-    expect(ci).toContain("kotlin-parity-${{ steps.port-kotlin.outputs.empreinte }}");
+    expect(ci).toContain("kotlin-parity-port-v1-${{ steps.port-kotlin.outputs.empreinte }}");
   });
 
   // #513 : le cache du compilateur Kotlin n'était JAMAIS sauvegardé, en
@@ -376,16 +383,19 @@ exit "\${FAKE_BUN_CODE:-0}"
   // #511 : la clé du cache CI et le dossier de cache LOCAL doivent venir du
   // MÊME calcul. Deux calculs, deux clés : le cache restauré ne serait jamais
   // trouvé par le harnais — un cache mort qui coûte 43,6 s à chaque run.
-  test("le harnais et la CI partagent UNE empreinte de sources", async () => {
-    const harness = await Bun.file(join(ROOT, "tests", "unit", "fixtures", "kotlin-harness.ts")).text();
+  test("le harnais et la CI partagent l'empreinte des sources de production", async () => {
+    const harness = await Bun.file(join(ROOT, "tests", "unit", "fixtures", "kotlin-harness-build.ts")).text();
     // Le harnais IMPORTE le calcul, il ne le refait pas.
-    expect(harness).toContain("digestOf");
+    expect(harness).toContain("productionDigest");
     expect(harness).not.toContain("createHash");
     // Et le calcul vit dans le module qui définit les sources.
     const sources = await Bun.file(join(ROOT, "tests", "unit", "fixtures", "parity-sources.ts")).text();
     expect(sources).toContain("export function digestOf");
-    expect(sources).toContain("export function parityDigest");
+    expect(sources).toContain("export function productionDigest");
     // La clé de la CI est donc l'empreinte du port : 16 hex.
+    expect(productionDigest()).toMatch(/^[0-9a-f]{16}$/);
+    expect(digestOf(PRODUCTION_SOURCES)).toBe(productionDigest());
+    // L'union reste l'empreinte du chemin à froid (cache local).
     expect(parityDigest()).toMatch(/^[0-9a-f]{16}$/);
     expect(digestOf(PARITY_SOURCES)).toBe(parityDigest());
   });
