@@ -17,6 +17,7 @@ import {
   parseTeacherTurnResult,
   rejectTeacherAnswer,
   studentMessage,
+  teacherActionLabel,
   teacherHistory,
   teacherThreadPayload,
   teacherWriteQueue,
@@ -104,6 +105,7 @@ describe("professeur IA — modèle local (#633)", () => {
     // #706 : le natif garde les 6 récents et résume les anciens ; couper ici
     // rendait le résumé local inatteignable.
     expect(payload?.history).toHaveLength(9);
+    expect(payload?.proceedAnyway).toBe(false);
     expect(payload?.history.map((item) => item.text)).toEqual([
       "tour-0",
       "tour-1",
@@ -118,6 +120,8 @@ describe("professeur IA — modèle local (#633)", () => {
     expect(buildTeacherTurn("", "question", "explain", [])).toBeNull();
     expect(buildTeacherTurn("MATHEMATIQUES", "   ", "explain", [])).toBeNull();
     expect(buildTeacherTurn("MATHEMATIQUES", "q".repeat(2500), "explain", [])?.message).toHaveLength(2000);
+    // Le geste explicite traverse le pont jusqu'au natif.
+    expect(buildTeacherTurn("MATHEMATIQUES", "question", "explain", [], true)?.proceedAnyway).toBe(true);
   });
 
   test("l'historique garde sources et unsourced des tours professeur (#706)", () => {
@@ -287,6 +291,8 @@ describe("écran Prof — rendu (#633)", () => {
     });
     expect(html).toContain("Aucune source exploitable");
     expect(html).toContain("Ajouter un cours au cahier");
+    // La continuation explicite est le libellé EXACT demandé.
+    expect(teacherActionLabel("proceed_anyway")).toBe("Procéder quand même");
   });
 
   test("focus : le dernier tour du professeur est une cible programmatique", () => {

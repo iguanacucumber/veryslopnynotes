@@ -6,7 +6,7 @@
  */
 export interface CardActionFlags {
   assistantDisabled: boolean;
-  /** Manuel ou cours disponible pour CETTE matière (aide texte seulement). */
+  /** Manuel ou cours disponible pour CETTE matière (fiche seulement : l'aide texte peut procéder sans source). */
   hasMaterial: boolean;
   /** La carte affiche déjà un panneau (fermable). */
   hasPanel: boolean;
@@ -28,12 +28,15 @@ export function cardActionFlags(state: CardActionFlags): {
   photoOff: boolean;
   sheetOff: boolean;
 } {
-  const textOff = state.assistantDisabled || !state.hasMaterial;
+  // L'aide texte n'exige plus de corpus : le pont refuse d'abord (sans appel
+  // payant), puis propose « Procéder quand même ». La FICHE, elle, reste
+  // bloquée sans source : elle n'a pas de continuation non sourcée.
+  const textOff = state.assistantDisabled;
   const loadingPanel = state.hasPanel && state.helpLoading;
   return {
     textOff: textOff || (state.assistantBusy && !(loadingPanel && !state.helpPhoto)),
     photoOff:
       state.assistantDisabled || (state.assistantBusy && !(loadingPanel && state.helpPhoto)),
-    sheetOff: textOff || state.assistantBusy,
+    sheetOff: state.assistantDisabled || !state.hasMaterial || state.assistantBusy,
   };
 }

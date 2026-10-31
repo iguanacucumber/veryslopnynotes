@@ -20,6 +20,8 @@ export function teacherActionLabel(action: string): string {
       return "Activer le manuel";
     case "open_attachment":
       return "Ouvrir une pièce jointe";
+    case "proceed_anyway":
+      return "Procéder quand même";
     default:
       return "Continuer";
   }
@@ -124,11 +126,13 @@ export function buildTeacherTurn(
   message: string,
   mode: TeacherMode,
   messages: TeacherMessage[],
+  proceedAnyway = false,
 ): {
   subject: string;
   message: string;
   mode: TeacherMode;
   history: Array<Pick<TeacherMessage, "role" | "text" | "sources" | "unsourced">>;
+  proceedAnyway: boolean;
 } | null {
   const cleanSubject = boundedString(subject, TEACHER_MAX_SUBJECT);
   const cleanMessage = boundedString(message, TEACHER_MAX_MESSAGE);
@@ -138,6 +142,7 @@ export function buildTeacherTurn(
     message: cleanMessage,
     mode: TEACHER_MODES.includes(mode) ? mode : "explain",
     history: teacherHistory(messages),
+    proceedAnyway,
   };
 }
 

@@ -77,9 +77,10 @@ describe("aide devoirs — corrigé en trois parties (#629)", () => {
 
 describe("aide devoirs — CTA de refus (#629)", () => {
   test("seules les clés connues passent, sans doublon", () => {
-    expect(parseHomeworkActions(["add_course", "enable_manual", "core", 3, "add_course"])).toEqual([
+    expect(parseHomeworkActions(["add_course", "enable_manual", "proceed_anyway", "core", 3, "add_course"])).toEqual([
       "add_course",
       "enable_manual",
+      "proceed_anyway",
     ]);
     expect(parseHomeworkActions("add_course")).toEqual([]);
     expect(parseHomeworkActions(undefined)).toEqual([]);
@@ -104,11 +105,25 @@ describe("aide devoirs — pont et panneau (#629)", () => {
 
   test("le natif borne le corrigé et propose les CTA du refus", () => {
     const bridge = readBridgeSource();
-    expect(bridge).toContain("homeworkAnswerJson(outcome)");
-    expect(bridge).toContain('put("answer", outcome.answer.trim().take(Homework.MAX_ANSWER_CHARS))');
+    expect(bridge).toContain("homeworkAnswerJson(outcome, missing.takeIf { proceedAnyway })");
+    expect(bridge).toContain("(intro + outcome.answer.trim()).take(Homework.MAX_ANSWER_CHARS)");
     expect(bridge).toContain("outcome.steps.take(Homework.MAX_STEPS)");
     expect(bridge).toContain("Homework.MAX_STEP_CHARS");
-    expect(bridge).toContain('json.put("actions", JSONArray(AiContext.REFUSAL_ACTIONS))');
+    expect(bridge).toContain("actions.add(AiContext.REFUSAL_ACTION_PROCEED)");
+    expect(bridge).toContain('put("actions", JSONArray(actions))');
+    expect(bridge).toContain('put("unsourced", outcome.sources.isEmpty())');
+    // Le refus nomme chaque document manquant, calculé localement.
+    for (const doc of [
+      'missing.add("la consigne du devoir")',
+      'missing.add("le cours de cette matière (cahier de textes)")',
+      'missing.add("une pièce jointe")',
+      'missing.add("ton cahier de cours de cette matière")',
+      'missing.add("le manuel de cette matière")',
+    ]) {
+      expect(bridge).toContain(doc);
+    }
+    expect(bridge).toContain("missingRefusalMessage(missing)");
+    expect(bridge).toContain("AiProceed.intro(it)");
   });
 
   test("le panneau rend la réponse, les étapes, les sources et les CTA contextuels", () => {
@@ -121,6 +136,8 @@ describe("aide devoirs — pont et panneau (#629)", () => {
     expect(tasks).toContain('help.actions.includes("add_course")');
     expect(tasks).toContain('help.actions.includes("enable_manual")');
     expect(tasks).toContain('help.actions.includes("open_attachment")');
+    expect(tasks).toContain('help.actions.includes("proceed_anyway")');
+    expect(tasks).toContain("Procéder quand même");
     expect(tasks).toContain("parseHomeworkAnswer(result)");
     expect(tasks).toContain("parseHomeworkActions(result.actions)");
     expect(tasks).not.toContain("result.body");

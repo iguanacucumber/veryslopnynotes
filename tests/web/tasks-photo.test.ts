@@ -54,13 +54,13 @@ describe("devoirs — photo d'énoncé (#588)", () => {
     // Plus de pastille « Galerie » concurrente : un seul bouton photo.
     expect(tasks).not.toContain("Galerie");
     expect(tasks).toContain("const { textOff, photoOff, sheetOff } = cardActionFlags(");
-    expect(tasks).toContain("Photographie l’énoncé ci-dessus");
+    expect(tasks).toContain("Sans cours ni manuel, l’aide peut procéder quand même");
     expect(tasks).toContain("La photo est supprimée après lecture");
-    // Le texte reste bloqué sans source ; la photo a sa propre condition
-    // (`assistantDisabled` seul : elle ne dépend ni du manuel ni du cahier).
-    expect(source("features/tasks/actions.ts")).toContain(
-      "state.assistantDisabled || !state.hasMaterial",
-    );
+    // Le texte s'ouvre sans source (le pont refuse puis propose « Procéder
+    // quand même ») ; la fiche reste bloquée sans matière.
+    const actions = source("features/tasks/actions.ts");
+    expect(actions).toContain("const textOff = state.assistantDisabled;");
+    expect(actions).toContain("!state.hasMaterial ||");
   });
 
   test("un seul bouton photo ouvre le dialogue de source (#610)", () => {

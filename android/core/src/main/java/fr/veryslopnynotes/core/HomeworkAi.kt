@@ -66,7 +66,15 @@ object HomeworkAi {
     // VALIDATE : JSON du modele -> HomeworkOutcome. Meme schema que le contrat TS :
     // ok exige des sources citees, chaque citation doit reprendre une etiquette fournie.
     // Requete valide : sources VIDES autorisees (le refus deterministe suit).
-    fun parseHomeworkResponse(raw: JsonValue, allowedLabels: Set<String>): HomeworkOutcome {
+    //
+    // `allowUnsourced` = geste explicite « procéder quand même » : une réponse
+    // sans citation reste valide, et une citation inventée est ÉCARTÉE au lieu
+    // de jeter toute la réponse. Le défaut reste strict.
+    fun parseHomeworkResponse(
+        raw: JsonValue,
+        allowedLabels: Set<String>,
+        allowUnsourced: Boolean = false,
+    ): HomeworkOutcome {
         val obj = raw as? JsonValue.Obj ?: throw AiError("réponse devoirs invalide (schéma)")
         val status = jsonStrOf(obj, "status") ?: throw AiError("réponse devoirs invalide (schéma)")
         if (status == "ok") {
@@ -87,19 +95,23 @@ object HomeworkAi {
                 ?: throw AiError("réponse devoirs invalide (schéma)")
             val sources = nonBlankStrings(sourcesRaw)
                 ?: throw AiError("réponse devoirs invalide (schéma)")
-            if (sources.isEmpty()) throw AiError("réponse devoirs invalide (schéma)")
             // Le préambule « Libelle citable : » est un artefact du prompt : le
             // modèle le recopie parfois. On le retire AVANT de comparer, mais le
             // libellé lui-même reste comparé à l'identique.
             val citedLabels = ArrayList<String>(sources.size)
             for (cited in sources) {
                 val label = canonicalCitedLabel(cited, allowedLabels)
-                    ?: throw AiError("réponse devoirs invalide (schéma)")
+                if (label == null) {
+                    if (allowUnsourced) continue
+                    throw AiError("réponse devoirs invalide (schéma)")
+                }
                 if (!allowedLabels.contains(label)) {
+                    if (allowUnsourced) continue
                     throw AiError("réponse devoirs invalide (source non fournie)")
                 }
-                citedLabels.add(label)
+                if (label !in citedLabels) citedLabels.add(label)
             }
+            if (citedLabels.isEmpty() && !allowUnsourced) throw AiError("réponse devoirs invalide (schéma)")
             return HomeworkOutcome.Answer(answer = answer, steps = steps, sources = citedLabels)
         }
         if (status == "refused") {
@@ -132,36 +144,48 @@ object HomeworkAi {
     // Requete valide : question et cle bornees non-vides, lot borne, sources valides
     // — mais lot VIDE autorise (refus deterministe sans appel LLM). Differt de
     // Homework.isRequestValid, qui exige un lot non-vide cote app.
-    private fun isGenerationRequestValid(
+    fun isGenerationRequestValid(
         question: String,
         sources: List<HomeworkSource>,
         apiKey: String,
+        allowEmptySources: Boolean = false,
     ): Boolean {
         if (question.trim().isEmpty() || question.length > Homework.MAX_QUESTION_CHARS) return false
         if (apiKey.trim().isEmpty() || apiKey.length > Homework.MAX_API_KEY_CHARS) return false
         if (sources.size > Homework.MAX_SOURCES) return false
+        if (sources.isEmpty() && !allowEmptySources) return false
         return sources.all { it.isValid() }
     }
 
     // Genere un corrige source ou un refus. Aucun effet metier (I7). Refus
     // deterministe sans appel LLM si aucune source. apiKey est relayee telle
     // quelle : elle n'entre pas dans le prompt et n'est jamais journalisee.
+    //
+    // `allowUnsourced` n'est vrai que sur un geste EXPLICITE « procéder quand
+    // même » : le modèle répond avec ses connaissances générales, sans source
+    // citable, et le pont annonce les documents manquants.
     fun generateHomework(
         provider: SafePromptProvider,
         question: String,
         sources: List<HomeworkSource>,
         apiKey: String?,
         nonce: String? = null,
+        allowUnsourced: Boolean = false,
     ): HomeworkOutcome {
-        if (apiKey == null || !isGenerationRequestValid(question, sources, apiKey)) {
+        if (apiKey == null || !isGenerationRequestValid(question, sources, apiKey, allowEmptySources = allowUnsourced)) {
             throw AiError("requête devoirs invalide")
         }
-        if (sources.isEmpty()) {
+        if (sources.isEmpty() && !allowUnsourced) {
             return HomeworkOutcome.Refused(reason = HOMEWORK_REFUSAL_REASON, sources = emptyList())
         }
         val data = homeworkData(question, sources)
-        val raw = generateGuardedJson(provider, SYSTEM_HOMEWORK_JSON, data, nonce, apiKey)
-        return parseHomeworkResponse(raw, Homework.uniqueLabels(sources).toSet())
+        val system = if (allowUnsourced) SYSTEM_HOMEWORK_PROCEED_JSON else SYSTEM_HOMEWORK_JSON
+        val raw = generateGuardedJson(provider, system, data, nonce, apiKey)
+        return parseHomeworkResponse(
+            raw,
+            Homework.uniqueLabels(sources).toSet(),
+            allowUnsourced = allowUnsourced,
+        )
     }
 
     /**
@@ -176,7 +200,7 @@ object HomeworkAi {
         apiKey: String?,
         nonce: String? = null,
     ): HomeworkOutcome {
-        if (apiKey == null || !isGenerationRequestValid(question, sources, apiKey)) {
+        if (apiKey == null || !isGenerationRequestValid(question, sources, apiKey, allowEmptySources = true)) {
             throw AiError("requête devoirs invalide")
         }
         val data = homeworkData(question, sources) +

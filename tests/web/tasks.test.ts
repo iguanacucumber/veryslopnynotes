@@ -392,7 +392,10 @@ describe("web tâches — navigation de semaine", () => {
         method: "assignments.attachment",
         params: { homeworkId: "a1", attachmentId: "att1", weekStart: "2026-11-16" },
       },
-      { method: "llm.askHomework", params: { assignmentId: "a1", weekStart: "2026-11-16" } },
+      {
+        method: "llm.askHomework",
+        params: { assignmentId: "a1", weekStart: "2026-11-16", proceedAnyway: false },
+      },
     ]);
   });
 

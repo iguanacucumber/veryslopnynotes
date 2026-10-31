@@ -359,6 +359,8 @@ export interface TeacherTurnParams {
   mode: TeacherMode;
   /** Derniers tours de la conversation, bornés par le natif. */
   history: Array<Pick<TeacherMessage, "role" | "text">>;
+  /** Geste explicite : répondre même sans corpus, en annonçant les documents manquants. */
+  proceedAnyway?: boolean;
 }
 
 export interface TeacherTurnResult {

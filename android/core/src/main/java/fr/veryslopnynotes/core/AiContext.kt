@@ -133,6 +133,13 @@ object AiContext {
         "Aucune source exploitable : ajoute un cours au cahier, active un manuel ou ouvre une pièce jointe."
     val REFUSAL_ACTIONS: List<String> = listOf("add_course", "enable_manual", "open_attachment")
 
+    /**
+     * CTA de continuation : l'élève choisit explicitement une réponse non
+     * sourcée. Il n'est proposé que par le pont (jamais ajouté à
+     * [REFUSAL_ACTIONS], qui reste le refus déterministe des fiches).
+     */
+    const val REFUSAL_ACTION_PROCEED = "proceed_anyway"
+
     private val CONTROL_CHARS = Regex("[\\u0000-\\u001f\\u007f]")
     private val SPACES = Regex("\\s+")
 

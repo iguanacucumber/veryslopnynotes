@@ -273,9 +273,9 @@ type HomeworkParse = {
   message?: string;
 };
 
-async function parseHomework(body: unknown, labels: string[]): Promise<HomeworkParse> {
+async function parseHomework(body: unknown, labels: string[], allowUnsourced = false): Promise<HomeworkParse> {
   return JSON.parse(
-    await link!.ask({ op: "homework", raw: JSON.stringify(body), labels }, { allowError: true }),
+    await link!.ask({ op: "homework", raw: JSON.stringify(body), labels, allowUnsourced }, { allowError: true }),
   ) as HomeworkParse;
 }
 
@@ -392,6 +392,28 @@ describe("android homework — citations préfixées (vrai Kotlin)", () => {
         message: "réponse devoirs invalide (source non fournie)",
       });
     }
+  });
+
+  test.skipIf(skip)("« Procéder quand même » accepte zéro source et écarte une citation inventée", async () => {
+    const empty = await parseHomework({
+      status: "ok",
+      answer: "Voici une piste.",
+      steps: ["lire l'énoncé"],
+      sources: [],
+    }, LABELS, true);
+    expect(empty.ok).toBe(true);
+    expect(empty.status).toBe("ok");
+    expect(empty.cited).toEqual([]);
+
+    const invented = await parseHomework({
+      status: "ok",
+      answer: "Voici une piste.",
+      steps: [],
+      sources: ["Cours : Autre"],
+    }, LABELS, true);
+    expect(invented.ok).toBe(true);
+    expect(invented.status).toBe("ok");
+    expect(invented.cited).toEqual([]);
   });
 });
 

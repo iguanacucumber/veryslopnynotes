@@ -29,6 +29,7 @@ import fr.veryslopnynotes.core.MAX_OUTPUT_CHARS
 import fr.veryslopnynotes.core.MAX_OUTPUT_TOKENS
 import fr.veryslopnynotes.core.SYSTEM_HOMEWORK_JSON
 import fr.veryslopnynotes.core.SYSTEM_HOMEWORK_PHOTO_JSON
+import fr.veryslopnynotes.core.SYSTEM_HOMEWORK_PROCEED_JSON
 import fr.veryslopnynotes.core.parseJsonOutput
 import fr.veryslopnynotes.core.parseJsonValue
 import fr.veryslopnynotes.core.stringifyJson
@@ -87,6 +88,7 @@ private fun driver(op: JsonValue.Obj): JsonValue = when (op.str("op")) {
         // partagée doit être dans les DEUX entrées (texte et photo).
         "text" to JsonValue.Str(SYSTEM_HOMEWORK_JSON),
         "photo" to JsonValue.Str(SYSTEM_HOMEWORK_PHOTO_JSON),
+        "proceed" to JsonValue.Str(SYSTEM_HOMEWORK_PROCEED_JSON),
     )
     "homework" -> {
         val raw = op.str("raw") ?: throw IllegalArgumentException("pilote: raw absent")
@@ -96,7 +98,8 @@ private fun driver(op: JsonValue.Obj): JsonValue = when (op.str("op")) {
         try {
             // La garde I5 (longueur + JSON) puis le schéma du corrige.
             val parsed = parseJsonOutput(raw)
-            when (val outcome = HomeworkAi.parseHomeworkResponse(parsed, labels.toSet())) {
+            val allowUnsourced = (op.fields["allowUnsourced"] as? JsonValue.Bool)?.value ?: false
+            when (val outcome = HomeworkAi.parseHomeworkResponse(parsed, labels.toSet(), allowUnsourced = allowUnsourced)) {
                 is HomeworkOutcome.Answer -> obj(
                     "ok" to JsonValue.Bool(true),
                     "status" to JsonValue.Str("ok"),

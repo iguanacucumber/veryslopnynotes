@@ -209,7 +209,7 @@ function TasksWeek({ week }: { week: string }) {
     }
   }
 
-  async function askHelp(assignment: Assignment) {
+  async function askHelp(assignment: Assignment, proceedAnyway = false) {
     // Un seul assistant en vol pour TOUT l'écran : le bouton d'une autre
     // carte ne voit pas la demande en cours.
     if (assistantBusy) return;
@@ -217,7 +217,7 @@ function TasksWeek({ week }: { week: string }) {
     setHelpFlights((count) => count + 1);
     setHelp({ id: assignment.id, loading: true, answer: null, steps: [], sources: [], refusal: null, actions: [], error: null });
     try {
-      const result = await bridge.askHomework(assignment.id, week);
+      const result = await bridge.askHomework(assignment.id, week, proceedAnyway);
       if (seq !== helpSeq.current) return;
       const context = parseAiContext(result.context);
       if (result.refused) {
@@ -573,6 +573,7 @@ function TasksWeek({ week }: { week: string }) {
                       onToggle={(next) => void toggle(assignment, next)}
                       onOpenAttachment={(attachment) => void openAttachment(assignment, attachment)}
                       onHelp={() => void askHelp(assignment)}
+                      onProceed={() => void askHelp(assignment, true)}
                       onPhoto={(source) => void askPhoto(assignment, source)}
                       onOpenPhotoChooser={() => setPhotoChooser(assignment)}
                       onCloseHelp={closeHelp}
@@ -643,6 +644,7 @@ function AssignmentCard({
   onToggle,
   onOpenAttachment,
   onHelp,
+  onProceed,
   onPhoto,
   onOpenPhotoChooser,
   onCloseHelp,
@@ -662,6 +664,7 @@ function AssignmentCard({
   onToggle: (next: boolean) => void;
   onOpenAttachment: (attachment: AssignmentAttachment) => void;
   onHelp: () => void;
+  onProceed: () => void;
   onPhoto: (source: "camera" | "gallery") => void;
   onOpenPhotoChooser: () => void;
   onCloseHelp: () => void;
@@ -802,7 +805,8 @@ function AssignmentCard({
 
       {assistantDisabled || hasMaterial ? null : (
         <p id={noMaterialId} className="tiny muted task-card__hint">
-          Photographie l’énoncé ci-dessus : la photo devient la source du corrigé.
+          Sans cours ni manuel, l’aide peut procéder quand même : la réponse sera alors non sourcée.
+          La photo de l’énoncé reste la source la plus fiable.
         </p>
       )}
 
@@ -838,6 +842,12 @@ function AssignmentCard({
             </p>
           ) : null}
           {help.answer ? <p className="task-help__panel-answer">{help.answer}</p> : null}
+          {help.answer && help.sources.length === 0 ? (
+            <p className="tiny muted task-help__panel-unsourced">
+              <span className="task-help__panel-badge">non sourcée</span>
+              Cette réponse vient des connaissances générales du modèle : aucun document ne la soutient.
+            </p>
+          ) : null}
           {help.steps.length > 0 ? (
             <ol className="task-help__steps">
               {help.steps.map((step, index) => (
@@ -875,6 +885,11 @@ function AssignmentCard({
                   onClick={() => onOpenAttachment(assignment.attachments[0]!)}
                 >
                   Ouvrir la pièce jointe
+                </button>
+              ) : null}
+              {help.actions.includes("proceed_anyway") ? (
+                <button type="button" className="btn btn--ghost btn--small" onClick={onProceed}>
+                  Procéder quand même
                 </button>
               ) : null}
             </div>

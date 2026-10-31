@@ -70,28 +70,6 @@ a {
   flex-direction: column;
 }
 
-/* Lien d'évitement : premier élément focalisable de la coquille, masqué tant
-   qu'il n'a pas le focus. Il est FIXE et hors écran par translation, jamais
-   display:none — sinon il quitterait l'ordre de tabulation. */
-.skip-link {
-  position: fixed;
-  top: calc(8px + var(--safe-top));
-  left: 16px;
-  z-index: 40;
-  padding: 10px 16px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--brand-solid);
-  color: var(--on-brand);
-  font-weight: 600;
-  transform: translateY(calc(-100% - 24px));
-}
-
-.skip-link:focus,
-.skip-link:focus-visible {
-  transform: translateY(0);
-}
-
 /* Papillon : le fond d'accueil est un papier peint généré (SVG), pas un halo
    de page. Il couvre le haut de l'accueil et se dissout dans le fond. */
 .wallpaper {

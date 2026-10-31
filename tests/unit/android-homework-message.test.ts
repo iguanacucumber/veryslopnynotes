@@ -100,11 +100,15 @@ describe("message de refus de l'assistant (#416)", () => {
     expect(debut).toBeGreaterThan(-1);
     const corps = bridge.slice(debut, bridge.indexOf("\n        }", debut));
     // La construction du refus vit dans un helper borné qui porte phrase et CTA.
-    expect(corps).toContain("homeworkRefusalJson(outcome, context)");
+    expect(corps).toContain("homeworkRefusalJson(");
+    expect(corps).toContain("missing = missing");
+    expect(corps).toContain("allowProceed = !proceedAnyway");
     const helperDebut = bridge.indexOf("internal fun VsnBridge.homeworkRefusalJson");
     expect(helperDebut).toBeGreaterThan(-1);
     const helper = bridge.slice(helperDebut, bridge.indexOf("\n/**", helperDebut));
     expect(helper).toContain('homeworkRefusalMessage(outcome.reason)');
+    expect(helper).toContain("missingRefusalMessage(it)");
+    expect(helper).toContain("actions.add(AiContext.REFUSAL_ACTION_PROCEED)");
     expect(helper).toContain('.put("message"');
     // Le motif libre ne doit plus sortir dans `body`.
     expect(helper).not.toContain('put("body", outcome.reason)');

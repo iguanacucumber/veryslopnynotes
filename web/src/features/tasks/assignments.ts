@@ -628,9 +628,9 @@ export function homeworkRefusalText(message: string | undefined): string {
 }
 
 /** CTA stables proposés avec un refus (#629) : clés machine, jamais du texte. */
-export type HomeworkAction = "add_course" | "enable_manual" | "open_attachment";
+export type HomeworkAction = "add_course" | "enable_manual" | "open_attachment" | "proceed_anyway";
 
-const HOMEWORK_ACTIONS = new Set<string>(["add_course", "enable_manual", "open_attachment"]);
+const HOMEWORK_ACTIONS = new Set<string>(["add_course", "enable_manual", "open_attachment", "proceed_anyway"]);
 
 /**
  * Lit les CTA d'un refus : clés INCONNUES écartées, doublons retirés. Un refus

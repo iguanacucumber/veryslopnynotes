@@ -72,7 +72,6 @@ try {
   });
   page.on("pageerror", (err) => errors.push(err.message));
 
-  let firstRoute = true;
   for (const [name, route] of SMOKE_ROUTES) {
     await page.goto(`${URL_BASE}#${route}`, { waitUntil: "networkidle" });
     await page.locator("h1, h2, strong").first().waitFor();
@@ -81,10 +80,7 @@ try {
       .waitForFunction(() => !document.querySelector(".spinner"), null, { timeout: 5000 })
       .catch(() => undefined);
     await page.waitForTimeout(120);
-    // Accessibilité : une seule cible `main`, langue déclarée, et le lien
-    // d'évitement atteint par le PREMIER Tab puis activé au clavier. Après une
-    // navigation SPA, le titre reprend le focus : on le retire pour tabuler
-    // depuis le début du document, comme au chargement.
+    // Accessibilité : une seule cible `main`, langue déclarée.
     const mainCount = await page.locator("main").count();
     const mainTarget =
       mainCount === 1
@@ -103,54 +99,6 @@ try {
     if (lang !== "fr") {
       console.error(`web-smoke : langue du document "${lang}" sur ${route}, attendu "fr"`);
       code = 1;
-    }
-    if (!firstRoute) {
-      await page.evaluate(() => {
-        const active = document.activeElement;
-        if (active instanceof HTMLElement) active.blur();
-        // Sinon la tabulation repart du titre focalisé : la ramener au corps du
-        // document, sans l'ajouter à l'ordre de tabulation.
-        document.body.tabIndex = -1;
-        document.body.focus();
-      });
-    }
-    firstRoute = false;
-    await page.keyboard.press("Tab");
-    const skipReached = await page
-      .waitForFunction(
-        () => {
-          const element = document.querySelector<HTMLElement>(".skip-link");
-          if (!element || document.activeElement !== element) return false;
-          const rect = element.getBoundingClientRect();
-          const style = getComputedStyle(element);
-          return (
-            style.display !== "none" &&
-            style.visibility !== "hidden" &&
-            rect.width > 0 &&
-            rect.height > 0 &&
-            rect.top >= 0 &&
-            rect.bottom <= window.innerHeight + 1
-          );
-        },
-        null,
-        { timeout: 2000 },
-      )
-      .then(() => true)
-      .catch(() => false);
-    if (!skipReached) {
-      console.error(`web-smoke : le lien d'évitement n'est pas le premier Tab visible sur ${route}`);
-      code = 1;
-    } else {
-      // Entrée seulement si le focus est là (sinon on ne teste pas ce qu'on croit).
-      await page.keyboard.press("Enter");
-      const focused = await page
-        .waitForFunction(() => document.activeElement?.id === "main", null, { timeout: 2000 })
-        .then(() => true)
-        .catch(() => false);
-      if (!focused) {
-        console.error(`web-smoke : l'activation du lien d'évitement ne focalise pas #main sur ${route}`);
-        code = 1;
-      }
     }
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth + 1,

@@ -368,6 +368,22 @@
   overflow-wrap: anywhere;
 }
 
+.task-help__panel-unsourced {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.task-help__panel-badge {
+  border: 1px dashed var(--rule-strong);
+  border-radius: var(--radius-xs);
+  padding: 2px 9px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .task-help__steps {
   margin: 0;
   padding-left: 20px;

@@ -6,6 +6,7 @@ import fr.veryslopnynotes.core.AiContextEntry
 import fr.veryslopnynotes.core.AiContextItem
 import fr.veryslopnynotes.core.AiContextType
 import fr.veryslopnynotes.core.AiError
+import fr.veryslopnynotes.core.AiProceed
 import fr.veryslopnynotes.core.ExerciseHelpMode
 import fr.veryslopnynotes.core.Exercises
 import fr.veryslopnynotes.core.LessonNotes
@@ -235,14 +236,22 @@ internal fun VsnBridge.teacherTurn(p: JSONObject): JSONObject {
         return JSONObject().put("ok", false).put("message", "Écris ta question.")
     }
     val mode = TeacherMode.fromWire(p.string("mode")) ?: TeacherMode.EXPLAIN
+    val proceedAnyway = p.optBoolean("proceedAnyway", false)
     val history = teacherHistory(p.optJSONArray("history"))
     val summary = TeacherChat.summaryOf(history)
     val context = aiContextForSubject(subject, history)
+    val missing = missingDocumentsForSubject(subject)
     // Corpus vide = refus DÉTERMINISTE avec CTA, AVANT tout appel payant.
     // Un contexte qui ne porte QUE l'historique n'est PAS une source : sans
-    // matière (cahier, manuel, page web), aucun appel payant n'est lancé.
-    if (context.sources.isEmpty() || context.sources.none { it.type != AiContextType.HISTORY }) {
-        return refusalJson(context, ok = false).withTeacherHistory(context, summary.length)
+    // matière (cahier, manuel, page web), aucun appel payant n'est lancé
+    // sans le geste explicite « procéder quand même ».
+    if (context.sources.none { it.type != AiContextType.HISTORY } && !proceedAnyway) {
+        return refusalJson(
+            context,
+            ok = false,
+            message = missingRefusalMessage(missing),
+            allowProceed = true,
+        ).withTeacherHistory(context, summary.length)
     }
     val apiKey = llmKeys.apiKey()?.trim()
         ?: return JSONObject().put("ok", false)
@@ -263,10 +272,16 @@ internal fun VsnBridge.teacherTurn(p: JSONObject): JSONObject {
             message = message,
             summary = summary,
             apiKey = apiKey,
+            proceedAnyway = proceedAnyway,
         )
+        val answer = if (proceedAnyway && reply.unsourced) {
+            (AiProceed.intro(missing) + reply.answer).take(TeacherChat.MAX_ANSWER_CHARS)
+        } else {
+            reply.answer
+        }
         JSONObject()
             .put("ok", true)
-            .put("answer", reply.answer)
+            .put("answer", answer)
             .put("sources", JSONArray(reply.sources))
             .put("unsourced", reply.unsourced)
             .withTeacherHistory(context, summary.length)
@@ -309,6 +324,16 @@ internal fun VsnBridge.teacherFailureCode(e: Throwable): String = when (e) {
     }
     is AiError -> if (e.message?.contains("vide", ignoreCase = true) == true) "empty" else "format"
     else -> "network"
+}
+
+/** Documents précis qui manquent à une matière (chat) : cahier et manuel. */
+internal fun VsnBridge.missingDocumentsForSubject(subject: String): List<String> {
+    val missing = mutableListOf<String>()
+    if (LessonNotes.forSubject(lessons.notes(), subject).none { it.text.isNotBlank() }) {
+        missing.add("ton cahier de cours de cette matière")
+    }
+    if (manualDocFor(subject) == null) missing.add("le manuel de cette matière")
+    return missing
 }
 
 /**

@@ -316,12 +316,14 @@ describe("contexte IA — câblage unique du pont (#628)", () => {
     expect(bridge).not.toContain("revisionChunks");
   });
 
-  test("le corpus vide refuse AVANT l'appel payant", () => {
-    const refusal = bridge.indexOf("if (context.sources.isEmpty())");
+  test("le corpus vide refuse AVANT l'appel payant, sauf geste explicite", () => {
+    const refusal = bridge.indexOf("if (context.sources.isEmpty() && !proceedAnyway)");
     const call = bridge.indexOf("OpenRouterHomework(OpenRouterLlm(timeoutMs = HOMEWORK_LLM_TIMEOUT_MS), llmKeys)");
     expect(refusal).toBeGreaterThan(-1);
     expect(call).toBeGreaterThan(refusal);
-    expect(bridge).toContain("refusalJson(context)");
+    expect(bridge).toContain("missingRefusalMessage(missing)");
+    expect(bridge).toContain("allowProceed = true");
+    expect(bridge).toContain("refusalJson(");
   });
 
   test("« Ce qui est envoyé » expose type, libellé, taille et troncature", () => {

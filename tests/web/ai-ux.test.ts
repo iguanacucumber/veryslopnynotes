@@ -141,6 +141,18 @@ describe("IA — aide devoirs", () => {
       assistantBusy: false,
     });
     expect(idle).toEqual({ textOff: false, photoOff: false, sheetOff: false });
+    // Sans cours ni manuel, l'aide texte reste ouverte : le pont refuse sans
+    // appel payant puis propose « Procéder quand même ». La fiche, elle, n'a
+    // pas de continuation non sourcée et reste fermée.
+    const noMaterial = cardActionFlags({
+      assistantDisabled: false,
+      hasMaterial: false,
+      hasPanel: false,
+      helpLoading: false,
+      helpPhoto: false,
+      assistantBusy: false,
+    });
+    expect(noMaterial).toEqual({ textOff: false, photoOff: false, sheetOff: true });
   });
 
   test("le choix photo est un dialogue unique, annulable sans appel (#610)", () => {

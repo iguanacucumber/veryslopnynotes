@@ -7,6 +7,7 @@ import fr.veryslopnynotes.core.AiContext
 import fr.veryslopnynotes.core.AiContextEntry
 import fr.veryslopnynotes.core.AiContextItem
 import fr.veryslopnynotes.core.AiContextType
+import fr.veryslopnynotes.core.AiProceed
 import fr.veryslopnynotes.core.TeacherChat
 import fr.veryslopnynotes.core.TeacherChatMessage
 import fr.veryslopnynotes.core.TeacherMode
@@ -69,6 +70,7 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
             message = op.str("message") ?: "",
             summary = op.str("summary") ?: "",
             nonce = "teachernonce00001",
+            proceedAnyway = (op.fields["proceedAnyway"] as? JVal.Bool)?.value ?: false,
         )
         JVal.Obj(
             linkedMapOf(
@@ -82,7 +84,11 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
     "parse" -> {
         val allowed = (op.fields["allowed"] as? JVal.Arr)?.items?.mapNotNull { (it as? JVal.Str)?.value }?.toSet()
             ?: emptySet()
-        val reply = TeacherChat.parseReply(parseJsonValue(op.str("text") ?: ""), allowed)
+        val reply = TeacherChat.parseReply(
+            parseJsonValue(op.str("text") ?: ""),
+            allowed,
+            allowUnsourced = (op.fields["allowUnsourced"] as? JVal.Bool)?.value ?: false,
+        )
         JVal.Obj(
             linkedMapOf(
                 "ok" to JVal.Bool(true),
@@ -91,6 +97,12 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
                 "unsourced" to JVal.Bool(reply.unsourced),
             ),
         )
+    }
+    "proceedIntro" -> {
+        val missing = (op.fields["missing"] as? JVal.Arr)?.items
+            ?.mapNotNull { (it as? JVal.Str)?.value }
+            ?: emptyList()
+        JVal.Obj(linkedMapOf("intro" to JVal.Str(AiProceed.intro(missing))))
     }
     "history" -> {
         val messages = op.objs("messages").map { messageOf(it) }

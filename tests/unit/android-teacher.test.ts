@@ -36,16 +36,25 @@ describe("pont professeur IA — méthode bornée et validée (#633)", () => {
     expect(turn).toContain("TeacherMode.fromWire(");
     expect(turn).toContain("TeacherChat.requestTurn(");
     // La sortie est validée par TeacherChat.parseReply (sources fournies).
-    expect(CORE_CHAT).toContain("fun parseReply(raw: JsonValue, allowedLabels: Set<String>): TeacherChatReply");
+    expect(CORE_CHAT).toContain("fun parseReply(");
+    expect(CORE_CHAT).toContain("allowUnsourced: Boolean = false");
     expect(CORE_CHAT).toContain("if (!allowedLabels.contains(cited))");
-    expect(CORE_CHAT).toContain("generateGuardedJson(provider");
+    expect(CORE_CHAT).toContain("generateGuardedJson(");
   });
 
-  test("aucune source = aucun appel payant", () => {
+  test("aucune source = aucun appel payant sans « procéder quand même »", () => {
     const turn = between(BRIDGE, "internal fun VsnBridge.teacherTurn(", "internal fun VsnBridge.teacherFailureCode(");
-    expect(turn).toContain("context.sources.isEmpty()");
-    expect(turn).toContain("AiContextType.HISTORY");
-    expect(turn.indexOf("context.sources.isEmpty()")).toBeLessThan(turn.indexOf("TeacherChat.requestTurn("));
+    expect(turn).toContain('p.optBoolean("proceedAnyway", false)');
+    expect(turn).toContain("context.sources.none { it.type != AiContextType.HISTORY } && !proceedAnyway");
+    expect(turn.indexOf("context.sources.none { it.type != AiContextType.HISTORY } && !proceedAnyway")).toBeLessThan(
+      turn.indexOf("TeacherChat.requestTurn("),
+    );
+    // Le refus nomme les documents manquants et propose la continuation explicite.
+    expect(turn).toContain("missingRefusalMessage(missing)");
+    expect(turn).toContain("allowProceed = true");
+    // La liste est calculée LOCALEMENT, jamais par le modèle.
+    expect(BRIDGE).toContain('missing.add("ton cahier de cours de cette matière")');
+    expect(BRIDGE).toContain('missing.add("le manuel de cette matière")');
   });
 
   test("la clé reste native et n'entre jamais dans le prompt", () => {
@@ -71,7 +80,7 @@ describe("pont professeur IA — méthode bornée et validée (#633)", () => {
 
   test("la réponse ne transporte que du texte : aucun champ HTML", () => {
     const turn = between(BRIDGE, "internal fun VsnBridge.teacherTurn(", "internal fun VsnBridge.teacherFailureCode(");
-    expect(turn).toContain('put("answer", reply.answer)');
+    expect(turn).toContain('put("answer", answer)');
     expect(turn).not.toMatch(/put\("html"/);
     expect(turn).not.toContain("dangerouslySetInnerHTML");
   });

@@ -292,12 +292,13 @@ export const bridge = {
   llmStatus: () => call<{ configured: boolean }>("llm.status"),
   saveLlmKey: (key: string) => call<{ ok: boolean; message?: string }>("llm.saveKey", { key }),
   forgetLlmKey: () => call<{ ok: true }>("llm.forgetKey"),
-  askHomework: (assignmentId: string, weekStart: string) =>
+  askHomework: (assignmentId: string, weekStart: string, proceedAnyway = false) =>
     call<{
       ok: boolean;
       answer?: string;
       steps?: string[];
       sources?: string[];
+      unsourced?: boolean;
       refused?: boolean;
       message?: string;
       refusal?: string;
@@ -305,7 +306,7 @@ export const bridge = {
       context?: AiContextSourceMeta[];
       contextChars?: number;
       contextOmitted?: number;
-    }>("llm.askHomework", { assignmentId, weekStart }),
+    }>("llm.askHomework", { assignmentId, weekStart, proceedAnyway }),
   solveHomeworkPhoto: (assignmentId: string, weekStart: string, source: "camera" | "gallery") =>
     call<{
       ok: boolean;

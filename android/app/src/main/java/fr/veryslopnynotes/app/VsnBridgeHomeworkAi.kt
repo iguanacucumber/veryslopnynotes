@@ -6,6 +6,7 @@ import fr.veryslopnynotes.core.AiContextEntry
 import fr.veryslopnynotes.core.AiContextItem
 import fr.veryslopnynotes.core.AiContextResult
 import fr.veryslopnynotes.core.AiError
+import fr.veryslopnynotes.core.AiProceed
 import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.AssignmentAttachment
 import fr.veryslopnynotes.core.ExamCandidate
@@ -70,14 +71,21 @@ internal fun VsnBridge.askHomework(p: JSONObject, epoch: Long): JSONObject {
     // #369 : la semaine AFFICHÉE : le devoir demandé peut venir d'une
     // semaine non courante (le cache ne porte que la dernière lue).
     val week = bounded(p.string("weekStart"), 10)
+    val proceedAnyway = p.optBoolean("proceedAnyway", false)
     val assignment = loadAssignments(id, week).firstOrNull { it.id == id }
         ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
     val context = aiContextFor(assignment, AiContextEntry.HOMEWORK, week, epoch)
+    val missing = missingDocumentsFor(assignment)
     // #628 : corpus vide = refus DÉTERMINISTE avec CTA, AVANT tout appel
     // payant. L'ancien chemin payait un aller-retour pour lire « aucune
-    // source » et n'offrait aucune action.
-    if (context.sources.isEmpty()) {
-        return refusalJson(context)
+    // source » et n'offrait aucune action. « Procéder quand même » est le
+    // seul chemin qui autorise l'appel sans source : geste EXPLICITE.
+    if (context.sources.isEmpty() && !proceedAnyway) {
+        return refusalJson(
+            context,
+            message = missingRefusalMessage(missing),
+            allowProceed = true,
+        )
     }
     val sources = context.sources.map { it.toHomeworkSource() }
     val question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment)
@@ -86,7 +94,7 @@ internal fun VsnBridge.askHomework(p: JSONObject, epoch: Long): JSONObject {
         // égal, une réponse produite par la reprise arrive quand `await`
         // abandonne déjà (« L'assistant n'a pas répondu »).
         OpenRouterHomework(OpenRouterLlm(timeoutMs = HOMEWORK_LLM_TIMEOUT_MS), llmKeys)
-            .generate(question, sources, cb)
+            .generate(question, sources, cb, allowUnsourced = proceedAnyway)
     } ?: return JSONObject().put("ok", false).put("message", "L'assistant n'a pas répondu.")
         .withAiContext(context)
     val outcome = result.outcome
@@ -94,11 +102,18 @@ internal fun VsnBridge.askHomework(p: JSONObject, epoch: Long): JSONObject {
             .put("message", result.error ?: OpenRouterHomework.GENERIC_ERROR_MESSAGE)
             .withAiContext(context)
     return when (outcome) {
-        is HomeworkOutcome.Answer -> homeworkAnswerJson(outcome).withAiContext(context)
+        is HomeworkOutcome.Answer -> homeworkAnswerJson(outcome, missing.takeIf { proceedAnyway }).withAiContext(context)
         // #416 : le motif du modèle est un texte LIBRE (echo de la consigne
         // possible) : il ne franchit JAMAIS le pont. Le pont rend une
         // phrase française bornée, dans le champ `message` que l'UI lit.
-        is HomeworkOutcome.Refused -> homeworkRefusalJson(outcome, context)
+        // Un refus pour sources insuffisantes propose aussi la continuation
+        // explicite, avec la liste LOCALE des documents manquants.
+        is HomeworkOutcome.Refused -> homeworkRefusalJson(
+            outcome,
+            context,
+            missing = missing,
+            allowProceed = !proceedAnyway,
+        )
     }
 }
 
@@ -107,11 +122,22 @@ internal fun VsnBridge.askHomework(p: JSONObject, epoch: Long): JSONObject {
  * ordonnées et les sources réellement citées traversent la frontière. Le
  * schéma est déjà validé par `HomeworkAi` ; on borne ici ce que l'UI
  * affiche pour qu'un lot de citations ne fasse pas grossir la réponse.
+ *
+ * `missing` non nul = continuation explicite : la phrase locale qui dit
+ * EXACTEMENT ce qui manque précède la réponse du modèle, et `unsourced`
+ * interdit à l'UI de la présenter comme sourcée.
  */
-internal fun VsnBridge.homeworkAnswerJson(outcome: HomeworkOutcome.Answer): JSONObject =
-    JSONObject()
+internal fun VsnBridge.homeworkAnswerJson(
+    outcome: HomeworkOutcome.Answer,
+    missing: List<String>? = null,
+): JSONObject {
+    val intro = missing?.takeIf { outcome.sources.isEmpty() }?.let { AiProceed.intro(it) }.orEmpty()
+    return JSONObject()
         .put("ok", true)
-        .put("answer", outcome.answer.trim().take(Homework.MAX_ANSWER_CHARS))
+        .put(
+            "answer",
+            (intro + outcome.answer.trim()).take(Homework.MAX_ANSWER_CHARS),
+        )
         .put("steps", JSONArray().apply {
             outcome.steps.take(Homework.MAX_STEPS).forEach {
                 put(it.trim().take(Homework.MAX_STEP_CHARS))
@@ -124,26 +150,60 @@ internal fun VsnBridge.homeworkAnswerJson(outcome: HomeworkOutcome.Answer): JSON
                 .take(Homework.MAX_SOURCES)
                 .forEach { put(it.take(Homework.MAX_LABEL_CHARS)) }
         })
+        .put("unsourced", outcome.sources.isEmpty())
+}
 
 /**
  * Refus du modèle : la phrase bornée du pont, jamais le motif libre. Les
  * CTA ne sont proposés que pour le refus « sources insuffisantes » ; les
  * autres causes ne reçoivent pas un faux diagnostic.
+ *
+ * `missing` = liste LOCALE des documents absents : elle remplace le message
+ * générique et alimente le CTA « Procéder quand même » (jamais le motif libre
+ * du modèle).
  */
 internal fun VsnBridge.homeworkRefusalJson(
     outcome: HomeworkOutcome.Refused,
     context: AiContextResult,
+    missing: List<String>? = null,
+    allowProceed: Boolean = false,
 ): JSONObject {
     val json = JSONObject()
         .put("ok", true)
         .put("refused", true)
-        .put("message", homeworkRefusalMessage(outcome.reason))
+        .put("message", missing?.let { missingRefusalMessage(it) } ?: homeworkRefusalMessage(outcome.reason))
         .withAiContext(context)
     if (outcome.reason.trim().equals(Homework.REFUSAL_SOURCES_INSUFFICIENT, ignoreCase = true)) {
-        json.put("actions", JSONArray(AiContext.REFUSAL_ACTIONS))
+        val actions = AiContext.REFUSAL_ACTIONS.toMutableList()
+        if (allowProceed) actions.add(AiContext.REFUSAL_ACTION_PROCEED)
+        json.put("actions", JSONArray(actions))
     }
     return json
 }
+
+/** Documents précis qui manquent à un devoir : consigne, cours, pièce jointe, cahier, manuel. */
+internal fun VsnBridge.missingDocumentsFor(assignment: Assignment): List<String> {
+    val missing = mutableListOf<String>()
+    if (assignment.description.isBlank()) missing.add("la consigne du devoir")
+    if (assignment.allLessonContents().none { it.excerpt.isNotBlank() }) {
+        missing.add("le cours de cette matière (cahier de textes)")
+    }
+    if (assignment.allAttachments().isEmpty()) missing.add("une pièce jointe")
+    if (LessonNotes.forSubject(lessons.notes(), assignment.subject).none { it.text.isNotBlank() }) {
+        missing.add("ton cahier de cours de cette matière")
+    }
+    if (manualDocFor(assignment.subject) == null) missing.add("le manuel de cette matière")
+    return missing
+}
+
+/** Phrase de refus qui nomme les documents manquants, sans jamais inventer de source. */
+internal fun missingRefusalMessage(missing: List<String>): String =
+    if (missing.isEmpty()) {
+        AiContext.REFUSAL_MESSAGE
+    } else {
+        "Sources insuffisantes. Il me manque : " + missing.joinToString(", ") +
+            ". Ajoute-les, ou procède quand même."
+    }
 
 /**
  * Contexte IA unique pour un devoir (#628/#631). TOUS les points d'entrée
@@ -320,14 +380,21 @@ internal fun JSONObject.withAiContext(context: AiContextResult): JSONObject =
         .put("contextOmitted", context.omitted.size)
 
 /** Refus déterministe du corpus vide, avec CTA stables (jamais de motif libre). */
-internal fun VsnBridge.refusalJson(context: AiContextResult, ok: Boolean = true): JSONObject {
+internal fun VsnBridge.refusalJson(
+    context: AiContextResult,
+    ok: Boolean = true,
+    message: String? = null,
+    allowProceed: Boolean = false,
+): JSONObject {
     val refusal = context.refusal
+    val actions = (refusal?.actions ?: AiContext.REFUSAL_ACTIONS).toMutableList()
+    if (allowProceed) actions.add(AiContext.REFUSAL_ACTION_PROCEED)
     return JSONObject()
         .put("ok", ok)
         .put("refused", true)
-        .put("message", refusal?.message ?: AiContext.REFUSAL_MESSAGE)
+        .put("message", message ?: refusal?.message ?: AiContext.REFUSAL_MESSAGE)
         .put("refusal", refusal?.code ?: AiContext.REFUSAL_CODE)
-        .put("actions", JSONArray(refusal?.actions ?: AiContext.REFUSAL_ACTIONS))
+        .put("actions", JSONArray(actions))
         .withAiContext(context)
 }
 

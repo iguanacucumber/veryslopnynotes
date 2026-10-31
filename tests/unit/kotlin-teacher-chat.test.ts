@@ -22,6 +22,7 @@ async function ask<T>(op: unknown, allowError = false): Promise<T> {
 type Item = { type: string; label: string; text: string };
 type Prompt = { system: string; body: string; nonce: string; sources: number };
 type Parsed = { ok?: boolean; answer?: string; sources?: string[]; unsourced?: boolean; error?: string; message?: string };
+type Intro = { intro: string };
 type History = { labels: string[]; texts: string[]; summary: string };
 type Thread = { valid: boolean; subject: string; count: number; roles: string[] };
 
@@ -116,6 +117,27 @@ describe("professeur IA — prompt contextualisé et borné (#633)", () => {
         items: [ITEM("course", "Cours : chapitre 4", COURSE)],
       })).system,
     );
+  });
+
+  test.skipIf(skip)("« Procéder quand même » ajoute la consigne de continuation explicite", async () => {
+    const forced = await ask<Prompt>({
+      op: "prompt",
+      mode: "explain",
+      message: "Explique-moi quand même.",
+      proceedAnyway: true,
+      items: [],
+    });
+    expect(forced.system).toContain("demande explicitement de continuer");
+    expect(forced.system).toContain("ne la repete pas");
+    expect(forced.system).toContain("sans fabriquer de source");
+    // Le chemin normal ne porte jamais cette permission.
+    const normal = await ask<Prompt>({
+      op: "prompt",
+      mode: "explain",
+      message: "Explique-moi.",
+      items: [],
+    });
+    expect(normal.system).not.toContain("demande explicitement de continuer");
   });
 });
 
@@ -214,12 +236,45 @@ describe("professeur IA — sortie validée (#633)", () => {
     expect(res.message).toContain("source non fournie");
   });
 
+  test.skipIf(skip)("« Procéder quand même » garde la réponse et écarte la citation inventée", async () => {
+    const res = await ask<Parsed>({
+      op: "parse",
+      text: JSON.stringify({ answer: "Voici une piste.", sources: ["Cours : chapitre 9"] }),
+      allowed: ALLOWED,
+      allowUnsourced: true,
+    });
+    expect(res.ok).toBe(true);
+    expect(res.answer).toBe("Voici une piste.");
+    expect(res.sources).toEqual([]);
+    expect(res.unsourced).toBe(true);
+  });
+
   test.skipIf(skip)("une réponse vide ou mal formée est refusée, jamais une bulle vide", async () => {
     for (const text of ['{"answer":"","sources":[]}', '{"sources":[]}', "pas du json"]) {
       const res = await ask<Parsed>({ op: "parse", text, allowed: ALLOWED }, true);
       expect({ text, ok: res.ok }).toEqual({ text, ok: undefined });
       expect(res.error).toBeTruthy();
     }
+  });
+});
+
+describe("professeur IA — documents manquants annoncés localement", () => {
+  test.skipIf(skip)("l'introduction nomme exactement les documents manquants", async () => {
+    const res = await ask<Intro>({
+      op: "proceedIntro",
+      missing: ["la consigne du devoir", "ton cahier de cours de cette matière", "le manuel de cette matière"],
+    });
+    expect(res.intro).toContain("Il me manque :");
+    expect(res.intro).toContain("la consigne du devoir");
+    expect(res.intro).toContain("ton cahier de cours de cette matière");
+    expect(res.intro).toContain("le manuel de cette matière");
+    expect(res.intro).toContain("cette réponse n'est pas sourcée");
+  });
+
+  test.skipIf(skip)("sans liste, l'introduction ne prétend pas qu'un document manque", async () => {
+    const res = await ask<Intro>({ op: "proceedIntro", missing: [] });
+    expect(res.intro).toContain("Aucun document ne permet de sourcer cette réponse.");
+    expect(res.intro).not.toContain("Il me manque :");
   });
 });
 

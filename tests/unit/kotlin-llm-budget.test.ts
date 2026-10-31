@@ -230,6 +230,14 @@ describe("les deux consignes devoirs portent la règle de citation (#701)", () =
       expect(system.split(RULE).length - 1).toBe(1);
     }
   });
+
+  test.skipIf(skip)("« Procéder quand même » interdit le refus et la source inventée", async () => {
+    const r = (await ask({ op: "homeworkSystem" })) as unknown as { proceed: string };
+    expect(r.proceed).toContain("demande explicitement une reponse meme si des documents manquent");
+    expect(r.proceed).toContain("Ne reponds JAMAIS refused");
+    expect(r.proceed).toContain("Ne fabrique jamais une source");
+    expect(r.proceed).toContain(RULE);
+  });
 });
 
 describe("le raisonnement ne mange plus le budget de sortie (#604)", () => {

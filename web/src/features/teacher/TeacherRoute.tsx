@@ -105,9 +105,13 @@ export function TeacherRoute() {
     });
   }
 
-  async function sendCurrent(question: string, history: TeacherMessage[]): Promise<void> {
+  async function sendCurrent(
+    question: string,
+    history: TeacherMessage[],
+    proceedAnyway = false,
+  ): Promise<void> {
     const student = studentMessage(question);
-    const params = buildTeacherTurn(subject, question, mode, history);
+    const params = buildTeacherTurn(subject, question, mode, history, proceedAnyway);
     if (!student || !params) return;
     const next = trimTeacherMessages([...history, student]);
     applyMessages(next);
@@ -164,17 +168,18 @@ export function TeacherRoute() {
     void sendCurrent(question, messages);
   }
 
-  function retry(): void {
+  function retry(proceedAnyway = false): void {
     if (loading) return;
-    const last = messages[messages.length - 1];
+    const current = messagesRef.current;
+    const last = current[current.length - 1];
     const pending = last?.role === "student" ? last : null;
     if (!pending) {
       setError(null);
       return;
     }
     // L'historique s'arrête AVANT la question en attente : elle est le tour.
-    const history = messages.slice(0, -1);
-    void sendCurrent(pending.text, history);
+    const history = current.slice(0, -1);
+    void sendCurrent(pending.text, history, proceedAnyway);
   }
 
   function reject(index: number): void {
@@ -234,6 +239,9 @@ export function TeacherRoute() {
         break;
       case "open_attachment":
         navigate("/tasks");
+        break;
+      case "proceed_anyway":
+        retry(true);
         break;
       default:
         retry();
