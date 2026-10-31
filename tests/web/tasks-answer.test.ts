@@ -126,20 +126,21 @@ describe("aide devoirs — pont et panneau (#629)", () => {
     expect(bridge).toContain("AiProceed.intro(it)");
   });
 
-  test("le panneau rend la réponse, les étapes, les sources et les CTA contextuels", () => {
+  test("le chat rend la réponse, les étapes, les sources et les CTA contextuels", () => {
     const tasks = source("features/tasks/TasksScreen.tsx");
-    expect(tasks).toContain('className="task-help__panel-answer"');
-    expect(tasks).toContain("help.steps.map");
-    expect(tasks).toContain('className="task-help__steps"');
-    expect(tasks).toContain("help.sources.map");
-    expect(tasks).toContain('className="task-help__sources"');
-    expect(tasks).toContain('help.actions.includes("add_course")');
-    expect(tasks).toContain('help.actions.includes("enable_manual")');
-    expect(tasks).toContain('help.actions.includes("open_attachment")');
-    expect(tasks).toContain('help.actions.includes("proceed_anyway")');
-    expect(tasks).toContain("Procéder quand même");
+    const chat = source("features/tasks/HomeworkChat.tsx");
+    expect(chat).toContain("<MarkdownBody text={turn.answer} />");
+    expect(chat).toContain("turn.steps.map");
+    expect(chat).toContain('className="hw-steps"');
+    expect(chat).toContain("turn.sources.map");
+    expect(chat).toContain('className="hw-sources"');
+    expect(chat).toContain('action === "add_course"');
+    expect(chat).toContain('action === "enable_manual"');
+    expect(chat).toContain('action === "open_attachment"');
+    expect(chat).toContain('action === "proceed_anyway"');
+    expect(chat).toContain("Procéder quand même");
     expect(tasks).toContain("parseHomeworkAnswer(result)");
     expect(tasks).toContain("parseHomeworkActions(result.actions)");
-    expect(tasks).not.toContain("result.body");
+    expect(chat).not.toContain("result.body");
   });
 });

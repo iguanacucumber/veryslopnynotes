@@ -378,8 +378,8 @@ class VsnBridge(
                 llmKeys.clear()
                 JSONObject().put("ok", true)
             }
-            "llm.askHomework" -> askHomework(p, epoch)
-            "llm.solvePhoto" -> solveHomeworkPhoto(p, epoch)
+            "llm.askHomework" -> askHomework(p, epoch, requestId)
+            "llm.solvePhoto" -> solveHomeworkPhoto(p, epoch, requestId)
             "llm.generateRevision" -> generateRevision(p, epoch)
             "llm.teacherTurn" -> teacherTurn(p)
             "exercises.propose" -> exercisesPropose(p)
@@ -700,6 +700,22 @@ class VsnBridge(
         } else {
             null
         }
+    }
+
+    /**
+     * Étape réelle d'un appel long, poussée au JS sur le thread principal.
+     * Ce n'est PAS une interface `@JavascriptInterface` : le seul point
+     * d'entrée reste `call`, et le JS ignore un identifiant qu'il n'attend pas.
+     */
+    internal fun emitProgress(requestId: String?, phase: String, sources: Int = -1, chars: Int = -1) {
+        if (requestId.isNullOrEmpty() || !validBridgeId(requestId)) return
+        val payload = JSONObject().put("phase", phase.take(24))
+        if (sources >= 0) payload.put("sources", sources)
+        if (chars >= 0) payload.put("chars", chars)
+        postJs(
+            "window.__vsnProgress && window.__vsnProgress(${JSONObject.quote(requestId)}, " +
+                "${JSONObject.quote(payload.toString())})",
+        )
     }
 
     private fun resolve(requestId: String, result: JSONObject) {

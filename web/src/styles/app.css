@@ -559,6 +559,12 @@ button.card:hover {
 
 /* --- Dialogue modal ------------------------------------------------------- */
 
+/* `.main` porte un z-index : sans le relever, le fond du dialogue passait
+   SOUS l'en-tête et la barre d'onglets (visibles au-dessus du chat). */
+.main:has(.dialog-backdrop) {
+  z-index: 100;
+}
+
 .dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -617,6 +623,54 @@ button.card:hover {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 18px;
+}
+
+/* Fenêtre de conversation : hauteur utile, en-tête fixe, fil qui défile,
+   compositeur collé en bas. Le clavier réduit `--app-height`, donc la fenêtre
+   ne passe jamais dessous. */
+.dialog.dialog--chat {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 560px;
+  height: min(calc(var(--app-height) - 24px), 820px);
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 28px;
+  background: var(--surface);
+}
+
+.dialog--chat .dialog__head {
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.dialog--chat .dialog__icon {
+  color: var(--brand);
+}
+
+.dialog--chat .dialog__title {
+  font-size: 18px;
+  line-height: 24px;
+}
+
+.dialog--chat .dialog__actions {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .dialog.dialog--chat {
+    height: calc(var(--app-height) - 16px);
+    border-radius: 24px;
+  }
+
+  .dialog-backdrop:has(.dialog--chat) {
+    padding: 8px;
+  }
 }
 
 @keyframes dialog-fade {
@@ -1445,6 +1499,49 @@ button.chip {
 
 .revision-markdown__paragraph {
   margin: 0 0 10px;
+}
+
+/* Formules : MathML natif, aucune police distante. Le display respire et
+   déborde en défilement horizontal plutôt que de casser la mesure. */
+.math-inline {
+  display: inline;
+  white-space: nowrap;
+}
+
+.math-inline math {
+  font-size: 1.04em;
+}
+
+.math-display {
+  max-width: 100%;
+  margin: 2px 0 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+  text-align: center;
+  -webkit-overflow-scrolling: touch;
+}
+
+.math-display math[display="block"] {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  font-size: 1.12em;
+}
+
+.revision-markdown math {
+  font-family: "STIX Two Math", "Noto Sans Math", "Cambria Math", serif;
+  line-height: 1.2;
+}
+
+.revision-markdown mtable {
+  display: inline-table;
+  vertical-align: middle;
+}
+
+.revision-markdown mtd {
+  padding: 1px 3px;
 }
 
 .revision-markdown__heading {

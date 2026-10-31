@@ -258,7 +258,7 @@ export function ExercisesView({
               <p className="tiny muted">{exerciseModeHint(help.mode ?? "hint")}</p>
 
               {help.loading ? (
-                <p className="task-help__panel-status">
+                <p className="exercise-help__status">
                   <span className="spinner" aria-hidden="true" />
                   <span>{help.mode === "correction" ? "Correction en cours…" : "Le professeur réfléchit…"}</span>
                 </p>
@@ -283,9 +283,9 @@ export function ExercisesView({
                     </p>
                   )}
                   {exerciseSources(help.message.context).length > 0 ? (
-                    <details className="task-help__privacy">
+                    <details className="exercise-help__privacy">
                       <summary>Ce qui est envoyé</summary>
-                      <ul className="task-help__context tiny muted">
+                      <ul className="exercise-help__context tiny muted">
                         {exerciseSources(help.message.context).map((source, index) => (
                           <li key={`${source.type}:${source.label}:${index}`}>
                             {source.label} ({source.chars} caractères{source.truncated ? ", tronquée" : ""})

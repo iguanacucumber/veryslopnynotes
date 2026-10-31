@@ -8,6 +8,7 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MarkdownBody } from "../../web/src/features/revisions/MarkdownBody";
+import { mathToText, parseMath } from "../../web/src/features/revisions/math";
 import {
   countMarkdownNodes,
   MAX_INLINE_DEPTH,
@@ -33,6 +34,7 @@ function inlineText(nodes: InlineNode[]): string {
   return nodes
     .map((node) => {
       if (node.type === "text" || node.type === "code") return node.text;
+      if (node.type === "math") return mathToText(parseMath(node.tex));
       return inlineText(node.children);
     })
     .join("");
@@ -50,6 +52,8 @@ function blockText(blocks: MarkdownBlock[]): string {
           return block.items.map(inlineText).join(" ");
         case "table":
           return [...block.header, ...block.rows.flat()].map(inlineText).join(" ");
+        case "math":
+          return mathToText(parseMath(block.tex, true));
       }
     })
     .join("\n");
@@ -177,15 +181,22 @@ describe("parseur markdown borné (#630)", () => {
   });
 });
 
-describe("formules LaTeX : normalisées en texte lisible (#759)", () => {
-  test("délimiteurs, fractions et symboles courants ne restent pas littéraux", () => {
+describe("formules LaTeX : nœuds math et MathML natif (#759)", () => {
+  test("les délimiteurs deviennent des nœuds math, le TeX nu reste lisible", () => {
     const blocks = parseMarkdown(
       "Le terme $u(0)$ vaut \\[ \\frac{n}{2} \\times 2 \\]. Puis \\sqrt{2} \\leq 3.",
     );
+    const paragraph = blocks[0];
+    expect(paragraph?.type).toBe("paragraph");
+    if (paragraph?.type !== "paragraph") throw new Error("paragraphe attendu");
+    const math = paragraph.children.filter((node) => node.type === "math");
+    expect(math).toHaveLength(2);
+    expect(math[0]).toMatchObject({ type: "math", tex: "u(0)" });
+    expect(math[1]).toMatchObject({ type: "math" });
+    expect(math[1]!.tex).toContain("\\frac{n}{2}");
     const text = blockText(blocks);
     expect(text).toContain("u(0)");
-    expect(text).toContain("n/2");
-    expect(text).toContain("×");
+    expect(text).toContain("(n)/(2) × 2");
     expect(text).toContain("√(2)");
     expect(text).toContain("≤");
     for (const raw of ["$", "\\frac", "\\times", "\\[", "\\]", "\\sqrt", "\\leq"]) {
@@ -193,14 +204,20 @@ describe("formules LaTeX : normalisées en texte lisible (#759)", () => {
     }
   });
 
-  test("le rendu ne laisse aucune commande LaTeX visible", () => {
-    const html = render("\\[ \\frac{n}{2} \\times x \\] et $u(0)$");
-    expect(html).toContain("n/2");
-    expect(html).toContain("×");
+  test("le rendu produit du MathML, jamais une commande visible", () => {
+    const html = render("\\[ \\frac{n}{2} \\times x \\]\n\net $u(0)$");
+    expect(html).toContain('<math display="block"');
+    expect(html).toContain("<mfrac>");
+    expect(html).toContain('alttext="(n)/(2) × x"');
     expect(html).toContain("u(0)");
     expect(html).not.toContain("\\frac");
     expect(html).not.toContain("\\times");
     expect(html).not.toContain("\\[");
+  });
+
+  test("une formule suivie de texte ne l'avale pas", () => {
+    const html = render("\\[ x \\] suite");
+    expect(html).toContain("suite");
   });
 
   test("le texte sans formule reste intact", () => {

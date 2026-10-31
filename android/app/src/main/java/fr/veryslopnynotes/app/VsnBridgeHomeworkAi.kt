@@ -65,16 +65,21 @@ internal fun VsnBridge.saveLlmKey(p: JSONObject): JSONObject {
     }
 }
 
-internal fun VsnBridge.askHomework(p: JSONObject, epoch: Long): JSONObject {
+internal fun VsnBridge.askHomework(p: JSONObject, epoch: Long, requestId: String? = null): JSONObject {
     val id = bounded(p.string("assignmentId"), 128)
     if (id.isEmpty()) throw BridgeFailure("bad_request", "Devoir introuvable.")
     // #369 : la semaine AFFICHÉE : le devoir demandé peut venir d'une
     // semaine non courante (le cache ne porte que la dernière lue).
     val week = bounded(p.string("weekStart"), 10)
     val proceedAnyway = p.optBoolean("proceedAnyway", false)
+    // Question complémentaire du fil : DONNÉE bornée, ajoutée à la question
+    // du devoir. Le prompt la marque Untrusted avec le reste (I6).
+    val followUp = bounded(p.string("question"), 900)
     val assignment = loadAssignments(id, week).firstOrNull { it.id == id }
         ?: return JSONObject().put("ok", false).put("message", "Devoir introuvable.")
+    emitProgress(requestId, "prepare")
     val context = aiContextFor(assignment, AiContextEntry.HOMEWORK, week, epoch)
+    emitProgress(requestId, "context", context.sources.size, context.sources.sumOf { it.text.length })
     val missing = missingDocumentsFor(assignment)
     // #628 : corpus vide = refus DÉTERMINISTE avec CTA, AVANT tout appel
     // payant. L'ancien chemin payait un aller-retour pour lire « aucune
@@ -88,15 +93,26 @@ internal fun VsnBridge.askHomework(p: JSONObject, epoch: Long): JSONObject {
         )
     }
     val sources = context.sources.map { it.toHomeworkSource() }
-    val question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment)
+    val base = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment)
+    val question = if (followUp.isEmpty()) {
+        base
+    } else {
+        val suffix = "\n\nQuestion complémentaire (DONNÉE) :\n" + followUp
+        val room = (fr.veryslopnynotes.core.Homework.MAX_QUESTION_CHARS - suffix.length).coerceAtLeast(0)
+        (base.take(room) + suffix).take(fr.veryslopnynotes.core.Homework.MAX_QUESTION_CHARS)
+    }
+    emitProgress(requestId, "model")
     val result = await<fr.veryslopnynotes.data.HomeworkResult>(AWAIT_LLM_MS) { cb ->
         // Budget fournisseur STRICTEMENT sous l'attente du pont : à budget
         // égal, une réponse produite par la reprise arrive quand `await`
         // abandonne déjà (« L'assistant n'a pas répondu »).
         OpenRouterHomework(OpenRouterLlm(timeoutMs = HOMEWORK_LLM_TIMEOUT_MS), llmKeys)
-            .generate(question, sources, cb, allowUnsourced = proceedAnyway)
+            .generate(question, sources, cb, allowUnsourced = proceedAnyway) { phase ->
+                if (phase == "verify") emitProgress(requestId, "verify")
+            }
     } ?: return JSONObject().put("ok", false).put("message", "L'assistant n'a pas répondu.")
         .withAiContext(context)
+    emitProgress(requestId, "done")
     val outcome = result.outcome
         ?: return JSONObject().put("ok", false)
             .put("message", result.error ?: OpenRouterHomework.GENERIC_ERROR_MESSAGE)
@@ -403,7 +419,7 @@ internal fun VsnBridge.refusalJson(
  * l'aide texte ; la photo est une source citable supplémentaire. Aucun
  * enregistrement du corrigé, aucun effet métier (I7).
  */
-internal fun VsnBridge.solveHomeworkPhoto(p: JSONObject, epoch: Long): JSONObject {
+internal fun VsnBridge.solveHomeworkPhoto(p: JSONObject, epoch: Long, requestId: String? = null): JSONObject {
     val id = bounded(p.string("assignmentId"), 128)
     if (id.isEmpty()) throw BridgeFailure("bad_request", "Devoir introuvable.")
     val week = bounded(p.string("weekStart"), 10)
@@ -416,9 +432,12 @@ internal fun VsnBridge.solveHomeworkPhoto(p: JSONObject, epoch: Long): JSONObjec
         return JSONObject().put("ok", false)
             .put("message", "Clé LLM trop courte : renseigne-la dans Réglages.")
     }
+    emitProgress(requestId, "prepare")
     // Même corpus que l'aide texte. Une photo est une source à part entière :
     // un corpus texte vide reste valide pour ce chemin (allowEmpty).
     val context = aiContextFor(assignment, AiContextEntry.PHOTO, week, epoch)
+    emitProgress(requestId, "context", context.sources.size, context.sources.sumOf { it.text.length })
+    emitProgress(requestId, "photo")
     return when (val shot = awaitPhoto(bounded(p.string("source"), 16).ifEmpty { "camera" })) {
         is PhotoCapture.Result.Cancelled -> JSONObject().put("ok", false).put("cancelled", true)
             .withAiContext(context)
@@ -436,6 +455,7 @@ internal fun VsnBridge.solveHomeworkPhoto(p: JSONObject, epoch: Long): JSONObjec
                     .withAiContext(context)
             }
             try {
+                emitProgress(requestId, "model")
                 val outcome = HomeworkAi.generateHomeworkFromPhoto(
                     provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
                     question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment),
@@ -445,7 +465,9 @@ internal fun VsnBridge.solveHomeworkPhoto(p: JSONObject, epoch: Long): JSONObjec
                         base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
                     ),
                     apiKey = apiKey,
+                    onPhase = { phase -> if (phase == "verify") emitProgress(requestId, "verify") },
                 )
+                emitProgress(requestId, "done")
                 when (outcome) {
                     is HomeworkOutcome.Answer ->
                         homeworkAnswerJson(outcome).withAiContext(context)

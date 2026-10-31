@@ -171,6 +171,7 @@ object HomeworkAi {
         apiKey: String?,
         nonce: String? = null,
         allowUnsourced: Boolean = false,
+        onPhase: ((String) -> Unit)? = null,
     ): HomeworkOutcome {
         if (apiKey == null || !isGenerationRequestValid(question, sources, apiKey, allowEmptySources = allowUnsourced)) {
             throw AiError("requête devoirs invalide")
@@ -181,6 +182,7 @@ object HomeworkAi {
         val data = homeworkData(question, sources)
         val system = if (allowUnsourced) SYSTEM_HOMEWORK_PROCEED_JSON else SYSTEM_HOMEWORK_JSON
         val raw = generateGuardedJson(provider, system, data, nonce, apiKey)
+        onPhase?.invoke("verify")
         return parseHomeworkResponse(
             raw,
             Homework.uniqueLabels(sources).toSet(),
@@ -199,6 +201,7 @@ object HomeworkAi {
         image: VisionImage,
         apiKey: String?,
         nonce: String? = null,
+        onPhase: ((String) -> Unit)? = null,
     ): HomeworkOutcome {
         if (apiKey == null || !isGenerationRequestValid(question, sources, apiKey, allowEmptySources = true)) {
             throw AiError("requête devoirs invalide")
@@ -213,6 +216,7 @@ object HomeworkAi {
             nonce = nonce,
             apiKey = apiKey,
         )
+        onPhase?.invoke("verify")
         return parseHomeworkResponse(
             raw,
             Homework.uniqueLabels(sources).toSet() + HOMEWORK_PHOTO_LABEL,

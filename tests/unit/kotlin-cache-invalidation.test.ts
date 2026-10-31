@@ -218,10 +218,15 @@ describe("câblage de l'invalidation et de la fenêtre (#369)", () => {
     expect(tasks).toContain("bridge.toggleAssignment(assignment.id, next, week)");
     expect(tasks).toContain("bridge.openAttachment(assignment.id, attachment.id, week)");
     // L'aide devoirs lit le même cache : elle suit la semaine affichée aussi.
-    expect(tasks).toContain("bridge.askHomework(assignment.id, week, proceedAnyway)");
+    expect(tasks).toContain(
+      "bridge.askHomework(assignment.id, week, allowUnsourced, question, onProgress)",
+    );
     expect(client).toContain('"assignments.toggle", { id, done, weekStart }');
     expect(client).toContain('"assignments.attachment", { homeworkId, attachmentId, weekStart }');
-    expect(client).toContain('"llm.askHomework", { assignmentId, weekStart, proceedAnyway }');
+    expect(client).toContain('"llm.askHomework",');
+    expect(client).toContain("assignmentId,");
+    expect(client).toContain("weekStart,");
+    expect(client).toContain("proceedAnyway,");
   });
 
   test("une SEULE invalidation, côté natif (le web n'invalide pas)", () => {

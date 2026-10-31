@@ -102,6 +102,30 @@ describe("pont : délais", () => {
   });
 });
 
+describe("pont : progression", () => {
+  test("une étape réelle est livrée au bon appel, puis oubliée", async () => {
+    stubNative();
+    const seen: Array<{ phase: string; sources?: number; chars?: number }> = [];
+    const promise = call("llm.askHomework", { assignmentId: "a1" }, undefined, undefined, (progress) => {
+      seen.push(progress);
+    });
+    const requestId = nativeCalls[0]!.requestId;
+    const g = globalThis as unknown as {
+      __vsnProgress?: (requestId: string, progressJson: string) => void;
+      __vsnResolve?: (requestId: string, resultJson: string) => void;
+    };
+    g.__vsnProgress?.(requestId, JSON.stringify({ phase: "model", sources: 3 }));
+    g.__vsnProgress?.(requestId, "pas du json");
+    g.__vsnProgress?.("r-inconnu", JSON.stringify({ phase: "verify" }));
+    expect(seen).toEqual([{ phase: "model", sources: 3, chars: undefined }]);
+    g.__vsnResolve?.(requestId, '{"ok":true}');
+    await promise;
+    // Après règlement, une étape tardive ne rappelle plus l'écran fermé.
+    g.__vsnProgress?.(requestId, JSON.stringify({ phase: "done" }));
+    expect(seen).toHaveLength(1);
+  });
+});
+
 describe("pont : abandon", () => {
   test("un abandon libère l'entrée pending et prévient le natif", async () => {
     stubNative();

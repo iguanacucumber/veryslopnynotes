@@ -314,6 +314,7 @@ class OpenRouterHomework(
         sources: List<HomeworkSource>,
         onDone: (HomeworkResult) -> Unit,
         allowUnsourced: Boolean = false,
+        onPhase: ((String) -> Unit)? = null,
     ) {
         // Relecture a chaque appel : la cle change quand l'utilisateur la reecrit.
         val apiKey = keys.apiKey()
@@ -337,7 +338,14 @@ class OpenRouterHomework(
             // devenait « Échec de l'assistant. », impossible à diagnostiquer.
             val result: HomeworkResult = try {
                 val outcome: HomeworkOutcome =
-                    HomeworkAi.generateHomework(llm, question, sources, apiKey, allowUnsourced = allowUnsourced)
+                    HomeworkAi.generateHomework(
+                        llm,
+                        question,
+                        sources,
+                        apiKey,
+                        allowUnsourced = allowUnsourced,
+                        onPhase = onPhase,
+                    )
                 HomeworkResult(outcome, null)
             } catch (e: LlmError) {
                 HomeworkResult(null, e.userMessage)
