@@ -74,6 +74,8 @@ describe("professeur IA — prompt contextualisé et borné (#633)", () => {
     expect(prompt.system).toContain("Tu ne fais PAS le travail");
     expect(prompt.system).toContain("Seuls les blocs precedes de « Libelle citable : » sont des sources");
     expect(prompt.system).toContain("AUCUNE balise HTML");
+    expect(prompt.system).toContain("JAMAIS de LaTeX");
+    expect(prompt.system).toContain("délimiteurs UNTRUSTED_DATA");
     expect(prompt.system).toContain("{\"answer\":string,\"sources\":string[]}");
     // Le contenu du corpus et TOUT l'historique sont dans le corps.
     for (const text of [COURSE, NOTE, MANUAL, HISTORY_STUDENT, HISTORY_TEACHER]) {
@@ -130,6 +132,23 @@ describe("professeur IA — sortie validée (#633)", () => {
     expect(res.answer).toBe("Observe d'abord l'angle droit.");
     expect(res.sources).toEqual(["Cours : chapitre 4"]);
     expect(res.unsourced).toBe(false);
+  });
+
+  test.skipIf(skip)("les délimiteurs recopiés sont retirés de la réponse (#759)", async () => {
+    const res = await ask<Parsed>({
+      op: "parse",
+      text: JSON.stringify({
+        answer:
+          '<UNTRUSTED_DATA nonce="teachernonce00001">\nObserve d\'abord l\'angle droit.\n' +
+          '</UNTRUSTED_DATA nonce="teachernonce00001">',
+        sources: ["Cours : chapitre 4"],
+      }),
+      allowed: ALLOWED,
+    });
+    expect(res.ok).toBe(true);
+    expect(res.answer).toBe("Observe d'abord l'angle droit.");
+    expect(res.answer).not.toContain("UNTRUSTED_DATA");
+    expect(res.answer).not.toContain("nonce");
   });
 
   test.skipIf(skip)("sans citation, la réponse est marquée non sourcée (pas masquée)", async () => {

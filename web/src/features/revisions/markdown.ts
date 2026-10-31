@@ -32,6 +32,77 @@ type ListMarker = { ordered: boolean; start: number; text: string };
 
 const ESCAPABLE = "\\`*_{}[]()#+-.!|>";
 
+/** Commandes LaTeX courantes -> texte Unicode lisible (#759). */
+const MATH_SYMBOLS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\\times\b/g, "×"],
+  [/\\div\b/g, "÷"],
+  [/\\cdot\b/g, "·"],
+  [/\\pm\b/g, "±"],
+  [/\\mp\b/g, "∓"],
+  [/\\leq?\b/g, "≤"],
+  [/\\geq?\b/g, "≥"],
+  [/\\neq?\b/g, "≠"],
+  [/\\approx\b/g, "≈"],
+  [/\\equiv\b/g, "≡"],
+  [/\\infty\b/g, "∞"],
+  [/\\rightarrow\b|\\to\b/g, "→"],
+  [/\\leftarrow\b|\\gets\b/g, "←"],
+  [/\\alpha\b/g, "α"],
+  [/\\beta\b/g, "β"],
+  [/\\gamma\b/g, "γ"],
+  [/\\delta\b/g, "δ"],
+  [/\\Delta\b/g, "Δ"],
+  [/\\theta\b/g, "θ"],
+  [/\\lambda\b/g, "λ"],
+  [/\\mu\b/g, "μ"],
+  [/\\pi\b/g, "π"],
+  [/\\sigma\b/g, "σ"],
+  [/\\Sigma\b/g, "Σ"],
+  [/\\omega\b/g, "ω"],
+  [/\\Omega\b/g, "Ω"],
+];
+
+function fractionPart(part: string): string {
+  const trimmed = part.trim();
+  return /[+\-*/=<> ]/.test(trimmed) ? `(${trimmed})` : trimmed;
+}
+
+/** Le LaTeX produit par le modèle est affiché en texte lisible : les
+ *  délimiteurs partent, les fractions et symboles usuels sont traduits. Le
+ *  reste du texte (markdown, HTML échappé) n'est pas réinterprété. */
+export function normalizeMath(raw: string): string {
+  let out = raw;
+  // Affichage puis inline : le contenu reste, les délimiteurs partent.
+  out = out.replace(/\$\$([\s\S]*?)\$\$/g, "$1");
+  out = out.replace(/\\\[([\s\S]*?)\\\]/g, "$1");
+  out = out.replace(/\\\(([\s\S]*?)\\\)/g, "$1");
+  // Inline : un couple de dollars n'est une formule que s'il porte une marque
+  // mathématique. « coûte $5 et $10 » n'est pas une formule.
+  out = out.replace(/\$([^$\n]+)\$/g, (match, inner: string) =>
+    /[\\^_{}=+\-*/<>]/.test(inner) || !/\s/.test(inner) ? inner : match,
+  );
+  // Fractions imbriquées : quelques passes bornées, jamais de boucle ouverte.
+  for (let depth = 0; depth < 4; depth++) {
+    const next = out.replace(
+      /\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g,
+      (_match, numerator: string, denominator: string) =>
+        `${fractionPart(numerator)}/${fractionPart(denominator)}`,
+    );
+    if (next === out) break;
+    out = next;
+  }
+  out = out.replace(/\\sqrt\s*\{([^{}]*)\}/g, (_match, inner: string) => `√(${inner})`);
+  out = out.replace(/\\(?:text|mathrm|mathbf|mathit|operatorname)\s*\{([^{}]*)\}/g, "$1");
+  out = out.replace(/\\(?:left|right)\b/g, "");
+  out = out.replace(/\\q?quad\b/g, " ");
+  out = out.replace(/\\[ ,;:!]/g, " ");
+  for (const [pattern, symbol] of MATH_SYMBOLS) out = out.replace(pattern, symbol);
+  // Ponctuation LaTeX sans équivalent markdown ; `\{`, `\_`, `\#` restent
+  // échappés et le parseur markdown les rend littéraux.
+  out = out.replace(/\\([%&$])/g, "$1");
+  return out;
+}
+
 function tableCells(line: string): string[] | null {
   const trimmed = line.trim();
   if (!trimmed.includes("|")) return null;
@@ -310,8 +381,9 @@ export function countMarkdownNodes(blocks: MarkdownBlock[]): number {
 export function parseMarkdown(markdown: string): MarkdownBlock[] {
   // Un corps Windows (CRLF) ou vieux Mac (CR) rendrait ses marqueurs : les
   // expressions sont ancrées en `$` et `.` ne franchit pas `\r`. Normalisation
-  // en UN seul point d'entrée, avant toute analyse.
-  const source = boundSource(markdown.replace(/\r\n?/g, "\n"));
+  // en UN seul point d'entrée, avant toute analyse ; le LaTeX courant est
+  // traduit AVANT le bornage (la sortie reste bornée).
+  const source = boundSource(normalizeMath(markdown.replace(/\r\n?/g, "\n")));
   const blocks = parseBlocks(source);
   if (countMarkdownNodes(blocks) <= MAX_MARKDOWN_NODES) return blocks;
   // Trop de nœuds : texte plat, borné par la taille source, plutôt qu'un rendu

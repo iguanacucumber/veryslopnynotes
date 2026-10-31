@@ -38,6 +38,8 @@ describe("fiche de revision — le prompt demande le JSON attendu (#367)", () =>
     // Le sous-ensemble markdown est demandé explicitement, sans HTML.
     expect(prompt.system).toContain("markdown simple");
     expect(prompt.system).toContain("AUCUNE balise HTML");
+    expect(prompt.system).toContain("JAMAIS de LaTeX");
+    expect(prompt.system).toContain("délimiteurs UNTRUSTED_DATA");
   });
 
   test.skipIf(skip)("les sources restent des DONNEES delimitees par nonce (I6)", async () => {
@@ -65,6 +67,24 @@ describe("fiche de revision — le prompt demande le JSON attendu (#367)", () =>
       expect({ text, ok: bad.ok }).toEqual({ text, ok: false });
       expect(bad.error).toContain("I5");
     }
+  });
+
+  test.skipIf(skip)("les délimiteurs recopiés dans la fiche sont retirés (#759)", async () => {
+    const nonce = "revisionnonce000001";
+    const fiche = [
+      `<UNTRUSTED_DATA nonce="${nonce}">`,
+      "## Rappel",
+      "La dérivée de x^2 est 2x.",
+      `</UNTRUSTED_DATA nonce="${nonce}">`,
+      `---UNTRUSTED_DATA nonce="${nonce}"---`,
+      `--- fin DONNEES nonce="${nonce}" ---`,
+    ].join("\n");
+    const res = JSON.parse(await ask({ op: "parse", text: JSON.stringify({ fiche }) })) as Parse;
+    expect(res.ok).toBe(true);
+    expect(res.fiche).toContain("## Rappel");
+    expect(res.fiche).toContain("La dérivée de x^2 est 2x.");
+    expect(res.fiche).not.toContain("UNTRUSTED_DATA");
+    expect(res.fiche).not.toContain(nonce);
   });
 
   test.skipIf(skip)("le message d'echec est explicite, borne et sans secret", async () => {

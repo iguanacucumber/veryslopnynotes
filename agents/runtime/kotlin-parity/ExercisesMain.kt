@@ -104,12 +104,16 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
             studentAnswer = op.str("answer") ?: "",
             nonce = "exercicenonce0001",
         )
+        val number = op.str("number") ?: ""
         JVal.Obj(
             linkedMapOf(
                 "system" to JVal.Str(prompt.system),
                 "body" to JVal.Str(prompt.body),
                 "nonce" to JVal.Str(prompt.nonce),
                 "sources" to JVal.Num(context.sources.size.toDouble()),
+                "allowed" to JVal.Arr(
+                    Exercises.citableLabels(context, number).sorted().map { JVal.Str(it) },
+                ),
             ),
         )
     }

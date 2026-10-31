@@ -28,7 +28,8 @@ fun isRevisionAnswer(v: JsonValue): Boolean {
 
 fun parseRevisionAnswer(v: JsonValue): String {
     if (!isRevisionAnswer(v)) throw AiError("fiche JSON invalide (I5)")
-    val t = (jsonStrOf(v, "fiche") ?: throw AiError("fiche JSON invalide (I5)")).trim()
+    val raw = jsonStrOf(v, "fiche") ?: throw AiError("fiche JSON invalide (I5)")
+    val t = stripUntrustedTags(raw).trim()
     if (t.isEmpty()) throw AiError("fiche vide (I5)")
     return t
 }

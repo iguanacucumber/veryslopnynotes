@@ -55,6 +55,28 @@ private fun neutralizeMarkers(raw: String): String {
     return out
 }
 
+// Balises qu'un modele recopie parfois dans sa REPONSE. Contrairement a la
+// neutralisation d'entree, on retire ici la balise ENTIERE, attribut nonce
+// compris : l'eleve ne doit jamais voir un delimiteur du prompt.
+private val OUTPUT_TAG_RE = Regex(
+    "</?\\s*" + UNTRUSTED_TAG + "(?:\\s+nonce\\s*=\\s*(\"[^\"]*\"|'[^']*'))?\\s*/?>",
+    RegexOption.IGNORE_CASE,
+)
+private val OUTPUT_OPEN_RE = Regex(
+    "---\\s*" + UNTRUSTED_TAG + "(?:\\s+nonce\\s*=\\s*(\"[^\"]*\"|'[^']*'))?\\s*---",
+    RegexOption.IGNORE_CASE,
+)
+
+/**
+ * Retire les delimiteurs I6 qu'un modele aurait recopies dans sa sortie.
+ * Les balises sont supprimees avec leur nonce ; le texte autour reste intact.
+ */
+fun stripUntrustedTags(raw: String): String {
+    var out = OUTPUT_TAG_RE.replace(raw, "")
+    out = OUTPUT_OPEN_RE.replace(out, "")
+    return MARKER_END_RE.replace(out, "")
+}
+
 // ponytail: randomUUID stdlib suffit (128-bit, unique par prompt).
 // Upgrade: nonce 256-bit via SecureRandom si audit l'exige.
 fun createNonce(): String = UUID.randomUUID().toString().replace("-", "")
