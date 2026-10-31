@@ -1,14 +1,22 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { IconGrades } from "../../ui/icons";
+import {
+  IconBook,
+  IconCalendar,
+  IconChevronDown,
+  IconGrades,
+  IconSearch,
+  IconStar,
+} from "../../ui/icons";
 import { frDateLong, relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
-import { EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../../ui/components";
+import { EmptyState, ErrorBox, Loading, Page, SearchField, StaleBadge } from "../../ui/components";
 import {
   algorithmChipLabel,
   algorithmHint,
   ALGORITHMS,
   averageLabel,
   coverageLabel,
+  filterGradeGroups,
   formatMark,
   gradeContextLabel,
   gradeGroups,
@@ -240,8 +248,11 @@ export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boo
     .slice(0, 6);
   if (latest.length === 0) return null;
   return (
-    <section className="grades-latest" aria-label="Dernières notes">
-      <h2 className="sr-only">Dernières notes</h2>
+    <section className="grades-latest" aria-label="Nouvelles notes">
+      <h2 className="grades-section-title">
+        <IconStar size={20} />
+        Nouvelles notes
+      </h2>
       <div className="h-scroll grades-latest__track">
         {latest.map((grade) => {
           const color = subjectColor(grade.subject);
@@ -294,46 +305,53 @@ export function GradesToolbar({
 }) {
   const selected = periods.find((period) => period.id === periodId) ?? null;
   return (
-    <div className="stack grades-toolbar">
-      {periods.length > 0 ? (
-        <label className="grades-field">
-          <span>Période</span>
+    <>
+      <div className="grades-controls">
+        {periods.length > 0 ? (
+          <label className="grades-menu">
+            <IconCalendar size={20} />
+            <span className="sr-only">Période</span>
+            <select
+              value={periodId ?? ""}
+              onChange={(event) => onPeriod(event.target.value || null)}
+              aria-describedby={selected ? "grades-period-caption" : undefined}
+            >
+              <option value="">Année</option>
+              {periods.map((period) => (
+                <option key={period.id} value={period.id}>
+                  {period.name}
+                </option>
+              ))}
+            </select>
+            <IconChevronDown size={18} />
+          </label>
+        ) : null}
+        <label className="grades-menu grades-menu--end">
+          <IconGrades size={20} />
+          <span className="sr-only">Calcul de la moyenne</span>
           <select
-            value={periodId ?? ""}
-            onChange={(event) => onPeriod(event.target.value || null)}
-            aria-describedby={selected ? "grades-period-caption" : undefined}
+            value={algorithm}
+            onChange={(event) => onAlgorithm(event.target.value as Algorithm)}
+            aria-describedby="grades-algorithm-hint"
           >
-            <option value="">Année</option>
-            {periods.map((period) => (
-              <option key={period.id} value={period.id}>
-                {period.name}
+            {ALGORITHMS.map((choice) => (
+              <option key={choice} value={choice}>
+                {choice === "subject" ? "Moyennes" : algorithmChipLabel(choice)}
               </option>
             ))}
           </select>
+          <IconChevronDown size={18} />
         </label>
-      ) : null}
-      {selected ? (
-        <p id="grades-period-caption" className="grades-caption">
-          {periodLabel(selected)}
-        </p>
-      ) : null}
-      <div className="grades-algorithms" role="group" aria-label="Calcul de la moyenne">
-        {ALGORITHMS.map((choice) => (
-          <button
-            key={choice}
-            type="button"
-            className={`grades-chip${choice === algorithm ? " grades-chip--active" : ""}`}
-            aria-pressed={choice === algorithm}
-            onClick={() => onAlgorithm(choice)}
-          >
-            {algorithmChipLabel(choice)}
-          </button>
-        ))}
       </div>
-      <p className="grades-caption" aria-live="polite">
+      <p id="grades-algorithm-hint" className="sr-only" aria-live="polite">
         {algorithmHint(algorithm, provided)}
       </p>
-    </div>
+      {selected ? (
+        <span id="grades-period-caption" className="sr-only">
+          {periodLabel(selected)}
+        </span>
+      ) : null}
+    </>
   );
 }
 
@@ -423,6 +441,10 @@ export function GradesSubjectSections({
 }) {
   return (
     <section className="grades-ledger" aria-label="Notes par matière">
+      <h2 className="grades-section-title">
+        <IconBook size={20} />
+        Matières
+      </h2>
       {groups.map((group) => (
         <SubjectSection key={group.subject} group={group} report={report} />
       ))}
@@ -459,12 +481,15 @@ export function GradesScreen({
   onPeriod: (periodId: string | null) => void;
   onRefresh: () => void;
 }) {
+  const [search, setSearch] = useState("");
   const data = useMemo(() => parseGradesPayload(payload, algorithm, periodId), [payload, algorithm, periodId]);
   const visibleGrades = useMemo(() => gradesForPeriod(data.grades, periodId), [data.grades, periodId]);
   const groups = useMemo(
     () => gradeGroups(visibleGrades, data.report?.subjects ?? []),
     [visibleGrades, data.report],
   );
+  const filtered = useMemo(() => filterGradeGroups(groups, search), [groups, search]);
+  const searching = search.trim() !== "";
 
   const hasData = data.report !== null || data.grades.length > 0;
 
@@ -498,17 +523,35 @@ export function GradesScreen({
         provided={data.report?.provided ?? false}
       />
 
-      {data.report ? <GradesHero report={data.report} /> : null}
+      <SearchField
+        value={search}
+        onChange={setSearch}
+        placeholder="Rechercher une note, une matière"
+        label="Rechercher une note ou une matière"
+      />
 
-      {groups.length > 0 ? <LatestGrades groups={groups} dark={dark} /> : null}
+      {data.report && !searching ? <GradesHero report={data.report} /> : null}
 
-      {groups.length > 0 && data.report ? (
-        <GradesSubjectSections groups={groups} report={data.report} />
+      {filtered.length > 0 && !searching ? <LatestGrades groups={filtered} dark={dark} /> : null}
+
+      {filtered.length > 0 && data.report ? (
+        <GradesSubjectSections groups={filtered} report={data.report} />
       ) : (
         <EmptyState
-          icon={<IconGrades size={30} />}
-          title="Aucune note sur cette période"
-          body="L’établissement n’a publié aucune note ici."
+          icon={searching ? <IconSearch size={30} /> : <IconGrades size={30} />}
+          title={searching ? "Aucune note trouvée" : "Aucune note sur cette période"}
+          body={
+            searching
+              ? `Aucun résultat pour « ${search.trim()} » sur cette période.`
+              : "L’établissement n’a publié aucune note ici."
+          }
+          action={
+            searching ? (
+              <button type="button" className="btn btn--small" onClick={() => setSearch("")}>
+                Effacer la recherche
+              </button>
+            ) : undefined
+          }
         />
       )}
     </Page>

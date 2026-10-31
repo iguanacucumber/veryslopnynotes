@@ -19,10 +19,10 @@ import {
 import { Sparkline } from "../grades/components";
 import {
   clockLabel,
-  courseCountdown,
   courseWidgetTitle,
   dayLabel,
   dueLabel,
+  durationLabel,
   formatAverage,
   generalAverage,
   parseAssignments,
@@ -158,7 +158,7 @@ function CourseWidget({
       <div className="home-courses">
         {lessons.map((lesson) => {
           const palette = paletteFor(lesson.subject, dark);
-          const countdown = courseCountdown(lesson, now);
+          const duration = durationLabel(lesson.end - lesson.start);
           const live = lesson.start <= now && now < lesson.end;
           return (
             <div className={`home-course${live ? " home-course--live" : ""}`} key={lesson.id}>
@@ -184,7 +184,7 @@ function CourseWidget({
                       </>
                     ) : null}
                   </span>
-                  {countdown ? <span className="home-course__hint">{countdown}</span> : null}
+                  {duration ? <span className="home-course__hint">{duration}</span> : null}
                 </div>
               </div>
             </div>

@@ -140,17 +140,17 @@ describe("web mouvement", () => {
     expect(rivals.filter((rival) => !rival.file.endsWith("styles/tokens.css"))).toEqual([]);
   });
 
-  test("barre d'onglets : dock plat pleine largeur, cinq onglets, capsule active", () => {
+  test("barre d'onglets : dock flottant, cinq onglets, capsule active", () => {
     const css = readFileSync(join(ROOT, "web/src/styles/app.css"), "utf8");
     const tabbar = css.match(/\.tabbar\s*\{([^}]*)\}/)?.[1] ?? "";
     expect(tabbar).toContain("position: fixed");
-    expect(tabbar).toContain("left: 0");
-    expect(tabbar).toContain("right: 0");
-    expect(tabbar).toContain("border-radius: 0");
-    expect(tabbar).toContain("background: var(--page)");
+    expect(tabbar).toContain("left: 50%");
+    expect(tabbar).toContain("transform: translateX(-50%)");
+    expect(tabbar).toContain("border-radius: 999px");
+    expect(tabbar).toContain("background: var(--surface)");
     expect(tabbar).not.toContain("backdrop-filter");
-    expect(css).toMatch(/\.tab svg\s*\{[^}]*border-radius:\s*15px/);
-    expect(css).toMatch(/\.tab\[aria-current="page"\] svg\s*\{[^}]*background:\s*color-mix/);
+    expect(css).toMatch(/\.tab svg\s*\{[^}]*width:\s*24px/);
+    expect(css).toMatch(/\.tab\[aria-current="page"\][\s\S]*?background:\s*color-mix/);
   });
 
   test("en-tête : plat sur la page, identité en surimpression sur l'accueil", () => {

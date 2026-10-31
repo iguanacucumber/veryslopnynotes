@@ -11,6 +11,7 @@ import {
   assignmentDayKey,
   assignmentSections,
   assignmentsInWeek,
+  assignmentsMatching,
   dueLabel,
   foldFr,
   homeworkRefusalText,
@@ -19,6 +20,7 @@ import {
   shiftWeek,
   subjectDisplayFr,
   subjectInitial,
+  taskProgress,
   weekEndOf,
   weekGap,
   weekLabelFr,
@@ -464,6 +466,33 @@ describe("web tâches — navigation de semaine", () => {
     expect(assignmentsInWeek(spring, "2026-03-30").map((item) => item.id)).toEqual(["mon"]);
   });
 
+  test("la recherche ignore accents et casse, et couvre matière, titre, consigne", () => {
+    const items = parseAssignmentsPayload(
+      payload([
+        { ...VALID, id: "maths", subject: "MATHEMATIQUES", title: "Exercices", description: "Fractions" },
+        { ...VALID, id: "histoire", subject: "HISTOIRE-GEOGRAPHIE", title: "Révision", description: "Régimes" },
+        { ...VALID, id: "nsi", subject: "NUMERIQUE SC.INFORM.", title: "TP SQL", description: "Requêtes" },
+      ]),
+    ).items;
+    expect(assignmentsMatching(items, "mathematiques").map((item) => item.id)).toEqual(["maths"]);
+    expect(assignmentsMatching(items, "revision").map((item) => item.id)).toEqual(["histoire"]);
+    expect(assignmentsMatching(items, "sql").map((item) => item.id)).toEqual(["nsi"]);
+    expect(assignmentsMatching(items, "   ")).toEqual(items);
+    expect(assignmentsMatching(items, "introuvable")).toEqual([]);
+  });
+
+  test("l'avancement compte les terminés, sans dépasser la semaine", () => {
+    const items = parseAssignmentsPayload(
+      payload([
+        { ...VALID, id: "done", done: true },
+        { ...VALID, id: "todo", done: false },
+        { ...VALID, id: "todo2", done: false },
+      ]),
+    ).items;
+    expect(taskProgress(items)).toEqual({ total: 3, done: 1, remaining: 2, percent: 33 });
+    expect(taskProgress([])).toEqual({ total: 0, done: 0, remaining: 0, percent: 0 });
+  });
+
   test("la navigation est rendue même sans weekStart dans le payload", () => {
     const source = readFileSync(
       join(import.meta.dir, "..", "..", "web", "src", "features", "tasks", "TasksScreen.tsx"),
@@ -486,7 +515,8 @@ describe("web tâches — navigation de semaine", () => {
       "utf8",
     );
     // Les sections suivent l'en-tête : la semaine affichée, pas « maintenant ».
-    expect(source).toContain("assignmentSections(items, week, new Date())");
+    expect(source).toContain("assignmentSections(matching, week, new Date())");
+    expect(source).toContain("assignmentsMatching(items, search)");
   });
 
   test("le bouton de retour annonce le statut relatif, pas « Cette semaine » (#567, #580)", () => {

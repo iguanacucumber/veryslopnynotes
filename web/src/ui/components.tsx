@@ -1,10 +1,24 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useId, type CSSProperties, type ReactNode } from "react";
 import { subjectColor, tint, weekStatusFr } from "../lib/format";
 import { subjectEmoji } from "../lib/subjectVisual";
-import { IconChevronLeft, IconChevronRight, IconWarning } from "./icons";
+import { IconChevronLeft, IconChevronRight, IconClose, IconSearch, IconWarning } from "./icons";
 
 export function Page({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`stack ${className}`}>{children}</div>;
+}
+
+/** Un BOUTON, pas un `href="#main"` : le HashRouter possède déjà le hash de
+ *  l'URL, un tel lien changerait de route. Masqué tant qu'il n'a pas le focus. */
+export function SkipLink() {
+  return (
+    <button
+      type="button"
+      className="skip-link"
+      onClick={() => document.getElementById("main")?.focus()}
+    >
+      Aller au contenu
+    </button>
+  );
 }
 
 export function PageHeading({
@@ -23,6 +37,50 @@ export function PageHeading({
         {eyebrow ? <span className="page-heading__eyebrow">{eyebrow}</span> : null}
       </div>
       {action ? <div className="page-heading__action">{action}</div> : null}
+    </div>
+  );
+}
+
+/** Barre de recherche Papillon : capsule `item`, icône 24 px, texte 16 / 600.
+ *  Le bouton d'effacement n'apparaît qu'avec du texte, jamais un bouton mort. */
+export function SearchField({
+  value,
+  onChange,
+  placeholder,
+  label,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  label: string;
+}) {
+  const id = useId();
+  return (
+    <div className="search-field" role="search">
+      <IconSearch size={22} className="search-field__icon" />
+      <label className="sr-only" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        id={id}
+        type="search"
+        value={value}
+        placeholder={placeholder}
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {value ? (
+        <button
+          type="button"
+          className="search-field__clear"
+          aria-label="Effacer la recherche"
+          onClick={() => onChange("")}
+        >
+          <IconClose size={18} />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -311,8 +369,8 @@ export function Avatar({ name, size = 40, src }: { name: string; size?: number; 
         alignItems: "center",
         justifyContent: "center",
         border: 0,
-        background: src ? "transparent" : "var(--brand-solid)",
-        color: src ? "var(--ink-soft)" : "var(--on-brand)",
+        background: src ? "transparent" : "var(--brand-pale)",
+        color: src ? "var(--ink-soft)" : "var(--brand-solid)",
         fontWeight: 700,
         letterSpacing: "0.02em",
         fontSize: size * 0.32,

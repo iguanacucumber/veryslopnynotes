@@ -2,43 +2,56 @@
   gap: 12px;
 }
 
-/* `.stack` (app.css) arrive après : la spécificité doit gagner pour garder
-   les contrôles sur une ligne. */
-.grades .grades-toolbar {
+/* Barre Papillon : période à gauche, calcul à droite, deux capsules de 48 px.
+   Le select natif porte le libellé et le choix, sans menu maison à maintenir. */
+.grades-controls {
   display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 0 2px;
+  gap: 8px;
 }
 
-.grades-field {
-  display: flex;
-  flex-direction: row;
+.grades-menu {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--secondary);
-  font-size: 15px;
-  line-height: 19px;
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.grades-field select {
-  width: auto;
-  max-width: 100%;
-  min-height: 36px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 100px;
-  background: var(--item);
+  min-width: 0;
+  max-width: calc(50% - 4px);
+  min-height: var(--tap);
+  padding: 0 10px 0 14px;
+  border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
   color: var(--ink);
-  font-size: 15px;
+}
+
+.grades-menu--end {
+  margin-left: auto;
+}
+
+.grades-menu svg {
+  flex: 0 0 auto;
+  opacity: 0.6;
+}
+
+.grades-menu select {
+  min-width: 0;
+  max-width: 42vw;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 20px;
   font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
+  text-overflow: ellipsis;
+  appearance: none;
+  cursor: pointer;
+}
+
+.grades-menu:focus-within {
+  box-shadow: 0 0 0 2px var(--brand-deep);
 }
 
 .grades-caption {
@@ -49,27 +62,20 @@
   font-weight: 400;
 }
 
-.grades-algorithms {
+.grades-section-title {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.grades-chip {
-  min-height: 36px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 100px;
-  background: var(--item);
-  color: var(--ink);
-  font-size: 15px;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 2px 2px;
+  color: var(--secondary);
+  font-size: 17px;
+  line-height: 22px;
   font-weight: 600;
-  transition: background var(--duration) var(--ease);
 }
 
-.grades-chip--active {
-  background: var(--brand-solid);
-  color: var(--on-brand);
+.grades-section-title svg {
+  flex: 0 0 auto;
+  opacity: 0.6;
 }
 
 .grades-headline {
@@ -87,12 +93,12 @@
 }
 
 /* Carte moyenne Papillon : graphe 140 px, corps 18 px sans padding haut. */
-.grades-hero {
+.card.grades-hero {
   position: relative;
   padding: 0;
-  border: 0;
+  border: 1px solid color-mix(in srgb, var(--brand) 12%, transparent);
   border-radius: 24px;
-  background: var(--item);
+  background: color-mix(in srgb, var(--brand) 15%, var(--page));
   box-shadow: none;
   overflow: hidden;
 }
@@ -409,6 +415,7 @@
   width: 200px;
   flex: 0 0 auto;
   padding: 12px 0;
+  border: 1px solid color-mix(in srgb, var(--grade-ink) 13%, transparent);
   border-radius: 24px;
   overflow: hidden;
 }

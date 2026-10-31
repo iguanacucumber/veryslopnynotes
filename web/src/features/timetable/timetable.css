@@ -273,7 +273,7 @@
   min-width: 0;
   padding: 12px 14px 12px 28px;
   border: 0;
-  border-radius: 18px;
+  border-radius: 25px;
   background: var(--lesson-bg, var(--item));
   color: var(--lesson-ink, var(--ink));
 }

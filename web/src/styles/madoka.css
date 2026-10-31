@@ -11,8 +11,8 @@
   border-bottom-width: 2px;
 }
 
-:root[data-scheme="madoka"] .tabbar__pill {
-  background: var(--brand-light);
+:root[data-scheme="madoka"] .tab[aria-current="page"] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-light) 55%, transparent);
 }
 
 :root[data-scheme="madoka"] .card:not(.card--danger) {
@@ -25,9 +25,12 @@
 
 /* L'or marque la sélection ; l'encre reste le texte lisible. */
 :root[data-scheme="madoka"] .chip--active,
-:root[data-scheme="madoka"] .scheme-card--active,
-:root[data-scheme="madoka"] .grades-chip--active {
+:root[data-scheme="madoka"] .scheme-card--active {
   border-color: var(--brand-light);
+}
+
+:root[data-scheme="madoka"] .grades-menu:focus-within {
+  box-shadow: 0 0 0 2px var(--brand-light);
 }
 
 :root[data-scheme="madoka"] .field:focus {

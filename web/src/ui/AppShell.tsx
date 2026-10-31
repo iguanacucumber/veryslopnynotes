@@ -2,8 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "./AppContext";
 import { bridge } from "../bridge/client";
-import { Avatar } from "./components";
-import { isSafePhotoDataUrl, parseProfilePayload, type Profile } from "../features/profile/model";
+import { Avatar, SkipLink } from "./components";
+import { HomeWallpaper } from "./HomeWallpaper";
+import {
+  isSafePhotoDataUrl,
+  parseProfilePayload,
+  profileSubtitle,
+  type Profile,
+} from "../features/profile/model";
 import {
   IconBack,
   IconButterfly,
@@ -63,8 +69,8 @@ export function Shell() {
   const titleFocusedOnce = useRef(false);
   const isHome = location.pathname === "/";
   const meta = ROUTE_META[location.pathname] ?? { title: "VerySlopyNyNotes" };
-  // Papillon nomme l'en-tête par son contenu : la date pour le calendrier, la
-  // période pour les notes. Le reste garde le libellé de la route.
+  // Papillon nomme l'en-tête par son contenu : la date pour le calendrier.
+  // Les notes portent leur période dans les contrôles, pas deux fois.
   const now = new Date();
   const calendarTitle = now.toLocaleDateString("fr-FR", {
     weekday: "long",
@@ -74,11 +80,10 @@ export function Shell() {
   const headerTitle =
     location.pathname === "/calendar"
       ? calendarTitle.charAt(0).toUpperCase() + calendarTitle.slice(1)
-      : location.pathname === "/grades"
-        ? profile?.periodName || meta.title
-        : meta.title;
+      : meta.title;
   const headerSubtitle =
     location.pathname === "/calendar" ? "Aujourd’hui" : undefined;
+  const identitySub = profile ? profileSubtitle(profile) : "";
 
   // Le focus passe au titre pour qu'un lecteur d'écran annonce la page, sauf
   // au premier rendu.
@@ -126,6 +131,8 @@ export function Shell() {
 
   return (
     <div className={isHome ? "shell shell--home" : "shell"}>
+      <SkipLink />
+      {isHome ? <HomeWallpaper /> : null}
       <header className={isHome ? "topbar topbar--home" : "topbar"}>
         <div className="topbar__inner">
           {isHome ? (
@@ -138,6 +145,9 @@ export function Shell() {
               <Avatar name={profile?.displayName ?? "?"} size={40} src={photo} />
               <span className="topbar__identity-text">
                 <span className="topbar__identity-name">{profile?.displayName ?? "Mon relevé"}</span>
+                {identitySub ? (
+                  <span className="topbar__identity-sub">{identitySub}</span>
+                ) : null}
               </span>
               <IconChevronDown className="topbar__chevron" size={20} />
             </button>

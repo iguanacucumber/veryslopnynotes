@@ -70,21 +70,37 @@ a {
   flex-direction: column;
 }
 
-/* Papillon : le fond d'accueil est un papier peint, pas un halo de page.
-   Il reste généré (aucune image) et ne couvre que le haut de l'accueil. */
-.shell--home::before {
-  content: "";
+/* Lien d'évitement : premier élément focalisable de la coquille, masqué tant
+   qu'il n'a pas le focus. Il est FIXE et hors écran par translation, jamais
+   display:none — sinon il quitterait l'ordre de tabulation. */
+.skip-link {
+  position: fixed;
+  top: calc(8px + var(--safe-top));
+  left: 16px;
+  z-index: 40;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--brand-solid);
+  color: var(--on-brand);
+  font-weight: 600;
+  transform: translateY(calc(-100% - 24px));
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* Papillon : le fond d'accueil est un papier peint généré (SVG), pas un halo
+   de page. Il couvre le haut de l'accueil et se dissout dans le fond. */
+.wallpaper {
   position: absolute;
   inset: 0 0 auto;
   z-index: 0;
+  width: 100%;
   height: 400px;
   pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.42)),
-    radial-gradient(90% 62% at 88% 0%, color-mix(in srgb, var(--brand) 72%, #0b1c1a), transparent 70%),
-    radial-gradient(75% 55% at 4% 12%, color-mix(in srgb, var(--brand-light) 62%, #071412), transparent 72%),
-    radial-gradient(95% 72% at 48% 102%, color-mix(in srgb, var(--danger) 58%, #24060c), transparent 76%),
-    linear-gradient(158deg, #1b2b28, #2b1017 54%, #09090b);
   -webkit-mask-image: linear-gradient(#000 50%, transparent 100%);
   mask-image: linear-gradient(#000 50%, transparent 100%);
 }
@@ -172,6 +188,15 @@ a {
   min-height: 56px;
 }
 
+/* Le h1 reste accessible (`.sr-only`) mais ne prend plus la moitié de la
+   largeur : l'identité garde son nom entier, comme Papillon. */
+.topbar--home .topbar__heading {
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .topbar__identity {
   display: flex;
   align-items: center;
@@ -187,6 +212,7 @@ a {
 
 .topbar__identity-text {
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-width: 0;
 }
@@ -296,7 +322,7 @@ a {
   max-width: 700px;
   margin: 0 auto;
   padding: 8px var(--gutter)
-    calc(var(--tabbar-h) + 24px + var(--safe-bottom) + var(--keyboard-bottom));
+    calc(var(--tabbar-h) + 20px + var(--safe-bottom) + var(--keyboard-bottom));
 }
 
 /* Le papier peint passe derrière l'en-tête d'accueil : la page commence sous
@@ -315,21 +341,23 @@ a {
   padding-right: 0;
 }
 
-/* Barre d'onglets Papillon : pleine largeur, plate, sans verre ni ombre. */
+/* Dock flottant Papillon : une capsule de surface, cinq onglets, une pastille
+   active teintée. Il remonte avec le clavier et ne couvre pas le contenu. */
 .tabbar {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: var(--keyboard-bottom);
+  left: 50%;
+  bottom: calc(10px + var(--safe-bottom) + var(--keyboard-bottom));
   z-index: 30;
+  width: min(calc(100% - 24px), 480px);
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 0;
-  padding: 6px 4px calc(6px + var(--safe-bottom));
-  border: 0;
-  border-radius: 0;
-  background: var(--page);
-  box-shadow: none;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-dock);
+  transform: translateX(-50%);
   view-transition-name: tabbar;
 }
 
@@ -364,44 +392,45 @@ a {
   border: 0;
   background: transparent;
   color: var(--secondary);
-  min-height: calc(var(--tabbar-h) - 8px);
+  min-height: 58px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
   padding: 4px 2px;
-  border-radius: 0;
+  border-radius: 21px;
   font-size: 13px;
   line-height: 16px;
   font-weight: 500;
   letter-spacing: 0;
-  transition: color var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
 .tab:hover,
 .tab:active {
-  background: transparent;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: var(--ink);
 }
 
 .tab svg {
-  width: 54px;
-  height: 30px;
-  padding: 4px 16px;
-  border-radius: 15px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 0;
   background: transparent;
-  transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
-.tab[aria-current="page"] {
-  color: var(--brand);
+.tab[aria-current="page"],
+.tab[aria-current="page"]:hover,
+.tab[aria-current="page"]:active {
+  background: color-mix(in srgb, var(--brand) 14%, var(--surface));
+  color: var(--brand-solid);
   font-weight: 600;
 }
 
 .tab[aria-current="page"] svg {
-  background: color-mix(in srgb, var(--brand) 24%, var(--page));
-  color: var(--brand);
+  color: var(--brand-solid);
 }
 
 .card {
@@ -717,7 +746,7 @@ button.card:hover {
   margin: 0;
   font-size: 17px;
   line-height: 22px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0;
   opacity: 0.6;
 }
@@ -920,6 +949,74 @@ button.card:hover {
    compacts. Les puces purement décoratives gardent leur taille. */
 button.chip {
   min-height: var(--tap);
+}
+
+/* Recherche Papillon : une capsule pleine largeur, sans bordure au repos.
+   La cible garde 48 px ; le focus dessine un anneau, pas une ombre. */
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--item);
+  color: var(--ink);
+  transition: box-shadow var(--duration) var(--ease);
+}
+
+.search-field:focus-within {
+  box-shadow: 0 0 0 2px var(--brand-deep);
+}
+
+.search-field__icon {
+  flex: 0 0 auto;
+  opacity: 0.5;
+}
+
+.search-field input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 600;
+  outline: none;
+}
+
+.search-field input::placeholder {
+  color: color-mix(in srgb, var(--ink) 55%, transparent);
+  font-weight: 600;
+  opacity: 1;
+}
+
+.search-field input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search-field__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  margin-right: -14px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--secondary);
+}
+
+.search-field__clear:hover {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
 }
 
 .field {

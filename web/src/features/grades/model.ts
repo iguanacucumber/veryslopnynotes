@@ -530,6 +530,30 @@ export function gradeGroups(grades: readonly Grade[], subjects: readonly Subject
     });
 }
 
+/** Recherche Papillon : la matière garde toutes ses notes si son nom correspond ;
+ *  sinon seules les notes dont le libellé correspond restent visibles. */
+export function filterGradeGroups(groups: readonly GradeGroup[], query: string): GradeGroup[] {
+  const needle = fold(query);
+  if (!needle) return [...groups];
+  return groups.reduce<GradeGroup[]>((out, group) => {
+    if (fold(group.subject).includes(needle)) {
+      out.push(group);
+      return out;
+    }
+    const grades = group.grades.filter((grade) => fold(gradeLabel(grade)).includes(needle));
+    if (grades.length > 0) out.push({ ...group, grades });
+    return out;
+  }, []);
+}
+
+function fold(value: string): string {
+  return value
+    .toLocaleLowerCase("fr-FR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
 export function influenceOf(influences: readonly Influence[], gradeId: string): Influence | null {
   return influences.find((influence) => influence.gradeId === gradeId) ?? null;
 }
