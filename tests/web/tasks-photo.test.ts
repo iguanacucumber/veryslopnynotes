@@ -42,11 +42,12 @@ describe("devoirs — photo d'énoncé (#588)", () => {
     // La constante native existe : le fil du pont ne pend pas pour toujours.
     const bridge = readBridgeSource();
     expect(bridge).toContain("AWAIT_PHOTO_MS = 180_000L");
-    expect(bridge).toContain('"llm.solvePhoto" -> solveHomeworkPhoto(p, epoch)');
+    expect(bridge).toContain('"llm.solvePhoto" -> solveHomeworkPhoto(p, epoch, requestId)');
   });
 
   test("l'écran propose la photo même sans consigne ni manuel", () => {
     const tasks = source("features/tasks/TasksScreen.tsx");
+    const chat = source("features/tasks/HomeworkChat.tsx");
     expect(tasks).toContain("bridge.solveHomeworkPhoto");
     expect(tasks).toContain("Photo de l’énoncé");
     expect(tasks).toContain("Prendre une photo");
@@ -55,7 +56,7 @@ describe("devoirs — photo d'énoncé (#588)", () => {
     expect(tasks).not.toContain("Galerie");
     expect(tasks).toContain("const { textOff, photoOff, sheetOff } = cardActionFlags(");
     expect(tasks).toContain("Sans cours ni manuel, l’aide peut procéder quand même");
-    expect(tasks).toContain("La photo est supprimée après lecture");
+    expect(chat).toContain("La photo est supprimée après lecture");
     // Le texte s'ouvre sans source (le pont refuse puis propose « Procéder
     // quand même ») ; la fiche reste bloquée sans matière.
     const actions = source("features/tasks/actions.ts");

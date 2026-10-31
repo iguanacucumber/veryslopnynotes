@@ -44,6 +44,7 @@ describe("IA — refus d'enregistrement de la clé", () => {
 
 describe("IA — aide devoirs", () => {
   const tasks = source("features/tasks/TasksScreen.tsx");
+  const chat = source("features/tasks/HomeworkChat.tsx");
 
   test("fermer l'aide ignore la réponse en vol (pas de réouverture tardive)", () => {
     const close = between(tasks, "function closeHelp()", "async function generateSheet");
@@ -169,33 +170,35 @@ describe("IA — aide devoirs", () => {
     expect(choose).toContain("askPhoto(assignment, source)");
   });
 
-  test("le panneau se ferme de l'intérieur et garde le focus (#610)", () => {
-    expect(tasks).toContain('aria-label="Fermer l’aide"');
-    expect(tasks).toContain("const trigger = help?.photo ? photoTriggerRef.current : textTriggerRef.current;");
-    expect(tasks).toContain("trigger?.focus()");
-    expect(tasks).toContain("aria-busy={help.loading}");
-    expect(tasks).toContain('className="spinner"');
-    expect(tasks).toContain("L’assistant rédige…");
-    expect(tasks).toContain("L’assistant lit la photo…");
+  test("le chat est un dialogue modal qui rend le focus (#610)", () => {
+    const dialog = source("ui/Dialog.tsx");
+    expect(tasks).toContain("<HomeworkChat");
+    expect(chat).toContain("<Dialog");
+    expect(chat).toContain('className="dialog--chat"');
+    expect(dialog).toContain("restoreRef.current?.focus()");
+    expect(dialog).toContain('aria-label="Fermer"');
+    expect(chat).toContain("aria-busy={state.loading}");
+    expect(chat).toContain("L’assistant travaille");
+    expect(chat).toContain('className="spinner"');
   });
 
   test("un refus mène au cahier, jamais au corps brut (#610)", () => {
-    expect(tasks).toContain("Ajouter un cours au cahier");
+    expect(chat).toContain("Ajouter un cours au cahier");
     expect(tasks).toContain('onAddCourse={() => navigate("/course-notes")}');
-    const panel = between(tasks, 'className="task-help__panel"', "</details>");
-    expect(panel).toContain("{help.refusal}");
-    expect(panel).toContain("Ajouter un cours au cahier");
-    expect(panel).not.toContain("result.body");
+    const turn = between(chat, "function AssistantTurn", "export function HomeworkChat");
+    expect(turn).toContain("{turn.refusal}");
+    expect(turn).toContain('action === "add_course"');
+    expect(chat).not.toContain("result.body");
+    expect(tasks).not.toContain("result.body");
   });
 
-  test("la réponse reste du texte, la divulgation est repliée (#610)", () => {
-    expect(tasks).toContain("<summary>Ce qui est envoyé</summary>");
-    expect(tasks).toContain("le texte du manuel sont envoyés");
-    expect(tasks).toContain("La photo est supprimée après lecture");
-    expect(tasks).toContain('className="task-help__panel-answer"');
-    expect(tasks).not.toContain("Tu peux aussi photographier l’énoncé");
-    expect(tasks).not.toContain("dangerouslySetInnerHTML");
-    expect(tasks).not.toContain("innerHTML");
+  test("la réponse passe par le markdown sûr, la divulgation est repliée (#610)", () => {
+    expect(chat).toContain("<summary>Ce qui est envoyé</summary>");
+    expect(chat).toContain("le texte du manuel sont envoyés");
+    expect(chat).toContain("La photo est supprimée après lecture");
+    expect(chat).toContain("<MarkdownBody text={turn.answer} />");
+    expect(chat).not.toContain("dangerouslySetInnerHTML");
+    expect(chat).not.toContain("innerHTML");
   });
 
   test("pendant la vérification, l'écran ne dit pas déjà « désactivé »", () => {

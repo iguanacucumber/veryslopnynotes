@@ -33,11 +33,19 @@ interface VsnNative {
   call(requestId: string, method: string, paramsJson: string): void;
 }
 
+/** Étape réelle du pipeline natif, poussée pendant un appel long. */
+export type BridgeProgress = {
+  phase: string;
+  sources?: number;
+  chars?: number;
+};
+
 declare global {
   interface Window {
     VSN?: VsnNative;
     __vsnResolve?: (requestId: string, resultJson: string) => void;
     __vsnReject?: (requestId: string, errorJson: string) => void;
+    __vsnProgress?: (requestId: string, progressJson: string) => void;
   }
 }
 
@@ -48,14 +56,33 @@ type Pending = {
 };
 
 const pending = new Map<string, Pending>();
+const progressHandlers = new Map<string, (progress: BridgeProgress) => void>();
 let sequence = 0;
 
 function installCallbacks(): void {
+  if (!window.__vsnProgress) {
+    window.__vsnProgress = (requestId, progressJson) => {
+      const handler = progressHandlers.get(requestId);
+      if (!handler) return;
+      try {
+        const parsed = JSON.parse(progressJson) as Partial<BridgeProgress>;
+        if (typeof parsed.phase !== "string" || !parsed.phase.trim()) return;
+        handler({
+          phase: parsed.phase.slice(0, 32),
+          sources: typeof parsed.sources === "number" ? parsed.sources : undefined,
+          chars: typeof parsed.chars === "number" ? parsed.chars : undefined,
+        });
+      } catch {
+        // Une étape illisible n'interrompt pas l'appel en cours.
+      }
+    };
+  }
   if (window.__vsnResolve) return;
   window.__vsnResolve = (requestId, resultJson) => {
     const entry = pending.get(requestId);
     if (!entry) return;
     pending.delete(requestId);
+    progressHandlers.delete(requestId);
     window.clearTimeout(entry.timer);
     try {
       entry.resolve(JSON.parse(resultJson) as unknown);
@@ -67,6 +94,7 @@ function installCallbacks(): void {
     const entry = pending.get(requestId);
     if (!entry) return;
     pending.delete(requestId);
+    progressHandlers.delete(requestId);
     window.clearTimeout(entry.timer);
     let error: BridgeError = { code: "unknown", message: "erreur native" };
     try {
@@ -184,11 +212,13 @@ function callNative<T>(
   method: BridgeMethod,
   params: unknown,
   timeoutMs?: number,
+  onProgress?: (progress: BridgeProgress) => void,
 ): Promise<T> {
   installCallbacks();
   const requestId = `r${++sequence}`;
   // Toujours plus que le plafond natif, sinon la réponse native est perdue.
   const budget = timeoutMs ?? BRIDGE_TIMEOUTS[method] ?? DEFAULT_TIMEOUT_MS;
+  if (onProgress) progressHandlers.set(requestId, onProgress);
   return new Promise<T>((resolve, reject) => {
     // 0 = pas de timeout : le scan QR reste ouvert tant que l'utilisateur
     // cadre le code.
@@ -198,6 +228,7 @@ function callNative<T>(
             // Libère `pending` (la réponse tardive sera ignorée) et prévient
             // le natif.
             pending.delete(requestId);
+            progressHandlers.delete(requestId);
             abort(requestId);
             reject(new BridgeCallError("unavailable", "le téléphone n'a pas répondu"));
           }, budget)
@@ -211,6 +242,7 @@ function callNative<T>(
       window.VSN!.call(requestId, method, JSON.stringify(params));
     } catch {
       pending.delete(requestId);
+      progressHandlers.delete(requestId);
       window.clearTimeout(timer);
       reject(new BridgeCallError("unknown", "pont natif indisponible"));
     }
@@ -227,13 +259,14 @@ export function call<T>(
   params: unknown = {},
   timeoutMs?: number,
   signal?: AbortSignal,
+  onProgress?: (progress: BridgeProgress) => void,
 ): Promise<T> {
   if (!isNative()) return devCall<T>(method, params);
   // Une seule lecture en vol : le délai natif ne couvre pas l'attente en file.
   if (READ_METHODS.has(method)) {
-    return inReadLane(() => callNative<T>(method, params, timeoutMs), signal);
+    return inReadLane(() => callNative<T>(method, params, timeoutMs, onProgress), signal);
   }
-  return callNative<T>(method, params, timeoutMs);
+  return callNative<T>(method, params, timeoutMs, onProgress);
 }
 
 export const bridge = {
@@ -292,7 +325,13 @@ export const bridge = {
   llmStatus: () => call<{ configured: boolean }>("llm.status"),
   saveLlmKey: (key: string) => call<{ ok: boolean; message?: string }>("llm.saveKey", { key }),
   forgetLlmKey: () => call<{ ok: true }>("llm.forgetKey"),
-  askHomework: (assignmentId: string, weekStart: string, proceedAnyway = false) =>
+  askHomework: (
+    assignmentId: string,
+    weekStart: string,
+    proceedAnyway = false,
+    question?: string,
+    onProgress?: (progress: BridgeProgress) => void,
+  ) =>
     call<{
       ok: boolean;
       answer?: string;
@@ -306,8 +345,24 @@ export const bridge = {
       context?: AiContextSourceMeta[];
       contextChars?: number;
       contextOmitted?: number;
-    }>("llm.askHomework", { assignmentId, weekStart, proceedAnyway }),
-  solveHomeworkPhoto: (assignmentId: string, weekStart: string, source: "camera" | "gallery") =>
+    }>(
+      "llm.askHomework",
+      {
+        assignmentId,
+        weekStart,
+        proceedAnyway,
+        ...(question && question.trim() ? { question: question.trim() } : {}),
+      },
+      undefined,
+      undefined,
+      onProgress,
+    ),
+  solveHomeworkPhoto: (
+    assignmentId: string,
+    weekStart: string,
+    source: "camera" | "gallery",
+    onProgress?: (progress: BridgeProgress) => void,
+  ) =>
     call<{
       ok: boolean;
       answer?: string;
@@ -321,7 +376,7 @@ export const bridge = {
       context?: AiContextSourceMeta[];
       contextChars?: number;
       contextOmitted?: number;
-    }>("llm.solvePhoto", { assignmentId, weekStart, source }, BRIDGE_TIMEOUTS["llm.solvePhoto"]),
+    }>("llm.solvePhoto", { assignmentId, weekStart, source }, BRIDGE_TIMEOUTS["llm.solvePhoto"], undefined, onProgress),
   generateRevision: (assignmentId: string, weekStart: string) =>
     call<{
       ok: boolean;

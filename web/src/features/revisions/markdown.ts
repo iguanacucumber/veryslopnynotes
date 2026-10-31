@@ -19,18 +19,20 @@ export type InlineNode =
   | { type: "strong"; children: InlineNode[] }
   | { type: "em"; children: InlineNode[] }
   | { type: "code"; text: string }
-  | { type: "link"; children: InlineNode[] };
+  | { type: "link"; children: InlineNode[] }
+  | { type: "math"; tex: string };
 
 export type MarkdownBlock =
   | { type: "heading"; level: HeadingLevel; children: InlineNode[] }
   | { type: "paragraph"; children: InlineNode[] }
   | { type: "list"; ordered: boolean; start: number; items: InlineNode[][] }
   | { type: "quote"; depth: number; children: InlineNode[] }
-  | { type: "table"; header: InlineNode[][]; rows: InlineNode[][][] };
+  | { type: "table"; header: InlineNode[][]; rows: InlineNode[][][] }
+  | { type: "math"; tex: string };
 
 type ListMarker = { ordered: boolean; start: number; text: string };
 
-const ESCAPABLE = "\\`*_{}[]()#+-.!|>";
+const ESCAPABLE = "\\`*_{}[]()#+-.!|>$";
 
 /** Commandes LaTeX courantes -> texte Unicode lisible (#759). */
 const MATH_SYMBOLS: ReadonlyArray<readonly [RegExp, string]> = [
@@ -157,6 +159,100 @@ function quoteAt(line: string): { depth: number; text: string } | null {
   return { depth: Math.min(match[1]!.length, MAX_QUOTE_DEPTH), text: match[2]!.trim() };
 }
 
+/** Un couple de dollars n'est une formule que s'il porte une marque
+ *  mathématique : « coûte $5 et $10 » reste du texte. */
+function isMathCandidate(inner: string): boolean {
+  return /[\\^_{}=+\-*/<>]/.test(inner) || !/\s/.test(inner);
+}
+
+function inlineMathAt(source: string, index: number): { tex: string; end: number } | null {
+  if (source[index] === "$" && source[index + 1] !== "$") {
+    const end = source.indexOf("$", index + 1);
+    if (end > index + 1) {
+      const inner = source.slice(index + 1, end);
+      if (!inner.includes("\n") && isMathCandidate(inner)) return { tex: inner, end: end + 1 };
+    }
+  }
+  if (source.startsWith("\\(", index)) {
+    const end = source.indexOf("\\)", index + 2);
+    if (end > index + 2) {
+      const inner = source.slice(index + 2, end);
+      if (!inner.includes("\n")) return { tex: inner, end: end + 2 };
+    }
+  }
+  if (source.startsWith("\\[", index)) {
+    const end = source.indexOf("\\]", index + 2);
+    if (end > index + 2) {
+      const inner = source.slice(index + 2, end);
+      if (!inner.includes("\n")) return { tex: inner, end: end + 2 };
+    }
+  }
+  if (source.startsWith("$$", index)) {
+    const end = source.indexOf("$$", index + 2);
+    if (end > index + 2) {
+      const inner = source.slice(index + 2, end);
+      if (!inner.includes("\n")) return { tex: inner, end: end + 2 };
+    }
+  }
+  return null;
+}
+
+/** Bloc `$$…$$`, `\[…\]` ou environnement `\begin{…}`. Une ligne non fermée
+ *  reste un paragraphe, jamais une formule qui avale la suite. */
+function displayMathAt(lines: string[], index: number): { tex: string; end: number } | null {
+  const first = (lines[index] ?? "").trim();
+  let opener: "$$" | "\\[" | "env" | null = null;
+  let closer = "";
+  let inner = "";
+  if (first.startsWith("$$")) {
+    opener = "$$";
+    closer = "$$";
+    inner = first.slice(2);
+  } else if (first.startsWith("\\[")) {
+    opener = "\\[";
+    closer = "\\]";
+    inner = first.slice(2);
+  } else {
+    const begin = /^\\begin\{([a-zA-Z*]+)\}/.exec(first);
+    if (begin) {
+      opener = "env";
+      closer = `\\end{${begin[1]}}`;
+      inner = first.slice(begin[0].length);
+    }
+  }
+  if (!opener) return null;
+
+  let end = index + 1;
+  let rest = inner;
+  let accumulated = first;
+  if (!(opener === "env" ? first.includes(closer) : inner.includes(closer))) {
+    let found = false;
+    while (end < lines.length && end - index <= 120) {
+      rest = lines[end] ?? "";
+      accumulated += `\n${rest}`;
+      end++;
+      if (rest.includes(closer)) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) return null;
+  }
+
+  const closeAt = accumulated.indexOf(closer, opener === "env" ? first.indexOf(`\\begin`) + 1 : 2);
+  if (closeAt === -1) return null;
+  // Un bloc ne peut pas avaler du texte qui suit le délimiteur : sans cette
+  // borne, `\[x\] suite` perdait « suite ».
+  if (accumulated.slice(closeAt + closer.length).trim()) return null;
+  const tex = opener === "env"
+    ? accumulated.trim()
+    : accumulated
+        .slice(accumulated.indexOf(opener) + opener.length, closeAt)
+        .trim();
+  if (!tex) return null;
+  return { tex, end };
+}
+
 function listAt(line: string): ListMarker | null {
   const unordered = /^ {0,3}[-+*][ \t]+(.+)$/.exec(line);
   if (unordered) return { ordered: false, start: 1, text: unordered[1]!.trim() };
@@ -182,12 +278,21 @@ function parseInline(source: string, depth = 0): InlineNode[] {
   let text = "";
   let i = 0;
   const flush = () => {
-    pushText(nodes, text);
+    pushText(nodes, normalizeMath(text));
     text = "";
   };
 
   while (i < source.length) {
     const char = source[i]!;
+
+    // Formule inline : garde le TeX brut, le rendu MathML décide du layout.
+    const math = inlineMathAt(source, i);
+    if (math) {
+      flush();
+      nodes.push({ type: "math", tex: math.tex });
+      i = math.end;
+      continue;
+    }
 
     // Échappement markdown.
     if (char === "\\" && i + 1 < source.length && ESCAPABLE.includes(source[i + 1]!)) {
@@ -315,6 +420,13 @@ function parseBlocks(source: string): MarkdownBlock[] {
       continue;
     }
 
+    const displayMath = displayMathAt(lines, i);
+    if (displayMath) {
+      blocks.push({ type: "math", tex: displayMath.tex });
+      i = displayMath.end;
+      continue;
+    }
+
     const table = tableAt(lines, i);
     if (table) {
       blocks.push({
@@ -345,7 +457,7 @@ function parseBlocks(source: string): MarkdownBlock[] {
     while (i < lines.length) {
       const current = lines[i] ?? "";
       if (!current.trim()) break;
-      if (headingAt(current) || quoteAt(current) || listAt(current) || tableAt(lines, i)) break;
+      if (headingAt(current) || quoteAt(current) || listAt(current) || tableAt(lines, i) || displayMathAt(lines, i)) break;
       paragraph.push(current.trim());
       i++;
     }
@@ -388,6 +500,8 @@ export function countMarkdownNodes(blocks: MarkdownBlock[]): number {
           }
         }
         break;
+      case "math":
+        break;
     }
   }
   return count;
@@ -397,9 +511,9 @@ export function countMarkdownNodes(blocks: MarkdownBlock[]): number {
 export function parseMarkdown(markdown: string): MarkdownBlock[] {
   // Un corps Windows (CRLF) ou vieux Mac (CR) rendrait ses marqueurs : les
   // expressions sont ancrées en `$` et `.` ne franchit pas `\r`. Normalisation
-  // en UN seul point d'entrée, avant toute analyse ; le LaTeX courant est
-  // traduit AVANT le bornage (la sortie reste bornée).
-  const source = boundSource(normalizeMath(markdown.replace(/\r\n?/g, "\n")));
+  // en UN seul point d'entrée, avant toute analyse. Les formules restent en TeX
+  // jusqu'au rendu MathML ; les commandes nues retombent en texte lisible.
+  const source = boundSource(markdown.replace(/\r\n?/g, "\n"));
   const blocks = parseBlocks(source);
   if (countMarkdownNodes(blocks) <= MAX_MARKDOWN_NODES) return blocks;
   // Trop de nœuds : texte plat, borné par la taille source, plutôt qu'un rendu

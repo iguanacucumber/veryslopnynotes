@@ -426,3 +426,41 @@
   flex-direction: column;
   gap: 8px;
 }
+
+.exercise-help__status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--secondary);
+  font-size: 15px;
+  line-height: 19px;
+}
+
+.exercise-help__status .spinner {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.exercise-help__privacy {
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+}
+
+.exercise-help__privacy summary {
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.exercise-help__context {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.exercise-help__context li + li {
+  margin-top: 2px;
+}

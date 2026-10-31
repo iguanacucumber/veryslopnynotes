@@ -52,9 +52,10 @@ describe("manuel — source de l'assistant", () => {
 
   test("l'écran Tâches tient compte du manuel et le déclare dans la divulgation", () => {
     const tasks = source("features/tasks/TasksScreen.tsx");
+    const chat = source("features/tasks/HomeworkChat.tsx");
     expect(tasks).toContain("assignmentHasAssistantMaterial(assignment, manualReady, lessonReady)");
-    expect(tasks).toContain("<summary>Ce qui est envoyé</summary>");
-    expect(tasks).toContain("le texte du manuel sont envoyés");
+    expect(chat).toContain("<summary>Ce qui est envoyé</summary>");
+    expect(chat).toContain("le texte du manuel sont envoyés");
     // Le natif ajoute l'extrait aux DEUX pipelines IA.
     const bridge = readBridgeSource();
     // #628 : le manuel brut entre dans l'assembleur unique (coupe signalée),

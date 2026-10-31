@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MathFormula } from "./MathFormula";
 import { parseMarkdown, type InlineNode, type MarkdownBlock } from "./markdown";
 
 // Aucun rendu HTML brut, aucune URL, aucun attribut du modèle : une balise
@@ -28,6 +29,8 @@ function renderInline(nodes: InlineNode[], keyPrefix: string): ReactNode[] {
             {renderInline(node.children, key)}
           </span>
         );
+      case "math":
+        return <MathFormula key={key} tex={node.tex} />;
     }
   });
 }
@@ -114,6 +117,8 @@ function renderBlock(block: MarkdownBlock, index: number): ReactNode {
           </table>
         </div>
       );
+    case "math":
+      return <MathFormula key={key} tex={block.tex} display />;
   }
 }
 

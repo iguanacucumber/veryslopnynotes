@@ -15,6 +15,7 @@ export function Dialog({
   actions,
   busy = false,
   role = "dialog",
+  className,
   onClose,
 }: {
   open: boolean;
@@ -25,6 +26,7 @@ export function Dialog({
   actions: ReactNode;
   busy?: boolean;
   role?: "dialog" | "alertdialog";
+  className?: string;
   onClose: () => void;
 }) {
   const titleId = useId();
@@ -101,7 +103,7 @@ export function Dialog({
     >
       <div
         ref={panelRef}
-        className="dialog"
+        className={className ? `dialog ${className}` : "dialog"}
         role={role}
         aria-modal="true"
         aria-labelledby={titleId}
