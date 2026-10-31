@@ -272,15 +272,25 @@ pastilles sont à `999px`.
   `adjust(couleur, ±0,8)`, titre 17 / 700, description 15 / 500. Lignes de
   liste : item, rayon 20 px, padding 14 × 16 px, icône 24 px, titre 17.
 - **Prof** : onglets Discussion / Exercices en capsules de 44 px, actif plein
-  accent. Réglages matière et mode sur une barre discrète séparée par un filet,
-  modes en capsules. Le fil défile seul ; le compositeur reste au-dessus du dock.
+  accent. Une barre compacte porte la matière (sélecteur de 44 px) et deux
+  actions d'icône de 44 px (nouvelle discussion, supprimer), puis les modes en
+  capsules de 34 px. L'écran de discussion occupe la hauteur utile : seul le
+  fil défile, le compositeur est épinglé au-dessus du dock, et le changement de
+  matière d'un fil existant demande confirmation.
 - **Assistant** : mark circulaire pâle, réponse en texte pleine largeur
   16 / 26 (15 / 25 sur petit écran), question en bulle compacte à droite
-  (rayon 22 px, coin bas droit à 8 px). Sources en pastilles de 12 px,
-  actions Copier / Réessayer en texte secondaire de 44 px, suggestions en
-  lignes de 52 px bordées. Compositeur en capsule bordée, envoi circulaire
-  plein encre de 38 px. Les fiches sont des documents : mark, titre 18 / 700,
-  aperçu sur deux lignes, corps markdown mesuré.
+  (rayon 22 px, coin bas droit à 8 px). Dans Aide devoirs, le contexte
+  (matière, échéance, sources) reste collé en haut du fil. Sources en pastilles
+  de 12 px, actions Copier / Réessayer en texte secondaire de 44 px,
+  suggestions en lignes de 52 px bordées, placées après la dernière réponse.
+  Compositeur en capsule bordée, envoi circulaire plein encre de 38 px. Le
+  statut de réflexion commun est un pouls avec temps écoulé. Les fiches sont
+  des documents : mark, titre 18 / 700, aperçu sur deux lignes, corps markdown
+  mesuré.
+- **Suivi du fil** : le journal ne recolle au bas que si l'élève y était déjà ;
+  sinon une pastille « Dernière réponse » de 44 px y ramène. Le fil fermé
+  d'Aide devoirs reste en mémoire de l'écran : le rouvrir ne relance pas
+  d'appel.
 - **Boutons** : 44 px, rayon pastille, plein accent. **Champs** : item, rayon
   pastille, focus en anneau.
 - **Dialogues** : largeur maximale 440 px, surface opaque, ombre réelle.

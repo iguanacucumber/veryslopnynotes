@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useState, type CSSProperties } from "react";
 import { Dialog } from "../../ui/Dialog";
 import { useApp } from "../../ui/AppContext";
 import {
@@ -6,11 +6,14 @@ import {
   IconBook,
   IconCamera,
   IconCheck,
+  IconChevronDown,
   IconChevronRight,
   IconRefresh,
   IconSparkles,
 } from "../../ui/icons";
 import { CopyTextButton } from "../../ui/CopyTextButton";
+import { ThinkingLine } from "../../ui/ThinkingLine";
+import { useStickToBottom } from "../../ui/useStickToBottom";
 import { MarkdownBody } from "../revisions/MarkdownBody";
 import { relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
@@ -83,13 +86,6 @@ function Activity({
   loading: boolean;
   photo: boolean;
 }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!loading) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, [loading]);
-
   const events = new Map<string, HomeworkPhase>();
   for (const phase of phases) events.set(phase.phase, phase);
   const visible = PHASES.filter((phase) => phase !== "photo" || photo || events.has("photo"));
@@ -97,17 +93,9 @@ function Activity({
     (index, phase) => Math.max(index, visible.indexOf(phase.phase as PhaseKey)),
     -1,
   );
-  const elapsed = Math.max(0, Math.floor((now - (phases[0]?.at ?? now)) / 1000));
-
   return (
-    <div className="hw-activity ai-thinking" role="status" aria-live="polite">
-      <div className="hw-activity__head">
-        <span className="hw-activity__pulse" aria-hidden="true" />
-        <span className="hw-activity__title">L’assistant travaille</span>
-        <span className="hw-activity__time" aria-hidden="true">
-          {elapsed} s
-        </span>
-      </div>
+    <div className="hw-activity" role="status" aria-live="polite">
+      <ThinkingLine title="L’assistant travaille" startedAt={phases[0]?.at} />
       <ol className="hw-activity__list">
         {visible.map((phase, index) => {
           const event = events.get(phase);
@@ -324,8 +312,12 @@ export function HomeworkChat({
 }) {
   const composerId = useId();
   const [draft, setDraft] = useState("");
-  const logRef = useRef<HTMLDivElement>(null);
-  const stickRef = useRef(true);
+  const { ref: logRef, onScroll, away, toBottom } = useStickToBottom([
+    state.current,
+    state.turns,
+    state.phases,
+    state.loading,
+  ]);
   const { dark } = useApp();
   const tinted = tint(subjectColor(assignment.subject), dark ? 0.3 : -0.3);
   const due = relativeLongFr(assignment.dueDate, Date.now());
@@ -336,16 +328,11 @@ export function HomeworkChat({
     setDraft("");
   }, [state.id]);
 
-  useEffect(() => {
-    const log = logRef.current;
-    if (log && stickRef.current) log.scrollTop = log.scrollHeight;
-  }, [state.current, state.turns, state.phases, state.loading]);
-
   function send() {
     const question = draft.trim();
     if (!question || state.loading) return;
     setDraft("");
-    stickRef.current = true;
+    toBottom();
     onSend(question);
   }
 
@@ -374,61 +361,81 @@ export function HomeworkChat({
       actions={null}
     >
       <div className="hw-chat ai" style={{ "--hw-tint": tinted } as CSSProperties}>
-        <div
-          ref={logRef}
-          className="hw-log ai-log"
-          role="log"
-          aria-live="polite"
-          aria-relevant="additions text"
-          aria-busy={state.loading}
-          aria-label={`Conversation d’aide devoirs — ${assignment.subject}`}
-          onScroll={() => {
-            const log = logRef.current;
-            if (!log) return;
-            stickRef.current = log.scrollHeight - log.scrollTop - log.clientHeight < 56;
-          }}
-        >
-          <div className="hw-context">
-            <span className="hw-context__emoji" aria-hidden="true">
-              {subjectEmoji(assignment.subject)}
-            </span>
-            <span className="hw-context__subject">{subjectDisplayFr(assignment.subject)}</span>
-            {due ? <span className="hw-context__due">{due}</span> : null}
-            {lessonReady ? (
-              <span className="hw-context__chip">
-                <IconBook size={13} />
-                Cahier
+        <div className="ai-log-wrap hw-log-wrap">
+          <div
+            ref={logRef}
+            className="hw-log ai-log"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions text"
+            aria-busy={state.loading}
+            aria-label={`Conversation d’aide devoirs — ${assignment.subject}`}
+            onScroll={onScroll}
+          >
+            <div className="hw-context">
+              <span className="hw-context__emoji" aria-hidden="true">
+                {subjectEmoji(assignment.subject)}
               </span>
-            ) : null}
-            {manualReady ? <span className="hw-context__chip">Manuel</span> : null}
-            {state.photo ? (
-              <span className="hw-context__chip">
-                <IconCamera size={13} />
-                Photo
-              </span>
-            ) : null}
-          </div>
-
-          <div className="hw-user hw-user--assignment">
-            <span className="hw-user__who">Ton devoir</span>
-            <div className="hw-user__bubble">
-              {assignment.title ? <p className="hw-user__title">{assignment.title}</p> : null}
-              {assignment.description ? <MarkdownBody text={assignment.description} /> : null}
+              <span className="hw-context__subject">{subjectDisplayFr(assignment.subject)}</span>
+              {due ? <span className="hw-context__due">{due}</span> : null}
+              {lessonReady ? (
+                <span className="hw-context__chip">
+                  <IconBook size={13} />
+                  Cahier
+                </span>
+              ) : null}
+              {manualReady ? <span className="hw-context__chip">Manuel</span> : null}
+              {state.photo ? (
+                <span className="hw-context__chip">
+                  <IconCamera size={13} />
+                  Photo
+                </span>
+              ) : null}
             </div>
-          </div>
 
-          {state.turns.map((turn, index) => (
-            <div key={`${turn.question}:${index}`} className="hw-exchange">
-              {turn.question ? (
+            <div className="hw-user hw-user--assignment">
+              <span className="hw-user__who">Ton devoir</span>
+              <div className="hw-user__bubble">
+                {assignment.title ? <p className="hw-user__title">{assignment.title}</p> : null}
+                {assignment.description ? <MarkdownBody text={assignment.description} /> : null}
+              </div>
+            </div>
+
+            {state.turns.map((turn, index) => (
+              <div key={`${turn.question}:${index}`} className="hw-exchange">
+                {turn.question ? (
+                  <div className="hw-user">
+                    <span className="hw-user__who">Toi</span>
+                    <div className="hw-user__bubble">{turn.question}</div>
+                  </div>
+                ) : null}
+                <AssistantTurn
+                  turn={turn}
+                  loading={false}
+                  phases={[]}
+                  photo={state.photo}
+                  onProceed={onProceed}
+                  onRetry={onRetry}
+                  onAddCourse={onAddCourse}
+                  onEnableManual={onEnableManual}
+                  onOpenAttachment={onOpenAttachment}
+                  attachment={assignment.attachments[0]}
+                  interactive={false}
+                />
+              </div>
+            ))}
+
+            <div className="hw-exchange">
+              {last.question ? (
                 <div className="hw-user">
                   <span className="hw-user__who">Toi</span>
-                  <div className="hw-user__bubble">{turn.question}</div>
+                  <div className="hw-user__bubble">{last.question}</div>
                 </div>
               ) : null}
               <AssistantTurn
-                turn={turn}
-                loading={false}
-                phases={[]}
+                turn={last}
+                loading={state.loading}
+                phases={state.phases}
                 photo={state.photo}
                 onProceed={onProceed}
                 onRetry={onRetry}
@@ -436,83 +443,67 @@ export function HomeworkChat({
                 onEnableManual={onEnableManual}
                 onOpenAttachment={onOpenAttachment}
                 attachment={assignment.attachments[0]}
-                interactive={false}
               />
             </div>
-          ))}
 
-          <div className="hw-exchange">
-            {last.question ? (
-              <div className="hw-user">
-                <span className="hw-user__who">Toi</span>
-                <div className="hw-user__bubble">{last.question}</div>
+            {!state.loading && !last.answer && !last.refusal && !last.error ? (
+              <div className="hw-starters">
+                <p className="hw-empty tiny muted">Pose une question pour démarrer l’explication.</p>
+                <div className="ai-prompts">
+                  {[
+                    "Explique-moi la consigne",
+                    "Donne-moi juste un indice",
+                    "Aide-moi à commencer",
+                  ].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      className="ai-prompt"
+                      onClick={() => {
+                        toBottom();
+                        onSend(suggestion);
+                      }}
+                    >
+                      {suggestion}
+                      <IconChevronRight size={16} />
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : null}
-            <AssistantTurn
-              turn={last}
-              loading={state.loading}
-              phases={state.phases}
-              photo={state.photo}
-              onProceed={onProceed}
-              onRetry={onRetry}
-              onAddCourse={onAddCourse}
-              onEnableManual={onEnableManual}
-              onOpenAttachment={onOpenAttachment}
-              attachment={assignment.attachments[0]}
-            />
-          </div>
 
-          {!state.loading && !last.answer && !last.refusal && !last.error ? (
-            <div className="hw-starters">
-              <p className="hw-empty tiny muted">Pose une question pour démarrer l’explication.</p>
-              <div className="ai-prompts">
+            {!state.loading && (last.answer || last.refusal) ? (
+              <div className="hw-suggestions" aria-label="Questions rapides">
                 {[
-                  "Explique-moi la consigne",
-                  "Donne-moi juste un indice",
-                  "Aide-moi à commencer",
+                  "Explique plus simplement",
+                  "Détaille les étapes",
+                  "Donne un exemple",
                 ].map((suggestion) => (
                   <button
                     key={suggestion}
                     type="button"
-                    className="ai-prompt"
+                    className="hw-suggestion"
                     onClick={() => {
-                      stickRef.current = true;
+                      toBottom();
                       onSend(suggestion);
                     }}
                   >
                     {suggestion}
-                    <IconChevronRight size={16} />
+                    <IconChevronRight size={14} />
                   </button>
                 ))}
               </div>
-            </div>
+            ) : null}
+          </div>
+          {away ? (
+            <button type="button" className="ai-jump" onClick={toBottom}>
+              Dernière réponse
+              <IconChevronDown size={16} />
+            </button>
           ) : null}
         </div>
 
         <div className="hw-foot hw-foot--ai">
-          {!state.loading && (last.answer || last.refusal) ? (
-            <div className="hw-suggestions" aria-label="Questions rapides">
-              {[
-                "Explique plus simplement",
-                "Détaille les étapes",
-                "Donne un exemple",
-              ].map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  className="hw-suggestion"
-                  onClick={() => {
-                    stickRef.current = true;
-                    onSend(suggestion);
-                  }}
-                >
-                  {suggestion}
-                  <IconChevronRight size={14} />
-                </button>
-              ))}
-            </div>
-          ) : null}
-
           <form
             className="hw-composer ai-composer"
             onSubmit={(event) => {
@@ -570,7 +561,7 @@ export function HomeworkChat({
                 </ul>
               ) : null}
             </details>
-            <span className="tiny muted hw-foot__paid">Chaque question est un nouvel appel à ta clé.</span>
+            <span className="tiny muted hw-foot__paid">1 question = 1 appel.</span>
           </div>
         </div>
       </div>

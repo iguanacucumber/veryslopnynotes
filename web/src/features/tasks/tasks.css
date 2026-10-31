@@ -317,16 +317,29 @@
   gap: 24px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 14px 16px 12px;
-  scroll-behavior: smooth;
+  padding: 0 16px 12px;
 }
 
+/* Sans ça, un enfant du flex scrollable se comprime pour tenir dans la
+   hauteur visible et déborde de son propre cadre. */
+.hw-log > * {
+  flex: 0 0 auto;
+}
+
+/* Le contexte identifie le fil : il reste collé en haut du journal. */
 .hw-context {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-height: 30px;
+  margin: 0 -16px;
+  padding: 10px 16px 8px;
+  border-bottom: 1px solid var(--ai-line, var(--border));
+  background: var(--surface);
 }
 
 .hw-context__emoji {
@@ -647,41 +660,6 @@
   padding: 1px 0;
 }
 
-.hw-activity__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.hw-activity__pulse {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  border-radius: 100px;
-  background: var(--brand);
-  animation: hw-pulse 1.4s var(--ease) infinite;
-}
-
-@keyframes hw-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.7); }
-}
-
-.hw-activity__title {
-  flex: 1;
-  color: var(--secondary);
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 600;
-}
-
-.hw-activity__time {
-  color: var(--secondary);
-  font-size: 11px;
-  line-height: 16px;
-  font-variant-numeric: tabular-nums;
-}
-
 .hw-activity__list {
   display: flex;
   flex-direction: column;
@@ -731,8 +709,8 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 16px calc(10px + var(--safe-bottom));
+  gap: 4px;
+  padding: 6px 16px calc(6px + var(--safe-bottom));
   border-top: 1px solid var(--ai-line, var(--border-soft));
   background: var(--surface);
 }
@@ -741,6 +719,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  padding-top: 2px;
 }
 
 .hw-suggestion {

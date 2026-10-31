@@ -51,23 +51,12 @@ import {
 } from "./assignments";
 import { cardActionFlags } from "./actions";
 import { HomeworkChat, type HomeworkChatState, type HomeworkTurn } from "./HomeworkChat";
+import { emptyTurn, storedThread } from "./homeworkThread";
 import "./tasks.css";
 
 // Le fil ne grandit pas sans fin : les réponses précédentes restent locales,
 // mais seuls les derniers échanges sont gardés à l'écran.
 const MAX_CHAT_TURNS = 8;
-
-function emptyTurn(question: string): HomeworkTurn {
-  return {
-    question,
-    answer: null,
-    steps: [],
-    sources: [],
-    refusal: null,
-    actions: [],
-    error: null,
-  };
-}
 
 type LlmState = { configured: boolean | null; error: string | null };
 
@@ -120,6 +109,9 @@ function TasksWeek({ week }: { week: string }) {
   const [manualSubjects, setManualSubjects] = useState<string[]>([]);
   const [lessonSubjects, setLessonSubjects] = useState<string[]>([]);
   const helpSeq = useRef(0);
+  // Fils fermés, gardés en mémoire seulement : rouvrir relit l'explication
+  // sans repayer un appel. Aucune écriture disque, donc rien à purger.
+  const threadsRef = useRef(new Map<string, HomeworkChatState>());
   const toggleSeq = useRef(new Map<string, number>());
   // L'assistant est UNE ressource payante pour tout l'écran : un second
   // appel simultané jetterait la première réponse tout en la payant.
@@ -420,10 +412,22 @@ function TasksWeek({ week }: { week: string }) {
     void askHelp(assignment, help.allowUnsourced, help.current.question || undefined, true);
   }
 
+  /** Rouvrir relit le fil gardé ; sinon seulement on paie une première réponse. */
+  function openHelp(assignment: Assignment) {
+    const kept = threadsRef.current.get(assignment.id);
+    if (kept) {
+      setHelp({ ...kept, loading: false });
+      return;
+    }
+    void askHelp(assignment);
+  }
+
   /** Fermer ignore la demande en vol : une réponse tardive ne rouvre pas le
    *  panneau. Le pont n'a pas d'annulation LLM : on ignore la réponse. */
   function closeHelp() {
     helpSeq.current += 1;
+    const kept = storedThread(help);
+    if (kept) threadsRef.current.set(kept.id, kept);
     setHelp(null);
   }
 
@@ -628,7 +632,7 @@ function TasksWeek({ week }: { week: string }) {
                       assistantBusy={assistantBusy}
                       onToggle={(next) => void toggle(assignment, next)}
                       onOpenAttachment={(attachment) => void openAttachment(assignment, attachment)}
-                      onHelp={() => void askHelp(assignment)}
+                      onHelp={() => openHelp(assignment)}
                       onOpenPhotoChooser={() => setPhotoChooser(assignment)}
                       onCloseHelp={closeHelp}
                       onGenerateSheet={() => void generateSheet(assignment)}
