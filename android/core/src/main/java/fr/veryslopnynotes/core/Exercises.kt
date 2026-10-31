@@ -60,6 +60,26 @@ object Exercises {
     private val DIFFICULTY = Regex("""\b(facile|moyen(?:ne)?|difficile)\b""", RegexOption.IGNORE_CASE)
 
     /**
+     * Un titre « Exercice N » ouvre un énoncé : ses lignes numérotées sont des
+     * SOUS-QUESTIONS, pas des exercices voisins. Un simple « N. » reste un
+     * marqueur autonome (les pages sans titre listent leurs exercices ainsi).
+     */
+    private data class Marker(val number: String, val body: String, val titled: Boolean)
+
+    private fun markerAt(line: String): Marker? {
+        val titled = TITLED.matchEntire(line.trim())
+        if (titled != null) {
+            return Marker(titled.groupValues[1], titled.groupValues[2], titled = true)
+        }
+        val numbered = NUMBERED.matchEntire(line.trim()) ?: return null
+        val body = numbered.groupValues[2]
+        // Une ligne courte est plus probablement du sommaire qu'un énoncé ;
+        // « Exercice N » n'a pas cette garde.
+        if (body.trim().length < 15) return null
+        return Marker(numbered.groupValues[1], body, titled = false)
+    }
+
+    /**
      * Découpe un texte en énoncés numérotés ; les lignes de continuation sont
      * conservées jusqu'au marqueur suivant ou une ligne vide.
      *
@@ -84,10 +104,13 @@ object Exercises {
                 index += 1
                 continue
             }
-            val body = StringBuilder(marker.second)
+            val body = StringBuilder(marker.body)
             var cursor = index + 1
             while (cursor < lines.size && out.size < max) {
-                if (markerAt(lines[cursor]) != null) break
+                val next = markerAt(lines[cursor])
+                // Un titre absorbe ses sous-questions numérotées ; entre deux
+                // marqueurs autonomes, le suivant commence un autre énoncé.
+                if (next != null && (next.titled || !marker.titled)) break
                 val line = lines[cursor].trim()
                 // Ligne vide = fin de l'énoncé : le paragraphe suivant n'est pas aspiré.
                 if (line.isEmpty()) break
@@ -97,9 +120,9 @@ object Exercises {
             }
             val statement = body.toString().replace(SPACES, " ").trim().take(MAX_STATEMENT_CHARS)
             if (statement.isNotEmpty()) {
-                val difficulty = difficultyOf("${marker.second} $statement")
+                val difficulty = difficultyOf("${marker.body} $statement")
                 val exercise = Exercise(
-                    number = marker.first,
+                    number = marker.number,
                     statement = statement,
                     page = safePage,
                     difficulty = difficulty,
@@ -122,19 +145,6 @@ object Exercises {
         val needle = normalize(hint)
         if (needle.isEmpty()) return items
         return items.filter { normalize("${it.page} ${it.number} ${it.statement}").contains(needle) }
-    }
-
-    private fun markerAt(line: String): Pair<String, String>? {
-        val titled = TITLED.matchEntire(line.trim())
-        if (titled != null) {
-            return titled.groupValues[1] to titled.groupValues[2]
-        }
-        val numbered = NUMBERED.matchEntire(line.trim()) ?: return null
-        val body = numbered.groupValues[2]
-        // Une ligne courte est plus probablement du sommaire qu'un énoncé ;
-        // « Exercice N » n'a pas cette garde.
-        if (body.trim().length < 15) return null
-        return numbered.groupValues[1] to body
     }
 
     private fun difficultyOf(text: String): String {
@@ -171,7 +181,9 @@ object Exercises {
                     "Ne donne PAS le résultat final ni la correction complète : l'élève doit encore chercher."
             ExerciseHelpMode.CORRECTION ->
                 "Niveau CORRECTION COMPLETE, demandé explicitement. Corrige la réponse de l'élève, " +
-                    "signale chaque erreur, explique la correction et propose une étape à refaire. " +
+                    "signale chaque erreur RÉELLE, explique la correction et propose une étape à refaire. " +
+                    "Avant de conclure, vérifie que chaque erreur signalée contredit vraiment une étape " +
+                    "de l'élève : si sa réponse est correcte, dis-le et n'invente aucune erreur. " +
                     "Si aucune réponse n'est fournie, dis-le et corrige seulement l'énoncé, sans inventer un travail."
         }
         return "Tu es un professeur particulier. Utilise uniquement les DONNEES delimitees " +
@@ -180,6 +192,9 @@ object Exercises {
             SYSTEM_CITATION_RULE +
             SYSTEM_OUTPUT_FORMAT_RULE +
             "Ne fabrique jamais une source, un exercice ou une action. " +
+            "Ne décris jamais l'interface d'une capture (boutons, champs, icônes, menus) : " +
+            "seul le contenu mathématique compte. Ne recopie jamais dans \"answer\" les préambules " +
+            "\"Libelle citable :\", \"Contenu (DONNEE)\", ni un délimiteur ou un attribut nonce. " +
             "N'utilise AUCUNE balise HTML. Réponds UNIQUEMENT en JSON valide, sans texte autour : " +
             "{\"answer\":string,\"sources\":string[]}. La valeur de \"answer\" est en français, avec un " +
             "markdown simple (gras **, listes - ou 1., formules en texte ou `code inline`)."

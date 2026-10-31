@@ -73,6 +73,13 @@ private val OUTPUT_BRACKET_RE = Regex(
     RegexOption.IGNORE_CASE,
 )
 private val OUTPUT_BARE_TAG_RE = Regex("\\b" + UNTRUSTED_TAG + "\\b", RegexOption.IGNORE_CASE)
+// Un modèle qui recopie un fragment de délimiteur peut laisser l'attribut
+// SEUL (« Contenu nonce="…" ») : la balise entière n'est alors plus là pour
+// l'emporter. L'attribut n'a jamais sa place dans une réponse.
+private val OUTPUT_NONCE_RE = Regex(
+    "[ \\t]*nonce\\s*=\\s*(\"[^\"]*\"|'[^']*')[ \\t]*",
+    RegexOption.IGNORE_CASE,
+)
 // Marqueur de citation ajoute par le modele dans la fiche (« [DONNEE] »).
 // Casse stricte : le mot français « donnée » reste intact.
 private val OUTPUT_DONNEE_RE = Regex(
@@ -89,6 +96,7 @@ fun stripUntrustedTags(raw: String): String {
     out = OUTPUT_OPEN_RE.replace(out, "")
     out = OUTPUT_BRACKET_RE.replace(out, "")
     out = OUTPUT_BARE_TAG_RE.replace(out, "")
+    out = OUTPUT_NONCE_RE.replace(out, " ")
     out = MARKER_END_RE.replace(out, "")
     return OUTPUT_DONNEE_RE.replace(out, "")
 }

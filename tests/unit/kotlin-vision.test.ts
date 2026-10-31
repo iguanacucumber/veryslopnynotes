@@ -67,6 +67,8 @@ describe("photo de cours — garde d'image exécutée (#587)", () => {
     });
     expect(res.sawImage).toBe(true);
     expect(res.sawMarker).toBe(true);
+    // Une capture d'écran contient boutons et champs : ils ne sont jamais transcrits.
+    expect(res.sawInterfaceGuard).toBe(true);
     expect(res.title).toBe("Chapitre 4");
     expect(res.text).toBe("f'(x)=2x");
   });

@@ -204,7 +204,7 @@ internal fun VsnBridge.manualAvailableForSubject(
         // Sans extrait en cache, la récolte donnera cette matière : l'annoncer
         // vrai est la seule réponse qui ne mente pas avant le premier scrape.
         val doc = manuals.doc(url) ?: return true
-        return manualMatchesSubject(doc.subject, subject)
+        return manualMatchesSubject(doc, subject)
     }
     val classLabel = manuals.classLabel().ifEmpty { cachedProfile?.classLabel.orEmpty() }
     val subjects = (known + subject).distinct()
