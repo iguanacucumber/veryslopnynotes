@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.ComponentActivity
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -44,7 +45,9 @@ class PhotoCapture(private val activity: ComponentActivity) {
         }
     }
 
-    private val gallery = activity.registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    // Photo picker système (#769), comme ChatGPT : accès limité aux images
+    // choisies, aucun droit de lecture sur toute la galerie.
+    private val gallery = activity.registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri == null) {
             finish(Result.Cancelled)
             return@registerForActivityResult
@@ -148,7 +151,7 @@ class PhotoCapture(private val activity: ComponentActivity) {
 
     private fun openGallery() {
         try {
-            gallery.launch("image/*")
+            gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         } catch (_: Exception) {
             finish(Result.Error("Galerie indisponible : réessaie dans un instant."))
         }

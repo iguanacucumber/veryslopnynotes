@@ -94,6 +94,19 @@ describe("message de refus de l'assistant (#416)", () => {
     }
   });
 
+  test("le refus photo nomme les documents manquants (#769)", () => {
+    const bridge = readBridgeSource();
+    const debut = bridge.indexOf("internal fun VsnBridge.solveHomeworkPhoto(");
+    expect(debut).toBeGreaterThan(-1);
+    const photo = bridge.slice(debut, bridge.indexOf("\n/**", debut));
+    expect(photo).toContain("is HomeworkOutcome.Refused ->");
+    expect(photo).toContain("missing = missingDocumentsFor(assignment)");
+    // La phrase dit « procède quand même » : le CTA doit exister.
+    expect(photo).toContain("allowProceed = true");
+    // Jamais le refus générique quand la liste locale est disponible.
+    expect(photo).not.toContain("homeworkRefusalJson(outcome, context)");
+  });
+
   test("le pont envoie la phrase choisie, jamais le motif du modèle", () => {
     const bridge = readBridgeSource();
     const debut = bridge.indexOf("is HomeworkOutcome.Refused ->");

@@ -123,6 +123,13 @@ describe("photo de cours — garde d'image exécutée (#587)", () => {
     const capture = readFileSync(join(APP, "PhotoCapture.kt"), "utf8");
     expect(capture).toContain("cacheDir, \"photos\"");
     expect(capture).toContain("MAX_GALLERY_BYTES");
+    // #769 : photo picker système, même UI que ChatGPT. `GetContent` ouvrait
+    // le navigateur de fichiers et pouvait demander un accès large.
+    expect(capture).toContain("ActivityResultContracts.PickVisualMedia()");
+    expect(capture).toContain(
+      "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)",
+    );
+    expect(capture).not.toContain("ActivityResultContracts.GetContent()");
     // #749 : la déconnexion supprime `cacheDir/photos` ; le `lazy` ne repasse
     // jamais, donc chaque entrée refait le dossier (sinon photo muette
     // jusqu'au redémarrage du process).
