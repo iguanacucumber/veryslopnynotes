@@ -25,13 +25,20 @@ private fun imageOf(op: JVal.Obj): VisionImage = VisionImage(
     base64 = op.str("base64") ?: "",
 )
 
+private fun imagesOf(op: JVal.Obj): List<VisionImage> {
+    val images = op.arr("images")
+    return if (images.isEmpty()) listOf(imageOf(op)) else images.map(::imageOf)
+}
+
 /** Fournisseur factice : capture le prompt, renvoie la réponse de l'opération. */
 private class FakeProvider(private val response: String) : SafeVisionPromptProvider {
     var sawImage: Boolean = false
+    var sawImages: Int = 0
     var sawMarker: Boolean = false
 
     override fun generateVisionSafe(prompt: SafeVisionPrompt, apiKey: String?): String {
-        sawImage = prompt.images.size == 1
+        sawImages = prompt.images.size
+        sawImage = sawImages > 0
         sawMarker = prompt.prompt.body.contains("UNTRUSTED_DATA")
         return response
     }
@@ -39,6 +46,15 @@ private class FakeProvider(private val response: String) : SafeVisionPromptProvi
 
 private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
     "imageValid" -> ok("valid" to JVal.Bool(imageOf(op).isValid()))
+    "imageListValid" -> {
+        val valid = try {
+            buildSafeVisionPrompt(SYSTEM_LESSON_TRANSCRIBE, emptyList(), imagesOf(op))
+            true
+        } catch (_: AiError) {
+            false
+        }
+        ok("valid" to JVal.Bool(valid), "count" to JVal.Num(imagesOf(op).size.toDouble()))
+    }
     "decodedSize" -> ok("size" to JVal.Num(VisionImage.decodedSize(op.str("base64") ?: "").toDouble()))
     "parseDraft" -> {
         val raw = parseJsonValue(op.str("json") ?: "{}")
@@ -63,11 +79,11 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
                 text = it.str("text") ?: "",
             )
         }
-        val outcome = HomeworkAi.generateHomeworkFromPhoto(
+        val outcome = HomeworkAi.generateHomeworkFromPhotos(
             provider = provider,
             question = op.str("question") ?: "",
             sources = sources,
-            image = imageOf(op),
+            images = imagesOf(op),
             apiKey = "synthetic-key",
         )
         when (outcome) {
@@ -77,6 +93,7 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
                 "steps" to JVal.Arr(outcome.steps.map { JVal.Str(it) }),
                 "sources" to JVal.Arr(outcome.sources.map { JVal.Str(it) }),
                 "sawImage" to JVal.Bool(provider.sawImage),
+                "sawImages" to JVal.Num(provider.sawImages.toDouble()),
                 "sawMarker" to JVal.Bool(provider.sawMarker),
             )
             is HomeworkOutcome.Refused -> ok(
@@ -84,6 +101,7 @@ private fun driver(op: JVal.Obj): JVal = when (op.str("op")) {
                 "reason" to JVal.Str(outcome.reason),
                 "sources" to JVal.Arr(outcome.sources.map { JVal.Str(it) }),
                 "sawImage" to JVal.Bool(provider.sawImage),
+                "sawImages" to JVal.Num(provider.sawImages.toDouble()),
                 "sawMarker" to JVal.Bool(provider.sawMarker),
             )
         }

@@ -318,7 +318,7 @@ export interface PairResult {
 }
 
 /**
- * Métadonnée d'une source IA (#628) : « Ce qui est envoyé » côté natif.
+ * Métadonnée d'une source IA (#628) : contexte transmis, côté natif.
  *
  * `type` vient de `AiContextType.wire` (assignment, course, attachment, note,
  * manual, web, history). `chars` = taille réellement envoyée, `truncated` =
@@ -342,7 +342,7 @@ export interface TeacherMessage {
   sources: string[];
   /** Aucun libellé cité : la réponse est marquée « non sourcée ». */
   unsourced: boolean;
-  /** Métadonnées « Ce qui est envoyé » pour ce tour. */
+  /** Métadonnées de contexte pour ce tour. */
   context?: AiContextSourceMeta[];
   /** Taille du résumé local envoyé avec ce tour (0 = aucun). */
   summaryChars?: number;

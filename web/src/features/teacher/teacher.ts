@@ -1,4 +1,4 @@
-import type { AiContextSourceMeta, TeacherMessage, TeacherMode, TeacherThread, TeacherTurnResult } from "../../bridge/types";
+import type { TeacherMessage, TeacherMode, TeacherThread, TeacherTurnResult } from "../../bridge/types";
 import { parseAiContext } from "../tasks/assignments";
 
 // Modèle PUR de l'écran Prof. Aucun réseau ici : les bornes protègent le pont
@@ -271,12 +271,4 @@ export function teacherThreadPayload(subject: string, messages: TeacherMessage[]
     subject: boundedString(subject, TEACHER_MAX_SUBJECT),
     messages: trimTeacherMessages(messages),
   };
-}
-
-export function turnSources(message: TeacherMessage): AiContextSourceMeta[] {
-  return (message.context ?? []).filter((source) => source.type !== "history");
-}
-
-export function historySources(message: TeacherMessage): AiContextSourceMeta[] {
-  return (message.context ?? []).filter((source) => source.type === "history");
 }

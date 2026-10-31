@@ -279,8 +279,7 @@ pastilles sont à `999px`.
   matière d'un fil existant demande confirmation. Le mark du professeur prend
   la teinte de la matière. Erreurs et refus vivent dans le fil, après la
   question ; « Régénérer » et des puces de suivi compactes suivent la dernière
-  réponse. Les sources citées ne sont listées qu'une fois : le détail « Ce qui
-  est envoyé » donne des comptes, pas les libellés.
+  réponse. Les sources citées sont listées une seule fois, sans détail d'envoi.
 - **Assistant** : mark circulaire pâle, réponse en texte pleine largeur
   16 / 26 (15 / 25 sur petit écran), question en bulle compacte à droite
   (rayon 22 px, coin bas droit à 8 px). Dans Aide devoirs, le contexte

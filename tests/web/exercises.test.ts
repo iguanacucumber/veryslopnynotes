@@ -168,14 +168,14 @@ describe("exercices — aide progressive (#632)", () => {
     expect(html).toContain("textarea");
   });
 
-  test("une aide source cite ses libellés et montre ce qui est envoyé", () => {
+  test("une aide source cite ses libellés sans détail d'envoi", () => {
     const html = renderView({
       help: { ...IDLE_HELP, mode: "hint", message: answer() },
     });
     expect(html).toContain("Commence par écrire la formule");
     expect(html).toContain("Sources :");
     expect(html).toContain("Manuel : Mathématiques 1re");
-    expect(html).toContain("Ce qui est envoyé");
+    expect(html).not.toContain("Ce qui est envoyé");
     expect(html).not.toContain("non sourcée");
   });
 

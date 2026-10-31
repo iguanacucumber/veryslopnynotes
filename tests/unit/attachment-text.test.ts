@@ -373,7 +373,7 @@ describe("extraction locale d'une pièce jointe (#631)", () => {
     if (long.kind !== "readable") return;
     expect(long.text.length).toBe(50);
     expect(long.truncated).toBe(true);
-    // La taille d'origine reste publiée : « Ce qui est envoyé » dit la coupe.
+    // La taille d'origine reste publiée : le contexte dit la coupe.
     expect(long.originalChars).toBe(200);
 
     // Deux pages de texte, une seule autorisée : la seconde est coupée.

@@ -159,9 +159,9 @@ describe("IA — aide devoirs", () => {
   test("le choix photo est un dialogue unique, annulable sans appel (#610)", () => {
     expect(tasks).toContain("<Dialog");
     expect(tasks).toContain("Prendre une photo");
-    expect(tasks).toContain("Choisir une image");
+    expect(tasks).toContain("Choisir des images");
     expect(tasks).toContain("Annuler");
-    expect(tasks).toContain("La photo part directement au fournisseur");
+    expect(tasks).toContain("Jusqu’à 3 photos depuis la galerie");
     expect(tasks).toContain('aria-haspopup="dialog"');
     const cancel = between(tasks, "function closePhotoChooser()", "function choosePhoto");
     expect(cancel).toContain("setPhotoChooser(null)");
@@ -182,7 +182,7 @@ describe("IA — aide devoirs", () => {
     const turn = between(chat, "function AssistantTurn", "export function HomeworkChat");
     expect(turn).not.toContain("hw-unsourced__badge");
     expect(chat).not.toContain("aiContextTypeFr(source.type)");
-    expect(chat).toContain("Contexte : {last.context.length}");
+    expect(chat).not.toContain("Contexte : {last.context.length}");
   });
 
   test("le chat est un dialogue modal qui rend le focus (#610)", () => {
@@ -207,10 +207,8 @@ describe("IA — aide devoirs", () => {
     expect(tasks).not.toContain("result.body");
   });
 
-  test("la réponse passe par le markdown sûr, la divulgation est repliée (#610)", () => {
-    expect(chat).toContain("<summary>Ce qui est envoyé</summary>");
-    expect(chat).toContain("le texte du manuel sont envoyés");
-    expect(chat).toContain("La photo est supprimée après lecture");
+  test("la réponse passe par le markdown sûr, sans divulguer l'envoi (#610)", () => {
+    expect(chat).not.toContain("Ce qui est envoyé");
     expect(chat).toContain("<MarkdownBody text={turn.answer} />");
     expect(chat).not.toContain("dangerouslySetInnerHTML");
     expect(chat).not.toContain("innerHTML");

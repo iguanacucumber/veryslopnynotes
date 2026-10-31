@@ -18,12 +18,10 @@ import {
 import { subjectColor } from "../../lib/format";
 import { MarkdownBody } from "../revisions/MarkdownBody";
 import {
-  historySources,
   teacherActionLabel,
   teacherModeHint,
   teacherModeLabel,
   TEACHER_MODES,
-  turnSources,
   type TeacherTurnError,
 } from "./teacher";
 export interface TeacherViewProps {
@@ -338,7 +336,6 @@ export function TeacherView({
                               </div>
                             )}
                           </div>
-                          <SentDetails message={message} />
                           <div className="teacher-bubble__actions ai-actions">
                             <CopyTextButton text={message.text} />
                             {onRegenerate &&
@@ -493,29 +490,5 @@ export function TeacherView({
         </Section>
       )}
     </Page>
-  );
-}
-
-function SentDetails({ message }: { message: TeacherMessage }) {
-  const tourCount = turnSources(message).length;
-  const historyCount = historySources(message).length;
-  const summary = message.summaryChars ?? 0;
-  return (
-    <details className="teacher-sent">
-      <summary>Ce qui est envoyé</summary>
-      <p className="tiny muted">
-        Ta question, les sources de cette matière et les derniers tours partent directement au
-        fournisseur, avec ta clé. Aucun outil, aucun secret.
-      </p>
-      <p className="tiny muted">
-        {tourCount > 0
-          ? `${tourCount} source${tourCount > 1 ? "s" : ""} de contexte`
-          : "Aucune source de contexte"}
-        {historyCount > 0
-          ? ` · ${historyCount} source${historyCount > 1 ? "s" : ""} d’historique`
-          : " · aucun tour"}
-        {summary > 0 ? ` · résumé local (${summary} caractères)` : ""}.
-      </p>
-    </details>
   );
 }

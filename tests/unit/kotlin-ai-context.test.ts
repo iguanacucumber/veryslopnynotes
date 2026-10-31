@@ -326,7 +326,7 @@ describe("contexte IA — câblage unique du pont (#628)", () => {
     expect(bridge).toContain("refusalJson(");
   });
 
-  test("« Ce qui est envoyé » expose type, libellé, taille et troncature", () => {
+  test("le contexte IA expose type, libellé, taille et troncature", () => {
     expect(bridge).toContain('put("context", aiContextJson(context))');
     expect(bridge).toContain('put("type", source.type.wire)');
     expect(bridge).toContain('put("label", source.label)');

@@ -16,6 +16,7 @@ import fr.veryslopnynotes.core.SafePromptProvider
 import fr.veryslopnynotes.core.SafeVisionPrompt
 import fr.veryslopnynotes.core.SafeVisionPromptProvider
 import fr.veryslopnynotes.core.SecretDetectedException
+import fr.veryslopnynotes.core.VisionImage
 import fr.veryslopnynotes.core.assertNoSecretsInPrompt
 import fr.veryslopnynotes.core.secretRefusalMessage
 import okhttp3.MediaType.Companion.toMediaType
@@ -137,20 +138,22 @@ class OpenRouterLlm(
 
     /**
      * Prompt vision : le texte est le MÊME corps nonce-bound (déjà validé),
-     * l'image est un data URL JPEG ré-encodé. Aucune image n'est journalisée,
-     * et le message d'erreur ne la recopie jamais.
+     * chaque image est un data URL JPEG ré-encodé. Aucune image n'est
+     * journalisée, et le message d'erreur ne la recopie jamais.
      */
     override fun generateVisionSafe(prompt: SafeVisionPrompt, apiKey: String?): String {
         val key = (apiKey ?: "").trim()
         if (key.length < MIN_API_KEY_CHARS) throw LlmError("Clé LLM absente ou trop courte : renseigne-la dans Réglages.")
         assertNoSecretsInPrompt(prompt.prompt)
         val images = prompt.images
-        if (images.isEmpty() || images.size > 1) throw LlmError("Image invalide : une seule photo par demande.")
-        val image = images[0]
-        if (!image.isValid()) throw LlmError("Image invalide ou trop volumineuse.")
-        val content = JSONArray()
-            .put(JSONObject().put("type", "text").put("text", prompt.prompt.body))
-            .put(
+        if (images.isEmpty()) throw LlmError("Image invalide : aucune photo à envoyer.")
+        if (images.size > VisionImage.MAX_IMAGES) {
+            throw LlmError("Image invalide : ${VisionImage.MAX_IMAGES} photos au maximum par demande.")
+        }
+        val content = JSONArray().put(JSONObject().put("type", "text").put("text", prompt.prompt.body))
+        for (image in images) {
+            if (!image.isValid()) throw LlmError("Image invalide ou trop volumineuse.")
+            content.put(
                 JSONObject()
                     .put("type", "image_url")
                     .put(
@@ -158,6 +161,7 @@ class OpenRouterLlm(
                         JSONObject().put("url", "data:" + image.mime + ";base64," + image.base64),
                     ),
             )
+        }
         val payload = JSONObject()
             .put("model", visionModel)
             .put(
