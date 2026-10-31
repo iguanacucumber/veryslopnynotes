@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { subjectColor, tint, weekStatusFr } from "../lib/format";
 import { subjectEmoji } from "../lib/subjectVisual";
 import { IconChevronLeft, IconChevronRight, IconWarning } from "./icons";
@@ -48,10 +48,6 @@ export function WeekNavigator({
   const status = weekStatusFr(weeks);
   return (
     <Card className="week-nav">
-      <div className="week-nav__top">
-        <strong className="week-nav__label">{label}</strong>
-        {detail ? <span className="week-nav__detail">{detail}</span> : null}
-      </div>
       <div className="week-nav__row">
         <button type="button" className="week-nav__arrow" aria-label="Semaine précédente" onClick={onPrevious}>
           <IconChevronLeft />
@@ -61,9 +57,10 @@ export function WeekNavigator({
           className="week-nav__today"
           onClick={onToday}
           disabled={current}
-          aria-label={current ? "Revenir à la semaine courante" : `${status} — revenir à la semaine courante`}
+          aria-label={current ? "Semaine courante" : `${status} — revenir à la semaine courante`}
         >
-          {status}
+          <strong className="week-nav__label">{label}</strong>
+          {detail ? <span className="week-nav__detail">{detail}</span> : null}
         </button>
         <button type="button" className="week-nav__arrow" aria-label="Semaine suivante" onClick={onNext}>
           <IconChevronRight />
@@ -141,20 +138,36 @@ export function Card({
   children,
   className = "",
   as = "div",
+  style,
 }: {
   children: ReactNode;
   className?: string;
   as?: "div" | "article" | "button";
+  style?: CSSProperties;
 }) {
   if (as === "button") {
     return (
-      <button type="button" className={`card ${className}`} style={{ textAlign: "left", width: "100%" }}>
+      <button
+        type="button"
+        className={`card ${className}`}
+        style={{ textAlign: "left", width: "100%", ...style }}
+      >
         {children}
       </button>
     );
   }
-  if (as === "article") return <article className={`card ${className}`}>{children}</article>;
-  return <div className={`card ${className}`}>{children}</div>;
+  if (as === "article") {
+    return (
+      <article className={`card ${className}`} style={style}>
+        {children}
+      </article>
+    );
+  }
+  return (
+    <div className={`card ${className}`} style={style}>
+      {children}
+    </div>
+  );
 }
 
 export function EmptyState({

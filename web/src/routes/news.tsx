@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { bridge } from "../bridge/client";
 import { useResource } from "../ui/AppContext";
 import { Card, EmptyState, ErrorBox, Loading, Page, Section, StaleBadge } from "../ui/components";
-import { IconBell } from "../ui/icons";
+import { IconNews } from "../ui/icons";
 import {
   needsNewsBody,
   newsBodyCollapsible,
@@ -153,7 +153,7 @@ export default function NewsRoute() {
 
       {items.length === 0 && !resource.loading && !resource.error ? (
         <EmptyState
-          icon={<IconBell size={30} />}
+          icon={<IconNews size={30} />}
           title="Aucune actualité"
           body="L’établissement n’a rien publié pour le moment."
           action={

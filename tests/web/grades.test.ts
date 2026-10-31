@@ -530,7 +530,7 @@ describe("compteur de notes — les notes RETENUES (coefficient 0 exclu)", () =>
     const groups = gradeGroups(grades, report.subjects);
     expect(groups[0]?.gradeCount).toBe(1);
     expect(groups[0]?.grades).toHaveLength(2);
-    const html = renderToStaticMarkup(createElement(GradesSubjectSections, { groups, report, dark: false }));
+    const html = renderToStaticMarkup(createElement(GradesSubjectSections, { groups, report }));
     expect(html).toContain("1 note");
     expect(html).not.toContain("2 notes");
   });

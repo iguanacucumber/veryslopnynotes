@@ -6,7 +6,9 @@ import { Avatar } from "./components";
 import { isSafePhotoDataUrl, parseProfilePayload, type Profile } from "../features/profile/model";
 import {
   IconBack,
+  IconButterfly,
   IconCalendar,
+  IconChevronDown,
   IconGrades,
   IconHome,
   IconRefresh,
@@ -61,6 +63,22 @@ export function Shell() {
   const titleFocusedOnce = useRef(false);
   const isHome = location.pathname === "/";
   const meta = ROUTE_META[location.pathname] ?? { title: "VerySlopyNyNotes" };
+  // Papillon nomme l'en-tête par son contenu : la date pour le calendrier, la
+  // période pour les notes. Le reste garde le libellé de la route.
+  const now = new Date();
+  const calendarTitle = now.toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
+  const headerTitle =
+    location.pathname === "/calendar"
+      ? calendarTitle.charAt(0).toUpperCase() + calendarTitle.slice(1)
+      : location.pathname === "/grades"
+        ? profile?.periodName || meta.title
+        : meta.title;
+  const headerSubtitle =
+    location.pathname === "/calendar" ? "Aujourd’hui" : undefined;
 
   // Le focus passe au titre pour qu'un lecteur d'écran annonce la page, sauf
   // au premier rendu.
@@ -107,80 +125,88 @@ export function Shell() {
   }, [authLost, sessionClosed, location.pathname, navigate, notify]);
 
   return (
-    <div className="shell">
+    <div className={isHome ? "shell shell--home" : "shell"}>
       <header className={isHome ? "topbar topbar--home" : "topbar"}>
-        {isHome ? (
-          <button
-            type="button"
-            className="topbar__identity"
-            aria-label="Ouvrir le profil"
-            onClick={() => go("/profile")}
-          >
-            <Avatar name={profile?.displayName ?? "?"} size={40} src={photo} />
-            <span className="topbar__identity-text">
-              <span className="topbar__identity-name">{profile?.displayName ?? "Mon relevé"}</span>
-              <span className="topbar__identity-sub">
-                {profile ? [profile.classLabel, profile.periodName].filter(Boolean).join(" · ") : "VerySlopyNyNotes"}
-              </span>
-            </span>
-          </button>
-        ) : meta.back ? (
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Retour"
-            onClick={() => {
-              if (window.history.length > 1) go(-1);
-              else go(meta.back!);
-            }}
-          >
-            <IconBack />
-          </button>
-        ) : null}
-        <h1
-          ref={titleRef}
-          tabIndex={-1}
-          className={isHome ? "sr-only" : "topbar__title"}
-          style={isHome ? undefined : { margin: 0 }}
-        >
-          {meta.title}
-        </h1>
-        <div className="topbar__actions">
-          <button
-            type="button"
-            className={`icon-btn${spinning ? " icon-btn--spin" : ""}`}
-            aria-label="Actualiser"
-            onClick={() => {
-              refresh();
-              setSpinning(true);
-              window.setTimeout(() => setSpinning(false), 650);
-            }}
-          >
-            <IconRefresh />
-          </button>
+        <div className="topbar__inner">
           {isHome ? (
             <button
               type="button"
-              className="icon-btn icon-btn--accent"
-              aria-label="Réglages"
-              onClick={() => go("/settings")}
-            >
-              <IconSettings />
-            </button>
-          ) : location.pathname !== "/profile" ? (
-            <button
-              type="button"
-              className="icon-btn icon-btn--accent"
-              aria-label="Profil"
+              className="topbar__identity"
+              aria-label="Ouvrir le profil"
               onClick={() => go("/profile")}
             >
-              <IconUser />
+              <Avatar name={profile?.displayName ?? "?"} size={40} src={photo} />
+              <span className="topbar__identity-text">
+                <span className="topbar__identity-name">{profile?.displayName ?? "Mon relevé"}</span>
+              </span>
+              <IconChevronDown className="topbar__chevron" size={20} />
             </button>
+          ) : meta.back ? (
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Retour"
+              onClick={() => {
+                if (window.history.length > 1) go(-1);
+                else go(meta.back!);
+              }}
+            >
+              <IconBack size={24} />
+            </button>
+          ) : meta.tab ? (
+            <span className="topbar__mark" aria-hidden="true">
+              <IconButterfly size={24} />
+            </span>
           ) : null}
+          <div className="topbar__heading">
+            <h1
+              ref={titleRef}
+              tabIndex={-1}
+              className={isHome ? "sr-only" : "topbar__title"}
+            >
+              {isHome ? meta.title : headerTitle}
+            </h1>
+            {!isHome && headerSubtitle ? (
+              <span className="topbar__subtitle">{headerSubtitle}</span>
+            ) : null}
+          </div>
+          <div className="topbar__actions">
+            <button
+              type="button"
+              className={`icon-btn${spinning ? " icon-btn--spin" : ""}`}
+              aria-label="Actualiser"
+              onClick={() => {
+                refresh();
+                setSpinning(true);
+                window.setTimeout(() => setSpinning(false), 650);
+              }}
+            >
+              <IconRefresh size={isHome ? 26 : 24} />
+            </button>
+            {isHome ? (
+              <button
+                type="button"
+                className="icon-btn icon-btn--accent"
+                aria-label="Réglages"
+                onClick={() => go("/settings")}
+              >
+                <IconSettings size={26} />
+              </button>
+            ) : location.pathname !== "/profile" ? (
+              <button
+                type="button"
+                className="icon-btn icon-btn--accent"
+                aria-label="Profil"
+                onClick={() => go("/profile")}
+              >
+                <IconUser size={24} />
+              </button>
+            ) : null}
+          </div>
         </div>
       </header>
 
-      <main id="main" tabIndex={-1} className="main">
+      <main id="main" tabIndex={-1} className={isHome ? "main main--home" : "main"}>
         <Outlet />
       </main>
 
@@ -197,7 +223,7 @@ export function Shell() {
               go(to);
             }}
           >
-            <Icon size={22} />
+            <Icon size={24} />
             <span>{label}</span>
           </NavLink>
         ))}

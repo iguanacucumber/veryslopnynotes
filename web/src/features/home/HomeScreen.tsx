@@ -1,18 +1,22 @@
 import { useMemo, useState, type ComponentType, type ReactElement } from "react";
 import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { relativeFr, subjectColor, tint } from "../../lib/format";
+import { subjectEmoji } from "../../lib/subjectVisual";
 import { useApp, useResource } from "../../ui/AppContext";
 import { Card, EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../../ui/components";
 import {
+  IconArrowRightUp,
   IconCalendar,
-  IconChevronRight,
   IconFood,
   IconGrades,
   IconMessage,
   IconNews,
+  IconPin,
   IconTasks,
+  IconUser,
   IconWarning,
 } from "../../ui/icons";
+import { Sparkline } from "../grades/components";
 import {
   clockLabel,
   courseCountdown,
@@ -32,6 +36,7 @@ import {
   upcomingCount,
   upcomingLessons,
   type GeneralAverage,
+  type Grade,
   type Lesson,
   type Assignment,
 } from "./parse";
@@ -54,36 +59,33 @@ interface Palette {
   ink: string;
 }
 
-/** Pastel de matière + encre mesurée, mêmes pas que Compose. */
+/** Mêmes pas que `Course.tsx` de Papillon : fond teinté, encre décalée. */
 function paletteFor(subject: string, dark: boolean): Palette {
   const base = subjectColor(subject);
   return {
     base,
-    background: tint(base, dark ? -0.74 : 0.86),
-    ink: tint(base, dark ? 0.72 : -0.5),
+    background: tint(base, dark ? -0.7 : 0.75),
+    ink: tint(base, dark ? 0.1 : -0.15),
   };
 }
 
 function WidgetHeader({
   title,
   icon,
-  count,
   onMore,
 }: {
   title: string;
   icon?: ReactElement;
-  count?: number;
   onMore?: () => void;
 }) {
   return (
     <div className="home-widget__header">
       {icon ? <span className="home-widget__icon">{icon}</span> : null}
       <h2 className="home-widget__title">{title}</h2>
-      {typeof count === "number" ? <span className="home-widget__count">{count}</span> : null}
       {onMore ? (
         <button type="button" className="home-widget__more" onClick={onMore} aria-label={`${title} — tout voir`}>
           Afficher plus
-          <IconChevronRight size={14} />
+          <IconArrowRightUp size={20} />
         </button>
       ) : null}
     </div>
@@ -92,19 +94,20 @@ function WidgetHeader({
 
 function AverageWidget({
   average,
+  history,
   onMore,
   openedAt,
 }: {
   average: GeneralAverage;
+  history: Array<number | null>;
   onMore: () => void;
   openedAt: number;
 }) {
   const animate = useEntrance(openedAt);
   const value = average.value;
-  const fraction = value === null ? 0 : Math.max(0, Math.min(1, value / 20));
   return (
     <Card className={animate ? "home-widget home-rise" : "home-widget"}>
-      <WidgetHeader title="Moyenne" icon={<IconGrades size={18} />} onMore={onMore} />
+      <WidgetHeader title="Moyenne" icon={<IconGrades size={24} />} onMore={onMore} />
       {value !== null ? (
         <div
           className="home-average"
@@ -112,21 +115,19 @@ function AverageWidget({
             average.provided ? "fournie par l’établissement" : "estimée"
           }`}
         >
-          <div className="home-average__figure" aria-hidden="true">
-            <strong>{formatAverage(value)}</strong>
-            <span>/20</span>
+          <div className="home-average__graph" aria-hidden="true">
+            <Sparkline values={history} provided={average.provided} />
           </div>
-          <div className="home-average__copy">
+          <div className="home-average__body">
+            <div className="home-average__figure" aria-hidden="true">
+              <strong>{formatAverage(value)}</strong>
+              <span>/20</span>
+            </div>
+            <span className="home-average__label">Moyenne des matières</span>
             <span className="home-average__origin">
-              {average.provided ? "Moyenne des matières" : "Estimation sur la période"}
+              {average.provided ? "par l’établissement" : "estimée sur la période"}
             </span>
-            {average.subjectCount > 0 ? (
-              <span className="home-average__count">{average.subjectCount} matières suivies</span>
-            ) : null}
           </div>
-          <span className="home-average__meter" aria-hidden="true">
-            <span style={{ width: `${fraction * 100}%` }} />
-          </span>
         </div>
       ) : null}
     </Card>
@@ -151,7 +152,7 @@ function CourseWidget({
     <Card className={animate ? "home-widget home-rise" : "home-widget"}>
       <WidgetHeader
         title={courseWidgetTitle(lessons[0], now)}
-        icon={<IconCalendar size={18} />}
+        icon={<IconCalendar size={24} />}
         onMore={onMore}
       />
       <div className="home-courses">
@@ -167,17 +168,24 @@ function CourseWidget({
               </div>
               <div
                 className="home-course__card"
-                style={{
-                  background: palette.background,
-                  color: palette.ink,
-                  borderLeftColor: palette.base,
-                }}
+                style={{ background: palette.background, color: palette.ink }}
               >
-                <strong className="home-course__subject">{lesson.subject}</strong>
-                <span className="home-course__room">
-                  {lesson.room ? `Salle ${lesson.room}` : "Salle non précisée"}
-                </span>
-                {countdown ? <span className="home-course__hint">{countdown}</span> : null}
+                <span className="home-course__bar" style={{ background: palette.ink }} aria-hidden="true" />
+                <div className="home-course__body">
+                  <strong className="home-course__subject">{lesson.subject}</strong>
+                  <span className="home-course__meta">
+                    <IconPin size={20} />
+                    <span>{lesson.room || "Salle non précisée"}</span>
+                    {lesson.teacher ? (
+                      <>
+                        <span className="home-course__separator" aria-hidden="true" />
+                        <IconUser size={20} />
+                        <span>{lesson.teacher}</span>
+                      </>
+                    ) : null}
+                  </span>
+                  {countdown ? <span className="home-course__hint">{countdown}</span> : null}
+                </div>
               </div>
             </div>
           );
@@ -205,27 +213,25 @@ function TasksWidget({
   const animate = useEntrance(openedAt);
   return (
     <Card className={animate ? "home-widget home-rise" : "home-widget"}>
-      <WidgetHeader
-        title="Devoirs"
-        icon={<IconTasks size={18} />}
-        count={total}
-        onMore={onMore}
-      />
+      <WidgetHeader title="Devoirs" icon={<IconTasks size={24} />} onMore={onMore} />
+      <span className="sr-only">{total} devoirs à faire</span>
       <div className="home-tasks">
         {tasks.map((task) => {
           const palette = paletteFor(task.subject, dark);
           return (
             <div className="home-task" key={task.id}>
-              <span className="home-task__mark" style={{ background: palette.base }} aria-hidden="true" />
+              <span className="home-task__emoji" aria-hidden="true">
+                {subjectEmoji(task.subject)}
+              </span>
               <div className="grow">
-                <div className="home-task__subject" style={{ color: palette.ink }}>
-                  {task.subject}
+                <div className="home-task__row">
+                  <span className="home-task__subject" style={{ color: palette.ink }}>
+                    {task.subject}
+                  </span>
+                  <span className="home-task__due">{dueLabel(task.due, now)}</span>
                 </div>
                 <div className="home-task__title">{task.title}</div>
               </div>
-              <span className={`home-task__due ${dueTone(task.due, now)}`}>
-                {dueLabel(task.due, now)}
-              </span>
             </div>
           );
         })}
@@ -239,24 +245,24 @@ interface QuickAction {
   label: string;
   status: string;
   icon: IconComponent;
+  tone: "news" | "canteen" | "attendance" | "messages";
   tab?: string;
 }
 
+/** Couleurs fixes des tuiles Papillon, posées en CSS par `tone`. */
 const QUICK_ACTIONS: QuickAction[] = [
-  { to: "/news", label: "Actualités", status: "Établissement", icon: IconNews, tab: "news" },
-  { to: "/canteen", label: "Cantine", status: "Menus", icon: IconFood, tab: "menus" },
-  { to: "/attendance", label: "Vie scolaire", status: "Absences", icon: IconWarning, tab: "attendance" },
-  { to: "/messages", label: "Messagerie", status: "Discussions", icon: IconMessage, tab: "discussions" },
+  { to: "/news", label: "Actualités", status: "Établissement", icon: IconNews, tone: "news", tab: "news" },
+  { to: "/canteen", label: "Cantine", status: "Menus", icon: IconFood, tone: "canteen", tab: "menus" },
+  { to: "/attendance", label: "Vie scolaire", status: "Absences", icon: IconWarning, tone: "attendance", tab: "attendance" },
+  { to: "/messages", label: "Messagerie", status: "Discussions", icon: IconMessage, tone: "messages", tab: "discussions" },
 ];
 
 function QuickActions({
   capabilities,
   openedAt,
-  dark,
 }: {
   capabilities: string[] | null;
   openedAt: number;
-  dark: boolean;
 }) {
   const navigate = useNavigate();
   const animate = useEntrance(openedAt);
@@ -266,17 +272,16 @@ function QuickActions({
     <div className="home-actions">
       {actions.map((action) => {
         const Icon = action.icon;
-        const palette = paletteFor(action.label, dark);
         return (
           <button
             type="button"
-            className={animate ? "home-action home-rise" : "home-action"}
+            className={`home-action home-action--${action.tone}${animate ? " home-rise" : ""}`}
             key={action.to}
             onClick={() => navigate(action.to)}
             aria-label={`${action.label} — ${action.status}`}
           >
-            <span className="home-action__icon" style={{ color: palette.ink }} aria-hidden="true">
-              <Icon size={22} />
+            <span className="home-action__icon" aria-hidden="true">
+              <Icon size={32} />
             </span>
             <span className="home-action__text">
               <span className="home-action__label">{action.label}</span>
@@ -303,6 +308,7 @@ export default function HomeScreen() {
 
   const grades = useMemo(() => parseGrades(gradesRes.payload), [gradesRes.payload]);
   const average = useMemo(() => generalAverage(gradesRes.payload, grades), [gradesRes.payload, grades]);
+  const averageHistory = useMemo(() => cumulativeHistory(grades), [grades]);
   const lessons = useMemo(() => parseTimetable(timetableRes.payload), [timetableRes.payload]);
   // La liste des widgets reste BORNÉE (deux cours) ; le compteur est le nombre
   // VRAI, sans plafond.
@@ -372,7 +378,7 @@ export default function HomeScreen() {
         />
       ) : null}
 
-      <QuickActions capabilities={capabilities} openedAt={openedAt} dark={dark} />
+      <QuickActions capabilities={capabilities} openedAt={openedAt} />
 
       {!loading && showTimetable && upcoming.length > 0 ? (
         <CourseWidget
@@ -387,6 +393,7 @@ export default function HomeScreen() {
       {!loading && showGrades && average.value !== null ? (
         <AverageWidget
           average={average}
+          history={averageHistory}
           onMore={() => navigate("/grades")}
           openedAt={openedAt}
         />
@@ -409,13 +416,16 @@ export default function HomeScreen() {
   );
 }
 
-/** Teinte d'échéance : rouge sous 24 h, accent sous 72 h, neutre ensuite. */
-function dueTone(due: number, now: number): string {
-  if (!due) return "";
-  const hours = (due - now) / 3_600_000;
-  if (hours <= 24) return "home-task__due--soon";
-  if (hours <= 72) return "home-task__due--near";
-  return "";
+/** Tendance lisible : moyenne cumulée des notes, de la plus ancienne à la plus
+ *  récente. Le graphe Papillon suit l'historique ; sans lui, cette marche
+ *  donne la même pente sans inventer de points. */
+function cumulativeHistory(grades: Grade[]): Array<number | null> {
+  const sorted = [...grades].sort((a, b) => a.date - b.date).slice(-40);
+  let sum = 0;
+  return sorted.map((grade, index) => {
+    sum += (grade.value / grade.scale) * 20;
+    return sum / (index + 1);
+  });
 }
 
 function scheduleHint(lesson: Lesson | undefined, now: number): ReactElement | null {

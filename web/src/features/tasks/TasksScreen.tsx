@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 import { bridge } from "../../bridge/client";
 import { useApp, useResource } from "../../ui/AppContext";
 import { useViewNavigate } from "../../ui/viewTransition";
@@ -8,7 +8,6 @@ import {
   ErrorBox,
   Loading,
   Page,
-  PageHeading,
   Section,
   StaleBadge,
   WeekNavigator,
@@ -25,7 +24,7 @@ import {
   IconImage,
   IconSparkles,
 } from "../../ui/icons";
-import { parseDate, subjectColor, tint } from "../../lib/format";
+import { relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
 import type { AiContextSourceMeta } from "../../bridge/types";
 import {
@@ -34,7 +33,6 @@ import {
   assignmentHasAssistantMaterial,
   assignmentSections,
   assignmentsInWeek,
-  dueLabel,
   homeworkRefusalText,
   parseAiContext,
   parseAssignmentsPayload,
@@ -430,11 +428,14 @@ function TasksWeek({ week }: { week: string }) {
 
   return (
     <Page>
-      <PageHeading
-        eyebrow={week === currentWeek ? "Semaine en cours" : "Semaine sélectionnée"}
-        title="Devoirs"
-        action={resource.stale ? <StaleBadge /> : null}
-      />
+      {resource.stale ? (
+        <div className="tasks-status" role="status">
+          <StaleBadge />
+          <span className="tiny muted">
+            {week === currentWeek ? "Semaine en cours" : "Semaine sélectionnée"}
+          </span>
+        </div>
+      ) : null}
 
       {resource.error ? <ErrorBox message={resource.error} /> : null}
 
@@ -582,16 +583,6 @@ function TasksWeek({ week }: { week: string }) {
   );
 }
 
-/** Rouge sous 24 h, accent sous 72 h, neutre ensuite. */
-function dueTone(due: string | null): string {
-  const date = parseDate(due ?? "");
-  if (!date) return "";
-  const hours = (date.getTime() - Date.now()) / 3_600_000;
-  if (hours < 24) return "task-card__due--soon";
-  if (hours < 72) return "task-card__due--near";
-  return "";
-}
-
 function AssignmentCard({
   assignment,
   busy,
@@ -638,8 +629,8 @@ function AssignmentCard({
   const photoTriggerRef = useRef<HTMLButtonElement>(null);
   const text = assignmentCardText(assignment);
   const subjectBase = subjectColor(assignment.subject);
-  const due = dueLabel(assignment.dueDate);
-  const tone = dueTone(assignment.dueDate);
+  const tinted = tint(subjectBase, dark ? 0.3 : -0.3);
+  const due = relativeLongFr(assignment.dueDate, Date.now());
   // Sans consigne ni cours, l'aide TEXTE refuserait avant le modèle. La photo
   // reste disponible : c'est une source à part entière.
   const hasMaterial = assignmentHasAssistantMaterial(assignment, manualReady, lessonReady);
@@ -664,56 +655,91 @@ function AssignmentCard({
   }
 
   return (
-    <Card as="article" className={`task-card${assignment.done ? " task-card--done" : ""}`}>
-      <div className="task-card__head">
-        <span
-          className="task-card__emoji"
-          style={{
-            background: tint(subjectBase, dark ? -0.68 : 0.86),
-            color: tint(subjectBase, dark ? 0.58 : -0.48),
-          }}
-          aria-hidden="true"
-        >
+    <Card
+      as="article"
+      className={`task-card${assignment.done ? " task-card--done" : ""}`}
+      style={{ "--task-tint": tinted } as CSSProperties}
+    >
+      <div className="task-card__subject-row">
+        <span className="task-card__emoji" aria-hidden="true">
           {subjectEmoji(assignment.subject)}
         </span>
-        <div className="task-card__main">
-          <span
-            className="task-card__subject"
-            style={{ color: tint(subjectBase, dark ? 0.62 : -0.42) }}
-          >
-            {subjectDisplayFr(assignment.subject)}
-          </span>
-          {text.title ? <h3 className="task-card__title">{text.title}</h3> : null}
-          {due ? <span className={`task-card__due ${tone}`}>{due}</span> : null}
-        </div>
+        <span className="task-card__subject" style={{ color: tinted }}>
+          {subjectDisplayFr(assignment.subject)}
+          {assignment.attachments.length > 0 ? <IconAttach size={18} /> : null}
+        </span>
+        {due ? <span className="task-card__due">{due}</span> : null}
       </div>
 
-      {text.body ? <p className="task-card__body">{text.body}</p> : null}
+      <div className="task-card__content">
+        {text.title ? <p className="task-card__title">{text.title}</p> : null}
+        {text.body ? <p className="task-card__body">{text.body}</p> : null}
+      </div>
 
       {assignment.lessonContent ? (
         <p className="chip task-card__lesson">Cours : {assignment.lessonContent.title}</p>
       ) : null}
 
       {assignment.attachments.length > 0 ? (
-        <div className="row row--wrap" style={{ gap: 6, marginTop: 10 }}>
+        <div className="task-card__attachments">
           {assignment.attachments.map((attachment) => (
             <button
               key={attachment.id}
               type="button"
-              className="chip"
+              className="task-card__attachment"
               aria-label={`Ouvrir la pièce jointe ${attachment.label}`}
               onClick={() => onOpenAttachment(attachment)}
             >
-              <IconAttach size={16} />
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: 200 }}>
-                {attachment.label}
-              </span>
+              <IconAttach size={18} />
+              <span>{attachment.label}</span>
             </button>
           ))}
         </div>
       ) : null}
 
       <div className="task-card__foot">
+        <div className="task-card__actions">
+          <button
+            type="button"
+            className="task-help"
+            disabled={sheetOff}
+            aria-describedby={offReason}
+            aria-label={`Créer une fiche de révision pour ${assignment.title}`}
+            onClick={onGenerateSheet}
+          >
+            <IconBook size={22} />
+            {revisionBusy ? "Création…" : "Fiche"}
+          </button>
+          <button
+            ref={textTriggerRef}
+            type="button"
+            className={`task-help${help && !help.photo ? " task-help--open" : ""}`}
+            disabled={textOff}
+            aria-describedby={offReason}
+            aria-expanded={help !== null && !help.photo}
+            aria-controls={help && !help.photo ? helpPanelId : undefined}
+            aria-label={`${help && !help.photo ? "Fermer" : "Ouvrir"} l'aide devoirs pour ${assignment.title}`}
+            onClick={help && !help.photo ? onCloseHelp : onHelp}
+          >
+            <IconSparkles size={22} />
+            {help && !help.photo ? "Fermer" : "Aide"}
+          </button>
+          <button
+            ref={photoTriggerRef}
+            type="button"
+            className={`task-help task-help--photo${help?.photo ? " task-help--open" : ""}`}
+            disabled={photoOff}
+            aria-describedby={assistantDisabled ? assistantReasonId : undefined}
+            aria-expanded={help?.photo === true}
+            aria-controls={help?.photo ? helpPanelId : undefined}
+            aria-haspopup="dialog"
+            aria-label={`${help?.photo ? "Fermer" : "Ouvrir"} la photo de l’énoncé pour ${assignment.title}`}
+            onClick={help?.photo ? onCloseHelp : onOpenPhotoChooser}
+          >
+            <IconCamera size={22} />
+            {help?.photo ? "Fermer" : "Photo"}
+          </button>
+        </div>
         <button
           type="button"
           aria-pressed={assignment.done}
@@ -722,48 +748,8 @@ function AssignmentCard({
           disabled={busy}
           onClick={() => onToggle(!assignment.done)}
         >
-          <IconCheck size={16} />
-          <span>{assignment.done ? "Terminé" : "Marquer fait"}</span>
-        </button>
-        <button
-          type="button"
-          className="task-help"
-          disabled={sheetOff}
-          aria-describedby={offReason}
-          aria-label={`Créer une fiche de révision pour ${assignment.title}`}
-          onClick={onGenerateSheet}
-        >
-          <IconBook size={16} />
-          {revisionBusy ? "Création…" : "Fiche de révision"}
-        </button>
-        <button
-          ref={textTriggerRef}
-          type="button"
-          className={`task-help${help && !help.photo ? " task-help--open" : ""}`}
-          disabled={textOff}
-          aria-describedby={offReason}
-          aria-expanded={help !== null && !help.photo}
-          aria-controls={help && !help.photo ? helpPanelId : undefined}
-          aria-label={`${help && !help.photo ? "Fermer" : "Ouvrir"} l'aide devoirs pour ${assignment.title}`}
-          onClick={help && !help.photo ? onCloseHelp : onHelp}
-        >
-          <IconSparkles size={16} />
-          {help && !help.photo ? "Fermer l’aide" : "Aide devoirs"}
-        </button>
-        <button
-          ref={photoTriggerRef}
-          type="button"
-          className={`task-help task-help--photo${help?.photo ? " task-help--open" : ""}`}
-          disabled={photoOff}
-          aria-describedby={assistantDisabled ? assistantReasonId : undefined}
-          aria-expanded={help?.photo === true}
-          aria-controls={help?.photo ? helpPanelId : undefined}
-          aria-haspopup="dialog"
-          aria-label={`${help?.photo ? "Fermer" : "Ouvrir"} la photo de l’énoncé pour ${assignment.title}`}
-          onClick={help?.photo ? onCloseHelp : onOpenPhotoChooser}
-        >
-          <IconCamera size={16} />
-          {help?.photo ? "Fermer la photo" : "Photo de l’énoncé"}
+          <IconCheck size={24} />
+          {assignment.done ? <span>Terminé</span> : null}
         </button>
       </div>
 

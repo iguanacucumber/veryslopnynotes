@@ -58,8 +58,8 @@ function paletteFor(subject: string, dark: boolean): Palette {
   const base = subjectColor(subject);
   return {
     base,
-    background: tint(base, dark ? -0.74 : 0.86),
-    ink: tint(base, dark ? 0.72 : -0.5),
+    background: tint(base, dark ? -0.7 : 0.75),
+    ink: tint(base, dark ? 0.1 : -0.15),
   };
 }
 
@@ -96,7 +96,7 @@ function LessonRow({
         {
           "--lesson-bg": palette.background,
           "--lesson-ink": palette.ink,
-          "--lesson-bar": palette.base,
+          "--lesson-bar": palette.ink,
         } as CSSProperties
       }
     >
@@ -108,7 +108,7 @@ function LessonRow({
       <div className="tt-card">
         {cancelled ? (
           <div className="tt-cancelled">
-            <IconWarning size={14} />
+            <IconWarning size={20} />
             <span>Prof. absent</span>
           </div>
         ) : null}
@@ -122,13 +122,13 @@ function LessonRow({
           <div className="tt-card__meta">
             {lesson.room ? (
               <span className="tt-card__meta-item">
-                <IconPin size={13} />
+                <IconPin size={20} />
                 {lesson.room}
               </span>
             ) : null}
             {lesson.teacher ? (
               <span className="tt-card__meta-item">
-                <IconUser size={13} />
+                <IconUser size={20} />
                 {lesson.teacher}
               </span>
             ) : null}
@@ -199,7 +199,7 @@ function WeekView({
   return (
     <Page className="tt">
       <WeekNavigator
-        label={weekLabel(weekStart)}
+        label={weekLabel(weekStart).replace(/^Semaine du /, "")}
         weeks={weeks}
         onPrevious={() => onShift(-1)}
         onNext={() => onShift(1)}
@@ -251,7 +251,7 @@ function WeekView({
           style={{
             background: focusPalette.background,
             color: focusPalette.ink,
-            borderLeftColor: focusPalette.base,
+            borderLeftColor: focusPalette.ink,
           }}
           aria-label={current ? "Cours en cours" : "Prochain cours"}
         >

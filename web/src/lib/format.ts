@@ -151,6 +151,30 @@ export function relativeFr(value: string, now: number = Date.now()): string {
   return frDateShort(value);
 }
 
+/** « il y a 27 jours », « dans 2 heures » : la distance longue de Papillon,
+ *  au lieu de la date courte. */
+export function relativeLongFr(
+  value: string | number | Date | null | undefined,
+  now: number = Date.now(),
+): string {
+  const millis =
+    typeof value === "number"
+      ? value
+      : value instanceof Date
+        ? value.getTime()
+        : parseInstant(value);
+  if (millis === null || !Number.isFinite(millis)) return "";
+  const diff = millis - now;
+  const abs = Math.abs(diff);
+  const format = new Intl.RelativeTimeFormat("fr", { numeric: "always" });
+  if (abs < 60_000) return format.format(Math.round(diff / 1_000), "second");
+  if (abs < 3_600_000) return format.format(Math.round(diff / 60_000), "minute");
+  if (abs < 86_400_000) return format.format(Math.round(diff / 3_600_000), "hour");
+  if (abs < 2_592_000_000) return format.format(Math.round(diff / 86_400_000), "day");
+  if (abs < 31_536_000_000) return format.format(Math.round(diff / 2_592_000_000), "month");
+  return format.format(Math.round(diff / 31_536_000_000), "year");
+}
+
 /** Les payloads peuvent contenir des caractères de contrôle : jamais rendus
  *  bruts. React échappe déjàle HTML ; ceci nettoie seulement le texte. */
 export function cleanText(value: unknown): string {

@@ -1,7 +1,43 @@
+/* SN Pro (SIL OFL 1.1) : la police de Papillon, dans ses six graisses. */
 @font-face {
-  font-family: "Figtree";
-  src: url("../fonts/figtree_subset.ttf") format("truetype");
-  font-weight: 300 900;
+  font-family: "SN Pro";
+  src: url("../fonts/SNPro-Light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "SN Pro";
+  src: url("../fonts/SNPro-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "SN Pro";
+  src: url("../fonts/SNPro-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "SN Pro";
+  src: url("../fonts/SNPro-Semibold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "SN Pro";
+  src: url("../fonts/SNPro-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "SN Pro";
+  src: url("../fonts/SNPro-Black.ttf") format("truetype");
+  font-weight: 900;
   font-style: normal;
   font-display: swap;
 }
@@ -12,9 +48,9 @@
 :root {
   color-scheme: light;
   --brand: #29947a;
-  --brand-light: #48a98b;
-  --brand-deep: #1c6653;
-  --brand-pale: #edf8f5;
+  --brand-light: #5ab09b;
+  --brand-deep: #217663;
+  --brand-pale: #e9f5f1;
   --brand-solid: #1c6653;
   --on-brand: #ffffff;
   --on-brand-soft: rgba(255, 255, 255, 0.88);
@@ -25,29 +61,43 @@
   --danger-solid: #c11200;
   --on-danger: #ffffff;
   --danger-ink: #c11200;
-  --ink: #1f292e;
-  --muted: rgba(31, 41, 46, 0.72);
-  --border: rgba(31, 41, 46, 0.16);
+  --ink: #000000;
+  --muted: rgba(0, 0, 0, 0.72);
+  --border: rgba(0, 0, 0, 0.16);
   --surface: #ffffff;
-  --page: #f6fbfa;
-  --overlay: rgba(12, 24, 20, 0.48);
+  --page: #ffffff;
+  --overlay: rgba(0, 0, 0, 0.48);
   --surface-variant: #f3f6f7;
+  --surface-container: #f1f1f1;
+
+  /* Papillon : surfaces plates, rayon généreux, aucune élévation décorative. */
+  --item: var(--surface-container);
+  --panel: var(--surface);
+  --panel-tint: var(--surface-container);
+  --paper: var(--surface);
+  --paper-deep: var(--surface-container);
+  --secondary: color-mix(in srgb, var(--ink) 50%, transparent);
+  --rule: var(--border);
+  --rule-strong: color-mix(in srgb, var(--ink) 34%, transparent);
+  --rule-brand: color-mix(in srgb, var(--brand) 58%, transparent);
+  --ink-soft: var(--secondary);
+  --border-soft: color-mix(in srgb, var(--border) 70%, transparent);
+  --border-brand: color-mix(in srgb, var(--brand) 34%, var(--border));
+
   --radius-xs: 8px;
   --radius-sm: 12px;
   --radius-md: 16px;
   --radius-lg: 20px;
-  --radius-xl: 24px;
-  --radius-2xl: 28px;
-  --shadow-card:
-    0 18px 36px -28px color-mix(in srgb, var(--ink) 45%, transparent),
-    0 2px 6px -5px color-mix(in srgb, var(--ink) 30%, transparent);
-  --shadow-dock: 0 20px 40px -24px color-mix(in srgb, var(--ink) 55%, transparent);
+  --radius-xl: 22px;
+  --radius-2xl: 24px;
+  --shadow-card: 0 0 1.5px rgba(0, 0, 0, 0.16);
+  --shadow-dock: none;
   --tap: 48px;
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease: cubic-bezier(0.3, 0.3, 0, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --duration: 180ms;
-  --gutter: 18px;
-  --tabbar-h: 56px;
+  --duration: 200ms;
+  --gutter: 16px;
+  --tabbar-h: 64px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   /* #399 : la hauteur utile est PUBLIÉE par le JS (viewport visuel), pas
@@ -61,31 +111,17 @@
   /* Hauteur du clavier (0 quand il est fermé) : les éléments fixes du bas
      remontent d'autant. */
   --keyboard-bottom: 0px;
-  /* Registre : papier froid, filets d'encre, aucune élévation décorative. */
-  --paper: color-mix(in srgb, var(--surface) 96%, var(--ink) 4%);
-  --paper-deep: color-mix(in srgb, var(--surface) 91%, var(--ink) 9%);
-  --panel: var(--surface);
-  --panel-tint: color-mix(in srgb, var(--surface) 96%, var(--brand) 4%);
-  --rule: color-mix(in srgb, var(--ink) 18%, transparent);
-  --rule-strong: color-mix(in srgb, var(--ink) 44%, transparent);
-  --rule-brand: color-mix(in srgb, var(--brand-solid) 58%, transparent);
-  --ink-soft: color-mix(in srgb, var(--ink) 64%, transparent);
-  --border-soft: color-mix(in srgb, var(--border) 70%, transparent);
-  --border-brand: color-mix(in srgb, var(--brand) 34%, var(--border));
-  font-family: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "SN Pro", system-ui, -apple-system, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  /* Sur fond noir, la profondeur vient du contraste, pas d'une ombre claire. */
-  --shadow-card: none;
-  --shadow-dock: none;
-  --brand: #48a98b;
-  --brand-light: #6cc4a8;
-  --brand-deep: #a7e3d2;
-  --brand-pale: #14332b;
+  --brand: #29947a;
+  --brand-light: #5ab09b;
+  --brand-deep: #5ab09b;
+  --brand-pale: #12362c;
   --brand-solid: #6cc4a8;
   --on-brand: #08201a;
   --on-brand-soft: rgba(8, 32, 26, 0.88);
@@ -96,19 +132,16 @@
   --danger-solid: #e0776f;
   --on-danger: #240806;
   --danger-ink: #f4b9b3;
-  --ink: #f2f5f4;
-  --muted: rgba(242, 245, 244, 0.72);
-  --border: rgba(242, 245, 244, 0.16);
+  --ink: #ffffff;
+  --muted: rgba(255, 255, 255, 0.72);
+  --border: rgba(255, 255, 255, 0.16);
   --surface: #121212;
   --page: #000000;
   --overlay: rgba(0, 0, 0, 0.7);
-  --surface-variant: #1b1b1b;
-  --paper: color-mix(in srgb, var(--surface) 86%, #000 14%);
-  --panel-tint: color-mix(in srgb, var(--surface) 92%, var(--brand) 8%);
-  --rule: color-mix(in srgb, var(--ink) 20%, transparent);
-  --rule-strong: color-mix(in srgb, var(--ink) 48%, transparent);
-  --ink-soft: color-mix(in srgb, var(--ink) 68%, transparent);
-  --border-soft: color-mix(in srgb, var(--border) 82%, transparent);
+  --surface-variant: #121212;
+  --surface-container: #121212;
+  --shadow-card: none;
+  --shadow-dock: none;
 }
 
 /* GARDE UNIQUE de mouvement réduit (#569) : elle porte sur TOUT l'arbre CSS,
@@ -130,15 +163,16 @@
   }
 }
 
-/* --- Type scale (PapillonTheme.kt) ---------------------------------------- */
-.t-display { font-size: 40px; line-height: 42px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-.t-display-m { font-size: 32px; line-height: 34px; font-weight: 800; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; }
-.t-display-s { font-size: 26px; line-height: 29px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.t-headline { font-size: 20px; line-height: 25px; font-weight: 750; letter-spacing: -0.015em; }
-.t-headline-m { font-size: 18px; line-height: 23px; font-weight: 700; letter-spacing: -0.01em; }
-.t-title { font-size: 17px; line-height: 22px; font-weight: 700; }
-.t-title-m { font-size: 16px; line-height: 22px; font-weight: 500; }
-.t-body { font-size: 15px; line-height: 22px; font-weight: 400; }
-.t-body-m { font-size: 14px; line-height: 20px; font-weight: 400; }
-.t-caption { font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-.t-label { font-size: 16px; line-height: 22px; font-weight: 600; }
+/* --- Type scale (Papillon `ui/components/Typography.tsx`) ----------------- */
+.t-display { font-size: 44px; line-height: 56px; font-weight: 700; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.t-display-m { font-size: 32px; line-height: 40px; font-weight: 700; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.t-display-s { font-size: 28px; line-height: 34px; font-weight: 700; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.t-headline { font-size: 24px; line-height: 30px; font-weight: 700; letter-spacing: 0; }
+.t-headline-m { font-size: 20px; line-height: 26px; font-weight: 700; letter-spacing: 0; }
+.t-title { font-size: 17px; line-height: 22px; font-weight: 600; }
+.t-title-m { font-size: 16px; line-height: 20px; font-weight: 500; }
+.t-header { font-size: 19px; line-height: 22px; font-weight: 700; letter-spacing: 0.08px; }
+.t-body { font-size: 16px; line-height: 20px; font-weight: 500; }
+.t-body-m { font-size: 15px; line-height: 19px; font-weight: 600; }
+.t-caption { font-size: 14px; line-height: 19px; font-weight: 400; letter-spacing: 0.1px; }
+.t-label { font-size: 16px; line-height: 20px; font-weight: 600; }

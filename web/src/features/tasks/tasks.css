@@ -1,25 +1,29 @@
+.tasks-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .tasks-assistant {
   display: flex;
   align-items: flex-start;
-  gap: 11px;
-  padding: 14px;
+  gap: 12px;
+  padding: 14px 16px;
   border: 0;
-  border-radius: var(--radius-xl);
-  background: var(--panel-tint);
-  box-shadow: var(--shadow-card);
+  border-radius: 20px;
+  background: var(--item);
+  box-shadow: none;
 }
 
 .tasks-assistant__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: auto;
+  height: auto;
   flex: 0 0 auto;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-xs);
-  background: var(--panel);
-  color: var(--brand-deep);
+  color: var(--brand);
 }
 
 .tasks-assistant--checking {
@@ -30,197 +34,171 @@
   margin-top: 8px;
 }
 
+/* Carte Papillon : 20 px de rayon, 14 × 16 de padding, blanc en clair. */
 .task-card {
-  position: relative;
-  padding: 16px;
-  transition: border-color var(--duration) var(--ease);
-}
-
-.task-card--done {
-  opacity: 0.74;
-}
-
-.task-card__head {
   display: flex;
-  align-items: flex-start;
-  gap: 11px;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  transition: background var(--duration) var(--ease);
+}
+
+:root[data-theme="dark"] .task-card {
+  background: var(--item);
+}
+
+.task-card__subject-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .task-card__emoji {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-sm);
-  font-size: 17px;
-  line-height: 1;
-}
-
-.task-card__main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
+  font-size: 22px;
+  line-height: 25px;
 }
 
 .task-card__subject {
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 auto;
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 600;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
 }
 
-.task-card__title {
-  margin: 0;
-  color: var(--ink);
-  font-size: 17px;
-  line-height: 23px;
-  font-weight: 750;
-  letter-spacing: -0.01em;
-  overflow-wrap: anywhere;
-}
-
-.task-card--done .task-card__title {
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+.task-card__subject svg {
+  flex: 0 0 auto;
 }
 
 .task-card__due {
-  display: inline-flex;
-  align-self: flex-start;
-  margin-top: 3px;
-  padding: 2px 9px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--surface-variant);
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 16px;
-  font-weight: 650;
-}
-
-.task-card__due--near {
-  background: var(--brand-pale);
-  color: var(--brand-deep);
-}
-
-.task-card__due--soon {
-  background: color-mix(in srgb, var(--danger) 13%, transparent);
-  color: var(--danger-ink);
-}
-
-.task-check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-height: var(--tap);
-  padding: 0 16px;
   flex: 0 0 auto;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  background: var(--panel);
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 700;
+  margin-left: auto;
+  color: var(--secondary);
+  font-size: 15px;
+  line-height: 19px;
+  font-weight: 500;
   white-space: nowrap;
-  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
 }
 
-.task-check:hover {
-  border-color: var(--brand-solid);
+.task-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.task-check--done {
-  border-color: var(--brand-solid);
-  background: var(--brand-solid);
-  color: var(--on-brand);
-}
-
-.task-check:disabled {
-  opacity: 0.5;
-  cursor: wait;
-}
-
+.task-card__title,
 .task-card__body {
-  margin: 10px 0 0;
+  margin: 0;
   color: var(--ink);
-  font-size: 14px;
-  line-height: 21px;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 500;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
+.task-card__body {
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .task-card__lesson {
-  margin-top: 10px;
+  align-self: flex-start;
   max-width: 100%;
+}
+
+.task-card__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.task-card__attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 100px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 19px;
+  font-weight: 500;
+}
+
+.task-card__attachment span {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-card__attachment:hover {
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
 .task-card__foot {
   display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 0;
+}
+
+.task-card__actions {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin-top: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
+/* Actions IA : la pastille teintée « magic » de Papillon, en 12 px. */
 .task-help {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-width: 0;
-  min-height: var(--tap);
-  padding: 0 12px;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-xs);
-  background: var(--panel);
-  color: var(--brand-deep);
-  font-size: 12px;
-  font-weight: 650;
+  min-height: 0;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--task-tint, var(--brand)) 13%, transparent);
+  color: var(--task-tint, var(--brand));
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 600;
   white-space: nowrap;
-  transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
+  transition: background var(--duration) var(--ease);
+}
+
+.task-help svg {
+  margin-left: -2px;
 }
 
 .task-help:hover {
-  border-color: var(--rule-strong);
-  background: var(--panel-tint);
-}
-
-/* Action secondaire : accessible, hors de la hiérarchie des deux principales. */
-.task-help--photo {
-  grid-column: 1 / -1;
-  justify-self: start;
-  padding: 0 10px;
-  border-color: transparent;
-  background: transparent;
-  color: var(--muted);
-  font-weight: 600;
-}
-
-.task-help--photo:hover {
-  border-color: var(--rule);
-  background: var(--panel-tint);
-  color: var(--brand-deep);
-}
-
-.task-help--photo.task-help--open {
-  border-color: var(--rule-brand);
-  background: var(--panel-tint);
-  color: var(--brand-deep);
+  background: color-mix(in srgb, var(--task-tint, var(--brand)) 20%, transparent);
 }
 
 .task-help--open {
-  background: var(--panel-tint);
-  border-color: var(--rule-brand);
+  background: color-mix(in srgb, var(--task-tint, var(--brand)) 24%, transparent);
 }
 
 .task-help:disabled {
@@ -228,19 +206,62 @@
   cursor: not-allowed;
 }
 
-.task-card__hint {
-  margin: 8px 0 0;
+.task-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 100px;
+  background: transparent;
+  color: var(--secondary);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
+.task-check:hover {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.task-check svg {
+  opacity: 0.5;
+}
+
+.task-check--done {
+  padding: 8px 12px;
+  background: var(--task-tint, var(--brand-solid));
+  color: #fff;
+}
+
+.task-check--done svg {
+  opacity: 1;
+}
+
+.task-check:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.task-card__hint {
+  margin: 0;
+}
+
+/* Panneau d'aide : même surface douce que les blocs secondaires Papillon. */
 .task-help__panel {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 10px;
-  padding: 13px;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: var(--paper);
+  margin-top: 0;
+  padding: 14px;
+  border: 0;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 .task-help__panel-head {
@@ -253,28 +274,27 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: auto;
+  height: auto;
   flex: 0 0 auto;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-xs);
-  background: var(--panel);
-  color: var(--brand-deep);
+  border: 0;
+  background: transparent;
+  color: var(--brand);
 }
 
 .task-help__panel-title {
   flex: 1;
   min-width: 0;
   color: var(--ink);
-  font-size: 15px;
-  line-height: 20px;
-  font-weight: 700;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
 }
 
 .task-help__panel-close {
   flex: 0 0 auto;
   margin: -8px -8px -8px 0;
-  color: var(--muted);
+  color: var(--secondary);
 }
 
 .task-help__panel-status {
@@ -282,9 +302,9 @@
   align-items: center;
   gap: 10px;
   margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 20px;
+  color: var(--secondary);
+  font-size: 15px;
+  line-height: 19px;
 }
 
 .task-help__panel-status .spinner {
@@ -296,8 +316,8 @@
 .task-help__panel-answer {
   margin: 0;
   color: var(--ink);
-  font-size: 14px;
-  line-height: 21px;
+  font-size: 15px;
+  line-height: 22px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -306,8 +326,8 @@
   margin: 0;
   padding-left: 20px;
   color: var(--ink);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 15px;
+  line-height: 21px;
 }
 
 .task-help__steps li + li {
@@ -341,8 +361,8 @@
 .task-help__panel-error p {
   margin: 0;
   color: var(--ink);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 15px;
+  line-height: 21px;
 }
 
 .task-help__panel-error p {
@@ -351,14 +371,14 @@
 
 .task-help__privacy {
   padding-top: 8px;
-  border-top: 1px solid var(--rule);
+  border-top: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
 }
 
 .task-help__privacy summary {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 700;
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -384,11 +404,11 @@
 
   .task-help {
     gap: 5px;
-    padding: 0 10px;
-    font-size: 12px;
+    padding: 6px 10px;
+    font-size: 15px;
   }
 
   .task-help--photo {
-    padding: 0 6px;
+    padding: 6px 10px;
   }
 }

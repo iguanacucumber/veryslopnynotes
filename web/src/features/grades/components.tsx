@@ -1,6 +1,6 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { IconChevronRight, IconGrades } from "../../ui/icons";
-import { frDateShort, subjectColor, tint } from "../../lib/format";
+import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { IconGrades } from "../../ui/icons";
+import { frDateLong, relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
 import { EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../../ui/components";
 import {
@@ -111,10 +111,12 @@ function smoothPath(points: ChartPoint[]): string {
   return path;
 }
 
+/** Exactement `CompactGrade` : fond `couleur + 15` (8 %), encre décalée de
+ *  moitié, secondaire à 60 %. */
 function subjectTint(hex: string, dark: boolean): { background: string; ink: string } {
   return {
-    background: tint(hex, dark ? -0.62 : 0.86),
-    ink: dark ? tint(hex, 0.4) : tint(hex, -0.45),
+    background: `${hex}15`,
+    ink: tint(hex, dark ? 0.5 : -0.5),
   };
 }
 
@@ -123,10 +125,12 @@ function subjectTint(hex: string, dark: boolean): { background: string; ink: str
 export function Sparkline({
   values,
   width,
+  height = CHART_HEIGHT,
   provided = false,
 }: {
   values: Array<number | null>;
   width?: number;
+  height?: number;
   provided?: boolean;
 }) {
   const ref = useRef<SVGSVGElement | null>(null);
@@ -148,20 +152,21 @@ export function Sparkline({
   }, []);
 
   const chartWidth = width ?? (measured > 0 ? measured : CHART_FALLBACK_WIDTH);
-  const points = sparklinePoints(values, chartWidth, CHART_HEIGHT);
-  const averageY = sparklineAverageY(values, CHART_HEIGHT);
+  const points = sparklinePoints(values, chartWidth, height);
+  const averageY = sparklineAverageY(values, height);
   const description = sparklineDescription(values, provided);
   if (points.length === 0) return null;
   const first = points[0];
   const last = points[points.length - 1];
   if (!first || !last) return null;
   const path = smoothPath(points);
-  const area = `${path} L ${last.x.toFixed(1)} ${CHART_HEIGHT} L ${first.x.toFixed(1)} ${CHART_HEIGHT} Z`;
+  const area = `${path} L ${last.x.toFixed(1)} ${height} L ${first.x.toFixed(1)} ${height} Z`;
   return (
     <svg
       ref={ref}
       className="grades-chart"
-      viewBox={`0 0 ${chartWidth} ${CHART_HEIGHT}`}
+      style={{ height }}
+      viewBox={`0 0 ${chartWidth} ${height}`}
       role="img"
       aria-label={description}
     >
@@ -195,28 +200,34 @@ export function GradesHero({ report }: { report: AveragesReport }) {
   const coverage = coverageLabel(report);
   return (
     <section className="card grades-hero" aria-labelledby={titleId}>
-      <div className="grades-hero__top">
+      <div className="grades-hero__graph">
+        <Sparkline
+          values={report.history.map((point) => point.value)}
+          height={140}
+          provided={report.provided}
+        />
+      </div>
+      <div className="grades-hero__body">
+        <div className="grades-hero__figure" role="img" aria-label={averageLabel(value, report.provided, report.algorithm)}>
+          {value === null ? (
+            <span className="grades-hero__empty">Aucune moyenne sur cette période</span>
+          ) : (
+            <>
+              <span className="grades-hero__value">{formatMark(value)}</span>
+              <span className="grades-hero__scale">/20</span>
+            </>
+          )}
+        </div>
         <h2 id={titleId} className="grades-hero__title">
           {reportTitle(report)}
         </h2>
-        <span className="grades-tag">{report.provided ? "établissement" : "estimée"}</span>
+        <p className="grades-hero__origin">
+          {report.provided ? "par l’établissement" : originLabel(false, lastHistory)}
+        </p>
+        <span className="sr-only">{originLabel(report.provided, lastHistory)}</span>
+        {coverage ? <span className="sr-only">{coverage}</span> : null}
+        {note ? <span className="sr-only">{note}</span> : null}
       </div>
-      <div className="grades-hero__figure" role="img" aria-label={averageLabel(value, report.provided, report.algorithm)}>
-        {value === null ? (
-          <span className="grades-hero__empty">Aucune moyenne sur cette période</span>
-        ) : (
-          <>
-            <span className="grades-hero__value">{formatMark(value)}</span>
-            <span className="grades-hero__scale">/20</span>
-          </>
-        )}
-      </div>
-      <p className="grades-hero__origin">
-        {originLabel(report.provided, lastHistory)}
-        {coverage ? ` · ${coverage}` : ""}
-      </p>
-      <Sparkline values={report.history.map((point) => point.value)} provided={report.provided} />
-      {note ? <p className="grades-hero__note">{note}</p> : null}
     </section>
   );
 }
@@ -230,7 +241,7 @@ export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boo
   if (latest.length === 0) return null;
   return (
     <section className="grades-latest" aria-label="Dernières notes">
-      <h2 className="grades-latest__title">Dernières notes</h2>
+      <h2 className="sr-only">Dernières notes</h2>
       <div className="h-scroll grades-latest__track">
         {latest.map((grade) => {
           const color = subjectColor(grade.subject);
@@ -239,7 +250,12 @@ export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boo
             <article
               className="grades-latest__card"
               key={grade.id}
-              style={{ background: palette.background, color: palette.ink }}
+              style={
+                {
+                  background: palette.background,
+                  "--grade-ink": palette.ink,
+                } as CSSProperties
+              }
             >
               <div className="grades-latest__head">
                 <span className="grades-latest__emoji" aria-hidden="true">
@@ -248,13 +264,11 @@ export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boo
                 <span className="grades-latest__subject">{grade.subject}</span>
               </div>
               <p className="grades-latest__label">{gradeLabel(grade)}</p>
-              <div className="grades-latest__foot">
-                <span className="grades-latest__date">{frDateShort(grade.date)}</span>
-                <span className="grades-pill grades-pill--small grades-latest__value">
-                  {gradeValueLabel(grade.value)}
-                  {scaleSuffix(grade.scale)}
-                </span>
-              </div>
+              <p className="grades-latest__date">{relativeLongFr(grade.date)}</p>
+              <p className="grades-latest__value">
+                <strong>{gradeValueLabel(grade.value)}</strong>
+                <span>{scaleSuffix(grade.scale)}</span>
+              </p>
             </article>
           );
         })}
@@ -327,40 +341,31 @@ function GradeRow({
   grade,
   influence,
   estimated,
-  dark,
 }: {
   grade: Grade;
   influence: number | null;
   estimated: boolean;
-  dark: boolean;
 }) {
-  const color = subjectColor(grade.subject);
-  const palette = subjectTint(color, dark);
   const context = gradeContextLabel(grade);
   return (
     <li className="grades-grade">
       <div className="grades-grade__body">
         <p className="grades-grade__title">{gradeLabel(grade)}</p>
         <p className="grades-grade__meta">
-          {frDateShort(grade.date)}
-          {context ? ` · ${context}` : ""}
+          {frDateLong(grade.date)}
+          {context ? <span className="sr-only"> · {context}</span> : null}
         </p>
         {influence !== null ? (
-          <p className={`grades-grade__influence${influence < 0 ? " grades-grade__influence--down" : ""}`}>
-            {influenceLabel(influence, estimated)}
-          </p>
+          <p className="sr-only">{influenceLabel(influence, estimated)}</p>
         ) : null}
       </div>
-      <span
-        className="grades-pill"
-        style={{ background: palette.background, color: palette.ink }}
+      <p
+        className="grades-grade__score"
         aria-label={`Note ${gradeValueLabel(grade.value)} sur ${gradeValueLabel(grade.scale)}`}
       >
-        <span aria-hidden="true">
-          {gradeValueLabel(grade.value)}
-          {scaleSuffix(grade.scale)}
-        </span>
-      </span>
+        <strong>{gradeValueLabel(grade.value)}</strong>
+        <span>{scaleSuffix(grade.scale)}</span>
+      </p>
     </li>
   );
 }
@@ -368,46 +373,30 @@ function GradeRow({
 function SubjectSection({
   group,
   report,
-  dark,
 }: {
   group: GradeGroup;
   report: AveragesReport;
-  dark: boolean;
 }) {
-  const color = subjectColor(group.subject);
-  const palette = subjectTint(color, dark);
   return (
-    <details className="grades-subject">
-      <summary className="grades-subject__summary">
+    <section className="grades-subject">
+      <header className="grades-subject__summary">
         <span className="grades-subject__emoji" aria-hidden="true">
           {subjectEmoji(group.subject)}
         </span>
-        <span className="grades-subject__name">
-          <span className="grades-subject__title">{group.subject}</span>
-          <span className="grades-subject__meter" aria-hidden="true">
-            <span
-              className="grades-subject__meter-fill"
-              style={{
-                width: `${group.average === null ? 0 : Math.max(0, Math.min(1, group.average / 20)) * 100}%`,
-                background: color,
-              }}
-            />
-          </span>
-          <span className="grades-caption">
-            {group.gradeCount} note{group.gradeCount > 1 ? "s" : ""}
-            {group.provided ? " · établissement" : ""}
-          </span>
+        <span className="grades-subject__title">{group.subject}</span>
+        <span className="sr-only">
+          {group.gradeCount} note{group.gradeCount > 1 ? "s" : ""}
+          {group.provided ? " · établissement" : ""}
         </span>
         {group.average !== null ? (
-          <span className="grades-subject__average" style={{ color: palette.ink }}>
-            {formatMark(group.average)}
-            <span className="grades-subject__scale">{scaleSuffix(20)}</span>
+          <span className="grades-subject__average">
+            <strong>{formatMark(group.average)}</strong>
+            <span>{scaleSuffix(20)}</span>
           </span>
         ) : (
-          <span className="grades-caption grades-subject__none">Pas de moyenne</span>
+          <span className="grades-subject__none">Pas de moyenne</span>
         )}
-        <IconChevronRight className="grades-chevron" size={18} />
-      </summary>
+      </header>
       <ul className="grades-list">
         {group.grades.map((grade) => {
           const influence = influenceOf(report.influences, grade.id);
@@ -417,28 +406,25 @@ function SubjectSection({
               grade={grade}
               influence={influence?.impact ?? null}
               estimated={report.provided}
-              dark={dark}
             />
           );
         })}
       </ul>
-    </details>
+    </section>
   );
 }
 
 export function GradesSubjectSections({
   groups,
   report,
-  dark,
 }: {
   groups: GradeGroup[];
   report: AveragesReport;
-  dark: boolean;
 }) {
   return (
     <section className="grades-ledger" aria-label="Notes par matière">
       {groups.map((group) => (
-        <SubjectSection key={group.subject} group={group} report={report} dark={dark} />
+        <SubjectSection key={group.subject} group={group} report={report} />
       ))}
     </section>
   );
@@ -517,7 +503,7 @@ export function GradesScreen({
       {groups.length > 0 ? <LatestGrades groups={groups} dark={dark} /> : null}
 
       {groups.length > 0 && data.report ? (
-        <GradesSubjectSections groups={groups} report={data.report} dark={dark} />
+        <GradesSubjectSections groups={groups} report={data.report} />
       ) : (
         <EmptyState
           icon={<IconGrades size={30} />}

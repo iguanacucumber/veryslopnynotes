@@ -4,7 +4,6 @@ import type { SettingsSnapshot } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
 import { Avatar, ErrorBox, Loading, Page, Section } from "../../ui/components";
 import { IconBook, IconSettings, IconShield, IconSparkles } from "../../ui/icons";
-import { subjectColor, tint } from "../../lib/format";
 import { parseProfilePayload, type Profile } from "../profile/model";
 import { AppearanceCard } from "./AppearanceCard";
 import { AssistantCards } from "./AssistantCards";
@@ -16,7 +15,7 @@ import "./settings.css";
 
 /** Une lecture d'instantané, puis chaque carte tient son propre état de formulaire. */
 export default function SettingsScreen() {
-  const { dark, refreshTick } = useApp();
+  const { refreshTick } = useApp();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [snapshot, setSnapshot] = useState<SettingsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,28 +61,28 @@ export default function SettingsScreen() {
       target: "reglages-apparence",
       label: "Apparence",
       detail: "Thèmes, palettes",
-      base: subjectColor("ESPAGNOL"),
+      tone: "appearance",
       Icon: IconSettings,
     },
     {
       target: "reglages-matieres",
       label: "Matières",
       detail: "Icônes, couleurs",
-      base: subjectColor("ALLEMAND"),
+      tone: "subjects",
       Icon: IconBook,
     },
     {
       target: "reglages-assistant",
       label: "Assistant",
       detail: "Clé, sources",
-      base: subjectColor("PHILOSOPHIE"),
+      tone: "assistant",
       Icon: IconSparkles,
     },
     {
       target: "reglages-avance",
       label: "Appareil",
       detail: "Serveur, session",
-      base: subjectColor("EPS"),
+      tone: "device",
       Icon: IconShield,
     },
   ];
@@ -104,19 +103,15 @@ export default function SettingsScreen() {
       </div>
 
       <div className="settings-tiles">
-        {tiles.map(({ target, label, detail, base, Icon }) => (
+        {tiles.map(({ target, label, detail, tone, Icon }) => (
           <button
             key={target}
             type="button"
-            className="settings-tile"
+            className={`settings-tile settings-tile--${tone}`}
             onClick={() => scrollTo(target)}
-            style={{
-              background: tint(base, dark ? -0.7 : 0.88),
-              color: tint(base, dark ? 0.62 : -0.58),
-            }}
           >
             <span className="settings-tile__icon" aria-hidden="true">
-              <Icon size={22} />
+              <Icon size={32} />
             </span>
             <span className="settings-tile__label">{label}</span>
             <span className="settings-tile__detail">{detail}</span>

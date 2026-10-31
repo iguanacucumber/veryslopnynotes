@@ -15,27 +15,13 @@ body,
   z-index: 1;
 }
 
-/* Fond Papillon : deux halos fixes dérivés de la palette, jamais une image. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(90% 55% at 100% 0%, color-mix(in srgb, var(--brand-light) 38%, transparent), transparent 64%),
-    radial-gradient(70% 45% at 0% 16%, color-mix(in srgb, var(--brand-pale) 90%, transparent), transparent 68%),
-    radial-gradient(55% 34% at 8% 76%, color-mix(in srgb, var(--danger) 12%, transparent), transparent 70%),
-    radial-gradient(85% 50% at 50% 108%, color-mix(in srgb, var(--brand) 18%, transparent), transparent 66%);
-}
-
 body {
   background: var(--page);
   color: var(--ink);
-  font-family: "Figtree", system-ui, sans-serif;
-  font-size: 15px;
-  line-height: 22px;
-  font-weight: 400;
+  font-family: "SN Pro", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 500;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
   caret-color: var(--brand-solid);
@@ -78,52 +64,112 @@ a {
    clavier s'ouvre. Une hauteur de viewport figée la laisserait dépasser sous
    le clavier (#399). */
 .shell {
+  position: relative;
   min-height: var(--app-height);
   display: flex;
   flex-direction: column;
 }
 
-/* En-tête transparent, posé sur le fond ambiant : le contenu passe dessous. */
+/* Papillon : le fond d'accueil est un papier peint, pas un halo de page.
+   Il reste généré (aucune image) et ne couvre que le haut de l'accueil. */
+.shell--home::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 0;
+  height: 400px;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.42)),
+    radial-gradient(90% 62% at 88% 0%, color-mix(in srgb, var(--brand) 72%, #0b1c1a), transparent 70%),
+    radial-gradient(75% 55% at 4% 12%, color-mix(in srgb, var(--brand-light) 62%, #071412), transparent 72%),
+    radial-gradient(95% 72% at 48% 102%, color-mix(in srgb, var(--danger) 58%, #24060c), transparent 76%),
+    linear-gradient(158deg, #1b2b28, #2b1017 54%, #09090b);
+  -webkit-mask-image: linear-gradient(#000 50%, transparent 100%);
+  mask-image: linear-gradient(#000 50%, transparent 100%);
+}
+
+/* En-tête de page : plat, à la largeur du contenu. */
 .topbar {
   position: sticky;
   top: 0;
   z-index: 20;
-  min-height: calc(62px + var(--safe-top));
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: calc(7px + var(--safe-top)) var(--gutter) 7px;
-  background: color-mix(in srgb, var(--page) 84%, transparent);
-  -webkit-backdrop-filter: blur(16px) saturate(1.15);
-  backdrop-filter: blur(16px) saturate(1.15);
+  min-height: calc(56px + var(--safe-top));
+  padding-top: var(--safe-top);
+  background: var(--page);
   color: var(--ink);
   view-transition-name: topbar;
 }
 
-.topbar__title {
+.topbar__inner {
+  width: 100%;
+  max-width: 700px;
+  min-height: 56px;
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbar__heading {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.topbar__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  color: var(--ink);
+}
+
+.topbar__title {
+  min-width: 0;
+  margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 24px;
-  line-height: 29px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-size: 19px;
+  line-height: 22px;
+  font-weight: 700;
+  letter-spacing: 0.08px;
 }
 
-@media (max-width: 380px) {
-  .topbar__title {
-    font-size: 21px;
-    line-height: 26px;
-  }
+.topbar__subtitle {
+  color: var(--secondary);
+  font-size: 15px;
+  line-height: 19px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Cible de focus programmatique : le titre n'est pas un contrôle, l'anneau
-   de focus y serait du bruit visuel. */
 .topbar__title:focus,
 .topbar__title:focus-visible {
   outline: none;
+}
+
+/* Accueil : identité blanche posée sur le papier peint, actions en verre. */
+.topbar--home {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  min-height: calc(56px + var(--safe-top));
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0));
+  color: #fff;
+}
+
+.topbar--home .topbar__inner {
+  min-height: 56px;
 }
 
 .topbar__identity {
@@ -135,7 +181,7 @@ a {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--ink);
+  color: #fff;
   text-align: left;
 }
 
@@ -146,51 +192,48 @@ a {
 }
 
 .topbar__identity-name {
-  font-size: 16px;
-  line-height: 20px;
-  font-weight: 750;
-  letter-spacing: -0.01em;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .topbar__identity-sub {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  line-height: 19px;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.topbar__chevron {
+  flex: 0 0 auto;
+  opacity: 0.5;
+  margin-left: -4px;
+}
+
 .topbar__actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  flex: 0 0 auto;
 }
 
 .icon-btn {
   border: 0;
   background: transparent;
   color: var(--ink);
-  width: var(--tap);
-  height: var(--tap);
-  border-radius: var(--radius-sm);
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: background var(--duration) var(--ease);
-}
-
-.topbar .icon-btn {
-  position: relative;
-  width: 42px;
-  height: 42px;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--ink);
 }
 
 /* Cible tactile de 48 px sans grossir le cercle visuel de 42 px. */
@@ -200,9 +243,13 @@ a {
   inset: -3px;
 }
 
+.topbar .icon-btn {
+  position: relative;
+}
+
 .topbar--home .icon-btn {
-  border: 1px solid var(--rule);
-  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  background: #ffffff28;
+  color: #fff;
 }
 
 .topbar .icon-btn:hover,
@@ -210,8 +257,17 @@ a {
   background: var(--surface-variant);
 }
 
+.topbar--home .icon-btn:hover,
+.topbar--home .icon-btn:active {
+  background: #ffffff3d;
+}
+
+.topbar--home .icon-btn--accent {
+  color: #fff;
+}
+
 .topbar .icon-btn--accent {
-  color: var(--brand-deep);
+  color: var(--brand);
 }
 
 /* Bouton Retour désactivé pendant l'envoi (#524) : sans ça, le bouton
@@ -229,20 +285,26 @@ a {
 }
 
 .icon-btn--accent {
-  color: var(--brand-deep);
+  color: var(--brand);
 }
 
 .main {
+  position: relative;
+  z-index: 1;
   flex: 1;
   width: 100%;
-  max-width: 760px;
+  max-width: 700px;
   margin: 0 auto;
-  padding: 20px var(--gutter)
-    calc(var(--tabbar-h) + 46px + var(--safe-bottom) + var(--keyboard-bottom));
+  padding: 8px var(--gutter)
+    calc(var(--tabbar-h) + 24px + var(--safe-bottom) + var(--keyboard-bottom));
 }
 
-/* Cible du lien d'évitement : le focus y est programmatique, l'anneau serait
-   du bruit visuel (même choix que le titre de la coquille). */
+/* Le papier peint passe derrière l'en-tête d'accueil : la page commence sous
+   la barre de 56 px, comme la liste Papillon. */
+.main--home {
+  padding-top: calc(56px + var(--safe-top) + 6px);
+}
+
 .main:focus,
 .main:focus-visible {
   outline: none;
@@ -253,23 +315,21 @@ a {
   padding-right: 0;
 }
 
-/* Dock flottant : il remonte avec le clavier (#399) et laisse voir le fond. */
+/* Barre d'onglets Papillon : pleine largeur, plate, sans verre ni ombre. */
 .tabbar {
   position: fixed;
-  left: 12px;
-  right: 12px;
-  bottom: calc(10px + var(--safe-bottom) + var(--keyboard-bottom));
+  left: 0;
+  right: 0;
+  bottom: var(--keyboard-bottom);
   z-index: 30;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 0;
-  padding: 6px;
-  border: 1px solid var(--rule);
-  border-radius: 26px;
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
-  backdrop-filter: blur(18px) saturate(1.2);
-  box-shadow: var(--shadow-dock);
+  padding: 6px 4px calc(6px + var(--safe-bottom));
+  border: 0;
+  border-radius: 0;
+  background: var(--page);
+  box-shadow: none;
   view-transition-name: tabbar;
 }
 
@@ -303,49 +363,52 @@ a {
   z-index: 1;
   border: 0;
   background: transparent;
-  color: var(--muted);
-  min-height: var(--tabbar-h);
+  color: var(--secondary);
+  min-height: calc(var(--tabbar-h) - 8px);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 5px 2px;
-  border-radius: 20px;
-  font-size: 11px;
-  line-height: 14px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  transition: color var(--duration) var(--ease), background var(--duration) var(--ease);
-}
-
-.tab:hover {
-  background: var(--panel-tint);
-}
-
-.tab svg {
+  gap: 2px;
+  padding: 4px 2px;
+  border-radius: 0;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+  letter-spacing: 0;
   transition: color var(--duration) var(--ease);
 }
 
+.tab:hover,
+.tab:active {
+  background: transparent;
+  color: var(--ink);
+}
+
+.tab svg {
+  width: 54px;
+  height: 30px;
+  padding: 4px 16px;
+  border-radius: 15px;
+  background: transparent;
+  transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
+}
+
 .tab[aria-current="page"] {
-  color: var(--brand-deep);
-  font-weight: 750;
+  color: var(--brand);
+  font-weight: 600;
 }
 
 .tab[aria-current="page"] svg {
-  width: 48px;
-  height: 30px;
-  padding: 4px 13px;
-  border-radius: 999px;
-  background: var(--brand-pale);
-  color: var(--brand-deep);
+  background: color-mix(in srgb, var(--brand) 24%, var(--page));
+  color: var(--brand);
 }
 
 .card {
-  background: var(--panel);
+  background: var(--item);
   border: 0;
-  border-radius: var(--radius-xl);
-  padding: 20px;
+  border-radius: 20px;
+  padding: 16px;
   box-shadow: var(--shadow-card);
 }
 
@@ -354,7 +417,7 @@ button.card {
 }
 
 button.card:hover {
-  background: var(--panel-tint);
+  background: color-mix(in srgb, var(--ink) 4%, var(--item));
 }
 
 .card--flat {
@@ -388,21 +451,21 @@ button.card:hover {
 .rows {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
   padding: 0;
 }
 
 .list-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   width: 100%;
   min-height: 60px;
-  padding: 13px 16px;
+  padding: 14px 16px;
   border: 0;
   border-radius: var(--radius-lg);
-  background: var(--panel);
-  box-shadow: var(--shadow-card);
+  background: var(--item);
+  box-shadow: none;
   color: inherit;
   text-align: left;
   transition: background var(--duration) var(--ease), transform var(--duration) var(--ease);
@@ -424,14 +487,17 @@ button.card:hover {
 
 .list-row__title {
   display: block;
+  font-size: 17px;
+  line-height: 22px;
   font-weight: 600;
 }
 
 .list-row__subtitle {
   display: block;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 16px;
+  color: var(--secondary);
+  font-size: 15px;
+  line-height: 19px;
+  font-weight: 500;
 }
 
 .list-row--danger,
@@ -444,7 +510,7 @@ button.card:hover {
 .list-row--static,
 .list-row--static:hover,
 .list-row--static:active {
-  background: var(--panel);
+  background: var(--item);
   cursor: default;
   transform: none;
 }
@@ -639,20 +705,21 @@ button.card:hover {
 
 .section-title {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 26px 0 10px;
-  padding-top: 0;
+  margin: 18px 0 4px;
+  padding: 6px;
   border-top: 0;
 }
 
 .section-title__heading {
   margin: 0;
-  font-size: 19px;
-  line-height: 24px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 700;
+  letter-spacing: 0;
+  opacity: 0.6;
 }
 
 .stack > section:first-child .section-title,
@@ -661,12 +728,93 @@ button.card:hover {
   margin-top: 0;
 }
 
+/* --- Semaine (Tâches, Cours) --------------------------------------------- */
+
+/* Papillon met la semaine dans l'en-tête ; sur le web elle reste une ligne
+   plate sous celui-ci, sans carte ni ombre. */
+.card.week-nav {
+  padding: 0 6px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.week-nav__label {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 700;
+}
+
+.week-nav__detail {
+  color: var(--secondary);
+  font-size: 15px;
+  line-height: 19px;
+  font-weight: 600;
+}
+
+.week-nav__row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 4px;
+}
+
+.week-nav__arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  transition: background var(--duration) var(--ease);
+}
+
+.week-nav__arrow:hover,
+.week-nav__arrow:active {
+  background: var(--item);
+}
+
+.week-nav__arrow:active {
+  transform: scale(0.92);
+}
+
+.week-nav__today {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  min-height: 44px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  transition: transform var(--duration) var(--ease-out), background var(--duration) var(--ease);
+}
+
+.week-nav__today:hover:not(:disabled) {
+  background: var(--item);
+}
+
+.week-nav__today:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.week-nav__today:disabled {
+  background: transparent;
+  opacity: 1;
+  cursor: default;
+}
+
 .page-heading {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
-  margin: 2px 0 0;
+  margin: 4px 6px 0;
   padding-bottom: 2px;
 }
 
@@ -676,20 +824,20 @@ button.card:hover {
 
 .page-heading__title {
   margin: 0;
-  font-size: 26px;
+  font-size: 24px;
   line-height: 30px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 /* Le contexte est un sous-titre, jamais un kicker au-dessus du titre. */
 .page-heading__eyebrow {
   display: block;
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 500;
+  margin-top: 1px;
+  color: var(--secondary);
+  font-size: 15px;
+  line-height: 19px;
+  font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
 }
@@ -701,137 +849,39 @@ button.card:hover {
   flex: 0 0 auto;
 }
 
-.page-heading__action .chip {
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-/* --- Semaine (Tâches, Cours) --------------------------------------------- */
-
-.card.week-nav {
-  padding: 12px 14px;
-  background: var(--panel);
-}
-
-.week-nav__top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-  padding-left: 4px;
-}
-
-.week-nav__label {
-  font-size: 14px;
-  line-height: 19px;
-  font-weight: 700;
-}
-
-.week-nav__detail {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 600;
-}
-
-.week-nav__row {
-  display: grid;
-  grid-template-columns: var(--tap) minmax(0, 1fr) var(--tap);
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
-}
-
-.week-nav__arrow {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--tap);
-  height: var(--tap);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--ink);
-  transition: background var(--duration) var(--ease);
-}
-
-.week-nav__arrow:hover,
-.week-nav__arrow:active {
-  background: var(--surface-variant);
-}
-
-.week-nav__arrow:active {
-  transform: scale(0.92);
-}
-
-.week-nav__today {
-  min-width: 0;
-  min-height: var(--tap);
-  padding: 4px 10px;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: var(--panel-tint);
-  color: var(--brand-deep);
-  font-size: 12px;
-  line-height: 15px;
-  font-weight: 700;
-  /* « Semaine précédente de 2 semaines » ne tient pas sur une ligne à 360 px :
-     on laisse le libellé passer à la ligne plutôt que le tronquer. */
-  white-space: normal;
-  text-wrap: balance;
-  transition: transform var(--duration) var(--ease-out), background var(--duration) var(--ease);
-}
-
-.week-nav__today:active {
-  transform: scale(0.97);
-}
-
-.week-nav__today:disabled {
-  background: var(--surface-variant);
-  color: var(--muted);
-  opacity: 0.7;
-  cursor: default;
-}
-
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 34px;
   padding: 4px 11px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--rule);
-  background: var(--panel);
+  border-radius: 100px;
+  border: 0;
+  background: var(--item);
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
 }
 
 .chip--active {
   background: var(--brand-solid);
-  border-color: var(--brand-solid);
   color: var(--on-brand);
 }
 
 .chip--danger {
   background: var(--danger-solid);
-  border-color: var(--danger-solid);
   color: var(--on-danger);
 }
 
 .btn {
-  min-height: var(--tap);
+  min-height: 44px;
   padding: 0 18px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--brand-solid);
+  border-radius: 100px;
+  border: 0;
   background: var(--brand-solid);
   color: var(--on-brand);
+  font-size: 16px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
@@ -842,7 +892,6 @@ button.card:hover {
 
 .btn:hover {
   background: color-mix(in srgb, var(--brand-solid) 88%, var(--ink));
-  border-color: color-mix(in srgb, var(--brand-solid) 88%, var(--ink));
 }
 
 .btn:disabled {
@@ -851,9 +900,9 @@ button.card:hover {
 }
 
 .btn--ghost {
-  background: var(--surface);
+  background: var(--item);
   color: var(--brand-deep);
-  border: 1px solid var(--rule);
+  border: 0;
 }
 
 .btn--danger {
@@ -862,9 +911,9 @@ button.card:hover {
 }
 
 .btn--small {
-  min-height: var(--tap);
+  min-height: 40px;
   padding: 0 14px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* Une puce cliquable reste une cible tactile : même hauteur que les boutons
@@ -877,10 +926,12 @@ button.chip {
   width: 100%;
   min-height: var(--tap);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--rule);
-  background: var(--panel);
+  border: 1px solid transparent;
+  background: var(--item);
   padding: 10px 13px;
   color: var(--ink);
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .field--area {
@@ -890,7 +941,7 @@ button.chip {
 
 .field:focus {
   border-color: var(--brand);
-  outline: 2px solid var(--brand);
+  outline: 2px solid color-mix(in srgb, var(--brand) 55%, transparent);
   outline-offset: 0;
 }
 
@@ -898,16 +949,15 @@ button.chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 7px;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-xs);
-  background: var(--panel);
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 15px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  padding: 3px 9px;
+  border: 0;
+  border-radius: 100px;
+  background: var(--item);
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .stale::before {
@@ -952,30 +1002,45 @@ button.chip {
 }
 
 .empty {
-  padding: 32px 22px;
+  padding: 32px 16px;
   text-align: center;
-  color: var(--muted);
+  color: var(--secondary);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 4px;
 }
 
-/* L'état vide garde un cadre de registre : un carré fileté, pas une pastille. */
 .empty__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-xs);
-  background: var(--panel);
-  color: var(--brand-deep);
+  width: auto;
+  height: auto;
+  margin-bottom: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  opacity: 0.5;
+}
+
+.empty__icon svg {
+  width: 32px;
+  height: 32px;
 }
 
 .empty strong {
   color: var(--ink);
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 700;
+}
+
+.empty .t-body-m {
+  color: var(--secondary);
+  font-size: 15px;
+  line-height: 19px;
+  font-weight: 600;
 }
 
 .spinner {
