@@ -82,15 +82,19 @@ export function normalizeMath(raw: string): string {
     /[\\^_{}=+\-*/<>]/.test(inner) || !/\s/.test(inner) ? inner : match,
   );
   // Fractions imbriquées : quelques passes bornées, jamais de boucle ouverte.
+  // Un niveau d'accolades suffit pour `\frac{u_{n-1}}{2}`.
   for (let depth = 0; depth < 4; depth++) {
     const next = out.replace(
-      /\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g,
+      /\\frac\s*\{((?:[^{}]|\{[^{}]*\})*)\}\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g,
       (_match, numerator: string, denominator: string) =>
         `${fractionPart(numerator)}/${fractionPart(denominator)}`,
     );
     if (next === out) break;
     out = next;
   }
+  // Indices et exposants LaTeX restent lisibles sans moteur math.
+  out = out.replace(/_\{([^{}]*)\}/g, "_($1)");
+  out = out.replace(/\^\{([^{}]*)\}/g, "^($1)");
   out = out.replace(/\\sqrt\s*\{([^{}]*)\}/g, (_match, inner: string) => `√(${inner})`);
   out = out.replace(/\\(?:text|mathrm|mathbf|mathit|operatorname)\s*\{([^{}]*)\}/g, "$1");
   out = out.replace(/\\(?:left|right)\b/g, "");
@@ -261,8 +265,20 @@ function parseInline(source: string, depth = 0): InlineNode[] {
   return nodes;
 }
 
+/** Le modèle recopie parfois les délimiteurs I6 (balise, crochets, nom nu) ou
+ *  un marqueur « [DONNEE] » dans sa fiche. Les retirer avant analyse évite de
+ *  les afficher, y compris pour une fiche déjà enregistrée. */
+function stripOutputArtifacts(markdown: string): string {
+  return markdown
+    .replace(/<\/?UNTRUSTED_DATA\b[^>]*>/gi, "")
+    .replace(/---\s*(?:UNTRUSTED_DATA|fin\s+DONNEES)\b[^\n]*?---/gi, "")
+    .replace(/\[[^\]\n]*UNTRUSTED_DATA[^\]\n]*\]|\([^)\n]*UNTRUSTED_DATA[^)\n]*\)/gi, "")
+    .replace(/\bUNTRUSTED_DATA\b/gi, "")
+    .replace(/[ \t]*[\[(]\s*DONN[EÉ]E(?:\s*,\s*non\s+citable)?\s*[\])]/g, "");
+}
+
 function boundSource(markdown: string): string {
-  let source = markdown;
+  let source = stripOutputArtifacts(markdown);
   if (source.length > MAX_MARKDOWN_CHARS) {
     source = `${source.slice(0, MAX_MARKDOWN_CHARS - 1)}…`;
   }

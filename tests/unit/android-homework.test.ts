@@ -100,18 +100,31 @@ function strings(raw: unknown): string[] {
 }
 
 // Miroir de `canonicalCitedLabel` (core/AiPrompts.kt) : espaces de bord, puis
-// UN préambule « Libelle citable : », casse et espaces internes libres. Le
-// libellé lui-même reste comparé à l'identique.
+// préambule « Libelle citable : » et suffixe « (DONNEE) », casse et espaces
+// internes libres. Le libellé lui-même reste comparé à l'identique.
 const CITABLE_PREAMBLE = /^Libelle\s+citable\s*:\s*/i;
+const DATA_MARKER = /\s*\((?:DONNEE|DONNÉE)(?:\s*,\s*non\s+citable)?\)\s*:?\s*$/i;
 
 function tsCanonicalCitedLabel(cited: string, allowedLabels: string[]): string | null {
   const trimmed = cited.trim();
   if (trimmed.length === 0) return null;
   if (allowedLabels.includes(trimmed)) return trimmed;
-  const match = CITABLE_PREAMBLE.exec(trimmed);
-  if (!match) return trimmed;
-  const label = trimmed.slice(match[0].length).trim();
-  return label.length === 0 ? null : label;
+  let candidate = trimmed;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const preamble = CITABLE_PREAMBLE.exec(candidate);
+    if (preamble) {
+      candidate = candidate.slice(preamble[0].length).trim();
+      changed = true;
+    }
+    const marker = DATA_MARKER.exec(candidate);
+    if (marker) {
+      candidate = candidate.slice(0, marker.index).trim();
+      changed = true;
+    }
+  }
+  return candidate.length === 0 ? null : candidate;
 }
 
 type Outcome =
@@ -234,12 +247,27 @@ describe("android homework — client de /v1/homework/generate (0.7.0)", () => {
     // Préambule seul ou citation vide : jamais un libellé accepté par accident.
     expect(tsParse({ status: "ok", answer: "a", steps: [], sources: ["Libelle citable :"] }, labels)).toBeNull();
     expect(tsParse({ status: "ok", answer: "a", steps: [], sources: [" "] }, labels)).toBeNull();
+    // Le suffixe du bloc est retiré avant comparaison ; hors liste, il ne
+    // sauve pas une source inventée.
+    expect(
+      tsParse({ status: "ok", answer: "a", steps: [], sources: ["Consigne (DONNEE)"] }, labels),
+    ).toEqual({ status: "ok", answer: "a", steps: [], sources: ["Consigne"] });
+    expect(
+      tsParse(
+        { status: "ok", answer: "a", steps: [], sources: ["Libelle citable : Cours : Chapitre 4 (DONNEE)"] },
+        labels,
+      ),
+    ).toEqual({ status: "ok", answer: "a", steps: [], sources: ["Cours : Chapitre 4"] });
+    expect(tsParse({ status: "ok", answer: "a", steps: [], sources: ["Manuel X (DONNEE)"] }, labels)).toBeNull();
   });
 });
 
 type HomeworkParse = {
   ok?: boolean;
   status?: string;
+  answer?: string;
+  stepsText?: string[];
+  reason?: string;
   cited?: string[];
   error?: string;
   message?: string;
@@ -317,6 +345,25 @@ describe("android homework — citations préfixées (vrai Kotlin)", () => {
       expect({ sources, ok: empty.ok }).toEqual({ sources, ok: false });
       expect(empty.message).toContain("schéma");
     }
+  });
+
+  test.skipIf(skip)("les marqueurs recopiés sont retirés de la réponse, des étapes et du refus", async () => {
+    const ok = await parseHomework({
+      status: "ok",
+      answer: '<UNTRUSTED_DATA nonce="mitosenonce000001">La mitose se déroule en quatre phases. [UNTRUSTED_DATA] [DONNEE]',
+      steps: ['lire <UNTRUSTED_DATA nonce="mitosenonce000001">le cours', "noter"],
+      sources: ["Cours : Mitose"],
+    }, LABELS);
+    expect(ok.ok).toBe(true);
+    expect(ok.answer).toBe("La mitose se déroule en quatre phases.");
+    expect(ok.stepsText).toEqual(["lire le cours", "noter"]);
+    const refused = await parseHomework({
+      status: "refused",
+      reason: "sources insuffisantes [DONNEE]",
+      sources: [],
+    }, LABELS);
+    expect(refused.ok).toBe(true);
+    expect(refused.reason).toBe("sources insuffisantes");
   });
 
   test.skipIf(skip)("un refus citant une source fournie reste accepté", async () => {

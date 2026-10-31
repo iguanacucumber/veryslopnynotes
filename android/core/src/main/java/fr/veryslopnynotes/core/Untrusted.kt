@@ -66,15 +66,31 @@ private val OUTPUT_OPEN_RE = Regex(
     "---\\s*" + UNTRUSTED_TAG + "(?:\\s+nonce\\s*=\\s*(\"[^\"]*\"|'[^']*'))?\\s*---",
     RegexOption.IGNORE_CASE,
 )
+// Variante observee en recette : le modele cite le nom du marqueur entre
+// crochets (« [UNTRUSTED_DATA] ») au lieu de recopier la balise.
+private val OUTPUT_BRACKET_RE = Regex(
+    "(?:\\[[^\\]\\n]*" + UNTRUSTED_TAG + "[^\\]\\n]*\\]|\\([^)\\n]*" + UNTRUSTED_TAG + "[^)\\n]*\\))",
+    RegexOption.IGNORE_CASE,
+)
+private val OUTPUT_BARE_TAG_RE = Regex("\\b" + UNTRUSTED_TAG + "\\b", RegexOption.IGNORE_CASE)
+// Marqueur de citation ajoute par le modele dans la fiche (« [DONNEE] »).
+// Casse stricte : le mot français « donnée » reste intact.
+private val OUTPUT_DONNEE_RE = Regex(
+    "[ \\t]*[\\[(]\\s*DONN[EÉ]E(?:\\s*,\\s*non\\s+citable)?\\s*[\\])]",
+)
 
 /**
- * Retire les delimiteurs I6 qu'un modele aurait recopies dans sa sortie.
- * Les balises sont supprimees avec leur nonce ; le texte autour reste intact.
+ * Retire les delimiteurs I6 qu'un modele aurait recopies dans sa sortie, sous
+ * leur forme balise, encadree ou nue. Les marqueurs sont supprimes avec leur
+ * nonce ; le texte autour reste intact.
  */
 fun stripUntrustedTags(raw: String): String {
     var out = OUTPUT_TAG_RE.replace(raw, "")
     out = OUTPUT_OPEN_RE.replace(out, "")
-    return MARKER_END_RE.replace(out, "")
+    out = OUTPUT_BRACKET_RE.replace(out, "")
+    out = OUTPUT_BARE_TAG_RE.replace(out, "")
+    out = MARKER_END_RE.replace(out, "")
+    return OUTPUT_DONNEE_RE.replace(out, "")
 }
 
 // ponytail: randomUUID stdlib suffit (128-bit, unique par prompt).

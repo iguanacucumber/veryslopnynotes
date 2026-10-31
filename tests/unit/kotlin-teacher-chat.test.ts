@@ -139,8 +139,8 @@ describe("professeur IA — sortie validée (#633)", () => {
       op: "parse",
       text: JSON.stringify({
         answer:
-          '<UNTRUSTED_DATA nonce="teachernonce00001">\nObserve d\'abord l\'angle droit.\n' +
-          '</UNTRUSTED_DATA nonce="teachernonce00001">',
+          '<UNTRUSTED_DATA nonce="teachernonce00001">\nObserve d\'abord l\'angle droit. ' +
+          "[UNTRUSTED_DATA] [DONNEE]\n</UNTRUSTED_DATA nonce=\"teachernonce00001\">",
         sources: ["Cours : chapitre 4"],
       }),
       allowed: ALLOWED,

@@ -207,6 +207,35 @@ describe("formules LaTeX : normalisées en texte lisible (#759)", () => {
     const blocks = parseMarkdown("Un prix de 5 $ et un calcul x^2.");
     expect(blockText(blocks)).toBe("Un prix de 5 $ et un calcul x^2.");
   });
+
+  test("fractions imbriquées et indices restent lisibles", () => {
+    const text = blockText(parseMarkdown("\\frac{u_{n-1}}{2} puis x^{2} coûtent 5 $ et 10 $."));
+    expect(text).toContain("(u_(n-1))/2");
+    expect(text).toContain("x^(2)");
+    expect(text).not.toContain("_{");
+    expect(text).toContain("5 $ et 10 $");
+  });
+});
+
+describe("artefacts du prompt recopiés : jamais affichés", () => {
+  test("balises, crochets, nom nu et (DONNEE) sont retirés", () => {
+    const html = render(
+      [
+        '---UNTRUSTED_DATA nonce="revisionnonce000001"---',
+        '<UNTRUSTED_DATA nonce="revisionnonce000001">',
+        "## Titre",
+        "Contenu de la fiche. [UNTRUSTED_DATA] [DONNEE]",
+        '</UNTRUSTED_DATA nonce="revisionnonce000001">',
+        '--- fin DONNEES nonce="revisionnonce000001" ---',
+      ].join("\n"),
+    );
+    expect(html).toContain("Titre");
+    expect(html).toContain("Contenu de la fiche.");
+    expect(html).not.toContain("UNTRUSTED_DATA");
+    expect(html).not.toContain("nonce");
+    expect(html).not.toContain("fin DONNEES");
+    expect(html).not.toContain("[DONNEE]");
+  });
 });
 
 describe("rendu markdown de fiche : lisible et sûr (#630)", () => {
