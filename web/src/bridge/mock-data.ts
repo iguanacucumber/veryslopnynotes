@@ -562,6 +562,7 @@ export const PHOTO_REPLY = {
   sources: ["Photo de l'énoncé", "Cours : Chapitre 4"],
   contextChars: 1380,
   contextOmitted: 0,
+  photos: 1,
 };
 
 export const LLM_CONTEXT: LlmSource[] = [

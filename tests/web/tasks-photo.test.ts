@@ -49,14 +49,14 @@ describe("devoirs — photo d'énoncé (#588)", () => {
     const tasks = source("features/tasks/TasksScreen.tsx");
     const chat = source("features/tasks/HomeworkChat.tsx");
     expect(tasks).toContain("bridge.solveHomeworkPhoto");
-    expect(tasks).toContain("Photo de l’énoncé");
+    expect(tasks).toContain("Photos de l’énoncé");
     expect(tasks).toContain("Prendre une photo");
-    expect(tasks).toContain("Choisir une image");
+    expect(tasks).toContain("Choisir des images");
     // Plus de pastille « Galerie » concurrente : un seul bouton photo.
     expect(tasks).not.toContain("Galerie");
     expect(tasks).toContain("const { textOff, photoOff, sheetOff } = cardActionFlags(");
     expect(tasks).toContain("Sans cours ni manuel, l’aide peut procéder quand même");
-    expect(chat).toContain("La photo est supprimée après lecture");
+    expect(chat).not.toContain("La photo est supprimée après lecture");
     // Le texte s'ouvre sans source (le pont refuse puis propose « Procéder
     // quand même ») ; la fiche reste bloquée sans matière.
     const actions = source("features/tasks/actions.ts");
@@ -71,7 +71,7 @@ describe("devoirs — photo d'énoncé (#588)", () => {
     expect(tasks).toContain("<Dialog");
     expect(tasks).toContain("open={photoChooser !== null}");
     expect(tasks).toContain("onClose={closePhotoChooser}");
-    expect(tasks).toContain("La photo part directement au fournisseur");
+    expect(tasks).toContain("Jusqu’à 3 photos depuis la galerie");
     expect(tasks).toContain("askPhoto(assignment, source)");
     // Un seul dialogue pour la semaine, rendu APRÈS la liste des cartes.
     expect(tasks.indexOf("<Dialog")).toBeGreaterThan(tasks.lastIndexOf('className="list"'));
@@ -89,8 +89,11 @@ describe("devoirs — photo d'énoncé (#588)", () => {
     // le cache du compte.
     expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.HOMEWORK, week, epoch)");
     expect(bridge).toContain("aiContextFor(assignment, AiContextEntry.PHOTO, week, epoch)");
-    expect(bridge).toContain("HomeworkAi.generateHomeworkFromPhoto(");
-    expect(bridge).toContain("PhotoPrep.prepare(shot.file)");
+    expect(bridge).toContain("HomeworkAi.generateHomeworkFromPhotos(");
+    expect(bridge).toContain("awaitPhotos(source, maxPhotos)");
+    expect(bridge).toContain('put("photos", images.size)');
+    expect(bridge).toContain("for ((index, file) in shot.files.withIndex())");
+    expect(bridge).toContain("PhotoPrep.prepare(file)");
     // Aucun enregistrement automatique du corrigé.
     expect(bridge).not.toContain("saveRevisionSheet(store, assembleRevisionSheet");
   });

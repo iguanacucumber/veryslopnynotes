@@ -68,7 +68,7 @@
 <a id="i32"></a>
 
 ## I32 — Une photo ne part que sur geste explicite, ré-encodée et bornée
-- Invariant : aucune photo capturée ni envoyée automatiquement : la capture part d'un geste explicite, jamais d'un rafraîchissement, job de fond ou sortie LLM. L'image est ré-encodée en JPEG, bornée à 1600 px et 2 Mo, envoyée seule au modèle vision (prompt sous I4). L'image est OPAQUE : pas de scan de secrets, pas de pont JS, pas de journal, pas d'octet dans une erreur. Fichier temporaire supprimé après usage ; purge de compte efface `cacheDir/photos/`.
+- Invariant : aucune photo capturée ni envoyée automatiquement : la capture part d'un geste explicite, jamais d'un rafraîchissement, job de fond ou sortie LLM. Chaque image est ré-encodée en JPEG, bornée à 1600 px et 2 Mo ; un envoi porte au plus trois pages au modèle vision (prompt sous I4). Les images sont OPAQUES : pas de scan de secrets, pas de pont JS, pas de journal, pas d'octet dans une erreur. Fichiers supprimés après usage ; purge de compte efface `cacheDir/photos/`.
 - Test : `tests/unit/kotlin-vision.test.ts`, `tests/web/course-notes.test.ts`
 - Commande : `make check`.
 - Emplacement : `android/app/PhotoCapture.kt`, `android/app/PhotoPrep.kt`,

@@ -47,6 +47,8 @@ export type HomeworkChatState = {
   id: string;
   photo: boolean;
   photoSource?: "camera" | "gallery";
+  /** Nombre de photos lues (absent tant que le pont n'a pas répondu). */
+  photoCount?: number;
   loading: boolean;
   allowUnsourced: boolean;
   phases: HomeworkPhase[];
@@ -174,19 +176,6 @@ function AssistantTurn({
         <div className="hw-assistant__answer ai-turn__body">
           <MarkdownBody text={turn.answer} />
         </div>
-      ) : null}
-
-      {turn.steps.length > 0 ? (
-        <section className="hw-steps" aria-label="Démarche du corrigé">
-          <h3 className="hw-steps__title">Démarche</h3>
-          <ol className="hw-steps__list">
-            {turn.steps.map((step, index) => (
-              <li key={`${index}:${step.slice(0, 32)}`}>
-                <MarkdownBody text={step} />
-              </li>
-            ))}
-          </ol>
-        </section>
       ) : null}
 
       {unsourced ? (
@@ -334,20 +323,8 @@ export function HomeworkChat({
     onSend(question);
   }
 
-  const privacy =
-    (state.photo
-      ? "La photo de l’énoncé, la consigne, le cours" +
-        (lessonReady ? ", ton cours mémorisé" : "") +
-        (manualReady ? " et le texte du manuel" : "") +
-        " sont envoyés directement au fournisseur, avec ta clé. La photo est supprimée après lecture."
-      : manualReady && lessonReady
-        ? "Le sujet, la consigne, le cours, ton cahier et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
-        : lessonReady
-          ? "Le sujet, la consigne, le cours et ton cours mémorisé sont envoyés directement au fournisseur, avec ta clé."
-          : manualReady
-            ? "Le sujet, la consigne, le cours et le texte du manuel sont envoyés directement au fournisseur, avec ta clé."
-            : "Le sujet, la consigne et le cours de ce devoir sont envoyés directement au fournisseur, avec ta clé.") +
-    (state.turns.length > 0 ? " Le fil précédent est joint comme contexte." : "");
+  const photoChip =
+    state.photo && (state.photoCount ?? 0) > 1 ? `${state.photoCount} photos` : "Photo";
 
   return (
     <Dialog
@@ -386,7 +363,7 @@ export function HomeworkChat({
               {state.photo ? (
                 <span className="hw-context__chip">
                   <IconCamera size={13} />
-                  Photo
+                  {photoChip}
                 </span>
               ) : null}
             </div>
@@ -545,16 +522,6 @@ export function HomeworkChat({
           </form>
 
           <div className="hw-foot__meta ai-meta">
-            <details className="hw-privacy">
-              <summary>Ce qui est envoyé</summary>
-              <p className="tiny muted">{privacy}</p>
-              {last.context && last.context.length > 0 ? (
-                <p className="tiny muted">
-                  Contexte : {last.context.length} source{last.context.length > 1 ? "s" : ""} —{" "}
-                  {last.context.reduce((sum, source) => sum + source.chars, 0)} caractères.
-                </p>
-              ) : null}
-            </details>
             <span className="tiny muted hw-foot__paid">1 question = 1 appel.</span>
           </div>
         </div>

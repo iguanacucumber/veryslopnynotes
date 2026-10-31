@@ -11,7 +11,6 @@ import {
   appendTeacherAnswer,
   buildTeacherTurn,
   classifyTeacherFailure,
-  historySources,
   parseTeacherMessage,
   parseTeacherThread,
   parseTeacherTurnResult,
@@ -21,7 +20,6 @@ import {
   teacherHistory,
   teacherThreadPayload,
   teacherWriteQueue,
-  turnSources,
 } from "../../web/src/features/teacher/teacher";
 
 useParisTz();
@@ -182,17 +180,6 @@ describe("professeur IA — modèle local (#633)", () => {
     expect(rejectTeacherAnswer(messages, 9)).toHaveLength(2);
   });
 
-  test("les sources du tour et l'historique sont séparés pour « Ce qui est envoyé »", () => {
-    const message = teacher({
-      context: [
-        SOURCE,
-        { type: "history", label: "Historique : 1 — eleve", chars: 40, truncated: false },
-      ],
-    });
-    expect(turnSources(message).map((source) => source.type)).toEqual(["course"]);
-    expect(historySources(message).map((source) => source.type)).toEqual(["history"]);
-  });
-
   test("classe les erreurs du pont avec un message et un geste", () => {
     expect(classifyTeacherFailure({ ok: false, code: "key", message: "clé" }).kind).toBe("key");
     expect(classifyTeacherFailure({ ok: false, code: "quota", message: "429" }).kind).toBe("quota");
@@ -260,16 +247,13 @@ describe("écran Prof — rendu (#633)", () => {
     expect(html).toContain("role=\"status\"");
   });
 
-  test("réponse : texte, sources citées et « Ce qui est envoyé » en comptes", () => {
+  test("réponse : texte et sources citées, sans détail d'envoi", () => {
     const html = renderView({ messages: [studentMessage("Ma question")!, teacher()] });
     expect(html).toContain("Ma question");
     expect(html).toContain("Repère d&#x27;abord l&#x27;angle droit");
     expect(html).toContain("Cours : chapitre 4");
     expect(html).toContain("Sources :");
-    expect(html).toContain("Ce qui est envoyé");
-    expect(html).toContain("1 source de contexte");
-    expect(html).toContain("aucun tour");
-    expect(html).not.toContain("120 caractères");
+    expect(html).not.toContain("Ce qui est envoyé");
     expect(html).not.toContain("non sourcée");
   });
 

@@ -717,7 +717,7 @@ export function homeworkFollowUpQuestion(question: string, turns: HomeworkExchan
   return `${question.trim()}${note}`.slice(0, HOMEWORK_FOLLOW_UP_CHARS);
 }
 
-// --- #628 : métadonnées « Ce qui est envoyé » --------------------------------
+// --- #628 : métadonnées de contexte IA ---------------------------------------
 
 const AI_CONTEXT_TYPES = new Set([
   "assignment",

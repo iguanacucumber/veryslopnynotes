@@ -92,6 +92,35 @@ describe("photo de cours — garde d'image exécutée (#587)", () => {
     expect(res.sawMarker).toBe(true);
   });
 
+  test.skipIf(skip)("jusqu'à trois photos d'énoncé, jamais quatre", async () => {
+    for (const count of [1, 3]) {
+      const images = Array.from({ length: count }, () => ({ mime: "image/jpeg", base64: IMAGE }));
+      const res = await ask({ op: "imageListValid", images });
+      expect(res.valid).toBe(true);
+      expect(res.count).toBe(count);
+    }
+    const four = Array.from({ length: 4 }, () => ({ mime: "image/jpeg", base64: IMAGE }));
+    expect((await ask({ op: "imageListValid", images: four })).valid).toBe(false);
+  });
+
+  test.skipIf(skip)("le prompt photo joint toutes les pages et les garde Untrusted", async () => {
+    const images = Array.from({ length: 3 }, () => ({ mime: "image/jpeg", base64: IMAGE }));
+    const res = await ask({
+      op: "homeworkPhoto",
+      images,
+      question: "Résous l'exercice 12.",
+      sources: [],
+      response: JSON.stringify({
+        status: "ok",
+        answer: "x = 3",
+        steps: ["poser l'équation"],
+        sources: ["Photo de l'énoncé"],
+      }),
+    });
+    expect(res.sawImages).toBe(3);
+    expect(res.sawMarker).toBe(true);
+  });
+
   test.skipIf(skip)("une citation inventée est refusée, même avec une photo", async () => {
     const res = await ask(
       {
@@ -129,6 +158,8 @@ describe("photo de cours — garde d'image exécutée (#587)", () => {
     expect(capture).toContain(
       "PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)",
     );
+    expect(capture).toContain("PickMultipleVisualMedia(MAX_PHOTOS)");
+    expect(capture).toContain("const val MAX_PHOTOS = VisionImage.MAX_IMAGES");
     expect(capture).not.toContain("ActivityResultContracts.GetContent()");
     // #749 : la déconnexion supprime `cacheDir/photos` ; le `lazy` ne repasse
     // jamais, donc chaque entrée refait le dossier (sinon photo muette

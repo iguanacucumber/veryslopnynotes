@@ -376,6 +376,8 @@ export const bridge = {
       context?: AiContextSourceMeta[];
       contextChars?: number;
       contextOmitted?: number;
+      /** Nombre de photos réellement lues (1 à 3). */
+      photos?: number;
     }>("llm.solvePhoto", { assignmentId, weekStart, source }, BRIDGE_TIMEOUTS["llm.solvePhoto"], undefined, onProgress),
   generateRevision: (assignmentId: string, weekStart: string) =>
     call<{

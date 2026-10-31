@@ -346,6 +346,7 @@ function TasksWeek({ week }: { week: string }) {
             ? {
                 ...state,
                 loading: false,
+                photoCount: result.photos ?? state.photoCount,
                 phases: [...state.phases, { phase: "done", at: Date.now() }].slice(-10),
                 current: { ...state.current, ...patch, context },
               }
@@ -647,8 +648,8 @@ function TasksWeek({ week }: { week: string }) {
 
       <Dialog
         open={photoChooser !== null}
-        title="Photo de l’énoncé"
-        description="La photo part directement au fournisseur, avec ta clé. Elle est supprimée après lecture."
+        title="Photos de l’énoncé"
+        description="Jusqu’à 3 photos depuis la galerie, ou une avec l’appareil photo. Elles partent directement au fournisseur, avec ta clé, et sont supprimées après lecture."
         icon={<IconCamera size={20} />}
         onClose={closePhotoChooser}
         actions={
@@ -678,7 +679,7 @@ function TasksWeek({ week }: { week: string }) {
               <span className="photo-choice__icon" aria-hidden="true">
                 <IconImage size={20} />
               </span>
-              <span>Choisir une image</span>
+              <span>Choisir des images</span>
             </button>
           </div>
         ) : null}
@@ -855,7 +856,7 @@ function AssignmentCard({
       {assistantDisabled || hasMaterial ? null : (
         <p id={noMaterialId} className="tiny muted task-card__hint">
           Sans cours ni manuel, l’aide peut procéder quand même : la réponse sera alors non sourcée.
-          La photo de l’énoncé reste la source la plus fiable.
+          Les photos de l’énoncé restent la source la plus fiable.
         </p>
       )}
 

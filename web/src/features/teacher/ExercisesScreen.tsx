@@ -9,7 +9,6 @@ import {
   exerciseModeHint,
   exerciseModeLabel,
   exercisePageLabel,
-  exerciseSources,
 } from "./exercises";
 import { teacherActionLabel, type TeacherTurnError } from "./teacher";
 
@@ -89,7 +88,7 @@ export function ExercisesView({
   const content = (
     <>
       <Section title="Matière">
-        <Card className="teacher-subject">
+        <Card className="stack">
           <label className="tiny muted" htmlFor={subjectId}>
             Matière du manuel
           </label>
@@ -282,18 +281,6 @@ export function ExercisesView({
                       <span className="teacher-unsourced__badge">non sourcée</span>
                     </p>
                   )}
-                  {exerciseSources(help.message.context).length > 0 ? (
-                    <details className="exercise-help__privacy">
-                      <summary>Ce qui est envoyé</summary>
-                      <ul className="exercise-help__context tiny muted">
-                        {exerciseSources(help.message.context).map((source, index) => (
-                          <li key={`${source.type}:${source.label}:${index}`}>
-                            {source.label} ({source.chars} caractères{source.truncated ? ", tronquée" : ""})
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  ) : null}
                 </div>
               ) : null}
               {help.refusal ? (

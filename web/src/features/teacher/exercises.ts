@@ -1,9 +1,4 @@
-import type {
-  AiContextSourceMeta,
-  ExerciseHelpMode,
-  ExerciseItem,
-  ExerciseProposal,
-} from "../../bridge/types";
+import type { ExerciseHelpMode, ExerciseItem, ExerciseProposal } from "../../bridge/types";
 import { parseTeacherTurnResult, classifyTeacherFailure, type TeacherTurnError } from "./teacher";
 
 // Exercices du manuel : modèle PUR de l'onglet. Aucun réseau ici ; les bornes
@@ -102,10 +97,6 @@ export function exerciseDifficultyLabel(difficulty: string): string {
 
 export function exercisePageLabel(exercise: ExerciseItem): string {
   return exercise.page > 0 ? `p. ${exercise.page}` : "";
-}
-
-export function exerciseSources(context: AiContextSourceMeta[] | undefined): AiContextSourceMeta[] {
-  return (context ?? []).filter((source) => source.type !== "history");
 }
 
 /** Même schéma validé que le professeur. */

@@ -169,10 +169,10 @@ internal fun VsnBridge.lessonsAddPhoto(p: JSONObject): JSONObject {
  * Le callback de l'activité arrive sur le thread principal ; le latch publie le
  * résultat au fil du pont.
  */
-internal fun VsnBridge.awaitPhoto(source: String): PhotoCapture.Result {
+internal fun VsnBridge.awaitPhotos(source: String, maxPhotos: Int = 1): PhotoCapture.Result {
     val latch = CountDownLatch(1)
     var result: PhotoCapture.Result? = null
-    photos.capture(source) {
+    photos.capture(source, maxPhotos) {
         result = it
         latch.countDown()
     }
@@ -182,6 +182,8 @@ internal fun VsnBridge.awaitPhoto(source: String): PhotoCapture.Result {
     }
     return result ?: PhotoCapture.Result.Error("Photo indisponible : réessaie.")
 }
+
+internal fun VsnBridge.awaitPhoto(source: String): PhotoCapture.Result = awaitPhotos(source, 1)
 
 internal fun VsnBridge.lessonJson(note: LessonNote): JSONObject = JSONObject()
     .put("id", note.id)

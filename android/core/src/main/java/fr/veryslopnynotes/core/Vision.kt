@@ -26,6 +26,9 @@ data class VisionImage(
         /** Base64 gonfle d'environ 4/3 : borne un peu au-dessus de 2 Mo. */
         const val MAX_IMAGE_BASE64_CHARS = 2_800_000
 
+        /** Un envoi peut porter plusieurs pages d'un même énoncé (coût borné). */
+        const val MAX_IMAGES = 3
+
         private val BASE64_RE = Regex("^[A-Za-z0-9+/]+={0,2}$")
 
         /** Taille décodée estimée, sans décoder (l'image peut être grosse). */
@@ -55,21 +58,43 @@ interface SafeVisionPromptProvider {
 }
 
 /**
- * Construit et valide un prompt vision : une image, jamais plus (coût et surface).
+ * Construit et valide un prompt vision : de une à [VisionImage.MAX_IMAGES]
+ * images (coût et surface bornés).
  */
+fun buildSafeVisionPrompt(
+    system: String,
+    data: List<Untrusted<String>>,
+    images: List<VisionImage>,
+    nonce: String? = null,
+): SafeVisionPrompt {
+    if (images.isEmpty() || images.size > VisionImage.MAX_IMAGES) throw AiError("images invalides (I6)")
+    if (images.any { !it.isValid() }) throw AiError("image invalide (I6)")
+    val prompt = buildSafePrompt(system, data, nonce)
+    assertNoSecretsInPrompt(prompt, data)
+    return SafeVisionPrompt(prompt = prompt, images = images)
+}
+
 fun buildSafeVisionPrompt(
     system: String,
     data: List<Untrusted<String>>,
     image: VisionImage,
     nonce: String? = null,
-): SafeVisionPrompt {
-    if (!image.isValid()) throw AiError("image invalide (I6)")
-    val prompt = buildSafePrompt(system, data, nonce)
-    assertNoSecretsInPrompt(prompt, data)
-    return SafeVisionPrompt(prompt = prompt, images = listOf(image))
+): SafeVisionPrompt = buildSafeVisionPrompt(system, data, listOf(image), nonce)
+
+/** Même pipeline que [generateGuardedJson], images déclarées DONNÉES ; sortie validée (I5). */
+fun generateGuardedVisionJson(
+    provider: SafeVisionPromptProvider,
+    system: String,
+    data: List<Untrusted<String>>,
+    images: List<VisionImage>,
+    nonce: String? = null,
+    apiKey: String? = null,
+): JsonValue {
+    val safe = buildSafeVisionPrompt(system, data, images, nonce)
+    val out = provider.generateVisionSafe(safe, apiKey)
+    return parseJsonOutput(out)
 }
 
-/** Même pipeline que [generateGuardedJson], image déclarée DONNÉE ; sortie validée (I5). */
 fun generateGuardedVisionJson(
     provider: SafeVisionPromptProvider,
     system: String,
@@ -77,8 +102,4 @@ fun generateGuardedVisionJson(
     image: VisionImage,
     nonce: String? = null,
     apiKey: String? = null,
-): JsonValue {
-    val safe = buildSafeVisionPrompt(system, data, image, nonce)
-    val out = provider.generateVisionSafe(safe, apiKey)
-    return parseJsonOutput(out)
-}
+): JsonValue = generateGuardedVisionJson(provider, system, data, listOf(image), nonce, apiKey)

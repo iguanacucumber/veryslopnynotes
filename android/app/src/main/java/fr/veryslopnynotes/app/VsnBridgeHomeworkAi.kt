@@ -438,39 +438,51 @@ internal fun VsnBridge.solveHomeworkPhoto(p: JSONObject, epoch: Long, requestId:
     val context = aiContextFor(assignment, AiContextEntry.PHOTO, week, epoch)
     emitProgress(requestId, "context", context.sources.size, context.sources.sumOf { it.text.length })
     emitProgress(requestId, "photo")
-    return when (val shot = awaitPhoto(bounded(p.string("source"), 16).ifEmpty { "camera" })) {
+    val source = bounded(p.string("source"), 16).ifEmpty { "camera" }
+    // La galerie peut rendre plusieurs pages du même énoncé ; l'appareil photo
+    // reste une capture à la fois.
+    val maxPhotos = if (source == "gallery") VisionImage.MAX_IMAGES else 1
+    return when (val shot = awaitPhotos(source, maxPhotos)) {
         is PhotoCapture.Result.Cancelled -> JSONObject().put("ok", false).put("cancelled", true)
             .withAiContext(context)
         is PhotoCapture.Result.Error -> JSONObject().put("ok", false).put("message", shot.message)
             .withAiContext(context)
         is PhotoCapture.Result.Ok -> {
-            val bytes = try {
-                PhotoPrep.prepare(shot.file)
-            } finally {
-                photos.discard(shot.file)
-            }
-            if (bytes == null) {
-                return JSONObject().put("ok", false)
-                    .put("message", "Photo illisible ou trop lourde : reprends-la.")
-                    .withAiContext(context)
-            }
-            try {
-                emitProgress(requestId, "model")
-                val outcome = HomeworkAi.generateHomeworkFromPhoto(
-                    provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
-                    question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment),
-                    sources = context.sources.map { it.toHomeworkSource() },
-                    image = VisionImage(
+            val images = mutableListOf<VisionImage>()
+            for ((index, file) in shot.files.withIndex()) {
+                val bytes = try {
+                    PhotoPrep.prepare(file)
+                } finally {
+                    photos.discard(file)
+                }
+                if (bytes == null) {
+                    // Les fichiers restants du lot ne doivent pas survivre.
+                    shot.files.drop(index + 1).forEach { photos.discard(it) }
+                    return JSONObject().put("ok", false)
+                        .put("message", "Photo illisible ou trop lourde : reprends-la.")
+                        .withAiContext(context)
+                }
+                images.add(
+                    VisionImage(
                         mime = "image/jpeg",
                         base64 = Base64.encodeToString(bytes, Base64.NO_WRAP),
                     ),
+                )
+            }
+            try {
+                emitProgress(requestId, "model")
+                val outcome = HomeworkAi.generateHomeworkFromPhotos(
+                    provider = OpenRouterLlm(timeoutMs = AWAIT_LLM_MS),
+                    question = fr.veryslopnynotes.data.HomeworkRepository.questionFor(assignment),
+                    sources = context.sources.map { it.toHomeworkSource() },
+                    images = images,
                     apiKey = apiKey,
                     onPhase = { phase -> if (phase == "verify") emitProgress(requestId, "verify") },
                 )
                 emitProgress(requestId, "done")
                 when (outcome) {
                     is HomeworkOutcome.Answer ->
-                        homeworkAnswerJson(outcome).withAiContext(context)
+                        homeworkAnswerJson(outcome).put("photos", images.size).withAiContext(context)
                     // Le refus photo nomme les documents absents comme les
                     // autres chemins ; « Procéder quand même » relance en
                     // texte avec la photo déjà lue dans le fil.
@@ -480,7 +492,7 @@ internal fun VsnBridge.solveHomeworkPhoto(p: JSONObject, epoch: Long, requestId:
                             context,
                             missing = missingDocumentsFor(assignment),
                             allowProceed = true,
-                        )
+                        ).put("photos", images.size)
                 }
             } catch (e: SecretDetectedException) {
                 JSONObject().put("ok", false).put("message", secretRefusalMessage(e.kind))

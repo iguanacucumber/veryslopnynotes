@@ -157,12 +157,13 @@ describe("aide devoirs — pont et panneau (#629)", () => {
     expect(bridge).toContain("AiProceed.intro(it)");
   });
 
-  test("le chat rend la réponse, les étapes, les sources et les CTA contextuels", () => {
+  test("le chat rend la réponse, les sources et les CTA contextuels", () => {
     const tasks = source("features/tasks/TasksScreen.tsx");
     const chat = source("features/tasks/HomeworkChat.tsx");
     expect(chat).toContain("<MarkdownBody text={turn.answer} />");
-    expect(chat).toContain("turn.steps.map");
-    expect(chat).toContain('className="hw-steps"');
+    // Les étapes restent une donnée du pont, jamais un bloc « Démarche » à l'écran.
+    expect(chat).not.toContain("turn.steps.map");
+    expect(chat).not.toContain("hw-steps");
     expect(chat).toContain("turn.sources.map");
     expect(chat).toContain('className="hw-sources"');
     expect(chat).toContain('action === "add_course"');

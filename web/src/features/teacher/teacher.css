@@ -304,10 +304,11 @@
   overflow-wrap: anywhere;
 }
 
-.teacher-bubble:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 3px;
-  border-radius: 8px;
+/* Le focus est déplacé par programme vers la dernière réponse (lecteur
+   d'écran). Le conteneur reste hors du parcours Tab : aucun cadre de focus
+   ne doit encadrer toute la réponse. */
+.teacher-bubble:focus {
+  outline: none;
 }
 
 .teacher-bubble--student {
@@ -444,21 +445,6 @@
   font-size: 12px;
   line-height: 17px;
   font-weight: 650;
-}
-
-.teacher-sent summary {
-  display: flex;
-  align-items: center;
-  min-height: 32px;
-  cursor: pointer;
-  color: var(--secondary);
-  font-size: 12px;
-  line-height: 17px;
-  font-weight: 600;
-}
-
-.teacher-sent p {
-  margin: 0 0 6px;
 }
 
 .teacher-bubble__actions {
@@ -603,26 +589,4 @@
   width: 18px;
   height: 18px;
   flex: 0 0 auto;
-}
-
-.exercise-help__privacy {
-  padding-top: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
-}
-
-.exercise-help__privacy summary {
-  color: var(--secondary);
-  font-size: 13px;
-  line-height: 18px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.exercise-help__context {
-  margin: 6px 0 0;
-  padding-left: 18px;
-}
-
-.exercise-help__context li + li {
-  margin-top: 2px;
 }
