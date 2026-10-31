@@ -1,17 +1,16 @@
 # BUILD.md — comment le gate est construit et pourquoi
 
-Le détail du `Makefile` et de `agents/runtime/check.ts` est ici pour que
-`AGENTS.md` et le `Makefile` restent courts à lire.
+Détail du `Makefile` et de `check.ts` ; `AGENTS.md` reste court.
 
 ## `make check` — le gate de merge (9 étapes)
 
-Toutes les étapes tournent en parallèle via `agents/runtime/check.ts`. Le
-seul goulot est le CPU (16 cœurs). Chaque étape est une cible `make` invoquée
-`make -s` : une recette écrite une fois, jamais dupliquée dans le harnais.
+Toutes les étapes tournent en parallèle (`check.ts`) ; seul goulot : le CPU
+(16 cœurs). Chaque étape est une cible `make -s` : une recette, jamais
+dupliquée.
 
 | Étape | Ce qu'elle vérifie |
 |---|---|
-| `android-compile` | Compilation Kotlin RÉELLE + Android Lint (`:app:lintDebug`) dans la même invocation Gradle. Seul filet qui résout les symboles (import manquant, surcharge ambiguë). |
+| `android-compile` | Compilation Kotlin RÉELLE + Android Lint (`:app:lintDebug`), même invocation Gradle. Seul filet qui résout les symboles. |
 | `unit` | `bun test tests/unit --parallel`, filtré par `agents/runtime/test-output.ts`. |
 | `typecheck` | `tsc --noEmit` (racine). |
 | `architecture` | Construit le bundle Vite une fois, puis scans d'architecture + tests `tests/architecture`. |
@@ -28,15 +27,23 @@ erreur, Expected/Received, PREMIER hunk, 10 échecs max ; log complet dans
 `gate-logs/<cible>.log`. Code de sortie forwardé (jamais de vert fabriqué).
 
 `android-compile` journalise Gradle dans `gate-logs/android-compile.log` ;
-`kotlin-errors.ts` n'affiche que les `e:` (relatifs, dédoublonnés, 10 max).
+`kotlin-errors.ts` n'affiche que les `e:` (10 max).
 
 ### Pourquoi le gate ne peut pas être allégé
 
-- **Android Lint et la compilation Kotlin** (#627) : les miroirs TS ne voient pas une surcharge ambiguë ou un import manquant côté Kotlin (piège réel : `MAX_LABEL_CHARS` non qualifié). Sans `kotlinc` + `java`, toute la parité TS ↔ Kotlin saute → faux vert. `REQUIRE_KOTLIN_TOOLCHAIN=1` est donc posé par le gate.
+- **Android Lint et la compilation Kotlin** (#627) : les miroirs TS ne voient pas une surcharge ambiguë ou un import manquant côté Kotlin. Sans `kotlinc` + `java`, toute la parité TS ↔ Kotlin saute → faux vert. `REQUIRE_KOTLIN_TOOLCHAIN=1` est donc posé par le gate.
 - **`ALLOW_SKIP_ANDROID=1`** : opt-in EXPLICITE pour assumer le skip de la compile Kotlin hors merge (poste sans outillage). Le skip reste bruyant.
 - **`MAKEFLAGS` / `make -i`** (#523) : ferait ignorer l'échec d'une recette et verdir un gate rouge. Le harnais lance les make enfants sans `MAKEFLAGS`, et `check` est une `$(error)` de MAKE (ignorée par `-i`) qui refuse tout code ≠ 0.
 - **Gate en deux phases** : `check-run` écrit le code de sortie, `check` refuse tout code ≠ 0 par `$(error)`. Sans statut, le gate n'a pas tourné = échec.
-- **CI** : rejoue exactement le même gate (`make check`), cache dépendances + jar de parité, jamais le build cache Gradle.
+- **CI** : rejoue exactement le même gate (`make check`), cache dépendances + port de parité, jamais le build cache Gradle.
+
+### Port de parité : un jar à froid, des morceaux à chaud
+
+L'union (production + pilotes) est compilée d'un bloc à froid, puis découpée
+par `SourceFile` en `port.jar` et `drivers.jar`. Pilotes modifiés seulement :
+overlay recompilé contre `port.jar` seul (une déclaration supprimée ne renaît
+pas du cache), lancé en `overlay.jar:drivers.jar:port.jar`. La CI indexe sur
+l'empreinte des **sources de production**.
 
 ### `make check-fast`
 
