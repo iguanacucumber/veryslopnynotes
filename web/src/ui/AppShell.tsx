@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "./AppContext";
-import { SkipLink } from "./components";
-import { IconBack, IconBell, IconCalendar, IconGrades, IconHome, IconRefresh, IconSparkles, IconTasks, IconUser } from "./icons";
+import { bridge } from "../bridge/client";
+import { Avatar } from "./components";
+import { isSafePhotoDataUrl, parseProfilePayload, type Profile } from "../features/profile/model";
+import {
+  IconBack,
+  IconCalendar,
+  IconGrades,
+  IconHome,
+  IconRefresh,
+  IconSettings,
+  IconSparkles,
+  IconTasks,
+  IconUser,
+} from "./icons";
 import { useViewNavigate } from "./viewTransition";
 
 interface RouteMeta {
@@ -42,15 +53,40 @@ export function Shell() {
   const location = useLocation();
   const navigate = useNavigate();
   const go = useViewNavigate();
-  const { refresh, notify, authLost, sessionClosed } = useApp();
+  const { refresh, refreshTick, notify, authLost, sessionClosed } = useApp();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [photo, setPhoto] = useState<string | null>(null);
   const [spinning, setSpinning] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const titleFocusedOnce = useRef(false);
+  const isHome = location.pathname === "/";
   const meta = ROUTE_META[location.pathname] ?? { title: "VerySlopyNyNotes" };
-  const activeTab = TABS.findIndex((tab) => tab.to === location.pathname);
 
-  // Le focus passe au titre pour qu'un lecteur d'écran annonce la page. Pas au
-  // PREMIER rendu : le lien d'évitement doit rester le premier arrêt du Tab.
+  // Le focus passe au titre pour qu'un lecteur d'écran annonce la page, sauf
+  // au premier rendu.
+  useEffect(() => {
+    let alive = true;
+    void bridge
+      .me()
+      .then((result) => {
+        if (alive) setProfile(parseProfilePayload(result.payload));
+      })
+      .catch(() => {
+        if (alive) setProfile(null);
+      });
+    void bridge
+      .photo()
+      .then((result) => {
+        if (alive) setPhoto(isSafePhotoDataUrl(result.dataUrl) ? result.dataUrl : null);
+      })
+      .catch(() => {
+        if (alive) setPhoto(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [refreshTick]);
+
   useEffect(() => {
     document.title = `${meta.title} · VerySlopyNyNotes`;
     if (!titleFocusedOnce.current) {
@@ -72,9 +108,23 @@ export function Shell() {
 
   return (
     <div className="shell">
-      <SkipLink />
-      <header className="topbar">
-        {meta.back ? (
+      <header className={isHome ? "topbar topbar--home" : "topbar"}>
+        {isHome ? (
+          <button
+            type="button"
+            className="topbar__identity"
+            aria-label="Ouvrir le profil"
+            onClick={() => go("/profile")}
+          >
+            <Avatar name={profile?.displayName ?? "?"} size={40} src={photo} />
+            <span className="topbar__identity-text">
+              <span className="topbar__identity-name">{profile?.displayName ?? "Mon relevé"}</span>
+              <span className="topbar__identity-sub">
+                {profile ? [profile.classLabel, profile.periodName].filter(Boolean).join(" · ") : "VerySlopyNyNotes"}
+              </span>
+            </span>
+          </button>
+        ) : meta.back ? (
           <button
             type="button"
             className="icon-btn"
@@ -90,8 +140,8 @@ export function Shell() {
         <h1
           ref={titleRef}
           tabIndex={-1}
-          className="topbar__title"
-          style={{ margin: 0 }}
+          className={isHome ? "sr-only" : "topbar__title"}
+          style={isHome ? undefined : { margin: 0 }}
         >
           {meta.title}
         </h1>
@@ -108,12 +158,16 @@ export function Shell() {
           >
             <IconRefresh />
           </button>
-          {location.pathname !== "/alerts" ? (
-            <button type="button" className="icon-btn" aria-label="Alertes" onClick={() => go("/alerts")}>
-              <IconBell />
+          {isHome ? (
+            <button
+              type="button"
+              className="icon-btn icon-btn--accent"
+              aria-label="Réglages"
+              onClick={() => go("/settings")}
+            >
+              <IconSettings />
             </button>
-          ) : null}
-          {location.pathname !== "/profile" ? (
+          ) : location.pathname !== "/profile" ? (
             <button
               type="button"
               className="icon-btn icon-btn--accent"
@@ -131,13 +185,6 @@ export function Shell() {
       </main>
 
       <nav className="tabbar" aria-label="Navigation principale">
-        {activeTab >= 0 ? (
-          <span
-            className="tabbar__pill"
-            aria-hidden="true"
-            style={{ "--tab-index": activeTab } as CSSProperties}
-          />
-        ) : null}
         {TABS.map(({ to, label, Icon }) => (
           <NavLink
             key={to}

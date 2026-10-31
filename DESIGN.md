@@ -1,12 +1,14 @@
 ---
 name: VerySlopyNyNotes
-description: Relevé scolaire mobile, calme et lisible, sur papier froid.
+description: Relevé scolaire vivant, coloré et dense, inspiré de Papillon.
 colors:
   brand: "#29947a"
   brand-light: "#48a98b"
   brand-deep: "#1c6653"
   brand-pale: "#edf8f5"
   brand-solid: "#1c6653"
+  on-brand: "#ffffff"
+  on-brand-soft: "rgba(255, 255, 255, 0.88)"
   ink: "#1f292e"
   ink-soft: "#6f797d"
   muted: "#5f696d"
@@ -17,7 +19,6 @@ colors:
   rule-strong: "#8a9497"
   danger: "#dc1400"
   danger-ink: "#c11200"
-  on-brand: "#ffffff"
   on-danger: "#ffffff"
 typography:
   display:
@@ -109,9 +110,12 @@ rounded:
   xs: "8px"
   sm: "12px"
   md: "16px"
+  lesson: "18px"
   lg: "20px"
   xl: "24px"
+  dock: "26px"
   "2xl": "28px"
+  pill: "999px"
 spacing:
   xxs: "4px"
   xs: "6px"
@@ -136,8 +140,8 @@ components:
   card:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.sm}"
-    padding: "18px"
+    rounded: "{rounded.xl}"
+    padding: "20px"
   field:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
@@ -147,74 +151,77 @@ components:
   chip:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.xs}"
+    rounded: "{rounded.sm}"
     padding: "4px 11px"
     height: "34px"
   topbar:
-    backgroundColor: "{colors.brand-solid}"
-    textColor: "{colors.on-brand}"
-    height: "58px"
+    backgroundColor: "{colors.page}"
+    textColor: "{colors.ink}"
+    height: "62px"
   tabbar:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-    height: "66px"
+    rounded: "{rounded.dock}"
+    height: "56px"
 ---
 
 # Design System: VerySlopyNyNotes
 
 ## Overview
 
-**Creative North Star: « Le Bulletin »**
+**Creative North Star: « Le Relevé vivant »**
 
-L'interface est un relevé scolaire, pas une pile de cartes. Le papier froid tient
-le fond, l'encre porte la hiérarchie, et un filet d'un pixel sépare ce qui doit
-l'être. L'en-tête plein prend la couleur de la palette ; partout ailleurs, la
-couleur ne sert qu'à indexer une matière ou à signaler une alerte.
+L'interface est un relevé scolaire, pas un journal imprimé. Le fond respire la
+couleur de la palette par deux halos fixes ; les cartes sont des surfaces
+opaques très arrondies ; les tuiles d'accès et les cours portent la teinte
+saturée de leur matière. La référence liée est Papillon 8.6.2, installé sur le
+téléphone de l'utilisateur : fond profond, formes généreuses, dock flottant,
+couleur assumée. L'app garde son nom, son contenu et ses 21 palettes.
 
-Le système est volontairement plat : aucune ombre de carte, aucun dégradé
-décoratif, aucun verre, aucun halo. La profondeur vient de l'ordre de lecture et
-des filets, jamais de l'élévation. Les chiffres sont tabulaires pour qu'une
-moyenne se compare d'un coup d'œil, et les actions gardent les mêmes cibles
-tactiles que l'app native.
+La profondeur est réelle mais discrète : une ombre portée basse en thème clair,
+aucune ombre en thème sombre où le contraste suffit. Le mouvement reste court
+et se limite à l'opacité et au `transform`.
 
 **Key Characteristics:**
 
-- Registre calme, dense en information, sans bruit visuel.
-- En-tête `--brand-solid`, contenu sur papier, barre d'onglets plate.
-- Filets de 1 px, rayons de 2 à 6 px, angles francs.
-- Couleur de matière réduite à une marque d'index de 10 à 12 px.
-- Chiffres tabulaires, libellés en petites capitales espacées.
+- Fond ambiant teinté par la palette, deux halos fixes, aucune texture.
+- Cartes de 20 à 24 px de rayon, surfaces opaques, ombre basse en clair.
+- En-tête d'identité à l'accueil : avatar, nom, classe et période.
+- Tuiles d'accès et cartes de cours teintées par matière.
+- Dock flottant à cinq onglets, capsule active, en-tête transparent flouté.
+- Chiffres tabulaires, libellés courts, forte hiérarchie de poids.
 
 ## Colors
 
 La palette par défaut est le vert « slop ». Les 21 palettes remplacent les mêmes
 variables à l'exécution : les rôles ci-dessous ne changent pas, seules les
-teintes changent.
+teintes changent. Le thème sombre est la démonstration la plus proche de
+Papillon ; le clair applique le même langage sur papier froid.
 
 ### Primary
 
-- **Vert registre** (`#1c6653`, `--brand-solid`) : en-tête, boutons pleins,
-  indicateur d'onglet actif, marques d'index. C'est la seule couleur qui peut
-  couvrir une grande surface.
-- **Vert encre** (`#1c6653` en clair) : liens, actions secondaires, titres de
-  section actifs.
-- **Vert pale** (`#edf8f5`) : fonds de sélection discrets, jamais un fond de
-  carte entier.
+- **Vert marque** (`#1c6653`, `--brand-solid`) : boutons pleins, jauge de
+  moyenne, capsule d'onglet actif, avatar.
+- **Vert clair** (`#48a98b`, `--brand-light`) : halo supérieur et teintes douces.
+- **Vert encre** (`#1c6653` en clair, `#a7e3d2` en sombre) : liens, titres
+  actifs, texte sur teinte de matière.
+- **Vert pale** (`#edf8f5`) : capsule active, fonds de sélection.
 
 ### Neutral
 
 - **Encre** (`#1f292e`) : texte principal, titres, chiffres.
-- **Encre douce** (`#6f797d`) : métadonnées, dates, libellés secondaires.
-- **Papier** (`#f6fbfa` mélangé à la surface) : fond de page.
-- **Surface** (`#ffffff`) : cartes, champs, barre d'onglets.
-- **Filet** (`#d6dcdd`) : séparateurs internes.
-- **Filet fort** (`#8a9497`) : bord de barre d'onglets, séparateurs de sections.
+- **Encre douce** (`rgba(31, 41, 46, 0.72)`) : métadonnées, dates, libellés.
+- **Papier** (`#f6fbfa`) : fond de page sous les halos.
+- **Surface** (`#ffffff` en clair, `#121212` en sombre) : cartes, champs, dock.
+- **Filet** (`rgba(31, 41, 46, 0.18)`) : bord du dock, séparateurs.
+- **Filet fort** (`rgba(31, 41, 46, 0.44)`) : séparateurs de sections.
 
 ### Named Rules
 
-**La règle de l'index.** La couleur d'une matière ne remplit jamais une carte :
-elle tient dans une marque de 10 à 12 px, un filet ou une barre de progression.
-Une carte teintée entière est un retour au décor, pas une information.
+**La règle de la teinte utile.** La couleur d'une matière peut remplir une tuile
+d'accès, une carte de cours ou une ligne de note, à condition que le texte
+posé dessus soit dérivé de la même teinte et garde un contraste AA. Une teinte
+décorative sans rôle est une faute.
 
 **La règle du signal.** Le rouge est réservé au danger réel : alerte, absence
 injustifiée, action destructive. Une simple absence de données reste neutre.
@@ -226,21 +233,21 @@ injustifiée, action destructive. Une simple absence de données reste neutre.
 **Mono Font:** ui-monospace (avec `SFMono-Regular`, Menlo, Consolas)
 
 **Character:** Une seule famille, très contrastée par le poids et l'échelle.
-Figtree en 800 pour les titres et les chiffres, en 400 pour le corps. Pas de
-seconde police décorative : la hiérarchie vient du corps et de l'espace. Le
-monospace ne sert qu'au code et aux extraits techniques.
+Figtree en 800 pour les titres et les grands chiffres, en 400 pour le corps.
+La hiérarchie vient du corps, de l'espace et de la couleur, jamais d'une
+seconde police.
 
 ### Hierarchy
 
-- **Display** (800, 40 px / 42 px, `-0.03em`) : salutation du relevé, moyenne
-  principale. Chiffres tabulaires obligatoires.
+- **Display** (800, 40 px / 42 px, `-0.03em`) : moyenne générale et grands
+  chiffres. Chiffres tabulaires obligatoires.
+- **Display S** (800, 26 px / 29 px, `-0.02em`) : titre de page, identité.
 - **Headline** (750, 20 px / 25 px, `-0.015em`) : titres de section.
 - **Title** (700, 17 px / 22 px) : titre de carte, de devoir, de discussion.
 - **Body** (400, 15 px / 22 px) : texte courant, consignes, descriptions.
 - **Caption** (600, 12 px / 16 px, `0.08em`, capitales) : surtitres de registre,
   dates, unités, états.
-- **Micro** (600, 10 px / 14 px, `0.08em`) : libellés d'onglets, mentions
-  légales.
+- **Micro** (600, 10 px / 14 px, `0.08em`) : libellés du dock, mentions légales.
 
 ### Named Rules
 
@@ -251,55 +258,79 @@ monospace ne sert qu'au code et aux extraits techniques.
 
 Largeur de contenu maximale de 760 px, gouttière de 18 px sur mobile, cible de
 référence 412 × 892 px et minimum testé 360 px. Le contenu respire par piles de
-12 px ; les sections sont séparées par 30 px et un filet.
+18 px sur l'accueil, 12 px ailleurs ; les sections sont séparées par 26 px sans
+filet.
 
 La coquille occupe la hauteur utile publiée par le JS (`--app-height`), jamais
-une hauteur de viewport figée. La barre d'onglets est fixe, pleine largeur, et
-le `main` réserve sa hauteur plus 32 px en bas. Quand le clavier s'ouvre, la
-barre et les éléments fixes remontent de `--keyboard-bottom`.
+une hauteur de viewport figée. Le dock est fixe, flottant à 12 px des bords, et
+le `main` réserve sa hauteur plus 46 px en bas. Quand le clavier s'ouvre, le
+dock et les éléments fixes remontent de `--keyboard-bottom`.
 
-Le relevé d'accueil est un masthead : filet supérieur, date, salutation, puis
-deux colonnes tabulaires (moyenne, devoirs). Les écrans de liste privilégient
-des lignes de registre séparées par des filets aux cartes empilées.
+L'accueil suit l'ordre de Papillon : identité dans l'en-tête (avatar, nom,
+classe), grille 2 × 2 de raccourcis teintés, puis cartes de cours, moyenne et
+devoirs. L'en-tête porte l'engrenage des réglages ; le profil s'ouvre par
+l'identité. Les écrans de liste restent des cartes séparées, jamais un registre
+à filets. Les réglages commencent par l'identité centrée et quatre tuiles
+teintées qui ancrent les sections.
 
 ## Elevation & Depth
 
-Le système est **plat**. Aucune ombre de carte, aucun `backdrop-filter`, aucun
-halo. La hiérarchie vient de l'ordre, du contraste et des filets.
+En thème clair, la profondeur vient d'une ombre basse et large
+(`--shadow-card`), jamais d'un filet noir. En thème sombre, les ombres sont
+désactivées : le contraste des surfaces suffit.
 
-Les seules couches sont fonctionnelles : le dialogue modal (bordure, fond
-opaque, voile `--overlay`) et la barre d'onglets fixe. Les états de survol
-changent la bordure ou le fond, jamais l'élévation. Le mouvement est court
-(180 ms, `--ease`) et se limite à l'opacité et au `transform`, avec une garde
-unique `prefers-reduced-motion` dans `tokens.css`.
+Le dock porte `--shadow-dock` en clair, un fond translucide flouté dans les deux
+thèmes, et un filet de 1 px. Les halos de fond sont fixes et purement
+décoratifs : ils n'interceptent aucun clic et ne portent aucune information.
+
+Le mouvement est court (180 ms, `--ease`) et se limite à l'opacité et au
+`transform`, avec une garde unique `prefers-reduced-motion` dans `tokens.css`.
 
 ## Shapes
 
-Rayons de 3 px (marques de matière, aperçus) à 28 px (`--radius-2xl`), avec un
-usage courant de 8 à 16 px. Les boutons, champs, cartes et dialogues sont
-souplement arrondis, jamais des pastilles. Interdits : `border-radius: 999px`,
-les pilules, les bords colorés épais de 3 px sur une carte arrondie.
+Rayons de 3 px (marques de matière) à 28 px (`--radius-2xl`), avec un usage
+courant de 16 à 24 px. Les cartes et tuiles sont généreusement arrondies ; le
+dock est un rectangle de 26 px ; les capsules d'état, avatars et l'onglet actif
+sont des pastilles `999px`. La barre de 4 px à gauche d'une carte de cours est
+la seule exception au refus des bords colorés épais : elle identifie la matière
+dans l'emploi du temps et sur la bannière cours en cours / suivant.
 
-Le filet est l'unité de forme : 1 px pour séparer, 3 px pour l'indicateur
-d'onglet actif, 2 px pour le soulignement d'un onglet de section. Les marques de
-matière sont des carrés de 10 à 12 px, pas des ronds.
+Le filet reste l'unité de séparation interne, mais il ne structure plus les
+pages : les cartes se lisent par leur surface et leur teinte.
 
 ## Components
 
-- **Topbar** : aplat `--brand-solid`, titre en 25 px / 800, icônes en
-  `--on-brand`, filet bas. Pas de flou, pas d'ombre.
-- **Tabbar** : fond `--surface`, filet haut `--rule-strong`, cinq onglets de
-  48 px minimum, indicateur glissant de 3 px en `--brand-solid`.
-- **Cartes** : fond `--panel`, bordure 1 px `--rule`, rayon 4 px. Une carte
-  cliquable change de bordure et de fond au survol.
-- **Boutons** : 48 px de haut, rayon 4 px, texte 700. Le bouton plein est
-  `--brand-solid` / `--on-brand` ; le bouton fantôme est une surface avec un
-  filet. Aucune ombre.
+- **Topbar** : fond de page translucide, flou de 16 px, titre en 24 px / 800,
+  actions rondes de 42 px, sans filet sauf sur l'accueil. Aucune ombre. À
+  l'accueil, l'identité remplace le titre : avatar de 40 px, nom 16 px / 750,
+  classe et période en 12 px.
+- **Dock** : cinq onglets, fond surface translucide flouté, rayon 26 px, filet,
+  ombre basse en clair. L'onglet actif porte une capsule `--brand-pale` de 48 px
+  de large et une icône `--brand-deep`.
+- **Tuiles d'accès** : grille 2 × 2, rayon 24 px, fond surface, icône de 22 px
+  teintée par la matière, libellé 14 px / 750, sous-titre 12 px.
+- **Cartes** : fond `--panel`, rayon 24 px, padding 16 à 20 px, ombre basse en
+  clair. Une carte cliquable change de fond au survol et se réduit de 1 % au
+  toucher. L'en-tête de widget porte une icône, un titre 17 px / 750, une
+  pastille de compteur et « Afficher plus » en capsule.
+- **Cartes de cours** : l'heure est une colonne fixe de 48 px hors de la carte ;
+  la carte a un rayon 16 px, un fond et une encre dérivés de la matière, et une
+  barre de 4 px à gauche. Dans l'emploi du temps, la bannière cours en cours /
+  suivant reprend le même fond teinté.
+- **Cartes de devoir** : avatar emoji de 34 px teinté par matière, nom de
+  matière coloré, titre 17 px, échéance en pastille, puis actions. La
+  complétion est une capsule « Marquer fait » / « Terminé » dans le pied.
+- **Dernières notes** : cartes horizontales teintées de 178 px, emoji de
+  matière, valeur dans une pastille dérivée de l'encre.
+- **Réglages** : identité centrée, puis quatre tuiles 2 × 2 teintées (Apparence,
+  Matières, Assistant, Appareil) qui font défiler aux sections ancrées.
+- **Boutons** : 48 px de haut, rayon 12 px, texte 700. Le bouton plein est
+  `--brand-solid` / `--on-brand` ; le bouton fantôme est une surface avec filet.
 - **Champs** : 48 px, fond surface, bordure `--rule`, focus en anneau d'encre.
-- **Puces** : rayon 2 px, hauteur 34 px (48 px si cliquables), bordure 1 px.
-  L'état actif est un aplat de marque, jamais une teinte pastel.
-- **Lignes de liste** : 56 px minimum, séparées par un filet, sans carte
-  individuelle.
+- **Lignes de liste** : cartes individuelles de 60 px, rayon 20 px, ombre basse
+  en clair, jamais un registre à filets.
+- **Avatars** : cercle plein `--brand-solid`, initiales en `--on-brand` ; une
+  photo remplace le fond.
 - **Dialogues** : largeur maximale 440 px, bordure `--rule-strong`, fond opaque,
   actions alignées à droite.
 
@@ -307,18 +338,20 @@ matière sont des carrés de 10 à 12 px, pas des ronds.
 
 **Do**
 
-- Garder l'en-tête plein et la barre d'onglets plate : ce sont les deux repères
+- Garder le dock flottant et l'en-tête transparent : ce sont les deux repères
   stables de l'app.
-- Utiliser un filet de 1 px avant une ombre, un rayon avant une pilule.
-- Poser la couleur de matière en marque d'index, en filet ou en barre.
-- Aligner les chiffres sur une grille tabulaire et les laisser grands.
+- Teinter les tuiles et les cours par matière, avec une encre dérivée de la
+  même teinte.
+- Laisser les chiffres grands et tabulaires.
 - Vérifier les contrastes dans les 21 palettes, en clair comme en sombre.
+- Désactiver les ombres en thème sombre plutôt que de les éclaircir.
 
 **Don't**
 
-- Ajouter un dégradé décoratif, un halo, un verre dépoli ou une ombre de carte.
-- Colorer une carte entière avec la couleur d'une matière.
-- Utiliser `border-radius: 999px` ou une pastille pour un statut.
-- Mettre un bord coloré épais sur une carte arrondie.
+- Remettre un filet noir épais autour des cartes ou un registre à lignes nues.
+- Colorer une carte sans dériver l'encre de la même teinte.
+- Ajouter une barre latérale colorée ailleurs que sur les cartes de cours.
+- Ajouter une texture, un motif ou une image de fond.
+- Utiliser une ombre blanche ou un halo clair en thème sombre.
 - Dupliquer une information dans un badge décoratif : le badge doit porter un
   état, pas répéter le titre.

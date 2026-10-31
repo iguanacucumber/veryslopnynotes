@@ -7,20 +7,6 @@ export function Page({ children, className = "" }: { children: ReactNode; classN
   return <div className={`stack ${className}`}>{children}</div>;
 }
 
-/** Un BOUTON, pas un `href="#main"` : le HashRouter possède déjà le hash de
- *  l'URL, un tel lien changerait de route. Masqué tant qu'il n'a pas le focus. */
-export function SkipLink() {
-  return (
-    <button
-      type="button"
-      className="skip-link"
-      onClick={() => document.getElementById("main")?.focus()}
-    >
-      Aller au contenu
-    </button>
-  );
-}
-
 export function PageHeading({
   title,
   eyebrow,
@@ -130,16 +116,18 @@ export function ListRow({
 }
 
 export function Section({
+  id,
   title,
   action,
   children,
 }: {
+  id?: string;
   title: string;
   action?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section>
+    <section id={id}>
       <div className="section-title">
         <h2 className="section-title__heading">{title}</h2>
         {action}
@@ -305,13 +293,13 @@ export function Avatar({ name, size = 40, src }: { name: string; size?: number; 
       style={{
         width: size,
         height: size,
-        borderRadius: "var(--radius-sm)",
+        borderRadius: 999,
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        border: src ? 0 : "1px solid var(--rule)",
-        background: src ? "transparent" : "var(--panel)",
-        color: "var(--ink-soft)",
+        border: 0,
+        background: src ? "transparent" : "var(--brand-solid)",
+        color: src ? "var(--ink-soft)" : "var(--on-brand)",
         fontWeight: 700,
         letterSpacing: "0.02em",
         fontSize: size * 0.32,

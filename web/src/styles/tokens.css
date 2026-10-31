@@ -38,12 +38,16 @@
   --radius-lg: 20px;
   --radius-xl: 24px;
   --radius-2xl: 28px;
+  --shadow-card:
+    0 18px 36px -28px color-mix(in srgb, var(--ink) 45%, transparent),
+    0 2px 6px -5px color-mix(in srgb, var(--ink) 30%, transparent);
+  --shadow-dock: 0 20px 40px -24px color-mix(in srgb, var(--ink) 55%, transparent);
   --tap: 48px;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --duration: 180ms;
   --gutter: 18px;
-  --tabbar-h: 66px;
+  --tabbar-h: 56px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   /* #399 : la hauteur utile est PUBLIÉE par le JS (viewport visuel), pas
@@ -75,6 +79,9 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
+  /* Sur fond noir, la profondeur vient du contraste, pas d'une ombre claire. */
+  --shadow-card: none;
+  --shadow-dock: none;
   --brand: #48a98b;
   --brand-light: #6cc4a8;
   --brand-deep: #a7e3d2;

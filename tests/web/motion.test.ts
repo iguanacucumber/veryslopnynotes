@@ -140,20 +140,25 @@ describe("web mouvement", () => {
     expect(rivals.filter((rival) => !rival.file.endsWith("styles/tokens.css"))).toEqual([]);
   });
 
-  test("barre d'onglets : pleine largeur, filet supérieur et indicateur de 3 px", () => {
+  test("barre d'onglets : dock flottant, cinq onglets, capsule active", () => {
     const css = readFileSync(join(ROOT, "web/src/styles/app.css"), "utf8");
-    expect(css).toMatch(/\.tabbar\s*\{[^}]*position:\s*fixed/);
-    expect(css).toMatch(/\.tabbar\s*\{[^}]*left:\s*0[^}]*right:\s*0/);
-    expect(css).toMatch(/\.tabbar\s*\{[^}]*border-top:\s*1px solid var\(--rule-strong\)/);
-    expect(css).toMatch(/\.tabbar__pill\s*\{[^}]*height:\s*3px/);
+    const tabbar = css.match(/\.tabbar\s*\{([^}]*)\}/)?.[1] ?? "";
+    expect(tabbar).toContain("position: fixed");
+    expect(tabbar).toContain("left: 12px");
+    expect(tabbar).toContain("right: 12px");
+    expect(tabbar).toContain("border-radius: 26px");
+    expect(tabbar).toContain("backdrop-filter");
+    expect(css).toMatch(/\.tab\[aria-current="page"\] svg\s*\{[^}]*border-radius:\s*999px/);
+    expect(css).toMatch(/\.tab\[aria-current="page"\] svg\s*\{[^}]*background:\s*var\(--brand-pale\)/);
   });
 
-  test("en-tête : aplat de marque, aucun flou ni ombre", () => {
+  test("en-tête : transparent sur le fond ambiant, actions rondes", () => {
     const css = readFileSync(join(ROOT, "web/src/styles/app.css"), "utf8");
-    expect(css).toMatch(/\.topbar\s*\{[^}]*background:\s*var\(--brand-solid\)/);
     const topbar = css.match(/\.topbar\s*\{([^}]*)\}/)?.[1] ?? "";
-    expect(topbar).not.toContain("box-shadow");
-    expect(topbar).not.toContain("backdrop-filter");
+    expect(topbar).toContain("backdrop-filter");
+    expect(topbar).toContain("background: color-mix");
+    expect(css).toMatch(/\.topbar \.icon-btn\s*\{[^}]*border-radius:\s*50%/);
+    expect(css).not.toContain(".tabbar__pill");
   });
 
   test("politique : les animations restent sur transform/opacité", () => {

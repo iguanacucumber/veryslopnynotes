@@ -16,18 +16,17 @@
   align-items: center;
   gap: 12px;
   padding: 13px 15px;
-  border: 1px solid var(--rule);
-  border-top: 1px solid var(--brand-solid);
-  border-radius: var(--radius-sm);
-  background: var(--panel);
+  border: 0;
+  border-left: 4px solid var(--brand-solid); /* impeccable-disable-line side-tab -- barre de matière Papillon */
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
-.tt-banner__mark {
-  flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+.tt-banner__label,
+.tt-banner__meta,
+.tt-banner__when span {
+  color: inherit;
+  opacity: 0.78;
 }
 
 .tt-banner__body {
@@ -38,7 +37,6 @@
 }
 
 .tt-banner__label {
-  color: var(--muted);
   font-size: 10px;
   line-height: 14px;
   font-weight: 700;
@@ -60,7 +58,6 @@
 }
 
 .tt-banner__meta {
-  color: var(--muted);
   font-size: 12px;
   line-height: 17px;
   overflow: hidden;
@@ -82,7 +79,6 @@
 }
 
 .tt-banner__when span {
-  color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -92,10 +88,11 @@
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 0;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
+  border: 0;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--panel);
+  box-shadow: var(--shadow-card);
 }
 
 .tt-day-chip {
@@ -121,6 +118,11 @@
 
 .tt-day-chip--empty {
   color: var(--muted);
+}
+
+/* Aujourd'hui sans cours : la case reste pleine, l'encre doit rester lisible. */
+.tt-day-chip--today.tt-day-chip--empty {
+  color: var(--on-brand);
 }
 
 .tt-day-chip__day {
@@ -166,7 +168,7 @@
   gap: 8px;
   margin: 22px 0 0;
   padding-bottom: 6px;
-  border-bottom: 2px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
   min-width: 0;
 }
 
@@ -205,6 +207,7 @@
 .tt-day__lessons {
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 
 /* Repère « maintenant » : un filet, pas une pastille. */
@@ -237,8 +240,8 @@
 
 .tt-lesson {
   display: grid;
-  grid-template-columns: 50px minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 10px;
   align-items: stretch;
 }
 
@@ -247,7 +250,7 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
-  padding-top: 12px;
+  padding-top: 10px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -257,35 +260,25 @@
   font-weight: 750;
 }
 
+.tt-time strong {
+  color: var(--lesson-ink, var(--ink));
+}
+
 .tt-time span {
-  color: var(--muted);
+  color: var(--lesson-ink, var(--muted));
   font-size: 12px;
   line-height: 16px;
+  opacity: 0.9;
 }
 
 .tt-card {
   position: relative;
   min-width: 0;
-  padding: 10px 0 11px 14px;
-  border-bottom: 1px solid var(--rule);
-  transition: background var(--duration) var(--ease);
-}
-
-.tt-lesson--current .tt-card {
-  background: var(--panel-tint);
-}
-
-.tt-lesson--next .tt-card {
-  border-bottom-color: var(--rule-strong);
-}
-
-.tt-card__mark {
-  position: absolute;
-  left: 0;
-  top: 15px;
-  width: 7px;
-  height: 7px;
-  border-radius: 3px;
+  padding: 9px 12px 10px 13px;
+  border-left: 4px solid var(--lesson-bar, var(--rule)); /* impeccable-disable-line side-tab -- barre de matière Papillon */
+  border-radius: var(--radius-md);
+  background: var(--lesson-bg, var(--panel));
+  color: var(--lesson-ink, var(--ink));
 }
 
 .tt-card__head {
@@ -299,6 +292,7 @@
   flex: 1;
   min-width: 0;
   margin: 0;
+  color: var(--lesson-ink, var(--ink));
   font-size: 15px;
   line-height: 21px;
   font-weight: 750;
@@ -306,16 +300,12 @@
   overflow-wrap: anywhere;
 }
 
-.tt-lesson--current .tt-card__subject {
-  color: var(--brand-deep);
-}
-
 .tt-pill {
   flex: 0 0 auto;
-  padding: 1px 6px;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-xs);
-  color: var(--muted);
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--lesson-ink, var(--muted)) 28%, transparent);
+  border-radius: 999px;
+  color: var(--lesson-ink, var(--muted));
   font-size: 9px;
   line-height: 14px;
   font-weight: 700;
@@ -336,9 +326,10 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 4px;
-  color: var(--muted);
+  color: var(--lesson-ink, var(--muted));
   font-size: 12px;
   line-height: 16px;
+  opacity: 0.9;
 }
 
 .tt-card__meta-item {

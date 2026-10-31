@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type CSSProperties } from "react";
 import {
   frDateShort,
   frDay,
@@ -92,6 +92,13 @@ function LessonRow({
       aria-label={[lesson.subject, lesson.room, timeRange(lesson), status]
         .filter(Boolean)
         .join(", ")}
+      style={
+        {
+          "--lesson-bg": palette.background,
+          "--lesson-ink": palette.ink,
+          "--lesson-bar": palette.base,
+        } as CSSProperties
+      }
     >
       <div className="tt-time" aria-hidden="true">
         <strong>{clockLabel(lesson.start)}</strong>
@@ -99,7 +106,6 @@ function LessonRow({
       </div>
 
       <div className="tt-card">
-        <span className="tt-card__mark" style={{ background: palette.base }} aria-hidden="true" />
         {cancelled ? (
           <div className="tt-cancelled">
             <IconWarning size={14} />
@@ -242,10 +248,13 @@ function WeekView({
       {focus && focusPalette ? (
         <section
           className={`tt-banner${current ? " tt-banner--current" : ""}`}
-          style={{ borderTopColor: focusPalette.base }}
+          style={{
+            background: focusPalette.background,
+            color: focusPalette.ink,
+            borderLeftColor: focusPalette.base,
+          }}
           aria-label={current ? "Cours en cours" : "Prochain cours"}
         >
-          <span className="tt-banner__mark" style={{ background: focusPalette.base }} aria-hidden="true" />
           <div className="tt-banner__body">
             <span className="tt-banner__label">{current ? "En cours" : "Prochain cours"}</span>
             <strong className="tt-banner__subject">{focus.subject}</strong>

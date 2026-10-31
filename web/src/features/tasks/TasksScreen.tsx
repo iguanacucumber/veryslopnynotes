@@ -25,7 +25,8 @@ import {
   IconImage,
   IconSparkles,
 } from "../../ui/icons";
-import { parseDate, subjectColor } from "../../lib/format";
+import { parseDate, subjectColor, tint } from "../../lib/format";
+import { subjectEmoji } from "../../lib/subjectVisual";
 import type { AiContextSourceMeta } from "../../bridge/types";
 import {
   aiContextTypeFr,
@@ -630,11 +631,13 @@ function AssignmentCard({
   onEnableManual: () => void;
   onGenerateSheet: () => void;
 }) {
+  const { dark } = useApp();
   const helpPanelId = useId();
   const noMaterialId = useId();
   const textTriggerRef = useRef<HTMLButtonElement>(null);
   const photoTriggerRef = useRef<HTMLButtonElement>(null);
   const text = assignmentCardText(assignment);
+  const subjectBase = subjectColor(assignment.subject);
   const due = dueLabel(assignment.dueDate);
   const tone = dueTone(assignment.dueDate);
   // Sans consigne ni cours, l'aide TEXTE refuserait avant le modèle. La photo
@@ -664,25 +667,25 @@ function AssignmentCard({
     <Card as="article" className={`task-card${assignment.done ? " task-card--done" : ""}`}>
       <div className="task-card__head">
         <span
-          className="task-card__mark"
-          style={{ background: subjectColor(assignment.subject) }}
+          className="task-card__emoji"
+          style={{
+            background: tint(subjectBase, dark ? -0.68 : 0.86),
+            color: tint(subjectBase, dark ? 0.58 : -0.48),
+          }}
           aria-hidden="true"
-        />
+        >
+          {subjectEmoji(assignment.subject)}
+        </span>
         <div className="task-card__main">
-          <span className="task-card__subject">{subjectDisplayFr(assignment.subject)}</span>
+          <span
+            className="task-card__subject"
+            style={{ color: tint(subjectBase, dark ? 0.62 : -0.42) }}
+          >
+            {subjectDisplayFr(assignment.subject)}
+          </span>
           {text.title ? <h3 className="task-card__title">{text.title}</h3> : null}
           {due ? <span className={`task-card__due ${tone}`}>{due}</span> : null}
         </div>
-        <button
-          type="button"
-          aria-pressed={assignment.done}
-          aria-label={`${assignment.done ? "Marquer à faire" : "Marquer fait"} : ${assignment.title}`}
-          className={`task-check${assignment.done ? " task-check--done" : ""}`}
-          disabled={busy}
-          onClick={() => onToggle(!assignment.done)}
-        >
-          {assignment.done ? <IconCheck size={18} /> : null}
-        </button>
       </div>
 
       {text.body ? <p className="task-card__body">{text.body}</p> : null}
@@ -711,6 +714,17 @@ function AssignmentCard({
       ) : null}
 
       <div className="task-card__foot">
+        <button
+          type="button"
+          aria-pressed={assignment.done}
+          aria-label={`${assignment.done ? "Marquer à faire" : "Marquer fait"} : ${assignment.title}`}
+          className={`task-check${assignment.done ? " task-check--done" : ""}`}
+          disabled={busy}
+          onClick={() => onToggle(!assignment.done)}
+        >
+          <IconCheck size={16} />
+          <span>{assignment.done ? "Terminé" : "Marquer fait"}</span>
+        </button>
         <button
           type="button"
           className="task-help"

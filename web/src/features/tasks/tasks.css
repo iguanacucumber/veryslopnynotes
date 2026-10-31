@@ -2,11 +2,11 @@
   display: flex;
   align-items: flex-start;
   gap: 11px;
-  padding: 13px 14px;
-  border: 1px solid var(--rule);
-  border-top: 1px solid var(--brand-solid);
-  border-radius: var(--radius-sm);
+  padding: 14px;
+  border: 0;
+  border-radius: var(--radius-xl);
   background: var(--panel-tint);
+  box-shadow: var(--shadow-card);
 }
 
 .tasks-assistant__icon {
@@ -46,12 +46,16 @@
   gap: 11px;
 }
 
-.task-card__mark {
+.task-card__emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  margin-top: 6px;
-  border-radius: 3px;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  font-size: 17px;
+  line-height: 1;
 }
 
 .task-card__main {
@@ -64,12 +68,9 @@
 }
 
 .task-card__subject {
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 14px;
+  font-size: 13px;
+  line-height: 18px;
   font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -94,23 +95,25 @@
 
 .task-card__due {
   display: inline-flex;
-  margin-top: 2px;
-  padding: 1px 6px;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-xs);
+  align-self: flex-start;
+  margin-top: 3px;
+  padding: 2px 9px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-variant);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 16px;
   font-weight: 650;
 }
 
 .task-card__due--near {
-  border-color: var(--rule-brand);
+  background: var(--brand-pale);
   color: var(--brand-deep);
 }
 
 .task-card__due--soon {
-  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 13%, transparent);
   color: var(--danger-ink);
 }
 
@@ -118,13 +121,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  gap: 5px;
+  min-height: var(--tap);
+  padding: 0 16px;
   flex: 0 0 auto;
-  border: 1px solid var(--rule-strong);
-  border-radius: var(--radius-xs);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
   background: var(--panel);
-  color: var(--on-brand);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
   transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
 }
 
@@ -135,6 +142,7 @@
 .task-check--done {
   border-color: var(--brand-solid);
   background: var(--brand-solid);
+  color: var(--on-brand);
 }
 
 .task-check:disabled {
@@ -157,8 +165,9 @@
 }
 
 .task-card__foot {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-top: 12px;
 }

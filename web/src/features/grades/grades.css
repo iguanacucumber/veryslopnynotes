@@ -80,10 +80,10 @@
 .grades-hero {
   position: relative;
   padding: 20px 20px 14px;
-  border: 1px solid var(--rule);
-  border-top: 1px solid var(--brand-solid);
-  border-radius: var(--radius-sm);
+  border: 0;
+  border-radius: var(--radius-xl);
   background: var(--panel-tint);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 
@@ -223,22 +223,24 @@
   from { opacity: 0; transform: scale(0.2); }
 }
 
-/* Un seul registre pour les matières : chaque ligne est séparée par un filet,
-   pas par une carte. */
+/* Chaque matière est une carte, comme les tuiles de Papillon. */
 .grades-ledger {
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: var(--panel);
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
 }
 
 .grades-subject {
   padding: 0;
-  border-top: 1px solid var(--rule);
-}
-
-.grades-subject:first-child {
-  border-top: 0;
+  border: 0;
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
 }
 
 .grades-subject__summary {
@@ -264,11 +266,17 @@
   border-bottom: 1px solid var(--rule);
 }
 
-.grades-subject__mark {
+.grades-subject__emoji {
   flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xs);
+  background: var(--surface-variant);
+  font-size: 16px;
+  line-height: 1;
 }
 
 .grades-subject__name {
@@ -427,8 +435,6 @@
 
 .grades-latest__title {
   margin: 0;
-  padding-top: 14px;
-  border-top: 1px solid var(--rule);
   color: var(--ink);
   font-size: 20px;
   line-height: 25px;
@@ -444,17 +450,11 @@
 .grades-latest__card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 186px;
+  gap: 7px;
+  width: 178px;
   flex: 0 0 auto;
-  padding: 2px 14px 2px 0;
-  border-left: 1px solid var(--rule);
-  padding-left: 14px;
-}
-
-.grades-latest__card:first-child {
-  border-left: 0;
-  padding-left: 0;
+  padding: 12px;
+  border-radius: var(--radius-md);
 }
 
 .grades-latest__head {
@@ -464,11 +464,10 @@
   min-width: 0;
 }
 
-.grades-latest__mark {
+.grades-latest__emoji {
   flex: 0 0 auto;
-  width: 7px;
-  height: 7px;
-  border-radius: 3px;
+  font-size: 14px;
+  line-height: 18px;
 }
 
 .grades-latest__subject {
@@ -476,18 +475,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 14px;
+  font-size: 12px;
+  line-height: 17px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
 }
 
 .grades-latest__label {
   margin: 0;
   min-height: 38px;
-  color: var(--ink);
   font-size: 14px;
   line-height: 19px;
   font-weight: 650;
@@ -505,10 +500,18 @@
 }
 
 .grades-latest__date {
-  color: var(--muted);
   font-size: 10px;
   font-weight: 600;
+  opacity: 0.78;
   white-space: nowrap;
+}
+
+.grades-latest__value {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-size: 14px;
+  font-weight: 800;
 }
 
 @media (max-width: 400px) {

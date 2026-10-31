@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { IconChevronRight, IconGrades } from "../../ui/icons";
 import { frDateShort, subjectColor, tint } from "../../lib/format";
+import { subjectEmoji } from "../../lib/subjectVisual";
 import { EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../../ui/components";
 import {
   algorithmChipLabel,
@@ -235,15 +236,21 @@ export function LatestGrades({ groups, dark }: { groups: GradeGroup[]; dark: boo
           const color = subjectColor(grade.subject);
           const palette = subjectTint(color, dark);
           return (
-            <article className="grades-latest__card" key={grade.id}>
+            <article
+              className="grades-latest__card"
+              key={grade.id}
+              style={{ background: palette.background, color: palette.ink }}
+            >
               <div className="grades-latest__head">
-                <span className="grades-latest__mark" style={{ background: color }} aria-hidden="true" />
+                <span className="grades-latest__emoji" aria-hidden="true">
+                  {subjectEmoji(grade.subject)}
+                </span>
                 <span className="grades-latest__subject">{grade.subject}</span>
               </div>
               <p className="grades-latest__label">{gradeLabel(grade)}</p>
               <div className="grades-latest__foot">
                 <span className="grades-latest__date">{frDateShort(grade.date)}</span>
-                <span className="grades-pill grades-pill--small" style={{ color: palette.ink }}>
+                <span className="grades-pill grades-pill--small grades-latest__value">
                   {gradeValueLabel(grade.value)}
                   {scaleSuffix(grade.scale)}
                 </span>
@@ -372,7 +379,9 @@ function SubjectSection({
   return (
     <details className="grades-subject">
       <summary className="grades-subject__summary">
-        <span className="grades-subject__mark" style={{ background: color }} aria-hidden="true" />
+        <span className="grades-subject__emoji" aria-hidden="true">
+          {subjectEmoji(group.subject)}
+        </span>
         <span className="grades-subject__name">
           <span className="grades-subject__title">{group.subject}</span>
           <span className="grades-subject__meter" aria-hidden="true">

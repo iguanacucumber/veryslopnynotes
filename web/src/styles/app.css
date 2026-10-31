@@ -9,14 +9,28 @@ body,
   margin: 0;
 }
 
-/* Le contenu reste au-dessus du papier. */
+/* Le contenu reste au-dessus du fond ambiant. */
 #root {
   position: relative;
   z-index: 1;
 }
 
+/* Fond Papillon : deux halos fixes dérivés de la palette, jamais une image. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(90% 55% at 100% 0%, color-mix(in srgb, var(--brand-light) 38%, transparent), transparent 64%),
+    radial-gradient(70% 45% at 0% 16%, color-mix(in srgb, var(--brand-pale) 90%, transparent), transparent 68%),
+    radial-gradient(55% 34% at 8% 76%, color-mix(in srgb, var(--danger) 12%, transparent), transparent 70%),
+    radial-gradient(85% 50% at 50% 108%, color-mix(in srgb, var(--brand) 18%, transparent), transparent 66%);
+}
+
 body {
-  background: var(--paper);
+  background: var(--page);
   color: var(--ink);
   font-family: "Figtree", system-ui, sans-serif;
   font-size: 15px;
@@ -59,29 +73,6 @@ a {
   outline-offset: 2px;
 }
 
-/* Lien d'évitement (#625) : premier élément focalisable de la coquille,
-   masqué tant qu'il n'a pas le focus. Il est FIXE et hors écran par
-   translation, jamais display:none — sinon il quitterait l'ordre de tabulation
-   et le clavier ne pourrait plus l'atteindre. */
-.skip-link {
-  position: fixed;
-  top: calc(8px + var(--safe-top));
-  left: 16px;
-  z-index: 40;
-  padding: 10px 16px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--brand-solid);
-  color: var(--on-brand);
-  font-weight: 600;
-  transform: translateY(calc(-100% - 24px));
-}
-
-.skip-link:focus,
-.skip-link:focus-visible {
-  transform: translateY(0);
-}
-
 /* La coquille occupe la hauteur UTILE (celle qu'on peut lire) : elle est
    publiée par le JS d'après le viewport visuel, donc elle rétrécit quand le
    clavier s'ouvre. Une hauteur de viewport figée la laisserait dépasser sous
@@ -92,20 +83,20 @@ a {
   flex-direction: column;
 }
 
-/* En-tête plein : la couleur de palette tient le cadre de l'app, le contenu
-   reste sur papier. Aucun flou, aucune ombre : un seul aplat et un filet. */
+/* En-tête transparent, posé sur le fond ambiant : le contenu passe dessous. */
 .topbar {
   position: sticky;
   top: 0;
   z-index: 20;
-  min-height: calc(58px + var(--safe-top));
+  min-height: calc(62px + var(--safe-top));
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: calc(6px + var(--safe-top)) var(--gutter) 6px;
-  border-bottom: 1px solid color-mix(in srgb, var(--on-brand) 24%, transparent);
-  background: var(--brand-solid);
-  color: var(--on-brand);
+  gap: 8px;
+  padding: calc(7px + var(--safe-top)) var(--gutter) 7px;
+  background: color-mix(in srgb, var(--page) 84%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(16px) saturate(1.15);
+  color: var(--ink);
   view-transition-name: topbar;
 }
 
@@ -115,16 +106,16 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 25px;
-  line-height: 30px;
+  font-size: 24px;
+  line-height: 29px;
   font-weight: 800;
   letter-spacing: -0.03em;
 }
 
 @media (max-width: 380px) {
   .topbar__title {
-    font-size: 22px;
-    line-height: 27px;
+    font-size: 21px;
+    line-height: 26px;
   }
 }
 
@@ -135,10 +126,48 @@ a {
   outline: none;
 }
 
+.topbar__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.topbar__identity-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar__identity-name {
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar__identity-sub {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .topbar__actions {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: 6px;
 }
 
 .icon-btn {
@@ -155,17 +184,34 @@ a {
 }
 
 .topbar .icon-btn {
-  color: var(--on-brand);
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
 }
 
-.icon-btn:hover,
-.icon-btn:active {
-  background: var(--surface-variant);
+/* Cible tactile de 48 px sans grossir le cercle visuel de 42 px. */
+.topbar .icon-btn::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+}
+
+.topbar--home .icon-btn {
+  border: 1px solid var(--rule);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
 }
 
 .topbar .icon-btn:hover,
 .topbar .icon-btn:active {
-  background: var(--on-brand-hover);
+  background: var(--surface-variant);
+}
+
+.topbar .icon-btn--accent {
+  color: var(--brand-deep);
 }
 
 /* Bouton Retour désactivé pendant l'envoi (#524) : sans ça, le bouton
@@ -186,17 +232,13 @@ a {
   color: var(--brand-deep);
 }
 
-.topbar .icon-btn--accent {
-  color: var(--on-brand);
-}
-
 .main {
   flex: 1;
   width: 100%;
   max-width: 760px;
   margin: 0 auto;
   padding: 20px var(--gutter)
-    calc(var(--tabbar-h) + 32px + var(--safe-bottom) + var(--keyboard-bottom));
+    calc(var(--tabbar-h) + 46px + var(--safe-bottom) + var(--keyboard-bottom));
 }
 
 /* Cible du lien d'évitement : le focus y est programmatique, l'anneau serait
@@ -211,35 +253,24 @@ a {
   padding-right: 0;
 }
 
-/* Barre d'onglets : FIXE, donc elle remonte de la hauteur du clavier — elle
-   reste au-dessus du clavier, jamais dessous (#399). */
+/* Dock flottant : il remonte avec le clavier (#399) et laisse voir le fond. */
 .tabbar {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: var(--keyboard-bottom);
+  left: 12px;
+  right: 12px;
+  bottom: calc(10px + var(--safe-bottom) + var(--keyboard-bottom));
   z-index: 30;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 0;
-  padding: 0 0 var(--safe-bottom);
-  border-top: 1px solid var(--rule-strong);
-  background: var(--surface);
+  padding: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 26px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+  box-shadow: var(--shadow-dock);
   view-transition-name: tabbar;
-}
-
-/* Indicateur glissant de l'onglet actif (#336) : un filet de 3 px qui glisse
-   au lieu de clignoter d'un onglet à l'autre. */
-.tabbar__pill {
-  position: absolute;
-  top: -1px;
-  left: 0;
-  width: 20%;
-  height: 3px;
-  border-radius: 3px;
-  background: var(--brand-solid);
-  transform: translateX(calc(var(--tab-index, 0) * 100%));
-  transition: transform 300ms var(--ease-out);
 }
 
 /* Les instantanés de la barre du haut et de la barre d'onglets restent figés
@@ -278,9 +309,10 @@ a {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding: 6px 2px;
-  font-size: 12px;
+  gap: 4px;
+  padding: 5px 2px;
+  border-radius: 20px;
+  font-size: 11px;
   line-height: 14px;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -296,19 +328,25 @@ a {
 }
 
 .tab[aria-current="page"] {
-  color: var(--ink);
+  color: var(--brand-deep);
   font-weight: 750;
 }
 
 .tab[aria-current="page"] svg {
-  color: var(--brand-solid);
+  width: 48px;
+  height: 30px;
+  padding: 4px 13px;
+  border-radius: 999px;
+  background: var(--brand-pale);
+  color: var(--brand-deep);
 }
 
 .card {
   background: var(--panel);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  padding: 18px;
+  border: 0;
+  border-radius: var(--radius-xl);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
 }
 
 button.card {
@@ -316,17 +354,11 @@ button.card {
 }
 
 button.card:hover {
-  border-color: var(--rule-strong);
   background: var(--panel-tint);
 }
 
 .card--flat {
-  padding: 18px;
-}
-
-.card--flat > .rows {
-  margin: -18px;
-  padding: 0 18px;
+  padding: 20px;
 }
 
 .card--brand {
@@ -354,7 +386,10 @@ button.card:hover {
 /* --- Lignes de liste (Profil, Réglages) ---------------------------------- */
 
 .rows {
-  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
 }
 
 .list-row {
@@ -362,24 +397,24 @@ button.card:hover {
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: 56px;
-  padding: 12px 0;
+  min-height: 60px;
+  padding: 13px 16px;
   border: 0;
-  border-bottom: 1px solid var(--rule);
-  border-radius: 0;
-  background: transparent;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-card);
   color: inherit;
   text-align: left;
-  transition: background var(--duration) var(--ease);
-}
-
-.list-row:last-child {
-  border-bottom: 0;
+  transition: background var(--duration) var(--ease), transform var(--duration) var(--ease);
 }
 
 .list-row:hover,
 .list-row:active {
   background: var(--panel-tint);
+}
+
+.list-row:active {
+  transform: scale(0.99);
 }
 
 .list-row__leading {
@@ -409,8 +444,9 @@ button.card:hover {
 .list-row--static,
 .list-row--static:hover,
 .list-row--static:active {
-  background: transparent;
+  background: var(--panel);
   cursor: default;
+  transform: none;
 }
 
 /* État de session dans le héros du profil : un point et une phrase, posés
@@ -606,28 +642,23 @@ button.card:hover {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  margin: 30px 0 10px;
-  padding-top: 14px;
-  border-top: 1px solid var(--rule);
+  margin: 26px 0 10px;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .section-title__heading {
   margin: 0;
-  font-size: 20px;
-  line-height: 25px;
+  font-size: 19px;
+  line-height: 24px;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
-/* La première section n'a pas de contenu au-dessus d'elle : son filet
-   supérieur serait une barre orpheline. Même chose juste après un titre de
-   page, dont le filet de 2 px tient déjà la séparation. */
 .stack > section:first-child .section-title,
 .stack > .sr-only + section .section-title,
 .stack > .page-heading + section .section-title {
   margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
 }
 
 .page-heading {
@@ -636,8 +667,7 @@ button.card:hover {
   justify-content: space-between;
   gap: 12px;
   margin: 2px 0 0;
-  padding-bottom: 12px;
-  border-bottom: 2px solid var(--ink);
+  padding-bottom: 2px;
 }
 
 .page-heading__text {
@@ -646,8 +676,8 @@ button.card:hover {
 
 .page-heading__title {
   margin: 0;
-  font-size: 27px;
-  line-height: 31px;
+  font-size: 26px;
+  line-height: 30px;
   font-weight: 800;
   letter-spacing: -0.03em;
 }
@@ -774,7 +804,7 @@ button.card:hover {
   gap: 6px;
   min-height: 34px;
   padding: 4px 11px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--rule);
   background: var(--panel);
   color: var(--ink);
@@ -893,7 +923,7 @@ button.chip {
   position: fixed;
   left: 16px;
   right: 16px;
-  bottom: calc(var(--tabbar-h) + 12px + var(--safe-bottom) + var(--keyboard-bottom));
+  bottom: calc(var(--tabbar-h) + 30px + var(--safe-bottom) + var(--keyboard-bottom));
   z-index: 50;
   padding: 12px 16px;
   border: 1px solid var(--ink);
@@ -1049,8 +1079,6 @@ button.chip {
 }
 
 .news-card--unread {
-  border-left: 1px solid var(--brand-solid);
-  padding-left: 18px;
   background: var(--panel-tint);
 }
 
@@ -1068,8 +1096,6 @@ button.chip {
 /* --- Cantine -------------------------------------------------------------- */
 
 .canteen-day--today {
-  border-left: 1px solid var(--brand-solid);
-  padding-left: 16px;
   background: var(--panel-tint);
 }
 
@@ -1192,23 +1218,20 @@ button.chip {
 .school-summary {
   position: relative;
   overflow: hidden;
-  border-left: 1px solid var(--brand-solid);
   background: var(--panel-tint);
 }
 
 .school-summary--unjustified {
-  border-left-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 6%, var(--panel));
+  background: color-mix(in srgb, var(--danger) 8%, var(--panel));
 }
 
 /* Justification non publiée : ni vert (tout est justifié), ni rouge (faux). */
 .school-summary--unverified {
-  border-left-color: var(--muted);
-  background: color-mix(in srgb, var(--ink) 5%, var(--panel));
+  background: color-mix(in srgb, var(--ink) 6%, var(--panel));
 }
 
 .school-summary--clean {
-  border-left-color: var(--brand);
+  background: var(--panel-tint);
 }
 
 /* --- Fiches de révision --------------------------------------------------- */
