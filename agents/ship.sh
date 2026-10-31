@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Termine une branche agent : rebase sur origin/main, check complet, push,
-# corps de PR prêt pour `gh`. Usage: ./agents/ship.sh <issue-n> ["titre"]
+# Termine une branche agent : rebase sur origin/main, revue obligatoire, check,
+# push, corps de PR prêt pour `gh`. Usage: ./agents/ship.sh <issue-n> ["titre"]
 set -euo pipefail
 
 N="${1:?issue requise}"; shift
@@ -32,6 +32,27 @@ if ! git rebase origin/main; then
   exit 1
 fi
 
+# La note de revue porte sur le diff final : elle est vérifiée après rebase,
+# donc contre le HEAD qui partira. Une note d'avant rebase est périmée.
+GIT_DIR="$(git rev-parse --git-dir)"
+REVIEW="$GIT_DIR/vsn-review.md"
+HEAD_SHA="$(git rev-parse HEAD)"
+if [ ! -f "$REVIEW" ]; then
+  echo "ship: refus — note de revue absente ($REVIEW)." >&2
+  echo "  écrire la note : 1re ligne « HEAD: $HEAD_SHA », puis le compte rendu." >&2
+  exit 1
+fi
+if [ "$(head -n 1 "$REVIEW")" != "HEAD: $HEAD_SHA" ]; then
+  echo "ship: refus — note de revue absente pour le HEAD courant ($HEAD_SHA)." >&2
+  echo "  relire le diff puis réécrire $REVIEW (1re ligne « HEAD: $HEAD_SHA »)." >&2
+  exit 1
+fi
+NOTE_BODY="$(tail -n +2 "$REVIEW")"
+if [ -z "$(printf '%s' "$NOTE_BODY" | tr -d '[:space:]')" ]; then
+  echo "ship: refus — note de revue vide ($REVIEW)." >&2
+  exit 1
+fi
+
 # Le rebase peut changer bun.lock : on ne devine pas (8 ms à chaud).
 bun install --frozen-lockfile
 make check
@@ -41,12 +62,12 @@ make check
 git push --force-with-lease -u origin "$BRANCH"
 
 if [ -z "$TITLE" ]; then TITLE="$(git log -1 --format=%s)"; fi
-GIT_DIR="$(git rev-parse --git-dir)"
 BODY="$GIT_DIR/vsn-pr-body.md"
 {
   printf 'Closes #%s\n\n' "$N"
   printf '## Changements\n\n'
   git log --format='- %s' origin/main..HEAD
+  printf '\n## Revue\n\n%s\n' "$NOTE_BODY"
   printf '\n## Vérifications\n\n- `make check` : OK\n'
 } > "$BODY"
 

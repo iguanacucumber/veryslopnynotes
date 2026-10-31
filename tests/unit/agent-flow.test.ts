@@ -154,12 +154,13 @@ describe("agents/launch.sh (#343)", () => {
   });
 });
 
-describe("agents/ship.sh (#343)", () => {
-  test("rebase, check, push et écrit le corps de PR", () => {
+describe("agents/ship.sh (#343, #753)", () => {
+  test("rebase, exige la revue du HEAD final, puis push et corps de PR", () => {
     const f = fixture();
     mustGit(f.work, "switch", "-c", "agent/42-flow");
     writeFileSync(join(f.work, "a.txt"), "branch\n");
     mustGit(f.work, "commit", "-am", "flow: change a");
+    const committed = mustGit(f.work, "rev-parse", "HEAD");
     mustGit(f.work, "push", "-u", "origin", "agent/42-flow");
 
     // main avance sans conflit : le ship doit rebaser dessus avant de pousser.
@@ -168,19 +169,68 @@ describe("agents/ship.sh (#343)", () => {
     mustGit(f.seed, "commit", "-m", "main: b");
     mustGit(f.seed, "push");
 
+    // Sans note : le rebase a lieu, puis refus avant `make check` et le push.
+    const refused = run([SHIP, "42", "flow: change a"], f.work, envFor(f));
+    expect(refused.code).toBe(1);
+    expect(refused.err).toContain("revue");
+    expect(existsSync(join(f.work, "b.txt"))).toBe(true);
+    expect(existsSync(join(f.base, "make.log"))).toBe(false);
+    expect(mustGit(f.origin, "rev-parse", "refs/heads/agent/42-flow")).toBe(committed);
+
+    // La note vise le HEAD rebasé, pas le commit d'avant rebase.
+    const head = mustGit(f.work, "rev-parse", "HEAD");
+    expect(head).not.toBe(committed);
+    writeFileSync(
+      join(f.work, ".git", "vsn-review.md"),
+      `HEAD: ${head}\n## Standards\n- conforme\n## Spec\n- #753 couvert\n`,
+    );
+
     const r = run([SHIP, "42", "flow: change a"], f.work, envFor(f));
 
     expect(r.code).toBe(0);
     expect(readFileSync(join(f.base, "make.log"), "utf8")).toContain("check");
-    expect(existsSync(join(f.work, "b.txt"))).toBe(true);
     expect(git(f.work, "merge-base", "--is-ancestor", "origin/main", "HEAD").code).toBe(0);
-    expect(mustGit(f.origin, "rev-parse", "refs/heads/agent/42-flow")).toBe(mustGit(f.work, "rev-parse", "HEAD"));
+    expect(mustGit(f.origin, "rev-parse", "refs/heads/agent/42-flow")).toBe(head);
 
     const body = readFileSync(join(f.work, ".git", "vsn-pr-body.md"), "utf8");
     expect(body).toContain("Closes #42");
     expect(body).toContain("- flow: change a");
+    expect(body).toContain("## Revue");
+    expect(body).toContain("- conforme");
+    expect(body).toContain("- #753 couvert");
     expect(body).toContain("Vérifications");
     expect(r.out).toContain("flow: change a");
+  });
+
+  test("refuse sans note de revue, avant check et push", () => {
+    const f = fixture();
+    mustGit(f.work, "switch", "-c", "agent/45-flow");
+    writeFileSync(join(f.work, "a.txt"), "branch\n");
+    mustGit(f.work, "commit", "-am", "flow: change a");
+
+    const r = run([SHIP, "45"], f.work, envFor(f));
+
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("revue absente");
+    expect(git(f.origin, "rev-parse", "--verify", "refs/heads/agent/45-flow").code).not.toBe(0);
+    expect(existsSync(join(f.base, "make.log"))).toBe(false);
+    expect(existsSync(join(f.work, ".git", "vsn-pr-body.md"))).toBe(false);
+  });
+
+  test("refuse une note de revue d'un autre HEAD", () => {
+    const f = fixture();
+    mustGit(f.work, "switch", "-c", "agent/46-flow");
+    writeFileSync(join(f.work, "a.txt"), "branch\n");
+    mustGit(f.work, "commit", "-am", "flow: change a");
+    const base = mustGit(f.work, "rev-parse", "HEAD~1");
+    writeFileSync(join(f.work, ".git", "vsn-review.md"), `HEAD: ${base}\n## Standards\n- conforme\n`);
+
+    const r = run([SHIP, "46"], f.work, envFor(f));
+
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("HEAD courant");
+    expect(git(f.origin, "rev-parse", "--verify", "refs/heads/agent/46-flow").code).not.toBe(0);
+    expect(existsSync(join(f.base, "make.log"))).toBe(false);
   });
 
   test("abort propre sur conflit : branche intacte, rien poussé", () => {

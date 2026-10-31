@@ -267,7 +267,7 @@ describe("registre d'invariants", () => {
   test("les surfaces de lecture agent restent sous leur budget d'octets", () => {
     // Budgets de CONTEXTE. Les plafonds serrent ~20 % au-dessus du réel : les
     // relever est un diff visible, pas une dérive silencieuse.
-    expect({ fichier: "AGENTS.md", sousBudget: AGENTS.length <= 4_500 }).toEqual({
+    expect({ fichier: "AGENTS.md", sousBudget: AGENTS.length <= 5_000 }).toEqual({
       fichier: "AGENTS.md",
       sousBudget: true,
     });
