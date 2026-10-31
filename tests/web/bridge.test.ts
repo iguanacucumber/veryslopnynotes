@@ -299,6 +299,69 @@ describe("pont : les lectures ne saturent pas le pont (#393)", () => {
     }
   });
 
+  test("une lecture au signal déjà avorté ne part pas vers le natif", async () => {
+    stubConcurrent();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      call("resources.load", { key: "grades" }, undefined, controller.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(nativeCalls.filter((c) => c.method === "resources.load")).toHaveLength(0);
+    expect(pendingCount()).toBe(0);
+  });
+
+  test("une lecture abandonnée en file ne part jamais et rend son emplacement", async () => {
+    const pont = stubConcurrent();
+    const premiere = call("resources.load", { key: "grades" });
+    const controller = new AbortController();
+    const seconde = call("resources.load", { key: "assignments" }, undefined, controller.signal);
+    void seconde.catch(() => {});
+    const suivante = new AbortController();
+    try {
+      await tick();
+      expect(nativeCalls.filter((c) => c.method === "resources.load")).toHaveLength(1);
+      controller.abort();
+      await expect(seconde).rejects.toMatchObject({ name: "AbortError" });
+      // L'attente est retirée de la file : rien ne part après l'abandon.
+      await tick();
+      expect(nativeCalls.filter((c) => c.method === "resources.load")).toHaveLength(1);
+      pont.resolve(nativeCalls[0]!.requestId);
+      await premiere;
+      await tick();
+      // L'attente abandonnée ne se réveille pas au retour de l'emplacement.
+      expect(nativeCalls.filter((c) => c.method === "resources.load")).toHaveLength(1);
+      // L'emplacement n'a pas été consommé : la lecture suivante part.
+      const troisieme = call("resources.load", { key: "timetable" }, undefined, suivante.signal);
+      void troisieme.catch(() => {});
+      await tick();
+      const lectures = nativeCalls.filter((c) => c.method === "resources.load");
+      expect(lectures).toHaveLength(2);
+      pont.resolve(lectures[1]!.requestId);
+      await troisieme;
+      expect(pendingCount()).toBe(0);
+    } finally {
+      suivante.abort();
+      controller.abort();
+      pont.resolveAll();
+    }
+  });
+
+  test("une lecture déjà partie n'est pas annulée par le signal", async () => {
+    const pont = stubConcurrent();
+    const controller = new AbortController();
+    const lecture = call("resources.load", { key: "grades" }, undefined, controller.signal);
+    try {
+      await tick();
+      expect(nativeCalls.filter((c) => c.method === "resources.load")).toHaveLength(1);
+      controller.abort();
+      expect(nativeCalls.some((c) => c.method === "bridge.cancel")).toBe(false);
+      pont.resolve(nativeCalls[0]!.requestId);
+      await expect(lecture).resolves.toMatchObject({ payload: "{}" });
+    } finally {
+      pont.resolveAll();
+    }
+  });
+
   test("le nombre de lectures en vol tient dans le délai natif", () => {
     // Le budget d'une lecture = le délai HTTP de l'établissement (lu dans le
     // Kotlin de production) ; le délai natif d'un appel = le miroir de
