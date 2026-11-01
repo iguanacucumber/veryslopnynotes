@@ -378,13 +378,14 @@ class ManualsClient(
 ) {
     data class Fetch(val doc: ManualDoc?, val error: String?)
 
-    fun fetch(startUrl: String): Fetch {
+    fun fetch(startUrl: String, page: Int? = null): Fetch {
         if (!baseUrl.contains("://")) {
             return Fetch(null, "Scraper non configuré : renseigne son adresse dans Réglages.")
         }
         val payload = JSONObject()
             .put("platform", PLATFORM)
             .put("startUrl", startUrl)
+            .apply { if (page != null && page >= 1) put("page", page) }
             .toString()
         val request = Request.Builder()
             .url(ServerConfig.manualsScrapeUrl(baseUrl))

@@ -165,7 +165,7 @@ internal fun VsnBridge.saveSubject(p: JSONObject, epoch: Long): JSONObject {
  * cette matière (jamais un manuel d'une autre matière). Un ouvrage inconnu de
  * la table ne produit AUCUNE source.
  */
-internal fun VsnBridge.manualDocFor(subject: String): ManualDoc? {
+internal fun VsnBridge.manualDocFor(subject: String, page: Int? = null): ManualDoc? {
     // #586 : une matière peut explicitement ne pas utiliser le manuel.
     if (!manuals.isEnabled(subject)) return null
     val stored = manuals.url() ?: return null
@@ -179,25 +179,35 @@ internal fun VsnBridge.manualDocFor(subject: String): ManualDoc? {
     } else {
         stored
     }
+    // Une page précise a SON extrait : la clé de cache la distingue du sommaire.
+    val cacheKey = if (page == null) target else "$target#p$page"
     // Le catalogue a déjà choisi l'ouvrage PAR matière ; une adresse précise ne
     // dit rien de la sienne, donc seule la fiche tranche.
     fun matches(doc: ManualDoc): Boolean = catalog || manualMatchesSubject(doc, subject)
-    manuals.doc(target)?.let { doc -> return if (matches(doc)) doc else null }
+    manuals.doc(cacheKey)?.let { doc -> return if (matches(doc)) doc else null }
     val now = System.currentTimeMillis()
-    val lastFailure = manualFailures[target] ?: 0L
+    val lastFailure = manualFailures[cacheKey] ?: 0L
     if (now - lastFailure < MANUAL_RETRY_MS) return null
-    val fetched = ManualsClient(currentBaseUrl()).fetch(target)
+    val fetched = ManualsClient(currentBaseUrl()).fetch(target, page)
     val doc = fetched.doc
     if (doc == null) {
-        manualFailures[target] = now
+        manualFailures[cacheKey] = now
         return null
     }
-    manualFailures.remove(target)
+    manualFailures.remove(cacheKey)
     // Gardé même hors matière : l'adresse rendra toujours le même extrait, le
     // redemander à chaque prompt ne changerait rien.
-    manuals.saveDoc(target, doc)
+    manuals.saveDoc(cacheKey, doc)
     return if (matches(doc)) doc else null
 }
+
+/**
+ * Extraits de toutes les pages citées par la consigne. Une page en échec ne
+ * prive pas les autres : chaque extrait reste une source indépendante.
+ */
+internal fun VsnBridge.manualDocsFor(subject: String, pages: List<Int>): List<ManualDoc> =
+    if (pages.isEmpty()) listOfNotNull(manualDocFor(subject))
+    else pages.mapNotNull { page -> manualDocFor(subject, page) }
 
 /**
  * Matières réellement présentes dans les caches (notes, devoirs, EDT) :

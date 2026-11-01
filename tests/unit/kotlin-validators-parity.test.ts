@@ -485,9 +485,9 @@ describe("catalogue de manuels — classe et spécialités", () => {
     const bridge = readBridgeSource();
     expect(bridge).toContain("ManualCatalog.resolve(stored, classLabel, subjects, subject)");
     // Un SEUL point d'entrée (aiContextFor) choisit le manuel : aide, photo et fiche.
-    expect(bridge).toContain("manualDocFor(assignment.subject)");
+    expect(bridge).toContain("manualDocsFor(assignment.subject, assignment.manualPages())");
     expect(bridge).not.toContain("manualDocFor(a.subject)");
-    expect(bridge).toContain("manuals.saveDoc(target, doc)");
+    expect(bridge).toContain("manuals.saveDoc(cacheKey, doc)");
     expect(bridge).toContain("internal fun VsnBridge.knownSubjects()");
     expect(bridge).toContain("internal fun VsnBridge.profileClassLabel()");
   });

@@ -14,6 +14,7 @@ import fr.veryslopnynotes.core.Homework
 import fr.veryslopnynotes.core.HomeworkAi
 import fr.veryslopnynotes.core.HomeworkOutcome
 import fr.veryslopnynotes.core.LessonNotes
+import fr.veryslopnynotes.core.ManualCatalog
 import fr.veryslopnynotes.core.OutputTooLongException
 import fr.veryslopnynotes.core.RevisionAi
 import fr.veryslopnynotes.core.RevisionChunk
@@ -197,10 +198,22 @@ internal fun VsnBridge.homeworkRefusalJson(
     return json
 }
 
+/** Pages citées par la consigne du devoir (« ex 185 p 192 + ex 123 p 225 »). */
+internal fun Assignment.manualPages(): List<Int> =
+    ManualCatalog.pageNumbers(title + "\n" + description)
+
 /** Documents précis qui manquent à un devoir : consigne, cours, pièce jointe, cahier, manuel. */
 internal fun VsnBridge.missingDocumentsFor(assignment: Assignment): List<String> {
     val missing = mutableListOf<String>()
     if (assignment.description.isBlank()) missing.add("la consigne du devoir")
+    // Une page de manuel présente PORTE l'énoncé cité : le cours, les pièces
+    // jointes et le cahier ne sont plus exigés, sinon « ex 185 p 192 » serait
+    // refusé alors que l'énoncé complet est déjà une source.
+    val manualPages = assignment.manualPages()
+    val manualDocs = manualDocsFor(assignment.subject, manualPages)
+    val manualOk = if (manualPages.isEmpty()) manualDocs.isNotEmpty() else manualDocs.size == manualPages.size
+    if (!manualOk) missing.add("le manuel de cette matière")
+    if (manualPages.isNotEmpty() && manualOk) return missing
     if (assignment.allLessonContents().none { it.excerpt.isNotBlank() }) {
         missing.add("le cours de cette matière (cahier de textes)")
     }
@@ -208,7 +221,6 @@ internal fun VsnBridge.missingDocumentsFor(assignment: Assignment): List<String>
     if (LessonNotes.forSubject(lessons.notes(), assignment.subject).none { it.text.isNotBlank() }) {
         missing.add("ton cahier de cours de cette matière")
     }
-    if (manualDocFor(assignment.subject) == null) missing.add("le manuel de cette matière")
     return missing
 }
 
@@ -254,7 +266,7 @@ internal fun VsnBridge.aiContextFor(
     for (note in LessonNotes.forSubject(lessons.notes(), assignment.subject)) {
         items.add(AiContext.note(note.title, note.text))
     }
-    manualDocFor(assignment.subject)?.let { doc ->
+    for (doc in manualDocsFor(assignment.subject, assignment.manualPages())) {
         items.add(AiContext.manual(doc.title, doc.excerpt))
     }
     items.addAll(webPages)

@@ -60,7 +60,7 @@ describe("manuel — source de l'assistant", () => {
     // #628 : le manuel brut entre dans l'assembleur unique (coupe signalée),
     // au lieu d'une source déjà tronquée à 2 000 caractères.
     expect(bridge).toContain("AiContext.manual(doc.title, doc.excerpt)");
-    expect(bridge).toContain("manualDocFor(assignment.subject)");
+    expect(bridge).toContain("manualDocsFor(assignment.subject, assignment.manualPages())");
   });
 });
 

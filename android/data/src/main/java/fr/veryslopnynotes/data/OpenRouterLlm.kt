@@ -25,6 +25,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
 
 // LLM OpenRouter sur l'appareil — adaptateur LlmProvider.
@@ -232,8 +233,18 @@ class OpenRouterLlm(
     }
 
     /** Panne de transport -> erreur affichable : un délai n'est pas un réseau coupé. */
-    private fun transportError(e: Exception): LlmError =
-        LlmError(transportFaultMessage(classifyTransportError(e)))
+    private fun transportError(e: Exception): LlmError {
+        // DNS d'abord : « réseau » générique n'aide pas à corriger un Wi-Fi
+        // sans résolution ; le message ne nomme jamais l'hôte.
+        var cause: Throwable? = e
+        while (cause != null) {
+            if (cause is UnknownHostException) {
+                return LlmError("Connexion internet indisponible : vérifie le réseau, puis réessaie.")
+            }
+            cause = cause.cause
+        }
+        return LlmError(transportFaultMessage(classifyTransportError(e)))
+    }
 
     /**
      * Décode l'enveloppe `choices` puis délègue le verdict à la règle PURE
@@ -261,18 +272,19 @@ class OpenRouterLlm(
 
     companion object {
         // Modele texte par defaut : choix de code, PAS un credential (donc pas
-        // d'env). `nvidia/nemotron-3.5-lightning:free` est au catalogue
-        // public, gratuit, francais correct et rapide. Il est TEXTE seul :
-        // les photos passent par `LLM_VISION_MODEL` (voir #587).
-        const val LLM_DEFAULT_MODEL = "nvidia/nemotron-3.5-lightning:free"
+        // d'env). `google/gemini-2.5-flash` est retenu pour la fiabilite du
+        // calcul : les modeles gratuits du catalogue rendaient un resultat
+        // faux une fois sur deux sur le meme DM. Le cout (quelques millièmes
+        // de dollar par devoir) est porte par la cle de l'utilisateur.
+        const val LLM_DEFAULT_MODEL = "google/gemini-2.5-flash"
 
-        // Modèle VISION : le modèle texte par défaut n'accepte PAS les
-        // images. `dots-studio/dots-3-note-preview:free` est multimodal
-        // (text+image), gratuit, au catalogue public — et il RÉPOND :
-        // `google/gemma-4-31b-it:free`, livré avant #604, renvoyait un 429
-        // « temporarily rate-limited upstream » sur 8 tentatives espacées,
-        // donc le chemin photo était mort. Un modèle séparé évite de
-        // dégrader le texte pour les photos.
+        // Modèle VISION : le modèle texte par défaut n'est pas garanti
+        // multimodal sur toutes ses variantes. `dots-studio/dots-3-note-preview:free`
+        // est multimodal (text+image), gratuit, au catalogue public — et il
+        // RÉPOND : `google/gemma-4-31b-it:free`, livré avant #604, renvoyait un
+        // 429 « temporarily rate-limited upstream » sur 8 tentatives espacées,
+        // donc le chemin photo était mort. Un modèle séparé évite de dégrader
+        // le texte pour les photos.
         const val LLM_VISION_MODEL = "dots-studio/dots-3-note-preview:free"
 
         // URL publique du fournisseur, pas une donnee perso/etablissement.

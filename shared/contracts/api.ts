@@ -277,6 +277,8 @@ export const MANUALS_SCRAPE_PATH = "/v1/manuals/scrape";
 export const MANUALS_SCRAPE_MAX_BODY_CHARS = 8192;
 export const MANUALS_SCRAPE_PLATFORM_MAX_CHARS = 100;
 export const MANUALS_SCRAPE_URL_MAX_CHARS = 2000;
+/** Page imprimée demandée : bornée avant tout scrape. */
+export const MANUALS_SCRAPE_PAGE_MAX = 2000;
 
 export interface ManualsScrapeRequest {
   readonly platform: string;
@@ -290,6 +292,11 @@ export interface ManualsScrapeRequest {
   readonly password?: string;
   /** URL de départ fournie par l'humain (jamais committée). */
   readonly startUrl: string;
+  /**
+   * Page imprimée à lire quand l'adresse est un ouvrage (sommaire). Absente =
+   * la page de départ telle quelle. Le serveur résout la page dans le sommaire.
+   */
+  readonly page?: number;
 }
 
 /**
@@ -325,6 +332,10 @@ export function isManualsScrapeRequest(v: unknown): v is ManualsScrapeRequest {
   // navigation et refuse le nom dont une adresse est privée
   // (server/infrastructure/ssrf.ts).
   if (!isPublicHttpUrl(r["startUrl"] as string)) return false;
+  if (r["page"] !== undefined) {
+    if (!Number.isInteger(r["page"])) return false;
+    if ((r["page"] as number) < 1 || (r["page"] as number) > MANUALS_SCRAPE_PAGE_MAX) return false;
+  }
   // Le mode d'exécution n'est plus un paramètre : le scraper force `headless`
   // (un `false` ouvrirait un Chromium visible, ou casserait dans l'image).
   return true;
