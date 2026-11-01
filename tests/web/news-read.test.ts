@@ -1,7 +1,10 @@
 import { useParisTz } from "./setup";
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
+  clearNewsReadIds,
   loadNewsReadIds,
   markNewsRead,
   NEWS_READ_MAX,
@@ -47,5 +50,24 @@ describe("web actualités — état lu persistant", () => {
     expect(ids.size).toBe(NEWS_READ_MAX);
     expect(ids.has("n0")).toBe(false);
     expect(ids.has(`n${NEWS_READ_MAX + 19}`)).toBe(true);
+  });
+
+  test("la déconnexion efface les identifiants lus du compte (I16)", () => {
+    const store = memoryStore();
+    markNewsRead("n1", store);
+    markNewsRead("n2", store);
+    clearNewsReadIds(store);
+    expect(loadNewsReadIds(store).size).toBe(0);
+    // Stockage absent : aucun exception.
+    expect(() => clearNewsReadIds(null)).not.toThrow();
+  });
+
+  test("AppContext efface les identifiants quand la session se ferme", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "ui", "AppContext.tsx"),
+      "utf8",
+    );
+    const close = source.slice(source.indexOf("const closeSession = useCallback"));
+    expect(close.slice(0, close.indexOf("}, []);"))).toContain("clearNewsReadIds()");
   });
 });

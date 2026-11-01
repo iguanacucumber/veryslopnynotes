@@ -15,6 +15,7 @@ import {
   dueLabel,
   foldFr,
   homeworkRefusalText,
+  isAssignmentsPayloadReadable,
   parseAssignment,
   parseAssignmentsPayload,
   shiftWeek,
@@ -70,6 +71,18 @@ describe("web tâches — parsing défensif", () => {
       expect(parsed.items).toEqual([]);
       expect(parsed.weekStart).toBeNull();
     }
+  });
+
+  test("un JSON illisible reste INVALIDE, jamais « aucun devoir » (I14)", () => {
+    // Le parseur tolérant ne lève pas ; l'écran lit le prédicat pour afficher
+    // une erreur au lieu d'affirmer qu'aucun devoir n'existe.
+    for (const raw of [null, "", "{", "null", JSON.stringify({ assignments: "non" }), "{}"]) {
+      expect(isAssignmentsPayloadReadable(raw)).toBe(false);
+    }
+    expect(isAssignmentsPayloadReadable(JSON.stringify({ assignments: [] }))).toBe(true);
+    expect(isAssignmentsPayloadReadable(JSON.stringify({ items: [] }))).toBe(true);
+    expect(isAssignmentsPayloadReadable(JSON.stringify([VALID]))).toBe(true);
+    expect(isAssignmentsPayloadReadable(payload([VALID]))).toBe(true);
   });
 
   test("rejette un devoir hors contrat ou une pièce jointe en URL absolue", () => {

@@ -2,10 +2,19 @@ import { useApp } from "../../ui/AppContext";
 import { Card, Divider } from "../../ui/components";
 import { IconBook, IconChevronRight, IconSparkles } from "../../ui/icons";
 import { useViewNavigate } from "../../ui/viewTransition";
+import { assistantStatus } from "./model";
 
-export function AssistantOverviewCard({ configured }: { configured: boolean }) {
+export function AssistantOverviewCard({
+  configured,
+  loading,
+}: {
+  /** `null` = état non lu (échec du pont), jamais « pas de clé ». */
+  configured: boolean | null;
+  loading: boolean;
+}) {
   const { storageUnavailable } = useApp();
   const navigate = useViewNavigate();
+  const status = assistantStatus(configured, storageUnavailable, loading);
   return (
     <Card className="card--flat assistant-overview ai">
       <div className="assistant-overview__head">
@@ -13,16 +22,8 @@ export function AssistantOverviewCard({ configured }: { configured: boolean }) {
           <IconSparkles size={22} />
         </span>
         <div className="grow">
-          <strong className="assistant-overview__status">
-            {configured ? "Assistant actif" : "Aucune clé"}
-          </strong>
-          <p className="assistant-overview__body">
-            {configured
-              ? storageUnavailable
-                ? "Clé en mémoire seulement : elle sera oubliée à la fermeture de l'app."
-                : "Clé enregistrée (chiffrée) : l’aide devoirs et les fiches de révision sont disponibles."
-              : "Sans clé OpenRouter, l’assistant ne peut ni aider sur un devoir ni générer une fiche."}
-          </p>
+          <strong className="assistant-overview__status">{status.title}</strong>
+          <p className="assistant-overview__body">{status.body}</p>
         </div>
       </div>
 

@@ -14,6 +14,7 @@ export default function AttendanceRoute() {
   return (
     <AttendanceScreen
       rows={data.absences}
+      payload={attendance.payload}
       loading={attendance.loading}
       error={attendance.error}
       stale={attendance.stale}

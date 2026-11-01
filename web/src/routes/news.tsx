@@ -4,6 +4,8 @@ import { useResource } from "../ui/AppContext";
 import { Card, EmptyState, ErrorBox, Loading, Page, Section, StaleBadge } from "../ui/components";
 import { IconNews } from "../ui/icons";
 import {
+  NEWS_UNAVAILABLE,
+  NEWS_UNREADABLE,
   needsNewsBody,
   newsBodyCollapsible,
   newsBodyFailed,
@@ -13,6 +15,7 @@ import {
   newsBodyText,
   newsByline,
   newsGroups,
+  isNewsPayloadReadable,
   parseNewsPayload,
   type NewsItem,
 } from "../features/news/news";
@@ -119,6 +122,17 @@ export default function NewsRoute() {
   const [readIds, setReadIds] = useState<ReadonlySet<string>>(() => loadNewsReadIds());
   const [announcement, setAnnouncement] = useState("");
 
+  // Un payload illisible ou absent n'est pas « rien publié » (I14).
+  const error =
+    resource.error ??
+    (resource.payload === null
+      ? resource.loading
+        ? null
+        : NEWS_UNAVAILABLE
+      : isNewsPayloadReadable(resource.payload)
+        ? null
+        : NEWS_UNREADABLE);
+
   const markRead = (id: string, title: string) => {
     setReadIds(markNewsRead(id));
     setAnnouncement(`Actualité « ${title} » marquée comme lue.`);
@@ -135,23 +149,23 @@ export default function NewsRoute() {
           <StaleBadge />
         </div>
       ) : null}
-      {resource.error && items.length > 0 ? (
+      {error && items.length > 0 ? (
         <p className="tiny" role="status" style={{ margin: 0, color: "var(--danger-ink)" }}>
-          {resource.error}
+          {error}
         </p>
       ) : null}
 
       {items.length === 0 && resource.loading ? <Loading label="Chargement des actualités…" /> : null}
 
-      {items.length === 0 && !resource.loading && resource.error ? (
-        <ErrorBox message={resource.error}>
+      {items.length === 0 && !resource.loading && error ? (
+        <ErrorBox message={error}>
           <button type="button" className="btn btn--small" onClick={resource.refresh}>
             Réessayer
           </button>
         </ErrorBox>
       ) : null}
 
-      {items.length === 0 && !resource.loading && !resource.error ? (
+      {items.length === 0 && !resource.loading && !error ? (
         <EmptyState
           icon={<IconNews size={30} />}
           title="Aucune actualité"

@@ -78,8 +78,14 @@ export default function MessagesRoute() {
       const result = await bridge.messages();
       if (!threadsSeq.current.isCurrent(seq)) return;
       setThreads(sortDiscussions(parseDiscussions(result.payload)));
-      setError(null);
-      setStale(false);
+      // Un payload illisible n'est pas « aucune discussion » (I14) ; un échec
+      // non-session avec cache est signalé par le pont.
+      setError(
+        isMessagesPayloadReadable(result.payload)
+          ? (result.error ?? null)
+          : "Discussions illisibles : la donnée n’a pas pu être lue.",
+      );
+      setStale(Boolean(result.error));
     } catch (e) {
       if (!threadsSeq.current.isCurrent(seq)) return;
       if (e instanceof BridgeCallError && e.code === "auth_required") {

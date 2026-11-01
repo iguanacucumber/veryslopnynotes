@@ -53,3 +53,14 @@ export function markNewsRead(id: string, store: ReadStore | null = defaultStore(
   }
   return new Set(next);
 }
+
+/** Déconnexion ou changement de compte (I16) : les IDs lus du compte
+ *  précédent ne s'appliquent pas au suivant. */
+export function clearNewsReadIds(store: ReadStore | null = defaultStore()): void {
+  if (!store) return;
+  try {
+    store.setItem(NEWS_READ_STORAGE_KEY, "[]");
+  } catch {
+    // Stockage indisponible : rien à effacer de persistant.
+  }
+}

@@ -3,10 +3,12 @@ import { useResource } from "../ui/AppContext";
 import { Card, EmptyState, ErrorBox, Loading, Page, PageHeading, StaleBadge } from "../ui/components";
 import { IconFood } from "../ui/icons";
 import {
+  CANTEEN_UNREADABLE,
   canteenDayLabel,
   canteenIsToday,
   canteenMealLabel,
   canteenWeekdayLabel,
+  isCanteenPayloadReadable,
   parseCanteenPayload,
   type CanteenMenu,
 } from "../features/canteen/canteen";
@@ -43,28 +45,32 @@ export default function CanteenRoute() {
   // Une seule horloge pour toutes les cartes : au passage de minuit, une
   // moitié de la liste ne peut pas basculer avant l’autre.
   const now = Date.now();
+  // `null` = pas encore de donnée ; illisible = erreur (I14).
+  const error =
+    resource.error ??
+    (resource.payload !== null && !isCanteenPayloadReadable(resource.payload) ? CANTEEN_UNREADABLE : null);
 
   return (
     <Page>
       <PageHeading title="Menus de la semaine" action={resource.stale ? <StaleBadge /> : null} />
 
-      {resource.error && days.length > 0 ? (
+      {error && days.length > 0 ? (
         <p className="tiny" role="status" style={{ margin: 0, color: "var(--danger-ink)" }}>
-          {resource.error}
+          {error}
         </p>
       ) : null}
 
       {days.length === 0 && resource.loading ? <Loading label="Chargement des menus…" /> : null}
 
-      {days.length === 0 && !resource.loading && resource.error ? (
-        <ErrorBox message={resource.error}>
+      {days.length === 0 && !resource.loading && error ? (
+        <ErrorBox message={error}>
           <button type="button" className="btn btn--small" onClick={resource.refresh}>
             Réessayer
           </button>
         </ErrorBox>
       ) : null}
 
-      {days.length === 0 && !resource.loading && !resource.error ? (
+      {days.length === 0 && !resource.loading && !error ? (
         <EmptyState
           icon={<IconFood size={30} />}
           title={resource.payload === null ? "Aucun menu en cache" : "Aucun menu publié cette semaine"}

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { assistantStatus } from "../../web/src/features/settings/model";
 
 const WEB = join(import.meta.dir, "..", "..", "web", "src");
 
@@ -16,8 +17,7 @@ function between(text: string, start: string, end: string): string {
   return text.slice(from, to);
 }
 
-describe("réglages — une seule section Assistant (#612)", () => {
-  const settings = source("features/settings/SettingsScreen.tsx");
+describe("réglages — une seule section Assistant (#612)", () => {  const settings = source("features/settings/SettingsScreen.tsx");
   const overview = source("features/settings/AssistantOverviewCard.tsx");
   const keyCard = source("features/settings/AssistantCards.tsx");
   const manual = source("features/settings/ManualCard.tsx");
@@ -42,8 +42,8 @@ describe("réglages — une seule section Assistant (#612)", () => {
     expect(keyCard).toContain('id="llm-key"');
     expect(manual).toContain('id="manual-url"');
     expect(manual).not.toContain('id="server-host"');
-    expect(overview).toContain("Assistant actif");
-    expect(overview).toContain("Aucune clé");
+    expect(overview).toContain("assistantStatus(configured");
+    expect(overview).toContain("configured: boolean | null");
 
     const advanced = settings.slice(settings.indexOf('title="Avancé"'));
     expect(advanced).toContain("<ServerCard");
@@ -51,6 +51,19 @@ describe("réglages — une seule section Assistant (#612)", () => {
     expect(server).toContain('id="server-host"');
     expect(server).toContain("Scraper de manuels (facultatif)");
     expect(server).not.toContain('id="manual-url"');
+  });
+
+  test("un instantané en erreur n'est ni « Aucune clé » ni des valeurs lues (I14)", () => {
+    // `null` = instantané non lu : le titre ne prétend rien sur la clé.
+    expect(assistantStatus(null, false, false).title).not.toBe("Aucune clé");
+    expect(assistantStatus(null, false, false).title).toContain("inconnu");
+    expect(assistantStatus(null, false, true).title).toContain("Lecture");
+    // Seuls les états LUS disent « aucune clé » ou « actif ».
+    expect(assistantStatus(false, false).title).toBe("Aucune clé");
+    expect(assistantStatus(true, false).title).toBe("Assistant actif");
+    // Le manuel ne part pas de l'adresse par défaut avant lecture.
+    expect(manual).toContain('useState("")');
+    expect(manual).toContain("Réglages non lus");
   });
 
   test("Cahier et Fiches sont atteignables depuis Assistant", () => {
@@ -111,6 +124,16 @@ describe("profil — assistant découvrable (#612)", () => {
     expect(assistant).toContain("<IconSparkles");
     expect(assistant).toContain('navigate("/course-notes")');
     expect(assistant).toContain('navigate("/revision-sheets")');
+  });
+
+  test("la copie de déconnexion correspond à ce qui est purgé (I16)", () => {
+    const dialog = profile.slice(profile.indexOf('title="Se déconnecter"'));
+    // Matières personnalisées et manuel partent avec le compte ; seule la clé
+    // de l'assistant survit (OfflineCache.clearAll + Manuals.clearAccountData).
+    expect(dialog).toContain("matières personnalisées");
+    expect(dialog).toContain("manuel enregistré");
+    expect(dialog).toContain("seule la clé de l’assistant reste");
+    expect(dialog).not.toContain("préférences et la clé");
   });
 
   test("Ressources garde les quatre entrées scolaires, sans doublon assistant", () => {

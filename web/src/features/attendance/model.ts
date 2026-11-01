@@ -116,6 +116,23 @@ function payloadRoot(payload: string | null): Record<string, unknown> | null {
   }
 }
 
+export const ATTENDANCE_UNAVAILABLE = "Vie scolaire indisponible : aucune donnée n’a été lue.";
+export const ATTENDANCE_UNREADABLE = "Vie scolaire illisible : la donnée n’a pas pu être lue.";
+export const PUNISHMENTS_UNAVAILABLE = "Sanctions indisponibles : aucune donnée n’a été lue.";
+export const PUNISHMENTS_UNREADABLE = "Sanctions illisibles : la donnée n’a pas pu être lue.";
+
+/** Un JSON illisible ou sans tableau d'événements n'est PAS « rien publié »
+ *  (I14). `null` = aucun payload, traité à part par l'appelant. */
+export function isAttendancePayloadReadable(payload: string | null): boolean {
+  const root = payloadRoot(payload);
+  return root !== null && (Array.isArray(root["absences"]) || Array.isArray(root["items"]));
+}
+
+export function isPunishmentsPayloadReadable(payload: string | null): boolean {
+  const root = payloadRoot(payload);
+  return root !== null && (Array.isArray(root["punishments"]) || Array.isArray(root["items"]));
+}
+
 export function parseAttendance(payload: string | null): AttendanceData {
   const root = payloadRoot(payload);
   if (!root) return { absences: [], periods: [] };

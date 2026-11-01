@@ -298,7 +298,7 @@ export const bridge = {
     call<{ ok: boolean; error?: string }>("assignments.toggle", { id, done, weekStart }),
   openAttachment: (homeworkId: string, attachmentId: string, weekStart: string) =>
     call<{ ok: boolean; error?: string }>("assignments.attachment", { homeworkId, attachmentId, weekStart }),
-  messages: () => call<{ payload: string | null }>("messages.list"),
+  messages: () => call<{ payload: string | null; error?: string }>("messages.list"),
   thread: (id: string) => call<{ payload: string | null; error?: string }>("messages.thread", { id }),
   reply: (id: string, body: string) => call<{ ok: boolean; error?: string }>("messages.reply", { id, body }),
   createMessage: (recipients: string[], subject: string, body: string) =>
