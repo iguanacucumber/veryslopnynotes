@@ -20,13 +20,18 @@ import {
   type Punishment,
 } from "../../web/src/features/attendance/model";
 
-function renderAttendance(rows: Absence[], onlyPending = false): string {
+function renderAttendance(
+  rows: Absence[],
+  onlyPending = false,
+  payload: string | null = JSON.stringify({ absences: rows }),
+): string {
   return renderToStaticMarkup(
     createElement(
       MemoryRouter,
       null,
       createElement(AttendanceScreen, {
         rows,
+        payload,
         loading: false,
         error: null,
         stale: false,
@@ -39,13 +44,14 @@ function renderAttendance(rows: Absence[], onlyPending = false): string {
   );
 }
 
-function renderSanctions(rows: Punishment[]): string {
+function renderSanctions(rows: Punishment[], payload = JSON.stringify({ punishments: rows })): string {
   return renderToStaticMarkup(
     createElement(
       MemoryRouter,
       null,
       createElement(SanctionsScreen, {
         rows,
+        payload,
         loading: false,
         error: null,
         stale: false,
@@ -116,6 +122,37 @@ describe("assiduité — la justification absente est INCONNUE, pas justifiée",
     expect(html).toContain("1 h sur 3 h manquées");
     expect(html).toContain("1 sans information de justification");
     expect(html).toContain("À justifier (2)");
+  });
+});
+
+describe("assiduité — un payload illisible n'est jamais « rien publié » (I14)", () => {
+  test("JSON corrompu : erreur, pas l'état vide", () => {
+    const html = renderAttendance([], false, "{cassé");
+    expect(html).toContain("Vie scolaire illisible");
+    expect(html).not.toContain("n’a rien publié");
+  });
+
+  test("payload absent : indisponible, pas « rien publié »", () => {
+    const html = renderAttendance([], false, null);
+    expect(html).toContain("Vie scolaire indisponible");
+    expect(html).not.toContain("n’a rien publié");
+  });
+
+  test("liste affirmée vide : l'état vide est légitime", () => {
+    const html = renderAttendance([], false, JSON.stringify({ absences: [], periods: [] }));
+    expect(html).toContain("n’a rien publié");
+    expect(html).not.toContain("illisible");
+  });
+
+  test("sanctions : JSON corrompu affiche une erreur, pas « aucune sanction »", () => {
+    const html = renderSanctions([], "{cassé");
+    expect(html).toContain("Sanctions illisibles");
+    expect(html).not.toContain("Aucune sanction publiée");
+  });
+
+  test("sanctions : liste lue et vide reste un état vide", () => {
+    const html = renderSanctions([], JSON.stringify({ punishments: [] }));
+    expect(html).toContain("Aucune sanction publiée");
   });
 });
 

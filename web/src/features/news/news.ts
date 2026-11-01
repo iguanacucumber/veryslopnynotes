@@ -47,6 +47,21 @@ function parseItems(payload: string | null): unknown[] {
   }
 }
 
+export const NEWS_UNAVAILABLE = "Actualités indisponibles : aucune donnée n’a été lue.";
+export const NEWS_UNREADABLE = "Actualités illisibles : la donnée n’a pas pu être lue.";
+
+/** Un JSON illisible ou sans liste d'actualités n'est PAS « rien publié »
+ *  (I14). `null` = aucun payload, traité à part par l'appelant. */
+export function isNewsPayloadReadable(payload: string | null): boolean {
+  if (!payload) return false;
+  try {
+    const root: unknown = JSON.parse(payload);
+    return isRecord(root) && (Array.isArray(root["news"]) || Array.isArray(root["items"]));
+  } catch {
+    return false;
+  }
+}
+
 export function parseNewsPayload(payload: string | null): NewsItem[] {
   const items: NewsItem[] = [];
   const seen = new Set<string>();

@@ -32,6 +32,40 @@ export function llmSaveError(response: { ok: boolean; message?: string }): strin
   return message !== "" ? message : "Clé refusée : vérifie qu'elle est complète.";
 }
 
+export interface AssistantStatus {
+  title: string;
+  body: string;
+}
+
+/** `null` = instantané NON LU (échec du pont) : on ne dit jamais « Aucune
+ *  clé » ni « actif » sur une donnée inconnue (I14). */
+export function assistantStatus(
+  configured: boolean | null,
+  storageUnavailable: boolean,
+  loading = false,
+): AssistantStatus {
+  if (configured === null) {
+    return loading
+      ? { title: "Lecture de la clé…", body: "L’état de la clé de l’assistant est en cours de lecture." }
+      : {
+          title: "État de la clé inconnu",
+          body: "Les réglages n’ont pas pu être lus : on ne sait pas si une clé est enregistrée sur cet appareil.",
+        };
+  }
+  if (!configured) {
+    return {
+      title: "Aucune clé",
+      body: "Sans clé OpenRouter, l’assistant ne peut ni aider sur un devoir ni générer une fiche.",
+    };
+  }
+  return {
+    title: "Assistant actif",
+    body: storageUnavailable
+      ? "Clé en mémoire seulement : elle sera oubliée à la fermeture de l'app."
+      : "Clé enregistrée (chiffrée) : l’aide devoirs et les fiches de révision sont disponibles.",
+  };
+}
+
 export interface ManualSaveNotice {
   notice: string;
   kind: "info" | "error";

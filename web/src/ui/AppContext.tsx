@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from "react";
 import { bridge } from "../bridge/client";
 import { BridgeCallError, type ResourceKey } from "../bridge/types";
+import { clearNewsReadIds } from "../features/news/readState";
 import { forceReload, type LoadSignature } from "../lib/refresh";
 import { beginLoad, canUseCached, invalidateOnRequestChange, requestId, visibleResource, type ResourceStatus } from "../lib/resource";
 import { cssVarsOf, paletteOf, parseScheme } from "../lib/schemes";
@@ -104,6 +105,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Déconnexion : le natif a invalidé la session et purgé les caches. Sans ce
   // drapeau, l'accueil afficherait « aucune donnée en cache ».
   const closeSession = useCallback(() => {
+    clearNewsReadIds();
     setSessionOpen(false);
     setSessionClosed(true);
     setAuthLost(false);

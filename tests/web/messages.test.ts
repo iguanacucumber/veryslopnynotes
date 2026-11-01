@@ -8,6 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createSeq } from "../../web/src/lib/seq";
 import { createReplyGuard, draftAfterReply } from "../../web/src/features/messages/reply";
 import { ThreadScreen } from "../../web/src/features/messages/MessagesScreen";
+import { readBridgeSource } from "../unit/fixtures/bridge-source";
 import {
   isMessagesPayloadReadable,
   type Discussion,
@@ -110,6 +111,36 @@ describe("messagerie : un fil illisible est une ERREUR, pas un fil vide (#537)",
     const route = readFileSync(join(ROOT, "web/src/routes/messages.tsx"), "utf8");
     expect(route).toContain("isMessagesPayloadReadable");
     expect(route).toContain("Fil illisible");
+  });
+});
+
+// #783 : un échec NON-session du pont rendait `payload: null` en succès, donc
+// zéro fil et `error = null`. Le pont doit lever `unavailable` (I14).
+describe("pont messages — un échec est une ERREUR, jamais zéro fil (#783)", () => {
+  const bridge = readBridgeSource();
+  const listStart = bridge.indexOf("internal fun VsnBridge.messagesList()");
+  const threadStart = bridge.indexOf("internal fun VsnBridge.messagesThread(");
+  const replyStart = bridge.indexOf("internal fun VsnBridge.messagesReply(");
+  const list = bridge.slice(listStart, threadStart);
+  const thread = bridge.slice(threadStart, replyStart);
+
+  test("messages.list ne rend plus payload null en succès", () => {
+    expect(list).not.toContain("payload ?: JSONObject.NULL");
+    expect(list).toContain('?: throw BridgeFailure("unavailable"');
+    expect(list).toContain('cachedPayload ?: throw BridgeFailure("unavailable"');
+    expect(list).toContain('put("error", outcome.message)');
+  });
+
+  test("messages.thread lève unavailable sur un échec ou un fil absent", () => {
+    expect(thread).toContain('if (error != null) throw BridgeFailure("unavailable", error)');
+    expect(thread).toContain('if (thread == null) throw BridgeFailure("unavailable"');
+  });
+
+  test("la liste web rend l'erreur du pont et le payload illisible", () => {
+    const route = readFileSync(join(ROOT, "web/src/routes/messages.tsx"), "utf8");
+    expect(route).toContain("isMessagesPayloadReadable(result.payload)");
+    expect(route).toContain("Discussions illisibles");
+    expect(route).toContain("result.error");
   });
 });
 

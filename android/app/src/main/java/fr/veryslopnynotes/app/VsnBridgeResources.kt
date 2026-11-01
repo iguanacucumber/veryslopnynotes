@@ -175,15 +175,20 @@ internal fun VsnBridge.openAttachment(p: JSONObject): JSONObject {
 internal fun VsnBridge.messagesList(): JSONObject {
     val outcome = await<RefreshOutcome> { cb ->
         repo.refreshAsync(CachePolicy.DISCUSSIONS, currentBaseUrl(), force = false, cb = cb)
+    } ?: throw BridgeFailure("unavailable", "Messagerie indisponible.")
+    val obj = JSONObject()
+    when (outcome) {
+        is RefreshOutcome.Updated -> obj.put("payload", outcome.payload)
+        is RefreshOutcome.OfflineFallback -> obj.put("payload", outcome.payload)
+        is RefreshOutcome.Failed -> {
+            sessionOrThrow(outcome.message)
+            // Aucun cache de la MÊME requête : l'échec est un échec, jamais un
+            // succès avec zéro fil (I14).
+            val cached = outcome.cachedPayload ?: throw BridgeFailure("unavailable", outcome.message)
+            obj.put("payload", cached).put("error", outcome.message)
+        }
     }
-    if (outcome is RefreshOutcome.Failed) sessionOrThrow(outcome.message)
-    val payload = when (outcome) {
-        is RefreshOutcome.Updated -> outcome.payload
-        is RefreshOutcome.OfflineFallback -> outcome.payload
-        is RefreshOutcome.Failed -> outcome.cachedPayload
-        null -> null
-    }
-    return JSONObject().put("payload", payload ?: JSONObject.NULL)
+    return obj
 }
 
 internal fun VsnBridge.messagesThread(p: JSONObject): JSONObject {
@@ -194,8 +199,11 @@ internal fun VsnBridge.messagesThread(p: JSONObject): JSONObject {
     } ?: throw BridgeFailure("unavailable", "Fil indisponible.")
     val (thread, error) = result
     sessionOrThrow(error)
+    // Un fil non lu (échec ou réponse vide) est une ERREUR, pas un fil vide.
+    if (error != null) throw BridgeFailure("unavailable", error)
+    if (thread == null) throw BridgeFailure("unavailable", "Fil indisponible.")
     val arr = JSONArray()
-    for (m in thread?.messages ?: emptyList()) {
+    for (m in thread.messages) {
         arr.put(
             JSONObject()
                 .put("id", m.id)
@@ -224,10 +232,9 @@ internal fun VsnBridge.messagesThread(p: JSONObject): JSONObject {
             "payload",
             JSONObject()
                 .put("messages", arr)
-                .put("participants", JSONArray(thread?.participants ?: emptyList<String>()))
+                .put("participants", JSONArray(thread.participants))
                 .toString(),
         )
-    error?.let { obj.put("error", it) }
     return obj
 }
 

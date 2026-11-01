@@ -10,6 +10,7 @@ export default function SanctionsRoute() {
   return (
     <SanctionsScreen
       rows={rows}
+      payload={punishments.payload}
       loading={punishments.loading}
       error={punishments.error}
       stale={punishments.stale}

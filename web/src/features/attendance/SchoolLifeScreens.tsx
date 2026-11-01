@@ -3,12 +3,18 @@ import { Link } from "react-router-dom";
 import { Card, EmptyState, ErrorBox, Loading, PageHeading, StaleBadge } from "../../ui/components";
 import { IconCheck, IconShield, IconWarning } from "../../ui/icons";
 import {
+  ATTENDANCE_UNAVAILABLE,
+  ATTENDANCE_UNREADABLE,
+  PUNISHMENTS_UNAVAILABLE,
+  PUNISHMENTS_UNREADABLE,
   absenceTitle,
   attendanceSections,
   attendanceStatus,
   durationLongFr,
   formatDateSpan,
   formatLongDate,
+  isAttendancePayloadReadable,
+  isPunishmentsPayloadReadable,
   isUnjustified,
   justifiedLabel,
   needsJustification,
@@ -19,6 +25,7 @@ import {
 
 interface AttendanceProps {
   rows: Absence[];
+  payload: string | null;
   loading: boolean;
   error: string | null;
   stale: boolean;
@@ -41,6 +48,7 @@ function statusColor(state: AttendanceState): string {
 
 export function AttendanceScreen({
   rows,
+  payload,
   loading,
   error,
   stale,
@@ -61,6 +69,28 @@ export function AttendanceScreen({
   if (error && rows.length === 0) {
     return (
       <ErrorBox message={error}>
+        <button type="button" className="btn btn--small" onClick={onRefresh}>
+          Réessayer
+        </button>
+      </ErrorBox>
+    );
+  }
+
+  // Payload absent ou illisible : on ne sait pas si l'établissement a publié
+  // quelque chose (I14). L'état vide n'affirmerait que ce qu'on ignore.
+  if (rows.length === 0 && payload === null) {
+    return (
+      <ErrorBox message={ATTENDANCE_UNAVAILABLE}>
+        <button type="button" className="btn btn--small" onClick={onRefresh}>
+          Réessayer
+        </button>
+      </ErrorBox>
+    );
+  }
+
+  if (rows.length === 0 && !isAttendancePayloadReadable(payload)) {
+    return (
+      <ErrorBox message={ATTENDANCE_UNREADABLE}>
         <button type="button" className="btn btn--small" onClick={onRefresh}>
           Réessayer
         </button>
@@ -237,13 +267,47 @@ function AttendanceRow({ row }: { row: Absence }) {
 
 interface SanctionsProps {
   rows: Punishment[];
+  payload: string | null;
   loading: boolean;
   error: string | null;
   stale: boolean;
   onRefresh: () => void;
 }
 
-export function SanctionsScreen({ rows, loading, error, stale, onRefresh }: SanctionsProps) {
+export function SanctionsScreen({ rows, payload, loading, error, stale, onRefresh }: SanctionsProps) {
+  const emptyContent = loading ? (
+    <Loading label="Chargement des sanctions…" />
+  ) : error ? (
+    <ErrorBox message={error}>
+      <button type="button" className="btn btn--small" onClick={onRefresh}>
+        Réessayer
+      </button>
+    </ErrorBox>
+  ) : payload === null ? (
+    <ErrorBox message={PUNISHMENTS_UNAVAILABLE}>
+      <button type="button" className="btn btn--small" onClick={onRefresh}>
+        Réessayer
+      </button>
+    </ErrorBox>
+  ) : !isPunishmentsPayloadReadable(payload) ? (
+    <ErrorBox message={PUNISHMENTS_UNREADABLE}>
+      <button type="button" className="btn btn--small" onClick={onRefresh}>
+        Réessayer
+      </button>
+    </ErrorBox>
+  ) : (
+    <EmptyState
+      icon={<IconShield size={30} />}
+      title="Aucune sanction publiée"
+      body="L’établissement n’a publié aucune sanction."
+      action={
+        <button type="button" className="btn btn--small" onClick={onRefresh}>
+          Actualiser
+        </button>
+      }
+    />
+  );
+
   return (
     <div className="stack">
       <PageHeading
@@ -256,7 +320,7 @@ export function SanctionsScreen({ rows, loading, error, stale, onRefresh }: Sanc
         }
       />
 
-      {error ? (
+      {error && rows.length > 0 ? (
         <ErrorBox message={error}>
           <button type="button" className="btn btn--small" onClick={onRefresh}>
             Réessayer
@@ -264,19 +328,8 @@ export function SanctionsScreen({ rows, loading, error, stale, onRefresh }: Sanc
         </ErrorBox>
       ) : null}
 
-      {loading && rows.length === 0 ? (
-        <Loading label="Chargement des sanctions…" />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon={<IconShield size={30} />}
-          title="Aucune sanction publiée"
-          body="L’établissement n’a publié aucune sanction."
-          action={
-            <button type="button" className="btn btn--small" onClick={onRefresh}>
-              Actualiser
-            </button>
-          }
-        />
+      {rows.length === 0 ? (
+        emptyContent
       ) : (
         <div className="list">
           {rows.map((row, index) => {

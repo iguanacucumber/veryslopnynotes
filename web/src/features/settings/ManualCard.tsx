@@ -9,7 +9,9 @@ import { DEFAULT_MANUAL_URL, MAX_MANUAL_URL_CHARS, manualSaveNotice } from "./mo
 /** L'adresse part au pont natif, jamais au serveur de l'établissement ; rien n'est stocké ici. */
 export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot | null; loading: boolean }) {
   const { notify } = useApp();
-  const [manualUrl, setManualUrl] = useState(DEFAULT_MANUAL_URL);
+  // Vide tant que l'instantané n'est pas lu : l'adresse par défaut ne doit pas
+  // passer pour une valeur enregistrée (I14).
+  const [manualUrl, setManualUrl] = useState("");
   const [manualConfigured, setManualConfigured] = useState(false);
   const [manualAuto, setManualAuto] = useState(false);
   const [manualReady, setManualReady] = useState(false);
@@ -92,6 +94,10 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
     .filter((part) => part !== "")
     .join(" · ");
   const manualStatus = manualAuto ? "Automatique" : manualReady ? "Prêt" : "Non récupéré";
+  // Instantané non lu : ni l'adresse par défaut ni « Non récupéré » ne sont
+  // des faits sur ce compte.
+  const unread = snapshot === null && !loading;
+  const blocked = loading || unread || savingManual;
 
   return (
     <Card className="card--flat">
@@ -114,6 +120,11 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
         extrait dans l’aide devoirs et les fiches de révision. L’adresse est lue par le scraper
         facultatif, jamais par l’établissement.
       </p>
+      {unread ? (
+        <p className="tiny" role="status" style={{ color: "var(--danger-ink)", margin: "8px 0 0" }}>
+          Réglages non lus : l’état du manuel est inconnu, rien n’est affiché comme enregistré.
+        </p>
+      ) : null}
       <label className="tiny muted" htmlFor="manual-url" style={{ display: "block", marginTop: 12 }}>
         Adresse du manuel
       </label>
@@ -128,7 +139,7 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
         autoCapitalize="none"
         autoCorrect="off"
         spellCheck={false}
-        disabled={loading || savingManual}
+        disabled={blocked}
         aria-invalid={manualError !== ""}
         aria-describedby="manual-help"
         placeholder="https://manuel.exemple.fr/chapitre"
@@ -185,7 +196,7 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
         <button
           type="button"
           className="btn btn--ghost btn--small"
-          disabled={loading || savingManual || !manualConfigured}
+          disabled={blocked || !manualConfigured}
           onClick={() => void forgetManual()}
         >
           Oublier le manuel
@@ -193,7 +204,7 @@ export function ManualCard({ snapshot, loading }: { snapshot: SettingsSnapshot |
         <button
           type="button"
           className="btn btn--small"
-          disabled={loading || savingManual || manualUrl.trim() === ""}
+          disabled={blocked || manualUrl.trim() === ""}
           onClick={() => void saveManual()}
         >
           {savingManual ? "Enregistrement…" : "Enregistrer le manuel"}

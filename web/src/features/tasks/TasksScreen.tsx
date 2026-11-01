@@ -27,6 +27,8 @@ import {
 import { relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
 import {
+  ASSIGNMENTS_UNAVAILABLE,
+  ASSIGNMENTS_UNREADABLE,
   assignmentCardText,
   assignmentHasAssistantMaterial,
   assignmentSections,
@@ -34,6 +36,7 @@ import {
   assignmentsMatching,
   homeworkFollowUpQuestion,
   homeworkRefusalText,
+  isAssignmentsPayloadReadable,
   parseAiContext,
   parseAssignmentsPayload,
   parseHomeworkActions,
@@ -91,6 +94,17 @@ function TasksWeek({ week }: { week: string }) {
   const query = `weekStart=${week}`;
   const resource = useResource("assignments", query);
   const parsed = useMemo(() => parseAssignmentsPayload(resource.payload), [resource.payload]);
+  // `null` = pas encore de donnée ; illisible = erreur (I14). L'état vide ne
+  // doit affirmer « aucun devoir » que sur une liste lue.
+  const error =
+    resource.error ??
+    (resource.payload === null
+      ? resource.loading
+        ? null
+        : ASSIGNMENTS_UNAVAILABLE
+      : isAssignmentsPayloadReadable(resource.payload)
+        ? null
+        : ASSIGNMENTS_UNREADABLE);
   // Un payload en cache peut appartenir à une autre semaine : on ne garde que
   // la semaine affichée. Semaine sans devoir = état vide, pas chargement sans fin.
   const visible = useMemo(() => assignmentsInWeek(parsed.items, week), [parsed.items, week]);
@@ -483,10 +497,10 @@ function TasksWeek({ week }: { week: string }) {
     );
   }
 
-  if (resource.error && items.length === 0) {
+  if (error && items.length === 0) {
     return (
       <Page>
-        <ErrorBox message={resource.error}>
+        <ErrorBox message={error}>
           <button type="button" className="btn btn--small" onClick={resource.refresh}>
             Réessayer
           </button>
@@ -506,7 +520,7 @@ function TasksWeek({ week }: { week: string }) {
         </div>
       ) : null}
 
-      {resource.error ? <ErrorBox message={resource.error} /> : null}
+      {error ? <ErrorBox message={error} /> : null}
 
       <SearchField
         value={search}

@@ -287,8 +287,26 @@ function bound(root: Record<string, unknown> | null, keys: string[]): string | n
   return null;
 }
 
+export const ASSIGNMENTS_UNAVAILABLE = "Devoirs indisponibles : aucune donnée n’a été lue.";
+export const ASSIGNMENTS_UNREADABLE = "Devoirs illisibles : la donnée n’a pas pu être lue.";
+
+/** Un JSON illisible ou sans liste de devoirs n'est PAS « aucun devoir »
+ *  (I14). `null` = aucun payload, traité à part par l'appelant. */
+export function isAssignmentsPayloadReadable(payload: string | null | undefined): boolean {
+  if (!payload) return false;
+  try {
+    const parsed: unknown = JSON.parse(payload);
+    if (Array.isArray(parsed)) return true;
+    const root = record(parsed);
+    return root !== null && (Array.isArray(root["assignments"]) || Array.isArray(root["items"]));
+  } catch {
+    return false;
+  }
+}
+
 /** Payload `{assignments: []}` (Kotlin) ou `{items: []}` (pont factice), avec
- *  d'éventuelles bornes de semaine. Un JSON illisible rend un payload vide. */
+ *  d'éventuelles bornes de semaine. Un JSON illisible rend un payload vide,
+ *  distingué de « aucun devoir » par [isAssignmentsPayloadReadable]. */
 export function parseAssignmentsPayload(payload: string | null | undefined): AssignmentsPayload {
   if (!payload) return { items: [], weekStart: null, weekEnd: null };
   let root: Record<string, unknown> | null = null;

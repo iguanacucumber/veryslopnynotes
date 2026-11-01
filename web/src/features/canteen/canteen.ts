@@ -72,6 +72,16 @@ function menuArray(root: Record<string, unknown> | null): unknown[] {
   return [];
 }
 
+export const CANTEEN_UNAVAILABLE = "Menus indisponibles : aucune donnée n’a été lue.";
+export const CANTEEN_UNREADABLE = "Menus illisibles : la donnée n’a pas pu être lue.";
+
+/** Un JSON illisible ou sans liste de menus n'est PAS « rien publié » (I14).
+ *  `null` = aucun payload, traité à part par l'appelant. */
+export function isCanteenPayloadReadable(payload: string | null): boolean {
+  const root = parseRoot(payload);
+  return root !== null && (Array.isArray(root["menus"]) || Array.isArray(root["items"]));
+}
+
 /** Jour normalisé en ISO local, `null` si la date est illisible : une date
  *  brute n'est jamais utilisée comme clé de regroupement. */
 function dayKey(value: unknown): string | null {

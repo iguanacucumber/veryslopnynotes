@@ -11,7 +11,8 @@ import { MAX_API_KEY_CHARS, llmSaveError } from "./model";
 
 export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapshot | null; loading: boolean }) {
   const { notify, storageUnavailable } = useApp();
-  const [llmConfigured, setLlmConfigured] = useState(false);
+  // `null` = instantané non lu : on ne prétend ni clé absente ni clé active.
+  const [llmConfigured, setLlmConfigured] = useState<boolean | null>(null);
   const [llmKey, setLlmKey] = useState("");
   const [keyVisible, setKeyVisible] = useState(false);
   const [llmError, setLlmError] = useState("");
@@ -68,7 +69,7 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
 
   return (
     <>
-      <AssistantOverviewCard configured={llmConfigured} />
+      <AssistantOverviewCard configured={llmConfigured} loading={loading} />
 
       <Card className="card--flat assistant-key ai">
         <strong className="assistant-key__title">Connexion OpenRouter</strong>
@@ -90,7 +91,13 @@ export function AssistantCards({ snapshot, loading }: { snapshot: SettingsSnapsh
             autoCapitalize="none"
             spellCheck={false}
             disabled={loading}
-            placeholder={llmConfigured ? "Nouvelle clé (facultatif)" : "Colle ta clé ici"}
+            placeholder={
+              llmConfigured === null
+                ? "État de la clé non lu"
+                : llmConfigured
+                  ? "Nouvelle clé (facultatif)"
+                  : "Colle ta clé ici"
+            }
             onChange={(event) => {
               setLlmKey(event.target.value.slice(0, MAX_API_KEY_CHARS));
               if (llmError) setLlmError("");

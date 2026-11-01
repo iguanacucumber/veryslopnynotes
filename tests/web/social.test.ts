@@ -32,6 +32,8 @@ import {
   absenceTitle,
   durationLongFr,
   formatDateSpan,
+  isAttendancePayloadReadable,
+  isPunishmentsPayloadReadable,
   isUnjustified,
   justifiedLabel,
   parseAttendance,
@@ -317,7 +319,20 @@ describe("vie scolaire — absences, retards, sanctions", () => {
     expect(data.absences.some((a) => a.id === "a4")).toBe(false); // date illisible
     expect(data.absences.some((a) => a.id === "a5")).toBe(false); // fin avant début
     expect(data.periods[0]?.name).toBe("Trimestre 1");
+  });
+
+  test("un JSON illisible est INVALIDE, jamais « rien publié » (I14)", () => {
+    // Le parseur tolérant rend une liste vide ; l'écran lit le prédicat.
     expect(parseAttendance("{cassé")).toEqual({ absences: [], periods: [] });
+    expect(isAttendancePayloadReadable("{cassé")).toBe(false);
+    expect(isAttendancePayloadReadable("null")).toBe(false);
+    expect(isAttendancePayloadReadable(JSON.stringify({ periods: [] }))).toBe(false);
+    // `null` = aucun payload, distingué de l'illisible par l'appelant.
+    expect(isAttendancePayloadReadable(null)).toBe(false);
+    // Liste AFFIRMÉE vide = « rien publié », lisible.
+    expect(isAttendancePayloadReadable(JSON.stringify({ absences: [], periods: [] }))).toBe(true);
+    expect(isAttendancePayloadReadable(JSON.stringify({ items: [] }))).toBe(true);
+    expect(isAttendancePayloadReadable(attendancePayload)).toBe(true);
   });
 
   test("repli `items` du pont factice", () => {
@@ -529,6 +544,10 @@ describe("vie scolaire — absences, retards, sanctions", () => {
     expect(rows[1]?.durationMinutes).toBe(120);
     expect(parsePunishments(null)).toEqual([]);
     expect(parsePunishments(JSON.stringify({ items: [] }))).toEqual([]);
+    // Un payload illisible reste INVALIDE, jamais « aucune sanction » (I14).
+    expect(isPunishmentsPayloadReadable("{cassé")).toBe(false);
+    expect(isPunishmentsPayloadReadable(JSON.stringify({ items: [] }))).toBe(true);
+    expect(isPunishmentsPayloadReadable(JSON.stringify({ punishments: [] }))).toBe(true);
   });
 
   test("capacités : contrat, repli factice, ou liste directe", () => {

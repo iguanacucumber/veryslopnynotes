@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   NEWS_BODY_ERROR,
+  isNewsPayloadReadable,
   needsNewsBody,
   newsBodyCollapsible,
   newsBodyFailed,
@@ -22,6 +23,7 @@ import {
   canteenIsToday,
   canteenMealLabel,
   canteenWeekdayLabel,
+  isCanteenPayloadReadable,
   parseCanteenPayload,
 } from "../../web/src/features/canteen/canteen";
 import {
@@ -66,6 +68,16 @@ describe("web actualités", () => {
     expect(parseNewsPayload(JSON.stringify({ items: [newsItem()] }))).toHaveLength(1);
     expect(parseNewsPayload(null)).toEqual([]);
     expect(parseNewsPayload("pas du json")).toEqual([]);
+  });
+
+  test("un payload corrompu reste INVALIDE, jamais « rien publié » (I14)", () => {
+    expect(isNewsPayloadReadable("pas du json")).toBe(false);
+    expect(isNewsPayloadReadable("null")).toBe(false);
+    expect(isNewsPayloadReadable(JSON.stringify({ autres: [] }))).toBe(false);
+    // `null` = aucun payload, traité à part par l'écran.
+    expect(isNewsPayloadReadable(null)).toBe(false);
+    expect(isNewsPayloadReadable(JSON.stringify({ news: [] }))).toBe(true);
+    expect(isNewsPayloadReadable(JSON.stringify({ items: [] }))).toBe(true);
   });
 
   test("borne les champs, ignore les entrées invalides et les doublons", () => {
@@ -208,6 +220,16 @@ describe("web cantine", () => {
     expect(parseCanteenPayload(JSON.stringify({ items: [] })).days).toEqual([]);
     expect(parseCanteenPayload(JSON.stringify({ items: [menu()] })).days).toHaveLength(1);
     expect(parseCanteenPayload("{").days).toEqual([]);
+    expect(isCanteenPayloadReadable("{")).toBe(false);
+  });
+
+  test("un payload corrompu reste INVALIDE, jamais « aucun menu » (I14)", () => {
+    expect(isCanteenPayloadReadable("null")).toBe(false);
+    expect(isCanteenPayloadReadable(JSON.stringify({ autres: [] }))).toBe(false);
+    // `null` = aucun payload, traité à part par l'écran.
+    expect(isCanteenPayloadReadable(null)).toBe(false);
+    expect(isCanteenPayloadReadable(JSON.stringify({ menus: [] }))).toBe(true);
+    expect(isCanteenPayloadReadable(JSON.stringify({ items: [] }))).toBe(true);
   });
 
   test("borne les plats et les allergènes", () => {
