@@ -79,6 +79,7 @@ mock.module("playwright", () => ({
   chromium: {
     launch: async () => ({
       newContext: async () => ({
+        routeWebSocket: async () => {},
         newPage: async () => ({
           url: () => PUBLIC_URL,
           title: async () => "Titre factice",
@@ -273,7 +274,8 @@ describe("scraper-only (#209)", () => {
 
   test("contrat : gardes requête/réponse", async () => {
     expect(isManualsScrapeRequest(scrapeBody())).toBe(true);
-    expect(isManualsScrapeRequest({ ...scrapeBody(), headless: false })).toBe(true);
+    // Le mode d'exécution n'est plus un champ du contrat : le scraper impose
+    // `headless` (un ancien client qui l'envoie reste accepté, champ ignoré).
     // C'est le SERVEUR qui refuse le corps qui demande un jar, pas le contrat.
     expect(isManualsScrapeRequest({ ...scrapeBody(), authFile: "manuel.json" })).toBe(true);
     // Le contrat n'exige ni ne valide d'identifiants : c'est le SERVEUR qui refuse.

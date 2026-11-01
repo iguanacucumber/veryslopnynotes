@@ -161,3 +161,22 @@ describe("#533 — l'image Docker n'est ni root ni en clair", () => {
     expect(home).toMatch(/^\/home\//);
   });
 });
+
+// #779 : une image tirée par tag mutable change sous l'opérateur, et la
+// commande documentée laissait le conteneur privilégié et inscriptible.
+describe("#779 — image épinglée par digest, commande durcie", () => {
+  const dockerfile = readFileSync(join(ROOT, "Dockerfile.server"), "utf8");
+  const readme = readFileSync(join(ROOT, "server", "README.md"), "utf8");
+
+  test("chaque FROM est épinglé par un digest sha256", () => {
+    const fromLines = dockerfile.split("\n").filter((l) => /^\s*FROM\b/.test(l));
+    expect(fromLines.length).toBeGreaterThan(0);
+    for (const line of fromLines) expect(line).toMatch(/@sha256:[0-9a-f]{64}\b/);
+  });
+
+  test("la commande docker run documentée est durcie", () => {
+    for (const flag of ["--read-only", "--cap-drop=ALL", "no-new-privileges"]) {
+      expect(readme).toContain(flag);
+    }
+  });
+});

@@ -290,8 +290,6 @@ export interface ManualsScrapeRequest {
   readonly password?: string;
   /** URL de départ fournie par l'humain (jamais committée). */
   readonly startUrl: string;
-  /** false = première connexion interactive visible. */
-  readonly headless?: boolean;
 }
 
 /**
@@ -327,8 +325,9 @@ export function isManualsScrapeRequest(v: unknown): v is ManualsScrapeRequest {
   // navigation et refuse le nom dont une adresse est privée
   // (server/infrastructure/ssrf.ts).
   if (!isPublicHttpUrl(r["startUrl"] as string)) return false;
-  const headless = r["headless"];
-  return headless === undefined || typeof headless === "boolean";
+  // Le mode d'exécution n'est plus un paramètre : le scraper force `headless`
+  // (un `false` ouvrirait un Chromium visible, ou casserait dans l'image).
+  return true;
 }
 
 export function isManualsScrapeDoc(v: unknown): v is ManualsScrapeDoc {

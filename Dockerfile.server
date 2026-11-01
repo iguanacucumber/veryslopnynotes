@@ -1,8 +1,9 @@
 # Scraper de manuels seul : seuls http.ts + manuals*.ts embarqués, sans auth
 # (I8, risque documenté dans server/infrastructure/http.ts).
-# Base épinglée (ADR-001) : ne pas redescendre sous 1.4.4 (CVE-2026-111497,
-# Brotli/node2shell/HTTP2Shell). Digest à figer quand un daemon est dispo.
-FROM oven/bun:1.4.4 AS base
+# Base épinglée (ADR-001) : tag ET digest (index multi-arch, résolu le
+# 2026-11-01 via le registre Docker Hub). Ne pas redescendre sous 1.4.4
+# (CVE-2026-111497, Brotli/node2shell/HTTP2Shell).
+FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS base
 WORKDIR /app
 # Install strict, aucun fallback : dérive interdite.
 COPY package.json bun.lock tsconfig.json ./
