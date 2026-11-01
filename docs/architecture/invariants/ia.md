@@ -44,7 +44,7 @@
 <a id="i15"></a>
 
 ## I15 — L'export PDF d'une fiche garde le corps entier et ses sources
-- Invariant : l'export PDF rend le corps ENTIER (`RevisionPdf` pagine) et la liste CANONIQUE des sources (`sheet.sources`), jamais un bloc « Sources : » recopié du modèle. Une citation du modèle ne remplace pas l'attribution ni n'introduit une source absente. Tout bloc « Sources » du modèle, final ou au milieu, est retiré jusqu'à la première ligne vide ou non-source ; le cours suivant reste entier. Une troncature (au-delà de I5, 12 000 caractères, ou du filet de rendu) est SIGNALÉE, jamais silencieuse.
+- Invariant : l'export PDF rend le corps ENTIER (`RevisionPdf` pagine) et la liste CANONIQUE des sources (`sheet.sources`), jamais un bloc « Sources : » recopié du modèle. Une citation du modèle ne remplace pas l'attribution ni n'introduit une source absente. Tout bloc « Sources » du modèle, final ou au milieu, est retiré jusqu'à la première ligne vide ou non-source ; le cours suivant reste entier. Une troncature (au-delà de `MAX_OUTPUT_CHARS`, 12 000 caractères sous I4, ou du filet de rendu) est SIGNALÉE, jamais silencieuse.
 - Test : `tests/unit/kotlin-revision-sheet.test.ts`
 - Commande : `make check`.
 - Emplacement : `android/core/src/main/java/fr/veryslopnynotes/core/RevisionSheet.kt`,

@@ -2,13 +2,16 @@
 
 - Statut : accepté (issue #333)
 - Remplace : le frontend Compose de `android/ui/` (le backend natif reste)
+- Amendé par : [ADR-006](006-no-notifications.md) — aucune notification livrée
 
 ## Contexte
 
 `android/ui/` représente ~18 800 lignes de Compose, avec un thème et des
 animations très spécifiques. Le protocole Pronote, la session chiffrée, le cache
-hors-ligne, la synchronisation de fond, les notifications et l'export PDF vivent
-déjà dans `android/pronote/`, `android/data/` et `android/core/` et sont testés.
+hors-ligne, la synchronisation de fond et l'export PDF vivent déjà dans
+`android/pronote/`, `android/data/` et `android/core/` et sont testés. Les
+notifications, citées dans la première version de cet ADR, ne sont pas livrées :
+[ADR-006](006-no-notifications.md) amende cette clause.
 
 Une application purement web est impossible : le serveur Pronote n'émet pas
 d'en-têtes CORS, la session repose sur des cookies cross-site, et la WebView

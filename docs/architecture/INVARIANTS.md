@@ -1,10 +1,10 @@
 # INVARIANTS.md — registre des règles vérifiées
 
 Un invariant est une propriété du produit ou du build qui doit rester vraie ;
-une régression est bloquante, même si la fonctionnalité marche. Ce fichier est
-un **index** : une ligne par invariant, le détail par thème. Format, ajout et
-retrait : [`invariants/OPERATING.md`](invariants/OPERATING.md) ; carte
-tâche → entrée : [`../CONTEXT.md`](../CONTEXT.md).
+une régression est bloquante, même si tout marche. **Index** : une ligne par
+invariant, détail par thème. Format, ajout et retrait :
+[`invariants/OPERATING.md`](invariants/OPERATING.md) ; carte tâche → entrée :
+[`../CONTEXT.md`](../CONTEXT.md).
 
 ## Architecture actuelle
 
@@ -20,7 +20,7 @@ tâche → entrée : [`../CONTEXT.md`](../CONTEXT.md).
 
 | ID | Règle | Vérification principale | Détail |
 |---|---|---|---|
-| I1 | Seul `android/pronote/` (et le scraper) parle réseau ; frontière Gradle, un seul `Client`, serveur jamais Pronote. | `tests/architecture/invariants.test.ts` | [`I1`](invariants/frontieres.md#i1) |
+| I1 | Seuls `android/pronote/`, `android/data/` (OpenRouter) et le scraper parlent réseau ; frontière Gradle, un seul `Client`, serveur jamais Pronote. | `tests/architecture/invariants.test.ts` | [`I1`](invariants/frontieres.md#i1) |
 | I4 | Le prompt LLM est vérifié et borné : secret refusé, prompt vérifié = envoyé, budget déduit, sortie validée. | `tests/unit/kotlin-llm-guard.test.ts` | [`I4`](invariants/ia.md#i4) |
 | I6 | Tout contenu externe est marqué `Untrusted` ; aucun MIME exécutable. | `tests/unit/android-untrusted.test.ts` | [`I6`](invariants/ia.md#i6) |
 | I8 | Le scraper est un sidecar local, sans auth, borné et sans SSRF ; jar choisi par le serveur, login jamais ingéré. | `tests/unit/scraper-ssrf.test.ts` | [`I8`](invariants/frontieres.md#i8) |
@@ -29,7 +29,7 @@ tâche → entrée : [`../CONTEXT.md`](../CONTEXT.md).
 | I13 | Le pont factice n'existe qu'en dev ; absent en prod = échec. | `tests/architecture/web-mock.test.ts` | [`I13`](invariants/build.md#i13) |
 | I14 | « Invalide » n'est jamais « vide » (fail-closed, sauf capabilities). | `tests/unit/kotlin-core-validation-parity.test.ts` | [`I14`](invariants/ia.md#i14) |
 | I15 | Export PDF = corps entier + sources canoniques ; troncature signalée. | `tests/unit/kotlin-revision-sheet.test.ts` | [`I15`](invariants/ia.md#i15) |
-| I16 | La donnée d'un compte n'est servie qu'à ce compte et purgée avec lui (cache, offline, téléchargements, session morte). | `tests/unit/kotlin-cache-scope.test.ts` | [`I16`](invariants/donnees.md#i16) |
+| I16 | Une donnée n'est servie qu'à son compte et purgée avec lui (cache, offline, téléchargements, session morte). | `tests/unit/kotlin-cache-scope.test.ts` | [`I16`](invariants/donnees.md#i16) |
 | I17 | Un seul rafraîchissement de session à la fois ; rate-limit ≠ session morte. | `tests/unit/kotlin-refresh-gate.test.ts` | [`I17`](invariants/donnees.md#i17) |
 | I18 | Keystore indisponible = état `UNAVAILABLE` signalé, jamais un secret en clair. | `tests/unit/kotlin-store-health.test.ts` | [`I18`](invariants/donnees.md#i18) |
 | I19 | Le job et l'interface lisent par la même file ; session restaurée d'abord, résultat toujours livré. | `tests/architecture/shared-queue.test.ts` | [`I19`](invariants/donnees.md#i19) |

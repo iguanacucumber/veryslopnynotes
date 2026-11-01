@@ -43,7 +43,7 @@ la même hiérarchie à chaque visite.
   fonctionnalité métier dans une refonte visuelle.
 - Le web reste sans réseau ; seuls le pont natif, le client OpenRouter et le
   scraper parlent réseau, hors de cette surface.
-- 21 palettes, thème clair/sombre/système, Figtree auto-hébergée.
+- 21 palettes, thème clair/sombre/système, SN Pro auto-hébergée (SIL OFL 1.1).
 - Cibles tactiles de 48 px, focus visible, contraste AA, mouvement réduit.
 - Les alertes de sécurité restent lisibles par lien direct mais n'ont plus
   d'entrée visible (décision utilisateur).

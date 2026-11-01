@@ -1,6 +1,7 @@
-// Le registre et les règles ne dérivent pas : ces tests portent sur la FORME de
-// la documentation (IDs uniques, sections, liens, cibles `make`), pour qu'un ID
-// réutilisé ou un lien mort rougisse le gate sans relecture humaine.
+// Le registre, les pins de release et les règles ne dérivent pas : ces tests
+// portent sur la FORME de la documentation (IDs uniques, sections, liens,
+// chemins cités, cibles `make`, versions épinglées), pour qu'un ID réutilisé ou
+// un lien mort rougisse le gate sans relecture humaine.
 import { describe, expect, test } from "bun:test";
 import { Glob } from "bun";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -26,6 +27,7 @@ const DETAIL = DETAIL_FILES.map((f) => DETAIL_BY_FILE[f]!).join("\n");
 const AGENTS = read("AGENTS.md");
 const README = read("README.md");
 const MAKEFILE = read("Makefile");
+const RELEASE = read("docs/RELEASE.md");
 
 const ENTRY = /^## (I\d+(?: bis)?) — /;
 
@@ -65,6 +67,50 @@ export function makeTargets(makefile: string): Set<string> {
     if (m) targets.add(m[1]!);
   }
   return targets;
+}
+
+/** Colonne « Version » des lignes du tableau `## Versions épinglées` de RELEASE.md. */
+export function releasePins(md: string): Map<string, string> {
+  const pins = new Map<string, string>();
+  const lines = md.split("\n");
+  const start = lines.indexOf("## Versions épinglées");
+  if (start === -1) return pins;
+  for (const line of lines.slice(start + 1)) {
+    if (line.startsWith("## ")) break;
+    const cells = line.split("|").map((cell) => cell.trim());
+    const component = cells[1];
+    const version = cells[2];
+    if (!component || !version || component === "Composant" || /^-+$/.test(component)) continue;
+    pins.set(component, version);
+  }
+  return pins;
+}
+
+/**
+ * Raccourci documenté dans `OPERATING.md` : `android/<module>/<Fichier>.kt`
+ * désigne la source Gradle du module.
+ */
+export function expandKotlinShorthand(path: string): string | null {
+  const m = /^android\/(core|data|app|pronote)\/(.+)$/.exec(path);
+  return m ? `android/${m[1]}/src/main/java/fr/veryslopnynotes/${m[1]}/${m[2]}` : null;
+}
+
+/** Chemins cités par la ligne `Emplacement :` ; les cibles make n'en sont pas. */
+export function emplacementPaths(body: string, makeTargetNames: Set<string>): string[] {
+  const lines = body.split("\n");
+  const start = lines.findIndex((line) => line.startsWith("- Emplacement :"));
+  if (start === -1) return [];
+  const block: string[] = [];
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (i > start && (line.startsWith("- ") || line === "" || line.startsWith("<a "))) break;
+    block.push(line);
+  }
+  return codeSpans(block.join("\n")).filter((span) => !makeTargetNames.has(span));
+}
+
+export function pathErrors(id: string, paths: string[], resolves: (path: string) => boolean): string[] {
+  return paths.filter((path) => !resolves(path)).map((path) => `${id} : Emplacement \`${path}\` introuvable`);
 }
 
 /**
@@ -144,9 +190,9 @@ export function codeSpans(text: string): string[] {
   return [...text.matchAll(/`([^`]+)`/g)].map((m) => m[1]!);
 }
 
-/** Un backtick n'est un chemin que s'il commence par tests/ ou agents/. */
+/** Un backtick est un chemin s'il contient un séparateur de dossier. */
 export function isCitedPath(span: string): boolean {
-  return /^(tests|agents)\//.test(span);
+  return span.includes("/");
 }
 
 export function isGlobPattern(path: string): boolean {
@@ -217,6 +263,13 @@ const cited = entries.map((e) => ({ id: e.id, paths: citedPaths(e.body, cells.ge
 const isFile = (path: string) => {
   try {
     return statSync(join(ROOT, path)).isFile();
+  } catch {
+    return false;
+  }
+};
+const isDirectory = (path: string) => {
+  try {
+    return statSync(join(ROOT, path)).isDirectory();
   } catch {
     return false;
   }
@@ -352,6 +405,73 @@ describe("registre d'invariants", () => {
   });
 });
 
+describe("versions épinglées (RELEASE.md)", () => {
+  const pkg = JSON.parse(read("package.json")) as {
+    dependencies: Record<string, string>;
+    devDependencies: Record<string, string>;
+  };
+  const dep = (name: string) => pkg.dependencies[name] ?? pkg.devDependencies[name] ?? "";
+  const toml = (key: string) =>
+    new RegExp(`^${key} = "([^"]+)"`, "m").exec(read("android/gradle/libs.versions.toml"))?.[1] ?? "";
+  const gradle = /gradle-([\d.]+)-bin\.zip/.exec(read("android/gradle/wrapper/gradle-wrapper.properties"))?.[1] ?? "";
+
+  // Composant → version lue dans son manifeste. Une ligne absente de cette
+  // table doit être déclarée transitive : sinon un pin peut dériver sans test.
+  const SOURCES: Record<string, () => string> = {
+    "bun (runtime)": () => /oven\/bun:([\d.]+)/.exec(read("Dockerfile.server"))?.[1] ?? "",
+    typescript: () => dep("typescript"),
+    "@types/bun": () => dep("@types/bun"),
+    "Gradle / AGP / Kotlin": () => [gradle, toml("agp"), toml("kotlin")].join(" / "),
+    "compileSdk/targetSdk/minSdk": () => {
+      const build = read("android/app/build.gradle.kts");
+      const sdk = (key: string) => new RegExp(`\\b${key} = (\\d+)`).exec(build)?.[1] ?? "";
+      return [sdk("compileSdk"), sdk("targetSdk"), sdk("minSdk")].join(" / ");
+    },
+    "activity-ktx / OkHttp": () => [toml("activity-ktx"), toml("okhttp")].join(" / "),
+    "zxing-android-embedded": () => toml("zxing-android-embedded"),
+    "react / react-dom": () => {
+      const [react, dom] = [dep("react"), dep("react-dom")];
+      return react === dom ? react : `${react} / ${dom}`;
+    },
+    "react-router-dom": () => dep("react-router-dom"),
+    "vite / @vitejs/plugin-react": () => [dep("vite"), dep("@vitejs/plugin-react")].join(" / "),
+    "tough-cookie": () => dep("tough-cookie"),
+  };
+  // Lues dans `bun.lock` : un manifeste racine ne les déclare pas.
+  const TRANSITIVE = new Set([
+    "bun-types (transitif)",
+    "@types/node (transitif)",
+    "undici-types (transitif)",
+    "rolldown (transitif)",
+    "lightningcss (transitif)",
+  ]);
+
+  test("chaque version de la table correspond au manifeste", () => {
+    const pins = releasePins(RELEASE);
+    for (const [component, source] of Object.entries(SOURCES)) {
+      const manifeste = source();
+      expect({ component, table: pins.get(component), manifeste }).toEqual({
+        component,
+        table: manifeste,
+        manifeste,
+      });
+    }
+  });
+
+  test("aucune ligne épinglée n'échappe au contrôle", () => {
+    const unchecked = [...releasePins(RELEASE).keys()].filter(
+      (component) => !(component in SOURCES) && !TRANSITIVE.has(component),
+    );
+    expect(unchecked).toEqual([]);
+  });
+
+  test("sabotage : un pin dérivé ne correspond plus au manifeste", () => {
+    const drift = releasePins(RELEASE.replace("8.3.5 / 6.1.2", "8.3.4 / 6.1.2"));
+    expect(drift.get("vite / @vitejs/plugin-react")).toBe("8.3.4 / 6.1.2");
+    expect(drift.get("vite / @vitejs/plugin-react")).not.toBe(SOURCES["vite / @vitejs/plugin-react"]!());
+  });
+});
+
 describe("carte de contexte", () => {
   test("CONTEXT.md reste sous son budget de lecture", () => {
     // Une carte qu'on relit à chaque tâche coûte plus qu'elle ne rapporte.
@@ -435,11 +555,52 @@ describe("sabotage : fichiers cités (fixtures)", () => {
   });
 });
 
+describe("emplacements des invariants", () => {
+  const targets = makeTargets(MAKEFILE);
+  const resolves = (path: string) => {
+    if (isGlobPattern(path)) return globMatchCount(path) > 0;
+    if (path.endsWith("/")) return isDirectory(path);
+    if (isFile(path)) return true;
+    const expanded = expandKotlinShorthand(path);
+    return expanded !== null && isFile(expanded);
+  };
+
+  test("chaque `Emplacement :` résout vers un fichier, un dossier ou un glob", () => {
+    for (const { id, body } of entries) {
+      expect({ id, bad: pathErrors(id, emplacementPaths(body, targets), resolves) }).toEqual({ id, bad: [] });
+    }
+  });
+
+  test("le raccourci Kotlin documenté résout vers la source du module", () => {
+    expect(expandKotlinShorthand("android/core/LlmGuard.kt")).toBe(
+      "android/core/src/main/java/fr/veryslopnynotes/core/LlmGuard.kt",
+    );
+    expect(expandKotlinShorthand("docs/README.md")).toBeNull();
+  });
+
+  test("les cibles make citées restent des commandes, pas des chemins", () => {
+    const body = "## I1 — x\n- Emplacement : `Makefile` (`check` / `check-run`)\n";
+    expect(emplacementPaths(body, targets)).toEqual(["Makefile"]);
+  });
+
+  test("sabotage : un emplacement inventé est rouge", () => {
+    expect(pathErrors("I1", ["android/core/Inexistant.kt"], resolves)).toEqual([
+      "I1 : Emplacement `android/core/Inexistant.kt` introuvable",
+    ]);
+  });
+});
+
 describe("commandes citées", () => {
-  test("chaque `make <cible>` de AGENTS.md et README.md existe", () => {
+  test("chaque `make <cible>` des docs de référence existe", () => {
     const targets = makeTargets(MAKEFILE);
-    for (const [name, text] of [["AGENTS.md", AGENTS], ["README.md", README]] as const) {
-      for (const m of text.matchAll(/\bmake ([a-zA-Z][\w-]*)/g)) {
+    const docs: [string, string][] = [
+      ["AGENTS.md", AGENTS],
+      ["README.md", README],
+      ["INVARIANTS.md", INVARIANTS],
+      ...DETAIL_FILES.map((file) => [file, DETAIL_BY_FILE[file]!] as [string, string]),
+    ];
+    for (const [name, text] of docs) {
+      for (const m of text.matchAll(/`make ([a-zA-Z][\w-]*)`/g)) {
         const target = m[1]!;
         expect({ name, target, exists: targets.has(target) }).toEqual({ name, target, exists: true });
       }

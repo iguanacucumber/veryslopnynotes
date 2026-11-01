@@ -2,6 +2,8 @@
 
 - Statut : accepté (issue #651)
 - Remplace : rien. Complète [ADR-005](005-rules-and-architecture.md).
+- Amende : [ADR-004](004-webview.md) — sa clause « notifications déjà là et
+  testées » est annulée.
 
 ## Contexte
 
