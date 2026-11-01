@@ -113,16 +113,25 @@ fun deflateRaw(data: ByteArray, level: Int = 6): ByteArray {
 fun inflateRaw(data: ByteArray): ByteArray {
     val inflater = Inflater(true)
     inflater.setInput(data)
-    val out = java.io.ByteArrayOutputStream(data.size * 2)
+    val out = java.io.ByteArrayOutputStream(minOf(data.size * 2, MAX_RESPONSE_BYTES))
     val buf = ByteArray(8192)
-    while (!inflater.finished()) {
-        val n = inflater.inflate(buf)
-        if (n == 0) {
-            if (inflater.needsInput()) break
+    try {
+        while (!inflater.finished()) {
+            val n = inflater.inflate(buf)
+            if (n == 0) {
+                // Entrée épuisée ou flux tronqué : on rend ce qui est là.
+                break
+            }
+            // Plafond AVANT l'écriture : 10 Mo de ciphertext peuvent gonfler à
+            // plusieurs Go, et un OutOfMemoryError ne se rattrape pas ici.
+            if (out.size() + n > MAX_RESPONSE_BYTES) {
+                throw java.io.IOException("reponse compressee hors borne")
+            }
+            out.write(buf, 0, n)
         }
-        out.write(buf, 0, n)
+    } finally {
+        inflater.end()
     }
-    inflater.end()
     return out.toByteArray()
 }
 

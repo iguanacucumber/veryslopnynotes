@@ -80,7 +80,7 @@
 <a id="i33"></a>
 
 ## I33 — La sauvegarde Android n'emporte jamais les payloads en clair
-- Invariant : les payloads Pronote en clair dans `filesDir/offline/` ne partent ni dans la sauvegarde cloud ni dans le transfert appareil-à-appareil. Le manifeste refuse la sauvegarde (`allowBackup="false"` ou exclut `files/`), le variant debug ne la réactive pas, et aucune infrastructure de sauvegarde n'est utilisée. Une copie cloud échapperait à `AccountStore.logout()`.
+- Invariant : les payloads Pronote en clair dans `filesDir/offline/` ne partent ni dans la sauvegarde cloud ni dans le transfert appareil-à-appareil. Le manifeste refuse la sauvegarde (`allowBackup="false"` ou exclut `files/`), le variant debug ne la réactive pas, et aucune infrastructure de sauvegarde n'est utilisée. Une copie cloud échapperait à `PairingRepository.logoutBlocking()`.
 - Test : `tests/architecture/backup.test.ts`.
 - Commande : `make check`.
 - Emplacement : `android/app/src/main/AndroidManifest.xml`, `android/app/src/debug/AndroidManifest.xml`.

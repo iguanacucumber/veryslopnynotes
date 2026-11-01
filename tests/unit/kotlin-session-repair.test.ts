@@ -65,6 +65,12 @@ describe("le rejet d'une session morte purge la session et le cache (#397)", () 
     expect((await ask({ op: "load", sid, resource: "grades" })).found).toBe(false);
     expect((await ask({ op: "files", sid })).files).toEqual([]);
   });
+
+  test.skipIf(skip)("un abonné en échec rend `false` : le job reprend la purge", async () => {
+    // Le contrat de `reject()` : `true` = purge FAITE. Un abonné qui jette
+    // (Keystore mort, etc.) ne doit pas faire croire au job que c'est réglé.
+    expect((await ask({ op: "rejectThrowing" })).handled).toBe(false);
+  });
 });
 
 // La détection de session morte ne se fie pas à un MOT du message, en partie écrit

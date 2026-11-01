@@ -1,5 +1,15 @@
 package fr.veryslopnynotes.data
 
+/** Issue d'une bascule de compte : la purge a-t-elle laissé publier ? */
+sealed interface CacheSwitch {
+    /** MÊME compte : cache conservé, nouvelle session publiée. */
+    data object Kept : CacheSwitch
+    /** Compte différent (ou inconnu) : cache purgé, session publiée. */
+    data object Purged : CacheSwitch
+    /** Purge INCOMPLÈTE : rien n'est publié, l'erreur remonte à l'appelant. */
+    data object Failed : CacheSwitch
+}
+
 /**
  * Le cache est la DONNÉE D'UN COMPTE, jamais celle d'un autre.
  *
@@ -12,7 +22,8 @@ package fr.veryslopnynotes.data
  *
  * La BASCULE de compte (purge + publication du nouveau client) est ATOMIQUE :
  * la purge précède la publication, dans la même section critique, sinon un
- * lecteur voit le nouveau client avec l'ancien cache.
+ * lecteur voit le nouveau client avec l'ancien cache. Une purge INCOMPLÈTE ne
+ * publie RIEN : le nouveau compte ne doit pas hériter du cache de l'ancien.
  *
  * ponytail: PURGE, pas de clé scopée — le cache ne contient qu'UN compte à la
  *   fois. Upgrade: plusieurs comptes simultanés ⇒ clé scopée par compte.
@@ -22,20 +33,20 @@ object CacheScope {
      * Purge si les identités diffèrent — une identité INCONNUE purge aussi
      * (fail-closed). [publish] s'exécute APRÈS la purge, dans la MÊME section
      * critique : aucun lecteur ne voit le nouveau client avec l'ancien cache.
-     * MÊME compte : cache conservé. Renvoie `true` si le cache a été purgé.
+     * MÊME compte : cache conservé. Purge ratée : [CacheSwitch.Failed] et
+     * [publish] n'est jamais appelée.
      */
     fun switchAccount(
         store: CacheStore,
         previous: AccountIdentity?,
         current: AccountIdentity?,
         publish: () -> Unit,
-    ): Boolean {
+    ): CacheSwitch {
         if (previous != null && current != null && previous.sameAccount(current)) {
             publish()
-            return false
+            return CacheSwitch.Kept
         }
-        purgeWith(store, publish)
-        return true
+        return if (purgeWith(store, publish)) CacheSwitch.Purged else CacheSwitch.Failed
     }
 
     /**
@@ -46,30 +57,29 @@ object CacheScope {
         store: CacheStore,
         previous: AccountIdentity?,
         current: AccountIdentity?,
-    ): Boolean = switchAccount(store, previous, current) {}
+    ): CacheSwitch = switchAccount(store, previous, current) {}
 
     /** Session MORTE : le cache part avec elle (le compte suivant peut être un autre). */
-    fun onSessionDead(store: CacheStore) {
-        purge(store)
-    }
+    fun onSessionDead(store: CacheStore): Boolean = purge(store)
 
     /**
      * Purge totale sous la garde d'époque : une écriture en vol ne ressuscite
-     * pas le cache purgé.
+     * pas le cache purgé. `false` = effacement incomplet.
      */
-    fun purge(store: CacheStore) {
-        purgeWith(store) {}
-    }
+    fun purge(store: CacheStore): Boolean = purgeWith(store) {}
 
     /**
      * Efface puis exécute l'action, dans la MÊME section critique d'époque :
-     * la bascule de compte publie le nouveau client sans fenêtre.
+     * la bascule de compte publie le nouveau client sans fenêtre. L'action ne
+     * tourne QUE si l'effacement a réussi.
      */
-    private fun purgeWith(store: CacheStore, after: () -> Unit) {
+    private fun purgeWith(store: CacheStore, after: () -> Unit): Boolean {
+        var cleared = false
         SessionEpoch.invalidate {
-            store.clearAll()
-            after()
+            cleared = store.clearAll()
+            if (cleared) after()
         }
+        return cleared
     }
 }
 

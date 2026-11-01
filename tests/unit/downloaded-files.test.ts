@@ -120,6 +120,48 @@ describe("les pièces jointes téléchargées ne s'accumulent pas (#540)", () =>
     expect(kept.length).toBeLessThanOrEqual(24);
   });
 
+  test.skipIf(skip)("une écriture d'un compte PÉRIMÉ ne supprime aucun fichier du compte courant", async () => {
+    const sid = await newStore();
+    // Le compte A remplit le cache…
+    for (let i = 0; i < 24; i++) {
+      await write(sid, String(2000 + i), `a-${i}.pdf`, `A${i}`);
+    }
+    // …une écriture de A est EN VOL (époque capturée)…
+    const staleEpoch = (await ask({ op: "epoch" })).epoch as number;
+
+    // …le compte B prend la main et remplit SON cache…
+    const paired = await ask({ op: "pair", sid, previous: compteA, current: compteB });
+    expect(paired.purged).toBe(true);
+    for (let i = 0; i < 24; i++) {
+      await write(sid, String(3000 + i), `b-${i}.pdf`, `B${i}`);
+    }
+    const before = await files(sid);
+    expect(before.length).toBe(24);
+
+    // …et l'écriture périmée se termine : elle est JETÉE, sans rien purger.
+    const refused = await write(sid, "999", "retard.pdf", "A", { epoch: staleEpoch });
+    expect(refused.ok).toBe(false);
+    expect(await files(sid)).toEqual(before);
+  });
+
+  test.skipIf(skip)("l'ID `42` ne prend pas le fichier de l'ID `42-3`", async () => {
+    const sid = await newStore();
+    const other = await write(sid, "42-3", "consigne.pdf", "B");
+    expect(other.ok).toBe(true);
+    // Le préfixe `42-` confondrait les deux : la recherche de `42` doit rater.
+    const wrong = await ask({ op: "cachedFor", sid, homework: "devoir-1", id: "42", label: "autre.pdf" });
+    expect(wrong.found).toBe(false);
+
+    const mine = await write(sid, "42", "consigne.pdf", "A");
+    // Repli par identifiant : un libellé différent retrouve LA pièce de `42`.
+    const found = await ask({ op: "cachedFor", sid, homework: "devoir-1", id: "42", label: "autre-libelle.pdf" });
+    expect(found.found).toBe(true);
+    expect(found.name).toBe(mine.name);
+    // Et `42-3` garde la sienne.
+    const exact = await ask({ op: "cachedFor", sid, homework: "devoir-1", id: "42-3", label: "autre.pdf" });
+    expect(exact.name).toBe(other.name);
+  });
+
   test.skipIf(skip)("la purge de déconnexion efface les pièces jointes téléchargées", async () => {
     const sid = await newStore();
     await write(sid, "101", "consigne.pdf", "A");

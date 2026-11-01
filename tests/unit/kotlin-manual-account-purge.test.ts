@@ -89,9 +89,9 @@ describe("pont — la purge part avec celle du cache, jamais au redémarrage", (
       const at = path.indexOf("purgeManualAccountData()");
       // La purge est là…
       expect(at).toBeGreaterThan(-1);
-      // …et AVANT `accounts.logout()` : si la purge de session jette (Keystore
-      // mort), le manuel est déjà parti (fail-safe).
-      expect(at).toBeLessThan(path.indexOf("accounts.logout()"));
+      // …et AVANT `pairing.logoutBlocking` : si la purge de session jette
+      // (Keystore mort), le manuel est déjà parti (fail-safe).
+      expect(at).toBeLessThan(path.indexOf("pairing.logoutBlocking"));
     }
   });
 

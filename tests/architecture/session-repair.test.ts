@@ -11,7 +11,6 @@ const ROOT = join(import.meta.dir, "..", "..");
 const DATA = join(ROOT, "android/data/src/main/java/fr/veryslopnynotes/data");
 const DEVICE_AUTH = join(DATA, "DeviceAuth.kt");
 const REPAIR = join(DATA, "SessionRepair.kt");
-const ACCOUNT = join(DATA, "AccountStore.kt");
 const PAIRING = join(DATA, "PairingRepository.kt");
 const WORKER = join(DATA, "PeriodicSyncWorker.kt");
 const APP_CONTEXT = join(ROOT, "web/src/ui/AppContext.tsx");
@@ -35,35 +34,35 @@ describe("réparation d'une session morte (#397)", () => {
     expect(codeOnly(worker)).not.toContain("setOnRejected");
   });
 
-  test("l'abonné répare par le chemin EXISTANT (accounts.logout())", () => {
+  test("l'abonné répare par le chemin EXISTANT (PairingRepository.logoutBlocking())", () => {
     const bridge = readBridgeSource();
     const rejected = body(bridge, "private fun onSessionRejected()");
-    expect(rejected).toContain("accounts.logout()");
+    expect(rejected).toContain("pairing.logoutBlocking");
     // `session.status` ne doit pas dire « restaurée » pour une session morte.
     expect(rejected).toContain("sessionReady = false");
   });
 
   test("la purge invalide la session ET purge le cache (un seul chemin)", () => {
-    const account = readFileSync(ACCOUNT, "utf8");
+    const pairing = readFileSync(PAIRING, "utf8");
     const repair = readFileSync(REPAIR, "utf8");
     // La déconnexion ET la session morte partagent le MÊME code de purge.
-    expect(account).toContain("SessionRepair.purge(");
-    expect(account).not.toContain("SessionEpoch.invalidate");
+    expect(pairing).toContain("SessionRepair.purge(");
+    expect(pairing).not.toContain("SessionEpoch.invalidate");
     expect(repair).toContain("invalidateSession()");
     expect(repair).toContain("PronoteSession.clear()");
     expect(repair).toContain("CacheScope.purge(cacheStore)");
     expect(repair).not.toContain("SessionEpoch.invalidate");
-    expect(account).toContain("sessions.clear()");
+    expect(pairing).toContain("sessions.clear()");
   });
 
   test("PAS de boucle : la purge ne lève jamais le signal", () => {
     const repair = readFileSync(REPAIR, "utf8");
-    const account = readFileSync(ACCOUNT, "utf8");
+    const pairing = readFileSync(PAIRING, "utf8");
     expect(codeOnly(repair)).not.toContain("reject()");
-    expect(codeOnly(account)).not.toContain("reject()");
+    expect(codeOnly(pairing)).not.toContain("reject()");
     // Le signal reste levé par les DÉPÔTS, jamais par la réparation.
     const deviceAuth = readFileSync(DEVICE_AUTH, "utf8");
-    expect(codeOnly(deviceAuth)).toContain("onRejected?.invoke()");
+    expect(codeOnly(deviceAuth)).toContain("listener()");
     // Une purge en échec ne doit pas tuer le fil du dépôt (la promesse JS pendrait).
     expect(codeOnly(deviceAuth)).toContain("catch (_: Exception)");
   });

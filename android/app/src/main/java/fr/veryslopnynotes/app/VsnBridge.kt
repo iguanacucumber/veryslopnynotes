@@ -130,7 +130,7 @@ class VsnBridge(
     internal val assignments = AssignmentsRepository(cacheStore)
     internal val discussions = DiscussionsRepository(cacheStore)
     internal val profileRepo = ProfileRepository()
-    internal val accounts = AccountStore(ctx, cacheStore, sessions)
+    internal val accounts = AccountStore(ctx, sessions)
     internal val llmKeys = LlmKeys.get(ctx)
 
     // #401 : l'échec du Keystore est DIT, ici (le pont), pas dans les stores :
@@ -142,10 +142,10 @@ class VsnBridge(
             Log.w(TAG, "Stockage chiffré indisponible : les identifiants vivent en mémoire, ils ne sont pas conservés.")
         }
         // #397 : le signal « session morte » a enfin un ABONNÉ — l'app. Il
-        // répare par le chemin EXISTANT (`accounts.logout()` : session
-        // invalidée ET cache purgé) puis l'interface renvoie à l'appairage.
-        // Avant, `reject()` ne purgeait rien : le natif gardait le jeton mort
-        // et servait un cache périmé comme frais.
+        // répare par le chemin EXISTANT (`PairingRepository.logoutBlocking()` :
+        // session invalidée ET cache purgé, sous le verrou de session) puis
+        // l'interface renvoie à l'appairage. Avant, `reject()` ne purgeait rien :
+        // le natif gardait le jeton mort et servait un cache périmé comme frais.
         // UN SEUL abonné : le job de fond NE s'abonne pas (il partage le
         // process : il remplacerait celui de l'app).
         DeviceAuth.setOnRejected { onSessionRejected() }
@@ -469,19 +469,26 @@ class VsnBridge(
         sessionReady = false
         cachedProfile = null
         purgeManualAccountData()
-        accounts.logout()
+        // Le verrou de session sérialise la purge avec un appairage ou une
+        // restauration EN VOL : aucun des deux ne peut republier l'ancien client.
+        val purged = pairing.logoutBlocking { accounts.clear() }
+        if (!purged) {
+            throw BridgeFailure(
+                "unavailable",
+                "Déconnexion incomplète : le cache local n'a pas pu être effacé. Réessaie.",
+            )
+        }
         return JSONObject().put("ok", true)
     }
 
     /**
      * Session MORTE (jeton tourné par l'établissement) : la session ET le cache
-     * sont purgés, par le chemin EXISTANT (`accounts.logout()` — la purge part
-     * sous la garde d'époque, #364/#407).
+     * sont purgés, par le chemin EXISTANT (`PairingRepository.logoutBlocking()`
+     * — la purge part sous la garde d'époque, #364/#407).
      *
-     * #397 : c'est ici que le signal étaitMUET. Sans cette purge, le natif
-     * gardait le jeton mort et le cache continuaient d'être servi comme
-     * frais — l'app affichait « session expirée » par-dessus des données
-     * périmées.
+     * #397 : c'est ici que le signal était MUET. Sans cette purge, le natif
+     * gardait le jeton mort et le cache continuait d'être servi comme frais —
+     * l'app affichait « session expirée » par-dessus des données périmées.
      *
      * Le fil qui lève le signal est un fil de fond (dépôt, job de fond) : la
      * purge y est légitime (elle n'écrit pas sur l'UI). `sessionReady` tombe :
@@ -491,7 +498,9 @@ class VsnBridge(
         sessionReady = false
         cachedProfile = null
         purgeManualAccountData()
-        accounts.logout()
+        // Échec de purge : pas de canal d'erreur ici (abonné de fond) ;
+        // l'appairage suivant repurge et, s'il échoue, le DIT.
+        pairing.logoutBlocking { accounts.clear() }
     }
 
     /**

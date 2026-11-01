@@ -21,6 +21,12 @@ data class ToggleOutcome(val assignment: Assignment?, val error: String?)
 /** Pièce jointe téléchargée : nom pour l'ouvreur, octets à partager. */
 data class AttachmentData(val name: String, val bytes: ByteArray)
 
+/**
+ * Issue d'un téléchargement de pièce jointe : octets, ou cause affichable.
+ * Un échec de session / de débit n'est jamais un « indisponible » silencieux.
+ */
+data class AttachmentOutcome(val data: AttachmentData?, val error: String?)
+
 // ponytail: refresh + toggle dans un seul dépôt (pas de ViewModel avant #82).
 class AssignmentsRepository(
     private val cache: CacheStore,
@@ -91,11 +97,11 @@ class AssignmentsRepository(
         homeworkId: String,
         attachmentId: String,
         weekStart: String,
-        onDone: (AttachmentData?) -> Unit,
+        onDone: (AttachmentOutcome) -> Unit,
     ) {
         Thread {
-            val data = try {
-                val client = provider() ?: return@Thread post { onDone(null) }
+            val outcome = try {
+                val client = provider() ?: return@Thread post { onDone(AttachmentOutcome(null, null)) }
                 val (from, to) = assignmentWindow(weekStart)
                 val hw = client.homework(from, to).firstOrNull { it.id == homeworkId }
                 // Une pièce jointe de COURS n'est pas dans le devoir : on la
@@ -104,19 +110,28 @@ class AssignmentsRepository(
                 val file = hw?.let { h ->
                     try {
                         h.files()
-                    } catch (_: Exception) {
+                    } catch (e: Exception) {
+                        if (mustPropagateReadFailure(e)) throw e
                         emptyList()
                     }
                 }.orEmpty().firstOrNull { it.id == attachmentId }
                     ?: lessonFiles(client, from, to).firstOrNull { it.id == attachmentId }
-                    ?: return@Thread post { onDone(null) }
+                    ?: return@Thread post { onDone(AttachmentOutcome(null, null)) }
                 val bytes = file.data()
                 val name = file.name.trim().take(200).ifEmpty { "piece-jointe" }
-                AttachmentData(name, bytes)
-            } catch (_: Exception) {
-                null
+                AttachmentOutcome(AttachmentData(name, bytes), null)
+            } catch (e: Exception) {
+                // Session morte ou débit limité : re-pair / attente, jamais
+                // « pièce jointe indisponible » (le même chemin que `toggle`).
+                if (mustPropagateReadFailure(e)) {
+                    val dead = isSessionFailure(e)
+                    if (dead) DeviceAuth.reject()
+                    AttachmentOutcome(null, if (dead) DeviceAuth.REJECTED_MESSAGE else RATE_LIMITED_MESSAGE)
+                } else {
+                    AttachmentOutcome(null, null)
+                }
             }
-            post { onDone(data) }
+            post { onDone(outcome) }
         }.start()
     }
 
@@ -242,3 +257,7 @@ class AssignmentsRepository(
         }
     }
 }
+
+/** Débit limité : même phrase que le rafraîchissement du cache. */
+private const val RATE_LIMITED_MESSAGE =
+    "L'établissement limite les connexions : attends une ou deux minutes, puis réessaie."

@@ -94,7 +94,7 @@ quement pour `10.0.2.2`/`localhost`, hôte IPv4/IPv6-littérale/nom DNS borné,
 port 1-65535, et refus de tout identifiant, chemin, query, fragment, espace ou
 caractère de contrôle. Elle ne valide plus que l'adresse du scraper de manuels
 (#209) : l'app ne parle plus métier à personne. Une déconnexion invalide la
-session et purge les caches par le chemin existant `AccountStore.logout()`.
+session et purge les caches par le chemin existant `PairingRepository.logoutBlocking()`.
 
 ## Config hôte serveur (jamais commité, jamais en dur)
 

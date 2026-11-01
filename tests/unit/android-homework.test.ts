@@ -472,11 +472,11 @@ describe("android homework — le credential reste dans l'app", () => {
   });
 
   test("le logout n'efface PAS la clé : c'est celle de l'utilisateur, pas une session", () => {
-    const store = codeOnly(src(DATA, "AccountStore.kt"));
-    expect(store).toMatch(/fun logout\(\)[\s\S]*sessions\.clear\(\)/);
+    const pairing = codeOnly(src(DATA, "PairingRepository.kt"));
+    expect(pairing).toMatch(/fun logoutBlocking[\s\S]*sessions\.clear\(\)/);
     // Le secret de session part, la clé LLM reste (elle n'est pas reconstructible
     // par le serveur : un ré-appairage ne doit pas coûter une nouvelle saisie).
-    expect(store).not.toMatch(/llmKeys|LlmKeys|LlmKeyStore/);
+    expect(pairing).not.toMatch(/llmKeys|LlmKeys|LlmKeyStore/);
   });
 
   test("l'aide texte porte le délai du pont (#594), comme les chemins photo", () => {

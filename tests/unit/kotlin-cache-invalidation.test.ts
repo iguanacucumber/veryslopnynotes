@@ -206,6 +206,21 @@ describe("câblage de l'invalidation et de la fenêtre (#369)", () => {
     expect(assignments.match(/client\.homework\(from, to\)/g)?.length).toBe(2);
   });
 
+  test("une pièce jointe sur session morte déclenche le re-pair", () => {
+    // Le catch ne transforme plus une session morte en « pièce jointe
+    // indisponible » : même décision que `toggle`.
+    expect(assignments).toContain("mustPropagateReadFailure(e)");
+    const fetch = assignments.slice(
+      assignments.indexOf("fun fetchAttachment("),
+      assignments.indexOf("private fun lessonFiles("),
+    );
+    expect(fetch).toContain("DeviceAuth.reject()");
+    expect(fetch).toContain("DeviceAuth.REJECTED_MESSAGE");
+    // La cause remonte au pont, qui traduit en `auth_required`.
+    expect(bridge).toContain("sessionOrThrow(outcome.error)");
+    expect(bridge).toContain("assignments.fetchAttachment(homeworkId, attachmentId, week, cb)");
+  });
+
   test("le pont transmet la semaine affichée", () => {
     expect(bridge).toContain('p.string("weekStart")');
     expect(bridge).toContain("assignments.toggle(currentBaseUrl(), id, done, week, cb)");

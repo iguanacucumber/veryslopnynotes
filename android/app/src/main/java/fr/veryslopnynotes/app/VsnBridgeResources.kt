@@ -154,9 +154,13 @@ internal fun VsnBridge.openAttachment(p: JSONObject): JSONObject {
     // L'époque est capturée AVANT le téléchargement : une pièce jointe
     // téléchargée pendant une déconnexion n'est pas écrite.
     val epoch = SessionEpoch.current()
-    val data = await<fr.veryslopnynotes.data.AttachmentData?> { cb ->
+    val outcome = await<fr.veryslopnynotes.data.AttachmentOutcome> { cb ->
         assignments.fetchAttachment(homeworkId, attachmentId, week, cb)
-    } ?: return JSONObject().put("ok", false).put("error", "Pièce jointe indisponible.")
+    } ?: throw BridgeFailure("unavailable", "Pièce jointe indisponible.")
+    // Session morte = re-pair, jamais « pièce jointe indisponible ».
+    sessionOrThrow(outcome.error)
+    val data = outcome.data
+        ?: return JSONObject().put("ok", false).put("error", outcome.error ?: "Pièce jointe indisponible.")
     return try {
         val file = writeAttachmentFile(
             ctx,

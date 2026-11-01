@@ -159,6 +159,10 @@ export const PRODUCTION_SOURCES: string[] = [
   join(DATA, "OfflineCache.kt"),
   join(DATA, "PronoteSession.kt"),
   join(DATA, "SessionRepair.kt"),
+  // `data/SessionGate.kt` : LE verrou d'ouverture/fermeture de session,
+  // partagé par appairage, restauration et déconnexion. Fichier PUR : le
+  // harnais l'EXÉCUTE et prouve qu'un logout ne double pas une restauration.
+  join(DATA, "SessionGate.kt"),
   // `data` — les règles des préférences matière (#395) : le contrat (couleur
   // #RRGGBB, emoji court, libellé) et ses bornes, en un fichier PUR pour que
   // le harnais les EXÉCUTE. Le pont et le dépôt s'appuient dessus.

@@ -16,6 +16,7 @@ private val PAIRING_MESSAGES: Map<String, String> = mapOf(
     // Établissement de DÉMONSTRATION : le geste est « réessaie », jamais « rescane ».
     "demo_failed" to "Connexion à la démo impossible : l'établissement de démonstration ne répond pas. Réessaie dans un instant.",
     "internal" to "Session illisible : réessaie l'appairage.",
+    "cache_not_cleared" to "Les données locales n'ont pas pu être effacées : réessaie l'appairage.",
 )
 
 /** Repli : un code inconnu ne dit rien de l'infrastructure. */

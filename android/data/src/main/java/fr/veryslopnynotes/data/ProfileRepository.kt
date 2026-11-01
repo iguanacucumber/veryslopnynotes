@@ -20,7 +20,7 @@ sealed interface MeResult {
 
 // Jamais d'adresse d'établissement dans l'app, jamais de WebView.
 // ponytail: rien n'est persisté ici (mode anonyme) : le profil vit en mémoire et
-// disparaît à la déconnexion (AccountStore.logout). Upgrade: cache profil chiffré
+// disparaît à la déconnexion (PairingRepository.logoutBlocking). Upgrade: cache profil chiffré
 // si l'utilisateur demande explicitement de garder son profil hors-ligne.
 class ProfileRepository(
     private val provider: PronoteClientProvider = { PronoteSession.client },

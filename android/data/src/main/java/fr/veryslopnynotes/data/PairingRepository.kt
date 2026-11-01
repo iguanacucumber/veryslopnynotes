@@ -69,14 +69,14 @@ class PairingRepository(
         // Même verrou que la restauration : deux `tokenLogin` en parallèle sur
         // le même compte = erreur 25, et l'établissement LIMITE le compte.
         // Ordre pont -> dépôt, jamais l'inverse.
-        synchronized(restoreLock) {
+        SessionGate.serialized {
             val qr = input.qr
             val pin = input.pin.trim()
             if (qr == null || pin.isEmpty()) {
-                return@synchronized PairingResult.Err("bad_request", "QR de l'établissement et son PIN requis")
+                return@serialized PairingResult.Err("bad_request", "QR de l'établissement et son PIN requis")
             }
             if (pin.length > PIN_MAX_CHARS) {
-                return@synchronized PairingResult.Err("bad_request", "PIN refusé : vérifie le code défini dans ton compte établissement.")
+                return@serialized PairingResult.Err("bad_request", "PIN refusé : vérifie le code défini dans ton compte établissement.")
             }
             val schoolUrl = qr.url
             val client = try {
@@ -92,9 +92,9 @@ class PairingRepository(
                 )
             } catch (e: IllegalArgumentException) {
                 // URL du QR malformée : rescanner est le seul geste utile.
-                return@synchronized PairingResult.Err("bad_request", "QR sans adresse d'établissement valide : rescane le code affiché par son application.")
+                return@serialized PairingResult.Err("bad_request", "QR sans adresse d'établissement valide : rescane le code affiché par son application.")
             } catch (e: Exception) {
-                return@synchronized failure(e)
+                return@serialized failure(e)
             }
             publish(client, SessionMode.JETON, schoolUrl)
         }
@@ -103,13 +103,13 @@ class PairingRepository(
      * Connexion à l'établissement de DÉMONSTRATION : compte public, ouvert par
      * identifiant (pas de jeton). Même verrou : une seule session à la fois.
      */
-    fun pairDemoBlocking(): PairingResult = synchronized(restoreLock) {
+    fun pairDemoBlocking(): PairingResult = SessionGate.serialized {
         val client = try {
             Client.demoLogin()
         } catch (_: Exception) {
             // Un seul code pour la démo, et jamais le message brut (il peut
             // nommer l'hôte).
-            return@synchronized PairingResult.Err("demo_failed", "Connexion à la démo impossible : réessaie dans un instant.")
+            return@serialized PairingResult.Err("demo_failed", "Connexion à la démo impossible : réessaie dans un instant.")
         }
         publish(client, SessionMode.IDENTIFIANT)
     }
@@ -147,12 +147,17 @@ class PairingRepository(
             }
             // Bascule ATOMIQUE : le client du nouveau compte ne devient
             // visible qu'une fois le cache de l'ancien purgé.
-            CacheScope.switchAccount(
+            val switched = CacheScope.switchAccount(
                 cacheStore,
                 previous,
                 AccountIdentity.of(endpoint, username),
             ) {
                 PronoteSession.set(client)
+            }
+            if (switched == CacheSwitch.Failed) {
+                // Purge incomplète : ni session persistée ni publication,
+                // sinon le compte suivant hériterait du cache de l'ancien.
+                return PairingResult.Err("cache_not_cleared", "Cache local non purgé : réessaie l'appairage.")
             }
             sessions.save(
                 StoredSession(
@@ -184,13 +189,13 @@ class PairingRepository(
      * appelant attend et trouve la session en RAM. Session morte = store vidé
      * et cache purgé ; réseau KO = store gardé.
      */
-    fun restoreBlocking(): RestoreResult = synchronized(restoreLock) {
+    fun restoreBlocking(): RestoreResult = SessionGate.serialized {
         val stored = try {
             sessions.load()
         } catch (_: Exception) {
             null
-        } ?: return@synchronized RestoreResult.NoSession
-        if (provider() != null) return@synchronized RestoreResult.Restored
+        } ?: return@serialized RestoreResult.NoSession
+        if (provider() != null) return@serialized RestoreResult.Restored
         try {
             val client = if (SessionMode.of(stored.mode) == SessionMode.IDENTIFIANT) {
                 // Démo : couple identifiant / mot de passe public, pas de jeton.
@@ -231,6 +236,21 @@ class PairingRepository(
     }
 
     /**
+     * Déconnexion sous le MÊME verrou que l'appairage et la restauration : une
+     * restauration EN VOL ne peut plus publier l'ancien client après la purge.
+     * [onPurged] efface l'état qui n'appartient pas au dépôt (liste de comptes)
+     * une fois la session et le cache traités, dans la même section critique.
+     *
+     * `false` = purge incomplète : l'appelant remonte l'erreur, jamais un
+     * « déconnecté » qui laisse la donnée du compte sur le disque.
+     */
+    fun logoutBlocking(onPurged: () -> Unit = {}): Boolean = SessionGate.serialized {
+        val purged = SessionRepair.purge({ sessions.clear() }, cacheStore)
+        onPurged()
+        purged
+    }
+
+    /**
      * Erreur d'appairage → phrase actionnable. Jamais « recommence » quand
      * « rescane » est la réponse, jamais un message brut de la lib (I6).
      */
@@ -263,12 +283,6 @@ class PairingRepository(
     companion object {
         /** Miroir de SETUP_PIN_MAX_CHARS (shared/contracts/api.ts). */
         const val PIN_MAX_CHARS = 64
-
-        /**
-         * Verrou PARTAGÉ par tout le process : jamais deux sessions ouvertes en
-         * parallèle (erreur 25 côté établissement).
-         */
-        private val restoreLock = Any()
 
         fun newUuid(): String = UUID.randomUUID().toString()
     }

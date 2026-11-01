@@ -2,8 +2,8 @@ package fr.veryslopnynotes.data
 
 // Signal unique « session Pronote morte » : les dépôts locaux le lèvent quand
 // le client du téléphone échoue en `isSessionFailure`. L'UI répare par le
-// chemin existant `accounts.logout()` (session invalidée + cache purgé), puis
-// renvoie à l'appairage.
+// chemin existant `PairingRepository.logoutBlocking()` (session invalidée +
+// cache purgé), puis renvoie à l'appairage.
 //
 // Anti-boucle : après `logout()` il n'y a plus de session (PronoteSession
 // purgée, store vidé), donc plus aucun dépôt ne peut lever le signal ; et la
@@ -24,14 +24,22 @@ object DeviceAuth {
         onRejected = listener
     }
 
-    /** Seuls les dépôts lèvent le signal (jamais l'UI, jamais une piste). */
-    internal fun reject() {
+    /**
+     * Seuls les dépôts lèvent le signal (jamais l'UI, jamais une piste).
+     * `true` = un abonné l'a traité (purge faite) ; `false` = personne n'écoute
+     * (process neuf du job), l'appelant doit purger lui-même.
+     */
+    internal fun reject(): Boolean {
+        val listener = onRejected ?: return false
         // Le signal ne doit jamais faire échouer celui qui le lève : le dépôt
         // doit pouvoir renvoyer son refus. Sans ce filet, une purge en échec
         // tuerait son fil et la promesse JS pendrait jusqu'au délai.
-        try {
-            onRejected?.invoke()
+        return try {
+            listener()
+            true
         } catch (_: Exception) {
+            // Abonné en échec = purge NON faite : le job doit la reprendre.
+            false
         }
     }
 }

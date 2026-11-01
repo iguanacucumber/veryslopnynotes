@@ -7,6 +7,7 @@ package fr.veryslopnynotes.downloads
 
 import fr.veryslopnynotes.data.AccountIdentity
 import fr.veryslopnynotes.data.CacheScope
+import fr.veryslopnynotes.data.CacheSwitch
 import fr.veryslopnynotes.data.DownloadedFiles
 import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.LocalDataStore
@@ -142,6 +143,22 @@ private class Driver {
                 "content" to JVal.Str(if (file.isFile) file.readText() else ""),
             )
         }
+        // Pièce déjà téléchargée pour un (devoir, identifiant, libellé) : sert
+        // de cache au contexte IA. Le nom EXACT d'abord, puis l'unique fichier
+        // préfixé par l'IDENTIFIANT de la pièce (jamais celui d'un autre id).
+        "cachedFor" -> {
+            val slot = bench.slot(op)
+            val found = DownloadedFiles.cachedFor(
+                slot.attachments,
+                op.str("homework") ?: "devoir-1",
+                op.str("id") ?: "1",
+                op.str("label") ?: "piece.pdf",
+            )
+            ok(
+                "found" to JVal.Bool(found != null),
+                "name" to JVal.Str(found?.name ?: ""),
+            )
+        }
         // Cache borné : les fichiers les plus anciens partent.
         "prune" -> {
             val slot = bench.slot(op)
@@ -152,25 +169,29 @@ private class Driver {
         // Purge directe du cache des téléchargements.
         "purge" -> {
             val slot = bench.slot(op)
-            val deleted = DownloadedFiles.purge(slot.cacheRoot)
-            ok("deleted" to JVal.Num(deleted.toDouble()))
+            ok("cleared" to JVal.Bool(DownloadedFiles.purge(slot.cacheRoot)))
         }
         // Déconnexion : la purge passe par le `CacheScope` (le MÊME chemin que
         // le cache) — le store englobe les téléchargements.
         "logout" -> {
             val slot = bench.slot(op)
-            CacheScope.purge(slot.store)
-            ok("epoch" to JVal.Num(SessionEpoch.current().toDouble()))
+            ok(
+                "cleared" to JVal.Bool(CacheScope.purge(slot.store)),
+                "epoch" to JVal.Num(SessionEpoch.current().toDouble()),
+            )
         }
         // Changement de compte : même purge, par le même chemin.
         "pair" -> {
             val slot = bench.slot(op)
-            val purged = CacheScope.onAccountPaired(
+            val switched = CacheScope.onAccountPaired(
                 slot.store,
                 identityOf(op.obj("previous")),
                 identityOf(op.obj("current")),
             )
-            ok("purged" to JVal.Bool(purged))
+            ok(
+                "purged" to JVal.Bool(switched == CacheSwitch.Purged),
+                "failed" to JVal.Bool(switched == CacheSwitch.Failed),
+            )
         }
         "cleanup" -> {
             bench.cleanup()
