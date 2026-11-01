@@ -44,7 +44,6 @@ export interface ScraperDeps {
        * libre, sous la responsabilité de l'exploitant.
        */
       readonly defaultAuthFile?: string;
-      readonly headless?: boolean;
       readonly signal?: AbortSignal;
       readonly resolveHost?: HostResolver;
     },
@@ -56,7 +55,6 @@ export interface ScraperDeps {
   readonly scrapeWeb?: (
     opts: {
       readonly startUrl: string;
-      readonly headless?: boolean;
       readonly signal?: AbortSignal;
       readonly resolveHost?: HostResolver;
     },
@@ -232,7 +230,6 @@ async function handleScrape(
           startUrl: body.startUrl,
           // Le SEUL jar monté est celui du serveur.
           defaultAuthFile: defaultJar,
-          headless: body.headless,
           // La garde SSRF résout le nom d'hôte avant la navigation. Le
           // résolveur est celui du serveur (jamais celui de l'appelant) ;
           // les tests injectent un faux résolveur.
@@ -354,7 +351,6 @@ async function handleWebScrape(
     try {
       const scrapeP = runScrape({
         startUrl: body.url,
-        headless: true,
         resolveHost,
         signal: controller.signal,
       });

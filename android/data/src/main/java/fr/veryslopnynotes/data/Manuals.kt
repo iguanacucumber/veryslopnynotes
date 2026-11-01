@@ -385,7 +385,6 @@ class ManualsClient(
         val payload = JSONObject()
             .put("platform", PLATFORM)
             .put("startUrl", startUrl)
-            .put("headless", true)
             .toString()
         val request = Request.Builder()
             .url(ServerConfig.manualsScrapeUrl(baseUrl))

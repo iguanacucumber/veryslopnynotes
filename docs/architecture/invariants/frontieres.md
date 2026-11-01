@@ -28,11 +28,12 @@
 ## I8 — Le scraper est un sidecar local, sans auth, borné et sans SSRF
 - Invariant : session et clé LLM restent locales ; le scraper, sans auth, n'est
   joignable qu'en local ou derrière un proxy authentifié. Identifiants refusés
-  (400), login jamais ingéré (`login_required`), jar choisi par le SERVEUR,
-  `authFile` refusé. Navigation : hôtes privés et IP internes refusés, plus de
-  20 redirections refusées, URL finale re-vérifiée. Le HTML est borné AVANT
-  lecture (4 Mo `content-length`, 1 Mo lu), 2 scrapes simultanés, 30 s, 504 au
-  délai. Image non-root, TLS obligatoire, pas de `HOST` forcé.
+  (400), login jamais ingéré (`login_required`), jar choisi par le SERVEUR et
+  écrit atomiquement, `authFile` refusé. Navigation : hôtes privés, IP
+  internes, WebSocket et service workers refusés, 20 redirections maximum,
+  URL finale re-vérifiée. HTML sérialisé borné (1 Mo), 2
+  scrapes simultanés, 30 s, 504 au délai. Image non-root au digest,
+  TLS obligatoire, pas de `HOST` forcé.
 - Test : `tests/unit/scraper-ssrf.test.ts`, `tests/unit/scraper-only.test.ts`,
   `tests/unit/scraper-limits.test.ts`,
   `tests/unit/scraper-concurrency.test.ts`,

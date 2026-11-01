@@ -5,14 +5,17 @@
 //
 // Garde SSRF (I8) : hôte normalisé WHATWG, résolu avant la navigation, chaîne
 // de redirections suivie à la main (autant que Chromium), URL finale
-// re-vérifiée, sous-ressources privées coupées. Reste la fenêtre TOCTOU de la
+// re-vérifiée, sous-ressources privées coupées, WebSocket gardés et service
+// workers bloqués. Reste la fenêtre TOCTOU de la
 // résolution côté navigateur (cf. ssrf.ts).
 // Jar de session : celui du SERVEUR uniquement (I24) ; un corps qui demande
 // `authFile` est refusé.
 // Le scraper ne s'authentifie pas : `username`/`password` sont refusés, et une
 // page de connexion (HTTP 200) n'est jamais ingérée.
-// HTML borné en caractères AVANT reparse et en octets avant lecture, avec
-// délai : jamais `page.content()` entier.
+// HTML sérialisé de façon BORNÉE dans le navigateur, borné en caractères avant
+// reparse et refusé sur un `content-length` trop grand, avec délai : jamais
+// `outerHTML` ni `page.content()` en entier.
+import { rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { load } from "cheerio";
 import { truncateManualText } from "./manuals";
@@ -53,8 +56,6 @@ export interface ScrapeOptions {
    * tenant. Absent = jar serveur par défaut.
    */
   readonly defaultAuthFile?: string;
-  /** false = première connexion interactive visible. */
-  readonly headless?: boolean;
   readonly timeoutMs?: number;
   readonly logger?: (message: string) => void;
   /**
@@ -106,10 +107,12 @@ const DEFAULT_TIMEOUT_MS = 30_000;
  */
 export const MAX_HTML_CHARS = 1_000_000;
 /**
- * Plafond du HTML en OCTETS, mesuré par l'en-tête `content-length`.
+ * Plafond du HTML en OCTETS annoncé par `content-length`.
  *
  * 4× le plafond de caractères (pire cas UTF-8). Au-delà, la page est REFUSÉE
- * SANS ÊTRE LUE : la sérialiser coûterait des centaines de Mo de mémoire.
+ * sans être lue : un refus tôt et pas cher. L'en-tête mesure le corps
+ * COMPRESSÉ et peut mentir ou manquer (chunked) : la vraie borne reste la
+ * sérialisation bornée dans le navigateur (`BOUNDED_HTML`).
  */
 export const MAX_HTML_BYTES = 4 * MAX_HTML_CHARS;
 /** Délai de lecture du HTML : `page.content()` n'en a pas. */
@@ -217,12 +220,13 @@ export async function assertPublicRedirectChain(
       res = await fetch(current, { redirect: "manual", signal });
     } catch {
       // Délai de la garde : la chaîne est INCONNUE, donc on ne navigue pas à
-      // l'aveugle (fail-closed). Une simple erreur réseau (hôte injoignable)
-      // laisse le navigateur trancher : il n'atteindra rien non plus.
+      // l'aveugle (fail-closed).
       if (signal.aborted) {
         throw new ScrapeManualsError("verification des redirections interrompue", "timeout");
       }
-      return; // DNS/réseau indisponible : le navigateur tranchera
+      // Réseau/DNS indisponible : la chaîne n'est pas vérifiable. Laisser le
+      // navigateur partir serait atteindre une cible non contrôlée (fail-closed).
+      throw new ScrapeManualsError("redirections non verifiables (reseau indisponible)", "generic");
     }
     if (res.status < 300 || res.status >= 400) return; // pas de redirection
     const location = res.headers.get("location");
@@ -286,11 +290,11 @@ export function isLoginPage(html: string): boolean {
 }
 
 /**
- * Taille de la réponse, en OCTETS (en-tête `content-length`), 0 si inconnue.
+ * Taille ANNONCÉE de la réponse, en OCTETS (`content-length`), 0 si inconnue.
  *
- * Mesure AVANT la matérialisation : la pile réseau la donne sans construire
- * la page. Une réponse en morceaux (pas d'en-tête) donne 0 : c'est alors la
- * lecture BORNÉE qui s'applique.
+ * Pré-contrôle bon marché, pas la borne : l'en-tête décrit le corps COMPRESSÉ
+ * et manque en chunked. La sérialisation bornée dans le navigateur reste
+ * l'autorité.
  */
 function responseHeadersOf(response: unknown): Record<string, string> {
   const res = response as { headers?: () => Record<string, string> } | null;
@@ -338,13 +342,128 @@ interface HtmlPage {
 /**
  * Sérialisation BORNÉE de la page, exécutée DANS le navigateur.
  *
- * Le DOM tient déjà en mémoire (Chromium l'a construit) ; c'est la
- * SÉRIALISATION qui coûte des centaines de Mo, et la chaîne qui traverse le
- * pont. Ici, seul le plafond (+1 caractère témoin) sort du navigateur.
+ * Le DOM tient déjà en mémoire ; c'est la SÉRIALISATION qui coûte des
+ * centaines de Mo (une seule chaîne) et la chaîne qui traverse le pont. On
+ * parcourt donc les nœuds et on s'arrête dès `max` caractères produits
+ * (+1 témoin de troncature) : ni `outerHTML` ni `innerHTML` ne sont lus,
+ * même pour un seul attribut géant (la valeur est tranchée AVANT échappement).
+ *
+ * Fonction AUTONOME : Playwright la sérialise dans la page, elle ne peut
+ * référencer aucune liaison du module. Testée hors navigateur avec un faux
+ * `document` (tests/unit/scraper-limits.test.ts).
  */
-const BOUNDED_HTML = (max: number): string => {
-  const full = document.documentElement.outerHTML;
-  return full.length > max ? full.slice(0, max + 1) : full;
+export const BOUNDED_HTML = (max: number): string => {
+  const ELEMENT_NODE = 1;
+  const TEXT_NODE = 3;
+  const CDATA_NODE = 4;
+  const COMMENT_NODE = 8;
+  type NodeLike = {
+    nodeType?: number;
+    nodeName?: string;
+    nodeValue?: string | null;
+    childNodes?: ArrayLike<NodeLike | null>;
+    attributes?: ArrayLike<{ name?: string; value?: string } | null>;
+  };
+  const doc = (globalThis as unknown as { document?: { documentElement?: NodeLike | null } }).document;
+  const root = doc && doc.documentElement;
+  if (!root) return "";
+  let out = "";
+  let full = false;
+  let visited = 0;
+  const escape = (value: string, attribute: boolean): string =>
+    value.replace(
+      attribute ? /[&<>"]/g : /[&<>]/g,
+      (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&quot;"),
+    );
+  const append = (chunk: string): void => {
+    if (full || chunk.length === 0) return;
+    const room = max + 1 - out.length;
+    if (room <= 0) {
+      full = true;
+      return;
+    }
+    out += chunk.length > room ? chunk.slice(0, room) : chunk;
+    if (out.length > max) full = true;
+  };
+  /** Tranche AVANT d'échapper : une valeur de 100 Mo n'est jamais recopiée. */
+  const appendValue = (value: string, attribute: boolean): void => {
+    if (full) return;
+    const room = max + 1 - out.length;
+    if (room <= 0) {
+      full = true;
+      return;
+    }
+    const kept = value.length > room ? value.slice(0, room) : value;
+    append(escape(kept, attribute));
+    if (kept.length < value.length) full = true;
+  };
+  // Pile de FRAMES, pas de récursion : l'imbrication peut être profonde. La
+  // pile suit la profondeur du DOM, pas sa largeur (un nœud à 10 000 enfants
+  // n'empile pas 10 000 frames).
+  type Frame = { node: NodeLike | null; close: string | null; index: number };
+  const stack: Frame[] = [{ node: root, close: null, index: 0 }];
+  while (stack.length > 0 && !full) {
+    const frame = stack[stack.length - 1]!;
+    if (frame.close !== null) {
+      const children = frame.node && frame.node.childNodes;
+      if (children && frame.index < children.length) {
+        const child = children[frame.index];
+        frame.index += 1;
+        if (child) stack.push({ node: child, close: null, index: 0 });
+        continue;
+      }
+      append(frame.close);
+      stack.pop();
+      continue;
+    }
+    visited += 1;
+    // Garde des millions de nœuds VIDES (texte vide, commentaire vide) : ils
+    // ne produisent aucun caractère et ne doivent pas faire tourner la boucle.
+    if (visited > max + 1) {
+      full = true;
+      break;
+    }
+    const node = frame.node;
+    if (!node) {
+      stack.pop();
+      continue;
+    }
+    const type = node.nodeType;
+    if (type === TEXT_NODE || type === CDATA_NODE) {
+      appendValue(String(node.nodeValue ?? ""), false);
+      stack.pop();
+      continue;
+    }
+    if (type === COMMENT_NODE) {
+      append("<!--");
+      appendValue(String(node.nodeValue ?? ""), false);
+      append("-->");
+      stack.pop();
+      continue;
+    }
+    if (type !== ELEMENT_NODE) {
+      stack.pop();
+      continue;
+    }
+    const name = String(node.nodeName ?? "").toLowerCase();
+    append("<" + name);
+    const attributes = node.attributes;
+    for (let i = 0; attributes && i < attributes.length && !full; i += 1) {
+      const attribute = attributes[i];
+      if (!attribute) continue;
+      // Nom et valeur passent par la borne : un attribut géant ne doit pas
+      // être recopié avant la coupe.
+      append(" ");
+      appendValue(String(attribute.name ?? ""), true);
+      append('="');
+      appendValue(String(attribute.value ?? ""), true);
+      append('"');
+    }
+    append(">");
+    frame.close = "</" + name + ">";
+    frame.index = 0;
+  }
+  return out;
 };
 
 /**
@@ -354,8 +473,8 @@ const BOUNDED_HTML = (max: number): string => {
  *    survit au délai HTTP et garde le Chromium vivant ;
  *  - plafond de caractères AVANT le reparse cheerio : le coût du parse est
  *    linéaire, donc on borne la chaîne qu'il va reparcourir ;
- *  - la borne est demandée AU NAVIGATEUR (`evaluate`) : le processus ne
- *    matérialise jamais une page de plusieurs centaines de Mo.
+ *  - la borne est appliquée DANS le navigateur (`BOUNDED_HTML`) : le processus
+ *    ne matérialise jamais une page de plusieurs centaines de Mo.
  * La course peut être perdue (délai) : la rejection tardive ne doit pas
  * devenir une rejection non gérée.
  */
@@ -363,7 +482,7 @@ async function readHtml(page: HtmlPage, timeoutMs: number, log: (message: string
   let timer: ReturnType<typeof setTimeout> | undefined;
   const contentP: Promise<string> = (async () => {
     try {
-      // La borne est demandée AU NAVIGATEUR : la chaîne qui traverse le pont
+      // La borne est appliquée AU NAVIGATEUR : la chaîne qui traverse le pont
       // ne dépasse jamais le plafond (+1 caractère témoin).
       return await page.evaluate(BOUNDED_HTML, MAX_HTML_CHARS);
     } catch {
@@ -395,6 +514,43 @@ async function readHtml(page: HtmlPage, timeoutMs: number, log: (message: string
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/**
+ * Contexte Playwright réduit à la persistance du jar.
+ *
+ * L'écriture passe par un fichier temporaire puis `rename` : une écriture
+ * interrompue ne laisse jamais un JSON tronqué à la place de la session.
+ * La chaîne PROMISE est au niveau du module : les deux scrapes simultanés
+ * (plafond 2) écrivent le même fichier l'un après l'autre, jamais en parallèle.
+ */
+interface JarContext {
+  storageState: (options: { path: string }) => Promise<unknown>;
+}
+
+let jarWriteChain: Promise<void> = Promise.resolve();
+let jarTempSeq = 0;
+
+async function persistJar(context: JarContext, path: string): Promise<void> {
+  jarTempSeq += 1;
+  const tmp = `${path}.tmp-${process.pid}-${jarTempSeq}`;
+  try {
+    await context.storageState({ path: tmp });
+    await rename(tmp, path);
+  } catch (err) {
+    await unlink(tmp).catch(() => {});
+    throw err;
+  }
+}
+
+function saveJar(context: JarContext, path: string): Promise<void> {
+  // `then(run, run)` : une écriture précédente ratée ne bloque pas la suivante.
+  const next = jarWriteChain.then(
+    () => persistJar(context, path),
+    () => persistJar(context, path),
+  );
+  jarWriteChain = next.catch(() => {});
+  return next;
 }
 
 /** Réglages du moteur commun : libellé + session + refus de contenu non textuel. */
@@ -458,7 +614,7 @@ export async function scrapePage(
   } catch {
     throw new ScrapeManualsError("Playwright non installé — e2e manuals skippé (aucune dép ajoutée v1)");
   }
-  const browser = await pw.chromium.launch({ headless: opts.headless ?? true, timeout: timeoutMs });
+  const browser = await pw.chromium.launch({ headless: true, timeout: timeoutMs });
   // Annulation RÉELLE : le navigateur est un processus externe, pas une
   // promesse — sans cette fermeture, un délai dépassé laisse tourner un
   // Chromium orphelin (épuisement mémoire).
@@ -476,13 +632,40 @@ export async function scrapePage(
   signal?.addEventListener("abort", abortBrowser, { once: true });
   let context: any = null;
   try {
+    // `serviceWorkers: "block"` : `page.route` ne voit PAS les requêtes émises
+    // par un service worker. Sans ce refus d'enregistrement, une page pouvait
+    // fetcher un hôte interne et recopier la réponse dans son DOM.
+    const contextOptions = { serviceWorkers: "block" as const };
     context =
       (jar
-        ? await browser.newContext({ storageState: jar }).catch(
+        ? await browser.newContext({ ...contextOptions, storageState: jar }).catch(
             // Premier run : pas de fichier local, contexte frais pour login interactif.
-            async () => browser.newContext(),
+            async () => browser.newContext(contextOptions),
           )
-        : await browser.newContext()) ?? null;
+        : await browser.newContext(contextOptions)) ?? null;
+    // Playwright route les WebSocket via `routeWebSocket`, jamais via
+    // `page.route` : sans cette garde, une page ouvrait `ws://192.168.x.x` et
+    // recopiait la réponse dans son DOM. Aucune socket n'est ouverte avant le
+    // verdict ; `close()` coupe les deux côtés.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await context.routeWebSocket("**/*", async (socket: any) => {
+      const raw = typeof socket?.url === "function" ? socket.url() : "";
+      let host: string | null = null;
+      try {
+        const parsed = new URL(raw);
+        if (parsed.protocol === "ws:" || parsed.protocol === "wss:") host = parsed.hostname;
+      } catch {
+        host = null;
+      }
+      const verdict = host === null ? "private" : await checkPublicHost(host, resolve);
+      if (verdict === "public") {
+        // `connectToServer()` n'est appelé qu'APRÈS la garde : le DNS est
+        // résolu avant que la socket réelle parte.
+        socket.connectToServer();
+        return;
+      }
+      await socket.close().catch(() => {});
+    });
     const page = await context.newPage();
     // Le navigateur suit les redirections : une URL publique qui répond 302
     // vers http://169.254.169.254/… serait atteinte si on ne coupait pas la
@@ -547,10 +730,10 @@ export async function scrapePage(
       ((await page.title().catch(() => config.label)) || config.label).trim(),
       200,
     );
-    // La TAILLE est mesurée AVANT la lecture (en-tête `content-length`) : une
-    // page de plusieurs centaines de Mo est REFUSÉE sans être sérialisée ni
-    // transférée. Sans en-tête (réponse en morceaux), c'est la lecture BORNÉE
-    // qui s'applique.
+    // La TAILLE annoncée (`content-length`) est un pré-contrôle : au-delà du
+    // plafond, la page est refusée sans être lue. L'en-tête peut manquer
+    // (chunked) ou décrire le corps COMPRESSÉ : la vraie borne est la
+    // sérialisation bornée dans le navigateur, ci-dessous.
     const contentLength = contentLengthOf(response);
     if (contentLength > MAX_HTML_BYTES) {
       throw new ScrapeManualsError(
@@ -558,10 +741,9 @@ export async function scrapePage(
         config.textOnly ? "too_large" : "generic",
       );
     }
-    // HTML borné (plafond de caractères) et lecture à DÉLAI : sans ça, tout le
-    // HTML était matérialisé en mémoire et une page qui ne finit pas de
-    // streamer bloquait le scrape au-delà du délai HTTP. La borne est appliquée
-    // DANS le navigateur (`evaluate`) : seule la chaîne bornée traverse le pont.
+    // HTML borné PENDANT la sérialisation (plafond de caractères) et lecture à
+    // DÉLAI : le navigateur n'écrit jamais la page entière, seule la chaîne
+    // bornée (+1 témoin) traverse le pont.
     const html = await readHtml(page, opts.contentTimeoutMs ?? CONTENT_TIMEOUT_MS, log);
     // Une PAGE DE CONNEXION (HTTP 200) n'est JAMAIS une source : le refus
     // arrive AVANT l'extraction ET avant l'écriture du jar, pour ne pas
@@ -574,7 +756,7 @@ export async function scrapePage(
     }
     const text = truncateManualText(stripTags(html), 4000);
     if (jar) {
-      await context.storageState({ path: jar }).catch(() => {
+      await saveJar(context, jar).catch(() => {
         log(`scrape ${config.label} -> jar non persiste`);
       });
     }
@@ -612,7 +794,9 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
       id: `scrape-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
       platform: config.platform,
       title: page.title,
-      subject: page.title,
+      // Le contrat borne `subject` à 100 : un titre plus long (100–200) ne doit
+      // pas faire rejeter un scrape réussi (500 « invalid payload »).
+      subject: truncateManualText(page.title, 100),
       page: 1,
       excerpt: page.text,
     },

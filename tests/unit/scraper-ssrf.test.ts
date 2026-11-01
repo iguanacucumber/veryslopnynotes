@@ -2,7 +2,7 @@
 // est refusé avant navigation) et jar de session choisi par le SERVEUR.
 // Fakes synthétiques : `playwright` mocké, DNS injecté, jar en tmpdir.
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isManualsScrapeRequest } from "../../shared/contracts/api";
@@ -51,30 +51,49 @@ interface FakeOptions {
   /** false = la redirection finale n'est PAS vue par le route handler. */
   routeSeesRedirect?: boolean;
   status?: number;
+  /** Titre rendu par la page (le contrat borne `subject` à 100). */
+  title?: string;
+  /** true = `storageState` écrit vraiment son fichier (test du jar atomique). */
+  realJarWrites?: boolean;
 }
 
 interface FakeState {
   launched: number;
+  launchHeadless: boolean | null;
   contentCalls: number;
   aborted: string[];
   continued: string[];
   storageStatePaths: string[];
   /** Jar MONTÉ par le navigateur (le `storageState` du contexte). */
   mountedStates: string[];
+  /** Mode `serviceWorkers` demandé à chaque `newContext`. */
+  serviceWorkerModes: (string | undefined)[];
   routePattern: string | null;
+  wsPattern: string | null;
+  concurrentStorage: number;
+  maxConcurrentStorage: number;
 }
+
+/** Jar factice : le contenu n'a aucune importance, seule l'écriture compte. */
+const JAR_STATE = { cookies: [], origins: [] };
 
 let fake: FakeOptions = { finalUrl: PUBLIC_URL };
 const state: FakeState = {
   launched: 0,
+  launchHeadless: null,
   contentCalls: 0,
   aborted: [],
   continued: [],
   storageStatePaths: [],
   mountedStates: [],
+  serviceWorkerModes: [],
   routePattern: null,
+  wsPattern: null,
+  concurrentStorage: 0,
+  maxConcurrentStorage: 0,
 };
 let routeHandler: ((route: unknown) => Promise<void>) | null = null;
+let wsHandler: ((socket: unknown) => Promise<void>) | null = null;
 let fetchSpy: { mockRestore: () => void } | null = null;
 
 /** Stub du `fetch` global : la chaîne de redirections est vérifiée AVANT le navigateur. */
@@ -91,13 +110,19 @@ function stubFetch(handler: (url: string) => Response): void {
 function resetState(): void {
   fake = { finalUrl: PUBLIC_URL };
   state.launched = 0;
+  state.launchHeadless = null;
   state.contentCalls = 0;
   state.aborted = [];
   state.continued = [];
   state.storageStatePaths = [];
   state.mountedStates = [];
+  state.serviceWorkerModes = [];
   state.routePattern = null;
+  state.wsPattern = null;
+  state.concurrentStorage = 0;
+  state.maxConcurrentStorage = 0;
   routeHandler = null;
+  wsHandler = null;
   stubFetch(() => new Response("ok", { status: 200 })); // pas de redirection
 }
 
@@ -108,16 +133,18 @@ afterEach(() => {
 
 mock.module("playwright", () => ({
   chromium: {
-    launch: async () => {
+    launch: async (opts?: { headless?: boolean }) => {
       state.launched += 1;
+      state.launchHeadless = opts?.headless ?? null;
       return {
-        newContext: async (opts?: { storageState?: string }) => {
+        newContext: async (opts?: { storageState?: string; serviceWorkers?: string }) => {
+          state.serviceWorkerModes.push(opts?.serviceWorkers);
           // Le jar MONTÉ par le navigateur dit quelle session est utilisée.
           if (opts?.storageState) state.mountedStates.push(opts.storageState);
           return {
             newPage: async () => ({
               url: () => fake.finalUrl,
-              title: async () => "Titre factice",
+              title: async () => fake.title ?? "Titre factice",
               // La borne est appliquée DANS le navigateur : le faux rend au plus `max` caractères.
               evaluate: async (_fn: unknown, max: number) => {
                 state.contentCalls += 1;
@@ -148,8 +175,23 @@ mock.module("playwright", () => ({
                 return { status: () => fake.status ?? 200, ok: () => (fake.status ?? 200) < 400 };
               },
             }),
+            routeWebSocket: async (pattern: string, handler: (socket: unknown) => Promise<void>) => {
+              state.wsPattern = pattern;
+              wsHandler = handler;
+            },
             storageState: async (o: { path: string }) => {
               state.storageStatePaths.push(o.path);
+              state.concurrentStorage += 1;
+              state.maxConcurrentStorage = Math.max(state.maxConcurrentStorage, state.concurrentStorage);
+              try {
+                if (fake.realJarWrites) {
+                  // Laisse la fenêtre ouverte : sans sérialisation, deux écritures se chevauchent.
+                  await new Promise((resolve) => setTimeout(resolve, 20));
+                  writeFileSync(o.path, JSON.stringify(JAR_STATE));
+                }
+              } finally {
+                state.concurrentStorage -= 1;
+              }
             },
             close: async () => {},
           };
@@ -335,7 +377,9 @@ describe("redirection : l'URL finale est re-vérifiée (#362)", () => {
     expect(docs[0]?.excerpt).toContain("SECRET-INTERNAL-SERVICE");
     expect(state.contentCalls).toBe(1);
     expect(state.routePattern).toBe("**/*");
-    expect(state.storageStatePaths).toEqual([DEFAULT_AUTH_FILE]);
+    // Le jar n'est plus écrit en place : passage par un fichier temporaire puis rename.
+    expect(state.storageStatePaths).toHaveLength(1);
+    expect(state.storageStatePaths[0]).toStartWith(`${DEFAULT_AUTH_FILE}.tmp-`);
   });
 });
 
@@ -530,14 +574,152 @@ describe("jar de session : choisi par le serveur, jamais par l'appelant (#538)",
   test("le SEUL jar monté est celui du serveur", async () => {
     resetState();
     await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
-    // Monté ET persisté : le même jar, celui du serveur.
+    // Monté ET persisté : le même jar, celui du serveur (via un temporaire).
     expect(state.mountedStates).toEqual([DEFAULT_AUTH_FILE]);
-    expect(state.storageStatePaths).toEqual([DEFAULT_AUTH_FILE]);
+    expect(state.storageStatePaths).toHaveLength(1);
+    expect(state.storageStatePaths[0]).toStartWith(`${DEFAULT_AUTH_FILE}.tmp-`);
   });
 
   test("le contrat ne connaît plus de champ de jar (le jar n'est pas un paramètre de requête)", () => {
     expect(isManualsScrapeRequest(base)).toBe(true);
     // C'est le SERVEUR qui refuse le corps, pas le contrat.
     expect(isManualsScrapeRequest({ ...base, authFile: "manuel.json" })).toBe(true);
+  });
+});
+
+// #779 : WebSocket hors `page.route`, service workers bloqués, `subject` borné,
+// sonde de redirection fail-closed, jar atomique, `headless` non pilotable.
+describe("#779 — fermetures SSRF et bornes du scrape", () => {
+  const postManuals = (extra: Record<string, unknown> = {}) =>
+    new Request("http://127.0.0.1/v1/manuals/scrape", {
+      method: "POST",
+      body: JSON.stringify({ platform: "editeur-fake", startUrl: PUBLIC_URL, ...extra }),
+    });
+
+  /** Fausse socket routée : `close()` coupe, `connectToServer()` ouvre. */
+  function fakeSocket(url: string) {
+    const calls = { closed: 0, connected: 0 };
+    return {
+      calls,
+      socket: {
+        url: () => url,
+        close: async () => {
+          calls.closed += 1;
+        },
+        connectToServer: () => {
+          calls.connected += 1;
+          return {};
+        },
+      },
+    };
+  }
+
+  test("un ws:// interne est coupé AVANT toute connexion", async () => {
+    resetState();
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    expect(state.wsPattern).toBe("**/*");
+    expect(wsHandler).not.toBeNull();
+    // `routeWebSocket` voit les WebSocket que `page.route` ne voit jamais.
+    for (const url of ["ws://127.0.0.1:9/socket", "ws://169.254.169.254/latest", "ws://10.0.0.5/x"]) {
+      const { socket, calls } = fakeSocket(url);
+      await wsHandler!(socket);
+      expect({ url, ...calls }).toEqual({ url, closed: 1, connected: 0 });
+    }
+  });
+
+  test("un nom qui résout vers une IP privée est coupé aussi (rebinding)", async () => {
+    resetState();
+    const resolve = fakeResolver({
+      "manuels.example.invalid": [PUBLIC_IP],
+      "interne.example.invalid": ["127.0.0.1"],
+    });
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: resolve });
+    const { socket, calls } = fakeSocket("wss://interne.example.invalid/socket");
+    await wsHandler!(socket);
+    expect(calls).toEqual({ closed: 1, connected: 0 });
+  });
+
+  test("un WebSocket public est connecté (la garde ne bloque pas tout)", async () => {
+    resetState();
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    const { socket, calls } = fakeSocket("wss://manuels.example.invalid/socket");
+    await wsHandler!(socket);
+    expect(calls).toEqual({ closed: 0, connected: 1 });
+  });
+
+  test("une URL de socket illisible est refusée (fail-closed)", async () => {
+    resetState();
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    const { socket, calls } = fakeSocket("pas-une-url");
+    await wsHandler!(socket);
+    expect(calls).toEqual({ closed: 1, connected: 0 });
+  });
+
+  test("les service workers sont BLOQUÉS : leur fetch ne contourne pas page.route", async () => {
+    resetState();
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER });
+    // `page.route` ne voit pas les requêtes d'un service worker : on refuse
+    // l'enregistrement lui-même, avec et sans jar.
+    expect(state.serviceWorkerModes).toEqual(["block"]);
+
+    resetState();
+    await scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER, useSession: false });
+    expect(state.serviceWorkerModes).toEqual(["block"]);
+    expect(state.mountedStates).toEqual([]);
+  });
+
+  test("la sonde de redirection refusée par le réseau = refus (jamais une navigation aveugle)", async () => {
+    resetState();
+    stubFetch(() => {
+      throw new Error("ECONNREFUSED");
+    });
+    const err = await refusal(scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER }));
+    expect(err).toBeInstanceOf(ScrapeManualsError);
+    expect(err.message).toMatch(/redirections non verifiables/);
+    // La chaîne n'est pas vérifiable : le navigateur ne part pas.
+    expect(state.launched).toBe(0);
+    expect(state.contentCalls).toBe(0);
+  });
+
+  test("un titre de 150 caractères ne fait plus rejeter le scrape (`subject` borné à 100)", async () => {
+    resetState();
+    fake = { finalUrl: PUBLIC_URL, routeSeesRedirect: true, title: "T".repeat(150) };
+    const app = createApp({ scrape: scrapeManuals, resolveHost: PUBLIC_RESOLVER });
+    const res = await app.handler(postManuals());
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { docs: Array<{ title: string; subject: string }> };
+    expect(json.docs).toHaveLength(1);
+    // Le titre garde sa borne (200), le sujet suit le contrat (100).
+    expect(json.docs[0]?.title).toHaveLength(150);
+    expect(json.docs[0]?.subject).toHaveLength(100);
+  });
+
+  test("`headless` ne dépend plus de l'appelant : `false` est ignoré", async () => {
+    resetState();
+    fake = { finalUrl: PUBLIC_URL, routeSeesRedirect: true };
+    const app = createApp({ scrape: scrapeManuals, resolveHost: PUBLIC_RESOLVER });
+    const res = await app.handler(postManuals({ headless: false }));
+    expect(res.status).toBe(200);
+    expect(state.launchHeadless).toBe(true);
+  });
+
+  test("deux scrapes concurrents ne corrompent pas le jar (sérialisé, tmp+rename)", async () => {
+    resetState();
+    fake = { finalUrl: PUBLIC_URL, routeSeesRedirect: true, realJarWrites: true };
+    const dir = mkdtempSync(join(tmpdir(), "vsn-jar-"));
+    const jar = join(dir, "manuals.json");
+    try {
+      await Promise.all([
+        scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER, defaultAuthFile: jar }),
+        scrapeManuals(CONFIG, { startUrl: PUBLIC_URL, resolveHost: PUBLIC_RESOLVER, defaultAuthFile: jar }),
+      ]);
+      // Le fichier final est un JSON complet, jamais une écriture tronquée.
+      expect(JSON.parse(readFileSync(jar, "utf8"))).toEqual(JAR_STATE);
+      // Aucun temporaire ne survit, et les écritures ne se sont pas chevauchées.
+      expect(readdirSync(dir).sort()).toEqual(["manuals.json"]);
+      expect(state.maxConcurrentStorage).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -64,6 +64,7 @@ mock.module("playwright", () => ({
             state.storageStatePaths.push(options.storageState);
           }
           return {
+            routeWebSocket: async () => {},
             newPage: async () => ({
               url: () => state.finalUrl,
               title: async () => state.title,

@@ -4,6 +4,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { createApp } from "../../server/infrastructure/http";
 import {
+  BOUNDED_HTML,
   CONTENT_TIMEOUT_MS,
   MAX_HTML_BYTES,
   MAX_HTML_CHARS,
@@ -68,6 +69,7 @@ mock.module("playwright", () => ({
   chromium: {
     launch: async () => ({
       newContext: async () => ({
+        routeWebSocket: async () => {},
         newPage: async () => ({
           url: () => PUBLIC_URL,
           title: async () => "Titre factice",
@@ -237,5 +239,66 @@ describe("délai de lecture du HTML (#422)", () => {
     );
     expect(res.status).toBe(504);
     expect((await res.json()) as unknown).toMatchObject({ error: { code: "timeout" } });
+  });
+});
+
+// #779 : la borne est appliquée PENDANT la sérialisation, pas après
+// (`outerHTML` construisait toute la page avant le `.slice()`).
+describe("sérialisation bornée pendant le parcours du DOM (#779)", () => {
+  interface FakeNode {
+    nodeType: number;
+    nodeName: string;
+    nodeValue?: string | null;
+    childNodes?: FakeNode[];
+    attributes?: { name: string; value: string }[];
+  }
+
+  const element = (
+    name: string,
+    children: FakeNode[] = [],
+    attributes: { name: string; value: string }[] = [],
+  ): FakeNode => ({ nodeType: 1, nodeName: name, childNodes: children, attributes });
+  const text = (value: string): FakeNode => ({ nodeType: 3, nodeName: "#text", nodeValue: value });
+
+  /** Exécute le sérialiseur avec un faux `document` (aucun navigateur). */
+  function bounded(root: FakeNode, max: number): string {
+    const globals = globalThis as { document?: unknown };
+    const previous = globals.document;
+    globals.document = { documentElement: root };
+    try {
+      return BOUNDED_HTML(max);
+    } finally {
+      globals.document = previous;
+    }
+  }
+
+  test("le parcours s'arrête à la borne, sans jamais lire `outerHTML`", () => {
+    const root = element("html", [element("body", [text("x".repeat(50_000))])]);
+    Object.defineProperty(root, "outerHTML", {
+      get() {
+        throw new Error("outerHTML matérialise toute la page");
+      },
+    });
+    const html = bounded(root, 1000);
+    // +1 caractère témoin : `readHtml` sait que la page a été tronquée.
+    expect(html.length).toBe(1001);
+    expect(html).toStartWith("<html><body>");
+  });
+
+  test("un attribut géant est tranché AVANT échappement", () => {
+    const root = element("html", [], [{ name: "data", value: "&".repeat(2_000_000) }]);
+    const html = bounded(root, 500);
+    expect(html.length).toBeLessThanOrEqual(501);
+  });
+
+  test("une imbrication très profonde ne fait pas déborder la pile", () => {
+    let root = element("span", [text("fin")]);
+    for (let i = 0; i < 20_000; i += 1) root = element("div", [root]);
+    const html = bounded(root, 10_000);
+    expect(html.length).toBeLessThanOrEqual(10_001);
+  });
+
+  test("une page courte est rendue entière (pas de témoin parasite)", () => {
+    expect(bounded(element("p", [text("ok")]), 1000)).toBe("<p>ok</p>");
   });
 });
