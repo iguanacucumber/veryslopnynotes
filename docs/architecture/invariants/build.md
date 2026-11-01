@@ -34,7 +34,7 @@
   le classpath Kotlin lit l'entrée `kotlin` du catalogue ; la CI télécharge
   le `kotlinc` de cette version. Une version changée fait échouer le gate.
 - Test : `tests/architecture/gradle-versions.test.ts` (catalogue TOML, build
-  scripts et `ci.yml` : littéraux refusés, version Kotlin identique).
+  scripts et `.github/workflows/ci.yml` : littéraux refusés, version Kotlin identique).
 - Commande : `make architecture`.
 - Emplacement : `android/gradle/libs.versions.toml`, `android/build.gradle.kts`,
   `android/*/build.gradle.kts`, `.github/workflows/ci.yml`.

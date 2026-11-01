@@ -11,7 +11,9 @@ Une entrée vit dans `docs/architecture/invariants/<thème>.md`, ancrée
 - `- Invariant :` la règle, vérifiable.
 - `- Test :` les fichiers de test cités (chemins réels ou globs).
 - `- Commande :` une cible `make` existante.
-- `- Emplacement :` le fichier à modifier.
+- `- Emplacement :` le fichier à modifier ; `android/<module>/<Fichier>.kt`
+  abrège `android/<module>/src/main/java/fr/veryslopnynotes/<module>/<Fichier>.kt`,
+  un dossier finit par `/`, un ensemble est un glob.
 
 Une entrée tient en 120 mots ; au-delà, le détail va dans un lien (issue,
 commit, ADR). L'identifiant est unique et n'est jamais réutilisé.
@@ -30,7 +32,8 @@ commit, ADR). L'identifiant est unique et n'est jamais réutilisé.
 
 Une règle qui ne peut pas être testée est une convention, pas un invariant.
 `tests/architecture/docs.test.ts` vérifie les identifiants, le format, les
-références, l'existence des fichiers cités et les commandes citées.
+références, les chemins cités par `Test :` et `Emplacement :` (fichier, dossier
+ou glob ; raccourci Kotlin résolu), et chaque `make <cible>` cité.
 
 ## Retirer
 

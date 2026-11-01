@@ -13,13 +13,13 @@ perso dans le livrable. Clé signature TOUJOURS hors repo.
 | bun-types (transitif) | 1.4.4 | `bun.lock` | MIT |
 | @types/node (transitif) | 26.6.4 | `bun.lock` | MIT |
 | undici-types (transitif) | 8.9.0 | `bun.lock` | MIT |
-| Gradle / AGP / Kotlin | 9.8.1 / 9.4.1 / 2.4.21 | wrapper + `android/gradle/libs.versions.toml` | Apache-2.0 |
+| Gradle / AGP / Kotlin | 9.8.2 / 9.5.0 / 2.4.21 | wrapper + `android/gradle/libs.versions.toml` | Apache-2.0 |
 | compileSdk/targetSdk/minSdk | 37 / 37 / 26 | `android/app/build.gradle.kts` | — |
-| activity-ktx / OkHttp | 1.13.0 / 5.5.0 | `android/gradle/libs.versions.toml` | Apache-2.0 |
+| activity-ktx / OkHttp | 1.13.0 / 5.5.1 | `android/gradle/libs.versions.toml` | Apache-2.0 |
 | zxing-android-embedded | 4.3.0 | `android/gradle/libs.versions.toml` | Apache-2.0 |
 | react / react-dom | 19.3.1 | `package.json` exact + `bun.lock` | MIT |
 | react-router-dom | 7.18.4 | `package.json` exact + `bun.lock` | MIT |
-| vite / @vitejs/plugin-react | 8.3.4 / 6.1.2 | `package.json` exact + `bun.lock` | MIT |
+| vite / @vitejs/plugin-react | 8.3.5 / 6.1.2 | `package.json` exact + `bun.lock` | MIT |
 | rolldown (transitif) | 1.2.14 | `bun.lock` | MIT |
 | lightningcss (transitif) | 1.33.0 | `bun.lock` | MPL-2.0 (build uniquement, non distribué) |
 | tough-cookie | 6.0.2 | `package.json` exact + `bun.lock` | BSD-3-Clause |
@@ -99,7 +99,9 @@ make build   # check-secrets + docker build (skip si daemon absent)
    L'interface React est construite avant Gradle (`bun run build:web`, tâche
    Gradle `preBuild`) et copiée dans les assets de l'APK ; `MainActivity`
    l'affiche toujours dans la WebView locale (ADR-004). Le build web ne fait
-   aucun appel réseau et n'embarque aucun secret.
+   aucun appel réseau et n'embarque aucun secret. Les notices de licence
+   (`web/public/licenses/` : SN Pro OFL, Papicons MIT) sont copiées dans
+   `assets/web/licenses/` et voyagent donc avec l'APK.
    Produit deux artefacts signés :
    - APK : `android/app/build/outputs/apk/release/app-release.apk` (sideload)
    - AAB : `android/app/build/outputs/bundle/release/app-release.aab` (Play Store)
