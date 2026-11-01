@@ -47,6 +47,13 @@ const ATTENDU: Record<string, string> = {
   impeccable: "b2e58e101de25ac171189f29b9c79fd41c3ccb3d60330e660970b0a9dfb9b8e3",
 };
 
+/**
+ * Empreinte de TOUT `.agents/` (skills + README.md + licenses/). La table
+ * ci-dessus ne couvrait que `skills/` : éditer le README ou une licence
+ * passait sans bruit. Même règle de mise à jour que `ATTENDU`.
+ */
+const RACINE_ATTENDUE = "41db7a3021de9ebfa8b7f64ae4843ca358a82b4313cccdf36f86e166fa6a1a65";
+
 /** Plafond PAR skill : le dépassement doit être un choix visible en PR. */
 const PLAFOND: Record<string, number> = {
   "code-review": 24_576,
@@ -59,6 +66,12 @@ const LOCK = JSON.parse(readFileSync(join(AGENTS, "..", "skills-lock.json"), "ut
 };
 
 describe("skills vendorisées : le contenu est verrouillé", () => {
+  test("tout `.agents/` est verrouillé, README et licences compris", () => {
+    // Le hash porte sur l'ARBRE entier : un fichier ajouté, édité ou supprimé
+    // hors `skills/` change l'empreinte.
+    expect(treeHash(AGENTS)).toBe(RACINE_ATTENDUE);
+  });
+
   test("chaque skill vendorisée a l'empreinte attendue", () => {
     const vues = Object.fromEntries(
       readdirSync(SKILLS)

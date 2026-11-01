@@ -60,7 +60,7 @@ function toolchain(): ParityToolchain {
     // garde le SKIP bruyant.
     if (process.env.REQUIRE_KOTLIN_TOOLCHAIN === "1") {
       throw new Error(
-        `outillage Kotlin ABSENT — la parité TS <-> Kotlin n'est PAS vérifiée : ${skipReason} ` +
+        `outillage Kotlin ABSENT ou HORS VERSION — la parité TS <-> Kotlin n'est PAS vérifiée : ${skipReason} ` +
           "(installez `kotlinc`, ou pointez KOTLINC_BIN/KOTLIN_JAVA_BIN ; le gate l'exige).",
       );
     }

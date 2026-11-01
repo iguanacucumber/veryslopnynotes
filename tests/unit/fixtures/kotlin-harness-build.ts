@@ -246,13 +246,56 @@ const SUPERVISOR = join(import.meta.dir, "kotlin-compile.sh");
  *  l'outillage peut apparaître (ou être pointé par une variable
  *  d'environnement) après le chargement du module. */
 export function computeSkipReason(): string | null {
-  if (!resolveKotlinc()) {
+  const kotlinc = resolveKotlinc();
+  if (!kotlinc) {
     return "`kotlinc` absent : installez le compilateur Kotlin (ou lancez `make android-compile` pour le diagnostic).";
   }
   if (!resolveJava()) {
     return "`java` absent : la parité a besoin d'une JVM pour exécuter le port compilé.";
   }
+  // I34 : le gate exige AUSSI la version du catalogue. Un poste avec un autre
+  // `kotlinc` compilerait une parité que la CI ne rejoue jamais. Hors gate
+  // (`make watch`), la version locale reste libre : le SKIP bruyant suffit.
+  if (process.env.REQUIRE_KOTLIN_TOOLCHAIN === "1") {
+    const attendu = catalogKotlinVersion();
+    if (!attendu) {
+      return "catalogue Kotlin illisible (`android/gradle/libs.versions.toml`) : version non vérifiable.";
+    }
+    const vu = kotlincVersion(kotlinc);
+    if (vu !== attendu) {
+      return `\`kotlinc\` ${vu ?? "version illisible"} ≠ catalogue ${attendu} : le gate exige le compilateur épinglé (I34).`;
+    }
+  }
   return null;
+}
+
+/** Version Kotlin du catalogue Gradle (I34) : seule source admise. */
+export function catalogKotlinVersion(): string | null {
+  try {
+    const toml = readFileSync(join(ROOT, "android", "gradle", "libs.versions.toml"), "utf8");
+    return /^\s*kotlin\s*=\s*"([^"]+)"/m.exec(toml)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Versions déjà interrogées : un `kotlinc -version` par binaire et par
+ *  worker, pas un par fichier de parité. */
+const kotlincVersions = new Map<string, string | null>();
+
+/** Version rendue par `kotlinc -version`, ou null si illisible. */
+export function kotlincVersion(kotlinc: string): string | null {
+  if (kotlincVersions.has(kotlinc)) return kotlincVersions.get(kotlinc) ?? null;
+  let version: string | null = null;
+  try {
+    const r = Bun.spawnSync([kotlinc, "-version"], { stdout: "pipe", stderr: "pipe" });
+    const out = `${r.stdout.toString()}\n${r.stderr.toString()}`;
+    version = /\b(\d+\.\d+\.\d+(?:-[A-Za-z0-9.]+)?)\b/.exec(out)?.[1] ?? null;
+  } catch {
+    version = null; // binaire cassé : le SKIP/ÉCHEC ci-dessus le dit
+  }
+  kotlincVersions.set(kotlinc, version);
+  return version;
 }
 
 /**

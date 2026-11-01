@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { DEFAULT_TARGETS } from "../../agents/runtime/check";
+import { catalogKotlinVersion, computeSkipReason } from "./fixtures/kotlin-harness-build";
 import {
   digestOf,
   PARITY_SOURCES,
@@ -351,12 +352,101 @@ exit "\${FAKE_BUN_CODE:-0}"
     });
   });
 
+  // #782 : un seul `gate-status` par arbre faisait lire à un gate concurrent le
+  // `0` de l'autre. Le chemin est désormais unique par run, figé au parse.
+  test("chaque run a son propre fichier de statut", () => {
+    const statut = (): string => {
+      const p = Bun.spawnSync(
+        ["make", "--no-print-directory", "-s", "--eval", "statut:\n\t@echo $(GATE_STATUS)", "statut"],
+        { cwd: ROOT, stdout: "pipe", stderr: "pipe" },
+      );
+      return new TextDecoder().decode(p.stdout).trim();
+    };
+    const a = statut();
+    const b = statut();
+    expect(a).toContain("gate-status.");
+    expect(b).toContain("gate-status.");
+    expect(a).not.toBe(b);
+  });
+
   // #491 : sans la chaîne Kotlin, la parité SAUTE — donc le gate était vert
   // sans une ligne de production Kotlin exécutée.
   test("le gate exige la chaîne Kotlin : un outillage absent est un ÉCHEC, pas un SKIP", async () => {
     const harness = await Bun.file(join(ROOT, "tests", "unit", "fixtures", "kotlin-harness.ts")).text();
     expect(harness).toContain('process.env.REQUIRE_KOTLIN_TOOLCHAIN === "1"');
     expect(harness).toMatch(/REQUIRE_KOTLIN_TOOLCHAIN === "1"[\s\S]{0,600}throw new Error/);
+  });
+
+  // I34 : la CI épingle une version de `kotlinc` ; un poste avec une autre
+  // version compilait la parité que la CI ne rejoue pas.
+  describe("I34 : le gate vérifie la version de kotlinc", () => {
+    /** Faux compilateur : seule `-version` nous intéresse. */
+    function fakeKotlinc(version: string): string {
+      const dir = mkdtempSync(join(tmpdir(), "kotlinc-version-"));
+      const bin = join(dir, "kotlinc");
+      writeFileSync(bin, `#!/bin/sh\necho "info: kotlinc-jvm ${version} (JRE 17.0.1)" >&2\n`);
+      chmodSync(bin, 0o755);
+      return bin;
+    }
+
+    function withEnv<T>(env: Record<string, string | undefined>, fn: () => T): T {
+      const cles = Object.keys(env);
+      const avant = Object.fromEntries(cles.map((k) => [k, process.env[k]]));
+      for (const k of cles) {
+        if (env[k] === undefined) delete process.env[k];
+        else process.env[k] = env[k];
+      }
+      try {
+        return fn();
+      } finally {
+        for (const k of cles) {
+          if (avant[k] === undefined) delete process.env[k];
+          else process.env[k] = avant[k];
+        }
+      }
+    }
+
+    const JAVA = Bun.which("sh") ?? "/bin/sh";
+
+    test("une version hors catalogue est refusée", () => {
+      const bin = fakeKotlinc("0.0.0");
+      try {
+        const reason = withEnv(
+          { REQUIRE_KOTLIN_TOOLCHAIN: "1", KOTLINC_BIN: bin, KOTLIN_JAVA_BIN: JAVA },
+          () => computeSkipReason(),
+        );
+        expect(reason).toContain("0.0.0");
+        expect(reason).toContain(catalogKotlinVersion() ?? "catalogue");
+      } finally {
+        rmSync(dirname(bin), { recursive: true, force: true });
+      }
+    });
+
+    test("la version du catalogue est acceptée", () => {
+      const bin = fakeKotlinc(catalogKotlinVersion() ?? "");
+      try {
+        const reason = withEnv(
+          { REQUIRE_KOTLIN_TOOLCHAIN: "1", KOTLINC_BIN: bin, KOTLIN_JAVA_BIN: JAVA },
+          () => computeSkipReason(),
+        );
+        expect(reason).toBeNull();
+      } finally {
+        rmSync(dirname(bin), { recursive: true, force: true });
+      }
+    });
+
+    test("hors gate, une version locale différente ne bloque pas l'itération", () => {
+      const bin = fakeKotlinc("0.0.0");
+      try {
+        const reason = withEnv(
+          { REQUIRE_KOTLIN_TOOLCHAIN: undefined, KOTLINC_BIN: bin, KOTLIN_JAVA_BIN: JAVA },
+          () => computeSkipReason(),
+        );
+        expect(reason).toBeNull();
+      } finally {
+        rmSync(dirname(bin), { recursive: true, force: true });
+      }
+    });
   });
 
   // #491 : le gate doit être rejoué par la CI, pas seulement par convention

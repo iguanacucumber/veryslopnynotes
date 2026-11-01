@@ -27,6 +27,21 @@ export const PATTERNS: SecretPattern[] = [
   // Identifiants dans une URL : `https://user:pass@host/`. 8 caractères mini,
   // pour ignorer « user:pass@ » des tests et des docs.
   { name: "url-credential", re: /https?:\/\/[^\s/:@"]+:[^\s/@"]{8,}@/ },
+  // Hôte d'établissement Pronote : `<etab>.index-education.net`. La démo et le
+  // hub sont allowlistés, un vrai établissement est une donnée d'école.
+  { name: "pronote-host", re: /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+index-education\.(?:net|fr)\b/i },
+  // IPv4 PUBLIQUE : octets validés, sans zéro de tête (sinon une suite de
+  // chiffres de SVG « 3.24.091.008 » passerait pour une adresse).
+  {
+    name: "ipv4",
+    re: /(?<![\d.])(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}(?![\d.])/,
+  },
+  // E-mail en clair. Domaine en minuscules : `this@VsnBridge.reject` (label
+  // Kotlin) n'est pas une adresse. Un `user@host` d'URL est exclu juste avant.
+  {
+    name: "email",
+    re: /(?<![A-Za-z0-9._%+:/@-])([a-z0-9][a-z0-9._%+-]+)@([a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+)/,
+  },
   // Littéral de credential : `api_key = "…"`, `password: "…"`.
   { name: "credential-literal", re: /(api[_-]?key|secret|token|password|passwd|pwd)\s*[:=]\s*["']([A-Za-z0-9+/=_-]{32,})["']/i },
 ];
@@ -47,8 +62,60 @@ export const VENDORED_PATTERNS: SecretPattern[] = [
   // Identifiants dans une URL : 12 caractères mini, sinon les exemples de doc
   // (« user:password@ », « user:changeme@ ») seraient signalés.
   { name: "url-credential", re: /https?:\/\/[^\s/:@"]+:[^\s/@"]{12,}@/ },
+  { name: "pronote-host", re: /\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+index-education\.(?:net|fr)\b/i },
+  {
+    name: "ipv4",
+    re: /(?<![\d.])(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}(?![\d.])/,
+  },
+  {
+    name: "email",
+    re: /(?<![A-Za-z0-9._%+:/@-])([a-z0-9][a-z0-9._%+-]+)@([a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+)/,
+  },
   { name: "credential-literal", re: /(api[_-]?key|secret|token|password|passwd|pwd)\s*[:=]\s*["']([A-Za-z0-9+/=_-]{32,})["']/i },
 ];
+
+// Hôtes Pronote admis : la démo publique et le hub d'Index Éducation. Un
+// établissement (`<etab>.index-education.net`) est une donnée d'école réelle.
+// Assemblé : l'hôte de démo est interdit partout ailleurs (demo-school.test.ts).
+export const ALLOWED_PRONOTE_HOSTS = new Set([
+  ["demo.", "index-education", ".net"].join(""),
+  ["hubeduconnect.", "index-education", ".net"].join(""),
+]);
+
+// Domaines de documentation (RFC 2606) : jamais une personne réelle.
+const ALLOWED_EMAIL_DOMAINS = new Set(["example.com", "example.net", "example.org"]);
+const ALLOWED_EMAIL_SUFFIXES = [".invalid", ".example", ".test", ".localhost"];
+
+// Adresses de boucle locale/privées/réservées (RFC 1918, 5737, 6598) et
+// résolveurs publics de doc : jamais une machine d'école.
+const ALLOWED_IPS = new Set([
+  "0.0.0.0",
+  "1.1.1.1",
+  "1.2.3.4",
+  "8.8.8.8",
+  "93.184.216.34", // example.com, l'adresse publique de la doc
+]);
+
+export function isAllowedIp(ip: string): boolean {
+  if (ALLOWED_IPS.has(ip)) return true;
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+  const [a, b, c] = parts as [number, number, number, number];
+  if (a === 10 || a === 127 || a === 0) return true; // privé / boucle / indéfini
+  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16/12
+  if (a === 192 && b === 168) return true; // 192.168/16
+  if (a === 169 && b === 254) return true; // lien local
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT 100.64/10
+  if (a === 192 && b === 0 && c === 2) return true; // TEST-NET-1
+  if (a === 198 && b === 51 && c === 100) return true; // TEST-NET-2
+  if (a === 203 && b === 0 && c === 113) return true; // TEST-NET-3
+  return a >= 224; // multicast/réservé
+}
+
+function isAllowedEmailDomain(domain: string): boolean {
+  const d = domain.toLowerCase();
+  return ALLOWED_EMAIL_DOMAINS.has(d) || ALLOWED_EMAIL_SUFFIXES.some((s) => d.endsWith(s));
+}
 
 // ponytail: allowlist placeholders docs légitimes. Upgrade: gitleaks.
 export const PLACEHOLDER_RE = /your|example|placeholder|x{3,}|<[^>]*>|TODO|change-?me|dummy/i;
@@ -93,6 +160,17 @@ export function matchPatterns(content: string, patterns: SecretPattern[]): strin
       // TOUS les matchs inspectés : un placeholder n'excuse plus le fichier.
       const reels = all.filter((m) => !VALUE_PLACEHOLDER_RE.test(m[2] ?? ""));
       if (!reels.length) continue;
+    }
+    if (name === "ipv4") {
+      if (!all.some((m) => !isAllowedIp(m[0]))) continue;
+    }
+    if (name === "email") {
+      if (!all.some((m) => !isAllowedEmailDomain(m[2] ?? ""))) continue;
+    }
+    if (name === "pronote-host") {
+      // Un hôte allowlisté n'excuse que LUI-MÊME : un établissement plus bas
+      // dans le même fichier échoue quand même.
+      if (!all.some((m) => !ALLOWED_PRONOTE_HOSTS.has(m[0].toLowerCase()))) continue;
     }
     hits.push(name);
   }
