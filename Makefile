@@ -8,7 +8,11 @@ TEST_OUTPUT = bun run agents/runtime/test-output.ts
 
 # Gate strict : CHECK_HARNESS/ALLOW_SKIP_ANDROID neutralisés,
 # REQUIRE_KOTLIN_TOOLCHAIN=1, MAKEFLAGS ignoré. Pas de version allégée.
-GATE_STATUS = $(CURDIR)/node_modules/.cache/gate-status
+# Chemin de statut UNIQUE par run : deux gates concurrents dans le même arbre
+# ne peuvent pas lire le verdict de l'autre. `:=` fige la valeur AU PARSE, donc
+# `check-run` (écriture) et `check` (lecture) partagent le même fichier.
+# `GATE_STATUS=…` en ligne de commande reste prioritaire (tests).
+GATE_STATUS := $(shell mktemp -u "$(CURDIR)/node_modules/.cache/gate-status.XXXXXX")
 
 check-run:
 	@mkdir -p $(dir $(GATE_STATUS)); rm -f $(GATE_STATUS); \

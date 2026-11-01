@@ -13,7 +13,8 @@ const ROOT = process.argv[2] ? resolve(process.argv[2]) : join(import.meta.dir, 
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", "build", "coverage", ".bun-cache"]);
 const SKIP_FILES = new Set(["bun.lock", "bun.lockb", "package-lock.json", "check-secrets.ts", "secret-patterns.ts"]);
 // Chemins locaux gitignorés : pas de scan contenu (.env.local untracked est
-// requis pour l'intégration).
+// requis pour l'intégration) — mais SEULEMENT s'ils ne sont pas trackés : un
+// fichier force-added est scanné comme le reste du dépôt.
 const SKIP_PATH_PREFIXES = ["server/data/", "playwright/.auth/"];
 
 let failures: string[] = [];
@@ -32,19 +33,16 @@ function trackedSet(): Set<string> | null {
 
 const TRACKED = trackedSet();
 
-function isSkippedPath(absPath: string): boolean {
-  const rel = relative(ROOT, absPath).replace(/\\/g, "/");
-  for (const prefix of SKIP_PATH_PREFIXES) {
-    if (rel === prefix.slice(0, -1) || rel.startsWith(prefix)) return true;
-  }
-  return false;
+function isSkippedPath(rel: string): boolean {
+  const under = SKIP_PATH_PREFIXES.some((prefix) => rel === prefix.slice(0, -1) || rel.startsWith(prefix));
+  // Tracké = présent dans le dépôt : le scan doit le voir même sous un chemin
+  // normalement local. Sans git, on ne peut pas prouver l'inverse.
+  return under && TRACKED !== null && !TRACKED.has(rel);
 }
 
 function walk(dir: string) {
   for (const e of readdirSync(dir)) {
     const p = join(dir, e);
-    // Chemins locaux gitignorés : jamais scannés, jamais FAIL.
-    if (isSkippedPath(p)) continue;
     let st: ReturnType<typeof statSync>;
     try {
       st = statSync(p);
@@ -53,11 +51,13 @@ function walk(dir: string) {
     }
     if (st.isDirectory()) {
       if (SKIP_DIRS.has(e)) continue;
+      // Pas de skip du DOSSIER : un fichier tracké peut y vivre (force-add).
       walk(p);
       continue;
     }
     if (SKIP_FILES.has(e) || e === ".env.example") continue;
     const rel = relative(ROOT, p).replace(/\\/g, "/");
+    if (isSkippedPath(rel)) continue;
     // Fichiers .env* : FAIL uniquement si trackés git, sinon skip contenu.
     if (/\.env(\.|$)/.test(e) || e.endsWith(".env") || e.endsWith(".env.local")) {
       const tracked = TRACKED ? TRACKED.has(rel) : true;

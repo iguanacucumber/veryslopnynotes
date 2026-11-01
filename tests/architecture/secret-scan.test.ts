@@ -7,7 +7,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { matchPatterns, PATTERNS, patternsFor, VENDORED_PATTERNS } from "../../agents/runtime/secret-patterns";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -169,6 +169,71 @@ describe("scan anti-secrets : un secret dans .agents/ fait échouer le scan", ()
   });
 });
 
+describe("scan anti-secrets : une donnée d'école déposée sur le disque échoue", () => {
+  function scanDir(dir: string): { code: number; out: string } {
+    const p = Bun.spawnSync(["bun", join(ROOT, "agents", "runtime", "check-secrets.ts"), dir], {
+      cwd: ROOT,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const dec = new TextDecoder();
+    return { code: p.exitCode ?? -1, out: dec.decode(p.stdout) + dec.decode(p.stderr) };
+  }
+
+  function scanFixture(fichier: string, contenu: string): { code: number; out: string } {
+    const dir = mkdtempSync(join(tmpdir(), "secret-scan-ecole-"));
+    const chemin = join(dir, fichier);
+    mkdirSync(dirname(chemin), { recursive: true });
+    writeFileSync(chemin, contenu);
+    try {
+      return scanDir(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  const etabUrl = ["https://0123456a.", "index-education", ".net/pronote/eleve.html"].join("");
+  const realEmail = ["marie.dupont@", "ac-versailles", ".fr"].join("");
+  const demoUrl = ["https://demo.", "index-education", ".net/pronote/eleve.html"].join("");
+
+  test("une URL d'établissement Pronote est refusée dans une source", () => {
+    const r = scanFixture(join("src", "config.ts"), `export const base = "${etabUrl}";\n`);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("pronote-host");
+  });
+
+  test("un e-mail réel est refusé dans .agents/", () => {
+    const r = scanFixture(join(".agents", "skills", "x", "SKILL.md"), `Contact : ${realEmail}\n`);
+    expect(r.code).not.toBe(0);
+    expect(r.out).toContain("email");
+  });
+
+  test("l'hôte de démonstration passe", () => {
+    const r = scanFixture(join("src", "demo.ts"), `export const base = "${demoUrl}";\n`);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain("check-secrets OK");
+  });
+
+  test("un fichier sensible force-added est scanné, untracked reste ignoré", () => {
+    const dir = mkdtempSync(join(tmpdir(), "secret-scan-force-add-"));
+    try {
+      Bun.spawnSync(["git", "init", "-q"], { cwd: dir });
+      const secret = join(dir, "server", "data", "export.ts");
+      mkdirSync(dirname(secret), { recursive: true });
+      writeFileSync(secret, ["MASTER_", "KEY=prod-9f3a2b8c7d6e5f4a3b2c1d0e9f8a7b6c"].join(""));
+      // Untracked : chemin local, pas de scan (intégration).
+      expect(scanDir(dir).code).toBe(0);
+      // Force-added : le chemin ne l'excuse plus.
+      Bun.spawnSync(["git", "add", "-f", "server/data/export.ts"], { cwd: dir });
+      const r = scanDir(dir);
+      expect(r.code).not.toBe(0);
+      expect(r.out).toContain("env-assign");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("scan anti-secrets : le dépôt surveille les mêmes formes que le jeu vendorisé", () => {
   const urlCred = ["https://user:s3cr3tP4", "ss@host/x"].join("");
   const jwt = [
@@ -205,6 +270,49 @@ describe("scan anti-secrets : le dépôt surveille les mêmes formes que le jeu 
     // credentials (le mot de passe doit faire 8 caractères).
     expect(matchPatterns("https://user:pass@host/", PATTERNS)).toEqual([]);
     expect(matchPatterns("http://127.0.0.1:80@editeur.example/", PATTERNS)).toEqual([]);
+  });
+});
+
+// Le dépôt et `.agents/` interdisent les mêmes formes : hôte d'établissement
+// Pronote, IPv4 publique, e-mail en clair.
+describe("scan anti-secrets : domaines Pronote, IP et e-mails", () => {
+  // Fragments : le scan passe aussi sur `tests/`, un littéral entier se
+  // signalerait lui-même.
+  const etabUrl = ["https://0123456a.", "index-education", ".net/pronote/eleve.html"].join("");
+  const publicIp = ["82", "65", "12", "34"].join(".");
+  const realEmail = ["marie.dupont@", "ac-versailles", ".fr"].join("");
+  const demoUrl = ["https://demo.", "index-education", ".net/pronote/eleve.html"].join("");
+
+  test("une URL d'établissement Pronote échoue, la démo passe", () => {
+    expect(matchPatterns(etabUrl, PATTERNS)).toContain("pronote-host");
+    expect(matchPatterns(etabUrl, VENDORED)).toContain("pronote-host");
+    expect(matchPatterns(demoUrl, PATTERNS)).toEqual([]);
+    expect(matchPatterns(demoUrl, VENDORED)).toEqual([]);
+  });
+
+  test("une IP publique échoue, les adresses de doc/privées passent", () => {
+    expect(matchPatterns(`serveur ${publicIp}`, PATTERNS)).toContain("ipv4");
+    expect(matchPatterns(`serveur ${publicIp}`, VENDORED)).toContain("ipv4");
+    for (const ok of ["127.0.0.1", "10.0.2.2", "192.168.1.10", "192.0.2.10", "999.1.1.1", "3.24.091.008"]) {
+      expect({ ip: ok, hits: matchPatterns(`hôte ${ok}`, PATTERNS) }).toEqual({ ip: ok, hits: [] });
+    }
+  });
+
+  test("un e-mail réel échoue, les domaines de documentation passent", () => {
+    expect(matchPatterns(`contact ${realEmail}`, PATTERNS)).toContain("email");
+    expect(matchPatterns(`contact ${realEmail}`, VENDORED)).toContain("email");
+    for (const ok of ["test@example.invalid", "pass@example.org", "eleve@ecole.example", "d@e.fr"]) {
+      expect({ email: ok, hits: matchPatterns(`contact ${ok}`, PATTERNS) }).toEqual({ email: ok, hits: [] });
+    }
+  });
+
+  test("un identifiant d'URL n'est pas un e-mail, un label Kotlin non plus", () => {
+    expect(matchPatterns(["https://user@", "notes.exemple.fr/"].join(""), PATTERNS)).toEqual([]);
+    expect(matchPatterns("this@VsnBridge.reject", PATTERNS)).toEqual([]);
+  });
+
+  test("un hôte allowlisté n'excuse pas un établissement dans le même fichier", () => {
+    expect(matchPatterns(`${demoUrl}\n${etabUrl}\n`, PATTERNS)).toContain("pronote-host");
   });
 });
 
