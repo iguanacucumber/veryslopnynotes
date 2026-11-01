@@ -270,12 +270,15 @@ export function parseGrades(payload: string | null): Grade[] {
   return out.sort((a, b) => b.date - a.date);
 }
 
+/** Moyenne de l'établissement SEULEMENT : `origin` absent ou `estimated` ne
+ *  fait pas d'une estimation une valeur fournie. */
 export function providedGeneralAverage(payload: string | null): number | null {
   const root = payloadRoot(payload);
   if (!root) return null;
   const averages = asObject(root["averages"]);
   const general = averages ? asObject(averages["general"]) : null;
-  const value = general ? numberOrNull(general["value"]) : null;
+  if (!general || general["origin"] !== "provided") return null;
+  const value = numberOrNull(general["value"]);
   return value !== null && value >= 0 ? value : null;
 }
 
@@ -352,11 +355,8 @@ export interface GeneralAverage {
   subjectCount: number;
 }
 
-export function generalAverage(
-  payload: string | null,
-  grades: Grade[] = parseGrades(payload),
-): GeneralAverage {
-  const provided = providedGeneralAverage(payload);
+/** Moyennes de matière (une par matière), la règle d'`Averages.kt`. */
+function subjectValuesOf(grades: Grade[]): number[] {
   const groups = new Map<string, Grade[]>();
   for (const grade of grades) {
     const key = subjectKey(grade.subject);
@@ -364,20 +364,41 @@ export function generalAverage(
     if (bucket) bucket.push(grade);
     else groups.set(key, [grade]);
   }
-  const subjectValues: number[] = [];
+  const values: number[] = [];
   for (const bucket of groups.values()) {
     const value = subjectAverage(bucket);
-    if (value !== null) subjectValues.push(value);
+    if (value !== null) values.push(value);
   }
-  const estimated =
-    subjectValues.length > 0
-      ? subjectValues.reduce((total, value) => total + value, 0) / subjectValues.length
-      : null;
+  return values;
+}
+
+function averageOf(values: number[]): number | null {
+  return values.length > 0 ? values.reduce((total, value) => total + value, 0) / values.length : null;
+}
+
+export function generalAverage(
+  payload: string | null,
+  grades: Grade[] = parseGrades(payload),
+): GeneralAverage {
+  const provided = providedGeneralAverage(payload);
+  const subjectValues = subjectValuesOf(grades);
   return {
-    value: provided ?? estimated,
+    value: provided ?? averageOf(subjectValues),
     provided: provided !== null,
     subjectCount: subjectValues.length,
   };
+}
+
+const MAX_HISTORY_POINTS = 40;
+
+/** Moyenne estimée à chaque note, avec la MÊME règle que [generalAverage] :
+ *  la courbe ne peut pas contredire le chiffre affiché. */
+export function estimatedAverageSeries(grades: Grade[]): Array<number | null> {
+  const sorted = [...grades].sort((a, b) => a.date - b.date);
+  // Les préfixes courent sur TOUTES les notes : le dernier point est la
+  // moyenne complète, jamais celle des 40 dernières.
+  const series = sorted.map((_, index) => averageOf(subjectValuesOf(sorted.slice(0, index + 1))));
+  return series.slice(-MAX_HISTORY_POINTS);
 }
 
 export function formatAverage(value: number): string {

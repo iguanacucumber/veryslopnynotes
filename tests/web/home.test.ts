@@ -17,6 +17,7 @@ import {
   formatAverage,
   formatGrade,
   generalAverage,
+  estimatedAverageSeries,
   latestGrades,
   movedHint,
   parseAlerts,
@@ -26,6 +27,7 @@ import {
   parseTimetable,
   pendingAssignments,
   pendingCount,
+  providedGeneralAverage,
   shouldAnimateOnMount,
   subjectAverage,
   tabVisible,
@@ -364,6 +366,17 @@ describe("notes et moyennes", () => {
     expect(report.provided).toBe(true);
   });
 
+  test("une moyenne estimée n'est jamais dite fournie (#781)", () => {
+    const payload = JSON.stringify({
+      averages: { general: { value: 13.75, origin: "estimated", subjectCount: 1 } },
+      grades: [{ id: "1", subject: "MATHS", value: 10, scale: 20, date: local(12, 8) }],
+    });
+    expect(providedGeneralAverage(payload)).toBeNull();
+    const report = generalAverage(payload);
+    expect(report.provided).toBe(false);
+    expect(report.value).toBe(10);
+  });
+
   test("calcule la moyenne des matières quand elle n'est pas fournie", () => {
     const grades: Grade[] = [
       grade({ subject: "MATHS", value: 10, scale: 20 }),
@@ -393,6 +406,23 @@ describe("notes et moyennes", () => {
   test("sans note exploitable, aucune moyenne (jamais 0 inventé)", () => {
     expect(generalAverage(null, [grade({ subject: "MATHS", value: 8, scale: 20, coefficient: 0 })]).value).toBeNull();
     expect(generalAverage(null, [grade({ subject: "MATHS", value: 8, scale: 20, coefficient: -2 })]).value).toBeNull();
+  });
+
+  test("la courbe suit la même règle que la moyenne estimée (#781)", () => {
+    const grades: Grade[] = [
+      grade({ subject: "MATHS", value: 8, scale: 20, coefficient: 2 }),
+      grade({ subject: "MATHS", value: 16, scale: 20, id: "m2" }),
+      grade({ subject: "NSI", value: 5, scale: 10, coefficient: 3 }),
+      grade({ subject: "PHILO", value: 16, scale: 20, bonus: true }),
+    ];
+    const series = estimatedAverageSeries(grades);
+    const report = generalAverage(null, grades);
+    expect(series.at(-1)).not.toBeNull();
+    expect(series.at(-1)).toBeCloseTo(report.value ?? Number.NaN, 10);
+    // Une moyenne brute des notes ne donne pas ce chiffre : coefficients,
+    // bonus et barèmes sont appliqués comme dans la moyenne affichée.
+    const raw = grades.reduce((sum, g) => sum + (g.value / g.scale) * 20, 0) / grades.length;
+    expect(series.at(-1)).not.toBeCloseTo(raw, 5);
   });
 
   test("formate les nombres à la française, sans zéros inutiles", () => {

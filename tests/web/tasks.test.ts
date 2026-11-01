@@ -15,6 +15,7 @@ import {
   dueLabel,
   foldFr,
   homeworkRefusalText,
+  isAllDayDue,
   isAssignmentsPayloadReadable,
   parseAssignment,
   parseAssignmentsPayload,
@@ -216,6 +217,17 @@ describe("web tâches — dates et semaines", () => {
     expect(dueLabel("illisible")).toBe("");
   });
 
+  test("un minuit Paris (PourLe sans heure) est une échéance sans heure (#781)", () => {
+    // Forme RÉELLE de `HomeworkPayloads` : `parisIso()` d'un `PourLe` sans
+    // heure, pas une date seule fabriquée à la main.
+    expect(isAllDayDue("2026-11-01T00:00+01:00")).toBe(true);
+    expect(isAllDayDue("2026-11-01T00:00:00+01:00")).toBe(true);
+    expect(isAllDayDue("2026-11-01T00:30+01:00")).toBe(false);
+    // Minuit UTC = 01:00 à Paris : une heure réelle, pas une journée entière.
+    expect(isAllDayDue("2026-11-01T00:00:00Z")).toBe(false);
+    expect(dueLabel("2026-11-01T00:00+01:00")).toBe("dimanche 1 novembre");
+  });
+
   test("numéro et plage de semaine ISO, année affichée seulement au changement", () => {
     expect(weekLabelFr("2026-10-19")).toBe("Semaine 43");
     expect(weekRangeFr("2026-10-19")).toBe("19/10 – 25/10");
@@ -300,6 +312,20 @@ describe("web tâches — sections", () => {
     const sections = assignmentSections(items, CURRENT_WEEK, NOW);
     expect(sections.map((section) => section.id)).toEqual(["today"]);
     expect(sections[0]?.items.map((item) => item.id)).toEqual(["aujourdhui"]);
+  });
+
+  test("un devoir émis à minuit Paris reste « Aujourd'hui » toute la journée (#781)", () => {
+    // Dimanche 1er novembre 2026, midi à Paris (semaine du 26 octobre).
+    const now = new Date(2026, 10, 1, 12, 0, 0);
+    const week = weekStartOf(now);
+    expect(week).toBe("2026-10-26");
+    const items = parseAssignmentsPayload(
+      payload([{ ...VALID, id: "journee", dueDate: "2026-11-01T00:00+01:00" }]),
+    ).items;
+    // La fenêtre de semaine et les sections lisent le même jour civil.
+    expect(assignmentsInWeek(items, week).map((item) => item.id)).toEqual(["journee"]);
+    expect(assignmentSections(items, week, now).map((section) => section.id)).toEqual(["today"]);
+    expect(dueLabel("2026-11-01T00:00+01:00")).not.toContain("00:00");
   });
 
   test("une semaine passée : « En retard » avant la semaine, la semaine à l'intérieur", () => {
@@ -531,7 +557,9 @@ describe("web tâches — navigation de semaine", () => {
       "utf8",
     );
     // Les sections suivent l'en-tête : la semaine affichée, pas « maintenant ».
-    expect(source).toContain("assignmentSections(matching, week, new Date())");
+    // Et « maintenant » avance (tick) : pas de sections figées après minuit.
+    expect(source).toContain("assignmentSections(matching, week, new Date(now))");
+    expect(source).toContain("const now = useNow()");
     expect(source).toContain("assignmentsMatching(items, search)");
   });
 

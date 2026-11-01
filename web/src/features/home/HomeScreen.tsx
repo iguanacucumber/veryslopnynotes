@@ -25,6 +25,7 @@ import {
   durationLabel,
   formatAverage,
   generalAverage,
+  estimatedAverageSeries,
   parseAssignments,
   parseCapabilities,
   parseGrades,
@@ -36,7 +37,6 @@ import {
   upcomingCount,
   upcomingLessons,
   type GeneralAverage,
-  type Grade,
   type Lesson,
   type Assignment,
 } from "./parse";
@@ -308,7 +308,7 @@ export default function HomeScreen() {
 
   const grades = useMemo(() => parseGrades(gradesRes.payload), [gradesRes.payload]);
   const average = useMemo(() => generalAverage(gradesRes.payload, grades), [gradesRes.payload, grades]);
-  const averageHistory = useMemo(() => cumulativeHistory(grades), [grades]);
+  const averageHistory = useMemo(() => estimatedAverageSeries(grades), [grades]);
   const lessons = useMemo(() => parseTimetable(timetableRes.payload), [timetableRes.payload]);
   // La liste des widgets reste BORNÉE (deux cours) ; le compteur est le nombre
   // VRAI, sans plafond.
@@ -414,18 +414,6 @@ export default function HomeScreen() {
       {scheduleHint(upcoming[0], now)}
     </Page>
   );
-}
-
-/** Tendance lisible : moyenne cumulée des notes, de la plus ancienne à la plus
- *  récente. Le graphe Papillon suit l'historique ; sans lui, cette marche
- *  donne la même pente sans inventer de points. */
-function cumulativeHistory(grades: Grade[]): Array<number | null> {
-  const sorted = [...grades].sort((a, b) => a.date - b.date).slice(-40);
-  let sum = 0;
-  return sorted.map((grade, index) => {
-    sum += (grade.value / grade.scale) * 20;
-    return sum / (index + 1);
-  });
 }
 
 function scheduleHint(lesson: Lesson | undefined, now: number): ReactElement | null {
