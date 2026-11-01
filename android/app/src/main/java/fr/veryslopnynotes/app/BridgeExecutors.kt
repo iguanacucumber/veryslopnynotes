@@ -17,7 +17,7 @@ class BridgeExecutors {
         /**
          * Liste fermée : une méthode LLM oubliée ici gèlerait le pont.
          */
-        val LLM_METHODS = setOf("llm.askHomework", "llm.generateRevision")
+        val LLM_METHODS = setOf("llm.askHomework", "llm.generateRevision", "llm.teacherTurn")
 
         // `llm.solvePhoto` et `lessons.addPhoto` restent dans `calls` : leur
         // attente comprend le CADRAGE de la photo (plusieurs minutes), qui

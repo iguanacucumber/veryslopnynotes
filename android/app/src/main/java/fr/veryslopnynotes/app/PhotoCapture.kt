@@ -33,15 +33,30 @@ class PhotoCapture(private val activity: ComponentActivity) {
         data class Error(val message: String) : Result
     }
 
+    private val lock = Any()
     private var pending: ((Result) -> Unit)? = null
     private var cameraFile: File? = null
     private var galleryMax: Int = 1
 
+    /**
+     * Résultat DÉJÀ livré à son appelant. Un abandon tardif (délai dépassé) le
+     * supprime : sinon un `Ok` arrivé juste après l'expiration laisserait ses
+     * fichiers dans `cacheDir/photos/` (I32). Le propriétaire évite qu'un appel
+     * expiré efface le vol d'un AUTRE appel, commencé entre-temps.
+     */
+    private var delivered: Delivered? = null
+
+    private class Delivered(val owner: (Result) -> Unit, val result: Result)
+
     private val dir: File by lazy { File(activity.cacheDir, "photos").apply { mkdirs() } }
 
     private val takePicture = activity.registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        val file = cameraFile
-        cameraFile = null
+        // Sous le verrou : `cancel()` peut effacer le fichier AVANT ce retour.
+        val file = synchronized(lock) {
+            val current = cameraFile
+            cameraFile = null
+            current
+        }
         if (!ok || file == null) {
             file?.delete()
             finish(Result.Cancelled)
@@ -91,16 +106,26 @@ class PhotoCapture(private val activity: ComponentActivity) {
      * thread principal.
      */
     fun capture(source: String, maxPhotos: Int = 1, onDone: (Result) -> Unit) {
-        if (pending != null) {
-            onDone(Result.Error("Une photo est déjà en cours."))
+        // Verrou UNIQUE : deux appels concurrents (deux fils du pont) ne peuvent
+        // pas écraser `pending`/`cameraFile`, et `finish` ne livre jamais deux
+        // fois le même vol.
+        val refusal: String? = synchronized(lock) {
+            when {
+                pending != null -> "Une photo est déjà en cours."
+                activity.isFinishing || activity.isDestroyed ->
+                    "Photo indisponible : l'application se ferme."
+                else -> {
+                    pending = onDone
+                    galleryMax = maxPhotos.coerceIn(1, MAX_PHOTOS)
+                    delivered = null
+                    null
+                }
+            }
+        }
+        if (refusal != null) {
+            onDone(Result.Error(refusal))
             return
         }
-        if (activity.isFinishing || activity.isDestroyed) {
-            onDone(Result.Error("Photo indisponible : l'application se ferme."))
-            return
-        }
-        pending = onDone
-        galleryMax = maxPhotos.coerceIn(1, MAX_PHOTOS)
         try {
             activity.runOnUiThread {
                 when (source) {
@@ -122,11 +147,25 @@ class PhotoCapture(private val activity: ComponentActivity) {
         }
     }
 
-    /** Abandon explicite (fermeture de la WebView). */
-    fun cancel() {
-        cameraFile?.delete()
-        cameraFile = null
-        finish(Result.Cancelled)
+    /** Abandon explicite (fermeture de la WebView). `owner` = ce vol SEULEMENT. */
+    fun cancel(owner: ((Result) -> Unit)? = null) {
+        var callback: ((Result) -> Unit)? = null
+        synchronized(lock) {
+            if (owner == null || pending === owner) {
+                cameraFile?.delete()
+                cameraFile = null
+                callback = pending
+                pending = null
+            }
+            // `Ok` livré entre l'expiration et cet appel : plus personne ne le
+            // lira, ses fichiers partent avec l'abandon (I32).
+            val late = delivered
+            if (late != null && (owner == null || late.owner === owner)) {
+                delivered = null
+                if (late.result is Result.Ok) late.result.files.forEach { discard(it) }
+            }
+        }
+        callback?.invoke(Result.Cancelled)
     }
 
     private fun requestCamera() {
@@ -233,8 +272,17 @@ class PhotoCapture(private val activity: ComponentActivity) {
     }
 
     private fun finish(result: Result) {
-        val callback = pending
-        pending = null
+        var callback: ((Result) -> Unit)? = null
+        var orphan: File? = null
+        synchronized(lock) {
+            callback = pending
+            pending = null
+            delivered = callback?.let { Delivered(it, result) }
+            // Abandon/erreur : le fichier de l'appareil ne survit pas.
+            orphan = if (result is Result.Ok) null else cameraFile
+            cameraFile = null
+        }
+        orphan?.delete()
         if (callback != null) callback(result) else {
             // Personne n'attend (activité recréée, appel annulé) : pas de fuite.
             if (result is Result.Ok) result.files.forEach { discard(it) }

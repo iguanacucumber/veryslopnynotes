@@ -172,12 +172,15 @@ internal fun VsnBridge.lessonsAddPhoto(p: JSONObject): JSONObject {
 internal fun VsnBridge.awaitPhotos(source: String, maxPhotos: Int = 1): PhotoCapture.Result {
     val latch = CountDownLatch(1)
     var result: PhotoCapture.Result? = null
-    photos.capture(source, maxPhotos) {
+    // Même lambda pour `capture` et `cancel` : un abandon ne peut viser QUE ce
+    // vol, jamais une capture commencée par un autre appel après l'expiration.
+    val onDone: (PhotoCapture.Result) -> Unit = {
         result = it
         latch.countDown()
     }
+    photos.capture(source, maxPhotos, onDone)
     if (!latch.await(AWAIT_PHOTO_MS, TimeUnit.MILLISECONDS)) {
-        photos.cancel()
+        photos.cancel(onDone)
         return PhotoCapture.Result.Error("Photo annulée : délai dépassé.")
     }
     return result ?: PhotoCapture.Result.Error("Photo indisponible : réessaie.")

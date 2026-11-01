@@ -117,7 +117,7 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       return ok(DEMO_QR) as Promise<T>;
     case "pairing.pair": {
       const pair = p as unknown as PairParams;
-      const result: PairResult = pair.pin
+      const result: PairResult = pair.handle && pair.pin
         ? { ok: true }
         : { ok: false, code: "bad_request", message: "PIN requis" };
       if (result.ok) sessions.state = "restored";
