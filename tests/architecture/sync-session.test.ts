@@ -55,9 +55,11 @@ describe("session du job de fond (#406)", () => {
     const pairing = readFileSync(PAIRING, "utf8");
     // Le pont ET le job restaurent la session : en parallèle, deux `tokenLogin`
     // sur le même compte → erreur 25 → l'établissement LIMITE le compte.
-    expect(pairing).toContain("synchronized(restoreLock)");
-    // Verrou de COMPAGNON partagé : le worker et le pont n'ont pas le même dépôt.
-    expect(pairing).toMatch(/companion object \{[\s\S]*private val restoreLock = Any\(\)/);
+    expect(pairing).toContain("SessionGate.serialized");
+    // Verrou d'OBJET partagé : le worker et le pont n'ont pas le même dépôt.
+    const gate = readFileSync(join(DATA, "SessionGate.kt"), "utf8");
+    expect(gate).toMatch(/object SessionGate/);
+    expect(gate).toMatch(/private val restoreLock = Any\(\)/);
   });
 
   // L'appairage ouvre une session comme la restauration et doit prendre le MÊME
@@ -70,7 +72,20 @@ describe("session du job de fond (#406)", () => {
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     const body = pairing.slice(start, end);
-    // Le verrou partagé du dépôt, pas celui du pont (réservé à `sessionReady`).
-    expect(body).toContain("synchronized(restoreLock)");
+    // Le verrou de session partagé, pas celui du pont (réservé à `sessionReady`).
+    expect(body).toContain("SessionGate.serialized");
+  });
+
+  // Le logout doit passer par le MÊME verrou : sans lui, une restauration
+  // encore en vol republie l'ancien client APRÈS la purge.
+  test("la déconnexion prend le MÊME verrou que restauration et appairage", () => {
+    const pairing = readFileSync(PAIRING, "utf8");
+    const start = pairing.indexOf("fun logoutBlocking(");
+    expect(start).toBeGreaterThan(-1);
+    const body = pairing.slice(start, pairing.indexOf("private fun failure(", start));
+    expect(body).toContain("SessionGate.serialized");
+    expect(body).toContain("SessionRepair.purge(");
+    const bridge = readBridgeSource();
+    expect(bridge).toContain("pairing.logoutBlocking");
   });
 });

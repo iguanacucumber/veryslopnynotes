@@ -35,9 +35,13 @@ object DownloadedFiles {
 
     /**
      * Nom de fichier d'une pièce : l'IDENTIFIANT d'abord, puis le libellé
-     * (`42-consigne.pdf`). L'identifiant distingue deux pièces de même libellé.
+     * (`42~consigne.pdf`). L'identifiant distingue deux pièces de même libellé.
      * Assaini (jamais de séparateur ni `..`), borné à ≤ 228 octets (sous la
      * borne de 255 du système de fichiers).
+     *
+     * `~` et non `-` : l'identifiant assaini peut contenir `-` (`42-3`), donc
+     * un préfixe `42-` confondrait la pièce `42` avec `42-3-…`. `~` ne peut
+     * apparaître ni dans l'identifiant ni dans le libellé (assainis).
      */
     fun fileName(attachmentId: String, label: String): String {
         val id = clean(attachmentId, ID_MAX).ifEmpty { "piece" }
@@ -45,7 +49,7 @@ object DownloadedFiles {
         val cut = raw.lastIndexOf('.')
         val ext = if (cut > 0) raw.substring(cut + 1).filter { it.isLetterOrDigit() }.take(EXT_MAX) else ""
         val stem = clean(if (cut > 0) raw.substring(0, cut) else raw, LABEL_MAX)
-        return "$id-${stem.ifEmpty { "piece-jointe" }}" + if (ext.isEmpty()) "" else ".$ext"
+        return "$id~${stem.ifEmpty { "piece-jointe" }}" + if (ext.isEmpty()) "" else ".$ext"
     }
 
     /**
@@ -69,7 +73,7 @@ object DownloadedFiles {
         val exact = File(dir, fileName(attachmentId, label))
         if (exact.isFile && exact.length() in 1..MAX_BYTES.toLong()) return exact
         val id = clean(attachmentId, ID_MAX).ifEmpty { "piece" }
-        val prefix = "$id-"
+        val prefix = "$id~"
         val matches = dir.listFiles()?.filter { it.isFile && it.name.startsWith(prefix) }.orEmpty()
         val found = matches.singleOrNull() ?: return null
         return found.takeIf { it.length() in 1..MAX_BYTES.toLong() }
@@ -93,10 +97,11 @@ object DownloadedFiles {
         val dir = dirFor(root, homeworkId)
         val file = File(dir, fileName(attachmentId, label))
         require(file.canonicalPath.startsWith(dir.canonicalPath + File.separator)) { "nom de pièce jointe refusé" }
-        // Purge AVANT l'écriture : le fichier qu'on écrit est le plus récent, il
-        // ne peut pas être effacé par la purge qui suit.
-        prune(root, MAX_CACHED_FILES - 1)
         return SessionEpoch.writeIfCurrent(epoch) {
+            // Purge DANS la garde : une écriture d'un compte périmé ne doit pas
+            // supprimer les fichiers du compte courant en étant ensuite jetée.
+            // Avant l'écriture : le fichier qu'on écrit est le plus récent.
+            prune(root, MAX_CACHED_FILES - 1)
             dir.mkdirs()
             file.writeBytes(bytes)
             file
@@ -113,15 +118,22 @@ object DownloadedFiles {
     /**
      * Pièces jointes ET exports PDF : donnée du compte, purgée avec lui
      * (déconnexion, changement de compte, session morte).
+     *
+     * `false` = au moins un fichier a survécu : l'appelant ne publie pas le
+     * compte suivant sur une purge incomplète.
      */
-    fun purge(cacheRoot: File): Int {
-        var deleted = 0
+    fun purge(cacheRoot: File): Boolean {
+        var ok = true
         for (name in listOf(ATTACHMENTS, EXPORTS)) {
             val dir = File(cacheRoot, name)
-            deleted += dir.walkTopDown().count { it.isFile }
-            dir.deleteRecursively()
+            if (!dir.exists()) continue
+            try {
+                if (!dir.deleteRecursively() || dir.exists()) ok = false
+            } catch (_: Exception) {
+                ok = false
+            }
         }
-        return deleted
+        return ok
     }
 
     /**

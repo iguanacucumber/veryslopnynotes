@@ -204,11 +204,11 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(bridge).toContain("internal val serverStore = ServerStore(ctx)");
     expect(bridge).toContain("internal fun currentBaseUrl(): String = serverStore.baseUrl(baseUrlSeed)");
     expect(bridge).toContain("serverStore.save(host)");
-    // Aucune purge parallèle : tout passe par AccountStore.logout().
+    // Aucune purge parallèle : tout passe par PairingRepository.logoutBlocking().
     expect(bridgeCode).not.toContain("clearAll(");
     expect(bridgeCode).not.toContain("sessions.clear(");
     expect(bridgeCode).not.toContain("SessionTokens(");
-    expect(accounts_has_logout()).toBe(true);
+    expect(accounts_have_logout()).toBe(true);
     expect(bridgeCode).not.toContain("changeServer");
     expect(bridgeCode).not.toContain("onServerChange");
   });
@@ -284,15 +284,15 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
 });
 
 // `logout()` purge dans l'ordre : session persistée, session mémoire, PUIS caches.
-function accounts_has_logout(): boolean {
-  const accounts = read(join(DATA, "AccountStore.kt"));
+function accounts_have_logout(): boolean {
+  const pairing = read(join(DATA, "PairingRepository.kt"));
   const repair = read(join(DATA, "SessionRepair.kt"));
   // Purge déléguée à `SessionRepair.purge` (seul endroit) ; l'ordre y est vérifié.
   const purge = repair.indexOf("CacheScope.purge(cacheStore)");
   return (
-    accounts.includes("fun logout()") &&
-    accounts.includes("SessionRepair.purge(") &&
-    accounts.includes("sessions.clear()") &&
+    pairing.includes("fun logoutBlocking(") &&
+    pairing.includes("SessionRepair.purge(") &&
+    pairing.includes("sessions.clear()") &&
     repair.indexOf("invalidateSession()") < repair.indexOf("PronoteSession.clear()") &&
     repair.indexOf("PronoteSession.clear()") < purge &&
     purge > -1

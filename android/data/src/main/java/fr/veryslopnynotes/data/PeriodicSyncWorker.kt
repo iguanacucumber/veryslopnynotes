@@ -72,10 +72,7 @@ class PeriodicSyncWorker(
                 }
                 when (val decision = syncJobDecision(read)) {
                     SyncJobDecision.Retry -> return Result.retry()
-                    SyncJobDecision.SessionDead -> {
-                        DeviceAuth.reject()
-                        return Result.success()
-                    }
+                    SyncJobDecision.SessionDead -> return sessionDead()
                     is SyncJobDecision.Loaded -> {
                         if (!saveIfCurrent(epoch, store, resource, decision.payload, now, "")) {
                             return Result.success()
@@ -95,11 +92,27 @@ class PeriodicSyncWorker(
      */
     private fun failure(e: Throwable): Result =
         if (isSessionFailure(e)) {
-            DeviceAuth.reject()
-            Result.success()
+            sessionDead()
         } else {
             Result.retry()
         }
+
+    /**
+     * Session morte : le signal à l'app, puis la purge par le MÊME chemin que
+     * le pont. Dans un process NEUF, personne n'écoute (`reject()` rend
+     * `false`) : sans cette purge, la donnée du compte mort attendrait
+     * l'ouverture de l'interface.
+     */
+    private fun sessionDead(): Result {
+        if (!DeviceAuth.reject()) {
+            val sessions = SessionStores.get(applicationContext)
+            val store = cacheStore()
+            PairingRepository(sessions, store).logoutBlocking {
+                AccountStore(applicationContext, sessions).clear()
+            }
+        }
+        return Result.success()
+    }
 
     /**
      * Session du process, restaurée si absente, par le même chemin que le pont.

@@ -14,7 +14,6 @@ const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslo
 const SCOPE = join(DATA, "CacheScope.kt");
 const REPAIR = join(DATA, "SessionRepair.kt");
 const PAIRING = join(DATA, "PairingRepository.kt");
-const ACCOUNT = join(DATA, "AccountStore.kt");
 const WORKER = join(DATA, "PeriodicSyncWorker.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "CacheScopeParityMain.kt");
 
@@ -108,6 +107,22 @@ describe("le cache n'est jamais servi à un autre compte (#407)", () => {
     expect((await ask({ op: "files", sid })).files).toEqual([]);
   });
 
+  test.skipIf(skip)("une purge EN ÉCHEC ne publie pas le nouveau compte", async () => {
+    const store = await ask({ op: "newStore" });
+    const sid = store.sid as number;
+    // Le compte A a laissé un cache.
+    await ask({ op: "write", sid, resource: "grades", payload: '{"grades":[{"moyenne":15}]}', fetchedAt: 1000 });
+
+    // La purge échoue : la publication est ANNULÉE et l'échec remonte.
+    const sw = await ask({ op: "switchFailing", sid, previous: compteA, current: compteB });
+    expect(sw.failed).toBe(true);
+    expect(sw.published).toBe(false);
+    // Le cache de l'ancien compte n'a pas été servi au nouveau, ni effacé « à moitié ».
+    expect((await ask({ op: "load", sid, resource: "grades" })).found).toBe(true);
+    // Une purge directe en échec le DIT aussi (jamais un succès silencieux).
+    expect((await ask({ op: "purgeFailing", sid })).cleared).toBe(false);
+  });
+
   test.skipIf(skip)("une lecture EN VOL ne ressuscite pas le cache purgé (garde d'époque)", async () => {
     const store = await ask({ op: "newStore" });
     const sid = store.sid as number;
@@ -197,7 +212,6 @@ describe("la bascule de compte est atomique (#529)", () => {
 
 describe("câblage du scopage du cache (#407)", () => {
   const pairing = readFileSync(PAIRING, "utf8");
-  const account = readFileSync(ACCOUNT, "utf8");
   const worker = readFileSync(WORKER, "utf8");
   const bridge = readBridgeSource();
   const scope = readFileSync(SCOPE, "utf8");
@@ -210,8 +224,8 @@ describe("câblage du scopage du cache (#407)", () => {
     expect(scope.match(/store\.clearAll\(\)/g)?.length).toBe(1);
     // Déconnexion ET session morte partagent `SessionRepair.purge`.
     expect(repair).toContain("CacheScope.purge(cacheStore)");
-    expect(account).toContain("SessionRepair.purge(");
-    expect(account).not.toContain("SessionEpoch.invalidate");
+    expect(pairing).toContain("SessionRepair.purge(");
+    expect(pairing).not.toContain("SessionEpoch.invalidate");
   });
 
   test("l'appairage purge le cache du compte précédent AVANT d'enregistrer la session", () => {

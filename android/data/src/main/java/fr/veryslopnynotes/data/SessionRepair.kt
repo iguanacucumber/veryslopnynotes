@@ -4,8 +4,8 @@ package fr.veryslopnynotes.data
  * La RÉPARATION d'une session MORTE.
  *
  * ICI : session invalidée + cache purgé. C'est le MÊME code que la
- * déconnexion (`AccountStore.logout()`) : UN seul chemin de purge, donc
- * « déconnecté » et « session morte » ne peuvent pas diverger.
+ * déconnexion (`PairingRepository.logoutBlocking()`) : UN seul chemin de
+ * purge, donc « déconnecté » et « session morte » ne peuvent pas diverger.
  *
  * Le store persisté est chiffré (Android) : la purge prend donc
  * l'INVALIDATION (`invalidateSession`) et non le store — elle reste rejouable
@@ -19,15 +19,16 @@ object SessionRepair {
     /**
      * Session persistée invalidée, session mémoire abandonnée, cache purgé.
      * La purge passe par [CacheScope.purge] : une lecture en vol ne ressuscite
-     * pas le cache purgé.
+     * pas le cache purgé. `false` = purge incomplète (l'appelant décide s'il
+     * peut continuer).
      */
-    fun purge(invalidateSession: () -> Unit, cacheStore: CacheStore) {
+    fun purge(invalidateSession: () -> Unit, cacheStore: CacheStore): Boolean {
         // Session persistée d'abord (le jeton mort ne doit pas survivre), puis
         // mémoire, puis cache.
         invalidateSession()
         PronoteSession.clear()
         // Pas de liste codée en dur : elle dériverait des contrats et
         // laisserait fuiter la donnée d'une ressource ajoutée plus tard.
-        CacheScope.purge(cacheStore)
+        return CacheScope.purge(cacheStore)
     }
 }

@@ -8,6 +8,7 @@ package fr.veryslopnynotes.sessionrepair
 import fr.veryslopnynotes.data.DeviceAuth
 import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.PronoteSession
+import fr.veryslopnynotes.data.SessionGate
 import fr.veryslopnynotes.data.SessionRepair
 import fr.veryslopnynotes.data.isSessionFailure
 import fr.veryslopnynotes.pronote.Client
@@ -21,6 +22,8 @@ import java.io.InputStreamReader
 import java.io.PrintStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 private fun JVal.Obj.str(key: String): String? = (fields[key] as? JVal.Str)?.value
 
@@ -138,6 +141,12 @@ private class Driver {
                 "client" to JVal.Bool(PronoteSession.client != null),
             )
         }
+        // Abonné en ÉCHEC : `reject()` rend `false`, donc le job de fond sait
+        // que la purge n'a PAS été faite et la reprend lui-même.
+        "rejectThrowing" -> {
+            DeviceAuth.setOnRejected { throw IllegalStateException("abonné en échec") }
+            ok("handled" to JVal.Bool(DeviceAuth.reject()))
+        }
         // une LECTURE qui échoue — le chemin RÉEL d'un dépôt : la
         // décision de production (`isSessionFailure`) décide si le signal
         // « session morte » est levé, donc si le cache est purgé. La
@@ -171,6 +180,51 @@ private class Driver {
                 "dead" to JVal.Bool(dead),
                 "sessionCleared" to JVal.Bool(sessionCleared),
                 "client" to JVal.Bool(PronoteSession.client != null),
+            )
+        }
+        // COURSE logout / restauration : le même verrou que `pairBlocking`,
+        // `restoreBlocking` et `logoutBlocking`. La restauration publie
+        // l'ancien client APRÈS un délai ; le logout doit ATTENDRE, puis purger
+        // — sinon le client republié survivrait à la déconnexion.
+        "race" -> {
+            val slot = bench.slot(op)
+            PronoteSession.clear()
+            var logoutRan = false
+            val restoreEntered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val logoutStarted = CountDownLatch(1)
+            val restore = Thread {
+                SessionGate.serialized {
+                    restoreEntered.countDown()
+                    release.await(5, TimeUnit.SECONDS)
+                    PronoteSession.set(Client("https://etab.exemple/eleve", "eleve.a", "jeton-factice"))
+                }
+            }
+            restore.start()
+            restoreEntered.await(5, TimeUnit.SECONDS)
+            val logout = Thread {
+                logoutStarted.countDown()
+                SessionGate.serialized {
+                    logoutRan = true
+                    SessionRepair.purge({}, slot.store)
+                }
+            }
+            logout.start()
+            // Le fil de logout a DÉMARRÉ (il attend le verrou) : la mesure qui
+            // suit ne peut pas être un faux positif d'ordonnancement.
+            logoutStarted.await(5, TimeUnit.SECONDS)
+            // Sans verrou, le logout purgerait tout de suite, PUIS la
+            // restauration republierait l'ancien client.
+            Thread.sleep(200)
+            val ranDuringRestore = logoutRan
+            release.countDown()
+            restore.join(5000)
+            logout.join(5000)
+            ok(
+                "ranDuringRestore" to JVal.Bool(ranDuringRestore),
+                "client" to JVal.Bool(PronoteSession.client != null),
+                "restoreAlive" to JVal.Bool(restore.isAlive),
+                "logoutAlive" to JVal.Bool(logout.isAlive),
             )
         }
         "cleanup" -> {

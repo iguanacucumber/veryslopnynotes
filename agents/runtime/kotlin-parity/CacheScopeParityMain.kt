@@ -7,6 +7,8 @@ package fr.veryslopnynotes.cachescope
 
 import fr.veryslopnynotes.data.AccountIdentity
 import fr.veryslopnynotes.data.CacheScope
+import fr.veryslopnynotes.data.CacheStore
+import fr.veryslopnynotes.data.CacheSwitch
 import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.SessionEpoch
 import fr.veryslopnynotes.pronote.JVal
@@ -33,6 +35,11 @@ private fun ok(vararg pairs: Pair<String, JVal>): JVal.Obj = JVal.Obj(linkedMapO
 /** Un store de cache + son dossier (comme l'app et le job de fond). */
 private class Slot(val id: Int, val dir: File) {
     val store = FileCacheStore(dir)
+}
+
+/** Store dont la purge ÉCHOUE : prouve qu'un échec ne publie pas le compte. */
+private class FailingStore(private val delegate: CacheStore) : CacheStore by delegate {
+    override fun clearAll(): Boolean = false
 }
 
 private class Bench {
@@ -109,19 +116,40 @@ private class Driver {
             val epochBefore = SessionEpoch.current()
             var epochAtPublish = -1L
             var payloadAtPublish = ""
-            val purged = CacheScope.switchAccount(
+            var published = false
+            val switched = CacheScope.switchAccount(
                 slot.store,
                 identityOf(op.obj("previous")),
                 identityOf(op.obj("current")),
             ) {
+                published = true
                 epochAtPublish = SessionEpoch.current()
                 payloadAtPublish = slot.store.load("grades", "")?.payload ?: ""
             }
             ok(
-                "purged" to JVal.Bool(purged),
+                "purged" to JVal.Bool(switched == CacheSwitch.Purged),
+                "failed" to JVal.Bool(switched == CacheSwitch.Failed),
+                "published" to JVal.Bool(published),
                 "epochBefore" to JVal.Num(epochBefore.toDouble()),
                 "epochAtPublish" to JVal.Num(epochAtPublish.toDouble()),
                 "payloadAtPublish" to JVal.Str(payloadAtPublish),
+            )
+        }
+        // Purge en ÉCHEC : rien n'est publié, le cache de l'ancien compte reste
+        // et l'échec remonte.
+        "switchFailing" -> {
+            val slot = bench.slot(op)
+            var published = false
+            val switched = CacheScope.switchAccount(
+                FailingStore(slot.store),
+                identityOf(op.obj("previous")),
+                identityOf(op.obj("current")),
+            ) {
+                published = true
+            }
+            ok(
+                "failed" to JVal.Bool(switched == CacheSwitch.Failed),
+                "published" to JVal.Bool(published),
             )
         }
         // Session morte : le cache part avec elle.
@@ -133,8 +161,12 @@ private class Driver {
         // Purge explicite (déconnexion).
         "purge" -> {
             val slot = bench.slot(op)
-            CacheScope.purge(slot.store)
-            ok("ok" to JVal.Bool(true))
+            ok("cleared" to JVal.Bool(CacheScope.purge(slot.store)))
+        }
+        // Purge explicite en ÉCHEC : l'appelant reçoit `false`.
+        "purgeFailing" -> {
+            val slot = bench.slot(op)
+            ok("cleared" to JVal.Bool(CacheScope.purge(FailingStore(slot.store))))
         }
         "epoch" -> ok("epoch" to JVal.Num(SessionEpoch.current().toDouble()))
         // Début d'une lecture : l'époque est capturée AVANT la lecture locale.

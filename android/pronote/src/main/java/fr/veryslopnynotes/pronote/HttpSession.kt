@@ -9,7 +9,7 @@ import java.util.TimeZone
 import java.util.zip.GZIPInputStream
 
 /** Plafond d'une réponse (10 Mo), une fois décompressée. */
-private const val MAX_RESPONSE_BYTES = 10_485_760
+internal const val MAX_RESPONSE_BYTES = 10_485_760
 
 /**
  * Jar à cookies persistant (RFC 6265) + redirects suivies à la main : ni

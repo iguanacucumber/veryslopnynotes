@@ -37,7 +37,8 @@ interface CacheStore {
     fun clear(resource: String)
     // Purge totale (logout) : toute donnée scolaire locale disparaît, sans
     // dépendre d'une liste de ressources qui dériverait des contrats.
-    fun clearAll()
+    // `false` = effacement INCOMPLET : l'appelant ne publie pas le compte suivant.
+    fun clearAll(): Boolean
 }
 
 // ponytail: memoire seule pour tests/preview. Upgrade: persistance seule (File).
@@ -76,8 +77,9 @@ class InMemoryCacheStore : CacheStore {
     }
 
     @Synchronized
-    override fun clearAll() {
+    override fun clearAll(): Boolean {
         map.clear()
+        return true
     }
 }
 
@@ -227,17 +229,19 @@ class FileCacheStore(private val dir: File) : CacheStore {
         }
     }
 
-    override fun clearAll() {
-        synchronized(lock) {
+    override fun clearAll(): Boolean = synchronized(lock) {
+        // `deleteRecursively` renvoie `false` quand un fichier résiste : le
+        // résultat est VÉRIFIÉ, sinon une purge ratée passait pour un succès.
+        val children = dir.listFiles() ?: return@synchronized !dir.exists()
+        var ok = true
+        for (child in children) {
             try {
-                // Récursif : `revisions/` et `subject_prefs.json` sont de la
-                // donnée du compte comme le reste, la purge efface tout
-                // `offline/`.
-                dir.listFiles()?.forEach { it.deleteRecursively() }
+                if (!child.deleteRecursively() || child.exists()) ok = false
             } catch (_: Exception) {
-                // ponytail: purge best-effort, comme clear().
+                ok = false
             }
         }
+        ok && dir.listFiles()?.isEmpty() != false
     }
 
     /**

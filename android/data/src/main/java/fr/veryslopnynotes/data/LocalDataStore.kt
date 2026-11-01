@@ -15,15 +15,17 @@ class LocalDataStore(
     private val store: CacheStore,
     private val cacheRoot: File,
 ) : CacheStore by store {
-    override fun clearAll() {
-        store.clearAll()
-        DownloadedFiles.purge(cacheRoot)
+    override fun clearAll(): Boolean {
+        val cacheCleared = store.clearAll()
+        val downloadsCleared = DownloadedFiles.purge(cacheRoot)
         // Une photo de cours en attente est de la donnée scolaire : elle part
         // avec le cache même si la capture est restée ouverte.
-        try {
+        val photosCleared = try {
             File(cacheRoot, "photos").deleteRecursively()
         } catch (_: Exception) {
-            // best-effort : le cache est jetable.
+            false
         }
+        // UN SEUL verdict : le compte suivant ne se publie que si tout est parti.
+        return cacheCleared && downloadsCleared && photosCleared
     }
 }

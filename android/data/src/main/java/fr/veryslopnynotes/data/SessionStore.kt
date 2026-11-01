@@ -115,9 +115,10 @@ class EncryptedSessionStore(context: Context) : SessionStore {
     }
 
     // Déconnexion : plus aucune trace de session, jeton compris (un jeton
-    // rejoué après un logout doit échouer). AccountStore.logout() appelle ici.
+    // rejoué après un logout doit échouer). `commit()` : un force-stop juste
+    // après ne doit pas ressusciter la session au lancement suivant.
     override fun clear() {
-        prefs.edit().clear().apply()
+        prefs.edit().clear().commit()
     }
 
     companion object {

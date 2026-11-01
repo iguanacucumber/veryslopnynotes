@@ -5,7 +5,7 @@ import { listFiles } from "../../agents/runtime/check-architecture";
 
 // Les payloads Pronote sont écrits EN CLAIR dans `filesDir/offline/` (notes,
 // absences, sanctions, messages) : la sauvegarde automatique les emporterait sur
-// un autre appareil, et `AccountStore.logout()` ne peut pas retirer cette copie.
+// un autre appareil, et `PairingRepository.logoutBlocking()` ne peut pas retirer cette copie.
 // Le manifeste et les règles réels sont donc lus ici.
 
 const ROOT = join(import.meta.dir, "..", "..");

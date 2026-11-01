@@ -4,12 +4,13 @@ import android.content.Context
 import android.content.SharedPreferences
 
 /**
- * Comptes appairés + déconnexion (multi-compte parent).
+ * Comptes appairés (multi-compte parent).
  * - Persiste UNIQUEMENT des accountId (jamais nom, classe, photo, jeton) :
  *   liste bornée + compte courant. Le profil reste en mémoire (mode anonyme :
  *   aucune donnée personnelle sur disque).
- * - `logout()` invalide la session appairée (SessionStore) ET purge tous les
- *   caches locaux : plus aucune donnée scolaire du compte déconnecté.
+ * - La session et le cache sont purgés par `PairingRepository.logoutBlocking`,
+ *   sous le verrou de session ; [clear] efface la liste de comptes, rappelé
+ *   dans la même section critique par le pont.
  * - La SEULE écriture est [add], appelée par le Profil quand le client local
  *   répond.
  * ponytail: SharedPreferences seul (une liste de chaînes), pas de Room.
@@ -17,7 +18,6 @@ import android.content.SharedPreferences
  */
 class AccountStore(
     context: Context,
-    private val cacheStore: CacheStore,
     private val sessions: SessionStore,
 ) {
     private val prefs: SharedPreferences = context.applicationContext
@@ -48,7 +48,7 @@ class AccountStore(
         if (ids.contains(id)) return false
         if (ids.size >= MAX_ACCOUNTS) return false
         ids.add(id)
-        prefs.edit().putString(KEY_IDS, ids.joinToString(SEP)).apply()
+        prefs.edit().putString(KEY_IDS, ids.joinToString(SEP)).commit()
         if (current() == null) select(id)
         return true
     }
@@ -61,22 +61,15 @@ class AccountStore(
     fun select(accountId: String) {
         val id = accountId.trim()
         if (!isValidAccountId(id) || !accountIds().contains(id)) return
-        prefs.edit().putString(KEY_CURRENT, id).apply()
+        prefs.edit().putString(KEY_CURRENT, id).commit()
     }
 
     /**
-     * Déconnexion : session invalidée + TOUS les caches purgés (les
-     * notes/devoirs/EDT sont des données du compte déconnecté). Après
-     * `sessions.clear()`, plus aucune lecture ne peut rouvrir la session.
-     *
-     * L'invalidation d'époque ET la purge sont dans la MÊME section critique :
-     * une lecture déjà en vol ne peut plus réécrire le cache après la purge.
-     * La purge passe par [CacheScope], partagée avec l'appairage d'un autre
-     * compte et la session morte — une seule implémentation.
+     * Déconnexion : plus aucun compte connu. `commit()` : la préférence ne
+     * doit pas survivre au force-stop qui suit la déconnexion.
      */
-    fun logout() {
-        SessionRepair.purge({ sessions.clear() }, cacheStore)
-        prefs.edit().clear().apply()
+    fun clear() {
+        prefs.edit().clear().commit()
     }
 
     companion object {

@@ -339,9 +339,9 @@ internal fun VsnBridge.attachmentFile(
 ): File? {
     val root = File(ctx.cacheDir, DownloadedFiles.ATTACHMENTS)
     DownloadedFiles.cachedFor(root, assignment.id, att.id, att.label)?.let { return it }
-    val data = await<fr.veryslopnynotes.data.AttachmentData?> { cb ->
+    val data = await<fr.veryslopnynotes.data.AttachmentOutcome> { cb ->
         assignments.fetchAttachment(assignment.id, att.id, week, cb)
-    } ?: return null
+    }?.data ?: return null
     if (data.bytes.isEmpty() || data.bytes.size > DownloadedFiles.MAX_BYTES) return null
     return DownloadedFiles.write(root, assignment.id, att.id, att.label, data.bytes, epoch)
 }

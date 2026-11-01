@@ -11,7 +11,7 @@ const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslo
 const CACHE = join(DATA, "OfflineCache.kt");
 const POLICY = join(DATA, "CachePolicy.kt");
 const REPO = join(DATA, "SyncedRepository.kt");
-const ACCOUNT = join(DATA, "AccountStore.kt");
+const PAIRING = join(DATA, "PairingRepository.kt");
 const WORKER = join(DATA, "PeriodicSyncWorker.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "CacheEpochParityMain.kt");
 
@@ -56,12 +56,12 @@ describe("purge de déconnexion (#364)", () => {
   });
 
   test("câblage : la déconnexion invalide l'époque ET purge dans la même section critique", () => {
-    const acc = readFileSync(ACCOUNT, "utf8");
-    const iLogout = acc.indexOf("fun logout(");
+    const pairing = readFileSync(PAIRING, "utf8");
+    const iLogout = pairing.indexOf("fun logoutBlocking(");
     expect(iLogout).toBeGreaterThan(-1);
     // La purge est UN SEUL endroit (`CacheScope.purge`), partagé par déconnexion, appairage et session morte.
-    expect(acc).toContain("SessionRepair.purge(");
-    expect(acc).not.toContain("SessionEpoch.invalidate");
+    expect(pairing).toContain("SessionRepair.purge(");
+    expect(pairing).not.toContain("SessionEpoch.invalidate");
     const repair = readFileSync(join(DATA, "SessionRepair.kt"), "utf8");
     expect(repair).toContain("CacheScope.purge(cacheStore)");
     expect(repair).not.toContain("SessionEpoch.invalidate");
