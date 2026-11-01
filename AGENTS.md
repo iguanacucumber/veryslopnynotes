@@ -43,7 +43,7 @@ Une loi ne change que par ADR. Une PR qui la viole est refusée.
    push direct sur `main` : le merge passe par une PR. Un push ou un merge
    échoué se signale, il ne se masque pas.
 
-`make check-fast` (~2,1 s à chaud) saute `android-compile` seulement. Détail
+`make check-fast` (~2,1 s à chaud) saute `android-compile` et `audit` (réseau). Détail
 du gate : [`docs/architecture/BUILD.md`](docs/architecture/BUILD.md).
 
 ## Gate et invariants

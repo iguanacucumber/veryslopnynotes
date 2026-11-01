@@ -156,6 +156,22 @@ describe("check.ts : pilote de `make check`", () => {
     expect(r.out).toContain("lint");
   });
 
+  test("la liste du gate est EXACTEMENT les 9 étapes documentées", () => {
+    // Un retrait d'étape est aussi grave qu'un ajout : le compte seul ne le
+    // voyait pas (`DEFAULT_TARGETS.length`).
+    expect(DEFAULT_TARGETS).toEqual([
+      "android-compile",
+      "unit",
+      "typecheck",
+      "architecture",
+      "contracts",
+      "lint",
+      "audit",
+      "web-typecheck",
+      "web-test",
+    ]);
+  });
+
   test("CHECK_TARGETS avec l'opt-in CHECK_HARNESS=1 : honoré", () => {
     const r = plan({ CHECK_TARGETS: "lint", CHECK_HARNESS: "1" });
     expect(r.code).toBe(0);
@@ -168,6 +184,19 @@ describe("check.ts : pilote de `make check`", () => {
     // `check-fast` (boucle interne) : l'opt-in EXPLICITE qui autorise la liste
     // réduite — c'est le seul usage légitime de CHECK_TARGETS.
     expect(makefile).toMatch(/check-fast:\n\tCHECK_HARNESS=1 CHECK_TARGETS=/);
+    // Liste EXACTE : ajouter ou retirer une étape du raccourci casse ici.
+    const fast =
+      /check-fast:\n\tCHECK_HARNESS=1 CHECK_TARGETS="([^"]+)"/.exec(makefile)?.[1]?.split(" ") ?? [];
+    expect([...fast].sort()).toEqual(
+      DEFAULT_TARGETS.filter((t) => t !== "android-compile" && t !== "audit").sort(),
+    );
+    // Et la doc dit la même chose que la recette.
+    expect(await Bun.file(join(ROOT, "AGENTS.md")).text()).toContain(
+      "saute `android-compile` et `audit`",
+    );
+    expect(await Bun.file(join(ROOT, "docs", "architecture", "BUILD.md")).text()).toContain(
+      "Tout sauf `android-compile` et `audit`",
+    );
     // Le GATE (la phase 1, `check-run`) : l'opt-in est VIDE, donc même un
     // shell qui exporterait CHECK_HARNESS=1 ne peut pas rétrécir le gate.
     const gate = /check-run:\n((?:\t[^\n]*\n)+)/.exec(makefile)?.[1] ?? "";
@@ -233,6 +262,33 @@ exit "\${FAKE_BUN_CODE:-0}"
         expect(p.exitCode).toBe(1);
         expect(out).toContain("✘ echec");
         expect(out).toContain("check : ÉCHEC — echec");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test("un MAKEFILES hostile ne change pas la recette enfant", () => {
+      const dir = mkdtempSync(join(tmpdir(), "gate-makefiles-"));
+      try {
+        writeFileSync(join(dir, "Makefile"), "probe:\n\t@echo VALUE=$(VALUE)\nVALUE = normal\n");
+        const hostile = join(dir, "hostile.mk");
+        writeFileSync(hostile, "override VALUE = neutralise\n");
+        const p = Bun.spawnSync(["bun", DRIVER, dir], {
+          cwd: ROOT,
+          env: {
+            ...process.env,
+            CHECK_HARNESS: "1",
+            CHECK_TARGETS: "probe",
+            MAKEFILES: hostile,
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        const dec = new TextDecoder();
+        const out = dec.decode(p.stdout) + dec.decode(p.stderr);
+        expect(p.exitCode).toBe(0);
+        expect(out).toContain("VALUE=normal");
+        expect(out).not.toContain("neutralise");
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -308,7 +364,10 @@ exit "\${FAKE_BUN_CODE:-0}"
   // RIEN — la PR #481 a ainsi cassé la compilation Kotlin de `main` (#483).
   test("la CI rejoue le gate COMPLET (`make check`), jamais une version light", async () => {
     const ci = await Bun.file(join(ROOT, ".github", "workflows", "ci.yml")).text();
-    expect(ci).toContain("make check");
+    // Ligne EXACTE : `toContain("make check")` acceptait `make check-run`, qui
+    // sort 0 par construction, et les commentaires du fichier.
+    expect(ci).toMatch(/^\s+make check 2>&1 \| tee "\$resume"$/m);
+    expect(ci).not.toMatch(/make check-run/);
     // `check-fast` saute la compilation Kotlin : la CI ne peut pas s'en
     // contenter, sinon elle ne prouve pas ce que prouve le poste.
     expect(ci).not.toContain("check-fast");
