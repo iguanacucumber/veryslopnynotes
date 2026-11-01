@@ -168,7 +168,7 @@ try {
               return resolve({ state: expired ? "restored" : paired ? "restored" : "no_session" });
             case "pairing.scanQr":
               return resolve({
-                qr: { login: "demo", jeton: "demo", url: "https://demo.school.invalid" },
+                qr: { handle: "smoke-handle", login: "demo", url: "https://demo.school.invalid" },
                 cancelled: false,
               });
             case "pairing.pair":
