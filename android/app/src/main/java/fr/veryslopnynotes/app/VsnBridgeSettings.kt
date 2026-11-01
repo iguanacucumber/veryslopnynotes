@@ -184,13 +184,18 @@ internal fun VsnBridge.manualDocFor(subject: String, page: Int? = null): ManualD
     // Le catalogue a déjà choisi l'ouvrage PAR matière ; une adresse précise ne
     // dit rien de la sienne, donc seule la fiche tranche.
     fun matches(doc: ManualDoc): Boolean = catalog || manualMatchesSubject(doc, subject)
-    manuals.doc(cacheKey)?.let { doc -> return if (matches(doc)) doc else null }
+    manuals.doc(cacheKey)?.let { doc ->
+        if (!matches(doc)) return null
+        // Une page non résolue ne vaut pas la page demandée : sans ce contrôle
+        // un scrap raté (page 1) serait cité comme « p 192 ».
+        if (page == null || doc.page == page) return doc
+    }
     val now = System.currentTimeMillis()
     val lastFailure = manualFailures[cacheKey] ?: 0L
     if (now - lastFailure < MANUAL_RETRY_MS) return null
     val fetched = ManualsClient(currentBaseUrl()).fetch(target, page)
     val doc = fetched.doc
-    if (doc == null) {
+    if (doc == null || (page != null && doc.page != page)) {
         manualFailures[cacheKey] = now
         return null
     }
