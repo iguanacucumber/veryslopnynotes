@@ -61,12 +61,16 @@ interface Result {
 }
 
 /** Environnement des make ENFANTS : `MAKEFLAGS` NEUTRALISÉ, sinon `make -i`
- *  ferait passer une étape ROUGE pour verte. `MFLAGS` (compat BSD) part aussi. */
+ *  ferait passer une étape ROUGE pour verte. `MFLAGS` (compat BSD) part aussi.
+ *  `MAKEFILES` lit des makefiles AVANT le nôtre : un `override` y gagne, donc
+ *  il part avec `GNUMAKEFLAGS` (relu par un make lancé directement). */
 export function childEnv(env: Record<string, string | undefined> = process.env): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) if (v !== undefined) out[k] = v;
   delete out["MAKEFLAGS"];
   delete out["MFLAGS"];
+  delete out["MAKEFILES"];
+  delete out["GNUMAKEFLAGS"];
   return out;
 }
 
