@@ -9,7 +9,7 @@ import {
   HOMEWORK_MAX_STEPS,
   HOMEWORK_MAX_STEP_CHARS,
 } from "../../../../shared/contracts/api";
-import { addDays, frDate, frTime, isoDay, parseDate, startOfWeek, weeksBetween } from "../../lib/format";
+import { addDays, frDate, isoDay, parseDate, startOfWeek, weeksBetween } from "../../lib/format";
 
 export interface AssignmentAttachment {
   id: string;
@@ -100,6 +100,21 @@ function record(value: unknown): Record<string, unknown> | null {
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/;
 
+const PARIS_CLOCK = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Paris",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+/** Heure murale de l'établissement, jamais celle de l'appareil. */
+function parisClock(date: Date): string {
+  const parts = PARIS_CLOCK.formatToParts(date);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("hour")}:${part("minute")}:${part("second")}`;
+}
+
 /** DueDate du contrat : instant ISO complet ou date seule. Tout le reste est
  *  illisible (jamais une date fabriquée à partir des dix premiers caractères).
  *  Une date seule est minuit local (analyseur partagé). */
@@ -110,25 +125,36 @@ export function assignmentDate(value: unknown): Date | null {
   return parseDate(raw);
 }
 
-export function assignmentDayKey(value: unknown): string | null {
-  const date = assignmentDate(value);
-  return date ? isoDay(date) : null;
+/** Échéance sans heure : date seule du contrat, ou minuit Paris que le natif
+ *  émet pour un `PourLe` sans heure (`2026-11-01T00:00+01:00`). Une échéance de
+ *  journée entière n'est jamais « plus tôt que maintenant ». */
+export function isAllDayDue(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const raw = value.trim();
+  if (!raw) return false;
+  if (DATE_ONLY.test(raw)) return true;
+  const date = assignmentDate(raw);
+  return date !== null && parisClock(date) === "00:00:00";
 }
 
-/** « dimanche 25 octobre · 20:00 » ; une date seule n'affiche pas d'heure. */
+/** « dimanche 25 octobre · 20:00 », à l'heure de l'établissement ; une
+ *  échéance sans heure n'affiche pas d'heure. */
 export function dueLabel(value: unknown): string {
+  const day = typeof value === "string" ? parisDayKey(value) : null;
+  if (!day) return "";
+  const label = frDate(day);
+  if (isAllDayDue(value)) return label;
   const date = assignmentDate(value);
-  if (!date || typeof value !== "string") return "";
-  const label = frDate(value);
-  if (!DATE_ONLY.test(value.trim())) {
-    const time = frTime(value);
-    return time ? `${label} · ${time}` : label;
-  }
-  return label;
+  const time = date ? parisClock(date).slice(0, 5) : "";
+  return time ? `${label} · ${time}` : label;
 }
 
+/** Lundi de la semaine de `now`, en JOUR civil de Paris : la même horloge que
+ *  la fenêtre du natif (`WeekWindow.kt`). */
 export function weekStartOf(now: Date): string {
-  return isoDay(startOfWeek(now));
+  const day = parisDayOf(now);
+  const monday = day ? mondayOf(day) : null;
+  return monday ?? isoDay(startOfWeek(now));
 }
 
 /** Dimanche de la semaine commençant à `startIso`. */
@@ -365,17 +391,13 @@ const SECTION_TITLES: Record<Exclude<AssignmentSectionId, "week">, string> = {
   done: "Terminés",
 };
 
-/** Lundi 00:00 de la semaine affichée. Une semaine illisible retombe sur la
- *  semaine courante : la partition reste exhaustive (aucun devoir ne
+/** Fenêtre de la semaine affichée : lundi → dimanche, en JOURS civils de Paris
+ *  — les mêmes clés que [assignmentsInWeek]. Une semaine illisible retombe sur
+ *  la semaine courante : la partition reste exhaustive (aucun devoir ne
  *  disparaît, aucun ne se retrouve deux fois). */
-function resolveWeekStart(weekStart: string, now: Date): Date {
-  return assignmentDate(weekStart) ?? assignmentDate(weekStartOf(now)) ?? new Date(now);
-}
-
-/** Fenêtre de la semaine affichée : lundi → dimanche (jours locaux). */
 function weekWindow(weekStart: string, now: Date): { start: string; end: string } {
-  const date = resolveWeekStart(weekStart, now);
-  return { start: isoDay(date), end: isoDay(addDays(date, 6)) };
+  const start = parisDayKey(weekStart) ?? parisDayKey(weekStartOf(now)) ?? isoDay(now);
+  return { start, end: dayKeyShift(start, 6) ?? start };
 }
 
 /** Titre de la section de semaine : il nomme la semaine AFFICHÉE, pas
@@ -386,13 +408,14 @@ function weekSectionTitle(weekStart: string, now: Date): string {
   return start === weekStartOf(now) ? "Cette semaine" : weekLabelFr(start);
 }
 
-/** Une échéance datée du jour et DÉJÀ PASSÉE est « en retard ». Une date
- *  SEULE (sans heure) est un rendez-vous de la journée entière : elle n'est
- *  jamais « plus tôt que maintenant », sinon la moitié des devoirs du jour
+/** Une échéance datée du jour et DÉJÀ PASSÉE est « en retard ». Une échéance
+ *  sans heure est un rendez-vous de la journée entière : elle n'est jamais
+ *  « plus tôt que maintenant », sinon la moitié des devoirs du jour
  *  signaleraient à tort un retard. */
-function isEarlierToday(assignment: Assignment, date: Date, now: Date): boolean {
-  if (DATE_ONLY.test(assignment.dueDate.trim())) return false;
-  return date.getTime() < now.getTime();
+function isEarlierToday(assignment: Assignment, now: Date): boolean {
+  if (isAllDayDue(assignment.dueDate)) return false;
+  const date = assignmentDate(assignment.dueDate);
+  return date !== null && date.getTime() < now.getTime();
 }
 
 /**
@@ -402,7 +425,7 @@ function isEarlierToday(assignment: Assignment, date: Date, now: Date): boolean 
  * - « En retard » : échéance d'AVANT aujourd'hui — un devoir dû hier est en
  *   retard, il ne repasse pas dans « Cette semaine » ; et, pour une
  *   échéance du jour dont l'heure est déjà passée, retard également ;
- * - « Aujourd'hui » : échéance du jour qu'il reste à faire (une date SANS
+ * - « Aujourd'hui » : échéance du jour qu'il reste à faire (une échéance SANS
  *   heure est un rendez-vous de la journée entière : jamais en retard) ;
  * - section de semaine : échéances des jours qui viennent, jusqu'au
  *   dimanche (titre : « Cette semaine ») ;
@@ -420,6 +443,9 @@ function isEarlierToday(assignment: Assignment, date: Date, now: Date): boolean 
  * Le FAIT prime sur la date (« Terminés ») ; une dueDate illisible n'est
  * jamais « en retard » : elle a sa propre section (« Sans échéance »), un
  * devoir sans échéance reste visible.
+ *
+ * Tous les jours comparés sont des JOURS civils de Paris : l'appareil peut
+ * être ailleurs, la section et la fenêtre de semaine restent d'accord.
  */
 export function assignmentSectionOf(
   assignment: Assignment,
@@ -427,15 +453,14 @@ export function assignmentSectionOf(
   now: Date,
 ): AssignmentSectionId {
   if (assignment.done) return "done";
-  const date = assignmentDate(assignment.dueDate);
-  if (!date) return "undated";
+  const day = parisDayKey(assignment.dueDate);
+  if (!day) return "undated";
   const { start, end } = weekWindow(weekStart, now);
-  const day = isoDay(date);
   if (start === weekStartOf(now)) {
     // Semaine en cours : « En retard » = ce qui aurait déjà dû être rendu.
-    const today = isoDay(now);
+    const today = parisDayOf(now) ?? start;
     if (day < today) return "overdue";
-    if (day === today) return isEarlierToday(assignment, date, now) ? "overdue" : "today";
+    if (day === today) return isEarlierToday(assignment, now) ? "overdue" : "today";
     if (day > end) return "later";
     return "week";
   }
@@ -487,18 +512,35 @@ const PARIS_DAY = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
-function parisDayKey(value: string): string | null {
-  const raw = value.trim();
-  if (!raw) return null;
-  if (DATE_ONLY.test(raw)) return raw;
-  const date = assignmentDate(raw);
-  if (!date) return null;
+/** Jour civil de Paris d'un instant (jamais le jour local de l'appareil). */
+function parisDayOf(date: Date): string | null {
   const parts = PARIS_DAY.formatToParts(date);
   const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "";
   const year = part("year");
   const month = part("month");
   const day = part("day");
   return year && month && day ? `${year}-${month}-${day}` : null;
+}
+
+function parisDayKey(value: string): string | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  if (DATE_ONLY.test(raw)) return raw;
+  const date = assignmentDate(raw);
+  return date ? parisDayOf(date) : null;
+}
+
+export function assignmentDayKey(value: unknown): string | null {
+  return typeof value === "string" ? parisDayKey(value) : null;
+}
+
+/** Lundi du jour civil `AAAA-MM-JJ`, en UTC : ces clés ne sont que des
+ *  étiquettes, jamais des instants. */
+function mondayOf(dayKey: string): string | null {
+  const [year, month, day] = dayKey.split("-").map((part) => Number.parseInt(part, 10));
+  if (!year || !month || !day) return null;
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return dayKeyShift(dayKey, -((weekday + 6) % 7));
 }
 
 /** Décalage en jours d'un jour civil (`AAAA-MM-JJ`), en UTC pour ne pas

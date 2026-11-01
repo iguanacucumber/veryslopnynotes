@@ -52,6 +52,7 @@ import {
   type Assignment,
   type AssignmentAttachment,
 } from "./assignments";
+import { useNow } from "../home/useNow";
 import { cardActionFlags } from "./actions";
 import { HomeworkChat, type HomeworkChatState, type HomeworkTurn } from "./HomeworkChat";
 import { emptyTurn, storedThread } from "./homeworkThread";
@@ -90,7 +91,10 @@ export function TasksScreen() {
 function TasksWeek({ week }: { week: string }) {
   const { notify, refreshTick } = useApp();
   const navigate = useViewNavigate();
-  const currentWeek = weekStartOf(new Date());
+  // « Maintenant » avance sans interaction : les sections ne restent pas
+  // figées sur la veille après minuit.
+  const now = useNow();
+  const currentWeek = weekStartOf(new Date(now));
   const query = `weekStart=${week}`;
   const resource = useResource("assignments", query);
   const parsed = useMemo(() => parseAssignmentsPayload(resource.payload), [resource.payload]);
@@ -174,7 +178,10 @@ function TasksWeek({ week }: { week: string }) {
   // Les sections suivent la semaine AFFICHÉE, pas la semaine en cours ; la
   // recherche filtre les cartes, jamais la fenêtre de semaine.
   const matching = useMemo(() => assignmentsMatching(items, search), [items, search]);
-  const sections = useMemo(() => assignmentSections(matching, week, new Date()), [matching, week]);
+  const sections = useMemo(
+    () => assignmentSections(matching, week, new Date(now)),
+    [matching, week, now],
+  );
   const progress = useMemo(() => taskProgress(items), [items]);
   const searching = search.trim() !== "";
 
