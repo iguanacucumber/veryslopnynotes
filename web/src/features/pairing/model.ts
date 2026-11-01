@@ -2,15 +2,12 @@
 // d'échec en phrases actionnables. Le QR et le PIN sont des secrets de session :
 // rien ici ne les écrit, ne les journalise ni ne les rend en entier.
 
+import type { ScannedQr } from "../../bridge/types";
+
 export const PIN_MAX_CHARS = 64;
 const MAX_QR_FIELD_CHARS = 1024;
 const MAX_SCHOOL_URL_CHARS = 300;
-
-export interface SchoolQr {
-  login: string;
-  jeton: string;
-  url: string;
-}
+const MAX_HANDLE_CHARS = 64;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -32,14 +29,14 @@ export function qrHost(url: string): string {
   }
 }
 
-export function validateScannedQr(value: unknown): SchoolQr | null {
+export function validateScannedQr(value: unknown): ScannedQr | null {
   if (!isRecord(value)) return null;
+  const handle = typeof value["handle"] === "string" ? value["handle"].trim() : "";
   const login = typeof value["login"] === "string" ? value["login"].trim() : "";
-  const jeton = typeof value["jeton"] === "string" ? value["jeton"].trim() : "";
   const url = typeof value["url"] === "string" ? value["url"].trim() : "";
-  if (!bounded(login, MAX_QR_FIELD_CHARS) || !bounded(jeton, MAX_QR_FIELD_CHARS)) return null;
+  if (!bounded(handle, MAX_HANDLE_CHARS) || !bounded(login, MAX_QR_FIELD_CHARS)) return null;
   if (!bounded(url, MAX_SCHOOL_URL_CHARS) || qrHost(url) === "") return null;
-  return { login, jeton, url };
+  return { handle, login, url };
 }
 
 export function normalizePin(raw: string): string {

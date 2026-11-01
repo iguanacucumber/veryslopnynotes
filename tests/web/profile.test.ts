@@ -281,18 +281,24 @@ describe("appairage : hôte affichable, PIN et codes d'échec", () => {
     expect(qrHost("")).toBe("");
   });
 
-  test("QR scanné : trois champs bornés et une adresse lisible", () => {
-    expect(validateScannedQr({ login: " l ", jeton: " j ", url: "https://a.invalid/x" })).toEqual({
-      login: "l",
-      jeton: "j",
+  test("QR scanné : handle, login masqué et adresse lisible", () => {
+    expect(
+      validateScannedQr({ handle: " h1 ", login: " de… ", url: "https://a.invalid/x" }),
+    ).toEqual({
+      handle: "h1",
+      login: "de…",
       url: "https://a.invalid/x",
     });
     expect(validateScannedQr(null)).toBeNull();
-    expect(validateScannedQr({ login: "", jeton: "j", url: "https://a.invalid" })).toBeNull();
-    expect(validateScannedQr({ login: "l", jeton: "j", url: "pas-une-url" })).toBeNull();
-    expect(validateScannedQr({ login: "l", jeton: "j", url: "https://a.invalid" })).not.toBeNull();
-    expect(validateScannedQr({ login: "x".repeat(1025), jeton: "j", url: "https://a.invalid" })).toBeNull();
-    expect(validateScannedQr({ login: "l", jeton: "j", url: `https://${"a".repeat(299)}.invalid` })).toBeNull();
+    // Le jeton ne traverse plus le pont : un ancien payload sans handle est refusé.
+    expect(validateScannedQr({ login: "l", jeton: "j", url: "https://a.invalid" })).toBeNull();
+    expect(validateScannedQr({ handle: "", login: "d", url: "https://a.invalid" })).toBeNull();
+    expect(validateScannedQr({ handle: "h", login: "", url: "https://a.invalid" })).toBeNull();
+    expect(validateScannedQr({ handle: "h", login: "d", url: "pas-une-url" })).toBeNull();
+    expect(validateScannedQr({ handle: "h", login: "d", url: "https://a.invalid" })).not.toBeNull();
+    expect(validateScannedQr({ handle: "x".repeat(65), login: "d", url: "https://a.invalid" })).toBeNull();
+    expect(validateScannedQr({ handle: "h", login: "x".repeat(1025), url: "https://a.invalid" })).toBeNull();
+    expect(validateScannedQr({ handle: "h", login: "d", url: `https://${"a".repeat(299)}.invalid` })).toBeNull();
   });
 
   test("PIN : requis, borné à 64, rogné avant envoi", () => {

@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useLocation } from "react-router-dom";
 import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
 import { bridge } from "../../bridge/client";
-import { BridgeCallError } from "../../bridge/types";
+import { BridgeCallError, type ScannedQr } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
 import { Card, Page } from "../../ui/components";
 import { IconCamera, IconChevronLeft, IconLock } from "../../ui/icons";
@@ -16,7 +16,6 @@ import {
   qrHost,
   scanErrorMessage,
   validateScannedQr,
-  type SchoolQr,
 } from "./model";
 
 function actionMessage(error: unknown, fallback: string): string {
@@ -48,7 +47,7 @@ export default function PairingScreen() {
     typeof location.state === "object" &&
     location.state !== null &&
     (location.state as { replacing?: unknown }).replacing === true;
-  const [qr, setQr] = useState<SchoolQr | null>(null);
+  const [qr, setQr] = useState<ScannedQr | null>(null);
   const [pin, setPin] = useState("");
   const [scanning, setScanning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -115,7 +114,7 @@ export default function PairingScreen() {
     setPairError("");
     setSubmitting(true);
     try {
-      const result = await bridge.pair({ qr, pin: normalizePin(pin) });
+      const result = await bridge.pair({ handle: qr.handle, pin: normalizePin(pin) });
       if (result.ok) {
         setQr(null);
         setPin("");

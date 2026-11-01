@@ -401,9 +401,10 @@ export const RECIPIENTS = {
   ],
 };
 
-/** Réponse de `pairing.scanQr` : aucun établissement réel n'est nommé. */
+/** Réponse de `pairing.scanQr` : aucun établissement réel n'est nommé, et le
+ *  secret (login chiffré, jeton) reste côté natif derrière le handle. */
 export const DEMO_QR = {
-  qr: { login: "demo", jeton: "demo", url: "https://demo.school.invalid" },
+  qr: { handle: "demo-handle", login: "de…", url: "https://demo.school.invalid" },
   cancelled: false,
 };
 

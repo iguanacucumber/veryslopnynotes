@@ -5,6 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { codeOnly } from "../../agents/runtime/source-guards";
 import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 import { readBridgeSource } from "./fixtures/bridge-source";
 
@@ -167,6 +168,23 @@ describe("photo de cours — garde d'image exécutée (#587)", () => {
     // jamais, donc chaque entrée refait le dossier (sinon photo muette
     // jusqu'au redémarrage du process).
     expect(capture.match(/dir\.mkdirs\(\)/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    // #786 : un verrou UNIQUE couvre capture/finish/cancel. Sans lui, deux fils
+    // du pont peuvent écraser `pending`/`cameraFile` (check-then-set).
+    const captureBlock = capture.slice(capture.indexOf("fun capture("), capture.indexOf("/** Nettoie le fichier"));
+    expect(captureBlock).toContain("synchronized(lock)");
+    const cancelBlock = capture.slice(capture.indexOf("fun cancel("), capture.indexOf("private fun requestCamera"));
+    expect(cancelBlock).toContain("synchronized(lock)");
+    const finishBlock = capture.slice(capture.indexOf("private fun finish("), capture.indexOf("private fun purgeStale("));
+    expect(finishBlock).toContain("synchronized(lock)");
+    // Un `Ok` livré après l'expiration est supprimé par l'abandon (I32).
+    expect(cancelBlock).toContain("if (late.result is Result.Ok) late.result.files.forEach { discard(it) }");
+    // Un abandon ne vise QUE son vol : l'appel expiré ne doit pas annuler une
+    // capture commencée entre-temps (owner = même callback).
+    expect(cancelBlock).toContain("owner == null || pending === owner");
+    expect(cancelBlock).toContain("late.owner === owner");
+    const lessons = codeOnly(readBridgeSource());
+    expect(lessons).toContain("photos.cancel(onDone)");
+    expect(finishBlock).toContain("if (result is Result.Ok) result.files.forEach { discard(it) }");
     const bridge = readBridgeSource();
     expect(bridge).toContain("PhotoPrep.prepare(shot.file)");
     expect(bridge).toContain("photos.discard(shot.file)");

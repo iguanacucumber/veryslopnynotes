@@ -306,8 +306,18 @@ export interface SubjectSaveResult {
   message?: string;
 }
 
+/**
+ * QR scanné : le natif garde le secret (login chiffré, jeton) derrière
+ * `handle`. Le web ne reçoit qu'un login masqué et l'adresse affichable (I10).
+ */
+export interface ScannedQr {
+  handle: string;
+  login: string;
+  url: string;
+}
+
 export interface PairParams {
-  qr: { login: string; jeton: string; url: string };
+  handle: string;
   pin: string;
 }
 

@@ -7,6 +7,7 @@ import fr.veryslopnynotes.core.DiscussionMessage
 import fr.veryslopnynotes.core.DiscussionRecipient
 import fr.veryslopnynotes.core.DiscussionRules
 import fr.veryslopnynotes.core.MessageAttachment
+import fr.veryslopnynotes.pronote.DiscussionClosed
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -22,6 +23,12 @@ import org.json.JSONObject
  * I6 : corps/sujets = DONNÉES affichées telles quelles, jamais exécutées.
  */
 data class DiscussionWriteOutcome(val ok: Boolean, val error: String?)
+
+/** Fil absent du client : un refus de destinataires n'est PAS « introuvable ». */
+class DiscussionNotFound : IllegalArgumentException("fil introuvable")
+
+/** Destinataires demandés absents de la liste de l'établissement. */
+class UnknownRecipients : IllegalArgumentException("destinataires inconnus")
 
 /**
  * Un fil OUVERT : ses messages et ses participants, demandés à l'ouverture
@@ -121,7 +128,7 @@ class DiscussionsRepository(
             }
             val outcome = writeLocal("Création impossible.") {
                 val matched = client.getRecipients().filter { it.id in ids }
-                if (matched.isEmpty()) throw IllegalArgumentException("destinataires inconnus")
+                if (matched.isEmpty()) throw UnknownRecipients()
                 client.newDiscussion(title, text, matched)
             }
             post { cb(outcome) }
@@ -148,7 +155,7 @@ class DiscussionsRepository(
             }
             val outcome = writeLocal("Réponse impossible.") {
                 val discussion = client.discussions().firstOrNull { it.id == target }
-                    ?: throw IllegalArgumentException("fil introuvable")
+                    ?: throw DiscussionNotFound()
                 discussion.reply(text)
             }
             post { cb(outcome) }
@@ -174,7 +181,7 @@ class DiscussionsRepository(
             }
             val outcome = writeLocal("État de lecture refusé.") {
                 val discussion = client.discussions().firstOrNull { it.id == target }
-                    ?: throw IllegalArgumentException("fil introuvable")
+                    ?: throw DiscussionNotFound()
                 discussion.markAs(read)
             }
             post { cb(outcome) }
@@ -200,7 +207,7 @@ class DiscussionsRepository(
             }
             val outcome = writeLocal("Suppression impossible.") {
                 val discussion = client.discussions().firstOrNull { it.id == target }
-                    ?: throw IllegalArgumentException("fil introuvable")
+                    ?: throw DiscussionNotFound()
                 discussion.delete()
             }
             post { cb(outcome) }
@@ -218,10 +225,16 @@ class DiscussionsRepository(
             if (isSessionFailure(e)) {
                 DeviceAuth.reject()
                 DiscussionWriteOutcome(false, DeviceAuth.REJECTED_MESSAGE)
-            } else if (e is IllegalArgumentException) {
+            } else if (e is DiscussionNotFound) {
                 DiscussionWriteOutcome(false, "$failure (Fil introuvable).")
-            } else if (e.javaClass.simpleName == "DiscussionClosed") {
+            } else if (e is UnknownRecipients) {
+                DiscussionWriteOutcome(false, "$failure (Destinataires inconnus).")
+            } else if (e is DiscussionClosed) {
+                // Par TYPE : R8 renomme la classe, `simpleName` ne la reconnaîtrait
+                // plus en release (fil fermé affiché « Sans connexion »).
                 DiscussionWriteOutcome(false, "$failure (Fil fermé).")
+            } else if (e is IllegalArgumentException) {
+                DiscussionWriteOutcome(false, "$failure (Demande refusée).")
             } else {
                 DiscussionWriteOutcome(false, "$failure (Sans connexion).")
             }

@@ -203,6 +203,10 @@ export const PRODUCTION_SOURCES: string[] = [
   join(APP, "BridgeExecutors.kt"),
   join(APP, "HomeworkMessages.kt"),
   join(APP, "PairingMessages.kt"),
+  // #786 : le QR scanné reste derrière un handle opaque (I10) — `pairing.pair`
+  // rend le handle contre le QR, le JS ne voit jamais le jeton. Pur : le
+  // harnais EXÉCUTE le cycle remember/lookup/clear.
+  join(APP, "QrHandle.kt"),
   // `app` — la phrase de refus d'une matière hors contrat (#395).
   join(APP, "SubjectPrefMessages.kt"),
   // `app` — la ROUTE de l'interface web (#400) : le chemin porté par le HASH

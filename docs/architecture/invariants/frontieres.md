@@ -52,11 +52,12 @@
   distante, et la CSP impose `connect-src 'none'`. Aucun jeton ni clé LLM au JS ;
   seules des méthodes allowlistées sont exposées, jamais un proxy d'URL. Toute
   entrée répond EXACTEMENT une fois ; aucun « ok » sans
-  écriture. Un appel court ne fait pas la queue derrière cinq appels longs ; les
+  écriture. Un appel court ne fait pas la queue ; les
   opérations LLM ont leur file bornée à deux ; délais hiérarchisés : natif < JS.
 - Test : `tests/architecture/web.test.ts`,
   `tests/unit/kotlin-bridge-executors.test.ts`, `tests/web/bridge.test.ts`,
   `tests/unit/android-bridge-call.test.ts`,
+  `tests/unit/android-pairing-handle.test.ts`,
   `tests/unit/android-pairing-message.test.ts`,
   `tests/unit/android-homework-message.test.ts`,
   `tests/unit/android-bridge-error.test.ts`,

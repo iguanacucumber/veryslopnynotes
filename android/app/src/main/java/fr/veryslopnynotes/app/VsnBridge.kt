@@ -192,6 +192,10 @@ class VsnBridge(
     @Volatile
     private var pendingScanId: String? = null
 
+    // I10 : le QR scanné (login/jeton chiffrés) reste ici. Le JS ne reçoit qu'un
+    // handle et un login masqué ; `pairing.pair` le rend contre le PIN.
+    private val qrHandles = QrHandle<SchoolQr>()
+
     private val scanLauncher = activity.registerForActivityResult(ScanContract()) { result ->
         val id = synchronized(scanLock) {
             val pending = pendingScanId
@@ -218,8 +222,8 @@ class VsnBridge(
                         .put(
                             "qr",
                             JSONObject()
-                                .put("login", qr.login)
-                                .put("jeton", qr.jeton)
+                                .put("handle", qrHandles.remember(qr))
+                                .put("login", maskLogin(qr.login))
                                 .put("url", qr.url),
                         ),
                 )
@@ -468,6 +472,7 @@ class VsnBridge(
     private fun logout(): JSONObject {
         sessionReady = false
         cachedProfile = null
+        qrHandles.clear()
         purgeManualAccountData()
         // Le verrou de session sérialise la purge avec un appairage ou une
         // restauration EN VOL : aucun des deux ne peut republier l'ancien client.
@@ -497,6 +502,7 @@ class VsnBridge(
     private fun onSessionRejected() {
         sessionReady = false
         cachedProfile = null
+        qrHandles.clear()
         purgeManualAccountData()
         // Échec de purge : pas de canal d'erreur ici (abonné de fond) ;
         // l'appairage suivant repurge et, s'il échoue, le DIT.
@@ -569,18 +575,12 @@ class VsnBridge(
     }
 
     private fun pair(p: JSONObject): JSONObject {
-        val qrObj = p.optJSONObject("qr")
-            ?: throw BridgeFailure("bad_request", "QR et PIN requis.")
-        val qr = SchoolQr(
-            login = bounded(qrObj.string("login"), 1024),
-            jeton = bounded(qrObj.string("jeton"), 1024),
-            url = bounded(qrObj.string("url"), 300),
-        )
-        if (qr.login.isEmpty() || qr.jeton.isEmpty() || qr.url.isEmpty()) {
-            throw BridgeFailure("bad_request", "QR et PIN requis.")
-        }
+        val handle = bounded(p.string("handle"), QrHandle.HANDLE_MAX_CHARS)
+        if (handle.isEmpty()) throw BridgeFailure("bad_request", "QR et PIN requis.")
         val pin = bounded(p.string("pin"), PairingRepository.PIN_MAX_CHARS)
         if (pin.isEmpty()) throw BridgeFailure("bad_request", "PIN requis.")
+        val qr = qrHandles.lookup(handle)
+            ?: throw BridgeFailure("bad_request", "QR expiré : rescane le code de l'établissement.")
         // I16 : identité AVANT l'appairage — la purge du manuel (et du cache,
         // dans `PairingRepository`) ne vise que le compte précédent.
         val previous = storedIdentity()
@@ -593,6 +593,7 @@ class VsnBridge(
             is PairingResult.Ok -> {
                 sessionReady = true
                 cachedProfile = null
+                qrHandles.clear()
                 purgeManualIfAccountChanged(previous)
                 // #397 : le compte appairé est ENREGISTRÉ. Le magasin
                 // multi-compte n'était jamais alimenté (rien n'écrivait
@@ -646,6 +647,7 @@ class VsnBridge(
     }
 
     private fun cancelPairing(): JSONObject {
+        qrHandles.clear()
         val id = synchronized(scanLock) {
             val pending = pendingScanId
             pendingScanId = null

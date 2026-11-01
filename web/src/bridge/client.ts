@@ -20,6 +20,7 @@ import {
   type PairResult,
   type ResourceParams,
   type ResourceResult,
+  type ScannedQr,
   type SubjectPref,
   type SubjectSaveResult,
   type TeacherSaveResult,
@@ -278,7 +279,7 @@ export const bridge = {
   restore: () => call<SessionStatus>("session.restore"),
   logout: () => call<{ ok: true }>("session.logout"),
   accounts: () => call<{ count: number }>("session.accounts"),
-  scanQr: () => call<{ qr: PairParams["qr"] | null; cancelled: boolean }>("pairing.scanQr", {}, 0),
+  scanQr: () => call<{ qr: ScannedQr | null; cancelled: boolean }>("pairing.scanQr", {}, 0),
   pair: (params: PairParams) => call<PairResult>("pairing.pair", params),
   // Démo : ni QR ni PIN, même contrat que `pair`.
   pairDemo: () => call<PairResult>("pairing.pairDemo"),

@@ -98,12 +98,12 @@ describe("pont factice", () => {
 
   test("appairage sans PIN refusé, avec PIN accepté", async () => {
     const bad = await mockCall<PairResult>("pairing.pair", {
-      qr: { login: "x", jeton: "y", url: "https://school.invalid" },
+      handle: "demo-handle",
       pin: "",
     });
     expect(bad.ok).toBe(false);
     const good = await mockCall<PairResult>("pairing.pair", {
-      qr: { login: "x", jeton: "y", url: "https://school.invalid" },
+      handle: "demo-handle",
       pin: "1234",
     });
     expect(good.ok).toBe(true);

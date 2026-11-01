@@ -83,7 +83,9 @@ describe("exécuteurs du pont (#393)", () => {
       await ask({ op: "execSlow", qid, count: 2, method: "llm.askHomework" });
       expect(await waitStarted(qid, 2)).toBe(2);
       // Le TROISIÈME appel LLM attend un créneau libre : la file LLM est bornée.
-      await ask({ op: "execSlow", qid, count: 1, method: "llm.generateRevision" });
+      // `teacherTurn` en fait partie : oublié dans `LLM_METHODS`, il tournerait
+      // sur le pool non borné et démarrerait aussitôt.
+      await ask({ op: "execSlow", qid, count: 1, method: "llm.teacherTurn" });
       // Le troisième appel ne DÉMARRE PAS pendant que les deux autres occupent les créneaux.
       const troisieme = JSON.parse(
         await ask({ op: "execWaitStarted", qid, want: 3, timeoutMs: 150 }),
