@@ -76,6 +76,11 @@ export interface ScrapeOptions {
    */
   readonly contentTimeoutMs?: number;
   /**
+   * Page imprimée demandée (ouvrage = sommaire). Le serveur résout la page
+   * dans le sommaire avant la navigation ; absente = page de départ.
+   */
+  readonly page?: number;
+  /**
    * Monter le jar de session du serveur ? Défaut = oui (manuel). La page web
    * passe `false` : aucune authentification, aucun cookie.
    */
@@ -260,10 +265,13 @@ function stripTags(html: string): string {
   $("*").each((_i, el) => {
     $(el).append(" ");
   });
-  return $.root()
-    .text()
-    .replace(/\s+/g, " ")
-    .trim();
+  // Un lecteur de manuel met le sommaire ET la page dans le DOM : le texte
+  // complet commençait par la navigation et la page réelle était coupée par
+  // le budget de source. Le contenu du document passe en premier ; les sites
+  // sans ce conteneur gardent le texte complet d'avant.
+  const document = $(".lls-new-viewer-document-root").first();
+  const text = document.length > 0 ? document.text() : $.root().text();
+  return text.replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -775,10 +783,105 @@ export async function scrapePage(
   }
 }
 
+/**
+ * Matière de l'OUVRAGE, prise sur la page sommaire : le titre de la page
+ * résolue (« Activités | … ») ne nomme pas la matière, et la fiche d'ouvrage
+ * précis s'en sert pour refuser un manuel d'une autre discipline (fail-closed).
+ */
+export function manualBookSubject(html: string): string | null {
+  const $ = load(html);
+  const og = $('meta[property="og:title"]').attr("content")?.trim();
+  if (og) return og;
+  const title = $("title").first().text().trim();
+  return title || null;
+}
+
+/**
+ * Page du sommaire qui contient `requested`, à partir du HTML de l'ouvrage.
+ *
+ * Le slug vient d'un contenu EXTERNE : seuls `page/<chiffres>` sont acceptés,
+ * et l'URL est reconstruite sur l'origine déjà validée. Un slug absolu ou
+ * privé ne peut donc pas détourner la navigation (I8).
+ */
+export function manualPageFromHtml(html: string, requested: number, baseUrl: string): string | null {
+  if (!Number.isInteger(requested) || requested < 1) return null;
+  const $ = load(html);
+  const script = $("#id-initial-state").first().text().trim();
+  const marker = script.indexOf("window.__PRELOADED_STATE__");
+  if (marker < 0) return null;
+  const eq = script.indexOf("=", marker);
+  if (eq < 0) return null;
+  let state: unknown;
+  try {
+    state = JSON.parse(script.slice(eq + 1).trim().replace(/;\s*$/, ""));
+  } catch {
+    return null;
+  }
+  let found: string | null = null;
+  const visit = (node: unknown): void => {
+    if (found !== null || node === null || typeof node !== "object") return;
+    const obj = node as Record<string, unknown>;
+    const element = obj["element"];
+    if (obj["type"] === "Page" && element !== null && typeof element === "object") {
+      const el = element as Record<string, unknown>;
+      const start = el["page"];
+      const count = el["nbPages"];
+      const slug = el["slug"];
+      const span = typeof count === "number" && count > 0 ? count : 1;
+      if (
+        typeof start === "number" &&
+        typeof slug === "string" &&
+        requested >= start &&
+        requested < start + span &&
+        /^page\/\d+$/.test(slug)
+      ) {
+        found = new URL(`/${slug}`, baseUrl).toString();
+        return;
+      }
+    }
+    for (const value of Object.values(obj)) visit(value);
+  };
+  visit(state);
+  return found;
+}
+
+/**
+ * Résout une page d'ouvrage avant le scrape (sommaire lisible sans JS).
+ *
+ * `null` = sommaire sans cette page (ou format inconnu) : l'appelant garde
+ * l'adresse de départ. Un site sans sommaire lisible ne perd donc pas sa
+ * source ; un manuel lelivrescolaire résout la page exacte.
+ */
+async function resolveManualPageUrl(
+  startUrl: string,
+  requested: number,
+  opts: ScrapeOptions,
+): Promise<{ url: string; subject: string | null } | null> {
+  const resolve = opts.resolveHost ?? systemResolver;
+  await assertPublicRedirectChain(startUrl, opts.timeoutMs, resolve, false);
+  const res = await fetch(startUrl, {
+    redirect: "follow",
+    signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new ScrapeManualsError(`réponse HTTP ${res.status} sur le sommaire`);
+  await assertPublicUrl(res.url, "sommaire final", resolve, false);
+  const announced = Number(res.headers.get("content-length") ?? "0");
+  if (announced > MAX_HTML_BYTES) {
+    throw new ScrapeManualsError("sommaire trop volumineux", "too_large");
+  }
+  const html = (await res.text()).slice(0, MAX_HTML_CHARS);
+  const url = manualPageFromHtml(html, requested, res.url);
+  return url === null ? null : { url, subject: manualBookSubject(html) };
+}
+
 // Scrape manuel v1 : une page -> un ManualDoc (titre + texte).
 // Ne logue jamais l'URL ni aucun credential : seulement plateforme + compteurs.
 export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOptions): Promise<ManualDoc[]> {
   if (!config) throw new ScrapeManualsError("manuels non configurés (plateforme absente)");
+  const resolved = opts.page === undefined
+    ? null
+    : await resolveManualPageUrl(opts.startUrl, opts.page, opts);
+  const startUrl = resolved?.url ?? opts.startUrl;
   const page = await scrapePage(
     {
       label: config.platform,
@@ -786,7 +889,7 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
       textOnly: opts.textOnly ?? false,
       rejectCredentials: false,
     },
-    opts,
+    { ...opts, startUrl },
   );
   if (!page) return [];
   return [
@@ -796,8 +899,8 @@ export async function scrapeManuals(config: ManualsConfig | null, opts: ScrapeOp
       title: page.title,
       // Le contrat borne `subject` à 100 : un titre plus long (100–200) ne doit
       // pas faire rejeter un scrape réussi (500 « invalid payload »).
-      subject: truncateManualText(page.title, 100),
-      page: 1,
+      subject: truncateManualText(resolved?.subject ?? page.title, 100),
+      page: resolved !== null ? opts.page ?? 1 : 1,
       excerpt: page.text,
     },
   ];

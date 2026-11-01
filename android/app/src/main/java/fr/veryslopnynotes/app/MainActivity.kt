@@ -1,6 +1,9 @@
 package fr.veryslopnynotes.app
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
@@ -8,6 +11,8 @@ import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -20,10 +25,18 @@ import fr.veryslopnynotes.data.PeriodicSyncWorker
 class MainActivity : ComponentActivity() {
     private var webShell: NativeWebShell? = null
 
+    // Android 17 : joindre le serveur du réseau local demande une autorisation
+    // d'exécution. Le résultat n'est pas lu ici : la prochaine requête dira
+    // elle-même si elle passe, et un refus n'empêche pas l'app de démarrer.
+    private val localNetworkPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) {}
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         hideSystemBars()
+        requestLocalNetworkPermission()
         // La planification du sync de fond quitte le chemin critique du premier
         // frame ; un échec ici ne doit jamais faire rater un démarrage.
         Thread({
@@ -124,6 +137,19 @@ class MainActivity : ComponentActivity() {
         webShell?.destroy()
         webShell = null
         super.onDestroy()
+    }
+
+    /**
+     * `ACCESS_LOCAL_NETWORK` n'existe qu'à partir d'Android 17 (API 37) : sur
+     * une plateforme plus ancienne la demande serait un refus immédiat.
+     */
+    private fun requestLocalNetworkPermission() {
+        if (Build.VERSION.SDK_INT < 37) return
+        val granted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_LOCAL_NETWORK,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
     }
 
     /**

@@ -39,6 +39,8 @@ export interface ScraperDeps {
     config: { readonly platform: string },
     opts: {
       readonly startUrl: string;
+      /** Page imprimée à résoudre dans le sommaire (manuel). */
+      readonly page?: number;
       /**
        * Jar de session du SERVEUR (jamais choisi par l'appelant) : chemin
        * libre, sous la responsabilité de l'exploitant.
@@ -228,6 +230,7 @@ async function handleScrape(
         { platform: body.platform },
         {
           startUrl: body.startUrl,
+          page: body.page,
           // Le SEUL jar monté est celui du serveur.
           defaultAuthFile: defaultJar,
           // La garde SSRF résout le nom d'hôte avant la navigation. Le

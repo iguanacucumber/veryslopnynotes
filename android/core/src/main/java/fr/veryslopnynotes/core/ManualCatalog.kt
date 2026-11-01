@@ -16,6 +16,15 @@ enum class ManualLevel {
 }
 
 object ManualCatalog {
+    /** Page maximale acceptée dans une consigne (bornée avant tout scrape). */
+    const val MAX_PAGE = 2_000
+
+    /** Pages distinctes lues pour un seul devoir. */
+    const val MAX_PAGES = 4
+
+    // « p 192 », « p. 192 », « page 192 » ; le premier nombre suffit.
+    private val PAGE = Regex("""(?i)\b(?:p\.?|page)\s*(\d{1,4})\b""")
+
     private val SLUGS: Map<ManualLevel, Map<String, String>> = mapOf(
         ManualLevel.SIXIEME to mapOf(
             "MATH" to "mathematiques-6eme-2025",
@@ -97,6 +106,23 @@ object ManualCatalog {
     )
     private val SPECIALTY_KEYS_1RE = setOf("MATH", "PC", "SVT", "SES", "HGGSP", "NSI", "LLCE_ANG", "LLCE_ESP")
     private val SPECIALTY_KEYS_TLE = SPECIALTY_KEYS_1RE + "MATH_EXP"
+
+    /**
+     * Pages imprimées citées par une consigne (« p 192 + p 225 »), ou liste vide.
+     *
+     * Le scraper ne lit qu'une page par requête : l'appelant boucle. Le
+     * plafond évite qu'un texte libre (« p 99999 ») devienne une rafale de
+     * scrapes inutiles.
+     */
+    fun pageNumbers(text: String): List<Int> =
+        PAGE.findAll(text)
+            .mapNotNull { it.groupValues[1].toIntOrNull()?.takeIf { page -> page in 1..MAX_PAGE } }
+            .distinct()
+            .take(MAX_PAGES)
+            .toList()
+
+    /** Première page citée, ou null. */
+    fun pageNumber(text: String): Int? = pageNumbers(text).firstOrNull()
 
     /**
      * Une adresse de CATALOGUE (pas un manuel précis) : l'app résout alors

@@ -29,6 +29,7 @@ const KNOWN_MODELS = [
   "nvidia/nemotron-3.5-lightning:free",
   "liquid/lfm-2.5-2.6b:free",
   "google/gemini-3.8-flash",
+  "google/gemini-2.5-flash",
 ];
 
 /** Messages du `when (status)` de `LlmError.messageForStatus`, lus dans le Kotlin. */
