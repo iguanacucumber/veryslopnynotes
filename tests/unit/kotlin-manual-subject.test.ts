@@ -184,9 +184,13 @@ describe("pont — extrait et disponibilité appliquent la même règle", () => 
     // Extrait fraîchement récolté : même contrôle avant de le rendre.
     const cached = doc.slice(0, doc.indexOf("val now = System.currentTimeMillis()"));
     const fetched = doc.slice(doc.indexOf("val fetched = ManualsClient("));
-    for (const part of [cached, fetched]) {
-      expect(part).toContain("if (matches(doc)) doc else null");
-    }
+    // Le cache sert la fiche seulement si elle passe la matière ET porte la
+    // page demandée ; un extrait d'une autre page ne vaut pas la citation.
+    expect(cached).toContain("if (!matches(doc)) return null");
+    expect(cached).toContain("if (page == null || doc.page == page) return doc");
+    // Le scrape frais écarte une page non résolue avant de l'enregistrer.
+    expect(fetched).toContain("doc == null || (page != null && doc.page != page)");
+    expect(fetched).toContain("if (matches(doc)) doc else null");
   });
 
   test("manualAvailableForSubject : une matière sans extrait ne s'annonce pas servie", () => {

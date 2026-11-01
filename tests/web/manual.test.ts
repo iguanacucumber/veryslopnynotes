@@ -61,6 +61,9 @@ describe("manuel — source de l'assistant", () => {
     // au lieu d'une source déjà tronquée à 2 000 caractères.
     expect(bridge).toContain("AiContext.manual(doc.title, doc.excerpt)");
     expect(bridge).toContain("manualDocsFor(assignment.subject, assignment.manualPages())");
+    // Une page non résolue reste manquante : jamais servir la page 1 sous « p 192 ».
+    expect(bridge).toContain("doc.page == page");
+    expect(bridge).toContain("doc.page != page");
   });
 });
 
