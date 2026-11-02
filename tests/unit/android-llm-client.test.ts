@@ -123,10 +123,10 @@ async function tooLargeMessage(max: number): Promise<string> {
 describe("corps d'une réponse LLM : lu BORNÉ", () => {
   test.skipIf(skip)("le plafond documenté laisse passer la sortie maximale", async () => {
     const cap = (await constants()).maxResponseBytes;
-    // Au moins 256 Kio, et assez pour 12 000 caractères même au pire
+    // Au moins 256 Kio, et assez pour 16 000 caractères même au pire
     // échappement JSON (`\uXXXX` = 6 octets par caractère).
     expect(cap).toBeGreaterThanOrEqual(256 * 1024);
-    expect(cap).toBeGreaterThan(12_000 * 6);
+    expect(cap).toBeGreaterThan(16_000 * 6);
   });
 
   test.skipIf(skip)("un corps exactement au plafond est accepté, un octet de plus est refusé", async () => {
