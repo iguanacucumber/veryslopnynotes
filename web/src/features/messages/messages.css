@@ -1,0 +1,124 @@
+/* Messagerie : liste de conversations compacte et fil qui garde son compositeur
+   au-dessus du dock. Le fil occupe la hauteur utile, la liste seule défile. */
+
+.messages-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.messages-card__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.messages-card__open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.messages-card__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* Le nom et la date ne partagent plus une ligne : le sujet peut tenir sur
+   deux lignes sans être tronqué par la colonne de droite. */
+.messages-card__name {
+  display: block;
+  font-size: 16px;
+  line-height: 20px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.messages-card__name--unread {
+  font-weight: 800;
+}
+
+.messages-card__date,
+.messages-card__preview {
+  display: block;
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.messages-card__preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messages-card__unread {
+  justify-content: center;
+  min-width: var(--tap);
+}
+
+/* Hauteur utile dérivée de la coquille : en-tête et dock déjà soustraits.
+   Même calcul que l'écran Professeur, pour que le clavier réduise la page. */
+.messages-thread {
+  height: max(
+    260px,
+    calc(
+      var(--app-height) - 56px - var(--safe-top) - 8px - var(--tabbar-h) - 20px -
+        var(--safe-bottom) - var(--keyboard-bottom)
+    )
+  );
+  gap: 10px;
+}
+
+.messages-thread__head {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.messages-thread__log-wrap {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.messages-log {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.messages-log > * {
+  flex: 0 0 auto;
+}
+
+.messages-thread .ai-jump {
+  border: 1px solid var(--border);
+}
+
+.messages-composer {
+  flex: 0 0 auto;
+}
+
+.messages-composer textarea {
+  min-height: 64px;
+  scroll-margin-bottom: calc(120px + var(--keyboard-bottom));
+}

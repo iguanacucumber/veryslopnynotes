@@ -106,11 +106,26 @@ components:
   topbar:
     backgroundColor: "{colors.page}"
     height: "56px"
+    action: "42px"
+    actionHitArea: "48px"
   tabbar:
     backgroundColor: "{colors.surface}"
     height: "72px"
+    maxWidth: "480px"
     rounded: "{rounded.pill}"
     shadow: "0 18px 46px -24px rgba(0, 0, 0, 0.46), 0 2px 10px rgba(0, 0, 0, 0.08)"
+    tabHeight: "58px"
+    iconSize: "24px"
+    labelSize: "13px"
+  dialog:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.md}"
+    padding: "20px"
+    maxWidth: "440px"
+  palette-card:
+    rounded: "{rounded.md}"
+    previewHeight: "44px"
+    labelSize: "12px"
 ---
 
 # Design System: VerySlopyNyNotes
@@ -134,15 +149,18 @@ pour la question de l'élève et un compositeur unique. La coquille Papillon
 - Fond de page blanc (noir en sombre), surfaces `--item` gris très clair
   (`#f1f1f1`, `#121212`) sans bordure.
 - Ombre de carte très basse, presque un liseré : la profondeur vient d'abord du
-  contraste des surfaces ; le dock et les dialogues portent seuls une ombre
-  franche.
+  contraste des surfaces ; le dock porte seul une ombre franche, les dialogues
+  se détachent par leur overlay et une bordure.
 - En-tête plat, titre 19 px / 700, icône de route puis libellé.
 - Accueil : papier peint SVG généré, identité blanche et sous-titre de classe,
-  tuiles 2 colonnes, widgets à en-tête 10 px.
+  quatre raccourcis à couleur fixe (Actualités, Cantine, Vie scolaire,
+  Messagerie) en grille 2 colonnes, puis widgets cours, moyenne, devoirs à
+  en-tête 10 px.
 - Dock flottant en capsule de surface, pastille active teintée, libellé accent.
 - Cinq onglets : Accueil, Cours, Tâches, Notes, Prof.
 - L'assistant a ses surfaces : hero d'accueil, suggestions, fil de lecture,
-  pastilles de sources et compositeur en capsule sombre.
+  pastilles de sources et compositeur en capsule bordée. La messagerie suit le
+  même principe : seul le fil défile, le compositeur reste au-dessus du dock.
 
 ## Colors
 
@@ -203,14 +221,30 @@ Largeur maximale 700 px, gouttière 16 px, cible 412 × 892 px, minimum testé
 360 px. L'accueil espace ses blocs de 12 px ; les autres pages de 12 à 14 px.
 
 La coquille occupe la hauteur utile publiée par le JS (`--app-height`), jamais
-une unité de viewport figée. Le dock est une capsule fixe de 72 px, centrée à
-24 px des bords au plus, et remonte avec `--keyboard-bottom`. Le `main` réserve
-l'empreinte du dock (84 px avec sa marge basse) et 20 px.
+une unité de viewport figée. Le dock est une capsule fixe de 72 px, à 12 px des
+bords au plus (largeur maximale 480 px), et remonte avec `--keyboard-bottom`. Le
+`main` réserve l'empreinte du dock (84 px avec sa marge basse) et 20 px.
 
 L'accueil suit Papillon : en-tête sur papier peint, grille de raccourcis,
 widgets (cours, moyenne, devoirs) dans cet ordre. Les écrans de liste sont des
 cartes séparées, jamais un registre à filets. Réglages : profil centré, quatre
 tuiles teintées, puis sections ancrées.
+
+## Tokens
+
+- `--app-height` : hauteur utile publiée par le JS d'après le viewport visuel ;
+  le repli initial est `100vh`.
+- `--keyboard-bottom` : hauteur du clavier (0 px fermé) ; le dock, les notices,
+  le fil de messagerie et les compositeurs remontent d'autant.
+- `--tabbar-h` : 84 px (capsule de 72 px, 10 px de marge basse, 2 px de
+  sécurité) ; le `main` réserve cette empreinte et 20 px.
+- `--tap` : 48 px, plancher de toute cible tactile. Les cercles de 42 px et les
+  boutons de 40 à 44 px l'atteignent par un pseudo-élément, sans grossir le
+  dessin.
+- `--radius-xs` à `--radius-2xl` (8 → 24 px), `--shadow-card`, `--shadow-dock`,
+  `--ease`, `--duration`.
+- Aucune couleur en dur dans un écran : tout passe par les variables de
+  `tokens.css` et les 21 palettes.
 
 ## Elevation & Depth
 
@@ -218,7 +252,8 @@ tuiles teintées, puis sections ancrées.
 faible) qui détache les tuiles, les widgets et les contrôles blancs du fond de
 page. En sombre elle disparaît : le contraste des surfaces suffit. Le dock
 porte `--shadow-dock`, plus marquée, pour flotter au-dessus du contenu. Les
-dialogues gardent leur ombre propre.
+dialogues se détachent par l'overlay et une bordure `--rule-strong`, sans ombre
+propre.
 
 Le mouvement est court (200 ms, `--ease`) et se limite à l'opacité et au
 `transform`, avec une garde unique `prefers-reduced-motion` dans `tokens.css`.
@@ -234,13 +269,15 @@ pastilles sont à `999px`.
 
 ## Components
 
-- **Topbar** : fond de page, 56 px, titre 19 / 700, actions rondes de 42 px.
-  À l'accueil, en-tête fixe sur papier peint : avatar pâle, nom blanc 18 / 700,
-  sous-titre classe · période à 70 %, chevron, actions en verre blanc. Les
-  icônes d'accueil sont blanches.
-- **Dock** : capsule flottante de surface, 72 px, largeur maximale 480 px,
-  cinq onglets de 58 px, icônes 24 px et libellés 13 px. L'onglet actif porte
-  une capsule entière teintée à 14 % de marque, icône et libellé accent.
+- **Topbar** : fond de page, 56 px, titre 19 / 700, actions rondes de 42 px
+  avec une cible tactile de 48 px (pseudo-élément). À l'accueil, en-tête fixe
+  sur dégradé sombre au-dessus du papier peint : avatar pâle, nom blanc
+  18 / 700, sous-titre classe · période à 70 %, chevron, actions en verre
+  blanc. Les icônes d'accueil sont blanches (24 à 26 px).
+- **Dock** : capsule flottante de surface, 72 px, largeur maximale 480 px à
+  12 px des bords au plus, cinq onglets de 58 px, icônes 24 px et libellés
+  13 px. L'onglet actif porte une capsule entière teintée à 14 % de marque,
+  icône et libellé accent.
 - **Tuiles d'accueil** : grille 2 colonnes, rayon 22 px, padding 13 × 10 px,
   ombre basse, icône Papicons 32 px à couleur fixe, titre 17 / 600, sous-titre
   16 / 500 secondaire.
@@ -256,7 +293,7 @@ pastilles sont à `999px`.
   teintée 16 / 600, date relative 15 secondaire, contenu 17 / 500, actions IA
   en pastilles teintées de 12 px, coche de 24 px ou capsule « Terminé ».
 - **Recherche** : capsule `item` pleine largeur, 48 px, icône 22 px à 50 %,
-  texte 16 / 600, bouton d'effacement de 34 px, anneau de focus de 2 px.
+  texte 16 / 600, bouton d'effacement de 48 px, anneau de focus de 2 px.
 - **Notes** : contrôles période et calcul en capsules de surface de 48 px,
   recherche dessous, héros teinté à 15 % de marque avec rayon 24 px et graphe
   140 px, moyenne 32 / 700 accent, libellé 17 / 600, origine 16 / 500. Titres
@@ -266,11 +303,23 @@ pastilles sont à `999px`.
   matière : item, rayon 20 px, titre 17 / 600, date 15, note 20 / 600 +
   dénominateur 15.
 - **Tâches** : recherche, puis résumé centré : anneau conique de 34 px et
-  phrase 17 / 600 accent (« 2 tâches restantes cette semaine » ou « Toutes les
-  tâches sont terminées ! »).
+  phrase 17 / 600 accent (« 2 tâches restantes cette semaine », « pour la
+  semaine du 26 oct. » quand une autre semaine est affichée, ou « Toutes les
+  tâches sont terminées ! »). Le résumé suit toujours la semaine affichée.
+  L'action de génération s'appelle « Fiche de révision », comme la
+  bibliothèque de fiches.
 - **Réglages** : tuiles de rayon 23 px, padding 14 px, icône 32 px, fond
   `adjust(couleur, ±0,8)`, titre 17 / 700, description 15 / 500. Lignes de
   liste : item, rayon 20 px, padding 14 × 16 px, icône 24 px, titre 17.
+  Palettes : grille de 3 colonnes, carte de rayon 16 px, aperçu 44 px, libellé
+  12 / 16 px sur deux lignes, coche de 16 px.
+- **Messagerie** : liste de fils en cartes plates ; le sujet occupe la largeur
+  et peut passer à la ligne, la date puis l'aperçu vivent sur des niveaux
+  séparés, la pastille non-lue reste à droite. Le fil occupe la hauteur utile :
+  seul le journal défile, le compositeur reste épinglé au-dessus du dock.
+  L'ouverture colle au dernier message, et la pastille « Dernier message »
+  ramène en bas si l'élève a remonté l'historique. La recherche utilise la
+  capsule partagée ; sans résultat, l'action efface la requête.
 - **Prof** : onglets Discussion / Exercices en capsules de 44 px, actif plein
   accent. Une barre compacte porte la matière (sélecteur de 44 px) et deux
   actions d'icône de 44 px (nouvelle discussion, supprimer), puis les modes en
@@ -295,9 +344,11 @@ pastilles sont à `999px`.
   sinon une pastille « Dernière réponse » de 44 px y ramène. Le fil fermé
   d'Aide devoirs reste en mémoire de l'écran : le rouvrir ne relance pas
   d'appel.
-- **Boutons** : 44 px, rayon pastille, plein accent. **Champs** : item, rayon
-  pastille, focus en anneau.
-- **Dialogues** : largeur maximale 440 px, surface opaque, ombre réelle.
+- **Boutons** : 44 px visibles, cible de 48 px par pseudo-élément, rayon
+  pastille, plein accent ; `btn--small` descend à 40 px visibles pour la même
+  cible de 48 px. **Champs** : item, rayon pastille, focus en anneau.
+- **Dialogues** : largeur maximale 440 px, padding 20 px, surface opaque, rayon
+  16 px, bordure `--rule-strong` ; hauteur bornée par `--app-height`.
 
 ## Do's and Don'ts
 

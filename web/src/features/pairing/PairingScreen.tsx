@@ -345,7 +345,7 @@ export default function PairingScreen() {
             ) : null}
 
             <button type="submit" className="btn" disabled={!ready || submitting || scanning}>
-              {submitting ? "Connexion…" : "Terminer"}
+              {submitting ? "Connexion…" : "Ouvrir la session"}
             </button>
           </form>
 

@@ -9,7 +9,7 @@ import {
   HOMEWORK_MAX_STEPS,
   HOMEWORK_MAX_STEP_CHARS,
 } from "../../../../shared/contracts/api";
-import { addDays, frDate, isoDay, parseDate, startOfWeek, weeksBetween } from "../../lib/format";
+import { addDays, frDate, frDateShort, isoDay, parseDate, startOfWeek, weeksBetween } from "../../lib/format";
 
 export interface AssignmentAttachment {
   id: string;
@@ -192,6 +192,14 @@ export function isoWeekNumber(startIso: string): number {
 export function weekLabelFr(startIso: string): string {
   const week = isoWeekNumber(startIso);
   return week > 0 ? `Semaine ${week}` : "Semaine";
+}
+
+/** Suffixe du résumé de tâches : « cette semaine » seulement si la semaine
+ *  affichée est la semaine courante ; sinon la date du lundi affiché. */
+export function taskWeekSuffixFr(weekStart: string, currentWeek: string): string {
+  if (weekStart === currentWeek) return "cette semaine";
+  const day = frDateShort(weekStart);
+  return day ? `pour la semaine du ${day}` : "pour la semaine affichée";
 }
 
 /** « 05/10 – 11/10 », avec l'année seulement quand elle change. */

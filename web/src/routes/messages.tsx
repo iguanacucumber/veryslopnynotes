@@ -25,6 +25,7 @@ import { ErrorBox, Loading } from "../ui/components";
 import { useApp } from "../ui/AppContext";
 import { useViewNavigate } from "../ui/viewTransition";
 import { createSeq } from "../lib/seq";
+import "../features/messages/messages.css";
 
 type Mode = "list" | "thread" | "new";
 
