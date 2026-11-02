@@ -13,6 +13,7 @@ package fr.veryslopnynotes.webroute
 import fr.veryslopnynotes.app.HOME_ROUTE
 import fr.veryslopnynotes.app.ROUTE_STATE_KEY
 import fr.veryslopnynotes.app.WEB_ROUTES
+import fr.veryslopnynotes.app.WEB_SUBROUTES
 import fr.veryslopnynotes.app.routePathFromState
 import fr.veryslopnynotes.app.routePathFromUrl
 import fr.veryslopnynotes.pronote.JVal
@@ -47,7 +48,7 @@ private class Driver {
             "state" -> JVal.Obj(linkedMapOf("path" to route(routePathFromState(op.text("path")))))
             // Les routes servies : la liste du contrat.
             "routes" -> JVal.Obj(
-                linkedMapOf("routes" to JVal.Arr(WEB_ROUTES.sorted().map { JVal.Str(it) })),
+                linkedMapOf("routes" to JVal.Arr((WEB_ROUTES + WEB_SUBROUTES).sorted().map { JVal.Str(it) })),
             )
             // L'accueil et la clé de l'état sauvegardé.
             "meta" -> JVal.Obj(

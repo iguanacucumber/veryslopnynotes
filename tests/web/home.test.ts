@@ -48,6 +48,7 @@ import {
   weekLabel,
   weekQuery,
   weekStartFrom,
+  weekStartFromParam,
 } from "../../web/src/features/timetable/week";
 
 useParisTz();
@@ -543,6 +544,14 @@ describe("semaine de l'EDT", () => {
     // Le premier du mois s'écrit « 1er » (les deux bornes).
     expect(weekLabel(weekStartFrom(1, base))).toBe("Semaine du 26 octobre au 1er novembre 2026");
     expect(weekLabel(new Date(2026, 5, 1))).toBe("Semaine du 1er au 7 juin 2026");
+  });
+
+  test("la semaine lue dans le hash se normalise au lundi", () => {
+    const base = new Date(2026, 9, 21);
+    expect(isoDay(weekStartFromParam("2026-10-22", base))).toBe("2026-10-19");
+    // Valeur absente ou illisible : repli sur la semaine de référence.
+    expect(isoDay(weekStartFromParam(null, base))).toBe("2026-10-19");
+    expect(isoDay(weekStartFromParam("pas-une-date", base))).toBe("2026-10-19");
   });
 
   test("une semaine ancrée ne saute pas à minuit", () => {

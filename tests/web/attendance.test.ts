@@ -24,6 +24,7 @@ function renderAttendance(
   rows: Absence[],
   onlyPending = false,
   payload: string | null = JSON.stringify({ absences: rows }),
+  canSeeSanctions = false,
 ): string {
   return renderToStaticMarkup(
     createElement(
@@ -36,7 +37,7 @@ function renderAttendance(
         error: null,
         stale: false,
         onlyPending,
-        canSeeSanctions: false,
+        canSeeSanctions,
         onOnlyPendingChange: () => {},
         onRefresh: () => {},
       }),
@@ -122,6 +123,15 @@ describe("assiduité — la justification absente est INCONNUE, pas justifiée",
     expect(html).toContain("1 h sur 3 h manquées");
     expect(html).toContain("1 sans information de justification");
     expect(html).toContain("À justifier (2)");
+  });
+
+  test("les sanctions restent atteignables sans absence", () => {
+    const empty = renderAttendance([], false, JSON.stringify({ absences: [] }), true);
+    expect(empty).toContain("Sanctions");
+    expect(empty).toContain('href="/sanctions"');
+    // La capacité de l'établissement reste la seule porte.
+    const hidden = renderAttendance([], false, JSON.stringify({ absences: [] }), false);
+    expect(hidden).not.toContain('href="/sanctions"');
   });
 });
 

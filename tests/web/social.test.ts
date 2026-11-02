@@ -629,10 +629,14 @@ describe("écrans — garde-fous de source", () => {
     expect(read("styles/app.css")).toContain("min-height: var(--tap)");
     expect(read("styles/tokens.css")).toContain("--tap: 48px");
     expect(read("features/attendance/SchoolLifeScreens.tsx")).not.toContain("minHeight: 48");
-    // Le retour du fil ramène à la liste sans quitter la route (sentinelle
-    // d’historique de même URL, consommée par le retour système).
-    expect(messages).toContain("Retour à la liste des discussions");
-    expect(read("routes/messages.tsx")).toContain("window.history.pushState");
-    expect(read("routes/messages.tsx")).toContain('addEventListener("popstate"');
+    // Une seule flèche : celle de la coquille. Le fil et la composition sont
+    // des sous-routes, donc le retour système et la coquille visent /messages.
+    expect(messages).not.toContain("Retour à la liste des discussions");
+    const messagesRoute = read("routes/messages.tsx");
+    expect(messagesRoute).toContain('go("/messages"');
+    expect(messagesRoute).not.toContain("window.history.pushState");
+    const shell = read("ui/AppShell.tsx");
+    expect(shell).toContain('"/messages/new"');
+    expect(shell).toContain('"/messages/:id"');
   });
 });

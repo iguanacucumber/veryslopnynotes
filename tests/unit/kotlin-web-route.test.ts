@@ -64,6 +64,15 @@ describe("route de l'interface web (#400)", () => {
     expect(await routeFromUrl(`${INDEX}#/../etc/passwd`)).toBeNull();
   });
 
+  test.skipIf(skip)("un fil de messagerie garde son id à la restauration", async () => {
+    // Le contrat porte `/messages/:id`, mais l'état doit conserver l'id réel :
+    // la restauration Android rouvre la discussion, pas le gabarit.
+    expect(await routeFromUrl(`${INDEX}#/messages/d1`)).toBe("/messages/d1");
+    expect(await routeFromUrl(`${INDEX}#/messages/new`)).toBe("/messages/new");
+    expect(await routeFromState("/messages/d1")).toBe("/messages/d1");
+    expect(await routeFromUrl(`${INDEX}#/messages/d1/messages`)).toBeNull();
+  });
+
   // Le chemin de la route est CONSERVÉ dans l'état sauvegardé, puis RELU tel quel.
   test.skipIf(skip)("le chemin survit à l'aller-retour par l'état sauvegardé", async () => {
     const path = await routeFromUrl(`${INDEX}#/attendance`);
@@ -111,6 +120,6 @@ describe("route de l'interface web (#400)", () => {
     const shell = readFileSync(join(ROOT_APP, "WebApp.kt"), "utf8");
     expect(activity).toContain("routePathFromUrl");
     expect(activity).toContain("routePathFromState");
-    expect(shell).toContain("WEB_ROUTES");
+    expect(shell).toContain("isServedRoute");
   });
 });

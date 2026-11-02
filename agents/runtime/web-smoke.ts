@@ -369,10 +369,14 @@ try {
       console.error(`web-smoke : la déconnexion ne mène pas à l'appairage (${flow.url()})`);
       code = 1;
     }
-    // Le « Retour » de l'appairage ne doit pas rouvrir l'accueil d'un compte
-    // déconnecté : le garde-fou renvoie vers l'appairage.
-    await flow.getByRole("button", { name: "Retour" }).click();
-    await flow.waitForTimeout(600);
+    // Sans session, l'appairage n'a pas de « Retour » : s'il réapparaît, il ne
+    // doit pas rouvrir l'accueil d'un compte déconnecté (le garde-fou renvoie
+    // vers l'appairage).
+    const pairBack = flow.getByRole("button", { name: "Retour" });
+    if ((await pairBack.count()) > 0) {
+      await pairBack.click();
+      await flow.waitForTimeout(600);
+    }
     const tabs = await flow.locator(".tabbar .tab").count();
     if (!flow.url().endsWith("#/pairing") || tabs > 0) {
       console.error(`web-smoke : l'accueil d'un compte déconnecté reste accessible (${flow.url()}, ${tabs} onglets)`);

@@ -23,9 +23,9 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
   const manual = source("features/settings/ManualCard.tsx");
   const server = source("features/settings/ServerCard.tsx");
 
-  test("l'ordre Apparence, Matières, Assistant, Avancé remplace la section Sécurité", () => {
+  test("l'ordre Apparence, Matières, Assistant, Appareil remplace la section Sécurité", () => {
     expect(settings).not.toContain('title="Sécurité"');
-    const order = ["Apparence", "Matières", "Assistant", "Avancé"].map((title) =>
+    const order = ["Apparence", "Matières", "Assistant", "Appareil"].map((title) =>
       settings.search(new RegExp(`<Section[^>]*title="${title}"`)),
     );
     expect(order.every((index) => index > -1)).toBe(true);
@@ -34,8 +34,8 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
     expect(settings.match(/<Section[^>]*title="Assistant"/g)).toHaveLength(1);
   });
 
-  test("clé et manuel vivent dans Assistant, le scraper reste sous Avancé", () => {
-    const assistant = between(settings, 'title="Assistant"', 'title="Avancé"');
+  test("clé et manuel vivent dans Assistant, le scraper reste sous Appareil", () => {
+    const assistant = between(settings, 'title="Assistant"', 'title="Appareil"');
     expect(assistant).toContain("<AssistantCards");
     expect(assistant).toContain("<ManualCard");
     expect(assistant).not.toContain("<ServerCard");
@@ -45,12 +45,20 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
     expect(overview).toContain("assistantStatus(configured");
     expect(overview).toContain("configured: boolean | null");
 
-    const advanced = settings.slice(settings.indexOf('title="Avancé"'));
-    expect(advanced).toContain("<ServerCard");
-    expect(advanced).not.toContain("<ManualCard");
+    const device = settings.slice(settings.indexOf('title="Appareil"'));
+    expect(device).toContain("<ServerCard");
+    expect(device).not.toContain("<ManualCard");
     expect(server).toContain('id="server-host"');
     expect(server).toContain("Scraper de manuels (facultatif)");
     expect(server).not.toContain('id="manual-url"');
+  });
+
+  test("la tuile Appareil ancre vers une section qui dégage la barre", () => {
+    expect(settings).toContain('target: "reglages-appareil"');
+    expect(settings).toContain('id="reglages-appareil"');
+    const css = source("features/settings/settings.css");
+    expect(css).toContain("scroll-margin-top");
+    expect(css).toContain("56px");
   });
 
   test("un instantané en erreur n'est ni « Aucune clé » ni des valeurs lues (I14)", () => {

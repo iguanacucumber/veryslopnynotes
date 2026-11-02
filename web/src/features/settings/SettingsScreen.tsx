@@ -79,7 +79,7 @@ export default function SettingsScreen() {
       Icon: IconSparkles,
     },
     {
-      target: "reglages-avance",
+      target: "reglages-appareil",
       label: "Appareil",
       detail: "Serveur, session",
       tone: "device",
@@ -91,7 +91,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <Page>
+    <Page className="settings">
       <div className="settings-profile">
         <Avatar name={profile?.displayName ?? "?"} size={72} />
         <strong className="settings-profile__name">{profile?.displayName ?? "Mon compte"}</strong>
@@ -146,7 +146,7 @@ export default function SettingsScreen() {
         <ManualCard snapshot={snapshot} loading={loading} />
       </Section>
 
-      <Section id="reglages-avance" title="Avancé">
+      <Section id="reglages-appareil" title="Appareil">
         <ServerCard snapshot={snapshot} loading={loading} />
       </Section>
 
