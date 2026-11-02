@@ -14,13 +14,16 @@ import {
   schemeLabel,
   type Palette,
 } from "../../web/src/lib/schemes";
+import { readableInk, subjectColor, tint } from "../../web/src/lib/format";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const HEX = /^#[0-9A-Fa-f]{6}$/;
 
 function rgb(hex: string): [number, number, number] {
-  const value = Number.parseInt(hex.slice(1), 16);
-  return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+  const value = /^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})/i.exec(hex.trim());
+  if (value) return [Number(value[1]), Number(value[2]), Number(value[3])];
+  const parsed = Number.parseInt(hex.slice(1), 16);
+  return [(parsed >> 16) & 255, (parsed >> 8) & 255, parsed & 255];
 }
 
 function luminance(hex: string): number {
@@ -148,6 +151,31 @@ describe("web palettes", () => {
         });
       }
     }
+  });
+
+  // La coche « Terminé » pose son encre sur la teinte de la matière : cette
+  // teinte est éclaircie en sombre. L'encre doit donc être dérivée, pas blanche.
+  test("l'encre de tâche reste ≥ 4.5:1 sur la teinte de matière", () => {
+    const bases = [...new Set(Array.from({ length: 64 }, (_, index) => subjectColor(`MATIERE ${index}`)))];
+    expect(bases.length).toBe(20);
+    for (const base of bases) {
+      // Mêmes deux teintes que la carte de tâche : assombrie en clair, éclaircie en sombre.
+      for (const amount of [-0.3, 0.3]) {
+        const background = tint(base, amount);
+        const ink = readableInk(background);
+        const ratio = contrast(ink, background);
+        expect({ base, amount, ink, ok: ratio >= 4.5, ratio: Number(ratio.toFixed(2)) }).toEqual({
+          base,
+          amount,
+          ink,
+          ok: true,
+          ratio: Number(ratio.toFixed(2)),
+        });
+      }
+    }
+    const css = readFileSync(join(ROOT, "web/src/features/tasks/tasks.css"), "utf8");
+    expect(css).toContain("color: var(--task-ink, var(--on-brand))");
+    expect(css).not.toContain("color: #fff;");
   });
 
   test("cssVarsOf : variables attendues, noms préfixés, valeurs non vides", () => {

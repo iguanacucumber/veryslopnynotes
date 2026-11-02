@@ -107,6 +107,60 @@ try {
       console.error(`web-smoke : débordement horizontal sur ${route}`);
       code = 1;
     }
+    // Cibles tactiles : la cible réelle inclut le `::after` qui l'agrandit
+    // (les icônes gardent leur taille visuelle). Un élément masqué n'est pas
+    // mesuré ; un rectangle nul signifie « pas rendu ».
+    const smallTargets = await page.evaluate(() => {
+      const MIN = 48;
+      const nameOf = (element: HTMLElement): string => {
+        const label = element.getAttribute("aria-label") ?? element.getAttribute("title") ?? "";
+        const text = (element.textContent ?? "").replace(/\s+/g, " ").trim();
+        return (label || text || element.tagName.toLowerCase()).slice(0, 80);
+      };
+      const boxOf = (element: HTMLElement): { width: number; height: number } => {
+        const rect = element.getBoundingClientRect();
+        let left = rect.left;
+        let top = rect.top;
+        let right = rect.right;
+        let bottom = rect.bottom;
+        const after = getComputedStyle(element, "::after");
+        if (after.content !== "none" && after.content !== "normal" && after.position === "absolute") {
+          const px = (value: string): number | null => {
+            const number = Number.parseFloat(value);
+            return Number.isFinite(number) ? number : null;
+          };
+          const insetLeft = px(after.left);
+          const insetTop = px(after.top);
+          const insetRight = px(after.right);
+          const insetBottom = px(after.bottom);
+          if (insetLeft !== null && insetTop !== null && insetRight !== null && insetBottom !== null) {
+            left += insetLeft;
+            top += insetTop;
+            right -= insetRight;
+            bottom -= insetBottom;
+          }
+        }
+        return { width: Math.round(right - left), height: Math.round(bottom - top) };
+      };
+      return [...document.querySelectorAll<HTMLElement>('button, [role="tab"], .tabbar a, select, a.btn')]
+        .filter((element) => {
+          if (element.closest("[hidden]")) return false;
+          const style = getComputedStyle(element);
+          if (style.display === "none" || style.visibility === "hidden") return false;
+          const rect = element.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        })
+        .map((element) => ({ name: nameOf(element), ...boxOf(element) }))
+        .filter((target) => target.width < MIN || target.height < MIN);
+    });
+    if (smallTargets.length > 0) {
+      afficherErreurs(
+        `web-smoke : cibles tactiles < 48 px sur ${route} :`,
+        "web-smoke-cibles",
+        smallTargets.map((target) => `${target.name} — ${target.width}×${target.height} px`),
+      );
+      code = 1;
+    }
     if (route === "/canteen") {
       const cards = await page.locator("main article.card").count();
       const text = await page.locator("main").innerText();

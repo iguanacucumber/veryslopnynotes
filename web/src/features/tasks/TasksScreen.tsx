@@ -24,7 +24,7 @@ import {
   IconImage,
   IconSparkles,
 } from "../../ui/icons";
-import { relativeLongFr, subjectColor, tint } from "../../lib/format";
+import { readableInk, relativeLongFr, subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
 import {
   ASSIGNMENTS_UNAVAILABLE,
@@ -783,7 +783,7 @@ function AssignmentCard({
     <Card
       as="article"
       className={`task-card${assignment.done ? " task-card--done" : ""}`}
-      style={{ "--task-tint": tinted } as CSSProperties}
+      style={{ "--task-tint": tinted, "--task-ink": readableInk(tinted) } as CSSProperties}
     >
       <div className="task-card__subject-row">
         <span className="task-card__emoji" aria-hidden="true">

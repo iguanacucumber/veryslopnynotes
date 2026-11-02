@@ -180,6 +180,7 @@ a {
   align-items: center;
   gap: 10px;
   min-width: 0;
+  min-height: var(--tap);
   flex: 1;
   padding: 0;
   border: 0;
@@ -228,6 +229,7 @@ a {
 }
 
 .icon-btn {
+  position: relative;
   border: 0;
   background: transparent;
   color: var(--ink);
@@ -241,14 +243,10 @@ a {
 }
 
 /* Cible tactile de 48 px sans grossir le cercle visuel de 42 px. */
-.topbar .icon-btn::after {
+.icon-btn::after {
   content: "";
   position: absolute;
   inset: -3px;
-}
-
-.topbar .icon-btn {
-  position: relative;
 }
 
 .topbar--home .icon-btn {
@@ -414,7 +412,7 @@ a {
 .card {
   background: var(--item);
   border: 0;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   padding: 16px;
   box-shadow: var(--shadow-card);
 }
@@ -665,7 +663,7 @@ button.card:hover {
 @media (max-width: 480px) {
   .dialog.dialog--chat {
     height: calc(var(--app-height) - 16px);
-    border-radius: 24px;
+    border-radius: var(--radius-2xl);
   }
 
   .dialog-backdrop:has(.dialog--chat) {
@@ -820,6 +818,7 @@ button.card:hover {
 }
 
 .week-nav__arrow {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -830,6 +829,12 @@ button.card:hover {
   background: transparent;
   color: var(--ink);
   transition: background var(--duration) var(--ease);
+}
+
+.week-nav__arrow::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
 }
 
 .week-nav__arrow:hover,
@@ -846,10 +851,10 @@ button.card:hover {
   flex-direction: column;
   align-items: flex-start;
   min-width: 0;
-  min-height: 44px;
+  min-height: var(--tap);
   padding: 3px 10px;
   border: 0;
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--ink);
   text-align: left;
@@ -936,6 +941,7 @@ button.card:hover {
 }
 
 .btn {
+  position: relative;
   min-height: 44px;
   padding: 0 18px;
   border-radius: 100px;
@@ -949,6 +955,13 @@ button.card:hover {
   justify-content: center;
   gap: 8px;
   transition: background var(--duration) var(--ease), border-color var(--duration) var(--ease);
+}
+
+.btn::after {
+  content: "";
+  position: absolute;
+  inset-block: -2px;
+  inset-inline: 0;
 }
 
 .btn:hover {
@@ -975,6 +988,10 @@ button.card:hover {
   min-height: 40px;
   padding: 0 14px;
   font-size: 14px;
+}
+
+.btn--small::after {
+  inset-block: -4px;
 }
 
 /* Une puce cliquable reste une cible tactile : même hauteur que les boutons
@@ -1448,7 +1465,7 @@ button.chip {
 
 .revision-card {
   padding: 17px;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
 }
 
 .revision-card__head {

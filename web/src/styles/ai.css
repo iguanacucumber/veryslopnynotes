@@ -28,7 +28,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-height: 44px;
+  min-height: var(--tap);
   padding: 0 14px;
   border: 1px solid var(--ai-line);
   border-radius: 100px;
@@ -110,8 +110,8 @@
   align-self: flex-end;
   max-width: min(88%, 560px);
   padding: 10px 14px;
-  border-radius: 22px;
-  border-bottom-right-radius: 8px;
+  border-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xs);
   background: var(--ai-bubble);
 }
 
@@ -163,7 +163,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
+  min-height: var(--tap);
   padding: 0 10px;
   border: 0;
   border-radius: 100px;
@@ -204,7 +204,7 @@
   align-items: center;
   align-self: flex-start;
   gap: 6px;
-  min-height: 32px;
+  min-height: var(--tap);
   padding: 0 2px;
   border: 0;
   background: transparent;
@@ -272,7 +272,7 @@
   min-height: 52px;
   padding: 12px 14px;
   border: 1px solid var(--ai-line);
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--ink);
   font-size: 15px;
@@ -364,6 +364,7 @@
 }
 
 .ai-composer__send {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -375,6 +376,13 @@
   background: var(--ink);
   color: var(--page);
   transition: opacity var(--duration) var(--ease), transform var(--duration) var(--ease);
+}
+
+/* Cible de 48 px : le disque d'envoi garde ses 38 px visuels. */
+.ai-composer__send::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
 }
 
 .ai-composer__send:disabled {
@@ -398,7 +406,7 @@
 }
 
 .ai-meta details summary {
-  min-height: 28px;
+  min-height: var(--tap);
   color: var(--secondary);
   font-size: 12px;
   line-height: 17px;

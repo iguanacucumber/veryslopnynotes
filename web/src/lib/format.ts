@@ -226,8 +226,25 @@ export function hexToRgb(hex: string): [number, number, number] | null {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
+/** Accepte les deux formes que produit le thème : `#rrggbb` et `rgb(r g b)`. */
+function colorRgb(value: string): [number, number, number] | null {
+  const rgb = /^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})/i.exec(value.trim());
+  if (!rgb) return hexToRgb(value);
+  const channels = [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+  if (channels.some((channel) => channel > 255)) return null;
+  return channels as [number, number, number];
+}
+
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+  const linear = (value: number) => {
+    const channel = value / 255;
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+}
+
 export function tint(hex: string, amount: number): string {
-  const rgb = hexToRgb(hex);
+  const rgb = colorRgb(hex);
   if (!rgb) return hex;
   const a = Math.min(1, Math.abs(amount));
   const channel = (v: number) => (amount >= 0 ? v + (255 - v) * a : v - v * a);
@@ -235,14 +252,18 @@ export function tint(hex: string, amount: number): string {
   return `rgb(${r} ${g} ${b})`;
 }
 
-/** Encre lisible sur une couleur arbitraire (aperçu de palette, pastille). */
+const DARK_INK = "#000000";
+const LIGHT_INK = "#ffffff";
+const DARK_INK_LUMINANCE = relativeLuminance(hexToRgb(DARK_INK)!);
+
+/** Encre lisible sur une couleur arbitraire (aperçu de palette, pastille).
+ *  Choisit celle des deux encres qui a le meilleur contraste, jamais un seuil
+ *  de luminosité approximatif : les teintes de matière tombent des deux côtés. */
 export function readableInk(hex: string): string {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return "#ffffff";
-  const [r, g, b] = rgb.map((value) => {
-    const channel = value / 255;
-    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return luminance > 0.55 ? "#1f292e" : "#ffffff";
+  const rgb = colorRgb(hex);
+  if (!rgb) return LIGHT_INK;
+  const luminance = relativeLuminance(rgb);
+  const onLight = 1.05 / (luminance + 0.05);
+  const onDark = (luminance + 0.05) / (DARK_INK_LUMINANCE + 0.05);
+  return onDark >= onLight ? DARK_INK : LIGHT_INK;
 }

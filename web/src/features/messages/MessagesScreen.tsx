@@ -109,6 +109,7 @@ export function ConversationListScreen({
                     style={{
                       flex: 1,
                       minWidth: 0,
+                      minHeight: "var(--tap)",
                       display: "flex",
                       alignItems: "center",
                       gap: 10,
