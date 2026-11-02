@@ -23,6 +23,7 @@ import {
   subjectDisplayFr,
   subjectInitial,
   taskProgress,
+  taskWeekSuffixFr,
   weekEndOf,
   weekGap,
   weekLabelFr,
@@ -244,6 +245,14 @@ describe("web tâches — dates et semaines", () => {
     expect(weekGap("2026-11-02", "2026-10-19")).toBe(2);
     // Illisible : on ne prétend pas être sur une autre semaine.
     expect(weekGap("illisible", "2026-10-19")).toBe(0);
+  });
+
+  test("le résumé ne dit « cette semaine » que sur la semaine courante", () => {
+    expect(taskWeekSuffixFr("2026-10-19", "2026-10-19")).toBe("cette semaine");
+    expect(taskWeekSuffixFr("2026-10-26", "2026-10-19")).toBe("pour la semaine du 26 oct.");
+    expect(taskWeekSuffixFr("2026-11-02", "2026-10-19")).toBe("pour la semaine du 2 nov.");
+    // Une semaine illisible ne revendique pas la semaine courante.
+    expect(taskWeekSuffixFr("illisible", "2026-10-19")).toBe("pour la semaine affichée");
   });
 });
 

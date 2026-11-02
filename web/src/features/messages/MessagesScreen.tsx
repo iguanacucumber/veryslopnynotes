@@ -1,8 +1,25 @@
 import { useId, useState } from "react";
 import type { FormEvent } from "react";
-import { Avatar, Card, EmptyState, ErrorBox, Loading, StaleBadge } from "../../ui/components";
+import {
+  Avatar,
+  Card,
+  EmptyState,
+  ErrorBox,
+  Loading,
+  Page,
+  SearchField,
+  StaleBadge,
+} from "../../ui/components";
 import { Dialog } from "../../ui/Dialog";
-import { IconMessage, IconPlus, IconSend, IconTrash, IconWarning } from "../../ui/icons";
+import {
+  IconChevronDown,
+  IconMessage,
+  IconPlus,
+  IconSend,
+  IconTrash,
+  IconWarning,
+} from "../../ui/icons";
+import { useStickToBottom } from "../../ui/useStickToBottom";
 import {
   conversationCountLabel,
   conversationDateLabel,
@@ -44,7 +61,6 @@ export function ConversationListScreen({
   onNew,
   onRefresh,
 }: ListProps) {
-  const searchId = useId();
   return (
     <div className="stack">
       <div className="row row--wrap">
@@ -56,19 +72,12 @@ export function ConversationListScreen({
         </button>
       </div>
 
-      <div>
-        <label className="sr-only" htmlFor={searchId}>
-          Rechercher une discussion
-        </label>
-        <input
-          id={searchId}
-          className="field"
-          type="search"
-          placeholder="Rechercher une discussion"
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-        />
-      </div>
+      <SearchField
+        value={query}
+        onChange={onQueryChange}
+        placeholder="Rechercher une discussion"
+        label="Rechercher une discussion"
+      />
 
       {error ? (
         <ErrorBox message={error}>
@@ -90,89 +99,57 @@ export function ConversationListScreen({
               : "L’établissement n’a publié aucune discussion."
           }
           action={
-            <button type="button" className="btn btn--small" onClick={onRefresh}>
-              Actualiser
-            </button>
+            query.trim() ? (
+              <button type="button" className="btn btn--small" onClick={() => onQueryChange("")}>
+                Effacer la recherche
+              </button>
+            ) : (
+              <button type="button" className="btn btn--small" onClick={onRefresh}>
+                Actualiser
+              </button>
+            )
           }
         />
       ) : (
         <div className="list">
           {discussions.map((discussion) => {
             const unread = Math.max(discussion.unreadCount, 0);
+            const date = conversationDateLabel(discussion);
+            const preview = previews[discussion.id] || discussion.participants.join(", ");
             return (
               <Card key={discussion.id} as="article" className="card--flat messages-card">
-                <div className="row" style={{ alignItems: "stretch", gap: 8 }}>
+                <div className="messages-card__row">
                   <button
                     type="button"
+                    className="messages-card__open"
                     onClick={() => onOpen(discussion)}
                     aria-label={`Ouvrir la discussion « ${discussion.subject} »`}
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      minHeight: "var(--tap)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      border: 0,
-                      background: "transparent",
-                      textAlign: "left",
-                      padding: 0,
-                      color: "inherit",
-                    }}
                   >
                     <Avatar name={discussion.subject} size={40} />
-                    <span className="grow" style={{ minWidth: 0 }}>
+                    <span className="messages-card__text">
                       <span
-                        className="t-body"
-                        style={{
-                          display: "block",
-                          fontWeight: unread > 0 ? 800 : 600,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
+                        className={`messages-card__name${
+                          unread > 0 ? " messages-card__name--unread" : ""
+                        }`}
                       >
                         {discussion.subject}
                       </span>
-                      <span
-                        className="tiny muted"
-                        style={{
-                          display: "block",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {previews[discussion.id] || discussion.participants.join(", ")}
-                      </span>
+                      {date ? <span className="messages-card__date">{date}</span> : null}
+                      {preview ? <span className="messages-card__preview">{preview}</span> : null}
                     </span>
                   </button>
-                  <span
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-end",
-                      gap: 4,
-                      flex: "0 0 auto",
-                    }}
-                  >
-                    <span className="tiny muted" style={{ textAlign: "right" }}>
-                      {conversationDateLabel(discussion)}
-                    </span>
-                    {unread > 0 ? (
-                      <button
-                        type="button"
-                        className="chip chip--active"
-                        style={{ minWidth: 48, justifyContent: "center" }}
-                        aria-label={`${unread} message${unread > 1 ? "s" : ""} non lu${
-                          unread > 1 ? "s" : ""
-                        }, marquer comme lu`}
-                        onClick={() => onMarkRead(discussion)}
-                      >
-                        {unread}
-                      </button>
-                    ) : null}
-                  </span>
+                  {unread > 0 ? (
+                    <button
+                      type="button"
+                      className="chip chip--active messages-card__unread"
+                      aria-label={`${unread} message${unread > 1 ? "s" : ""} non lu${
+                        unread > 1 ? "s" : ""
+                      }, marquer comme lu`}
+                      onClick={() => onMarkRead(discussion)}
+                    >
+                      {unread}
+                    </button>
+                  ) : null}
                 </div>
               </Card>
             );
@@ -214,76 +191,109 @@ export function ThreadScreen({
   const [confirming, setConfirming] = useState(false);
   const replyId = useId();
   const read = discussion.unreadCount === 0;
+  // Le fil s'ouvre sur le dernier message et reste collé tant que l'élève est
+  // en bas ; remonter dans l'historique ne vole pas le scroll.
+  const { ref: logRef, onScroll, away, toBottom } = useStickToBottom([
+    messages.length,
+    loading,
+  ]);
 
   return (
-    <div className="stack">
-      <div className="row" style={{ alignItems: "center" }}>
-        <div className="grow" style={{ minWidth: 0 }}>
-          <h2 className="t-title" id={titleId} style={{ margin: 0 }}>
-            {discussion.subject}
-          </h2>
-          {discussion.participants.length > 0 ? (
-            <p className="tiny muted" style={{ margin: 0 }}>
-              {discussion.participants.join(", ")}
-            </p>
-          ) : null}
-        </div>
-        <button type="button" className="icon-btn" aria-label="Supprimer la discussion" onClick={() => setConfirming(true)}>
-          <IconTrash />
-        </button>
-      </div>
-
-      <div className="row row--wrap">
-        <button type="button" className="btn btn--ghost btn--small" onClick={onToggleRead}>
-          {read ? "Marquer non lu" : "Marquer lu"}
-        </button>
-      </div>
-
-      {error ? (
-        <ErrorBox message={error}>
-          <button type="button" className="btn btn--small" onClick={onRefresh}>
-            Réessayer
+    <Page className="messages-thread">
+      <div className="messages-thread__head">
+        <div className="row" style={{ alignItems: "center" }}>
+          <div className="grow" style={{ minWidth: 0 }}>
+            <h2 className="t-title" id={titleId} style={{ margin: 0 }}>
+              {discussion.subject}
+            </h2>
+            {discussion.participants.length > 0 ? (
+              <p className="tiny muted" style={{ margin: 0 }}>
+                {discussion.participants.join(", ")}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Supprimer la discussion"
+            onClick={() => setConfirming(true)}
+          >
+            <IconTrash />
           </button>
-        </ErrorBox>
-      ) : null}
-
-      {loading ? (
-        <Loading label="Chargement du fil…" />
-      ) : messages.length === 0 ? (
-        // Avec une erreur, le fil n'est pas connu comme vide : l'état vide serait un fait faux.
-        error ? null : <EmptyState icon={<IconMessage size={30} />} title="Aucun message." body="Ce fil est vide." />
-      ) : (
-        <div className="list" aria-labelledby={titleId}>
-          {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
-          ))}
         </div>
-      )}
 
-      <div className="row" style={{ alignItems: "flex-end" }}>
-        <div className="grow">
-          <label className="sr-only" htmlFor={replyId}>
-            Répondre
-          </label>
-          <textarea
-            id={replyId}
-            className="field"
-            style={{ minHeight: 64 }}
-            placeholder="Répondre"
-            value={draft}
-            maxLength={4000}
-            onChange={(event) => onDraftChange(event.target.value)}
-          />
+        <div className="row row--wrap">
+          <button type="button" className="btn btn--ghost btn--small" onClick={onToggleRead}>
+            {read ? "Marquer non lu" : "Marquer lu"}
+          </button>
         </div>
-        <button
-          type="button"
-          className="icon-btn icon-btn--accent"
-          aria-label={sending ? "Envoi en cours" : "Envoyer"}
-          disabled={sending || draft.trim() === ""}
-          onClick={onReply}
+
+        {error ? (
+          <ErrorBox message={error}>
+            <button type="button" className="btn btn--small" onClick={onRefresh}>
+              Réessayer
+            </button>
+          </ErrorBox>
+        ) : null}
+      </div>
+
+      <div className="ai-log-wrap messages-thread__log-wrap">
+        <div
+          ref={logRef}
+          className="messages-log"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions text"
+          aria-label={`Messages — ${discussion.subject}`}
+          onScroll={onScroll}
         >
-          <IconSend />
-        </button>
+          {loading ? (
+            <Loading label="Chargement du fil…" />
+          ) : messages.length === 0 ? (
+            // Avec une erreur, le fil n'est pas connu comme vide : l'état vide serait un fait faux.
+            error ? null : (
+              <EmptyState icon={<IconMessage size={30} />} title="Aucun message." body="Ce fil est vide." />
+            )
+          ) : (
+            messages.map((message) => <MessageBubble key={message.id} message={message} />)
+          )}
+        </div>
+        {away ? (
+          <button type="button" className="ai-jump" onClick={toBottom}>
+            Dernier message
+            <IconChevronDown size={16} />
+          </button>
+        ) : null}
+      </div>
+
+      <div className="messages-composer">
+        <div className="row" style={{ alignItems: "flex-end" }}>
+          <div className="grow">
+            <label className="sr-only" htmlFor={replyId}>
+              Répondre
+            </label>
+            <textarea
+              id={replyId}
+              className="field"
+              placeholder="Répondre"
+              value={draft}
+              maxLength={4000}
+              onChange={(event) => onDraftChange(event.target.value)}
+            />
+          </div>
+          <button
+            type="button"
+            className="icon-btn icon-btn--accent"
+            aria-label={sending ? "Envoi en cours" : "Envoyer"}
+            disabled={sending || draft.trim() === ""}
+            onClick={() => {
+              toBottom();
+              onReply();
+            }}
+          >
+            <IconSend />
+          </button>
+        </div>
       </div>
 
       {confirming ? (
@@ -296,7 +306,7 @@ export function ThreadScreen({
           }}
         />
       ) : null}
-    </div>
+    </Page>
   );
 }
 
@@ -384,7 +394,6 @@ interface NewProps {
 export function NewDiscussionScreen({ recipients, loading, error, sending, onRetry, onCreate }: NewProps) {
   const subjectId = useId();
   const bodyId = useId();
-  const searchId = useId();
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [query, setQuery] = useState("");
@@ -431,18 +440,12 @@ export function NewDiscussionScreen({ recipients, loading, error, sending, onRet
         />
       </div>
 
-      <div>
-        <label className="tiny muted" htmlFor={searchId}>
-          Rechercher un destinataire
-        </label>
-        <input
-          id={searchId}
-          className="field"
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </div>
+      <SearchField
+        value={query}
+        onChange={setQuery}
+        placeholder="Rechercher un destinataire"
+        label="Rechercher un destinataire"
+      />
 
       {error ? (
         <ErrorBox message={error}>
@@ -465,6 +468,11 @@ export function NewDiscussionScreen({ recipients, loading, error, sending, onRet
           icon={<IconMessage size={30} />}
           title="Aucun destinataire ne correspond."
           body="Aucun nom ne porte ces mots."
+          action={
+            <button type="button" className="btn btn--small" onClick={() => setQuery("")}>
+              Effacer la recherche
+            </button>
+          }
         />
       ) : (
         <div className="stack">

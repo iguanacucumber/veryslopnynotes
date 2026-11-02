@@ -224,6 +224,8 @@ describe("IA — aide devoirs", () => {
     expect(tasks).toContain("bridge.generateRevision(assignment.id, week)");
     expect(tasks).toContain('navigate("/revision-sheets")');
     expect(tasks).toContain("Fiche de révision");
+    // Le libellé visible porte le même nom que la bibliothèque de fiches.
+    expect(tasks).toContain('revisionBusy ? "Création…" : "Fiche de révision"');
   });
 });
 

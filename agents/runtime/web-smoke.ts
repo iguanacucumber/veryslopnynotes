@@ -248,7 +248,7 @@ try {
     // Le scan lit le QR PUIS vide le PIN : on attend le QR avant de saisir.
     await flow.getByRole("button", { name: "Rescanner le QR" }).waitFor({ timeout: 5000 });
     await flow.locator("#pairing-pin").fill("1234");
-    await flow.getByRole("button", { name: "Terminer" }).click();
+    await flow.getByRole("button", { name: "Ouvrir la session" }).click();
     await flow.waitForURL(/#\/$/, { timeout: 5000 }).catch(() => undefined);
     // Le garde-fou « pas de session » renverrait vers /pairing quelques
     // millisecondes plus tard : laisser l'app se stabiliser avant de conclure.

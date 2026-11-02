@@ -44,6 +44,7 @@ import {
   shiftWeek,
   subjectDisplayFr,
   taskProgress,
+  taskWeekSuffixFr,
   weekEndOf,
   weekGap,
   weekLabelFr,
@@ -184,6 +185,7 @@ function TasksWeek({ week }: { week: string }) {
   );
   const progress = useMemo(() => taskProgress(items), [items]);
   const searching = search.trim() !== "";
+  const weekSuffix = taskWeekSuffixFr(week, currentWeek);
 
   async function toggle(assignment: Assignment, next: boolean) {
     if (pending[assignment.id]) return;
@@ -550,7 +552,7 @@ function TasksWeek({ week }: { week: string }) {
               ? "Toutes les tâches sont terminées !"
               : `${progress.remaining} tâche${progress.remaining > 1 ? "s" : ""} restante${
                   progress.remaining > 1 ? "s" : ""
-                } cette semaine`}
+                } ${weekSuffix}`}
           </span>
         </div>
       ) : null}
@@ -593,7 +595,7 @@ function TasksWeek({ week }: { week: string }) {
           <EmptyState
             icon={<IconCheck size={30} />}
             title="Aucun devoir trouvé"
-            body={`Aucun résultat pour « ${search.trim()} » cette semaine.`}
+            body={`Aucun résultat pour « ${search.trim()} » dans la semaine affichée.`}
             action={
               <button type="button" className="btn btn--small" onClick={() => setSearch("")}>
                 Effacer la recherche
@@ -833,7 +835,7 @@ function AssignmentCard({
             onClick={onGenerateSheet}
           >
             <IconBook size={22} />
-            {revisionBusy ? "Création…" : "Fiche"}
+            {revisionBusy ? "Création…" : "Fiche de révision"}
           </button>
           <button
             type="button"

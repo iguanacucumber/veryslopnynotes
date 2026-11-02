@@ -56,6 +56,12 @@ describe("connexion à l'établissement de démonstration", () => {
     expect(screen).toContain("openSession()");
   });
 
+  test("le formulaire d'appairage ouvre la session, il ne « termine » pas", () => {
+    const screen = readFileSync(SCREEN, "utf8");
+    expect(screen).toContain('"Ouvrir la session"');
+    expect(screen).not.toContain('"Terminer"');
+  });
+
   test("le pont expose la méthode, et le factice de développement aussi", () => {
     const client = readFileSync(CLIENT, "utf8");
     expect(client).toContain('call<PairResult>("pairing.pairDemo")');

@@ -7,7 +7,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createSeq } from "../../web/src/lib/seq";
 import { createReplyGuard, draftAfterReply } from "../../web/src/features/messages/reply";
-import { ThreadScreen } from "../../web/src/features/messages/MessagesScreen";
+import { ConversationListScreen, ThreadScreen } from "../../web/src/features/messages/MessagesScreen";
 import { readBridgeSource } from "../unit/fixtures/bridge-source";
 import {
   isMessagesPayloadReadable,
@@ -292,5 +292,68 @@ describe("messagerie — fil et composition sont des sous-routes", () => {
     // Plus de mode local contre l'historique : l'URL est la source.
     expect(route).not.toContain("pushState");
     expect(route).not.toContain("popstate");
+  });
+});
+
+describe("messagerie — recherche, lignes de liste et fil collé", () => {
+  const discussion: Discussion = {
+    id: "d1",
+    subject: "Cahier de texte — Mme Martin",
+    participants: ["Mme Martin"],
+    unreadCount: 3,
+    lastMessageAt: "2026-10-21T08:00:00.000Z",
+    updatedAt: "2026-10-21T08:00:00.000Z",
+  };
+
+  function renderList(list: Discussion[], query: string): string {
+    return renderToStaticMarkup(
+      createElement(ConversationListScreen, {
+        discussions: list,
+        query,
+        loading: false,
+        error: null,
+        stale: false,
+        previews: { d1: "Pensez à rendre le TP." },
+        onQueryChange: () => {},
+        onOpen: () => {},
+        onMarkRead: () => {},
+        onNew: () => {},
+        onRefresh: () => {},
+      }),
+    );
+  }
+
+  test("la recherche utilise le champ partagé", () => {
+    const html = renderList([discussion], "");
+    expect(html).toContain('class="search-field"');
+    expect(html).not.toContain('class="field"');
+    expect(html).toContain("Rechercher une discussion");
+  });
+
+  test("sans résultat, l'action efface la recherche au lieu d'actualiser", () => {
+    const html = renderList([], "introuvable");
+    expect(html).toContain("Effacer la recherche");
+    expect(html).not.toContain("Actualiser");
+  });
+
+  test("le sujet et la date occupent deux niveaux, le nom peut s'étendre", () => {
+    const html = renderList([discussion], "");
+    expect(html).toContain("messages-card__name");
+    expect(html).toContain("messages-card__date");
+    expect(html).toContain("messages-card__preview");
+    // Plus de style inline qui tronque le nom sur une ligne.
+    expect(html).not.toContain("text-overflow:ellipsis;white-space:nowrap");
+  });
+
+  test("le fil suit le bas et garde son compositeur hors de la liste", () => {
+    const source = readFileSync(
+      join(ROOT, "web/src/features/messages/MessagesScreen.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("useStickToBottom");
+    expect(source).toContain("messages-thread__log-wrap");
+    expect(source).toContain("messages-composer");
+    expect(source).toContain("toBottom()");
+    expect(source).toContain("role=\"log\"");
   });
 });
