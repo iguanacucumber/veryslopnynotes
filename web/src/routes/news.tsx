@@ -143,12 +143,7 @@ export default function NewsRoute() {
       <p className="sr-only" role="status">
         {announcement}
       </p>
-      {resource.stale ? (
-        <div className="row row--between">
-          <span className="tiny muted">Dernières actualités en cache.</span>
-          <StaleBadge />
-        </div>
-      ) : null}
+      {resource.stale ? <StaleBadge fetchedAt={resource.fetchedAt} /> : null}
       {error && items.length > 0 ? (
         <p className="tiny" role="status" style={{ margin: 0, color: "var(--danger-ink)" }}>
           {error}

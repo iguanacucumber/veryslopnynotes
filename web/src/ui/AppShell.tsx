@@ -72,10 +72,9 @@ export function Shell() {
   const location = useLocation();
   const navigate = useNavigate();
   const go = useViewNavigate();
-  const { refresh, refreshTick, notify, authLost, sessionClosed } = useApp();
+  const { refresh, refreshTick, busy, notify, authLost, sessionClosed } = useApp();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
-  const [spinning, setSpinning] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const titleFocusedOnce = useRef(false);
   const isHome = location.pathname === "/";
@@ -204,13 +203,10 @@ export function Shell() {
           <div className="topbar__actions">
             <button
               type="button"
-              className={`icon-btn${spinning ? " icon-btn--spin" : ""}`}
+              className={`icon-btn${busy ? " icon-btn--spin" : ""}`}
               aria-label="Actualiser"
-              onClick={() => {
-                refresh();
-                setSpinning(true);
-                window.setTimeout(() => setSpinning(false), 650);
-              }}
+              aria-busy={busy}
+              onClick={refresh}
             >
               <IconRefresh size={isHome ? 26 : 24} />
             </button>

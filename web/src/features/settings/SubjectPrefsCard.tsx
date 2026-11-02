@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { bridge } from "../../bridge/client";
 import type { SubjectPref } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
-import { Card, Divider, ListRow, SubjectBadge } from "../../ui/components";
+import { Card, Divider, ListRow, Loading, SubjectBadge } from "../../ui/components";
 import { SubjectEditor } from "./SubjectEditor";
 import { actionMessage } from "./action";
 import { sanitizeSubjectPrefs, subjectNameError, subjectSaveRefusal } from "./model";
@@ -25,6 +25,8 @@ export function SubjectPrefsCard({
   const { refreshTick, notify, dark } = useApp();
   const [prefs, setPrefs] = useState<SubjectPref[]>([]);
   const [prefsError, setPrefsError] = useState("");
+  // Faux « aucune matière » tant que la première lecture n'a pas répondu.
+  const [loaded, setLoaded] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editorError, setEditorError] = useState("");
   const [savingSubject, setSavingSubject] = useState(false);
@@ -43,6 +45,8 @@ export function SubjectPrefsCard({
       } catch (error) {
         if (!alive) return;
         setPrefsError(actionMessage(error, "Préférences de matières indisponibles."));
+      } finally {
+        if (alive) setLoaded(true);
       }
     })();
     return () => {
@@ -124,7 +128,9 @@ export function SubjectPrefsCard({
         </div>
       ) : null}
 
-      {prefs.length === 0 && !prefsError ? (
+      {!loaded && !prefsError ? <Loading label="Lecture des matières…" /> : null}
+
+      {loaded && prefs.length === 0 && !prefsError ? (
         <p className="t-body-m muted" style={{ margin: 0 }}>
           Aucune matière personnalisée. Le nom d'origine est affiché partout, avec une couleur dérivée de son nom.
         </p>

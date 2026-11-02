@@ -5,7 +5,6 @@ import {
   frDay,
   isSameDay,
   isoDay,
-  relativeFr,
   startOfWeek,
   subjectColor,
   tint,
@@ -205,10 +204,6 @@ function WeekView({
   const loaded = Boolean(resource.payload);
   const empty = !resource.loading && weekLessons.length === 0;
 
-  const staleLabel = resource.fetchedAt
-    ? `hors-ligne · mis à jour ${relativeFr(new Date(resource.fetchedAt).toISOString(), now)}`
-    : "hors-ligne";
-
   return (
     <Page className="tt">
       <WeekNavigator
@@ -221,7 +216,7 @@ function WeekView({
 
       {loaded && (resource.stale || resource.error) ? (
         <div className="tt-status" role="status">
-          <StaleBadge label={staleLabel} />
+          <StaleBadge fetchedAt={resource.fetchedAt} />
           {resource.error ? (
             <span className="tiny muted">Affichage du cache · {resource.error}</span>
           ) : null}

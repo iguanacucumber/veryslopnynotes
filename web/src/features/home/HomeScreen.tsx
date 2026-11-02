@@ -1,6 +1,6 @@
 import { useMemo, useState, type ComponentType, type ReactElement } from "react";
 import { useViewNavigate as useNavigate } from "../../ui/viewTransition";
-import { relativeFr, subjectColor, tint } from "../../lib/format";
+import { subjectColor, tint } from "../../lib/format";
 import { subjectEmoji } from "../../lib/subjectVisual";
 import { useApp, useResource } from "../../ui/AppContext";
 import { Card, EmptyState, ErrorBox, Loading, Page, StaleBadge } from "../../ui/components";
@@ -42,7 +42,6 @@ import {
 } from "./parse";
 import { useNow } from "./useNow";
 import { ManualPrompt } from "../settings/ManualPrompt";
-import "./home.css";
 
 type IconComponent = ComponentType<{ size?: number }>;
 
@@ -134,7 +133,7 @@ function AverageWidget({
   );
 }
 
-function CourseWidget({
+export function CourseWidget({
   lessons,
   now,
   dark,
@@ -151,51 +150,55 @@ function CourseWidget({
   return (
     <Card className={animate ? "home-widget home-rise" : "home-widget"}>
       <WidgetHeader
-        title={courseWidgetTitle(lessons[0], now)}
+        title={lessons.length > 0 ? courseWidgetTitle(lessons[0], now) : "Cours"}
         icon={<IconCalendar size={24} />}
         onMore={onMore}
       />
-      <div className="home-courses">
-        {lessons.map((lesson) => {
-          const palette = paletteFor(lesson.subject, dark);
-          const duration = durationLabel(lesson.end - lesson.start);
-          const live = lesson.start <= now && now < lesson.end;
-          return (
-            <div className={`home-course${live ? " home-course--live" : ""}`} key={lesson.id}>
-              <div className="home-course__time" aria-hidden="true">
-                <strong>{clockLabel(lesson.start)}</strong>
-                <span>{clockLabel(lesson.end)}</span>
-              </div>
-              <div
-                className="home-course__card"
-                style={{ background: palette.background, color: palette.ink }}
-              >
-                <span className="home-course__bar" style={{ background: palette.ink }} aria-hidden="true" />
-                <div className="home-course__body">
-                  <strong className="home-course__subject">{lesson.subject}</strong>
-                  <span className="home-course__meta">
-                    <IconPin size={20} />
-                    <span>{lesson.room || "Salle non précisée"}</span>
-                    {lesson.teacher ? (
-                      <>
-                        <span className="home-course__separator" aria-hidden="true" />
-                        <IconUser size={20} />
-                        <span>{lesson.teacher}</span>
-                      </>
-                    ) : null}
-                  </span>
-                  {duration ? <span className="home-course__hint">{duration}</span> : null}
+      {lessons.length === 0 ? (
+        <p className="home-widget__empty">Aucun cours à venir</p>
+      ) : (
+        <div className="home-courses">
+          {lessons.map((lesson) => {
+            const palette = paletteFor(lesson.subject, dark);
+            const duration = durationLabel(lesson.end - lesson.start);
+            const live = lesson.start <= now && now < lesson.end;
+            return (
+              <div className={`home-course${live ? " home-course--live" : ""}`} key={lesson.id}>
+                <div className="home-course__time" aria-hidden="true">
+                  <strong>{clockLabel(lesson.start)}</strong>
+                  <span>{clockLabel(lesson.end)}</span>
+                </div>
+                <div
+                  className="home-course__card"
+                  style={{ background: palette.background, color: palette.ink }}
+                >
+                  <span className="home-course__bar" style={{ background: palette.ink }} aria-hidden="true" />
+                  <div className="home-course__body">
+                    <strong className="home-course__subject">{lesson.subject}</strong>
+                    <span className="home-course__meta">
+                      <IconPin size={20} />
+                      <span>{lesson.room || "Salle non précisée"}</span>
+                      {lesson.teacher ? (
+                        <>
+                          <span className="home-course__separator" aria-hidden="true" />
+                          <IconUser size={20} />
+                          <span>{lesson.teacher}</span>
+                        </>
+                      ) : null}
+                    </span>
+                    {duration ? <span className="home-course__hint">{duration}</span> : null}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 }
 
-function TasksWidget({
+export function TasksWidget({
   tasks,
   total,
   now,
@@ -215,27 +218,31 @@ function TasksWidget({
     <Card className={animate ? "home-widget home-rise" : "home-widget"}>
       <WidgetHeader title="Devoirs" icon={<IconTasks size={24} />} onMore={onMore} />
       <span className="sr-only">{total} devoirs à faire</span>
-      <div className="home-tasks">
-        {tasks.map((task) => {
-          const palette = paletteFor(task.subject, dark);
-          return (
-            <div className="home-task" key={task.id}>
-              <span className="home-task__emoji" aria-hidden="true">
-                {subjectEmoji(task.subject)}
-              </span>
-              <div className="grow">
-                <div className="home-task__row">
-                  <span className="home-task__subject" style={{ color: palette.ink }}>
-                    {task.subject}
-                  </span>
-                  <span className="home-task__due">{dueLabel(task.due, now)}</span>
+      {tasks.length === 0 ? (
+        <p className="home-widget__empty">Rien à rendre</p>
+      ) : (
+        <div className="home-tasks">
+          {tasks.map((task) => {
+            const palette = paletteFor(task.subject, dark);
+            return (
+              <div className="home-task" key={task.id}>
+                <span className="home-task__emoji" aria-hidden="true">
+                  {subjectEmoji(task.subject)}
+                </span>
+                <div className="grow">
+                  <div className="home-task__row">
+                    <span className="home-task__subject" style={{ color: palette.ink }}>
+                      {task.subject}
+                    </span>
+                    <span className="home-task__due">{dueLabel(task.due, now)}</span>
+                  </div>
+                  <div className="home-task__title">{task.title}</div>
                 </div>
-                <div className="home-task__title">{task.title}</div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 }
@@ -335,22 +342,24 @@ export default function HomeScreen() {
     .filter((resource) => resource.payload && resource.fetchedAt > 0)
     .map((resource) => resource.fetchedAt);
   const oldest = stamps.length > 0 ? Math.min(...stamps) : 0;
-  const staleLabel = oldest
-    ? `hors-ligne · mis à jour ${relativeFr(new Date(oldest).toISOString())}`
-    : "hors-ligne";
   const showGrades = tabVisible(capabilities, "grades");
   const showHomework = tabVisible(capabilities, "homework");
   const showTimetable = tabVisible(capabilities, "timetable");
+  // Une capacité visible avec un cache LU mais vide garde son widget : la ligne
+  // calme dit « rien », au lieu de laisser un blanc.
+  const timetableReady = showTimetable && timetableRes.payload !== null;
+  const homeworkReady = showHomework && assignmentsRes.payload !== null;
   const hasData =
     average.value !== null || grades.length > 0 || upcomingTotal > 0 || tasksTotal > 0;
+  const quietRows = timetableReady || homeworkReady;
   const refreshAll = () => resources.forEach((resource) => resource.refresh());
 
   return (
     <Page className="home">
       <ManualPrompt />
-      {hasData && (stale || error) ? (
+      {(hasData || quietRows) && (stale || error) ? (
         <div className="home-status" role="status">
-          <StaleBadge label={staleLabel} />
+          <StaleBadge fetchedAt={oldest} />
           {error ? <span className="tiny muted">Affichage du cache · {error}</span> : null}
         </div>
       ) : null}
@@ -365,7 +374,7 @@ export default function HomeScreen() {
         </ErrorBox>
       ) : null}
 
-      {!loading && !hasData && !error ? (
+      {!loading && !hasData && !error && !quietRows ? (
         <EmptyState
           icon={<IconCalendar size={30} />}
           title="Rien à afficher"
@@ -380,7 +389,7 @@ export default function HomeScreen() {
 
       <QuickActions capabilities={capabilities} openedAt={openedAt} />
 
-      {!loading && showTimetable && upcoming.length > 0 ? (
+      {!loading && timetableReady ? (
         <CourseWidget
           lessons={upcoming}
           now={now}
@@ -399,7 +408,7 @@ export default function HomeScreen() {
         />
       ) : null}
 
-      {!loading && showHomework && tasks.length > 0 ? (
+      {!loading && homeworkReady ? (
         <TasksWidget
           tasks={tasks}
           total={tasksTotal}

@@ -354,6 +354,7 @@ describe("moyenne fournie par l'établissement : l'écran ne ment pas", () => {
         loading: false,
         error: null,
         stale: false,
+        fetchedAt: 0,
         periodsError: null,
         algorithm: "median",
         periodId: null,
@@ -659,6 +660,55 @@ describe("sparkline — le dessin reste net, quelle que soit la largeur (#568)",
   });
 });
 
+// Les périodes sont une ressource SÉPARÉE des notes : même quand la lecture des
+// notes échoue, la barre doit rester là pour changer de période (#804).
+describe("notes : les contrôles survivent à l'absence de données (#804)", () => {
+  const periods = [{ id: "p1", name: "Trimestre 1", start: null, end: null }];
+
+  function render(overrides: Partial<Parameters<typeof GradesScreen>[0]> = {}): string {
+    return renderToStaticMarkup(
+      createElement(GradesScreen, {
+        payload: null,
+        loading: false,
+        error: null,
+        stale: false,
+        fetchedAt: 0,
+        periodsError: null,
+        algorithm: "subject",
+        periodId: "p1",
+        periods,
+        dark: false,
+        onAlgorithm: () => {},
+        onPeriod: () => {},
+        onRefresh: () => {},
+        ...overrides,
+      }),
+    );
+  }
+
+  test("un échec garde la période, la recherche et le bouton de nouvelle tentative", () => {
+    const html = render({ error: "Lecture indisponible." });
+    expect(html).toContain("Trimestre 1");
+    expect(html).toContain("Rechercher une note");
+    expect(html).not.toContain("disabled");
+    expect(html.indexOf("Rechercher une note")).toBeLessThan(html.indexOf("Lecture indisponible."));
+  });
+
+  test("un chargement sans cache affiche aussi les contrôles au-dessus du chargement", () => {
+    const html = render({ loading: true });
+    expect(html).toContain("Trimestre 1");
+    expect(html).toContain("Rechercher une note");
+    expect(html.indexOf("Rechercher une note")).toBeLessThan(html.indexOf("Chargement des notes"));
+  });
+
+  test("un cache lisible mais vide garde les contrôles au-dessus de l'explication", () => {
+    const html = render({ payload: '{"grades":[]}' });
+    expect(html).toContain("Trimestre 1");
+    expect(html).toContain("Rechercher une note");
+    expect(html.indexOf("Rechercher une note")).toBeLessThan(html.indexOf("Aucune note en cache"));
+  });
+});
+
 // Un payload CORROMPU (JSON illisible) ne doit JAMAIS être présenté comme une
 // absence de note (I14 : « invalide » n'est jamais « vide »). L'écran est RENDU
 // par `react-dom/server` : c'est ce que l'élève voit.
@@ -742,6 +792,7 @@ describe("notes : un changement de requête invalide le payload précédent (#52
         loading: view.loading,
         error: view.error,
         stale: view.stale,
+        fetchedAt: view.fetchedAt,
         periodsError: null,
         algorithm: "subject",
         periodId,
