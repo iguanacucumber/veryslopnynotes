@@ -164,9 +164,15 @@ pour la question de l'élève et un compositeur unique. La coquille Papillon
 
 ## Colors
 
-La palette par défaut est le vert « slop » ; les 21 palettes remplacent les
+La palette par défaut est le vert « slop » ; les 22 palettes remplacent les
 mêmes variables à l'exécution. Le thème clair, le sombre et le suivi système
 sont supportés sans changer les rôles.
+
+**La règle du skin scopé.** Une palette peut ajouter une matière, à condition
+qu'elle soit confinée à `:root[data-scheme="<id>"]` et qu'un repli opaque
+existe. `Liquid Glass` ajoute des surfaces translucides (`backdrop-filter`), un
+fond ambiant dérivé du papier peint et la pile système ; les autres palettes ne
+voient rien de ces règles.
 
 ### Primary
 
@@ -197,7 +203,9 @@ données est neutre.
 ## Typography
 
 **Famille unique : SN Pro** (SIL OFL 1.1), graisses 300 à 900, vendoriée dans
-`web/src/fonts/`.
+`web/src/fonts/`. Exception scopée : `Liquid Glass` prend la pile système
+(`-apple-system`, Roboto) pour se rapprocher du natif ; les autres palettes
+gardent SN Pro.
 
 ### Hierarchy
 
@@ -244,7 +252,7 @@ tuiles teintées, puis sections ancrées.
 - `--radius-xs` à `--radius-2xl` (8 → 24 px), `--shadow-card`, `--shadow-dock`,
   `--ease`, `--duration`.
 - Aucune couleur en dur dans un écran : tout passe par les variables de
-  `tokens.css` et les 21 palettes.
+  `tokens.css` et les 22 palettes.
 
 ## Elevation & Depth
 
@@ -357,7 +365,7 @@ pastilles sont à `999px`.
 - Copier les métriques Papillon avant d'inventer une variante.
 - Teinter les matières avec une encre dérivée de la même couleur.
 - Garder les chiffres grands et tabulaires.
-- Vérifier les 21 palettes en clair et en sombre.
+- Vérifier les 22 palettes en clair et en sombre.
 - Laisser le dock flotter en capsule, détaché du contenu.
 
 **Don't**

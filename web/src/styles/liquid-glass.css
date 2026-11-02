@@ -1,0 +1,255 @@
+/* Skin « Liquid Glass » : une matière, pas seulement une palette. Tout est
+   scopé sur `:root[data-scheme="liquid-glass"]` ; les vingt-et-une autres palettes
+   gardent leurs surfaces opaques. Le relief vient du flou d'arrière-plan, des
+   liserés spéculaires et d'un fond ambiant dérivé du papier peint. */
+
+:root[data-scheme="liquid-glass"] {
+  --lg-fill: color-mix(in srgb, var(--surface) 64%, transparent);
+  --lg-fill-strong: color-mix(in srgb, var(--surface) 80%, transparent);
+  --lg-panel: color-mix(in srgb, var(--surface) 86%, transparent);
+  --lg-bar: color-mix(in srgb, var(--page) 80%, transparent);
+  --lg-bar-strong: color-mix(in srgb, var(--surface) 84%, transparent);
+  --lg-edge: color-mix(in srgb, var(--ink) 9%, transparent);
+  --lg-edge-strong: color-mix(in srgb, var(--ink) 15%, transparent);
+  --lg-sheen: rgba(255, 255, 255, 0.72);
+  --lg-shade: rgba(0, 0, 0, 0.12);
+  --lg-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 18px 40px -26px rgba(0, 0, 0, 0.38);
+  --lg-blur: blur(30px) saturate(180%);
+
+  /* La matière se branche sur les jetons partagés : cartes, lignes, puces et
+     champs deviennent translucides sans repeindre chaque écran. */
+  --item: var(--lg-fill);
+  --panel: var(--lg-panel);
+  --panel-tint: var(--lg-fill-strong);
+
+  /* Papier peint d'accueil plus proche d'iOS : bleu nuit, violet, rose. */
+  --wallpaper-deep: #071a3a;
+  --wallpaper-mid: #0b1b33;
+  --wallpaper-warm: #241033;
+  --wallpaper-pink: #ff6482;
+  --wallpaper-blue: #2e86de;
+  --wallpaper-amber: #ffb340;
+  --wallpaper-violet: #7d5cff;
+}
+
+:root[data-scheme="liquid-glass"][data-theme="dark"] {
+  --lg-fill: color-mix(in srgb, var(--surface) 62%, transparent);
+  --lg-fill-strong: color-mix(in srgb, var(--surface) 80%, transparent);
+  --lg-panel: color-mix(in srgb, var(--surface) 88%, transparent);
+  --lg-bar: color-mix(in srgb, var(--page) 82%, transparent);
+  --lg-bar-strong: color-mix(in srgb, var(--surface) 86%, transparent);
+  --lg-edge: color-mix(in srgb, var(--ink) 12%, transparent);
+  --lg-edge-strong: color-mix(in srgb, var(--ink) 18%, transparent);
+  --lg-sheen: rgba(255, 255, 255, 0.12);
+  --lg-shade: rgba(0, 0, 0, 0.5);
+  --lg-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.55),
+    0 20px 44px -26px rgba(0, 0, 0, 0.9);
+}
+
+/* Fond ambiant fixe : des taches douces, aucune image ni requête réseau. Il
+   reste derrière `#root` et transparaît sous les surfaces translucides. */
+:root[data-scheme="liquid-glass"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(52% 38% at 50% -8%, color-mix(in srgb, var(--brand) 24%, transparent), transparent 72%),
+    radial-gradient(48% 36% at 6% 8%, color-mix(in srgb, var(--wallpaper-blue) 28%, transparent), transparent 72%),
+    radial-gradient(44% 34% at 96% 14%, color-mix(in srgb, var(--wallpaper-pink) 20%, transparent), transparent 72%),
+    radial-gradient(46% 34% at 86% 78%, color-mix(in srgb, var(--wallpaper-violet) 18%, transparent), transparent 74%),
+    radial-gradient(46% 32% at 8% 88%, color-mix(in srgb, var(--wallpaper-amber) 14%, transparent), transparent 74%);
+}
+
+/* Pile système : SF sur Apple, Roboto sur Android. Les métriques existantes
+   (hauteurs de ligne explicites) ne bougent pas. */
+:root[data-scheme="liquid-glass"] body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, "SN Pro",
+    system-ui, sans-serif;
+}
+
+:root[data-scheme="liquid-glass"] .topbar__title {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+/* Barres translucides : le contenu qui défile dessous est flouté. */
+:root[data-scheme="liquid-glass"] .topbar:not(.topbar--home) {
+  background: var(--lg-bar);
+  -webkit-backdrop-filter: var(--lg-blur);
+  backdrop-filter: var(--lg-blur);
+  box-shadow: inset 0 -1px 0 var(--lg-edge);
+}
+
+:root[data-scheme="liquid-glass"] .topbar--home {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.48), rgba(0, 0, 0, 0.1) 72%, transparent);
+  -webkit-backdrop-filter: var(--lg-blur);
+  backdrop-filter: var(--lg-blur);
+  box-shadow: none;
+}
+
+:root[data-scheme="liquid-glass"] .tabbar {
+  background: var(--lg-bar-strong);
+  border: 1px solid var(--lg-edge);
+  -webkit-backdrop-filter: var(--lg-blur);
+  backdrop-filter: var(--lg-blur);
+  box-shadow:
+    var(--lg-shadow),
+    inset 0 1px 0 var(--lg-sheen),
+    inset 0 -1px 0 var(--lg-shade);
+}
+
+:root[data-scheme="liquid-glass"] .tab[aria-current="page"],
+:root[data-scheme="liquid-glass"] .tab[aria-current="page"]:hover,
+:root[data-scheme="liquid-glass"] .tab[aria-current="page"]:active {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--brand) 26%, transparent),
+    color-mix(in srgb, var(--brand) 14%, transparent)
+  );
+  color: var(--brand-deep);
+  box-shadow:
+    inset 0 1px 0 var(--lg-sheen),
+    inset 0 0 0 1px color-mix(in srgb, var(--brand) 30%, transparent);
+}
+
+:root[data-scheme="liquid-glass"] .tab[aria-current="page"] svg {
+  color: var(--brand-deep);
+}
+
+/* Cartes, lignes et contrôles : même recette, plus discrète que les barres. */
+:root[data-scheme="liquid-glass"] .card:not(.card--brand):not(.card--danger):not(.grades-hero) {
+  background: var(--lg-fill);
+  box-shadow:
+    var(--lg-shadow),
+    inset 0 1px 0 var(--lg-sheen),
+    inset 0 0 0 1px var(--lg-edge);
+}
+
+:root[data-scheme="liquid-glass"] button.card:hover {
+  background: var(--lg-fill-strong);
+}
+
+:root[data-scheme="liquid-glass"] .list-row {
+  background: var(--lg-fill);
+  box-shadow:
+    inset 0 1px 0 var(--lg-sheen),
+    inset 0 0 0 1px var(--lg-edge);
+}
+
+:root[data-scheme="liquid-glass"] .list-row:hover,
+:root[data-scheme="liquid-glass"] .list-row:active {
+  background: var(--lg-fill-strong);
+}
+
+:root[data-scheme="liquid-glass"] .chip,
+:root[data-scheme="liquid-glass"] .field,
+:root[data-scheme="liquid-glass"] .search-field,
+:root[data-scheme="liquid-glass"] .grades-menu {
+  box-shadow:
+    inset 0 1px 0 var(--lg-sheen),
+    inset 0 0 0 1px var(--lg-edge);
+}
+
+:root[data-scheme="liquid-glass"] .grades-menu {
+  background: var(--lg-fill-strong);
+}
+
+:root[data-scheme="liquid-glass"] .search-field:focus-within {
+  box-shadow:
+    inset 0 1px 0 var(--lg-sheen),
+    inset 0 0 0 1px var(--lg-edge),
+    0 0 0 2px var(--brand-deep);
+}
+
+:root[data-scheme="liquid-glass"] .grades-menu:focus-within {
+  box-shadow:
+    inset 0 1px 0 var(--lg-sheen),
+    inset 0 0 0 1px var(--lg-edge),
+    0 0 0 2px var(--brand);
+}
+
+:root[data-scheme="liquid-glass"] .settings-tile {
+  box-shadow:
+    var(--lg-shadow),
+    inset 0 1px 0 var(--lg-sheen),
+    inset 0 0 0 1px var(--lg-edge);
+}
+
+:root[data-scheme="liquid-glass"] .btn {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 10px 24px -14px var(--lg-shade);
+}
+
+:root[data-scheme="liquid-glass"] .btn--ghost {
+  box-shadow:
+    inset 0 1px 0 var(--lg-sheen),
+    inset 0 0 0 1px var(--lg-edge);
+}
+
+/* `.btn:hover` repeint tous les boutons en marque ; on garde le sens du fantôme
+   et du rouge, sinon le libellé passe sous le fond. */
+:root[data-scheme="liquid-glass"] .btn--ghost:hover {
+  background: var(--lg-fill-strong);
+  color: var(--brand-deep);
+}
+
+:root[data-scheme="liquid-glass"] .btn--danger:hover {
+  background: color-mix(in srgb, var(--danger-solid) 88%, var(--ink));
+  color: var(--on-danger);
+}
+
+/* Dialogues : verre plus épais, fond assombri et flouté. */
+:root[data-scheme="liquid-glass"] .dialog-backdrop {
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+}
+
+:root[data-scheme="liquid-glass"] .dialog,
+:root[data-scheme="liquid-glass"] .dialog.dialog--chat {
+  background: var(--lg-panel);
+  border: 1px solid var(--lg-edge-strong);
+  box-shadow:
+    var(--lg-shadow),
+    inset 0 1px 0 var(--lg-sheen);
+  -webkit-backdrop-filter: var(--lg-blur);
+  backdrop-filter: var(--lg-blur);
+}
+
+/* Repli WebView ancienne : surfaces opaques, même hiérarchie. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root[data-scheme="liquid-glass"] {
+    --lg-fill: var(--surface);
+    --lg-fill-strong: var(--surface-variant);
+    --lg-panel: var(--surface);
+    --lg-bar: var(--page);
+    --lg-bar-strong: var(--surface);
+    --lg-blur: none;
+  }
+}
+
+/* Accessibilité : « Réduire la transparence » rend les surfaces opaques. */
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-scheme="liquid-glass"] {
+    --lg-fill: var(--surface);
+    --lg-fill-strong: var(--surface-variant);
+    --lg-panel: var(--surface);
+    --lg-bar: var(--page);
+    --lg-bar-strong: var(--surface);
+    --lg-blur: none;
+  }
+
+  :root[data-scheme="liquid-glass"] .dialog-backdrop,
+  :root[data-scheme="liquid-glass"] .dialog,
+  :root[data-scheme="liquid-glass"] .dialog.dialog--chat {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}

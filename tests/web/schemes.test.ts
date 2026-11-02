@@ -89,6 +89,20 @@ describe("web palettes", () => {
     expect(css).toContain("border-color: var(--brand-light)");
   });
 
+  // La palette Liquid Glass porte une matière WebView-locale. Le test vérifie
+  // le CÂBLAGE (palette → `data-scheme` → feuille importée), pas le rendu.
+  test("la palette Liquid Glass existe et sa matière est câblée", () => {
+    const scheme = SCHEMES.find((entry) => entry.id === "liquid-glass");
+    expect(scheme?.label).toBe("Liquid Glass");
+    const main = readFileSync(join(ROOT, "web/src/main.tsx"), "utf8");
+    expect(main).toContain('import "./styles/liquid-glass.css";');
+    const css = readFileSync(join(ROOT, "web/src/styles/liquid-glass.css"), "utf8");
+    expect(css).toContain(':root[data-scheme="liquid-glass"]');
+    expect(css).toMatch(/:root\[data-scheme="liquid-glass"\] \.tabbar\s*\{[^}]*backdrop-filter/);
+    expect(css).toContain("@supports not");
+    expect(css).toContain("prefers-reduced-transparency");
+  });
+
   test("parseScheme : valeur inconnue = palette par défaut", () => {
     expect(parseScheme("tokyo-night")).toBe("tokyo-night");
     expect(parseScheme("inconnu")).toBe(DEFAULT_SCHEME_ID);
