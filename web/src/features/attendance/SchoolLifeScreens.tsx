@@ -177,23 +177,6 @@ export function AttendanceScreen({
             </button>
           </div>
 
-          {canSeeSanctions ? (
-            <Card className="card--flat" as="article">
-              <div className="row">
-                <IconShield size={24} />
-                <div className="grow">
-                  <strong className="t-body-m">Sanctions</strong>
-                  <p className="tiny muted" style={{ margin: 0 }}>
-                    Les sanctions publiées par l’établissement.
-                  </p>
-                </div>
-                <Link to="/sanctions" className="btn btn--ghost btn--small">
-                  Voir
-                </Link>
-              </div>
-            </Card>
-          ) : null}
-
           {sections.length === 0 ? (
             <EmptyState
               icon={<IconCheck size={30} />}
@@ -221,6 +204,23 @@ export function AttendanceScreen({
           )}
         </>
       )}
+
+      {canSeeSanctions ? (
+        <Card className="card--flat" as="article">
+          <div className="row">
+            <IconShield size={24} />
+            <div className="grow">
+              <strong className="t-body-m">Sanctions</strong>
+              <p className="tiny muted" style={{ margin: 0 }}>
+                Les sanctions publiées par l’établissement.
+              </p>
+            </div>
+            <Link to="/sanctions" className="btn btn--ghost btn--small">
+              Voir
+            </Link>
+          </div>
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { BridgeCallError, type ScannedQr } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
 import { Card, Page } from "../../ui/components";
 import { IconCamera, IconChevronLeft, IconLock } from "../../ui/icons";
-import { STORAGE_UNAVAILABLE_MESSAGE } from "../../lib/session";
+import { STORAGE_UNAVAILABLE_MESSAGE, mustPair } from "../../lib/session";
 import {
   PIN_MAX_CHARS,
   demoErrorMessage,
@@ -40,13 +40,25 @@ function StepChip({ label, done }: { label: string; done: boolean }) {
 export default function PairingScreen() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { refresh, notify, openSession, storageUnavailable } = useApp();
+  const { refresh, notify, openSession, storageUnavailable, sessionStatus, sessionOpen, authLost, sessionClosed } =
+    useApp();
   // Le Profil arrive ici avec `replacing` : la session vivante va être
   // remplacée. Au premier lancement, l'écran reste un simple appairage.
   const replacing =
     typeof location.state === "object" &&
     location.state !== null &&
     (location.state as { replacing?: unknown }).replacing === true;
+  // Sans session, le retour mènerait à un écran que la porte de session
+  // renvoie ici : le bouton ne doit exister que s'il a une destination réelle.
+  const canGoBack =
+    sessionStatus !== null &&
+    !mustPair({
+      status: sessionStatus,
+      open: sessionOpen,
+      expired: authLost,
+      closed: sessionClosed,
+    });
+  const backTarget = replacing ? "/profile" : "/";
   const [qr, setQr] = useState<ScannedQr | null>(null);
   const [pin, setPin] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -167,19 +179,18 @@ export default function PairingScreen() {
   return (
     <div className="shell">
       <main id="main" tabIndex={-1} className="main" style={{ paddingBottom: 32 }}>
-        <div className="row" style={{ marginBottom: 10 }}>
-          <button
-            type="button"
-            className="btn btn--ghost btn--small"
-            onClick={() => {
-              if (window.history.length > 1) navigate(-1);
-              else navigate("/", { replace: true });
-            }}
-          >
-            <IconChevronLeft size={18} />
-            Retour
-          </button>
-        </div>
+        {canGoBack ? (
+          <div className="row" style={{ marginBottom: 10 }}>
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={() => navigate(backTarget, { replace: true })}
+            >
+              <IconChevronLeft size={18} />
+              Retour
+            </button>
+          </div>
+        ) : null}
 
         <Page>
           <Card className="card--brand">

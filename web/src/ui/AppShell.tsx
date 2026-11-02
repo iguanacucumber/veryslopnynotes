@@ -4,6 +4,7 @@ import { useApp } from "./AppContext";
 import { bridge } from "../bridge/client";
 import { Avatar } from "./components";
 import { HomeWallpaper } from "./HomeWallpaper";
+import { isCurrentWeek, weekStartFromParam } from "../features/timetable/week";
 import {
   isSafePhotoDataUrl,
   parseProfilePayload,
@@ -43,11 +44,21 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   "/attendance": { title: "Vie scolaire", back: "/profile" },
   "/sanctions": { title: "Sanctions", back: "/attendance" },
   "/messages": { title: "Messagerie", back: "/profile" },
+  "/messages/new": { title: "Nouveau message", back: "/messages" },
+  "/messages/:id": { title: "Discussion", back: "/messages" },
   "/alerts": { title: "Alertes", back: "/" },
   "/revision-sheets": { title: "Révisions", back: "/profile" },
   "/course-notes": { title: "Cahier", back: "/profile" },
   "/prof": { title: "Professeur", tab: true },
 };
+
+/** Le fil porte un id : la table exacte ne peut pas le nommer. */
+function metaFor(pathname: string): RouteMeta {
+  return (
+    ROUTE_META[pathname] ??
+    (pathname.startsWith("/messages/") ? ROUTE_META["/messages/:id"]! : { title: "VerySlopyNyNotes" })
+  );
+}
 
 const TABS = [
   { to: "/", label: "Accueil", Icon: IconHome },
@@ -68,11 +79,12 @@ export function Shell() {
   const titleRef = useRef<HTMLHeadingElement>(null);
   const titleFocusedOnce = useRef(false);
   const isHome = location.pathname === "/";
-  const meta = ROUTE_META[location.pathname] ?? { title: "VerySlopyNyNotes" };
+  const meta = metaFor(location.pathname);
   // Papillon nomme l'en-tête par son contenu : la date pour le calendrier.
   // Les notes portent leur période dans les contrôles, pas deux fois.
   const now = new Date();
-  const calendarTitle = now.toLocaleDateString("fr-FR", {
+  const calendarWeek = weekStartFromParam(new URLSearchParams(location.search).get("week"), now);
+  const calendarTitle = calendarWeek.toLocaleDateString("fr-FR", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -82,7 +94,9 @@ export function Shell() {
       ? calendarTitle.charAt(0).toUpperCase() + calendarTitle.slice(1)
       : meta.title;
   const headerSubtitle =
-    location.pathname === "/calendar" ? "Aujourd’hui" : undefined;
+    location.pathname === "/calendar" && isCurrentWeek(calendarWeek, now)
+      ? "Aujourd’hui"
+      : undefined;
   const identitySub = profile ? profileSubtitle(profile) : "";
 
   // Le focus passe au titre pour qu'un lecteur d'écran annonce la page, sauf
@@ -118,6 +132,12 @@ export function Shell() {
     }
     titleRef.current?.focus({ preventScroll: true });
   }, [location.pathname, meta.title]);
+
+  // Seul le CHANGEMENT D'ÉCRAN remonte la page : changer de semaine est une
+  // query, pas une nouvelle page. Le focus du titre reste en `preventScroll`.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   useEffect(() => {
     // Session fermée par l'utilisateur ≠ session expirée : le bandeau
@@ -156,7 +176,9 @@ export function Shell() {
               className="icon-btn"
               aria-label="Retour"
               onClick={() => {
-                if (window.history.length > 1) go(-1);
+                // Entrée initiale (deep link, restauration) : `back` de la
+                // route, pas un historique qui peut sortir de l'app.
+                if (location.key !== "default" && window.history.length > 1) go(-1);
                 else go(meta.back!);
               }}
             >

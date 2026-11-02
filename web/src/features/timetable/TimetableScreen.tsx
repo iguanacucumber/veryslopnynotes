@@ -1,4 +1,5 @@
-import { Fragment, useMemo, useState, type CSSProperties } from "react";
+import { Fragment, useCallback, useMemo, type CSSProperties } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   frDateShort,
   frDay,
@@ -44,6 +45,7 @@ import {
   weekDays,
   weekLabel,
   weekQuery,
+  weekStartFromParam,
   type Highlight,
 } from "./week";
 import "./timetable.css";
@@ -146,9 +148,20 @@ function LessonRow({
 
 export default function TimetableScreen() {
   const now = useNow();
-  // Semaine ancrée : un offset relatif à `now` ferait sauter la semaine affichée à minuit.
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [searchParams, setSearchParams] = useSearchParams();
+  // La semaine vit dans l'URL : en-tête, écran, retour et restauration Android
+  // lisent la même valeur. Sans paramètre, on ancre la semaine courante au
+  // montage (minuit ne doit pas déplacer la semaine affichée).
+  const initialWeek = useMemo(() => startOfWeek(new Date()), []);
+  const weekStart = useMemo(
+    () => weekStartFromParam(searchParams.get("week"), initialWeek),
+    [searchParams, initialWeek],
+  );
   const weeks = useMemo(() => weeksBetween(weekStart, new Date(now)), [weekStart, now]);
+  const showWeek = useCallback(
+    (next: Date) => setSearchParams({ week: isoDay(startOfWeek(next)) }),
+    [setSearchParams],
+  );
 
   return (
     <WeekView
@@ -156,8 +169,8 @@ export default function TimetableScreen() {
       weekStart={weekStart}
       now={now}
       weeks={weeks}
-      onShift={(delta) => setWeekStart((week) => shiftWeeks(week, delta))}
-      onToday={() => setWeekStart(startOfWeek(new Date()))}
+      onShift={(delta) => showWeek(shiftWeeks(weekStart, delta))}
+      onToday={() => showWeek(startOfWeek(new Date(now)))}
     />
   );
 }

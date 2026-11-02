@@ -2,7 +2,7 @@ import { useId, useState } from "react";
 import type { FormEvent } from "react";
 import { Avatar, Card, EmptyState, ErrorBox, Loading, StaleBadge } from "../../ui/components";
 import { Dialog } from "../../ui/Dialog";
-import { IconBack, IconMessage, IconPlus, IconSend, IconTrash, IconWarning } from "../../ui/icons";
+import { IconMessage, IconPlus, IconSend, IconTrash, IconWarning } from "../../ui/icons";
 import {
   conversationCountLabel,
   conversationDateLabel,
@@ -192,7 +192,6 @@ interface ThreadProps {
   sending: boolean;
   onDraftChange: (value: string) => void;
   onReply: () => void;
-  onBack: () => void;
   onToggleRead: () => void;
   onDelete: () => void;
   onRefresh: () => void;
@@ -207,7 +206,6 @@ export function ThreadScreen({
   sending,
   onDraftChange,
   onReply,
-  onBack,
   onToggleRead,
   onDelete,
   onRefresh,
@@ -220,16 +218,6 @@ export function ThreadScreen({
   return (
     <div className="stack">
       <div className="row" style={{ alignItems: "center" }}>
-        {/* Pendant l'envoi, le fil ne change pas : la réponse ne doit pas arriver ailleurs. */}
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label="Retour à la liste des discussions"
-          onClick={onBack}
-          disabled={sending}
-        >
-          <IconBack />
-        </button>
         <div className="grow" style={{ minWidth: 0 }}>
           <h2 className="t-title" id={titleId} style={{ margin: 0 }}>
             {discussion.subject}
@@ -389,12 +377,11 @@ interface NewProps {
   loading: boolean;
   error: string | null;
   sending: boolean;
-  onBack: () => void;
   onRetry: () => void;
   onCreate: (subject: string, body: string, recipients: string[]) => void;
 }
 
-export function NewDiscussionScreen({ recipients, loading, error, sending, onBack, onRetry, onCreate }: NewProps) {
+export function NewDiscussionScreen({ recipients, loading, error, sending, onRetry, onCreate }: NewProps) {
   const subjectId = useId();
   const bodyId = useId();
   const searchId = useId();
@@ -414,14 +401,9 @@ export function NewDiscussionScreen({ recipients, loading, error, sending, onBac
 
   return (
     <form className="stack" onSubmit={submit}>
-      <div className="row">
-        <button type="button" className="icon-btn" aria-label="Retour à la liste des discussions" onClick={onBack}>
-          <IconBack />
-        </button>
-        <h2 className="t-title grow" style={{ margin: 0 }}>
-          Nouvelle discussion
-        </h2>
-      </div>
+      <h2 className="t-title" style={{ margin: 0 }}>
+        Nouvelle discussion
+      </h2>
 
       <div>
         <label className="tiny muted" htmlFor={subjectId}>

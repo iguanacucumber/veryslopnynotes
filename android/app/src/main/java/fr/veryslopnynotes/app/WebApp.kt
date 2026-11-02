@@ -82,13 +82,13 @@ class NativeWebShell(private val activity: ComponentActivity) {
     val view: WebView get() = webView
 
     fun open(path: String?) {
-        val safe = if (path != null && path in WEB_ROUTES) path else "/"
+        val safe = path?.takeIf { isServedRoute(it) } ?: "/"
         webView.loadUrl(urlFor(safe))
     }
 
     /** Deep link reçu APRÈS le chargement : simple changement de hash. */
     fun navigate(path: String) {
-        if (path !in WEB_ROUTES) return
+        if (!isServedRoute(path)) return
         if (!pageLoaded) {
             open(path)
             return

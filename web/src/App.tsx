@@ -70,7 +70,7 @@ function Gate({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionStatus | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
-  const { authLost, sessionOpen, sessionClosed, reportStorage } = useApp();
+  const { authLost, sessionOpen, sessionClosed, reportStorage, reportSession } = useApp();
 
   useEffect(() => {
     let alive = true;
@@ -79,17 +79,21 @@ function Gate({ children }: { children: ReactNode }) {
       .then((s) => {
         if (!alive) return;
         setSession(s);
+        reportSession(s);
         // Le statut porte l'état du stockage chiffré : Keystore mort = dégradé
         // (rien n'est conservé), l'interface l'affiche.
         reportStorage(storageUnavailable(s));
       })
       .catch(() => {
-        if (alive) setSession({ state: "offline", message: "téléphone injoignable" });
+        if (!alive) return;
+        const offline: SessionStatus = { state: "offline", message: "téléphone injoignable" };
+        setSession(offline);
+        reportSession(offline);
       });
     return () => {
       alive = false;
     };
-  }, [reportStorage]);
+  }, [reportStorage, reportSession]);
 
   // Le statut lu au démarrage est périmé après appairage ou déconnexion :
   // sans ces drapeaux, retour à /pairing à tort ou accueil d'un compte fermé.
@@ -117,6 +121,8 @@ export function App() {
               <Route path="/profile" element={<ProfileRoute />} />
               <Route path="/settings" element={<SettingsRoute />} />
               <Route path="/messages" element={<MessagesRoute />} />
+              <Route path="/messages/new" element={<MessagesRoute />} />
+              <Route path="/messages/:id" element={<MessagesRoute />} />
               <Route path="/attendance" element={<AttendanceRoute />} />
               <Route path="/sanctions" element={<SanctionsRoute />} />
               <Route path="/news" element={<NewsRoute />} />

@@ -4,7 +4,7 @@
 // bug connu de l'onglet : une semaine qui traverse un changement d'heure dure
 // 167 h ou 169 h. `addDays` / `startOfWeek` travaillent sur la date, donc le
 // lundi 00:00 reste le lundi 00:00.
-import { addDays, frDayShort, isoDay, startOfWeek } from "../../lib/format";
+import { addDays, frDayShort, isoDay, parseDate, startOfWeek } from "../../lib/format";
 import type { Lesson } from "../home/parse";
 
 export interface DayGroup {
@@ -84,6 +84,12 @@ export function highlightOf(
   if (current && lesson.id === current.id) return "current";
   if (next && lesson.id === next.id) return "next";
   return null;
+}
+
+/** Semaine publiée dans le hash (`#/calendar?week=YYYY-MM-DD`) ; une valeur
+ *  absente ou illisible retombe sur la semaine de `fallback`. */
+export function weekStartFromParam(value: string | null, fallback: Date = new Date()): Date {
+  return startOfWeek(parseDate(value) ?? fallback);
 }
 
 export function weekQuery(weekStart: Date): string {

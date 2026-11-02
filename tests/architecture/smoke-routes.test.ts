@@ -15,6 +15,11 @@ function appRoutes(source: string): string[] {
     .filter((path) => path !== "*");
 }
 
+/** `/messages/:id` est visité par un id concret dans le smoke. */
+function matches(route: string, path: string): boolean {
+  return new RegExp(`^${route.replace(/:[^/]+/g, "[^/]+")}$`).test(path);
+}
+
 describe("parité des routes du smoke", () => {
   test("le smoke visite exactement les routes de App.tsx", () => {
     const app = appRoutes(readFileSync(APP, "utf8"));
@@ -25,8 +30,8 @@ describe("parité des routes du smoke", () => {
     expect(new Set(app).size).toBe(app.length);
     expect(new Set(smoke).size).toBe(smoke.length);
 
-    const absentesDuSmoke = app.filter((path) => !smoke.includes(path));
-    const absentesDeApp = smoke.filter((path) => !app.includes(path));
+    const absentesDuSmoke = app.filter((route) => !smoke.some((path) => matches(route, path)));
+    const absentesDeApp = smoke.filter((path) => !app.some((route) => matches(route, path)));
     if (absentesDuSmoke.length || absentesDeApp.length) {
       throw new Error(
         [

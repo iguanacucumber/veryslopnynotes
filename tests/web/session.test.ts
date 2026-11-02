@@ -67,6 +67,15 @@ describe("session web", () => {
     expect(closed).toBe(false);
   });
 
+  test("l'appairage ne propose un retour que si la session existe", () => {
+    // Sans session, le garde-fou renvoie vers /pairing : un « Retour » y
+    // boucherait sur lui-même.
+    const pairing = readFileSync(join(ROOT, "web/src/features/pairing/PairingScreen.tsx"), "utf8");
+    expect(pairing).toContain("mustPair(");
+    expect(pairing).toContain("sessionStatus !== null");
+    expect(pairing).toContain('const backTarget = replacing ? "/profile" : "/"');
+  });
+
   test("un appairage réussi rouvre la session", () => {
     // Non-régression #357 : la session ouverte prime sur le statut périmé,
     // et annule la fermeture d'une déconnexion précédente.

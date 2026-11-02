@@ -7,6 +7,11 @@
   text-align: center;
 }
 
+/* Les tuiles ancrent vers une section sous la barre collante de 56 px. */
+.settings section[id^="reglages-"] {
+  scroll-margin-top: calc(56px + var(--safe-top) + 8px);
+}
+
 .settings-profile__name {
   margin: 8px 0 0;
   font-size: 24px;

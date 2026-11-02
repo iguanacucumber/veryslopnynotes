@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useParams } from "react-router-dom";
 import { bridge } from "../bridge/client";
 import { BridgeCallError } from "../bridge/types";
 import {
@@ -20,7 +21,9 @@ import {
   type DiscussionRecipient,
 } from "../features/messages/model";
 import { createReplyGuard, draftAfterReply } from "../features/messages/reply";
+import { ErrorBox, Loading } from "../ui/components";
 import { useApp } from "../ui/AppContext";
+import { useViewNavigate } from "../ui/viewTransition";
 import { createSeq } from "../lib/seq";
 
 type Mode = "list" | "thread" | "new";
@@ -38,10 +41,14 @@ function reportable(error: unknown, notify: (message: string, kind?: "info" | "e
 
 export default function MessagesRoute() {
   const { notify, refreshTick } = useApp();
-  // Fil et rédaction sont des MODES de /messages, pas des routes : le retour
-  // système revient donc à la liste.
-  const sentinel = useRef(0);
-  const [mode, setMode] = useState<Mode>("list");
+  const { id } = useParams();
+  const location = useLocation();
+  const go = useViewNavigate();
+  // Fil et rédaction sont des SOUS-ROUTES : le retour système et la flèche de
+  // la coquille visent la même URL, sans sentinelle d'historique.
+  const composing = location.pathname === "/messages/new";
+  const mode: Mode = composing ? "new" : id ? "thread" : "list";
+
   const [threads, setThreads] = useState<Discussion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +56,6 @@ export default function MessagesRoute() {
   const [query, setQuery] = useState("");
   const [previews, setPreviews] = useState<Record<string, string>>({});
 
-  const [open, setOpen] = useState<Discussion | null>(null);
   const [messages, setMessages] = useState<DiscussionMessage[]>([]);
   const [threadLoading, setThreadLoading] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
@@ -61,10 +67,15 @@ export default function MessagesRoute() {
   const [recipientsError, setRecipientsError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  // La liste porte les métadonnées du fil (objet, participants) : un lien
+  // direct ou une restauration Android retrouve le fil sans état de navigation.
+  const open = useMemo(() => (id ? threads.find((d) => d.id === id) ?? null : null), [id, threads]);
+
   // Une réponse PÉRIMÉE est ignorée : sinon les messages du fil A s'affichent
   // sous l'en-tête du fil B (A répond après B).
   const threadsSeq = useRef(createSeq());
   const threadSeq = useRef(createSeq());
+  const loadedThread = useRef<string | null>(null);
 
   // La réponse d'un envoi n'écrit que dans le fil OUVERT à l'envoi : une
   // réponse périmée ne doit ni changer de fil ni effacer le brouillon.
@@ -120,9 +131,6 @@ export default function MessagesRoute() {
       // Les participants arrivent AVEC les messages du fil.
       const participants = parseParticipants(result.payload);
       if (participants.length > 0) {
-        setOpen((current) =>
-          current && current.id === discussion.id ? { ...current, participants } : current,
-        );
         setThreads((current) =>
           current.map((d) => (d.id === discussion.id ? { ...d, participants } : d)),
         );
@@ -142,6 +150,28 @@ export default function MessagesRoute() {
     }
   }, []);
 
+  // Le fil affiché vient de l'URL : un lien direct charge le fil dès que la
+  // liste a livré ses métadonnées. Quitter le fil invalide la requête en vol.
+  useEffect(() => {
+    if (mode !== "thread" || !open) return;
+    if (loadedThread.current === open.id) return;
+    loadedThread.current = open.id;
+    replyGuard.current.setDisplayedThread(open.id);
+    setSending(false);
+    setMessages([]);
+    setDraft("");
+    setThreadError(null);
+    void loadThread(open);
+  }, [mode, open, loadThread]);
+
+  useEffect(() => {
+    if (mode === "thread") return;
+    loadedThread.current = null;
+    threadSeq.current.invalidate();
+    replyGuard.current.setDisplayedThread(null);
+    setSending(false);
+  }, [mode]);
+
   // Le geste global « Actualiser » recharge aussi le fil OUVERT, sinon il
   // serait le seul écran que le geste global ne rafraîchit pas.
   useEffect(() => {
@@ -150,61 +180,19 @@ export default function MessagesRoute() {
     if (mode === "thread" && open) void loadThread(open);
   }, [refreshTick, mode, open, loadThread]);
 
-  const resetToList = useCallback(() => {
-    // Le fil refermé : sa réponse en vol est périmée (elle ne doit plus rien
-    // écrire dans l'écran).
+  const backToList = useCallback(() => {
     threadSeq.current.invalidate();
     replyGuard.current.setDisplayedThread(null);
     setSending(false);
-    setMode("list");
-    setOpen(null);
-    setMessages([]);
-    setDraft("");
-    setThreadError(null);
-  }, []);
-
-  const pushSentinel = useCallback(() => {
-    try {
-      window.history.pushState({ vsn: "messages-mode" }, "", window.location.href);
-      sentinel.current += 1;
-    } catch {
-      // Historique indisponible : le bouton Retour de l’écran reste le chemin.
-    }
-  }, []);
+    go("/messages", { replace: true });
+  }, [go]);
 
   const openThread = useCallback(
     (discussion: Discussion) => {
-      pushSentinel();
-      // Le fil affiché change : l'envoi en cours ne vaut plus rien ici.
-      replyGuard.current.setDisplayedThread(discussion.id);
-      setSending(false);
-      setOpen(discussion);
-      setMode("thread");
-      setMessages([]);
-      setDraft("");
-      void loadThread(discussion);
+      go(`/messages/${encodeURIComponent(discussion.id)}`);
     },
-    [loadThread, pushSentinel],
+    [go],
   );
-
-  const backToList = useCallback(() => {
-    const hadSentinel = sentinel.current > 0;
-    sentinel.current = 0;
-    resetToList();
-    if (hadSentinel) window.history.back();
-  }, [resetToList]);
-
-  // Le retour système (PopState) consomme la sentinelle : on retombe sur la
-  // liste, sans quitter l’onglet.
-  useEffect(() => {
-    if (mode === "list") return;
-    const onPop = () => {
-      sentinel.current = 0;
-      resetToList();
-    };
-    window.addEventListener("popstate", onPop);
-    return () => window.removeEventListener("popstate", onPop);
-  }, [mode, resetToList]);
 
   const setRead = useCallback(
     async (discussion: Discussion, read: boolean) => {
@@ -214,10 +202,12 @@ export default function MessagesRoute() {
           notify(result.error || "État de lecture refusé.", "error");
           return;
         }
-        setOpen((current) =>
-          current && current.id === discussion.id
-            ? { ...current, unreadCount: read ? 0 : Math.max(current.unreadCount, 1) }
-            : current,
+        setThreads((current) =>
+          current.map((d) =>
+            d.id === discussion.id
+              ? { ...d, unreadCount: read ? 0 : Math.max(d.unreadCount, 1) }
+              : d,
+          ),
         );
         notify(read ? "Discussion marquée comme lue." : "Discussion marquée comme non lue.");
         await loadThreads();
@@ -277,9 +267,7 @@ export default function MessagesRoute() {
     }
   }, [backToList, loadThreads, notify, open]);
 
-  const startNew = useCallback(async () => {
-    pushSentinel();
-    setMode("new");
+  const loadRecipients = useCallback(async () => {
     setRecipients([]);
     setRecipientsError(null);
     setRecipientsLoading(true);
@@ -294,7 +282,15 @@ export default function MessagesRoute() {
     } finally {
       setRecipientsLoading(false);
     }
-  }, [pushSentinel]);
+  }, []);
+
+  useEffect(() => {
+    if (composing) void loadRecipients();
+  }, [composing, loadRecipients]);
+
+  const startNew = useCallback(() => {
+    go("/messages/new");
+  }, [go]);
 
   const create = useCallback(
     async (subject: string, body: string, picked: string[]) => {
@@ -326,14 +322,27 @@ export default function MessagesRoute() {
         loading={recipientsLoading}
         error={recipientsError}
         sending={creating}
-        onBack={backToList}
-        onRetry={() => void startNew()}
+        onRetry={() => void loadRecipients()}
         onCreate={(subject, body, picked) => void create(subject, body, picked)}
       />
     );
   }
 
-  if (mode === "thread" && open) {
+  if (mode === "thread") {
+    if (!open) {
+      return loading ? (
+        <Loading label="Chargement de la discussion…" />
+      ) : (
+        <ErrorBox message={error ?? "Discussion introuvable."}>
+          <button type="button" className="btn btn--small" onClick={backToList}>
+            Retour à la messagerie
+          </button>
+        </ErrorBox>
+      );
+    }
+    // Le fil de l'URL n'est pas encore chargé : ne jamais montrer les messages
+    // du fil précédent sous le nouveau sujet.
+    if (loadedThread.current !== open.id) return <Loading label="Chargement de la discussion…" />;
     return (
       <ThreadScreen
         discussion={open}
@@ -344,7 +353,6 @@ export default function MessagesRoute() {
         sending={sending}
         onDraftChange={setDraft}
         onReply={() => void reply()}
-        onBack={backToList}
         onToggleRead={() => void setRead(open, open.unreadCount !== 0)}
         onDelete={() => void remove()}
         onRefresh={() => void loadThread(open)}

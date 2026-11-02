@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { bridge } from "../bridge/client";
-import { BridgeCallError, type ResourceKey } from "../bridge/types";
+import { BridgeCallError, type ResourceKey, type SessionStatus } from "../bridge/types";
 import { clearNewsReadIds } from "../features/news/readState";
 import { forceReload, type LoadSignature } from "../lib/refresh";
 import { beginLoad, canUseCached, invalidateOnRequestChange, requestId, visibleResource, type ResourceStatus } from "../lib/resource";
@@ -20,6 +20,9 @@ interface AppContextValue {
   refreshTick: number;
   refresh: () => void;
   notify: (message: string, kind?: NoticeKind) => void;
+  /** Statut de session lu au démarrage (ou après un échec du pont). */
+  sessionStatus: SessionStatus | null;
+  reportSession: (status: SessionStatus | null) => void;
   authLost: boolean;
   /** Session ouverte : le statut lu au démarrage est périmé, sinon retour à
    *  l'écran d'appairage malgré une session native ouverte. */
@@ -47,6 +50,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [systemDark, setSystemDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
   const [scheme, setSchemeState] = useState<string>(() => parseScheme(localStorage.getItem("vsn:scheme")));
   const [refreshTick, setRefreshTick] = useState(0);
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
   const [authLost, setAuthLost] = useState(false);
   const [sessionOpen, setSessionOpen] = useState(false);
   const [sessionClosed, setSessionClosed] = useState(false);
@@ -117,6 +121,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setStorageUnavailable(unavailable);
   }, []);
 
+  const reportSession = useCallback((status: SessionStatus | null) => {
+    setSessionStatus(status);
+  }, []);
+
   // Notice : entrée, lecture, sortie animée. `leaving` est un état à part pour
   // que la disparition soit animée au lieu d'un retrait sec.
   const notify = useCallback((message: string, kind: NoticeKind = "info") => {
@@ -163,6 +171,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshTick,
       refresh,
       notify,
+      sessionStatus,
+      reportSession,
       authLost,
       sessionOpen,
       sessionClosed,
@@ -180,6 +190,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       refreshTick,
       refresh,
       notify,
+      sessionStatus,
+      reportSession,
       authLost,
       sessionOpen,
       sessionClosed,

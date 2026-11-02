@@ -79,7 +79,6 @@ describe("messagerie : un fil illisible est une ERREUR, pas un fil vide (#537)",
         sending: false,
         onDraftChange: () => {},
         onReply: () => {},
-        onBack: () => {},
         onToggleRead: () => {},
         onDelete: () => {},
         onRefresh: () => {},
@@ -190,16 +189,11 @@ describe("messagerie : une réponse d'envoi tardive n'écrase pas le fil ouvert 
         sending,
         onDraftChange: () => {},
         onReply: () => {},
-        onBack: () => {},
         onToggleRead: () => {},
         onDelete: () => {},
         onRefresh: () => {},
       }),
     );
-  }
-
-  function backButton(html: string): string {
-    return html.match(/<button[^>]*aria-label="Retour à la liste des discussions"[^>]*>/)?.[0] ?? "";
   }
 
   test("répondre puis changer de fil : la réponse d'A est ignorée", () => {
@@ -265,10 +259,11 @@ describe("messagerie : une réponse d'envoi tardive n'écrase pas le fil ouvert 
     expect(html).toContain("brouillon de B");
   });
 
-  test("pendant l'envoi, le bouton Retour est désactivé (pas de chevauchement)", () => {
-    expect(backButton(renderScreen(threadA, [], "en cours", true))).toContain("disabled");
-    // Hors envoi, le fil peut être refermé.
-    expect(backButton(renderScreen(threadA, [], "", false))).not.toContain("disabled");
+  test("le fil n'ajoute pas une seconde flèche Retour", () => {
+    // La coquille porte la seule flèche : son retour vise `/messages` par la
+    // route du fil, sans doublon dans l'écran.
+    const html = renderScreen(threadA, [], "", false);
+    expect(html).not.toContain('aria-label="Retour à la liste des discussions"');
   });
 
   test("la route utilise la garde et n'efface le brouillon que par elle", () => {
@@ -284,5 +279,18 @@ describe("messagerie : une réponse d'envoi tardive n'écrase pas le fil ouvert 
     // Le brouillon n'est plus effacé en dur : il l'est seulement s'il est
     // ENCORE celui envoyé.
     expect(route).toContain("draftAfterReply(current, sentDraft)");
+  });
+});
+
+describe("messagerie — fil et composition sont des sous-routes", () => {
+  test("la coquille et le retour Android partagent la même URL", () => {
+    const app = readFileSync(join(ROOT, "web/src/App.tsx"), "utf8");
+    expect(app).toContain('path="/messages/new"');
+    expect(app).toContain('path="/messages/:id"');
+    const route = readFileSync(join(ROOT, "web/src/routes/messages.tsx"), "utf8");
+    expect(route).toContain("useParams()");
+    // Plus de mode local contre l'historique : l'URL est la source.
+    expect(route).not.toContain("pushState");
+    expect(route).not.toContain("popstate");
   });
 });
