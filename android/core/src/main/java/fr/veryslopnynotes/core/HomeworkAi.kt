@@ -17,7 +17,7 @@ const val SYSTEM_HOMEWORK_JSON =
     "Reponds UNIQUEMENT en JSON valide, sans texte autour, sans effet externe. " +
     "Schema ok : {\"status\":\"ok\",\"steps\":string[],\"answer\":string,\"sources\":string[]}. " +
     "Schema refus : {\"status\":\"refused\",\"reason\":string,\"sources\":string[]}. " +
-    "Redige d'abord steps (raisonnement complet), puis answer qui reprend le resultat final des steps. " +
+    SYSTEM_STEPS_RULE +
     "Si les DONNEES sont insuffisantes pour repondre de facon sourcee, reponds refused avec reason=sources_insuffisantes. " +
     "Un enonce present dans les DONNEES peut demander un calcul ou une demonstration : resous-le avec tes connaissances, " +
     "sans inventer de source ; les libelles cites restent ceux fournis. " +
@@ -40,7 +40,7 @@ const val SYSTEM_HOMEWORK_PHOTO_JSON =
         "Reponds UNIQUEMENT en JSON valide, sans texte autour, sans effet externe. " +
         "Schema ok : {\"status\":\"ok\",\"steps\":string[],\"answer\":string,\"sources\":string[]}. " +
         "Schema refus : {\"status\":\"refused\",\"reason\":string,\"sources\":string[]}. " +
-        "Redige d'abord steps (raisonnement complet), puis answer qui reprend le resultat final des steps. " +
+        SYSTEM_STEPS_RULE +
         "Si les DONNEES sont insuffisantes pour repondre de facon sourcee, reponds refused avec reason=sources_insuffisantes. " +
         SYSTEM_CITATION_RULE +
         "Chaque source citee doit reprendre exactement un libelle fourni, ou \"" + "Photo de l'énoncé" + "\"."

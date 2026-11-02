@@ -5,15 +5,15 @@
 
 <a id="i4"></a>
 
-## I4 — Le prompt LLM est vérifié, borné, et c'est celui qui part (ADR-003)
+## I4 — Le prompt LLM vérifié est celui qui part (ADR-003)
 - Invariant : aucun secret dans un prompt — garde sur des FORMES (clé, JWT,
   en-tête, cookie, clé privée, entropie) — et le prompt VÉRIFIÉ est celui
   ENVOYÉ (`SafePromptProvider`). Une sortie texte/JSON mal formée est refusée,
-  jamais réinterprétée. Le budget de tokens est DÉDUIT du plafond de caractères
-  (`MAX_OUTPUT_CHARS` ÷ `CHARS_PER_TOKEN`, une constante) : le fournisseur ne
-  produit pas ce que la garde jetterait. L'app appelle OpenRouter en HTTPS, clé
-  dans `Authorization`, jamais le serveur. Un refus nomme la limite réelle, sans
-  le secret.
+  jamais réinterprétée. Le budget de tokens est DÉDUIT du plafond
+  (`MAX_OUTPUT_CHARS` ÷ `CHARS_PER_TOKEN`) selon la densité du français :
+  une réponse demandée tient dans la garde, qui nomme la limite réelle
+  au-delà. L'app appelle OpenRouter en HTTPS, clé dans `Authorization`, jamais le
+  serveur ; un refus ne cite jamais le secret.
 - Test : `tests/unit/kotlin-llm-guard.test.ts`,
   `tests/unit/kotlin-llm-budget.test.ts`,
   `tests/unit/check-architecture-scan.test.ts`,
@@ -44,7 +44,7 @@
 <a id="i15"></a>
 
 ## I15 — L'export PDF d'une fiche garde le corps entier et ses sources
-- Invariant : l'export PDF rend le corps ENTIER (`RevisionPdf` pagine) et la liste CANONIQUE des sources (`sheet.sources`), jamais un bloc « Sources : » recopié du modèle. Une citation du modèle ne remplace pas l'attribution ni n'introduit une source absente. Tout bloc « Sources » du modèle, final ou au milieu, est retiré jusqu'à la première ligne vide ou non-source ; le cours suivant reste entier. Une troncature (au-delà de `MAX_OUTPUT_CHARS`, 12 000 caractères sous I4, ou du filet de rendu) est SIGNALÉE, jamais silencieuse.
+- Invariant : l'export PDF rend le corps ENTIER (`RevisionPdf` pagine) et la liste CANONIQUE des sources (`sheet.sources`), jamais un bloc « Sources : » recopié du modèle. Une citation du modèle ne remplace pas l'attribution ni n'introduit une source absente. Tout bloc « Sources » du modèle, final ou au milieu, est retiré jusqu'à la première ligne vide ou non-source ; le cours suivant reste entier. Une troncature (au-delà de `MAX_OUTPUT_CHARS`, 16 000 caractères sous I4, ou du filet de rendu) est SIGNALÉE, jamais silencieuse.
 - Test : `tests/unit/kotlin-revision-sheet.test.ts`
 - Commande : `make check`.
 - Emplacement : `android/core/src/main/java/fr/veryslopnynotes/core/RevisionSheet.kt`,

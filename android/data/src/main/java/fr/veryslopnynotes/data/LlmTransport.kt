@@ -13,8 +13,8 @@ import java.net.SocketTimeoutException
 /**
  * Plafond de lecture d'une réponse fournisseur : 512 Kio.
  *
- * La sortie est DÉJÀ bornée à 12 000 caractères (I5) ; en JSON, un caractère
- * échappé en `\uXXXX` pèse 6 octets, soit ~72 Kio au pire. 512 Kio laissent
+ * La sortie est DÉJÀ bornée à 16 000 caractères (I5) ; en JSON, un caractère
+ * échappé en `\uXXXX` pèse 6 octets, soit ~96 Kio au pire. 512 Kio laissent
  * donc de la marge (métadonnées `usage`, enveloppe) tout en refusant un corps
  * qui n'est pas une réponse de chat — la mémoire de l'appareil reste bornée.
  */

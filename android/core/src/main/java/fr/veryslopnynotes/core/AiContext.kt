@@ -10,9 +10,11 @@ package fr.veryslopnynotes.core
 //
 // BUDGETS DÉCLARÉS UNE SEULE FOIS :
 //   - par source = Homework.MAX_SOURCE_CHARS (2 000), le contrat du devoir ;
-//   - total      = MAX_OUTPUT_CHARS (12 000), le plafond de la garde I5.
-// Les deux viennent de `core` (Homework/LlmGuard), jamais d'une copie. Le
-// contexte d'entrée ne dépasse donc pas le plafond de sortie de la garde, et
+//   - total      = MAX_TOTAL_CHARS (12 000), plafond du corpus envoyé ;
+//                  volontairement plus petit que la sortie (16 000) pour
+//                  borner le coût d'un prompt.
+// Les budgets viennent de `core` (Homework/AiContext), jamais d'une copie. Le
+// contexte d'entree ne depasse donc pas le plafond de sortie de la garde, et
 // chaque source produite reste valide pour `Homework.isRequestValid` (I5) :
 // aucun libellé ni texte hors contrat, et le lot tient dans `MAX_SOURCES`.
 //
@@ -119,13 +121,14 @@ object AiContext {
     const val MAX_LABEL_CHARS = Homework.MAX_LABEL_CHARS
 
     /**
-     * Budget total du contexte : le plafond de la garde I5 (12 000 caractères).
+     * Budget total du contexte : 12 000 caractères.
      *
-     * Il est volontairement PLUS PETIT que 8 sources x 2 000 : le plafond de lot
-     * ne suffit pas à borner le coût d'un prompt. Une fois le budget épuisé,
-     * les sources suivantes sont écartées avec la raison `budget`.
+     * Il reste volontairement PLUS PETIT que le plafond de sortie
+     * ([MAX_OUTPUT_CHARS], 16 000) : le plafond de lot ne suffit pas à borner
+     * le coût d'un prompt. Une fois le budget épuisé, les sources suivantes
+     * sont écartées avec la raison `budget`.
      */
-    const val MAX_TOTAL_CHARS = MAX_OUTPUT_CHARS
+    const val MAX_TOTAL_CHARS = 12000
 
     /** Refus stable, identique pour tous les points d'entrée hors photo. */
     const val REFUSAL_CODE = "aucune_source"

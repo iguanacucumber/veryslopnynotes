@@ -27,37 +27,42 @@ import java.util.Base64
 // une reponse VALIDE de 9 000 caracteres (finish_reason=stop) etait jetee.
 //
 // MAINTENANT : le budget de tokens est DEDUIT du plafond de caracteres, avec
-// la borne HAUTE de densite (4 caracteres/token : texte dense, anglais, code,
-// longs identifiants). Le budget du fournisseur ne peut donc pas produire une
-// sortie plus longue que la garde — et la garde nomme la LIMITE REELLE quand
-// elle refuse.
+// la densite REELLE du francais JSON (~2,5 caracteres/token, mesure live).
+// L'ancienne borne de 4 caracteres/token sous-provisionnait le fournisseur :
+// un DM de six exercices etait coupe a 7 300 caracteres (`finish_reason`
+// `length`), bien avant le plafond de la garde. Le budget couvre donc le
+// corrige maximal et son enveloppe bornee en francais, et la garde nomme la
+// LIMITE REELLE quand elle refuse.
 
 /**
- * Plafond de caracteres d'une sortie LLM (garde I5) : 12 000 caracteres.
+ * Plafond de caracteres d'une sortie LLM (garde I5) : 16 000 caracteres.
  *
- * Assez pour ce que le fournisseur peut produire (3 000 tokens, cf.
- * [MAX_OUTPUT_TOKENS]) : la garde ne jette plus une reponse valide.
+ * Laisse la place au corrige maximal (8 000) et a son enveloppe JSON
+ * (etapes bornees, sources) : le plafond du contrat partage reste inchange.
+ * C'est un filet dur, pas un objectif de longueur.
  */
-const val MAX_OUTPUT_CHARS = 12000
+const val MAX_OUTPUT_CHARS = 16000
 
 /**
- * Densite de reference d'un token : 4 caracteres par token.
+ * Densite de reference d'un token : 3 caracteres par token.
  *
- * Le francais est plus dense en tokens (~3 caracteres/token) ; 4 est la
- * borne HAUTE plausible (anglais dense, code, longs identifiants). On
- * retient cette borne : le budget de tokens deduit ne peut alors pas
- * produire une sortie plus longue que la garde.
+ * Mesure live sur le modele par defaut avec sortie JSON francaise : 2,5 a
+ * 2,6 caracteres/token, echappements compris. 3 laisse une petite marge pour
+ * le francais ordinaire ; le budget qui en derive couvre le corrige maximal
+ * (8 000) et son enveloppe bornee (~5 000), sans payer 16 000 caracteres sur
+ * chaque appel.
  */
-const val CHARS_PER_TOKEN = 4
+const val CHARS_PER_TOKEN = 3
 
 /**
  * Budget de tokens du fournisseur : DEDUIT du plafond de caracteres
  * (arrondi en bas : jamais plus de tokens que le budget de la garde).
  *
- * 3 000 tokens x 4 caracteres/token = 12 000 caracteres : la sortie que le
- * fournisseur produit tient dans la garde, et le cout par appel reste borne.
- * Le module `data` IMPORTE cette constante (jamais de copie) : les deux
- * plafonds ne peuvent pas deriver l'un de l'autre.
+ * 5 333 tokens x 3 caracteres/token = 15 999 caracteres : le fournisseur
+ * peut ecrire une reponse francaise plus longue que tout ce que l'app
+ * demande, et le cout par appel reste borne. Le module `data` IMPORTE cette
+ * constante (jamais de copie) : les deux plafonds ne peuvent pas deriver
+ * l'un de l'autre.
  */
 const val MAX_OUTPUT_TOKENS = MAX_OUTPUT_CHARS / CHARS_PER_TOKEN
 

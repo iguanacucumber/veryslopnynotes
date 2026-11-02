@@ -47,8 +47,13 @@ object Homework {
     /**
      * Budget de l'enveloppe JSON autour du corrigé (clés, échappements, étapes,
      * sources) : le corrigé ne peut pas occuper TOUTE la sortie.
+     *
+     * 8 000 = le corrigé maximal : étapes au contrat d'affichage (12 × 400),
+     * libellés de sources, clés et échappements JSON. Une enveloppe plus
+     * petite rendait un corrigé pourtant valide impossible à produire dans la
+     * garde (étapes verbeuses comprises).
      */
-    const val JSON_ENVELOPE_RESERVE_CHARS = 4000
+    const val JSON_ENVELOPE_RESERVE_CHARS = 8000
 
     /**
      * Le corrigé : le plafond I5 [MAX_OUTPUT_CHARS] moins l'enveloppe JSON.
