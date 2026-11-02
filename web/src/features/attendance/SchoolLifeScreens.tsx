@@ -29,6 +29,7 @@ interface AttendanceProps {
   loading: boolean;
   error: string | null;
   stale: boolean;
+  fetchedAt: number;
   onlyPending: boolean;
   canSeeSanctions: boolean;
   onOnlyPendingChange: (value: boolean) => void;
@@ -52,6 +53,7 @@ export function AttendanceScreen({
   loading,
   error,
   stale,
+  fetchedAt,
   onlyPending,
   canSeeSanctions,
   onOnlyPendingChange,
@@ -100,7 +102,7 @@ export function AttendanceScreen({
 
   return (
     <div className="stack">
-      <PageHeading title="Absences et retards" action={stale ? <StaleBadge /> : null} />
+      <PageHeading title="Absences et retards" action={stale ? <StaleBadge fetchedAt={fetchedAt} /> : null} />
 
       {error ? (
         <ErrorBox message={error}>
@@ -271,10 +273,11 @@ interface SanctionsProps {
   loading: boolean;
   error: string | null;
   stale: boolean;
+  fetchedAt: number;
   onRefresh: () => void;
 }
 
-export function SanctionsScreen({ rows, payload, loading, error, stale, onRefresh }: SanctionsProps) {
+export function SanctionsScreen({ rows, payload, loading, error, stale, fetchedAt, onRefresh }: SanctionsProps) {
   const emptyContent = loading ? (
     <Loading label="Chargement des sanctions…" />
   ) : error ? (
@@ -314,7 +317,7 @@ export function SanctionsScreen({ rows, payload, loading, error, stale, onRefres
         title="Sanctions déclarées"
         action={
           <>
-            {stale ? <StaleBadge /> : null}
+            {stale ? <StaleBadge fetchedAt={fetchedAt} /> : null}
             <span className="chip">{rows.length}</span>
           </>
         }

@@ -520,7 +520,7 @@ function TasksWeek({ week }: { week: string }) {
     <Page>
       {resource.stale ? (
         <div className="tasks-status" role="status">
-          <StaleBadge />
+          <StaleBadge fetchedAt={resource.fetchedAt} />
           <span className="tiny muted">
             {week === currentWeek ? "Semaine en cours" : "Semaine sélectionnée"}
           </span>

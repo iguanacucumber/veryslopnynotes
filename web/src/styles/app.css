@@ -281,9 +281,10 @@ a {
   cursor: not-allowed;
 }
 
-/* Retour au toucher : l'icône tourne une fois au rafraîchissement (#336). */
+/* Rotation tant qu'une lecture est en cours : elle s'arrête avec la ressource,
+   pas après un délai fixe. `prefers-reduced-motion` la coupe. */
 .icon-btn--spin svg {
-  animation: spin 650ms var(--ease);
+  animation: spin 900ms linear infinite;
 }
 
 .icon-btn--accent {

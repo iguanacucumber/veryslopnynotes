@@ -14,6 +14,7 @@ export default function SanctionsRoute() {
       loading={punishments.loading}
       error={punishments.error}
       stale={punishments.stale}
+      fetchedAt={punishments.fetchedAt}
       onRefresh={punishments.refresh}
     />
   );

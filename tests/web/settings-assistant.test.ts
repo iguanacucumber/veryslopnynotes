@@ -103,6 +103,14 @@ describe("réglages — une seule section Assistant (#612)", () => {  const sett
     expect(keyCard).not.toContain("ne quitte jamais cet appareil");
   });
 
+  test("les matières personnalisées chargent avant d'affirmer qu'il n'y en a aucune (#804)", () => {
+    const card = source("features/settings/SubjectPrefsCard.tsx");
+    expect(card).toContain("Lecture des matières…");
+    expect(card).toContain("setLoaded(true)");
+    // Le message vide est gardé par la première lecture terminée.
+    expect(card).toContain("loaded && prefs.length === 0");
+  });
+
   test("le manuel garde son pont et affiche une puce de statut", () => {
     expect(manual).toContain("Automatique");
     expect(manual).toContain("Prêt");

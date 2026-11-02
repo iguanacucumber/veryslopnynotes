@@ -1,5 +1,5 @@
 import { useId, type CSSProperties, type ReactNode } from "react";
-import { subjectColor, tint, weekStatusFr } from "../lib/format";
+import { relativeFr, subjectColor, tint, weekStatusFr } from "../lib/format";
 import { subjectEmoji } from "../lib/subjectVisual";
 import { IconChevronLeft, IconChevronRight, IconClose, IconSearch, IconWarning } from "./icons";
 
@@ -248,8 +248,19 @@ export function Loading({ label = "Chargement…" }: { label?: string }) {
   );
 }
 
-export function StaleBadge({ label = "hors-ligne" }: { label?: string }) {
-  return <span className="stale">{label}</span>;
+/** État hors-ligne : une seule phrase, avec la date quand le cache en porte une. */
+export function StaleBadge({
+  fetchedAt,
+  label = "hors-ligne",
+}: {
+  fetchedAt?: number;
+  label?: string;
+}) {
+  const text =
+    fetchedAt !== undefined && Number.isFinite(fetchedAt) && fetchedAt > 0
+      ? `hors-ligne · mis à jour ${relativeFr(new Date(fetchedAt).toISOString())}`
+      : label;
+  return <span className="stale">{text}</span>;
 }
 
 export function ErrorBox({ message, children }: { message: string; children?: ReactNode }) {

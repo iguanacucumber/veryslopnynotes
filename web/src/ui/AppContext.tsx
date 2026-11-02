@@ -1,7 +1,17 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { ReactNode } from "react";
 import { bridge } from "../bridge/client";
 import { BridgeCallError, type ResourceKey, type SessionStatus } from "../bridge/types";
+import { beginBusy, isBusy, subscribeBusy } from "../lib/busy";
 import { clearNewsReadIds } from "../features/news/readState";
 import { forceReload, type LoadSignature } from "../lib/refresh";
 import { beginLoad, canUseCached, invalidateOnRequestChange, requestId, visibleResource, type ResourceStatus } from "../lib/resource";
@@ -19,6 +29,8 @@ interface AppContextValue {
   setScheme: (scheme: string) => void;
   refreshTick: number;
   refresh: () => void;
+  /** Au moins une lecture de ressource est en cours. */
+  busy: boolean;
   notify: (message: string, kind?: NoticeKind) => void;
   /** Statut de session lu au démarrage (ou après un échec du pont). */
   sessionStatus: SessionStatus | null;
@@ -58,6 +70,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const noticeTimer = useRef<number | undefined>(undefined);
   const leaveTimer = useRef<number | undefined>(undefined);
   const [notice, setNotice] = useState<{ message: string; kind: NoticeKind; leaving: boolean } | null>(null);
+  const busy = useSyncExternalStore(subscribeBusy, isBusy, isBusy);
 
   const dark = theme === "DARK" || (theme === "SYSTEM" && systemDark);
   const palette = paletteOf(scheme, dark);
@@ -170,6 +183,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setScheme,
       refreshTick,
       refresh,
+      busy,
       notify,
       sessionStatus,
       reportSession,
@@ -189,6 +203,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setScheme,
       refreshTick,
       refresh,
+      busy,
       notify,
       sessionStatus,
       reportSession,
@@ -268,60 +283,74 @@ export function useResource(key: ResourceKey, query = ""): ResourceState {
     const signature: LoadSignature = { query, manual, tick: refreshTick };
     const force = forceReload(lastLoad.current, signature);
     lastLoad.current = signature;
+    // Le démontage termine aussi la lecture : sans cela le compteur resterait
+    // bloqué et l'en-tête tournerait pour toujours.
+    const finishBusy = beginBusy();
+    let settled = false;
+    const settleBusy = () => {
+      if (settled) return;
+      settled = true;
+      finishBusy();
+    };
     const run = async () => {
       // Changement de requête : l'état est vidé, le payload précédent devient
       // invalide. Même requête : le cache reste affiché pendant la relecture.
       setStatus((s) => beginLoad(s, request));
       try {
-        const cached = await bridge.cached(key, query);
+        try {
+          const cached = await bridge.cached(key, query);
+          if (cancelled) return;
+          if (cached.payload) {
+            // Le natif dit déjà si le cache est périmé (`stale`), on ne le
+            // devine pas.
+            setStatus({
+              request,
+              payload: cached.payload,
+              fetchedAt: cached.fetchedAt,
+              stale: cached.stale,
+              error: null,
+              loading: false,
+            });
+            // Cache frais : le natif rendrait la même donnée, on ne relit pas.
+            if (canUseCached(cached, force)) return;
+          }
+        } catch {
+          // Cache indisponible : on tente le natif.
+        }
         if (cancelled) return;
-        if (cached.payload) {
-          // Le natif dit déjà si le cache est périmé (`stale`), on ne le
-          // devine pas.
+        try {
+          const result = await bridge.load({ key, query, force }, controller.signal);
+          if (cancelled) return;
           setStatus({
             request,
-            payload: cached.payload,
-            fetchedAt: cached.fetchedAt,
-            stale: cached.stale,
-            error: null,
+            payload: result.payload,
+            fetchedAt: result.fetchedAt,
+            stale: result.stale,
+            error: result.error,
             loading: false,
           });
-          // Cache frais : le natif rendrait la même donnée, on ne relit pas.
-          if (canUseCached(cached, force)) return;
+        } catch (e) {
+          if (cancelled) return;
+          if (e instanceof BridgeCallError && e.code === "auth_required") {
+            window.dispatchEvent(new Event("vsn:auth"));
+          }
+          setStatus((s) => ({
+            // L'échec porte sur la requête COURANTE : son cache reste affiché,
+            // celui d'une autre requête jamais.
+            ...invalidateOnRequestChange(s, request),
+            loading: false,
+            error: e instanceof Error ? e.message : "lecture indisponible",
+          }));
         }
-      } catch {
-        // Cache indisponible : on tente le natif.
-      }
-      if (cancelled) return;
-      try {
-        const result = await bridge.load({ key, query, force }, controller.signal);
-        if (cancelled) return;
-        setStatus({
-          request,
-          payload: result.payload,
-          fetchedAt: result.fetchedAt,
-          stale: result.stale,
-          error: result.error,
-          loading: false,
-        });
-      } catch (e) {
-        if (cancelled) return;
-        if (e instanceof BridgeCallError && e.code === "auth_required") {
-          window.dispatchEvent(new Event("vsn:auth"));
-        }
-        setStatus((s) => ({
-          // L'échec porte sur la requête COURANTE : son cache reste affiché,
-          // celui d'une autre requête jamais.
-          ...invalidateOnRequestChange(s, request),
-          loading: false,
-          error: e instanceof Error ? e.message : "lecture indisponible",
-        }));
+      } finally {
+        settleBusy();
       }
     };
     void run();
     return () => {
       cancelled = true;
       controller.abort();
+      settleBusy();
     };
   }, [key, query, manual, refreshTick]);
 

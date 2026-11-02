@@ -459,6 +459,7 @@ export function GradesScreen({
   loading,
   error,
   stale,
+  fetchedAt,
   periodsError,
   algorithm,
   periodId,
@@ -472,6 +473,7 @@ export function GradesScreen({
   loading: boolean;
   error: string | null;
   stale: boolean;
+  fetchedAt: number;
   periodsError: string | null;
   algorithm: Algorithm;
   periodId: string | null;
@@ -492,10 +494,41 @@ export function GradesScreen({
   const searching = search.trim() !== "";
 
   const hasData = data.report !== null || data.grades.length > 0;
+  // Les périodes pilotent la requête : sans elles, changer de période est
+  // impossible même quand la lecture des notes échoue.
+  const toolbar = periods.length > 0;
+
+  const toolbarNode = (
+    <GradesToolbar
+      algorithm={algorithm}
+      onAlgorithm={onAlgorithm}
+      periods={periods}
+      periodId={periodId}
+      onPeriod={onPeriod}
+      provided={data.report?.provided ?? false}
+    />
+  );
 
   if (!hasData) {
     return (
-      <Page>
+      <Page className="grades">
+        <div className="grades-headline">
+          {stale && !loading ? <StaleBadge fetchedAt={fetchedAt} /> : null}
+          {periodsError ? <span className="grades-caption">{periodsError}</span> : null}
+        </div>
+
+        {toolbar ? (
+          <>
+            {toolbarNode}
+            <SearchField
+              value={search}
+              onChange={setSearch}
+              placeholder="Rechercher une note, une matière"
+              label="Rechercher une note ou une matière"
+            />
+          </>
+        ) : null}
+
         <GradesNoData payload={payload} loading={loading} error={error} onRefresh={onRefresh} />
       </Page>
     );
@@ -504,7 +537,7 @@ export function GradesScreen({
   return (
     <Page className="grades">
       <div className="grades-headline">
-        {stale && !loading ? <StaleBadge /> : null}
+        {stale && !loading ? <StaleBadge fetchedAt={fetchedAt} /> : null}
         {periodsError ? <span className="grades-caption">{periodsError}</span> : null}
       </div>
 
@@ -514,14 +547,7 @@ export function GradesScreen({
         </p>
       ) : null}
 
-      <GradesToolbar
-        algorithm={algorithm}
-        onAlgorithm={onAlgorithm}
-        periods={periods}
-        periodId={periodId}
-        onPeriod={onPeriod}
-        provided={data.report?.provided ?? false}
-      />
+      {toolbarNode}
 
       <SearchField
         value={search}

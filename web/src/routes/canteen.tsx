@@ -52,7 +52,10 @@ export default function CanteenRoute() {
 
   return (
     <Page>
-      <PageHeading title="Menus de la semaine" action={resource.stale ? <StaleBadge /> : null} />
+      <PageHeading
+        title="Menus de la semaine"
+        action={resource.stale ? <StaleBadge fetchedAt={resource.fetchedAt} /> : null}
+      />
 
       {error && days.length > 0 ? (
         <p className="tiny" role="status" style={{ margin: 0, color: "var(--danger-ink)" }}>

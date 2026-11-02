@@ -3,6 +3,8 @@ import { useParisTz } from "./setup";
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { isoDay, startOfWeek, weekStatusFr, weeksBetween } from "../../web/src/lib/format";
 import {
   ENTRANCE_WINDOW_MS,
@@ -36,6 +38,7 @@ import {
   upcomingLessons,
   type Grade,
 } from "../../web/src/features/home/parse";
+import { CourseWidget, TasksWidget } from "../../web/src/features/home/HomeScreen";
 import {
   currentLesson,
   groupDays,
@@ -251,6 +254,40 @@ describe("devoirs", () => {
       ],
     });
     expect(parseAssignments(alike).map((task) => task.id)).toEqual(["1", "2"]);
+  });
+});
+
+// Une capacité visible avec un cache LU mais vide ne laisse pas un blanc : le
+// widget garde son en-tête et dit calmement qu'il n'y a rien (#804).
+describe("accueil : capacités visibles, donnée absente (#804)", () => {
+  const now = new Date(2026, 9, 19, 12).getTime();
+  const props = { now, dark: false, onMore: () => {}, openedAt: now };
+
+  test("aucun cours : une ligne calme sous l'en-tête Cours", () => {
+    const html = renderToStaticMarkup(createElement(CourseWidget, { ...props, lessons: [] }));
+    expect(html).toContain("Aucun cours à venir");
+    expect(html.match(/Aucun cours à venir/g)).toHaveLength(1);
+    expect(html).toContain("Cours");
+  });
+
+  test("aucun devoir : une ligne calme sous l'en-tête Devoirs", () => {
+    const html = renderToStaticMarkup(
+      createElement(TasksWidget, { ...props, tasks: [], total: 0 }),
+    );
+    expect(html).toContain("Rien à rendre");
+    expect(html.match(/Rien à rendre/g)).toHaveLength(1);
+    expect(html).toContain("Devoirs");
+  });
+
+  test("le câblage garde les widgets quand la capacité a un payload vide", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "features", "home", "HomeScreen.tsx"),
+      "utf8",
+    );
+    expect(source).toContain("timetableRes.payload !== null");
+    expect(source).toContain("assignmentsRes.payload !== null");
+    expect(source).not.toContain("upcoming.length > 0 ?");
+    expect(source).not.toContain("tasks.length > 0 ?");
   });
 });
 

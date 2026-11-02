@@ -58,4 +58,16 @@ describe("geste de rechargement = delta (#365)", () => {
     expect(source).toContain("forceReload");
     expect(source).not.toContain("manual > 0 || refreshTick > 0");
   });
+
+  // #804 : la rotation suit la fin réelle des lectures, pas un minuteur.
+  test("l'en-tête s'appuie sur le compteur de lectures, jamais sur 650 ms", () => {
+    const context = readFileSync(join(ROOT, "web/src/ui/AppContext.tsx"), "utf8");
+    expect(context).toContain("beginBusy");
+    expect(context).toContain("settleBusy()");
+    expect(context).toContain("useSyncExternalStore");
+    const shell = readFileSync(join(ROOT, "web/src/ui/AppShell.tsx"), "utf8");
+    expect(shell).toContain("aria-busy={busy}");
+    expect(shell).not.toContain("650");
+    expect(shell).not.toContain("spinning");
+  });
 });

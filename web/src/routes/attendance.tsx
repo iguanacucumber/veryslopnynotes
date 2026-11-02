@@ -18,6 +18,7 @@ export default function AttendanceRoute() {
       loading={attendance.loading}
       error={attendance.error}
       stale={attendance.stale}
+      fetchedAt={attendance.fetchedAt}
       onlyPending={onlyPending}
       // Capacités INCONNUES (`null`) : rien n'est affirmé, la sanction reste
       // visible ; seule une liste AFFIRMÉE sans l'onglet la masque.
