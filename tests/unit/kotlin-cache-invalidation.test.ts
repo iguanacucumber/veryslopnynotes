@@ -47,6 +47,11 @@ interface WindowResult {
   outside: string[];
 }
 
+interface WeekRange {
+  from: string;
+  to: string;
+}
+
 interface InstantWindow {
   from: string;
   to: string;
@@ -168,6 +173,40 @@ describe("fenêtre EDT = lundi 00:00 Paris (#578)", () => {
     expect(printemps.from).toBe("2026-03-22T23:00:00Z");
     expect(printemps.to).toBe("2026-03-29T21:59:59.999Z");
     expect(Date.parse(printemps.to) + 1 - Date.parse(printemps.from)).toBe(167 * 3_600_000);
+  });
+});
+
+describe("devoirs : relire seulement les semaines qui portent un cours", () => {
+  test.skipIf(skip)("dédoublonne et trie les semaines des jours de devoir", async () => {
+    const res = JSON.parse(
+      await ask({
+        op: "weeks",
+        days: ["2026-09-23", "2026-09-21", "2026-10-01", "2026-09-27"],
+      }),
+    ) as { weeks: WeekRange[] };
+    // 21 et 23 septembre = même semaine ; 27 septembre = la suivante ;
+    // 1er octobre = encore la suivante. Une semaine vide n'est jamais lue.
+    expect(res.weeks).toEqual([
+      { from: "2026-09-21", to: "2026-09-27" },
+      { from: "2026-09-28", to: "2026-10-04" },
+    ]);
+  });
+
+  test("le payload des devoirs passe les semaines utiles, pas la fenêtre entière", () => {
+    const payloads = codeOnly(payloadsSource());
+    expect(payloads).toContain("lessonContents(client, lessonWeeks(days), wanted)");
+    expect(payloads).not.toContain("lessonContents(client, from, to, wanted)");
+  });
+});
+
+describe("notes : lire seulement la période demandée", () => {
+  test("une période filtrée ne relit pas les autres trimestres", () => {
+    const notes = source(join(DATA, "NotesPayloads.kt"));
+    expect(notes).toContain("val readPeriods = if (requested != null) listOf(requested) else periods");
+    expect(notes).toContain("for (p in readPeriods)");
+    // Le registre complet reste construit : la déduplication a besoin des
+    // bornes de toutes les périodes, même celles qu'on ne lit pas.
+    expect(notes).toContain("val spanById = periods.mapNotNull");
   });
 });
 

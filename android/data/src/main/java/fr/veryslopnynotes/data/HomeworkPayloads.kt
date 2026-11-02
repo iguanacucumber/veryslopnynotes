@@ -8,6 +8,7 @@ import fr.veryslopnynotes.core.eventKey
 import fr.veryslopnynotes.pronote.Client
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 // Devoirs : payload `assignments` (devoirs, séances, pièces jointes).
@@ -35,49 +36,60 @@ private fun lessonKeyOf(subject: String, day: String?): String? {
  */
 private fun lessonContents(
     client: Client,
-    from: LocalDateTime,
-    to: LocalDateTime,
+    weeks: List<Pair<LocalDateTime, LocalDateTime>>,
     wanted: Set<String>,
 ): Map<String, List<LessonPayload>> {
     if (wanted.isEmpty()) return emptyMap()
     val out = LinkedHashMap<String, MutableList<LessonPayload>>()
     val seen = HashSet<String>()
-    val lessons = try {
-        client.lessons(from, to)
-    } catch (e: Exception) {
-        if (mustPropagateReadFailure(e)) throw e
-        return emptyMap()
-    }
     var fetched = 0
-    for (l in lessons) {
+    for ((from, to) in weeks) {
         if (fetched >= LESSON_FETCH_LIMIT) break
-        val key = lessonKeyOf(l.subject?.name ?: "", parisDay(l.start))
-        if (key == null || key !in wanted) continue
-        if (l.id.isNotBlank() && !seen.add(l.id)) continue
-        fetched += 1
-        try {
-            val c = l.content() ?: continue
-            val title = boundedCp(c.title, AssignmentLessonContent.MAX_TITLE)
-            val excerpt = boundedCp(c.description, AssignmentLessonContent.MAX_EXCERPT)
-            val files = c.files().take(LESSON_ATTACHMENTS_LIMIT).mapNotNull { f ->
-                val id = boundedCp(f.id, 200)
-                val name = boundedCp(f.name, AssignmentAttachment.MAX_LABEL)
-                if (id.isEmpty() || name.isEmpty()) null else id to name
-            }
-            if (title.isEmpty() && excerpt.isEmpty() && files.isEmpty()) continue
-            out.getOrPut(key) { mutableListOf() }.add(
-                LessonPayload(
-                    title = title.ifEmpty { "Contenu de cours" },
-                    text = excerpt,
-                    files = files,
-                ),
-            )
+        val lessons = try {
+            client.lessons(from, to)
         } catch (e: Exception) {
             if (mustPropagateReadFailure(e)) throw e
+            continue
+        }
+        for (l in lessons) {
+            if (fetched >= LESSON_FETCH_LIMIT) break
+            val key = lessonKeyOf(l.subject?.name ?: "", parisDay(l.start))
+            if (key == null || key !in wanted) continue
+            if (l.id.isNotBlank() && !seen.add(l.id)) continue
+            fetched += 1
+            try {
+                val c = l.content() ?: continue
+                val title = boundedCp(c.title, AssignmentLessonContent.MAX_TITLE)
+                val excerpt = boundedCp(c.description, AssignmentLessonContent.MAX_EXCERPT)
+                val files = c.files().take(LESSON_ATTACHMENTS_LIMIT).mapNotNull { f ->
+                    val id = boundedCp(f.id, 200)
+                    val name = boundedCp(f.name, AssignmentAttachment.MAX_LABEL)
+                    if (id.isEmpty() || name.isEmpty()) null else id to name
+                }
+                if (title.isEmpty() && excerpt.isEmpty() && files.isEmpty()) continue
+                out.getOrPut(key) { mutableListOf() }.add(
+                    LessonPayload(
+                        title = title.ifEmpty { "Contenu de cours" },
+                        text = excerpt,
+                        files = files,
+                    ),
+                )
+            } catch (e: Exception) {
+                if (mustPropagateReadFailure(e)) throw e
+            }
         }
     }
     return out
 }
+
+/**
+ * Un `PageEmploiDuTemps` par semaine QUI PORTE UN DEVOIR, jamais pour les
+ * semaines vides de la fenêtre de recherche.
+ */
+private fun lessonWeeks(days: Iterable<LocalDate>): List<Pair<LocalDateTime, LocalDateTime>> =
+    weeksCovering(days).map { (monday, sunday) ->
+        monday.atStartOfDay() to sunday.atTime(23, 59, 59, 999_000_000)
+    }
 
 private fun lessonJson(
     lesson: LessonPayload,
@@ -187,10 +199,14 @@ internal fun assignmentsPayload(client: Client, query: Map<String, String>, now:
     val win = weekWindow(query)
     val (from, to) = assignmentWindow(query["weekStart"], now)
     val raws = client.homework(from, to)
-    val wanted = raws.mapNotNullTo(LinkedHashSet()) {
-        lessonKeyOf(it.subject.name, parisDay(it.date))
+    val wanted = LinkedHashSet<String>()
+    val days = LinkedHashSet<LocalDate>()
+    for (hw in raws) {
+        val key = lessonKeyOf(hw.subject.name, parisDay(hw.date)) ?: continue
+        wanted.add(key)
+        days.add(hw.date.toLocalDate())
     }
-    val lessons = lessonContents(client, from, to, wanted)
+    val lessons = lessonContents(client, lessonWeeks(days), wanted)
     val arr = JSONArray()
     val fromMs = from.atZone(PARIS).toInstant().toEpochMilli()
     val toMs = to.atZone(PARIS).toInstant().toEpochMilli()

@@ -29,6 +29,16 @@ internal fun weekWindow(weekStart: String?): Pair<Long, Long>? {
     return from to to
 }
 
+/**
+ * Semaines lundi→dimanche qui portent au moins un des jours, triées et sans
+ * doublon. Sert à ne pas relire des semaines sans cours utile.
+ */
+internal fun weeksCovering(days: Iterable<LocalDate>): List<Pair<LocalDate, LocalDate>> =
+    days.map { it.minusDays(((it.dayOfWeek.value + 6) % 7).toLong()) }
+        .distinct()
+        .sorted()
+        .map { monday -> monday to monday.plusDays(6) }
+
 /** Semaine demandée, sinon repli -7/+21 jours, bornes en heure de Paris. */
 internal fun assignmentWindow(
     weekStart: String?,

@@ -9,6 +9,7 @@ import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.InMemoryCacheStore
 import fr.veryslopnynotes.data.assignmentWindow
 import fr.veryslopnynotes.data.weekWindow
+import fr.veryslopnynotes.data.weeksCovering
 import fr.veryslopnynotes.data.writeAndInvalidate
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
@@ -17,6 +18,7 @@ import java.io.InputStreamReader
 import java.io.PrintStream
 import java.nio.charset.StandardCharsets
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 private fun JVal.Obj.str(key: String): String? = (fields[key] as? JVal.Str)?.value
@@ -94,6 +96,19 @@ private class Driver {
                 "inside" to JVal.Arr(inside),
                 "outside" to JVal.Arr(outside),
             )
+        }
+        // Semaines à relire pour les devoirs : lundi→dimanche, triées, sans doublon.
+        "weeks" -> {
+            val days = op.arr("days").mapNotNull { (it as? JVal.Str)?.value }.map { LocalDate.parse(it) }
+            val weeks = weeksCovering(days).map { (from, to) ->
+                JVal.Obj(
+                    linkedMapOf(
+                        "from" to JVal.Str(from.toString()),
+                        "to" to JVal.Str(to.toString()),
+                    ),
+                )
+            }
+            ok("weeks" to JVal.Arr(weeks))
         }
         // Fenêtre EDT : lundi 00:00 Paris -> lundi suivant 00:00 − 1 ms.
         "timetableWindow" -> {
