@@ -9,6 +9,7 @@ import { ROOT } from "./fixtures/kotlin-harness";
 import { payloadsSource } from "./fixtures/payload-sources";
 
 const CORE = join(ROOT, "android", "core", "src", "main", "java", "fr", "veryslopnynotes", "core");
+const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 
 const source = (path: string): string => readFileSync(path, "utf8");
 
@@ -45,6 +46,23 @@ describe("fraîcheur des fils : jamais de date inventée (#427)", () => {
     // La borne d'enrichissement reste 12 fils : c'est une limite de réseau.
     expect(payloads).toContain("private const val DISCUSSION_ENRICH_LIMIT = 12");
     expect(body).toContain("if (i < DISCUSSION_ENRICH_LIMIT)");
+  });
+
+  test("une date connue d'un fil resté lu n'est pas relue", () => {
+    // Le payload précédent de la MÊME requête fournit les dates connues.
+    expect(body).toContain("knownThreads(previous)");
+    // Réutilisation seulement si le fil était lu et l'est toujours.
+    expect(body).toContain(
+      "before != null && before.date != null && before.unread == 0 && d.unread <= 0.0",
+    );
+    // La porte de lecture transmet le payload précédent à la messagerie.
+    const reads = source(join(DATA, "CachedReads.kt"));
+    expect(reads).toContain("discussionsPayload(client, previous = previous)");
+  });
+
+  test("un rafraîchissement forcé ne réutilise aucune date", () => {
+    const repo = source(join(DATA, "SyncedRepository.kt"));
+    expect(repo).toContain("previous = if (force) null else entry?.payload");
   });
 
   test("le JSON reste valide : le fil garde son identifiant et son sujet", () => {

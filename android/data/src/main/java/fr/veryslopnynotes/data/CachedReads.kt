@@ -9,8 +9,16 @@ import fr.veryslopnynotes.pronote.Client
  * et la clé AES) : deux lectures simultanées = deux authentifications sur le
  * même compte = « Exceeded max authorization requests » (erreur 25), puis
  * limitation du compte. Les écrans et le job de fond passent tous par ici.
+ *
+ * `previous` = payload de la MÊME requête déjà en cache : seules les lectures
+ * qui peuvent en réutiliser une partie le lisent (dates des fils de messagerie).
  */
-internal fun cachedRead(client: Client, resource: String, query: String): String {
+internal fun cachedRead(
+    client: Client,
+    resource: String,
+    query: String,
+    previous: String? = null,
+): String {
     val q = parseQuery(query)
     return when (resource) {
         CachePolicy.GRADES -> gradesPayload(client, q)
@@ -21,7 +29,7 @@ internal fun cachedRead(client: Client, resource: String, query: String): String
         CachePolicy.ATTENDANCE -> attendancePayload(client)
         CachePolicy.PUNISHMENTS -> punishmentsPayload(client)
         CachePolicy.CAPABILITIES -> capabilitiesPayload(client)
-        CachePolicy.DISCUSSIONS -> discussionsPayload(client)
+        CachePolicy.DISCUSSIONS -> discussionsPayload(client, previous = previous)
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
     }
 }
