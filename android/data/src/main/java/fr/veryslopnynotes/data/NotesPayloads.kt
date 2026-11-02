@@ -146,8 +146,12 @@ internal fun gradesPayload(client: Client, query: Map<String, String>): String {
     val spanOfId = HashMap<String, Long>()
     // Snapshot de la période DEMANDÉE, capturé pendant la lecture unique.
     val snapshots = HashMap<String, PeriodNotes>()
+    // Une période DEMANDÉE suffit : le rapport est déjà borné à elle, lire les
+    // autres ne servirait qu'à jeter leurs notes.
+    val requested = periodId?.let { id -> periods.firstOrNull { it.id == id } }
+    val readPeriods = if (requested != null) listOf(requested) else periods
     var seq = 0
-    for (p in periods) {
+    for (p in readPeriods) {
         val pid = p.id.ifBlank { null }
         val notes = try {
             p.notes()
