@@ -6,24 +6,59 @@ import org.json.JSONObject
 
 private const val DISCUSSION_ENRICH_LIMIT = 12
 
+private data class KnownThread(val date: String?, val unread: Int?)
+
 private fun unreadOf(raw: Double): Int? =
     if (raw.isFinite() && raw >= 0 && raw <= 999 && raw == kotlin.math.floor(raw)) raw.toInt() else null
+
+/** Dates du payload PRÉCÉDENT (même requête) : un fil resté lu n'a pas bougé. */
+private fun knownThreads(previous: String?): Map<String, KnownThread> {
+    if (previous.isNullOrBlank()) return emptyMap()
+    return try {
+        val arr = JSONObject(previous).optJSONArray("discussions") ?: return emptyMap()
+        val out = HashMap<String, KnownThread>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val id = o.optString("id", "")
+            if (id.isEmpty()) continue
+            val date = o.optString("lastMessageAt", "").ifEmpty { o.optString("updatedAt", "") }
+            out[id] = KnownThread(
+                date = date.ifEmpty { null },
+                unread = if (o.has("unreadCount")) o.optInt("unreadCount", 0) else null,
+            )
+        }
+        out
+    } catch (_: Exception) {
+        emptyMap()
+    }
+}
 
 // Seuls les `DISCUSSION_ENRICH_LIMIT` premiers fils sont enrichis (chaque appel
 // réseau coûte) : au-delà, la date du dernier message est INCONNUE, et
 // `updatedAt` est OMIS plutôt qu'inventé — sinon les fils anciens remontent en
-// tête et mentent sur leur fraîcheur. `nowIso` reste un paramètre à signature
-// stable mais ne date plus aucun fil, d'où le `@Suppress`.
+// tête et mentent sur leur fraîcheur. Une date déjà connue d'un fil resté lu est
+// RÉUTILISÉE : sans nouveau message, relire `ListeMessages` ne dirait rien de
+// plus. `nowIso` reste un paramètre à signature stable mais ne date plus aucun
+// fil, d'où le `@Suppress`.
 @Suppress("UNUSED_PARAMETER")
-internal fun discussionsPayload(client: Client, nowIso: String = parisNowIso()): String {
+internal fun discussionsPayload(
+    client: Client,
+    nowIso: String = parisNowIso(),
+    previous: String? = null,
+): String {
     val arr = JSONArray()
+    val known = knownThreads(previous)
     val raws = client.discussions()
     raws.forEachIndexed { i, d ->
         val id = boundedCp(d.id, 64)
         if (id.isEmpty()) return@forEachIndexed
         var lastMessageAt: String? = null
         var updatedAt: String? = null
-        if (i < DISCUSSION_ENRICH_LIMIT) {
+        val before = known[id]
+        if (before != null && before.date != null && before.unread == 0 && d.unread <= 0.0) {
+            lastMessageAt = before.date
+            updatedAt = before.date
+        } else if (i < DISCUSSION_ENRICH_LIMIT) {
             // Participants non téléchargés ici : la liste ne promet pas de nom,
             // le fil ouvert les redemande.
             try {

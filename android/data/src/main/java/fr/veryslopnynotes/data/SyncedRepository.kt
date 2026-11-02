@@ -69,7 +69,8 @@ class SyncedRepository(
             post(cb, RefreshOutcome.Updated(entry.payload, entry.fetchedAt))
             return
         }
-        readAsync(save = true, resource = resource, query = query, cb = cb)
+        // Geste EXPLICITE (`force`) : on relit tout, jamais de réutilisation.
+        readAsync(save = true, resource = resource, query = query, cb = cb, previous = if (force) null else entry?.payload)
     }
 
     /**
@@ -81,7 +82,13 @@ class SyncedRepository(
         readAsync(save = false, resource = resource, query = query, cb = cb)
     }
 
-    private fun readAsync(save: Boolean, resource: String, query: String, cb: (RefreshOutcome) -> Unit) {
+    private fun readAsync(
+        save: Boolean,
+        resource: String,
+        query: String,
+        cb: (RefreshOutcome) -> Unit,
+        previous: String? = null,
+    ) {
         // Clé de dédoublonnage : ressource|query|écriture. Deux lectures
         // identiques en vol = une seule exécution, le MÊME RefreshOutcome
         // pour tous les callbacks.
@@ -90,7 +97,7 @@ class SyncedRepository(
         // (l'assistant) pouvait avaler l'écriture du cache de la même requête.
         ClientQueue.submit(
             CachePolicy.dedupKey(resource, query, save),
-            work = { readOutcome(save, resource, query) },
+            work = { readOutcome(save, resource, query, previous) },
             deliver = { o ->
                 // L'échec de la file est un outcome : la promesse est toujours
                 // réglée, jamais laissée en attente du délai natif.
@@ -100,12 +107,17 @@ class SyncedRepository(
     }
 
     /** Corps de lecture (jamais d'exception qui s'echappe : tout echec = outcome). */
-    private fun readOutcome(save: Boolean, resource: String, query: String): RefreshOutcome {
+    private fun readOutcome(
+        save: Boolean,
+        resource: String,
+        query: String,
+        previous: String? = null,
+    ): RefreshOutcome {
         // Époque capturée AVANT la lecture locale : une déconnexion pendant la
         // lecture invalide l'écriture, sinon elle annule la purge du cache.
         val epoch = SessionEpoch.current()
         return try {
-            val payload = readLocal(resource, query)
+            val payload = readLocal(resource, query, previous)
             if (save) {
                 // Gardée par l'epoch : `null` = session changée, le payload est
                 // abandonné et rien n'est écrit.
@@ -293,7 +305,7 @@ class SyncedRepository(
      * ([NoLocalSession] : repli cache, comme un réseau KO). La lecture passe
      * par `cachedRead` (porte unique), exécutée dans la file partagée.
      */
-    private fun readLocal(resource: String, query: String): String {
+    private fun readLocal(resource: String, query: String, previous: String? = null): String {
         val client = try {
             provider()
         } catch (_: Exception) {
@@ -302,7 +314,7 @@ class SyncedRepository(
         // Alertes : balayage des contenus DÉJÀ en cache, aucun réseau (marche
         // hors ligne) — ce n'est pas une lecture du client.
         if (resource == CachePolicy.SECURITY_ALERTS) return alertsPayload(scanTexts())
-        return cachedRead(client, resource, query)
+        return cachedRead(client, resource, query, previous)
     }
 
     private fun scanTexts(): List<SecurityAlert.ScannableText> {
