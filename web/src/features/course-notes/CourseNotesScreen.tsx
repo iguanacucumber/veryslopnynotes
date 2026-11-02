@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { bridge } from "../../bridge/client";
-import { BridgeCallError, type LessonSummary, type LessonSubject, type LessonsSnapshot } from "../../bridge/types";
+import { BridgeCallError, type LessonSubject, type LessonsSnapshot } from "../../bridge/types";
 import { useApp } from "../../ui/AppContext";
 import {
   Card,
@@ -79,7 +79,7 @@ export function CourseNotesScreen() {
   const [editorLoading, setEditorLoading] = useState(false);
   const [editorError, setEditorError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<LessonSummary | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [manualBusy, setManualBusy] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState<string | null>(null);
@@ -125,6 +125,7 @@ export function CourseNotesScreen() {
   async function openNote(id: string) {
     setEditorError("");
     setEditorLoading(true);
+    setConfirmDelete(false);
     try {
       const result = await bridge.lesson(id);
       if (!result.ok || !result.note) {
@@ -146,6 +147,7 @@ export function CourseNotesScreen() {
 
   function newNote(subject = "") {
     setEditorError("");
+    setConfirmDelete(false);
     setEditor({ id: "", subject, title: "", text: "" });
   }
 
@@ -179,6 +181,7 @@ export function CourseNotesScreen() {
         setEditorError(result.message || "Cours non enregistré.");
         return;
       }
+      setConfirmDelete(false);
       setEditor(null);
       afterWrite("Cours enregistré.");
     } catch (e) {
@@ -189,15 +192,16 @@ export function CourseNotesScreen() {
   }
 
   async function deleteNote() {
-    if (!deleteTarget || deleting) return;
+    const id = editor?.id;
+    if (!id || deleting) return;
     setDeleting(true);
     try {
-      const result = await bridge.deleteLesson(deleteTarget.id);
+      const result = await bridge.deleteLesson(id);
       if (!result.ok) {
         notify(result.message || "Cours non supprimé.", "error");
         return;
       }
-      setDeleteTarget(null);
+      setConfirmDelete(false);
       setEditor(null);
       afterWrite("Cours supprimé.");
     } catch (e) {
@@ -573,60 +577,91 @@ export function CourseNotesScreen() {
       <Dialog
         open={editor !== null}
         title={
-          editor?.fromPhoto
-            ? "Vérifier la photo"
-            : editor?.id
-              ? "Modifier le cours"
-              : "Ajouter un cours"
+          confirmDelete
+            ? "Supprimer ce cours ?"
+            : editor?.fromPhoto
+              ? "Vérifier la photo"
+              : editor?.id
+                ? "Modifier le cours"
+                : "Ajouter un cours"
         }
         description={
-          editor?.fromPhoto
-            ? undefined
-            : "Le texte est envoyé au fournisseur comme une donnée, jamais comme une instruction."
+          confirmDelete
+            ? "Le cours sera retiré du cahier et ne sera plus utilisé par l’assistant."
+            : editor?.fromPhoto
+              ? undefined
+              : "Le texte est envoyé au fournisseur comme une donnée, jamais comme une instruction."
         }
-        busy={editorBusy}
+        busy={editorBusy || deleting}
+        role={confirmDelete ? "alertdialog" : "dialog"}
         onClose={() => {
-          if (!editorBusy) setEditor(null);
+          if (editorBusy || deleting) return;
+          if (confirmDelete) {
+            setConfirmDelete(false);
+            return;
+          }
+          setEditor(null);
         }}
         actions={
-          <>
-            {editor?.id ? (
+          confirmDelete ? (
+            <>
+              <button
+                type="button"
+                className="btn btn--ghost btn--small"
+                disabled={deleting}
+                onClick={() => setConfirmDelete(false)}
+              >
+                Annuler
+              </button>
               <button
                 type="button"
                 className="btn btn--danger btn--small"
-                disabled={editorBusy}
-                onClick={() => {
-                  const summary = subjects
-                    .flatMap((subject) => subject.notes)
-                    .find((note) => note.id === editor.id);
-                  if (summary) setDeleteTarget(summary);
-                }}
+                disabled={deleting}
+                onClick={() => void deleteNote()}
               >
-                <IconTrash size={16} />
-                Supprimer
+                {deleting ? "Suppression…" : "Supprimer"}
               </button>
-            ) : null}
-            <button
-              type="button"
-              className="btn btn--ghost btn--small"
-              disabled={editorBusy}
-              onClick={() => setEditor(null)}
-            >
-              Annuler
-            </button>
-            <button
-              type="button"
-              className="btn btn--small"
-              disabled={editorBusy || editorLoading}
-              onClick={() => void saveNote()}
-            >
-              {saving ? "Enregistrement…" : "Enregistrer"}
-            </button>
-          </>
+            </>
+          ) : (
+            <>
+              {editor?.id ? (
+                <button
+                  type="button"
+                  className="btn btn--danger btn--small"
+                  disabled={editorBusy}
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <IconTrash size={16} />
+                  Supprimer
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn--ghost btn--small"
+                disabled={editorBusy}
+                onClick={() => setEditor(null)}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="btn btn--small"
+                disabled={editorBusy || editorLoading}
+                onClick={() => void saveNote()}
+              >
+                {saving ? "Enregistrement…" : "Enregistrer"}
+              </button>
+            </>
+          )
         }
       >
-        {editorLoading ? <Loading label="Chargement du cours…" /> : null}
-        {editor ? (
+        {confirmDelete ? (
+          <p className="t-body-m" style={{ margin: 0 }}>
+            {editor?.title ?? ""}
+          </p>
+        ) : editorLoading ? (
+          <Loading label="Chargement du cours…" />
+        ) : editor ? (
           <>
             {editor.fromPhoto ? (
               <div className={`course-notes-photo${photoBusy !== null ? " course-notes-photo--busy" : ""}`}>
@@ -725,31 +760,6 @@ export function CourseNotesScreen() {
             ) : null}
           </>
         ) : null}
-      </Dialog>
-
-      <Dialog
-        open={deleteTarget !== null}
-        role="alertdialog"
-        title="Supprimer ce cours ?"
-        description="Le cours sera retiré du cahier et ne sera plus utilisé par l’assistant."
-        busy={deleting}
-        onClose={() => {
-          if (!deleting) setDeleteTarget(null);
-        }}
-        actions={
-          <>
-            <button type="button" className="btn btn--ghost btn--small" disabled={deleting} onClick={() => setDeleteTarget(null)}>
-              Annuler
-            </button>
-            <button type="button" className="btn btn--danger btn--small" disabled={deleting} onClick={() => void deleteNote()}>
-              {deleting ? "Suppression…" : "Supprimer"}
-            </button>
-          </>
-        }
-      >
-        <p className="t-body-m" style={{ margin: 0 }}>
-          {deleteTarget?.title ?? ""}
-        </p>
       </Dialog>
     </Page>
   );

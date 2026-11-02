@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { TeacherMessage, TeacherMode } from "../../bridge/types";
 import { Card, EmptyState, ErrorBox, Loading, Page, Section } from "../../ui/components";
 import { CopyTextButton } from "../../ui/CopyTextButton";
@@ -135,15 +135,43 @@ export function TeacherView({
     -1,
   );
 
+  function onTabKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    const tabs = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const current = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    if (current < 0) return;
+    const last = tabs.length - 1;
+    let next: number;
+    switch (event.key) {
+      case "ArrowRight":
+        next = current === last ? 0 : current + 1;
+        break;
+      case "ArrowLeft":
+        next = current === 0 ? last : current - 1;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = last;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    tabs[next]?.focus();
+    onTabChange(next === 0 ? "chat" : "exercises");
+  }
+
   return (
     <Page className={tab === "chat" ? "teacher teacher--chat" : "teacher"}>
-      <div className="teacher-tabs" role="tablist" aria-label="Professeur">
+      <div className="teacher-tabs" role="tablist" aria-label="Professeur" onKeyDown={onTabKeyDown}>
         <button
           type="button"
           role="tab"
           id="teacher-tab-chat"
           aria-selected={tab === "chat"}
           aria-controls="teacher-panel-chat"
+          tabIndex={tab === "chat" ? 0 : -1}
           className={`teacher-tab${tab === "chat" ? " teacher-tab--active" : ""}`}
           onClick={() => onTabChange("chat")}
         >
@@ -155,6 +183,7 @@ export function TeacherView({
           id="teacher-tab-exercises"
           aria-selected={tab === "exercises"}
           aria-controls="teacher-panel-exercises"
+          tabIndex={tab === "exercises" ? 0 : -1}
           className={`teacher-tab${tab === "exercises" ? " teacher-tab--active" : ""}`}
           onClick={() => onTabChange("exercises")}
         >

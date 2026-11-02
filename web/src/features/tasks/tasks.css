@@ -57,7 +57,7 @@
   gap: 12px;
   padding: 14px 16px;
   border: 0;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   background: var(--item);
   box-shadow: none;
 }
@@ -88,7 +88,7 @@
   position: relative;
   padding: 14px 16px;
   border: 0;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-card);
   transition: background var(--duration) var(--ease);
@@ -178,7 +178,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 36px;
+  min-height: var(--tap);
   padding: 4px 12px;
   border: 0;
   border-radius: 100px;
@@ -218,6 +218,7 @@
 
 /* Actions IA : la pastille teintée « magic » de Papillon, en 12 px. */
 .task-help {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -225,7 +226,7 @@
   min-height: 0;
   padding: 6px 12px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--task-tint, var(--brand)) 13%, transparent);
   color: var(--task-tint, var(--brand));
   font-size: 16px;
@@ -233,6 +234,13 @@
   font-weight: 600;
   white-space: nowrap;
   transition: background var(--duration) var(--ease);
+}
+
+.task-help::after {
+  content: "";
+  position: absolute;
+  inset-block: -8px;
+  inset-inline: 0;
 }
 
 .task-help svg {
@@ -253,6 +261,7 @@
 }
 
 .task-check {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -271,6 +280,13 @@
   transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
 }
 
+/* Cible de 48 px : la coche garde sa taille visuelle. */
+.task-check::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+
 .task-check:hover {
   background: color-mix(in srgb, var(--ink) 7%, transparent);
 }
@@ -282,7 +298,7 @@
 .task-check--done {
   padding: 8px 12px;
   background: var(--task-tint, var(--brand-solid));
-  color: #fff;
+  color: var(--task-ink, var(--on-brand));
 }
 
 .task-check--done svg {
@@ -415,8 +431,8 @@
 }
 
 .hw-user__bubble {
-  border-radius: 22px;
-  border-bottom-right-radius: 8px;
+  border-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xs);
   padding: 10px 14px;
   background: var(--ai-bubble, color-mix(in srgb, var(--ink) 7%, var(--surface)));
   color: var(--ink);
@@ -567,7 +583,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 9px;
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   padding: 12px 14px;
 }
 

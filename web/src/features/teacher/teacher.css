@@ -35,6 +35,7 @@
 }
 
 .teacher-tab {
+  position: relative;
   flex: 1;
   min-height: 44px;
   padding: 0 12px;
@@ -46,6 +47,13 @@
   font-weight: 600;
   cursor: pointer;
   transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
+}
+
+.teacher-tab::after {
+  content: "";
+  position: absolute;
+  inset-block: -2px;
+  inset-inline: 0;
 }
 
 .teacher-tab--active {
@@ -92,7 +100,7 @@
 
 .teacher-subject__select {
   width: 100%;
-  min-height: 44px;
+  min-height: var(--tap);
   padding: 0 12px;
   border: 1px solid var(--ai-line);
   border-radius: 14px;
@@ -110,10 +118,11 @@
 
 .teacher-chat__actions {
   display: flex;
-  gap: 2px;
+  gap: 6px;
 }
 
 .teacher-action {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -125,6 +134,12 @@
   background: transparent;
   color: var(--secondary);
   transition: background var(--duration) var(--ease), color var(--duration) var(--ease);
+}
+
+.teacher-action::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
 }
 
 .teacher-action:hover,
@@ -213,7 +228,7 @@
   flex-direction: column;
   gap: 8px;
   border: 1px solid var(--ai-line);
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   padding: 12px 14px;
   background: var(--panel-tint);
 }
@@ -233,7 +248,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 9px;
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   padding: 12px 14px;
   background: color-mix(in srgb, var(--danger) 7%, var(--surface));
 }
@@ -315,8 +330,8 @@
   align-self: flex-end;
   max-width: min(88%, 560px);
   padding: 10px 14px;
-  border-radius: 22px;
-  border-bottom-right-radius: 8px;
+  border-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xs);
   background: var(--ai-bubble);
 }
 
@@ -480,7 +495,7 @@
 .teacher-footnote summary {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
+  min-height: var(--tap);
   color: var(--secondary);
   font-size: 12px;
   line-height: 17px;

@@ -4,7 +4,7 @@
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--ai-line, var(--border-soft));
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
 }
 
 .course-notes-privacy__details {
@@ -72,7 +72,7 @@
 
 .course-notes-subject {
   padding: 17px;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
 }
 
 .course-notes-subject__head {
@@ -106,7 +106,7 @@
 .course-notes-manual {
   display: flex;
   align-items: center;
-  min-height: 44px;
+  min-height: var(--tap);
   margin-top: 10px;
   padding-top: 8px;
   border-top: 1px solid var(--ai-line, var(--rule));
@@ -209,6 +209,7 @@
 .course-notes-empty-row__actions {
   display: flex;
   align-items: center;
+  gap: 8px;
   flex: 0 0 auto;
   color: var(--muted);
 }

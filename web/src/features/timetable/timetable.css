@@ -94,7 +94,7 @@
   min-width: 0;
   padding: 8px 2px;
   border: 0;
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   background: var(--item);
   text-align: center;
 }

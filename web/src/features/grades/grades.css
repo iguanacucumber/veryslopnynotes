@@ -37,7 +37,7 @@
 .grades-menu select {
   min-width: 0;
   max-width: 42vw;
-  height: 46px;
+  height: var(--tap);
   padding: 0;
   border: 0;
   background: transparent;
@@ -97,7 +97,7 @@
   position: relative;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--brand) 12%, transparent);
-  border-radius: 24px;
+  border-radius: var(--radius-2xl);
   background: color-mix(in srgb, var(--brand) 15%, var(--page));
   box-shadow: none;
   overflow: hidden;
@@ -328,7 +328,7 @@
   margin-bottom: 8px;
   padding: 14px 16px;
   border-top: 0;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   background: var(--item);
 }
 
@@ -416,7 +416,7 @@
   flex: 0 0 auto;
   padding: 12px 0;
   border: 1px solid color-mix(in srgb, var(--grade-ink) 13%, transparent);
-  border-radius: 24px;
+  border-radius: var(--radius-2xl);
   overflow: hidden;
 }
 
