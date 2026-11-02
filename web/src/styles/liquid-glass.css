@@ -1,14 +1,14 @@
 /* Skin « Liquid Glass » : une matière, pas seulement une palette. Tout est
-   scopé sur `:root[data-scheme="liquid-glass"]` ; les vingt-et-une autres palettes
+   scopé sur `:root[data-scheme="liquid-glass"]` ; les 21 autres palettes
    gardent leurs surfaces opaques. Le relief vient du flou d'arrière-plan, des
    liserés spéculaires et d'un fond ambiant dérivé du papier peint. */
 
 :root[data-scheme="liquid-glass"] {
-  --lg-fill: color-mix(in srgb, var(--surface) 64%, transparent);
-  --lg-fill-strong: color-mix(in srgb, var(--surface) 80%, transparent);
-  --lg-panel: color-mix(in srgb, var(--surface) 86%, transparent);
-  --lg-bar: color-mix(in srgb, var(--page) 80%, transparent);
-  --lg-bar-strong: color-mix(in srgb, var(--surface) 84%, transparent);
+  --lg-fill: color-mix(in srgb, var(--surface) 58%, transparent);
+  --lg-fill-strong: color-mix(in srgb, var(--surface) 78%, transparent);
+  --lg-panel: color-mix(in srgb, var(--surface) 80%, transparent);
+  --lg-bar: color-mix(in srgb, var(--page) 68%, transparent);
+  --lg-bar-strong: color-mix(in srgb, var(--surface) 72%, transparent);
   --lg-edge: color-mix(in srgb, var(--ink) 9%, transparent);
   --lg-edge-strong: color-mix(in srgb, var(--ink) 15%, transparent);
   --lg-sheen: rgba(255, 255, 255, 0.72);
@@ -16,7 +16,7 @@
   --lg-shadow:
     0 1px 2px rgba(0, 0, 0, 0.06),
     0 18px 40px -26px rgba(0, 0, 0, 0.38);
-  --lg-blur: blur(30px) saturate(180%);
+  --lg-blur: blur(36px) saturate(180%);
 
   /* La matière se branche sur les jetons partagés : cartes, lignes, puces et
      champs deviennent translucides sans repeindre chaque écran. */
@@ -35,11 +35,11 @@
 }
 
 :root[data-scheme="liquid-glass"][data-theme="dark"] {
-  --lg-fill: color-mix(in srgb, var(--surface) 62%, transparent);
-  --lg-fill-strong: color-mix(in srgb, var(--surface) 80%, transparent);
-  --lg-panel: color-mix(in srgb, var(--surface) 88%, transparent);
-  --lg-bar: color-mix(in srgb, var(--page) 82%, transparent);
-  --lg-bar-strong: color-mix(in srgb, var(--surface) 86%, transparent);
+  --lg-fill: color-mix(in srgb, var(--surface) 56%, transparent);
+  --lg-fill-strong: color-mix(in srgb, var(--surface) 76%, transparent);
+  --lg-panel: color-mix(in srgb, var(--surface) 82%, transparent);
+  --lg-bar: color-mix(in srgb, var(--page) 72%, transparent);
+  --lg-bar-strong: color-mix(in srgb, var(--surface) 78%, transparent);
   --lg-edge: color-mix(in srgb, var(--ink) 12%, transparent);
   --lg-edge-strong: color-mix(in srgb, var(--ink) 18%, transparent);
   --lg-sheen: rgba(255, 255, 255, 0.12);
@@ -49,20 +49,161 @@
     0 20px 44px -26px rgba(0, 0, 0, 0.9);
 }
 
-/* Fond ambiant fixe : des taches douces, aucune image ni requête réseau. Il
-   reste derrière `#root` et transparaît sous les surfaces translucides. */
-:root[data-scheme="liquid-glass"] body::before {
-  content: "";
+/* Fond animé : quatre taches de couleur qui dérivent lentement derrière les
+   surfaces floutées. Les gradients sont doux, donc aucun `filter` coûteux ;
+   seules les transformations bougent (la garde globale coupe le mouvement). */
+:root[data-scheme="liquid-glass"] .glass-backdrop {
   position: fixed;
   inset: 0;
   z-index: 0;
+  overflow: hidden;
   pointer-events: none;
-  background:
-    radial-gradient(52% 38% at 50% -8%, color-mix(in srgb, var(--brand) 24%, transparent), transparent 72%),
-    radial-gradient(48% 36% at 6% 8%, color-mix(in srgb, var(--wallpaper-blue) 28%, transparent), transparent 72%),
-    radial-gradient(44% 34% at 96% 14%, color-mix(in srgb, var(--wallpaper-pink) 20%, transparent), transparent 72%),
-    radial-gradient(46% 34% at 86% 78%, color-mix(in srgb, var(--wallpaper-violet) 18%, transparent), transparent 74%),
-    radial-gradient(46% 32% at 8% 88%, color-mix(in srgb, var(--wallpaper-amber) 14%, transparent), transparent 74%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 7%, transparent), transparent 46%);
+}
+
+:root[data-scheme="liquid-glass"] .glass-backdrop__blob {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  opacity: 0.78;
+  will-change: transform;
+  animation: lg-drift-a 26s ease-in-out -6s infinite alternate;
+}
+
+:root[data-scheme="liquid-glass"] .glass-backdrop__blob--a {
+  top: -34vmax;
+  left: -24vmax;
+  width: 78vmax;
+  height: 78vmax;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--wallpaper-blue) 52%, transparent),
+    transparent 66%
+  );
+}
+
+:root[data-scheme="liquid-glass"] .glass-backdrop__blob--b {
+  top: -28vmax;
+  right: -26vmax;
+  width: 72vmax;
+  height: 72vmax;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--wallpaper-pink) 46%, transparent),
+    transparent 66%
+  );
+  animation-name: lg-drift-b;
+  animation-duration: 32s;
+  animation-delay: -17s;
+}
+
+:root[data-scheme="liquid-glass"] .glass-backdrop__blob--c {
+  right: -20vmax;
+  bottom: -36vmax;
+  width: 84vmax;
+  height: 84vmax;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--wallpaper-violet) 40%, transparent),
+    transparent 68%
+  );
+  animation-name: lg-drift-c;
+  animation-duration: 38s;
+  animation-delay: -25s;
+}
+
+:root[data-scheme="liquid-glass"] .glass-backdrop__blob--d {
+  bottom: -30vmax;
+  left: -24vmax;
+  width: 70vmax;
+  height: 70vmax;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--wallpaper-amber) 34%, transparent),
+    transparent 66%
+  );
+  animation-name: lg-drift-d;
+  animation-duration: 44s;
+  animation-delay: -39s;
+}
+
+:root[data-scheme="liquid-glass"] .glass-backdrop__blob--e {
+  top: 20%;
+  left: 14%;
+  width: 66vmax;
+  height: 66vmax;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in srgb, var(--brand) 26%, transparent),
+    transparent 68%
+  );
+  animation-name: lg-drift-e;
+  animation-duration: 30s;
+  animation-delay: -11s;
+}
+
+:root[data-scheme="liquid-glass"][data-theme="dark"] .glass-backdrop__blob {
+  opacity: 0.62;
+}
+
+@keyframes lg-drift-a {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(10%, 12%, 0) scale(1.14);
+  }
+  100% {
+    transform: translate3d(-6%, 6%, 0) scale(0.94);
+  }
+}
+
+@keyframes lg-drift-b {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-12%, 8%, 0) scale(1.1);
+  }
+  100% {
+    transform: translate3d(6%, -7%, 0) scale(0.95);
+  }
+}
+
+@keyframes lg-drift-c {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-9%, -11%, 0) scale(1.12);
+  }
+  100% {
+    transform: translate3d(7%, 5%, 0) scale(0.96);
+  }
+}
+
+@keyframes lg-drift-d {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(11%, -8%, 0) scale(1.08);
+  }
+  100% {
+    transform: translate3d(-7%, 9%, 0) scale(0.94);
+  }
+}
+
+@keyframes lg-drift-e {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(12%, -10%, 0) scale(1.12);
+  }
+  100% {
+    transform: translate3d(-9%, 7%, 0) scale(0.95);
+  }
 }
 
 /* Pile système : SF sur Apple, Roboto sur Android. Les métriques existantes

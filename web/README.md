@@ -42,7 +42,7 @@ production ne l'embarque pas, et un pont natif absent y est un échec bruyant
 - `src/styles/tokens.css` : jetons de la palette par défaut (repli si le JS échoue).
 - `src/lib/schemes.ts` : les 22 palettes (claire + sombre), posées en variables CSS sur `<html>`.
 - `src/styles/madoka.css` : accent doré « Madoka Magica » (filets et sélection), actif seulement quand la palette `madoka` est choisie.
-- `src/styles/liquid-glass.css` : matière « Liquid Glass » (barres floutées, cartes translucides, fond ambiant), active seulement avec la palette `liquid-glass`.
+- `src/styles/liquid-glass.css` : matière « Liquid Glass » (barres floutées, cartes translucides, fond ambiant animé), active seulement avec la palette `liquid-glass`.
 - `src/routes/*.tsx` : un écran par route.
 - `src/features/*` : logique/parsers par écran.
 

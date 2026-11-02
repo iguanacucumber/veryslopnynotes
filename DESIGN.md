@@ -171,8 +171,9 @@ sont supportés sans changer les rôles.
 **La règle du skin scopé.** Une palette peut ajouter une matière, à condition
 qu'elle soit confinée à `:root[data-scheme="<id>"]` et qu'un repli opaque
 existe. `Liquid Glass` ajoute des surfaces translucides (`backdrop-filter`), un
-fond ambiant dérivé du papier peint et la pile système ; les autres palettes ne
-voient rien de ces règles.
+fond ambiant animé dérivé du papier peint et la pile système ; les autres
+palettes ne voient rien de ces règles. Le mouvement ne touche que les
+transformations, donc la garde globale de `prefers-reduced-motion` le coupe.
 
 ### Primary
 
