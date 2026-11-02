@@ -101,6 +101,11 @@ describe("web palettes", () => {
     expect(css).toMatch(/:root\[data-scheme="liquid-glass"\] \.tabbar\s*\{[^}]*backdrop-filter/);
     expect(css).toContain("@supports not");
     expect(css).toContain("prefers-reduced-transparency");
+    const shell = readFileSync(join(ROOT, "web/src/ui/AppShell.tsx"), "utf8");
+    expect(shell).toContain("<GlassBackdrop");
+    expect(shell).toContain('scheme === "liquid-glass"');
+    expect(css).toContain(".glass-backdrop__blob");
+    expect(css).toMatch(/@keyframes lg-drift-a/);
   });
 
   test("parseScheme : valeur inconnue = palette par défaut", () => {

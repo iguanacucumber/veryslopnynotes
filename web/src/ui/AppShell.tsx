@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useApp } from "./AppContext";
 import { bridge } from "../bridge/client";
 import { Avatar } from "./components";
+import { GlassBackdrop } from "./GlassBackdrop";
 import { HomeWallpaper } from "./HomeWallpaper";
 import { isCurrentWeek, weekStartFromParam } from "../features/timetable/week";
 import {
@@ -72,7 +73,7 @@ export function Shell() {
   const location = useLocation();
   const navigate = useNavigate();
   const go = useViewNavigate();
-  const { refresh, refreshTick, busy, notify, authLost, sessionClosed } = useApp();
+  const { refresh, refreshTick, busy, notify, authLost, sessionClosed, scheme } = useApp();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -151,6 +152,7 @@ export function Shell() {
   return (
     <div className={isHome ? "shell shell--home" : "shell"}>
       {isHome ? <HomeWallpaper /> : null}
+      {scheme === "liquid-glass" ? <GlassBackdrop /> : null}
       <header className={isHome ? "topbar topbar--home" : "topbar"}>
         <div className="topbar__inner">
           {isHome ? (
