@@ -266,28 +266,22 @@ class ManualStore(context: Context) {
      * montrée), jamais une donnée du compte — et un rappel intempestif à chaque
      * bascule serait un défaut.
      *
-     * `false` = le fichier est encore là : la bascule de compte ne doit pas
-     * publier le suivant sur une purge incomplète.
+     * `false` = le fichier ou les clés héritées survivent : la bascule de compte
+     * ne doit pas publier le suivant sur une purge incomplète.
      */
-    fun clearAccountData(): Boolean {
-        val fileCleared = lock.run {
-            val fileCleared = file?.let { DurableFile.delete(it) } ?: true
-            // Les préférences d'une version antérieure au fichier durable portent
-            // encore les mêmes clés : elles partent aussi (I16).
-            try {
-                prefs?.edit()
-                    ?.remove(KEY_URL)
-                    ?.remove(KEY_DOCS)
-                    ?.remove(KEY_CLASS_LABEL)
-                    ?.remove(KEY_SUBJECTS)
-                    ?.remove(KEY_DISABLED_SUBJECTS)
-                    ?.apply()
-            } catch (_: Exception) {
-                // Préfs indisponibles : rien n'était de toute façon lisible.
-            }
-            fileCleared
+    fun clearAccountData(): Boolean = lock.run {
+        // Les préférences d'une version antérieure au fichier durable portent
+        // encore les mêmes clés : elles partent aussi (I16). `commit()` est lu :
+        // un `apply()` différé pouvait rendre le manuel au force-stop suivant.
+        clearManualAccountData(file) {
+            prefs?.edit()
+                ?.remove(KEY_URL)
+                ?.remove(KEY_DOCS)
+                ?.remove(KEY_CLASS_LABEL)
+                ?.remove(KEY_SUBJECTS)
+                ?.remove(KEY_DISABLED_SUBJECTS)
+                ?.commit() ?: true
         }
-        return fileCleared
     }
 
     /** Indices de choix : classe + matières, jamais un profil complet. */

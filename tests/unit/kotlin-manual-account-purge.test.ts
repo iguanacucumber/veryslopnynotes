@@ -10,11 +10,11 @@
 // régression est donc étroite et portée sur le code réel : la PURGE elle-même
 // (toutes les clés de compte, pas le drapeau d'invitation) et son CÂBLAGE sur
 // chaque chemin qui purge déjà le cache.
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { codeOnly } from "../../agents/runtime/source-guards";
-import { ROOT } from "./fixtures/kotlin-harness";
+import { parityToolchain, ROOT, type ParityLink } from "./fixtures/kotlin-harness";
 
 const DATA = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data");
 const BRIDGE = join(
@@ -29,6 +29,25 @@ const BRIDGE = join(
   "app",
   "VsnBridge.kt",
 );
+const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "AccountPurgeMain.kt");
+
+const skip = parityToolchain.skipReason !== null;
+
+let link: ParityLink | null = null;
+if (!skip) link = await parityToolchain.openParityLink(DRIVER);
+
+afterAll(async () => {
+  if (!link) return;
+  try {
+    await link.ask({ op: "cleanup" });
+  } catch {
+    // pilote déjà mort : rien à nettoyer.
+  }
+});
+
+async function ask(op: unknown): Promise<any> {
+  return JSON.parse(await link!.ask(op));
+}
 
 /** Corps d'une fonction/méthode `fun <nom>(`, accolades équilibrées. */
 function bodyOf(src: string, signature: string): string {
@@ -47,6 +66,7 @@ function bodyOf(src: string, signature: string): string {
 }
 
 const manual = codeOnly(readFileSync(join(DATA, "Manuals.kt"), "utf8"));
+const manualAccountData = codeOnly(readFileSync(join(DATA, "ManualAccountData.kt"), "utf8"));
 const bridge = codeOnly(readFileSync(BRIDGE, "utf8"));
 
 describe("manuel — purge de compte (I16)", () => {
@@ -56,15 +76,66 @@ describe("manuel — purge de compte (I16)", () => {
     // antérieure ne doit pas rendre le manuel du compte précédent.
     const purge = bodyOf(manual, "fun clearAccountData()");
     expect(purge.length).toBeGreaterThan(0);
-    expect(purge).toContain("DurableFile.delete(it)");
+    expect(purge).toContain("clearManualAccountData(file)");
+    expect(manualAccountData).toContain("DurableFile.delete(it)");
     // Un rappel intempestif à chaque bascule serait un défaut : le drapeau
     // d'invitation reste dans les préférences, hors de ce fichier.
+    expect(manualAccountData).not.toContain("prompt_seen");
     expect(purge).not.toContain("KEY_PROMPT_SEEN");
   });
 
   test("« Oublier » garde le drapeau vu (comportement inchangé)", () => {
     const clear = bodyOf(manual, "fun clear()");
     expect(clear).toContain("?.putBoolean(KEY_PROMPT_SEEN, true)");
+  });
+});
+
+describe("manuel — purge durable, panne de commit (#886)", () => {
+  test.skipIf(skip)("un commit de préférences refusé rend la purge du manuel INCOMPLÈTE", async () => {
+    const out = await ask({ op: "manualPlan", filePresent: true, failPrefs: true });
+    expect(out.ok).toBe(false);
+    expect(out.failed).toEqual(["manual"]);
+    expect(out.missing).toEqual([]);
+    // Le fichier a bien été effacé : l'échec vient des clés héritées, pas d'un
+    // abandon de l'étape.
+    expect(out.fileExists).toBe(false);
+  });
+
+  test.skipIf(skip)("fichier et préférences partent ensemble quand le commit réussit", async () => {
+    const out = await ask({ op: "manualPlan", filePresent: true, failPrefs: false });
+    expect(out.ok).toBe(true);
+    expect(out.failed).toEqual([]);
+    expect(out.purged).toContain("manual");
+    expect(out.fileExists).toBe(false);
+  });
+
+  test.skipIf(skip)("un fichier absent ne masque pas un commit refusé", async () => {
+    const out = await ask({ op: "manualPurge", filePresent: false, failPrefs: true });
+    expect(out.cleared).toBe(false);
+    expect(out.prefsCalls).toBe(1);
+  });
+
+  test.skipIf(skip)("un fichier absent et un commit réussi = purge complète", async () => {
+    const out = await ask({ op: "manualPurge", filePresent: false, failPrefs: false });
+    expect(out.cleared).toBe(true);
+  });
+
+  test("la déconnexion ne dit jamais « réussi » sur une purge manuelle ratée", () => {
+    const purge = bodyOf(manual, "fun clearAccountData()");
+    expect(purge).toContain("?.commit() ?: true");
+    expect(purge).not.toContain(".apply()");
+
+    const pairing = codeOnly(readFileSync(join(DATA, "PairingRepository.kt"), "utf8"));
+    const logout = bodyOf(pairing, "fun logoutBlocking()");
+    expect(logout).toContain("purge.purge(AccountPurgeMode.LOGOUT, null)");
+    expect(logout).toContain("if (result.ok)");
+    expect(logout).toContain("WriteResult.Failed");
+
+    const bridgeLogout = bodyOf(bridge, "private fun logout()");
+    const failure = bridgeLogout.indexOf("throw BridgeFailure(");
+    const success = bridgeLogout.indexOf('put("ok", true)');
+    expect(failure).toBeGreaterThan(-1);
+    expect(success).toBeGreaterThan(failure);
   });
 });
 

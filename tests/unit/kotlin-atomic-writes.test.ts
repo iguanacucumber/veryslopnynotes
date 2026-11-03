@@ -56,8 +56,10 @@ describe("câblage des écritures durables (#879)", () => {
     expect(manuals).toContain("DurableFile.read(it, ::parseObject)");
     // Même chemin durable ET même garde d'époque que les trois autres stores.
     expect(manuals).toContain("OfflineArtifacts.writeText(target, obj.toString(), SessionEpoch.current())");
-    // Cible, `.bak` ET quarantaine partent avec le compte (I16).
-    expect(manuals).toContain("DurableFile.delete(it)");
+    // Cible, `.bak` ET quarantaine partent avec le compte (I16) : l'effacement
+    // vérifié vit dans le seam pur joué par la parité.
+    expect(source("ManualAccountData.kt")).toContain("DurableFile.delete(it)");
+    expect(manuals).toContain("clearManualAccountData(file)");
     // Le drapeau d'invitation n'est jamais une donnée du compte.
     const purge = manuals.slice(
       manuals.indexOf("fun clearAccountData()"),
