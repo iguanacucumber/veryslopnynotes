@@ -52,6 +52,7 @@ import fr.veryslopnynotes.data.ProfileRepository
 import fr.veryslopnynotes.data.RequestCancellation
 import fr.veryslopnynotes.data.RequestScope
 import fr.veryslopnynotes.data.RestoreResult
+import fr.veryslopnynotes.data.RotatedTokenWrite
 import fr.veryslopnynotes.data.SchoolQr
 import fr.veryslopnynotes.data.SecureStorage
 import fr.veryslopnynotes.data.ServerStore
@@ -538,14 +539,15 @@ class VsnBridge(
             else -> "no_session"
         }
         return JSONObject().put("state", state).put("storage", storageState())
+            .put("tokenSaved", !RotatedTokenWrite.failed())
     }
 
     private fun restoreSession(): JSONObject {
         val response = synchronized(restoreLock) {
             when (val result = pairing.restoreBlocking()) {
-                RestoreResult.Restored -> {
+                is RestoreResult.Restored -> {
                     sessionReady = true
-                    JSONObject().put("state", "restored")
+                    JSONObject().put("state", "restored").put("tokenSaved", result.tokenSaved)
                 }
                 RestoreResult.NoSession -> {
                     sessionReady = false

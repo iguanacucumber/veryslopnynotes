@@ -245,6 +245,11 @@ export interface SessionStatus {
    * (repli mémoire), et l'interface doit le dire (#401).
    */
   storage?: "available" | "unavailable";
+  /**
+   * Le jeton tourné par l'établissement a-t-il atteint le disque ? `false` =
+   * la session vit en mémoire mais le prochain démarrage peut échouer (#867).
+   */
+  tokenSaved?: boolean;
 }
 
 /** Taille du texte : `SYSTEM` suit le réglage Android, sinon choix explicite. */
