@@ -248,8 +248,16 @@ describe("harnais de parité Kotlin : gestion des processus", () => {
     const restorePid = env("KOTLIN_STUB_PIDFILE", pidFile);
     try {
       const link = await parityToolchain.openLink(join(dir, "peu-importe.jar"));
-      // On attend que son PID soit ÉCRIT, pas qu'un délai s'écoule.
-      const written = await until(() => existsSync(pidFile), 10_000);
+      // On attend que son PID soit ÉCRIT, pas que le FICHIER apparaisse : le
+      // stub le crée vide avant d'y écrire, et un run parallèle chargé
+      // observait `existsSync` vrai avec un contenu encore vide.
+      const written = await until(() => {
+        try {
+          return readFileSync(pidFile, "utf8").trim().length > 0;
+        } catch {
+          return false;
+        }
+      }, 10_000);
       expect(written).toBe(true);
       const pid = Number(readFileSync(pidFile, "utf8").trim());
       expect(pid).toBeGreaterThan(0);

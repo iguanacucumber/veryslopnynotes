@@ -369,7 +369,8 @@ describe("registre d'invariants", () => {
   test("le reste du chemin de lecture reste borné", () => {
     const ceilings: [string, number][] = [
       // +600 pour la politique anti-flake (#924), qui appartient au build CI.
-      ["docs/architecture/BUILD.md", 4_600],
+      // +1 150 pour la mesure, la marge et le seuil de couverture (#895).
+      ["docs/architecture/BUILD.md", 5_750],
       // +1 000 mort du rendu (#866), +580 FLAG_SECURE (#898), +600 réseau
       // local (#896). Marge : 12 000.
       ["android/README.md", 12_000],
