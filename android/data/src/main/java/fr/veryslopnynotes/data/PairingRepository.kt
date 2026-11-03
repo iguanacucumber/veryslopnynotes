@@ -122,6 +122,13 @@ class PairingRepository(
         queuedPairing("auth|demo|") { SessionGate.serialized { demoLocked() } }
 
     private fun demoLocked(): PairingResult {
+        // DAT-06 : la release n'ouvre jamais le compte de démonstration.
+        if (!BuildConfig.DEMO_MODE) {
+            return PairingResult.Err(
+                "unavailable",
+                "Connexion démo disponible uniquement en build de développement.",
+            )
+        }
         val client = try {
             Client.demoLogin()
         } catch (_: Exception) {
@@ -270,6 +277,18 @@ class PairingRepository(
         val epoch = SessionEpoch.current()
         return try {
             val client = if (SessionMode.of(stored.mode) == SessionMode.IDENTIFIANT) {
+                // DAT-06 : une session de démo laissée par un build de
+                // développement ne se rouvre pas en release — on efface comme
+                // une session morte.
+                if (!BuildConfig.DEMO_MODE) {
+                    try {
+                        sessions.clear()
+                    } catch (_: Exception) {
+                        // Une session de démo illisible ne survit pas non plus.
+                    }
+                    CacheScope.onSessionDead(cacheStore)
+                    return RestoreResult.NoSession
+                }
                 // Démo : couple identifiant / mot de passe public, pas de jeton.
                 Client.login(
                     stored.endpointUrl,

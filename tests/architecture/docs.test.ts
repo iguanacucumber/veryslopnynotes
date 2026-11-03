@@ -380,9 +380,8 @@ describe("registre d'invariants", () => {
       // l'opérabilité (sondes, drain, cgroups, CA/HSTS).
       ["server/README.md", 9_600],
       ["shared/contracts/README.md", 1_000],
-      // +500 pour la publication loopback et le digest Docker (#921),
-      // +900 pour la politique de deep links et la preuve adb (SEC-10).
-      ["docs/RELEASE.md", 8_400],
+      // +500 loopback/digest (#921), +900 deep links (SEC-10), +200 démo (#873).
+      ["docs/RELEASE.md", 8_600],
       ["docs/HUMAN_INPUTS.md", 4_500],
       ["docs/PRODUCT.md", 7_500],
     ];

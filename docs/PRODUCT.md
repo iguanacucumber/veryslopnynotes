@@ -8,7 +8,7 @@ contribuer, voir `AGENTS.md`.
 
 | Route | Écran | Ce que tu y trouves |
 |---|---|---|
-| `/pairing` | Appairage | Scan du QR de l'établissement + PIN, session ouverte en direct, sans serveur intermédiaire. Un bouton « Connexion démo » ouvre l'établissement de démonstration public, sans QR ni PIN. |
+| `/pairing` | Appairage | Scan du QR de l'établissement + PIN, session ouverte en direct, sans serveur intermédiaire. Un build de développement expose en plus « Connexion démo » (établissement public, sans QR ni PIN) ; la release ne montre ni ce bouton ni la méthode native. |
 | `/` | Accueil | Moyenne, dernière note, prochains cours, devoirs à faire, alertes et accès rapides. |
 | `/calendar` | Cours | Navigation par semaine, professeur, salle, cours en cours / prochain, annulés et déplacés. |
 | `/tasks` | Tâches | Devoirs de la semaine, consigne, pièces jointes, case « fait » écrite dans Pronote, aide IA, photo d'énoncé et création d'une fiche de révision. |
@@ -35,7 +35,7 @@ En plus des écrans :
 - **Synchronisation de fond** — WorkManager rafraîchit notes, devoirs et emploi du temps toutes les 6 h (réseau connecté, batterie suffisante) et réécrit le cache partagé avec l'interface, sans serveur ni push.
 - **Accessibilité** — libellés ARIA, contrastes vérifiés dans les palettes claire et sombre, `prefers-reduced-motion` respecté.
 - **Aide devoirs sourcée** — la réponse vient de la consigne, du cours du devoir et, si tu l'as enregistré une fois, d'un extrait de ton manuel ; sans source suffisante, l'assistant refuse au lieu d'inventer.
-- **Connexion en un clic** — l'établissement de démonstration public de l'éditeur s'ouvre sans QR ni PIN : un bouton, une session. Le compte est public (l'éditeur le publie sur son site de démonstration) et ne contient aucune donnée personnelle ; la session s'ouvre par le pont natif, comme n'importe quel appairage.
+- **Démo de développement** — réservée aux builds `debug` : « Connexion démo » ouvre l'établissement public de l'éditeur sans QR ni PIN. La release masque le bouton, refuse `pairing.pairDemo` au pont et ne restaure jamais une session de démo. Le pont factice et ses écoles fictives restent hors du bundle de production (`import.meta.env.DEV`).
 
 ## Comment ça marche
 

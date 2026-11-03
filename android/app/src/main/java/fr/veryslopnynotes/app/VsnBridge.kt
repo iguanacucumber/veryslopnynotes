@@ -417,7 +417,7 @@ class VsnBridge(
         // `bridge.cancel` n'arrive jamais ici : il est intercepté dans `call()`
         // (signal immédiat, hors file d'exécution).
         return when (method) {
-            "app.ready" -> JSONObject().put("ok", true)
+            "app.ready" -> JSONObject().put("ok", true).put("demo", BuildConfig.DEMO_MODE)
             "app.theme" -> JSONObject().put("theme", theme())
             "app.setTheme" -> setTheme(p)
             "app.textSize" -> textSize()
@@ -840,6 +840,11 @@ class VsnBridge(
      * pourrait nommer l'hôte (I10, #396).
      */
     private fun pairDemo(): JSONObject {
+        // DAT-06 : la release ne peut pas ouvrir ce compte. Le bouton web est
+        // déjà masqué par `app.ready`, mais le pont est l'autorité.
+        if (!BuildConfig.DEMO_MODE) {
+            throw BridgeFailure("unavailable", "Connexion démo disponible uniquement en build de développement.")
+        }
         val result = synchronized(restoreLock) {
             pairing.pairDemoBlocking()
         }

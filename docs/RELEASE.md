@@ -104,8 +104,7 @@ make build   # check-secrets + docker build (skip si daemon absent)
    ```
    L'interface React est construite avant Gradle (`bun run build:web`, tâche
    Gradle `preBuild`) et copiée dans les assets de l'APK ; `MainActivity`
-   l'affiche toujours dans la WebView locale (ADR-004). Le build web ne fait
-   aucun appel réseau et n'embarque aucun secret. Les notices de licence
+   l'affiche dans la WebView locale (ADR-004). Les notices de licence
    (`web/public/licenses/` : SN Pro OFL, Papicons MIT) sont copiées dans
    `assets/web/licenses/` et voyagent donc avec l'APK.
    Produit deux artefacts signés :
@@ -118,7 +117,9 @@ make build   # check-secrets + docker build (skip si daemon absent)
    vraie upload key, Play App Signing re-signant pour la distribution).
    `SERVER_HOST` via `local.properties` `server.host` ou env (défaut release
    VIDE, HTTPS-only ; le défaut émulateur `10.0.2.2:3000` et le clair
-   n'existent que dans `src/debug`).
+   n'existent qu'en debug). La release pose `DEMO_MODE=false` : démo refusée,
+   bouton absent, session non restaurée
+   (`tests/architecture/demo-mode.test.ts`).
 4. Vérifier : `apksigner verify --print-certs` (APK), `jarsigner -verify`
    (AAB), aucune clé/secret dans les artefacts,
    `git status` propre (APK/AAB ignorés `*.apk`/`*.aab`).

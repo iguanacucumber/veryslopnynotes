@@ -67,9 +67,16 @@ export default function PairingScreen() {
   const [pairError, setPairError] = useState("");
   const [demoError, setDemoError] = useState("");
   const [demoing, setDemoing] = useState(false);
+  // DAT-06 : le natif dit si le build de développement expose la démo. Faux
+  // par défaut : une release ne montre jamais ce bouton, même avant la réponse.
+  const [demoAvailable, setDemoAvailable] = useState(false);
 
   useEffect(() => {
     document.title = "Appairage · VerySlopyNyNotes";
+    void bridge
+      .ready()
+      .then((ready) => setDemoAvailable(ready.demo === true))
+      .catch(() => setDemoAvailable(false));
     return () => {
       // Quitter l'écran pendant un scan ne doit pas laisser la caméra ouverte.
       void bridge.cancelPairing().catch(() => undefined);
@@ -352,31 +359,33 @@ export default function PairingScreen() {
             </button>
           </form>
 
-          <Card className="card--flat">
-            <strong style={{ display: "block" }}>Essayer sans établissement</strong>
-            <p className="tiny muted" style={{ margin: "2px 0 0" }}>
-              Connexion à l'établissement de démonstration public : aucun QR, aucun PIN.
-            </p>
-            <p className="tiny muted" style={{ margin: "2px 0 0" }}>
-              Le compte est partagé (ce que tu y changes peut être vu par d'autres) et la session
-              appairée, si tu en as une, est remplacée.
-            </p>
-            {demoError ? (
-              <p className="t-body-m" role="alert" style={{ margin: "8px 0 0", color: "var(--danger-ink)" }}>
-                {demoError}
+          {demoAvailable ? (
+            <Card className="card--flat">
+              <strong style={{ display: "block" }}>Essayer sans établissement</strong>
+              <p className="tiny muted" style={{ margin: "2px 0 0" }}>
+                Connexion à l'établissement de démonstration public : aucun QR, aucun PIN.
               </p>
-            ) : null}
-            <div className="row" style={{ marginTop: 10, justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                className="btn btn--ghost btn--small"
-                disabled={demoing || submitting || scanning}
-                onClick={() => void connectDemo()}
-              >
-                {demoing ? "Connexion…" : "Connexion démo"}
-              </button>
-            </div>
-          </Card>
+              <p className="tiny muted" style={{ margin: "2px 0 0" }}>
+                Le compte est partagé (ce que tu y changes peut être vu par d'autres) et la session
+                appairée, si tu en as une, est remplacée.
+              </p>
+              {demoError ? (
+                <p className="t-body-m" role="alert" style={{ margin: "8px 0 0", color: "var(--danger-ink)" }}>
+                  {demoError}
+                </p>
+              ) : null}
+              <div className="row" style={{ marginTop: 10, justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small"
+                  disabled={demoing || submitting || scanning}
+                  onClick={() => void connectDemo()}
+                >
+                  {demoing ? "Connexion…" : "Connexion démo"}
+                </button>
+              </div>
+            </Card>
+          ) : null}
         </Page>
       </main>
     </div>

@@ -7,20 +7,20 @@
 
 ## I1 — Frontière étanche : `android/pronote/` seul parle à Pronote (ADR-003)
 - Invariant : hors `android/pronote/`, `android/` ne contient aucune URL ni
-  référence d'hôte Pronote (`pronote`, `index-education`), sauf déclaration du
-  module ; le serveur ne contacte jamais Pronote. Gradle :
+  référence d'hôte Pronote (`pronote`, `index-education`) ; le serveur ne
+  contacte jamais Pronote. Gradle :
   `core`/`pronote` sans arête, `data` →
   `core`+`pronote`, `app` → `core`+`data` ; accès Pronote via l'unique
   `Client`. `android/core/` n'importe ni `java.net` ni `android.database`.
   Clients réseau : `Client`, OpenRouter
-  (`android/data/OpenRouterLlm.kt`, I4), scraper (I8). Hôte auxiliaire :
+  (`android/data/OpenRouterLlm.kt`, I4), scraper (I8). Hôte auxiliaire
   (`ServerConfig.validateBaseUrl` : https ; clair loopback en debug seul,
-  interdit en release ; préfixe strict) ; seul `DemoSchool.kt` porte la
-  démonstration.
+  interdit en release) ; seul `DemoSchool.kt` porte la démo : `DEMO_MODE`.
 - Test : `tests/architecture/invariants.test.ts`,
   `tests/unit/check-architecture-scan.test.ts`,
   `tests/unit/android-server-config.test.ts`,
-  `tests/architecture/demo-school.test.ts`.
+  `tests/architecture/demo-school.test.ts`,
+  `tests/architecture/demo-mode.test.ts`.
 - Commande : `make architecture-test`.
 - Emplacement : `android/**/*`, `android/core/`, `server/`,
   `android/pronote/Client.kt`. Réf : `docs/adr/003-client-direct.md`.

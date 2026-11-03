@@ -49,11 +49,15 @@ android {
             val scheme = if (emulator) "http" else "https"
             buildConfigField("String", "SERVER_SCHEME", "\"$scheme\"")
             buildConfigField("String", "SERVER_HOST", "\"$host\"")
+            // DAT-06 : la démo de l'éditeur est une porte de développement.
+            buildConfigField("Boolean", "DEMO_MODE", "true")
         }
         release {
             // Graine VIDE par défaut : l'utilisateur saisit son serveur.
             buildConfigField("String", "SERVER_SCHEME", "\"https\"")
             buildConfigField("String", "SERVER_HOST", "\"${configuredHost.orEmpty()}\"")
+            // DAT-06 : aucune connexion de démonstration dans l'APK publiable.
+            buildConfigField("Boolean", "DEMO_MODE", "false")
             // R8 sur la release (artefact public) : code minifié, ressources rétrécies.
             isMinifyEnabled = true
             isShrinkResources = true
