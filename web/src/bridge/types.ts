@@ -56,6 +56,7 @@ export const BRIDGE_METHODS = [
   "lessons.delete",
   "lessons.setManual",
   "lessons.addPhoto",
+  "data.export",
   "llm.status",
   "llm.saveKey",
   "llm.forgetKey",
@@ -355,6 +356,24 @@ export interface LessonPhotoResult {
   title?: string;
   text?: string;
   message?: string;
+}
+
+/** Une section du manifeste d'export : lignes publiées, lignes écartées. */
+export interface DataExportSection {
+  name: string;
+  count: number;
+  skipped: number;
+}
+
+/**
+ * Export local : le fichier est déjà remis au sélecteur Android. `withheld`
+ * nomme les familles volontairement absentes (session, clé LLM, URL serveur).
+ */
+export interface DataExportResult {
+  ok: boolean;
+  message?: string;
+  sections?: DataExportSection[];
+  withheld?: string[];
 }
 
 /** Réponse de l'enregistrement du manuel : l'URL est gardée même si l'extrait

@@ -17,6 +17,10 @@ la section `0.1.0` le jour du tag.
   marqué non fiable avant chaque prompt.
 - Scraper de manuels facultatif, HTTPS obligatoire, sans authentification.
 - Taille du texte réglable (100/125/150 %) et suivi du réglage Android jusqu'à 200 %.
+- Export local et portable (JSON versionné, manifeste) des notes, du cahier de
+  cours, du fil du professeur, du manuel mémorisé, des préférences matière et de
+  l’état de lecture ; partage Android, sans jeton de session, clé LLM ni adresse
+  de serveur.
 - Smoke CI sur émulateur : APK debug installé, appairage démo, accueil vérifié,
   captures et logcat en artefact (non bloquant tant que non stable).
 - Tests instrumentés sur émulateur : clé chiffrée, Keystore dégradé puis sain,

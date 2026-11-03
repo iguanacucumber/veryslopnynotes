@@ -36,6 +36,7 @@ val BRIDGE_METHODS = setOf(
     "settings.saveManualUrl", "settings.dismissManualPrompt",
     "lessons.list", "lessons.load", "lessons.save", "lessons.delete", "lessons.setManual",
     "lessons.addPhoto",
+    "data.export",
     "llm.status", "llm.saveKey", "llm.forgetKey", "llm.askHomework",
     "llm.solvePhoto", "llm.generateRevision", "llm.teacherTurn",
     "exercises.propose", "exercises.help",

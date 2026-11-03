@@ -7,6 +7,7 @@ import {
   type AiContextSourceMeta,
   type BridgeError,
   type BridgeMethod,
+  type DataExportResult,
   type DeleteAllResult,
   type ExerciseHelpParams,
   type ExerciseProposal,
@@ -344,6 +345,8 @@ export const bridge = {
     call<LessonSaveResult>("lessons.setManual", { subject, enabled }),
   addLessonPhoto: (subject: string, source: "camera" | "gallery") =>
     call<LessonPhotoResult>("lessons.addPhoto", { subject, source }, BRIDGE_TIMEOUTS["lessons.addPhoto"]),
+  exportData: (newsReadIds: string[] = []) =>
+    call<DataExportResult>("data.export", { newsReadIds }),
 
   llmStatus: () => call<{ configured: boolean }>("llm.status"),
   saveLlmKey: (key: string) => call<{ ok: boolean; message?: string }>("llm.saveKey", { key }),

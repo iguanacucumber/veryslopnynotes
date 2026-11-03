@@ -9,6 +9,7 @@ import { parseProfilePayload, type Profile } from "../profile/model";
 import { AdvancedSection, SelfHostingNotice } from "./AdvancedSection";
 import { AppearanceCard } from "./AppearanceCard";
 import { AssistantCards } from "./AssistantCards";
+import { DataExportCard } from "./DataExportCard";
 import { DeleteAllCard } from "./DeleteAllCard";
 import { ManualCard } from "./ManualCard";
 import { ServerCard } from "./ServerCard";
@@ -155,6 +156,10 @@ export default function SettingsScreen() {
 
       <Section id="reglages-assistant" title="Assistant">
         <AssistantCards snapshot={snapshot} loading={loading} />
+      </Section>
+
+      <Section id="reglages-donnees" title="Données">
+        <DataExportCard />
       </Section>
 
       <AdvancedSection open={advancedOpen} onToggle={() => setAdvancedOpen((open) => !open)}>
