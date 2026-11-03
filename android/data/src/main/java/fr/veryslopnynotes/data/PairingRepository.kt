@@ -39,7 +39,12 @@ sealed interface RestoreResult {
     data object Restored : RestoreResult
     data object NoSession : RestoreResult
     /** Jeton mort (tourné, révoqué) : le store est vidé ; `sessionCleared` dit si le disque a suivi. */
-    data class Dead(val message: String, val sessionCleared: Boolean = true) : RestoreResult
+    data class Dead(
+        val message: String,
+        val sessionCleared: Boolean = true,
+        val purgeFailed: Boolean = false,
+    ) : RestoreResult
+
     /**
      * Session persistée PARTIELLE ou client à moitié authentifié
      * (`logged_in`/`info`) : rien n'est publié, store et cache sont purgés.
@@ -67,6 +72,8 @@ class PairingRepository(
     private val provider: PronoteClientProvider = { PronoteSession.client },
     /** Enregistré DANS la section critique, avec la session (bascule atomique). */
     private val accountRecorder: AccountRecorder = AccountRecorder { WriteResult.Written },
+    /** UN chemin de purge : session, cache ET tous les stores de compte. */
+    private val purge: AccountPurgeRunner,
 ) {
     /** Le `uuid` identifie CET appareil (2e tour 2FA), persisté avec la session. */
     fun pairBlocking(input: PairingInput, deviceName: String = "", uuid: String = newUuid()): PairingResult =
@@ -186,19 +193,26 @@ class PairingRepository(
             } catch (_: Exception) {
                 null
             }
-            // Bascule ATOMIQUE : le client du nouveau compte ne devient
-            // visible qu'une fois le cache de l'ancien purgé.
-            val switched = CacheScope.switchAccount(
-                cacheStore,
-                previous,
-                identity,
-            ) {
+            // Bascule : la purge de TOUS les stores précède la publication du
+            // nouveau client. L'étape `CACHE` publie dans la même section
+            // critique d'époque, donc aucun lecteur ne voit le neuf avec
+            // l'ancien cache.
+            val current = AccountIdentity.of(endpoint, username)
+            val switched = if (previous != null && current != null && previous.sameAccount(current)) {
+                // MÊME compte : sa donnée reste la sienne.
                 PronoteSession.set(client)
+                true
+            } else {
+                purge.purge(
+                    AccountPurgeMode.ACCOUNT_SWITCH,
+                    AccountSwitch(previous, current) { PronoteSession.set(client) },
+                ).ok
             }
-            if (switched == CacheSwitch.Failed) {
+            if (!switched) {
                 // Purge incomplète : ni session persistée ni publication,
-                // sinon le compte suivant hériterait du cache de l'ancien.
-                return PairingResult.Err("cache_not_cleared", "Cache local non purgé : réessaie l'appairage.")
+                // sinon le compte suivant hériterait de la donnée de l'ancien.
+                PronoteSession.clear()
+                return PairingResult.Err("cache_not_cleared", "Données locales non purgées : réessaie l'appairage.")
             }
             // Session ET compte dans la même garde d'époque : un logout
             // concurrent refuse la bascule au lieu de la couper en deux. Un
@@ -294,11 +308,11 @@ class PairingRepository(
                 }
                 // Session MORTE : le cache part avec elle, sinon l'appairage
                 // suivant (un AUTRE compte) servirait ce payload hors ligne
-                // jusqu'à 24 h.
-                CacheScope.onSessionDead(cacheStore)
+                // jusqu'à 24 h. L'orchestrateur efface aussi les autres stores.
+                val purgeResult = purge.purge(AccountPurgeMode.SESSION_DEAD, null)
                 // `false` = le jeton peut ressusciter au force-stop : le pont
                 // PUBLIE cet échec au lieu de dire « déconnecté ».
-                RestoreResult.Dead(DeviceAuth.REJECTED_MESSAGE, cleared.ok)
+                RestoreResult.Dead(DeviceAuth.REJECTED_MESSAGE, cleared.ok, purgeFailed = !purgeResult.ok)
             }
         }
     }
@@ -371,23 +385,19 @@ class PairingRepository(
     /**
      * Déconnexion sous le MÊME verrou que l'appairage et la restauration : une
      * restauration EN VOL ne peut plus publier l'ancien client après la purge.
-     * [onPurged] efface l'état qui n'appartient pas au dépôt (liste de comptes)
-     * une fois la session et le cache traités, dans la même section critique.
      *
-     * Rend l'issue COMBINÉE : session, cache ET comptes. Un échec de l'un
+     * Rend l'issue de la purge ORCHESTRÉE (session, cache, notes, chat, préfs,
+     * manuel, pièces jointes, exports, lecture, WebView, comptes). Un échec
      * n'est jamais un « déconnecté » qui laisse la donnée du compte sur le
      * disque — l'appelant remonte le refus.
      */
-    fun logoutBlocking(onPurged: () -> WriteResult = { WriteResult.Written }): WriteResult =
+    fun logoutBlocking(): WriteResult =
         SessionGate.serialized {
-            var sessionWrite: WriteResult = WriteResult.Failed("session non effacée")
-            val cachePurged = SessionRepair.purge({ sessionWrite = sessions.clear() }, cacheStore)
-            val accountsWrite = onPurged()
-            when {
-                !sessionWrite.ok -> sessionWrite
-                !accountsWrite.ok -> accountsWrite
-                !cachePurged -> WriteResult.Failed("cache non purgé")
-                else -> WriteResult.Written
+            val result = purge.purge(AccountPurgeMode.LOGOUT, null)
+            if (result.ok) {
+                WriteResult.Written
+            } else {
+                WriteResult.Failed((result as? AccountPurgeResult.Incomplete)?.summary() ?: "purge incomplète")
             }
         }
 

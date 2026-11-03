@@ -69,53 +69,43 @@ describe("manuel — purge de compte (I16)", () => {
 });
 
 describe("pont — la purge part avec celle du cache, jamais au redémarrage", () => {
-  test("déconnexion et session morte purgent le manuel AVANT la session", () => {
-    const purge = bodyOf(bridge, "private fun purgeManualAccountData()");
-    expect(purge).toContain("manuals.clearAccountData()");
+  test("l'orchestrateur purge le manuel et ses adresses essayées", () => {
+    const factory = codeOnly(readFileSync(join(DATA, "AccountPurgeFactory.kt"), "utf8"));
+    expect(factory).toContain("AccountDataStore.MANUAL");
+    expect(factory).toContain("targets.manuals.clearAccountData()");
     // Une adresse de manuel oubliée est de la donnée de compte : elle part aussi.
-    expect(purge).toContain("manualFailures.clear()");
+    expect(factory).toContain("targets.onManualPurged()");
 
+    const bridge = codeOnly(readFileSync(BRIDGE, "utf8"));
+    // Le pont ne refait pas une seconde purge à côté de l'orchestrateur.
+    expect(bridge).not.toContain("purgeManualAccountData");
+    expect(bridge).toContain("onManualPurged = { manualFailures.clear() }");
     for (const signature of ["private fun logout()", "private fun onSessionRejected()"]) {
       const path = bodyOf(bridge, signature);
-      const at = path.indexOf("purgeManualAccountData()");
-      // La purge est là…
-      expect(at).toBeGreaterThan(-1);
-      // …et AVANT `pairing.logoutBlocking` : si la purge de session jette
-      // (Keystore mort), le manuel est déjà parti (fail-safe).
-      expect(at).toBeLessThan(path.indexOf("pairing.logoutBlocking"));
+      expect(path).toContain("pairing.logoutBlocking()");
+      expect(path).not.toContain("manuals.clearAccountData()");
     }
   });
 
-  test("session morte à la restauration et appairage d'un AUTRE compte purgent aussi", () => {
-    // Restauration : la branche `Dead` a déjà purgé le cache dans
-    // `PairingRepository`, elle purge le manuel ici.
+  test("session morte et bascule purgent par le MÊME orchestrateur", () => {
+    const bridge = codeOnly(readFileSync(BRIDGE, "utf8"));
     const restore = bodyOf(bridge, "private fun restoreSession()");
     expect(restore).toContain("is RestoreResult.Dead");
     const dead = restore.slice(restore.indexOf("is RestoreResult.Dead"));
-    expect(dead).toContain("purgeManualAccountData()");
+    expect(dead).not.toContain("purgeManualAccountData()");
 
-    // Appairage : MÊME comparaison d'identité que `CacheScope.switchAccount`
-    // (le manuel n'est pas connu de `PairingRepository`), appliquée aux deux
-    // entrées (QR et démonstration).
-    const changed = bodyOf(bridge, "private fun purgeManualIfAccountChanged(");
-    expect(changed).toContain("storedIdentity()");
-    expect(changed).toContain("sameAccount(next)");
-    // Identité inconnue = purge (fail-closed, comme le cache).
-    expect(changed).toMatch(/previous == null \|\| next == null/);
-    expect(changed).toContain("purgeManualAccountData()");
-    for (const signature of ["private fun pair(p: JSONObject)", "private fun pairDemo()"]) {
-      expect(bodyOf(bridge, signature)).toContain("purgeManualIfAccountChanged(previous)");
-    }
-    // L'identité est prise AVANT l'appairage (sinon elle décrit déjà le neuf).
-    const pair = bodyOf(bridge, "private fun pair(p: JSONObject)");
-    expect(pair.indexOf("val previous = storedIdentity()")).toBeLessThan(
-      pair.indexOf("pairBlocking("),
-    );
+    const pairing = codeOnly(readFileSync(join(DATA, "PairingRepository.kt"), "utf8"));
+    expect(pairing).toContain("AccountPurgeMode.SESSION_DEAD");
+    expect(pairing).toContain("AccountPurgeMode.ACCOUNT_SWITCH");
+    // Identité inconnue = purge (fail-closed), et la purge précède la publication.
+    expect(pairing).toMatch(/previous != null && current != null && previous\.sameAccount\(current\)/);
+    const iPurge = pairing.indexOf("AccountPurgeMode.ACCOUNT_SWITCH");
+    const iPublish = pairing.indexOf("AccountSwitch(previous, current) { PronoteSession.set(client) }");
+    expect(iPurge).toBeGreaterThan(-1);
+    expect(iPublish).toBeGreaterThan(iPurge);
   });
 
   test("un redémarrage ordinaire ne purge RIEN", () => {
-    // `Restored` / `NoSession` / `Offline` : la session (ou son absence) ne
-    // change pas de compte — l'utilisateur doit retrouver son manuel.
     const restore = bodyOf(bridge, "private fun restoreSession()");
     const firstPurge = restore.indexOf("is RestoreResult.Incomplete");
     const deadAt = restore.indexOf("is RestoreResult.Dead");
@@ -123,9 +113,9 @@ describe("pont — la purge part avec celle du cache, jamais au redémarrage", (
     expect(deadAt).toBeGreaterThan(-1);
     const ordinary = restore.slice(0, firstPurge);
     expect(ordinary).not.toContain("purgeManualAccountData()");
-    expect(ordinary).not.toContain("purgeManualIfAccountChanged(");
-    // Les SEULES purges de ce chemin sont les deux refus non ordinaires
-    // (« incomplète » et « morte »), jamais un redémarrage ordinaire.
-    expect(restore.split("purgeManualAccountData()").length - 1).toBe(2);
+    expect(ordinary).not.toContain("logoutBlocking()");
+    // Incomplète ET morte passent par l'orchestrateur central : aucune purge
+    // locale dans le pont.
+    expect(restore).not.toContain("purgeManualAccountData()");
   });
 });

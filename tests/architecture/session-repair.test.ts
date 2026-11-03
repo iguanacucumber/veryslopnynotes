@@ -45,14 +45,19 @@ describe("réparation d'une session morte (#397)", () => {
   test("la purge invalide la session ET purge le cache (un seul chemin)", () => {
     const pairing = readFileSync(PAIRING, "utf8");
     const repair = readFileSync(REPAIR, "utf8");
-    // La déconnexion ET la session morte partagent le MÊME code de purge.
-    expect(pairing).toContain("SessionRepair.purge(");
+    const factory = readFileSync(join(DATA, "AccountPurgeFactory.kt"), "utf8");
+    // La déconnexion ET la session morte passent par le MÊME orchestrateur.
+    expect(pairing).toContain("purge.purge(");
     expect(pairing).not.toContain("SessionEpoch.invalidate");
     expect(repair).toContain("invalidateSession()");
     expect(repair).toContain("PronoteSession.clear()");
-    expect(repair).toContain("CacheScope.purge(cacheStore)");
+    expect(factory).toContain("CacheScope.purge(targets.cacheStore)");
     expect(repair).not.toContain("SessionEpoch.invalidate");
-    expect(pairing).toContain("sessions.clear()");
+    // La session est effacée par l'étape SESSION, avant le cache.
+    expect(factory).toContain("AccountPurgeStep(AccountDataStore.SESSION)");
+    expect(factory.indexOf("AccountPurgeStep(AccountDataStore.SESSION)")).toBeLessThan(
+      factory.indexOf("AccountPurgeStep(AccountDataStore.CACHE)"),
+    );
   });
 
   test("PAS de boucle : la purge ne lève jamais le signal", () => {

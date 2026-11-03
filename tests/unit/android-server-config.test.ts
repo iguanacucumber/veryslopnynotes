@@ -400,19 +400,21 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
   });
 });
 
-// `logout()` purge dans l'ordre : session persistée, session mémoire, PUIS caches.
+// `logout()` purge par l'orchestrateur : session, mémoire, PUIS caches.
 function accounts_have_logout(): boolean {
   const pairing = read(join(DATA, "PairingRepository.kt"));
   const repair = read(join(DATA, "SessionRepair.kt"));
-  // Purge déléguée à `SessionRepair.purge` (seul endroit) ; l'ordre y est vérifié.
-  const purge = repair.indexOf("CacheScope.purge(cacheStore)");
+  const factory = read(join(DATA, "AccountPurgeFactory.kt"));
+  const clearSession = factory.indexOf("AccountPurgeStep(AccountDataStore.SESSION)");
+  const cache = factory.indexOf("AccountPurgeStep(AccountDataStore.CACHE)");
   return (
     pairing.includes("fun logoutBlocking(") &&
-    pairing.includes("SessionRepair.purge(") &&
-    pairing.includes("sessions.clear()") &&
+    pairing.includes("AccountPurgeMode.LOGOUT") &&
+    factory.includes("AccountDataStore.CACHE") &&
+    factory.indexOf("SessionRepair.clearSession") < cache &&
     repair.indexOf("invalidateSession()") < repair.indexOf("PronoteSession.clear()") &&
-    repair.indexOf("PronoteSession.clear()") < purge &&
-    purge > -1
+    clearSession > -1 &&
+    clearSession < cache
   );
 }
 

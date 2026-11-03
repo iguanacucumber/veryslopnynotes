@@ -54,8 +54,8 @@ describe("logout sérialisé avec restore/pair (#785)", () => {
     const start = pairing.indexOf("fun logoutBlocking(");
     expect(start).toBeGreaterThan(-1);
     const body = pairing.slice(start, pairing.indexOf("private fun failure(", start));
-    expect(body).toContain("SessionRepair.purge(");
-    expect(body).toContain("sessions.clear()");
+    expect(body).toContain("AccountPurgeMode.LOGOUT");
+    expect(body).toContain("purge.purge(");
     // Le pont n'appelle plus une purge hors verrou.
     const bridge = readBridgeSource();
     expect(bridge).toContain("pairing.logoutBlocking");
@@ -65,7 +65,7 @@ describe("logout sérialisé avec restore/pair (#785)", () => {
   test("le job purge une session morte même sans abonné (process neuf)", () => {
     const worker = readFileSync(join(DATA, "PeriodicSyncWorker.kt"), "utf8");
     expect(worker).toContain("if (!DeviceAuth.reject())");
-    expect(worker).toMatch(/logoutBlocking[\s\S]*AccountStore\(applicationContext/);
+    expect(worker).toMatch(/logoutBlocking\(\)[\s\S]*AccountPurgeFactory\.runner/);
     expect(worker).toContain("Result.success()");
   });
 });

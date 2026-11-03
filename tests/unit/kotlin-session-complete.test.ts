@@ -133,12 +133,14 @@ describe("câblage : aucune publication avant la prédicat (#870)", () => {
     );
     const iAuth = publish.indexOf("SessionAuthentication.missing(client.logged_in, client.infoReady)");
     const iStored = publish.indexOf("SessionCompleteness.missing(candidate)");
-    const iCache = publish.indexOf("CacheScope.switchAccount(");
+    const iPurge = publish.indexOf("purge.purge(");
     const iSet = publish.indexOf("PronoteSession.set(client)");
+    // #861 a centralisé la purge : le prédicat doit précéder la purge ET la
+    // publication, quel que soit le chemin (même compte ou bascule).
+    const iMutation = Math.min(iPurge, iSet);
     expect(iAuth).toBeGreaterThan(-1);
     expect(iStored).toBeGreaterThan(iAuth);
-    expect(iCache).toBeGreaterThan(iStored);
-    expect(iSet).toBeGreaterThan(iCache);
+    expect(iMutation).toBeGreaterThan(iStored);
   });
 
   test("la restauration publie sous la garde d'époque, après la prédicat", () => {

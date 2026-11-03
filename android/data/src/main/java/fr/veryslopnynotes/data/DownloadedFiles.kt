@@ -178,18 +178,18 @@ object DownloadedFiles {
      * `false` = au moins un fichier a survécu : l'appelant ne publie pas le
      * compte suivant sur une purge incomplète.
      */
-    fun purge(cacheRoot: File): Boolean {
-        var ok = true
-        for (name in listOf(ATTACHMENTS, EXPORTS)) {
-            val dir = File(cacheRoot, name)
-            if (!dir.exists()) continue
-            try {
-                if (!dir.deleteRecursively() || dir.exists()) ok = false
-            } catch (_: Exception) {
-                ok = false
-            }
+    fun purge(cacheRoot: File): Boolean =
+        purge(cacheRoot, ATTACHMENTS) && purge(cacheRoot, EXPORTS)
+
+    /** Purge d'UN dossier téléchargé : l'inventaire de compte le suit store par store. */
+    fun purge(cacheRoot: File, name: String): Boolean {
+        val dir = File(cacheRoot, name)
+        if (!dir.exists()) return true
+        return try {
+            dir.deleteRecursively() && !dir.exists()
+        } catch (_: Exception) {
+            false
         }
-        return ok
     }
 
     /**

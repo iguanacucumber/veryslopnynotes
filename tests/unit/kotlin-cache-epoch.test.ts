@@ -59,11 +59,14 @@ describe("purge de déconnexion (#364)", () => {
     const pairing = readFileSync(PAIRING, "utf8");
     const iLogout = pairing.indexOf("fun logoutBlocking(");
     expect(iLogout).toBeGreaterThan(-1);
-    // La purge est UN SEUL endroit (`CacheScope.purge`), partagé par déconnexion, appairage et session morte.
-    expect(pairing).toContain("SessionRepair.purge(");
+    // La purge est UN SEUL endroit (`AccountPurgePlan`), partagé par
+    // déconnexion, appairage et session morte.
+    expect(pairing).toContain("AccountPurgeMode.LOGOUT");
     expect(pairing).not.toContain("SessionEpoch.invalidate");
     const repair = readFileSync(join(DATA, "SessionRepair.kt"), "utf8");
-    expect(repair).toContain("CacheScope.purge(cacheStore)");
+    const factory = readFileSync(join(DATA, "AccountPurgeFactory.kt"), "utf8");
+    expect(factory).toContain("CacheScope.purge(targets.cacheStore)");
+    expect(repair).not.toContain("CacheScope.purge(cacheStore)");
     expect(repair).not.toContain("SessionEpoch.invalidate");
     // La purge est DANS la garde : invalidation et effacement dans la même section critique.
     const scope = readFileSync(join(DATA, "CacheScope.kt"), "utf8");

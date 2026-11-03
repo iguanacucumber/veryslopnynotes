@@ -6,14 +6,15 @@
 <a id="i16"></a>
 
 ## I16 — La donnée d'un compte n'est servie qu'à ce compte, et purgée avec lui
-- Invariant : cache, téléchargements, fiches, préférences et photos sont la
-  donnée d'UN compte. Purgés au changement de compte et à la session morte — par
+- Invariant : cache, téléchargements, fiches, préférences et photos sont
+  d'UN compte. Purgés au changement de compte et à la session morte — par
   TYPE et code `G`, jamais un mot. Purge, invalidation et bascule
   sont atomiques et ORDONNÉES : la purge précède la publication, une écriture en
-  vol est abandonnée. `offline/` ne contient que de la donnée de compte ; la
+  vol est abandonnée. `offline/` ne contient que de la donnée de compte ;
   déconnexion l'efface. Téléchargements : nom portant l'ID, bornés, purgés
   avec lui. Identité inconnue : purge.
-- Test : `tests/unit/kotlin-cache-scope.test.ts`,
+- Test : `tests/unit/kotlin-account-purge.test.ts`,
+  `tests/unit/kotlin-cache-scope.test.ts`,
   `tests/unit/kotlin-cache-epoch.test.ts`,
   `tests/unit/kotlin-offline-artifacts.test.ts`,
   `tests/unit/kotlin-manual-account-purge.test.ts`,
@@ -22,7 +23,8 @@
   `tests/unit/kotlin-sync-worker.test.ts`,
   `tests/unit/downloaded-files.test.ts`.
 - Commande : `make check`.
-- Emplacement : `android/data/CacheScope.kt`,
+- Emplacement : `android/data/AccountPurge.kt`,
+  `android/data/AccountPurgeFactory.kt`, `android/data/CacheScope.kt`,
   `android/data/OfflineArtifacts.kt`, `android/data/DownloadedFiles.kt`,
   `android/data/SessionRepair.kt`.
 
