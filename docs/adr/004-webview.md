@@ -59,8 +59,8 @@ violerait ADR-003 et I8.
   (`tests/architecture/web.test.ts`), et la CSP.
 - Les captures `make shot` passent par les deep links existants
   (`veryslopnynotes://<route>`), désormais traduits en `#/<route>`.
-- Compatibilité WebView : cible ES2018, pas de `:has()`/`dvh` sans repli,
-  tests sur API 26.
+- Compatibilité WebView : Chromium 100+ (seuil natif, refus explicite), cible
+  ES2018, pas de `:has()`/`dvh` sans repli, tests sur API 26.
 - Budget : JS initial < 250 Ko gzip, pas de bibliothèque de composants.
 - La parité visuelle est vérifiée écran par écran ; les références de capture
   Compose ne sont plus la source de vérité.

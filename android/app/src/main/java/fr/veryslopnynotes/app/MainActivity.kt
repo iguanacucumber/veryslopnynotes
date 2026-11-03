@@ -9,6 +9,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
+import android.widget.ScrollView
+import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -37,6 +39,13 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         hideSystemBars()
         requestLocalNetworkPermission()
+        // Refus AVANT de construire la WebView : une version trop ancienne ne
+        // doit pas planter au chargement, elle doit lire quoi faire.
+        val support = webViewSupport(currentWebViewVersion())
+        if (support is WebViewSupport.Unsupported) {
+            showUnsupportedWebView(support.installedMajor)
+            return
+        }
         // La planification du sync de fond quitte le chemin critique du premier
         // frame ; un échec ici ne doit jamais faire rater un démarrage.
         Thread({
@@ -169,6 +178,23 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.ACCESS_LOCAL_NETWORK,
         ) == PackageManager.PERMISSION_GRANTED
         if (!granted) localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+    }
+
+    /** Une erreur de lecture du paquet WebView devient « version inconnue », pas un crash. */
+    private fun currentWebViewVersion(): String? = try {
+        WebView.getCurrentWebViewPackage()?.versionName
+    } catch (_: Exception) {
+        null
+    }
+
+    /** WebView trop ancienne : message natif plein écran, aucune coquille construite. */
+    private fun showUnsupportedWebView(installedMajor: Int?) {
+        val message = TextView(this).apply {
+            text = unsupportedWebViewMessage(installedMajor)
+            textSize = 16f
+            setPadding(48, 48, 48, 48)
+        }
+        setContentView(ScrollView(this).apply { addView(message) })
     }
 
     /**

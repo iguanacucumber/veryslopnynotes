@@ -159,7 +159,7 @@ export default function SettingsScreen() {
         <Rows>
           <ListRow
             title="Aide et FAQ"
-            subtitle="QR, PIN, réseau, caméra, assistant, dépannage"
+            subtitle="QR, PIN, réseau, caméra, assistant, dépannage · Android 8.0+, WebView 100+"
             leading={<IconInfo size={22} />}
             onClick={() => navigate("/help")}
           />

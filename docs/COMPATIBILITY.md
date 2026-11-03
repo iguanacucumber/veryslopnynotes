@@ -9,7 +9,7 @@ l'établissement et le message affiché (sans donnée scolaire).
 | Élément | Pris en charge | Non pris en charge |
 |---|---|---|
 | Appareil | Android 8.0+ (API 26), cible API 37 | iOS, desktop, navigateur seul |
-| Interface | WebView système à jour, bundle React embarqué | moteur embarqué, WebView distante |
+| Interface | WebView système Chromium 100 ou plus récente, bundle React embarqué | moteur embarqué, WebView Chromium 99 ou plus ancienne, WebView distante |
 | Connexion | QR de l'application Pronote + PIN, session ouverte en direct | identifiant / mot de passe, SSO d'ENT, double authentification (MFA) |
 | Établissement | Pronote qui expose un QR de connexion et le protocole direct | portail sans QR, compte qui exige une vérification supplémentaire |
 | Version Pronote | aucune version n'est épinglée : le contrat est le QR | une version qui change le QR ou impose la MFA |
@@ -17,6 +17,21 @@ l'établissement et le message affiché (sans donnée scolaire).
 | Scraper de manuels | facultatif, HTTPS, boucle locale ou proxy authentifié | exposition publique sans authentification |
 | Assistant IA | facultatif, clé OpenRouter stockée sur l'appareil | appel sans clé, envoi de la clé à un serveur du dépôt |
 | Notifications | synchronisation de fond WorkManager (environ 6 h) | push, notification temps réel |
+
+## WebView : Chromium 100 minimum
+
+Le minimum est **Android 8.0 (API 26)** avec une **WebView système Chromium
+100** (mars 2022). Le seuil reste atteignable sur Android 8 par le Play Store et
+couvre le bundle React (ES2018 et CSS utilisés). Une WebView plus ancienne n'est
+pas une promesse de rendu dégradé : elle est refusée explicitement.
+
+Au démarrage, l'app lit la version du paquet WebView installé. Si la majeure est
+absente, illisible ou inférieure à 100, elle affiche un écran natif qui nomme le
+minimum, la version détectée et l'action (mettre à jour Android System WebView
+ou Chrome, puis relancer) : aucune WebView n'est chargée et l'app ne plante pas.
+La même phrase est visible dans **Aide → Configuration minimale**. La décision
+vit dans un fichier Kotlin pur (`android/app/WebViewSupport.kt`), testé par
+`tests/unit/android-webview-support.test.ts` et par la compilation Android.
 
 ## Connexion : QR uniquement
 
