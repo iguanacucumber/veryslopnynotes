@@ -71,14 +71,19 @@ transfert appareil-à-appareil, enfin l'aperçu des applications récentes.
 - Les stores ne journalisent jamais le jeton ni la clé, et les `toString()`
   masquent les champs sensibles. Aucune photo ne part sans geste explicite
   (I32).
+- La fenêtre est protégée par `FLAG_SECURE` en release : l'aperçu des
+  applications récentes, les captures et les enregistrements d'écran sont
+  vides. Toutes les routes servies portent une donnée scolaire, la clé LLM ou
+  l'appairage ; le build debug est exempté pour `make shot` et le débogage
+  (`SecureWindow.kt`).
 
 **Risque résiduel** : l'app n'a pas de verrou utilisateur. Sur un appareil
 déverrouillé, l'attaquant peut lire les écrans, utiliser la clé LLM et exporter
-ce que l'app affiche ; le Keystore protège le repos, pas l'accès à chaud. Aucun
-`FLAG_SECURE` n'est posé, donc l'aperçu des applications récentes peut montrer
-des données scolaires. Les payloads hors ligne sont en clair dans
-`filesDir/offline/` tant que l'appareil est déverrouillé, et un appareil rooté
-ou un OS compromis contourne le bac à sable et le Keystore.
+ce que l'app affiche ; le Keystore protège le repos, pas l'accès à chaud.
+`FLAG_SECURE` ferme l'aperçu des récents et les captures, mais pas la lecture à
+l'écran, ni un appareil rooté ou un OS compromis ; le build debug reste
+capturable et visible dans les récents. Les payloads hors ligne sont en clair
+dans `filesDir/offline/` tant que l'appareil est déverrouillé.
 
 **Preuves** : `tests/unit/kotlin-cache-scope.test.ts`,
 `tests/unit/kotlin-offline-artifacts.test.ts`,
@@ -86,7 +91,8 @@ ou un OS compromis contourne le bac à sable et le Keystore.
 `tests/unit/kotlin-session-repair.test.ts`,
 `tests/architecture/session-repair.test.ts`,
 `tests/unit/downloaded-files.test.ts`, `tests/unit/kotlin-store-health.test.ts`,
-`tests/unit/kotlin-vision.test.ts` et `tests/architecture/backup.test.ts`.
+`tests/unit/kotlin-vision.test.ts`, `tests/unit/android-secure-window.test.ts`
+et `tests/architecture/backup.test.ts`.
 
 ## T2 — Charge scolaire malveillante
 

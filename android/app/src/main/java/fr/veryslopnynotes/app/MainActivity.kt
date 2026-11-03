@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.webkit.WebView
 import android.widget.Button
 import android.widget.FrameLayout
@@ -45,6 +46,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applySecureWindow()
         // Edge-to-edge : `enableEdgeToEdge` pose aussi le mode découpe (API 28+),
         // donc le fond occupe l'encoche et le contenu est décalé par l'inset.
         enableEdgeToEdge()
@@ -192,6 +194,16 @@ class MainActivity : ComponentActivity() {
     /** Un chemin hors contrat est refusé : l'accueil, pas une route inventée. */
     private fun savedRoute(savedInstanceState: Bundle?): String? =
         routePathFromState(savedInstanceState?.getString(ROUTE_STATE_KEY))
+
+    /**
+     * Aperçu des applications récentes, captures et enregistrements d'écran
+     * masqués en release. Le debug est exempté (voir [secureWindowRequired]).
+     */
+    private fun applySecureWindow() {
+        if (secureWindowRequired(BuildConfig.DEBUG)) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
 
     /**
      * Deux chemins distincts, sans double comptage :

@@ -45,6 +45,19 @@ adb logcat -d | grep -E "FATAL|AndroidRuntime"   # vide
 Le retry recharge la route et un écran de données répond sans réappairer ;
 répéter le kill ne boucle pas.
 
+## Écran protégé (récents, captures)
+
+En release, `FLAG_SECURE` est posé sur la fenêtre entière : récents, `adb
+screencap` et enregistrements d'écran sont vides. Toutes les routes servies
+portent une donnée scolaire, la clé LLM ou l'appairage : aucune liste d'écrans à
+maintenir.
+
+Le build debug est exempté (`SecureWindow.secureWindowRequired`) : `make shot`
+et le débogage WebView en ont besoin, au prix d'un aperçu des récents visible.
+
+Limites : pas de verrou propre (appareil déverrouillé = lecture), ni root/OS
+compromis. Les exports et téléchargements restent des fichiers lisibles.
+
 ## Serveur facultatif : scraper de manuels
 
 Le serveur n'est pas nécessaire pour Pronote ou l'assistant IA. Il ne sert qu'au

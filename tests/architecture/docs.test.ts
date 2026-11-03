@@ -370,8 +370,9 @@ describe("registre d'invariants", () => {
     const ceilings: [string, number][] = [
       // +600 pour la politique anti-flake (#924), qui appartient au build CI.
       ["docs/architecture/BUILD.md", 4_600],
-      // +1 000 pour la reprise après mort du rendu WebView (#866).
-      ["android/README.md", 10_500],
+      // +1 000 pour la reprise après mort du rendu WebView (#866) et +580 pour
+      // la protection d'écran (`FLAG_SECURE`, #898). Marge : 11 200.
+      ["android/README.md", 11_200],
       ["web/README.md", 4_000],
       // +1000 pour le sandbox Chromium et le profil seccomp.
       ["server/README.md", 5_800],
