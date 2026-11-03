@@ -82,6 +82,21 @@ function fixture(): Fixture {
   mkdirSync(bin);
   stub(join(bin, "bun"), '#!/bin/sh\nprintf \'bun %s\\n\' "$*" >> "$HARNESS/bun.log"\nexit 0\n');
   stub(join(bin, "make"), '#!/bin/sh\nprintf \'make %s\\n\' "$*" >> "$HARNESS/make.log"\nexit 0\n');
+  stub(
+    join(bin, "gh"),
+    [
+      "#!/bin/sh",
+      'printf \'gh %s\\n\' "$*" >> "$HARNESS/gh.log"',
+      'case "$1 $2" in',
+      '  "pr view") printf \'https://example.invalid/pr/1\\n\'; exit 0 ;;',
+      '  "pr create") printf \'https://example.invalid/pr/1\\n\'; exit 0 ;;',
+      '  "pr checks") exit "${GH_CHECKS_CODE:-0}" ;;',
+      '  "pr merge") exit "${GH_MERGE_CODE:-0}" ;;',
+      "esac",
+      "exit 0",
+      "",
+    ].join("\n"),
+  );
 
   return { base, seed, origin, work, bin };
 }
@@ -154,7 +169,7 @@ describe("agents/launch.sh (#343)", () => {
   });
 });
 
-describe("agents/ship.sh (#343, #753)", () => {
+describe("agents/ship.sh (#343, #753, #880)", () => {
   test("rebase, exige la revue du HEAD final, puis push et corps de PR", () => {
     const f = fixture();
     mustGit(f.work, "switch", "-c", "agent/42-flow");
@@ -200,6 +215,35 @@ describe("agents/ship.sh (#343, #753)", () => {
     expect(body).toContain("- #753 couvert");
     expect(body).toContain("Vérifications");
     expect(r.out).toContain("flow: change a");
+
+    const gh = readFileSync(join(f.base, "gh.log"), "utf8").trim().split("\n");
+    const check = gh.findIndex((line) => line.startsWith("gh pr checks"));
+    const merge = gh.findIndex((line) => line.startsWith("gh pr merge"));
+    expect(check).toBeGreaterThanOrEqual(0);
+    expect(gh[check]).toContain("--watch --fail-fast");
+    expect(merge).toBeGreaterThan(check);
+    expect(gh[merge]).toContain(`--match-head-commit ${head}`);
+  });
+
+  test("attend les checks et ne fusionne jamais sur échec (#880)", () => {
+    const f = fixture();
+    mustGit(f.work, "switch", "-c", "agent/47-flow");
+    writeFileSync(join(f.work, "a.txt"), "branch\n");
+    mustGit(f.work, "commit", "-am", "flow: change a");
+    const head = mustGit(f.work, "rev-parse", "HEAD");
+    writeFileSync(
+      join(f.work, ".git", "vsn-review.md"),
+      `HEAD: ${head}\n## Standards\n- conforme\n## Spec\n- #880 couvert\n`,
+    );
+
+    const r = run([SHIP, "47"], f.work, { ...envFor(f), GH_CHECKS_CODE: "1" });
+
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("NON fusionnée");
+    const gh = readFileSync(join(f.base, "gh.log"), "utf8");
+    expect(gh).toContain("gh pr checks");
+    expect(gh).not.toContain("gh pr merge");
+    expect(mustGit(f.origin, "rev-parse", "refs/heads/agent/47-flow")).toBe(head);
   });
 
   test("refuse sans note de revue, avant check et push", () => {

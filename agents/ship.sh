@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Termine une branche agent : rebase sur origin/main, revue obligatoire, check,
-# push, corps de PR prêt pour `gh`. Usage: ./agents/ship.sh <issue-n> ["titre"]
+# push, PR, attente des checks, merge. Usage: ./agents/ship.sh <issue-n> ["titre"]
 set -euo pipefail
 
 N="${1:?issue requise}"; shift
@@ -71,6 +71,23 @@ BODY="$GIT_DIR/vsn-pr-body.md"
   printf '\n## Vérifications\n\n- `make check` : OK\n'
 } > "$BODY"
 
-printf 'ship: OK\n  branche : %s\n  titre   : %s\n  corps   : %s\n' "$BRANCH" "$TITLE" "$BODY"
-printf 'gh : pr create --base main --head %s --title "%s" --body-file %s, pr merge --merge --delete-branch, issue close %s\n' \
-  "$BRANCH" "$TITLE" "$BODY" "$N"
+# La PR est la seule voie de merge (AGENTS.md, ADR-005 §9). Le corps porte
+# « Closes #N » : le merge ferme l'issue, donc pas de `gh issue close` séparé
+# qui échouerait sur une issue déjà fermée.
+PR="$(gh pr view "$BRANCH" --json url -q .url 2>/dev/null || true)"
+if [ -z "$PR" ]; then
+  PR="$(gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file "$BODY")"
+fi
+
+# Attendre les checks AVANT de merger : un rouge ne devient jamais un merge.
+# `--fail-fast` sort au premier échec et `set -e` interdit alors la fusion.
+# Aucun check (CI pas encore enregistrée) est aussi un échec : on ne fusionne
+# pas à l'aveugle, on relance. `--match-head-commit` épingle le SHA relu.
+if ! gh pr checks "$PR" --watch --fail-fast; then
+  echo "ship: checks ROUGES ou absents — PR $PR NON fusionnée." >&2
+  exit 1
+fi
+gh pr merge "$PR" --merge --delete-branch --match-head-commit "$HEAD_SHA"
+
+printf 'ship: OK\n  branche : %s\n  titre   : %s\n  PR      : %s\n  merge   : checks verts, fusionnée\n  corps   : %s\n' \
+  "$BRANCH" "$TITLE" "$PR" "$BODY"
