@@ -3,7 +3,9 @@
       VARIANT DEBUG UNIQUEMENT : absent en release, donc l'APK publiable ne
       répond à aucune URL extérieure.
 
-      `veryslopnynotes://<route>` ouvre l'écran visé directement.
+      `veryslopnynotes://<route>` ouvre l'écran visé directement. Schéma privé,
+      jamais `https` : aucun App Link à vérifier, donc ni `autoVerify` ni
+      `assetlinks.json` (SEC-10).
 
       `launchMode="singleTask"` : sinon une URL de second lancement créerait une
       NOUVELLE instance au-dessus de la tâche (deux écrans superposés).

@@ -25,3 +25,5 @@ la section `0.1.0` le jour du tag.
   capabilities.
 - Release sans adresse de serveur par défaut : le défaut émulateur et le HTTP
   en clair restent confinés au variant debug (SEC-01).
+- Liens profonds : schéma privé `veryslopnynotes` limité au debug, aucun
+  `VIEW`/`BROWSABLE` ni App Link dans la release (SEC-10).

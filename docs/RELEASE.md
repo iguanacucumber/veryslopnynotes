@@ -123,6 +123,26 @@ make build   # check-secrets + docker build (skip si daemon absent)
    (AAB), aucune clé/secret dans les artefacts,
    `git status` propre (APK/AAB ignorés `*.apk`/`*.aab`).
 
+## Liens profonds et App Links
+
+Politique : **aucun App Link** ; le deep link par schéma privé
+`veryslopnynotes://<route>` n'existe qu'en **debug** (captures `make shot`). La
+release ne déclare ni `VIEW` ni `BROWSABLE` : l'APK publié ne répond à aucune
+URL extérieure. Un App Link exigerait un hôte `https` vérifié,
+`assetlinks.json` servi par ce domaine et `android:autoVerify="true"` ; l'app
+n'a pas de domaine public, donc aucun n'est revendiqué.
+
+Preuve `adb`, sur l'APK **release** puis **debug** :
+
+```sh
+# Release : doit ÉCHOUER, aucune activité ne résout l'intent.
+adb shell am start -W -a android.intent.action.VIEW \
+  -c android.intent.category.BROWSABLE -d "veryslopnynotes://grades"
+# -> Error: Activity not started, unable to resolve Intent
+
+# Debug : la même commande doit ouvrir l'écran Notes.
+```
+
 ## Notes de version
 
 Chaque PR ajoute sa ligne sous `[Unreleased]` de
@@ -138,3 +158,4 @@ Release : la note publiée est la section du changelog.
 - [ ] `bun audit` : 0 vulnérabilité.
 - [ ] `git status` : aucun `.env*`, `*.keystore`, `*.apk`, donnée perso.
 - [ ] `bun run agents/runtime/check-secrets.ts` : OK.
+- [ ] APK release : `am start` sur `veryslopnynotes://<route>` échoue (aucun deep link).
