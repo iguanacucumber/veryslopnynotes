@@ -204,6 +204,9 @@ export default function PairingScreen() {
                     ? "Scanne le QR du compte à utiliser, puis son PIN. Le nouvel appairage remplace la session actuelle ; si le compte change, les données en cache du précédent sont purgées."
                     : "Scanne le QR de l'application de ton établissement, puis saisis son PIN. Ta session reste sur ce téléphone."}
                 </p>
+                <p className="tiny" style={{ margin: "6px 0 0", color: "var(--on-brand-soft)" }}>
+                  Compatibilité : QR + PIN uniquement, pas de mot de passe ni de double authentification.
+                </p>
               </div>
               <span
                 aria-hidden="true"
