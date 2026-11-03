@@ -40,6 +40,76 @@ object Json {
 
     fun stringify(value: JVal): String = buildString { appendValue(value) }
 
+    /** Octets UTF-8 d'une chaîne, sans matérialiser le tableau. */
+    fun utf8ByteLength(s: String): Int {
+        var total = 0
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            total += when {
+                c.code < 0x80 -> 1
+                c.code < 0x800 -> 2
+                c.isHighSurrogate() && i + 1 < s.length && s[i + 1].isLowSurrogate() -> {
+                    i++
+                    4
+                }
+                else -> 3
+            }
+            i++
+        }
+        return total
+    }
+
+    /** Taille UTF-8 du JSON sérialisé, guillemets et clés compris. */
+    fun utf8Size(value: JVal): Int = when (value) {
+        is JVal.Null -> 4
+        is JVal.Bool -> if (value.value) 4 else 5
+        is JVal.Num -> jsNumber(value.value).length
+        is JVal.Str -> 2 + escapedUtf8Size(value.value)
+        is JVal.Arr -> 2 + value.items.sumOf { utf8Size(it) } + (value.items.size - 1).coerceAtLeast(0)
+        is JVal.Obj -> {
+            var total = 2
+            var first = true
+            for ((key, item) in value.fields) {
+                if (!first) total++
+                first = false
+                total += 3 + escapedUtf8Size(key) + utf8Size(item)
+            }
+            total
+        }
+        else -> throw IllegalStateException("JVal non sérialisable : ${value.javaClass.simpleName}")
+    }
+
+    private fun escapedUtf8Size(s: String): Int {
+        var total = 0
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            when {
+                c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t' ||
+                    c == '\b' || c == '\u000C' -> {
+                    total += 2
+                    i++
+                }
+                // Paire de substitution valide : quatre octets UTF-8.
+                c.isHighSurrogate() && i + 1 < s.length && s[i + 1].isLowSurrogate() -> {
+                    total += 4
+                    i += 2
+                }
+                // Contrôle ou surrogate isolé : `\uXXXX` (six octets ASCII).
+                c < ' ' || c.isSurrogate() -> {
+                    total += 6
+                    i++
+                }
+                else -> {
+                    total += if (c.code < 0x80) 1 else if (c.code < 0x800) 2 else 3
+                    i++
+                }
+            }
+        }
+        return total
+    }
+
     private fun StringBuilder.appendValue(value: JVal) {
         when (value) {
             is JVal.Null -> append("null")

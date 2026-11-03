@@ -108,6 +108,39 @@ object DownloadedFiles {
         }
     }
 
+    /**
+     * Adopte un fichier DÉJÀ téléchargé (en flux) sans le relire en mémoire :
+     * même nom, mêmes bornes et même garde d'époque que [write]. [source] est
+     * déplacé si possible (même volume), sinon copié par blocs.
+     */
+    fun adopt(
+        root: File,
+        homeworkId: String,
+        attachmentId: String,
+        label: String,
+        source: File,
+        epoch: Long,
+    ): File? {
+        val size = source.length()
+        require(size in 1..MAX_BYTES.toLong()) { "pièce jointe hors borne" }
+        val dir = dirFor(root, homeworkId)
+        val file = File(dir, fileName(attachmentId, label))
+        require(file.canonicalPath.startsWith(dir.canonicalPath + File.separator)) { "nom de pièce jointe refusé" }
+        return SessionEpoch.writeIfCurrent(epoch) {
+            prune(root, MAX_CACHED_FILES - 1)
+            dir.mkdirs()
+            if (!source.renameTo(file)) source.inputStream().use { input -> file.outputStream().use { input.copyTo(it) } }
+            // Une copie interrompue ne doit pas devenir une pièce TRONQUÉE
+            // servie ensuite comme valide.
+            if (file.isFile && file.length() == size) {
+                file
+            } else {
+                file.delete()
+                null
+            }
+        }
+    }
+
     fun prune(root: File, keep: Int): Int {
         val files = root.walkTopDown().filter { it.isFile }.sortedBy { it.lastModified() }.toList()
         var deleted = 0

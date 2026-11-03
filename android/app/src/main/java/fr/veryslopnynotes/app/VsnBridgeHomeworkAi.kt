@@ -354,8 +354,14 @@ internal fun VsnBridge.attachmentFile(
     val data = await<fr.veryslopnynotes.data.AttachmentOutcome> { cb ->
         assignments.fetchAttachment(assignment.id, att.id, week, cb)
     }?.data ?: return null
-    if (data.bytes.isEmpty() || data.bytes.size > DownloadedFiles.MAX_BYTES) return null
-    return DownloadedFiles.write(root, assignment.id, att.id, att.label, data.bytes, epoch)
+    // Le fichier est déjà téléchargé en flux : `write` ne reçoit plus d'octets.
+    return writeAttachmentFile(
+        ctx,
+        assignment.id,
+        AssignmentAttachment(id = att.id, label = data.name, ref = ""),
+        data,
+        epoch,
+    )
 }
 
 /**

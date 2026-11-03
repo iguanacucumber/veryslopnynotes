@@ -106,6 +106,37 @@ describe("les pièces jointes téléchargées ne se chevauchent pas (#540)", () 
       expect(path).not.toContain("..");
     }
   });
+
+  test.skipIf(skip)("un fichier déjà téléchargé est adopté sans relecture", async () => {
+    const sid = await newStore();
+    const adopted = await ask({
+      op: "adopt",
+      sid,
+      id: "77",
+      label: "consigne.pdf",
+      content: "flux",
+    });
+    expect(adopted.ok).toBe(true);
+    expect(adopted.name).toContain("77");
+    // La source a été DÉPLACÉE : aucun doublon temporaire ne survit.
+    expect(adopted.sourceExists).toBe(false);
+    expect((await ask({ op: "content", sid, name: `attachments/devoir-1/${adopted.name}` })).content).toBe("flux");
+  });
+
+  test.skipIf(skip)("une époque périmée n'adopte rien", async () => {
+    const sid = await newStore();
+    const current = (await ask({ op: "epoch" })).epoch as number;
+    const adopted = await ask({
+      op: "adopt",
+      sid,
+      id: "78",
+      label: "consigne.pdf",
+      content: "perime",
+      epoch: current + 1,
+    });
+    expect(adopted.ok).toBe(false);
+    expect(await files(sid)).toEqual([]);
+  });
 });
 
 describe("les pièces jointes téléchargées ne s'accumulent pas (#540)", () => {
@@ -213,7 +244,8 @@ describe("câblage de la purge des téléchargements (#540)", () => {
   test("le nom du fichier est calculé par la source partagée, avec l'identifiant", () => {
     // Le libellé seul ne suffit pas : deux pièces distinctes le partagent.
     expect(attachments).toContain("att.id");
-    expect(attachments).toContain("DownloadedFiles.write(");
+    // Le fichier arrive DÉJÀ sur disque (flux) : `adopt` le nomme et le garde.
+    expect(attachments).toContain("DownloadedFiles.adopt(");
     // L'écriture est gardée par l'époque : une déconnexion pendant le téléchargement n'écrit rien.
     expect(attachments).toContain("epoch: Long");
   });

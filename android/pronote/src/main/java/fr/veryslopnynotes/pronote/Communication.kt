@@ -152,7 +152,6 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
     var authorizedOnglets: List<Double> = emptyList()
     var compressRequests = false
     var encryptRequests = false
-    var lastResponse: HttpResponse? = null
 
     init {
         // L'AUTORITÉ d'abord, puis le dernier segment.
@@ -276,7 +275,8 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
         val pSite = "$rootSite/appelfonction/${attrJs(attributes, "a")}/${attrJs(attributes, "h")}/$rNumber"
         val response = session.post(pSite, RequestOpts(json = JVal.Obj(envelope)))
         requestNumber += 2
-        lastResponse = response
+        // La réponse n'est PAS gardée : texte + octets (jusqu'à 10 Mio) y
+        // survivaient à chaque requête alors que personne ne les relisait.
         if (!response.ok) {
             // Le STATUT porte l'information (401 = session morte) : CHAMP de
             // l'erreur, jamais un mot du message.

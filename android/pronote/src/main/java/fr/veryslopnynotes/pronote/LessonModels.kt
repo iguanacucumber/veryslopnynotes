@@ -24,6 +24,13 @@ class Attachment(private val client: PronoteClientLike, json: JVal?) : PronoteOb
         }
 
     fun data(): ByteArray = client.communication.session.get(url).content
+
+    /**
+     * Écrit la pièce jointe dans [dest] en FLUX (aucun tampon de plusieurs
+     * Mio). Au-delà de [maxBytes], le fichier est supprimé et l'appel échoue.
+     */
+    fun download(dest: java.io.File, maxBytes: Int = MAX_RESPONSE_BYTES): Long =
+        client.communication.session.download(url, dest, maxBytes = maxBytes)
 }
 
 /** Contenu détaillé d'un cours (`_files` brut, `files()` l'habille). */

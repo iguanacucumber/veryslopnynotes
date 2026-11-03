@@ -14,6 +14,7 @@ import fr.veryslopnynotes.pronote.HttpSession
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
 import fr.veryslopnynotes.pronote.KeepAlive
+import fr.veryslopnynotes.pronote.MAX_RESPONSE_BYTES
 import fr.veryslopnynotes.pronote.PronoteAPIError
 import fr.veryslopnynotes.pronote.enBytes
 import fr.veryslopnynotes.pronote.hexToBytes
@@ -203,6 +204,35 @@ private class Driver {
                 val n = (op.num("n") ?: 0.0).toInt()
                 val statuses = (1..n).map { session.get(url).status }
                 ok("statuses" to JVal.Arr(statuses.map { JVal.Num(it.toDouble()) }))
+            }
+            "httpDownload" -> {
+                // Le corps part sur DISQUE : la réponse ne doit porter aucun
+                // octet, et un dépassement ne laisse pas de fichier partiel.
+                val session = sessions[(op.num("sid") ?: 0.0).toInt()] ?: throw IllegalArgumentException("pilote: sid inconnu")
+                val dest = java.io.File(op.str("path") ?: throw IllegalArgumentException("pilote: path absent"))
+                val maxBytes = op.num("maxBytes")?.toInt() ?: MAX_RESPONSE_BYTES
+                try {
+                    val size = session.download(op.str("url") ?: "", dest, maxBytes = maxBytes)
+                    ok(
+                        "ok" to JVal.Bool(true),
+                        "size" to JVal.Num(size.toDouble()),
+                        "exists" to JVal.Bool(dest.exists()),
+                    )
+                } catch (e: Exception) {
+                    ok(
+                        "ok" to JVal.Bool(false),
+                        "error" to JVal.Str(e.javaClass.simpleName),
+                        "exists" to JVal.Bool(dest.exists()),
+                    )
+                }
+            }
+            "jsonSize" -> {
+                val value = Json.parse(op.str("text") ?: "")
+                ok(
+                    "size" to JVal.Num(Json.utf8Size(value).toDouble()),
+                    "utf8" to JVal.Num(Json.stringify(value).toByteArray(Charsets.UTF_8).size.toDouble()),
+                    "length" to JVal.Num(Json.utf8ByteLength(op.str("raw") ?: "").toDouble()),
+                )
             }
             "commNew" -> {
                 val cid = alloc()
