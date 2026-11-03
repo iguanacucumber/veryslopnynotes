@@ -213,6 +213,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // de l'URL. Fichier PUR (aucun import `android.*`) : le harnais le compile
   // et le REJOUE, donc le test porte sur du code de production.
   join(APP, "WebRouteState.kt"),
+  // #907 : la politique WebView minimale (seuil, nom de version, message de
+  // refus). Fichier PUR : le harnais l'EXÉCUTE au lieu de relire la constante.
+  join(APP, "WebViewSupport.kt"),
 ];
 
 /** Les pilotes du dossier `kotlin-parity` (tous, triés : parcours déterministe). */

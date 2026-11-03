@@ -88,6 +88,22 @@ export default function HelpScreen() {
         </Card>
       </Section>
 
+      <Section id="aide-compatibilite" title="Configuration minimale">
+        <Card className="card--flat">
+          <p className="help-paragraph">
+            VerySlopyNyNotes demande Android 8.0 (API 26) ou plus et une WebView
+            système Chromium 100 ou plus récente. La WebView est le moteur fourni
+            par Android System WebView ou Chrome : elle se met à jour dans le
+            Play Store.
+          </p>
+          <ul className="help-list">
+            <li>Android 7 ou plus ancien : l’app ne s’installe pas.</li>
+            <li>WebView plus ancienne que Chromium 100 : l’app affiche un écran de mise à jour au lieu de planter.</li>
+            <li>Après la mise à jour, relance l’app.</li>
+          </ul>
+        </Card>
+      </Section>
+
       <Section id="aide-sans-ia" title="Utiliser l’app sans assistant IA">
         <Card className="card--flat">
           <p className="help-paragraph">
