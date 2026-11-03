@@ -86,7 +86,7 @@ class NativeWebShell(
 
     // Construit le pont APRÈS la WebView (il lui répond) et l'expose sous le
     // seul nom que le JS connaît. Aucune autre interface n'est ajoutée.
-    private val bridge = VsnBridge(activity, webView) { setBackAvailable(it) }
+    private val bridge = VsnBridge(activity, webView, { setBackAvailable(it) }, ::applyTextZoom)
 
     // Désactivé par défaut : à l'accueil, le système garde la main et joue
     // l'animation prédictive. Le JS l'active dès qu'un dialogue ou une route
@@ -103,6 +103,8 @@ class NativeWebShell(
         activity.window.setBackgroundDrawable(ColorDrawable(splashColor))
         webView.addJavascriptInterface(bridge, "VSN")
         activity.onBackPressedDispatcher.addCallback(activity, backCallback)
+        // Avant `loadUrl` : le premier rendu a déjà la bonne taille de texte.
+        applyTextZoom(bridge.textZoom())
     }
 
     val view: WebView get() = webView
@@ -154,6 +156,13 @@ class NativeWebShell(
             "r.style.setProperty('--native-safe-bottom','${safeArea.bottom}px');" +
             "})(document.documentElement)"
         webView.evaluateJavascript(js, null)
+    }
+
+    /** Applique le zoom textuel natif ; le web n'a aucun accès à ce réglage. */
+    private fun applyTextZoom(zoom: Int) {
+        activity.runOnUiThread {
+            if (webView.settings.textZoom != zoom) webView.settings.textZoom = zoom
+        }
     }
 
     /** Le JS n'a rien consommé : la pile système reprend la main et termine. */

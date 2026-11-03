@@ -119,6 +119,9 @@ export const PRODUCTION_SOURCES: string[] = [
   join(CORE, "RevisionAi.kt"),
   join(CORE, "RevisionSheet.kt"),
   join(CORE, "SecurityAlert.kt"),
+  // #942 : le zoom textuel de la WebView (choix explicite ou `fontScale`
+  // système). Fichier PUR : le harnais EXÉCUTE la conversion et les bornes.
+  join(CORE, "TextScale.kt"),
   // #633 : professeur IA contextualisé (prompt + validation + historique
   // borné). Fichier PUR : le harnais l'EXÉCUTE au lieu d'un miroir TS.
   join(CORE, "TeacherChat.kt"),

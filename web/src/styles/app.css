@@ -1748,3 +1748,29 @@ h5.revision-markdown__heading {
 .messages-card:hover {
   border-color: var(--rule-strong);
 }
+
+/* --- Grand texte ---------------------------------------------------------- */
+/* Le zoom natif suit le réglage Android (jusqu'à 200 %) ou le choix 150 %.
+   Les libellés prennent la place nécessaire au lieu d'être coupés ; le dock
+   garde une réserve assez haute pour deux lignes d'onglet. */
+html[data-text-zoom="large"] {
+  --tabbar-h: 116px;
+}
+
+html[data-text-zoom="large"] .topbar__title,
+html[data-text-zoom="large"] .topbar__subtitle,
+html[data-text-zoom="large"] .tab,
+html[data-text-zoom="large"] .chip,
+html[data-text-zoom="large"] .btn,
+html[data-text-zoom="large"] .list-row__title,
+html[data-text-zoom="large"] .list-row__subtitle {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+
+html[data-text-zoom="large"] .search-field input {
+  height: auto;
+  min-height: 46px;
+}

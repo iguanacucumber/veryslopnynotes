@@ -12,6 +12,7 @@ import androidx.core.content.FileProvider
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import fr.veryslopnynotes.core.RevisionKv
+import fr.veryslopnynotes.core.TextScale
 import fr.veryslopnynotes.core.UserProfile
 import fr.veryslopnynotes.data.AccountIdentity
 import fr.veryslopnynotes.data.AccountStore
@@ -77,6 +78,7 @@ class VsnBridge(
     private val activity: ComponentActivity,
     private val webView: WebView,
     private val onBackAvailable: (Boolean) -> Unit = {},
+    private val onTextZoom: (Int) -> Unit = {},
 ) {
     internal val ctx: Context = activity.applicationContext
     private val main = Handler(Looper.getMainLooper())
@@ -171,8 +173,8 @@ class VsnBridge(
         null
     }
 
-    private val themePrefs = try {
-        ctx.getSharedPreferences(THEME_PREFS, Context.MODE_PRIVATE)
+    private val appPrefs = try {
+        ctx.getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
     } catch (_: Exception) {
         null
     }
@@ -342,6 +344,8 @@ class VsnBridge(
             "app.ready" -> JSONObject().put("ok", true)
             "app.theme" -> JSONObject().put("theme", theme())
             "app.setTheme" -> setTheme(p)
+            "app.textSize" -> textSize()
+            "app.setTextSize" -> setTextSize(p)
             "app.backState" -> setBackState(p)
             "session.status" -> sessionStatus()
             "session.restore" -> restoreSession()
@@ -409,7 +413,7 @@ class VsnBridge(
 
     // --- Application / session -------------------------------------------------
 
-    internal fun theme(): String = when (themePrefs?.getString(THEME_KEY, null)) {
+    internal fun theme(): String = when (appPrefs?.getString(THEME_KEY, null)) {
         "LIGHT" -> "LIGHT"
         "DARK" -> "DARK"
         else -> "SYSTEM"
@@ -420,9 +424,29 @@ class VsnBridge(
         if (next !in setOf("SYSTEM", "LIGHT", "DARK")) {
             throw BridgeFailure("bad_request", "Thème inconnu.")
         }
-        themePrefs?.edit()?.putString(THEME_KEY, next)?.apply()
+        appPrefs?.edit()?.putString(THEME_KEY, next)?.apply()
         return JSONObject().put("ok", true)
     }
+
+    /** Zoom effectif calculé AVANT le chargement de la page. */
+    internal fun textZoom(): Int = TextScale.zoom(textSizePreference(), fontScale())
+
+    private fun textSize(): JSONObject = JSONObject()
+        .put("size", TextScale.wire(textSizePreference()))
+        .put("zoom", textZoom())
+
+    private fun setTextSize(p: JSONObject): JSONObject {
+        val size = TextScale.parse(p.string("size"))
+            ?: throw BridgeFailure("bad_request", "Taille de texte inconnue.")
+        appPrefs?.edit()?.putString(TEXT_SIZE_KEY, size)?.apply()
+        val zoom = textZoom()
+        onTextZoom(zoom)
+        return JSONObject().put("ok", true).put("size", size).put("zoom", zoom)
+    }
+
+    private fun textSizePreference(): String? = appPrefs?.getString(TEXT_SIZE_KEY, null)
+
+    private fun fontScale(): Float = activity.resources.configuration.fontScale
 
     /** Le JS dit si le retour a une cible ; la décision reste côté web. */
     private fun setBackState(p: JSONObject): JSONObject {
@@ -795,8 +819,9 @@ class VsnBridge(
         if (isNull(key)) "" else optString(key, "")
 
     companion object {
-        private const val THEME_PREFS = "settings"
+        private const val APP_PREFS = "settings"
         private const val THEME_KEY = "theme"
+        private const val TEXT_SIZE_KEY = "text_size"
 
         /** Journal du pont (jamais de secret : cf. le `init` de la classe). */
         private const val TAG = "vsn-bridge"

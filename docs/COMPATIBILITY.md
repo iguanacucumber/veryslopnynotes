@@ -58,6 +58,24 @@ l'assistant n'en dépendent. Sans clé OpenRouter, l'assistant reste inactif et
 aucun appel n'est fait. Le reste de l'app fonctionne avec le seul accès direct
 à l'établissement.
 
+## Accessibilité : taille du texte
+
+Réglages → Apparence → « Taille du texte » propose 100 %, 125 % et 150 % ;
+« Système » (défaut) suit le réglage Android. Le choix est enregistré dans les
+préférences de l'appareil et appliqué par la WebView (`textZoom`) au chargement
+et au changement.
+
+Vérification appareil (obligatoire avant de livrer un changement d'interface) :
+
+1. Android → Paramètres → Affichage → Taille de la police : **200 %**, puis
+   relancer l'app.
+2. Parcourir l'accueil, les notes, les devoirs, les messages, le profil et les
+   réglages : aucun libellé coupé, aucun chevauchement, pas de défilement
+   horizontal ; le dock et la barre du haut restent lisibles.
+3. Choisir successivement 100 %, 125 %, 150 %, puis « Système » : le texte
+   change sans redémarrage et le choix survit à une fermeture/réouverture.
+4. Revenir à la taille Android normale.
+
 ## Signaler une incompatibilité
 
 Ouvre une issue « bug » avec : version de l'app, version d'Android et de la

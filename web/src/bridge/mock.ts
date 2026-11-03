@@ -38,11 +38,16 @@ import type {
   SettingsSnapshot,
   SubjectPref,
   TeacherThread,
+  TextSizeChoice,
 } from "./types";
+import { parseTextSize } from "../lib/textScale";
 
 const now = Date.now();
 
 let settings: SettingsSnapshot = INITIAL_SETTINGS;
+
+let textSize: TextSizeChoice = "SYSTEM";
+let textZoom = 100;
 
 const manualDisabled = new Set<string>();
 
@@ -103,6 +108,12 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
     case "app.setTheme":
       settings = { ...settings, theme: p["theme"] as SettingsSnapshot["theme"] };
       return ok({ ok: true }) as Promise<T>;
+    case "app.textSize":
+      return ok({ size: textSize, zoom: textZoom }) as Promise<T>;
+    case "app.setTextSize":
+      textSize = parseTextSize(p["size"]);
+      textZoom = textSize === "SYSTEM" ? 100 : Number(textSize);
+      return ok({ ok: true, size: textSize, zoom: textZoom }) as Promise<T>;
     case "app.backState":
       return ok({ ok: true }) as Promise<T>;
     case "session.status":

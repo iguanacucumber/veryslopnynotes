@@ -14,6 +14,8 @@ export const BRIDGE_METHODS = [
   "app.ready",
   "app.theme",
   "app.setTheme",
+  "app.textSize",
+  "app.setTextSize",
   "app.backState",
   "session.status",
   "session.restore",
@@ -196,6 +198,15 @@ export interface SessionStatus {
    * (repli mémoire), et l'interface doit le dire (#401).
    */
   storage?: "available" | "unavailable";
+}
+
+/** Taille du texte : `SYSTEM` suit le réglage Android, sinon choix explicite. */
+export type TextSizeChoice = "SYSTEM" | "100" | "125" | "150";
+
+export interface TextSizeState {
+  size: TextSizeChoice;
+  /** Zoom effectif appliqué par la WebView, en pourcentage (50–200). */
+  zoom: number;
 }
 
 export interface SettingsSnapshot {
