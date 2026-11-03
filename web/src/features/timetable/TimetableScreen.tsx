@@ -6,10 +6,9 @@ import {
   isSameDay,
   isoDay,
   startOfWeek,
-  subjectColor,
-  tint,
   weeksBetween,
 } from "../../lib/format";
+import { subjectPalette, type SubjectPalette } from "../../lib/subjectVisual";
 import { useApp, useResource } from "../../ui/AppContext";
 import {
   EmptyState,
@@ -49,21 +48,6 @@ import {
 } from "./week";
 import "./timetable.css";
 
-interface Palette {
-  base: string;
-  background: string;
-  ink: string;
-}
-
-function paletteFor(subject: string, dark: boolean): Palette {
-  const base = subjectColor(subject);
-  return {
-    base,
-    background: tint(base, dark ? -0.7 : 0.75),
-    ink: tint(base, dark ? 0.1 : -0.15),
-  };
-}
-
 function capitalize(value: string): string {
   return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
 }
@@ -81,7 +65,7 @@ function LessonRow({
   const moved = isMoved(lesson);
   const palette = cancelled
     ? { base: "var(--border)", background: "var(--surface-variant)", ink: "var(--muted)" }
-    : paletteFor(lesson.subject, dark);
+    : subjectPalette(lesson.subject, dark);
   const hint = movedHint(lesson);
   const status = cancelled ? "annulé" : moved ? "déplacé" : "";
 
@@ -340,11 +324,11 @@ function WeekView({
   );
 }
 
-function cancelledPalette(lesson: Lesson, dark: boolean): Palette {
+function cancelledPalette(lesson: Lesson, dark: boolean): SubjectPalette {
   if (isCancelled(lesson)) {
     return { base: "var(--border)", background: "var(--surface-variant)", ink: "var(--muted)" };
   }
-  return paletteFor(lesson.subject, dark);
+  return subjectPalette(lesson.subject, dark);
 }
 
 function daySubtitle(date: Date, now: number): string {
