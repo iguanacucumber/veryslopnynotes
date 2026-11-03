@@ -304,7 +304,11 @@ describe("manifeste Android fusionné (#900)", () => {
         );
         const config = cleartextConfig(current);
         expect(config.base).toBe("false");
-        expect([...config.hosts].sort()).toEqual([...LOOPBACK].sort());
+        // La release refuse TOUT clair ; seul le debug garde les hôtes locaux
+        // nécessaires à l'émulateur (#864).
+        expect([...config.hosts].sort()).toEqual(
+          current.variant === "debug" ? [...LOOPBACK].sort() : [],
+        );
         expect(config.wildcardHosts).toEqual([]);
       });
     });
