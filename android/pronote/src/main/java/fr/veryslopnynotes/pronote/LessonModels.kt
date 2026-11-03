@@ -23,14 +23,18 @@ class Attachment(private val client: PronoteClientLike, json: JVal?) : PronoteOb
                 "?Session=${client.attributes["h"] ?: "undefined"}"
         }
 
-    fun data(): ByteArray = client.communication.session.get(url).content
+    fun data(): ByteArray = client.communication.session.get(fetchUrl()).content
 
     /**
      * Écrit la pièce jointe dans [dest] en FLUX (aucun tampon de plusieurs
      * Mio). Au-delà de [maxBytes], le fichier est supprimé et l'appel échoue.
      */
     fun download(dest: java.io.File, maxBytes: Int = MAX_RESPONSE_BYTES): Long =
-        client.communication.session.download(url, dest, maxBytes = maxBytes)
+        client.communication.session.download(fetchUrl(), dest, maxBytes = maxBytes)
+
+    /** Vérifie l'origine et le type À CHAQUE accès : aucun réseau avant le refus. */
+    private fun fetchUrl(): String =
+        AttachmentUrl.fetchable(client.communication.rootSite, type, url)
 }
 
 /** Contenu détaillé d'un cours (`_files` brut, `files()` l'habille). */

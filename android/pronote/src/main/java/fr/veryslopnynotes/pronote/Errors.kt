@@ -23,6 +23,16 @@ open class PronoteAPIError(
 class ExpiredObject(message: String) : PronoteAPIError(message)
 
 /**
+ * Pièce jointe refusée AVANT tout réseau : adresse hors origine de
+ * l'établissement, lien `type == 0`, ou corps qui n'est pas un fichier.
+ * Le message ne porte jamais l'adresse refusée (elle peut contenir la session).
+ */
+class AttachmentRefused(message: String) : PronoteAPIError(message)
+
+/** Téléchargement refusé par le statut HTTP ; le corps d'erreur n'est jamais lu. */
+class AttachmentHttpError(message: String, httpStatus: Int) : PronoteAPIError(message, httpStatus = httpStatus)
+
+/**
  * L'établissement a suspendu l'accès depuis ce réseau. Ce n'est ni un compte
  * refusé ni une panne de l'établissement : le geste est de changer de réseau.
  */

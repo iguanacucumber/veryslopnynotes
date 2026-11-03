@@ -40,6 +40,10 @@ export const PRODUCTION_SOURCES: string[] = [
   // `pronote` — le client, le transport, le JSON embarqué.
   join(PRONOTE, "Bytes.kt"),
   join(PRONOTE, "CanteenModels.kt"),
+  // #885 : l'origine d'une pièce jointe est vérifiée AVANT le réseau (lien
+  // `type == 0`, hôte tiers, `file:`/`data:`). Fichier PUR : le harnais
+  // l'EXÉCUTE au lieu de relire la forme du code.
+  join(PRONOTE, "AttachmentUrl.kt"),
   join(PRONOTE, "Client.kt"),
   join(PRONOTE, "ClientLike.kt"),
   join(PRONOTE, "Communication.kt"),
