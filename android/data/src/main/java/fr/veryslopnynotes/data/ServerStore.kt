@@ -2,6 +2,7 @@ package fr.veryslopnynotes.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import fr.veryslopnynotes.core.CleartextPolicy
 import fr.veryslopnynotes.core.ServerConfig
 import fr.veryslopnynotes.core.ServerUrlResult
 
@@ -11,7 +12,8 @@ import fr.veryslopnynotes.core.ServerUrlResult
  *
  * - Validé par `ServerConfig.validateBaseUrl` AVANT écriture : ce store est le
  *   point d'écriture unique, pas un second validateur. Refus => `Rejected`,
- *   aucune modification.
+ *   aucune modification. La politique de clair vient du build appelant
+ *   (release = `FORBID`), donc une prefs `http` héritée ne ressort jamais.
  * - Prefs PROPRES à `AccountStore` : le serveur choisi doit survivre à une
  *   déconnexion, sinon on reboucle sur la graine de build.
  * - Aucune donnée d'établissement : l'adresse ne part jamais dans un log ni
@@ -19,7 +21,10 @@ import fr.veryslopnynotes.core.ServerUrlResult
  * ponytail: SharedPreferences seul (une chaîne), pas de DataStore/Room.
  *   Upgrade: liste de serveurs connus si le besoin se prouve.
  */
-class ServerStore(context: Context) {
+class ServerStore(
+    context: Context,
+    private val cleartext: CleartextPolicy = CleartextPolicy.FORBID,
+) {
     private val prefs: SharedPreferences? = try {
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     } catch (_: Exception) {
@@ -33,13 +38,13 @@ class ServerStore(context: Context) {
      */
     fun baseUrl(seed: String): String {
         val stored = prefs?.getString(KEY_BASE_URL, null) ?: return seed
-        val validated = ServerConfig.validateBaseUrl(stored)
+        val validated = ServerConfig.validateBaseUrl(stored, cleartext)
         return (validated as? ServerUrlResult.Ok)?.baseUrl ?: seed
     }
 
     /** `Rejected` = rien n'est écrit, l'adresse courante est conservée. */
     fun save(raw: String): ServerUrlResult {
-        val validated = ServerConfig.validateBaseUrl(raw)
+        val validated = ServerConfig.validateBaseUrl(raw, cleartext)
         if (validated !is ServerUrlResult.Ok) return validated
         val p = prefs ?: return PREFS_KO
         return try {

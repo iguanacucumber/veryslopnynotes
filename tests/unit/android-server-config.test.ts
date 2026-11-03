@@ -25,6 +25,10 @@ function read(p: string): string {
 
 const PORT_HINT = "Port invalide : utilisez un nombre entre 1 et 65535.";
 const HOST_HINT = "Domaine invalide : utilisez un nom de domaine, une IPv4 ou une IPv6 entre crochets.";
+const CLEARTEXT_DEBUG_HINT =
+  "HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur.";
+const CLEARTEXT_RELEASE_HINT =
+  "HTTP en clair n'existe que dans les builds de développement : utilisez https.";
 
 interface ServerUrlResult {
   ok: boolean;
@@ -32,9 +36,11 @@ interface ServerUrlResult {
   message?: string;
 }
 
+type Cleartext = "forbid" | "loopback";
+
 /** Verdict du VRAI `ServerConfig.validateBaseUrl`, via le pilote de parité. */
-async function serverUrl(raw: string): Promise<ServerUrlResult> {
-  return JSON.parse(await link!.ask({ op: "serverUrl", raw })) as ServerUrlResult;
+async function serverUrl(raw: string, cleartext: Cleartext = "forbid"): Promise<ServerUrlResult> {
+  return JSON.parse(await link!.ask({ op: "serverUrl", raw, cleartext })) as ServerUrlResult;
 }
 
 /** Verdict du VRAI `ServerConfig.isAllowed`, via le pilote de parité. */
@@ -49,7 +55,7 @@ async function localNetwork(raw: string): Promise<boolean> {
   return result.local;
 }
 
-const ACCEPTED: [string, string][] = [
+const HTTPS_ACCEPTED: [string, string][] = [
   ["https://notes.exemple.fr", "https://notes.exemple.fr"],
   ["https://notes.exemple.fr:8443", "https://notes.exemple.fr:8443"],
   ["https://notes.exemple.fr:1", "https://notes.exemple.fr:1"],
@@ -62,20 +68,37 @@ const ACCEPTED: [string, string][] = [
   // IPv4 littérale (adresse de développement / réseau interne).
   ["https://192.168.1.10:3000", "https://192.168.1.10:3000"],
   ["https://1.2.3.4", "https://1.2.3.4"],
+  ["https://127.0.0.1:8443", "https://127.0.0.1:8443"],
   // IPv6 littérale entre crochets.
   ["https://[2001:db8::1]:8443", "https://[2001:db8::1]:8443"],
   ["https://[::1]", "https://[::1]"],
   // Nom DNS à un seul label (poste / réseau local).
   ["https://serveur-poste", "https://serveur-poste"],
   ["https://a.b.c.exemple.fr", "https://a.b.c.exemple.fr"],
-  // Clair UNIQUEMENT émulateur / boucle locale (identique à la règle du build).
+];
+
+// Clair loopback/émulateur : politique DEBUG seulement, jamais celle de release.
+const DEBUG_HTTP_ACCEPTED: [string, string][] = [
   ["http://10.0.2.2:3000", "http://10.0.2.2:3000"],
   ["http://localhost:3000", "http://localhost:3000"],
   ["http://10.0.2.2", "http://10.0.2.2"],
   ["http://127.0.0.1:3000", "http://127.0.0.1:3000"],
+  ["http://127.0.0.2:8080", "http://127.0.0.2:8080"],
   ["http://[::1]", "http://[::1]"],
-  // La graine du build (defaultConfig Gradle) doit toujours passer la validation.
+  // La graine du build debug doit toujours passer la validation.
   ["http://10.0.2.2:3000\n", "http://10.0.2.2:3000"],
+];
+
+// Clair vers un hôte NON loopback : refusé par les deux politiques.
+const PUBLIC_HTTP: string[] = [
+  "http://notes.exemple.fr",
+  "http://192.168.1.10:3000",
+  "http://203.0.113.10",
+  "http://10.0.2.234:3000",
+  "http://10.0.2.2.evil.tld",
+  "http://localhost.evil.tld",
+  "http://serveur-poste:8080",
+  "http://[2001:db8::1]",
 ];
 
 const REJECTED: [string, string][] = [
@@ -101,12 +124,13 @@ const REJECTED: [string, string][] = [
   ["https://notes.exemple.fr\u0000", "Espace ou caractère interdit dans l'adresse."],
   ["https://notes.exemple.fr\u0000", "Espace ou caractère interdit dans l'adresse."],
   // HTTP hors émulateur/boucle locale : jamais affaibli.
-  ["http://notes.exemple.fr", "HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur."],
-  ["http://192.168.1.10:3000", "HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur."],
-  ["http://10.0.2.234:3000", "HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur."],
-  ["http://10.0.2.2.evil.tld", "HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur."],
-  ["http://localhost.evil.tld", "HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur."],
-  ["http://serveur-poste:8080", "HTTP est réservé à l'émulateur et à la boucle locale : utilisez l'adresse https de votre serveur."],
+  ["http://notes.exemple.fr", CLEARTEXT_DEBUG_HINT],
+  ["http://192.168.1.10:3000", CLEARTEXT_DEBUG_HINT],
+  ["http://10.0.2.234:3000", CLEARTEXT_DEBUG_HINT],
+  ["http://10.0.2.2.evil.tld", CLEARTEXT_DEBUG_HINT],
+  ["http://localhost.evil.tld", CLEARTEXT_DEBUG_HINT],
+  ["http://serveur-poste:8080", CLEARTEXT_DEBUG_HINT],
+  ["http://[2001:db8::1]", CLEARTEXT_DEBUG_HINT],
   // Ports hors bornes / non numériques.
   ["https://notes.exemple.fr:0", PORT_HINT],
   ["https://notes.exemple.fr:65536", PORT_HINT],
@@ -137,19 +161,45 @@ const REJECTED: [string, string][] = [
 ];
 
 describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)", () => {
-  test.skipIf(skip)("formes acceptées : https, hôte borné, port 1-65535, grain du build émulé", async () => {
-    for (const [input, canonical] of ACCEPTED) {
-      const res = await serverUrl(input);
+  test.skipIf(skip)("https accepté sous les deux politiques, release comprise", async () => {
+    for (const [input, canonical] of HTTPS_ACCEPTED) {
+      for (const cleartext of ["forbid", "loopback"] as const) {
+        const res = await serverUrl(input, cleartext);
+        expect({ input, cleartext, res }).toEqual({
+          input,
+          cleartext,
+          res: { ok: true, baseUrl: canonical },
+        });
+      }
+    }
+  });
+
+  test.skipIf(skip)("debug : clair loopback/émulateur seul, IPv4 et IPv6", async () => {
+    for (const [input, canonical] of DEBUG_HTTP_ACCEPTED) {
+      const res = await serverUrl(input, "loopback");
       expect({ input, res }).toEqual({ input, res: { ok: true, baseUrl: canonical } });
     }
-    // La graine BuildConfig reste valide : 10.0.2.2:3000 n'est jamais refusé.
-    const seed = "http://10.0.2.2:3000";
-    expect(await serverUrl(seed)).toEqual({ ok: true, baseUrl: seed });
+  });
+
+  test.skipIf(skip)("release : tout clair est refusé, loopback, émulateur et IPv6 compris", async () => {
+    // Défaut sûr du noyau : sans politique explicite, c'est release.
+    const implicit = JSON.parse(
+      await link!.ask({ op: "serverUrl", raw: "http://localhost:3000" }),
+    ) as ServerUrlResult;
+    expect(implicit).toEqual({ ok: false, message: CLEARTEXT_RELEASE_HINT });
+
+    const loopback = DEBUG_HTTP_ACCEPTED.map(([raw]) => raw);
+    for (const input of [...loopback, ...PUBLIC_HTTP]) {
+      const res = await serverUrl(input, "forbid");
+      expect({ input, res }).toEqual({ input, res: { ok: false, message: CLEARTEXT_RELEASE_HINT } });
+    }
   });
 
   test.skipIf(skip)("formes refusées : message français actionnable, cause unique", async () => {
     for (const [input, message] of REJECTED) {
-      const res = await serverUrl(input);
+      // Politique debug : les autres refus gardent leur cause, et le clair
+      // public montre le message loopback plutôt que celui de release.
+      const res = await serverUrl(input, "loopback");
       expect({ input, res }).toEqual({ input, res: { ok: false, message } });
       // Un refus ne réécrit jamais la saisie : elle révèle l'établissement.
       expect(res.message?.includes(input.trim()) && input.trim().length > 3).toBe(false);
@@ -206,7 +256,10 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
 
   test("store : une adresse, validée avant écriture, prefs séparées des comptes", () => {
     const store = read(join(DATA, "ServerStore.kt"));
-    expect(store).toContain("class ServerStore(context: Context)");
+    expect(store).toContain("class ServerStore(");
+    // La politique de clair vient du build : release par défaut, jamais un
+    // `http` hérité qui ressortirait après mise à jour.
+    expect(store).toContain("private val cleartext: CleartextPolicy = CleartextPolicy.FORBID");
     expect(store).toContain("getSharedPreferences(PREFS, Context.MODE_PRIVATE)");
     // Prefs PROPRE à AccountStore : le serveur choisi survit à `logout()`.
     const accounts = read(join(DATA, "AccountStore.kt"));
@@ -215,8 +268,9 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(store).not.toContain('const val PREFS = "accounts"');
     // Validation avant écriture, et revalidation à la lecture.
     expect(store).toContain("fun baseUrl(seed: String): String");
-    expect(store).toContain("ServerConfig.validateBaseUrl(stored)");
+    expect(store).toContain("ServerConfig.validateBaseUrl(stored, cleartext)");
     expect(store).toContain("fun save(raw: String): ServerUrlResult");
+    expect(store).toContain("ServerConfig.validateBaseUrl(raw, cleartext)");
     expect(store).toContain("if (validated !is ServerUrlResult.Ok) return validated");
     expect(store.indexOf("fun save")).toBeLessThan(store.indexOf("putString(KEY_BASE_URL"));
     // Un seul store : aucun secret, aucun log, aucune donnée d'établissement.
@@ -234,7 +288,7 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     const bridge = readBridgeSource();
     const bridgeCode = codeOnly(bridge);
     expect(bridge).toContain("private val baseUrlSeed: String = if (BuildConfig.SERVER_HOST.isEmpty())");
-    expect(bridge).toContain("internal val serverStore = ServerStore(ctx)");
+    expect(bridge).toContain("internal val serverStore = ServerStore(ctx, cleartextPolicy)");
     expect(bridge).toContain("internal fun currentBaseUrl(): String = serverStore.baseUrl(baseUrlSeed)");
     expect(bridge).toContain("serverStore.save(baseUrl)");
     // Aucune purge parallèle : tout passe par PairingRepository.logoutBlocking().
@@ -254,10 +308,16 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(bridge).toContain("currentBaseUrl()");
     // Aucun hôte en dur côté app : la seule adresse connue est la graine.
     expect(codeOnly(bridge)).not.toMatch(/https?:\/\/[^"' )`]+/);
-    // Le pont n'infère http qu'en debug ; la release refuse le clair explicite.
+    // Le pont n'infère http qu'en debug ; la politique de clair suit le build.
+    expect(bridge).toContain(
+      "if (BuildConfig.DEBUG) CleartextPolicy.LOOPBACK_ONLY else CleartextPolicy.FORBID",
+    );
     const bridgeSettings = codeOnly(read(join(ANDROID, "app/src/main/java/fr/veryslopnynotes/app/VsnBridgeSettings.kt")));
     expect(bridgeSettings).toContain("if (BuildConfig.DEBUG) ServerConfig.schemeFor(host) else \"https\"");
-    expect(bridgeSettings).toContain('!BuildConfig.DEBUG && host.startsWith("http://")');
+    expect(bridgeSettings).toContain("ServerConfig.validateBaseUrl(host, cleartextPolicy)");
+    expect(bridgeSettings).toContain("ServerConfig.validateBaseUrl(serverHost(p), cleartextPolicy)");
+    // Un seul validateur : pas de préfixe `http://` recopié dans le pont.
+    expect(bridgeSettings).not.toContain('host.startsWith("http://")');
 
     const gradle = read(join(ANDROID, "app/build.gradle.kts"));
     const defaultConfig = gradleBlock(gradle, "defaultConfig");

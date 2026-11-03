@@ -48,11 +48,7 @@ internal fun VsnBridge.settings(): JSONObject {
 
 internal fun VsnBridge.saveServer(p: JSONObject, requestId: String): JSONObject? {
     val host = serverHost(p)
-    if (!BuildConfig.DEBUG && host.startsWith("http://")) {
-        return JSONObject().put("ok", false)
-            .put("message", "HTTP en clair n'existe que dans les builds de développement : utilisez https.")
-    }
-    return when (val checked = ServerConfig.validateBaseUrl(host)) {
+    return when (val checked = ServerConfig.validateBaseUrl(host, cleartextPolicy)) {
         is ServerUrlResult.Rejected ->
             JSONObject().put("ok", false).put("message", checked.message)
         is ServerUrlResult.Ok ->
@@ -68,7 +64,7 @@ internal fun VsnBridge.saveServer(p: JSONObject, requestId: String): JSONObject?
 
 /** `needed` pilote la rationale AVANT de lancer la demande système. */
 internal fun VsnBridge.localNetworkStatus(p: JSONObject): JSONObject {
-    val checked = ServerConfig.validateBaseUrl(serverHost(p))
+    val checked = ServerConfig.validateBaseUrl(serverHost(p), cleartextPolicy)
     val needed = checked is ServerUrlResult.Ok && localNetworkPermissionRequired(checked.baseUrl)
     return JSONObject().put("needed", needed)
 }

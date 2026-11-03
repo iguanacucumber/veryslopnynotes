@@ -103,9 +103,14 @@ private fun driver(op: JsonValue.Obj): JsonValue = when (op.str("op")) {
     }
     // Adresse de serveur saisie : le verdict de `ServerConfig.validateBaseUrl`,
     // messages français compris (le contrat affiché à l'utilisateur).
+    // `cleartext: "loopback"` = politique debug ; absent = release (`FORBID`).
     "serverUrl" -> {
         val raw = op.str("raw") ?: throw IllegalArgumentException("pilote: adresse absente")
-        val result = ServerConfig.validateBaseUrl(raw)
+        val policy = when (op.str("cleartext")) {
+            "loopback" -> CleartextPolicy.LOOPBACK_ONLY
+            else -> CleartextPolicy.FORBID
+        }
+        val result = ServerConfig.validateBaseUrl(raw, policy)
         if (result is ServerUrlResult.Ok) {
             obj(
                 "ok" to JsonValue.Bool(true),
