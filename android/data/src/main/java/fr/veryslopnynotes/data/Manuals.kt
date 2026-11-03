@@ -108,6 +108,8 @@ class ManualStore(context: Context) {
     fun url(): String? = lock.run {
         try {
             storedUrl(data())
+        } catch (e: LocalDataUnreadable) {
+            throw e
         } catch (_: Exception) {
             null
         }
@@ -146,11 +148,7 @@ class ManualStore(context: Context) {
         }
     }
 
-    private fun disabledSubjects(): Set<String> = try {
-        disabledSubjects(data())
-    } catch (_: Exception) {
-        emptySet()
-    }
+    private fun disabledSubjects(): Set<String> = storage(emptySet()) { disabledSubjects(data()) }
 
     private fun disabledSubjects(obj: JSONObject): Set<String> = try {
         val raw = obj.optString(KEY_DISABLED_SUBJECTS, null)
@@ -175,6 +173,8 @@ class ManualStore(context: Context) {
     fun classLabel(): String = lock.run {
         try {
             storedClassLabel(data())
+        } catch (e: LocalDataUnreadable) {
+            throw e
         } catch (_: Exception) {
             ""
         }
@@ -187,6 +187,8 @@ class ManualStore(context: Context) {
     fun subjects(): List<String> = lock.run {
         try {
             storedSubjects(data())
+        } catch (e: LocalDataUnreadable) {
+            throw e
         } catch (_: Exception) {
             emptyList()
         }
@@ -196,7 +198,7 @@ class ManualStore(context: Context) {
         val out = try {
             val raw = obj.optString(KEY_SUBJECTS, null)
             if (raw.isNullOrBlank()) {
-                emptyList<String>()
+                emptyList()
             } else {
                 val arr = JSONArray(raw)
                 val values = mutableListOf<String>()
@@ -241,14 +243,18 @@ class ManualStore(context: Context) {
         }
     }
 
-    /** Oublier le manuel (l'invitation reste vue : pas de rappel intempestif). */
-    fun clear() {
-        clearAccountData()
+    /**
+     * Oublier le manuel (l'invitation reste vue : pas de rappel intempestif).
+     * `false` = le fichier n'a pas pu être effacé ; l'interface le dit.
+     */
+    fun clear(): Boolean {
+        val cleared = clearAccountData()
         try {
             prefs?.edit()?.putBoolean(KEY_PROMPT_SEEN, true)?.apply()
         } catch (_: Exception) {
             // Préfs indisponibles : rien n'était de toute façon lisible.
         }
+        return cleared
     }
 
     /**
@@ -259,10 +265,13 @@ class ManualStore(context: Context) {
      * `prompt_seen` RESTE : c'est un réglage d'interface (une invitation déjà
      * montrée), jamais une donnée du compte — et un rappel intempestif à chaque
      * bascule serait un défaut.
+     *
+     * `false` = le fichier est encore là : la bascule de compte ne doit pas
+     * publier le suivant sur une purge incomplète.
      */
-    fun clearAccountData() {
-        lock.run {
-            file?.let { DurableFile.delete(it) }
+    fun clearAccountData(): Boolean {
+        val fileCleared = lock.run {
+            val fileCleared = file?.let { DurableFile.delete(it) } ?: true
             // Les préférences d'une version antérieure au fichier durable portent
             // encore les mêmes clés : elles partent aussi (I16).
             try {
@@ -276,7 +285,9 @@ class ManualStore(context: Context) {
             } catch (_: Exception) {
                 // Préfs indisponibles : rien n'était de toute façon lisible.
             }
+            fileCleared
         }
+        return fileCleared
     }
 
     /** Indices de choix : classe + matières, jamais un profil complet. */
@@ -352,11 +363,7 @@ class ManualStore(context: Context) {
         }
     }
 
-    private fun docs(): JSONObject = try {
-        docs(data())
-    } catch (_: Exception) {
-        JSONObject()
-    }
+    private fun docs(): JSONObject = storage(JSONObject()) { docs(data()) }
 
     private fun docs(obj: JSONObject): JSONObject = try {
         val raw = obj.optString(KEY_DOCS, null)
@@ -365,10 +372,19 @@ class ManualStore(context: Context) {
         JSONObject()
     }
 
-    private fun data(): JSONObject = try {
+    private fun data(): JSONObject =
         file?.let { DurableFile.read(it, ::parseObject) } ?: legacyData()
+
+    /**
+     * Repli des pannes de stockage, sauf [LocalDataUnreadable] : une donnée
+     * corrompue est DITE, jamais transformée en valeur vide (#910).
+     */
+    private inline fun <T> storage(fallback: T, block: () -> T): T = try {
+        block()
+    } catch (e: LocalDataUnreadable) {
+        throw e
     } catch (_: Exception) {
-        JSONObject()
+        fallback
     }
 
     /**
@@ -423,6 +439,9 @@ class ManualStore(context: Context) {
                 // Garde d'époque partagée avec notes/chat/préfs : une écriture
                 // en vol pendant la purge de compte est REFUSÉE.
                 OfflineArtifacts.writeText(target, obj.toString(), SessionEpoch.current())
+            } catch (e: LocalDataUnreadable) {
+                // `data()` a levé : ne jamais remplacer la cible corrompue.
+                throw e
             } catch (_: Exception) {
                 false
             }

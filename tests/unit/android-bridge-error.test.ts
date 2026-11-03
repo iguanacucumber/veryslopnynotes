@@ -90,4 +90,10 @@ describe("pont : un échec natif devient toujours un rejet (#394)", () => {
     expect(rejet.code).toBe("bad_request");
     expect(rejet.message).toBe("Requête invalide.");
   });
+
+  test.skipIf(skip)("une donnée locale illisible est DITE, jamais un écran vide", async () => {
+    const rejet = await traduction("local_data");
+    expect(rejet.code).toBe("unknown");
+    expect((rejet.message ?? "").toLowerCase()).toContain("données locales illisibles");
+  });
 });

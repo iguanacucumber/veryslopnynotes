@@ -10,6 +10,16 @@ import org.json.JSONObject
 import java.io.File
 
 /**
+ * Issue d'une suppression : `REFUSED` = la session a changé, `FAILED` = le
+ * disque n'a pas rendu la place. L'interface ne dit pas la même chose.
+ */
+enum class TeacherChatDelete {
+    DELETED,
+    REFUSED,
+    FAILED,
+}
+
+/**
  * Fil de discussion du professeur IA : UN fichier JSON dans
  * `filesDir/offline/teacher_chat.json`.
  *
@@ -27,8 +37,7 @@ interface TeacherChatLocalStore {
     /** false = écriture abandonnée (la session a changé depuis [epoch]). */
     fun save(thread: TeacherThread, epoch: Long): Boolean
 
-    /** false = suppression abandonnée (la session a changé depuis [epoch]). */
-    fun delete(epoch: Long): Boolean
+    fun delete(epoch: Long): TeacherChatDelete
 }
 
 class FileTeacherChatStore(private val file: File) : TeacherChatLocalStore {
@@ -49,15 +58,12 @@ class FileTeacherChatStore(private val file: File) : TeacherChatLocalStore {
     }
 
     @Synchronized
-    override fun delete(epoch: Long): Boolean =
-        SessionEpoch.writeIfCurrent(epoch) {
-            try {
-                file.delete()
-            } catch (_: Exception) {
-                // ponytail: best-effort, comme la purge du cache.
-            }
-            true
-        } ?: false
+    override fun delete(epoch: Long): TeacherChatDelete {
+        val deleted = SessionEpoch.writeIfCurrent(epoch) {
+            DurableFile.delete(file)
+        } ?: return TeacherChatDelete.REFUSED
+        return if (deleted) TeacherChatDelete.DELETED else TeacherChatDelete.FAILED
+    }
 }
 
 class InMemoryTeacherChatStore : TeacherChatLocalStore {
@@ -77,11 +83,11 @@ class InMemoryTeacherChatStore : TeacherChatLocalStore {
     }
 
     @Synchronized
-    override fun delete(epoch: Long): Boolean =
+    override fun delete(epoch: Long): TeacherChatDelete =
         SessionEpoch.writeIfCurrent(epoch) {
             thread = TeacherThread()
             true
-        } ?: false
+        }?.let { TeacherChatDelete.DELETED } ?: TeacherChatDelete.REFUSED
 }
 
 fun teacherThreadJson(thread: TeacherThread): String {

@@ -1,5 +1,7 @@
 package fr.veryslopnynotes.app
 
+import fr.veryslopnynotes.data.LocalDataUnreadable
+
 // Ce qui sort du pont est un `{code, message}` borné, jamais le message brut
 // d'une exception (il peut nommer un hôte, un compte, une URL).
 // `Throwable` et non `Exception` : un `Error` non capturé tue le fil du worker
@@ -12,6 +14,9 @@ data class BridgeError(val code: String, val message: String)
 
 fun bridgeErrorFor(t: Throwable): BridgeError = when {
     t is BridgeFailure -> BridgeError(t.code, t.message ?: "Requête invalide.")
+    // La phrase est CHOISIE : elle ne nomme ni chemin ni contenu. Une lecture
+    // vide ne doit jamais passer pour « rien enregistré » (#910).
+    t is LocalDataUnreadable -> BridgeError("unknown", LocalDataUnreadable.MESSAGE)
     // Mémoire épuisée : la cause est certaine, l'appel peut réussir plus tard.
     t is OutOfMemoryError -> BridgeError("unavailable", "Mémoire insuffisante sur l'appareil.")
     // Toute autre cause : on n'affirme rien.

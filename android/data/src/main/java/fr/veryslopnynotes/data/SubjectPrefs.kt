@@ -117,23 +117,24 @@ interface SubjectPrefsLocalStore {
 
 class FileSubjectPrefsStore(private val file: File) : SubjectPrefsLocalStore {
     @Synchronized
-    override fun load(): List<SubjectPrefs> = try {
+    override fun load(): List<SubjectPrefs> =
         // Un fichier corrompu part en quarantaine ; la version précédente est
-        // relue au lieu de perdre toutes les préférences en silence.
+        // relue. Sans sauvegarde valide, `LocalDataUnreadable` LÈVE : jamais un
+        // écran vide qui affirme « aucune préférence » (#910).
         DurableFile.read(file, SubjectPrefs::listFromJsonOrNull) ?: emptyList()
-    } catch (_: Exception) {
-        emptyList()
-    }
 
     @Synchronized
-    override fun save(prefs: List<SubjectPrefs>, epoch: Long): Boolean =
+    override fun save(prefs: List<SubjectPrefs>, epoch: Long): Boolean {
+        // Relire AVANT d'écrire : une cible illisible arrête la sauvegarde.
+        load()
         // L'écriture passe par la garde d'époque (comme le cache) : une
         // écriture commencée avant la purge de déconnexion est abandonnée.
-        OfflineArtifacts.writeText(
+        return OfflineArtifacts.writeText(
             file,
             subjectPrefsListToJson(prefs.take(SubjectPrefs.MAX_COUNT)),
             epoch,
         )
+    }
 }
 
 class InMemorySubjectPrefsStore : SubjectPrefsLocalStore {
@@ -178,6 +179,8 @@ class SubjectPrefsRepository(
     fun prefs(): List<SubjectPrefs> = update.run {
         try {
             local.load()
+        } catch (e: LocalDataUnreadable) {
+            throw e
         } catch (_: Exception) {
             emptyList()
         }
@@ -213,6 +216,9 @@ class SubjectPrefsRepository(
     private fun write(prefs: List<SubjectPrefs>, epoch: Long): Boolean {
         return try {
             local.save(prefs, epoch)
+        } catch (e: LocalDataUnreadable) {
+            // Une cible corrompue n'est pas un « refus d'époque » : la dire.
+            throw e
         } catch (_: Exception) {
             // ponytail: prefs = préférences, pas de donnée critique (perdues, pas crash).
             false

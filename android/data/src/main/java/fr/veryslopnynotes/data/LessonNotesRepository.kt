@@ -42,6 +42,8 @@ class LessonNotesRepository(private val local: LessonNotesLocalStore) {
     fun notes(): List<LessonNote> = update.run {
         try {
             local.load().filter { LessonNote.isValid(it) }.take(LessonNotes.MAX_NOTES)
+        } catch (e: LocalDataUnreadable) {
+            throw e
         } catch (_: Exception) {
             emptyList()
         }
