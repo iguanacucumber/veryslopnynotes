@@ -11,6 +11,7 @@ interface PronoteClientLike {
     val communication: Communication
     val attributes: Map<String, String>
     val funcOptions: JVal
+    val periods: List<Period>
     val infoId: String?
     fun getWeek(date: LocalDateTime): Int
 }

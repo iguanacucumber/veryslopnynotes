@@ -238,15 +238,15 @@ private fun overallAverageOf(resp: JVal, tolerant: Boolean): JVal? {
 }
 
 /**
- * Registre `instances` alimenté à la construction, avant parse, comme le `Set` TS.
+ * Période d'une session : les notes résolvent leur période dans la liste du
+ * MÊME client, jamais dans un registre partagé (I16).
  */
 class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject(json) {
-    companion object {
-        val instances: MutableSet<Period> = mutableSetOf()
-    }
-
-    init {
-        instances.add(this)
+    /** Liste du client, complétée de cette période quand elle est construite seule. */
+    private fun periodLookup(): (String) -> Period? {
+        val cached = runCatching { client.periods }.getOrNull().orEmpty()
+        val scoped = if (cached.any { it === this }) cached else cached + this
+        return { id -> scoped.firstOrNull { it.id == id } }
     }
 
     val id: String = r(::strOf, listOf("N"))
@@ -267,7 +267,8 @@ class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject
     /** `DernieresNotes` 198. */
     fun grades(): List<Grade> {
         val resp = client.post("DernieresNotes", 198.0, notesPayload())
-        return dataList(resp, "listeDevoirs").map { Grade(it) }
+        val resolve = periodLookup()
+        return dataList(resp, "listeDevoirs").map { Grade(it, resolve) }
     }
 
     /**
@@ -281,11 +282,12 @@ class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject
     fun notes(): PeriodNotes {
         val resp = client.post("DernieresNotes", 198.0, notesPayload())
         val data = dataOf(resp)
+        val resolve = periodLookup()
         var firstFailure: Exception? = null
         val grades = try {
             val rows = dataListOrNull(resp, "listeDevoirs")
                 ?: throw ParsingError("Liste listeDevoirs manquante", listOf("dataSec", "data", "listeDevoirs", "V"))
-            partialRows(rows) { Grade(it) }
+            partialRows(rows) { Grade(it, resolve) }
         } catch (e: Exception) {
             if (!isUnreadableRow(e)) throw e
             firstFailure = e

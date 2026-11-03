@@ -28,6 +28,11 @@ interface ErrorResult {
   posts?: number;
 }
 
+interface LogoutResult {
+  cleared: boolean;
+  gradePeriods: (string | null)[];
+}
+
 async function run<T>(op: string): Promise<T> {
   return JSON.parse(await link!.ask({ op })) as T;
 }
@@ -84,5 +89,16 @@ describe("snapshot de période (Period.notes)", () => {
   test.skipIf(skip)("overallAverage() garde son comportement STRICT", async () => {
     const r = await run<ErrorResult>("strictOverall");
     expect(r.thrown).toBe("ParsingError");
+  });
+});
+
+describe("registre de périodes — déconnexion (I16)", () => {
+  test.skipIf(skip)("aucune période du compte précédent ne survit à la déconnexion", async () => {
+    const r = await run<LogoutResult>("logout");
+    expect(r.cleared).toBe(true);
+    // « p-a » est construite pour le compte A, puis la session est fermée.
+    // B reçoit une note qui nomme cet id : la résolution est bornée au client
+    // B, donc la note ne porte AUCUNE période au lieu de celle de A.
+    expect(r.gradePeriods).toEqual([null]);
   });
 });

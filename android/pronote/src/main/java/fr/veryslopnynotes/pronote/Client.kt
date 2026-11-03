@@ -302,7 +302,7 @@ open class ClientBase(
     }
 
     /** Reconstruits à chaque accès sauf cache `periods_` non vide. */
-    val periods: List<Period>
+    override val periods: List<Period>
         get() {
             val cached = periods_
             if (!cached.isNullOrEmpty()) return cached

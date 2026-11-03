@@ -22,10 +22,10 @@ class Average(json: JVal?) : PronoteObject(json) {
 }
 
 /**
- * `period` résolu via `Period.instances`, `null` si inconnu ; `isOptionnal` =
- * `facultatif && !bonus`, comme la coquille TS.
+ * `period` résolu dans la liste du client courant, `null` si inconnu ;
+ * `isOptionnal` = `facultatif && !bonus`, comme la coquille TS.
  */
-class Grade(json: JVal?) : PronoteObject(json) {
+class Grade(json: JVal?, private val resolvePeriod: (String) -> Period? = { null }) : PronoteObject(json) {
     val id: String = r(::strOf, listOf("N"))
     val grade: String? = r(::gradeParse, listOf("note", "V"))
     val outOf: String? = r(::gradeParse, listOf("bareme", "V"))
@@ -34,7 +34,7 @@ class Grade(json: JVal?) : PronoteObject(json) {
     val subject: Subject = r({ v -> Subject(v) }, listOf("service", "V"))
     val period: Period? =
         // `===` strict sur la valeur brute : `N` non-texte ne matche jamais.
-        r({ v -> (v as? JVal.Str)?.value?.let { n -> Period.instances.firstOrNull { it.id == n } } }, listOf("periode", "V", "N"), ResolveOpts.lenient())
+        r({ v -> (v as? JVal.Str)?.value?.let(resolvePeriod) }, listOf("periode", "V", "N"), ResolveOpts.lenient())
     val average: String? = r(::gradeParse, listOf("moyenne", "V"), ResolveOpts.lenient())
     val max: String? = r(::gradeParse, listOf("noteMax", "V"), ResolveOpts.lenient())
     val min: String? = r(::gradeParse, listOf("noteMin", "V"), ResolveOpts.lenient())

@@ -3,6 +3,8 @@
 // Protocole : une opération JSON par ligne sur stdin, une réponse par ligne sur stdout.
 package fr.veryslopnynotes.periodnotes
 
+import fr.veryslopnynotes.data.PronoteSession
+import fr.veryslopnynotes.pronote.Client
 import fr.veryslopnynotes.pronote.ClientBase
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
@@ -93,6 +95,15 @@ private fun periodOf(client: ClientBase, id: String): Period = Period(
         "dateFin" to v(s("20/12/2025")),
     ),
 )
+
+/** Client de session (le type publié par `PronoteSession`) dont l'envoi est un stub. */
+private class SessionClient(private val response: JVal) : Client(
+    "https://etablissement.example/pronote/eleve.html",
+    "eleve",
+    "secret",
+) {
+    override fun send(functionName: String, postData: Map<String, JVal>): JVal = response
+}
 
 private fun notesJson(client: CountingClient, notes: PeriodNotes): JVal.Obj = ok(
     "posts" to JVal.Num(client.posts.toDouble()),
@@ -187,6 +198,36 @@ private class Driver {
             ok(
                 "thrown" to (name?.let { JVal.Str(it) } ?: JVal.Null),
                 "posts" to JVal.Num(client.posts.toDouble()),
+            )
+        }
+
+        // Déconnexion : aucune période du compte précédent ne doit survivre.
+        "logout" -> {
+            val accountA = SessionClient(JVal.Obj(linkedMapOf()))
+            Period(
+                accountA,
+                o(
+                    "N" to s("p-a"),
+                    "L" to s("Trimestre A"),
+                    "dateDebut" to v(s("01/09/2025")),
+                    "dateFin" to v(s("20/12/2025")),
+                ),
+            )
+            PronoteSession.set(accountA)
+            PronoteSession.clear()
+            val cleared = PronoteSession.client == null
+            val response = notesResponse(
+                grades = listOf(gradeRow("g1", periodId = "p-a")),
+                services = listOf(serviceRow("s1", "Maths", "12,5")),
+            )
+            val accountB = SessionClient(response)
+            PronoteSession.set(accountB)
+            val notes = periodOf(accountB, "p-b").notes()
+            ok(
+                "cleared" to JVal.Bool(cleared),
+                "gradePeriods" to JVal.Arr(
+                    notes.grades.map { g -> g.period?.id?.let { JVal.Str(it) } ?: JVal.Null },
+                ),
             )
         }
 
