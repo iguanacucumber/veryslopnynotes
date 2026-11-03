@@ -44,6 +44,8 @@ import fr.veryslopnynotes.data.PairingInput
 import fr.veryslopnynotes.data.PairingRepository
 import fr.veryslopnynotes.data.PairingResult
 import fr.veryslopnynotes.data.ProfileRepository
+import fr.veryslopnynotes.data.RequestCancellation
+import fr.veryslopnynotes.data.RequestScope
 import fr.veryslopnynotes.data.RestoreResult
 import fr.veryslopnynotes.data.SchoolQr
 import fr.veryslopnynotes.data.SecureStorage
@@ -97,6 +99,8 @@ class VsnBridge(
     /** Appels acceptés et pas encore terminés : un abandon ne vise que ceux-là. */
     private val inFlight: MutableSet<String> =
         Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    /** Jeton réseau par appel : un abandon ou un timeout coupe la connexion en vol. */
+    private val cancels: MutableMap<String, RequestCancellation> = ConcurrentHashMap()
 
     // Mêmes objets que `AppNav` : une seule session chiffrée, un seul cache.
     // Release : graine vide (aucun hôte par défaut) ; debug seul porte l'émulateur.
@@ -302,6 +306,10 @@ class VsnBridge(
         // Capturée ici, elle perd la course d'époque et son écriture est
         // abandonnée — le répertoire purgé ne ressuscite pas.
         val epoch = SessionEpoch.current()
+        // Le jeton couvre TOUTE l'opération : les lectures passent par la file
+        // (autre fil) et le travail réseau doit quand même être annulable.
+        val cancellation = RequestCancellation()
+        cancels[requestId] = cancellation
         // #393 : le LLM part sur SA file (bornée) : deux appels LLM simultanés
         // ne prennent plus les fils des appels ordinaires.
         executors.workerFor(method).execute {
@@ -319,13 +327,16 @@ class VsnBridge(
                         throw BridgeFailure("bad_request", "Paramètres illisibles.")
                     }
                     // null = réponse différée (scan QR).
-                    handle(requestId, method, params, epoch)?.let { resolve(requestId, it) }
+                    RequestScope.with(cancellation) {
+                        handle(requestId, method, params, epoch)?.let { resolve(requestId, it) }
+                    }
                 }
                 // Jamais le message brut : il peut nommer un hôte ou un compte.
                 if (failure != null) reject(requestId, failure.code, failure.message)
             } finally {
                 inFlight.remove(requestId)
                 cancelled.remove(requestId)
+                cancels.remove(requestId)
             }
         }
     }
@@ -345,11 +356,17 @@ class VsnBridge(
             // pas). Un abandon malformé n'est qu'un abandon raté.
             ""
         }
-        if (validBridgeId(target) && inFlight.contains(target)) cancelled.add(target)
+        if (validBridgeId(target) && inFlight.contains(target)) {
+            cancelled.add(target)
+            // Le travail continue dans la file : sans ce jeton, le socket
+            // établissement restait ouvert jusqu'au timeout HTTP.
+            cancels[target]?.cancel()
+        }
     }
 
     /** Fin de vie de la WebView : aucun fil ne survit à la rotation. */
     fun close() {
+        for (cancellation in cancels.values) cancellation.cancel()
         photos.cancel()
         executors.shutdown()
     }
@@ -826,6 +843,9 @@ class VsnBridge(
             @Suppress("UNCHECKED_CAST")
             holder[0] as T?
         } else {
+            // Timeout de l'APPELANT : le travail natif n'est pas laissé tourner
+            // (il garderait un socket et le fil de la file).
+            RequestScope.current()?.cancel()
             null
         }
     }

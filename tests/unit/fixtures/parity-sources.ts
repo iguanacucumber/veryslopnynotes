@@ -59,6 +59,7 @@ export const PRODUCTION_SOURCES: string[] = [
   join(PRONOTE, "RateLimitGate.kt"),
   join(PRONOTE, "ReadMemo.kt"),
   join(PRONOTE, "RefreshGate.kt"),
+  join(PRONOTE, "RequestDeadline.kt"),
   join(PRONOTE, "Resolver.kt"),
   join(PRONOTE, "SchoolLifeModels.kt"),
   // `core` — les règles métier pures (dates, notes, IA, garde-fous).
@@ -175,6 +176,7 @@ export const PRODUCTION_SOURCES: string[] = [
   join(DATA, "OfflineArtifacts.kt"),
   join(DATA, "OfflineCache.kt"),
   join(DATA, "PronoteSession.kt"),
+  join(DATA, "RequestScope.kt"),
   join(DATA, "SessionRepair.kt"),
   // `data/SessionGate.kt` : LE verrou d'ouverture/fermeture de session,
   // partagé par appairage, restauration et déconnexion. Fichier PUR : le

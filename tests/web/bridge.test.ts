@@ -387,12 +387,12 @@ describe("pont : les lectures ne saturent pas le pont (#393)", () => {
   });
 
   test("le nombre de lectures en vol tient dans le délai natif", () => {
-    // Le budget d'une lecture = le délai HTTP de l'établissement (lu dans le
-    // Kotlin de production) ; le délai natif d'un appel = le miroir de
+    // Le budget d'une lecture = l'échéance TOTALE de la requête HTTP (lue dans
+    // le Kotlin de production) ; le délai natif d'un appel = le miroir de
     // `VsnBridge`. Les lectures en file s'additionnent : la N-ième attend
     // (N-1) lectures avant son travail, son délai doit couvrir le tout.
     const http = readFileSync(HTTP, "utf8");
-    const budget = Number(/readTimeout\s*=\s*([\d_]+)/.exec(http)?.[1]?.replace(/_/g, ""));
+    const budget = Number(/DEFAULT_REQUEST_DEADLINE_MS\s*=\s*([\d_]+)/.exec(http)?.[1]?.replace(/_/g, ""));
     expect(budget).toBeGreaterThan(0);
     expect(MAX_PARALLEL_READS * budget).toBeLessThanOrEqual(NATIVE_WAIT_MS.default);
     // Et le JS attend plus longtemps que le plafond natif (#371).
