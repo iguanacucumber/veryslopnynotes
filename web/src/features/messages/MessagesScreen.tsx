@@ -161,7 +161,6 @@ export function ConversationListScreen({
                       type="button"
                       className="messages-card__open"
                       onClick={() => onOpen(discussion)}
-                      aria-label={`Ouvrir la discussion « ${discussion.subject} »`}
                     >
                       <Avatar name={discussion.subject} size={40} />
                       <span className="messages-card__text">

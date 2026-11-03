@@ -71,6 +71,7 @@ web: web-typecheck web-test web-build
 
 web-smoke: web-build
 	bun run agents/runtime/web-smoke.ts
+	bun run test:visual
 
 # `web-build` une seule fois par gate.
 architecture: web-build architecture-test

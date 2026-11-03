@@ -186,9 +186,9 @@ export function Shell() {
             <button
               type="button"
               className="topbar__identity"
-              aria-label="Ouvrir le profil"
               onClick={() => go("/profile")}
             >
+              <span className="sr-only">Ouvrir le profil</span>
               <Avatar name={profile?.displayName ?? "?"} size={40} src={photo} />
               <span className="topbar__identity-text">
                 <span className="topbar__identity-name">{profile?.displayName ?? "Mon relevé"}</span>

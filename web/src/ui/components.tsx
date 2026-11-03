@@ -101,10 +101,13 @@ export function WeekNavigator({
           className="week-nav__today"
           onClick={onToday}
           disabled={current}
-          aria-label={current ? "Semaine courante" : `${status} — revenir à la semaine courante`}
+          title={current ? "Semaine courante" : `${status} — revenir à la semaine courante`}
         >
           <strong className="week-nav__label">{label}</strong>
           {detail ? <span className="week-nav__detail">{detail}</span> : null}
+          <span className="sr-only">
+            {current ? " — semaine courante" : ` — ${status}, revenir à la semaine courante`}
+          </span>
         </button>
         <button type="button" className="week-nav__arrow" aria-label="Semaine suivante" onClick={onNext}>
           <IconChevronRight />

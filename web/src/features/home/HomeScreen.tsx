@@ -65,7 +65,7 @@ function WidgetHeader({
       {icon ? <span className="home-widget__icon">{icon}</span> : null}
       <h2 className="home-widget__title">{title}</h2>
       {onMore ? (
-        <button type="button" className="home-widget__more" onClick={onMore} aria-label={`${title} — tout voir`}>
+        <button type="button" className="home-widget__more" onClick={onMore} aria-label={`${title} — Afficher plus`}>
           Afficher plus
           <IconArrowRightUp size={20} />
         </button>
@@ -268,7 +268,6 @@ function QuickActions({
             className={`home-action home-action--${action.tone}${animate ? " home-rise" : ""}`}
             key={action.to}
             onClick={() => navigate(action.to)}
-            aria-label={`${action.label} — ${action.status}`}
           >
             <span className="home-action__icon" aria-hidden="true">
               <Icon size={32} />

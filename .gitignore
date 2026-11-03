@@ -40,6 +40,8 @@ build/
 # UI web compilée (gitignorée ici, Gradle la reconstruit).
 android/app/src/main/assets/web/
 coverage/
+test-results/
+playwright-report/
 *.apk
 *.aab
 android/**/build/

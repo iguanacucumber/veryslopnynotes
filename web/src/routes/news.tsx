@@ -73,7 +73,7 @@ function NewsCard({
           <button
             type="button"
             className="btn btn--ghost btn--small"
-            aria-label={`Lire l’actualité « ${item.title} »`}
+            aria-label={`Lire le texte de l’actualité « ${item.title} »`}
             onClick={load}
           >
             Lire le texte
@@ -94,7 +94,7 @@ function NewsCard({
             type="button"
             className="btn btn--ghost btn--small"
             aria-expanded={expanded}
-            aria-label={`${expanded ? "Réduire" : "Lire la suite de"} l’actualité « ${item.title} »`}
+            aria-label={`${expanded ? "Réduire le texte de" : "Lire la suite de"} l’actualité « ${item.title} »`}
             onClick={() => setExpanded((value) => !value)}
           >
             {expanded ? "Réduire le texte" : "Lire la suite"}
@@ -104,7 +104,7 @@ function NewsCard({
           <button
             type="button"
             className="btn btn--ghost btn--small"
-            aria-label={`Marquer l’actualité « ${item.title} » comme lue`}
+            aria-label={`Marquer comme lue l’actualité « ${item.title} »`}
             onClick={() => onMarkRead(item.id, item.title)}
           >
             Marquer comme lue

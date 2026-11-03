@@ -72,7 +72,7 @@
   --panel-tint: var(--surface-container);
   --paper: var(--surface);
   --paper-deep: var(--surface-container);
-  --secondary: color-mix(in srgb, var(--ink) 55%, transparent);
+  --secondary: color-mix(in srgb, var(--ink) 62%, transparent);
   --rule: var(--border);
   --rule-strong: color-mix(in srgb, var(--ink) 34%, transparent);
   --rule-brand: color-mix(in srgb, var(--brand) 58%, transparent);
