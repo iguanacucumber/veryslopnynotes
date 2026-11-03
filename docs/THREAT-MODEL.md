@@ -30,7 +30,8 @@ regroupée [en fin de document](#correspondance-lois-invariants-adr).
 Frontières : l'app est un processus de confiance dont les secrets sont chiffrés
 au repos par le Keystore ; Pronote, OpenRouter, une page scrapée et un fichier
 scolaire sont des **données non fiables** ; la WebView est sans réseau et son
-pont est une allowlist ; le scraper est un service local sans authentification ;
+pont est une allowlist ; le scraper est un service local, sans authentification
+sur la boucle locale ;
 la chaîne de build n'est fiable que par ses épingles, ses empreintes et le gate.
 
 ## T1 — Appareil partagé
@@ -227,9 +228,10 @@ sous-ressources du navigateur sont les chemins d'attaque.
 
 **Mitigations existantes**
 
-- Écoute sur `127.0.0.1` par défaut ; `HOST` explicite est requis pour exposer
-  hors boucle locale. Le service reste sans authentification par conception :
-  boucle locale ou proxy authentifié, jamais public (I8, ADR-005 §5) :
+- Écoute sur `127.0.0.1` par défaut. Toute autre interface est REFUSÉE au
+  démarrage sans `ALLOW_PUBLIC=1` ; ce mode exige `SCRAPER_TOKEN`, vérifié en
+  `Authorization: Bearer` sur toutes les routes (comparaison à temps constant).
+  Boucle locale ou proxy authentifié, jamais public sans jeton (I8, ADR-005 §5) :
   [`http.ts`](../server/infrastructure/http.ts).
 - Garde SSRF : refus des IP privées/réservées et des noms qui résolvent vers
   elles, chaîne de redirections suivie et re-vérifiée, URL finale re-testée,

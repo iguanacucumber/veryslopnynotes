@@ -34,9 +34,10 @@ malveillante, dépendance compromise, scraper local et clé perdue.
 - **Aucun secret dans le dépôt.** Pas de clé, de session, de mot de passe, de
   `.env`, ni de donnée personnelle. Un secret exposé est **révoqué et
   remplacé** : retirer le commit ne suffit pas.
-- **Le scraper est sans authentification** (I8). Il reste sur la boucle locale
-  ou derrière un proxy authentifié, jamais exposé publiquement. Une exposition
-  publique est un choix de l'opérateur, pas un défaut de l'image.
+- **Le scraper est sans authentification sur la boucle locale** (I8). Toute
+  écoute hors loopback est REFUSÉE sans `ALLOW_PUBLIC=1` ; ce mode exige un
+  `SCRAPER_TOKEN` vérifié en Bearer et un proxy authentifié devant. Une
+  exposition publique est un choix de l'opérateur, pas un défaut de l'image.
 - **Les actions GitHub sont épinglées** à un SHA de commit, pas à un tag
   mutable. Dependabot propose les mises à jour.
 

@@ -71,9 +71,10 @@ make build   # check-secrets + docker build (skip si daemon absent)
   `server/chromium-seccomp.json` ; sans user namespaces, le scrape échoue au
   lieu de tourner non sandboxé.
 - TLS OBLIGATOIRE et exposition LOOPBACK par défaut : le CMD refuse de
-  démarrer sans `TLS_CERT_FILE`/`TLS_KEY_FILE` (sans auth, I8 — jamais de
-  repli en clair) ; la commande de `server/README.md` publie `127.0.0.1:3000`
-  et exige un proxy authentifié au-delà. `HOST` non forcé.
+  démarrer sans `TLS_CERT_FILE`/`TLS_KEY_FILE` (I8 — jamais de repli en clair) ;
+  la commande de `server/README.md` publie `127.0.0.1:3000` et exige un proxy
+  authentifié au-delà ; hors loopback, `ALLOW_PUBLIC=1` + jeton Bearer. `HOST`
+  non forcé.
 - Contexte minimal (`server/`, `shared/` + manifests) ; `.dockerignore`
   exclut `.env*`, clés (`*.pem/*.key/*.keystore/*.jks`), `secrets/`,
   données (`data/`, `*.db`), `android/`, `tests/`, `agents/`, `docs/`.

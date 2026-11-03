@@ -208,7 +208,7 @@ describe("#921 — exposition Docker : boucle locale par défaut", () => {
   test("l'exposition hors boucle locale exige un proxy authentifié", () => {
     expect(readme).toMatch(/proxy authentifié/i);
     expect(readme).toMatch(/OBLIGATOIRE/);
-    expect(readme).toMatch(/sans auth/i);
+    expect(readme).toMatch(/sans (auth|authentification)/i);
   });
 
   test("le mode public est un opt-in explicite qui nomme le risque", () => {

@@ -102,11 +102,12 @@ describe("invariants", () => {
     expect(hasDirectFetch(codeOnly("const p = apiProvider;\nawait fetch(apiUrl);"))).toBe(false);
   });
 
-  test("I8 (0.7.0): le serveur ne lit AUCUN credential dans l'environnement", () => {
-    // Le serveur ne détient aucun credential : `PORT`/`HOST` et les chemins TLS
-    // sont les seules variables lues, dans `start()` ; la clé du certificat vit
-    // hors du dépôt. Tout ce qui s'authentifie vient du client.
-    const allowedRead = /envValue\(env,\s*"(PORT|HOST|TLS_CERT_FILE|TLS_KEY_FILE)"\)/;
+  test("I8 (0.7.0): le serveur ne lit que l'exposition et le jeton public", () => {
+    // Aucun credential métier : `PORT`/`HOST`, `ALLOW_PUBLIC`, `SCRAPER_TOKEN`
+    // (mode public seulement) et les chemins TLS sont les seules variables lues,
+    // dans `start()` ; la clé du certificat vit hors du dépôt.
+    const allowedRead =
+      /envValue\(env,\s*"(PORT|HOST|ALLOW_PUBLIC|SCRAPER_TOKEN|TLS_CERT_FILE|TLS_KEY_FILE)"\)/;
     const hits: string[] = [];
     for (const f of listFiles(join(ROOT, "server"))) {
       for (const line of codeOnly(readFileSync(f, "utf8")).split("\n")) {
@@ -182,8 +183,15 @@ describe("invariants", () => {
     );
   });
 
-  test("I8 closed (#242): envValue n'ouvre que PORT/HOST/TLS_*", () => {
-    const allowed = new Set(["PORT", "HOST", "TLS_CERT_FILE", "TLS_KEY_FILE"]);
+  test("I8 closed (#242): envValue n'ouvre que l'exposition et le jeton public", () => {
+    const allowed = new Set([
+      "PORT",
+      "HOST",
+      "ALLOW_PUBLIC",
+      "SCRAPER_TOKEN",
+      "TLS_CERT_FILE",
+      "TLS_KEY_FILE",
+    ]);
     const keys = new Set<string>();
     for (const f of listFiles(join(ROOT, "server"))) {
       const src = codeOnly(readFileSync(f, "utf8"));

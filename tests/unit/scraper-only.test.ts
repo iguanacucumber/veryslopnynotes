@@ -311,7 +311,7 @@ describe("scraper-only (#209)", () => {
     expect(fake.calls[0]?.opts).not.toHaveProperty("authFile");
   });
 
-  test("I8 : aucun credential lu dans l'environnement (PORT/HOST/TLS seuls, dans start)", async () => {
+  test("I8 : aucune credential métier lue dans l'environnement (exposition + TLS seuls, dans start)", async () => {
     const src = readFileSync(join(ROOT, "server/infrastructure/http.ts"), "utf8");
     const code = src
       .replace(/\/\*[\s\S]*?\*\//g, "\n")
@@ -328,20 +328,7 @@ describe("scraper-only (#209)", () => {
     expect(code).toContain("TLS_KEY_FILE");
   });
 
-  test("sans auth : aucun bearer exigé ni lu sur les routes servies", async () => {
-    const src = readFileSync(join(ROOT, "server/infrastructure/http.ts"), "utf8");
-    const code = src
-      .replace(/\/\*[\s\S]*?\*\//g, "\n")
-      .split("\n")
-      .filter((l) => !l.trim().startsWith("//"))
-      .map((l) => {
-        const idx = l.search(/(?<!:)\/\//);
-        return idx >= 0 ? l.slice(0, idx) : l;
-      })
-      .join("\n");
-    expect(code).not.toMatch(/authorization/i);
-    expect(code).not.toMatch(/bearer/i);
-    // Et le comportement le prouve : 200/400/404 sans aucun en-tête.
+  test("boucle locale sans jeton : aucun bearer exigé sur les routes servies", async () => {
     const app = createApp({ scrape: fakeScrape().scrape });
     expect((await app.handler(new Request("http://127.0.0.1/v1/health"))).status).toBe(200);
     expect((await app.handler(post("/v1/manuals/scrape", scrapeBody()))).status).toBe(200);
