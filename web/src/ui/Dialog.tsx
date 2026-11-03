@@ -1,11 +1,38 @@
 import { useEffect, useId, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { IconClose } from "./icons";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-/** Dialogue modal partagé : pas de portail, l'overlay est `position: fixed` et
- *  aucun ancêtre de l'app ne crée de containing block. */
+// Le dialogue vit hors de `#root` : rendre la racine inerte ne le coupe donc
+// pas. Le compteur garde l'inertie tant qu'un dialogue empilé reste ouvert.
+let openDialogs = 0;
+let rootState: { inert: boolean; hidden: string | null } | null = null;
+
+function inertApp(): void {
+  openDialogs += 1;
+  if (openDialogs > 1) return;
+  const root = document.getElementById("root");
+  if (!root) return;
+  rootState = { inert: root.inert, hidden: root.getAttribute("aria-hidden") };
+  root.inert = true;
+  root.setAttribute("aria-hidden", "true");
+}
+
+function freeApp(): void {
+  openDialogs = Math.max(0, openDialogs - 1);
+  if (openDialogs > 0) return;
+  const root = document.getElementById("root");
+  if (root && rootState) {
+    root.inert = rootState.inert;
+    if (rootState.hidden === null) root.removeAttribute("aria-hidden");
+    else root.setAttribute("aria-hidden", rootState.hidden);
+  }
+  rootState = null;
+}
+
+/** Dialogue modal partagé : portail vers `document.body`, app inerte derrière. */
 export function Dialog({
   open,
   title,
@@ -61,10 +88,12 @@ export function Dialog({
     const panel = panelRef.current;
     const target = panel?.querySelector<HTMLElement>("[data-autofocus]") ?? panel;
     target?.focus();
+    inertApp();
 
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
+      freeApp();
       restoreRef.current?.focus();
     };
   }, [open]);
@@ -94,7 +123,7 @@ export function Dialog({
     }
   }
 
-  return (
+  return createPortal(
     <div
       className="dialog-backdrop"
       onClick={(event) => {
@@ -138,6 +167,7 @@ export function Dialog({
         {children}
         {actions ? <div className="dialog__actions">{actions}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
