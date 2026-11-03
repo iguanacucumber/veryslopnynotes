@@ -10,17 +10,18 @@
   en-tête, cookie, clé privée, entropie) — et le prompt VÉRIFIÉ est celui
   ENVOYÉ (`SafePromptProvider`). Une sortie texte/JSON mal formée est refusée,
   jamais réinterprétée. Le budget de tokens est DÉDUIT du plafond
-  (`MAX_OUTPUT_CHARS` ÷ `CHARS_PER_TOKEN`) selon la densité du français :
-  une réponse demandée tient dans la garde, qui nomme la limite réelle
-  au-delà. L'app appelle OpenRouter en HTTPS, clé dans `Authorization`, jamais le
-  serveur ; un refus ne cite jamais le secret.
+  (`MAX_OUTPUT_CHARS` ÷ `CHARS_PER_TOKEN`) : la garde nomme la limite au-delà. L'app appelle OpenRouter en HTTPS, clé dans `Authorization`, jamais le
+  serveur ; un refus ne cite jamais le secret. Modèle ÉPINGLÉ (allowlist, aucun
+  repli) ; erreurs bornées, sans clé.
 - Test : `tests/unit/kotlin-llm-guard.test.ts`,
   `tests/unit/kotlin-llm-budget.test.ts`,
   `tests/unit/check-architecture-scan.test.ts`,
   `tests/unit/android-llm-catalogue.test.ts`,
+  `tests/unit/android-llm-hardening.test.ts`,
   `tests/unit/android-homework.test.ts`, `tests/unit/android-revision.test.ts`.
 - Commande : `make check`.
-- Emplacement : `android/core/LlmGuard.kt`, `android/data/OpenRouterLlm.kt`.
+- Emplacement : `android/core/LlmGuard.kt`, `android/data/OpenRouterLlm.kt`,
+  `android/data/LlmPolicy.kt`.
 
 <a id="i6"></a>
 

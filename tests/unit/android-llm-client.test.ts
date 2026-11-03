@@ -311,7 +311,7 @@ describe("câblage de l'appel : redirections coupées, une seule reprise", () =>
   test("la reprise est bornée par la taille du corps et la réponse consommée", () => {
     // Le corps est sérialisé une fois, et sa taille décide de la reprise.
     expect(src).toMatch(/val bodyBytes = payload\.toString\(\)\.toByteArray\(Charsets\.UTF_8\)/);
-    expect(send).toContain("retryAllowed(bodyBytes.size, responseConsumed)");
+    expect(send).toContain("retryAllowed(bodyBytes.size, responseConsumed, cancelled)");
     // Tout octet du 2xx consommé ferme la reprise, AVANT la lecture bornée.
     const consumed = send.indexOf("responseConsumed = true");
     const readCall = send.indexOf("readBounded(body.byteStream()");
@@ -324,8 +324,8 @@ describe("câblage de l'appel : redirections coupées, une seule reprise", () =>
     // `LlmCompletion.kt`, exécuté par la parité.
     expect(src).toContain("readCompletion(if (choice == null) 0 else 1, finishReason, content)");
     // `content` doit être une VRAIE chaîne : `optString` rendrait « null ».
-    expect(src).toMatch(/as\? String\)\?\.takeIf \{ it\.isNotBlank\(\) \}/);
-    expect(src).toMatch(/message\?\.opt\("content"\) as\? String/);
+    expect(src).toMatch(/val contentRaw = \(message as\? JSONObject\)\?\.opt\("content"\)/);
+    expect(src).toContain("readCompletionSchema(envelope)");
   });
 
   test("seule une panne de transport est rejouée", () => {
@@ -333,7 +333,7 @@ describe("câblage de l'appel : redirections coupées, une seule reprise", () =>
     expect(send.indexOf("catch (e: LlmError)")).toBeGreaterThan(-1);
     expect(send.indexOf("catch (e: LlmError)")).toBeLessThan(send.indexOf("catch (e: Exception)"));
     expect(send).toMatch(
-      /if \(attempt >= MAX_ATTEMPTS \|\| !retryAllowed\(bodyBytes\.size, responseConsumed\)\)/,
+      /if \(attempt >= MAX_ATTEMPTS \|\| !retryAllowed\(bodyBytes\.size, responseConsumed, cancelled\)\)/,
     );
     // L'analyse de la réponse (garde de format) est HORS de la boucle : une
     // réponse illisible n'est jamais redemandée au fournisseur.

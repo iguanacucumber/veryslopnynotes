@@ -16,16 +16,30 @@
 //       → {"ok":true,"text":"…"} ou {"ok":false,"fault":"EMPTY","message":"…"}
 //   - {"op":"completionMessages"} → les messages de refus (bornés, français)
 //   - {"op":"retry","bytes":2700000,"consumed":false} → {"allowed":false,"max":…}
+//   - {"op":"model","model":"google/gemini-2.5-flash"} → {"allowed":true,"message":…}
+//   - {"op":"envelope","choicesIsArray":true,"choiceCount":1,…} → {"fault":null}
+//   - {"op":"redact","text":"…","key":"sk-or-…"} → {"text":"…[clé]…"}
+//   - {"op":"bounded","text":"…","max":120} → {"text":"…"}
 package fr.veryslopnynotes.llmtransport
 
+import fr.veryslopnynotes.data.CompletionEnvelope
+import fr.veryslopnynotes.data.LLM_ALLOWED_MODELS
 import fr.veryslopnynotes.data.LlmCompletion
 import fr.veryslopnynotes.data.LlmCompletionFault
+import fr.veryslopnynotes.data.MAX_ERROR_CHARS
 import fr.veryslopnynotes.data.MAX_RESPONSE_BYTES
 import fr.veryslopnynotes.data.MAX_RETRY_BODY_BYTES
+import fr.veryslopnynotes.data.MODEL_REFUSED_MESSAGE
+import fr.veryslopnynotes.data.PINNED_TEXT_MODEL
+import fr.veryslopnynotes.data.PINNED_VISION_MODEL
 import fr.veryslopnynotes.data.ResponseTooLargeException
+import fr.veryslopnynotes.data.boundedMessage
 import fr.veryslopnynotes.data.classifyTransportError
+import fr.veryslopnynotes.data.isAllowedModel
 import fr.veryslopnynotes.data.readBounded
 import fr.veryslopnynotes.data.readCompletion
+import fr.veryslopnynotes.data.readCompletionSchema
+import fr.veryslopnynotes.data.redactKey
 import fr.veryslopnynotes.data.responseTooLargeMessage
 import fr.veryslopnynotes.data.retryAllowed
 import fr.veryslopnynotes.data.transportFaultMessage
@@ -43,6 +57,7 @@ import javax.net.ssl.SSLHandshakeException
 
 private fun JVal.Obj.str(key: String): String? = (fields[key] as? JVal.Str)?.value
 private fun JVal.Obj.num(key: String): Double? = (fields[key] as? JVal.Num)?.value
+private fun JVal.Obj.bool(key: String): Boolean? = (fields[key] as? JVal.Bool)?.value
 private fun JVal.Obj.requireStr(key: String): String =
     str(key) ?: throw IllegalArgumentException("pilote: $key absent")
 
@@ -87,7 +102,43 @@ private fun handle(op: JVal.Obj): String = when (val name = op.requireStr("op"))
     "constants" -> ok(
         "maxResponseBytes" to JVal.Num(MAX_RESPONSE_BYTES.toDouble()),
         "maxRetryBodyBytes" to JVal.Num(MAX_RETRY_BODY_BYTES.toDouble()),
+        "maxErrorChars" to JVal.Num(MAX_ERROR_CHARS.toDouble()),
+        "textModel" to JVal.Str(PINNED_TEXT_MODEL),
+        "visionModel" to JVal.Str(PINNED_VISION_MODEL),
+        "allowedModels" to JVal.Arr(LLM_ALLOWED_MODELS.sorted().map { JVal.Str(it) }),
     )
+
+    "model" -> {
+        val model = op.requireStr("model")
+        ok(
+            "allowed" to JVal.Bool(isAllowedModel(model)),
+            "message" to JVal.Str(MODEL_REFUSED_MESSAGE),
+        )
+    }
+
+    "envelope" -> {
+        val envelope = CompletionEnvelope(
+            choicesIsArray = op.bool("choicesIsArray") ?: true,
+            choiceCount = op.num("choiceCount")?.toInt() ?: 1,
+            messageIsObject = op.bool("messageIsObject") ?: true,
+            finishReasonIsText = op.bool("finishReasonIsText") ?: true,
+            contentIsText = op.bool("contentIsText") ?: true,
+        )
+        val fault = readCompletionSchema(envelope)
+        ok("fault" to (fault?.let { JVal.Str(it.name) } ?: JVal.Null))
+    }
+
+    "redact" -> {
+        val text = op.requireStr("text")
+        val key = op.requireStr("key")
+        ok("text" to JVal.Str(redactKey(text, key)))
+    }
+
+    "bounded" -> {
+        val text = op.requireStr("text")
+        val max = op.num("max")?.toInt() ?: MAX_ERROR_CHARS
+        ok("text" to JVal.Str(boundedMessage(text, max)))
+    }
 
     "completion" -> {
         val choices = op.num("choices")?.toInt() ?: 0
@@ -111,9 +162,10 @@ private fun handle(op: JVal.Obj): String = when (val name = op.requireStr("op"))
 
     "retry" -> {
         val bytes = op.num("bytes")?.toInt() ?: throw IllegalArgumentException("pilote: bytes absent")
-        val consumed = (op.fields["consumed"] as? JVal.Bool)?.value ?: false
+        val consumed = op.bool("consumed") ?: false
+        val cancelled = op.bool("cancelled") ?: false
         ok(
-            "allowed" to JVal.Bool(retryAllowed(bytes, consumed)),
+            "allowed" to JVal.Bool(retryAllowed(bytes, consumed, cancelled)),
             "max" to JVal.Num(MAX_RETRY_BODY_BYTES.toDouble()),
         )
     }

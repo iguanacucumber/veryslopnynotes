@@ -19,6 +19,7 @@ import fr.veryslopnynotes.core.SecretDetectedException
 import fr.veryslopnynotes.core.VisionImage
 import fr.veryslopnynotes.core.assertNoSecretsInPrompt
 import fr.veryslopnynotes.core.secretRefusalMessage
+import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -26,6 +27,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.UnknownHostException
+import java.util.Collections
 import java.util.concurrent.TimeUnit
 
 // LLM OpenRouter sur l'appareil — adaptateur LlmProvider.
@@ -43,15 +45,12 @@ import java.util.concurrent.TimeUnit
 
 // Erreur LLM : le message est DEJA affichable (borné, français, sans clé ni
 // URL). `status` = code HTTP du fournisseur quand la cause est HTTP
-// (null = réseau ou garde locale).
-class LlmError(message: String, val status: Int? = null) : Exception(message) {
+// (null = réseau, annulation ou garde locale).
+class LlmError(message: String, val status: Int? = null) : Exception(boundedMessage(message)) {
     // Message pour l'UI : borné, jamais le corps de réponse brut du fournisseur.
-    val userMessage: String = message.take(MAX_ERROR_CHARS)
+    val userMessage: String = boundedMessage(message)
 
     companion object {
-        // Longueur max affichée : au-delà on tronque (jamais de vidage de corps).
-        const val MAX_ERROR_CHARS = 120
-
         // Une CAUSE par message : 401 clé refusée, 402 crédits, 404 modèle absent
         // du catalogue, 429 quota, sinon HTTP générique. Jamais la clé, jamais
         // l'URL : le message part tel quel à l'UI.
@@ -68,7 +67,7 @@ class LlmError(message: String, val status: Int? = null) : Exception(message) {
 }
 
 class OpenRouterLlm(
-    private val model: String = LLM_DEFAULT_MODEL,
+    private val model: String = PINNED_TEXT_MODEL,
     timeoutMs: Long = DEFAULT_TIMEOUT_MS,
     // Client NU impose par l'appelant (jamais api.client() : son intercepteur
     // 401 confondrait « cle LLM refusee » avec « session d'appareil perdue »
@@ -77,12 +76,18 @@ class OpenRouterLlm(
     // pool et dispatcher sans reprendre les intercepteurs. Défaut = client
     // vierge (l'UI n'a pas à construire d'OkHttpClient elle-même).
     client: OkHttpClient = OkHttpClient(),
-    // Modèle VISION distinct : le modèle texte par défaut (Nemotron
-    // Lightning) n'accepte pas les images. `google/gemma-4-31b-it:free` est
-    // multimodal et gratuit ; il ne sert QU'aux photos.
-    private val visionModel: String = LLM_VISION_MODEL,
+    // Modèle VISION distinct, épinglé dans `LlmPolicy.kt` : le modèle texte
+    // n'est pas garanti multimodal. Il ne sert QU'aux photos.
+    private val visionModel: String = PINNED_VISION_MODEL,
 ) : SafePromptProvider, SafeVisionPromptProvider {
     private val timeout = normalizeTimeoutMs(timeoutMs)
+
+    // Appels en vol : `cancel()` les coupe sans attendre le délai réseau. Un
+    // appel annulé ne repart pas (voir `retryAllowed`).
+    private val inFlight: MutableSet<Call> = Collections.synchronizedSet(mutableSetOf<Call>())
+
+    @Volatile
+    private var cancelled = false
 
     // Budget TOTAL de l'appel réparti sur les DEUX tentatives : une reprise ne
     // double donc jamais l'attente de l'appelant. Le pont attend STRICTEMENT
@@ -101,7 +106,22 @@ class OpenRouterLlm(
         .build()
 
     init {
-        if (model.isBlank() || visionModel.isBlank()) throw LlmError("Configuration LLM incomplète.")
+        // Allowlist ÉPINGLÉE : un modèle inconnu est refusé, jamais remplacé
+        // par le défaut (la clé de l'utilisateur paierait un autre modèle).
+        if (!isAllowedModel(model) || !isAllowedModel(visionModel)) {
+            throw LlmError(MODEL_REFUSED_MESSAGE)
+        }
+    }
+
+    /**
+     * Annule les appels en vol de CETTE instance et interdit tout nouvel envoi.
+     * L'appelant qui abandonne un devoir n'attend pas le délai réseau complet.
+     */
+    fun cancel() {
+        cancelled = true
+        // Copie sous verrou : `cancel()` peut courir avec une fin d'appel.
+        val calls = synchronized(inFlight) { inFlight.toList() }
+        for (call in calls) call.cancel()
     }
 
     // Envoie le SafePrompt DEJA valide par la garde (nonce de l'appelant preserve
@@ -183,6 +203,7 @@ class OpenRouterLlm(
 
     /** Envoi HTTPS + cause d'erreur bornée. Seule la clé est interpolée (Bearer). */
     private fun send(payload: JSONObject, key: String): String {
+        if (cancelled) throw LlmError(CANCELLED_MESSAGE)
         // Corps sérialisé UNE fois : sa taille décide de la reprise, et un
         // second POST identique ne doit pas re-encoder un corps de plusieurs Mio.
         val bodyBytes = payload.toString().toByteArray(Charsets.UTF_8)
@@ -204,8 +225,12 @@ class OpenRouterLlm(
             // Tout octet d'un corps 2xx consommé interdit la reprise : la
             // complétion est peut-être déjà produite (et facturée).
             var responseConsumed = false
+            val call = http.newCall(request)
+            inFlight.add(call)
             try {
-                http.newCall(request).execute().use { res ->
+                call.execute().use { res ->
+                    // Annulation pendant l'attente : la réponse n'est pas lue.
+                    if (cancelled) throw LlmError(CANCELLED_MESSAGE)
                     if (!res.isSuccessful) throw LlmError.forStatus(res.code)
                     val body = res.body ?: return ""
                     responseConsumed = true
@@ -218,40 +243,50 @@ class OpenRouterLlm(
                     }
                 }
             } catch (e: LlmError) {
-                // Statut HTTP, corps démesuré, garde locale : JAMAIS rejoués.
+                // Statut HTTP, corps démesuré, annulation, garde locale : JAMAIS rejoués.
                 throw e
             } catch (e: Exception) {
+                // Une annulation se traduit par une erreur OkHttp : elle ne
+                // repart pas, même si le corps est petit et jamais consommé.
+                if (cancelled) throw LlmError(CANCELLED_MESSAGE)
                 // UNE SEULE reprise, et seulement pour une panne de TRANSPORT
                 // d'un petit corps (le prompt est peut-être parti : la réponse
                 // manque). Un corps vision de plusieurs Mio ou une réponse
                 // entamée ne sont jamais re-POSTés.
-                if (attempt >= MAX_ATTEMPTS || !retryAllowed(bodyBytes.size, responseConsumed)) {
-                    throw transportError(e)
+                if (attempt >= MAX_ATTEMPTS || !retryAllowed(bodyBytes.size, responseConsumed, cancelled)) {
+                    throw transportError(e, key)
                 }
+            } finally {
+                inFlight.remove(call)
             }
         }
     }
 
-    /** Panne de transport -> erreur affichable : un délai n'est pas un réseau coupé. */
-    private fun transportError(e: Exception): LlmError {
+    /**
+     * Panne de transport -> erreur affichable : un délai n'est pas un réseau coupé.
+     * [key] ne sert qu'à retirer la clé d'un éventuel texte recopié.
+     */
+    private fun transportError(e: Exception, key: String): LlmError {
         // DNS d'abord : « réseau » générique n'aide pas à corriger un Wi-Fi
         // sans résolution ; le message ne nomme jamais l'hôte.
         var cause: Throwable? = e
         while (cause != null) {
             if (cause is UnknownHostException) {
-                return LlmError("Connexion internet indisponible : vérifie le réseau, puis réessaie.")
+                return LlmError(
+                    redactKey("Connexion internet indisponible : vérifie le réseau, puis réessaie.", key),
+                )
             }
             cause = cause.cause
         }
-        return LlmError(transportFaultMessage(classifyTransportError(e)))
+        return LlmError(redactKey(transportFaultMessage(classifyTransportError(e)), key))
     }
 
     /**
-     * Décode l'enveloppe `choices` puis délègue le verdict à la règle PURE
-     * [readCompletion] (parité Kotlin). `optString` seul est piégeux sur
-     * Android : il rend la chaîne `"null"` pour un JSON `null`, et un
-     * `content` en tableau n'est pas un texte. On lit donc la valeur BRUTE
-     * (`opt`) et on n'accepte qu'une `String`.
+     * Décode l'enveloppe `choices`, REFUSE un schéma inattendu, puis délègue le
+     * verdict à la règle PURE [readCompletion] (parité Kotlin). `optString`
+     * seul est piégeux sur Android : il rend la chaîne `"null"` pour un JSON
+     * `null`. On lit donc la valeur BRUTE (`opt`), et un type non textuel est
+     * un refus de schéma, jamais un texte vide (I14).
      */
     private fun parseCompletion(bodyText: String): String {
         val root = try {
@@ -259,34 +294,30 @@ class OpenRouterLlm(
         } catch (_: Exception) {
             throw LlmError(LlmCompletionFault.UNREADABLE.message)
         }
-        val choice = root.optJSONArray("choices")?.optJSONObject(0)
-        val message = choice?.optJSONObject("message")
-        // Un tableau (ou un objet) n'est pas une réponse : traité comme absent.
-        val content = message?.opt("content") as? String
-        val finishReason = (choice?.opt("finish_reason") as? String)?.takeIf { it.isNotBlank() }
+        val choices = root.opt("choices")
+        val choice = (choices as? JSONArray)?.optJSONObject(0)
+        val message = choice?.opt("message")
+        val finishRaw = choice?.opt("finish_reason")
+        val contentRaw = (message as? JSONObject)?.opt("content")
+        val envelope = CompletionEnvelope(
+            choicesIsArray = choices is JSONArray,
+            choiceCount = (choices as? JSONArray)?.length() ?: 0,
+            messageIsObject = message is JSONObject,
+            finishReasonIsText = isTextOrAbsent(finishRaw),
+            contentIsText = isTextOrAbsent(contentRaw),
+        )
+        readCompletionSchema(envelope)?.let { throw LlmError(it.message) }
+        val content = contentRaw as? String
+        val finishReason = (finishRaw as? String)?.takeIf { it.isNotBlank() }
         return when (val verdict = readCompletion(if (choice == null) 0 else 1, finishReason, content)) {
             is LlmCompletion.Text -> verdict.value
             is LlmCompletion.Refused -> throw LlmError(verdict.fault.message)
         }
     }
 
+    private fun isTextOrAbsent(raw: Any?): Boolean = raw == null || raw === JSONObject.NULL || raw is String
+
     companion object {
-        // Modele texte par defaut : choix de code, PAS un credential (donc pas
-        // d'env). `google/gemini-2.5-flash` est retenu pour la fiabilite du
-        // calcul : les modeles gratuits du catalogue rendaient un resultat
-        // faux une fois sur deux sur le meme DM. Le cout (quelques millièmes
-        // de dollar par devoir) est porte par la cle de l'utilisateur.
-        const val LLM_DEFAULT_MODEL = "google/gemini-2.5-flash"
-
-        // Modèle VISION : le modèle texte par défaut n'est pas garanti
-        // multimodal sur toutes ses variantes. `dots-studio/dots-3-note-preview:free`
-        // est multimodal (text+image), gratuit, au catalogue public — et il
-        // RÉPOND : `google/gemma-4-31b-it:free`, livré avant #604, renvoyait un
-        // 429 « temporarily rate-limited upstream » sur 8 tentatives espacées,
-        // donc le chemin photo était mort. Un modèle séparé évite de dégrader
-        // le texte pour les photos.
-        const val LLM_VISION_MODEL = "dots-studio/dots-3-note-preview:free"
-
         // URL publique du fournisseur, pas une donnee perso/etablissement.
         const val OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
         const val DEFAULT_TIMEOUT_MS = 20_000L
@@ -301,7 +332,7 @@ class OpenRouterLlm(
         const val INVALID_KEY_MESSAGE = "Clé LLM invalide : corrige-la dans Réglages."
 
         // Longueur plausible d'une cle de fournisseur : borne l'appel comme le reste.
-        const val MIN_API_KEY_CHARS = 8
+        const val MIN_API_KEY_CHARS = LLM_MIN_API_KEY_CHARS
 
         private val JSON = "application/json; charset=utf-8".toMediaType()
 

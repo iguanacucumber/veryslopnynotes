@@ -42,8 +42,8 @@ function statusMessages(kotlin: string): Map<string, string> {
 
 describe("android LLM — modèle par défaut au catalogue (#359)", () => {
   test("l'identifiant livré est un modèle connu du catalogue de référence", () => {
-    const kotlin = src(DATA, "OpenRouterLlm.kt");
-    const model = /const val LLM_DEFAULT_MODEL = "([^"]+)"/.exec(kotlin)?.[1];
+    const kotlin = src(DATA, "LlmPolicy.kt");
+    const model = /const val PINNED_TEXT_MODEL = "([^"]+)"/.exec(kotlin)?.[1];
     expect(model).toBeTruthy();
     // Le filet : le modèle par défaut existe VRAIMENT chez le fournisseur.
     expect(KNOWN_MODELS).toContain(model!);
@@ -52,9 +52,9 @@ describe("android LLM — modèle par défaut au catalogue (#359)", () => {
   });
 
   test("le modèle vision est lui aussi au catalogue, et DISTINCT du texte", () => {
-    const kotlin = src(DATA, "OpenRouterLlm.kt");
-    const text = /const val LLM_DEFAULT_MODEL = "([^"]+)"/.exec(kotlin)?.[1];
-    const vision = /const val LLM_VISION_MODEL = "([^"]+)"/.exec(kotlin)?.[1];
+    const kotlin = src(DATA, "LlmPolicy.kt");
+    const text = /const val PINNED_TEXT_MODEL = "([^"]+)"/.exec(kotlin)?.[1];
+    const vision = /const val PINNED_VISION_MODEL = "([^"]+)"/.exec(kotlin)?.[1];
     expect(vision).toBeTruthy();
     expect(KNOWN_MODELS).toContain(vision!);
     // Le modèle texte demandé n'accepte pas les images : constantes distinctes.
@@ -74,7 +74,7 @@ describe("android LLM — modèle par défaut au catalogue (#359)", () => {
   });
 
   test("le modèle par défaut n'est pas un identifiant retiré du catalogue", () => {
-    const kotlin = src(DATA, "OpenRouterLlm.kt");
+    const kotlin = src(DATA, "LlmPolicy.kt") + src(DATA, "OpenRouterLlm.kt");
     // L'ancien identifiant (#359) : ni dans le code, ni dans la liste de référence.
     expect(kotlin).not.toContain("space-bunny-alpha");
     expect(KNOWN_MODELS).not.toContain("stealth/space-bunny-alpha");
@@ -95,7 +95,7 @@ describe("android LLM — une cause par message (#359)", () => {
   });
 
   test("messages bornés, sans secret ni URL", () => {
-    const kotlin = src(DATA, "OpenRouterLlm.kt");
+    const kotlin = src(DATA, "OpenRouterLlm.kt") + src(DATA, "LlmPolicy.kt");
     const max = Number(/const val MAX_ERROR_CHARS = (\d+)/.exec(kotlin)?.[1] ?? "0");
     expect(max).toBeGreaterThan(0);
     const messages = statusMessages(kotlin);

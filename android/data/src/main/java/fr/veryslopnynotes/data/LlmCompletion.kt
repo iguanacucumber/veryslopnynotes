@@ -38,6 +38,35 @@ enum class LlmCompletionFault(val message: String) {
 }
 
 /**
+ * Champs de SCHÉMA lus par l'adaptateur avant toute interprétation.
+ *
+ * Un type inattendu n'est pas « absent » (I14) : `choices` qui n'est pas un
+ * tableau, un message qui n'est pas un objet, un `content` numérique sont des
+ * réponses MAL FORMEES, refusées, jamais converties en texte vide.
+ */
+data class CompletionEnvelope(
+    val choicesIsArray: Boolean,
+    val choiceCount: Int,
+    val messageIsObject: Boolean,
+    /** Absent ou nul = conforme ; toute autre valeur non textuelle = refus. */
+    val finishReasonIsText: Boolean,
+    /** Absent ou nul = conforme ; tableau, objet ou nombre = refus. */
+    val contentIsText: Boolean,
+)
+
+/**
+ * Valide le schéma minimal d'une enveloppe `chat/completions` : `choices`
+ * tableau non vide, `choices[0].message` objet, `finish_reason` et `content`
+ * texte ou nuls. Rend `null` si le schéma tient, sinon la faute nommée.
+ */
+fun readCompletionSchema(envelope: CompletionEnvelope): LlmCompletionFault? {
+    if (!envelope.choicesIsArray || envelope.choiceCount <= 0) return LlmCompletionFault.UNREADABLE
+    if (!envelope.messageIsObject) return LlmCompletionFault.UNREADABLE
+    if (!envelope.finishReasonIsText || !envelope.contentIsText) return LlmCompletionFault.UNREADABLE
+    return null
+}
+
+/**
  * Lit une complétion déjà décodée : [choiceCount] = nombre de choix
  * exploitables (0 si `choices` absent, vide ou sans objet), [finishReason] =
  * valeur texte de `finish_reason` (`null` si absente ou JSON `null`),
