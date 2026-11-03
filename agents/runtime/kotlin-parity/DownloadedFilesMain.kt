@@ -182,11 +182,18 @@ private class Driver {
                 "name" to JVal.Str(found?.name ?: ""),
             )
         }
-        // Cache borné : les fichiers les plus anciens partent.
+        // Budgets du cache des pièces jointes.
+        "budgets" -> ok(
+            "maxFiles" to JVal.Num(DownloadedFiles.MAX_CACHED_FILES.toDouble()),
+            "maxFileBytes" to JVal.Num(DownloadedFiles.MAX_BYTES.toDouble()),
+            "maxCacheBytes" to JVal.Num(DownloadedFiles.MAX_CACHE_BYTES.toDouble()),
+        )
+        // Cache borné : nombre de fichiers ET octets, les plus anciens partent.
         "prune" -> {
             val slot = bench.slot(op)
             val keep = (op.num("keep") ?: 1.0).toInt()
-            val deleted = DownloadedFiles.prune(slot.attachments, keep)
+            val maxBytes = (op.num("maxBytes") ?: DownloadedFiles.MAX_CACHE_BYTES.toDouble()).toLong()
+            val deleted = DownloadedFiles.prune(slot.attachments, keep, maxBytes)
             ok("deleted" to JVal.Num(deleted.toDouble()))
         }
         // Purge directe du cache des téléchargements.
