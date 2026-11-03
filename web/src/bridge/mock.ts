@@ -318,6 +318,19 @@ export async function mockCall<T>(method: string, params: unknown): Promise<T> {
       if (!subject) return ok({ ok: false, message: "Choisis une matière." }) as Promise<T>;
       return ok(ADD_PHOTO_REPLY) as Promise<T>;
     }
+    case "data.export":
+      return ok({
+        ok: true,
+        sections: [
+          { name: "grades", count: 0, skipped: 0 },
+          { name: "notes", count: lessons.length, skipped: 0 },
+          { name: "teacherChat", count: teacherThread.messages.length, skipped: 0 },
+          { name: "manual", count: 0, skipped: 0 },
+          { name: "subjectPrefs", count: prefs.length, skipped: 0 },
+          { name: "newsReadState", count: 0, skipped: 0 },
+        ],
+        withheld: ["sessionToken", "llmKey", "serverUrl", "manualSourceUrl", "credentials"],
+      }) as Promise<T>;
     case "llm.status":
       return ok({ configured: settings.llmConfigured }) as Promise<T>;
     case "llm.saveKey":

@@ -79,6 +79,21 @@ class SyncedRepository(
         store.freshPayloads(resource, now)
     }
 
+    /**
+     * Toutes les entrées en cache, fraîches ou non : un export de portabilité
+     * ne perd pas une note parce que son TTL est dépassé.
+     */
+    fun allPayloads(
+        resource: String,
+        epoch: Long = SessionEpoch.current(),
+    ): EpochRead<List<String>> = SessionEpoch.readIfCurrent(epoch) {
+        try {
+            store.payloads(resource)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     fun isStale(resource: String, entry: CachedEntry, now: Long = clock()): Boolean =
         CachePolicy.isStale(resource, entry.fetchedAt, now)
 

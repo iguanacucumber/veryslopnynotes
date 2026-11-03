@@ -149,6 +149,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // `data` — cache, file d'attente locale, issue de synchronisation.
   join(DATA, "CachePolicy.kt"),
   join(DATA, "CacheScope.kt"),
+  // #857 : l'export portable (format, manifeste, aller-retour, clés
+  // interdites). Fichier PUR : le harnais l'EXÉCUTE au lieu de relire la forme.
+  join(DATA, "DataExport.kt"),
   // #861 : l'inventaire des stores de compte et l'orchestrateur de purge.
   // Fichier PUR : le harnais EXÉCUTE l'ordre, les échecs et les stores absents.
   join(DATA, "AccountPurge.kt"),

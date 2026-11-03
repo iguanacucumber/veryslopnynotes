@@ -57,6 +57,7 @@ const STORE_FILES: Record<string, string[]> = {
   "Attachments.kt": ["attachments"],
   "VsnBridgeHomeworkAi.kt": ["attachments"],
   "VsnBridgeRevision.kt": ["exports"],
+  "VsnBridgeDataExport.kt": ["exports"],
   "PhotoCapture.kt": ["photos"],
   "VsnBridge.kt": ["ui_prefs", "webview", "read_state"],
   "WebViewAccountStorage.kt": ["read_state", "webview"],

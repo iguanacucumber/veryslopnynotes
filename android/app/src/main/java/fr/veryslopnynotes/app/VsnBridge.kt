@@ -99,6 +99,7 @@ private val EPOCH_GUARDED_READS = setOf(
     "lessons.list",
     "lessons.load",
     "lessons.addPhoto",
+    "data.export",
     "teacher.load",
     "llm.askHomework",
     "llm.solvePhoto",
@@ -568,6 +569,7 @@ class VsnBridge(
             "lessons.delete" -> lessonsDelete(p, epoch)
             "lessons.setManual" -> lessonsSetManual(p)
             "lessons.addPhoto" -> lessonsAddPhoto(p, epoch)
+            "data.export" -> dataExport(p, epoch)
             "llm.status" -> JSONObject().put("configured", llmKeys.isConfigured())
             "llm.saveKey" -> saveLlmKey(p)
             "llm.forgetKey" -> {
@@ -1051,6 +1053,32 @@ class VsnBridge(
                 activity.startActivity(intent)
             } catch (_: Exception) {
                 // Course avec la désinstallation du seul ouvreur : rien à afficher.
+            }
+        }
+        return null
+    }
+
+    /** `null` = le sélecteur de partage a été lancé ; sinon le refus lisible. */
+    internal fun shareFile(file: File, mime: String, title: String): String? {
+        val uri = try {
+            FileProvider.getUriForFile(
+                activity,
+                attachmentProviderAuthority(BuildConfig.APPLICATION_ID),
+                file,
+            )
+        } catch (_: Exception) {
+            return "Export préparé, mais le partage Android est indisponible."
+        }
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = mime
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        activity.runOnUiThread {
+            try {
+                activity.startActivity(Intent.createChooser(send, title))
+            } catch (_: Exception) {
+                // Aucun sélecteur : l'utilisateur peut réessayer, rien n'est perdu.
             }
         }
         return null

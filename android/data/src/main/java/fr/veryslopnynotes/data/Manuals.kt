@@ -357,6 +357,42 @@ class ManualStore(context: Context) {
         }
     }
 
+    /**
+     * Donnée du manuel pour l'export : classe, matières, extraits. L'ADRESSE
+     * (`KEY_URL`) n'en fait pas partie — elle peut nommer un hôte choisi par
+     * l'utilisateur, et l'export quitte l'appareil.
+     */
+    fun exportSnapshot(): ManualSnapshot = lock.run {
+        try {
+            val obj = data()
+            val map = docs(obj)
+            val out = ArrayList<ManualDocSnapshot>()
+            val keys = map.keys()
+            while (keys.hasNext() && out.size < MAX_DOCS) {
+                val item = map.optJSONObject(keys.next()) ?: continue
+                val doc = ManualDoc(
+                    title = item.optString("title").trim(),
+                    subject = item.optString("subject").trim(),
+                    page = item.optInt("page", 0),
+                    excerpt = item.optString("excerpt").trim(),
+                )
+                if (doc.isValid()) {
+                    out.add(ManualDocSnapshot(doc.title, doc.subject, doc.page, doc.excerpt))
+                }
+            }
+            ManualSnapshot(
+                classLabel = storedClassLabel(obj),
+                subjects = storedSubjects(obj),
+                disabledSubjects = disabledSubjects(obj).toList(),
+                docs = out,
+            )
+        } catch (e: LocalDataUnreadable) {
+            throw e
+        } catch (_: Exception) {
+            ManualSnapshot("", emptyList(), emptyList(), emptyList())
+        }
+    }
+
     private fun docs(): JSONObject = storage(JSONObject()) { docs(data()) }
 
     private fun docs(obj: JSONObject): JSONObject = try {
