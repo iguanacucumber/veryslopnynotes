@@ -128,7 +128,7 @@ describe("messagerie : un fil illisible est une ERREUR, pas un fil vide (#537)",
 // zéro fil et `error = null`. Le pont doit lever `unavailable` (I14).
 describe("pont messages — un échec est une ERREUR, jamais zéro fil (#783)", () => {
   const bridge = readBridgeSource();
-  const listStart = bridge.indexOf("internal fun VsnBridge.messagesList()");
+  const listStart = bridge.indexOf("internal fun VsnBridge.messagesList(");
   const threadStart = bridge.indexOf("internal fun VsnBridge.messagesThread(");
   const replyStart = bridge.indexOf("internal fun VsnBridge.messagesReply(");
   const list = bridge.slice(listStart, threadStart);

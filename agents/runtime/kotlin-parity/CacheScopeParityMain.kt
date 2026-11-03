@@ -9,6 +9,7 @@ import fr.veryslopnynotes.data.AccountIdentity
 import fr.veryslopnynotes.data.CacheScope
 import fr.veryslopnynotes.data.CacheStore
 import fr.veryslopnynotes.data.CacheSwitch
+import fr.veryslopnynotes.data.EpochRead
 import fr.veryslopnynotes.data.FileCacheStore
 import fr.veryslopnynotes.data.SessionEpoch
 import fr.veryslopnynotes.pronote.JVal
@@ -171,6 +172,41 @@ private class Driver {
         "epoch" -> ok("epoch" to JVal.Num(SessionEpoch.current().toDouble()))
         // Début d'une lecture : l'époque est capturée AVANT la lecture locale.
         "readBegin" -> ok("epoch" to JVal.Num(SessionEpoch.current().toDouble()))
+        // Lecture de cache gardée par l'époque capturée : après une bascule,
+        // l'ancienne lecture ne rend AUCUNE donnée.
+        "readIfCurrent" -> {
+            val slot = bench.slot(op)
+            val epoch = (op.num("epoch") ?: 0.0).toLong()
+            val resource = op.str("resource") ?: throw IllegalArgumentException("pilote: resource absent")
+            when (val read = SessionEpoch.readIfCurrent(epoch) {
+                slot.store.load(resource, op.str("query") ?: "")
+            }) {
+                is EpochRead.Current -> {
+                    val entry = read.value
+                    if (entry == null) {
+                        ok("stale" to JVal.Bool(false), "found" to JVal.Bool(false))
+                    } else {
+                        ok(
+                            "stale" to JVal.Bool(false),
+                            "found" to JVal.Bool(true),
+                            "payload" to JVal.Str(entry.payload),
+                        )
+                    }
+                }
+                EpochRead.Stale -> ok("stale" to JVal.Bool(true), "found" to JVal.Bool(false))
+            }
+        }
+        // Livraison gardée : le contrôle et la livraison sont dans la même
+        // section critique d'époque.
+        "deliverIfCurrent" -> {
+            val epoch = (op.num("epoch") ?: 0.0).toLong()
+            var delivered = false
+            val read = SessionEpoch.readIfCurrent(epoch) { delivered = true }
+            ok(
+                "stale" to JVal.Bool(read !is EpochRead.Current),
+                "delivered" to JVal.Bool(delivered && read is EpochRead.Current),
+            )
+        }
         // Fin de lecture : l'écriture est gardée par l'époque capturée.
         "readEnd" -> {
             val slot = bench.slot(op)

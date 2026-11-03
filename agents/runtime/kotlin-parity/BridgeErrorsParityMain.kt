@@ -9,6 +9,7 @@ import fr.veryslopnynotes.app.BridgeFailure
 import fr.veryslopnynotes.app.bridgeCallOutcome
 import fr.veryslopnynotes.app.bridgeErrorFor
 import fr.veryslopnynotes.data.LocalDataUnreadable
+import fr.veryslopnynotes.data.StaleSessionRead
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
 import java.io.BufferedReader
@@ -30,6 +31,7 @@ private fun throwableFor(kind: String, message: String): Throwable = when (kind)
     "runtime" -> RuntimeException(message)
     "bridge_failure" -> BridgeFailure("bad_request", message)
     "local_data" -> LocalDataUnreadable()
+    "stale_session" -> StaleSessionRead()
     else -> throw IllegalArgumentException("pilote: genre inconnu : $kind")
 }
 

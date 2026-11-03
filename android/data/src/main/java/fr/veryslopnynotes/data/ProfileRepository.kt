@@ -17,6 +17,8 @@ sealed interface PhotoState {
 sealed interface MeResult {
     data class Ok(val profile: UserProfile?) : MeResult
     data class Err(val message: String) : MeResult
+    /** Session changée pendant la lecture : ce profil n'est pas le compte courant. */
+    data object Stale : MeResult
 }
 
 // Jamais d'adresse d'établissement dans l'app, jamais de WebView.
@@ -31,30 +33,34 @@ class ProfileRepository(
     private val schoolTime: Clock = schoolClock(),
 ) {
     /** Le profil n'est jamais écrit sur disque. */
-    fun fetchMe(cb: (MeResult) -> Unit) {
+    fun fetchMe(epoch: Long = SessionEpoch.current(), cb: (MeResult) -> Unit) {
         ClientQueue.submitUnit(
             key = "profile-me|",
             work = {
+            if (!SessionEpoch.isCurrent(epoch)) {
+                post(epoch, cb, MeResult.Stale, MeResult.Stale)
+                return@submitUnit
+            }
             val client = provider()
             if (client == null) {
                 // Sans session : mode anonyme, état vide — jamais d'écran
                 // d'erreur plein écran.
-                post(cb, MeResult.Ok(null))
+                post(epoch, cb, MeResult.Stale, MeResult.Ok(null))
                 return@submitUnit
             }
             try {
                 // user null = infos non publiées, pas une erreur.
-                post(cb, MeResult.Ok(parse(mePayload(client, schoolTime))))
+                post(epoch, cb, MeResult.Stale, MeResult.Ok(parse(mePayload(client, schoolTime))))
             } catch (e: Exception) {
                 if (isSessionFailure(e)) {
                     DeviceAuth.reject()
-                    post(cb, MeResult.Err(DeviceAuth.REJECTED_MESSAGE))
+                    post(epoch, cb, MeResult.Stale, MeResult.Err(DeviceAuth.REJECTED_MESSAGE))
                 } else {
-                    post(cb, MeResult.Ok(null))
+                    post(epoch, cb, MeResult.Stale, MeResult.Ok(null))
                 }
             }
             },
-            onFailure = { post(cb, MeResult.Ok(null)) },
+            onFailure = { post(epoch, cb, MeResult.Stale, MeResult.Ok(null)) },
         )
     }
 
@@ -62,32 +68,40 @@ class ProfileRepository(
      * Photo lue depuis la réf opaque `photo:<id>` (jamais une URL d'établissement).
      * Réf absente/invalide ou échec = null, l'UI affiche les initiales.
      */
-    fun fetchPhoto(profile: UserProfile, cb: (Bitmap?) -> Unit) {
+    fun fetchPhoto(epoch: Long = SessionEpoch.current(), profile: UserProfile, cb: (Bitmap?) -> Unit) {
         ClientQueue.submitUnit(
             key = "profile-photo|${profile.photoRef}",
             work = {
+            if (!SessionEpoch.isCurrent(epoch)) {
+                post(epoch, cb, null, null)
+                return@submitUnit
+            }
             val bytes = try {
-                val client = provider() ?: return@submitUnit post(cb, null)
+                val client = provider() ?: return@submitUnit post(epoch, cb, null, null)
                 val ref = profile.photoRef.trim()
-                if (!UserProfileRules.isValidPhotoRef(ref)) return@submitUnit post(cb, null)
+                if (!UserProfileRules.isValidPhotoRef(ref)) return@submitUnit post(epoch, cb, null, null)
                 val wantId = ref.removePrefix("photo:")
                 val pic = client.info.profilePicture
-                if (pic == null || pic.id != wantId) return@submitUnit post(cb, null)
+                if (pic == null || pic.id != wantId) return@submitUnit post(epoch, cb, null, null)
                 pic.data()
             } catch (_: Exception) {
-                return@submitUnit post(cb, null)
+                return@submitUnit post(epoch, cb, null, null)
             }
-            post(cb, decodePhoto(bytes))
+            post(epoch, cb, null, decodePhoto(bytes))
             },
-            onFailure = { post(cb, null) },
+            onFailure = { post(epoch, cb, null, null) },
         )
     }
 
-    private fun <T> post(cb: (T) -> Unit, value: T) {
+    /** Livre [value] seulement si l'époque n'a pas changé ; sinon [stale]. */
+    private fun <T> post(epoch: Long, cb: (T) -> Unit, stale: T, value: T) {
+        val deliver = {
+            if (SessionEpoch.isCurrent(epoch)) cb(value) else cb(stale)
+        }
         try {
-            main.post { cb(value) }
+            main.post(deliver)
         } catch (_: Exception) {
-            cb(value)
+            deliver()
         }
     }
 

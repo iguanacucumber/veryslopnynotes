@@ -15,7 +15,7 @@ if (!skip) {
 }
 
 /** Les codes de rejet que l'UI sait traiter (`web/src/bridge/types.ts`). */
-const CODES = new Set(["auth_required", "bad_request", "unavailable", "unknown"]);
+const CODES = new Set(["auth_required", "bad_request", "unavailable", "unknown", "stale_session"]);
 
 /** Les genres d'échec natif que le pont doit savoir traduire. */
 const GENRES = ["error", "out_of_memory", "stack_overflow", "runtime"] as const;
@@ -95,5 +95,13 @@ describe("pont : un échec natif devient toujours un rejet (#394)", () => {
     const rejet = await traduction("local_data");
     expect(rejet.code).toBe("unknown");
     expect((rejet.message ?? "").toLowerCase()).toContain("données locales illisibles");
+  });
+
+  test.skipIf(skip)("une lecture d'une session révolue est un rejet TYPÉ, jamais un résultat", async () => {
+    // Un code dédié : l'UI ne confond ni avec une session morte ni avec un réseau KO.
+    const rejet = await traduction("stale_session");
+    expect(rejet.code).toBe("stale_session");
+    expect(rejet.message).toBe("Session modifiée : résultat ignoré, recharge.");
+    expect(CODES.has(rejet.code ?? "")).toBe(true);
   });
 });

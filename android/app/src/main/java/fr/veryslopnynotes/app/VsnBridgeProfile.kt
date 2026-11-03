@@ -7,15 +7,22 @@ import fr.veryslopnynotes.core.UserProfile
 import fr.veryslopnynotes.data.MeResult
 import fr.veryslopnynotes.data.PhotoState
 import fr.veryslopnynotes.data.ProfileRepository
+import fr.veryslopnynotes.data.SessionEpoch
+import fr.veryslopnynotes.data.StaleSessionRead
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
-internal fun VsnBridge.profileMe(timeoutMs: Long = BridgeTimeouts.AWAIT_DEFAULT_MS): JSONObject {
-    val result = await<MeResult>(timeoutMs) { cb -> profileRepo.fetchMe(cb) }
+internal fun VsnBridge.profileMe(
+    epoch: Long = SessionEpoch.current(),
+    timeoutMs: Long = BridgeTimeouts.AWAIT_DEFAULT_MS,
+): JSONObject {
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
+    val result = await<MeResult>(timeoutMs) { cb -> profileRepo.fetchMe(epoch, cb) }
         ?: throw BridgeFailure("unavailable", "Profil indisponible.")
     return when (result) {
         is MeResult.Ok -> {
+            if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
             cachedProfile = result.profile
             JSONObject()
                 .put("payload", JSONObject().put("user", result.profile?.let { profileJson(it) } ?: JSONObject.NULL).toString())
@@ -26,17 +33,22 @@ internal fun VsnBridge.profileMe(timeoutMs: Long = BridgeTimeouts.AWAIT_DEFAULT_
                 .put("payload", JSONObject.NULL)
                 .put("error", result.message)
         }
+        MeResult.Stale -> throw StaleSessionRead()
     }
 }
 
-internal fun VsnBridge.profilePhoto(): JSONObject {
-    val me = await<MeResult> { cb -> profileRepo.fetchMe(cb) }
+internal fun VsnBridge.profilePhoto(epoch: Long = SessionEpoch.current()): JSONObject {
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
+    val me = await<MeResult> { cb -> profileRepo.fetchMe(epoch, cb) }
+    if (me is MeResult.Stale) throw StaleSessionRead()
     val profile = (me as? MeResult.Ok)?.profile
         ?: return JSONObject().put("dataUrl", JSONObject.NULL)
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     cachedProfile = profile
-    val photo = await<PhotoState> { cb -> profileRepo.fetchPhoto(profile) { bitmap -> cb(bitmap.toState()) } }
+    val photo = await<PhotoState> { cb -> profileRepo.fetchPhoto(epoch, profile) { bitmap -> cb(bitmap.toState()) } }
     val bitmap = (photo as? PhotoState.Loaded)?.bitmap
         ?: return JSONObject().put("dataUrl", JSONObject.NULL)
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     return try {
         val out = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)

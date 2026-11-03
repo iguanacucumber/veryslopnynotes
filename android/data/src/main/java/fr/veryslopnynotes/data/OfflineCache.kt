@@ -141,10 +141,32 @@ class InMemoryCacheStore : CacheStore {
 }
 
 /**
+ * Résultat d'une lecture gardée par l'époque : `Stale` = la session a changé
+ * pendant la lecture, la valeur n'est jamais livrée.
+ */
+sealed interface EpochRead<out T> {
+    data class Current<T>(val value: T) : EpochRead<T>
+    data object Stale : EpochRead<Nothing>
+}
+
+/** Une valeur d'une session révolue serait celle d'un autre compte. */
+class StaleSessionRead : Exception(MESSAGE) {
+    companion object {
+        const val MESSAGE = "Session modifiée : résultat ignoré, recharge."
+    }
+}
+
+/** La valeur si l'époque [observed] est encore la bonne ; sinon erreur typée. */
+fun <T> EpochRead<T>.orStale(): T = when (this) {
+    is EpochRead.Current -> value
+    EpochRead.Stale -> throw StaleSessionRead()
+}
+
+/**
  * Époque de session : compteur monotone qui distingue deux sessions pour le
  * cache. Une lecture capture l'époque AVANT de lire le client local, puis la
- * revérifie juste avant d'écrire : si elle a changé, le payload est abandonné
- * et la purge reste effective.
+ * revérifie juste avant d'écrire ou de livrer : si elle a changé, le payload
+ * est abandonné et la purge reste effective.
  *
  * Invalidation et purge sont dans la MÊME section critique : soit l'écriture
  * précède la purge (qui l'efface), soit la purge précède (l'écriture est
@@ -162,6 +184,9 @@ object SessionEpoch {
 
     /** Époque courante : à capturer au DÉBUT d'une lecture. */
     fun current(): Long = synchronized(lock) { value }
+
+    /** Vrai tant que la session n'a pas changé depuis [observed]. */
+    fun isCurrent(observed: Long): Boolean = synchronized(lock) { value == observed }
 
     /**
      * Invalidation des lectures en vol ET purge du cache, en une seule section
@@ -181,6 +206,14 @@ object SessionEpoch {
      */
     fun <T> writeIfCurrent(observed: Long, write: () -> T): T? =
         synchronized(lock) { if (value == observed) write() else null }
+
+    /**
+     * Lit seulement si [observed] est encore la bonne époque, dans la MÊME
+     * section critique : la purge ne peut pas passer entre le contrôle et la
+     * lecture. `Stale` = résultat d'une autre session, jamais livré.
+     */
+    fun <T> readIfCurrent(observed: Long, read: () -> T): EpochRead<T> =
+        synchronized(lock) { if (value == observed) EpochRead.Current(read()) else EpochRead.Stale }
 }
 
 // Persistance native sans dependance (java.io seul, pas de Room/DataStore).

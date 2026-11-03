@@ -9,8 +9,9 @@
 - Invariant : cache, téléchargements, fiches, préférences et photos sont
   d'UN compte. Purgés au changement de compte et à la session morte — par
   TYPE et code `G`, jamais un mot. Purge, invalidation et bascule
-  sont atomiques et ORDONNÉES : la purge précède la publication, une écriture en
-  vol est abandonnée. `offline/` ne contient que de la donnée de compte ;
+  sont atomiques et ORDONNÉES : la purge précède la publication, lecture
+  ou écriture en vol abandonnée. `offline/` ne contient que de la donnée
+  de compte ;
   déconnexion l'efface. Téléchargements : nom portant l'ID, bornés, purgés
   avec lui. Identité inconnue : purge.
 - Test : `tests/unit/kotlin-account-purge.test.ts`,

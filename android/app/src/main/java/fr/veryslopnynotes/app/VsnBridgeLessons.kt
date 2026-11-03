@@ -13,6 +13,8 @@ import fr.veryslopnynotes.core.transcribeLesson
 import fr.veryslopnynotes.data.LessonNotesWrite
 import fr.veryslopnynotes.data.LlmError
 import fr.veryslopnynotes.data.OpenRouterLlm
+import fr.veryslopnynotes.data.SessionEpoch
+import fr.veryslopnynotes.data.StaleSessionRead
 import fr.veryslopnynotes.data.SubjectPrefs
 import fr.veryslopnynotes.data.manualMatchesSubject
 import org.json.JSONArray
@@ -25,9 +27,10 @@ import fr.veryslopnynotes.app.BridgeTimeouts.AWAIT_PHOTO_MS
 /**
  * Aucune lecture réseau : l'écran s'ouvre même hors ligne.
  */
-internal fun VsnBridge.lessonsList(): JSONObject {
+internal fun VsnBridge.lessonsList(epoch: Long = SessionEpoch.current()): JSONObject {
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     val known = LinkedHashSet<String>()
-    knownSubjects().forEach { known.add(it) }
+    knownSubjects(epoch).forEach { known.add(it) }
     lessons.subjects().forEach { known.add(it) }
     prefsRepo.prefs().forEach { known.add(it.subject) }
     val arr = JSONArray()
@@ -61,10 +64,12 @@ internal fun VsnBridge.lessonsList(): JSONObject {
         .put("maxTitleChars", LessonNote.MAX_TITLE_CHARS)
 }
 
-internal fun VsnBridge.lessonsLoad(p: JSONObject): JSONObject {
+internal fun VsnBridge.lessonsLoad(p: JSONObject, epoch: Long = SessionEpoch.current()): JSONObject {
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     val id = bounded(p.string("id"), LessonNote.MAX_ID_CHARS)
     val note = lessons.find(id)
         ?: return JSONObject().put("ok", false).put("message", "Cours introuvable.")
+    if (!SessionEpoch.isCurrent(epoch)) throw StaleSessionRead()
     return JSONObject().put("ok", true).put("note", lessonJson(note))
 }
 

@@ -134,6 +134,38 @@ describe("le cache n'est jamais servi à un autre compte (#407)", () => {
     expect((await ask({ op: "files", sid })).files).toEqual([]);
     expect((await ask({ op: "load", sid, resource: "grades" })).found).toBe(false);
   });
+
+  test.skipIf(skip)("bascule de compte : une lecture d'AVANT la bascule n'est ni chargée ni livrée", async () => {
+    const store = await ask({ op: "newStore" });
+    const sid = store.sid as number;
+    // Le compte A a laissé une entrée lisible.
+    await ask({ op: "write", sid, resource: "grades", payload: '{"grades":[{"moyenne":15}]}', fetchedAt: 1000 });
+    expect((await ask({ op: "readIfCurrent", epoch: (await ask({ op: "readBegin" })).epoch, sid, resource: "grades" })).found).toBe(true);
+
+    // La lecture A part : elle capture l'époque AVANT de charger.
+    const begin = await ask({ op: "readBegin" });
+    // Le compte B est appairé : purge + époque suivante, même section critique.
+    await ask({ op: "switch", sid, previous: compteA, current: compteB });
+
+    // Fin de lecture A : le chargement est REFUSÉ (stale, aucune donnée).
+    const load = await ask({ op: "readIfCurrent", epoch: begin.epoch, sid, resource: "grades" });
+    expect(load.stale).toBe(true);
+    expect(load.found).toBe(false);
+
+    // Et la livraison est REFUSÉE aussi : l'écran ne voit pas l'ancien payload.
+    const oldPayload = '{"grades":[{"moyenne":15}]}';
+    const delivery = await ask({ op: "deliverIfCurrent", epoch: begin.epoch, payload: oldPayload });
+    expect(delivery.stale).toBe(true);
+    expect(delivery.delivered).toBe(false);
+
+    // Le nouveau compte, lui, lit et livre normalement.
+    const now = await ask({ op: "readBegin" });
+    await ask({ op: "write", sid, resource: "grades", payload: '{"grades":[{"moyenne":18}]}', fetchedAt: 2000 });
+    const fresh = await ask({ op: "readIfCurrent", epoch: now.epoch, sid, resource: "grades" });
+    expect(fresh.stale).toBe(false);
+    expect(fresh.found).toBe(true);
+    expect((await ask({ op: "deliverIfCurrent", epoch: now.epoch, payload: fresh.payload })).delivered).toBe(true);
+  });
 });
 
 // L'ordre (purge AVANT publication) est vérifié sur `CacheScope.switchAccount` exécuté.
@@ -277,7 +309,32 @@ describe("câblage du scopage du cache (#407)", () => {
   // Le pont capture l'époque à l'arrivée : une entrée purgée depuis vient d'un AUTRE compte.
   test("le pont ne sert pas une entrée d'un autre compte", () => {
     expect(bridge).toContain("resourceCached(p, epoch)");
-    expect(bridge).toMatch(/if \(SessionEpoch\.current\(\) != epoch\) return emptyCached\(\)/);
+    // La garde est typée : une lecture d'une session révolue LÈVE, elle ne
+    // rend pas un cache vide qui passerait pour « rien en cache ».
+    expect(bridge).toContain("EPOCH_GUARDED_READS");
+    expect(bridge).toMatch(/if \(!SessionEpoch\.isCurrent\(epoch\)\) throw StaleSessionRead\(\)/);
+    // Livraison sous la même section critique d'époque.
+    expect(bridge).toContain("SessionEpoch.readIfCurrent(epoch)");
+  });
+
+  test("chaque lecture du contrat est dans la liste gardée", () => {
+    for (const method of [
+      "resources.cached",
+      "resources.load",
+      "capabilities.load",
+      "capabilities.refresh",
+      "profile.me",
+      "profile.photo",
+      "messages.list",
+      "messages.thread",
+      "messages.enrich",
+      "messages.recipients",
+      "lessons.list",
+      "lessons.load",
+      "teacher.load",
+    ]) {
+      expect(bridge).toContain(`"${method}"`);
+    }
   });
 
   test("le login ne sort jamais (ni log, ni rapport de crash)", () => {

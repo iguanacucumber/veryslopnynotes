@@ -1,6 +1,7 @@
 package fr.veryslopnynotes.app
 
 import fr.veryslopnynotes.data.LocalDataUnreadable
+import fr.veryslopnynotes.data.StaleSessionRead
 
 // Ce qui sort du pont est un `{code, message}` borné, jamais le message brut
 // d'une exception (il peut nommer un hôte, un compte, une URL).
@@ -14,6 +15,8 @@ data class BridgeError(val code: String, val message: String)
 
 fun bridgeErrorFor(t: Throwable): BridgeError = when {
     t is BridgeFailure -> BridgeError(t.code, t.message ?: "Requête invalide.")
+    // La session a changé : le résultat d'un autre compte ne se livre pas.
+    t is StaleSessionRead -> BridgeError("stale_session", StaleSessionRead.MESSAGE)
     // La phrase est CHOISIE : elle ne nomme ni chemin ni contenu. Une lecture
     // vide ne doit jamais passer pour « rien enregistré » (#910).
     t is LocalDataUnreadable -> BridgeError("unknown", LocalDataUnreadable.MESSAGE)

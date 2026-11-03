@@ -13,10 +13,13 @@ import fr.veryslopnynotes.data.ManualStore
 import fr.veryslopnynotes.data.ManualsClient
 import fr.veryslopnynotes.data.MeResult
 import fr.veryslopnynotes.data.RefreshOutcome
+import fr.veryslopnynotes.data.SessionEpoch
+import fr.veryslopnynotes.data.StaleSessionRead
 import fr.veryslopnynotes.data.SubjectPrefInput
 import fr.veryslopnynotes.data.SubjectPrefRules
 import fr.veryslopnynotes.data.SubjectPrefsWrite
 import fr.veryslopnynotes.data.manualMatchesSubject
+import fr.veryslopnynotes.data.orStale
 import org.json.JSONArray
 import org.json.JSONObject
 import fr.veryslopnynotes.app.VsnBridge.Companion.MANUAL_RETRY_MS
@@ -253,13 +256,13 @@ internal fun VsnBridge.manualDocsFor(subject: String, pages: List<Int>): List<Ma
  * elles servent à deviner les spécialités, jamais à les inventer. Aucun
  * accès réseau ici — hors ligne, la liste est simplement plus courte.
  */
-internal fun VsnBridge.knownSubjects(): List<String> {
+internal fun VsnBridge.knownSubjects(epoch: Long = SessionEpoch.current()): List<String> {
     val out = LinkedHashSet<String>()
     fun add(raw: String) {
         val subject = raw.trim()
         if (subject.isNotEmpty() && subject.length <= 100) out.add(subject)
     }
-    for (payload in repo.payloads(CachePolicy.GRADES)) {
+    for (payload in repo.payloads(CachePolicy.GRADES, epoch = epoch).orStale()) {
         try {
             val root = JSONObject(payload)
             val averages = root.optJSONObject("averages")?.optJSONArray("subjects")
@@ -274,14 +277,14 @@ internal fun VsnBridge.knownSubjects(): List<String> {
             // Payload illisible : il ne prouve aucune matière.
         }
     }
-    for (payload in repo.payloads(CachePolicy.ASSIGNMENTS)) {
+    for (payload in repo.payloads(CachePolicy.ASSIGNMENTS, epoch = epoch).orStale()) {
         try {
             AssignmentsRepository.parse(payload).forEach { add(it.subject) }
         } catch (_: Exception) {
             // Idem : le cache suivant suffira peut-être.
         }
     }
-    for (payload in repo.payloads(CachePolicy.TIMETABLE)) {
+    for (payload in repo.payloads(CachePolicy.TIMETABLE, epoch = epoch).orStale()) {
         try {
             val entries = JSONObject(payload).optJSONArray("entries")
             for (i in 0 until (entries?.length() ?: 0)) {
@@ -297,7 +300,7 @@ internal fun VsnBridge.knownSubjects(): List<String> {
 /** Classe du profil, lue au plus une fois et gardée en mémoire. */
 internal fun VsnBridge.profileClassLabel(): String {
     cachedProfile?.classLabel?.takeIf { it.isNotBlank() }?.let { return it }
-    val result = await<MeResult> { cb -> profileRepo.fetchMe(cb) } ?: return ""
+    val result = await<MeResult> { cb -> profileRepo.fetchMe(SessionEpoch.current(), cb) } ?: return ""
     return when (result) {
         is MeResult.Ok -> {
             cachedProfile = result.profile
@@ -307,6 +310,7 @@ internal fun VsnBridge.profileClassLabel(): String {
             sessionOrThrow(result.message)
             ""
         }
+        MeResult.Stale -> throw StaleSessionRead()
     }
 }
 
@@ -320,19 +324,19 @@ internal fun VsnBridge.loadAssignments(wantedId: String, weekStart: String): Lis
     // #570 : le cache garde une entrée par requête (fenêtre de semaine),
     // donc le même devoir peut être présent dans PLUSIEURS payloads : la
     // fusion est DÉDUPLIQUÉE par identifiant (une entrée par devoir).
-    val fromCache = repo.payloads(CachePolicy.ASSIGNMENTS)
+    val fromCache = repo.payloads(CachePolicy.ASSIGNMENTS).orStale()
         .flatMap { payload -> runCatching { AssignmentsRepository.parse(payload) }.getOrDefault(emptyList()) }
         .distinctBy { it.id }
     if (fromCache.any { it.id == wantedId }) return fromCache
     val query = if (weekStart.isNotEmpty()) "weekStart=$weekStart" else ""
     val outcome = await<RefreshOutcome> { cb ->
-        repo.fetchAsync(CachePolicy.ASSIGNMENTS, query, cb)
+        repo.fetchAsync(CachePolicy.ASSIGNMENTS, query, cb = cb)
     }
     val payload = when (outcome) {
         is RefreshOutcome.Updated -> outcome.payload
         is RefreshOutcome.OfflineFallback -> outcome.payload
         is RefreshOutcome.Failed -> outcome.cachedPayload
-        null -> null
+        RefreshOutcome.Stale, null -> null
     } ?: return emptyList()
     return runCatching { AssignmentsRepository.parse(payload) }.getOrDefault(emptyList())
 }
