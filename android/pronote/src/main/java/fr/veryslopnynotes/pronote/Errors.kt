@@ -16,6 +16,8 @@ open class PronoteAPIError(
      * pas HTTP. CHAMP et non mot du message : « session morte » s'y fie.
      */
     val httpStatus: Int? = null,
+    /** `Retry-After` de la réponse (ms), plancheur du réessai ; `null` = absent. */
+    val retryAfterMs: Long? = null,
 ) : Exception(message)
 
 class ExpiredObject(message: String) : PronoteAPIError(message)

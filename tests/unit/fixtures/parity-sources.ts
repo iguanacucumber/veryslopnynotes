@@ -59,6 +59,9 @@ export const PRODUCTION_SOURCES: string[] = [
   join(PRONOTE, "RateLimitGate.kt"),
   join(PRONOTE, "ReadMemo.kt"),
   join(PRONOTE, "RefreshGate.kt"),
+  // #874 : réessai borné des lectures idempotentes (classes transitoires,
+  // jitter, `Retry-After`, budget). Fichier PUR : le harnais l'EXÉCUTE.
+  join(PRONOTE, "RetryPolicy.kt"),
   join(PRONOTE, "RequestDeadline.kt"),
   join(PRONOTE, "Resolver.kt"),
   join(PRONOTE, "SchoolLifeModels.kt"),

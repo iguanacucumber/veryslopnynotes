@@ -29,13 +29,14 @@
 <a id="i17"></a>
 
 ## I17 — Le rafraîchissement de session est atomique
-- Invariant : le client PRONOTE ne fait JAMAIS deux rafraîchissements à la fois. `post` et `refresh` partagent le moniteur ; `RefreshGate` (CAS) n'en admet qu'un et le relâche en cas d'échec (`finally`). Le perdant réessaie sur la session neuve.
+- Invariant : jamais deux rafraîchissements à la fois. `post` et `refresh` partagent le moniteur ; `RefreshGate` (CAS) n'en admet un et le relâche (`finally`).
 - Seul `401`/`G=10` rouvre la session ; `5xx`, `403` ou `G` inconnu remonte sans login. Une écriture non idempotente (`SaisieMessage`, `SaisieTAFFaitEleve`, `SecurisationCompteDoubleAuth`) n'est jamais rejouée.
-- Un refus de débit (`G=25`/429) n'est jamais une session morte : `RateLimitedError` arme `RateLimitGate` (2 min), aucun refresh n'est tenté. La porte se lève seule.
-- Test : `tests/unit/kotlin-auth-refresh.test.ts`, `tests/unit/kotlin-refresh-gate.test.ts`, `tests/unit/kotlin-rate-limit.test.ts`, `tests/architecture/pronote-refresh.test.ts`.
+- Une LECTURE idempotente (`ReadMemo.READ_FUNCTIONS`) réessaie 5xx/IO transitoires : jitter borné, `Retry-After` plancher, budget total. 4xx, TLS, auth et annulation non.
+- Un refus de débit (`G=25`/429) ≠ session morte : `RateLimitedError` arme `RateLimitGate` (2 min), aucun refresh.
+- Test : `tests/unit/kotlin-auth-refresh.test.ts`, `tests/unit/kotlin-retry.test.ts`, `tests/unit/kotlin-rate-limit.test.ts`, `tests/architecture/pronote-refresh.test.ts`.
 - Commande : `make check`.
 - Emplacement : `android/pronote/src/main/java/fr/veryslopnynotes/pronote/Client.kt`,
-  `android/pronote/src/main/java/fr/veryslopnynotes/pronote/RefreshGate.kt`.
+  `android/pronote/RetryPolicy.kt`, `android/pronote/RefreshGate.kt`.
 
 <a id="i18"></a>
 

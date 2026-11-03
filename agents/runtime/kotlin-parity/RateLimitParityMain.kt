@@ -6,12 +6,14 @@ package fr.veryslopnynotes.ratelimit
 import fr.veryslopnynotes.data.isSessionFailure
 import fr.veryslopnynotes.data.mustPropagateReadFailure
 import fr.veryslopnynotes.pronote.ClientBase
+import fr.veryslopnynotes.pronote.ClientOptions
 import fr.veryslopnynotes.pronote.ExpiredObject
 import fr.veryslopnynotes.pronote.JVal
 import fr.veryslopnynotes.pronote.Json
 import fr.veryslopnynotes.pronote.PronoteAPIError
 import fr.veryslopnynotes.pronote.RateLimitGate
 import fr.veryslopnynotes.pronote.RateLimitedError
+import fr.veryslopnynotes.pronote.RetryPolicy
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintStream
@@ -55,6 +57,7 @@ private class ScriptedClient(
     "https://etablissement.example/pronote/eleve.html",
     "eleve",
     "secret",
+    ClientOptions(retryPolicy = RetryPolicy(sleep = {})),
 ) {
     var sends: Int = 0
     var refreshes: Int = 0

@@ -99,12 +99,13 @@ describe("porte de limitation de débit", () => {
     expect(r.refreshes).toBe(1);
   });
 
-  test.skipIf(skip)("une erreur NON authentifiante ne rafraîchit pas et ne rejoue pas", async () => {
+  test.skipIf(skip)("une erreur NON authentifiante ne rafraîchit pas (le 5xx d'une lecture est réessayé)", async () => {
     const r = await run<ClientResult>("genericNoRefresh");
-    // 5xx : la session est intacte, c'est le backoff de l'appelant qui gère.
-    expect(r.sends).toBe(1);
+    // 5xx : la session est intacte, aucun login ; le réessai borné de la
+    // lecture idempotente repart (pas de refresh).
+    expect(r.sends).toBe(2);
     expect(r.refreshes).toBe(0);
-    expect(r.error).toBe("PronoteAPIError");
+    expect(r.error).toBeNull();
   });
 
   test.skipIf(skip)("les lectures tolérantes remontent rate-limit et session morte", async () => {
