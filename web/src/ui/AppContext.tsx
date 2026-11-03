@@ -77,6 +77,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.dataset["theme"] = dark ? "dark" : "light";
+    // Le bootstrap de `index.html` a posé la barre système avant le rendu ;
+    // un changement de thème à chaud la suit. La couleur vient de `--page`
+    // (tokens.css), jamais d'un littéral dans un composant.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const page = getComputedStyle(document.documentElement).getPropertyValue("--page").trim();
+    if (meta && page) meta.setAttribute("content", page);
   }, [dark]);
 
   // Palette posée en variables CSS sur `<html>` : un seul point d'écriture,
