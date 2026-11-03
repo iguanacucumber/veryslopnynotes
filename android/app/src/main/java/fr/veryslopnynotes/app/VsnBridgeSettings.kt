@@ -4,6 +4,7 @@ import fr.veryslopnynotes.core.Assignment
 import fr.veryslopnynotes.core.ManualCatalog
 import fr.veryslopnynotes.core.ManualUrl
 import fr.veryslopnynotes.core.ManualUrlResult
+import fr.veryslopnynotes.core.ServerConfig
 import fr.veryslopnynotes.data.AssignmentsRepository
 import fr.veryslopnynotes.data.CachePolicy
 import fr.veryslopnynotes.data.ManualDoc
@@ -47,8 +48,13 @@ internal fun VsnBridge.settings(): JSONObject {
 internal fun VsnBridge.saveServer(p: JSONObject): JSONObject {
     var host = bounded(p.string("host"), 300)
     if (!host.contains("://")) {
-        val scheme = if (host.startsWith("localhost") || host.startsWith("10.0.2.2")) "http" else "https"
+        // HTTP n'est inféré qu'en debug ; la release reste HTTPS strict (SEC-01).
+        val scheme = if (BuildConfig.DEBUG) ServerConfig.schemeFor(host) else "https"
         host = "$scheme://$host"
+    }
+    if (!BuildConfig.DEBUG && host.startsWith("http://")) {
+        return JSONObject().put("ok", false)
+            .put("message", "HTTP en clair n'existe que dans les builds de développement : utilisez https.")
     }
     return when (val result = serverStore.save(host)) {
         is fr.veryslopnynotes.core.ServerUrlResult.Ok -> {

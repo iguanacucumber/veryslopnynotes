@@ -105,10 +105,11 @@ session et purge les caches par le chemin existant `PairingRepository.logoutBloc
 server.host=10.0.2.2:3000
 ```
 
-Défaut émulateur `10.0.2.2:3000` (http local). Hors émulateur : HTTPS-only
-(`app/build.gradle.kts` force `https` sauf `10.0.2.2`/`localhost`).
+Défaut émulateur `10.0.2.2:3000` (http local) **en debug seulement** : la
+release part avec une graine vide et HTTPS obligatoire (`app/build.gradle.kts`).
 `./gradlew installDebug` utilise le défaut sans config ; l'utilisateur peut le
-remplacer ensuite depuis l'app.
+remplacer ensuite depuis l'app. Le clair n'est autorisé que par le
+`network_security_config` de `src/debug` ; l'APK publiable l'interdit partout.
 
 ### Certificat de `make runServer` (« Trust anchor … not found »)
 

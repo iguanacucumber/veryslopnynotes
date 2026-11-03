@@ -16,3 +16,8 @@ la section `0.1.0` le jour du tag.
 - Assistant IA local (clé OpenRouter chiffrée) : contenu externe délimité et
   marqué non fiable avant chaque prompt.
 - Scraper de manuels facultatif, HTTPS obligatoire, sans authentification.
+
+### Sécurité
+
+- Release sans adresse de serveur par défaut : le défaut émulateur et le HTTP
+  en clair restent confinés au variant debug (SEC-01).

@@ -110,8 +110,9 @@ make build   # check-secrets + docker build (skip si daemon absent)
    (installable sideload, sans cert custom — ne pas publier comme mise à
    jour d'un APK signé custom, signature différente ; pour Play, fournir une
    vraie upload key, Play App Signing re-signant pour la distribution).
-   `SERVER_HOST` via `local.properties` `server.host` ou env (défaut
-   émulateur `10.0.2.2:3000`, HTTPS-only hors émulateur).
+   `SERVER_HOST` via `local.properties` `server.host` ou env (défaut release
+   VIDE, HTTPS-only ; le défaut émulateur `10.0.2.2:3000` et le clair
+   n'existent que dans `src/debug`).
 4. Vérifier : `apksigner verify --print-certs` (APK), `jarsigner -verify`
    (AAB), aucune clé/secret dans les artefacts,
    `git status` propre (APK/AAB ignorés `*.apk`/`*.aab`).
