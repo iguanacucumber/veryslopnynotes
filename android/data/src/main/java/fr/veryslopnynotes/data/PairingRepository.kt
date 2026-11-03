@@ -2,12 +2,8 @@ package fr.veryslopnynotes.data
 
 import fr.veryslopnynotes.pronote.Client
 import fr.veryslopnynotes.pronote.ClientOptions
-import fr.veryslopnynotes.pronote.MFAError
-import fr.veryslopnynotes.pronote.PronoteAPIError
-import fr.veryslopnynotes.pronote.QRCodeDecryptError
 import fr.veryslopnynotes.pronote.QrCode
 import fr.veryslopnynotes.pronote.QrLoginOptions
-import fr.veryslopnynotes.pronote.RateLimitedError
 import java.io.IOException
 import java.util.UUID
 import org.json.JSONObject
@@ -251,33 +247,13 @@ class PairingRepository(
     }
 
     /**
-     * Erreur d'appairage → phrase actionnable. Jamais « recommence » quand
-     * « rescane » est la réponse, jamais un message brut de la lib (I6).
+     * Erreur d'appairage → cause typée, puis phrase actionnable. Jamais
+     * « recommence » quand « rescane » est la réponse, jamais un message brut
+     * de la lib (I6) et jamais une classification par un mot du message.
      */
     private fun failure(e: Exception): PairingResult.Err {
-        if (e is IOException) {
-            // Jamais le message de l'exception : il peut nommer l'hôte (#396).
-            return PairingResult.Err("network", "Réseau indisponible : vérifie ta connexion, puis réessaie.")
-        }
-        val message = e.message.orEmpty()
-        return when {
-            // Débit limité, pas un compte refusé ni un QR périmé : attendre.
-            // Le TYPE est la voie normale ; le code brut couvre une erreur
-            // construite hors de `Communication`.
-            (e is RateLimitedError) || (e is PronoteAPIError && e.pronoteErrorCode == G_RATE_LIMIT) ->
-                PairingResult.Err("rate_limited", "L'établissement limite les connexions : attends une ou deux minutes, puis réessaie.")
-            e is QRCodeDecryptError ->
-                PairingResult.Err("qr_rejected", "QR ou PIN refusé par l'établissement : rescane le code affiché par son application.")
-            e is MFAError ->
-                PairingResult.Err("mfa_required", "Ce compte exige une vérification supplémentaire que l'app ne prend pas en charge.")
-            // Code d'erreur présent = refus ; le `G` le dit, pas le message.
-            e is PronoteAPIError && e.pronoteErrorCode != null ->
-                PairingResult.Err("login_refused", "Compte refusé par l'établissement : régénère le QR dans son application, puis rescane-le.")
-            isSessionFailure(e) || message.isNotBlank() && isLoginRefused(message) ->
-                PairingResult.Err("login_refused", "Compte refusé par l'établissement : régénère le QR dans son application, puis rescane-le.")
-            else ->
-                PairingResult.Err("school_unreachable", "L'établissement ne répond pas : réessaie dans un instant.")
-        }
+        val cause = pairingFailureCause(e)
+        return PairingResult.Err(cause.code, cause.message)
     }
 
     companion object {
@@ -287,14 +263,6 @@ class PairingRepository(
         fun newUuid(): String = UUID.randomUUID().toString()
     }
 }
-
-/** Message brut qui parle d'identifiants = compte refusé (jamais affiché tel quel). */
-private fun isLoginRefused(message: String): Boolean =
-    Regex("login|credential|username|password|identifiant|refus", RegexOption.IGNORE_CASE)
-        .containsMatchIn(message)
-
-/** `G=25` : « Exceeded max authorization requests » = débit limité, pas un refus. */
-private const val G_RATE_LIMIT = 25
 
 // Miroir de SETUP_* (shared/contracts/api.ts), bornes appliquées à la saisie.
 private const val SCHOOL_QR_FIELD_MAX_CHARS = 1024

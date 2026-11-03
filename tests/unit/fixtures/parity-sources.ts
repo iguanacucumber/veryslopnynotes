@@ -181,6 +181,9 @@ export const PRODUCTION_SOURCES: string[] = [
   join(DATA, "LocalRequestQueue.kt"),
   join(DATA, "OfflineArtifacts.kt"),
   join(DATA, "OfflineCache.kt"),
+  // #877 : la cause TYPÉE d'un échec d'appairage (type d'exception -> code du
+  // pont). Fichier PUR : le harnais l'EXÉCUTE sur une fixture par cause.
+  join(DATA, "PairingFailure.kt"),
   join(DATA, "PronoteSession.kt"),
   join(DATA, "SessionRepair.kt"),
   // `data/SessionGate.kt` : LE verrou d'ouverture/fermeture de session,

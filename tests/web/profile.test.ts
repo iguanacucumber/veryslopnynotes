@@ -313,6 +313,8 @@ describe("appairage : hôte affichable, PIN et codes d'échec", () => {
   test("codes natifs -> phrases actionnables, inconnu -> repli", () => {
     expect(pairErrorMessage("qr_rejected")).toContain("rescane");
     expect(pairErrorMessage("mfa_required")).toContain("vérification supplémentaire");
+    expect(pairErrorMessage("ip_suspended")).toContain("change de réseau");
+    expect(pairErrorMessage("unexpected_page")).toContain("ne mène pas à l'établissement");
     expect(pairErrorMessage("login_refused")).toContain("Compte refusé");
     expect(pairErrorMessage("rate_limited")).toContain("limite");
     expect(pairErrorMessage("school_unreachable")).toContain("ne répond pas");

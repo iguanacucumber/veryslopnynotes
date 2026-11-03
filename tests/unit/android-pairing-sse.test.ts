@@ -180,8 +180,10 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     expect(repo).toContain("sealed interface PairingResult");
     expect(repo).toContain("sealed interface RestoreResult");
     // PIN faux = QR indéchiffrable : message de rescan, jamais le brut I6.
-    expect(repo).toContain("QRCodeDecryptError");
-    expect(repo).toContain("QR ou PIN refusé");
+    // La cause typée vit dans le fichier pur `PairingFailure.kt` (#877).
+    const failure = read(join(DATA, "PairingFailure.kt"));
+    expect(failure).toContain("QRCodeDecryptError");
+    expect(failure).toContain("QR ou PIN refusé");
     // Restauration : jeton mort = store vidé, réseau KO = store gardé.
     expect(repo).toContain("Client.tokenLogin(");
     expect(repo).toContain("RestoreResult.Dead");

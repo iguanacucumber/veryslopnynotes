@@ -80,6 +80,10 @@ export function pairErrorMessage(code: string | undefined): string {
       return "QR ou PIN refusé par l'établissement : rescane le code affiché par son application.";
     case "mfa_required":
       return "Ce compte exige une vérification supplémentaire que l'app ne prend pas en charge.";
+    case "ip_suspended":
+      return "L'établissement bloque l'accès depuis ce réseau : change de réseau (Wi-Fi ou données), puis réessaie.";
+    case "unexpected_page":
+      return "L'adresse du QR ne mène pas à l'établissement : régénère le QR dans son application, puis rescane-le.";
     case "login_refused":
       return "Compte refusé par l'établissement : régénère le QR dans son application, puis rescane-le.";
     case "rate_limited":

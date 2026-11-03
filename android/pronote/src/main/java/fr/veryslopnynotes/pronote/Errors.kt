@@ -21,6 +21,15 @@ open class PronoteAPIError(
 class ExpiredObject(message: String) : PronoteAPIError(message)
 
 /**
+ * L'établissement a suspendu l'accès depuis ce réseau. Ce n'est ni un compte
+ * refusé ni une panne de l'établissement : le geste est de changer de réseau.
+ */
+class IpSuspendedError(message: String = "Your IP address is suspended.") : PronoteAPIError(message)
+
+/** Page HTML sans `Start({…})` : l'URL ne mène pas à Pronote. */
+class UnexpectedPageError(message: String) : PronoteAPIError(message)
+
+/**
  * Type à part : le client ne doit PAS rafraîchir la session pour ce cas — un
  * refresh = un nouveau login = encore plus de requêtes, donc plus de limitation.
  * `pronoteErrorCode` = 25 si `Erreur.G`, `httpStatus` = 429 si refus HTTP ; les

@@ -10,6 +10,7 @@ import { readBridgeSource } from "./fixtures/bridge-source";
 const APP = join(ROOT, "android", "app", "src", "main", "java", "fr", "veryslopnynotes", "app");
 const MESSAGES = join(APP, "PairingMessages.kt");
 const REPO = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data", "PairingRepository.kt");
+const FAILURE = join(ROOT, "android", "data", "src", "main", "java", "fr", "veryslopnynotes", "data", "PairingFailure.kt");
 const DRIVER = join(ROOT, "agents", "runtime", "kotlin-parity", "PairingMessagesParityMain.kt");
 
 const skip = parityToolchain.skipReason !== null;
@@ -28,7 +29,12 @@ async function message(code: string): Promise<string> {
 /** Codes d'échec que la couche `data` produit vraiment (lus dans sa source). */
 function dataCodes(): string[] {
   const src = readFileSync(REPO, "utf8");
-  const codes = [...src.matchAll(/PairingResult\.Err\("([a-z_]+)"/g)].map((m) => m[1]!);
+  const failure = readFileSync(FAILURE, "utf8");
+  const codes = [
+    ...[...src.matchAll(/PairingResult\.Err\("([a-z_]+)"/g)].map((m) => m[1]!),
+    // #877 : les codes viennent aussi de l'enum de causes typées.
+    ...[...failure.matchAll(/^ {4}[A-Z_]+\(\s*"([a-z_]+)"/gm)].map((m) => m[1]!),
+  ];
   return [...new Set(codes)].sort();
 }
 
@@ -89,8 +95,11 @@ describe("message d'appairage borné (#396)", () => {
   test("la couche data n'embarque plus le message d'une exception", () => {
     const repo = readFileSync(REPO, "utf8");
     // `IOException` : le message brut nomme l'hôte de l'établissement.
-    expect(repo).not.toMatch(/PairingResult\.Err\("network",\s*e\.message/);
-    expect(repo).toContain('PairingResult.Err("network", "');
+    expect(repo).not.toContain("val message = e.message");
+    expect(repo).not.toContain(".orEmpty()");
+    // Le code et la phrase viennent de la cause typée (#877), pas de l'exception.
+    expect(repo).toContain("PairingResult.Err(cause.code, cause.message)");
+    expect(readFileSync(FAILURE, "utf8")).toContain('NETWORK("network", "');
   });
 
   test("le pont ne transmet que le code de l'échec", () => {
