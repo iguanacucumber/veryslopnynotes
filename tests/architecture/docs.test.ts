@@ -118,6 +118,23 @@ export function releasePins(md: string): Map<string, string> {
   return pins;
 }
 
+/** `info.version` du contrat OpenAPI : source de vérité du badge README. */
+export function openapiVersion(yaml: string): string | null {
+  const info = /^info:\n((?:[ \t]+\S.*\n|\n)*)/m.exec(yaml)?.[1] ?? "";
+  return /^[ \t]+version:[ \t]*(\S+)/m.exec(info)?.[1] ?? null;
+}
+
+/** Erreurs du badge `contracts` : texte alternatif et URL dérivent de `version`. */
+export function contractBadgeErrors(md: string, version: string): string[] {
+  const badge = /<img alt="Contracts ([^"]*)" src="(https:\/\/img\.shields\.io\/badge\/contracts-[^"]+)">/.exec(md);
+  if (!badge) return ["README : badge contracts introuvable"];
+  const expected = `https://img.shields.io/badge/contracts-${version}-blue.svg`;
+  return [
+    ...(badge[1] === version ? [] : [`README : badge « Contracts ${badge[1]} » ≠ ${version}`]),
+    ...(badge[2] === expected ? [] : [`README : badge src \`${badge[2]}\` ≠ \`${expected}\``]),
+  ];
+}
+
 /**
  * Raccourci documenté dans `OPERATING.md` : `android/<module>/<Fichier>.kt`
  * désigne la source Gradle du module.
@@ -517,6 +534,24 @@ describe("versions épinglées (RELEASE.md)", () => {
     const drift = releasePins(RELEASE.replace("8.3.5 / 6.1.2", "8.3.4 / 6.1.2"));
     expect(drift.get("vite / @vitejs/plugin-react")).toBe("8.3.4 / 6.1.2");
     expect(drift.get("vite / @vitejs/plugin-react")).not.toBe(SOURCES["vite / @vitejs/plugin-react"]!());
+  });
+});
+
+describe("badge contracts du README (#1071)", () => {
+  const version = openapiVersion(read("shared/contracts/api.openapi.yaml"));
+
+  test("le badge annonce la version du contrat OpenAPI", () => {
+    expect(version).not.toBeNull();
+    expect({ bad: contractBadgeErrors(README, version!) }).toEqual({ bad: [] });
+  });
+
+  test("sabotage : une version dérivée dans le badge est rouge", () => {
+    // Une version recopiée à la main dérive : le badge suit le YAML, pas la prose.
+    const url = README.replace(/(badge\/contracts-)[\d.]+/, (_m, prefix: string) => `${prefix}9.9.9`);
+    const alt = README.replace(/alt="Contracts [\d.]+"/, 'alt="Contracts 9.9.9"');
+    expect([url, alt]).not.toEqual([README, README]);
+    expect(contractBadgeErrors(url, version!)).not.toEqual([]);
+    expect(contractBadgeErrors(alt, version!)).not.toEqual([]);
   });
 });
 
