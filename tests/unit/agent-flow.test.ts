@@ -169,6 +169,99 @@ describe("agents/launch.sh (#343)", () => {
   });
 });
 
+describe("agents/protect-main.sh (#963)", () => {
+  const PROTECT = join(ROOT, "agents", "protect-main.sh");
+  const SCRIPT = readFileSync(PROTECT, "utf8");
+  const RULESET = JSON.parse(
+    /RULESET="\$\(cat <<'JSON'\n([\s\S]*?)\nJSON\n\)"/.exec(SCRIPT)![1]!,
+  );
+  const RULES = RULESET.rules as Array<{ type: string; parameters?: { required_status_checks?: Array<{ context: string }> } }>;
+  const CONTEXTS = RULES.flatMap((rule) => rule.parameters?.required_status_checks ?? []).map(
+    (check) => check.context,
+  );
+
+  test("le ruleset exige PR, gate, gitleaks, et refuse force-push et suppression", () => {
+    expect(RULES.map((rule) => rule.type).sort()).toEqual([
+      "deletion",
+      "non_fast_forward",
+      "pull_request",
+      "required_status_checks",
+    ]);
+    expect(CONTEXTS).toEqual(["check", "web-smoke", "gitleaks"]);
+  });
+
+  test("les contextes requis existent comme jobs CI", () => {
+    const workflows = [
+      readFileSync(join(ROOT, ".github", "workflows", "ci.yml"), "utf8"),
+      readFileSync(join(ROOT, ".github", "workflows", "secret-scan.yml"), "utf8"),
+    ].join("\n");
+    for (const context of CONTEXTS) expect(workflows).toContain(`\n  ${context}:\n`);
+  });
+
+  test("la doc et le ruleset ne dérivent pas", () => {
+    for (const path of [
+      "docs/architecture/BRANCH-PROTECTION.md",
+      "CONTRIBUTING.md",
+      "docs/adr/005-rules-and-architecture.md",
+    ]) {
+      const doc = readFileSync(join(ROOT, path), "utf8");
+      for (const context of CONTEXTS) expect({ path, context, cité: doc.includes(context) }).toEqual({
+        path,
+        context,
+        cité: true,
+      });
+    }
+    const protection = readFileSync(join(ROOT, "docs/architecture/BRANCH-PROTECTION.md"), "utf8");
+    expect(protection).toContain("PR obligatoire");
+    expect(protection).toContain("Force-push interdit");
+    expect(protection).toContain("Suppression interdite");
+  });
+
+  function protectFixture(): Fixture {
+    const f = fixture();
+    stub(
+      join(f.bin, "gh"),
+      [
+        "#!/bin/sh",
+        'printf \'gh %s\\n\' "$*" >> "$HARNESS/gh.log"',
+        'if [ "$1 $2" = "api repos/acme/repo/rulesets" ]; then',
+        '  [ -n "$GH_RULESET_ID" ] && printf \'%s\\n\' "$GH_RULESET_ID"',
+        "  exit 0",
+        "fi",
+        'cat > "$HARNESS/ruleset.json"',
+        "exit 0",
+        "",
+      ].join("\n"),
+    );
+    return f;
+  }
+
+  test("met à jour le ruleset existant sans en créer un second", () => {
+    const f = protectFixture();
+    const r = run(["bash", PROTECT], f.work, {
+      ...envFor(f),
+      VSN_REPO: "acme/repo",
+      GH_RULESET_ID: "42",
+    });
+
+    expect(r.code).toBe(0);
+    const gh = readFileSync(join(f.base, "gh.log"), "utf8");
+    expect(gh).toContain("--method PUT repos/acme/repo/rulesets/42");
+    expect(gh).not.toContain("--method POST");
+    expect(JSON.parse(readFileSync(join(f.base, "ruleset.json"), "utf8"))).toEqual(RULESET);
+  });
+
+  test("crée le ruleset quand aucun du nom attendu n'existe", () => {
+    const f = protectFixture();
+    const r = run(["bash", PROTECT], f.work, { ...envFor(f), VSN_REPO: "acme/repo" });
+
+    expect(r.code).toBe(0);
+    const gh = readFileSync(join(f.base, "gh.log"), "utf8");
+    expect(gh).toContain("--method POST repos/acme/repo/rulesets");
+    expect(gh).not.toContain("--method PUT");
+  });
+});
+
 describe("agents/ship.sh (#343, #753, #880)", () => {
   test("rebase, exige la revue du HEAD final, puis push et corps de PR", () => {
     const f = fixture();

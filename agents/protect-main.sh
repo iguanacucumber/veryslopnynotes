@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Applique le ruleset de `main` : PR obligatoire, checks `check` et `web-smoke`
-# requis, suppression et force-push interdits. Idempotent.
+# Applique le ruleset de `main` : PR obligatoire, checks `check`, `web-smoke`
+# et `gitleaks` requis, suppression et force-push interdits. Idempotent.
 # Usage: ./agents/protect-main.sh
 set -euo pipefail
 
@@ -38,7 +38,8 @@ RULESET="$(cat <<'JSON'
         "strict_required_status_checks_policy": false,
         "required_status_checks": [
           { "context": "check" },
-          { "context": "web-smoke" }
+          { "context": "web-smoke" },
+          { "context": "gitleaks" }
         ]
       }
     }
