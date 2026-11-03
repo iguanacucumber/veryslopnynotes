@@ -82,11 +82,13 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null);
 
+/** Thème stocké : seule la valeur connue compte, le reste suit le système. */
+function parseTheme(raw: string | null): Theme {
+  return raw === "LIGHT" || raw === "DARK" || raw === "SYSTEM" ? raw : "SYSTEM";
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    const stored = localStorage.getItem("vsn:theme");
-    return stored === "LIGHT" || stored === "DARK" || stored === "SYSTEM" ? stored : "SYSTEM";
-  });
+  const [theme, setThemeState] = useState<Theme>(() => parseTheme(localStorage.getItem("vsn:theme")));
   const [systemDark, setSystemDark] = useState(() => matchMedia("(prefers-color-scheme: dark)").matches);
   const [scheme, setSchemeState] = useState<string>(() => parseScheme(localStorage.getItem("vsn:scheme")));
   const [textSize, setTextSizeState] = useState<TextSizeChoice>("SYSTEM");
@@ -152,6 +154,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // La purge globale de la WebView (job de fond, sans instance) efface le DOM
+  // storage : le thème natif reste la source, on le réécrit s'il a disparu.
+  // Le natif est déjà l'écrivain de `app.setTheme` ; ici on ne fait que réparer
+  // un cache local effacé par une purge de compte (I16).
+  useEffect(() => {
+    if (localStorage.getItem("vsn:theme") !== null) return;
+    let alive = true;
+    void bridge
+      .theme()
+      .then((state) => {
+        if (!alive) return;
+        const restored = parseTheme(state.theme);
+        setThemeState(restored);
+        localStorage.setItem("vsn:theme", restored);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   useEffect(() => {
     const mq = matchMedia("(prefers-color-scheme: dark)");
     const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
@@ -172,6 +195,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Une session rouverte annule « session expirée », levé seulement sur 401 :
   // sinon le garde-fou renverrait vers /pairing pour toujours.
   const openSession = useCallback(() => {
+    // Appairage ou démo : le compte change (ou est remplacé) ; les actualités
+    // lues du précédent ne s'appliquent pas. Le natif purge le DOM storage,
+    // cette écriture remet aussi le cache local à vide.
+    clearNewsReadIds();
     setSessionOpen(true);
     setSessionClosed(false);
     setAuthLost(false);

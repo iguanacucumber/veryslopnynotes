@@ -59,6 +59,7 @@ const STORE_FILES: Record<string, string[]> = {
   "VsnBridgeRevision.kt": ["exports"],
   "PhotoCapture.kt": ["photos"],
   "VsnBridge.kt": ["ui_prefs", "webview", "read_state"],
+  "WebViewAccountStorage.kt": ["read_state", "webview"],
   // `web` — l'identifiant lu et son consommateur.
   "readState.ts": ["read_state"],
   "AppContext.tsx": ["read_state"],

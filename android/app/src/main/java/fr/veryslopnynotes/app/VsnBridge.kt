@@ -674,11 +674,13 @@ class VsnBridge(
     }
 
     /**
-     * I16 : la WebView ne conserve que l'identifiant `vsn:news:read` pour le
-     * compte courant. On retire CETTE clé, pas le thème (même origine).
+     * I16 : le DOM storage appartient au compte courant. Le script retire
+     * toutes les clés SAUF l'apparence (`vsn:theme`, `vsn:scheme`), donc un
+     * futur identifiant local n'échappe pas à la purge comme l'aurait fait
+     * une liste noire.
      */
     private fun clearWebViewReadState(): Boolean {
-        val js = "(function(){try{localStorage.removeItem('vsn:news:read');return 'ok'}catch(e){return 'ko'}})()"
+        val js = WebViewAccountStorage.clearScript()
         if (Looper.myLooper() == Looper.getMainLooper()) {
             // Appel déjà sur l'UI : le callback JS arrivera après ce message ;
             // bloquer ici deadlockerait.
@@ -712,14 +714,16 @@ class VsnBridge(
         }
     }
 
-    /** Cache et formulaires de la coquille ; aucune donnée du compte resservie. */
+    /** Cache, formulaires et cookies de la coquille ; aucune donnée du compte resservie. */
     private fun clearWebViewCache(): Boolean {
         val run = {
             try {
                 webView.clearCache(true)
                 webView.clearFormData()
                 webView.clearHistory()
-                true
+                // `removeAllCookies` est asynchrone : `flush` écrit l'état vide
+                // sur disque avant que le process puisse mourir.
+                WebViewAccountData.clearCookies()
             } catch (_: Exception) {
                 false
             }

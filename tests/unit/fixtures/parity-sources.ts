@@ -293,6 +293,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // #907 : la politique WebView minimale (seuil, nom de version, message de
   // refus). Fichier PUR : le harnais l'EXÉCUTE au lieu de relire la constante.
   join(APP, "WebViewSupport.kt"),
+  // #894 : le script de purge du DOM storage et sa liste blanche d'apparence.
+  // Fichier PUR : le harnais EXÉCUTE le script pour prouver que le thème reste.
+  join(APP, "WebViewAccountStorage.kt"),
   // #898 : la décision `FLAG_SECURE` (release protégée, debug capturable).
   // Fichier PUR : le harnais l'EXÉCUTE pour prouver l'exemption de capture.
   join(APP, "SecureWindow.kt"),

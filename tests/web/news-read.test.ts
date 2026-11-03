@@ -70,4 +70,13 @@ describe("web actualités — état lu persistant", () => {
     const close = source.slice(source.indexOf("const closeSession = useCallback"));
     expect(close.slice(0, close.indexOf("}, []);"))).toContain("clearNewsReadIds()");
   });
+
+  test("AppContext efface les identifiants à l'appairage et à la démo", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "web", "src", "ui", "AppContext.tsx"),
+      "utf8",
+    );
+    const open = source.slice(source.indexOf("const openSession = useCallback"));
+    expect(open.slice(0, open.indexOf("}, []);"))).toContain("clearNewsReadIds()");
+  });
 });
