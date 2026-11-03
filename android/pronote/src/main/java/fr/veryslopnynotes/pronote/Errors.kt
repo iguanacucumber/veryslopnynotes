@@ -42,7 +42,9 @@ class RateLimitedError(
     pronoteErrorCode: Int? = 25,
     pronoteErrorMsg: String? = null,
     httpStatus: Int? = null,
-) : PronoteAPIError(message, pronoteErrorCode, pronoteErrorMsg, httpStatus)
+    /** `Retry-After` de la réponse : plancher du cooldown, `null` si absent. */
+    retryAfterMs: Long? = null,
+) : PronoteAPIError(message, pronoteErrorCode, pronoteErrorMsg, httpStatus, retryAfterMs)
 
 /** Les refus applicatifs sont branchés par NOM, comme côté TS (jamais importés). */
 open class DataError(message: String) : Exception(message)

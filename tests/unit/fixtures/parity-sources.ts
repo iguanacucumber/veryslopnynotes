@@ -63,6 +63,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // jitter, `Retry-After`, budget). Fichier PUR : le harnais l'EXÉCUTE.
   join(PRONOTE, "RetryPolicy.kt"),
   join(PRONOTE, "RequestDeadline.kt"),
+  // #889 : `Retry-After` (delta-seconds ou date HTTP) est PUR : le harnais
+  // l'EXÉCUTE au lieu de relire la forme du code.
+  join(PRONOTE, "RetryAfter.kt"),
   join(PRONOTE, "Resolver.kt"),
   join(PRONOTE, "SchoolLifeModels.kt"),
   // `core` — les règles métier pures (dates, notes, IA, garde-fous).
@@ -183,6 +186,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // simulées au lieu de relire la forme du code.
   join(DATA, "DurableFile.kt"),
   join(DATA, "LocalRequestQueue.kt"),
+  // #889 : le seau à jetons, la gigue et le cooldown persistant de la file
+  // scolaire. Fichier PUR (`java.*` seul) : le harnais EXÉCUTE la cadence.
+  join(DATA, "SchoolPacer.kt"),
   join(DATA, "OfflineArtifacts.kt"),
   join(DATA, "OfflineCache.kt"),
   // #877 : la cause TYPÉE d'un échec d'appairage (type d'exception -> code du

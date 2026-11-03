@@ -53,17 +53,17 @@
 <a id="i19"></a>
 
 ## I19 — Le job et l'interface lisent par la même file, sans promesse pendante
-- Invariant : les lectures de ressources cachées (écran, job) passent par LA
-  MÊME file partagée (`ClientQueue`), jamais en direct sur le `Client` mutable ;
-  les clés sont namespacées par producteur. Le job restaure la session AVANT de
-  lire, avec le verrou de restauration unique, et attend sa lecture avec un
-  délai borné (au-delà : `Result.retry()`). Un travail qui JETTE livre son échec
-  à TOUS les callbacks (`QueueOutcome.Failed`) : l'échec est une valeur, jamais
-  une promesse pendante. La décision session morte / réessai reste inchangée.
+- Invariant : les lectures (écran, job) ET les ouvertures de session passent par
+  LA MÊME file partagée (`ClientQueue`), jamais en direct sur le `Client`
+  mutable ; clés namespacées par producteur. Un seau à jetons (gigue) cadence ;
+  `G=25`/429 arme un cooldown persistant, `Retry-After` plancher, conservé au
+  redémarrage. Le job restaure la session AVANT de lire et attend sa lecture
+  avec un délai borné (sinon `Result.retry()`). Un travail qui JETTE livre son
+  échec à TOUS ses callbacks (`QueueOutcome.Failed`), jamais pendante.
+  Décision session/réessai inchangée.
 - Test : `tests/architecture/shared-queue.test.ts`,
-  `tests/unit/kotlin-local-queue.test.ts`,
-  `tests/unit/kotlin-sync-worker.test.ts`,
-  `tests/architecture/sync-session.test.ts`.
+  `tests/unit/kotlin-local-queue.test.ts`, `tests/unit/kotlin-pacing.test.ts`,
+  `tests/unit/kotlin-sync-worker.test.ts`, `tests/architecture/sync-session.test.ts`.
 - Commande : `make check`.
 - Emplacement : `android/data/LocalRequestQueue.kt`,
   `android/data/ClientQueue.kt`, `android/data/PeriodicSyncWorker.kt`.

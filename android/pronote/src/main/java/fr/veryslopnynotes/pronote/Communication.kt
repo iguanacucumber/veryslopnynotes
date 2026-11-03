@@ -235,6 +235,7 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
                     "Too many requests (http status: $HTTP_TOO_MANY_REQUESTS)",
                     pronoteErrorCode = null,
                     httpStatus = HTTP_TOO_MANY_REQUESTS,
+                    retryAfterMs = retryAfterMs(res.headers),
                 )
             }
             try {
@@ -311,6 +312,7 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
                     "Too many requests (http status: $HTTP_TOO_MANY_REQUESTS)",
                     pronoteErrorCode = null,
                     httpStatus = HTTP_TOO_MANY_REQUESTS,
+                    retryAfterMs = retryAfterMs(response.headers),
                 )
             }
             throw PronoteAPIError(

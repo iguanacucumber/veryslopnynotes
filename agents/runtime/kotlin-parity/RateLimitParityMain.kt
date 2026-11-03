@@ -14,6 +14,8 @@ import fr.veryslopnynotes.pronote.PronoteAPIError
 import fr.veryslopnynotes.pronote.RateLimitGate
 import fr.veryslopnynotes.pronote.RateLimitedError
 import fr.veryslopnynotes.pronote.RetryPolicy
+import fr.veryslopnynotes.pronote.parseRetryAfterMs
+import fr.veryslopnynotes.pronote.retryAfterMs
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintStream
@@ -113,6 +115,40 @@ private class Driver {
                 "coolingAtOldExpiry" to JVal.Bool(coolingAtOldExpiry),
                 "stillDuring" to (stillDuring?.let { JVal.Str(it) } ?: JVal.Null),
                 "coolingAfterExpiry" to JVal.Bool(coolingAfterExpiry),
+                "after" to (after?.let { JVal.Str(it) } ?: JVal.Null),
+            )
+        }
+
+        // `Retry-After` : delta-seconds OU date HTTP ; absent/illisible = null.
+        "retryAfter" -> {
+            val now = 1_700_000_000_000L
+            val date = op.str("date")
+            ok(
+                "seconds" to (parseRetryAfterMs("120", now)?.let { JVal.Num(it.toDouble()) } ?: JVal.Null),
+                "zero" to (parseRetryAfterMs("0", now)?.let { JVal.Num(it.toDouble()) } ?: JVal.Null),
+                "negative" to (parseRetryAfterMs("-5", now)?.let { JVal.Num(it.toDouble()) } ?: JVal.Null),
+                "date" to (parseRetryAfterMs(date, now)?.let { JVal.Num(it.toDouble()) } ?: JVal.Null),
+                "bad" to (parseRetryAfterMs("n'importe quoi", now)?.let { JVal.Num(it.toDouble()) } ?: JVal.Null),
+                "header" to (
+                    retryAfterMs(mapOf("retry-after" to listOf("30")), now)?.let { JVal.Num(it.toDouble()) }
+                        ?: JVal.Null
+                    ),
+            )
+        }
+
+        // `Retry-After` plus long que la fenêtre par défaut : il la PROLONGE.
+        "gateRetryAfter" -> {
+            var now = 1_000L
+            val gate = RateLimitGate(cooldownMs = 120_000L, clock = { now })
+            gate.trip(retryAfterMs = 300_000L)
+            val remaining = gate.remainingMs()
+            now += 120_000L
+            val stillCooling = gate.isCoolingDown()
+            now += 180_000L
+            val after = catchName { gate.check() }
+            ok(
+                "remaining" to JVal.Num(remaining.toDouble()),
+                "stillCooling" to JVal.Bool(stillCooling),
                 "after" to (after?.let { JVal.Str(it) } ?: JVal.Null),
             )
         }

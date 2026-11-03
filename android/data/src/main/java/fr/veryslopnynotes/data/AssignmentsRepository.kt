@@ -56,11 +56,13 @@ class AssignmentsRepository(
             post { onDone(ToggleOutcome(null, "Devoir introuvable.")) }
             return
         }
-        Thread {
+        ClientQueue.submitUnit(
+            key = "assign-toggle|$target",
+            work = {
             val client = provider()
             if (client == null) {
                 post { onDone(ToggleOutcome(null, "Connexion indisponible, retour arrière.")) }
-                return@Thread
+                return@submitUnit
             }
             try {
                 val (from, to) = assignmentWindow(weekStart, schoolTime)
@@ -68,7 +70,7 @@ class AssignmentsRepository(
                     .firstOrNull { it.id == target }
                 if (found == null) {
                     post { onDone(ToggleOutcome(null, "Toggle refusé (devoir introuvable).")) }
-                    return@Thread
+                    return@submitUnit
                 }
                 // Écriture CONFIRMÉE → cache invalidé. `setDone` lève si
                 // l'écriture échoue : rien n'est purgé alors.
@@ -88,7 +90,9 @@ class AssignmentsRepository(
                     post { onDone(ToggleOutcome(null, "Connexion indisponible, retour arrière.")) }
                 }
             }
-        }.start()
+            },
+            onFailure = { post { onDone(ToggleOutcome(null, "Connexion indisponible, retour arrière.")) } },
+        )
     }
 
     /**
@@ -102,10 +106,12 @@ class AssignmentsRepository(
         weekStart: String,
         onDone: (AttachmentOutcome) -> Unit,
     ) {
-        Thread {
+        ClientQueue.submitUnit(
+            key = "attachment|$homeworkId|$attachmentId|$weekStart",
+            work = {
             var temp: java.io.File? = null
             val outcome = try {
-                val client = provider() ?: return@Thread post { onDone(AttachmentOutcome(null, null)) }
+                val client = provider() ?: return@submitUnit post { onDone(AttachmentOutcome(null, null)) }
                 val (from, to) = assignmentWindow(weekStart, schoolTime)
                 val hw = client.homework(from, to).firstOrNull { it.id == homeworkId }
                 // Une pièce jointe de COURS n'est pas dans le devoir : on la
@@ -120,7 +126,7 @@ class AssignmentsRepository(
                     }
                 }.orEmpty().firstOrNull { it.id == attachmentId }
                     ?: lessonFiles(client, from, to).firstOrNull { it.id == attachmentId }
-                    ?: return@Thread post { onDone(AttachmentOutcome(null, null)) }
+                    ?: return@submitUnit post { onDone(AttachmentOutcome(null, null)) }
                 val name = file.name.trim().take(200).ifEmpty { "piece-jointe" }
                 // Téléchargement en FLUX vers un temporaire : la pièce n'est
                 // jamais matérialisée en `ByteArray` (jusqu'à 10 Mio).
@@ -143,7 +149,9 @@ class AssignmentsRepository(
                 }
             }
             post { onDone(outcome) }
-        }.start()
+            },
+            onFailure = { post { onDone(AttachmentOutcome(null, RATE_LIMITED_MESSAGE)) } },
+        )
     }
 
     /**

@@ -60,7 +60,9 @@ class DiscussionsRepository(
      * omettent (l'écran garde déjà les siens).
      */
     fun fetchMessages(discussionId: String, before: Int? = null, cb: (DiscussionThread?, String?) -> Unit) {
-        Thread {
+        ClientQueue.submitUnit(
+            key = "discussion-thread|$discussionId|${before ?: 0}",
+            work = {
             val client = provider()
             if (client == null) {
                 // Sans session : liste vide, état vide propre, pas d'écran
@@ -68,14 +70,14 @@ class DiscussionsRepository(
                 ThreadMessageCache.clear()
                 DiscussionListCache.clear()
                 post { cb(null, null) }
-                return@Thread
+                return@submitUnit
             }
             try {
                 val target = boundedCp(discussionId, 64)
                 val discussion = findDiscussion(client, target)
                 if (discussion == null) {
                     post { cb(null, "Fil introuvable.") }
-                    return@Thread
+                    return@submitUnit
                 }
                 val page = ThreadMessageCache.page(target, before) {
                     discussion.messages().mapIndexedNotNull { i, m -> toDiscussionMessage(target, m, i) }
@@ -103,16 +105,20 @@ class DiscussionsRepository(
                     post { cb(null, null) }
                 }
             }
-        }.start()
+            },
+            onFailure = { post { cb(null, null) } },
+        )
     }
 
     /** Fils visibles à enrichir : une requête `ListeMessages` par identifiant. */
     fun fetchEnrichment(ids: List<String>, cb: (String?, String?) -> Unit) {
-        Thread {
+        ClientQueue.submitUnit(
+            key = "discussion-enrich|${ids.joinToString(",")}",
+            work = {
             val client = provider()
             if (client == null) {
                 post { cb(null, null) }
-                return@Thread
+                return@submitUnit
             }
             try {
                 val body = enrichmentPayload(client, ids)
@@ -127,16 +133,20 @@ class DiscussionsRepository(
                     post { cb(null, null) }
                 }
             }
-        }.start()
+            },
+            onFailure = { post { cb(null, null) } },
+        )
     }
 
     /** Destinataires d'une nouvelle discussion (sélecteur). Vide = onglet absent. */
     fun fetchRecipients(cb: (List<DiscussionRecipient>, String?) -> Unit) {
-        Thread {
+        ClientQueue.submitUnit(
+            key = "discussion-recipients|",
+            work = {
             val client = provider()
             if (client == null) {
                 post { cb(emptyList(), null) }
-                return@Thread
+                return@submitUnit
             }
             try {
                 val body = recipientsPayload(client)
@@ -149,7 +159,9 @@ class DiscussionsRepository(
                     post { cb(emptyList(), null) }
                 }
             }
-        }.start()
+            },
+            onFailure = { post { cb(emptyList(), null) } },
+        )
     }
 
     /** Nouvelle discussion (I7 : geste utilisateur confirmé). */
@@ -171,11 +183,13 @@ class DiscussionsRepository(
             post { cb(DiscussionWriteOutcome(false, "Création impossible.")) }
             return
         }
-        Thread {
+        ClientQueue.submitUnit(
+            key = "discussion-create|${System.nanoTime()}",
+            work = {
             val client = provider()
             if (client == null) {
                 post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) }
-                return@Thread
+                return@submitUnit
             }
             val outcome = writeLocal("Création impossible.") {
                 val matched = client.getRecipients().filter { it.id in ids }
@@ -183,7 +197,9 @@ class DiscussionsRepository(
                 client.newDiscussion(title, text, matched)
             }
             post { cb(outcome) }
-        }.start()
+            },
+            onFailure = { post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) } },
+        )
     }
 
     /** Réponse dans un fil (I7). */
@@ -198,11 +214,13 @@ class DiscussionsRepository(
             post { cb(DiscussionWriteOutcome(false, "Réponse impossible.")) }
             return
         }
-        Thread {
+        ClientQueue.submitUnit(
+            key = "discussion-reply|${System.nanoTime()}",
+            work = {
             val client = provider()
             if (client == null) {
                 post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) }
-                return@Thread
+                return@submitUnit
             }
             val outcome = writeLocal("Réponse impossible.") {
                 val discussion = findDiscussion(client, target)
@@ -211,7 +229,9 @@ class DiscussionsRepository(
             }
             if (outcome.ok) ThreadMessageCache.invalidate(target)
             post { cb(outcome) }
-        }.start()
+            },
+            onFailure = { post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) } },
+        )
     }
 
     /** Marquer lu / non-lu (I7). */
@@ -225,11 +245,13 @@ class DiscussionsRepository(
             post { cb(DiscussionWriteOutcome(false, "État de lecture refusé.")) }
             return
         }
-        Thread {
+        ClientQueue.submitUnit(
+            key = "discussion-read|${System.nanoTime()}",
+            work = {
             val client = provider()
             if (client == null) {
                 post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) }
-                return@Thread
+                return@submitUnit
             }
             val outcome = writeLocal("État de lecture refusé.") {
                 val discussion = findDiscussion(client, target)
@@ -237,7 +259,9 @@ class DiscussionsRepository(
                 discussion.markAs(read)
             }
             post { cb(outcome) }
-        }.start()
+            },
+            onFailure = { post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) } },
+        )
     }
 
     /** Mise à la corbeille (I7). */
@@ -251,11 +275,13 @@ class DiscussionsRepository(
             post { cb(DiscussionWriteOutcome(false, "Suppression impossible.")) }
             return
         }
-        Thread {
+        ClientQueue.submitUnit(
+            key = "discussion-delete|${System.nanoTime()}",
+            work = {
             val client = provider()
             if (client == null) {
                 post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) }
-                return@Thread
+                return@submitUnit
             }
             val outcome = writeLocal("Suppression impossible.") {
                 val discussion = findDiscussion(client, target)
@@ -264,7 +290,9 @@ class DiscussionsRepository(
             }
             if (outcome.ok) ThreadMessageCache.invalidate(target)
             post { cb(outcome) }
-        }.start()
+            },
+            onFailure = { post { cb(DiscussionWriteOutcome(false, "Connexion indisponible, retour arrière.")) } },
+        )
     }
 
     /** Liste déjà téléchargée d'abord : une ouverture ne refait pas `ListeMessagerie`. */

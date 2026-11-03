@@ -26,10 +26,11 @@ class RateLimitGate(
 
     /**
      * Un second refus pendant la fenêtre la PROLONGE (jamais ne la raccourcit).
+     * `Retry-After` est un plancher : il peut dépasser la fenêtre par défaut.
      */
     @Synchronized
-    fun trip() {
-        val deadline = clock() + cooldownMs
+    fun trip(retryAfterMs: Long? = null) {
+        val deadline = clock() + maxOf(cooldownMs, retryAfterMs ?: 0L)
         if (deadline > blockedUntil) blockedUntil = deadline
     }
 

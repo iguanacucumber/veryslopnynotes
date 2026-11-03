@@ -32,13 +32,15 @@ class ProfileRepository(
 ) {
     /** Le profil n'est jamais écrit sur disque. */
     fun fetchMe(cb: (MeResult) -> Unit) {
-        Thread {
+        ClientQueue.submitUnit(
+            key = "profile-me|",
+            work = {
             val client = provider()
             if (client == null) {
                 // Sans session : mode anonyme, état vide — jamais d'écran
                 // d'erreur plein écran.
                 post(cb, MeResult.Ok(null))
-                return@Thread
+                return@submitUnit
             }
             try {
                 // user null = infos non publiées, pas une erreur.
@@ -51,7 +53,9 @@ class ProfileRepository(
                     post(cb, MeResult.Ok(null))
                 }
             }
-        }.start()
+            },
+            onFailure = { post(cb, MeResult.Ok(null)) },
+        )
     }
 
     /**
@@ -59,20 +63,24 @@ class ProfileRepository(
      * Réf absente/invalide ou échec = null, l'UI affiche les initiales.
      */
     fun fetchPhoto(profile: UserProfile, cb: (Bitmap?) -> Unit) {
-        Thread {
+        ClientQueue.submitUnit(
+            key = "profile-photo|${profile.photoRef}",
+            work = {
             val bytes = try {
-                val client = provider() ?: return@Thread post(cb, null)
+                val client = provider() ?: return@submitUnit post(cb, null)
                 val ref = profile.photoRef.trim()
-                if (!UserProfileRules.isValidPhotoRef(ref)) return@Thread post(cb, null)
+                if (!UserProfileRules.isValidPhotoRef(ref)) return@submitUnit post(cb, null)
                 val wantId = ref.removePrefix("photo:")
                 val pic = client.info.profilePicture
-                if (pic == null || pic.id != wantId) return@Thread post(cb, null)
+                if (pic == null || pic.id != wantId) return@submitUnit post(cb, null)
                 pic.data()
             } catch (_: Exception) {
-                return@Thread post(cb, null)
+                return@submitUnit post(cb, null)
             }
             post(cb, decodePhoto(bytes))
-        }.start()
+            },
+            onFailure = { post(cb, null) },
+        )
     }
 
     private fun <T> post(cb: (T) -> Unit, value: T) {

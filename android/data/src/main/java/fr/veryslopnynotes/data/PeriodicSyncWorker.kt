@@ -34,6 +34,9 @@ class PeriodicSyncWorker(
     params: WorkerParameters,
 ) : Worker(context, params) {
     override fun doWork(): Result {
+        // Process NEUF : le cooldown persistant doit être chargé AVANT toute
+        // ouverture de session ou lecture.
+        ClientQueue.attachCooldown(FileCooldownStore(File(applicationContext.filesDir, "school-cooldown")))
         return when (val outcome = syncJobOutcome(restoreClient())) {
             is SyncJobOutcome.Retry -> Result.retry()
             is SyncJobOutcome.Refresh -> refresh(outcome.session)

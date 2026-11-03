@@ -22,13 +22,26 @@ import java.util.concurrent.TimeUnit
  */
 object ClientQueue {
     /**
+     * UN seau à jetons pour tout le process : la file sérialise, le seau
+     * cadence. Sans lui, un écran qui recharge cinq ressources part en rafale
+     * et déclenche la limitation de l'établissement.
+     */
+    @PublishedApi
+    internal val pacer = SchoolPacer()
+
+    /**
      * La file unique, typée `Any` : chaque producteur a son propre type, la
      * clé fait le lien entre le travail et ses callbacks.
      *
      * `@PublishedApi` : `submit` est `inline`, elle doit voir la file.
      */
     @PublishedApi
-    internal val queue = LocalRequestQueue<Any>()
+    internal val queue = LocalRequestQueue<Any>().also { it.attachPacer(pacer) }
+
+    /** Cooldown persistant (fichier) : un redémarrage ne repart pas à zéro. */
+    fun attachCooldown(store: CooldownStore?) {
+        pacer.attachStore(store)
+    }
 
     /**
      * Soumet [work] ; [deliver] reçoit son résultat OU son échec. Un travail
@@ -47,6 +60,23 @@ object ClientQueue {
         // fil, un timeout JS ou `bridge.cancel` doit quand même couper le socket.
         val cancellation = RequestScope.current()
         queue.submit(key, work = { RequestScope.with(cancellation) { work() } }, deliver = { o -> deliver(cast(o)) })
+    }
+
+    /**
+     * Travail dont le résultat est livré par ses propres callbacks (dépôts à
+     * callback). Un échec de file — un `Error` compris — est TOUJOURS livré à
+     * [onFailure] : l'écran ne reste jamais en attente.
+     */
+    inline fun submitUnit(
+        key: String,
+        crossinline work: () -> Unit,
+        crossinline onFailure: (Throwable) -> Unit,
+    ) {
+        submit<Unit>(
+            key,
+            work = { work() },
+            deliver = { outcome -> if (outcome is QueueOutcome.Failed) onFailure(outcome.cause) },
+        )
     }
 
     /**

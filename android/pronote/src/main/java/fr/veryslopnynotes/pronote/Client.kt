@@ -419,7 +419,7 @@ open class ClientBase(
             return send(functionName, postData)
         } catch (e: RateLimitedError) {
             // Ne surtout pas rafraîchir : armer la porte, rendre l'erreur telle quelle.
-            rateLimitGate.trip()
+            rateLimitGate.trip(e.retryAfterMs)
             throw e
         } catch (e: ExpiredObject) {
             throw e
@@ -436,7 +436,7 @@ open class ClientBase(
             } catch (rate: RateLimitedError) {
                 // Le refresh tombe sur la limite : la session n'est pas morte,
                 // on attend.
-                rateLimitGate.trip()
+                rateLimitGate.trip(rate.retryAfterMs)
                 throw rate
             } finally {
                 refreshGate.leave()
@@ -445,7 +445,7 @@ open class ClientBase(
                 send(functionName, postData)
             } catch (e: RateLimitedError) {
                 // Rejeu refusé aussi : armer la porte évite une 3e tentative.
-                rateLimitGate.trip()
+                rateLimitGate.trip(e.retryAfterMs)
                 throw e
             }
         }

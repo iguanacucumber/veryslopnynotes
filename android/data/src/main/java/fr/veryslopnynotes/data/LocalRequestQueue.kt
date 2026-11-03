@@ -42,6 +42,14 @@ class LocalRequestQueue<T> {
     private val lock = Any()
     private val inFlight = LinkedHashMap<String, MutableList<(QueueOutcome<T>) -> Unit>>()
 
+    /** Cadence appliquée AVANT chaque travail, sur le fil unique. */
+    @Volatile
+    private var pacer: QueuePacer? = null
+
+    fun attachPacer(pacer: QueuePacer?) {
+        this.pacer = pacer
+    }
+
     /**
      * Exécute [work] sur le fil unique. Si [key] est déjà en vol, [deliver] est
      * empilé : tous les callbacks reçoivent le MÊME résultat, dans l'ordre.
@@ -63,8 +71,13 @@ class LocalRequestQueue<T> {
         // `Throwable` et non `Exception` : un `Error` (OOM) ne doit pas laisser
         // les callbacks en attente non plus.
         val outcome: QueueOutcome<T> = try {
+            // Le seau est consommé sur le fil UNIQUE : deux producteurs ne
+            // peuvent pas obtenir un jeton en même temps.
+            pacer?.awaitTurn()
             QueueOutcome.Ok(work())
         } catch (t: Throwable) {
+            // Rate-limit : la fenêtre est armée avant de livrer l'échec.
+            pacer?.onFailure(t)
             QueueOutcome.Failed(t)
         }
         // Clé libérée DANS LES DEUX CAS : sinon la volée suivante attendrait

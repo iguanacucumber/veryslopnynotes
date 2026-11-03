@@ -371,7 +371,12 @@ class HttpSession(
             val response = request("GET", url, opts, dest, maxBytes)
             if (!response.ok) {
                 if (response.status == 429) {
-                    throw RateLimitedError("Too many requests (http status: 429)", pronoteErrorCode = null, httpStatus = 429)
+                    throw RateLimitedError(
+                        "Too many requests (http status: 429)",
+                        pronoteErrorCode = null,
+                        httpStatus = 429,
+                        retryAfterMs = retryAfterMs(response.headers),
+                    )
                 }
                 throw PronoteAPIError("Bad request (http status: ${response.status})", httpStatus = response.status)
             }
