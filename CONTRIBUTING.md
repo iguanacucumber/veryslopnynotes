@@ -57,6 +57,10 @@ Commits : `<scope>: <objet>`, à l'impératif, une ligne. La PR cible `main`,
 cite `Closes #<issue>` et raconte le **pourquoi** ; le diff doit rester court
 et lisible.
 
+`main` est protégé : la PR est obligatoire et les checks `check` et
+`web-smoke` doivent être verts avant le merge
+([`docs/architecture/BRANCH-PROTECTION.md`](docs/architecture/BRANCH-PROTECTION.md)).
+
 ## DCO (sign-off)
 
 Chaque commit porte son `Signed-off-by: Nom <email>`, l'identité Git

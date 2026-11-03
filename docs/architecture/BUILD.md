@@ -2,6 +2,8 @@
 
 Détail du `Makefile` et de `check.ts`.
 
+Protection de `main` et checks : [`BRANCH-PROTECTION.md`](BRANCH-PROTECTION.md).
+
 ## `make check` — le gate de merge (9 étapes)
 
 Toutes les étapes tournent en parallèle (`check.ts`) ; seul goulot : le CPU.
