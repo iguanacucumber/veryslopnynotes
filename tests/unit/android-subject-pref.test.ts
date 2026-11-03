@@ -186,7 +186,7 @@ describe("câblage : le pont et le dépôt partagent la MÊME règle (#395)", ()
   test("le dépôt n'écrit RIEN quand la matière est hors contrat", () => {
     // `upsert` valide AVANT d'écrire : un refus laisse le disque intact.
     const upsert = prefs.slice(prefs.indexOf("fun upsert("));
-    const refus = upsert.indexOf("return SubjectPrefsWrite.INVALID");
+    const refus = upsert.indexOf("SubjectPrefsWrite.INVALID");
     const ecriture = upsert.indexOf("write(");
     expect(refus).toBeGreaterThan(-1);
     expect(ecriture).toBeGreaterThan(-1);

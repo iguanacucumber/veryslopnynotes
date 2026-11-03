@@ -192,6 +192,13 @@ export const PRODUCTION_SOURCES: string[] = [
   // partagé par appairage, restauration et déconnexion. Fichier PUR : le
   // harnais l'EXÉCUTE et prouve qu'un logout ne double pas une restauration.
   join(DATA, "SessionGate.kt"),
+  // #882 : la section critique d'une lecture-modification-écriture (notes,
+  // préférences matière, manuel). Fichier PUR (`java.util.concurrent` seul) :
+  // le harnais EXÉCUTE la sérialisation avec de vrais fils.
+  join(DATA, "SerializedUpdate.kt"),
+  // #882 : le dépôt du cahier (relecture + fusion + écriture sous LE verrou).
+  // Fichier PUR : le harnais EXÉCUTE des ajouts concurrents sur ce code réel.
+  join(DATA, "LessonNotesRepository.kt"),
   // `data` — les règles des préférences matière (#395) : le contrat (couleur
   // #RRGGBB, emoji court, libellé) et ses bornes, en un fichier PUR pour que
   // le harnais les EXÉCUTE. Le pont et le dépôt s'appuient dessus.

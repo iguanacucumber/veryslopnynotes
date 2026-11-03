@@ -165,14 +165,22 @@ enum class SubjectPrefsWrite {
 
 // Offline-first : l'affichage lit le FICHIER local (survit au restart, lisible
 // hors ligne) ; le fichier EST la vérité. Callback sur main thread.
+//
+// La fusion (relire, remplacer la matière, réécrire) est UNE section critique :
+// deux `upsert` concurrents ne peuvent pas partir du même état et perdre l'un
+// des deux.
 class SubjectPrefsRepository(
     private val local: SubjectPrefsLocalStore,
     private val main: Handler = Handler(Looper.getMainLooper()),
 ) {
-    fun prefs(): List<SubjectPrefs> = try {
-        local.load()
-    } catch (_: Exception) {
-        emptyList()
+    private val update = SerializedUpdate()
+
+    fun prefs(): List<SubjectPrefs> = update.run {
+        try {
+            local.load()
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     // Écriture locale immédiate (offline), `updatedAt` par l'appareil.
@@ -184,7 +192,7 @@ class SubjectPrefsRepository(
         emoji: String?,
         label: String?,
         epoch: Long,
-    ): SubjectPrefsWrite {
+    ): SubjectPrefsWrite = update.run {
         val p = SubjectPrefs(
             subject = subject.trim(),
             color = color?.trim()?.takeIf { it.isNotEmpty() },
@@ -192,9 +200,9 @@ class SubjectPrefsRepository(
             label = label?.trim()?.takeIf { it.isNotEmpty() },
             updatedAt = Instant.now().toString(),
         )
-        if (!SubjectPrefs.isValid(p)) return SubjectPrefsWrite.INVALID
-        if (!write(mergeSubjectPrefs(prefs(), listOf(p)), epoch)) return SubjectPrefsWrite.REFUSED
-        return SubjectPrefsWrite.WRITTEN
+        if (!SubjectPrefs.isValid(p)) return@run SubjectPrefsWrite.INVALID
+        if (!write(mergeSubjectPrefs(prefs(), listOf(p)), epoch)) return@run SubjectPrefsWrite.REFUSED
+        SubjectPrefsWrite.WRITTEN
     }
 
     fun refresh(baseUrl: String, onDone: (List<SubjectPrefs>) -> Unit) {

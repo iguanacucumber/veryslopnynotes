@@ -102,17 +102,19 @@ class ManualStore(context: Context) {
         null
     }
 
-    private val lock = Any()
+    private val lock = SerializedUpdate()
 
     /** Adresse courante revalidée à la lecture (fichier altéré, version passée). */
-    fun url(): String? {
-        val stored = try {
-            data().optString(KEY_URL, null)
+    fun url(): String? = lock.run {
+        try {
+            storedUrl(data())
         } catch (_: Exception) {
             null
-        } ?: return null
-        return (ManualUrl.validate(stored) as? ManualUrlResult.Ok)?.url
+        }
     }
+
+    private fun storedUrl(obj: JSONObject): String? =
+        obj.optString(KEY_URL, null)?.let { (ManualUrl.validate(it) as? ManualUrlResult.Ok)?.url }
 
     /** L'invitation a-t-elle déjà été montrée (une seule fois) ? */
     fun promptSeen(): Boolean = try {
@@ -170,16 +172,29 @@ class ManualStore(context: Context) {
         raw.trim().lowercase(java.util.Locale.ROOT)
 
     /** Classe lue sur le profil (ex. « TG2 ») au moment de l'enregistrement. */
-    fun classLabel(): String = try {
-        data().optString(KEY_CLASS_LABEL, "").trim().take(64)
-    } catch (_: Exception) {
-        ""
+    fun classLabel(): String = lock.run {
+        try {
+            storedClassLabel(data())
+        } catch (_: Exception) {
+            ""
+        }
     }
 
+    private fun storedClassLabel(obj: JSONObject): String =
+        obj.optString(KEY_CLASS_LABEL, "").trim().take(64)
+
     /** Matières réellement vues dans les caches (notes, devoirs, EDT). */
-    fun subjects(): List<String> {
+    fun subjects(): List<String> = lock.run {
+        try {
+            storedSubjects(data())
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun storedSubjects(obj: JSONObject): List<String> {
         val out = try {
-            val raw = data().optString(KEY_SUBJECTS, null)
+            val raw = obj.optString(KEY_SUBJECTS, null)
             if (raw.isNullOrBlank()) {
                 emptyList<String>()
             } else {
@@ -205,8 +220,10 @@ class ManualStore(context: Context) {
     fun save(raw: String): ManualUrlResult {
         val validated = ManualUrl.validate(raw)
         if (validated !is ManualUrlResult.Ok) return validated
-        val previous = url()
+        // L'ancienne adresse se lit DANS la section critique : deux `save`
+        // concurrents ne peuvent pas comparer une adresse déjà remplacée.
         val written = update { obj ->
+            val previous = storedUrl(obj)
             obj.put(KEY_URL, validated.url)
             if (previous != validated.url) obj.remove(KEY_DOCS)
         }
@@ -244,31 +261,33 @@ class ManualStore(context: Context) {
      * bascule serait un défaut.
      */
     fun clearAccountData() {
-        file?.let { DurableFile.delete(it) }
-        // Les préférences d'une version antérieure au fichier durable portent
-        // encore les mêmes clés : elles partent aussi (I16).
-        try {
-            prefs?.edit()
-                ?.remove(KEY_URL)
-                ?.remove(KEY_DOCS)
-                ?.remove(KEY_CLASS_LABEL)
-                ?.remove(KEY_SUBJECTS)
-                ?.remove(KEY_DISABLED_SUBJECTS)
-                ?.apply()
-        } catch (_: Exception) {
-            // Préfs indisponibles : rien n'était de toute façon lisible.
+        lock.run {
+            file?.let { DurableFile.delete(it) }
+            // Les préférences d'une version antérieure au fichier durable portent
+            // encore les mêmes clés : elles partent aussi (I16).
+            try {
+                prefs?.edit()
+                    ?.remove(KEY_URL)
+                    ?.remove(KEY_DOCS)
+                    ?.remove(KEY_CLASS_LABEL)
+                    ?.remove(KEY_SUBJECTS)
+                    ?.remove(KEY_DISABLED_SUBJECTS)
+                    ?.apply()
+            } catch (_: Exception) {
+                // Préfs indisponibles : rien n'était de toute façon lisible.
+            }
         }
     }
 
     /** Indices de choix : classe + matières, jamais un profil complet. */
     fun saveGuess(classLabel: String, subjects: List<String>) {
-        val label = classLabel.trim().take(64).ifEmpty { this.classLabel() }
-        val clean = subjects.map { it.trim().take(100) }
-            .filter { it.isNotEmpty() }
-            .distinct()
-            .take(MAX_SUBJECTS)
-            .ifEmpty { this.subjects() }
         update { obj ->
+            val label = classLabel.trim().take(64).ifEmpty { storedClassLabel(obj) }
+            val clean = subjects.map { it.trim().take(100) }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .take(MAX_SUBJECTS)
+                .ifEmpty { storedSubjects(obj) }
             obj.put(KEY_CLASS_LABEL, label)
             obj.put(KEY_SUBJECTS, jsonArray(clean).toString())
         }
@@ -397,7 +416,7 @@ class ManualStore(context: Context) {
 
     private fun update(block: (JSONObject) -> Unit): Boolean {
         val target = file ?: return false
-        return synchronized(lock) {
+        return lock.run {
             try {
                 val obj = data()
                 block(obj)
