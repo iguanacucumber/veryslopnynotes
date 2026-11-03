@@ -22,6 +22,25 @@ val PRONOTE_ERROR_MESSAGES = mapOf(
 /** HTTP 429 : refus de débit, même sens que `G=25`. */
 private const val HTTP_TOO_MANY_REQUESTS = 429
 
+/**
+ * Cause d'une page d'ouverture, TYPÉE : l'appelant branche dessus, jamais sur
+ * le texte. La page de suspension est reconnue par une phrase (« adresse IP …
+ * suspendue/bannie/bloquée »), pas par la seule présence des lettres « IP ».
+ */
+enum class HtmlPageCause { START, IP_SUSPENDED, UNEXPECTED }
+
+private val SUSPENDED_PAGE = Regex(
+    """(?is)\bIP\b.{0,120}?(?:suspend|banni|bloqu)|(?:suspend|banni|bloqu).{0,120}?\bIP\b""",
+)
+
+private val START_PAGE = Regex("""Start ?\(\{([^}]*)\}\)""")
+
+internal fun htmlPageCause(html: String): HtmlPageCause = when {
+    SUSPENDED_PAGE.containsMatchIn(html) -> HtmlPageCause.IP_SUSPENDED
+    START_PAGE.containsMatchIn(html) -> HtmlPageCause.START
+    else -> HtmlPageCause.UNEXPECTED
+}
+
 val PRONOTE_HEADERS = mapOf(
     "User-Agent" to "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:73.0) Gecko/20100101 Firefox/73.0",
 )
@@ -352,15 +371,21 @@ class Communication(site: String, cookieJar: CookieJar? = null, mobile: Boolean 
 
     /**
      * Attributs de session lus dans la page HTML (`Start({…})`, regex et non
-     * parser). `IP` présent = banni ; sans `h`, erreur interne que
-     * `initialise` réessaie.
+     * parser). Cause TYPÉE : page de suspension réseau, ou page inattendue ;
+     * sans `h`, erreur interne que `initialise` réessaie.
      */
     fun parseHtml(html: String): Map<String, String> {
-        if (html.contains("IP")) {
-            throw PronoteAPIError("Your IP address is suspended.")
+        when (htmlPageCause(html)) {
+            HtmlPageCause.IP_SUSPENDED -> throw IpSuspendedError()
+            HtmlPageCause.UNEXPECTED -> throw UnexpectedPageError(
+                "Page html is different than expected. Be sure that pronote_url is the direct url to your pronote page.",
+            )
+            HtmlPageCause.START -> Unit
         }
-        val match = Regex("""Start ?\(\{([^}]*)\}\)""").find(html)
-            ?: throw PronoteAPIError("Page html is different than expected. Be sure that pronote_url is the direct url to your pronote page.")
+        val match = START_PAGE.find(html)
+            ?: throw UnexpectedPageError(
+                "Page html is different than expected. Be sure that pronote_url is the direct url to your pronote page.",
+            )
         val attributes = LinkedHashMap<String, String>()
         for (attr in match.groupValues[1].split(",")) {
             val idx = attr.indexOf(':')

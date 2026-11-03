@@ -1,5 +1,14 @@
 import { expect, test } from "bun:test";
 import { Encryption, IV1_HEX, K0_HEX, RSA_E_DEC, RSA_N_DEC, TEMP_HEX, ask, canonTs, checkRsaHeader, enBytes, expectKt, md5, modPow, portError, prepareOnglets, sha256HexUpper, skip, tsAesEncrypt, tsErrorOf, tsParseHtml } from "../fixtures/pronote-protocol";
+import {
+  START_PAGE,
+  START_PAGE_WITH_IP_WORD,
+  START_WITHOUT_H,
+  SUSPENDED_PAGE_EN,
+  SUSPENDED_PAGE_FR,
+  SUSPENDED_PAGE_TAG_SPLIT,
+  UNEXPECTED_PAGE,
+} from "../fixtures/pronote-pages";
 
 export function registerProtocolCrypto(): void {
   test.skipIf(skip)("crypto : MD5 et SHA-256 sur vecteurs (vide, ASCII, unicode, long)", async () => {
@@ -80,18 +89,27 @@ export function registerProtocolCrypto(): void {
     }
   });
 
-  test.skipIf(skip)("parseHtml : attributs, IP banni, page inattendue, `h` manquant", async () => {
-    const valid = `<html><body onload="Start({h: '123456', a: 'abcdef', CrA: '1', CoA: '0', http: ''})"></body></html>`;
-    await expectKt({ op: "parseHtml", html: valid }, { ok: true, attrs: tsParseHtml(valid) }, "parseHtml");
+  test.skipIf(skip)("parseHtml : cause typée (saine, IP suspendue, page inattendue, `h` manquant)", async () => {
+    await expectKt({ op: "parseHtml", html: START_PAGE }, { ok: true, attrs: tsParseHtml(START_PAGE) }, "parseHtml");
     // Espaces et guillemets doubles : même lecture.
     const spaced = `Start({ h : "42" , a : "z" })`;
     await expectKt({ op: "parseHtml", html: spaced }, { ok: true, attrs: tsParseHtml(spaced) }, "parseHtml-espaces");
-    // Refus : IP, page sans Start, `h` absent — les deux jettent (classes non
-    // contractuelles ici : seul le contrôle compte, `initialise` réessaie).
-    for (const html of ["IP bannie 1.2.3.4", "<html></html>", "Start({a: 'x'})"]) {
-      const kt = JSON.parse(await ask({ op: "parseHtml", html }, true)) as { ok: boolean };
-      expect(`${html} -> ${kt.ok}`).toBe(`${html} -> false`);
+    // La sous-chaîne « IP » seule n'est plus une cause : la page saine parse,
+    // alors que la référence TS la refuse encore (c'est le correctif #877).
+    const word = JSON.parse(await ask({ op: "parseHtml", html: START_PAGE_WITH_IP_WORD })) as { ok: boolean };
+    expect(word.ok).toBe(true);
+    expect(tsErrorOf(() => tsParseHtml(START_PAGE_WITH_IP_WORD))?.name).toBe("PronoteAPIError");
+    // Page de suspension : cause TYPÉE, reconnue par la phrase et non « IP ».
+    for (const html of [SUSPENDED_PAGE_FR, SUSPENDED_PAGE_EN, SUSPENDED_PAGE_TAG_SPLIT]) {
+      const kt = JSON.parse(await ask({ op: "parseHtml", html }, true)) as { ok: boolean; error?: string };
+      expect({ html, ok: kt.ok, error: kt.error }).toEqual({ html, ok: false, error: "IpSuspendedError" });
       expect(tsErrorOf(() => tsParseHtml(html)) !== null).toBe(true);
     }
+    // Page sans `Start` : cause distincte, jamais une suspension.
+    const page = JSON.parse(await ask({ op: "parseHtml", html: UNEXPECTED_PAGE }, true)) as { error?: string };
+    expect(page.error).toBe("UnexpectedPageError");
+    // Sans `h` : erreur interne que `initialise` réessaie.
+    const noH = JSON.parse(await ask({ op: "parseHtml", html: START_WITHOUT_H }, true)) as { error?: string };
+    expect(noH.error).toBe("IllegalStateException");
   });
 }
