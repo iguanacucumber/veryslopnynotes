@@ -161,6 +161,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // contenu -> texte ou refus nommé). Fichier `java.*` seul : le harnais
   // l'EXÉCUTE, sans `org.json`, pour que « coupé » ≠ « vide » ≠ « illisible ».
   join(DATA, "LlmCompletion.kt"),
+  // `data/LlmPolicy.kt` : modèles épinglés (allowlist), messages bornés et
+  // retrait de la clé. Fichier `java.*` seul : le harnais l'EXÉCUTE.
+  join(DATA, "LlmPolicy.kt"),
   join(DATA, "ClientQueue.kt"),
   // `data` — le signal « session morte » et sa RÉPARATION (#397) : le rejet
   // invalide la session ET purge le cache. Fichiers PURS (aucun import

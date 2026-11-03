@@ -61,13 +61,18 @@ const val MAX_RETRY_BODY_BYTES = 256 * 1024
 
 /**
  * Une reprise est permise seulement si le corps reste sous
- * [MAX_RETRY_BODY_BYTES] ET qu'aucun octet du corps 2xx n'a été consommé.
+ * [MAX_RETRY_BODY_BYTES], qu'aucun octet du corps 2xx n'a été consommé ET que
+ * l'appel n'a pas été annulé.
  *
  * Un 2xx dont la lecture a commencé a peut-être déjà produit (et facturé) une
- * complétion : re-POSTer en créerait une seconde.
+ * complétion : re-POSTer en créerait une seconde. Une annulation est un choix
+ * explicite : elle ne se rejoue pas.
  */
-fun retryAllowed(bodyBytes: Int, responseConsumed: Boolean): Boolean =
-    bodyBytes in 0..MAX_RETRY_BODY_BYTES && !responseConsumed
+fun retryAllowed(
+    bodyBytes: Int,
+    responseConsumed: Boolean,
+    cancelled: Boolean = false,
+): Boolean = !cancelled && bodyBytes in 0..MAX_RETRY_BODY_BYTES && !responseConsumed
 
 /** Panne de transport distinguée pour que l'élève sache quoi réessayer. */
 enum class TransportFault { TIMEOUT, NETWORK }
