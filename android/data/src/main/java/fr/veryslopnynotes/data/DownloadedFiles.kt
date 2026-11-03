@@ -109,7 +109,7 @@ object DownloadedFiles {
             // la nouvelle pièce comprise.
             prune(root, MAX_CACHED_FILES - 1, MAX_CACHE_BYTES - bytes.size)
             dir.mkdirs()
-            file.writeBytes(bytes)
+            writeFileAtomically(file, bytes) { target, content -> target.writeBytes(content) }
             file
         }
     }

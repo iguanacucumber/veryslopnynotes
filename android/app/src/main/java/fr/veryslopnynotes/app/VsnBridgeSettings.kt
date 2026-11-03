@@ -198,7 +198,8 @@ internal fun VsnBridge.manualDocFor(subject: String, page: Int? = null): ManualD
     }
     val now = System.currentTimeMillis()
     val lastFailure = manualFailures[cacheKey] ?: 0L
-    if (now - lastFailure < MANUAL_RETRY_MS) return null
+    // Horloge reculée : une marque « future » ne bloque pas la reprise.
+    if (lastFailure in 1..now && now - lastFailure < MANUAL_RETRY_MS) return null
     val fetched = ManualsClient(currentBaseUrl()).fetch(target, page)
     val doc = fetched.doc
     if (doc == null || (page != null && doc.page != page)) {

@@ -145,6 +145,9 @@ export const PRODUCTION_SOURCES: string[] = [
   // désinfecté, PDF texte, format inconnu = « illisible »). Fichier PUR
   // (`java.*` seul) : le harnais l'EXÉCUTE sur des fixtures synthétiques.
   join(DATA, "AttachmentText.kt"),
+  // #915 : l'écriture atomique partagée par le cache, les artefacts hors cache
+  // et les pièces jointes. Fichier PUR : le harnais l'EXÉCUTE (échec injecté).
+  join(DATA, "AtomicFile.kt"),
   // `ClientQueue.kt` : LA file PARTAGÉE du client local (#403) — c'est elle
   // qui sérialise les lectures de l'interface ET celles du job de fond.
   // `data/LlmTransport.kt` : les deux règles PURES de l'appel au fournisseur

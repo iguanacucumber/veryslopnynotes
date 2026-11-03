@@ -23,22 +23,38 @@ object OfflineArtifacts {
      * Écrit un fichier texte sous la garde d'époque.
      *
      * `false` = écriture abandonnée (la session a changé depuis [epoch]) : le
-     * fichier n'est pas créé et son dossier parent n'est PAS ressuscité.
+     * fichier n'est pas créé et son dossier parent n'est PAS ressuscité. Une
+     * panne d'écriture (disque plein) LÈVE : l'appelant ne peut pas la
+     * confondre avec un refus d'époque.
      */
     fun writeText(file: File, content: String, epoch: Long): Boolean =
-        SessionEpoch.writeIfCurrent(epoch) {
-            file.parentFile?.let { if (!it.exists()) it.mkdirs() }
-            file.writeText(content)
-            true
-        } ?: false
+        writeText(file, content, epoch) { target, bytes -> target.writeBytes(bytes) }
+
+    internal fun writeText(
+        file: File,
+        content: String,
+        epoch: Long,
+        write: (File, ByteArray) -> Unit,
+    ): Boolean = SessionEpoch.writeIfCurrent(epoch) {
+        file.parentFile?.let { if (!it.exists()) it.mkdirs() }
+        writeFileAtomically(file, content.toByteArray(Charsets.UTF_8), write)
+        true
+    } ?: false
 
     /** Écrit un fichier binaire sous la garde d'époque (mêmes règles). */
     fun writeBytes(file: File, bytes: ByteArray, epoch: Long): Boolean =
-        SessionEpoch.writeIfCurrent(epoch) {
-            file.parentFile?.let { if (!it.exists()) it.mkdirs() }
-            file.writeBytes(bytes)
-            true
-        } ?: false
+        writeBytes(file, bytes, epoch) { target, content -> target.writeBytes(content) }
+
+    internal fun writeBytes(
+        file: File,
+        bytes: ByteArray,
+        epoch: Long,
+        write: (File, ByteArray) -> Unit,
+    ): Boolean = SessionEpoch.writeIfCurrent(epoch) {
+        file.parentFile?.let { if (!it.exists()) it.mkdirs() }
+        writeFileAtomically(file, bytes, write)
+        true
+    } ?: false
 }
 
 /**
