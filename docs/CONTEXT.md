@@ -28,6 +28,7 @@ Registre : [`INVARIANTS.md`](architecture/INVARIANTS.md).
 | `docs/architecture/invariants/OPERATING.md` | format, ajout, retrait | créer ou réviser un invariant |
 | `docs/architecture/BUILD.md` | les 9 étapes du gate | modifier `Makefile` ou CI |
 | `docs/PRODUCT.md` | écrans et parcours | changer un comportement visible |
+| `DESIGN.md` | système visuel, jetons | changer l'apparence |
 | `docs/COMPATIBILITY.md` | QR, MFA, versions, options | vérifier une limite |
 | `docs/HUMAN_INPUTS.md` | QR, clé OpenRouter, manuel | config utilisateur |
 | `docs/RELEASE.md` | build, signature, release | livrer un APK |

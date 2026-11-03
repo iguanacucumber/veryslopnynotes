@@ -5,7 +5,7 @@
 import { describe, expect, test } from "bun:test";
 import { Glob } from "bun";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { DEFAULT_TARGETS } from "../../agents/runtime/check";
 
 const ROOT = join(import.meta.dir, "..", "..");
@@ -29,6 +29,16 @@ const AGENTS = read("AGENTS.md");
 const README = read("README.md");
 const MAKEFILE = read("Makefile");
 const RELEASE = read("docs/RELEASE.md");
+// Seuls les docs du dépôt : `.agents/` est vendorisé et `node_modules/` n'est
+// pas de la documentation.
+const DOC_MARKDOWN = [
+  ...new Glob("*.md").scanSync(ROOT),
+  ...new Glob("docs/**/*.md").scanSync(ROOT),
+  ...new Glob("*/README.md").scanSync(ROOT),
+  ...new Glob("shared/**/*.md").scanSync(ROOT),
+]
+  .filter((file) => !file.startsWith(".agents/") && !file.startsWith("node_modules/"))
+  .sort();
 
 const ENTRY = /^## (I\d+(?: bis)?) — /;
 
@@ -68,6 +78,27 @@ export function makeTargets(makefile: string): Set<string> {
     if (m) targets.add(m[1]!);
   }
   return targets;
+}
+
+/** Cibles relatives d'un Markdown ; les liens externes et ancres pures sortent. */
+export function relativeLinks(md: string): string[] {
+  return [...md.matchAll(/\]\(([^)\s]+)\)/g)]
+    .map((m) => m[1]!)
+    .filter((target) => !/^(?:[a-z][\w+.-]*:|\/\/|#)/i.test(target))
+    .map((target) => decodeURIComponent(target.split("#")[0]!))
+    .filter((target) => target.length > 0);
+}
+
+/** Un lien relatif doit résoudre depuis le fichier qui le porte. */
+export function brokenDocLinks(
+  files: { path: string; text: string }[],
+  resolves: (path: string) => boolean,
+): string[] {
+  return files.flatMap(({ path, text }) =>
+    relativeLinks(text)
+      .filter((link) => !resolves(join(dirname(path), link)))
+      .map((link) => `${path} : lien \`${link}\` introuvable`),
+  );
 }
 
 /** Colonne « Version » des lignes du tableau `## Versions épinglées` de RELEASE.md. */
@@ -466,6 +497,13 @@ describe("versions épinglées (RELEASE.md)", () => {
     expect(unchecked).toEqual([]);
   });
 
+  test("le digest Docker de RELEASE.md est celui du Dockerfile", () => {
+    // Un tag seul n'épingle rien : le digest de l'index multi-arch est la preuve.
+    const ref = /oven\/bun:([\d.]+@sha256:[0-9a-f]{64})/.exec(read("Dockerfile.server"))?.[1] ?? "";
+    expect({ ref, cité: RELEASE.includes(`oven/bun:${ref}`) }).toEqual({ ref, cité: true });
+    expect(ref).not.toBe("");
+  });
+
   test("sabotage : un pin dérivé ne correspond plus au manifeste", () => {
     const drift = releasePins(RELEASE.replace("8.3.5 / 6.1.2", "8.3.4 / 6.1.2"));
     expect(drift.get("vite / @vitejs/plugin-react")).toBe("8.3.4 / 6.1.2");
@@ -646,6 +684,36 @@ describe("check-fast", () => {
         });
       }
     }
+  });
+});
+
+describe("liens et doublons des docs", () => {
+  const exists = (path: string) => {
+    try {
+      statSync(join(ROOT, path));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  test("chaque lien relatif des docs résout depuis son fichier", () => {
+    const files = DOC_MARKDOWN.map((path) => ({ path, text: read(path) }));
+    expect({ bad: brokenDocLinks(files, exists) }).toEqual({ bad: [] });
+  });
+
+  test("sabotage : un lien mort est rouge", () => {
+    expect(brokenDocLinks([{ path: "docs/CONTEXT.md", text: "[x](../inexistant.md)" }], exists)).toEqual([
+      "docs/CONTEXT.md : lien `../inexistant.md` introuvable",
+    ]);
+  });
+
+  test("PRODUCT.md n'existe qu'à un endroit", () => {
+    // Deux PRODUCT.md = deux vérités produit ; `docs/` est la source canonique.
+    expect({ racine: exists("PRODUCT.md"), docs: exists("docs/PRODUCT.md") }).toEqual({
+      racine: false,
+      docs: true,
+    });
   });
 });
 

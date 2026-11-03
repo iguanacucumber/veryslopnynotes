@@ -1,7 +1,8 @@
 # PRODUCT.md — visite produit
 
-Écrans, comportement et architecture de l'interface. Pour contribuer, voir
-`AGENTS.md`.
+Source canonique du produit. Écrans, comportement et architecture de
+l'interface ; le système visuel vit dans [`DESIGN.md`](../DESIGN.md). Pour
+contribuer, voir `AGENTS.md`.
 
 ## Écrans et fonctionnalités
 

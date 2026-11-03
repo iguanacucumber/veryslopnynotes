@@ -80,8 +80,9 @@ unitaires et web, parité TS ↔ Kotlin, contrats, scans d'architecture et audit
 des dépendances. Il tourne aussi en CI, sans version allégée.
 
 `make check-fast` saute `android-compile` et `audit` : c'est une boucle
-interne, jamais une preuve avant une PR. Une régression d'invariant est
-bloquante ; le détail des étapes est dans
+interne, jamais une preuve avant une PR. Avec `kotlinc` et `java`, la parité
+TS ↔ Kotlin tourne aussi — la durée dépend de l'outillage. Une régression
+d'invariant est bloquante ; le détail des étapes est dans
 [`docs/architecture/BUILD.md`](docs/architecture/BUILD.md).
 
 ## Données et sécurité
