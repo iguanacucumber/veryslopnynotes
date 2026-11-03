@@ -14,6 +14,8 @@ export const MAX_ATTACHMENT_LABEL = 200;
 export const MAX_ATTACHMENT_REF = 200;
 export const UNKNOWN_UNREAD = -1;
 export const RECIPIENT_KINDS = ["student", "teacher", "administration"] as const;
+/** Le pont livre tout l'historique : l'écran n'en rend qu'une fenêtre récente. */
+export const MESSAGE_WINDOW = 50;
 
 export interface MessageAttachment {
   id: string;
@@ -177,6 +179,26 @@ export function parseMessages(payload: string | null): DiscussionMessage[] {
     });
   }
   return out;
+}
+
+/** Nombre entier borné à `[0, max]` ; une valeur non finie ne rend rien. */
+function boundedCount(value: number, max: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(Math.max(Math.floor(value), 0), Math.max(max, 0));
+}
+
+/** Derniers `shown` messages, ordre conservé. Le fil n'est jamais rendu en
+ *  entier : le pont peut en livrer des milliers. */
+export function visibleMessages<T>(messages: readonly T[], shown: number): T[] {
+  const count = boundedCount(shown, messages.length);
+  return messages.slice(messages.length - count);
+}
+
+/** Fenêtre suivante : un pas de plus, sans dépasser le fil. */
+export function nextMessageWindow(shown: number, total: number): number {
+  const boundedTotal = boundedCount(total, Number.MAX_SAFE_INTEGER);
+  const current = boundedCount(shown, boundedTotal);
+  return Math.min(boundedTotal, current + MESSAGE_WINDOW);
 }
 
 /** Participants d'un fil OUVERT : la liste ne les porte plus, une recherche par

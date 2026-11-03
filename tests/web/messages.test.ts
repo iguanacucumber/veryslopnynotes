@@ -11,6 +11,9 @@ import { ConversationListScreen, NewDiscussionScreen, ThreadScreen } from "../..
 import { readBridgeSource } from "../unit/fixtures/bridge-source";
 import {
   isMessagesPayloadReadable,
+  MESSAGE_WINDOW,
+  nextMessageWindow,
+  visibleMessages,
   type Discussion,
   type DiscussionMessage,
   type DiscussionRecipient,
@@ -456,5 +459,103 @@ describe("messagerie : une erreur n'est jamais un état vide (#918)", () => {
     expect(block).toContain("isMessagesPayloadReadable(result.payload)");
     expect(block).toContain("result.error");
     expect(block).toContain("Destinataires illisibles");
+  });
+});
+
+// #966 : le pont livre tout l'historique du fil. L'écran n'en rend qu'une
+// fenêtre récente, extensible par un bouton — pas un scroll infini.
+describe("messagerie — le fil rend une fenêtre bornée de messages (#966)", () => {
+  const ids = Array.from({ length: 120 }, (_, i) => `m-${String(i).padStart(3, "0")}`);
+
+  function message(id: string): DiscussionMessage {
+    return {
+      id,
+      discussionId: "d1",
+      authorName: "",
+      body: `corps-${id}`,
+      sentAt: "",
+      attachments: [],
+    };
+  }
+
+  const discussion: Discussion = {
+    id: "d1",
+    subject: "Cahier de texte",
+    participants: [],
+    unreadCount: 0,
+    lastMessageAt: null,
+    updatedAt: null,
+  };
+
+  function renderThread(messages: DiscussionMessage[]): string {
+    return renderToStaticMarkup(
+      createElement(ThreadScreen, {
+        discussion,
+        messages,
+        loading: false,
+        error: null,
+        draft: "",
+        sending: false,
+        onDraftChange: () => {},
+        onReply: () => {},
+        onToggleRead: () => {},
+        onDelete: () => {},
+        onRefresh: () => {},
+      }),
+    );
+  }
+
+  test("la fenêtre par défaut est le suffixe récent, ordre conservé", () => {
+    const visible = visibleMessages(ids, MESSAGE_WINDOW);
+    expect(visible).toHaveLength(MESSAGE_WINDOW);
+    expect(visible).toEqual(ids.slice(ids.length - MESSAGE_WINDOW));
+    // Un fil plus court que la fenêtre n'est pas tronqué.
+    expect(visibleMessages(ids.slice(0, 7), MESSAGE_WINDOW)).toEqual(ids.slice(0, 7));
+  });
+
+  test("l'extension ne dépasse jamais le total et chaque pas ajoute des anciens", () => {
+    expect(nextMessageWindow(MESSAGE_WINDOW, 120)).toBe(100);
+    expect(nextMessageWindow(100, 120)).toBe(120);
+    expect(nextMessageWindow(120, 120)).toBe(120);
+    expect(nextMessageWindow(MESSAGE_WINDOW, 10)).toBe(10);
+
+    let shown = MESSAGE_WINDOW;
+    let previous = visibleMessages(ids, shown);
+    let steps = 0;
+    while (shown < ids.length) {
+      const next = nextMessageWindow(shown, ids.length);
+      expect(next).toBeGreaterThan(shown);
+      const visible = visibleMessages(ids, next);
+      // La fenêtre suivante est un SURENSEMBLE : aucun message perdu ni dupliqué.
+      expect(visible.slice(visible.length - previous.length)).toEqual(previous);
+      expect(visible.length - previous.length).toBe(next - shown);
+      expect(new Set(visible).size).toBe(visible.length);
+      previous = visible;
+      shown = next;
+      steps += 1;
+      expect(steps).toBeLessThan(10);
+    }
+    expect(previous).toEqual(ids);
+  });
+
+  test("le rendu initial ne construit que les 50 derniers messages et garde le log", () => {
+    const all = ids.map(message);
+    const html = renderThread(all);
+    const visible = visibleMessages(all, MESSAGE_WINDOW);
+
+    for (const item of visible) expect(html).toContain(item.body);
+    // Le premier message hors fenêtre n'est pas dans le DOM : le rendu est borné.
+    expect(html).not.toContain(all[all.length - MESSAGE_WINDOW - 1]!.body);
+    expect(html).toContain("Charger les messages plus anciens");
+    expect(html).toContain('role="log"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('aria-relevant="additions text"');
+  });
+
+  test("un fil déjà sous la fenêtre n'affiche ni bouton ni statut", () => {
+    const html = renderThread(ids.slice(0, 40).map(message));
+    expect(html).toContain("corps-m-000");
+    expect(html).not.toContain("Charger les messages plus anciens");
+    expect(html).not.toContain("Tous les messages sont affichés");
   });
 });

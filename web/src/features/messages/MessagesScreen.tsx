@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   Avatar,
@@ -26,8 +26,11 @@ import {
   formatDateTime,
   groupRecipients,
   isOwnMessage,
+  MESSAGE_WINDOW,
+  nextMessageWindow,
   pickedCountLabel,
   recipientMatches,
+  visibleMessages,
   type Discussion,
   type DiscussionMessage,
   type DiscussionRecipient,
@@ -191,7 +194,12 @@ export function ThreadScreen({
   onRefresh,
 }: ThreadProps) {
   const titleId = useId();
+  const logId = useId();
   const [confirming, setConfirming] = useState(false);
+  const [windowLimit, setWindowLimit] = useState(MESSAGE_WINDOW);
+  const olderAnchor = useRef<{ top: number; height: number } | null>(null);
+  const focusOlderEnd = useRef(false);
+  const olderEndRef = useRef<HTMLParagraphElement>(null);
   const replyId = useId();
   const read = discussion.unreadCount === 0;
   // Le fil s'ouvre sur le dernier message et reste collé tant que l'élève est
@@ -200,6 +208,40 @@ export function ThreadScreen({
     messages.length,
     loading,
   ]);
+
+  // Changer de fil repart de la fenêtre récente, jamais de l'historique déplié
+  // du fil précédent.
+  useEffect(() => {
+    setWindowLimit(MESSAGE_WINDOW);
+    olderAnchor.current = null;
+    focusOlderEnd.current = false;
+  }, [discussion.id]);
+
+  const visible = visibleMessages(messages, windowLimit);
+  const hiddenCount = messages.length - visible.length;
+
+  const loadOlder = () => {
+    const box = logRef.current;
+    if (box) olderAnchor.current = { top: box.scrollTop, height: box.scrollHeight };
+    const next = nextMessageWindow(windowLimit, messages.length);
+    focusOlderEnd.current = next >= messages.length;
+    setWindowLimit(next);
+  };
+
+  // Les messages anciens s'ajoutent AU-DESSUS : conserver le message lu sous
+  // les yeux, sans réveiller l'ancrage automatique du fil.
+  useLayoutEffect(() => {
+    const box = logRef.current;
+    const anchor = olderAnchor.current;
+    if (box && anchor) {
+      box.scrollTop = anchor.top + (box.scrollHeight - anchor.height);
+      olderAnchor.current = null;
+    }
+    if (focusOlderEnd.current) {
+      focusOlderEnd.current = false;
+      olderEndRef.current?.focus({ preventScroll: true });
+    }
+  }, [windowLimit]);
 
   return (
     <Page className="messages-thread">
@@ -231,6 +273,28 @@ export function ThreadScreen({
           </button>
         </div>
 
+        {hiddenCount > 0 ? (
+          <div className="row" style={{ justifyContent: "center" }}>
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              aria-controls={logId}
+              onClick={loadOlder}
+            >
+              Charger les messages plus anciens ({hiddenCount})
+            </button>
+          </div>
+        ) : messages.length > MESSAGE_WINDOW ? (
+          <p
+            ref={olderEndRef}
+            tabIndex={-1}
+            className="tiny muted"
+            style={{ margin: 0, textAlign: "center" }}
+          >
+            Tous les messages sont affichés.
+          </p>
+        ) : null}
+
         {error ? (
           <ErrorBox message={error}>
             <button type="button" className="btn btn--small" onClick={onRefresh}>
@@ -243,6 +307,7 @@ export function ThreadScreen({
       <div className="ai-log-wrap messages-thread__log-wrap">
         <div
           ref={logRef}
+          id={logId}
           className="messages-log"
           role="log"
           aria-live="polite"
@@ -258,7 +323,7 @@ export function ThreadScreen({
               <EmptyState icon={<IconMessage size={30} />} title="Aucun message." body="Ce fil est vide." />
             )
           ) : (
-            messages.map((message) => <MessageBubble key={message.id} message={message} />)
+            visible.map((message) => <MessageBubble key={message.id} message={message} />)
           )}
         </div>
         {away ? (
