@@ -18,6 +18,8 @@ export interface ResourceStatus {
   payload: string | null;
   fetchedAt: number;
   stale: boolean;
+  /** Optionnel : les fixtures historiques n'ont pas le drapeau. */
+  partial?: boolean;
   error: string | null;
   loading: boolean;
 }
@@ -27,6 +29,7 @@ export interface ResourceView {
   payload: string | null;
   fetchedAt: number;
   stale: boolean;
+  partial: boolean;
   error: string | null;
   loading: boolean;
 }
@@ -36,6 +39,7 @@ const PENDING: ResourceView = {
   payload: null,
   fetchedAt: 0,
   stale: false,
+  partial: false,
   error: null,
   loading: true,
 };
@@ -53,7 +57,7 @@ export function canUseCached(
  *  conservé, le cache reste affiché pendant la relecture. */
 export function invalidateOnRequestChange(status: ResourceStatus, request: string): ResourceStatus {
   if (status.request === request) return status;
-  return { request, payload: null, fetchedAt: 0, stale: false, error: null, loading: true };
+  return { request, payload: null, fetchedAt: 0, stale: false, partial: false, error: null, loading: true };
 }
 
 /** Début de chargement : requête différente = chargement ; même requête =
@@ -71,6 +75,7 @@ export function visibleResource(status: ResourceStatus, request: string): Resour
     payload: status.payload,
     fetchedAt: status.fetchedAt,
     stale: status.stale,
+    partial: status.partial ?? false,
     error: status.error,
     loading: status.loading,
   };

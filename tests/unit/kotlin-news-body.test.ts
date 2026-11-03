@@ -51,6 +51,6 @@ describe("le corps d'une actualité à la demande (#475)", () => {
     expect(start).toBeGreaterThan(-1);
     const body = payloads.slice(start, payloads.indexOf("\n}", start));
     expect(body).not.toContain("content()");
-    expect(body).toContain("informationAndSurveys()");
+    expect(body).toContain("informationAndSurveysPartial()");
   });
 });

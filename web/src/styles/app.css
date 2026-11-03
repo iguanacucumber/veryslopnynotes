@@ -1133,6 +1133,18 @@ button.chip {
   background: var(--muted);
 }
 
+/* Une lecture partielle n'est jamais présentée comme complète. */
+.partial-notice {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--item);
+  color: var(--secondary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
 /* Bandeau de message : fixe au-dessus de la barre d'onglets, donc lui aussi
    au-dessus du clavier (#399). */
 .notice {

@@ -10,6 +10,7 @@ import fr.veryslopnynotes.core.computeAverages
 import fr.veryslopnynotes.core.subjectKey
 import fr.veryslopnynotes.pronote.Client
 import fr.veryslopnynotes.pronote.JVal
+import fr.veryslopnynotes.pronote.ParsingError
 import fr.veryslopnynotes.pronote.PeriodNotes
 import org.json.JSONArray
 import org.json.JSONObject
@@ -144,6 +145,9 @@ internal fun gradesPayload(client: Client, query: Map<String, String>): String {
     val all = mutableListOf<Grade>()
     val positionById = HashMap<String, Int>()
     val spanOfId = HashMap<String, Long>()
+    var partial = false
+    var read = 0
+    var firstFailure: Exception? = null
     // Snapshot de la période DEMANDÉE, capturé pendant la lecture unique.
     val snapshots = HashMap<String, PeriodNotes>()
     // Une période DEMANDÉE suffit : le rapport est déjà borné à elle, lire les
@@ -157,8 +161,12 @@ internal fun gradesPayload(client: Client, query: Map<String, String>): String {
             p.notes()
         } catch (e: Exception) {
             if (mustPropagateReadFailure(e)) throw e
+            partial = true
+            if (firstFailure == null) firstFailure = e
             continue
         }
+        read += 1
+        if (notes.partial) partial = true
         if (pid != null) snapshots[pid] = notes
         for (g in notes.grades) {
             // La période PORTÉE par la ligne prime quand elle nomme une période
@@ -187,6 +195,9 @@ internal fun gradesPayload(client: Client, query: Map<String, String>): String {
             }
         }
     }
+    if (readPeriods.isNotEmpty() && read == 0) {
+        throw firstFailure ?: ParsingError("Aucune période lisible")
+    }
     val provided = periodId?.let { id -> snapshots[id]?.let { mapProvided(id, it) } }
     val report = computeAverages(
         all,
@@ -195,15 +206,23 @@ internal fun gradesPayload(client: Client, query: Map<String, String>): String {
     return JSONObject().apply {
         put("averages", reportJson(report))
         put("grades", JSONArray().apply { for (g in all) put(gradeJson(g)) })
+        putFlag("partial", partial)
     }.toString()
 }
 
 /** Tranches de l'établissement (miroir `/v1/periods`, hors cache). */
 internal fun periodsPayload(client: Client): String {
     val arr = JSONArray()
+    var partial = false
     client.periods.forEachIndexed { i, p ->
-        val start = runCatching { p.start.parisIso() }.getOrNull() ?: return@forEachIndexed
-        val end = runCatching { p.end.parisIso() }.getOrNull() ?: return@forEachIndexed
+        val start = runCatching { p.start.parisIso() }.getOrNull() ?: run {
+            partial = true
+            return@forEachIndexed
+        }
+        val end = runCatching { p.end.parisIso() }.getOrNull() ?: run {
+            partial = true
+            return@forEachIndexed
+        }
         arr.put(JSONObject().apply {
             put("id", p.id.ifBlank { "period-$i" })
             put("name", boundedCp(p.name.ifBlank { "Période ${i + 1}" }, 100))
@@ -211,6 +230,6 @@ internal fun periodsPayload(client: Client): String {
             put("end", end)
         })
     }
-    return JSONObject().put("periods", arr).toString()
+    return JSONObject().put("periods", arr).apply { putFlag("partial", partial) }.toString()
 }
 

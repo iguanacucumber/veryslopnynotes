@@ -26,6 +26,7 @@ internal fun VsnBridge.resourceCached(p: JSONObject, epoch: Long): JSONObject {
         .put("payload", entry.payload)
         .put("fetchedAt", entry.fetchedAt)
         .put("stale", repo.isStale(resource, entry))
+        .put("partial", payloadPartial(entry.payload))
         .put("error", JSONObject.NULL)
 }
 
@@ -33,7 +34,18 @@ internal fun VsnBridge.emptyCached(): JSONObject = JSONObject()
     .put("payload", JSONObject.NULL)
     .put("fetchedAt", 0L)
     .put("stale", false)
+    .put("partial", false)
     .put("error", JSONObject.NULL)
+
+/** Le drapeau vit DANS le payload ; le pont le remonte pour que l'écran le voie. */
+internal fun payloadPartial(payload: String?): Boolean {
+    if (payload.isNullOrBlank()) return false
+    return try {
+        JSONObject(payload).optBoolean("partial", false)
+    } catch (_: Exception) {
+        false
+    }
+}
 
 internal fun VsnBridge.resourceLoad(p: JSONObject): JSONObject {
     val key = p.string("key")
@@ -77,19 +89,23 @@ internal fun VsnBridge.resultJson(outcome: RefreshOutcome, resource: String?, qu
             .put("payload", outcome.payload)
             .put("fetchedAt", outcome.fetchedAt)
             .put("stale", false)
+            .put("partial", payloadPartial(outcome.payload))
             .put("error", JSONObject.NULL)
         is RefreshOutcome.OfflineFallback -> obj
             .put("payload", outcome.payload)
             .put("fetchedAt", outcome.fetchedAt)
             .put("stale", outcome.stale)
+            .put("partial", payloadPartial(outcome.payload))
             .put("error", "Données en cache (hors ligne).")
         is RefreshOutcome.Failed -> {
             sessionOrThrow(outcome.message)
             // L'entrée de cache servie est celle de la MÊME requête.
             val cached = resource?.let { repo.cached(it, query) }
-            obj.put("payload", outcome.cachedPayload ?: JSONObject.NULL)
+            val payload = outcome.cachedPayload
+            obj.put("payload", payload ?: JSONObject.NULL)
                 .put("fetchedAt", cached?.fetchedAt ?: 0L)
                 .put("stale", true)
+                .put("partial", payloadPartial(payload))
                 .put("error", outcome.message)
         }
     }

@@ -3,6 +3,7 @@ package fr.veryslopnynotes.data
 import fr.veryslopnynotes.core.MessagePaging
 import fr.veryslopnynotes.pronote.Client
 import fr.veryslopnynotes.pronote.Message
+import fr.veryslopnynotes.pronote.PartialRead
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -50,7 +51,9 @@ internal fun discussionsPayload(
 ): String {
     val arr = JSONArray()
     val known = knownThreads(previous)
-    val raws = client.discussions()
+    val read = client.discussionsPartial()
+    val raws = read.value
+    var partial = read.partial
     DiscussionListCache.put(raws)
     raws.forEachIndexed { i, d ->
         val id = boundedCp(d.id, 64)
@@ -70,6 +73,7 @@ internal fun discussionsPayload(
                 updatedAt = dates.second
             } catch (e: Exception) {
                 if (mustPropagateReadFailure(e)) throw e
+                partial = true
             }
         }
         arr.put(JSONObject().apply {
@@ -80,7 +84,7 @@ internal fun discussionsPayload(
             lastMessageAt?.let { put("lastMessageAt", it) }
         })
     }
-    return JSONObject().put("discussions", arr).toString()
+    return JSONObject().put("discussions", arr).apply { putFlag("partial", partial) }.toString()
 }
 
 /** Dates réelles d'un fil : dernier message, sinon premier (fil sans réponse). */
@@ -103,8 +107,14 @@ private fun datesOf(messages: List<Message>): Pair<String?, String?> {
  * `ListeMessagerie` pour chaque ligne.
  */
 internal fun enrichmentPayload(client: Client, ids: List<String>): String {
-    val byId = (DiscussionListCache.get() ?: client.discussions().also { DiscussionListCache.put(it) })
-        .associateBy { it.id }
+    val cached = DiscussionListCache.get()
+    val read = if (cached != null) {
+        PartialRead(cached, false)
+    } else {
+        client.discussionsPartial().also { DiscussionListCache.put(it.value) }
+    }
+    val byId = read.value.associateBy { it.id }
+    var partial = read.partial
     val arr = JSONArray()
     val wanted = MessagePaging.enrichBatch(ids, emptySet())
     for (id in wanted) {
@@ -117,6 +127,7 @@ internal fun enrichmentPayload(client: Client, ids: List<String>): String {
             updatedAt = dates.second
         } catch (e: Exception) {
             if (mustPropagateReadFailure(e)) throw e
+            partial = true
         }
         arr.put(JSONObject().apply {
             put("id", boundedCp(id, 64))
@@ -124,12 +135,13 @@ internal fun enrichmentPayload(client: Client, ids: List<String>): String {
             putIf("updatedAt", updatedAt)
         })
     }
-    return JSONObject().put("discussions", arr).toString()
+    return JSONObject().put("discussions", arr).apply { putFlag("partial", partial) }.toString()
 }
 
 internal fun recipientsPayload(client: Client): String {
     val arr = JSONArray()
-    for (r in client.getRecipients()) {
+    val read = client.getRecipientsPartial()
+    for (r in read.value) {
         val id = boundedCp(r.id, 64)
         val name = boundedCp(r.name, 100)
         if (id.isEmpty() || name.isEmpty()) continue
@@ -139,6 +151,6 @@ internal fun recipientsPayload(client: Client): String {
             put("kind", if (r.type == "teacher") "teacher" else "administration")
         })
     }
-    return JSONObject().put("recipients", arr).toString()
+    return JSONObject().put("recipients", arr).apply { putFlag("partial", read.partial) }.toString()
 }
 

@@ -64,27 +64,79 @@ internal fun dataList(resp: JVal, key: String): List<JVal> {
     return arr?.items ?: throw ParsingError("Liste $key manquante", listOf("dataSec", "data", key, "V"))
 }
 
-/**
- * Une LISTE absente vaut vide (une des deux listes peut manquer), mais
- * l'ENVELOPPE reste stricte : un payload vide n'est pas un trimestre vide.
- */
-internal fun tolerantDataList(resp: JVal, key: String): List<JVal> {
-    val data = dataOf(resp)
-    val arr = (data.fields[key] as? JVal.Obj)?.fields?.get("V") as? JVal.Arr
-    return arr?.items ?: emptyList()
-}
+/** Une liste ABSENTE est une section illisible : `null`, pas une liste vide. */
+internal fun dataListOrNull(resp: JVal, key: String): List<JVal>? =
+    ((dataOf(resp).fields[key] as? JVal.Obj)?.fields?.get("V") as? JVal.Arr)?.items
 
-/** Lignes tolérantes : une ligne illisible est sautée, les autres restent. */
-internal fun <T> tolerantRows(rows: List<JVal>, make: (JVal) -> T): List<T> {
+/**
+ * Résultat d'une lecture sectionnée : [value] ne contient que les données
+ * lisibles, [partial] dit qu'une section ou une ligne a été écartée.
+ *
+ * Une lecture PARTIELLE n'est jamais rendue comme complète : le drapeau
+ * voyage jusqu'au payload publié.
+ */
+data class PartialRead<out T>(val value: T, val partial: Boolean)
+
+/**
+ * Une erreur de FORME (ligne tordue, champ absent) se saute ; une erreur de
+ * session, de débit ou de transport remonte : elle ne prouve pas que la
+ * donnée est incomplète, elle prouve que la lecture a échoué.
+ */
+internal fun isUnreadableRow(e: Throwable): Boolean =
+    e is DataError || e is DateParsingError || e is IllegalArgumentException ||
+        e is IllegalStateException || e is ClassCastException
+
+/**
+ * Lignes tolérantes : une ligne illisible est SAUTÉE, le résultat est marqué
+ * partiel. Si toutes les lignes sont illisibles, la première erreur remonte :
+ * une liste non vide dont rien n'est lisible n'est pas une liste vide.
+ */
+internal fun <T> partialRows(rows: List<JVal>, make: (JVal) -> T): PartialRead<List<T>> {
     val out = mutableListOf<T>()
+    var partial = false
+    var first: Exception? = null
     for (row in rows) {
         try {
             out.add(make(row))
-        } catch (_: Exception) {
-            // Une ligne tordue ne doit pas jeter TOUT le trimestre.
+        } catch (e: Exception) {
+            if (!isUnreadableRow(e)) throw e
+            partial = true
+            if (first == null) first = e
         }
     }
-    return out
+    if (rows.isNotEmpty() && out.isEmpty()) throw first ?: ParsingError("Aucune ligne lisible")
+    return PartialRead(out, partial)
+}
+
+/** Une SECTION peut manquer : elle est alors écartée, pas devinée vide. */
+internal class PartialSections<T> {
+    private val values = mutableListOf<T>()
+    private var attempted = 0
+    private var readable = 0
+    private var partial = false
+    private var firstFailure: Exception? = null
+
+    fun add(block: () -> PartialRead<List<T>>) {
+        attempted += 1
+        try {
+            val section = block()
+            readable += 1
+            values += section.value
+            if (section.partial) partial = true
+        } catch (e: Exception) {
+            if (!isUnreadableRow(e)) throw e
+            partial = true
+            if (firstFailure == null) firstFailure = e
+        }
+    }
+
+    /** Aucune section lisible = l'erreur typée de la première, jamais un vide. */
+    fun build(): PartialRead<List<T>> {
+        if (attempted > 0 && readable == 0) {
+            throw firstFailure ?: ParsingError("Aucune section lisible")
+        }
+        return PartialRead(values, partial)
+    }
 }
 
 /** `funcOptions.dataSec.data.General.<key>.V` brut, `null` si illisible. */
@@ -130,11 +182,15 @@ private fun roundJs(x: Double): Double = if (x == -0.5) -0.0 else floor(x + 0.5)
  *
  * `overallAverage` : `moyGenerale.V` publiée, sinon moyenne manuelle, `"-1"` si
  * aucune moyenne exploitable ; `null` = moyenne INCONNUE.
+ *
+ * `partial` : au moins une section (`listeDevoirs`, `listeServices`) ou une
+ * ligne a été écartée. Un snapshot partiel n'est jamais publié comme complet.
  */
 data class PeriodNotes(
     val grades: List<Grade>,
     val averages: List<Average>,
     val overallAverage: JVal?,
+    val partial: Boolean = false,
 )
 
 /**
@@ -217,13 +273,42 @@ class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject
     /**
      * UN SEUL POST au lieu de trois ; lignes tordues sautées, enveloppe
      * `dataSec.data` obligatoire.
+     *
+     * Les deux listes sont des SECTIONS indépendantes : l'une illisible ne
+     * jette pas l'autre. `moyGenerale` est une troisième section : elle peut
+     * suffire quand les listes manquent. Aucune des trois = erreur typée.
      */
     fun notes(): PeriodNotes {
         val resp = client.post("DernieresNotes", 198.0, notesPayload())
+        val data = dataOf(resp)
+        var firstFailure: Exception? = null
+        val grades = try {
+            val rows = dataListOrNull(resp, "listeDevoirs")
+                ?: throw ParsingError("Liste listeDevoirs manquante", listOf("dataSec", "data", "listeDevoirs", "V"))
+            partialRows(rows) { Grade(it) }
+        } catch (e: Exception) {
+            if (!isUnreadableRow(e)) throw e
+            firstFailure = e
+            null
+        }
+        val averages = try {
+            val rows = dataListOrNull(resp, "listeServices")
+                ?: throw ParsingError("Liste listeServices manquante", listOf("dataSec", "data", "listeServices", "V"))
+            partialRows(rows) { Average(it) }
+        } catch (e: Exception) {
+            if (!isUnreadableRow(e)) throw e
+            if (firstFailure == null) firstFailure = e
+            null
+        }
+        val overallKnown = data.fields["moyGenerale"]?.let { boolOf(it) } == true
+        if (grades == null && averages == null && !overallKnown) {
+            throw firstFailure ?: ParsingError("Notes illisibles", listOf("dataSec", "data"))
+        }
         return PeriodNotes(
-            grades = tolerantRows(tolerantDataList(resp, "listeDevoirs")) { Grade(it) },
-            averages = tolerantRows(tolerantDataList(resp, "listeServices")) { Average(it) },
+            grades = grades?.value.orEmpty(),
+            averages = averages?.value.orEmpty(),
             overallAverage = overallAverageOf(resp, tolerant = true),
+            partial = grades == null || averages == null || grades.partial || averages.partial,
         )
     }
 
@@ -245,29 +330,28 @@ class Period(private val client: PronoteClientLike, json: JVal?) : PronoteObject
         return overallAverageOf(resp, tolerant = false)
     }
 
-    /** Absences (`PagePresence` 19, `G == 13`). */
-    fun absences(): List<Absence> {
+    private fun presenceRows(g: Double): List<JVal> {
         val resp = client.post("PagePresence", 19.0, presencePayload())
         return dataList(resp, "listeAbsences")
-            .filter { ((it as? JVal.Obj)?.fields?.get("G") as? JVal.Num)?.value == 13.0 }
-            .map { Absence(it) }
+            .filter { ((it as? JVal.Obj)?.fields?.get("G") as? JVal.Num)?.value == g }
     }
+
+    /** Absences (`PagePresence` 19, `G == 13`). */
+    fun absences(): List<Absence> = presenceRows(13.0).map { Absence(it) }
+
+    /** Absences tolérantes : une ligne tordue est sautée, le reste publié. */
+    fun absencesPartial(): PartialRead<List<Absence>> = partialRows(presenceRows(13.0)) { Absence(it) }
 
     /** Retards (`PagePresence` 19, `G == 14`). */
-    fun delays(): List<Delay> {
-        val resp = client.post("PagePresence", 19.0, presencePayload())
-        return dataList(resp, "listeAbsences")
-            .filter { ((it as? JVal.Obj)?.fields?.get("G") as? JVal.Num)?.value == 14.0 }
-            .map { Delay(it) }
-    }
+    fun delays(): List<Delay> = presenceRows(14.0).map { Delay(it) }
+
+    fun delaysPartial(): PartialRead<List<Delay>> = partialRows(presenceRows(14.0)) { Delay(it) }
 
     /** Punitions (`PagePresence` 19, `G == 41`). */
-    fun punishments(): List<Punishment> {
-        val resp = client.post("PagePresence", 19.0, presencePayload())
-        return dataList(resp, "listeAbsences")
-            .filter { ((it as? JVal.Obj)?.fields?.get("G") as? JVal.Num)?.value == 41.0 }
-            .map { Punishment(client, it) }
-    }
+    fun punishments(): List<Punishment> = presenceRows(41.0).map { Punishment(client, it) }
+
+    fun punishmentsPartial(): PartialRead<List<Punishment>> =
+        partialRows(presenceRows(41.0)) { Punishment(client, it) }
 }
 
 /**

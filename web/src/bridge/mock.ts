@@ -93,7 +93,7 @@ function timetableFor(query: string | undefined): unknown {
 function resource(key: ResourceKey, query?: string): ResourceResult {
   const body = key === "timetable" ? timetableFor(query) : fixtures[key];
   const payload = JSON.stringify(body);
-  return { payload, fetchedAt: now, stale: false, error: null };
+  return { payload, fetchedAt: now, stale: false, partial: false, error: null };
 }
 
 export async function mockCall<T>(method: string, params: unknown): Promise<T> {
