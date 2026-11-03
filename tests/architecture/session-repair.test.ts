@@ -70,11 +70,12 @@ describe("réparation d'une session morte (#397)", () => {
   test("le compte appairé est ENREGISTRÉ à l'appairage", () => {
     const bridge = readBridgeSource();
     const pairing = readFileSync(PAIRING, "utf8");
-    expect(bridge).toContain("accounts.add(");
-    const paired = body(bridge, "private fun pair(p: JSONObject)");
-    expect(paired).toContain("accounts.add(");
+    // #890 : l'enregistrement est DANS la section critique de session, pas
+    // après le retour de l'appairage (un échec de commit l'annule).
+    expect(bridge).toContain("accountRecorder = accounts");
+    expect(pairing).toContain("AccountSessionCommit(sessions, accountRecorder)");
     // Le compte appairé devient le compte COURANT : `current()` ne vaut plus `null`.
-    expect(paired).toContain("accounts.select(");
+    expect(pairing).toContain(".switchTo(");
     expect(pairing).toContain("client.infoId");
     expect(pairing).toContain("data class Ok(val accountId: String?)");
     // C'est l'id de la ressource client, jamais le login ni le jeton.

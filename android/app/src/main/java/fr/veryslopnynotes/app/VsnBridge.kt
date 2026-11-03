@@ -172,7 +172,7 @@ class VsnBridge(
         DeviceAuth.setOnRejected { onSessionRejected() }
     }
 
-    private val pairing = PairingRepository(sessions, cacheStore)
+    private val pairing = PairingRepository(sessions, cacheStore, accountRecorder = accounts)
     internal val prefsRepo = SubjectPrefsRepository(
         try {
             FileSubjectPrefsStore(File(ctx.filesDir, "offline/subject_prefs.json"))
@@ -516,6 +516,7 @@ class VsnBridge(
                     // resservirait au prochain appairage.
                     purgeManualAccountData()
                     JSONObject().put("state", "dead").put("message", result.message)
+                        .put("sessionCleared", result.sessionCleared)
                 }
                 RestoreResult.Offline ->
                     JSONObject().put("state", "offline")
@@ -545,10 +546,10 @@ class VsnBridge(
         // Le verrou de session sérialise la purge avec un appairage ou une
         // restauration EN VOL : aucun des deux ne peut republier l'ancien client.
         val purged = pairing.logoutBlocking { accounts.clear() }
-        if (!purged) {
+        if (!purged.ok) {
             throw BridgeFailure(
                 "unavailable",
-                "Déconnexion incomplète : le cache local n'a pas pu être effacé. Réessaie.",
+                "Déconnexion incomplète : les données locales n'ont pas pu être effacées. Réessaie.",
             )
         }
         return JSONObject().put("ok", true)
@@ -727,15 +728,11 @@ class VsnBridge(
                 cachedProfile = null
                 qrHandles.clear()
                 purgeManualIfAccountChanged(previous)
-                // #397 : le compte appairé est ENREGISTRÉ. Le magasin
-                // multi-compte n'était jamais alimenté (rien n'écrivait
-                // `account_ids` depuis la bascule Compose -> WebView) :
-                // `current()` valait toujours `null` et le compte courant
-                // n'était jamais connu. L'id est celui de la ressource client
-                // (jamais le login, jamais le jeton). Le compte appairé
-                // devient le compte COURANT : c'est lui que la relecture
-                // (`resources.sync`) annonce.
-                result.accountId?.let { accounts.add(it); accounts.select(it) }
+                // #397 : le compte appairé est ENREGISTRÉ et devient COURANT
+                // par le dépôt, DANS la section critique de session : un échec
+                // de commit annule l'appairage au lieu de laisser un compte
+                // inconnu. L'id est celui de la ressource client (jamais le
+                // login, jamais le jeton).
                 JSONObject().put("ok", true)
             }
             is PairingResult.Err -> JSONObject()
@@ -768,7 +765,6 @@ class VsnBridge(
                 sessionReady = true
                 cachedProfile = null
                 purgeManualIfAccountChanged(previous)
-                result.accountId?.let { accounts.add(it); accounts.select(it) }
                 JSONObject().put("ok", true)
             }
             is PairingResult.Err -> JSONObject()

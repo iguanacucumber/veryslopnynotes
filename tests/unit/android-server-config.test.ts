@@ -267,12 +267,17 @@ describe("serveur choisi à l'exécution : validation + purge (allowlist saisie)
     expect(accounts).toContain('const val PREFS = "accounts"');
     expect(store).not.toContain('const val PREFS = "accounts"');
     // Validation avant écriture, et revalidation à la lecture.
+    const choice = read(join(DATA, "StoreCommit.kt"));
     expect(store).toContain("fun baseUrl(seed: String): String");
-    expect(store).toContain("ServerConfig.validateBaseUrl(stored, cleartext)");
+    expect(choice).toContain("ServerConfig.validateBaseUrl(stored, cleartext)");
     expect(store).toContain("fun save(raw: String): ServerUrlResult");
     expect(store).toContain("ServerConfig.validateBaseUrl(raw, cleartext)");
     expect(store).toContain("if (validated !is ServerUrlResult.Ok) return validated");
-    expect(store.indexOf("fun save")).toBeLessThan(store.indexOf("putString(KEY_BASE_URL"));
+    // #890 : validation AVANT écriture, puis commit SYNCHRONE vérifié.
+    expect(store).toContain("target.save(validated)");
+    expect(choice).toContain("store.commit(mapOf(KEY_BASE_URL");
+    const serverChoice = choice.slice(choice.indexOf("class ServerChoice"));
+    expect(serverChoice.indexOf("fun save")).toBeLessThan(serverChoice.indexOf("store.commit("));
     // Un seul store : aucun secret, aucun log, aucune donnée d'établissement.
     expect(codeOnly(store)).not.toMatch(/Log\.[vdiew]\(|println\(|printStackTrace/);
     // L'adresse est la seule clé : aucun secret stocké ici.

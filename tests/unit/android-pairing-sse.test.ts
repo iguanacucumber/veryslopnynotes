@@ -156,21 +156,26 @@ describe("unit android pairing device-only (#206) + sync périodique (#208)", ()
     const store = read(join(DATA, "SessionStore.kt"));
     expect(store).toContain("EncryptedSharedPreferences");
     expect(store).toContain("MasterKey");
-    expect(store).toContain("interface SessionStore");
-    expect(store).toContain("fun save(session: StoredSession)");
-    expect(store).toContain("fun load(): StoredSession?");
-    expect(store).toContain("fun clear()");
+    // Le contrat et sa validation vivent dans un fichier PUR (#890), exécuté
+    // par la parité : une seule définition, aucune copie Android.
+    const record = read(join(DATA, "SessionRecord.kt"));
+    expect(record).toContain("interface SessionStore");
+    expect(record).toContain("fun save(session: StoredSession): WriteResult");
+    expect(record).toContain("fun load(): StoredSession?");
+    expect(record).toContain("fun clear(): WriteResult");
     // Plus de repli en clair : un Keystore KO jette, il n'écrit pas.
     expect(codeOnly(store)).not.toContain("MODE_PRIVATE");
     expect(codeOnly(store)).not.toContain("getSharedPreferences(");
     expect(store).toContain("object SessionStores");
     // Jamais de secret dans un log, un toString ou un message d'erreur.
     expect(codeOnly(store)).not.toMatch(/Log\.[vdiew]\(|println\(|printStackTrace/);
-    expect(store).toContain('override fun toString(): String = "StoredSession(url=***, user=***)"');
-    expect(store).not.toContain("data class StoredSession");
+    expect(record).toContain('override fun toString(): String = "StoredSession(url=***, user=***)"');
+    expect(record).not.toContain("data class StoredSession");
     // Le PIN ne dort nulle part : ni clé, ni écriture, ni lecture.
     expect(store).not.toContain("KEY_PIN");
     expect(codeOnly(store)).not.toContain("pin");
+    expect(record).not.toContain("KEY_PIN");
+    expect(codeOnly(record)).not.toContain("pin");
   });
 
   test("appairage local : QR+PIN ou refus bruyant, restauration sans rescanner", () => {

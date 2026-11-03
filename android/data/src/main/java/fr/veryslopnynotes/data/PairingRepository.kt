@@ -38,8 +38,8 @@ sealed interface PairingResult {
 sealed interface RestoreResult {
     data object Restored : RestoreResult
     data object NoSession : RestoreResult
-    /** Jeton mort (tourné, révoqué) : le store est vidé. */
-    data class Dead(val message: String) : RestoreResult
+    /** Jeton mort (tourné, révoqué) : le store est vidé ; `sessionCleared` dit si le disque a suivi. */
+    data class Dead(val message: String, val sessionCleared: Boolean = true) : RestoreResult
     /** Réseau KO : le store est GARDÉ (session vivante), l'app lit ses caches. */
     data object Offline : RestoreResult
 }
@@ -59,6 +59,8 @@ class PairingRepository(
     private val sessions: SessionStore,
     private val cacheStore: CacheStore,
     private val provider: PronoteClientProvider = { PronoteSession.client },
+    /** Enregistré DANS la section critique, avec la session (bascule atomique). */
+    private val accountRecorder: AccountRecorder = AccountRecorder { WriteResult.Written },
 ) {
     /** Le `uuid` identifie CET appareil (2e tour 2FA), persisté avec la session. */
     fun pairBlocking(input: PairingInput, deviceName: String = "", uuid: String = newUuid()): PairingResult =
@@ -111,7 +113,9 @@ class PairingRepository(
     }
 
     /**
-     * Purge du cache du compte précédent, client en RAM, session persistée.
+     * Purge du cache du compte précédent, client en RAM, session persistée et
+     * compte courant enregistré — la bascule session + comptes est atomique
+     * ([AccountSessionCommit], sous la garde d'époque).
      * La purge précède la publication (`#529`) : les identifiants sont donc
      * exportés avant, la purge ayant besoin de l'identité du nouveau compte.
      * Déstructuré, pas nommé : le champ du port s'appelle `pronoteUrl`
@@ -133,9 +137,9 @@ class PairingRepository(
         }
         try {
             // L'identité vient de la session PERSISTÉE (toujours présente, pas
-            // `AccountStore.current()`). La purge est AVANT `sessions.save` :
-            // si le process meurt entre les deux, la session restaurée est
-            // l'ANCIENNE, jamais le nouveau compte avec le cache de l'ancien.
+            // `AccountStore.current()`). La purge est AVANT l'écriture de la
+            // session : si le process meurt entre les deux, la session restaurée
+            // est l'ANCIENNE, jamais le nouveau compte avec le cache de l'ancien.
             val previous = try {
                 sessions.load()?.let { AccountIdentity.of(it.endpointUrl, it.username) }
             } catch (_: Exception) {
@@ -155,7 +159,11 @@ class PairingRepository(
                 // sinon le compte suivant hériterait du cache de l'ancien.
                 return PairingResult.Err("cache_not_cleared", "Cache local non purgé : réessaie l'appairage.")
             }
-            sessions.save(
+            // Session ET compte dans la même garde d'époque : un logout
+            // concurrent refuse la bascule au lieu de la couper en deux. Un
+            // échec d'écriture (compte ou session) annule l'appairage ; la
+            // session précédente est restaurée si le compte est refusé.
+            val written = AccountSessionCommit(sessions, accountRecorder).switchTo(
                 StoredSession(
                     endpointUrl = endpoint,
                     username = username,
@@ -167,7 +175,18 @@ class PairingRepository(
                     schoolUrl = schoolUrl.ifEmpty { endpoint },
                     mode = mode,
                 ),
+                accountId,
             )
+            if (written is WriteResult.EpochRefused) {
+                PronoteSession.clear()
+                return PairingResult.Err("session_changed", "Session modifiée pendant l'appairage : réessaie.")
+            }
+            if (!written.ok) {
+                // Rien n'est publié : ni session neuve ni compte à moitié
+                // enregistré (l'échec de restauration est porté par le code).
+                PronoteSession.clear()
+                return PairingResult.Err("storage_unavailable", "Stockage local indisponible : appairage annulé, réessaie.")
+            }
         } catch (_: Exception) {
             PronoteSession.clear()
             return PairingResult.Err("internal", "Session illisible : réessaie l'appairage.")
@@ -218,15 +237,20 @@ class PairingRepository(
             if (e is IOException || !isSessionFailure(e)) {
                 RestoreResult.Offline
             } else {
-                try {
+                // Le store doit disparaître AVANT le cache : une session morte
+                // qui survivrait au disque republirait l'ancien compte.
+                val cleared = try {
                     sessions.clear()
                 } catch (_: Exception) {
+                    WriteResult.Failed("session non effacée")
                 }
                 // Session MORTE : le cache part avec elle, sinon l'appairage
                 // suivant (un AUTRE compte) servirait ce payload hors ligne
                 // jusqu'à 24 h.
                 CacheScope.onSessionDead(cacheStore)
-                RestoreResult.Dead(DeviceAuth.REJECTED_MESSAGE)
+                // `false` = le jeton peut ressusciter au force-stop : le pont
+                // PUBLIE cet échec au lieu de dire « déconnecté ».
+                RestoreResult.Dead(DeviceAuth.REJECTED_MESSAGE, cleared.ok)
             }
         }
     }
@@ -237,14 +261,22 @@ class PairingRepository(
      * [onPurged] efface l'état qui n'appartient pas au dépôt (liste de comptes)
      * une fois la session et le cache traités, dans la même section critique.
      *
-     * `false` = purge incomplète : l'appelant remonte l'erreur, jamais un
-     * « déconnecté » qui laisse la donnée du compte sur le disque.
+     * Rend l'issue COMBINÉE : session, cache ET comptes. Un échec de l'un
+     * n'est jamais un « déconnecté » qui laisse la donnée du compte sur le
+     * disque — l'appelant remonte le refus.
      */
-    fun logoutBlocking(onPurged: () -> Unit = {}): Boolean = SessionGate.serialized {
-        val purged = SessionRepair.purge({ sessions.clear() }, cacheStore)
-        onPurged()
-        purged
-    }
+    fun logoutBlocking(onPurged: () -> WriteResult = { WriteResult.Written }): WriteResult =
+        SessionGate.serialized {
+            var sessionWrite: WriteResult = WriteResult.Failed("session non effacée")
+            val cachePurged = SessionRepair.purge({ sessionWrite = sessions.clear() }, cacheStore)
+            val accountsWrite = onPurged()
+            when {
+                !sessionWrite.ok -> sessionWrite
+                !accountsWrite.ok -> accountsWrite
+                !cachePurged -> WriteResult.Failed("cache non purgé")
+                else -> WriteResult.Written
+            }
+        }
 
     /**
      * Erreur d'appairage → cause typée, puis phrase actionnable. Jamais

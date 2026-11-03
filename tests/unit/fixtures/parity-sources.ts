@@ -214,6 +214,11 @@ export const PRODUCTION_SOURCES: string[] = [
   // (jeton pour un appairage QR, identifiant pour l'établissement de
   // démonstration). Fichier PUR : le harnais le compile et le REJOUE.
   join(DATA, "SessionMode.kt"),
+  // #890 : les écritures PERSISTÉES (comptes, session, serveur) et leur issue
+  // typée. Fichiers PURS : le harnais injecte des `commit()` en échec et
+  // vérifie que rien n'est enregistré en douce.
+  join(DATA, "StoreCommit.kt"),
+  join(DATA, "SessionRecord.kt"),
   join(DATA, "SyncJobOutcome.kt"),
   // #893 : fuseau de l'établissement et horloge injectable, partagés par les
   // fenêtres EDT/devoirs et les payloads. Fichier PUR : le harnais EXÉCUTE le
