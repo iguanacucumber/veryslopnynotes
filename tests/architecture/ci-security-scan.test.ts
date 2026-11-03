@@ -64,6 +64,16 @@ describe("CI : dépendances et conteneur (#908)", () => {
     }
   });
 
+  test("le repli installe le runtime Bun avant d'auditer", () => {
+    // Un manifeste modifié sans `bun` dans le runner sort en 127 : le repli
+    // annoncerait un échec d'infrastructure à la place du verdict d'audit.
+    const bun = step("Bun (repli)");
+    expect(bun).toContain("steps.graph.outputs.supported != 'true'");
+    expect(bun).toContain("oven-sh/setup-bun@");
+    expect(bun).toContain('bun-version: "1.4.4"');
+    expect(WORKFLOW.indexOf(bun)).toBeLessThan(WORKFLOW.indexOf(step("Repli bun audit")));
+  });
+
   test("Trivy est épinglé et vérifié avant extraction", () => {
     const install = step("Trivy épinglé");
     const version = /version=(\d+\.\d+\.\d+)/.exec(install)?.[1];
