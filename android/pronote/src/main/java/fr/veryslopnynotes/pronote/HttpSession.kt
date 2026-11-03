@@ -1,6 +1,7 @@
 package fr.veryslopnynotes.pronote
 
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
@@ -11,17 +12,45 @@ import java.util.zip.GZIPInputStream
 /** Plafond d'une réponse (10 Mio), en OCTETS UTF-8 une fois décompressée. */
 internal const val MAX_RESPONSE_BYTES = 10_485_760
 
+/** Budget TOTAL d'une requête scolaire : connect, redirects, en-têtes et corps. */
+internal const val DEFAULT_REQUEST_DEADLINE_MS = 15_000L
+
+private const val CONNECT_TIMEOUT_MS = 15_000L
+/** Tranche de lecture : permet de voir un abandon SANS attendre l'échéance totale. */
+private const val READ_SLICE_MS = 2_000L
+
 /**
  * Copie [input] vers [output] en refusant au-delà de [maxBytes] OCTETS lus.
  * Le dépassement est une `IOException` : aucune réponse partielle n'est gardée
  * par l'appelant (fichier temporaire supprimé, tampon jeté).
+ *
+ * [deadline] et [cancellation] sont vérifiées À CHAQUE LECTURE : un serveur qui
+ * s'égoutte ne repousse jamais l'échéance.
  */
-internal fun copyBounded(input: java.io.InputStream, output: java.io.OutputStream, maxBytes: Int): Long {
+internal fun copyBounded(
+    input: java.io.InputStream,
+    output: java.io.OutputStream,
+    maxBytes: Int,
+    deadline: RequestDeadline? = null,
+    cancellation: RequestCancellation? = null,
+): Long {
     val buf = ByteArray(8192)
     var total = 0L
     while (true) {
-        val n = input.read(buf)
+        deadline?.check()
+        cancellation?.throwIfCancelled()
+        val n = try {
+            input.read(buf)
+        } catch (_: SocketTimeoutException) {
+            // `readTimeout` n'est qu'une TRANCHE : l'échéance totale décide.
+            // Une tranche expirée sans abandon ni échéance se retente.
+            deadline?.check()
+            cancellation?.throwIfCancelled()
+            continue
+        }
         if (n < 0) break
+        deadline?.check()
+        cancellation?.throwIfCancelled()
         total += n
         if (total > maxBytes) throw java.io.IOException("Reponse trop volumineuse")
         output.write(buf, 0, n)
@@ -34,8 +63,10 @@ internal fun copyBounded(input: java.io.InputStream, output: java.io.OutputStrea
  * `HttpURLConnection` ni `fetch` ne gardent les cookies seuls. Transport :
  * `HttpURLConnection`, zéro dépendance.
  *
- * Pas de timeout ici (le client le borne), redirects max 10, POST → GET sur 303
- * (et 301/302 émises pour un POST).
+ * Pas de timeout de lecture global ici : [RequestOpts.deadlineMs] borne la
+ * requête ENTIÈRE (redirects, en-têtes et corps). Chaque lecture utilise une
+ * tranche courte pour voir un abandon, et l'échéance totale est vérifiée à
+ * chaque tour. Redirects max 10, POST → GET sur 303 (et 301/302 pour un POST).
  */
 
 private data class StoredCookie(
@@ -230,6 +261,10 @@ data class RequestOpts(
     val json: JVal? = null,
     val data: Map<String, String?>? = null,
     val maxRedirects: Int = 10,
+    /** Budget total de l'opération ; `null` = [DEFAULT_REQUEST_DEADLINE_MS]. */
+    val deadlineMs: Long? = null,
+    /** Jeton de l'appelant ; `null` = celui posé par [RequestScope]. */
+    val cancellation: RequestCancellation? = null,
 )
 
 data class HttpResponse(
@@ -264,9 +299,14 @@ class HttpSession(
     private fun urlEncode(s: String): String = URLEncoder.encode(s, "UTF-8")
 
     // ponytail: plafond 10 Mio par chunks, evite OOM sur grosse reponse.
-    private fun cappedBytes(stream: java.io.InputStream, max: Int): ByteArray {
+    private fun cappedBytes(
+        stream: java.io.InputStream,
+        max: Int,
+        deadline: RequestDeadline? = null,
+        cancellation: RequestCancellation? = null,
+    ): ByteArray {
         val out = java.io.ByteArrayOutputStream()
-        stream.use { copyBounded(it, out, max) }
+        stream.use { copyBounded(it, out, max, deadline, cancellation) }
         return out.toByteArray()
     }
 
@@ -352,12 +392,14 @@ class HttpSession(
         dest: java.io.File,
         gzipped: Boolean,
         maxBytes: Int,
+        deadline: RequestDeadline,
+        cancellation: RequestCancellation?,
     ) {
         val parent = dest.parentFile ?: java.io.File(".")
         val temp = java.io.File.createTempFile("telechargement-", ".part", parent)
         try {
             stream.use { raw ->
-                java.io.FileOutputStream(temp).use { copyBounded(raw, it, maxBytes) }
+                java.io.FileOutputStream(temp).use { copyBounded(raw, it, maxBytes, deadline, cancellation) }
             }
             if (gzipped) {
                 try {
@@ -389,6 +431,8 @@ class HttpSession(
         maxBytes: Int,
     ): HttpResponse {
         val maxRedirects = opts.maxRedirects
+        val deadline = RequestDeadline(opts.deadlineMs ?: DEFAULT_REQUEST_DEADLINE_MS)
+        val cancellation = opts.cancellation ?: RequestScope.current()
         var currentMethod = method
         var currentUrl = buildUrl(url, opts.params)
         var body: ByteArray? = null
@@ -408,20 +452,32 @@ class HttpSession(
             headers["Content-Type"] = "application/x-www-form-urlencoded"
         }
         for (redirect in 0..maxRedirects) {
+            cancellation?.throwIfCancelled()
+            deadline.check()
+            val remainingMs = deadline.remainingMs()
+            if (remainingMs <= 0L) throw requestTimeout()
             val conn = URL(currentUrl).openConnection() as HttpURLConnection
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 15_000
+            conn.connectTimeout = minOf(CONNECT_TIMEOUT_MS, remainingMs).toInt()
+            // Une seule valeur de timeout est posée AVANT `responseCode` : la
+            // couche HTTP fige celle du socket. Elle sert d'en-têtes ET de
+            // tranche de corps (2 s) ; l'échéance totale tranche à chaque lecture.
+            conn.readTimeout = minOf(READ_SLICE_MS, remainingMs).toInt()
             conn.instanceFollowRedirects = false
             conn.requestMethod = currentMethod
             for ((k, v) in headers) conn.setRequestProperty(k, v)
             val cookieHeader = jar.getCookieString(currentUrl)
             if (cookieHeader.isNotEmpty()) conn.setRequestProperty("Cookie", cookieHeader)
+            var activeStream: java.io.InputStream? = null
             try {
+                cancellation?.register(conn)
+                cancellation?.throwIfCancelled()
                 if (body != null && currentMethod != "GET" && currentMethod != "HEAD") {
                     conn.doOutput = true
                     conn.outputStream.use { it.write(body) }
                 }
                 val status = conn.responseCode
+                deadline.check()
+                cancellation?.throwIfCancelled()
                 // En-têtes reçus : clé insensible à la casse (comme `Headers`).
                 val received = LinkedHashMap<String, List<String>>()
                 for ((k, values) in conn.headerFields) {
@@ -465,6 +521,10 @@ class HttpSession(
                 // retourne au cache keep-alive et le POST suivant réutilise la
                 // MÊME connexion (pas de handshake TCP+TLS).
                 val stream = if (status >= 400) conn.errorStream else conn.inputStream
+                if (stream != null) {
+                    activeStream = stream
+                    cancellation?.registerStream(stream)
+                }
                 // `Content-Encoding` absent = corps déjà en clair (la
                 // décompression est faite par la plateforme quand c'est elle
                 // qui a posé l'en-tête).
@@ -475,8 +535,10 @@ class HttpSession(
                     if (stream == null) {
                         java.io.FileOutputStream(downloadTo).close()
                     } else {
-                        streamToFile(stream, downloadTo, gzipped, maxBytes)
+                        streamToFile(stream, downloadTo, gzipped, maxBytes, deadline, cancellation)
                     }
+                    deadline.check()
+                    cancellation?.throwIfCancelled()
                     return HttpResponse(
                         status = status,
                         ok = true,
@@ -486,7 +548,9 @@ class HttpSession(
                         content = ByteArray(0),
                     )
                 }
-                val raw: ByteArray = if (stream == null) ByteArray(0) else cappedBytes(stream, MAX_RESPONSE_BYTES)
+                val raw: ByteArray = if (stream == null) ByteArray(0) else cappedBytes(stream, MAX_RESPONSE_BYTES, deadline, cancellation)
+                deadline.check()
+                cancellation?.throwIfCancelled()
                 val bytes: ByteArray = if (gzipped) gunzip(raw) else raw
                 return HttpResponse(
                     status = status,
@@ -501,6 +565,9 @@ class HttpSession(
                 // le pool de connexions.
                 try { conn.disconnect() } catch (_: Exception) {}
                 throw e
+            } finally {
+                activeStream?.let { cancellation?.unregisterStream(it) }
+                cancellation?.unregister(conn)
             }
         }
         // Inatteignable (la boucle retourne toujours), comme côté TS.

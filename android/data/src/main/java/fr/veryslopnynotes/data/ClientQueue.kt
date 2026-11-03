@@ -43,7 +43,10 @@ object ClientQueue {
         crossinline work: () -> T,
         crossinline deliver: (QueueOutcome<T>) -> Unit,
     ) {
-        queue.submit(key, work = { work() }, deliver = { o -> deliver(cast(o)) })
+        // Le jeton de l'APPELANT suit le travail : la file exécute sur un autre
+        // fil, un timeout JS ou `bridge.cancel` doit quand même couper le socket.
+        val cancellation = RequestScope.current()
+        queue.submit(key, work = { RequestScope.with(cancellation) { work() } }, deliver = { o -> deliver(cast(o)) })
     }
 
     /**
@@ -80,8 +83,18 @@ object ClientQueue {
     ): QueueOutcome<T>? {
         val latch = CountDownLatch(1)
         var outcome: QueueOutcome<T>? = null
-        submit(key, work = work, deliver = { o -> outcome = o; latch.countDown() })
-        if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) return null
+        // Délai du job = abandon de l'appelant : le travail ne doit pas rester
+        // à lire un socket après le retour.
+        val timeoutCancellation = if (RequestScope.current() == null) RequestCancellation() else null
+        submit(
+            key,
+            work = { RequestScope.with(timeoutCancellation) { work() } },
+            deliver = { o -> outcome = o; latch.countDown() },
+        )
+        if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+            timeoutCancellation?.cancel()
+            return null
+        }
         return outcome
     }
 }

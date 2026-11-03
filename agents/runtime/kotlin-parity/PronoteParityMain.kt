@@ -16,6 +16,8 @@ import fr.veryslopnynotes.pronote.Json
 import fr.veryslopnynotes.pronote.KeepAlive
 import fr.veryslopnynotes.pronote.MAX_RESPONSE_BYTES
 import fr.veryslopnynotes.pronote.PronoteAPIError
+import fr.veryslopnynotes.pronote.RequestCancellation
+import fr.veryslopnynotes.pronote.RequestOpts
 import fr.veryslopnynotes.pronote.enBytes
 import fr.veryslopnynotes.pronote.hexToBytes
 import fr.veryslopnynotes.pronote.jsNumber
@@ -27,6 +29,8 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.PrintStream
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 private fun JVal.Obj.str(key: String): String? = (fields[key] as? JVal.Str)?.value
 
@@ -58,8 +62,47 @@ private class Driver {
     private val jars = mutableMapOf<Int, CookieJar>()
     private val sessions = mutableMapOf<Int, HttpSession>()
     private val comms = mutableMapOf<Int, Communication>()
+    private val pending = mutableMapOf<Int, Pending>()
+
+    private class Pending(val done: CountDownLatch, val cancellation: RequestCancellation) {
+        @Volatile
+        var line: String? = null
+    }
 
     private fun alloc(): Int = nextId++
+
+    private fun requestOpts(op: JVal.Obj, cancellation: RequestCancellation? = null): RequestOpts {
+        val opts = op.obj("opts")
+        return RequestOpts(
+            params = opts?.obj("params")?.fields?.mapValues { (_, v) -> (v as JVal.Str).value },
+            headers = opts?.obj("headers")?.fields?.mapValues { (_, v) -> (v as JVal.Str).value },
+            json = opts?.fields?.get("json"),
+            data = opts?.obj("data")?.fields?.mapValues { (_, v) -> (v as? JVal.Str)?.value },
+            deadlineMs = opts?.num("deadlineMs")?.toLong(),
+            cancellation = cancellation,
+        )
+    }
+
+    private fun httpAnswer(res: fr.veryslopnynotes.pronote.HttpResponse): JVal.Obj = ok(
+        "status" to JVal.Num(res.status.toDouble()),
+        "ok" to JVal.Bool(res.ok),
+        "url" to JVal.Str(res.url),
+        "headers" to JVal.Obj(
+            LinkedHashMap(res.headers.mapValues { (_, vs) -> JVal.Arr(vs.map { JVal.Str(it) }) as JVal }),
+        ),
+        "text" to JVal.Str(res.text),
+    )
+
+    private fun httpRequest(op: JVal.Obj, cancellation: RequestCancellation? = null): JVal.Obj {
+        val session = sessions[(op.num("sid") ?: 0.0).toInt()] ?: throw IllegalArgumentException("pilote: sid inconnu")
+        return httpAnswer(
+            session.request(
+                op.str("method") ?: "GET",
+                op.str("url") ?: "",
+                requestOpts(op, cancellation),
+            ),
+        )
+    }
 
     fun run(op: JVal.Obj): JVal {
         return when (op.str("op")) {
@@ -172,27 +215,41 @@ private class Driver {
                 sessions[sid] = HttpSession(headers)
                 ok("sid" to JVal.Num(sid.toDouble()))
             }
-            "httpReq" -> {
-                val session = sessions[(op.num("sid") ?: 0.0).toInt()] ?: throw IllegalArgumentException("pilote: sid inconnu")
-                val opts = op.obj("opts")
-                val res = session.request(
-                    op.str("method") ?: "GET",
-                    op.str("url") ?: "",
-                    fr.veryslopnynotes.pronote.RequestOpts(
-                        params = opts?.obj("params")?.fields?.mapValues { (_, v) -> (v as JVal.Str).value },
-                        headers = opts?.obj("headers")?.fields?.mapValues { (_, v) -> (v as JVal.Str).value },
-                        json = opts?.fields?.get("json"),
-                        data = opts?.obj("data")?.fields?.mapValues { (_, v) -> (v as? JVal.Str)?.value },
-                    ),
-                )
+            "httpReq" -> httpRequest(op)
+            "httpReqAsync" -> {
+                val rid = alloc()
+                val cancellation = RequestCancellation()
+                val slot = Pending(CountDownLatch(1), cancellation)
+                pending[rid] = slot
+                Thread({
+                    slot.line = try {
+                        Json.stringify(httpRequest(op, cancellation))
+                    } catch (e: Exception) {
+                        Json.stringify(err(e.javaClass.simpleName, e.message))
+                    }
+                    slot.done.countDown()
+                }, "parity-http-$rid").apply { isDaemon = true }.start()
+                ok("rid" to JVal.Num(rid.toDouble()))
+            }
+            "httpAwait" -> {
+                val rid = (op.num("rid") ?: 0.0).toInt()
+                val slot = pending[rid] ?: throw IllegalArgumentException("pilote: rid inconnu")
+                val timeout = (op.num("timeoutMs") ?: 30_000.0).toLong()
+                if (!slot.done.await(timeout, TimeUnit.MILLISECONDS)) {
+                    ok("pending" to JVal.Bool(true))
+                } else {
+                    pending.remove(rid)
+                    ok("pending" to JVal.Bool(false), "line" to JVal.Str(slot.line ?: ""))
+                }
+            }
+            "httpCancelReq" -> {
+                val rid = (op.num("rid") ?: 0.0).toInt()
+                val slot = pending[rid]
+                slot?.cancellation?.cancel()
                 ok(
-                    "status" to JVal.Num(res.status.toDouble()),
-                    "ok" to JVal.Bool(res.ok),
-                    "url" to JVal.Str(res.url),
-                    "headers" to JVal.Obj(
-                        LinkedHashMap(res.headers.mapValues { (_, vs) -> JVal.Arr(vs.map { JVal.Str(it) }) as JVal }),
-                    ),
-                    "text" to JVal.Str(res.text),
+                    "ok" to JVal.Bool(true),
+                    "found" to JVal.Bool(slot != null),
+                    "cancelled" to JVal.Bool(slot?.cancellation?.isCancelled == true),
                 )
             }
             "httpSeq" -> {
