@@ -275,6 +275,12 @@ export default function MessagesRoute() {
     try {
       const result = await bridge.recipients();
       setRecipients(parseRecipients(result.payload));
+      // Un payload illisible n'est pas « aucun destinataire » (I14).
+      setRecipientsError(
+        isMessagesPayloadReadable(result.payload)
+          ? (result.error ?? null)
+          : "Destinataires illisibles : la donnée n’a pas pu être lue.",
+      );
     } catch (e) {
       if (e instanceof BridgeCallError && e.code === "auth_required") {
         window.dispatchEvent(new Event("vsn:auth"));
@@ -335,6 +341,11 @@ export default function MessagesRoute() {
         <Loading label="Chargement de la discussion…" />
       ) : (
         <ErrorBox message={error ?? "Discussion introuvable."}>
+          {error ? (
+            <button type="button" className="btn btn--small" onClick={() => void loadThreads()}>
+              Réessayer
+            </button>
+          ) : null}
           <button type="button" className="btn btn--small" onClick={backToList}>
             Retour à la messagerie
           </button>

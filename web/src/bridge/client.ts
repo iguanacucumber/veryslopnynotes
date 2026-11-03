@@ -306,7 +306,7 @@ export const bridge = {
     call<{ ok: boolean; error?: string }>("messages.create", { recipients, subject, body }),
   setRead: (id: string, read: boolean) => call<{ ok: boolean; error?: string }>("messages.setRead", { id, read }),
   deleteMessage: (id: string) => call<{ ok: boolean; error?: string }>("messages.delete", { id }),
-  recipients: () => call<{ payload: string | null }>("messages.recipients"),
+  recipients: () => call<{ payload: string | null; error?: string }>("messages.recipients"),
   settings: () => call<SettingsSnapshot>("settings.get"),
   saveServer: (host: string) => call<{ ok: boolean; message?: string }>("settings.saveServer", { host }),
   saveManualUrl: (url: string) => call<ManualSaveResult>("settings.saveManualUrl", { url }),
