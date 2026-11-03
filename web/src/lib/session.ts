@@ -13,6 +13,12 @@ export function storageUnavailable(status: SessionStatus | null): boolean {
   return status?.storage === "unavailable";
 }
 
+/** Tant que le natif n'a pas répondu, les routes restent démontées : leurs
+ *  lectures de pont partiraient avant `session.restore`. */
+export function sessionKnown(status: SessionStatus | null): boolean {
+  return status !== null;
+}
+
 export interface SessionView {
   /** `null` = le natif n'a pas encore répondu. */
   status: SessionStatus | null;
