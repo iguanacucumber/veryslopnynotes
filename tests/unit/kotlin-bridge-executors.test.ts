@@ -47,7 +47,7 @@ async function waitStarted(qid: number, want: number, timeoutMs = 8000): Promise
 }
 
 /** Soumet un appel court et attend son DÉBUT d'exécution. */
-async function shortCall(qid: number, method = "app.back"): Promise<ShortResult> {
+async function shortCall(qid: number, method = "app.backState"): Promise<ShortResult> {
   await ask({ op: "execShort", qid, method });
   return JSON.parse(await ask({ op: "execWaitShort", qid, timeoutMs: 8000 })) as ShortResult;
 }

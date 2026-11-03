@@ -62,7 +62,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
 };
 
 /** Le fil porte un id : la table exacte ne peut pas le nommer. */
-function metaFor(pathname: string): RouteMeta {
+export function metaFor(pathname: string): RouteMeta {
   return (
     ROUTE_META[pathname] ??
     (pathname.startsWith("/messages/") ? ROUTE_META["/messages/:id"]! : { title: "VerySlopyNyNotes" })

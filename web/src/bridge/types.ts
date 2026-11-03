@@ -14,7 +14,7 @@ export const BRIDGE_METHODS = [
   "app.ready",
   "app.theme",
   "app.setTheme",
-  "app.back",
+  "app.backState",
   "session.status",
   "session.restore",
   "session.logout",

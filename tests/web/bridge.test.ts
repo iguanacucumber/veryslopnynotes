@@ -310,9 +310,9 @@ describe("pont : les lectures ne saturent pas le pont (#393)", () => {
     try {
       await tick();
       // Le retour part TOUT DE SUITE : il n'attend pas la lecture en vol.
-      const retour = call("app.back");
+      const retour = call("app.backState", { available: true });
       await tick();
-      expect(nativeCalls.map((c) => c.method)).toEqual(["resources.load", "app.back"]);
+      expect(nativeCalls.map((c) => c.method)).toEqual(["resources.load", "app.backState"]);
       // …et la lecture n'est pas bloquée par le retour.
       pont.resolve(nativeCalls[0]!.requestId);
       pont.resolve(nativeCalls[1]!.requestId);

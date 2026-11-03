@@ -109,7 +109,7 @@ private class Driver {
             )
         }
         "execShort" -> {
-            state(op).submitShort(op.str("method") ?: "app.back")
+            state(op).submitShort(op.str("method") ?: "app.backState")
             ok("ok" to JVal.Bool(true))
         }
         "execWaitShort" -> {
