@@ -374,8 +374,9 @@ describe("registre d'invariants", () => {
       // la protection d'écran (`FLAG_SECURE`, #898). Marge : 11 200.
       ["android/README.md", 11_200],
       ["web/README.md", 4_000],
-      // +1000 pour le sandbox Chromium et le profil seccomp.
-      ["server/README.md", 5_800],
+      // +1000 pour le sandbox Chromium et le profil seccomp, +3800 pour
+      // l'opérabilité (sondes, drain, cgroups, CA/HSTS).
+      ["server/README.md", 9_600],
       ["shared/contracts/README.md", 1_000],
       // +500 pour la publication loopback et le digest Docker (#921).
       ["docs/RELEASE.md", 7_500],
