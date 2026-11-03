@@ -25,9 +25,10 @@ Une loi ne change que par ADR. Une PR qui la viole est refusée.
 ## Workflow
 
 1. **Plan.** Une issue, un périmètre, des critères d'acceptation avant le code.
-2. **Branche.** `./agents/launch.sh <n> <slug>` depuis `origin/main`. Une issue =
-   une branche `agent/<n>-<slug>`. Zéro commit direct sur `main`. PR via `gh`
-   (MCP GitHub retiré : ses schémas coûtaient plus cher que la commande).
+2. **Claim.** Commenter `Claimed by <compte GitHub>`, puis
+   `./agents/launch.sh <n> <slug>`. Une issue = une branche
+   `agent/<n>-<slug>` ; branche distante = claim pris. Aucun commit direct
+   sur `main` ; PR via `gh`, pas MCP.
 3. **Build et revue.** `make watch`, diff court, puis `make check`. Relire le
    périmètre et la lisibilité du diff, puis écrire la note de revue dans
    `<git-dir>/vsn-review.md` (`ship.sh` affiche le chemin) : 1re ligne
