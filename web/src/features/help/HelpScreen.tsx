@@ -67,7 +67,7 @@ export default function HelpScreen() {
             <li>Sans réseau, les écrans déjà ouverts affichent le cache et signalent qu’il est périmé.</li>
             <li>Le bouton « Actualiser » en haut relance la lecture quand la connexion revient.</li>
             <li>Les notes, cours, devoirs et messages ne se mettent pas à jour hors-ligne.</li>
-            <li>Le serveur de manuels est facultatif : son adresse se règle dans Réglages → Appareil.</li>
+            <li>Le serveur de manuels est facultatif : son adresse se règle dans Réglages → Avancé.</li>
             <li>Aucune donnée scolaire ne passe par un serveur du projet ; la clé OpenRouter part directement chez OpenRouter.</li>
           </ul>
         </Card>
