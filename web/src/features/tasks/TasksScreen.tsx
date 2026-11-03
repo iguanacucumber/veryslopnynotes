@@ -37,6 +37,7 @@ import {
   homeworkFollowUpQuestion,
   homeworkRefusalText,
   isAssignmentsPayloadReadable,
+  overdueCount,
   parseAiContext,
   parseAssignmentsPayload,
   parseHomeworkActions,
@@ -57,6 +58,7 @@ import { useNow } from "../home/useNow";
 import { cardActionFlags } from "./actions";
 import { HomeworkChat, type HomeworkChatState, type HomeworkTurn } from "./HomeworkChat";
 import { emptyTurn, storedThread } from "./homeworkThread";
+import { TasksSummary } from "./TasksSummary";
 import "./tasks.css";
 
 // Le fil ne grandit pas sans fin : les réponses précédentes restent locales,
@@ -184,6 +186,9 @@ function TasksWeek({ week }: { week: string }) {
     [matching, week, now],
   );
   const progress = useMemo(() => taskProgress(items), [items]);
+  // Même source que la liste : si la recherche vide la section « En retard »,
+  // le badge disparaît avec elle.
+  const overdue = overdueCount(sections);
   const searching = search.trim() !== "";
   const weekSuffix = taskWeekSuffixFr(week, currentWeek);
 
@@ -539,22 +544,12 @@ function TasksWeek({ week }: { week: string }) {
       />
 
       {progress.total > 0 ? (
-        <div className="tasks-summary" role="status">
-          <span
-            className="tasks-summary__ring"
-            aria-hidden="true"
-            style={{ "--task-progress": `${progress.percent * 3.6}deg` } as CSSProperties}
-          >
-            {progress.remaining === 0 ? <IconCheck size={16} /> : null}
-          </span>
-          <span className="tasks-summary__text">
-            {progress.remaining === 0
-              ? "Toutes les tâches sont terminées !"
-              : `${progress.remaining} tâche${progress.remaining > 1 ? "s" : ""} restante${
-                  progress.remaining > 1 ? "s" : ""
-                } ${weekSuffix}`}
-          </span>
-        </div>
+        <TasksSummary
+          percent={progress.percent}
+          remaining={progress.remaining}
+          overdue={overdue}
+          weekSuffix={weekSuffix}
+        />
       ) : null}
 
       {assistantChecking ? (
