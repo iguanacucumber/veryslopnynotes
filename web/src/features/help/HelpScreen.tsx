@@ -104,6 +104,22 @@ export default function HelpScreen() {
         </Card>
       </Section>
 
+      <Section id="aide-accessibilite" title="Accessibilité">
+        <Card className="card--flat">
+          <p className="help-paragraph">
+            La déclaration d’accessibilité complète est publiée avec le dépôt
+            dans <code>docs/ACCESSIBILITY.md</code> : cible WCAG 2.2 AA, limites
+            connues, versions testées et contact.
+          </p>
+          <ul className="help-list">
+            <li>TalkBack n’a pas encore été vérifié sur un appareil réel.</li>
+            <li>La police système à 200 % n’a pas été validée visuellement : 100 %, 125 % et 150 % restent les choix sûrs dans Réglages → Apparence.</li>
+            <li>Le rendu n’est scanné que sur Chromium 156 : le minimum WebView Chromium 100 reste une exigence, pas une preuve.</li>
+            <li>Pour signaler un problème, ouvre une issue GitHub : version de l’app, version d’Android et de la WebView, écran et étape, sans aucune donnée scolaire.</li>
+          </ul>
+        </Card>
+      </Section>
+
       <Section id="aide-sans-ia" title="Utiliser l’app sans assistant IA">
         <Card className="card--flat">
           <p className="help-paragraph">

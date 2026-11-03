@@ -31,6 +31,7 @@ Registre : [`INVARIANTS.md`](architecture/INVARIANTS.md).
 | `DESIGN.md` | système visuel, jetons | changer l'apparence |
 | `docs/COMPATIBILITY.md` | QR, MFA, versions, options | vérifier une limite |
 | [`docs/QA-MATRIX.md`](QA-MATRIX.md) | preuves appareil | preuve |
+| [`docs/ACCESSIBILITY.md`](ACCESSIBILITY.md) | cible, limites, contact | avant une promesse d'accessibilité |
 | `docs/HUMAN_INPUTS.md` | QR, clé OpenRouter, manuel | config utilisateur |
 | `docs/RELEASE.md` | build, signature, release | livrer un APK |
 | `docs/adr/` | décisions et leurs raisons | contester une règle |
