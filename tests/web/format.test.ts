@@ -19,6 +19,7 @@ import {
   isSameDay,
   isoDay,
   parseDate,
+  parseInstant,
   startOfWeek,
   subjectColor,
   tint,
@@ -111,6 +112,21 @@ describe("dates web", () => {
       const jour = String(index + 1).padStart(2, "0");
       expect(frDateShort(`2026-${jour}-15`)).toBe(`15 ${mois}`);
     });
+  });
+
+  test("une date civile impossible est refusée", () => {
+    // `new Date` déborde le 30 février au 2 mars et le mois 13 à l'année
+    // suivante : le parseur doit refuser, pas glisser.
+    expect(parseInstant("2026-02-30")).toBeNull();
+    expect(parseInstant("2026-13-01")).toBeNull();
+    expect(parseInstant("2026-00-10")).toBeNull();
+  });
+
+  test("une date civile valide et un instant ISO restent lisibles", () => {
+    expect(isoDay(parseDate("2026-02-28")!)).toBe("2026-02-28");
+    expect(parseInstant("2026-10-19T06:00:00.000Z")).toBe(
+      Date.parse("2026-10-19T06:00:00.000Z"),
+    );
   });
 
   test("parité : format, actualités et fiches de révision rendent la même date", () => {
