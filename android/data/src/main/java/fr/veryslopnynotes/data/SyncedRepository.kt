@@ -5,6 +5,7 @@ import android.os.Looper
 import fr.veryslopnynotes.core.SecurityAlert
 import fr.veryslopnynotes.pronote.RateLimitedError
 import org.json.JSONObject
+import java.time.Clock
 
 // Jamais d'exception vers l'UI : tout échec = Failed, avec le cache si dispo.
 sealed interface RefreshOutcome {
@@ -25,6 +26,7 @@ class SyncedRepository(
     private val clock: () -> Long = System::currentTimeMillis,
     private val main: Handler = Handler(Looper.getMainLooper()),
     private val provider: PronoteClientProvider = { PronoteSession.client },
+    private val schoolTime: Clock = schoolClock(),
 ) {
     // File PARTAGÉE : un appel client à la fois dans le process, écrans et job
     // de fond compris. Le client local est mutable (refresh() réassigne son
@@ -317,7 +319,7 @@ class SyncedRepository(
         // Alertes : balayage des contenus DÉJÀ en cache, aucun réseau (marche
         // hors ligne) — ce n'est pas une lecture du client.
         if (resource == CachePolicy.SECURITY_ALERTS) return alertsPayload(scanTexts())
-        return cachedRead(client, resource, query, previous)
+        return cachedRead(client, resource, query, previous, schoolTime)
     }
 
     private fun scanTexts(): List<SecurityAlert.ScannableText> {

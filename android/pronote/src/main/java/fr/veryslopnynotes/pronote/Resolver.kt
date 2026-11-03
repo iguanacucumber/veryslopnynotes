@@ -1,6 +1,8 @@
 package fr.veryslopnynotes.pronote
 
+import java.time.Clock
 import java.time.LocalDateTime
+import java.time.ZoneId
 
 /**
  * Dates FR, notes codées (`|1` = Absent…), HTML des enseignants, tranches
@@ -8,7 +10,12 @@ import java.time.LocalDateTime
  *
  * Dates = `LocalDateTime` (heure murale LOCALE, sans fuseau, comme `new Date` :
  * `JJ/MM` injecte l'année courante, `HHMM` jette l'heure lue, `AA` → 2000+AA).
+ * L'heure murale est celle de l'ÉTABLISSEMENT (Europe/Paris), jamais celle de
+ * l'appareil : un téléphone réglé ailleurs ne décale pas les cours.
  */
+
+/** Fuseau des heures murales Pronote (même valeur que `data`, sans arête Gradle). */
+internal val SCHOOL_ZONE: ZoneId = ZoneId.of("Europe/Paris")
 
 /** Code PRONOTE (1..8) → constante, ordre exact (index = code - 1). */
 val GRADE_TRANSLATE = listOf(
@@ -122,7 +129,9 @@ private fun frParts(s: String): Triple<Int, Int, Int> {
 
 /**
  * `new Date(y, mo0, d, h, mi, s)` : les débordements cascadent (32/09 → 02/10,
- * mois 13 → janvier +1), jamais d'erreur de plage. Résolu dans la zone système.
+ * mois 13 → janvier +1), jamais d'erreur de plage. Résolu dans le fuseau de
+ * l'établissement : le trou DST avance de la durée du trou (SMART), le
+ * chevauchement prend le premier offset.
  *
  * ANNÉE 0..99 REMAPPÉE en 1900+y, comme JS : `"05/09/0026"` vaut 1926.
  */
@@ -136,16 +145,15 @@ private fun jsDate(y: Int, mo0: Int, d: Int, h: Int = 0, mi: Int = 0, s: Int = 0
         .plusHours(h.toLong())
         .plusMinutes(mi.toLong())
         .plusSeconds(s.toLong())
-    // Trous DST : SMART avance de la durée du trou (comme JS), chevauchement =
-    // premier offset (comme les moteurs JS).
-    return java.time.ZonedDateTime.of(base, java.time.ZoneId.systemDefault()).toLocalDateTime()
+    return java.time.ZonedDateTime.of(base, SCHOOL_ZONE).toLocalDateTime()
 }
 
 /**
  * 6 formats, sinon `DateParsingError`. `JJ/MM` = année courante (borne Dec→Jan
- * assumée) ; `HHMM` = aujourd'hui à minuit (l'heure lue est JETÉE, comme en TS).
+ * assumée) ; `HHMM` = aujourd'hui à minuit (l'heure lue est JETÉE). L'horloge
+ * est injectée : année et jour de repli sont lus à Paris, pas sur l'appareil.
  */
-fun dateParse(v: JVal?): LocalDateTime {
+fun dateParse(v: JVal?, clock: Clock = Clock.system(SCHOOL_ZONE)): LocalDateTime {
     val s = (v as? JVal.Str)?.value ?: throw IllegalArgumentException("date non textuelle")
     if (RE_DMY4.matches(s)) {
         val (d, m, y) = frParts(s)
@@ -169,12 +177,12 @@ fun dateParse(v: JVal?): LocalDateTime {
     }
     if (RE_DM.matches(s)) {
         // Année courante injectée, cascade calendaire comme ailleurs (`31/02` déborde).
-        val year = LocalDateTime.now().year
+        val year = LocalDateTime.now(clock).year
         val (d, m, _) = frParts("$s/$year")
         return jsDate(year, m - 1, d)
     }
     if (RE_HM.matches(s)) {
-        val now = LocalDateTime.now()
+        val now = LocalDateTime.now(clock)
         return LocalDateTime.of(now.year, now.monthValue, now.dayOfMonth, 0, 0, 0)
     }
     throw DateParsingError(s)

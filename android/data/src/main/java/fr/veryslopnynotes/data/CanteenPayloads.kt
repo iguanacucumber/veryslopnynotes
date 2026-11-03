@@ -3,6 +3,7 @@ package fr.veryslopnynotes.data
 import fr.veryslopnynotes.pronote.Client
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Clock
 
 private fun mealOf(isDinner: Boolean, name: String?): String {
     if (isDinner) return "dinner"
@@ -12,14 +13,14 @@ private fun mealOf(isDinner: Boolean, name: String?): String {
     return "lunch"
 }
 
-internal fun menusPayload(client: Client): String {
-    val (from, to) = currentWeekLocal()
-    val fromMs = from.atZone(PARIS).toInstant().toEpochMilli()
-    val toMs = to.plusDays(1).atZone(PARIS).toInstant().toEpochMilli() - 1
+internal fun menusPayload(client: Client, clock: Clock = schoolClock()): String {
+    val (from, to) = currentWeekLocal(clock)
+    val fromMs = from.atZone(SCHOOL_ZONE).toInstant().toEpochMilli()
+    val toMs = to.plusDays(1).atZone(SCHOOL_ZONE).toInstant().toEpochMilli() - 1
     val arr = JSONArray()
     var seq = 0
     for (m in client.menus(from, to)) {
-        val dateMs = m.date.atZone(PARIS).toInstant().toEpochMilli()
+        val dateMs = m.date.atZone(SCHOOL_ZONE).toInstant().toEpochMilli()
         if (dateMs < fromMs || dateMs > toMs) continue
         val dishes = mutableListOf<String>()
         val allergens = mutableListOf<String>()

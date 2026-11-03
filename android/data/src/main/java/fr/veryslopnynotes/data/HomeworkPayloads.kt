@@ -8,6 +8,7 @@ import fr.veryslopnynotes.core.eventKey
 import fr.veryslopnynotes.pronote.Client
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalDateTime
 
@@ -195,9 +196,9 @@ internal fun assignmentJson(
  * `getAssignments`). La MÊME fenêtre sert au toggle et aux pièces jointes : un
  * devoir affiché doit rester trouvable.
  */
-internal fun assignmentsPayload(client: Client, query: Map<String, String>, now: LocalDateTime = LocalDateTime.now()): String {
+internal fun assignmentsPayload(client: Client, query: Map<String, String>, clock: Clock = schoolClock()): String {
     val win = weekWindow(query)
-    val (from, to) = assignmentWindow(query["weekStart"], now)
+    val (from, to) = assignmentWindow(query["weekStart"], clock)
     val raws = client.homework(from, to)
     val wanted = LinkedHashSet<String>()
     val days = LinkedHashSet<LocalDate>()
@@ -208,15 +209,15 @@ internal fun assignmentsPayload(client: Client, query: Map<String, String>, now:
     }
     val lessons = lessonContents(client, lessonWeeks(days), wanted)
     val arr = JSONArray()
-    val fromMs = from.atZone(PARIS).toInstant().toEpochMilli()
-    val toMs = to.atZone(PARIS).toInstant().toEpochMilli()
+    val fromMs = from.atZone(SCHOOL_ZONE).toInstant().toEpochMilli()
+    val toMs = to.atZone(SCHOOL_ZONE).toInstant().toEpochMilli()
     // Un devoir = UNE ligne publiée. Le même devoir (même `N`) peut revenir
     // dans la liste brute : il est publié une fois (le web déduplique par
     // identifiant, mais le NATIF est la source de vérité). Le repli
     // d'identifiant est unique par fenêtre.
     val scope = "${from.toLocalDate()}-${to.toLocalDate()}"
     val rows = raws.mapIndexedNotNull { i, hw ->
-        val dueMs = hw.date.atZone(PARIS).toInstant().toEpochMilli()
+        val dueMs = hw.date.atZone(SCHOOL_ZONE).toInstant().toEpochMilli()
         if (win != null && (dueMs < fromMs || dueMs > toMs)) return@mapIndexedNotNull null
         Triple(homeworkIdOf(hw, i, scope), i, hw)
     }

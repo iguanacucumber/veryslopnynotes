@@ -9,6 +9,7 @@ import fr.veryslopnynotes.core.dedupe
 import fr.veryslopnynotes.core.eventKey
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Clock
 
 // Dépôt devoirs : parse du payload local + écriture « fait » sur le client.
 // org.json = SDK Android (aucune dépendance ajoutée). Un devoir non conforme
@@ -33,6 +34,7 @@ class AssignmentsRepository(
     private val cache: CacheStore,
     private val provider: PronoteClientProvider = { PronoteSession.client },
     private val main: Handler = Handler(Looper.getMainLooper()),
+    private val schoolTime: Clock = schoolClock(),
 ) {
 
     // Toggle optimiste : l'UI bascule d'abord, puis revert si échec. Fenêtre =
@@ -61,7 +63,7 @@ class AssignmentsRepository(
                 return@Thread
             }
             try {
-                val (from, to) = assignmentWindow(weekStart)
+                val (from, to) = assignmentWindow(weekStart, schoolTime)
                 val found = client.homework(from, to)
                     .firstOrNull { it.id == target }
                 if (found == null) {
@@ -104,7 +106,7 @@ class AssignmentsRepository(
             var temp: java.io.File? = null
             val outcome = try {
                 val client = provider() ?: return@Thread post { onDone(AttachmentOutcome(null, null)) }
-                val (from, to) = assignmentWindow(weekStart)
+                val (from, to) = assignmentWindow(weekStart, schoolTime)
                 val hw = client.homework(from, to).firstOrNull { it.id == homeworkId }
                 // Une pièce jointe de COURS n'est pas dans le devoir : on la
                 // cherche dans les contenus de la même fenêtre. La `ref` reste

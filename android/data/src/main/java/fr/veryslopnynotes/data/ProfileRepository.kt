@@ -7,6 +7,7 @@ import android.os.Looper
 import fr.veryslopnynotes.core.ChildAccount
 import fr.veryslopnynotes.core.UserProfile
 import fr.veryslopnynotes.core.UserProfileRules
+import java.time.Clock
 
 sealed interface PhotoState {
     data object Absent : PhotoState
@@ -27,6 +28,7 @@ class ProfileRepository(
     // Callback sur le thread principal : l'état Compose n'est jamais écrit
     // depuis le thread OkHttp.
     private val main: Handler = Handler(Looper.getMainLooper()),
+    private val schoolTime: Clock = schoolClock(),
 ) {
     /** Le profil n'est jamais écrit sur disque. */
     fun fetchMe(cb: (MeResult) -> Unit) {
@@ -40,7 +42,7 @@ class ProfileRepository(
             }
             try {
                 // user null = infos non publiées, pas une erreur.
-                post(cb, MeResult.Ok(parse(mePayload(client))))
+                post(cb, MeResult.Ok(parse(mePayload(client, schoolTime))))
             } catch (e: Exception) {
                 if (isSessionFailure(e)) {
                     DeviceAuth.reject()

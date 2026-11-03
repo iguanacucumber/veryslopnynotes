@@ -67,7 +67,7 @@ describe("file partagée du client local (#403)", () => {
     }
     const reads = codeOnly(readFileSync(READS, "utf8"));
     expect(reads).toContain("gradesPayload(client, q)");
-    expect(reads).toContain("assignmentsPayload(client, q)");
-    expect(reads).toContain("timetablePayload(client, q)");
+    expect(reads).toContain("assignmentsPayload(client, q, clock)");
+    expect(reads).toContain("timetablePayload(client, q, clock)");
   });
 });

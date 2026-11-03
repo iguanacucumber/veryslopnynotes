@@ -1,5 +1,6 @@
 package fr.veryslopnynotes.pronote
 
+import java.time.Clock
 import java.time.LocalDateTime
 
 /**
@@ -23,6 +24,8 @@ data class ClientOptions(
     // Mémo des lectures (60 s) DÉSACTIVÉE par défaut : le harnais de parité
     // compare le fil de la référence TS. L'APP l'active (cf. `PairingRepository`).
     val memoizeReads: Boolean = false,
+    // Horloge de la semaine courante : lue à Paris par défaut, fixée en test.
+    val clock: Clock = Clock.system(SCHOOL_ZONE),
 )
 
 data class QrLoginOptions(
@@ -31,6 +34,7 @@ data class QrLoginOptions(
     val deviceName: String? = null,
     val skip2fa: Boolean = false,
     val memoizeReads: Boolean = false,
+    val clock: Clock = Clock.system(SCHOOL_ZONE),
 )
 
 data class ExportedCredentials(
@@ -84,6 +88,7 @@ open class ClientBase(
     val accountPin: String? = opts.accountPin
     var clientIdentifier: String? = opts.clientIdentifier
     val deviceName: String? = opts.deviceName
+    private val clock: Clock = opts.clock
 
     /**
      * `null` = désactivée. Repart vide à chaque `refresh` et à chaque écriture.
@@ -155,7 +160,7 @@ open class ClientBase(
         encryption = Encryption()
         encryption.aesIv = communication.encryption.aesIv
         startDay = dateParse(objAt(funcs, "dataSec", "data", "General", "PremierLundi", "V"))
-        week = getWeek(LocalDateTime.now())
+        week = getWeek(LocalDateTime.now(clock))
         periods_ = periods
         logged_in = login()
     }
@@ -334,7 +339,7 @@ open class ClientBase(
         login()
         periods_ = null
         periods_ = periods
-        week = getWeek(LocalDateTime.now())
+        week = getWeek(LocalDateTime.now(clock))
         _expired = true
     }
 
@@ -459,7 +464,7 @@ open class Client(
             val client = Client(
                 rewriteQrUrl(qrCode.url),
                 login, jeton,
-                ClientOptions(mode = "qr_code", uuid = uuid, accountPin = opts.accountPin, clientIdentifier = opts.clientIdentifier, deviceName = opts.deviceName, memoizeReads = opts.memoizeReads),
+                ClientOptions(mode = "qr_code", uuid = uuid, accountPin = opts.accountPin, clientIdentifier = opts.clientIdentifier, deviceName = opts.deviceName, memoizeReads = opts.memoizeReads, clock = opts.clock),
             )
             // Un PIN faux a déjà jeté `QRCodeDecryptError`.
             client.init()
@@ -474,7 +479,7 @@ open class Client(
                 val creds = client.exportCredentials()
                 return tokenLogin(
                     creds.pronoteUrl, creds.username, creds.password, creds.uuid,
-                    ClientOptions(accountPin = opts.accountPin, clientIdentifier = creds.clientIdentifier, deviceName = opts.deviceName, memoizeReads = opts.memoizeReads),
+                    ClientOptions(accountPin = opts.accountPin, clientIdentifier = creds.clientIdentifier, deviceName = opts.deviceName, memoizeReads = opts.memoizeReads, clock = opts.clock),
                 )
             }
             return client

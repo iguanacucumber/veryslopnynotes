@@ -6,7 +6,7 @@ import fr.veryslopnynotes.core.UserProfileRules
 import fr.veryslopnynotes.pronote.Client
 import org.json.JSONArray
 import org.json.JSONObject
-import java.time.LocalDateTime
+import java.time.Clock
 
 internal fun capabilitiesPayload(client: Client, nowIso: String = parisNowIso()): String {    val periods = try {
         client.periods
@@ -48,7 +48,7 @@ internal fun capabilitiesPayload(client: Client, nowIso: String = parisNowIso())
     return JSONObject().put("capabilities", body).toString()
 }
 
-internal fun mePayload(client: Client, now: LocalDateTime = LocalDateTime.now()): String {
+internal fun mePayload(client: Client, clock: Clock = schoolClock()): String {
     val info = client.info
     val displayName = boundedCp(info.name, 64)
     if (displayName.isEmpty()) return JSONObject().put("user", JSONObject.NULL).toString()
@@ -58,6 +58,7 @@ internal fun mePayload(client: Client, now: LocalDateTime = LocalDateTime.now())
         if (mustPropagateReadFailure(e)) throw e
         emptyList()
     }
+    val now = schoolNow(clock)
     val current = periods.find { !now.isBefore(it.start) && !now.isAfter(it.end) } ?: periods.firstOrNull()
     val picId = info.profilePicture?.id?.trim().orEmpty()
     val photoRef = if (Regex("^[A-Za-z0-9._-]{1,150}$").matches(picId)) "photo:$picId" else null

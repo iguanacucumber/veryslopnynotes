@@ -1,6 +1,7 @@
 package fr.veryslopnynotes.data
 
 import fr.veryslopnynotes.pronote.Client
+import java.time.Clock
 
 /**
  * La SEULE porte d'entrée des lectures du client local : l'appelant pose la
@@ -18,17 +19,18 @@ internal fun cachedRead(
     resource: String,
     query: String,
     previous: String? = null,
+    clock: Clock = schoolClock(),
 ): String {
     val q = parseQuery(query)
     return when (resource) {
         CachePolicy.GRADES -> gradesPayload(client, q)
-        CachePolicy.ASSIGNMENTS -> assignmentsPayload(client, q)
-        CachePolicy.TIMETABLE -> timetablePayload(client, q)
+        CachePolicy.ASSIGNMENTS -> assignmentsPayload(client, q, clock)
+        CachePolicy.TIMETABLE -> timetablePayload(client, q, clock)
         CachePolicy.NEWS -> newsPayload(client)
-        CachePolicy.MENUS -> menusPayload(client)
+        CachePolicy.MENUS -> menusPayload(client, clock)
         CachePolicy.ATTENDANCE -> attendancePayload(client)
         CachePolicy.PUNISHMENTS -> punishmentsPayload(client)
-        CachePolicy.CAPABILITIES -> capabilitiesPayload(client)
+        CachePolicy.CAPABILITIES -> capabilitiesPayload(client, parisNowIso(clock))
         CachePolicy.DISCUSSIONS -> discussionsPayload(client, previous = previous)
         else -> throw IllegalArgumentException("ressource non cachable: $resource")
     }
