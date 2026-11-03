@@ -55,6 +55,9 @@ class ServerStore(
         }
     }
 
+    /** Efface le choix persistant ; l'appelant retombe alors sur la graine. */
+    fun clear(): Boolean = choice?.clear()?.ok == true
+
     companion object {
         const val PREFS = "server"
         private val PREFS_KO = ServerUrlResult.Rejected(

@@ -16,6 +16,8 @@ class AccountPurgeTargets(
     val lessons: LessonNotesRepository,
     val teacherChat: TeacherChatLocalStore,
     val prefs: SubjectPrefsRepository,
+    val llmKeys: LlmKeyStore,
+    val serverStore: ServerStore,
     val webView: WebViewAccountData = WebViewAccountData(),
     /** États du pont qui ne sont pas des stores (adresses de manuel essayées). */
     val onManualPurged: () -> Unit = {},
@@ -67,6 +69,15 @@ object AccountPurgeFactory {
             AccountPurgeStep(AccountDataStore.PHOTOS) { deleteDir(File(targets.cacheRoot, "photos")) },
             AccountPurgeStep(AccountDataStore.READ_STATE) { targets.webView.clearReadState() },
             AccountPurgeStep(AccountDataStore.WEBVIEW) { targets.webView.clearCache() },
+            AccountPurgeStep(AccountDataStore.LLM_KEY) {
+                try {
+                    targets.llmKeys.clear()
+                    !targets.llmKeys.isConfigured()
+                } catch (_: Exception) {
+                    false
+                }
+            },
+            AccountPurgeStep(AccountDataStore.SERVER_URL) { targets.serverStore.clear() },
             AccountPurgeStep(AccountDataStore.CACHE) {
                 val target = switch
                 if (target == null) {

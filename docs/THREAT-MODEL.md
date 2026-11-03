@@ -62,6 +62,10 @@ transfert appareil-à-appareil, enfin l'aperçu des applications récentes.
   [`PairingRepository.kt`](../android/data/src/main/java/fr/veryslopnynotes/data/PairingRepository.kt),
   [`CacheScope.kt`](../android/data/src/main/java/fr/veryslopnynotes/data/CacheScope.kt),
   [`SessionRepair.kt`](../android/data/src/main/java/fr/veryslopnynotes/data/SessionRepair.kt).
+- « Supprimer toutes mes données » réutilise le MÊME orchestrateur
+  (`AccountPurgeMode.DELETE_ALL`) et y ajoute la clé LLM et le serveur choisi.
+  La confirmation liste l'inventaire ; un échec partiel nomme les stores
+  restants.
 - La bascule de compte est atomique : la purge précède la publication du
   nouveau client, et une époque invalide les écritures en vol (I16).
 - La sauvegarde est fermée deux fois : `allowBackup="false"` et des règles

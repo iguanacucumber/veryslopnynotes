@@ -110,4 +110,6 @@ sont refusés.
   nécessaires au fonctionnement hors-ligne.
 - Une **déconnexion** invalide la session, purge tous les caches locaux et
   renvoie vers l'appairage : l'accueil d'un compte déconnecté n'est plus
-  accessible.
+  accessible. « **Supprimer toutes mes données** » emporte en plus la clé de
+  l’assistant et l’adresse du serveur ; la confirmation liste tout
+  l’inventaire et un échec partiel est affiché.

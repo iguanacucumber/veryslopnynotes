@@ -269,6 +269,31 @@
   padding: 0 12px 12px;
 }
 
+.delete-all__artifacts {
+  margin: 12px 0 0;
+  padding: 0 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.delete-all__artifacts li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.delete-all__error {
+  margin: 12px 0 0;
+  color: var(--danger-ink);
+}
+
+.delete-all__failed {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--danger-ink);
+}
+
 .subject-editor {
   animation: rise-in 220ms var(--ease) both;
 }

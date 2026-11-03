@@ -1,10 +1,14 @@
 package fr.veryslopnynotes.data
 
-/** Pourquoi la donnée d'un compte part : déconnexion, session morte ou bascule. */
+/**
+ * Pourquoi la donnée part : déconnexion, session morte, bascule, ou demande
+ * explicite « supprimer toutes mes données ».
+ */
 enum class AccountPurgeMode {
     LOGOUT,
     SESSION_DEAD,
     ACCOUNT_SWITCH,
+    DELETE_ALL,
 }
 
 /** Ce qu'une purge fait d'un store : l'effacer, ou le garder par conception. */
@@ -17,10 +21,11 @@ enum class AccountStorePolicy {
  * INVENTAIRE des stores locaux d'un compte. Un store `PURGED` sans étape rend
  * la purge INCOMPLÈTE : aucun appelant ne peut l'oublier en silence.
  *
- * `RETAINED` est une décision explicite, pas un oubli : la clé LLM et le
- * serveur choisi appartiennent à l'utilisateur (docs/PRODUCT.md), et
- * `prompt_seen` est un réglage d'interface (Manuals.kt). Les préférences
- * d'apparence restent aussi : elles ne décrivent aucun compte.
+ * `RETAINED` est une décision explicite pour une déconnexion ou une bascule :
+ * la clé LLM et le serveur choisi appartiennent à l'utilisateur
+ * (docs/PRODUCT.md), et `prompt_seen` est un réglage d'interface (Manuals.kt).
+ * La suppression TOTALE demandée par l'utilisateur les emporte aussi : c'est
+ * sa donnée, pas celle d'un compte. Les préférences d'apparence restent.
  */
 enum class AccountDataStore(val id: String, val policy: AccountStorePolicy) {
     SESSION("session", AccountStorePolicy.PURGED),
@@ -35,19 +40,19 @@ enum class AccountDataStore(val id: String, val policy: AccountStorePolicy) {
     PHOTOS("photos", AccountStorePolicy.PURGED),
     READ_STATE("read_state", AccountStorePolicy.PURGED),
     WEBVIEW("webview", AccountStorePolicy.PURGED),
-    CACHE("cache", AccountStorePolicy.PURGED),
     LLM_KEY("llm_key", AccountStorePolicy.RETAINED),
     SERVER_URL("server_url", AccountStorePolicy.RETAINED),
+    CACHE("cache", AccountStorePolicy.PURGED),
     UI_PREFS("ui_prefs", AccountStorePolicy.RETAINED),
     ;
 
     /** Une bascule remplace la session et la liste de comptes ; elle ne les efface pas. */
-    fun required(mode: AccountPurgeMode): Boolean =
-        policy == AccountStorePolicy.PURGED &&
-            when (this) {
-                SESSION, ACCOUNTS -> mode != AccountPurgeMode.ACCOUNT_SWITCH
-                else -> true
-            }
+    fun required(mode: AccountPurgeMode): Boolean = when {
+        this == LLM_KEY || this == SERVER_URL -> mode == AccountPurgeMode.DELETE_ALL
+        policy == AccountStorePolicy.RETAINED -> false
+        this == SESSION || this == ACCOUNTS -> mode != AccountPurgeMode.ACCOUNT_SWITCH
+        else -> true
+    }
 }
 
 /** Une étape nommée : `true` = le store est réellement vide. */

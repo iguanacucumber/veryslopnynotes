@@ -10,6 +10,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
+import fr.veryslopnynotes.core.CleartextPolicy
 import fr.veryslopnynotes.pronote.Client
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -156,6 +157,9 @@ class PeriodicSyncWorker(
                 ),
                 teacherChat = FileTeacherChatStore(File(offline, "teacher_chat.json")),
                 prefs = SubjectPrefsRepository(FileSubjectPrefsStore(File(offline, "subject_prefs.json"))),
+                llmKeys = LlmKeys.get(applicationContext),
+                // Le job ne demande jamais DELETE_ALL ; le câblage reste réel.
+                serverStore = ServerStore(applicationContext, CleartextPolicy.FORBID),
             ),
         )
     }

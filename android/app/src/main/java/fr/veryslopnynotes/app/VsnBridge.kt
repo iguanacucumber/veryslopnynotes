@@ -68,6 +68,7 @@ import fr.veryslopnynotes.data.SyncedRepository
 import fr.veryslopnynotes.data.TeacherChatLocalStore
 import fr.veryslopnynotes.data.WebViewAccountData
 import fr.veryslopnynotes.data.parseSchoolQr
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.Collections
@@ -244,6 +245,8 @@ class VsnBridge(
                 lessons = lessons,
                 teacherChat = teacherChat,
                 prefs = prefsRepo,
+                llmKeys = llmKeys,
+                serverStore = serverStore,
                 webView = WebViewAccountData(
                     readState = { clearWebViewReadState() },
                     cache = { clearWebViewCache() },
@@ -526,6 +529,7 @@ class VsnBridge(
             "session.status" -> sessionStatus()
             "session.restore" -> restoreSession()
             "session.logout" -> logout(requestId)
+            "privacy.deleteAll" -> deleteAllData()
             "session.accounts" -> JSONObject().put("count", accounts.count())
             "pairing.scanQr" -> {
                 scanQr(requestId)
@@ -707,6 +711,34 @@ class VsnBridge(
             )
         }
         return JSONObject().put("ok", true)
+    }
+
+    /**
+     * « Supprimer toutes mes données » : purge ORCHESTRÉE sous le verrou de
+     * session, puis réponse qui nomme les stores en échec. Un échec partiel
+     * n'est jamais masqué derrière un `ok:true` : l'interface liste ce qui
+     * reste. Aucun identifiant de store ne porte une donnée du compte.
+     */
+    private fun deleteAllData(): JSONObject {
+        // La demande vaut abandon de tout état en mémoire, même si un store
+        // résiste : l'interface ne doit pas se croire encore connectée.
+        sessionReady = false
+        cachedProfile = null
+        qrHandles.clear()
+        val result = pairing.deleteAllBlocking()
+        val failures = result.failed + result.missing
+        return JSONObject()
+            .put("ok", result.ok)
+            .put("failed", JSONArray(failures.map { it.id }))
+            .put(
+                "message",
+                if (result.ok) {
+                    "Toutes les données locales ont été supprimées."
+                } else {
+                    "Suppression incomplète : réessaie. Éléments restants : " +
+                        failures.joinToString(", ") { it.id } + "."
+                },
+            )
     }
 
     /**
