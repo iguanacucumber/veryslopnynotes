@@ -36,8 +36,9 @@ malveillante, dépendance compromise, scraper local et clé perdue.
   remplacé** : retirer le commit ne suffit pas.
 - **Le scraper est sans authentification sur la boucle locale** (I8). Toute
   écoute hors loopback est REFUSÉE sans `ALLOW_PUBLIC=1` ; ce mode exige un
-  `SCRAPER_TOKEN` vérifié en Bearer et un proxy authentifié devant. Une
-  exposition publique est un choix de l'opérateur, pas un défaut de l'image.
+  `SCRAPER_TOKEN` vérifié en Bearer, un seau par jeton (`429` + `Retry-After`)
+  et un proxy authentifié devant. Une exposition publique est un choix de
+  l'opérateur, pas un défaut de l'image.
 - **Les actions GitHub sont épinglées** à un SHA de commit, pas à un tag
   mutable. Dependabot propose les mises à jour.
 
