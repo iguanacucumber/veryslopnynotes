@@ -181,7 +181,11 @@ class PhotoCapture(private val activity: ComponentActivity) {
         dir.mkdirs()
         val file = File(dir, "capture-" + UUID.randomUUID().toString().replace("-", "") + ".jpg")
         val uri = try {
-            FileProvider.getUriForFile(activity, ATTACHMENT_PROVIDER_AUTHORITY, file)
+            FileProvider.getUriForFile(
+                activity,
+                attachmentProviderAuthority(BuildConfig.APPLICATION_ID),
+                file,
+            )
         } catch (_: Exception) {
             finish(Result.Error("Appareil photo indisponible : choisis une image dans la galerie."))
             return

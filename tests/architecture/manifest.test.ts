@@ -111,8 +111,14 @@ function normalizeName(name: string): string {
   return name.includes(".") ? name : `${NAMESPACE}.${name}`;
 }
 
+/** Repli sources : AGP remplace `${applicationId}` ; le test doit voir la
+ *  même autorité que le manifeste fusionné (#878). */
+function expandPlaceholders(xml: string): string {
+  return xml.replace(/\$\{applicationId\}/g, APPLICATION_ID);
+}
+
 function parseManifest(xml: string): Manifest {
-  const clean = withoutComments(xml);
+  const clean = withoutComments(expandPlaceholders(xml));
   const application = attrsOf(/<application\b([^>]*)>/.exec(clean)?.[1] ?? "");
   const permissions = new Set<string>();
   for (const m of clean.matchAll(/<uses-permission(?:-sdk-\d+)?\b([^>]*)\/?>/g)) {
