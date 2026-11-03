@@ -5,10 +5,13 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
+import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -26,6 +29,12 @@ import fr.veryslopnynotes.data.PeriodicSyncWorker
 // locaux de `web/`. Aucun appel réseau ici (I1) et aucun hôte tiers (CSP).
 class MainActivity : ComponentActivity() {
     private var webShell: NativeWebShell? = null
+    private var webContainer: FrameLayout? = null
+    private var retryView: View? = null
+
+    /** Route du dernier écran : elle survit à la mort du rendu (pas la WebView). */
+    private var lastRoute: String = HOME_ROUTE
+    private var resumed = false
 
     // Android 17 : joindre le serveur du réseau local demande une autorisation
     // d'exécution. Le résultat n'est pas lu ici : la prochaine requête dira
@@ -58,26 +67,99 @@ class MainActivity : ComponentActivity() {
         }, "periodic-sync-schedule").apply { isDaemon = true; start() }
 
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
-        val shell = NativeWebShell(this)
-        webShell = shell
         // La WebView vit dans un CONTENEUR, pas directement dans la fenêtre :
         // lui seul reçoit l'inset clavier, donc la zone visible s'arrête
         // au-dessus du clavier.
-        val container = FrameLayout(this).apply {
-            addView(
-                shell.view,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                ),
-            )
-        }
+        val container = FrameLayout(this)
+        webContainer = container
         setContentView(container)
         applyWindowInsets(container)
         // La route sauvée prime TOUJOURS sur le deep link : l'intention est
         // périmée (c'est elle qui renvoyait l'utilisateur sur l'ancien écran).
-        shell.open(savedRoute(savedInstanceState) ?: routePath(intent))
+        mountShell(savedRoute(savedInstanceState) ?: routePath(intent))
     }
+
+    /**
+     * Monte une coquille NEUVE. Une WebView dont le rendu est mort ne se
+     * réutilise jamais (Android tue le process), d'où la recréation complète.
+     */
+    private fun mountShell(path: String?) {
+        val container = webContainer ?: return
+        val shell = NativeWebShell(this) { gone -> onRendererGone(gone) }
+        webShell = shell
+        container.addView(
+            shell.view,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        shell.open(path)
+        // Mort du rendu en arrière-plan : `onResume` a déjà eu lieu et ne
+        // reverra pas cette coquille. `pauseTimers` est global au process.
+        if (resumed) shell.resume()
+    }
+
+    /**
+     * Rendu mort : la coquille est détruite, la session (disque + pont) reste
+     * intacte, et l'utilisateur décide du redémarrage. Aucun rechargement
+     * automatique : un rendu qui meurt au chargement boucherait l'app.
+     */
+    private fun onRendererGone(shell: NativeWebShell) {
+        if (webShell !== shell) return
+        lastRoute = shell.route
+        webShell = null
+        shell.destroy()
+        showRendererRetry()
+    }
+
+    /** Écran de reprise : un message et UNE action, rien d'autre à décider. */
+    private fun showRendererRetry() {
+        val container = webContainer ?: return
+        retryView?.let(container::removeView)
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(24), dp(24), dp(24), dp(24))
+            addView(
+                TextView(this@MainActivity).apply {
+                    text = "L'interface s'est arrêtée."
+                    textSize = 18f
+                    gravity = Gravity.CENTER
+                },
+            )
+            addView(
+                Button(this@MainActivity).apply {
+                    id = R.id.renderer_retry
+                    text = "Réessayer"
+                    setOnClickListener { retryRenderer() }
+                },
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(16) },
+            )
+        }
+        container.addView(
+            panel,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        retryView = panel
+    }
+
+    private fun retryRenderer() {
+        if (webShell != null) return
+        val container = webContainer ?: return
+        retryView?.let(container::removeView)
+        retryView = null
+        mountShell(lastRoute)
+    }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
 
     /**
      * L'état de la WebView peut être perdu (mort du processus) ; le CHEMIN de
@@ -85,11 +167,13 @@ class MainActivity : ComponentActivity() {
      */
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        val view = webShell?.view ?: return
+        val shell = webShell
         // Une URL sans hash = l'accueil : on l'écrit quand même, pour que la
         // route relue soit TOUJOURS une route (et jamais une intention).
-        outState.putString(ROUTE_STATE_KEY, routePathFromUrl(view.url) ?: HOME_ROUTE)
-        view.saveState(outState)
+        val route = routePathFromUrl(shell?.view?.url) ?: shell?.route ?: lastRoute
+        outState.putString(ROUTE_STATE_KEY, route)
+        // Rendu mort : aucun état de WebView à sauver, la route suffit.
+        shell?.view?.saveState(outState)
     }
 
     /**
@@ -160,19 +244,24 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        routePath(intent)?.let { webShell?.navigate(it) }
+        routePath(intent)?.let { route ->
+            lastRoute = route
+            webShell?.navigate(route)
+        }
     }
 
     // La WebView ne tourne pas en arrière-plan : ses timers JS sont coupés ici
     // et reprennent au retour. La recréation de configuration passe par la
     // même paire, donc aucun timer ne reste gelé après une rotation.
     override fun onPause() {
+        resumed = false
         webShell?.pause()
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
+        resumed = true
         webShell?.resume()
     }
 
@@ -185,6 +274,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         webShell?.destroy()
         webShell = null
+        webContainer = null
         super.onDestroy()
     }
 

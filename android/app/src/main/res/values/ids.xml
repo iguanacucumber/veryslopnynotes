@@ -3,4 +3,6 @@
     <!-- Id STABLE : une vue sans id n'est pas retrouvée à la restauration, et un
          id régénéré ne survit pas à la mort du processus. Jamais `generateViewId()`. -->
     <item name="web_view" type="id" />
+    <!-- Écran de reprise après la mort du rendu WebView (#866). -->
+    <item name="renderer_retry" type="id" />
 </resources>

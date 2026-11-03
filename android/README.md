@@ -23,6 +23,28 @@ l'accueil (`enableOnBackInvokedCallback`), donc retour prédictif système.
 Appareil (API 33+) : `make updateApkToPhone`, puis retour sur un dialogue
 (fermé), sur une sous-route (recule), à l'accueil (sortie animée).
 
+## Mort du rendu WebView (#866)
+
+Le rendu WebView est un processus séparé qu'Android peut tuer. La vue morte ne
+se réutilise jamais : `onRenderProcessGone` (`WebApp.kt`) la détruit
+(`removeView` + `destroy`, callback retiré) et rend `true`. La session et le
+pont restent intacts. L'écran « L'interface s'est arrêtée. » propose
+« Réessayer », qui monte une coquille NEUVE sur la dernière route ; aucun
+rechargement automatique, donc aucune boucle. Callback disponible depuis
+l'API 26 = `minSdk` : pas de repli mort à coder.
+
+Preuve « kill simulé » (émulateur) :
+
+```sh
+adb root
+adb shell ps -A | grep -i sandboxed_process
+adb shell kill -9 <pid_du_sandboxed_process>
+adb logcat -d | grep -E "FATAL|AndroidRuntime"   # vide
+```
+
+Le retry recharge la route et un écran de données répond sans réappairer ;
+répéter le kill ne boucle pas.
+
 ## Serveur facultatif : scraper de manuels
 
 Le serveur n'est pas nécessaire pour Pronote ou l'assistant IA. Il ne sert qu'au

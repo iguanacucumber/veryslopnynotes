@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.util.TypedValue
 import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -42,11 +43,19 @@ private const val HARDWARE_BACK_JS = "(window.__vsnBack && window.__vsnBack()) =
 // vérité, lu par la WebView, l'activité et les tests.
 
 @SuppressLint("SetJavaScriptEnabled")
-class NativeWebShell(private val activity: ComponentActivity) {
+class NativeWebShell(
+    private val activity: ComponentActivity,
+    private val onRendererGone: (NativeWebShell) -> Unit = {},
+) {
 
     private val splashColor: Int = windowBackground(activity)
 
     private var pageLoaded = false
+    private var destroyed = false
+
+    /** Dernière route CONNUE : la relire dans une WebView morte n'est pas garanti. */
+    var route: String = HOME_ROUTE
+        private set
 
     private var safeArea = SafeArea(0, 0, 0, 0)
 
@@ -99,13 +108,15 @@ class NativeWebShell(private val activity: ComponentActivity) {
     val view: WebView get() = webView
 
     fun open(path: String?) {
-        val safe = path?.takeIf { isServedRoute(it) } ?: "/"
+        val safe = path?.takeIf { isServedRoute(it) } ?: HOME_ROUTE
+        route = safe
         webView.loadUrl(urlFor(safe))
     }
 
     /** Deep link reçu APRÈS le chargement : simple changement de hash. */
     fun navigate(path: String) {
         if (!isServedRoute(path)) return
+        route = path
         if (!pageLoaded) {
             open(path)
             return
@@ -152,6 +163,11 @@ class NativeWebShell(private val activity: ComponentActivity) {
     }
 
     fun destroy() {
+        if (destroyed) return
+        destroyed = true
+        pageLoaded = false
+        backCallback.isEnabled = false
+        backCallback.remove()
         bridge.close()
         webView.removeJavascriptInterface("VSN")
         (webView.parent as? ViewGroup)?.removeView(webView)
@@ -255,6 +271,26 @@ class NativeWebShell(private val activity: ComponentActivity) {
             // natif n'y existent pas encore.
             applySafeArea()
             onFirstPaint()
+        }
+
+        /** Navigation par hash : `onPageFinished` ne rejoue pas, l'historique si. */
+        override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+            super.doUpdateVisitedHistory(view, url, isReload)
+            routePathFromUrl(url)?.let { route = it }
+        }
+
+        /**
+         * Le rendu est mort : réutiliser cette WebView ferait planter le process.
+         * On la détruit et on rend `true` (l'événement est traité). La recréation
+         * est DIFFÉRÉE au clic « Réessayer » : recharger tout de suite
+         * reproduirait la même mort en boucle.
+         *
+         * `onRenderProcessGone` existe depuis l'API 26, qui est le `minSdk` :
+         * aucun repli de compatibilité n'est atteignable, donc aucun code mort.
+         */
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            onRendererGone(this@NativeWebShell)
+            return true
         }
 
         override fun onReceivedError(
